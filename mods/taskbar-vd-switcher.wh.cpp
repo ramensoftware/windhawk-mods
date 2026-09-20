@@ -546,6 +546,15 @@ This mod builds directly on patterns established by several community mods:
   - HideWhenSingle: false
     $name: Hide when only one desktop
     $description: Don't show the buttons when there is only one virtual desktop.
+  - UseLegacySettings: true
+    $name: Keep my 1.7 settings
+    $description: >-
+      Version 2.0 grouped every setting under a new name. With this on, a
+      value you customized in 1.7 keeps working until you change its 2.0
+      counterpart, so updating the mod does not reset your position, sizes or
+      colors. The old grid settings have no 2.0 counterpart - they are
+      replaced by the single Layout.Arrangement expression. Turn this off to
+      use only the 2.0 settings.
   $name: Behavior
 */
 // ==/WindhawkModSettings==
@@ -1938,6 +1947,20 @@ inline wchar_t const* OrientationName(Orientation orientation) {
 //
 // Stoppable and WAITED during unload. A detached thread that outlives
 // Wh_ModUninit runs mod code out of an unloaded DLL.
+//
+// STOP IS CALLED FROM MORE THAN ONE THREAD. Wh_ModUninit stops the loop from
+// Windhawk's thread while an Explorer taskbar rebuild can be starting it from
+// the taskbar's UI thread, and Start() stops the previous run before it begins
+// a new one. So the handles cannot live in bare members that each caller
+// closes: two callers would read the same handle and close it twice, and in
+// explorer.exe a double CloseHandle later closes whatever unrelated handle the
+// value was recycled into.
+//
+// One attempt therefore owns its handles through a shared Run, and EVERY
+// caller that observes a live Run waits for it. The mutex is held only across
+// the handoff, never across the wait: the retry thread marshals onto the UI
+// thread with SendMessage, so a UI-thread caller blocked on the mutex while
+// another thread waited under it could never service that message.
 
 class RetryLoop {
 public:
@@ -1945,80 +1968,120 @@ public:
     using AppliedFn = bool (*)();
     using AttemptFn = void (*)();
 
+    // No destructor on purpose. A namespace-scope loop's destructor would run
+    // at DLL detach, inside the loader lock, and Stop() waits on a thread —
+    // the owner stops it explicitly from Wh_ModUninit instead.
+
     void Start(AttemptFn attempt, AppliedFn applied,
                std::atomic<bool> const& unloading, int attempts = 5,
                DWORD intervalMs = 2000, bool forceFirstAttempt = false) {
         Stop();
         if (unloading) return;
-        attempt_ = attempt;
-        applied_ = applied;
-        unloading_ = &unloading;
-        attempts_ = attempts;
-        intervalMs_ = intervalMs;
-        forceFirstAttempt_ = forceFirstAttempt;
-        stopEvent_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!stopEvent_) return;
-        thread_ = CreateThread(
-            nullptr, 0,
-            [](void* parameter) -> DWORD {
-                auto* self = static_cast<RetryLoop*>(parameter);
-                for (int i = 0; i < self->attempts_ && !*self->unloading_;
-                     ++i) {
-                    // A settings reload can need one restore/reapply pass even
-                    // while `applied` truthfully says we still own live XAML.
-                    // Do not overload that ownership flag merely to wake the
-                    // retry loop; request a forced first attempt instead.
-                    if (self->applied_ &&
-                        !(self->forceFirstAttempt_ && i == 0) &&
-                        self->applied_()) break;
-                    if (i && WaitForSingleObject(self->stopEvent_,
-                                                 self->intervalMs_) !=
-                                 WAIT_TIMEOUT)
-                        break;
-                    if (self->attempt_) self->attempt_();
-                }
-                return 0;
-            },
-            this, 0, nullptr);
-        if (!thread_) {
-            CloseHandle(stopEvent_);
-            stopEvent_ = nullptr;
+
+        auto run = std::make_shared<Run>();
+        run->attempt = attempt;
+        run->applied = applied;
+        run->unloading = &unloading;
+        run->attempts = attempts;
+        run->intervalMs = intervalMs;
+        run->forceFirstAttempt = forceFirstAttempt;
+        run->stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!run->stopEvent) return;
+
+        // The thread carries a reference of its own, so the Run survives until
+        // both the loop and the thread are done with it, whichever ends first.
+        auto* parameter = new std::shared_ptr<Run>(run);
+        run->thread =
+            CreateThread(nullptr, 0, ThreadMain, parameter, 0, nullptr);
+        if (!run->thread) {
+            delete parameter;
+            return;
         }
+
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            if (!unloading) {
+                run_ = std::move(run);
+                return;
+            }
+        }
+        // Unload began while this attempt was being created, so the Stop that
+        // would have waited for it saw nothing. Wait for it here instead.
+        StopRun(run);
     }
 
-    // Pumps sent messages while waiting: the retry thread marshals onto the UI
-    // thread with SendMessage, so a plain wait from that same UI thread would
-    // deadlock against the thread it is waiting for.
     void Stop() {
-        if (stopEvent_) SetEvent(stopEvent_);
-        if (thread_) {
-            DWORD result;
-            do {
-                result = MsgWaitForMultipleObjects(1, &thread_, FALSE, INFINITE,
-                                                   QS_SENDMESSAGE);
-                if (result == WAIT_OBJECT_0 + 1) {
-                    MSG message;
-                    PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
-                }
-            } while (result == WAIT_OBJECT_0 + 1);
-            CloseHandle(thread_);
-            thread_ = nullptr;
+        std::shared_ptr<Run> run;
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            run = run_;  // shared, not moved: a concurrent Stop must wait too
         }
-        if (stopEvent_) {
-            CloseHandle(stopEvent_);
-            stopEvent_ = nullptr;
-        }
+        if (!run) return;
+        StopRun(run);
+        std::lock_guard<std::mutex> guard(mutex_);
+        if (run_ == run) run_.reset();
     }
 
 private:
-    HANDLE thread_ = nullptr;
-    HANDLE stopEvent_ = nullptr;
-    AttemptFn attempt_ = nullptr;
-    AppliedFn applied_ = nullptr;
-    std::atomic<bool> const* unloading_ = nullptr;
-    int attempts_ = 5;
-    DWORD intervalMs_ = 2000;
-    bool forceFirstAttempt_ = false;
+    struct Run {
+        HANDLE thread = nullptr;
+        HANDLE stopEvent = nullptr;
+        AttemptFn attempt = nullptr;
+        AppliedFn applied = nullptr;
+        std::atomic<bool> const* unloading = nullptr;
+        int attempts = 5;
+        DWORD intervalMs = 2000;
+        bool forceFirstAttempt = false;
+
+        // Closed exactly once, when the last of the loop and the thread lets
+        // go. Both have already stopped using them by then.
+        ~Run() {
+            if (thread) CloseHandle(thread);
+            if (stopEvent) CloseHandle(stopEvent);
+        }
+    };
+
+    static DWORD WINAPI ThreadMain(void* parameter) {
+        auto* owned = static_cast<std::shared_ptr<Run>*>(parameter);
+        std::shared_ptr<Run> run = *owned;
+        delete owned;
+        for (int i = 0; i < run->attempts && !*run->unloading; ++i) {
+            // A settings reload can need one restore/reapply pass even while
+            // `applied` truthfully says we still own live XAML. Do not
+            // overload that ownership flag merely to wake the retry loop;
+            // request a forced first attempt instead.
+            if (run->applied && !(run->forceFirstAttempt && i == 0) &&
+                run->applied())
+                break;
+            if (i && WaitForSingleObject(run->stopEvent, run->intervalMs) !=
+                         WAIT_TIMEOUT)
+                break;
+            if (run->attempt) run->attempt();
+        }
+        return 0;
+    }
+
+    // Signal and wait, pumping sent messages: a caller on the taskbar's UI
+    // thread would otherwise deadlock against the SendMessage the retry thread
+    // is making back to it. Idempotent — the stop event is manual-reset, and
+    // waiting on an already-exited thread returns at once.
+    static void StopRun(std::shared_ptr<Run> const& run) {
+        if (run->stopEvent) SetEvent(run->stopEvent);
+        if (!run->thread) return;
+        DWORD result;
+        do {
+            HANDLE thread = run->thread;
+            result = MsgWaitForMultipleObjects(1, &thread, FALSE, INFINITE,
+                                               QS_SENDMESSAGE);
+            if (result == WAIT_OBJECT_0 + 1) {
+                MSG message;
+                PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
+            }
+        } while (result == WAIT_OBJECT_0 + 1);
+    }
+
+    std::mutex mutex_;
+    std::shared_ptr<Run> run_;
 };
 
 }  // namespace windhawk_mod_templates::taskbar_host
@@ -2074,6 +2137,33 @@ public:
             }
         }
         snapshots_.clear();
+    }
+
+    // Put ONE object's properties back and forget them, leaving every other
+    // object's snapshots alone. For the case where a mod discovers that an
+    // element it began borrowing was never actually its business — handing
+    // that element back has to be possible without ending the whole lease.
+    void RestoreObject(DependencyObject const& object,
+                       RestoreErrorFn const& onError = {}) {
+        if (!object) return;
+        for (auto it = snapshots_.rbegin(); it != snapshots_.rend();) {
+            if (it->object != object) {
+                ++it;
+                continue;
+            }
+            try {
+                if (it->localValue == DependencyProperty::UnsetValue())
+                    it->object.ClearValue(it->property);
+                else
+                    it->object.SetValue(it->property, it->localValue);
+            } catch (...) {
+                if (onError) onError();
+            }
+            // Erase through the reverse iterator without invalidating the
+            // traversal: base() points one past the element being erased.
+            it = std::make_reverse_iterator(snapshots_.erase(
+                std::next(it).base()));
+        }
     }
 
     // Drop the snapshots WITHOUT restoring. For the case where the elements
@@ -2136,7 +2226,7 @@ struct ModSettings {
     std::wstring inactiveSymbol    = L"○";
     bool         taskViewButton    = false;
     std::wstring taskViewLabel     = L"⊞";
-    VdTaskViewPlacement taskViewPlacement = VdTaskViewPlacement::Before;
+    VdTaskViewPlacement taskViewPlacement = VdTaskViewPlacement::After;
     // Layout
     std::wstring arrangement       = L"auto";
     ngl::FillOrder fillOrder = ngl::FillOrder::Rows;
@@ -2182,6 +2272,75 @@ struct ModSettings {
 // leak the string buffers on every normal unload.
 ModSettings g_settings;  // exit-time-safe: heap-only
 
+// ---- Reading a 1.7 configuration ------------------------------------------
+//
+// 2.0 groups every setting key, and Windhawk cannot carry a value across a
+// rename. Windhawk also updates mods silently, so without this every current
+// user finds the switcher back at its defaults — including people who tuned
+// sizes, colors and position — with their old values still in storage,
+// orphaned, and only a README they may never open to explain it.
+//
+// The 1.7 keys are therefore still read. Undeclared keys still return stored
+// user values; what they cannot do is distinguish "unset" from "set to zero",
+// since both read back as 0 or "". Hence the probe: establish that this
+// install HAS a 1.7 configuration, then trust an individual legacy key
+// against its 1.7 default.
+static bool g_useLegacySettings = false;
+
+static std::wstring LegacyString(const wchar_t* key) {
+    auto value = WindhawkUtils::StringSetting::make(key);
+    return value.get() ? std::wstring(value.get()) : std::wstring{};
+}
+
+static bool HasLegacySettings() {
+    static PCWSTR const kProbeStrings[] = {
+        L"position", L"labelFormat", L"customLabels", L"activeColor",
+        L"shortGroupAlign", L"masterButtonLabel",
+    };
+    for (auto key : kProbeStrings) {
+        if (!LegacyString(key).empty())
+            return true;
+    }
+    static PCWSTR const kProbeInts[] = {
+        L"buttonWidth", L"buttonHeight", L"buttonSpacing",
+        L"fontSize", L"cornerRadius", L"buttonOpacity",
+    };
+    for (auto key : kProbeInts) {
+        if (Wh_GetIntSetting(key) != 0)
+            return true;
+    }
+    return false;
+}
+
+// A 2.0 key wins as soon as it differs from its declared default; until then a
+// customized 1.7 value is used instead.
+static std::wstring PreferCurrentOrLegacyString(PCWSTR currentKey,
+                                                PCWSTR currentDefault,
+                                                PCWSTR legacyKey,
+                                                bool& usedLegacy) {
+    std::wstring current = LegacyString(currentKey);
+    if (!g_useLegacySettings || current != currentDefault)
+        return current;
+    std::wstring legacy = LegacyString(legacyKey);
+    if (legacy.empty())
+        return current;
+    usedLegacy = true;
+    return legacy;
+}
+
+static int PreferCurrentOrLegacyInt(PCWSTR currentKey, int currentDefault,
+                                    PCWSTR legacyKey, int legacyDefault,
+                                    bool& usedLegacy) {
+    int current = Wh_GetIntSetting(currentKey);
+    if (!g_useLegacySettings || current != currentDefault)
+        return current;
+    int legacy = Wh_GetIntSetting(legacyKey);
+    if (legacy == legacyDefault)
+        return current;
+    usedLegacy = true;
+    return legacy;
+}
+
 static void LoadSettings() {
     // Free-form strings only: every $options value is parsed to an enum by
     // sio::LoadChoice below. StringSetting frees on every path, including the
@@ -2193,6 +2352,10 @@ static void LoadSettings() {
     auto Int = [](const wchar_t* k) { return Wh_GetIntSetting(k); };
     auto Bool = [](const wchar_t* k) { return sio::LoadBool(k); };
 
+    g_useLegacySettings = Wh_GetIntSetting(L"Behavior.UseLegacySettings") != 0 &&
+                          HasLegacySettings();
+    bool usedLegacy = false;
+
     static constexpr sio::Choice<VdPosition> kPositions[] = {
         {L"beforeIcons", VdPosition::BeforeIcons},
         {L"beforeOmni", VdPosition::BeforeOmni},
@@ -2203,9 +2366,22 @@ static void LoadSettings() {
         {L"overStart", VdPosition::OverStart},
         {L"rightOfStart", VdPosition::RightOfStart},
     };
-    g_settings.position = sio::LoadChoice(L"Placement.Position", kPositions,
-                                          VdPosition::BeforeOmni);
-    g_settings.allTaskbars       = Bool(L"Placement.AllTaskbars");
+    // The fallback must match the DECLARED default, or a stored value that no
+    // longer matches any token silently moves the bar somewhere the user never
+    // chose. The settings block declares "afterClock".
+    {
+        std::wstring position = PreferCurrentOrLegacyString(
+            L"Placement.Position", L"afterClock", L"position", usedLegacy);
+        g_settings.position = VdPosition::AfterClock;
+        for (auto const& choice : kPositions) {
+            if (_wcsicmp(position.c_str(), choice.token) == 0) {
+                g_settings.position = choice.value;
+                break;
+            }
+        }
+    }
+    g_settings.allTaskbars = PreferCurrentOrLegacyInt(
+        L"Placement.AllTaskbars", 0, L"multiMonitor", 0, usedLegacy) != 0;
 
     static constexpr sio::Choice<VdLabelFormat> kLabelFormats[] = {
         {L"number", VdLabelFormat::Number},
@@ -2213,10 +2389,19 @@ static void LoadSettings() {
         {L"symbol", VdLabelFormat::Symbol},
         {L"custom", VdLabelFormat::Custom},
     };
-    g_settings.labelFormat = sio::LoadChoice(L"Content.LabelFormat",
-                                             kLabelFormats,
-                                             VdLabelFormat::Number);
-    g_settings.customLabels      = Str(L"Content.CustomLabels");
+    {
+        std::wstring format = PreferCurrentOrLegacyString(
+            L"Content.LabelFormat", L"number", L"labelFormat", usedLegacy);
+        g_settings.labelFormat = VdLabelFormat::Number;
+        for (auto const& choice : kLabelFormats) {
+            if (_wcsicmp(format.c_str(), choice.token) == 0) {
+                g_settings.labelFormat = choice.value;
+                break;
+            }
+        }
+    }
+    g_settings.customLabels = PreferCurrentOrLegacyString(
+        L"Content.CustomLabels", L"", L"customLabels", usedLegacy);
     g_settings.activeSymbol      = Str(L"Content.ActiveSymbol");
     g_settings.inactiveSymbol    = Str(L"Content.InactiveSymbol");
     g_settings.taskViewButton    = Bool(L"Content.TaskViewButton");
@@ -2228,9 +2413,10 @@ static void LoadSettings() {
         {L"below", VdTaskViewPlacement::Below},
         {L"inGrid", VdTaskViewPlacement::InGrid},
     };
+    // Matches the declared default, "after".
     g_settings.taskViewPlacement = sio::LoadChoice(
         L"Content.TaskViewPlacement", kTaskViewPlacements,
-        VdTaskViewPlacement::Before);
+        VdTaskViewPlacement::After);
 
     g_settings.arrangement       = Str(L"Layout.Arrangement");
     static constexpr sio::Choice<ngl::FillOrder> kFillOrders[] = {
@@ -2253,39 +2439,72 @@ static void LoadSettings() {
     g_settings.appendNewItems = sio::LoadChoice(L"Layout.NewItems",
                                                 kNewItemPolicies, true);
 
-    g_settings.itemWidth         = std::max(1, Int(L"Size.ItemWidth"));
-    g_settings.itemHeight        = std::max(1, Int(L"Size.ItemHeight"));
-    g_settings.itemSpacing       = std::max(0, Int(L"Size.ItemSpacing"));
+    g_settings.itemWidth = std::max(1, PreferCurrentOrLegacyInt(
+        L"Size.ItemWidth", 20, L"buttonWidth", 20, usedLegacy));
+    g_settings.itemHeight = std::max(1, PreferCurrentOrLegacyInt(
+        L"Size.ItemHeight", 22, L"buttonHeight", 22, usedLegacy));
+    g_settings.itemSpacing = std::max(0, PreferCurrentOrLegacyInt(
+        L"Size.ItemSpacing", 2, L"buttonSpacing", 2, usedLegacy));
     g_settings.taskViewSize      = std::max(1, Int(L"Size.TaskViewSize"));
     g_settings.taskViewSpan      = std::max(0, Int(L"Size.TaskViewSpan"));
     g_settings.taskViewGap       = Int(L"Size.TaskViewGap");
 
-    g_settings.padX              = std::max(0, Int(L"Adjust.PadX"));
-    g_settings.padY              = std::max(0, Int(L"Adjust.PadY"));
+    // 1.7 reserved left and right padding separately; 2.0 has one symmetric
+    // value, so the wider of the two carries over.
+    g_settings.padX = std::max(0, PreferCurrentOrLegacyInt(
+        L"Adjust.PadX", 0,
+        Wh_GetIntSetting(L"paddingLeft") >= Wh_GetIntSetting(L"paddingRight")
+            ? L"paddingLeft"
+            : L"paddingRight",
+        0, usedLegacy));
+    g_settings.padY = std::max(0, PreferCurrentOrLegacyInt(
+        L"Adjust.PadY", 0, L"gridVerticalOffset", 0, usedLegacy));
     g_settings.offsetX           = Int(L"Adjust.OffsetX");
     g_settings.offsetY           = Int(L"Adjust.OffsetY");
 
-    g_settings.fontSize          = Int(L"Surface.FontSize");
+    g_settings.fontSize = PreferCurrentOrLegacyInt(
+        L"Surface.FontSize", 10, L"fontSize", 10, usedLegacy);
     g_settings.fontFamily        = Str(L"Surface.FontFamily");
-    g_settings.hoverBackgroundColor   = Str(L"Surface.HoverBackgroundColor");
-    g_settings.pressedBackgroundColor = Str(L"Surface.PressedBackgroundColor");
-    g_settings.borderColor       = Str(L"Surface.BorderColor");
-    g_settings.borderThickness   = Int(L"Surface.BorderThickness");
-    g_settings.cornerRadius      = Int(L"Surface.CornerRadius");
-    g_settings.opacity           = Int(L"Surface.Opacity");
-    g_settings.shineEffect       = Bool(L"Surface.ShineEffect");
+    g_settings.hoverBackgroundColor = PreferCurrentOrLegacyString(
+        L"Surface.HoverBackgroundColor", L"", L"hoverBackgroundColor",
+        usedLegacy);
+    g_settings.pressedBackgroundColor = PreferCurrentOrLegacyString(
+        L"Surface.PressedBackgroundColor", L"", L"pressedBackgroundColor",
+        usedLegacy);
+    g_settings.borderColor = PreferCurrentOrLegacyString(
+        L"Surface.BorderColor", L"", L"borderColor", usedLegacy);
+    g_settings.borderThickness = PreferCurrentOrLegacyInt(
+        L"Surface.BorderThickness", 0, L"borderThickness", 0, usedLegacy);
+    g_settings.cornerRadius = PreferCurrentOrLegacyInt(
+        L"Surface.CornerRadius", 4, L"cornerRadius", 4, usedLegacy);
+    g_settings.opacity = PreferCurrentOrLegacyInt(
+        L"Surface.Opacity", 100, L"buttonOpacity", 100, usedLegacy);
+    g_settings.shineEffect = PreferCurrentOrLegacyInt(
+        L"Surface.ShineEffect", 0, L"shineEffect", 0, usedLegacy) != 0;
     g_settings.taskViewFontFamily = Str(L"Surface.TaskViewFontFamily");
 
-    g_settings.activeTextColor   = Str(L"State.ActiveTextColor");
-    g_settings.inactiveTextColor = Str(L"State.InactiveTextColor");
-    g_settings.activeBackgroundColor   = Str(L"State.ActiveBackgroundColor");
-    g_settings.inactiveBackgroundColor = Str(L"State.InactiveBackgroundColor");
-    g_settings.activeBold        = Bool(L"State.ActiveBold");
+    g_settings.activeTextColor = PreferCurrentOrLegacyString(
+        L"State.ActiveTextColor", L"", L"activeTextColor", usedLegacy);
+    g_settings.inactiveTextColor = PreferCurrentOrLegacyString(
+        L"State.InactiveTextColor", L"", L"inactiveTextColor", usedLegacy);
+    g_settings.activeBackgroundColor = PreferCurrentOrLegacyString(
+        L"State.ActiveBackgroundColor", L"accent", L"activeColor", usedLegacy);
+    g_settings.inactiveBackgroundColor = PreferCurrentOrLegacyString(
+        L"State.InactiveBackgroundColor", L"", L"inactiveColor", usedLegacy);
+    g_settings.activeBold = PreferCurrentOrLegacyInt(
+        L"State.ActiveBold", 0, L"activeBold", 0, usedLegacy) != 0;
 
-    g_settings.hideWhenSingle    = Bool(L"Behavior.HideWhenSingle");
+    g_settings.hideWhenSingle = PreferCurrentOrLegacyInt(
+        L"Behavior.HideWhenSingle", 0, L"hideWhenSingle", 0, usedLegacy) != 0;
     g_settings.hoverPreview = Bool(L"Behavior.HoverPreview");
     g_settings.previewDelay = sio::LoadInt(L"Behavior.PreviewDelay", 100, 2000);
     g_settings.previewWidth = sio::LoadInt(L"Behavior.PreviewWidth", 200, 800);
+
+    if (usedLegacy) {
+        Wh_Log(L"[Settings] Using your 1.7 values where the 2.0 setting is "
+               L"still at its default; change a 2.0 setting to take over, or "
+               L"turn off Behavior.UseLegacySettings");
+    }
 
     auto shownColor = [](std::wstring const& value) {
         return value.empty() ? L"<empty/automatic>" : value.c_str();
@@ -2326,9 +2545,13 @@ static HANDLE g_retryStopEvent = nullptr;
 static std::atomic<bool> g_systemTrayModuleHooked{false};
 // Desktop-switch workers must finish before Windhawk unloads this image.
 // Handles, unlike a counter decremented inside a thread proc, establish that.
-[[clang::no_destroy]] static std::mutex g_switchThreadsMutex;
-[[clang::no_destroy]] static std::optional<std::vector<HANDLE>>
-    g_switchThreads{std::in_place};
+// No no_destroy on either: std::mutex destructs trivially here, and a
+// vector<HANDLE> is plain values whose destructor is just a heap free — safe
+// from any thread at shutdown. The attribute is for types that would touch
+// XAML or another framework during teardown, and suppressing it where it is
+// not needed only invites copying it somewhere it matters.
+static std::mutex g_switchThreadsMutex;          // exit-time-safe: heap-only
+static std::vector<HANDLE> g_switchThreads;      // exit-time-safe: heap-only
 [[clang::no_destroy]] static std::optional<std::list<FrameworkElement::Loaded_revoker>>
     g_autoRevokerList{std::in_place};
 
@@ -2686,7 +2909,7 @@ static void WaitForSwitchThreads() {
     std::vector<HANDLE> threads;
     {
         std::lock_guard lock(g_switchThreadsMutex);
-        threads.swap(*g_switchThreads);
+        threads.swap(g_switchThreads);
     }
     for (HANDLE thread : threads) {
         DWORD result;
@@ -2805,6 +3028,11 @@ static std::vector<std::wstring> ReadDesktopNames(int count) {
 
 namespace desktop_preview {
 constexpr PCWSTR kClass = L"WindhawkDesktopPreview_" WH_MOD_ID;
+
+// Deliberately outside `state`, which Destroy() clears wholesale: the window
+// class outlives any one popup window, so its registration has to be tracked
+// on its own or the two fall out of step.
+static bool g_previewClassRegistered = false;
 
 // The overview used to paint itself in COLOR_INFOBK / COLOR_INFOTEXT — the
 // classic tooltip palette, which renders as pale yellow and looks nothing like
@@ -3114,18 +3342,38 @@ static void Schedule(FrameworkElement const& button, int desktopIndex, int width
         2 * state.heading, int(state.work.bottom - state.work.top));
     if (state.width <= 2 * state.inset || state.height <= 2 * state.heading) return;
     if (!state.popup) {
-        GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<PCWSTR>(&WindowProc), &state.module);
-        WNDCLASSW wc{};
-        wc.hInstance = state.module;
-        wc.lpfnWndProc = WindowProc;
-        wc.lpszClassName = kClass;
-        // This class belongs to this module. An existing copy can only be a
-        // failed prior teardown, whose WndProc may be dangling; never reuse it.
-        if (!RegisterClassW(&wc)) return;
+        if (!state.module) {
+            GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                reinterpret_cast<PCWSTR>(&WindowProc), &state.module);
+        }
+        // THE CLASS OUTLIVES THE WINDOW, so its registration is tracked
+        // separately. The popup is owned by Shell_TrayWnd, so an Explorer
+        // taskbar rebuild destroys it and WM_NCDESTROY nulls state.popup —
+        // but the class this load registered is still registered. Re-running
+        // RegisterClassW then fails with ERROR_CLASS_ALREADY_EXISTS and the
+        // early return silently killed hover previews for the rest of the
+        // session. This flag lives outside `state` on purpose: Destroy()
+        // assigns `state = {}`, which would otherwise wipe it out of step
+        // with the actual registration.
+        if (!g_previewClassRegistered) {
+            WNDCLASSW wc{};
+            wc.hInstance = state.module;
+            wc.lpfnWndProc = WindowProc;
+            wc.lpszClassName = kClass;
+            if (!RegisterClassW(&wc)) {
+                Wh_Log(L"[Preview] RegisterClass failed error=%u; previews "
+                       L"unavailable", GetLastError());
+                return;
+            }
+            g_previewClassRegistered = true;
+        }
         state.popup = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
             kClass, L"Desktop preview", WS_POPUP, 0, 0, state.width, state.height,
             taskbar, nullptr, state.module, nullptr);
+        if (!state.popup) {
+            Wh_Log(L"[Preview] CreateWindow failed error=%u", GetLastError());
+            return;
+        }
     }
     // Re-applied per hover, not once at creation: the user can switch the
     // Windows theme while Explorer keeps running, and the popup outlives that.
@@ -3136,7 +3384,10 @@ static void Schedule(FrameworkElement const& button, int desktopIndex, int width
 static void Destroy() {
     Hide();
     if (state.popup) DestroyWindow(state.popup);
-    if (state.module) UnregisterClassW(kClass, state.module);
+    if (g_previewClassRegistered && state.module) {
+        UnregisterClassW(kClass, state.module);
+        g_previewClassRegistered = false;
+    }
     state = {};
 }
 }  // namespace desktop_preview
@@ -3577,10 +3828,30 @@ static bool ComputeButtonPlacements(int count,
 
 // Measure only -- called from the Start-placement layout callback, so it must
 // not log on every layout pass.
+//
+// AND IT MUST NOT RE-MEASURE ON EVERY PASS EITHER. LayoutUpdated fires for
+// every layout pass anywhere in the taskbar's tree, not just for the element
+// it was attached to, and the uncached form did a ResolveTaskbarWnd +
+// GetWindowRect + GetDpiForWindow, built the expression string, parsed it into
+// a Node tree and ran a full measure/arrange with a fresh cache — every time.
+// The answer only changes when the settings or the desktop count change, and
+// both of those already force a rebuild, so it is cached until then.
+static int g_estimatedSizeCount = -1;
+static ngl::Size g_estimatedSize{};
+
+static void InvalidateButtonGridSizeEstimate() {
+    g_estimatedSizeCount = -1;
+    g_estimatedSize = {};
+}
+
 static ngl::Size EstimateButtonGridSize(int count) {
+    if (count == g_estimatedSizeCount)
+        return g_estimatedSize;
     std::vector<ngl::Placement> placements;
     ngl::Size total;
     ComputeButtonPlacements(count, placements, total, /*quiet=*/true);
+    g_estimatedSizeCount = count;
+    g_estimatedSize = total;
     return total;
 }
 
@@ -3903,6 +4174,17 @@ static Grid BuildButtonGrid(int count, int current) {
             // handle is retained and waited before the mod image is freed.
             std::lock_guard lock(g_switchThreadsMutex);
             if (g_unloading) return;
+            // Reap finished workers while we already hold the lock. Without
+            // this the list only shrinks in Wh_ModUninit, so a user who
+            // switches desktops from the taskbar all day accumulates one
+            // thread handle and one dead thread object per click, inside
+            // explorer.exe, for the lifetime of the mod.
+            std::erase_if(g_switchThreads, [](HANDLE thread) {
+                if (WaitForSingleObject(thread, 0) != WAIT_OBJECT_0)
+                    return false;
+                CloseHandle(thread);
+                return true;
+            });
             HANDLE h = CreateThread(nullptr, 0, [](LPVOID p2) -> DWORD {
                 int i2 = (int)(INT_PTR)p2;
                 CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -3911,7 +4193,7 @@ static Grid BuildButtonGrid(int count, int current) {
                 return 0;
             }, (LPVOID)(INT_PTR)capturedIdx, 0, nullptr);
             if (h)
-                g_switchThreads->push_back(h);
+                g_switchThreads.push_back(h);
             else
                 Wh_Log(L"[Switch] Failed to create desktop-switch thread");
         });
@@ -4687,6 +4969,9 @@ static void RebuildButtonGrid() {
     int current = ReadCurrentDesktop();
     g_desktopCount.store(count);
     g_currentDesktop.store(current);
+    // The cached Start-placement size is only valid for the shape it was
+    // measured from; a rebuild is exactly when that shape can change.
+    InvalidateButtonGridSizeEstimate();
 
     // Secondary bars first — RefreshSecondaryBars handles the hideWhenSingle
     // and toggle-off cases internally, so it must run before the early returns.
@@ -4970,6 +5255,37 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+// Bounded reapply worker. Used both at startup and after a settings change
+// that could not reach a live XAML root — without the second caller, a
+// deferred reapply had nothing left to come back for and the bar stayed gone
+// until Explorer restarted.
+static void StartRetryThread() {
+    StopRetryThread();
+    if (g_unloading)
+        return;
+
+    g_retryStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_retryStopEvent) {
+        Wh_Log(L"[Retry] Failed to create the retry stop event");
+        return;
+    }
+    g_retryThread = CreateThread(nullptr, 0, [](void*) -> DWORD {
+        for (int i = 0; i < 5 && !g_unloading; i++) {
+            if (WaitForSingleObject(g_retryStopEvent, 2000) != WAIT_TIMEOUT) break;
+            if (g_buttonGrid || g_unloading) break;
+            Wh_Log(L"[Retry] Attempt %d", i + 1);
+            ApplyAllSettingsOnWindowThread();
+        }
+        return 0;
+    }, nullptr, 0, nullptr);
+    if (!g_retryThread) {
+        // Nothing will ever wait on it, so do not leave the event behind.
+        Wh_Log(L"[Retry] Failed to create the retry thread");
+        CloseHandle(g_retryStopEvent);
+        g_retryStopEvent = nullptr;
+    }
+}
+
 void Wh_ModAfterInit() {
     if (!g_systemTrayModuleHooked) {
         if (HMODULE hSystemTray = GetSystemTrayModuleHandle()) {
@@ -4983,16 +5299,7 @@ void Wh_ModAfterInit() {
     if (g_systemTrayModuleHooked)
         ApplyAllSettingsOnWindowThread();
 
-    g_retryStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    g_retryThread = CreateThread(nullptr, 0, [](void*) -> DWORD {
-        for (int i = 0; i < 5 && !g_unloading; i++) {
-            if (WaitForSingleObject(g_retryStopEvent, 2000) != WAIT_TIMEOUT) break;
-            if (g_buttonGrid || g_unloading) break;
-            Wh_Log(L"[AfterInit] Retry %d", i + 1);
-            ApplyAllSettingsOnWindowThread();
-        }
-        return 0;
-    }, nullptr, 0, nullptr);
+    StartRetryThread();
 }
 
 void Wh_ModUninit() {
@@ -5002,12 +5309,6 @@ void Wh_ModUninit() {
     // Waiting on each handle establishes that the worker has returned fully
     // out of mod code. A counter decremented inside its thread proc cannot.
     WaitForSwitchThreads();
-    // Every handle was closed above; free the vector buffer on this controlled
-    // unload path instead of retaining it behind no_destroy.
-    {
-        std::lock_guard lock(g_switchThreadsMutex);
-        g_switchThreads.reset();
-    }
 
     StopRetryThread();
     StopNotificationThread();
@@ -5020,20 +5321,47 @@ void Wh_ModUninit() {
     bool tornDown = false;
     if (hWnd) {
         tornDown = RunFromWindowThread(hWnd, [](void*) {
-            desktop_preview::Destroy();
-            // Controlled UI-thread unload: revoke/release on this thread, then
-            // reset() the no_destroy optionals so their heap buffers are freed
-            // (a bare no_destroy container would keep its capacity forever).
-            g_autoRevokerList->clear();
-            RemoveButtonGrid();
-            RemoveSecondaryBars();
-            ClearAllButtonEventState();
-            g_autoRevokerList.reset();
-            g_buttonEventStates.reset();
-            g_secondaryBars.reset();  // release WinRT refs on the UI thread
+            // EACH STEP GUARDED ON ITS OWN. tbh::Invoke wraps the whole
+            // callback in one try/catch, so an unguarded sequence turns the
+            // first throw into "nothing after this ran" — and several of
+            // these genuinely can throw: RemoveButtonGrid goes through
+            // GetTaskbarXamlRoot and Children()/ColumnDefinitions() removals,
+            // and RemoveSecondaryBars touches trays on other taskbars.
+            //
+            // Revocation is the part that must not be skipped. Removing the
+            // grid is cosmetic; leaving a Click or Pointer delegate
+            // registered on a live taskbar element is what calls into
+            // unmapped memory after Windhawk frees this image. So revoking is
+            // independent of the physical removal, and a failure in one step
+            // cannot prevent the next.
+            auto step = [](PCWSTR what, auto&& fn) {
+                try {
+                    fn();
+                } catch (...) {
+                    LogCurrentUiException(what);
+                }
+            };
+            step(L"preview teardown", [] { desktop_preview::Destroy(); });
+            step(L"Loaded revokers", [] { g_autoRevokerList->clear(); });
+            step(L"button handlers", [] { ClearAllButtonEventState(); });
+            step(L"remove button grid", [] { RemoveButtonGrid(); });
+            step(L"remove secondary bars", [] { RemoveSecondaryBars(); });
+            // Controlled UI-thread unload: free the no_destroy optionals'
+            // heap buffers here rather than retaining them forever.
+            step(L"release revoker list", [] { g_autoRevokerList.reset(); });
+            step(L"release handler state", [] { g_buttonEventStates.reset(); });
+            step(L"release secondary bars", [] { g_secondaryBars.reset(); });
         }, nullptr);
     }
     if (!tornDown) {
+        // Every step above swallows its own exceptions now, so the lambda
+        // cannot throw — reaching here means the DISPATCH itself failed, i.e.
+        // the taskbar UI thread was genuinely unreachable. Revoking a
+        // thread-affine XAML delegate from Windhawk's thread cannot work, so
+        // this is damage limitation, not a second attempt at the same thing.
+        Wh_Log(L"[Uninit] No taskbar UI dispatch; XAML handlers may still be "
+               L"registered");
+
         // The popup has its own UI thread and WndProc. Tear it down through its
         // own window even if Shell_TrayWnd was recreated or is briefly absent.
         HWND popup = desktop_preview::state.popup;
@@ -5042,27 +5370,46 @@ void Wh_ModUninit() {
             }, nullptr)) {
             Wh_Log(L"[Uninit] Failed to dispatch desktop-preview cleanup");
         }
-        // Explorer shutdown doesn't guarantee a usable XAML/UI thread. The
-        // XAML owners deliberately retain state rather than releasing it from
-        // Windhawk's arbitrary unload thread after framework teardown.
-        Wh_Log(L"[Uninit] No taskbar UI dispatch; XAML tree was unavailable");
+
+        // Dropping the handler records does not touch XAML, so it works from
+        // any thread and at least stops this mod from holding those elements.
+        try {
+            if (g_buttonEventStates) g_buttonEventStates->clear();
+        } catch (...) {
+        }
+        // The XAML owners deliberately retain their references: releasing a
+        // projected type from Windhawk's arbitrary unload thread after
+        // framework teardown is worse than leaking it into a dying process.
     }
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
-    Wh_Log(L"[Settings] Changed");
-
+    // STOP THE READERS BEFORE REWRITING WHAT THEY READ. LoadSettings
+    // reassigns a dozen std::wstring members, and the notification thread can
+    // still be dispatching RebuildButtonGrid onto the UI thread — which reads
+    // activeSymbol, customLabels and the color strings. That is a data race on
+    // the string buffers, not merely a stale read.
     StopRetryThread();
     // Stop desktop-change callbacks before rebuilding tray columns. A late
     // callback during settings save can otherwise rebuild the old bar while the
     // UI thread is removing/reinserting columns.
     StopNotificationThread();
 
-    HWND hWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd);
-    if (!hWnd) return;
+    LoadSettings();
+    InvalidateButtonGridSizeEstimate();
+    Wh_Log(L"[Settings] Changed");
 
-    RunFromWindowThread(hWnd, [](void* parameter) {
+    HWND hWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd);
+    if (!hWnd) {
+        // Nothing applied the new settings, so something has to come back for
+        // it. Without this the bar stays gone until Explorer restarts.
+        StartRetryThread();
+        return;
+    }
+
+    static std::atomic<bool> s_reapplied{false};
+    s_reapplied = false;
+    bool dispatched = RunFromWindowThread(hWnd, [](void* parameter) {
         HWND hWnd = static_cast<HWND>(parameter);
         if (!GetTaskbarXamlRoot(hWnd)) {
             Wh_Log(L"[Settings] No live XAML root; deferring reapply");
@@ -5073,5 +5420,13 @@ void Wh_ModSettingsChanged() {
         // Apply the new settings (including the multi-monitor toggle) to any
         // secondary taskbars discovered earlier.
         RefreshSecondaryBars();
+        s_reapplied = true;
     }, hWnd);
+
+    // "Deferring reapply" only means something if somebody comes back. The
+    // retry loop was stopped above, so restart it whenever the reapply did not
+    // actually happen.
+    if (!dispatched || !s_reapplied) {
+        StartRetryThread();
+    }
 }
