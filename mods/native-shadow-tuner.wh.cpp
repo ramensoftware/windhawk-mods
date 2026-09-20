@@ -2,11 +2,12 @@
 // @id              native-shadow-tuner
 // @name            Windows Shadows Tuner
 // @description     Adjust the size, blur and intensity of native Windows shadows.
-// @version         0.6.0
+// @version         0.6.3
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         dwm.exe
 // @architecture    x86-64
+// @compilerOptions -lwevtapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -55,9 +56,9 @@ persistent state.
 
 Tested and supported on Windows 11 25H2 build 26200.9445.
 
-Windows 11 24H2 is currently unsupported: the required uDWM symbol can be
-resolved on build 26100.9457, but an independent test reported no visible
-shadow change.
+On Windows 11 24H2 build 26100.9457, version 0.6.0 resolved the required uDWM
+symbol but produced no visible change because every observed `style=0` call was
+skipped. Version 0.6.2 removes that assumption and is awaiting a new 24H2 test.
 
 Other Windows builds haven't been tested. If the required uDWM symbol can't
 be resolved, the mod logs the error and doesn't load.
@@ -77,6 +78,7 @@ be resolved, the mod logs the error and doesn't load.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <winevt.h>
 #include <windhawk_utils.h>
 
 #include <algorithm>
@@ -97,6 +99,63 @@ GetShadowParameters getShadowParameters_Original = nullptr;
 float opacityScale = 1.0f;
 float sizeScale = 1.0f;
 
+// DWM records a Dwminit warning when it crashes and is restarted. Two such
+// warnings in one minute are treated as a possible crash loop.
+bool HasMultipleDwminitWarningsInLastMinute() {
+    constexpr WCHAR kQueryPath[] = L"Application";
+    constexpr WCHAR kQuery[] =
+        L"*[System[Provider[@Name='Dwminit'] and (Level=3) and "
+        L"TimeCreated[timediff(@SystemTime) <= 60000]]]";
+
+    EVT_HANDLE queryHandle =
+        EvtQuery(nullptr, kQueryPath, kQuery, EvtQueryChannelPath);
+    if (!queryHandle) {
+        Wh_Log(L"EvtQuery failed with error: %u", GetLastError());
+        return false;
+    }
+
+    EVT_HANDLE events[2] = {};
+    DWORD returned = 0;
+    constexpr DWORD kTimeoutMilliseconds = 1000;
+    const BOOL ok = EvtNext(queryHandle,
+                            ARRAYSIZE(events),
+                            events,
+                            kTimeoutMilliseconds,
+                            0,
+                            &returned);
+
+    if (!ok && GetLastError() != ERROR_NO_MORE_ITEMS) {
+        Wh_Log(L"EvtNext failed with error: %u", GetLastError());
+    }
+
+    for (DWORD i = 0; i < returned; i++) {
+        EvtClose(events[i]);
+    }
+
+    EvtClose(queryHandle);
+    return ok && returned >= ARRAYSIZE(events);
+}
+
+bool IsPossibleDwmCrashLoop() {
+    FILETIME nowFileTime;
+    GetSystemTimeAsFileTime(&nowFileTime);
+
+    const ULONGLONG now =
+        (static_cast<ULONGLONG>(nowFileTime.dwHighDateTime) << 32) |
+        nowFileTime.dwLowDateTime;
+
+    ULONGLONG lastInitTime = 0;
+    Wh_GetBinaryValue(
+        L"lastInitTime", &lastInitTime, sizeof(lastInitTime));
+    Wh_SetBinaryValue(L"lastInitTime", &now, sizeof(now));
+
+    // Querying the event log can wait for up to one second. Skip it during
+    // normal DWM startup and only query after another recent initialization.
+    constexpr ULONGLONG kOneMinute = 60 * 10000000ULL;
+    return now - lastInitTime <= kOneMinute &&
+           HasMultipleDwminitWarningsInLastMinute();
+}
+
 void __cdecl GetShadowParameters_Hook(int style,
                                       int dpi,
                                       float* radius1,
@@ -111,12 +170,14 @@ void __cdecl GetShadowParameters_Hook(int style,
         alpha1,
         alpha2);
 
-    // In the analyzed uDWM shadow path, value 0 selects the no-shadow case.
-    if (style == 0) {
-        Wh_Log(L"SHADOW style=%d dpi=%d not scaled (no-shadow style)", style,
-               dpi);
-        return;
-    }
+    Wh_Log(
+        L"SHADOW style=%d dpi=%d radius=(%.3f,%.3f) alpha=(%.3f,%.3f)",
+        style,
+        dpi,
+        static_cast<double>(*radius1),
+        static_cast<double>(*radius2),
+        static_cast<double>(*alpha1),
+        static_cast<double>(*alpha2));
 
     *radius1 *= sizeScale;
     *radius2 *= sizeScale;
@@ -170,6 +231,13 @@ BOOL Wh_ModInit() {
         Wh_Log(
             L"Neutral shadow settings selected; "
             L"no DWM hooks are required.");
+        return FALSE;
+    }
+
+    if (IsPossibleDwmCrashLoop()) {
+        Wh_Log(
+            L"Refusing to load: multiple recent Dwminit warnings indicate "
+            L"a possible DWM crash loop.");
         return FALSE;
     }
 
