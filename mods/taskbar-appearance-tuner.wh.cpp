@@ -1,10 +1,10 @@
 // ==WindhawkMod==
-// @id              taskbar-appearance-tuner
-// @name            Taskbar opacity tuner
-// @name:zh-CN      任务栏透明度调节器
+// @id              taskbar-brightness-and-opacity-tuner
+// @name            Taskbar brightness and opacity tuner
+// @name:zh-CN      任务栏亮度和透明度调节器
 // @description     Adjust the opacity of the taskbar background and of the icons and text, and dim the taskbar background, for a clean, beautiful taskbar which is easier on the eyes and on OLED displays
 // @description:zh-CN 分别调整任务栏背景与图标文字的不透明度，并可调暗任务栏背景，定制出简洁漂亮的任务栏，也更护眼、更适合 OLED 显示器
-// @version         1.9.0
+// @version         1.9.3
 // @author          lzxujun
 // @homepage        https://github.com/lzxujun
 // @license         GPL-3.0
@@ -21,7 +21,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar opacity tuner
+# Taskbar brightness and opacity tuner
 
 > **English:** Adjust the opacity of the taskbar background and of its icons
 > and text, and dim the taskbar background, to build a clean, beautiful
@@ -139,9 +139,9 @@ without depending on the class names of the individual containers.
   $name: Show the taskbar top line
   $name:zh-CN: 显示任务栏顶部线
   $description: >-
-    Whether to show the thin line at the top edge of the taskbar. When
-    disabled, the line is hidden by clearing the taskbar border stroke.
-  $description:zh-CN: 是否显示任务栏顶部的细线。关闭后通过清除任务栏边框描边来隐藏该线。
+    Whether to show the thin line at the top edge of the taskbar. The line is
+    hidden by fading it out, so switching it back on restores it exactly.
+  $description:zh-CN: 是否显示任务栏顶部的细线。关闭后该线以淡出方式隐藏，重新打开即精确恢复。
 */
 // ==/WindhawkModSettings==
 
@@ -528,20 +528,25 @@ struct AppearanceState {
     double originalFillOpacity = 1.0;
     // backgroundFillReplaced records whether the fill of the background
     // rectangle was replaced with a backdrop brush (background dimming). The
-    // original fill is not held: ClearValue drops the local value so the
-    // style-provided brush takes effect again, which also keeps the state free
-    // of strong, thread-affine XAML objects.
+    // original brush is held and put back by assignment: elements of the
+    // taskbar XAML template receive their values as local values, so
+    // ClearValue would wipe the fill instead of reverting it. RestoreState
+    // only ever runs on the taskbar UI thread, so the strong reference is
+    // always released from the thread the object belongs to.
     bool backgroundFillReplaced = false;
-    // The taskbar top line rectangle and its original visibility. topLineHidden
-    // records whether the line was actually hidden, so that restore only
-    // touches properties which were modified. The fill and the stroke thickness
-    // are restored with ClearValue, so no original values have to be held
-    // (holding a brush here would make the state a strong, thread-affine XAML
-    // object, which must not be released from an arbitrary thread at process
-    // shutdown).
+    Media::Brush originalFillBrush = nullptr;
+    // The taskbar top line rectangle. topLineHidden records whether the line
+    // was actually hidden, so that restore only touches properties which were
+    // modified. The line is hidden with Opacity only: that is a plain value
+    // which can be handed back verbatim, and it is independent of how the line
+    // happens to be drawn (fill or stroke). Visibility, Fill and
+    // StrokeThickness are deliberately never written - the line belongs to the
+    // taskbar XAML template and holds its values as local values, so
+    // overwriting them destroys the original look for good (ClearValue does not
+    // revert a template value, it wipes it).
     winrt::weak_ref<FrameworkElement> topLine;
     bool topLineHidden = false;
-    Visibility originalTopLineVisibility = Visibility::Visible;
+    double originalTopLineOpacity = 1.0;
     // The taskbar drag grip handle (Rectangle#Gripper). The handle is hidden
     // while the mod is active; the property-changed callback re-hides it when
     // Windows makes it visible again (locking and unlocking the taskbar does).
@@ -553,10 +558,13 @@ struct AppearanceState {
         foregroundOpacity;
 };
 
-// The state holds only weak references and value types, which are all safe to
-// release from the automatic destructor at process shutdown (Explorer's
-// shutdown path runs global destructors after the XAML core is gone). States
-// are normally released via RestoreAllStates() on the taskbar UI thread.
+// The state holds weak references and value types, plus the single strong
+// brush saved for the background fill restore. RestoreAllStates() always runs
+// on the taskbar UI thread (settings changes, neutral settings and unload all
+// go through ApplyPassOnTaskbarThread), so the brush is released from the
+// thread it belongs to. The only path which could release it elsewhere is
+// process termination running global destructors, where nothing can be served
+// anymore anyway.
 std::vector<AppearanceState> g_states;
 
 HWND FindCurrentProcessTaskbarWnd() {
@@ -960,11 +968,14 @@ void RestoreState(AppearanceState& state) {
         if (auto backgroundFill = state.backgroundFill.get()) {
             if (auto rect = backgroundFill.try_as<Shapes::Rectangle>()) {
                 // The fill was replaced with a backdrop brush for the
-                // brightness adjustment; ClearValue drops the local value so
-                // that the style-provided brush takes effect again.
-                rect.ClearValue(Shapes::Shape::FillProperty());
+                // brightness adjustment. Put the saved brush back by
+                // assignment: template elements hold their values as local
+                // values, so ClearValue would wipe the fill instead of
+                // reverting it.
+                rect.Fill(state.originalFillBrush);
             }
         }
+        state.originalFillBrush = nullptr;
         state.backgroundFillReplaced = false;
     }
 
@@ -974,15 +985,9 @@ void RestoreState(AppearanceState& state) {
 
     if (state.topLineHidden) {
         if (auto topLine = state.topLine.get()) {
-            // The fill and the stroke thickness were overwritten with local
-            // values; ClearValue drops them so that the style-provided values
-            // take effect again. Nothing here lives in the mod image, so this
-            // is safe even if the state outlives the mod.
-            if (auto rect = topLine.try_as<Shapes::Rectangle>()) {
-                rect.ClearValue(Shapes::Shape::FillProperty());
-                rect.ClearValue(Shapes::Shape::StrokeThicknessProperty());
-            }
-            topLine.Visibility(state.originalTopLineVisibility);
+            // The line was hidden with Opacity only; assigning the saved value
+            // back brings it back verbatim.
+            topLine.Opacity(state.originalTopLineOpacity);
         }
     }
 
@@ -1055,12 +1060,10 @@ std::pair<double, double> GetVisibleBand(FrameworkElement content,
 
 // Looks the thin line at the top edge of the taskbar up and hides it on
 // request. The line is drawn by the taskbar border rectangle
-// (Rectangle#BackgroundStroke, a sibling of Rectangle#BackgroundFill).
-// Depending on the Windows version it can be drawn with a fill or with a
-// stroke, so both are cleared when hiding, and the element itself is
-// collapsed. It is looked up among the siblings of BackgroundFill first, as
-// the taskbar flyouts contain rectangles with the same names. The original
-// state is always recorded, so that RestoreState can bring it back.
+// (Rectangle#BackgroundStroke, a sibling of Rectangle#BackgroundFill). It is
+// looked up among the siblings of BackgroundFill first, as the taskbar flyouts
+// contain rectangles with the same names. Hiding only changes the opacity, so
+// the original look can always be restored verbatim.
 void ApplyTopLineStyle(FrameworkElement content,
                        FrameworkElement backgroundFillElem,
                        AppearanceState& state) {
@@ -1068,17 +1071,17 @@ void ApplyTopLineStyle(FrameworkElement content,
     if (auto parent =
             Media::VisualTreeHelper::GetParent(backgroundFillElem)
                 .try_as<FrameworkElement>()) {
-            int childrenCount =
-                Media::VisualTreeHelper::GetChildrenCount(parent);
-            for (int i = 0; i < childrenCount; i++) {
-                auto child = Media::VisualTreeHelper::GetChild(parent, i)
-                                 .try_as<FrameworkElement>();
-                if (child && child.Name() == L"BackgroundStroke") {
-                    topLineElem = child;
-                    break;
-                }
+        int childrenCount =
+            Media::VisualTreeHelper::GetChildrenCount(parent);
+        for (int i = 0; i < childrenCount; i++) {
+            auto child = Media::VisualTreeHelper::GetChild(parent, i)
+                             .try_as<FrameworkElement>();
+            if (child && child.Name() == L"BackgroundStroke") {
+                topLineElem = child;
+                break;
             }
         }
+    }
     if (!topLineElem) {
         topLineElem = FindDescendantByName(content, L"BackgroundStroke");
     }
@@ -1095,13 +1098,14 @@ void ApplyTopLineStyle(FrameworkElement content,
     }
 
     state.topLine = winrt::make_weak(topLineRect.as<FrameworkElement>());
-    state.originalTopLineVisibility = topLineRect.Visibility();
+    state.originalTopLineOpacity = topLineRect.Opacity();
 
     if (!g_settings.topLine) {
         state.topLineHidden = true;
-        topLineRect.Fill(nullptr);
-        topLineRect.StrokeThickness(0);
-        topLineRect.Visibility(Visibility::Collapsed);
+        // Hide the line with Opacity only. Visibility, Fill and
+        // StrokeThickness are never written: they belong to the taskbar
+        // template, and overwriting them destroys the original look for good.
+        topLineRect.Opacity(0.0);
         Wh_Log(L"Top line hidden");
     }
 }
@@ -1142,8 +1146,8 @@ void ApplyGripStyle(FrameworkElement content, AppearanceState& state) {
 
 // Adjusts the background rectangle: opacity directly, brightness by replacing
 // the fill with a live backdrop brush filtered by a color matrix effect. The
-// fill replacement is recorded in the state so that RestoreState can undo it
-// with ClearValue.
+// original fill is saved in the state so that RestoreState can put it back by
+// assignment.
 void ApplyBackgroundStyle(Shapes::Rectangle const& backgroundFill,
                           AppearanceState& state) {
     bool hasOpacity = g_settings.backgroundOpacity != 100;
@@ -1164,6 +1168,7 @@ void ApplyBackgroundStyle(Shapes::Rectangle const& backgroundFill,
                     .Compositor();
         float brightness = -g_settings.backgroundBrightness / 100.0f;
         auto brush = winrt::make<BackdropAdjustBrush>(compositor, brightness);
+        state.originalFillBrush = backgroundFill.Fill();
         backgroundFill.Fill(brush);
         state.backgroundFillReplaced = true;
         Wh_Log(L"Background fill replaced (brightness=%.2f)", brightness);
@@ -1521,8 +1526,8 @@ void WINAPI ApplyPassOnTaskbarThread(void* parameter) {
                 // callback can outlive the mod, and restore unconditionally:
                 // RestoreAllStates() works off the stored weak refs and does
                 // not need a XamlRoot. A skipped restore would leave the
-                // taskbar holding a top line fill brush which lives in the
-                // mod image, which crashes Explorer once the mod is unloaded.
+                // taskbar holding the background fill brush, which lives in
+                // the mod image and crashes Explorer once the mod is unloaded.
                 StopApplyRetry(hWnd);
                 RestoreAllStates();
                 return TRUE;
