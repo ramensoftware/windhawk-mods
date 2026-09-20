@@ -2,12 +2,138 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-20T18:22:04.000Z</updated>
+    <updated>2026-09-20T18:51:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Teams Multi-Instance 1.0]]></title>
+        <id>https://windhawk.net/mods/teams-multi-instance#0737efa406ff03b13579de25c758a86837cc625a</id>
+        <link href="https://windhawk.net/mods/teams-multi-instance"/>
+        <updated>2026-09-20T18:51:31.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="teamsmultiinstance">Teams Multi-Instance</h1>
+<p>The new Microsoft Teams desktop app only allows one instance per Windows
+session — launching it again just activates the existing window. Teams
+enforces this with two named mutexes, <code>Teams-Tfw-instance</code> and
+<code>Teams-Tfw-server</code>. This mod appends the process ID to those names so each
+launch believes it is the first one, letting you run e.g. your own tenant and
+a client tenant side by side in two full Teams windows.</p>
+<h2 id="usage">Usage</h2>
+<ol>
+<li>Enable the mod.</li>
+<li>Quit Teams completely (tray icon → Quit) and start it again, so the first
+instance is launched with the mod active.</li>
+<li>Start Teams again. Every additional launch opens a new independent
+instance. Sign in to a different account/tenant in each one.</li>
+</ol>
+<p>Each instance gets its own tray icon, with the process ID in the tooltip
+(e.g. <code>Microsoft Teams [20680]</code>) so they can be told apart. Additional icons
+usually land in the tray overflow (the <code>^</code> arrow). Quit each instance from
+its own tray icon or from inside its window — closing a window only
+minimises it.</p>
+<p><strong>Restart Teams after enabling, disabling, or changing the settings of the
+mod.</strong> The mod decides once, when a Teams process starts, whether and how to
+rewrite names, and keeps that decision — and the settings in effect at the
+time — for the life of the process. A Teams instance that was already
+running when the mod was enabled is left untouched; an instance started with
+the mod active keeps its salt across mod updates and Windhawk restarts; and
+settings changes only apply to Teams processes started afterwards.</p>
+<h2 id="howitworks">How it works</h2>
+<p>Hooks <code>NtCreateMutant</code> / <code>NtOpenMutant</code> in ntdll and appends <code>_&lt;pid&gt;</code> to
+object names matching the configured patterns. Only mutexes are hooked —
+sections and events are deliberately left alone, since those fire on the
+DLL-loader path and hooking them destabilises the process.</p>
+<p>Each <code>ms-teams.exe</code> process uses its own PID as the salt. Only the top-level
+Teams process creates or opens the <code>Teams-Tfw-*</code> objects; child
+<code>ms-teams.exe</code> processes never touch them, so they need no shared salt.</p>
+<p>Teams registers its tray icon with a fixed GUID, and Windows allows only one
+icon per GUID, so a second instance would get no icon at all. The mod hooks
+<code>Shell_NotifyIconW</code> in salted processes, drops the GUID so the icon is
+identified by its window instead, and appends the PID to the tooltip.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li><strong>All instances share the same Teams profile</strong>
+(<code>%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache</code>, including the
+WebView2 user-data folder). Two Teams processes writing it concurrently is
+exactly what the single-instance lock exists to prevent. This can corrupt
+the profile, which means signing in again and rebuilding the cache. Avoid
+signing in/out or changing settings in more than one instance, and use at
+your own risk.</li>
+<li>Notification clicks and <code>teams://</code> links are routed by Windows activation
+and may land in a different instance than the one you expect.</li>
+<li>Helpers that are not <code>ms-teams.exe</code> (the Teams Meeting Add-in in Outlook,
+the updater) are not hooked and cannot reach a salted instance's objects;
+meeting-join from Outlook may target the wrong instance or none.</li>
+<li>Not supported by Microsoft.</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>Turn on <strong>Log only</strong>, then quit and restart Teams. The Windhawk log lists
+every named mutex the new Teams process creates or opens without modifying
+any of them (the interesting objects are created during startup, so a running
+instance shows nothing useful). If a future Teams build renames the
+single-instance objects, add the new name to <strong>Object name patterns</strong>, turn
+Log only off, and restart Teams again.</p>]]></content>
+        <author>
+            <name>Sam Mahdi</name>
+            <uri>https://github.com/TSA3000</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Vista/7 Logoff Screen Restorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/win7-logoff-screen-restorer#ee795749e75b9d66f8f383434cb09d0320e6c931</id>
+        <link href="https://windhawk.net/mods/win7-logoff-screen-restorer"/>
+        <updated>2026-09-20T18:51:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowsvista7logoffscreenrestorer">Windows Vista/7 Logoff Screen Restorer</h1>
+<p>This mod shows a Windows Vista/7-style full-screen confirmation (dimmed
+desktop, a list of your open programs, and "Force log off"/"Cancel" buttons)
+right before a log off, shut down or restart started from Explorer, whenever
+programs are still open.</p>
+<p>The files on the system are not modified. A program that refuses to close, for example because of
+unsaved work, is not force-closed, so Windows may still show its own "app is
+preventing shutdown" screen afterwards in rare cases.</p>
+<h2 id="screenshots">Screenshots</h2>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7logoff.PNG" alt="Windows 7 Logoff" /></p>
+<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/winvistalogoff.PNG" alt="Windows Vista Logoff" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>The mod shows every open program in a scrollable list, with icons just like Windows Vista/7 did. Programs that have stopped responding are marked "not responding" and listed first.</li>
+<li>If nothing is open, the screen doesn't show up at all and the system goes straight to shutdown.</li>
+<li>The mod includes two skins to choose in the settings: <strong>Windows 7</strong> (blue Aero) or <strong>Windows Vista</strong> (red button) and the changes apply instantly.</li>
+<li>The mod is translated into 21 languages, matched automatically the system language (or pick one manually in settings).</li>
+</ul>
+<p>The mod has been tested on Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2.</p>
+<hr />
+<h2 id="tryitwithoutloggingoff">Try it without logging off</h2>
+<p>To try the mod without logging off, you can enable a preview shortcut in the mod's settings (<code>previewHotkey</code>) and press it any time to preview the screen. The preview shortcut is off by default. <code>Win+L</code> can't be used as a shortcut — Windows reserves it for locking the PC.</p>
+<hr />
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 10 or Windows 11 (64 bit)</li>
+</ul>
+<hr />
+<h2 id="safetynotes">Safety Notes</h2>
+<ul>
+<li>If the screen is ever left open too long, the mod closes it automatically after 60 seconds and lets the logoff/shutdown continue and it never forces programs to close on its own and never destroys unsaved work.</li>
+<li>The mod only shows a visual screen and it doesn't touch any system files or settings, and doesn't write anything to the registry.</li>
+<li>Turning the mod off from Windhawk removes it completely.</li>
+</ul>
+<hr />
+<h2 id="relationtowin7bsdr">Relation to win7-bsdr</h2>
+<p>Unlike <code>win7-bsdr</code>, which hooks <code>LogonUI.exe</code> and <code>winlogon.exe</code>, this mod runs entirely inside <code>explorer.exe</code>: no <code>LogonUI.exe</code> setup it is essentially a confirmation on every shell-initiated shutdown.</p>
+<hr />
+<h2 id="credits">Credits</h2>
+<ul>
+<li>Cips — testing on Windows 11 25H2</li>
+</ul>
+<hr />
+<p>For any suggestions or problems it is recommended to contact the author of this modification.</p>]]></content>
+        <author>
+            <name>babamohammed</name>
+            <uri>https://github.com/babamohammed2022</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinDraw - Screen Inking & Annotation 1.0.0]]></title>
         <id>https://windhawk.net/mods/windraw#eb97283dd3ce0d81657dc64ba8611f528fcee120</id>
@@ -1084,38 +1210,6 @@ mod by m417z (GPL-3.0).</p>]]></content>
         <author>
             <name>Ingan121</name>
             <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Aero Flip 3D Recreation 1.2.0]]></title>
-        <id>https://windhawk.net/mods/aero-flip3d-recreation#a59c744c4e60927da9e311c3d5127b9b826dbaa3</id>
-        <link href="https://windhawk.net/mods/aero-flip3d-recreation"/>
-        <updated>2026-09-17T19:08:02.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Made the implementation more robust</li>
-<li>Improved desktop background capture on multi-monitor setups</li>
-<li>Enhanced the handle of the previews</li>
-<li>Updated the README</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MuteAlert - Microphone Activity Taskbar Widget 0.9.10]]></title>
-        <id>https://windhawk.net/mods/mutealert#cfa9b1247d303811aded2063004f07525dc1345b</id>
-        <link href="https://windhawk.net/mods/mutealert"/>
-        <updated>2026-09-17T19:03:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>recover an unmuted Windows input at startup only when MuteAlert recorded that it applied the preceding headset-driven mute</li>
-<li>keep manual Windows privacy mutes intact and keep call-app unmute synchronization transition-driven</li>
-<li>preserve fail-safe physical-mute enforcement for Windows input and active calls</li>
-<li>organize settings into collapsible General, Headset, Slack, Teams, Zoom, and Google Meet groups</li>
-</ul>]]></content>
-        <author>
-            <name>Nikolay</name>
-            <uri>https://github.com/Nikolay1243</uri>
         </author>
     </entry>
 </feed>

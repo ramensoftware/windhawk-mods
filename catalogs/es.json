@@ -15772,6 +15772,36 @@
         "version": "1.0"
       }
     },
+    "teams-multi-instance": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789930291000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1789930291000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Sam Mahdi",
+        "compilerOptions": "-lshlwapi -lshell32",
+        "description": "Allows running multiple independent instances of the new Microsoft Teams desktop app",
+        "github": "https://github.com/TSA3000",
+        "include": [
+          "ms-teams.exe"
+        ],
+        "license": "MIT",
+        "name": "Teams Multi-Instance",
+        "version": "1.0"
+      }
+    },
     "text-replace": {
       "details": {
         "defaultSorting": 8145,
@@ -18020,6 +18050,38 @@
         "name": "Logon & Sleep Fade Restorer",
         "twitter": "https://twitter.com/Ingan121",
         "version": "1.4"
+      }
+    },
+    "win7-logoff-screen-restorer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789930284000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1789930284000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "babamohammed",
+        "compilerOptions": "-luser32 -lgdi32 -lmsimg32 -lpsapi -lshell32 -ldwmapi -ladvapi32 -lole32",
+        "description": "This mod shows a Windows Vista/7-style full-screen confirmation listing your open programs before log off, shut down or restart on Windows 10 and 11",
+        "github": "https://github.com/babamohammed2022",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Windows Vista/7 Logoff Screen Restorer",
+        "version": "1.0.0"
       }
     },
     "win7-network-flyout-recreation": {
