@@ -22,9 +22,9 @@ it. Inspired by three finger drag on macOS.
 ## Features
 
 - Moves the windows of all programs, including programs running as
-  administrator. The mod runs inside `explorer.exe`, which is always running,
-  and loads a small helper into programs running as administrator, which
-  Windows doesn't let other programs move.
+  administrator. The mod runs in a process of its own, and loads a small
+  helper into programs running as administrator, which Windows doesn't let
+  other programs move.
 - Native move: windows are moved by Windows itself, the way a title bar drag
   moves them, so Snap Layouts, Aero Snap and PowerToys FancyZones work as
   usual. Programs the mod doesn't run in are moved by the mod instead.
@@ -69,13 +69,23 @@ free, so the three-finger tap can keep any action.
 ## Limitations
 
 - Requires a precision touchpad.
-- The mod runs in Explorer and in programs running as administrator. With
-  native move on, it also loads into the other programs, where it only hooks
-  message retrieval and stays idle until a drag.
-- With a program running as administrator in the foreground, Esc doesn't
-  cancel a direct move, and macOS drag mode can't click. The helper in such
-  programs only ever moves their windows, moves the cursor and presses the
-  button on the mod's own overlay, so that it can't be used to control them.
+- The touchpad is read in a dedicated process of the mod's own. Programs
+  running as administrator get a helper, and with native move on the mod also
+  loads into the other programs, where it only hooks message retrieval and
+  stays idle until a drag.
+- What works while a program running as administrator is in the foreground
+  depends on Windhawk's own level. Running Windhawk as administrator, as it
+  asks to be, leaves nothing out. Otherwise such a program's helper moves the
+  cursor and its windows, but the window isn't brought to the front, Esc
+  doesn't cancel a direct move, and macOS drag mode can't click. A helper only
+  ever moves its program's windows, moves the cursor and presses the button on
+  the mod's own overlay, so that it can't be used to control the program.
+
+## Credits
+
+Native move follows the approach [AltDrag](https://windhawk.net/mods/alt-drag)
+takes: hooks on message retrieval turn a press into the move loop Windows
+itself runs. Both mods are under the GPL v3.
 */
 // ==/WindhawkModReadme==
 
@@ -92,9 +102,8 @@ free, so the three-finger tap can keep any action.
     Windows are moved by Windows itself, the way a title bar drag moves them,
     so Snap Layouts, Aero Snap, PowerToys FancyZones and other tools which
     react to window drags work, in place of the mod's own snapping. When off,
-    the mod unloads from all programs but Explorer and those running as
-    administrator, and programs already running when it's turned back on are
-    moved directly until they're restarted.
+    the mod unloads from every program but its own process and those running
+    as administrator.
 - fingers: auto
   $name: Number of fingers
   $description: >-
@@ -178,9 +187,10 @@ free, so the three-finger tap can keep any action.
 // background with RIDEV_INPUTSINK. Windows turns the touchpad into mouse input
 // for one and two fingers only, and with its swipes for a finger count turned
 // off it leaves that count alone, so the cursor is moved here, by the motion of
-// the contacts' centroid, through SendInput. The mod runs in explorer.exe,
-// which is always running; a named mutex keeps it to one explorer process when
-// there are several, and another one takes over when the owner goes away.
+// the contacts' centroid, through SendInput. That part runs in a dedicated
+// process of its own, started from windhawk.exe, so that an input thread of the
+// highest priority, a low level keyboard hook and a dialog don't live in
+// somebody else's program, see the tool mod implementation at the end.
 //
 // A precision touchpad reports its contacts in frames. In parallel mode all
 // the contacts of a frame come in one report, in hybrid mode they're spread
@@ -199,17 +209,20 @@ free, so the three-finger tap can keep any action.
 // integrity level, e.g. running as administrator, and from sending input while
 // one is in the foreground. The mod is loaded into every such program as a
 // helper: a message-only window on a thread of its own, which takes requests
-// from the lower level, let through its message filter, to move a window of
-// its own process or the cursor, and to press the button for a native move,
-// only ever where it lands on the mod's own overlay. That's all it does, so
-// that it can't be used to drive the program, which clicks or keys would
-// allow.
+// from below, let through its message filter, to move a window of its own
+// process or the cursor, and to press the button for a native move, only ever
+// where it lands on the mod's own overlay. That's all it does, so that it
+// can't be used to drive the program, which clicks or keys would allow.
 //
 // While such a program is in the foreground, Windows doesn't deliver the
 // touchpad's raw input to programs at a lower level either. Its helper reads
 // the touchpad then and forwards each frame to the main part, which is
 // allowed in that direction. Positions are in fractions of the touchpad's
-// width, the same in any process.
+// width, the same in any process. Windhawk asks to run as administrator, and
+// then the main part is above the medium level itself: it reads the touchpad
+// and sends input whatever is in the foreground, which a marker tells the
+// helpers, so that they leave the touchpad alone. The replies of the programs
+// below it are let through its window's message filter.
 //
 // Native move is a title bar drag in every way that counts: the left button
 // is really pressed, the cursor moves with it held, and its release ends the
@@ -250,7 +263,6 @@ free, so the three-finger tap can keep any action.
 #include <atomic>
 #include <cmath>
 #include <map>
-#include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_set>
@@ -354,7 +366,9 @@ constexpr WCHAR kPressOverlayClassName[] =
     L"Windhawk_ThreeFingerDrag_Press_" WH_MOD_ID;
 constexpr WCHAR kHelperClassName[] =
     L"Windhawk_ThreeFingerDrag_Helper_" WH_MOD_ID;
-constexpr WCHAR kMutexName[] = L"Local\\Windhawk_ThreeFingerDrag_" WH_MOD_ID;
+// Up while the main part sends input itself, see MainSendsInput.
+constexpr WCHAR kDirectMarkerName[] =
+    L"Local\\Windhawk_ThreeFingerDrag_Direct_" WH_MOD_ID;
 
 // Requests to a helper. The window goes in wParam as its 32 significant bits,
 // which is all a handle has, so that 32-bit and 64-bit processes agree, and
@@ -400,7 +414,7 @@ enum : LPARAM {
 
 enum class Role {
     kNone,
-    // explorer.exe, reading the touchpad.
+    // The dedicated process, reading the touchpad.
     kMain,
     // A process running at a higher integrity level.
     kHelper,
@@ -411,12 +425,25 @@ enum class Role {
 Role g_role;
 
 HANDLE g_stopEvent;
-HANDLE g_instanceMutex;
 HANDLE g_thread;
+
+// This process's integrity level. Windows keeps a program from driving one
+// at a higher level: moving its windows, or sending input while it's in the
+// foreground.
+DWORD g_integrity;
+
+// Whether the main part is above the medium level, which is what Windhawk
+// asks for: it then moves every window and sends input itself, and needs a
+// helper for neither.
+bool g_direct;
 
 // Exists for as long as the mod runs native moves in this process, so that
 // the main part can tell which programs have it.
 HANDLE g_nativeMarker;
+
+// Exists while the main part sends input itself, so that the helpers don't
+// read the touchpad on top of it.
+HANDLE g_directMarker;
 
 std::wstring NativeMarkerName(DWORD processId) {
     return L"Local\\Windhawk_ThreeFingerDrag_Native_" WH_MOD_ID L"_" +
@@ -743,8 +770,13 @@ void ShowTarget(LPARAM show) {
 }
 
 // With a window of a higher integrity level in the foreground, input sent from
-// here is dropped, so its process's helper sends it.
+// here is dropped, so its process's helper sends it. Above that level there's
+// nothing to stand in for.
 HWND ForegroundHelper() {
+    if (g_direct) {
+        return nullptr;
+    }
+
     HWND hForegroundWnd = GetForegroundWindow();
     if (hForegroundWnd != g_state.cursorForeground) {
         g_state.cursorForeground = hForegroundWnd;
@@ -918,7 +950,8 @@ DWORD WINAPI NoticeThread(LPVOID param) {
     bool openClicked = false;
     bool dismissed = false;
 
-    // Only in version 6 of the common controls, which Explorer loads.
+    // Only in version 6 of the common controls, and only where the process
+    // has them; a plain message box stands in where it doesn't.
     auto taskDialogIndirect = (TaskDialogIndirect_t)GetProcAddress(
         GetModuleHandle(L"comctl32.dll"), "TaskDialogIndirect");
     if (taskDialogIndirect) {
@@ -1675,7 +1708,16 @@ void BeginDrag() {
         ActivateWindow(hWnd);
     }
 
-    if (!g_settings.nativeMove || !HasNativeMove(hWnd) || !StartNativeDrag()) {
+    // The press can only be sent from here or by the target's own helper: any
+    // other helper turns down a press on a window of somebody else's, so the
+    // native move would only time out. ForegroundHelper reads the foreground
+    // window afresh, the one activation may just have changed.
+    HWND hForegroundHelper = ForegroundHelper();
+    bool canPress =
+        !hForegroundHelper || hForegroundHelper == g_state.targetHelper;
+
+    if (!g_settings.nativeMove || !canPress || !HasNativeMove(hWnd) ||
+        !StartNativeDrag()) {
         StartDirectDrag();
     }
 }
@@ -2319,6 +2361,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     }
 
     if (uMsg == g_frameMessage) {
+        // Already read here, whoever else did.
+        if (g_direct) {
+            return 0;
+        }
+
         DWORD frame = (DWORD)wParam;
         OnFrame(frame >> 24, frame & 0xFFFFFF, LOWORD(lParam) / kFrameScale,
                 HIWORD(lParam) / kFrameScale);
@@ -2444,6 +2491,13 @@ void RunTouchpad(HINSTANCE hInstance) {
         return;
     }
 
+    // The answers of a window's thread come from any level, a sandboxed
+    // program's below this one, an ordinary program's below it when Windhawk
+    // runs as administrator.
+    for (UINT message : {g_nativeReadyMessage, g_nativeStartedMessage}) {
+        ChangeWindowMessageFilterEx(g_hWnd, message, MSGFLT_ALLOW, nullptr);
+    }
+
     RAWINPUTDEVICE rid{
         .usUsagePage = kPageDigitizer,
         .usUsage = kUsageTouchPad,
@@ -2475,15 +2529,6 @@ void RunTouchpad(HINSTANCE hInstance) {
 }
 
 DWORD WINAPI WorkerThread(LPVOID) {
-    HANDLE waits[] = {g_stopEvent, g_instanceMutex};
-    DWORD result = WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE,
-                                          INFINITE);
-    if (result != WAIT_OBJECT_0 + 1 && result != WAIT_ABANDONED_0 + 1) {
-        return 0;
-    }
-
-    Wh_Log(L"This process runs the touchpad");
-
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     // It turns touches into cursor moves, as the system's input threads do,
@@ -2501,7 +2546,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
     }
 
     UnregisterClasses(hInstance);
-    ReleaseMutex(g_instanceMutex);
     return 0;
 }
 
@@ -2759,7 +2803,7 @@ void OnMessageRetrieved(MSG* msg) {
             if (msg->message == WM_MOUSEMOVE) {
                 SetCursor(LoadCursor(nullptr, CursorOfCommand(g_loopCommand)));
             }
-        } else if (GetAsyncKeyState(VK_LBUTTON) >= 0) {
+        } else if (GetKeyState(VK_LBUTTON) >= 0) {
             ForgetDrag();
         } else if (!g_loopEnded) {
             // Over on its own, e.g. with Esc, with the button still held: the
@@ -2791,6 +2835,8 @@ LRESULT CALLBACK MessageHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
 }
 
 // Once per thread, the first time it retrieves a message with native move on.
+// A thread which got here with it off is left to try again, the setting being
+// one a program which is already running picks up.
 void EnsureMessageHook() {
     if (g_messageHookTried || !g_settings.nativeMove || g_uninitializing) {
         return;
@@ -2878,14 +2924,15 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
 
 // The helper, in a process running at a higher integrity level.
 
-// Windows keeps a program at a lower level from driving one at this level.
-bool IsAboveMediumIntegrity() {
+// This process's integrity level, the medium one if it can't be read, which
+// is what a program of the user's runs at.
+DWORD ProcessIntegrity() {
     HANDLE token;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
-        return false;
+        return SECURITY_MANDATORY_MEDIUM_RID;
     }
 
-    DWORD rid = 0;
+    DWORD rid = SECURITY_MANDATORY_MEDIUM_RID;
     DWORD size = 0;
     GetTokenInformation(token, TokenIntegrityLevel, nullptr, 0, &size);
     std::vector<BYTE> buffer(size);
@@ -2896,7 +2943,21 @@ bool IsAboveMediumIntegrity() {
     }
 
     CloseHandle(token);
-    return rid > SECURITY_MANDATORY_MEDIUM_RID;
+    return rid;
+}
+
+// The main part puts its marker up while it sends input itself, and then the
+// helper would only read the touchpad a second time. A marker of a process
+// above this level can't be opened, but the refusal still tells that it's
+// there.
+bool MainSendsInput() {
+    HANDLE marker = OpenEvent(SYNCHRONIZE, FALSE, kDirectMarkerName);
+    if (marker) {
+        CloseHandle(marker);
+        return true;
+    }
+
+    return GetLastError() == ERROR_ACCESS_DENIED;
 }
 
 // A request only ever concerns a top level window of this process, whoever
@@ -3037,10 +3098,11 @@ void SetHelperTouchpad(bool on) {
     g_frameExpected = 0;
 }
 
-// The helper reads the touchpad only while its process is in the foreground,
-// the only time it forwards frames, so that the programs in the background
-// aren't woken up by every touch. The program's own registration for the
-// touchpad, if it has one, is left alone: there's one per process.
+// The helper reads the touchpad only while its process is in the foreground
+// and the main part gets nothing itself, the only time it forwards frames, so
+// that the programs in the background aren't woken up by every touch. The
+// program's own registration for the touchpad, if it has one, is left alone:
+// there's one per process.
 void UpdateHelperTouchpad() {
     DWORD processId = 0;
     HWND hForegroundWnd = GetForegroundWindow();
@@ -3048,12 +3110,12 @@ void UpdateHelperTouchpad() {
         GetWindowThreadProcessId(hForegroundWnd, &processId);
     }
 
-    bool foreground = processId == GetCurrentProcessId();
-    if (foreground && !g_helperTouchpad && IsTouchpadRegistered()) {
+    bool forward = processId == GetCurrentProcessId() && !MainSendsInput();
+    if (forward && !g_helperTouchpad && IsTouchpadRegistered()) {
         return;
     }
 
-    SetHelperTouchpad(foreground);
+    SetHelperTouchpad(forward);
 }
 
 void CALLBACK ForegroundEventProc(HWINEVENTHOOK hWinEventHook,
@@ -3071,8 +3133,10 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK hWinEventHook,
 DWORD WINAPI HelperThread(LPVOID) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
-    // It forwards touches and moves the cursor while its program is in the
-    // foreground, see WorkerThread.
+    // While its program is in the foreground, this thread is the touchpad's
+    // way in and the cursor's way out, the main part getting neither, so a
+    // delay in scheduling it shows as jitter in the drag, all the more in a
+    // program which keeps its own threads busy, see WorkerThread.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
 
     HINSTANCE hInstance = nullptr;
@@ -3122,7 +3186,9 @@ DWORD WINAPI HelperThread(LPVOID) {
     return 0;
 }
 
-bool IsExplorer() {
+// The mod's own process, and the others.
+
+bool IsWindhawk() {
     WCHAR path[MAX_PATH];
     DWORD length = GetModuleFileName(nullptr, path, ARRAYSIZE(path));
     if (!length || length == ARRAYSIZE(path)) {
@@ -3131,7 +3197,7 @@ bool IsExplorer() {
 
     PCWSTR fileName = wcsrchr(path, L'\\');
     fileName = fileName ? fileName + 1 : path;
-    return _wcsicmp(fileName, L"explorer.exe") == 0;
+    return _wcsicmp(fileName, L"windhawk.exe") == 0;
 }
 
 void LoadSettings() {
@@ -3189,83 +3255,6 @@ void LoadSettings() {
     std::lock_guard<std::mutex> guard(g_excludedProgramsMutex);
     g_excludedPrograms = std::move(excludedPrograms);
 }
-
-// explorer.exe runs the main part and the processes running at a higher
-// integrity level a helper. With native move on, every other process which
-// retrieves messages hooks it, and the rest unload. A process which unloaded
-// has no native move until it's restarted, and its windows are moved
-// directly, see HasNativeMove. Session 0 has no desktop to drag on.
-BOOL Wh_ModInit() {
-    DWORD sessionId;
-    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
-        sessionId == 0) {
-        return FALSE;
-    }
-
-    if (IsExplorer()) {
-        g_role = Role::kMain;
-    } else if (IsAboveMediumIntegrity()) {
-        g_role = Role::kHelper;
-    } else {
-        g_role = Role::kOther;
-    }
-
-    g_settings.nativeMove = Wh_GetIntSetting(L"nativeMove");
-    if (g_role == Role::kOther && !g_settings.nativeMove) {
-        return FALSE;
-    }
-
-    bool hooked = HookMessageLoops();
-    if (hooked) {
-        g_nativeMarker = CreateEvent(
-            nullptr, TRUE, FALSE,
-            NativeMarkerName(GetCurrentProcessId()).c_str());
-    }
-
-    if (g_role == Role::kOther) {
-        return hooked;
-    }
-
-    Wh_Log(L"> %s", g_role == Role::kMain ? L"main" : L"helper");
-
-    g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
-    if (!g_stopEvent) {
-        Wh_Log(L"CreateEvent error: %u", GetLastError());
-        return FALSE;
-    }
-
-    if (g_role == Role::kHelper) {
-        // Native move requests come from explorer.exe, at a lower level.
-        ChangeWindowMessageFilter(g_nativePrepareMessage, MSGFLT_ADD);
-        ChangeWindowMessageFilter(g_nativeCancelMessage, MSGFLT_ADD);
-
-        g_thread = CreateThread(nullptr, 0, HelperThread, nullptr, 0, nullptr);
-    } else {
-        LoadSettings();
-
-        // Windows 10 2004 and later.
-        g_isWindowArranged = (IsWindowArranged_t)GetProcAddress(
-            GetModuleHandle(L"user32.dll"), "IsWindowArranged");
-
-        g_instanceMutex = CreateMutex(nullptr, FALSE, kMutexName);
-        if (!g_instanceMutex) {
-            Wh_Log(L"CreateMutex error: %u", GetLastError());
-            CloseHandle(g_stopEvent);
-            g_stopEvent = nullptr;
-            return FALSE;
-        }
-
-        g_thread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
-    }
-
-    if (!g_thread) {
-        Wh_Log(L"CreateThread error: %u", GetLastError());
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
 // Closes the notice if it's up, its code being in this module.
 void CloseNotice() {
     if (!g_noticeThread) {
@@ -3285,8 +3274,126 @@ void CloseNotice() {
     CloseHandle(g_noticeThread);
     g_noticeThread = nullptr;
 }
+// The dedicated process: it reads the touchpad and runs the drags. Above the
+// medium level, which is what Windhawk asks to run at, it moves every window
+// and sends input itself and needs no helper for either, which its marker
+// tells them.
+BOOL WhTool_ModInit() {
+    Wh_Log(L"> main");
 
-void Wh_ModUninit() {
+    g_role = Role::kMain;
+    LoadSettings();
+
+    // Windows 10 2004 and later.
+    g_isWindowArranged = (IsWindowArranged_t)GetProcAddress(
+        GetModuleHandle(L"user32.dll"), "IsWindowArranged");
+
+    g_direct = g_integrity > SECURITY_MANDATORY_MEDIUM_RID;
+    if (g_direct) {
+        g_directMarker = CreateEvent(nullptr, TRUE, FALSE, kDirectMarkerName);
+    }
+
+    g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+    if (g_stopEvent) {
+        g_thread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
+    }
+
+    if (!g_thread) {
+        Wh_Log(L"Can't start the touchpad thread: %u", GetLastError());
+        if (g_stopEvent) {
+            CloseHandle(g_stopEvent);
+            g_stopEvent = nullptr;
+        }
+        if (g_directMarker) {
+            CloseHandle(g_directMarker);
+            g_directMarker = nullptr;
+        }
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+void WhTool_ModSettingsChanged() {
+    Wh_Log(L">");
+
+    LoadSettings();
+}
+
+void WhTool_ModUninit() {
+    Wh_Log(L">");
+
+    SetEvent(g_stopEvent);
+    WaitForSingleObject(g_thread, INFINITE);
+    CloseHandle(g_thread);
+    g_thread = nullptr;
+
+    CloseNotice();
+
+    CloseHandle(g_stopEvent);
+    g_stopEvent = nullptr;
+
+    if (g_directMarker) {
+        CloseHandle(g_directMarker);
+        g_directMarker = nullptr;
+    }
+}
+
+// Every other process: a helper where the level is above the medium one, and
+// the hooks which run native moves anywhere the mod is loaded. Without native
+// move there's nothing to do in the rest, which the mod unloads from. A
+// process it unloaded from has no native move until it's loaded again, and
+// its windows are moved directly, see HasNativeMove.
+BOOL ModInitOther() {
+    g_role = g_integrity > SECURITY_MANDATORY_MEDIUM_RID ? Role::kHelper
+                                                         : Role::kOther;
+
+    g_settings.nativeMove = Wh_GetIntSetting(L"nativeMove");
+    if (g_role == Role::kOther && !g_settings.nativeMove) {
+        return FALSE;
+    }
+
+    bool hooked = HookMessageLoops();
+
+    if (g_role == Role::kHelper) {
+        Wh_Log(L"> helper");
+
+        // The requests come from the main part, which runs below this level
+        // unless Windhawk runs as administrator.
+        ChangeWindowMessageFilter(g_nativePrepareMessage, MSGFLT_ADD);
+        ChangeWindowMessageFilter(g_nativeCancelMessage, MSGFLT_ADD);
+
+        g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+        if (g_stopEvent) {
+            g_thread =
+                CreateThread(nullptr, 0, HelperThread, nullptr, 0, nullptr);
+        }
+
+        if (!g_thread) {
+            Wh_Log(L"Can't start the helper: %u", GetLastError());
+            ChangeWindowMessageFilter(g_nativePrepareMessage, MSGFLT_REMOVE);
+            ChangeWindowMessageFilter(g_nativeCancelMessage, MSGFLT_REMOVE);
+            if (g_stopEvent) {
+                CloseHandle(g_stopEvent);
+                g_stopEvent = nullptr;
+            }
+            return FALSE;
+        }
+    } else if (!hooked) {
+        return FALSE;
+    }
+
+    // Last, so that it's only there once this process really runs them.
+    if (hooked) {
+        g_nativeMarker = CreateEvent(
+            nullptr, TRUE, FALSE,
+            NativeMarkerName(GetCurrentProcessId()).c_str());
+    }
+
+    return TRUE;
+}
+
+void ModUninitOther() {
     g_uninitializing = true;
     RemoveMessageHooks();
 
@@ -3307,45 +3414,224 @@ void Wh_ModUninit() {
         g_nativeMarker = nullptr;
     }
 
-    if (g_role == Role::kOther) {
+    // The launcher keeps the mod loaded whether its helper came up or not.
+    if (g_role != Role::kHelper || !g_thread) {
         return;
     }
 
     Wh_Log(L">");
 
-    if (g_role == Role::kHelper) {
-        ChangeWindowMessageFilter(g_nativePrepareMessage, MSGFLT_REMOVE);
-        ChangeWindowMessageFilter(g_nativeCancelMessage, MSGFLT_REMOVE);
-    }
+    ChangeWindowMessageFilter(g_nativePrepareMessage, MSGFLT_REMOVE);
+    ChangeWindowMessageFilter(g_nativeCancelMessage, MSGFLT_REMOVE);
 
-    if (g_thread) {
-        SetEvent(g_stopEvent);
-        WaitForSingleObject(g_thread, INFINITE);
-        CloseHandle(g_thread);
-        g_thread = nullptr;
-    }
+    SetEvent(g_stopEvent);
+    WaitForSingleObject(g_thread, INFINITE);
+    CloseHandle(g_thread);
+    g_thread = nullptr;
 
-    CloseNotice();
-
-    if (g_instanceMutex) {
-        CloseHandle(g_instanceMutex);
-        g_instanceMutex = nullptr;
-    }
-
-    if (g_stopEvent) {
-        CloseHandle(g_stopEvent);
-        g_stopEvent = nullptr;
-    }
+    CloseHandle(g_stopEvent);
+    g_stopEvent = nullptr;
 }
 
-void Wh_ModSettingsChanged() {
-    g_settings.nativeMove = Wh_GetIntSetting(L"nativeMove");
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+//
+// This mod does load into the other processes, for the helpers and for native
+// move, so the launcher is picked out by the process rather than by the
+// include pattern, and every other process goes through ModInitOther and
+// ModUninitOther above.
 
-    if (g_role != Role::kMain) {
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    g_integrity = ProcessIntegrity();
+
+    bool isWindhawk = IsWindhawk();
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; isWindhawk && i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    // The process of another tool mod, and the service, have no windows of
+    // their own to drag.
+    if (isToolModProcess || isExcluded) {
+        return FALSE;
+    }
+
+    if (!isWindhawk) {
+        return ModInitOther();
+    }
+
+    g_isToolModProcessLauncher = true;
+
+    // Windhawk's own windows are dragged like any other program's.
+    ModInitOther();
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
         return;
     }
 
-    Wh_Log(L">");
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
 
-    LoadSettings();
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    *bReload = FALSE;
+
+    if (g_role == Role::kMain) {
+        WhTool_ModSettingsChanged();
+        return TRUE;
+    }
+
+    bool nativeMove = Wh_GetIntSetting(L"nativeMove");
+    g_settings.nativeMove = nativeMove;
+
+    // Without native move there's nothing left for this process to do, and
+    // the reload's Wh_ModInit unloads the mod from it. The launcher stays,
+    // whatever it's set to.
+    *bReload = g_role == Role::kOther && !nativeMove &&
+               !g_isToolModProcessLauncher;
+    return TRUE;
+}
+
+void Wh_ModUninit() {
+    if (g_role == Role::kMain) {
+        WhTool_ModUninit();
+        ExitProcess(0);
+    }
+
+    ModUninitOther();
 }
