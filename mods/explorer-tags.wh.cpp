@@ -2,7 +2,7 @@
 // @id              explorer-tags
 // @name            Explorer Tags
 // @description     Colored tags panel at the bottom of File Explorer's navigation pane, plus a Tags submenu in the file context menu
-// @version         0.6.0
+// @version         0.6.1
 // @author          buedgik
 // @github          https://github.com/buedgik
 // @homepage        https://github.com/buedgik/explorer-tags
@@ -461,36 +461,6 @@ void EnsureParentFolder(const std::wstring& filePath) {
     size_t slash = filePath.rfind(L'\\');
     if (slash != std::wstring::npos) {
         SHCreateDirectoryExW(nullptr, filePath.substr(0, slash).c_str(), nullptr);
-    }
-}
-
-// Up to 0.5.4 the record lived in %LOCALAPPDATA%\WindhawkExplorerTags. Brought
-// over once, or an upgrade would look like every file had lost its tags. Runs
-// on the worker, under the database lock.
-void MigrateOldRecord() {
-    std::wstring folder = DbFolder();
-    WCHAR base[MAX_PATH * 2];
-    DWORD n =
-        ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\WindhawkExplorerTags", base, ARRAYSIZE(base));
-    if (folder.empty() || n == 0 || n > ARRAYSIZE(base)) {
-        return;
-    }
-    for (PCWSTR name : {L"tags.tsv", L"last-root.txt"}) {
-        std::wstring from = std::wstring(base) + L"\\" + name;
-        std::wstring to = folder + L"\\" + name;
-        if (GetFileAttributesW(to.c_str()) != INVALID_FILE_ATTRIBUTES ||
-            GetFileAttributesW(from.c_str()) == INVALID_FILE_ATTRIBUTES) {
-            continue;
-        }
-        SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);
-        if (!CopyFileW(from.c_str(), to.c_str(), TRUE)) {
-            Wh_Log(L"Couldn't bring %s over: %u", name, GetLastError());
-            continue;
-        }
-        // The old file stays as a copy, under a name that isn't looked for
-        // again: installing the mod afresh later shouldn't resurrect it.
-        MoveFileExW(from.c_str(), (from + L".old").c_str(), MOVEFILE_REPLACE_EXISTING);
-        Wh_Log(L"Brought %s into the mod's own storage", name);
     }
 }
 
@@ -1556,12 +1526,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
     std::wstring root = GetSettings()->root;
     HANDLE change = WatchRoot(root);
 
-    {
-        DbLock lock;
-        if (lock.ok()) {
-            MigrateOldRecord();
-        }
-    }
     SyncAll();
     BroadcastRefresh();
 
@@ -1709,6 +1673,7 @@ struct Panel {
     std::wstring currentFolder;  // folder shown in the tab, for the open tag row
     std::wstring pendingOpen;     // tag folder to open once the worker made it
     std::wstring pendingOpenTag;  // and the tag it belongs to, to ask again
+    int pendingOpenRetries = 0;   // asking again, bounded: see the handler
     bool pendingOpenNewWindow = false;
     ULONGLONG pendingOpenAt = 0;
     // Bumped by every click. Opening a folder runs messages, so a second
@@ -1975,12 +1940,6 @@ void OpenTag(Panel* p, int index, bool newWindow) {
     unsigned seq = ++p->openSeq;
     std::wstring folder = s->root + L"\\" + s->tags[index].folderName;
 
-    // Not one disk call on this thread: creating the folder here froze the
-    // whole Explorer window when the tags folder lived on a drive that had
-    // stopped responding. The worker makes the folder and the panel opens it
-    // when the answer comes back.
-    QueueEnsureFolder(s->tags[index].name);
-
     // Whether the folder exists is the worker's last word on it, which can be
     // out of date: a folder deleted behind its back still reads as ready, and
     // navigating there used to do nothing at all (measured 2026-09-18). So
@@ -2010,13 +1969,15 @@ void OpenTag(Panel* p, int index, bool newWindow) {
     // the worker says it is ready. Armed only now, and never before the
     // attempt above: the worker's answer arriving inside it found a click
     // still waiting and opened a second window (measured 2026-09-19).
+    //
+    // Not one disk call on this thread, either: making the folder here froze
+    // the whole Explorer window when the tags folder lived on a drive that
+    // had stopped responding. The worker makes it and answers.
     p->pendingOpen = folder;
     p->pendingOpenTag = s->tags[index].name;
     p->pendingOpenNewWindow = newWindow;
     p->pendingOpenAt = GetTickCount64();
-    // Asked for again, because the answer to the request above may have come
-    // and gone while the attempt was running, and because a folder that has
-    // just been found missing needs making regardless.
+    p->pendingOpenRetries = 0;
     QueueEnsureFolder(s->tags[index].name);
 }
 
@@ -2578,11 +2539,14 @@ LRESULT CALLBACK PanelWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 if (!newWindow) {
                     SetTimer(hWnd, TIMER_REPAINT, 350, nullptr);
                 }
-            } else if (p->pendingOpen.empty()) {
+            } else if (p->pendingOpen.empty() && ++p->pendingOpenRetries <= 2) {
                 // The worker's word on the folder was out of date after all:
                 // keep waiting for it, under the same deadline, instead of
                 // dropping the click, and ask for the folder again — nothing
-                // else would bring another answer.
+                // else would bring another answer. Twice at most: a folder
+                // that is there and still won't open is failing for another
+                // reason, and asking forever would be the worker and this
+                // window shouting at each other until the deadline.
                 p->pendingOpen = folder;
                 p->pendingOpenNewWindow = newWindow;
                 p->pendingOpenAt = since;
@@ -3500,12 +3464,12 @@ BOOL Wh_ModInit() {
     LoadSettings();
     g_collapsed = Wh_GetIntValue(L"collapsed", 0) != 0;
 
-    // The record is now one file per user under Windhawk's machine-wide
-    // storage, so the same account signed in twice (console and a remote
-    // session) has to take the same lock: that needs the global namespace,
-    // which an ordinary account isn't allowed to create objects in, hence the
-    // fallback. The name carries the user, so accounts don't wait on
-    // each other.
+    // The record is one file per user under Windhawk's machine-wide storage,
+    // so the same account signed in twice (console and a remote session) has
+    // to take the same lock, and that means the global namespace. The name
+    // carries the user, so accounts don't wait on each other; the fallback is
+    // for the name being held in Global by someone else, which comes back as
+    // access denied.
     std::wstring mutexName = L"WindhawkExplorerTagsDb-" + CurrentUserKey();
     g_dbMutex = CreateMutexW(nullptr, FALSE, (L"Global\\" + mutexName).c_str());
     if (!g_dbMutex) {
