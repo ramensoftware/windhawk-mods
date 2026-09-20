@@ -276,8 +276,6 @@ static DWORD WINAPI BypassPollerThread(LPVOID) {
 bool RouteLinkIfNecessary(const WCHAR* lpFile, const WCHAR* lpVerb, int nShow) {
     if (!lpFile || t_inHook) return false;
 
-    if (IsBypassActive()) return false;
-
     // Only redirect default (NULL) or "open" verbs
     if (lpVerb && _wcsicmp(lpVerb, L"open") != 0) return false;
 
@@ -289,6 +287,8 @@ bool RouteLinkIfNecessary(const WCHAR* lpFile, const WCHAR* lpVerb, int nShow) {
 
     bool isLink = (_wcsnicmp(cleanUrl.c_str(), L"http://", 7) == 0 || _wcsnicmp(cleanUrl.c_str(), L"https://", 8) == 0);
     if (!isLink) return false;
+
+    if (IsBypassActive()) return false;
 
     // Reject URLs with characters that could break command-line quoting
     if (cleanUrl.find_first_of(L"\" \t\r\n") != std::wstring::npos)
@@ -345,8 +345,13 @@ ShellExecuteExA_t ShellExecuteExA_Original;
 using ShellExecuteA_t = decltype(&ShellExecuteA);
 ShellExecuteA_t ShellExecuteA_Original;
 
-using CreateProcessW_t = decltype(&CreateProcessW);
-CreateProcessW_t CreateProcessW_Original;
+using CreateProcessInternalW_t = BOOL(WINAPI*)(
+    HANDLE hToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+    LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes,
+    BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment,
+    LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
+    LPPROCESS_INFORMATION lpProcessInformation, PHANDLE hNewToken);
+CreateProcessInternalW_t CreateProcessInternalW_Original;
 
 
 
@@ -393,7 +398,8 @@ HINSTANCE WINAPI ShellExecuteA_Hook(HWND hwnd, LPCSTR lpOperation, LPCSTR lpFile
     return ShellExecuteA_Original(hwnd, lpOperation, lpFile, lpParameters, lpDirectory, nShow);
 }
 
-BOOL WINAPI CreateProcessW_Hook(
+BOOL WINAPI CreateProcessInternalW_Hook(
+    HANDLE hToken,
     LPCWSTR lpApplicationName,
     LPWSTR lpCommandLine,
     LPSECURITY_ATTRIBUTES lpProcessAttributes,
@@ -403,12 +409,13 @@ BOOL WINAPI CreateProcessW_Hook(
     LPVOID lpEnvironment,
     LPCWSTR lpCurrentDirectory,
     LPSTARTUPINFOW lpStartupInfo,
-    LPPROCESS_INFORMATION lpProcessInformation)
+    LPPROCESS_INFORMATION lpProcessInformation,
+    PHANDLE hNewToken)
 {
     if (lpCommandLine && !t_inHook) {
-        // Skip if the calling process is itself a configured browser —
-        // prevents catching internal browser URLs (cr.brave.com, telemetry)
-        // and cascading redirects when the default browser starts up.
+        Wh_Log(L"CreateProcessInternalW_Hook: app=%s cmd=%.100s",
+            lpApplicationName ? lpApplicationName : L"(null)",
+            lpCommandLine ? lpCommandLine : L"(null)");
         const auto& currentProc = GetCurrentProcessName();
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -420,23 +427,23 @@ BOOL WINAPI CreateProcessW_Hook(
         }
 
         {
-            // Determine the target executable name being launched
             std::wstring targetExe;
+            std::wstring cmdLine(lpCommandLine);
+            size_t exeTokenEnd = 0;
+
             if (lpApplicationName) {
                 std::wstring appPath(lpApplicationName);
                 size_t pos = appPath.find_last_of(L"\\/");
                 targetExe = (pos != std::wstring::npos) ? appPath.substr(pos + 1) : appPath;
-            } else if (lpCommandLine) {
-                std::wstring cl(lpCommandLine);
-                size_t start = (cl[0] == L'"') ? 1 : 0;
-                size_t end = (cl[0] == L'"') ? cl.find(L'"', 1) : cl.find_first_of(L" \t");
-                std::wstring appPath = (end != std::wstring::npos) ? cl.substr(start, end - start) : cl.substr(start);
+            } else {
+                size_t start = (cmdLine[0] == L'"') ? 1 : 0;
+                size_t end = (cmdLine[0] == L'"') ? cmdLine.find(L'"', 1) : cmdLine.find_first_of(L" \t");
+                std::wstring appPath = (end != std::wstring::npos) ? cmdLine.substr(start, end - start) : cmdLine.substr(start);
                 size_t pos = appPath.find_last_of(L"\\/");
                 targetExe = (pos != std::wstring::npos) ? appPath.substr(pos + 1) : appPath;
+                exeTokenEnd = (cmdLine[0] == L'"') ? ((end != std::wstring::npos) ? end + 1 : cmdLine.size()) : ((end != std::wstring::npos) ? end : cmdLine.size());
             }
 
-            // Only intercept if the target process is a browser in our priority list.
-            // This prevents false positives from git, curl, etc. that have URLs in args.
             bool targetIsBrowser = false;
             {
                 std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -449,23 +456,26 @@ BOOL WINAPI CreateProcessW_Hook(
             }
             if (!targetIsBrowser) goto passthrough;
 
-            // Check bypass after confirming this is a browser launch with a URL
             if (IsBypassActive()) goto passthrough;
 
-            std::wstring cmdLine(lpCommandLine);
-
-            // Quick scan for URL in command line
+            // Find URL in command line
             std::wstring::size_type urlPos = cmdLine.find(L"https://");
             if (urlPos == std::wstring::npos)
                 urlPos = cmdLine.find(L"http://");
 
             if (urlPos != std::wstring::npos) {
-                // Extract URL (may be quoted or unquoted)
-                std::wstring url;
                 size_t end = cmdLine.find_first_of(L" \t\"", urlPos);
-                url = (end != std::wstring::npos)
+                std::wstring url = (end != std::wstring::npos)
                     ? cmdLine.substr(urlPos, end - urlPos)
                     : cmdLine.substr(urlPos);
+
+                // Don't rewrite launches with switches indicating intentional browser behavior
+                if (cmdLine.find(L"--app=") != std::wstring::npos ||
+                    cmdLine.find(L"--incognito") != std::wstring::npos ||
+                    cmdLine.find(L"--private-window") != std::wstring::npos ||
+                    cmdLine.find(L"--profile-directory") != std::wstring::npos) {
+                    goto passthrough;
+                }
 
                 std::wstring targetBrowser = GetHighestPriorityRunningBrowser();
                 if (!targetBrowser.empty() &&
@@ -474,18 +484,21 @@ BOOL WINAPI CreateProcessW_Hook(
 
                     std::wstring targetPath = GetBrowserFullPath(targetBrowser);
                     if (!targetPath.empty()) {
-                        Wh_Log(L"Rewriting CreateProcessW to %s", targetBrowser.c_str());
+                        Wh_Log(L"Rewriting CreateProcess to %s", targetBrowser.c_str());
 
-                        // Replace the browser in the command line
                         std::wstring newCmdLine = L"\"" + targetPath + L"\" " + url;
                         std::vector<wchar_t> cmdBuf(newCmdLine.begin(), newCmdLine.end());
                         cmdBuf.push_back(L'\0');
 
-                        return CreateProcessW_Original(
-                            targetPath.c_str(), cmdBuf.data(),
-                            lpProcessAttributes, lpThreadAttributes,
-                            bInheritHandles, dwCreationFlags, lpEnvironment,
-                            lpCurrentDirectory, lpStartupInfo, lpProcessInformation);
+                        if (CreateProcessInternalW_Original(
+                                hToken, targetPath.c_str(), cmdBuf.data(),
+                                lpProcessAttributes, lpThreadAttributes,
+                                bInheritHandles, dwCreationFlags, lpEnvironment,
+                                lpCurrentDirectory, lpStartupInfo,
+                                lpProcessInformation, hNewToken)) {
+                            return TRUE;
+                        }
+                        Wh_Log(L"Redirected launch failed (%lu), falling back", GetLastError());
                     }
                 }
             }
@@ -493,10 +506,11 @@ BOOL WINAPI CreateProcessW_Hook(
     }
 
 passthrough:
-    return CreateProcessW_Original(lpApplicationName, lpCommandLine,
+    return CreateProcessInternalW_Original(
+        hToken, lpApplicationName, lpCommandLine,
         lpProcessAttributes, lpThreadAttributes, bInheritHandles,
         dwCreationFlags, lpEnvironment, lpCurrentDirectory,
-        lpStartupInfo, lpProcessInformation);
+        lpStartupInfo, lpProcessInformation, hNewToken);
 }
 
 BOOL Wh_ModInit() {
@@ -513,9 +527,6 @@ BOOL Wh_ModInit() {
     if (g_bypassMethod.load(std::memory_order_relaxed) != BypassMethod::None) {
         g_hSharedMem = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL,
             PAGE_READWRITE, 0, sizeof(BypassSharedState), L"Local\\PivotLinkBypassState");
-        if (!g_hSharedMem)
-            g_hSharedMem = OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, FALSE,
-                L"Local\\PivotLinkBypassState");
         if (g_hSharedMem)
             g_pSharedState = (BypassSharedState*)MapViewOfFile(
                 g_hSharedMem, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, sizeof(BypassSharedState));
@@ -533,13 +544,20 @@ BOOL Wh_ModInit() {
     WindhawkUtils::SetFunctionHook(ShellExecuteExA, ShellExecuteExA_Hook, &ShellExecuteExA_Original);
     WindhawkUtils::SetFunctionHook(ShellExecuteA, ShellExecuteA_Hook, &ShellExecuteA_Original);
 
-    // Hook kernelbase's CreateProcessW — the single choke point all CreateProcess variants funnel through
     HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
     if (hKernelBase) {
-        void* pKB = (void*)GetProcAddress(hKernelBase, "CreateProcessW");
-        if (pKB)
-            Wh_SetFunctionHook(pKB, (void*)CreateProcessW_Hook, (void**)&CreateProcessW_Original);
+        void* pFunc = (void*)GetProcAddress(hKernelBase, "CreateProcessInternalW");
+        if (pFunc) {
+            Wh_SetFunctionHook(pFunc, (void*)CreateProcessInternalW_Hook,
+                (void**)&CreateProcessInternalW_Original);
+            Wh_Log(L"Hooked CreateProcessInternalW at %p", pFunc);
+        } else {
+            Wh_Log(L"CreateProcessInternalW not found in kernelbase");
+        }
     }
+
+    Wh_Log(L"PivotLink loaded in %s (PID %u), CreateProcessW_Original=%p",
+        GetCurrentProcessName().c_str(), GetCurrentProcessId(), CreateProcessInternalW_Original);
 
     return TRUE;
 }
