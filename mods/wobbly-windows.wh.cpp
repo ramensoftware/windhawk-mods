@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         1.0
+// @version         0.108
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
@@ -34,7 +34,7 @@ initialize instead of using unverified addresses.
 ## Features
 
 * Change the wobbliness of the windows from 5 presets
-* Enable advanced mode to change each parameter independently, instead of a preset
+* Enable custom physics to change each parameter independently, instead of a preset
 * Fluid wobble animations for dragging, snapping and even resizing windows
 * Uses a 4x4 spring simulation fitted to a smooth whole-window transform
 
@@ -90,6 +90,14 @@ the combined mod is not offered under GPLv2.
   $name: Snap and maximize wobble
   $description: Animate Snap, maximize and restore transitions.
 
+- SharpRendering: false
+  $name: Sharp rendering (test)
+  $description: Keep the native border and use pixel-aligned whole-window spring motion to reduce blur, ghosting and thin-border artifacts. Bending and tilting are disabled while this is enabled.
+
+- VisualArtifactReduction: false
+  $name: Visual artifact reduction (test)
+  $description: Keep the jelly deformation, dim the native border while wobbling and phase-align animation updates with DWM when its composition timing is compatible.
+
 - AdvancedMode:
   - enable: false
     $name: Enable
@@ -114,10 +122,16 @@ the combined mod is not offered under GPLv2.
 
 
 #include <windows.h>
+#define MilMatrix3x2D DwmApiMilMatrix3x2D
+#include <dwmapi.h>
+#undef MilMatrix3x2D
 #include <winevt.h>
+#include <windows.ui.composition.h>
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cfloat>
+#include <cctype>
 #include <climits>
 #include <cmath>
 #include <cstddef>
@@ -125,6 +139,7 @@ the combined mod is not offered under GPLv2.
 #include <regex>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <windhawk_utils.h>
 
@@ -158,6 +173,8 @@ struct WobblySettings
     double stiffness;
     double drag;
     double moveFactor;
+    bool sharpRendering = false;
+    bool visualArtifactReduction = false;
 };
 
 static constexpr WobblySettings PHYSICS_PRESETS[] = {
@@ -365,8 +382,10 @@ HMODULE g_shcoreModule = nullptr;
 GetDpiForMonitor_t g_getDpiForMonitor = nullptr;
 using DwmGetWindowAttribute_t = HRESULT(WINAPI*)(HWND hwnd, DWORD attribute, void* value,
                                                  DWORD valueSize);
+using DwmGetCompositionTimingInfo_t = HRESULT(WINAPI*)(HWND hwnd, DWM_TIMING_INFO* timingInfo);
 HMODULE g_dwmApiModule = nullptr;
 DwmGetWindowAttribute_t g_dwmGetWindowAttribute = nullptr;
+DwmGetCompositionTimingInfo_t g_dwmGetCompositionTimingInfo = nullptr;
 HWND g_lastForegroundWindow = nullptr;
 UINT_PTR g_virtualDesktopRefreshTimer = 0;
 ULONGLONG g_virtualDesktopRefreshDeadline = 0;
@@ -420,6 +439,7 @@ std::atomic<void*> g_visualProxyVtable = nullptr;
 std::atomic<void*> g_redirectVisualProxyVtable = nullptr;
 std::atomic<void*> g_containerVisualProxyVtable = nullptr;
 std::atomic<void*> g_matrixTransformProxyVtable = nullptr;
+std::atomic<void*> g_windowBorderVtable = nullptr;
 std::atomic<void*> g_dwmCompositor = nullptr;
 std::atomic<void*> g_desktopManager = nullptr;
 void* g_desktopManagerVtableSymbol = nullptr;
@@ -431,6 +451,10 @@ void* g_visualProxyVtableSymbol = nullptr;
 void* g_redirectVisualProxyVtableSymbol = nullptr;
 void* g_containerVisualProxyVtableSymbol = nullptr;
 void* g_matrixTransformProxyVtableSymbol = nullptr;
+void* g_windowBorderVtableSymbol = nullptr;
+void* g_windowBorderSetParametersFunction = nullptr;
+void* g_windowBorderAttachBrushFunction = nullptr;
+size_t g_windowBorderSpriteOffset = SIZE_MAX;
 size_t g_desktopManagerCompositorOffset = SIZE_MAX;
 size_t g_desktopManagerThreadIdOffset = SIZE_MAX;
 size_t g_canvasVisualOwnerOffset = SIZE_MAX;
@@ -579,11 +603,16 @@ static void* ReadPointerMember(void* object, size_t offset)
 }
 
 static void* GetTopLevelVisualProxy(void* topLevelWindow,
-                                    const wchar_t** source = nullptr)
+                                    const wchar_t** source = nullptr,
+                                    void** completeRoot = nullptr)
 {
     if (source)
     {
         *source = L"None";
+    }
+    if (completeRoot)
+    {
+        *completeRoot = nullptr;
     }
     if (!IsDwmObjectPointerValid(topLevelWindow, g_topLevelWindowVtable))
     {
@@ -600,6 +629,10 @@ static void* GetTopLevelVisualProxy(void* topLevelWindow,
         void* proxy = ReadPointerMember(rootVisual, g_visualProxyOffset);
         if (IsVisualProxyPointerValid(proxy))
         {
+            if (completeRoot)
+            {
+                *completeRoot = rootVisual;
+            }
             if (source)
             {
                 *source = L"CompleteWindowRoot";
@@ -647,6 +680,18 @@ static void* GetTransitionVisualProxy(void* topLevelWindow3D)
 static constexpr int MAX_ANIMATION_SLOTS = 6;
 static constexpr ULONGLONG DWM_SCENE_STALL_TIMEOUT_MS = 3000;
 static constexpr ULONGLONG DWM_UNLOAD_CLEANUP_TIMEOUT_MS = 3000;
+static constexpr float REDUCED_BORDER_OPACITY = 0.28f;
+
+namespace Composition = ABI::Windows::UI::Composition;
+
+struct BorderSpriteOpacity
+{
+    Composition::IVisual* visual;
+    float originalOpacity;
+    bool changed;
+    bool logged;
+    ULONGLONG lastFailureLog;
+};
 
 struct WindowAnimationSlot
 {
@@ -675,6 +720,7 @@ struct WindowAnimationSlot
     ULONGLONG nextWindowValidation;
     ULONGLONG nextVisualValidation;
     bool identityApplied;
+    BorderSpriteOpacity borderSpriteOpacity;
     ULONGLONG lastMatrixErrorLog;
     ULONGLONG lastBindFailureLog;
 };
@@ -719,8 +765,13 @@ HANDLE g_animationTimer = nullptr;
 LARGE_INTEGER g_animationFrequency = {};
 LARGE_INTEGER g_lastAnimationCounter = {};
 LARGE_INTEGER g_nextAnimationCounter = {};
+LARGE_INTEGER g_compositionVBlankCounter = {};
+LONGLONG g_compositionRefreshPeriod = 0;
+ULONGLONG g_nextCompositionTimingRefresh = 0;
 double g_animationTargetHz = 0.0;
 bool g_animationClockArmed = false;
+std::atomic_bool g_visualArtifactReductionEnabled = false;
+std::atomic<int> g_compositionTimingState = 0;
 
 static bool ResolveDwmWindowObjects(void* windowData, void** topLevelWindow,
                                     void** topLevelWindow3D);
@@ -1589,6 +1640,288 @@ static bool FindVisualProxyAccessPath(void* function, size_t* ownerOffset,
     return *ownerOffset != SIZE_MAX && *proxyOffset != SIZE_MAX;
 }
 
+// Follow only the exact native function's reachable local branches. Accept the
+// sprite member only when every reachable AttachBrush call has proven arguments.
+static size_t FindBorderSpriteOffset(void* function, void* attachBrush,
+                                     BOOL (*decode)(void*, WH_DISASM_RESULT*) = Wh_Disasm)
+{
+    if (!IsDwmFunctionPointerValid(function) || !IsDwmFunctionPointerValid(attachBrush))
+    {
+        return SIZE_MAX;
+    }
+    struct Value
+    {
+        int kind = 0; // unknown, this, member value
+        size_t offset = 0;
+        bool operator==(const Value&) const = default;
+    };
+    using Registers = std::array<Value, 16>;
+    struct Node
+    {
+        size_t offset;
+        size_t length = 0;
+        std::string text;
+        std::vector<size_t> successors;
+        uintptr_t callTarget = 0;
+        bool isCall = false;
+        bool reached = false;
+        Registers incoming = {};
+    };
+    const std::array<std::string_view, 16> names = {
+        "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi",
+        "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"};
+    auto registerIndex = [&](std::string_view name) -> int
+    {
+        for (size_t i = 0; i < names.size(); i++)
+        {
+            if (name == names[i] ||
+                (i < 8 && (name == std::string("e") + std::string(names[i].substr(1)) ||
+                           name == names[i].substr(1))) ||
+                (i >= 8 && (name == std::string(names[i]) + "d" ||
+                            name == std::string(names[i]) + "w" ||
+                            name == std::string(names[i]) + "b")))
+            {
+                return static_cast<int>(i);
+            }
+        }
+        for (size_t i = 0; i < 4; i++)
+        {
+            if (name == std::string(1, names[i][1]) + "l" ||
+                name == std::string(1, names[i][1]) + "h")
+            {
+                return static_cast<int>(i);
+            }
+        }
+        for (size_t i = 4; i < 8; i++)
+        {
+            if (name == std::string(names[i].substr(1)) + "l")
+            {
+                return static_cast<int>(i);
+            }
+        }
+        return -1;
+    };
+    std::vector<Node> nodes;
+    auto addNode = [&](size_t offset) -> size_t
+    {
+        for (size_t i = 0; i < nodes.size(); i++)
+        {
+            if (nodes[i].offset == offset)
+            {
+                return i;
+            }
+        }
+        Node node = {};
+        node.offset = offset;
+        nodes.push_back(std::move(node));
+        return nodes.size() - 1;
+    };
+    uintptr_t begin = reinterpret_cast<uintptr_t>(function);
+    addNode(static_cast<size_t>(begin));
+    size_t decodedBytes = 0;
+    const std::regex branchPattern(R"(^j[a-z]+ 0x([0-9a-f]+)$)");
+    const std::regex callPattern(R"(^call 0x([0-9a-f]+)$)");
+    for (size_t i = 0; i < nodes.size(); i++)
+    {
+        if (nodes.size() > 1024)
+        {
+            return SIZE_MAX;
+        }
+        BYTE* address = reinterpret_cast<BYTE*>(nodes[i].offset);
+        WH_DISASM_RESULT result = {};
+        if (!IsDwmExecutableAddress(address) || !decode(address, &result) ||
+            result.length == 0 || result.length > 15 ||
+            decodedBytes + result.length > 4096 ||
+            !IsDwmImageAddress(address, result.length))
+        {
+            return SIZE_MAX;
+        }
+        nodes[i].length = result.length;
+        decodedBytes += result.length;
+        nodes[i].text = result.text;
+        std::transform(nodes[i].text.begin(), nodes[i].text.end(), nodes[i].text.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        const std::string text = nodes[i].text;
+        std::smatch match;
+        bool branch = std::regex_match(text, match, branchPattern);
+        uintptr_t branchTarget = branch ? std::stoull(match[1].str(), nullptr, 16) : 0;
+        bool terminates = text.starts_with("ret") || text == "int3" ||
+                          text.starts_with("jmp ");
+        nodes[i].isCall = text.starts_with("call ");
+        if (std::regex_match(text, match, callPattern))
+        {
+            nodes[i].callTarget = std::stoull(match[1].str(), nullptr, 16);
+        }
+        size_t next = nodes[i].offset + result.length;
+        if (!terminates)
+        {
+            size_t successor = addNode(next);
+            nodes[i].successors.push_back(successor);
+        }
+        if (branch)
+        {
+            size_t successor = addNode(static_cast<size_t>(branchTarget));
+            nodes[i].successors.push_back(successor);
+        }
+        else if (text.starts_with("jmp "))
+        {
+            return SIZE_MAX;
+        }
+        else if ((!text.empty() && text[0] == 'j') || text.starts_with("loop"))
+        {
+            return SIZE_MAX;
+        }
+    }
+    for (size_t i = 0; i < nodes.size(); i++)
+    {
+        for (size_t j = i + 1; j < nodes.size(); j++)
+        {
+            if (nodes[i].offset < nodes[j].offset + nodes[j].length &&
+                nodes[j].offset < nodes[i].offset + nodes[i].length)
+            {
+                return SIZE_MAX;
+            }
+        }
+    }
+    const std::regex copyPattern(R"(^mov (r[a-z0-9]+), (r[a-z0-9]+)$)");
+    const std::regex loadPattern(
+        R"(^mov (r[a-z0-9]+), \[(r[a-z0-9]+)\+0x([0-9a-f]+)\]$)");
+    const std::regex destinationPattern(R"(^[a-z0-9]+ ([a-z0-9]+)(?:,|$))");
+    auto transfer = [&](const Node& node) -> Registers
+    {
+        Registers outgoing = node.incoming;
+        const std::string operation = node.text.substr(0, node.text.find(' '));
+        const bool knownOperation = node.isCall || operation.starts_with("j") ||
+            operation.starts_with("ret") || operation.starts_with("cmov") ||
+            operation.starts_with("set") || operation == "int3" || operation == "nop" ||
+            operation == "endbr64" || operation == "mov" || operation == "movabs" ||
+            operation == "movzx" || operation == "movsx" || operation == "movsxd" ||
+            operation == "lea" || operation == "add" || operation == "sub" ||
+            operation == "and" || operation == "or" || operation == "xor" ||
+            operation == "neg" || operation == "not" || operation == "inc" ||
+            operation == "dec" || operation == "sbb" || operation == "adc" ||
+            operation == "shl" || operation == "shr" || operation == "sar" ||
+            operation == "cmp" || operation == "test" || operation == "push" ||
+            operation == "pop" || operation == "movd" || operation == "movq" ||
+            operation == "movss" || operation == "movsd" || operation == "movups" ||
+            operation == "movaps" || operation == "movdqu" || operation == "movdqa" ||
+            operation == "xorps" || operation == "xorpd" || operation == "ucomiss" ||
+            operation == "ucomisd" || operation == "cvtdq2pd";
+        if (!knownOperation)
+        {
+            return Registers{};
+        }
+        std::smatch match;
+        if (node.isCall)
+        {
+            for (size_t reg : {0U, 1U, 2U, 8U, 9U, 10U, 11U})
+            {
+                outgoing[reg] = {};
+            }
+        }
+        else if (std::regex_match(node.text, match, copyPattern))
+        {
+            int dest = registerIndex(match[1].str());
+            int source = registerIndex(match[2].str());
+            if (dest >= 0)
+            {
+                outgoing[static_cast<size_t>(dest)] =
+                    source >= 0 && match[1].str() == names[static_cast<size_t>(dest)] &&
+                            match[2].str() == names[static_cast<size_t>(source)]
+                        ? outgoing[static_cast<size_t>(source)] : Value{};
+            }
+        }
+        else if (std::regex_match(node.text, match, loadPattern))
+        {
+            int dest = registerIndex(match[1].str());
+            int base = registerIndex(match[2].str());
+            if (dest >= 0)
+            {
+                outgoing[static_cast<size_t>(dest)] =
+                    base >= 0 && match[1].str() == names[static_cast<size_t>(dest)] &&
+                            outgoing[static_cast<size_t>(base)].kind == 1
+                        ? Value{2, static_cast<size_t>(std::stoull(match[3].str(), nullptr, 16))}
+                        : Value{};
+            }
+        }
+        else if (!node.text.starts_with("cmp ") && !node.text.starts_with("test ") &&
+                 !node.text.starts_with("push ") &&
+                 std::regex_search(node.text, match, destinationPattern))
+        {
+            int dest = registerIndex(match[1].str());
+            if (dest >= 0)
+            {
+                outgoing[static_cast<size_t>(dest)] = {};
+            }
+            if (node.text.starts_with("xchg ") || node.text.starts_with("mul ") ||
+                node.text.starts_with("div ") || node.text.starts_with("idiv "))
+            {
+                outgoing = {};
+            }
+        }
+        if (operation == "push" || operation == "pop") outgoing[4] = {};
+        return outgoing;
+    };
+    nodes[0].reached = true;
+    nodes[0].incoming[1] = {1, 0};
+    bool changed = true;
+    for (size_t pass = 0; changed; pass++)
+    {
+        if (pass > nodes.size() * 32)
+        {
+            return SIZE_MAX;
+        }
+        changed = false;
+        for (const Node& node : nodes)
+        {
+            if (!node.reached)
+            {
+                continue;
+            }
+            Registers outgoing = transfer(node);
+            for (size_t successor : node.successors)
+            {
+                Node& target = nodes[successor];
+                if (!target.reached)
+                {
+                    target.incoming = outgoing;
+                    target.reached = true;
+                    changed = true;
+                }
+                else
+                {
+                    for (size_t reg = 0; reg < outgoing.size(); reg++)
+                    {
+                        if (!(target.incoming[reg] == outgoing[reg]) &&
+                            target.incoming[reg].kind != 0)
+                        {
+                            target.incoming[reg] = {};
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    size_t candidate = SIZE_MAX;
+    for (const Node& node : nodes)
+    {
+        if (node.reached && node.callTarget == reinterpret_cast<uintptr_t>(attachBrush))
+        {
+            const Value& argument = node.incoming[2];
+            if (node.incoming[1].kind != 1 || argument.kind != 2 ||
+                argument.offset < 0x80 || argument.offset > 0x400 ||
+                argument.offset % sizeof(void*) != 0 ||
+                (candidate != SIZE_MAX && candidate != argument.offset))
+            {
+                return SIZE_MAX;
+            }
+            candidate = argument.offset;
+        }
+    }
+    return candidate;
+}
+
 static bool DecodePointerGetter(void* function, size_t* objectOffset,
                                 size_t* memberOffset = nullptr)
 {
@@ -2371,6 +2704,7 @@ static void DropAnimationSlotsForStoppedSceneThread()
     // Only called after the old owner stopped; its scene-only pins cannot return.
     unsigned int droppedSlots = 0;
     unsigned int retainedProxies = 0;
+    unsigned int retainedBorderVisuals = 0;
     AcquireSRWLockExclusive(&g_animationSlotsLock);
     for (WindowAnimationSlot& slot : g_animationSlots)
     {
@@ -2379,6 +2713,7 @@ static void DropAnimationSlotsForStoppedSceneThread()
             continue;
         }
         retainedProxies += slot.matrixTransformProxy != nullptr;
+        retainedBorderVisuals += slot.borderSpriteOpacity.visual != nullptr;
         ResetAnimationSlotLocked(slot, slot.generation + 1);
         droppedSlots++;
     }
@@ -2389,8 +2724,9 @@ static void DropAnimationSlotsForStoppedSceneThread()
         g_abandonedProxyCount.fetch_add(retainedProxies, std::memory_order_acq_rel);
         g_sceneRecoveryCleanupPending.store(false, std::memory_order_release);
         g_sceneOwnershipResetPending.store(true, std::memory_order_release);
-        Wh_Log(L"DWM scene owner changed: droppedSlots=%u retainedOldProxies=%u",
-               droppedSlots, retainedProxies);
+        Wh_Log(L"DWM scene owner changed: droppedSlots=%u retainedOldProxies=%u "
+               L"retainedBorderVisuals=%u",
+               droppedSlots, retainedProxies, retainedBorderVisuals);
     }
 }
 
@@ -2648,6 +2984,18 @@ static bool InitializeDwmHooks()
          &g_topLevelWindowGetRootVisual,
          nullptr,
          true},
+        {{L"const CWindowBorder::`vftable'", L"??_7CWindowBorder@@6B@"},
+         &g_windowBorderVtableSymbol,
+         nullptr,
+         true},
+        {{L"?SetBorderParameters@CWindowBorder@@QEAAJAEBUtagRECT@@MHAEBU_D3DCOLORVALUE@@W4BorderStyle@1@W4ShadowStyle@1@@Z"},
+         &g_windowBorderSetParametersFunction,
+         nullptr,
+         true},
+        {{L"?CreateAndAttachBorderBrush@CWindowBorder@@AEAAJPEAUISpriteVisual@Composition@UI@Windows@@@Z"},
+         &g_windowBorderAttachBrushFunction,
+         nullptr,
+         true},
         {{L"public: virtual class CTopLevelWindow3D * __cdecl "
             L"winrt::Udwm::Transitions::implementation::TopLevelWindow3DWrapper::GetVisualWeak(void)"},
          &g_transitionWrapperGetVisualWeakFunction, nullptr, true},
@@ -2826,6 +3174,8 @@ static bool InitializeDwmHooks()
     keepValid(g_topLevelWindow3DStartAnimationOriginal);
     keepValid(g_getCanvasRootVisualProxy);
     keepValid(g_topLevelWindowGetRootVisual);
+    keepValid(g_windowBorderSetParametersFunction);
+    keepValid(g_windowBorderAttachBrushFunction);
     keepValid(g_topLevelWindowGetWindowData);
     keepValid(g_desktopManagerPostStartAnimations);
     auto cacheVtableSymbol = [](void* symbol, std::atomic<void*>& target)
@@ -2865,6 +3215,14 @@ static bool InitializeDwmHooks()
         hasExactVisualProxyVtable || hasExactRedirectProxyVtable || hasExactContainerProxyVtable;
     bool hasExactMatrixProxyVtable =
         cacheVtableSymbol(g_matrixTransformProxyVtableSymbol, g_matrixTransformProxyVtable);
+    bool hasExactWindowBorderVtable =
+        cacheVtableSymbol(g_windowBorderVtableSymbol, g_windowBorderVtable);
+    g_windowBorderSpriteOffset = FindBorderSpriteOffset(
+        g_windowBorderSetParametersFunction, g_windowBorderAttachBrushFunction);
+    Wh_Log(L"Border sprite opacity path: vtable=%s layout=%s offset=0x%zx",
+           hasExactWindowBorderVtable ? L"verified" : L"unavailable",
+           g_windowBorderSpriteOffset != SIZE_MAX ? L"verified" : L"unavailable",
+           g_windowBorderSpriteOffset);
     if (g_cMatrixTransformProxyUpdate && g_cMatrixTransformProxyUpdateFloat)
     {
         Wh_Log(L"DWM compatibility: ambiguous ABI variants");
@@ -3080,6 +3438,190 @@ static bool InitializeDwmHooks()
     return true;
 }
 
+static bool IsExecutableMemory(const void* address)
+{
+    MEMORY_BASIC_INFORMATION info = {};
+    return address && VirtualQuery(address, &info, sizeof(info)) == sizeof(info) &&
+           info.State == MEM_COMMIT && !(info.Protect & (PAGE_GUARD | PAGE_NOACCESS)) &&
+           (info.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE |
+                            PAGE_EXECUTE_WRITECOPY));
+}
+
+static void RestoreBorderSpriteOpacity(BorderSpriteOpacity& state, HWND hwnd)
+{
+    if (!state.visual || !IsOnDwmSceneThread())
+    {
+        return;
+    }
+    float current = 0.0f;
+    HRESULT readResult = state.visual->get_Opacity(&current);
+    bool externallyChanged = SUCCEEDED(readResult) &&
+                             std::fabs(current - REDUCED_BORDER_OPACITY) > 0.001f;
+    HRESULT restoreResult = S_OK;
+    if (state.changed && SUCCEEDED(readResult) && !externallyChanged)
+    {
+        restoreResult = state.visual->put_Opacity(state.originalOpacity);
+        if (SUCCEEDED(restoreResult))
+        {
+            readResult = state.visual->get_Opacity(&current);
+        }
+    }
+    if (state.changed)
+    {
+        Wh_Log(L"BORDER SPRITE OPACITY RESTORED: HWND=%p Status=%s "
+               L"Original=%.3f Current=%.3f ExternalChange=%d Read=0x%08X Restore=0x%08X",
+               hwnd,
+               externallyChanged ? L"external-change-preserved" :
+                   (SUCCEEDED(readResult) && SUCCEEDED(restoreResult) &&
+                    std::fabs(current - state.originalOpacity) <= 0.001f
+                        ? L"verified" : L"failed"),
+               static_cast<double>(state.originalOpacity), static_cast<double>(current),
+               externallyChanged,
+               static_cast<unsigned int>(readResult),
+               static_cast<unsigned int>(restoreResult));
+    }
+    state.visual->Release();
+    state = {};
+}
+
+static bool ApplyBorderSpriteOpacity(void* root, void* fullWindowProxy, HWND hwnd,
+                                     BorderSpriteOpacity& state)
+{
+    if (!IsOnDwmSceneThread())
+    {
+        return false;
+    }
+    const wchar_t* stage = L"Layout";
+    HRESULT result = E_FAIL;
+    Composition::IVisual* visual = nullptr;
+    void* sprite = nullptr;
+    void* expectedRootVtable = g_windowBorderVtable.load(std::memory_order_acquire);
+    void* actualRootVtable = IsReadableMemory(root, sizeof(void*))
+                                 ? *static_cast<void**>(root) : nullptr;
+    void* rootProxy = ReadPointerMember(root, g_visualProxyOffset);
+    if (g_windowBorderSpriteOffset == SIZE_MAX || !expectedRootVtable)
+    {
+        stage = L"SymbolLayout";
+    }
+    else if (!fullWindowProxy)
+    {
+        stage = L"FullWindowProxy";
+    }
+    else if (!root || !actualRootVtable)
+    {
+        stage = L"Root";
+    }
+    else if (actualRootVtable != expectedRootVtable)
+    {
+        stage = L"RootType";
+    }
+    else if (rootProxy != fullWindowProxy)
+    {
+        stage = L"RootProxy";
+    }
+    else
+    {
+        stage = L"Sprite";
+        sprite = ReadPointerMember(root, g_windowBorderSpriteOffset);
+        if (IsReadableMemory(sprite, sizeof(void*)))
+        {
+            void** vtable = *static_cast<void***>(sprite);
+            if (IsReadableMemory(vtable, sizeof(void*) * 3) &&
+                IsExecutableMemory(vtable[0]) && IsExecutableMemory(vtable[1]) &&
+                IsExecutableMemory(vtable[2]))
+            {
+                stage = L"QueryInterface";
+                result = static_cast<IUnknown*>(sprite)->QueryInterface(
+                    __uuidof(Composition::IVisual), reinterpret_cast<void**>(&visual));
+            }
+            else
+            {
+                stage = L"SpriteVtable";
+            }
+        }
+    }
+    if (visual)
+    {
+        if (visual == state.visual)
+        {
+            visual->Release();
+        }
+        else
+        {
+            RestoreBorderSpriteOpacity(state, hwnd);
+            stage = L"ReadOriginal";
+            float original = 0.0f;
+            result = visual->get_Opacity(&original);
+            if (SUCCEEDED(result) && std::isfinite(original) && original >= 0.0f &&
+                original <= 1.0f)
+            {
+                state.visual = visual;
+                state.originalOpacity = original;
+            }
+            else
+            {
+                visual->Release();
+                visual = nullptr;
+                if (SUCCEEDED(result)) result = E_UNEXPECTED;
+            }
+        }
+    }
+    else if (state.visual)
+    {
+        RestoreBorderSpriteOpacity(state, hwnd);
+    }
+    if (visual && state.visual)
+    {
+        stage = L"ReadCurrent";
+        float current = 0.0f;
+        result = state.visual->get_Opacity(&current);
+        bool changedNow = false;
+        if (SUCCEEDED(result) && std::isfinite(current) && current >= 0.0f && current <= 1.0f &&
+            std::fabs(current - REDUCED_BORDER_OPACITY) > 0.001f)
+        {
+            stage = L"SetReduced";
+            result = state.visual->put_Opacity(REDUCED_BORDER_OPACITY);
+            if (SUCCEEDED(result))
+            {
+                state.changed = std::fabs(state.originalOpacity - REDUCED_BORDER_OPACITY) > 0.001f;
+                changedNow = true;
+            }
+        }
+        if (SUCCEEDED(result))
+        {
+            stage = L"Readback";
+            result = state.visual->get_Opacity(&current);
+            if (SUCCEEDED(result) &&
+                std::fabs(current - REDUCED_BORDER_OPACITY) <= 0.001f)
+            {
+                if (!state.logged || changedNow)
+                {
+                    Wh_Log(L"BORDER SPRITE OPACITY: HWND=%p Root=%p Sprite=%p Visual=%p "
+                           L"Original=%.3f Current=%.3f Readback=verified",
+                           hwnd, root, sprite, state.visual,
+                           static_cast<double>(state.originalOpacity),
+                           static_cast<double>(current));
+                    state.logged = true;
+                }
+                return true;
+            }
+            if (SUCCEEDED(result)) result = E_UNEXPECTED;
+        }
+    }
+    ULONGLONG now = GetTickCount64();
+    if (state.lastFailureLog == 0 || now - state.lastFailureLog >= 2000)
+    {
+        Wh_Log(L"BORDER SPRITE OPACITY FAILED: HWND=%p Stage=%s Result=0x%08X "
+               L"Offset=0x%zx Root=%p RootVtable=%p ExpectedVtable=%p "
+               L"RootProxy=%p ExpectedProxy=%p Sprite=%p",
+               hwnd, stage, static_cast<unsigned int>(result),
+               g_windowBorderSpriteOffset, root, actualRootVtable, expectedRootVtable,
+               rootProxy, fullWindowProxy, sprite);
+        state.lastFailureLog = now;
+    }
+    return false;
+}
+
 static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
 {
     if (!IsOnDwmSceneThread() || g_unloading.load(std::memory_order_acquire) ||
@@ -3112,9 +3654,11 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
         void* matrixTransformProxy = nullptr;
         void* previouslyBoundTopLevelVisualProxy = nullptr;
         void* previouslyBoundTransitionVisualProxy = nullptr;
+        BorderSpriteOpacity borderSpriteOpacity = {};
         bool previouslyTopLevelAttached = false;
         bool previouslyTransitionAttached = false;
         bool windowStateThrob = false;
+        bool reduceVisualArtifacts = false;
         bool bindingPending = false;
         AcquireSRWLockExclusive(&g_animationSlotsLock);
         WindowAnimationSlot& slot = g_animationSlots[i];
@@ -3137,6 +3681,10 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
             previouslyTopLevelAttached = slot.transformAttached;
             previouslyTransitionAttached = slot.transitionTransformAttached;
             windowStateThrob = slot.windowStateThrob;
+            reduceVisualArtifacts = slot.settings.visualArtifactReduction &&
+                                    !slot.settings.sharpRendering;
+            borderSpriteOpacity = slot.borderSpriteOpacity;
+            slot.borderSpriteOpacity = {};
         }
         ReleaseSRWLockExclusive(&g_animationSlotsLock);
         if (!matrixTransformProxy)
@@ -3148,6 +3696,7 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
         void* topLevelWindow3D = nullptr;
         void* topLevelVisualProxy = nullptr;
         void* transitionVisualProxy = nullptr;
+        void* topLevelRootVisual = nullptr;
         const wchar_t* visualSource = L"None";
         const wchar_t* bindFailureStage = nullptr;
         HWND mappedHwnd = windowData ? GetHwndFromWindowData(windowData) : nullptr;
@@ -3172,7 +3721,8 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
             if (topLevelWindow)
             {
                 topLevelVisualProxy = GetTopLevelVisualProxy(topLevelWindow,
-                                                             &visualSource);
+                                                             &visualSource,
+                                                             &topLevelRootVisual);
                 if (!topLevelVisualProxy)
                 {
                     bindFailureStage = L"VisualProxy";
@@ -3211,6 +3761,20 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
         {
             transitionBindResult =
                 g_cVisualProxySetTransform(transitionVisualProxy, matrixTransformProxy);
+        }
+        bool topLevelTransformReady =
+            topLevelVisualProxy &&
+            ((topLevelBindingAttempted && topLevelBindResult >= 0) ||
+             (!topLevelBindingAttempted && previouslyTopLevelAttached &&
+              topLevelVisualProxy == previouslyBoundTopLevelVisualProxy));
+        if (reduceVisualArtifacts && topLevelTransformReady)
+        {
+            ApplyBorderSpriteOpacity(topLevelRootVisual, topLevelVisualProxy, hwnd,
+                                     borderSpriteOpacity);
+        }
+        else
+        {
+            RestoreBorderSpriteOpacity(borderSpriteOpacity, hwnd);
         }
         bool logBinding = false;
         bool logBindingFailure = false;
@@ -3265,9 +3829,12 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
                 currentSlot.transitionTransformAttached = false;
                 currentSlot.boundTransitionVisualProxy = nullptr;
             }
+            currentSlot.borderSpriteOpacity = borderSpriteOpacity;
+            borderSpriteOpacity = {};
         }
         ReleaseAnimationSlotPinLocked(currentSlot);
         ReleaseSRWLockExclusive(&g_animationSlotsLock);
+        RestoreBorderSpriteOpacity(borderSpriteOpacity, hwnd);
         if (logBinding)
         {
             Wh_Log(L"TRANSFORM BOUND FROM SCENE: Slot=%d HWND=%p "
@@ -3991,6 +4558,11 @@ static bool SimulateMeshStep(WobbleMesh& mesh, const WobblySettings& settings, d
 
 static void BeginDrag(WobbleMesh& mesh, const Vec2& mousePosition)
 {
+    // Replace the release anchor without discarding the remaining motion.
+    for (WobblePoint& point : mesh.points)
+    {
+        point.fixed = false;
+    }
     mesh.dragPointIndex = FindNearestPoint(mesh, mousePosition);
     WobblePoint& dragPoint = mesh.points[mesh.dragPointIndex];
     // Preserve the exact grab offset for a stable affine pivot.
@@ -4066,27 +4638,194 @@ static bool HasAnyAnimationSlots()
                                      { return slot.active || slot.retiring; }) >= 0;
 }
 
-static double GetPreferredAnimationRate(HWND hwnd)
+static double GetExactMonitorRefreshRate(const MONITORINFOEXW& monitorInfo)
 {
-    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    UINT32 pathCount = 0;
+    UINT32 modeCount = 0;
+    for (int attempt = 0; attempt < 3; attempt++)
+    {
+        if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) !=
+            ERROR_SUCCESS)
+        {
+            break;
+        }
+        std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+        std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+        LONG result = QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(),
+                                         &modeCount, modes.data(), nullptr);
+        if (result == ERROR_INSUFFICIENT_BUFFER)
+        {
+            continue;
+        }
+        if (result != ERROR_SUCCESS)
+        {
+            break;
+        }
+        for (UINT32 i = 0; i < pathCount; i++)
+        {
+            const DISPLAYCONFIG_PATH_INFO& path = paths[i];
+            DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName = {};
+            sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+            sourceName.header.size = sizeof(sourceName);
+            sourceName.header.adapterId = path.sourceInfo.adapterId;
+            sourceName.header.id = path.sourceInfo.id;
+            if (DisplayConfigGetDeviceInfo(&sourceName.header) != ERROR_SUCCESS ||
+                _wcsicmp(sourceName.viewGdiDeviceName, monitorInfo.szDevice) != 0)
+            {
+                continue;
+            }
+            const DISPLAYCONFIG_RATIONAL& refreshRate = path.targetInfo.refreshRate;
+            if (refreshRate.Numerator && refreshRate.Denominator)
+            {
+                double rate = static_cast<double>(refreshRate.Numerator) /
+                              static_cast<double>(refreshRate.Denominator);
+                if (std::isfinite(rate) && rate >= 30.0 && rate <= 1000.0)
+                {
+                    return rate;
+                }
+            }
+        }
+        break;
+    }
+    return 0.0;
+}
+
+static double GetPreferredAnimationRate(HMONITOR monitor)
+{
     MONITORINFOEXW monitorInfo = {};
     monitorInfo.cbSize = sizeof(monitorInfo);
     DEVMODEW displayMode = {};
     displayMode.dmSize = sizeof(displayMode);
-    if (monitor && GetMonitorInfoW(monitor, &monitorInfo) &&
-        EnumDisplaySettingsW(monitorInfo.szDevice, ENUM_CURRENT_SETTINGS, &displayMode) &&
-        displayMode.dmDisplayFrequency >= 30 && displayMode.dmDisplayFrequency <= 500)
+    if (monitor && GetMonitorInfoW(monitor, &monitorInfo))
     {
-        double displayRate =
-            std::clamp(static_cast<double>(displayMode.dmDisplayFrequency), 60.0, 240.0);
+        double displayRate = GetExactMonitorRefreshRate(monitorInfo);
+        if (displayRate == 0.0 &&
+            EnumDisplaySettingsW(monitorInfo.szDevice, ENUM_CURRENT_SETTINGS, &displayMode) &&
+            displayMode.dmDisplayFrequency >= 30 && displayMode.dmDisplayFrequency <= 1000)
+        {
+            displayRate = static_cast<double>(displayMode.dmDisplayFrequency);
+        }
+        if (displayRate == 0.0)
+        {
+            return 60.0;
+        }
+        displayRate = std::clamp(displayRate, 30.0, 500.0);
         if ((monitorInfo.dwFlags & MONITORINFOF_PRIMARY) == 0)
         {
             // Oversample secondary outputs because DWM exposes no per-output phase.
-            return std::min(240.0, displayRate * 2.0);
+            return std::min(500.0, displayRate * 2.0);
         }
         return displayRate;
     }
     return 60.0;
+}
+
+static double GetPreferredAnimationRate(HWND hwnd)
+{
+    return GetPreferredAnimationRate(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST));
+}
+
+static void RetargetAnimationClock(HMONITOR monitor)
+{
+    if (!g_animationClockArmed || !monitor)
+    {
+        return;
+    }
+    double preferredRate = GetPreferredAnimationRate(monitor);
+    if (std::fabs(preferredRate - g_animationTargetHz) > 0.01)
+    {
+        // The currently armed tick can finish; the next one starts a new exact-rate epoch.
+        g_animationTargetHz = preferredRate;
+        g_nextAnimationCounter = {};
+        g_compositionRefreshPeriod = 0;
+        g_nextCompositionTimingRefresh = 0;
+    }
+}
+
+static LONGLONG CalculateNextCompositionAlignedCounter(LONGLONG now, LONGLONG vblank,
+                                                       LONGLONG refreshPeriod)
+{
+    if (refreshPeriod <= 0 || vblank <= 0)
+    {
+        return 0;
+    }
+    // Run just after VBlank, leaving nearly a full refresh interval for uDWM
+    // to consume the new scene state before the following presentation.
+    LONGLONG target = vblank + std::max<LONGLONG>(1, refreshPeriod / 8);
+    if (target <= now)
+    {
+        target += ((now - target) / refreshPeriod + 1) * refreshPeriod;
+    }
+    return target;
+}
+
+static bool RefreshCompositionTiming(const LARGE_INTEGER& now)
+{
+    if (!g_visualArtifactReductionEnabled.load(std::memory_order_acquire) ||
+        g_animationFrequency.QuadPart <= 0)
+    {
+        g_compositionRefreshPeriod = 0;
+        g_compositionTimingState.store(0, std::memory_order_release);
+        return false;
+    }
+    if (!g_dwmGetCompositionTimingInfo)
+    {
+        g_compositionRefreshPeriod = 0;
+        if (g_compositionTimingState.exchange(-1, std::memory_order_acq_rel) != -1)
+        {
+            Wh_Log(L"DWM PHASE ALIGNMENT BYPASSED: timing API unavailable");
+        }
+        return false;
+    }
+    ULONGLONG nowMilliseconds = GetTickCount64();
+    if (g_compositionRefreshPeriod > 0 &&
+        nowMilliseconds < g_nextCompositionTimingRefresh)
+    {
+        return true;
+    }
+    DWM_TIMING_INFO timing = {};
+    timing.cbSize = sizeof(timing);
+    HRESULT timingResult = g_dwmGetCompositionTimingInfo(nullptr, &timing);
+    if (FAILED(timingResult) ||
+        timing.qpcRefreshPeriod == 0 || timing.qpcVBlank == 0)
+    {
+        g_compositionRefreshPeriod = 0;
+        g_nextCompositionTimingRefresh = nowMilliseconds + 1000;
+        if (g_compositionTimingState.exchange(-1, std::memory_order_acq_rel) != -1)
+        {
+            Wh_Log(L"DWM PHASE ALIGNMENT BYPASSED: timing result=0x%08X",
+                   static_cast<unsigned int>(timingResult));
+        }
+        return false;
+    }
+    double compositionHz = static_cast<double>(g_animationFrequency.QuadPart) /
+                           static_cast<double>(timing.qpcRefreshPeriod);
+    double tolerance = std::max(0.5, g_animationTargetHz * 0.01);
+    if (!std::isfinite(compositionHz) ||
+        std::fabs(compositionHz - g_animationTargetHz) > tolerance)
+    {
+        // Global DWM timing generally follows the primary output. Preserve the
+        // proven per-monitor timer on mismatched secondary-output cadences.
+        g_compositionRefreshPeriod = 0;
+        g_nextCompositionTimingRefresh = nowMilliseconds + 1000;
+        if (g_compositionTimingState.exchange(-1, std::memory_order_acq_rel) != -1)
+        {
+            Wh_Log(L"DWM PHASE ALIGNMENT BYPASSED: composition=%.3f Hz target=%.3f Hz",
+                   compositionHz, g_animationTargetHz);
+        }
+        return false;
+    }
+    g_compositionVBlankCounter.QuadPart = static_cast<LONGLONG>(timing.qpcVBlank);
+    g_compositionRefreshPeriod = static_cast<LONGLONG>(timing.qpcRefreshPeriod);
+    g_nextCompositionTimingRefresh = nowMilliseconds + 1000;
+    if (g_compositionTimingState.exchange(1, std::memory_order_acq_rel) != 1)
+    {
+        Wh_Log(L"DWM PHASE ALIGNMENT ACTIVE: composition=%.3f Hz target=%.3f Hz",
+               compositionHz, g_animationTargetHz);
+    }
+    return CalculateNextCompositionAlignedCounter(
+               now.QuadPart, g_compositionVBlankCounter.QuadPart,
+               g_compositionRefreshPeriod) > now.QuadPart;
 }
 
 static bool ArmNextAnimationTick()
@@ -4104,7 +4843,13 @@ static bool ArmNextAnimationTick()
     LONGLONG interval = std::max<LONGLONG>(
         1, static_cast<LONGLONG>(std::llround(static_cast<double>(g_animationFrequency.QuadPart) /
                                               g_animationTargetHz)));
-    if (g_nextAnimationCounter.QuadPart <= 0)
+    if (RefreshCompositionTiming(now))
+    {
+        g_nextAnimationCounter.QuadPart = CalculateNextCompositionAlignedCounter(
+            now.QuadPart, g_compositionVBlankCounter.QuadPart,
+            g_compositionRefreshPeriod);
+    }
+    else if (g_nextAnimationCounter.QuadPart <= 0)
     {
         g_nextAnimationCounter.QuadPart = now.QuadPart + interval;
     }
@@ -4215,6 +4960,9 @@ static void DisarmAnimationClock()
     g_animationTargetHz = 0.0;
     g_lastAnimationCounter = {};
     g_nextAnimationCounter = {};
+    g_compositionVBlankCounter = {};
+    g_compositionRefreshPeriod = 0;
+    g_nextCompositionTimingRefresh = 0;
 }
 
 static bool IsInteractiveMoveSizeLoop(HWND hwnd)
@@ -4372,28 +5120,40 @@ static void FinalizeRetiringSlots()
     for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
     {
         void* matrixTransformProxy = nullptr;
+        BorderSpriteOpacity borderSpriteOpacity = {};
+        HWND hwnd = nullptr;
+        bool finalizeResources = false;
         AcquireSRWLockExclusive(&g_animationSlotsLock);
         WindowAnimationSlot& slot = g_animationSlots[i];
         if (slot.retiring && slot.hookUsers == 0 && slot.identityApplied)
         {
-            if (!slot.matrixTransformProxy)
+            bool hasProxy = slot.matrixTransformProxy != nullptr;
+            bool hasBorderVisual = slot.borderSpriteOpacity.visual != nullptr;
+            if (!hasProxy && !hasBorderVisual)
             {
                 ResetAnimationSlotLocked(slot, slot.generation);
             }
-            else if (IsOnDwmSceneThread() && g_cBaseObjectRelease)
+            else if (IsOnDwmSceneThread() && (!hasProxy || g_cBaseObjectRelease))
             {
                 matrixTransformProxy = slot.matrixTransformProxy;
+                borderSpriteOpacity = slot.borderSpriteOpacity;
+                hwnd = slot.hwnd;
                 slot.matrixTransformProxy = nullptr;
-                // Unload must still see this release; reentry cannot use its proxy.
+                slot.borderSpriteOpacity = {};
                 slot.hookUsers++;
+                finalizeResources = true;
             }
         }
         ReleaseSRWLockExclusive(&g_animationSlotsLock);
-        if (matrixTransformProxy)
+        if (finalizeResources)
         {
-            // On 22621/26100 the visual retains the resource, not this wrapper.
-            // Keep identity: the private setter cannot unbind with nullptr.
-            g_cBaseObjectRelease(matrixTransformProxy);
+            RestoreBorderSpriteOpacity(borderSpriteOpacity, hwnd);
+            if (matrixTransformProxy)
+            {
+                // The visual retains the resource, not this wrapper. Keep identity:
+                // the private setter cannot unbind with nullptr.
+                g_cBaseObjectRelease(matrixTransformProxy);
+            }
             AcquireSRWLockExclusive(&g_animationSlotsLock);
             ReleaseAnimationSlotPinLocked(slot);
             ResetAnimationSlotLocked(slot, slot.generation);
@@ -4414,7 +5174,8 @@ static int CollectActiveAnimationSlots(int* indices, bool* hasProxy = nullptr)
         {
             indices[count++] = i;
         }
-        proxyFound |= slot.matrixTransformProxy != nullptr;
+        proxyFound |= slot.matrixTransformProxy != nullptr ||
+                      slot.borderSpriteOpacity.visual != nullptr;
     }
     ReleaseSRWLockShared(&g_animationSlotsLock);
     if (hasProxy)
@@ -4428,6 +5189,7 @@ static void AbandonAnimationSlotsAfterSceneStall(const wchar_t* reason)
 {
     unsigned int abandonedSlots = 0;
     unsigned int retainedProxies = 0;
+    unsigned int retainedBorderVisuals = 0;
     unsigned int busySlots = 0;
     AcquireSRWLockExclusive(&g_animationSlotsLock);
     for (WindowAnimationSlot& slot : g_animationSlots)
@@ -4442,12 +5204,12 @@ static void AbandonAnimationSlotsAfterSceneStall(const wchar_t* reason)
             continue;
         }
         retainedProxies += slot.matrixTransformProxy != nullptr;
+        retainedBorderVisuals += slot.borderSpriteOpacity.visual != nullptr;
         ResetAnimationSlotLocked(slot, slot.generation + 1);
         abandonedSlots++;
     }
     WakeAllConditionVariable(&g_animationSlotsCondition);
     ReleaseSRWLockExclusive(&g_animationSlotsLock);
-
     DisarmAnimationClock();
     g_sceneWakeScheduled.store(false, std::memory_order_release);
     g_sceneWakePostTimestamp.store(0, std::memory_order_release);
@@ -4463,8 +5225,9 @@ static void AbandonAnimationSlotsAfterSceneStall(const wchar_t* reason)
         g_abandonedProxyCount.fetch_add(retainedProxies, std::memory_order_acq_rel) +
         retainedProxies;
     Wh_Log(L"DWM scene work abandoned (%s): slots=%u retainedProxies=%u "
-           L"totalRetainedProxies=%u busySlots=%u",
-           reason, abandonedSlots, retainedProxies, totalRetainedProxies, busySlots);
+           L"retainedBorderVisuals=%u totalRetainedProxies=%u busySlots=%u",
+           reason, abandonedSlots, retainedProxies, retainedBorderVisuals,
+           totalRetainedProxies, busySlots);
 }
 
 static void BeginSceneStallCleanup(const wchar_t* reason)
@@ -4531,6 +5294,10 @@ static void RetireAnimationSlot(int slotIndex)
         {
             slot.meshIdentityPending = false;
             slot.identityApplied = true;
+        }
+        if (slot.matrixTransformProxy || slot.borderSpriteOpacity.visual)
+        {
+            sceneWakeWindow = slot.hwnd;
         }
         slot.generation++;
     }
@@ -4829,6 +5596,8 @@ static void InitializeDpiSupport()
     {
         g_dwmGetWindowAttribute = reinterpret_cast<DwmGetWindowAttribute_t>(
             GetProcAddress(g_dwmApiModule, "DwmGetWindowAttribute"));
+        g_dwmGetCompositionTimingInfo = reinterpret_cast<DwmGetCompositionTimingInfo_t>(
+            GetProcAddress(g_dwmApiModule, "DwmGetCompositionTimingInfo"));
     }
 }
 
@@ -4841,6 +5610,7 @@ static void UninitializeDpiSupport()
         g_shcoreModule = nullptr;
     }
     g_dwmGetWindowAttribute = nullptr;
+    g_dwmGetCompositionTimingInfo = nullptr;
     if (g_dwmApiModule)
     {
         FreeLibrary(g_dwmApiModule);
@@ -5120,6 +5890,7 @@ static void ApplyAnimationSlotTransform(int slotIndex, bool identityOnly)
         HWND hwnd;
         void* matrixTransformProxy;
         WobbleMesh mesh;
+        bool sharpRendering;
     } snapshot = {};
     bool identityUpdate = false;
     AcquireSRWLockExclusive(&g_animationSlotsLock);
@@ -5144,6 +5915,7 @@ static void ApplyAnimationSlotTransform(int slotIndex, bool identityOnly)
         if (!identityUpdate)
         {
             snapshot.mesh = slot.mesh;
+            snapshot.sharpRendering = slot.settings.sharpRendering;
         }
         // Pin the slot while calling its proxy outside the lock.
         slot.hookUsers++;
@@ -5244,6 +6016,15 @@ static void ApplyAnimationSlotTransform(int slotIndex, bool identityOnly)
     m12 = std::clamp(m12, -1.25, 1.25);
     m21 = std::clamp(m21, -1.25, 1.25);
     m22 = std::clamp(m22, 0.10, 2.00);
+    if (snapshot.sharpRendering)
+    {
+        // Avoid resampling the already-rasterized window and its native border.
+        // The mesh still drives springy whole-window translation and overshoot.
+        m11 = 1.0;
+        m12 = 0.0;
+        m21 = 0.0;
+        m22 = 1.0;
+    }
     Vec2 translationBase = baseCenter;
     Vec2 translationRendered = renderedCenter;
     bool useSurfacePivot = false;
@@ -5310,6 +6091,11 @@ static void ApplyAnimationSlotTransform(int slotIndex, bool identityOnly)
     }
     translationX = std::clamp(translationX, -emergencyTranslationLimit, emergencyTranslationLimit);
     translationY = std::clamp(translationY, -emergencyTranslationLimit, emergencyTranslationLimit);
+    if (snapshot.sharpRendering)
+    {
+        translationX = std::round(translationX);
+        translationY = std::round(translationY);
+    }
     MilMatrix3x2D matrix = {m11, m12, m21, m22, translationX, translationY};
     long updateResult = UpdateMatrixTransformProxy(snapshot.matrixTransformProxy, matrix);
     finishUpdate(updateResult, false);
@@ -5349,6 +6135,7 @@ static void StopAllAnimations()
     {
         unsigned int pendingIdentities = 0;
         unsigned int retainedProxies = 0;
+        unsigned int retainedBorderVisuals = 0;
         unsigned int hookUsers = 0;
         AcquireSRWLockShared(&g_animationSlotsLock);
         for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
@@ -5360,13 +6147,17 @@ static void StopAllAnimations()
                 retainedProxies++;
                 pendingIdentities += !slot.identityApplied;
             }
+            if (slot.retiring && slot.borderSpriteOpacity.visual)
+            {
+                retainedBorderVisuals++;
+            }
         }
         ReleaseSRWLockShared(&g_animationSlotsLock);
         // Natural scene passes can finish cleanup before queued wakes are read.
         // Wakes carry only an instance token, not pointers; keep their counter
         // intact for late acknowledgments, but don't mistake them for resources.
         bool wakePending = g_sceneWakeOutstanding.load(std::memory_order_acquire) != 0;
-        if (!hookUsers && !retainedProxies)
+        if (!hookUsers && !retainedProxies && !retainedBorderVisuals)
         {
             break;
         }
@@ -5374,13 +6165,14 @@ static void StopAllAnimations()
         if (now >= hookWaitDeadline)
         {
             Wh_Log(L"DWM cleanup timeout: pendingIdentities=%u retainedProxies=%u "
-                   L"hookUsers=%u wakePending=%d", pendingIdentities, retainedProxies,
+                   L"retainedBorderVisuals=%u hookUsers=%u wakePending=%d",
+                   pendingIdentities, retainedProxies, retainedBorderVisuals,
                    hookUsers, wakePending);
             cleanupTimedOut = true;
             break;
         }
         ULONGLONG lastWakePost = g_sceneWakePostTimestamp.load(std::memory_order_acquire);
-        if (retainedProxies &&
+        if ((retainedProxies || retainedBorderVisuals) &&
             (!wakePending || !lastWakePost || now - lastWakePost >= 50))
         {
             PostPendingDwmSceneWake(true);
@@ -5797,6 +6589,7 @@ static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild)
     {
         g_dragCursorMonitor = cursorMonitor;
         g_monitorTransitionRebaseUntil = now + 750;
+        RetargetAnimationClock(cursorMonitor);
     }
     bool dpiReflow = !g_realResizing && sizeChanged && !zoomStateChanged &&
                      g_interactiveStateThrob == InteractiveStateThrobKind::None;
@@ -7075,6 +7868,9 @@ static void LoadSettings()
     settings.resizeWobbleEnabled = Wh_GetIntSetting(L"EnableResizeWobble") != 0;
     settings.windowStateWobbleEnabled =
         Wh_GetIntSetting(L"EnableWindowStateWobble") != 0;
+    settings.sharpRendering = Wh_GetIntSetting(L"SharpRendering") != 0;
+    settings.visualArtifactReduction =
+        Wh_GetIntSetting(L"VisualArtifactReduction") != 0;
     if (advancedMode)
     {
         settings.stiffness =
@@ -7090,16 +7886,21 @@ static void LoadSettings()
     AcquireSRWLockExclusive(&g_settingsLock);
     g_settings = settings;
     ReleaseSRWLockExclusive(&g_settingsLock);
+    g_visualArtifactReductionEnabled.store(settings.visualArtifactReduction,
+                                           std::memory_order_release);
     Wh_Log(L"Settings: "
            L"WobblinessPreset=%d, "
            L"Advanced=%d, "
            L"ResizeWobble=%d, "
            L"WindowStateWobble=%d, "
+           L"SharpRendering=%d, "
+           L"VisualArtifactReduction=%d, "
            L"Stiffness=%.2f, "
            L"Drag=%.2f, "
            L"MoveFactor=%.2f",
            wobbliness, advancedMode, settings.resizeWobbleEnabled,
-           settings.windowStateWobbleEnabled, settings.stiffness, settings.drag,
+           settings.windowStateWobbleEnabled, settings.sharpRendering,
+           settings.visualArtifactReduction, settings.stiffness, settings.drag,
            settings.moveFactor);
 }
 
