@@ -6347,6 +6347,39 @@
         "version": "1.4.1"
       }
     },
+    "explorer-visual-tweaks-dark": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789930854000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1789930854000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "VitalS",
+        "compilerOptions": "-luser32 -lgdi32 -luxtheme -lmsimg32 -ladvapi32",
+        "description": "Explorer selection, progress, and Preview Pane visual tweaks",
+        "github": "https://github.com/VitalSkib",
+        "include": [
+          "explorer.exe",
+          "prevhost.exe"
+        ],
+        "name": "Explorer Visual Tweaks Dark",
+        "version": "1.0.0"
+      }
+    },
     "explorerframe-fixes-for-win11-22h2plus": {
       "details": {
         "defaultSorting": 17760,
@@ -11298,6 +11331,41 @@
         "license": "MIT",
         "name": "PivotLink: Browser Router",
         "version": "1.0"
+      }
+    },
+    "power-action-countdown": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789930824000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1789930824000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Nerdworld",
+        "compilerOptions": "-lole32 -lgdi32",
+        "description": "Shows a configurable cancellable countdown before shutdown, restart, sleep, or hibernation.",
+        "github": "https://github.com/nerdworldDE",
+        "homepage": "https://nerdworld.de/",
+        "include": [
+          "explorer.exe",
+          "RuntimeBroker.exe"
+        ],
+        "license": "MIT",
+        "name": "Power Action Countdown",
+        "version": "1.2"
       }
     },
     "power-options-button": {

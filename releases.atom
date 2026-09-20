@@ -2,12 +2,89 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-20T18:51:31.000Z</updated>
+    <updated>2026-09-20T19:00:54.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Visual Tweaks Dark 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-visual-tweaks-dark#0e6b56702ef4219f8b01cfce98cd8a4f7d4adcfb</id>
+        <link href="https://windhawk.net/mods/explorer-visual-tweaks-dark"/>
+        <updated>2026-09-20T19:00:54.000Z</updated>
+        <content type="html"><![CDATA[<p>This mod fixes visual inconsistencies in Windows Explorer and related windows,
+primarily in the standard dark theme. It brings the Preview Pane, plain-text
+preview, drive progress indicators, item selection, and Navigation Pane focus
+states to a consistent appearance, and allows their colors and rounding to be
+customized.
+The selection and progress renderers aren't tied to a particular theme.
+Their default colors are tuned for the standard dark theme, but can be changed
+to suit another theme. The Preview Pane correction is intentionally inactive
+in the standard light app mode, where the original color mismatch doesn't
+exist.
+Selection styling applies to Explorer and Explorer-based Open/Save dialogs.
+Drive progress rendering replaces only the PROGRESS part/state pairs used by
+Explorer. Preview Pane fixes cover Explorer, Open/Save dialog hosts, and
+prevhost.exe.
+Selection and Progress settings apply immediately.</p>
+<h3 id="screenshots">Screenshots</h3>
+<p><img src="https://raw.githubusercontent.com/VitalSkib/files/refs/heads/main/explorer-visual-tweaks-dark-thispc.png" alt="Explorer selections and drive progress" />
+<img src="https://raw.githubusercontent.com/VitalSkib/files/refs/heads/main/explorer-visual-tweaks-dark-text.png" alt="Preview Pane and plain-text preview" />
+<strong>Important:</strong> Preview Pane tweaks require restarting File Explorer and any
+included host applications for changed values and colors to apply correctly.
+A restart is also required after disabling the mod to fully restore the
+default Preview Pane appearance.
+To style an Explorer-based Open/Save dialog, add its host application to
+Windhawk's Inclusion List.</p>]]></content>
+        <author>
+            <name>VitalS</name>
+            <uri>https://github.com/VitalSkib</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Power Action Countdown 1.2]]></title>
+        <id>https://windhawk.net/mods/power-action-countdown#33fb034056848ebcbd106d07dddf1b8aaf4278a5</id>
+        <link href="https://windhawk.net/mods/power-action-countdown"/>
+        <updated>2026-09-20T19:00:24.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="poweractioncountdown">Power action countdown</h1>
+<p>Shows an individually configurable countdown before Windows shuts down,
+restarts, enters sleep, or enters hibernation. A value of <code>0</code> disables the
+countdown for the corresponding action and executes it immediately. Values
+above 30 seconds are limited to 30 seconds.</p>
+<p>The countdown is cancelled by:</p>
+<ul>
+<li>any keyboard key</li>
+<li>a mouse button</li>
+<li>the mouse wheel</li>
+<li>a touchscreen press on the overlay</li>
+</ul>
+<p>Moving the mouse alone does not cancel the countdown. The cancelling input is
+consumed and isn't forwarded to the application underneath the overlay.</p>
+<p>The countdown is displayed on the primary monitor. Keyboard and mouse-button
+input on other monitors still cancels it.</p>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://i.imgur.com/GpcwW3m.png" alt="Power action countdown" /></p>
+<h2 id="scopeandlimitations">Scope and limitations</h2>
+<p>The mod targets power actions initiated through the Windows shell. It is loaded
+into:</p>
+<ul>
+<li><code>explorer.exe</code> for classic shell power paths</li>
+<li><code>RuntimeBroker.exe</code> because current Windows 11 builds can delegate Start-menu
+power actions to a runtime broker</li>
+</ul>
+<p>Power actions initiated by <code>shutdown.exe</code>, Task Manager, the Ctrl+Alt+Delete
+screen, the sign-in/lock screen, or arbitrary third-party applications aren't
+covered unless they ultimately call a hooked API from one of these processes.</p>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>Enable mod logging in Windhawk's <strong>Advanced</strong> tab. When an action is detected,
+the log states which Windows API was intercepted. The exact API used by Windows
+can differ between builds.</p>]]></content>
+        <author>
+            <name>Nerdworld</name>
+            <uri>https://github.com/nerdworldDE</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Teams Multi-Instance 1.0]]></title>
         <id>https://windhawk.net/mods/teams-multi-instance#0737efa406ff03b13579de25c758a86837cc625a</id>
@@ -1653,67 +1730,6 @@ Original overlay/smear architecture inspired by <a href="https://github.com/Thea
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Title Bar Label 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-title-bar-label#12ff4e1fed9336f02f00ae94d92f5962a1112e93</id>
-        <link href="https://windhawk.net/mods/explorer-title-bar-label"/>
-        <updated>2026-09-12T12:37:10.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorertitlebarlabel">Explorer Title Bar Label</h1>
-<p>Add custom text, date and time to the right side of the Windows 11 File Explorer title bar.</p>
-<p><img src="https://raw.githubusercontent.com/digart11/explorer-title-bar-label/main/images/screenshot.png" alt="Explorer Title Bar Label" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Custom text, date and time</li>
-<li>Flexible date display</li>
-<li>12-hour or 24-hour time with optional seconds</li>
-<li>Font, size, weight and color</li>
-<li>Opacity and spacing</li>
-<li>Live updates</li>
-</ul>
-<h2 id="dateandtime">Date and time</h2>
-<p>Choose the date parts and order you prefer:</p>
-<ul>
-<li><strong>Weekday:</strong> None, Mon, Monday</li>
-<li><strong>Day number:</strong> 1, 01</li>
-<li><strong>Month:</strong> 8, 08, Aug, August</li>
-<li><strong>Year:</strong> None, 26, 2026</li>
-<li><strong>Date order:</strong> Month-Day-Year, Day-Month-Year, Year-Month-Day</li>
-<li><strong>Numeric separator:</strong> <code>/</code>, <code>-</code>, <code>.</code></li>
-</ul>
-<p>Time can use <strong>12-hour or 24-hour format</strong>, with optional seconds.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>This mod does not use XAML Diagnostics, so it can be used together with <strong>Windows 11 File Explorer Styler</strong> and other tools/mods that consume File Explorer XAML diagnostics.</p>
-<p>If the mod is enabled while File Explorer windows are already open, the label may only appear in newly opened windows or after Explorer rebuilds the relevant tab UI (for example, after tab activity). This is a limitation of avoiding XAML Diagnostics.</p>
-<h2 id="credits">Credits</h2>
-<p>Parts of the File Explorer hook and XAML discovery plumbing are adapted from <strong>Explorer Command Bar</strong> by <strong>DanRotaru</strong>, licensed under the MIT License.</p>]]></content>
-        <author>
-            <name>digART</name>
-            <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start button colorizer 1.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-colorizer#e0a0b51bcad52f7f2dc5edc42be0026f2a093b59</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-colorizer"/>
-        <updated>2026-09-11T14:06:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="startbuttoncolorizer">Start button colorizer</h1>
-<p>Customize the Windows logo of the Start button on the taskbar:</p>
-<ul>
-<li><strong>Color</strong>: recolor the icon with one of the built-in colors, such as red,
-green or pink.</li>
-<li><strong>Effects</strong>: fine tune the icon with the hue, saturation, brightness and
-opacity effects.</li>
-<li><strong>Size</strong>: set the size of the icon.</li>
-</ul>
-<p>To use a custom image instead of the built-in icon, refer to the <a href="https://windhawk.net/mods/start-button-replacer">Start Button
-Replacer</a> mod.</p>
-<p>Only Windows 11 is supported.</p>
-<p><img src="https://i.imgur.com/GebA6hR.png" alt="Screenshot" /></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
