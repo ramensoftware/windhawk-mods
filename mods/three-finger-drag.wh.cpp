@@ -3255,6 +3255,7 @@ void LoadSettings() {
     std::lock_guard<std::mutex> guard(g_excludedProgramsMutex);
     g_excludedPrograms = std::move(excludedPrograms);
 }
+
 // Closes the notice if it's up, its code being in this module.
 void CloseNotice() {
     if (!g_noticeThread) {
@@ -3274,6 +3275,7 @@ void CloseNotice() {
     CloseHandle(g_noticeThread);
     g_noticeThread = nullptr;
 }
+
 // The dedicated process: it reads the touchpad and runs the drags. Above the
 // medium level, which is what Windhawk asks to run at, it moves every window
 // and sends input itself and needs no helper for either, which its marker
@@ -3447,10 +3449,9 @@ void ModUninitOther() {
 //
 // Currently, other callbacks are not supported.
 //
-// This mod does load into the other processes, for the helpers and for native
-// move, so the launcher is picked out by the process rather than by the
-// include pattern, and every other process goes through ModInitOther and
-// ModUninitOther above.
+// This mod loads into the other processes too, for the helpers and for native
+// move, so the block below is kept as it is on the wiki apart from the names of
+// its four entry points, and the routing lives in the callbacks after it.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
@@ -3460,16 +3461,13 @@ void WINAPI EntryPoint_Hook() {
     ExitThread(0);
 }
 
-BOOL Wh_ModInit() {
+BOOL ToolMod_Init() {
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
         return FALSE;
     }
 
-    g_integrity = ProcessIntegrity();
-
-    bool isWindhawk = IsWindhawk();
     bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
@@ -3480,7 +3478,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    for (int i = 1; isWindhawk && i < argc; i++) {
+    for (int i = 1; i < argc; i++) {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
             wcscmp(argv[i], L"-service-stop") == 0) {
@@ -3500,6 +3498,10 @@ BOOL Wh_ModInit() {
     }
 
     LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
@@ -3530,24 +3532,15 @@ BOOL Wh_ModInit() {
         return TRUE;
     }
 
-    // The process of another tool mod, and the service, have no windows of
-    // their own to drag.
-    if (isToolModProcess || isExcluded) {
+    if (isToolModProcess) {
         return FALSE;
     }
 
-    if (!isWindhawk) {
-        return ModInitOther();
-    }
-
     g_isToolModProcessLauncher = true;
-
-    // Windhawk's own windows are dragged like any other program's.
-    ModInitOther();
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
+void ToolMod_AfterInit() {
     if (!g_isToolModProcessLauncher) {
         return;
     }
@@ -3608,11 +3601,61 @@ void Wh_ModAfterInit() {
     CloseHandle(pi.hThread);
 }
 
+void ToolMod_SettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void ToolMod_Uninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
+}
+
+// The mod's callbacks, which route each process to its part.
+
+BOOL Wh_ModInit() {
+    g_integrity = ProcessIntegrity();
+
+    // Every process but Windhawk's own: a helper, or the native move hooks.
+    if (!IsWindhawk()) {
+        DWORD sessionId;
+        if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+            sessionId == 0) {
+            return FALSE;
+        }
+
+        return ModInitOther();
+    }
+
+    // The service, the process of a tool mod, and the launcher.
+    if (!ToolMod_Init()) {
+        return FALSE;
+    }
+
+    // Windhawk's own windows are dragged like any other program's.
+    if (g_isToolModProcessLauncher) {
+        ModInitOther();
+    }
+
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    ToolMod_AfterInit();
+}
+
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     *bReload = FALSE;
 
     if (g_role == Role::kMain) {
-        WhTool_ModSettingsChanged();
+        ToolMod_SettingsChanged();
         return TRUE;
     }
 
@@ -3629,8 +3672,8 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
 void Wh_ModUninit() {
     if (g_role == Role::kMain) {
-        WhTool_ModUninit();
-        ExitProcess(0);
+        ToolMod_Uninit();
+        return;
     }
 
     ModUninitOther();
