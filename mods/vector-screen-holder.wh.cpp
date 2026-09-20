@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.3.4
+// @version         1.4.0
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -113,11 +113,11 @@ cycle the style as usual.
 **Ctrl+Alt+H works from anywhere**, so you can always close the overlay even
 when something else has focus.
 
-If you turn on **Click through to the desktop**, none of the mouse controls
-apply: every click goes to the desktop instead, which is the point of it. The
-hotkey still shows and hides the overlay, the global key still changes the
-palette if you have it on, and style, amount and the wheel parameter come from
-the settings.
+If you turn on **Click through to the desktop**, none of the controls above
+apply: every click goes to the desktop instead, which is the point of it, and
+the overlay never takes focus, so it never sees a key either. It runs on what
+you set in the settings. The hotkey still shows and hides it, and **Global
+Esc** still closes it if you have that on.
 
 **Start active** brings the overlay up as soon as the mod loads. Windhawk loads
 its mods when you sign in, so that means it is waiting on your chosen display
@@ -136,13 +136,12 @@ The mod has to be **enabled in Windhawk** for that to do anything, because
 the event only exists while the mod is loaded. The overlay itself does not
 have to be on screen.
 
-If you would rather **Esc** and the palette key reached the overlay from any
-application, turn on **Global Esc and Ctrl+Shift+Space** in the settings. The
-palette key is a chord there on purpose: plain Space from anywhere would step
-the palette on every space you type. The whole setting is off by default
-because Esc is a heavily used key, and a reflexive press meant for a dialog or
-a search box in another window would end the session and release the
-keep-awake with nothing on screen to say it had happened.
+If you would rather **Esc** reached the overlay from any application, turn on
+**Global Esc** in the settings. It is off by default because Esc is a heavily
+used key, and a reflexive press meant for a dialog or a search box in another
+window would end the session and release the keep-awake with nothing on screen
+to say it had happened. Esc is the only key watched that way, and it is never
+swallowed, so the application you are in still receives it.
 
 The overlay sits above your wallpaper but *below* your windows: anything you
 open covers it normally, and it never steals focus by itself or appears in
@@ -169,9 +168,8 @@ you press Esc or toggle it off.
 
 Seven palettes: aurora, ember, ocean, neon, forest, mono, and custom, which
 takes its colors from the two custom settings. **Space** steps to the next one
-while the overlay has focus, and **Ctrl+Shift+Space** does the same from
-anywhere if the global key setting is on. The one you land on is remembered,
-so you can pick a palette by eye instead of by name. Changing the palette in
+while the overlay has focus. The one you land on is remembered, so you can
+pick a palette by eye instead of by name. Changing the palette in
 the settings overrides whatever you stepped to, so the setting is never a dead
 control.
 
@@ -1463,32 +1461,31 @@ published at
   $name:he: אטימות (%)
   $description: Below 100 the desktop shows through the overlay. Clamped to 10-100.
 - globalKeys: false
-  $name: Global Esc and Ctrl+Shift+Space
-  $name:es-ES: Esc y Ctrl+Mayús+Espacio globales
-  $name:pt-BR: Esc e Ctrl+Shift+Espaço globais
-  $name:fr-FR: Échap et Ctrl+Maj+Espace globaux
-  $name:de-DE: Esc und Strg+Umschalt+Leertaste global
-  $name:it-IT: Esc e Ctrl+Maiusc+Spazio globali
-  $name:nl-NL: Esc en Ctrl+Shift+spatie overal
-  $name:pl-PL: Globalne Esc i Ctrl+Shift+spacja
-  $name:tr-TR: Genel Esc ve Ctrl+Shift+Boşluk
-  $name:ru-RU: Глобальные Esc и Ctrl+Shift+пробел
-  $name:uk-UA: Глобальні Esc і Ctrl+Shift+пробіл
-  $name:zh-CN: 全局 Esc 和 Ctrl+Shift+空格
-  $name:zh-TW: 全域 Esc 與 Ctrl+Shift+空白鍵
-  $name:ja-JP: Esc と Ctrl+Shift+スペースを全体で有効
-  $name:ko-KR: 전역 Esc 및 Ctrl+Shift+스페이스
-  $name:ar: Esc و Ctrl+Shift+المسافة بشكل عام
-  $name:he: Esc ו-Ctrl+Shift+רווח גלובליים
+  $name: Global Esc
+  $name:es-ES: Esc global
+  $name:pt-BR: Esc global
+  $name:fr-FR: Échap global
+  $name:de-DE: Esc global
+  $name:it-IT: Esc globale
+  $name:nl-NL: Esc overal
+  $name:pl-PL: Globalny Esc
+  $name:tr-TR: Genel Esc
+  $name:ru-RU: Глобальный Esc
+  $name:uk-UA: Глобальний Esc
+  $name:zh-CN: 全局 Esc
+  $name:zh-TW: 全域 Esc
+  $name:ja-JP: Esc を全体で有効
+  $name:ko-KR: 전역 Esc
+  $name:ar: Esc بشكل عام
+  $name:he: Esc גלובלי
   $description: >-
-    Let Esc close the overlay and Ctrl+Shift+Space change the palette from any
-    application, not just when the overlay has focus. The palette key is a
-    chord on purpose: plain Space from anywhere would step the palette on every
-    space you type. Off by default because Esc is a heavily used key, and a
-    reflexive press in another window would end the session and release the
-    keep-awake without any visible sign. Plain Space still changes the palette
-    when the overlay itself has focus, and the toggle hotkey above always works
-    regardless of this setting.
+    Let Esc close the overlay from any application, not just when the overlay
+    has focus. Off by default because Esc is a heavily used key, and a
+    reflexive press meant for a dialog in another window would end the session
+    and release the keep-awake without any visible sign. Nothing else is
+    watched globally, and the key is never swallowed, so the application you
+    are in still sees it. The toggle hotkey above always works regardless of
+    this setting.
 - clickThrough: false
   $name: Click through to the desktop
   $name:es-ES: Clics hacia el escritorio
@@ -1510,12 +1507,13 @@ published at
   $description: >-
     Pass every click straight through to the desktop, so the icons under the
     overlay stay usable. Worth turning on if you run the overlay on your only
-    display. The trade is that the overlay can no longer be clicked or
-    scrolled. The toggle hotkey still shows and hides it and the global key
-    above still changes the palette, but the amount and the wheel parameter
-    come from the settings above, and the style is whichever one you last left
-    it on, or the rotation if you have it on. To pin it to one style, leave
-    only that style ticked below.
+    display. The trade is that the overlay can no longer be clicked, scrolled
+    or typed at, so it runs entirely on what you set here: the palette, the
+    amount and the wheel parameter come from the settings above, and the style
+    is whichever one you last left it on, or the rotation if you have it on.
+    To pin it to one style, leave only that style ticked below. The toggle
+    hotkey still shows and hides it, and Esc still closes it if the setting
+    below is on.
 - keepAwake: true
   $name: Keep the PC awake
   $name:es-ES: Mantener el PC despierto
@@ -4658,14 +4656,10 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
             if (wp == VK_SPACE) {
                 // bit 30 is the previous key state: ignore auto-repeat so a
-                // held Space does not race through every palette.
-                //
-                // Ctrl+Shift+Space belongs to the global hook. If that is live
-                // it has already handled the press, and handling it here too
-                // would step the palette twice for one press.
-                bool chord = (GetKeyState(VK_CONTROL) & 0x8000) != 0 &&
-                             (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-                if (!(lp & (1 << 30)) && !(chord && g_kbdHookLive)) {
+                // held Space does not race through every palette. The global
+                // hook no longer touches Space, so this is the only path that
+                // handles it and there is nothing to exclude.
+                if (!(lp & (1 << 30))) {
                     Controller_RequestPalette();
                 }
                 return 0;
@@ -4897,41 +4891,27 @@ static void Controller_RequestRebuild() {
     }
 }
 
-// A global low-level keyboard hook so the overlay can be reached when it does
-// not own the keyboard focus. It never swallows anything, so normal typing is
-// completely unaffected.
+// A global low-level keyboard hook so Esc can reach the overlay when it does
+// not own the keyboard focus. It watches one key, never swallows it, and does
+// nothing else, so normal typing is completely unaffected.
 //
-// Esc is taken plain: it is a one shot with a visible result, and an escape
-// hatch that needs a chord is not much of an escape hatch. The palette key is
-// not taken plain, because plain Space from anywhere means every space in
-// every sentence you type steps the palette, silently and hundreds of times an
-// hour. Globally it is Ctrl+Shift+Space; plain Space still works when the
-// overlay itself has the focus, where you asked for it by clicking.
-// The hook gets no repeat flag, so the key down is latched here to step once
-// per physical press. It lives outside the callback because the hook can be
-// torn down and reinstalled with the key still held.
-static std::atomic<bool> g_spaceHeld{false};
-
+// The palette used to be on this hook too, first as plain Space and then as
+// Ctrl+Shift+Space. It is not any more, and the reason is what the setting was
+// asking people to accept. Esc from anywhere is a safety valve: the overlay
+// covers a display, and you should always be able to get rid of it. Stepping
+// the palette from anywhere is a convenience. Bundling them meant nobody could
+// have the safety valve without also taking a key that fires inside Word,
+// Visual Studio and the JetBrains editors. Two different things do not belong
+// behind one checkbox, so the convenience went and the safety valve stayed.
+//
+// The palette is still on Space, on the overlay, where every other control
+// already lives.
 static LRESULT CALLBACK LowLevelKbdProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION && g_active) {
         KBDLLHOOKSTRUCT* k = (KBDLLHOOKSTRUCT*)lParam;
         bool down = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
-        bool up = wParam == WM_KEYUP || wParam == WM_SYSKEYUP;
-        if (k->vkCode == VK_ESCAPE) {
-            if (down) {
-                Controller_RequestClose();
-            }
-        } else if (k->vkCode == VK_SPACE) {
-            // The hook gets no repeat flag, so latch the key down ourselves
-            // and step once per physical press.
-            bool chord = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
-                         (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-            if (down && chord && !g_spaceHeld) {
-                g_spaceHeld = true;
-                Controller_RequestPalette();
-            } else if (up) {
-                g_spaceHeld = false;
-            }
+        if (k->vkCode == VK_ESCAPE && down) {
+            Controller_RequestClose();
         }
     }
     return CallNextHookEx(nullptr, nCode, wParam, lParam);
@@ -4988,9 +4968,6 @@ static void InstallKbdHook() {
     if (g_hookThread) {
         return;
     }
-    // A press held across a hide would otherwise leave this latched, and the
-    // first press after the next show would be swallowed.
-    g_spaceHeld = false;
     g_hookReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_hookReady) {
         // Without it the uninstall path cannot know when the id is published,
