@@ -27,7 +27,7 @@ the themed focus border used by the modern File Explorer item view.
 
 ## Before / After
 
-![Before and after](https://raw.githubusercontent.com/NoMorePlz/windhawk-mods/main/assets/explorer-hide-focus-border-before-after.png)
+![Before and after](https://raw.githubusercontent.com/NoMorePlz/windhawk-mods/3e6e0b630dfe388217d4a2acf3e068b14ba456f0/assets/explorer-hide-focus-border-before-after.png)
 
 ## Notes
 
@@ -65,14 +65,22 @@ static bool IsItemsViewTheme(HTHEME hTheme) {
     static auto getThemeClass = reinterpret_cast<GetThemeClass_t>(
         GetProcAddress(GetModuleHandleW(L"uxtheme.dll"), MAKEINTRESOURCEA(74)));
 
-    if (!getThemeClass) {
+    if (!getThemeClass || !hTheme) {
+        if (!getThemeClass) {
+            Wh_Log(L"GetThemeClass (uxtheme ordinal 74) is unavailable");
+        }
         return false;
     }
 
-    WCHAR className[64] = {};
+    WCHAR className[256] = {};
     if (FAILED(getThemeClass(hTheme, className, ARRAYSIZE(className)))) {
         return false;
     }
+
+    // Temporary verification log requested during review. After confirming the
+    // exact class name(s) on Windows 11, this will be replaced with a code
+    // comment documenting the observed full class name for future reference.
+    Wh_Log(L"Theme class: %s", className);
 
     constexpr WCHAR kItemsView[] = L"ItemsView";
     constexpr size_t kItemsViewLength = ARRAYSIZE(kItemsView) - 1;
