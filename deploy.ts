@@ -7,6 +7,21 @@ import { Feed } from 'feed';
 import { OutgoingHttpHeaders } from 'http';
 import showdown from 'showdown';
 
+// Author name variations of the same github account. The first item of each
+// pair is the canonical name.
+const allowedAuthorNamePairs = [
+    ['CatmanFan / Mr._Lechkar', 'CatmanFan'],
+    ['Anixx', 'anixx'],
+    ['Isabella Lulamoon (kawapure)', 'kawapure'],
+];
+
+// Github accounts of the same author, e.g. after a rename, where old mod
+// versions still refer to the old account. The first item of each pair is the
+// current account.
+const allowedAuthorGithubPairs = [
+    ['https://github.com/meteoni', 'https://github.com/meteony'],
+];
+
 type ModAuthorData = {
     github: string;
     author: string;
@@ -22,6 +37,27 @@ type CommitMeta = {
 type FileChange = {
     changeType: string;
     filePath: string;
+};
+
+// A row of the update server's reviews/get_all.php: approved reviews only,
+// in ascending id. A reply is a review whose parentId names another.
+type PublicReview = {
+    id: number;
+    modId: string;
+    parentId: number | null;
+    timestamp: number;
+    authorName: string;
+    modVersion: string | null;
+    content: string;
+    votes: number;
+};
+
+type ModReviews = {
+    // The number of top-level reviews (replies excluded), what the catalog
+    // carries.
+    count: number;
+    // The file's entries, in the order the server gave them.
+    reviews: Omit<PublicReview, 'modId'>[];
 };
 
 class GitCache {
@@ -340,19 +376,11 @@ function validateAndUpdateAuthorData(
     }
 
     if (metadata.author !== entry.author) {
-        // Allow specific known author name variations
-        const allowedPairs = [
-            ['CatmanFan / Mr._Lechkar', 'CatmanFan'],
-            ['Anixx', 'anixx'],
-            ['Isabella Lulamoon (kawapure)', 'kawapure'],
-        ];
-
-        const matchedPair = allowedPairs.find(pair =>
+        const matchedPair = allowedAuthorNamePairs.find(pair =>
             pair.includes(metadata.author) && pair.includes(entry.author)
         );
 
         if (matchedPair) {
-            // Normalize to the first item in the pair
             entry.author = matchedPair[0];
         } else {
             inconsistencies.push(`author: expected '${entry.author}', got '${metadata.author}'`);
@@ -522,8 +550,15 @@ function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
         seenGithub.set(githubLower, authorKey);
 
         const authorLower = data.author.toLowerCase();
-        if (seenAuthor.has(authorLower) && seenAuthor.get(authorLower) !== authorKey) {
-            throw new Error(`Duplicate author name '${data.author}' found for authors '${authorKey}' and '${seenAuthor.get(authorLower)}'`);
+        const seenAuthorKey = seenAuthor.get(authorLower);
+        if (seenAuthorKey !== undefined && seenAuthorKey !== authorKey) {
+            const allowed = allowedAuthorGithubPairs.some(pair =>
+                pair.includes(authorKey) && pair.includes(seenAuthorKey)
+            );
+
+            if (!allowed) {
+                throw new Error(`Duplicate author name '${data.author}' found for authors '${authorKey}' and '${seenAuthorKey}'`);
+            }
         }
         seenAuthor.set(authorLower, authorKey);
 
@@ -573,7 +608,56 @@ function generateModsData(cache: GitCache) {
     fs.writeFileSync('mod_author_data.json', JSONstringifyOrder(modAuthorData, 2));
 }
 
-function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: any, cache: GitCache) {
+function groupReviews(allReviews: PublicReview[], knownModIds: Set<string>): Map<string, ModReviews> {
+    const byMod = new Map<string, ModReviews>();
+    for (const { modId, ...review } of allReviews) {
+        if (!knownModIds.has(modId)) {
+            // A review on a mod that is no longer in the repository has no
+            // page to be read on and no file name to trust.
+            console.warn(`Skipping review ${review.id} on unknown mod ${modId}`);
+            continue;
+        }
+        let entry = byMod.get(modId);
+        if (!entry) {
+            entry = { count: 0, reviews: [] };
+            byMod.set(modId, entry);
+        }
+        entry.reviews.push(review);
+        if (review.parentId === null) {
+            entry.count++;
+        }
+    }
+    return byMod;
+}
+
+// Writes reviews/<modId>.json for each mod with at least one top-level
+// review. The directory is rebuilt from scratch every run, so a mod that lost
+// its last review loses its file at the deploy step's git add -A.
+function writeModReviews(byMod: Map<string, ModReviews>) {
+    const reviewsDir = 'reviews';
+    if (!fs.existsSync(reviewsDir)) {
+        fs.mkdirSync(reviewsDir);
+    }
+    for (const [modId, { count, reviews }] of byMod) {
+        if (count === 0) {
+            // The server omits replies whose review is unapproved, so this
+            // is unreachable today; kept as the file's own invariant.
+            continue;
+        }
+        fs.writeFileSync(
+            path.join(reviewsDir, `${modId}.json`),
+            JSONstringifyOrder({ modId, reviews }, 2),
+        );
+    }
+}
+
+function enrichCatalog(
+    catalog: Record<string, any>,
+    enrichment: any,
+    reviewsByMod: Map<string, ModReviews>,
+    modTimes: any,
+    cache: GitCache,
+) {
     const app = {
         version: enrichment.app.version,
         versionBleedingEdge: enrichment.app.versionBleedingEdge,
@@ -603,6 +687,9 @@ function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: 
                 ratingUsers: 0,
                 ratingBreakdown: [0, 0, 0, 0, 0],
                 ...enrichment.mods[id]?.details,
+                // After the spread: the count must come from the same fetch
+                // as the mod's reviews file, whatever the enrichment carries.
+                reviews: reviewsByMod.get(id)?.count ?? 0,
             },
         };
 
@@ -621,6 +708,15 @@ async function generateModCatalogs(cache: GitCache) {
     const enrichmentUrl = 'https://update.windhawk.net/mods_catalog_enrichment.json';
     const enrichment = await fetchJson(enrichmentUrl);
 
+    // A failed fetch fails the run, like the enrichment: a deploy that went on
+    // with an empty list would delete every reviews file and zero every
+    // count for a day.
+    const reviewsUrl = 'https://update.windhawk.net/reviews/get_all.php';
+    const allReviews: PublicReview[] = await fetchJson(reviewsUrl);
+    if (!Array.isArray(allReviews)) {
+        throw new Error(`Expected an array from ${reviewsUrl}`);
+    }
+
     const translateFilesUrl = 'https://api.github.com/repos/ramensoftware/windhawk-translate/contents';
     const translateFiles = await fetchJson(translateFilesUrl, {
         Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
@@ -631,7 +727,10 @@ async function generateModCatalogs(cache: GitCache) {
     const modTimes = {};
 
     const englishCatalog = modSourceUtils.getMetadataOfMods('en-US');
-    const englishCatalogEnriched = enrichCatalog(englishCatalog, enrichment, modTimes, cache);
+    const reviewsByMod = groupReviews(allReviews, new Set(Object.keys(englishCatalog)));
+    writeModReviews(reviewsByMod);
+
+    const englishCatalogEnriched = enrichCatalog(englishCatalog, enrichment, reviewsByMod, modTimes, cache);
     fs.writeFileSync('catalog.json', JSONstringifyOrder(englishCatalogEnriched, 2));
 
     const catalogsDir = 'catalogs';
@@ -647,7 +746,7 @@ async function generateModCatalogs(cache: GitCache) {
 
         const language = translateFileName.slice(0, -'.yml'.length);
         const catalog = modSourceUtils.getMetadataOfMods(language);
-        const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes, cache);
+        const catalogEnriched = enrichCatalog(catalog, enrichment, reviewsByMod, modTimes, cache);
 
         // Keep the original (English) name and description for searching,
         // copying each field only if the translation changed it.

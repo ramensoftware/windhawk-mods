@@ -2,7 +2,7 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize and restore (open) animations for every window.
-// @version         3.1.3
+// @version         3.1.4
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
@@ -1347,13 +1347,32 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     const int origTop  = data->targetRect.top;
     const float origCenterX = (float)origLeft + W * 0.5f;
 
-    // Where the genie funnels to: the learned taskbar icon X, at the bottom of the
-    // monitor the genie plays on.
+    // Where the genie funnels to: the learned taskbar icon X. The dock Y is taken
+    // from the real per-monitor taskbar window (the same signal the modern engine
+    // uses), so a taskbar pinned to the top of the screen is honored too -
+    // previously the classic style always assumed the taskbar was at the bottom of
+    // the monitor. A single global shell query would get the wrong edge on setups
+    // where each monitor's taskbar can be on a different edge.
     int dockX = data->targetDockX;
     if (dockX < mon.left) dockX = mon.left;
     if (dockX > mon.right) dockX = mon.right;
     const float dockXf = (float)dockX;
-    const float dockY  = (float)mon.bottom;
+    float dockY = (float)mon.bottom;
+    if (HWND hTray = FindTaskbarForMonitor(data->hMon)) {
+        RECT tr;
+        if (GetWindowRect(hTray, &tr) && tr.bottom > tr.top &&
+            (tr.top + tr.bottom) < (mon.top + mon.bottom)) {   // taskbar in the upper half
+            dockY = (float)mon.top;
+        }
+    }
+    // Which end leads the morph. Taken from the window's mid-line so a dock that
+    // lands exactly on the window edge still picks a sane direction, and kept
+    // outside the window's own vertical span so the yb[] map below stays
+    // monotonic (a hard requirement of the scanline walk).
+    const float origBottomF = (float)(origTop + H);
+    const bool dockAbove = dockY < ((float)origTop + origBottomF) * 0.5f;
+    if (dockAbove) { if (dockY > (float)origTop) dockY = (float)origTop; }
+    else           { if (dockY < origBottomF)    dockY = origBottomF; }
     float neckW = W * 0.03f;
     if (neckW < 12.0f) neckW = 12.0f;
     if (neckW > 60.0f) neckW = 60.0f;
@@ -1365,8 +1384,10 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     // off and the window sits on a secondary display).
     int boundLeft   = (origLeft < dockX ? origLeft : dockX) - W / 2;
     int boundRight  = ((origLeft + W) > dockX ? (origLeft + W) : dockX) + W / 2;
-    int boundTop    = origTop;
-    int boundBottom = mon.bottom;
+    // Span from the dock edge up/down to the window so a top taskbar (dock above
+    // the window) is inside the canvas instead of below the box.
+    int boundTop    = std::min<int>(origTop, (int)dockY);
+    int boundBottom = std::max<int>(origTop + H, (int)dockY);
     RECT monUnion = GetGenieMonitorUnion(data->targetRect, data->hMon);
     ClampGenieCanvas(boundLeft, boundTop, boundRight, boundBottom,
                      data->targetRect, dockX, monUnion);
@@ -1420,7 +1441,8 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     HBITMAP hOldCanvas = (HBITMAP)SelectObject(hCanvasDC, hCanvas);
     const int canvasStride = boundW * 4;
 
-    const float SPREAD = 0.65f;   // lower rows lead the morph (bottom-first neck)
+    const float SPREAD = 0.65f;   // rows nearest the dock lead the morph (the
+                                  // spread v is flipped when the dock is above)
     const size_t canvasBytes = (size_t)boundW * 4 * boundH;
 
     const double totalMs = (double)data->durationMs;
@@ -1476,10 +1498,13 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
 
         memset(pBits, 0, canvasBytes);
 
-        // Vertical map: where each source row lands on screen this frame.
+        // Vertical map: where each source row lands on screen this frame. The rows
+        // nearest the dock lead the morph (bottom-first neck when the dock is
+        // below the window, top-first when it's above), so the spread v is
+        // flipped accordingly.
         for (int k = 0; k <= H; ++k) {
             float v = (float)k / (float)H;
-            float e = morphAt(v, tt);
+            float e = morphAt(dockAbove ? (1.0f - v) : v, tt);
             float idY = (float)origTop + (float)H * v;
             yb[k] = idY + (dockY - idY) * e;
         }
@@ -1494,7 +1519,7 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
             float frac = segH > 1e-4f ? (screenY - yb[kSeg]) / segH : 0.0f;
             float v = ((float)kSeg + frac) / (float)H;
 
-            float em = morphAt(v, tt);
+            float em = morphAt(dockAbove ? (1.0f - v) : v, tt);
             float width = (float)W + (neckW - (float)W) * em;
             if (width < 1.0f) width = 1.0f;
             float cx = origCenterX + (dockXf - origCenterX) * em;
