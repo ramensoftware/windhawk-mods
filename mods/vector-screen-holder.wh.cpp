@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.3.3
+// @version         1.3.4
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -5086,17 +5086,16 @@ static std::vector<RECT> ComputeTargetRects() {
     }
 
     auto targetRect = [&](const MonitorEntry& m) -> RECT {
-        if (g_settings.workAreaOnly) {
-            return m.work;
-        }
+        RECT r = g_settings.workAreaOnly ? m.work : m.rect;
+
         // One pixel short of the bottom edge, and here is why.
         //
         // The shell decides a fullscreen application is running by looking for
         // a foreground window whose rectangle covers the monitor, and Focus
         // Assist silences notifications when it finds one. Clicking the
-        // overlay makes it the foreground window, so on the default settings
-        // a single click would quietly turn the user's notifications off
-        // until something else took focus.
+        // overlay makes it the foreground window, so without this a single
+        // click would quietly turn the user's notifications off until
+        // something else took focus.
         //
         // Measured on Windows 11 rather than assumed: a WS_POPUP window with
         // WS_EX_TOOLWINDOW covering the primary monitor exactly, once it is
@@ -5105,10 +5104,17 @@ static std::vector<RECT> ComputeTargetRects() {
         // monitor it stays at QUNS_ACCEPTS_NOTIFICATIONS. The tool window
         // style does not exempt it, and only the primary monitor counts.
         //
+        // This applies to the work area too, not only the full monitor. A
+        // visible taskbar already keeps the work rect clear of the monitor
+        // edge, but an auto-hiding one does not: the work area is then the
+        // whole monitor, and staying inside it would put the overlay right
+        // back into the case above. Trimming whichever rect was chosen costs
+        // nothing when the taskbar is visible, because that pixel sits behind
+        // it, and covers the auto-hide case.
+        //
         // A pixel of wallpaper along the bottom edge is not something anyone
         // will notice in a piece of generative line art. Losing notifications
         // without being told is.
-        RECT r = m.rect;
         if (r.bottom > r.top) {
             r.bottom -= 1;
         }
