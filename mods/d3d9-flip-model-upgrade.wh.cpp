@@ -2,7 +2,7 @@
 // @id              d3d9-flip-model-upgrade
 // @name            D3D9 Flip Model Upgrade
 // @description     Upgrades Direct3D 9 games to D3D9Ex with a FLIPEX swap chain so windowed/borderless games can reach Independent Flip
-// @version         1.0
+// @version         1.1
 // @author          tria
 // @github          https://github.com/triatomic
 // ==/WindhawkMod==
@@ -80,6 +80,12 @@ instead.
   bound again.
 - The flip model can only present to the device window. Games that present the
   same swap chain to several windows will only draw to one of them.
+- The flip model needs the game window for itself. An in-game overlay that
+  creates its own Direct3D device for the same window, such as the Steam
+  overlay, keeps working, but it draws on top of the game and that prevents
+  Independent Flip. Turn the overlay off to get the full effect.
+- Games that create their device with mixed vertex processing aren't upgraded,
+  as their managed vertex buffers can't be emulated.
 - No guarantees of anti-cheat compatibility.
 
 Enable the mod's logging (Advanced → Debug logging) to see exactly what was
@@ -228,6 +234,31 @@ DeviceSet g_upgradedDevices;
 // Set once the managed pool emulation is in use.
 std::atomic<bool> g_emulatedTexturesUsed;
 
+// The flip model requires exclusive use of the window, so only the first device
+// of a window is upgraded. In-game overlays create a second device of their own,
+// which has to keep the swap effect it asked for. Entries are never removed, a
+// window which is gone can't be presented to anyway.
+SRWLOCK g_flipWindowsLock = SRWLOCK_INIT;
+std::vector<HWND> g_flipWindows;
+
+// The device of hWnd may use the flip model, unless another one already does.
+bool ClaimFlipWindow(HWND hWnd, IDirect3DDevice9* dev) {
+    if (!hWnd) {
+        return false;
+    }
+
+    AcquireSRWLockExclusive(&g_flipWindowsLock);
+    auto it = std::find(g_flipWindows.begin(), g_flipWindows.end(), hWnd);
+    bool claimed = it == g_flipWindows.end();
+    if (claimed) {
+        g_flipWindows.push_back(hWnd);
+    }
+    ReleaseSRWLockExclusive(&g_flipWindowsLock);
+
+    // Resetting an upgraded device claims its window again.
+    return claimed || (dev && g_flipDevices.Contains(dev));
+}
+
 HMODULE g_d3d9Module;
 
 thread_local bool g_inCreateDevice;
@@ -263,8 +294,13 @@ bool IsExDevice(IDirect3DDevice9* dev) {
     return true;
 }
 
-bool ShouldUpgrade(const D3DPRESENT_PARAMETERS* pp) {
+bool ShouldUpgrade(const D3DPRESENT_PARAMETERS* pp, HWND focusWindow) {
     if (!pp) {
+        return false;
+    }
+    // Without a window it's impossible to tell whether another device already
+    // uses the flip model for it. Overlays create such devices.
+    if (!pp->hDeviceWindow && !focusWindow) {
         return false;
     }
     if (!pp->Windowed && !g_settings.forceBorderless) {
@@ -278,8 +314,8 @@ bool ShouldUpgrade(const D3DPRESENT_PARAMETERS* pp) {
 
 // Returns false if the params are left alone. Whether the flip model was
 // applied is reflected by pp->SwapEffect.
-bool AdjustPresentParams(D3DPRESENT_PARAMETERS* pp) {
-    if (!ShouldUpgrade(pp)) {
+bool AdjustPresentParams(D3DPRESENT_PARAMETERS* pp, HWND focusWindow) {
+    if (!ShouldUpgrade(pp, focusWindow)) {
         return false;
     }
 
@@ -370,19 +406,36 @@ void MakeBorderless(HWND hWnd) {
     }
 
     LONG_PTR style = GetWindowLongPtrW(hWnd, GWL_STYLE);
-    style &= ~(WS_OVERLAPPEDWINDOW | WS_DLGFRAME | WS_BORDER);
-    style |= WS_POPUP;
-    SetWindowLongPtrW(hWnd, GWL_STYLE, style);
+    LONG_PTR newStyle =
+        (style & ~(WS_OVERLAPPEDWINDOW | WS_DLGFRAME | WS_BORDER)) | WS_POPUP;
 
     LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-    exStyle &= ~(WS_EX_CLIENTEDGE | WS_EX_WINDOWEDGE | WS_EX_DLGMODALFRAME |
-                 WS_EX_STATICEDGE);
-    SetWindowLongPtrW(hWnd, GWL_EXSTYLE, exStyle);
+    LONG_PTR newExStyle =
+        exStyle & ~(WS_EX_CLIENTEDGE | WS_EX_WINDOWEDGE |
+                    WS_EX_DLGMODALFRAME | WS_EX_STATICEDGE);
+
+    // The window may belong to a thread that is waiting for this one, e.g. for
+    // a render thread to finish resetting the device, so nothing may be sent to
+    // it synchronously.
+    DWORD windowThread = GetWindowThreadProcessId(hWnd, nullptr);
+    bool otherThread = windowThread != GetCurrentThreadId();
+
+    UINT flags = SWP_NOACTIVATE;
+    if (newStyle != style || newExStyle != exStyle) {
+        if (otherThread) {
+            // WM_STYLECHANGING and WM_STYLECHANGED can only be sent.
+            Wh_Log(L"Skipping borderless, window %p belongs to thread %u", hWnd,
+                   windowThread);
+            return;
+        }
+
+        SetWindowLongPtrW(hWnd, GWL_STYLE, newStyle);
+        SetWindowLongPtrW(hWnd, GWL_EXSTYLE, newExStyle);
+        flags |= SWP_FRAMECHANGED;
+    }
 
     const RECT& rc = mi.rcMonitor;
-    // The window may belong to a thread that is waiting for this one.
-    UINT flags = SWP_FRAMECHANGED | SWP_NOACTIVATE;
-    if (GetWindowThreadProcessId(hWnd, nullptr) != GetCurrentThreadId()) {
+    if (otherThread) {
         flags |= SWP_ASYNCWINDOWPOS;
     }
     SetWindowPos(hWnd, HWND_TOP, rc.left, rc.top, rc.right - rc.left,
@@ -442,7 +495,13 @@ HRESULT ResetCommon(IDirect3DDevice9* dev,
     ClearBoundTextures(dev);
 
     D3DPRESENT_PARAMETERS local = *pp;
-    bool adjusted = AdjustPresentParams(&local);
+    bool adjusted = false;
+    HWND window = GetDeviceWindow(dev, &local);
+    if (window && ClaimFlipWindow(window, dev)) {
+        adjusted = AdjustPresentParams(&local, window);
+    } else {
+        Wh_Log(L"Window %p has another device, not upgrading", window);
+    }
 
     HRESULT hr = E_FAIL;
     if (adjusted) {
@@ -591,6 +650,24 @@ static const GUID kShadowTextureGuid = {
     0x3C7A,
     0x4D0B,
     {0x9B, 0x0D, 0x4A, 0x1E, 0x6B, 0x7F, 0x21, 0xC3}};
+
+bool ConvertManagedPool(IDirect3DDevice9* dev, D3DPOOL* pool);
+
+// A managed buffer works with both hardware and software vertex processing. A
+// default pool buffer only works with software vertex processing if it's
+// created for it. Devices with mixed vertex processing aren't upgraded, as
+// there's no default pool buffer which works with both.
+void ConvertManagedBuffer(IDirect3DDevice9* dev, D3DPOOL* pool, DWORD* usage) {
+    if (!ConvertManagedPool(dev, pool)) {
+        return;
+    }
+
+    D3DDEVICE_CREATION_PARAMETERS cp = {};
+    if (SUCCEEDED(dev->GetCreationParameters(&cp)) &&
+        (cp.BehaviorFlags & D3DCREATE_SOFTWARE_VERTEXPROCESSING)) {
+        *usage |= D3DUSAGE_SOFTWAREPROCESSING;
+    }
+}
 
 bool ConvertManagedPool(IDirect3DDevice9* dev, D3DPOOL* pool) {
     if (*pool != D3DPOOL_MANAGED || !IsExDevice(dev)) {
@@ -1329,7 +1406,7 @@ HRESULT STDMETHODCALLTYPE CreateVertexBuffer_Hook(IDirect3DDevice9* dev,
                                                   D3DPOOL pool,
                                                   IDirect3DVertexBuffer9** vb,
                                                   HANDLE* sharedHandle) {
-    ConvertManagedPool(dev, &pool);
+    ConvertManagedBuffer(dev, &pool, &usage);
     return CreateVertexBuffer_Original(dev, length, usage, fvf, pool, vb,
                                        sharedHandle);
 }
@@ -1350,7 +1427,7 @@ HRESULT STDMETHODCALLTYPE CreateIndexBuffer_Hook(IDirect3DDevice9* dev,
                                                  D3DPOOL pool,
                                                  IDirect3DIndexBuffer9** ib,
                                                  HANDLE* sharedHandle) {
-    ConvertManagedPool(dev, &pool);
+    ConvertManagedBuffer(dev, &pool, &usage);
     return CreateIndexBuffer_Original(dev, length, usage, format, pool, ib,
                                       sharedHandle);
 }
@@ -1538,7 +1615,12 @@ HRESULT STDMETHODCALLTYPE CreateDeviceEx_Hook(IDirect3D9Ex* d3d,
     bool adjusted = false;
     if (pp && device && !(behaviorFlags & D3DCREATE_ADAPTERGROUP_DEVICE)) {
         local = *pp;
-        adjusted = AdjustPresentParams(&local);
+        HWND window = local.hDeviceWindow ? local.hDeviceWindow : focusWindow;
+        if (window && ClaimFlipWindow(window, nullptr)) {
+            adjusted = AdjustPresentParams(&local, window);
+        } else {
+            Wh_Log(L"Window %p already has a device, not upgrading", window);
+        }
     }
 
     HRESULT hr = E_FAIL;
@@ -1614,7 +1696,13 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
 
     if (g_inCreateDevice || !device || !CreateDeviceEx_Original ||
         (behaviorFlags & D3DCREATE_ADAPTERGROUP_DEVICE) ||
-        !ShouldUpgrade(pp)) {
+        !ShouldUpgrade(pp, focusWindow)) {
+        return callOriginal();
+    }
+
+    if (behaviorFlags & D3DCREATE_MIXED_VERTEXPROCESSING) {
+        // See ConvertManagedBuffer.
+        Wh_Log(L"Mixed vertex processing, creating a regular device");
         return callOriginal();
     }
 
