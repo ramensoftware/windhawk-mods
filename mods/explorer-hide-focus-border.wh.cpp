@@ -27,7 +27,7 @@ the themed focus border used by the modern File Explorer item view.
 
 ## Before / After
 
-![Before and after](https://raw.githubusercontent.com/NoMorePlz/windhawk-mods/3e6e0b630dfe388217d4a2acf3e068b14ba456f0/assets/explorer-hide-focus-border-before-after.png)
+![Before and after](https://raw.githubusercontent.com/NoMorePlz/windhawk-mods/cbf6be5c3a729079aff4d7cd44011f5189ed771f/assets/explorer-hide-focus-border-before-after-v2.png)
 
 ## Notes
 
