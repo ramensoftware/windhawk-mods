@@ -26,7 +26,7 @@ This mod restores a selection of classic Control Panel applets and task links in
 * Text to Speech
 * iSCSI Initiator
 * Game Controllers (joy.cpl)
-* Offline Files (cscui.dll - from Windows Vista)
+* Offline Files (cscui.dll)
 
 This mod aims to restore a series of Control Panel applets in a secure way, using reversible in-memory patches rather than permanently modifying system files, to reproduce a result nearly identical to the original Windows 7 (or Windows Vista/8/8.1) counterpart.
 
@@ -97,8 +97,6 @@ The mod does not commit to restore task links that would open the Settings app r
 - **[Windows 11 HomeGroup Restorer](https://windhawk.net/mods/win11-home-group-restorer)** – it restores the classic HomeGroup applet on Windows 11.
 - **[Windows Update Control Panel Restorer](https://windhawk.net/mods/windows-update-control-panel-restorer)** – it restores the classic Windows Update Control Panel page on Windows 10/11.
 - **[Performance Information and Tools Restorer](https://windhawk.net/mods/performance-info-tools-restorer)** – it restores the classic "Performance Information and Tools" applet.
-- **[Windows 7 Region and Language Restorer](https://windhawk.net/mods/win7-intl-control-panel-restorer)** – it restores the classic "Region and Language" (intl.cpl) applet from Windows 7.
-
 
 ## Related mods and overlaps
 
@@ -107,11 +105,11 @@ The mod does not commit to restore task links that would open the Settings app r
 
 ## Credits
 
-This mod is based on a fork of the original work by Anixx (https://github.com/Anixx), with parts of the implementation derived from aubymori's Control Panel script.
+This mod is based on a fork of the original work by Anixx (https://github.com/Anixx), with portions of the implementation derived from aubymori's Control Panel script.
 
 Credits to m417z for the code review and various enhancements.
 
-Credits to AdministratoX for the improvements and for restoring the "Text to Speech" applet in the Control Panel.
+Credits to AdministratoX for the improvements and for restoring Text to Speech in the Control Panel.
 */
 // ==/WindhawkModReadme==
 
@@ -2008,7 +2006,10 @@ static std::wstring g_offlineFilesIconFilePath;
 // dialog. Written once by ResolveOfflineFilesTarget() in Wh_ModInit (before
 // any hook can run) and only read afterwards.
 static std::wstring g_offlineFilesDllPath;
-static std::wstring g_offlineFilesLaunchCommand;
+// Launch command WITHOUT the tab index (it ends with the comma before it);
+// BuildOfflineFilesCommand() appends the index: 0 General, 1 Disk Usage,
+// 2 Encryption, 3 Network, as in Windows Vista/7.
+static std::wstring g_offlineFilesLaunchBase;
 
 // RAII guard for a temp file: the file is deleted when the guard goes out of
 // scope (early return, failed rename, thrown exception) unless Release() was
@@ -2092,7 +2093,7 @@ static bool IsRegularFile(const std::wstring& path) {
 // Returns false (and leaves both globals empty) when neither is usable.
 static bool ResolveOfflineFilesTarget() {
     g_offlineFilesDllPath.clear();
-    g_offlineFilesLaunchCommand.clear();
+    g_offlineFilesLaunchBase.clear();
     try {
         wchar_t dir[MAX_PATH] = {};
         UINT length = GetSystemDirectoryW(dir, MAX_PATH);
@@ -2100,8 +2101,8 @@ static bool ResolveOfflineFilesTarget() {
             const std::wstring dll = std::wstring(dir) + L"\\cscui.dll";
             if (IsRegularFile(dll)) {
                 g_offlineFilesDllPath = dll;
-                g_offlineFilesLaunchCommand =
-                    L"rundll32.exe shell32.dll,Control_RunDLL cscui.dll,0";
+                g_offlineFilesLaunchBase =
+                    L"rundll32.exe shell32.dll,Control_RunDLL cscui.dll,";
                 return true;
             }
         }
@@ -2113,17 +2114,37 @@ static bool ResolveOfflineFilesTarget() {
             const std::wstring exe = base + L"\\rundll32.exe";
             if (IsRegularFile(dll) && IsRegularFile(exe)) {
                 g_offlineFilesDllPath = dll;
-                g_offlineFilesLaunchCommand =
-                    L"\"" + exe + L"\" shell32.dll,Control_RunDLL " + dll + L",0";
+                g_offlineFilesLaunchBase =
+                    L"\"" + exe + L"\" shell32.dll,Control_RunDLL " + dll + L",";
                 return true;
             }
         }
     } catch (...) {
         Wh_Log(L"Offline Files: exception while locating cscui.dll");
         g_offlineFilesDllPath.clear();
-        g_offlineFilesLaunchCommand.clear();
+        g_offlineFilesLaunchBase.clear();
     }
     return false;
+}
+
+// Command that opens the Offline Files dialog on a given tab (see above).
+static std::wstring BuildOfflineFilesCommand(int tabIndex) {
+    return g_offlineFilesLaunchBase + std::to_wstring(tabIndex);
+}
+
+// Minimal XML escaping for text placed inside the task-links file.
+static std::string XmlEscapeUtf8(const std::string& text) {
+    std::string out;
+    out.reserve(text.size());
+    for (char c : text) {
+        switch (c) {
+            case '&': out += "&amp;"; break;
+            case '<': out += "&lt;"; break;
+            case '>': out += "&gt;"; break;
+            default:  out += c; break;
+        }
+    }
+    return out;
 }
 
 // Name/description of the Offline Files applet, hardcoded so the entry does
@@ -2140,39 +2161,72 @@ struct OfflineFilesTexts {
     const wchar_t* locale;
     const wchar_t* name;
     const wchar_t* infoTip;
+    const wchar_t* linkEncrypt;   // task link: "Encrypt your offline files"
+    const wchar_t* linkDisk;      // task link: "Manage disk space used by your offline files"
 };
 static const OfflineFilesTexts kOfflineFilesTexts[] = {
-    { L"en", L"Offline Files", L"Sync files between your computer and network folders." },
-    { L"it", L"File offline", L"Sincronizza i file tra il computer in uso e le cartelle di rete." },
-    { L"es", L"Archivos sin conexión", L"Sincroniza archivos entre el equipo y las carpetas de red." },
-    { L"fr", L"Fichiers hors connexion", L"Synchronisez les fichiers entre votre ordinateur et les dossiers réseau." },
-    { L"de", L"Offlinedateien", L"Synchronisiert Dateien zwischen dem Computer und Netzwerkordnern." },
-    { L"pt-PT", L"Ficheiros Offline", L"Sincronize ficheiros entre o computador e as pastas de rede." },
-    { L"pt", L"Arquivos Offline", L"Sincronize arquivos entre o computador e as pastas de rede." },
-    { L"nl", L"Offlinebestanden", L"Synchroniseer bestanden tussen de computer en netwerkmappen." },
-    { L"pl", L"Pliki offline", L"Synchronizuj pliki między komputerem a folderami sieciowymi." },
-    { L"ru", L"Автономные файлы", L"Синхронизация файлов между компьютером и сетевыми папками." },
-    { L"uk", L"Автономні файли", L"Синхронізація файлів між комп’ютером і мережевими папками." },
-    { L"tr", L"Çevrimdışı Dosyalar", L"Dosyaları bilgisayar ile ağ klasörleri arasında eşitleyin." },
-    { L"ar", L"الملفات دون اتصال", L"مزامنة الملفات بين الكمبيوتر ومجلدات الشبكة." },
-    { L"he", L"קבצים לא מקוונים", L"סנכרון קבצים בין המחשב לתיקיות רשת." },
-    { L"ja", L"オフライン ファイル", L"コンピューターとネットワーク フォルダーの間でファイルを同期します。" },
-    { L"ko", L"오프라인 파일", L"컴퓨터와 네트워크 폴더 간에 파일을 동기화합니다." },
-    { L"zh-CN", L"脱机文件", L"在计算机和网络文件夹之间同步文件。" },
-    { L"zh-TW", L"離線檔案", L"在電腦與網路資料夾之間同步檔案。" },
-    { L"zh-HK", L"離線檔案", L"在電腦與網路資料夾之間同步檔案。" },
-    { L"cs", L"Soubory offline", L"Synchronizace souborů mezi počítačem a síťovými složkami." },
-    { L"da", L"Offlinefiler", L"Synkroniser filer mellem computeren og netværksmapper." },
-    { L"fi", L"Offline-tiedostot", L"Synkronoi tiedostot tietokoneen ja verkkokansioiden välillä." },
-    { L"el", L"Αρχεία χωρίς σύνδεση", L"Συγχρονισμός αρχείων μεταξύ του υπολογιστή και των φακέλων δικτύου." },
-    { L"hu", L"Offline fájlok", L"Fájlok szinkronizálása a számítógép és a hálózati mappák között." },
-    { L"nb", L"Frakoblede filer", L"Synkroniser filer mellom datamaskinen og nettverksmapper." },
-    { L"ro", L"Fișiere offline", L"Sincronizați fișierele între computer și folderele de rețea." },
-    { L"sv", L"Offlinefiler", L"Synkronisera filer mellan datorn och nätverksmappar." },
-    { L"vi", L"Tệp ngoại tuyến", L"Đồng bộ hóa tệp giữa máy tính và các thư mục mạng." },
-    { L"id", L"File Offline", L"Sinkronkan file antara komputer dan folder jaringan." },
-    { L"th", L"ไฟล์ออฟไลน์", L"ซิงค์ไฟล์ระหว่างคอมพิวเตอร์และโฟลเดอร์เครือข่าย" },
-    { L"hi", L"ऑफ़लाइन फ़ाइलें", L"कंप्यूटर और नेटवर्क फ़ोल्डरों के बीच फ़ाइलें सिंक करें।" },
+    { L"en", L"Offline Files", L"Sync files between your computer and network folders.",
+      L"Encrypt your offline files", L"Manage disk space used by your offline files" },
+    { L"it", L"File offline", L"Sincronizza i file tra il computer in uso e le cartelle di rete.",
+      L"Crittografa i file offline", L"Gestisci lo spazio su disco utilizzato dai file offline" },
+    { L"es", L"Archivos sin conexión", L"Sincroniza archivos entre el equipo y las carpetas de red.",
+      L"Cifrar los archivos sin conexión", L"Administrar el espacio en disco que usan los archivos sin conexión" },
+    { L"fr", L"Fichiers hors connexion", L"Synchronisez les fichiers entre votre ordinateur et les dossiers réseau.",
+      L"Chiffrer vos fichiers hors connexion", L"Gérer l’espace disque utilisé par vos fichiers hors connexion" },
+    { L"de", L"Offlinedateien", L"Synchronisiert Dateien zwischen dem Computer und Netzwerkordnern.",
+      L"Offlinedateien verschlüsseln", L"Speicherplatz für Offlinedateien verwalten" },
+    { L"pt-PT", L"Ficheiros Offline", L"Sincronize ficheiros entre o computador e as pastas de rede.",
+      L"Encriptar os ficheiros offline", L"Gerir o espaço em disco utilizado pelos ficheiros offline" },
+    { L"pt", L"Arquivos Offline", L"Sincronize arquivos entre o computador e as pastas de rede.",
+      L"Criptografar os arquivos offline", L"Gerenciar o espaço em disco usado pelos arquivos offline" },
+    { L"nl", L"Offlinebestanden", L"Synchroniseer bestanden tussen de computer en netwerkmappen.",
+      L"Offlinebestanden versleutelen", L"Schijfruimte beheren die door offlinebestanden wordt gebruikt" },
+    { L"pl", L"Pliki offline", L"Synchronizuj pliki między komputerem a folderami sieciowymi.",
+      L"Szyfruj pliki offline", L"Zarządzaj miejscem na dysku używanym przez pliki offline" },
+    { L"ru", L"Автономные файлы", L"Синхронизация файлов между компьютером и сетевыми папками.",
+      L"Шифрование автономных файлов", L"Управление дисковым пространством, используемым автономными файлами" },
+    { L"uk", L"Автономні файли", L"Синхронізація файлів між комп’ютером і мережевими папками.",
+      L"Шифрування автономних файлів", L"Керування дисковим простором, що використовується автономними файлами" },
+    { L"tr", L"Çevrimdışı Dosyalar", L"Dosyaları bilgisayar ile ağ klasörleri arasında eşitleyin.",
+      L"Çevrimdışı dosyalarınızı şifreleyin", L"Çevrimdışı dosyaların kullandığı disk alanını yönetin" },
+    { L"ar", L"الملفات دون اتصال", L"مزامنة الملفات بين الكمبيوتر ومجلدات الشبكة.",
+      L"تشفير الملفات دون اتصال", L"إدارة مساحة القرص التي تستخدمها الملفات دون اتصال" },
+    { L"he", L"קבצים לא מקוונים", L"סנכרון קבצים בין המחשב לתיקיות רשת.",
+      L"הצפן את הקבצים הלא מקוונים", L"נהל את שטח הדיסק שבו משתמשים הקבצים הלא מקוונים" },
+    { L"ja", L"オフライン ファイル", L"コンピューターとネットワーク フォルダーの間でファイルを同期します。",
+      L"オフライン ファイルを暗号化する", L"オフライン ファイルが使用するディスク領域を管理する" },
+    { L"ko", L"오프라인 파일", L"컴퓨터와 네트워크 폴더 간에 파일을 동기화합니다.",
+      L"오프라인 파일 암호화", L"오프라인 파일이 사용하는 디스크 공간 관리" },
+    { L"zh-CN", L"脱机文件", L"在计算机和网络文件夹之间同步文件。",
+      L"加密脱机文件", L"管理脱机文件使用的磁盘空间" },
+    { L"zh-TW", L"離線檔案", L"在電腦與網路資料夾之間同步檔案。",
+      L"加密離線檔案", L"管理離線檔案使用的磁碟空間" },
+    { L"zh-HK", L"離線檔案", L"在電腦與網路資料夾之間同步檔案。",
+      L"加密離線檔案", L"管理離線檔案使用的磁碟空間" },
+    { L"cs", L"Soubory offline", L"Synchronizace souborů mezi počítačem a síťovými složkami.",
+      L"Šifrovat soubory offline", L"Spravovat místo na disku používané soubory offline" },
+    { L"da", L"Offlinefiler", L"Synkroniser filer mellem computeren og netværksmapper.",
+      L"Krypter dine offlinefiler", L"Administrer diskplads brugt af offlinefiler" },
+    { L"fi", L"Offline-tiedostot", L"Synkronoi tiedostot tietokoneen ja verkkokansioiden välillä.",
+      L"Salaa offline-tiedostot", L"Hallitse offline-tiedostojen käyttämää levytilaa" },
+    { L"el", L"Αρχεία χωρίς σύνδεση", L"Συγχρονισμός αρχείων μεταξύ του υπολογιστή και των φακέλων δικτύου.",
+      L"Κρυπτογράφηση των αρχείων χωρίς σύνδεση", L"Διαχείριση του χώρου στο δίσκο που χρησιμοποιείται από τα αρχεία χωρίς σύνδεση" },
+    { L"hu", L"Offline fájlok", L"Fájlok szinkronizálása a számítógép és a hálózati mappák között.",
+      L"Offline fájlok titkosítása", L"Az offline fájlok által használt lemezterület kezelése" },
+    { L"nb", L"Frakoblede filer", L"Synkroniser filer mellom datamaskinen og nettverksmapper.",
+      L"Krypter de frakoblede filene", L"Administrer diskplassen som brukes av frakoblede filer" },
+    { L"ro", L"Fișiere offline", L"Sincronizați fișierele între computer și folderele de rețea.",
+      L"Criptați fișierele offline", L"Gestionați spațiul pe disc utilizat de fișierele offline" },
+    { L"sv", L"Offlinefiler", L"Synkronisera filer mellan datorn och nätverksmappar.",
+      L"Kryptera offlinefiler", L"Hantera diskutrymme som används av offlinefiler" },
+    { L"vi", L"Tệp ngoại tuyến", L"Đồng bộ hóa tệp giữa máy tính và các thư mục mạng.",
+      L"Mã hóa tệp ngoại tuyến", L"Quản lý dung lượng đĩa được tệp ngoại tuyến sử dụng" },
+    { L"id", L"File Offline", L"Sinkronkan file antara komputer dan folder jaringan.",
+      L"Enkripsi file offline", L"Kelola ruang disk yang digunakan oleh file offline" },
+    { L"th", L"ไฟล์ออฟไลน์", L"ซิงค์ไฟล์ระหว่างคอมพิวเตอร์และโฟลเดอร์เครือข่าย",
+      L"เข้ารหัสไฟล์ออฟไลน์", L"จัดการพื้นที่ดิสก์ที่ไฟล์ออฟไลน์ใช้" },
+    { L"hi", L"ऑफ़लाइन फ़ाइलें", L"कंप्यूटर और नेटवर्क फ़ोल्डरों के बीच फ़ाइलें सिंक करें।",
+      L"ऑफ़लाइन फ़ाइलें एन्क्रिप्ट करें", L"ऑफ़लाइन फ़ाइलों द्वारा उपयोग किए जाने वाले डिस्क स्थान को प्रबंधित करें" },
 };
 
 // String ids of the applet name and description in cscui.dll's string table.
@@ -2191,23 +2245,41 @@ static bool IsPlausibleOfflineFilesString(const std::wstring& text, size_t maxLe
            text.find_first_of(L"%\n<") == std::wstring::npos;
 }
 
-static OfflineFilesStrings GetOfflineFilesStrings() {
-    OfflineFilesStrings result{ kOfflineFilesTexts[0].name, kOfflineFilesTexts[0].infoTip };
+// Row of kOfflineFilesTexts for the current UI language, or nullptr when the
+// language has no row (or the lookup failed).
+static const OfflineFilesTexts* FindOfflineFilesTexts() {
     try {
         wchar_t localeName[LOCALE_NAME_MAX_LENGTH] = {};
         if (!LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT),
                               localeName, LOCALE_NAME_MAX_LENGTH, 0)) {
             wcscpy_s(localeName, L"en-US");
         }
-        const OfflineFilesTexts* chosen = nullptr;
         for (const auto& candidate : kOfflineFilesTexts) {
             const size_t prefixLength = wcslen(candidate.locale);
             if (_wcsnicmp(localeName, candidate.locale, prefixLength) == 0 &&
                 (localeName[prefixLength] == L'\0' || localeName[prefixLength] == L'-')) {
-                chosen = &candidate;
-                break;
+                return &candidate;
             }
         }
+    } catch (...) {
+        Wh_Log(L"Offline Files: exception while matching the UI language");
+    }
+    return nullptr;
+}
+
+// The two classic Windows Vista task links shown under the Offline Files
+// entry. Always hardcoded; a language without a row gets English.
+static void GetOfflineFilesLinkLabels(std::wstring& encryptLabel, std::wstring& diskLabel) {
+    const OfflineFilesTexts* row = FindOfflineFilesTexts();
+    if (!row) row = &kOfflineFilesTexts[0];
+    encryptLabel = row->linkEncrypt;
+    diskLabel = row->linkDisk;
+}
+
+static OfflineFilesStrings GetOfflineFilesStrings() {
+    OfflineFilesStrings result{ kOfflineFilesTexts[0].name, kOfflineFilesTexts[0].infoTip };
+    try {
+        const OfflineFilesTexts* chosen = FindOfflineFilesTexts();
         if (chosen && chosen->infoTip[0] != L'\0') {
             result.name = chosen->name;
             result.infoTip = chosen->infoTip;
@@ -2710,6 +2782,38 @@ bool EnsureClassicTaskLinksFile() {
                 "    <category id=\"2\"><sh:task idref=\"{D4F4A041-0D35-4CB6-A21F-BC1661200041}\"/></category>\n"
                 "  </application>\n";
         }
+        // Offline Files (self-built virtual entry): the two classic Windows
+        // Vista links shown under the icon ("Encrypt your offline files" and
+        // "Manage disk space used by your offline files"). Labels are hardcoded
+        // in every supported language; each link opens the same dialog as the
+        // icon, on the matching tab (2 Encryption, 1 Disk Usage), through the
+        // same rundll32 command.
+        if (VirtualAppletPresent(kOfflineFilesVirtualGuid)) {
+            try {
+                std::wstring encryptLabel, diskLabel;
+                GetOfflineFilesLinkLabels(encryptLabel, diskLabel);
+                const std::string appId = NarrowAscii(ToLower(kOfflineFilesVirtualGuid));
+                std::string block;
+                block += "  <!-- Offline Files (Network and Internet, Category 3) -->\n";
+                block += "  <application id=\"" + appId + "\">\n";
+                block += "    <sh:task id=\"{D4F4A042-0D35-4CB6-A21F-BC1661200042}\">"
+                         "<sh:name>" + XmlEscapeUtf8(WideToUtf8(encryptLabel)) + "</sh:name>"
+                         "<sh:keywords>offline;files;encrypt;encryption</sh:keywords>"
+                         "<sh:command>" + XmlEscapeUtf8(WideToUtf8(BuildOfflineFilesCommand(2))) +
+                         "</sh:command></sh:task>\n";
+                block += "    <sh:task id=\"{D4F4A043-0D35-4CB6-A21F-BC1661200043}\">"
+                         "<sh:name>" + XmlEscapeUtf8(WideToUtf8(diskLabel)) + "</sh:name>"
+                         "<sh:keywords>offline;files;disk space;cache</sh:keywords>"
+                         "<sh:command>" + XmlEscapeUtf8(WideToUtf8(BuildOfflineFilesCommand(1))) +
+                         "</sh:command></sh:task>\n";
+                block += "    <category id=\"3\"><sh:task idref=\"{D4F4A042-0D35-4CB6-A21F-BC1661200042}\"/>"
+                         "<sh:task idref=\"{D4F4A043-0D35-4CB6-A21F-BC1661200043}\"/></category>\n";
+                block += "  </application>\n";
+                virtualTaskBlock += block;
+            } catch (...) {
+                Wh_Log(L"Offline Files: exception while building the task links; skipped");
+            }
+        }
     }
     replaceAll("{VIRTUAL_APPLET_TASKS_BLOCK}", virtualTaskBlock.c_str());
 
@@ -3126,7 +3230,7 @@ void InitDisplayNames() {
                                   ofIcon,
                                   ofTexts.infoTip,
                                   nullptr, kLegacyUnhideMonikerCount,
-                                  g_offlineFilesLaunchCommand))
+                                  BuildOfflineFilesCommand(0)))
                 Wh_Log(L"Could not create the Offline Files virtual entry");
         } catch (...) {
             Wh_Log(L"Offline Files: exception while creating the virtual entry; skipped");
@@ -5408,7 +5512,7 @@ BOOL Wh_ModInit() {
             offlineDllExists = ResolveOfflineFilesTarget();
             Wh_Log(L"Offline Files (cscui.dll): %s (%s)",
                    offlineDllExists ? g_offlineFilesDllPath.c_str() : L"not found",
-                   offlineDllExists ? g_offlineFilesLaunchCommand.c_str() : L"-");
+                   offlineDllExists ? g_offlineFilesLaunchBase.c_str() : L"-");
         }
         g_iscsiInitiatorExeExists.store(iscsiExeExists);
         g_joyCplExists.store(joyCplExists);
