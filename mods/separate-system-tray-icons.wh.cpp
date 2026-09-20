@@ -127,6 +127,20 @@ and button dimensions as state changes. Styles for those properties can be
 overwritten by the next update. Stable names provide selectors, but external
 stylers may not observe every dynamically created element. In particular, the
 menu presenter receives its name after creation.
+
+## ⚠ Important usage note ⚠
+
+In case if battery won't show properly on your system, System Battery (*Sysbatt.ttf*)
+font needs to be installed manually. It's part of Windows.UI.ControlCenter
+package, but is not actually installed. The missing font is stored in:
+
+```
+C:\Windows\SystemResources\Windows.UI.ControlCenter\Assets
+```
+
+In order to install the font, right-click the *Sysbatt.ttf* file, and choose *Install*
+from the context menu.
+
 */
 // ==/WindhawkModReadme==
 
