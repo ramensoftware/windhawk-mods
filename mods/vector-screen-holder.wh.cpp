@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.4.1
+// @version         1.4.2
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -1587,7 +1587,6 @@ published at
 #include <dwrite_3.h>
 #include <windhawk_utils.h>
 #include <sddl.h>
-#include <shellapi.h>
 
 #include <algorithm>
 #include <atomic>
@@ -5063,77 +5062,33 @@ static std::vector<RECT> ComputeTargetRects() {
         return targets;
     }
 
-    // Which edge the taskbar lives on. ABM_GETTASKBARPOS answers even when
-    // the bar is auto-hidden, which is the case that needs it most.
-    UINT tbEdge = ABE_BOTTOM;
-    {
-        APPBARDATA abd;
-        ZeroMemory(&abd, sizeof(abd));
-        abd.cbSize = sizeof(abd);
-        if (SHAppBarMessage(ABM_GETTASKBARPOS, &abd)) {
-            tbEdge = abd.uEdge;
-        }
-    }
-
+    // The plain rectangle, with nothing shaved off it.
+    //
+    // There used to be a pixel taken off the bottom edge here, to keep the
+    // overlay from being counted as a fullscreen application: the shell looks
+    // for a window that covers the monitor and Focus Assist silences
+    // notifications when it finds one, so a clicked overlay could have turned
+    // the user's notifications off without saying so.
+    //
+    // It turns out this overlay was never in that category, and the pixel was
+    // bought for nothing. Measured on Windows 11, three runs of each, a
+    // WS_POPUP tool window covering the primary monitor and holding the
+    // foreground:
+    //
+    //   normal z-order                      QUNS_BUSY
+    //   forced to HWND_BOTTOM every
+    //   WM_WINDOWPOSCHANGING, as here       QUNS_ACCEPTS_NOTIFICATIONS
+    //
+    // The earlier measurements that argued for the trim were all taken on a
+    // window at normal z-order, which this one never is: WM_WINDOWPOSCHANGING
+    // rewrites hwndInsertAfter to HWND_BOTTOM on every single position change,
+    // so the overlay sits under every application window for its whole life,
+    // foreground or not. The shell does not treat that as a fullscreen app.
+    //
+    // Which is worth knowing before anyone adds the pixel back: it costs a
+    // line of wallpaper across the artwork, and it defends against nothing.
     auto targetRect = [&](const MonitorEntry& m) -> RECT {
-        RECT r = g_settings.workAreaOnly ? m.work : m.rect;
-
-        // The shell decides a fullscreen application is running by looking for
-        // a foreground window whose rectangle covers the monitor, and Focus
-        // Assist silences notifications when it finds one. Clicking the
-        // overlay makes it the foreground window, so a window that covers its
-        // monitor would quietly turn the user's notifications off until
-        // something else took focus.
-        //
-        // Measured on Windows 11 rather than assumed. A WS_POPUP window with
-        // WS_EX_TOOLWINDOW, once it is foreground, moves
-        // SHQueryUserNotificationState to QUNS_BUSY when it covers the
-        // monitor, and leaves it at QUNS_ACCEPTS_NOTIFICATIONS when it is a
-        // pixel short. The test is containment rather than equality:
-        // overhanging the edge by a pixel, on any side or on all of them, is
-        // still counted as covering. So the only way out is to stop short.
-        //
-        // Which is worth doing only when the rectangle actually covers the
-        // monitor. With the work area chosen and a taskbar on screen it never
-        // does, because the work rect already stops at the bar, and trimming
-        // there bought nothing and cost a line of wallpaper between the
-        // artwork and the taskbar, which is exactly the sort of seam this mod
-        // exists not to have. An auto-hiding taskbar is the case that needs
-        // it: the work area is then the whole monitor.
-        bool covers = r.left <= m.rect.left && r.top <= m.rect.top &&
-                      r.right >= m.rect.right && r.bottom >= m.rect.bottom;
-        if (!covers) {
-            return r;
-        }
-
-        // Give up the pixel on the taskbar's edge. The overlay sits at the
-        // bottom of the z-order and the taskbar is topmost, so when the bar is
-        // on screen that pixel is behind it and cannot be seen at all; when it
-        // is hidden, the pixel is at the very edge of the display, which is
-        // the least conspicuous place for it to be.
-        switch (tbEdge) {
-            case ABE_TOP:
-                if (r.bottom > r.top) {
-                    r.top += 1;
-                }
-                break;
-            case ABE_LEFT:
-                if (r.right > r.left) {
-                    r.left += 1;
-                }
-                break;
-            case ABE_RIGHT:
-                if (r.right > r.left) {
-                    r.right -= 1;
-                }
-                break;
-            default:
-                if (r.bottom > r.top) {
-                    r.bottom -= 1;
-                }
-                break;
-        }
-        return r;
+        return g_settings.workAreaOnly ? m.work : m.rect;
     };
     if (g_settings.monitor == L"all") {
         for (size_t i = 0; i < mons.size(); i++) {
