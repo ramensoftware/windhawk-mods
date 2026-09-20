@@ -54,11 +54,11 @@ persistent state.
 
 ## Compatibility
 
-Tested and supported on Windows 11 25H2 build 26200.9445.
+Tested on Windows 11 25H2 build 26200.9445.
 
-On Windows 11 24H2 build 26100.9457, version 0.6.0 resolved the required uDWM
-symbol but produced no visible change because every observed `style=0` call was
-skipped. Version 0.6.2 removes that assumption and is awaiting a new 24H2 test.
+Windows 11 24H2 (build 26100.x): the uDWM symbol resolves, but the current
+version hasn't been visually confirmed there yet. If you're on 24H2, please
+report whether the shadows change.
 
 Other Windows builds haven't been tested. If the required uDWM symbol can't
 be resolved, the mod logs the error and doesn't load.
