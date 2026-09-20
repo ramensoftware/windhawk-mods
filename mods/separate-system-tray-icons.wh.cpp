@@ -131,8 +131,8 @@ menu presenter receives its name after creation.
 ## ⚠ Important usage note ⚠
 
 In case if battery won't show properly on your system, System Battery (*Sysbatt.ttf*)
-font needs to be installed manually. It's part of Windows.UI.ControlCenter
-package, but is not actually installed. The missing font is stored in:
+font needs to be installed manually. It's part of *Windows.UI.ControlCenter*
+package, but is not actually installed by default. The missing font is stored in:
 
 ```
 C:\Windows\SystemResources\Windows.UI.ControlCenter\Assets
