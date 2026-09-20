@@ -285,7 +285,9 @@ is restored to its exact prior value when the mod unloads.
     - "columns": "Fill columns first (top to bottom, then right)"
   - Justify: "center"
     $name: Short row or column
-    $description: Used by "auto". How a ragged last row or column is aligned.
+    $description: >-
+      How a short row or column is aligned against its siblings on the cross
+      axis. Applies to every arrangement, hand-written ones included.
     $options:
     - "start": "Start (top for columns, left for rows)"
     - "center": "Center"
@@ -421,12 +423,20 @@ is restored to its exact prior value when the mod unloads.
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <cwchar>
 #include <cwctype>
 #include <exception>
 #include <functional>
 #include <list>
+#include <memory>
+#include <mutex>
+#include <new>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -1524,13 +1534,15 @@ namespace lease_column = windhawk_mod_templates::injected_grid_column;
 
 // ============================================================
 // Start-adjacent owned group
-// Template block: _templates/start-placement.h v1.1 (verbatim copy — keep in
+// Template block: _templates/start-placement.h v1.4 (verbatim copy — keep in
 // sync with the template; Windhawk mods are single-file).
 // ============================================================
 
 namespace windhawk_mod_templates::start_placement {
 
+using winrt::Windows::Foundation::IInspectable;
 using winrt::Windows::UI::Xaml::DependencyObject;
+using winrt::Windows::UI::Xaml::DependencyProperty;
 using winrt::Windows::UI::Xaml::FrameworkElement;
 using winrt::Windows::UI::Xaml::HorizontalAlignment;
 using winrt::Windows::UI::Xaml::Thickness;
@@ -1555,12 +1567,31 @@ struct Lease {
     FrameworkElement startButton{nullptr};
     FrameworkElement taskItemsPanel{nullptr};
     Thickness groupOriginalMargin{};
+    // The task panel's margin is still needed as a VALUE while the lease is
+    // live, because the push is computed relative to it. The local-value
+    // snapshot beside it is what the release puts back.
     Thickness taskItemsPanelOriginalMargin{};
+    IInspectable taskItemsPanelMarginLocal{nullptr};
+    IInspectable startRenderTransformLocal{nullptr};
     bool startInTaskItemsPanel = false;
     winrt::event_token layoutToken{};
     Side side = Side::Left;
     double spacing = 0.0;
 };
+
+// Put back a borrowed dependency property's exact prior LOCAL value, or clear
+// the property when it had none. Clearing is the important half: an element
+// whose value came from its template has no local value, and writing a
+// concrete one back would override that binding permanently.
+inline void RestoreLocalValue(DependencyObject const& object,
+                              DependencyProperty const& property,
+                              IInspectable const& value) {
+    if (value == DependencyProperty::UnsetValue()) {
+        object.ClearValue(property);
+    } else {
+        object.SetValue(property, value);
+    }
+}
 
 template<typename Predicate>
 inline FrameworkElement FindDescendant(FrameworkElement const& root,
@@ -1674,9 +1705,13 @@ inline bool Position(Lease& lease) noexcept {
             neededShift = 0.0;
 
         if (std::fabs(neededShift) <= 0.5) {
+            // No shift wanted: hand the property back as it was found, rather
+            // than clearing it. Another mod's transform on Start is not ours
+            // to delete, and this path runs on every layout pass.
             if (existingShift || lease.startButton.RenderTransform())
-                lease.startButton.ClearValue(
-                    UIElement::RenderTransformProperty());
+                RestoreLocalValue(lease.startButton,
+                                  UIElement::RenderTransformProperty(),
+                                  lease.startRenderTransformLocal);
         } else if (std::fabs(currentShift - neededShift) > 0.5) {
             TranslateTransform startShift;
             startShift.X(neededShift);
@@ -1737,11 +1772,13 @@ inline bool Release(Lease& lease) noexcept {
         if (lease.rootGrid && lease.layoutToken)
             lease.rootGrid.LayoutUpdated(lease.layoutToken);
         if (lease.taskItemsPanel)
-            lease.taskItemsPanel.Margin(
-                lease.taskItemsPanelOriginalMargin);
+            RestoreLocalValue(lease.taskItemsPanel,
+                              FrameworkElement::MarginProperty(),
+                              lease.taskItemsPanelMarginLocal);
         if (lease.startButton)
-            lease.startButton.ClearValue(
-                UIElement::RenderTransformProperty());
+            RestoreLocalValue(lease.startButton,
+                              UIElement::RenderTransformProperty(),
+                              lease.startRenderTransformLocal);
         lease.group.Margin(lease.groupOriginalMargin);
         if (lease.rootGrid) {
             uint32_t index = 0;
@@ -1771,6 +1808,9 @@ inline bool Acquire(FrameworkElement const& root, Grid const& group,
     lease.rootGrid = rootGrid;
     lease.startButton = startButton;
     lease.groupOriginalMargin = group.Margin();
+    // Snapshot BEFORE the first write, so the release can be exact.
+    lease.startRenderTransformLocal = startButton.ReadLocalValue(
+        UIElement::RenderTransformProperty());
     lease.side = side;
     lease.spacing = spacing;
 
@@ -1791,6 +1831,8 @@ inline bool Acquire(FrameworkElement const& root, Grid const& group,
     if (lease.taskItemsPanel) {
         lease.taskItemsPanelOriginalMargin =
             lease.taskItemsPanel.Margin();
+        lease.taskItemsPanelMarginLocal = lease.taskItemsPanel.ReadLocalValue(
+            FrameworkElement::MarginProperty());
         // Whether Start rides the repeater-margin push is build-dependent.
         // Resolve it from the visual tree instead of inferring from motion.
         try {
@@ -2429,6 +2471,20 @@ inline wchar_t const* OrientationName(Orientation orientation) {
 //
 // Stoppable and WAITED during unload. A detached thread that outlives
 // Wh_ModUninit runs mod code out of an unloaded DLL.
+//
+// STOP IS CALLED FROM MORE THAN ONE THREAD. Wh_ModUninit stops the loop from
+// Windhawk's thread while an Explorer taskbar rebuild can be starting it from
+// the taskbar's UI thread, and Start() stops the previous run before it begins
+// a new one. So the handles cannot live in bare members that each caller
+// closes: two callers would read the same handle and close it twice, and in
+// explorer.exe a double CloseHandle later closes whatever unrelated handle the
+// value was recycled into.
+//
+// One attempt therefore owns its handles through a shared Run, and EVERY
+// caller that observes a live Run waits for it. The mutex is held only across
+// the handoff, never across the wait: the retry thread marshals onto the UI
+// thread with SendMessage, so a UI-thread caller blocked on the mutex while
+// another thread waited under it could never service that message.
 
 class RetryLoop {
 public:
@@ -2436,72 +2492,120 @@ public:
     using AppliedFn = bool (*)();
     using AttemptFn = void (*)();
 
+    // No destructor on purpose. A namespace-scope loop's destructor would run
+    // at DLL detach, inside the loader lock, and Stop() waits on a thread —
+    // the owner stops it explicitly from Wh_ModUninit instead.
+
     void Start(AttemptFn attempt, AppliedFn applied,
                std::atomic<bool> const& unloading, int attempts = 5,
-               DWORD intervalMs = 2000) {
+               DWORD intervalMs = 2000, bool forceFirstAttempt = false) {
         Stop();
         if (unloading) return;
-        attempt_ = attempt;
-        applied_ = applied;
-        unloading_ = &unloading;
-        attempts_ = attempts;
-        intervalMs_ = intervalMs;
-        stopEvent_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!stopEvent_) return;
-        thread_ = CreateThread(
-            nullptr, 0,
-            [](void* parameter) -> DWORD {
-                auto* self = static_cast<RetryLoop*>(parameter);
-                for (int i = 0; i < self->attempts_ && !*self->unloading_;
-                     ++i) {
-                    if (self->applied_ && self->applied_()) break;
-                    if (i && WaitForSingleObject(self->stopEvent_,
-                                                 self->intervalMs_) !=
-                                 WAIT_TIMEOUT)
-                        break;
-                    if (self->attempt_) self->attempt_();
-                }
-                return 0;
-            },
-            this, 0, nullptr);
-        if (!thread_) {
-            CloseHandle(stopEvent_);
-            stopEvent_ = nullptr;
+
+        auto run = std::make_shared<Run>();
+        run->attempt = attempt;
+        run->applied = applied;
+        run->unloading = &unloading;
+        run->attempts = attempts;
+        run->intervalMs = intervalMs;
+        run->forceFirstAttempt = forceFirstAttempt;
+        run->stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!run->stopEvent) return;
+
+        // The thread carries a reference of its own, so the Run survives until
+        // both the loop and the thread are done with it, whichever ends first.
+        auto* parameter = new std::shared_ptr<Run>(run);
+        run->thread =
+            CreateThread(nullptr, 0, ThreadMain, parameter, 0, nullptr);
+        if (!run->thread) {
+            delete parameter;
+            return;
         }
+
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            if (!unloading) {
+                run_ = std::move(run);
+                return;
+            }
+        }
+        // Unload began while this attempt was being created, so the Stop that
+        // would have waited for it saw nothing. Wait for it here instead.
+        StopRun(run);
     }
 
-    // Pumps sent messages while waiting: the retry thread marshals onto the UI
-    // thread with SendMessage, so a plain wait from that same UI thread would
-    // deadlock against the thread it is waiting for.
     void Stop() {
-        if (stopEvent_) SetEvent(stopEvent_);
-        if (thread_) {
-            DWORD result;
-            do {
-                result = MsgWaitForMultipleObjects(1, &thread_, FALSE, INFINITE,
-                                                   QS_SENDMESSAGE);
-                if (result == WAIT_OBJECT_0 + 1) {
-                    MSG message;
-                    PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
-                }
-            } while (result == WAIT_OBJECT_0 + 1);
-            CloseHandle(thread_);
-            thread_ = nullptr;
+        std::shared_ptr<Run> run;
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            run = run_;  // shared, not moved: a concurrent Stop must wait too
         }
-        if (stopEvent_) {
-            CloseHandle(stopEvent_);
-            stopEvent_ = nullptr;
-        }
+        if (!run) return;
+        StopRun(run);
+        std::lock_guard<std::mutex> guard(mutex_);
+        if (run_ == run) run_.reset();
     }
 
 private:
-    HANDLE thread_ = nullptr;
-    HANDLE stopEvent_ = nullptr;
-    AttemptFn attempt_ = nullptr;
-    AppliedFn applied_ = nullptr;
-    std::atomic<bool> const* unloading_ = nullptr;
-    int attempts_ = 5;
-    DWORD intervalMs_ = 2000;
+    struct Run {
+        HANDLE thread = nullptr;
+        HANDLE stopEvent = nullptr;
+        AttemptFn attempt = nullptr;
+        AppliedFn applied = nullptr;
+        std::atomic<bool> const* unloading = nullptr;
+        int attempts = 5;
+        DWORD intervalMs = 2000;
+        bool forceFirstAttempt = false;
+
+        // Closed exactly once, when the last of the loop and the thread lets
+        // go. Both have already stopped using them by then.
+        ~Run() {
+            if (thread) CloseHandle(thread);
+            if (stopEvent) CloseHandle(stopEvent);
+        }
+    };
+
+    static DWORD WINAPI ThreadMain(void* parameter) {
+        auto* owned = static_cast<std::shared_ptr<Run>*>(parameter);
+        std::shared_ptr<Run> run = *owned;
+        delete owned;
+        for (int i = 0; i < run->attempts && !*run->unloading; ++i) {
+            // A settings reload can need one restore/reapply pass even while
+            // `applied` truthfully says we still own live XAML. Do not
+            // overload that ownership flag merely to wake the retry loop;
+            // request a forced first attempt instead.
+            if (run->applied && !(run->forceFirstAttempt && i == 0) &&
+                run->applied())
+                break;
+            if (i && WaitForSingleObject(run->stopEvent, run->intervalMs) !=
+                         WAIT_TIMEOUT)
+                break;
+            if (run->attempt) run->attempt();
+        }
+        return 0;
+    }
+
+    // Signal and wait, pumping sent messages: a caller on the taskbar's UI
+    // thread would otherwise deadlock against the SendMessage the retry thread
+    // is making back to it. Idempotent — the stop event is manual-reset, and
+    // waiting on an already-exited thread returns at once.
+    static void StopRun(std::shared_ptr<Run> const& run) {
+        if (run->stopEvent) SetEvent(run->stopEvent);
+        if (!run->thread) return;
+        DWORD result;
+        do {
+            HANDLE thread = run->thread;
+            result = MsgWaitForMultipleObjects(1, &thread, FALSE, INFINITE,
+                                               QS_SENDMESSAGE);
+            if (result == WAIT_OBJECT_0 + 1) {
+                MSG message;
+                PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
+            }
+        } while (result == WAIT_OBJECT_0 + 1);
+    }
+
+    std::mutex mutex_;
+    std::shared_ptr<Run> run_;
 };
 
 }  // namespace windhawk_mod_templates::taskbar_host
@@ -2557,6 +2661,33 @@ public:
             }
         }
         snapshots_.clear();
+    }
+
+    // Put ONE object's properties back and forget them, leaving every other
+    // object's snapshots alone. For the case where a mod discovers that an
+    // element it began borrowing was never actually its business — handing
+    // that element back has to be possible without ending the whole lease.
+    void RestoreObject(DependencyObject const& object,
+                       RestoreErrorFn const& onError = {}) {
+        if (!object) return;
+        for (auto it = snapshots_.rbegin(); it != snapshots_.rend();) {
+            if (it->object != object) {
+                ++it;
+                continue;
+            }
+            try {
+                if (it->localValue == DependencyProperty::UnsetValue())
+                    it->object.ClearValue(it->property);
+                else
+                    it->object.SetValue(it->property, it->localValue);
+            } catch (...) {
+                if (onError) onError();
+            }
+            // Erase through the reverse iterator without invalidating the
+            // traversal: base() points one past the element being erased.
+            it = std::make_reverse_iterator(snapshots_.erase(
+                std::next(it).base()));
+        }
     }
 
     // Drop the snapshots WITHOUT restoring. For the case where the elements
@@ -2834,6 +2965,14 @@ enum StateRefreshFlags : DWORD {
 
 static std::atomic<bool> g_unloading{false};
 static HWND              g_taskbarWnd           = nullptr;
+// The window whose thread this mod's XAML callbacks were actually registered
+// on, remembered AT INJECTION TIME. g_taskbarWnd is cleared on an Explorer
+// rebuild, and unload is the moment Shell_TrayWnd is least likely to be
+// rediscoverable — which is also the moment when failing to reach the UI
+// thread stops being cosmetic, because Windhawk frees this image as soon as
+// Wh_ModUninit returns and every Loaded revoker, property-changed callback,
+// Tapped handler and LayoutUpdated token would still point into it.
+static HWND              g_uiHostWnd            = nullptr;
 static std::atomic<bool>  g_systemTrayModuleHooked{false};
 static std::atomic<bool>  g_taskbarRestarted{false};
 static HANDLE            g_retryThread          = nullptr;
@@ -3100,6 +3239,38 @@ static bool IsPrivacyText(std::wstring_view text) {
     return text.empty() || (text.length() == 1 && IsPrivacyGlyph(text[0]));
 }
 
+// WHICH STACK AN ICON LIVES IN IS THE REAL FILTER.
+//
+// `class == SystemTray.IconView && Name == SystemTrayIcon` is NOT unique to
+// the privacy indicators: the network, volume and battery icons under
+// ControlCenterButton use exactly the same pair, and the same
+// ContainerGrid > ContentPresenter > ContentGrid > TextIconContent >
+// InnerTextBlock shape the glyph walk expects. The glyph is not a sufficient
+// backstop either, because an IconView whose InnerTextBlock is still empty
+// when Loaded fires reads as a privacy indicator.
+//
+// Getting this wrong is not cosmetic: with SuppressNativeIndicators on, a
+// wrongly tracked icon is collapsed and made non-hit-testable, and the
+// visibility callback re-collapses it every time something tries to show it.
+// The user loses a tray icon until the mod is disabled.
+static bool IsChildOfElementByName(FrameworkElement const& element,
+                                   wchar_t const* name) {
+    for (auto node = element.try_as<DependencyObject>(); node;
+         node = VisualTreeHelper::GetParent(node)) {
+        auto fe = node.try_as<FrameworkElement>();
+        if (fe && fe.Name() == name)
+            return true;
+    }
+    return false;
+}
+
+// The stacks the privacy indicators actually live in. ControlCenterButton is
+// deliberately absent: that is the one that must never be tracked.
+static bool IsPrivacyIndicatorHostStack(FrameworkElement const& iconView) {
+    return IsChildOfElementByName(iconView, L"MainStack") ||
+           IsChildOfElementByName(iconView, L"NonActivatableStack");
+}
+
 // ============================================================
 // Unified icon layout
 // ============================================================
@@ -3262,6 +3433,9 @@ static bool ComputePrivacyPlacements(
 static void SetGlowActive(FrameworkElement const& glow, bool active) {
     if (!glow) return;
     glow.Visibility(active ? Visibility::Visible : Visibility::Collapsed);
+    // Engaged-check to match g_lease's call sites. Unreachable today (the
+    // reset()s are the last thing Wh_ModUninit does), but free.
+    if (!g_glowAnimationStates) return;
     for (auto& state : *g_glowAnimationStates) {
         if (state.element != glow || state.running == active) continue;
         try {
@@ -3608,10 +3782,26 @@ public:
         return S_OK;
     }
 
+    // ORDER MATTERS, AND THE OTHER ORDER IS A CRASH. Every
+    // IMMNotificationClient method runs on an MMDevice thread and calls
+    // AttachDefaultEndpoint, which re-arms m_volume->RegisterControlChangeNotify
+    // with `this`. Detaching first leaves a window in which a notification
+    // re-registers the volume callback AFTER the detach, and nothing
+    // unregisters it again — a dangling IAudioEndpointVolumeCallback whose
+    // vtable lives in an image Windhawk is about to free. So: stop the
+    // notifications that can re-arm, THEN detach what they armed.
     void Cleanup() {
-        DetachEndpointVolume();
+        // Outside the lock: MMDevice may be dispatching a callback that is
+        // waiting on it, and Unregister does not wait for one already running.
         if (m_enum) {
             m_enum->UnregisterEndpointNotificationCallback(this);
+        }
+        std::lock_guard<std::mutex> guard(m_endpointLock);
+        // A callback that got past Unregister and is blocked on the lock right
+        // now still must not re-arm anything behind us.
+        m_stopped = true;
+        DetachEndpointVolumeLocked();
+        if (m_enum) {
             m_enum->Release();
             m_enum = nullptr;
         }
@@ -3695,7 +3885,8 @@ private:
         RequestStateRefresh(RefreshMicrophoneState);
     }
 
-    void DetachEndpointVolume() {
+    // Call with m_endpointLock held.
+    void DetachEndpointVolumeLocked() {
         if (m_volume) {
             m_volume->UnregisterControlChangeNotify(this);
             m_volume->Release();
@@ -3707,9 +3898,12 @@ private:
         }
     }
 
+    // Called from MMDevice callback threads AND from the worker thread through
+    // Init, so every access to m_enum / m_device / m_volume is under the lock.
     void AttachDefaultEndpoint() {
-        if (!m_enum) return;
-        DetachEndpointVolume();
+        std::lock_guard<std::mutex> guard(m_endpointLock);
+        if (!m_enum || m_stopped) return;
+        DetachEndpointVolumeLocked();
 
         HRESULT hr = m_enum->GetDefaultAudioEndpoint(eCapture, eConsole, &m_device);
         if (FAILED(hr)) {
@@ -3733,10 +3927,46 @@ private:
     }
 
     volatile LONG m_refCount = 1;
+    std::mutex m_endpointLock;
+    bool m_stopped = false;
     IMMDeviceEnumerator* m_enum = nullptr;
     IMMDevice* m_device = nullptr;
     IAudioEndpointVolume* m_volume = nullptr;
 };
+
+// ── Camera initialization cancellation ───────────────────────────
+//
+// MediaCapture::InitializeAsync is the one call in this mod that can block its
+// thread for as long as a camera driver feels like taking — and a wedged camera
+// driver is precisely the hardware class this opt-in setting exists for. The
+// worker is joined with INFINITE during unload, and changing ANY setting
+// reloads the mod, so an uncancellable initialization turns "disable this mod"
+// into "Windhawk hangs".
+//
+// These are free globals rather than members of the monitor because the stop
+// path runs on Windhawk's unload thread while the monitor object itself lives
+// on the worker thread's stack: a pointer to that object could be freed
+// between the read and the Cancel, whereas these outlive both threads.
+static std::mutex g_cameraInitLock;
+[[clang::no_destroy]] static winrt::Windows::Foundation::IAsyncAction
+    g_cameraInitOp{nullptr};
+static std::atomic<bool> g_cameraInitStopping{false};
+
+// Call from the stop path BEFORE joining the worker.
+static void CancelPendingCameraInit() {
+    g_cameraInitStopping.store(true);
+    winrt::Windows::Foundation::IAsyncAction op{nullptr};
+    {
+        std::lock_guard<std::mutex> guard(g_cameraInitLock);
+        op = g_cameraInitOp;
+    }
+    if (!op) return;
+    Wh_Log(L"[CamMon] Cancelling an in-flight camera initialization");
+    try {
+        op.Cancel();
+    } catch (...) {
+    }
+}
 
 // Portable Windows 11 camera privacy monitor. CameraOcclusionInfo is backed by
 // the standard UVC/AVStream privacy control when a camera driver implements it,
@@ -3859,6 +4089,10 @@ public:
         }
         m_occlusion = nullptr;
         if (m_capture) {
+            // Close() has no cancellation of its own, so it remains the one
+            // camera call that can still take its time during unload. It only
+            // runs when initialization already SUCCEEDED, which rules out the
+            // wedged-driver case that made InitializeAsync worth cancelling.
             try { m_capture.Close(); } catch (...) {}
             m_capture = nullptr;
         }
@@ -3918,8 +4152,32 @@ private:
             settings.StreamingCaptureMode(StreamingCaptureMode::Video);
             settings.SharingMode(MediaCaptureSharingMode::SharedReadOnly);
 
+            if (g_cameraInitStopping.load())
+                return S_FALSE;
+
             MediaCapture capture;
-            capture.InitializeAsync(settings).get();
+            auto initOp = capture.InitializeAsync(settings);
+            {
+                std::lock_guard<std::mutex> guard(g_cameraInitLock);
+                g_cameraInitOp = initOp;
+            }
+            // Publish, THEN re-check: a Cancel that arrived between the call
+            // above and the store would otherwise have found nothing to cancel
+            // and this .get() would block anyway.
+            if (g_cameraInitStopping.load()) {
+                try {
+                    initOp.Cancel();
+                } catch (...) {
+                }
+            }
+            struct ClearInitOp {
+                ~ClearInitOp() {
+                    std::lock_guard<std::mutex> guard(g_cameraInitLock);
+                    g_cameraInitOp = nullptr;
+                }
+            } clearInitOp;
+            // Throws on cancellation, which the catch blocks below handle.
+            initOp.get();
             CameraOcclusionInfo occlusion =
                 capture.VideoDeviceController().CameraOcclusionInfo();
             if (!occlusion || !occlusion.IsOcclusionKindSupported(
@@ -3945,6 +4203,13 @@ private:
             Wh_Log(L"[CamMon] Watching CameraHardware occlusion state");
             return S_OK;
         } catch (winrt::hresult_error const& e) {
+            // A cancellation is not a failure to back off from — the worker is
+            // on its way out and will never run the retry.
+            if (g_cameraInitStopping.load()) {
+                Wh_Log(L"[CamMon] Initialization cancelled for unload");
+                Cleanup();
+                return e.code();
+            }
             Wh_Log(L"[CamMon] Initialize failed hr=0x%08X: %s",
                    static_cast<unsigned>(e.code().value), e.message().c_str());
             Cleanup();
@@ -3953,7 +4218,8 @@ private:
         } catch (...) {
             Wh_Log(L"[CamMon] Initialize failed with an unknown exception");
             Cleanup();
-            ScheduleRetry();
+            if (!g_cameraInitStopping.load())
+                ScheduleRetry();
             return E_FAIL;
         }
     }
@@ -4967,6 +5233,28 @@ static bool InjectSyntheticIcons(FrameworkElement root) {
     g_syntheticGrid = bar;
     g_syntheticParent = gridElem;
 
+    // THE PUBLISH ABOVE IS THE MOD'S "ALREADY INJECTED" FLAG, and every reader
+    // of it treats a non-null g_syntheticGrid as a bar that is on screen:
+    // ApplyStyle skips injection, the phase-1 retry loop breaks out, the
+    // IconView Loaded path skips re-injection, and UpdateSyntheticState keeps
+    // updating the elements. So if anything below throws, the published-but-
+    // never-placed bar wedges the mod permanently — no icons, no retry, no
+    // error — until it is reloaded. The explicit `return false` paths below
+    // already unwind through RemoveSyntheticIcons; this covers the other exit,
+    // an exception out of any XAML call in the region, and fires ONLY then
+    // (uncaught_exceptions rising above the depth at entry), so it cannot
+    // double-unwind a normal return.
+    struct UnwindPublishOnThrow {
+        int entryDepth = std::uncaught_exceptions();
+        ~UnwindPublishOnThrow() {
+            if (std::uncaught_exceptions() <= entryDepth) return;
+            try {
+                RemoveSyntheticIcons();
+            } catch (...) {
+            }
+        }
+    } unwindPublishOnThrow;
+
     for (auto const& placement : placements) {
         const auto& token = placement.token;
         PrivacyItemKind itemKind;
@@ -5243,23 +5531,28 @@ static void RemoveSyntheticIcons() {
     // after the mod DLL unloads. The boxed tooltip and automation-name values on
     // the synthetic icons are implemented in this DLL, so release them before
     // removal (same crash class as folder-menus crash-on-disable).
-    for (auto& state : *g_slotEventStates) {
-        if (!state.element) continue;
-        try { state.element.Tapped(state.tappedToken); } catch (...) {}
+    // Engaged-checks to match g_lease's call sites below.
+    if (g_slotEventStates) {
+        for (auto& state : *g_slotEventStates) {
+            if (!state.element) continue;
+            try { state.element.Tapped(state.tappedToken); } catch (...) {}
+        }
+        g_slotEventStates->clear();
     }
-    g_slotEventStates->clear();
 
     // Storyboards retain their animation targets. Stop and release them before
     // removing the XAML subtree so no callback can outlive the mod DLL.
-    for (auto& state : *g_glowAnimationStates) {
-        for (auto const& storyboard : state.storyboards) {
-            try { storyboard.Stop(); } catch (...) {}
+    if (g_glowAnimationStates) {
+        for (auto& state : *g_glowAnimationStates) {
+            for (auto const& storyboard : state.storyboards) {
+                try { storyboard.Stop(); } catch (...) {}
+            }
+            state.storyboards.clear();
+            state.element = nullptr;
+            state.running = false;
         }
-        state.storyboards.clear();
-        state.element = nullptr;
-        state.running = false;
+        g_glowAnimationStates->clear();
     }
-    g_glowAnimationStates->clear();
 
     auto clearIconState = [](FrameworkElement const& fe) {
         if (!fe) return;
@@ -5280,16 +5573,32 @@ static void RemoveSyntheticIcons() {
         if (!start_placement::Release(g_startLease))
             Wh_Log(L"[Remove] Start placement lease was not live");
     } else if (gridParent) {
-        for (uint32_t i = 0; i < gridParent.Children().Size(); i++) {
-            auto fe = gridParent.Children().GetAt(i)
-                          .try_as<FrameworkElement>();
-            if (fe && fe.Name() == L"PrivacyAnchorBar") {
-                gridParent.Children().RemoveAt(i);
-                break;
+        // GUARD EACH STEP SEPARATELY. The realistic trigger here is the tray
+        // being rebuilt underneath us, which throws out of Children() or
+        // RemoveAt. An unguarded throw would skip the lease release AND the
+        // global reset below, leaving the leased tray column in place after
+        // the mod is disabled — the one state disabling the mod is supposed to
+        // undo — and reporting failure back to Wh_ModUninit.
+        try {
+            for (uint32_t i = 0; i < gridParent.Children().Size(); i++) {
+                auto fe = gridParent.Children().GetAt(i)
+                              .try_as<FrameworkElement>();
+                if (fe && fe.Name() == L"PrivacyAnchorBar") {
+                    gridParent.Children().RemoveAt(i);
+                    break;
+                }
             }
+        } catch (...) {
+            Wh_Log(L"[Remove] Anchor bar removal failed; "
+                   L"releasing the column lease anyway");
         }
-        if (!lease_column::Release(gridParent, g_columnLease)) {
-            Wh_Log(L"[Remove] Privacy column lease was not live");
+        try {
+            if (!lease_column::Release(gridParent, g_columnLease)) {
+                Wh_Log(L"[Remove] Privacy column lease was not live");
+                g_columnLease = {};
+            }
+        } catch (...) {
+            Wh_Log(L"[Remove] Privacy column lease release threw");
             g_columnLease = {};
         }
     } else {
@@ -5314,6 +5623,49 @@ static void RemoveModUi() {
 // ============================================================
 // Privacy indicator state tracking
 // ============================================================
+
+// Hand one element back completely: unhook both callbacks, restore every
+// property this mod wrote on it to its exact prior local value, and drop the
+// tracking entry. Used when an element that was tracked while its glyph was
+// still empty turns out not to be a privacy indicator at all — without this
+// it stays collapsed and non-hit-testable for as long as the mod is loaded.
+static void UntrackPrivacyElement(TextBlock const& textBlock) {
+    for (auto it = g_privacyStates.begin(); it != g_privacyStates.end(); ++it) {
+        if (it->textBlockRef.get() != textBlock)
+            continue;
+
+        try {
+            if (auto tb = it->textBlockRef.get(); tb && it->textToken)
+                tb.UnregisterPropertyChangedCallback(
+                    TextBlock::TextProperty(), it->textToken);
+        } catch (...) {
+            LogCurrentUiException(L"privacy text unregister");
+        }
+
+        auto iconView = it->iconViewRef.get();
+        if (iconView) {
+            try {
+                if (it->visibilityToken)
+                    iconView.UnregisterPropertyChangedCallback(
+                        UIElement::VisibilityProperty(), it->visibilityToken);
+            } catch (...) {
+                LogCurrentUiException(L"privacy visibility unregister");
+            }
+            // Only this element's snapshots; every other borrowed element
+            // stays leased.
+            if (g_lease) {
+                g_lease->RestoreObject(iconView, [] {
+                    Wh_Log(L"[Privacy] Failed to restore a released icon");
+                });
+            }
+        }
+
+        // Its type was a guess from an empty glyph, so drop the flag it set.
+        SetPrivacyActive(it->type, false);
+        g_privacyStates.erase(it);
+        return;
+    }
+}
 
 static void ApplyPrivacyIndicatorBehavior(FrameworkElement iconView) {
     for (auto& s : g_privacyStates)
@@ -5358,11 +5710,20 @@ static void ApplyPrivacyIndicatorBehavior(FrameworkElement iconView) {
                 auto tbRef = sender.try_as<TextBlock>();
                 if (!tbRef) return;
                 std::wstring newText = tbRef.Text().c_str();
-                if (!newText.empty() && newText.length() == 1 && !IsPrivacyGlyph(newText[0])) {
-                    Wh_Log(L"[Privacy] Unknown glyph change: U+%04X", (unsigned)newText[0]);
+                if (!IsPrivacyText(newText)) {
+                    // THIS WAS NEVER OURS. The element was tracked while its
+                    // text was still empty, and the real glyph has now
+                    // arrived and is not a privacy glyph. Returning here would
+                    // leave it collapsed and non-hit-testable forever, with
+                    // the visibility callback re-collapsing it on every
+                    // attempt to show it. Give it back instead.
+                    if (!newText.empty() && newText.length() == 1) {
+                        Wh_Log(L"[Privacy] U+%04X is not a privacy glyph; "
+                               L"releasing this icon", (unsigned)newText[0]);
+                    }
+                    UntrackPrivacyElement(tbRef);
                     return;
                 }
-                if (!IsPrivacyText(newText)) return;
                 if (newText.empty()) {
                     for (auto& s : g_privacyStates) {
                         if (s.textBlockRef.get() == tbRef) {
@@ -5504,6 +5865,10 @@ static bool ApplyStyle() {
         auto mainStack = FindChildByName(sysGrid, L"MainStack");
         if (mainStack) ScanMainStack(mainStack);
     }
+    // Everything registered above lives on this window's thread. Remember it
+    // so teardown dispatches to the thread that owns the callbacks rather than
+    // re-deriving Shell_TrayWnd at unload.
+    g_uiHostWnd = hWnd;
     return true;
 }
 
@@ -5563,6 +5928,11 @@ static void ApplyStyleOnWindowThread() {
 static void StopRetryThread() {
     if (g_retryStopEvent) SetEvent(g_retryStopEvent);
     if (g_stateRefreshEvent) SetEvent(g_stateRefreshEvent);
+    // Setting the events is not enough: the worker may be parked inside
+    // MediaCapture::InitializeAsync, which observes neither. Cancel it before
+    // the INFINITE join below, or a wedged camera driver stalls the unload for
+    // as long as it likes.
+    CancelPendingCameraInit();
     if (g_retryThread) {
         DWORD result;
         do {
@@ -5622,7 +5992,8 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
                     auto fe = sender.try_as<FrameworkElement>();
                     if (!fe) return;
                     if (winrt::get_class_name(fe) == L"SystemTray.IconView" &&
-                        fe.Name() == L"SystemTrayIcon") {
+                        fe.Name() == L"SystemTrayIcon" &&
+                        IsPrivacyIndicatorHostStack(fe)) {
                         if (g_taskbarRestarted.load()) {
                             ApplyOnTaskbarThread();
                         } else if (!g_syntheticGrid) {
@@ -5764,10 +6135,15 @@ void Wh_ModAfterInit() {
         // bitmask. Timers are only used for Copilot process activity, a
         // five-minute health reconciliation, and backed-off setup retries.
         if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return 0;
-        // MMDevice owns callback references independently. Keep our own heap
-        // reference until unregistering, then Release it so an in-flight COM
-        // callback keeps the object alive instead of referring to a vanished
-        // worker-stack frame.
+        // Heap, not a worker-stack local, so the object's lifetime is not the
+        // worker frame's. Be precise about what that does and does not buy:
+        // MMDevice does NOT take its own reference on a registered client —
+        // that is exactly why the documentation requires Unregister before
+        // Release — and Unregister is not documented to wait for a callback
+        // already executing. So heap ownership alone does not make an
+        // in-flight callback safe; what makes unload safe is Cleanup's
+        // unregister-then-detach order, which closes the window in which a
+        // callback could re-arm a registration nothing will remove.
         auto* micMonitor = new (std::nothrow) MicPrivacyMonitor;
         CameraPrivacyMonitor cameraMonitor;
         DeviceStateMonitor deviceMonitor;
@@ -5941,7 +6317,10 @@ void Wh_ModUninit() {
     StopRetryThread();
     // Loaded revokers wrap WinRT objects that must be destroyed on the UI
     // thread — clear them inside RunFromWindowThread, not here.
-    HWND hWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd);
+    // Prefer the window remembered at injection time; ResolveTaskbarWnd only
+    // falls back to rediscovering Shell_TrayWnd when that one is already gone.
+    HWND hWnd = tbh::ResolveTaskbarWnd(g_uiHostWnd ? g_uiHostWnd
+                                                   : g_taskbarWnd);
     if (hWnd) {
         bool cleaned = RunFromWindowThread(hWnd, [](void*) {
             RemoveModUi();
@@ -5954,10 +6333,18 @@ void Wh_ModUninit() {
         }, nullptr);
         if (!cleaned) {
             Wh_Log(L"[Uninit] Taskbar cleanup dispatch failed; retrying callback removal");
-            if (HWND retryWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd)) {
-                RunFromWindowThread(retryWnd, [](void*) {
+            // CHECK THE RETRY'S RESULT. A discarded failure here reads as a
+            // successful unload while every callback is still registered in a
+            // tree that outlives this image.
+            HWND retryWnd = tbh::ResolveTaskbarWnd(nullptr);
+            bool retried =
+                retryWnd && RunFromWindowThread(retryWnd, [](void*) {
                     RemoveModUi();
                 }, nullptr);
+            if (!retried) {
+                Wh_Log(L"[Uninit] Could not reach the taskbar UI thread on "
+                       L"either attempt; this mod's XAML callbacks may still "
+                       L"be registered as the image is freed");
             }
         }
     } else {
