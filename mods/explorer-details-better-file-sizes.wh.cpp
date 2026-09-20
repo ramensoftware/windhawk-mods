@@ -2354,11 +2354,34 @@ HRESULT WINAPI PSFormatForDisplayAlloc_Hook(const PROPERTYKEY& key,
                                             const PROPVARIANT& propvar,
                                             PROPDESC_FORMAT_FLAGS pdff,
                                             PWSTR* ppszDisplay) {
-    if (IsEqualPropertyKey(key, kPKEY_Size)) {
-        pdff &= ~PDFF_ALWAYSKB;
+    auto original = [=]() {
+        return PSFormatForDisplayAlloc_Original(key, propvar, pdff,
+                                                ppszDisplay);
+    };
+
+    PROPDESC_FORMAT_FLAGS pdffNew = pdff & ~PDFF_ALWAYSKB;
+    if (pdffNew == pdff) {
+        return original();
     }
 
-    return PSFormatForDisplayAlloc_Original(key, propvar, pdff, ppszDisplay);
+    void* retAddress = __builtin_return_address(0);
+
+    HMODULE explorerFrame = GetModuleHandle(L"explorerframe.dll");
+    if (!explorerFrame) {
+        return original();
+    }
+
+    HMODULE module;
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (PCWSTR)retAddress, &module) ||
+        module != explorerFrame) {
+        return original();
+    }
+
+    Wh_Log(L">");
+
+    return PSFormatForDisplayAlloc_Original(key, propvar, pdffNew, ppszDisplay);
 }
 
 using PSFormatForDisplay_t = decltype(&PSFormatForDisplay);
@@ -2368,11 +2391,35 @@ HRESULT WINAPI PSFormatForDisplay_Hook(const PROPERTYKEY& propkey,
                                        PROPDESC_FORMAT_FLAGS pdfFlags,
                                        LPWSTR pwszText,
                                        DWORD cchText) {
-    if (IsEqualPropertyKey(propkey, kPKEY_Size)) {
-        pdfFlags &= ~PDFF_ALWAYSKB;
+    auto original = [=]() {
+        return PSFormatForDisplay_Original(propkey, propvar, pdfFlags, pwszText,
+                                           cchText);
+    };
+
+    PROPDESC_FORMAT_FLAGS pdfFlagsNew = pdfFlags & ~PDFF_ALWAYSKB;
+    if (pdfFlagsNew == pdfFlags) {
+        return original();
     }
 
-    return PSFormatForDisplay_Original(propkey, propvar, pdfFlags, pwszText, cchText);
+    void* retAddress = __builtin_return_address(0);
+
+    HMODULE shell32 = GetModuleHandle(L"shell32.dll");
+    if (!shell32) {
+        return original();
+    }
+
+    HMODULE module;
+    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (PCWSTR)retAddress, &module) ||
+        module != shell32) {
+        return original();
+    }
+
+    Wh_Log(L">");
+
+    return PSFormatForDisplay_Original(propkey, propvar, pdfFlagsNew, pwszText,
+                                       cchText);
 }
 
 using PSStrFormatByteSizeW_t = void*(WINAPI*)(ULONGLONG size,
