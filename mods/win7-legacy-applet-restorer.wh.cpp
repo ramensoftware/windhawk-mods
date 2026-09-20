@@ -1796,9 +1796,24 @@ static std::vector<unsigned char> Base64Decode(const std::string& input) {
     return out;
 }
 
-// Decodes the embedded icon to a stable temp .ico file (created once) and
-// returns its path, or an empty string on failure. Reuses the task-links
-// mutex; re-creates the file if a previous temp cleanup removed it.
+// Returns the mod's dedicated storage directory (created if needed), with a
+// trailing backslash, or an empty string on failure. Files written here are
+// not subject to Storage Sense / Disk Cleanup and are removed by Windhawk
+// when the mod itself is removed, unlike files dropped in %TEMP%.
+static std::wstring ModStorageDir() {
+    wchar_t path[MAX_PATH * 2] = {};
+    const size_t len = Wh_GetModStoragePath(path, ARRAYSIZE(path));
+    if (!len || len >= ARRAYSIZE(path)) return L"";
+    CreateDirectoryW(path, nullptr);  // no-op if it already exists
+    return std::wstring(path) + L"\\";
+}
+
+// Decodes the embedded icon to a stable .ico file in the mod's storage
+// folder (created once) and returns its path, or an empty string on
+// failure. Reuses the task-links mutex; re-creates the file if a previous
+// cleanup removed it. Skips the decode/write entirely if the file is
+// already present, since a fresh process only has an empty in-memory cache,
+// not a missing file.
 std::wstring EnsureJoyControllerIconFile() {
     std::lock_guard<std::mutex> lock(g_taskLinksMutex);
     if (!g_joyIconFilePath.empty() &&
@@ -1806,6 +1821,17 @@ std::wstring EnsureJoyControllerIconFile() {
         return g_joyIconFilePath;
     }
     g_joyIconFilePath.clear();
+
+    const std::wstring dir = ModStorageDir();
+    if (dir.empty()) return L"";
+    const std::wstring path = dir + L"WindhawkGameControllers.ico";
+
+    if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        // Already written by this or another process; no need to
+        // re-decode and rewrite it.
+        g_joyIconFilePath = path;
+        return g_joyIconFilePath;
+    }
 
     std::string b64;
     for (const char* part : kJoyControllerIconBase64) b64 += part;
@@ -1815,10 +1841,7 @@ std::wstring EnsureJoyControllerIconFile() {
         return L"";
     }
 
-    wchar_t tempPath[MAX_PATH] = {};
-    if (!GetTempPathW(MAX_PATH, tempPath)) return L"";
-    const std::wstring path = std::wstring(tempPath) + L"WindhawkGameControllers.ico";
-    const std::wstring tmp  = path + L".tmp." + std::to_wstring(GetCurrentProcessId());
+    const std::wstring tmp = path + L".tmp." + std::to_wstring(GetCurrentProcessId());
     {
         std::ofstream f(tmp.c_str(), std::ios::binary | std::ios::trunc);
         if (!f) return L"";
@@ -1827,7 +1850,7 @@ std::wstring EnsureJoyControllerIconFile() {
     }
     if (!MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
         DeleteFileW(tmp.c_str());
-        Wh_Log(L"Game Controllers icon: failed to write the temp .ico file");
+        Wh_Log(L"Game Controllers icon: failed to write the .ico file");
         return L"";
     }
     g_joyIconFilePath = path;
@@ -2036,6 +2059,17 @@ std::wstring EnsureOfflineFilesIconFile() {
         }
         g_offlineFilesIconFilePath.clear();
 
+        const std::wstring dir = ModStorageDir();
+        if (dir.empty()) return L"";
+        const std::wstring path = dir + L"WindhawkOfflineFiles.ico";
+
+        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            // Already written by this or another process; no need to
+            // re-decode and rewrite it.
+            g_offlineFilesIconFilePath = path;
+            return g_offlineFilesIconFilePath;
+        }
+
         std::string b64;
         for (const char* part : kOfflineFilesIconBase64) b64 += part;
         std::vector<unsigned char> bytes = Base64Decode(b64);
@@ -2044,10 +2078,7 @@ std::wstring EnsureOfflineFilesIconFile() {
             return L"";
         }
 
-        wchar_t tempPath[MAX_PATH] = {};
-        if (!GetTempPathW(MAX_PATH, tempPath)) return L"";
-        const std::wstring path = std::wstring(tempPath) + L"WindhawkOfflineFiles.ico";
-        const std::wstring tmp  = path + L".tmp." + std::to_wstring(GetCurrentProcessId());
+        const std::wstring tmp = path + L".tmp." + std::to_wstring(GetCurrentProcessId());
 
         ScopedTempFile tmpGuard(tmp);
         bool written = false;
@@ -2061,11 +2092,11 @@ std::wstring EnsureOfflineFilesIconFile() {
             }
         }
         if (!written) {
-            Wh_Log(L"Offline Files icon: failed to write the temp .ico file");
+            Wh_Log(L"Offline Files icon: failed to write the .ico file");
             return L"";
         }
         if (!MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
-            Wh_Log(L"Offline Files icon: failed to move the temp .ico file into place");
+            Wh_Log(L"Offline Files icon: failed to move the .ico file into place");
             return L"";
         }
         tmpGuard.Release();
@@ -2398,12 +2429,10 @@ bool EnsureClassicTaskLinksFile() {
         g_classicTaskLinksFilePath.clear();
     }
 
-    wchar_t tempPath[MAX_PATH] = {};
-    DWORD length = GetTempPathW(MAX_PATH, tempPath);
-    if (!length || length >= MAX_PATH) return false;
+    const std::wstring dir = ModStorageDir();
+    if (dir.empty()) return false;
 
-    g_classicTaskLinksFilePath = std::wstring(tempPath) +
-                                L"WindhawkClassicPersonalizationTasks.xml";
+    g_classicTaskLinksFilePath = dir + L"WindhawkClassicPersonalizationTasks.xml";
 
     struct TaskLinkTexts {
         const wchar_t* locale;
@@ -5518,13 +5547,15 @@ BOOL Wh_ModInit() {
         g_joyCplExists.store(joyCplExists);
         g_offlineFilesDllExists.store(offlineDllExists);
     }
-    // Decode the embedded gamepad icon to a temp .ico up front (before
-    // InitDisplayNames builds the virtual entry that references it).
-    if (g_joyCplExists.load()) {
+    // Decode the embedded gamepad icon to a mod-storage .ico up front
+    // (before InitDisplayNames builds the virtual entry that references
+    // it). Only needed when the feature is actually enabled; a later live
+    // toggle is covered by the lazy re-ensure in TryProvideValue.
+    if (g_joyCplExists.load() && g_settings.enableGameControllers.load()) {
         if (EnsureJoyControllerIconFile().empty())
             Wh_Log(L"Game Controllers: embedded icon unavailable; entry will fall back to the default icon");
     }
-    if (g_offlineFilesDllExists.load()) {
+    if (g_offlineFilesDllExists.load() && g_settings.enableOfflineFiles.load()) {
         if (EnsureOfflineFilesIconFile().empty())
             Wh_Log(L"Offline Files: embedded icon unavailable; entry will fall back to the cscui.dll icon");
     }
