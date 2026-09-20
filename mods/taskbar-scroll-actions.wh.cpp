@@ -2,14 +2,14 @@
 // @id              taskbar-scroll-actions
 // @name            Taskbar Scroll Actions
 // @description     Assign actions for scrolling over the taskbar, including virtual desktop switching, brightness control, and microphone volume control
-// @version         1.2
+// @version         1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
 // @homepage        https://m417z.com/
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -ldxva2 -lgdi32 -lole32 -loleaut32 -lversion
+// @compilerOptions -lcomctl32 -ldxva2 -lgdi32 -lgdiplus -lole32 -loleaut32 -lversion
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -36,6 +36,10 @@ Currently, the following actions are supported:
 Brightness control works with both external monitors (via DDC/CI) and laptop
 internal displays (via WMI). For external monitors, DDC/CI must be enabled in
 the monitor's OSD settings.
+
+When brightness is changed by scrolling, a small overlay with the current
+brightness level follows the cursor along the taskbar. It can be turned off,
+and its duration and accent color can be changed, in the mod settings.
 
 **Note:** Some laptop touchpads might not support scrolling over the taskbar. A
 workaround is to use the "pinch to zoom" gesture. For details, check out [a
@@ -97,6 +101,17 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
   $description: >-
     Enable this option to customize the old taskbar on Windows 11 (if using
     ExplorerPatcher or a similar tool).
+- brightnessOverlay: true
+  $name: Brightness overlay
+  $description: >-
+    Show an overlay with the current brightness level next to the cursor when
+    the brightness is changed by scrolling.
+- overlayDurationMs: 1000
+  $name: Overlay duration (ms)
+  $description: How long the brightness overlay stays on screen (200-5000).
+- overlayAccentColor: "FFBE5C"
+  $name: Overlay accent color
+  $description: Color of the overlay progress bar, as a hex RRGGBB value.
 */
 // ==/WindhawkModSettings==
 
@@ -108,6 +123,7 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
 #include <commctrl.h>
 #include <comutil.h>
 #include <endpointvolume.h>
+#include <gdiplus.h>
 #include <highlevelmonitorconfigurationapi.h>
 #include <mmdeviceapi.h>
 #include <physicalmonitorenumerationapi.h>
@@ -117,6 +133,7 @@ issue](https://tweaker.userecho.com/topics/826-scroll-on-trackpadtouchpad-doesnt
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <optional>
 #include <string_view>
 #include <unordered_set>
@@ -153,6 +170,9 @@ struct ScrollActionEntry {
 struct {
     std::vector<ScrollActionEntry> scrollActions;
     bool oldTaskbarOnWin11;
+    bool brightnessOverlay;
+    int overlayDurationMs;
+    Gdiplus::Color overlayAccentColor;
 } g_settings;
 
 std::atomic<bool> g_initialized;
@@ -932,20 +952,20 @@ cleanup:
 // DDC/CI brightness control (for external monitors).
 // VCP code 0x10 = Luminance (Brightness) per MCCS standard.
 
-bool AdjustBrightnessDdcCi(HMONITOR hMonitor, int delta) {
+int AdjustBrightnessDdcCi(HMONITOR hMonitor, int delta) {
     DWORD numPhysical = 0;
     if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, &numPhysical) ||
         numPhysical == 0) {
-        return false;
+        return -1;
     }
 
     std::vector<PHYSICAL_MONITOR> physical(numPhysical);
     if (!GetPhysicalMonitorsFromHMONITOR(hMonitor, numPhysical,
                                          physical.data())) {
-        return false;
+        return -1;
     }
 
-    bool anySuccess = false;
+    int resultPercent = -1;
 
     for (DWORD i = 0; i < numPhysical; i++) {
         DWORD dwMin = 0;
@@ -968,22 +988,28 @@ bool AdjustBrightnessDdcCi(HMONITOR hMonitor, int delta) {
                physical[i].szPhysicalMonitorDescription, dwCurrent, newVal,
                dwMin, dwMax);
 
-        if (SetMonitorBrightness(physical[i].hPhysicalMonitor, newVal)) {
-            anySuccess = true;
+        if (SetMonitorBrightness(physical[i].hPhysicalMonitor, newVal) &&
+            resultPercent < 0) {
+            DWORD range = dwMax - dwMin;
+            resultPercent =
+                range > 0 ? MulDiv((int)(newVal - dwMin), 100, (int)range) : 0;
         }
     }
 
     DestroyPhysicalMonitors(numPhysical, physical.data());
-    return anySuccess;
+    return resultPercent;
 }
 
-bool AdjustBrightness(HWND hTaskbarWnd, int delta) {
+int AdjustBrightness(HWND hTaskbarWnd, int delta) {
     // Try DDC/CI first (works for external monitors, targets the specific
     // monitor the taskbar is on, and is faster than WMI).
     HMONITOR hMonitor =
         MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST);
-    if (hMonitor && AdjustBrightnessDdcCi(hMonitor, delta)) {
-        return true;
+    if (hMonitor) {
+        int percent = AdjustBrightnessDdcCi(hMonitor, delta);
+        if (percent >= 0) {
+            return percent;
+        }
     }
 
     // Fall back to WMI (works for laptop internal displays).
@@ -992,13 +1018,390 @@ bool AdjustBrightness(HWND hTaskbarWnd, int delta) {
         int newBrightness = std::clamp(brightness + delta, 0, 100);
         Wh_Log(L"WMI: Changing brightness from %d to %d", brightness,
                newBrightness);
-        return SetBrightnessWmi(newBrightness);
+        return SetBrightnessWmi(newBrightness) ? newBrightness : -1;
     }
 
-    return false;
+    return -1;
 }
 
 #pragma endregion  // brightness
+
+#pragma region brightness_overlay
+
+constexpr WCHAR kOverlayClassName[] = L"WindhawkTaskbarScrollActionsOverlay";
+constexpr UINT_PTR kOverlayHideTimerId = 1;
+constexpr UINT_PTR kOverlayFrameTimerId = 2;
+constexpr UINT kOverlayFrameIntervalMs = 16;
+constexpr float kOverlayEasing = 0.15f;
+constexpr int kOverlayWidth = 160;
+constexpr int kOverlayHeight = 34;
+constexpr float kOverlayPadding = 12.0f;
+
+struct {
+    HWND hWnd;
+    int x;
+    int y;
+    int width;
+    int height;
+    int targetX;
+    int targetY;
+    int targetPercent;
+    float percent;
+    float opacity;
+    float targetOpacity;
+} g_overlay;
+
+bool g_overlayClassRegistered;
+ULONG_PTR g_gdiplusToken;
+
+HINSTANCE GetCurrentModuleHandle() {
+    HMODULE hModule = nullptr;
+    GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                      (PCWSTR)&GetCurrentModuleHandle, &hModule);
+    return hModule;
+}
+
+Gdiplus::Color ParseAccentColor(PCWSTR text) {
+    if (!text || !*text) {
+        return Gdiplus::Color(255, 190, 92);
+    }
+
+    if (*text == L'#') {
+        text++;
+    }
+
+    if (wcslen(text) == 6 && wcsspn(text, L"0123456789abcdefABCDEF") == 6) {
+        return Gdiplus::Color(0xFF000000 | wcstoul(text, nullptr, 16));
+    }
+
+    Wh_Log(L"Invalid overlay accent color: %s", text);
+    return Gdiplus::Color(255, 190, 92);
+}
+
+void RoundedRectPath(Gdiplus::GraphicsPath& path,
+                     float x,
+                     float y,
+                     float width,
+                     float height,
+                     float radius) {
+    float diameter = radius * 2.0f;
+    path.Reset();
+    path.AddArc(x, y, diameter, diameter, 180.0f, 90.0f);
+    path.AddArc(x + width - diameter, y, diameter, diameter, 270.0f, 90.0f);
+    path.AddArc(x + width - diameter, y + height - diameter, diameter,
+                diameter, 0.0f, 90.0f);
+    path.AddArc(x, y + height - diameter, diameter, diameter, 90.0f, 90.0f);
+    path.CloseFigure();
+}
+
+POINT GetOverlayPosition(const RECT& rc, POINT pt, int width, int height) {
+    bool isHorizontal = (rc.right - rc.left) >= (rc.bottom - rc.top);
+    if (isHorizontal) {
+        return {std::clamp<LONG>(pt.x - width / 2, rc.left,
+                                 std::max<LONG>(rc.left, rc.right - width)),
+                rc.top + (rc.bottom - rc.top - height) / 2};
+    }
+
+    return {rc.left + (rc.right - rc.left - width) / 2,
+            std::clamp<LONG>(pt.y - height / 2, rc.top,
+                             std::max<LONG>(rc.top, rc.bottom - height))};
+}
+
+int StepToward(int current, int target) {
+    int diff = target - current;
+    if (diff == 0) {
+        return current;
+    }
+
+    int step = diff / 4;
+    if (step == 0) {
+        step = diff > 0 ? 1 : -1;
+    }
+
+    return current + step;
+}
+
+void PaintOverlay(HWND hWnd, HDC hdc) {
+    RECT rc;
+    GetClientRect(hWnd, &rc);
+    int width = rc.right - rc.left;
+    int height = rc.bottom - rc.top;
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+
+    Gdiplus::Bitmap bitmap(width, height, PixelFormat32bppARGB);
+    Gdiplus::Graphics graphics(&bitmap);
+    graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    graphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+    graphics.Clear(Gdiplus::Color(255, 28, 28, 30));
+
+    Gdiplus::Pen borderPen(Gdiplus::Color(255, 65, 65, 65), 1.0f);
+    graphics.DrawRectangle(&borderPen, 0, 0, width - 1, height - 1);
+
+    graphics.ScaleTransform(width / (float)kOverlayWidth,
+                            height / (float)kOverlayHeight);
+
+    Gdiplus::FontFamily fontFamily(L"Segoe UI");
+    Gdiplus::Font labelFont(&fontFamily, 9.0f, Gdiplus::FontStyleRegular,
+                            Gdiplus::UnitPoint);
+    Gdiplus::Font percentFont(&fontFamily, 9.5f, Gdiplus::FontStyleBold,
+                              Gdiplus::UnitPoint);
+    Gdiplus::SolidBrush labelBrush(Gdiplus::Color(255, 170, 170, 175));
+    Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 245, 245, 245));
+
+    float percent = std::clamp(g_overlay.percent, 0.0f, 100.0f);
+    Gdiplus::RectF headerRect(kOverlayPadding, 4.0f,
+                              kOverlayWidth - kOverlayPadding * 2, 16.0f);
+
+    Gdiplus::StringFormat leftFormat;
+    leftFormat.SetAlignment(Gdiplus::StringAlignmentNear);
+    leftFormat.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    leftFormat.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+    graphics.DrawString(L"Brightness", -1, &labelFont, headerRect, &leftFormat,
+                        &labelBrush);
+
+    Gdiplus::StringFormat rightFormat;
+    rightFormat.SetAlignment(Gdiplus::StringAlignmentFar);
+    rightFormat.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    rightFormat.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
+    WCHAR percentText[8];
+    swprintf_s(percentText, L"%d%%", (int)(percent + 0.5f));
+    graphics.DrawString(percentText, -1, &percentFont, headerRect,
+                        &rightFormat, &textBrush);
+
+    const float barX = kOverlayPadding;
+    const float barY = kOverlayHeight - 11.0f;
+    const float barWidth = kOverlayWidth - kOverlayPadding * 2;
+    const float barHeight = 5.0f;
+
+    Gdiplus::GraphicsPath path;
+    Gdiplus::SolidBrush trackBrush(Gdiplus::Color(255, 58, 58, 60));
+    RoundedRectPath(path, barX, barY, barWidth, barHeight, barHeight / 2.0f);
+    graphics.FillPath(&trackBrush, &path);
+
+    float fillWidth = barWidth * percent / 100.0f;
+    if (fillWidth > 0.1f) {
+        Gdiplus::SolidBrush fillBrush(g_settings.overlayAccentColor);
+        RoundedRectPath(path, barX, barY, std::max(fillWidth, barHeight),
+                        barHeight, barHeight / 2.0f);
+        graphics.FillPath(&fillBrush, &path);
+    }
+
+    Gdiplus::Graphics screen(hdc);
+    screen.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
+    screen.DrawImage(&bitmap, Gdiplus::Rect(0, 0, width, height));
+}
+
+void AnimateOverlay(HWND hWnd) {
+    bool repaint = false;
+
+    float percentDiff = g_overlay.targetPercent - g_overlay.percent;
+    if (std::abs(percentDiff) > 0.1f) {
+        g_overlay.percent += percentDiff * kOverlayEasing;
+        repaint = true;
+    } else if (percentDiff != 0.0f) {
+        g_overlay.percent = (float)g_overlay.targetPercent;
+        repaint = true;
+    }
+
+    float opacityDiff = g_overlay.targetOpacity - g_overlay.opacity;
+    if (opacityDiff != 0.0f) {
+        if (std::abs(opacityDiff) > 1.0f) {
+            g_overlay.opacity += opacityDiff * kOverlayEasing;
+        } else {
+            g_overlay.opacity = g_overlay.targetOpacity;
+        }
+
+        SetLayeredWindowAttributes(
+            hWnd, 0, (BYTE)std::clamp(g_overlay.opacity, 0.0f, 255.0f),
+            LWA_ALPHA);
+    }
+
+    if (g_overlay.opacity <= 0.0f && g_overlay.targetOpacity <= 0.0f) {
+        KillTimer(hWnd, kOverlayFrameTimerId);
+        ShowWindow(hWnd, SW_HIDE);
+        return;
+    }
+
+    int x = StepToward(g_overlay.x, g_overlay.targetX);
+    int y = StepToward(g_overlay.y, g_overlay.targetY);
+    if (x != g_overlay.x || y != g_overlay.y) {
+        g_overlay.x = x;
+        g_overlay.y = y;
+        SetWindowPos(hWnd, nullptr, x, y, 0, 0,
+                     SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER);
+    }
+
+    if (repaint) {
+        InvalidateRect(hWnd, nullptr, FALSE);
+    }
+
+    if (g_overlay.percent == (float)g_overlay.targetPercent &&
+        g_overlay.opacity == g_overlay.targetOpacity &&
+        g_overlay.x == g_overlay.targetX &&
+        g_overlay.y == g_overlay.targetY) {
+        KillTimer(hWnd, kOverlayFrameTimerId);
+    }
+}
+
+LRESULT CALLBACK OverlayWndProc(HWND hWnd,
+                                UINT uMsg,
+                                WPARAM wParam,
+                                LPARAM lParam) {
+    switch (uMsg) {
+        case WM_ERASEBKGND:
+            return 1;
+
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC hdc = BeginPaint(hWnd, &ps);
+            PaintOverlay(hWnd, hdc);
+            EndPaint(hWnd, &ps);
+            return 0;
+        }
+
+        case WM_TIMER:
+            if (wParam == kOverlayHideTimerId) {
+                KillTimer(hWnd, kOverlayHideTimerId);
+                g_overlay.targetOpacity = 0.0f;
+                SetTimer(hWnd, kOverlayFrameTimerId, kOverlayFrameIntervalMs,
+                         nullptr);
+            } else if (wParam == kOverlayFrameTimerId) {
+                AnimateOverlay(hWnd);
+            }
+            return 0;
+
+        case WM_NCHITTEST:
+            return HTTRANSPARENT;
+
+        case WM_DESTROY:
+            KillTimer(hWnd, kOverlayHideTimerId);
+            KillTimer(hWnd, kOverlayFrameTimerId);
+            g_overlay.hWnd = nullptr;
+            return 0;
+    }
+
+    return DefWindowProc(hWnd, uMsg, wParam, lParam);
+}
+
+bool EnsureOverlayWindow() {
+    if (g_overlay.hWnd) {
+        return true;
+    }
+
+    if (!g_gdiplusToken) {
+        Gdiplus::GdiplusStartupInput startupInput;
+        if (Gdiplus::GdiplusStartup(&g_gdiplusToken, &startupInput, nullptr) !=
+            Gdiplus::Ok) {
+            g_gdiplusToken = 0;
+            Wh_Log(L"GdiplusStartup failed");
+            return false;
+        }
+    }
+
+    HINSTANCE hInstance = GetCurrentModuleHandle();
+
+    if (!g_overlayClassRegistered) {
+        WNDCLASSEX wc = {sizeof(wc)};
+        wc.lpfnWndProc = OverlayWndProc;
+        wc.hInstance = hInstance;
+        wc.lpszClassName = kOverlayClassName;
+        if (!RegisterClassEx(&wc)) {
+            DWORD err = GetLastError();
+            if (err != ERROR_CLASS_ALREADY_EXISTS) {
+                Wh_Log(L"RegisterClassEx failed: %u", err);
+                return false;
+            }
+        }
+
+        g_overlayClassRegistered = true;
+    }
+
+    g_overlay.hWnd =
+        CreateWindowEx(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
+                           WS_EX_LAYERED | WS_EX_TRANSPARENT,
+                       kOverlayClassName, L"", WS_POPUP, 0, 0, kOverlayWidth,
+                       kOverlayHeight, nullptr, nullptr, hInstance, nullptr);
+    if (!g_overlay.hWnd) {
+        Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
+        return false;
+    }
+
+    return true;
+}
+
+void ShowBrightnessOverlay(HWND hTaskbarWnd, int percent, POINT pt) {
+    if (!g_settings.brightnessOverlay || !EnsureOverlayWindow()) {
+        return;
+    }
+
+    RECT rcTaskbar;
+    if (!GetWindowRect(hTaskbarWnd, &rcTaskbar)) {
+        return;
+    }
+
+    UINT dpi = GetDpiForWindowWithFallback(hTaskbarWnd);
+    int width = MulDiv(kOverlayWidth, dpi, 96);
+    int height = MulDiv(kOverlayHeight, dpi, 96);
+    POINT position = GetOverlayPosition(rcTaskbar, pt, width, height);
+
+    g_overlay.targetPercent = percent;
+    g_overlay.targetOpacity = 255.0f;
+    g_overlay.targetX = position.x;
+    g_overlay.targetY = position.y;
+
+    HMONITOR hCurrentMonitor =
+        MonitorFromWindow(g_overlay.hWnd, MONITOR_DEFAULTTONULL);
+    HMONITOR hTargetMonitor =
+        MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST);
+    bool monitorChanged =
+        (hCurrentMonitor != nullptr && hCurrentMonitor != hTargetMonitor);
+
+    bool visible = IsWindowVisible(g_overlay.hWnd);
+    if (!visible) {
+        g_overlay.percent = (float)percent;
+        g_overlay.opacity = 0.0f;
+        SetLayeredWindowAttributes(g_overlay.hWnd, 0, 0, LWA_ALPHA);
+    }
+
+    if (!visible || width != g_overlay.width || height != g_overlay.height ||
+        monitorChanged) {
+        g_overlay.x = position.x;
+        g_overlay.y = position.y;
+        g_overlay.width = width;
+        g_overlay.height = height;
+        SetWindowPos(g_overlay.hWnd, HWND_TOPMOST, position.x, position.y,
+                     width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        InvalidateRect(g_overlay.hWnd, nullptr, FALSE);
+    }
+
+    SetTimer(g_overlay.hWnd, kOverlayHideTimerId, g_settings.overlayDurationMs,
+             nullptr);
+    SetTimer(g_overlay.hWnd, kOverlayFrameTimerId, kOverlayFrameIntervalMs,
+             nullptr);
+}
+
+void DestroyBrightnessOverlay() {
+    if (g_overlay.hWnd) {
+        SendMessage(g_overlay.hWnd, WM_CLOSE, 0, 0);
+    }
+
+    if (g_overlayClassRegistered) {
+        UnregisterClass(kOverlayClassName, GetCurrentModuleHandle());
+        g_overlayClassRegistered = false;
+    }
+
+    if (g_gdiplusToken) {
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+    }
+
+    g_overlay = {};
+}
+
+#pragma endregion  // brightness_overlay
 
 // Use a keyboard simulation and not IVirtualDesktopManagerInternal, since the
 // latter switches desktop without an animation. See:
@@ -1192,11 +1595,18 @@ void InvokeScrollAction(HWND hWnd,
                 SwitchDesktopViaKeyboardShortcut(clicks);
                 break;
 
-            case ScrollAction::brightnessChange:
-                if (!AdjustBrightness(hWnd, clicks)) {
+            case ScrollAction::brightnessChange: {
+                int percent = AdjustBrightness(hWnd, clicks);
+                if (percent >= 0) {
+                    ShowBrightnessOverlay(
+                        hWnd, percent,
+                        {GET_X_LPARAM(lMousePosParam),
+                         GET_Y_LPARAM(lMousePosParam)});
+                } else {
                     Wh_Log(L"Error adjusting brightness");
                 }
                 break;
+            }
 
             case ScrollAction::micVolumeChange:
                 if (AddMicMasterVolumeLevelScalar(clicks * 0.01f)) {
@@ -1564,6 +1974,16 @@ void LoadSettings() {
     }
 
     g_settings.oldTaskbarOnWin11 = Wh_GetIntSetting(L"oldTaskbarOnWin11");
+    g_settings.brightnessOverlay = Wh_GetIntSetting(L"brightnessOverlay");
+    int overlayDurationMs = Wh_GetIntSetting(L"overlayDurationMs");
+    if (overlayDurationMs == 0) {
+        overlayDurationMs = 1000;
+    }
+    g_settings.overlayDurationMs = std::clamp(overlayDurationMs, 200, 5000);
+
+    PCWSTR overlayAccentColor = Wh_GetStringSetting(L"overlayAccentColor");
+    g_settings.overlayAccentColor = ParseAccentColor(overlayAccentColor);
+    Wh_FreeStringSetting(overlayAccentColor);
 }
 
 bool IsExplorerPatcherModule(HMODULE module) {
@@ -1704,6 +2124,7 @@ void Wh_ModUninit() {
     }
 
     MicVolUninit();
+    DestroyBrightnessOverlay();
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
@@ -1712,6 +2133,17 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     bool prevOldTaskbarOnWin11 = g_settings.oldTaskbarOnWin11;
 
     LoadSettings();
+
+    if (!g_settings.brightnessOverlay && g_overlay.hWnd &&
+        IsWindowVisible(g_overlay.hWnd)) {
+        ShowWindow(g_overlay.hWnd, SW_HIDE);
+        KillTimer(g_overlay.hWnd, kOverlayHideTimerId);
+        KillTimer(g_overlay.hWnd, kOverlayFrameTimerId);
+        g_overlay.opacity = 0.0f;
+        g_overlay.targetOpacity = 0.0f;
+    } else if (g_overlay.hWnd && IsWindowVisible(g_overlay.hWnd)) {
+        InvalidateRect(g_overlay.hWnd, nullptr, FALSE);
+    }
 
     *bReload = g_settings.oldTaskbarOnWin11 != prevOldTaskbarOnWin11;
 
