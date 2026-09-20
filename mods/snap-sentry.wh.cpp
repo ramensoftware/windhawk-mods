@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.21.0
+// @version         0.21.1
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -47,13 +47,16 @@ When **Remove identical recent screenshots** is enabled, SnapSentry compares a
 new image with images handled recently by this running instance, within a short
 window of about ten minutes. It works only with the **Image** clipboard mode,
 because that is the mode that makes a durable copy before cleanup. An exact
-byte-for-byte match is cleaned up on the automatic path using the configured
-Recycle Bin choice, even when **Delete the screenshot after copying** is off.
-The older copy is kept when it still exists. If normal automatic deletion is
+byte-for-byte match is always sent to the Recycle Bin on the automatic path,
+even when **Delete the screenshot after copying** is off or ordinary deletion
+is set to permanent. If recycling fails, the duplicate stays in place. The older
+copy must still contain the same bytes when cleanup runs. If normal deletion is
 on, it usually removes each earlier copy before a later identical image arrives,
 so there may be no keeper for duplicate cleanup to find. The comparison is
-session-only and does not scan or touch files that were already in the folder
-when watching began.
+limited to 64 recent entries, resets when settings change or folder watching
+restarts, and does not scan or touch files that were already in the folder when
+watching began. Images with different embedded metadata are kept even if they
+look the same.
 
 ## Which folder it watches
 
@@ -118,10 +121,10 @@ detection keeps only short-lived hashes, not image data.
   $description: Off by default, since deleting is the part you cannot undo. Removes the file once the copy has succeeded. Only applies when copying the picture or nothing, because copying the file or its location has to leave it in place. When copying the picture, a multi-frame image, such as a multi-page TIFF or animated GIF, is kept rather than deleted, since only its first frame can go on the clipboard.
 - recycle: true
   $name: Delete to the Recycle Bin
-  $description: When something is deleted, whether automatically or from the popup buttons, the file goes to the Recycle Bin so you can get it back. Turn this off to delete for good.
+  $description: Ordinary automatic deletion and the popup buttons send files to the Recycle Bin so you can get them back. Turn this off for permanent deletion. Identical recent screenshots always use the Recycle Bin regardless of this choice.
 - removeExactDuplicates: false
   $name: Remove identical recent screenshots
-  $description: In Image clipboard mode, cleans up an exact byte-for-byte repeat seen in the recent ten-minute window, only on the automatic action. It follows the Delete to the Recycle Bin choice, even when Delete the screenshot after copying is off. When normal automatic deletion is on, earlier copies are usually gone before a later duplicate arrives. The comparison resets when settings change or folder watching restarts. It never scans or touches older files, and the older copy is kept when it still exists.
+  $description: In Image clipboard mode, recycles an exact byte-for-byte repeat among up to 64 images handled in the last ten minutes, only on the automatic action and after its copy succeeds. Duplicates always go to the Recycle Bin, even if ordinary deletion is set to permanent or Delete the screenshot after copying is off. A failed recycle keeps the file. The earlier copy must still have identical contents when cleanup runs. Normal auto-delete usually removes earlier copies before a duplicate arrives. The comparison resets on settings changes or watcher restarts and never scans older files.
 
 # ---- The popup ----
 - showActionPopup: false
@@ -414,9 +417,10 @@ static void LoadSettings() {
     LeaveCriticalSection(&g_lock);
 }
 
-static Settings SnapshotSettings() {
+static Settings SnapshotSettings(ULONGLONG* generation = nullptr) {
     EnterCriticalSection(&g_lock);
     Settings s = g_settings;
+    if (generation) *generation = g_generation.load();
     LeaveCriticalSection(&g_lock);
     return s;
 }
@@ -424,6 +428,20 @@ static Settings SnapshotSettings() {
 // True if the stop event became signalled within the wait.
 static bool WaitStop(DWORD ms) {
     return WaitForSingleObject(g_stopEvent, ms) == WAIT_OBJECT_0;
+}
+
+// Only the worker resets this event. Reset under the settings lock so a reload
+// cannot be lost between checking the generation and arming the wait.
+static bool CleanupCancelled(DWORD ms, ULONGLONG generation) {
+    EnterCriticalSection(&g_lock);
+    bool changed = g_generation.load() != generation;
+    if (!changed) ResetEvent(g_settingsEvent);
+    LeaveCriticalSection(&g_lock);
+    if (changed) return true;
+    HANDLE waits[] = {g_stopEvent, g_settingsEvent};
+    DWORD result = WaitForMultipleObjects(ARRAYSIZE(waits), waits, FALSE, ms);
+    return result != WAIT_TIMEOUT || WaitStop(0) ||
+           g_generation.load() != generation;
 }
 
 // ============================================================================
@@ -1973,7 +1991,9 @@ public:
         if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
         file = INVALID_HANDLE_VALUE;
     }
-    bool Open(const std::wstring& path, const std::wstring& parent) {
+    bool Open(const std::wstring& path, const std::wstring& parent,
+              bool shareDelete = true) {
+        Close();
         auto split = path.find_last_of(L"\\/");
         std::wstring comparisonParent = parent;
         if (comparisonParent.size() > 1 &&
@@ -1992,42 +2012,65 @@ public:
         if (folder == INVALID_HANDLE_VALUE ||
             !GetFileInformationByHandle(folder, &info) ||
             !(info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
-            (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) return false;
-        file = CreateFileW(path.c_str(), GENERIC_READ | DELETE,
-                           FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
+            (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
+            Close();
+            return false;
+        }
+        file = CreateFileW(path.c_str(), GENERIC_READ,
+                           FILE_SHARE_READ | (shareDelete ? FILE_SHARE_DELETE : 0), nullptr,
                            OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
         if (file == INVALID_HANDLE_VALUE ||
             !GetFileInformationByHandle(file, &info) ||
             (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY |
                                       FILE_ATTRIBUTE_REPARSE_POINT)) ||
             info.nNumberOfLinks != 1) {
-            CloseFile();
+            Close();
             return false;
         }
         return true;
     }
 };
 
+// Streaming comparison avoids retaining screenshot bytes in the cache. Both
+// handles deny writes; the keeper also denies deletion until recycling finishes.
+static bool SameFileContents(HANDLE a, HANDLE b) {
+    LARGE_INTEGER start{};
+    if (!SetFilePointerEx(a, start, nullptr, FILE_BEGIN) ||
+        !SetFilePointerEx(b, start, nullptr, FILE_BEGIN)) return false;
+    std::array<BYTE, 64 * 1024> left, right;
+    for (;;) {
+        if (WaitStop(0)) return false;
+        DWORD n = 0, m = 0;
+        if (!ReadFile(a, left.data(), (DWORD)left.size(), &n, nullptr) ||
+            !ReadFile(b, right.data(), (DWORD)right.size(), &m, nullptr) ||
+            n != m || memcmp(left.data(), right.data(), n) != 0) return false;
+        if (!n) return true;
+    }
+}
+
 static AuditOutcome CleanupDuplicate(const std::wstring& path,
                                      ULONGLONG generation,
-                                     LockedCapture& capture,
-                                     const Settings& s) {
-    capture.Close();
+                                     LockedCapture& capture) {
+    // Keep the folder pinned for the shell operation, but release the incoming
+    // file handle so the shell can recycle it in place, with its original path.
+    capture.CloseFile();
     if (g_generation.load() != generation || WaitStop(0))
         return AuditOutcome::Kept;
-    AuditOutcome outcome = DeleteWatched(path, s);
-    return outcome == AuditOutcome::Recycled ? AuditOutcome::RecycledDuplicate
-                                             : outcome;
+    return RecycleFile(path) ? AuditOutcome::RecycledDuplicate : AuditOutcome::Kept;
 }
 
 static void ProcessOne(std::wstring path) {
-    Settings s = SnapshotSettings();
-    ULONGLONG generation = g_generation.load();
+    ULONGLONG generation;
+    Settings s = SnapshotSettings(&generation);
 
     DWORD t0 = GetTickCount();
     if (!WaitForStableFile(path)) {
         AuditResult(s, AuditOutcome::Skipped,
                     L"file was unavailable or processing stopped", path);
+        return;
+    }
+    if (g_generation.load() != generation || WaitStop(0)) {
+        AuditResult(s, AuditOutcome::Kept, L"processing cancelled or stopped", path);
         return;
     }
     if (s.logDetails) {
@@ -2060,6 +2103,10 @@ static void ProcessOne(std::wstring path) {
         return;
     }
     if (action == ACTION_DELETE) {
+        if (CleanupCancelled(0, generation)) {
+            AuditResult(s, AuditOutcome::Kept, L"requested deletion cancelled", path);
+            return;
+        }
         AuditResult(s, DeleteWatched(path, s), L"requested deletion", path);
         return;
     }
@@ -2119,19 +2166,20 @@ static void ProcessOne(std::wstring path) {
                     return;
                 }
                 capture.Close();
-                if (WaitStop(delay) || g_generation.load() != generation) {
+                if (CleanupCancelled(delay, generation)) {
                     AuditResult(s, AuditOutcome::Kept,
                                 L"duplicate cleanup cancelled or stopped", path);
                     return;
                 }
-                if (GetFileAttributesW(keeper.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                LockedCapture kept;
+                if (!kept.Open(keeper, s.folder, false)) {
                     AuditResult(s, AuditOutcome::Kept,
-                                L"earlier copy is gone", path);
+                                L"earlier copy is unavailable", path);
                     return;
                 }
                 LockedCapture again;
                 BY_HANDLE_FILE_INFORMATION afterCleanup{};
-                if (!again.Open(path, s.folder) ||
+                if (!again.Open(path, s.folder, false) ||
                     !GetFileInformationByHandle(again.file, &afterCleanup) ||
                     beforeCleanup.dwVolumeSerialNumber !=
                         afterCleanup.dwVolumeSerialNumber ||
@@ -2145,8 +2193,15 @@ static void ProcessOne(std::wstring path) {
                                 L"file changed before cleanup", path);
                     return;
                 }
+                std::array<BYTE, 32> currentDigest;
+                if (!HashFile(again.file, currentDigest) || currentDigest != digest ||
+                    !SameFileContents(again.file, kept.file)) {
+                    AuditResult(s, AuditOutcome::Kept,
+                                L"file contents changed before cleanup", path);
+                    return;
+                }
                 AuditOutcome outcome =
-                    CleanupDuplicate(path, generation, again, s);
+                    CleanupDuplicate(path, generation, again);
                 AuditResult(s, outcome, outcome == AuditOutcome::RecycledDuplicate
                                 ? L"exact duplicate"
                                 : outcome == AuditOutcome::Kept
@@ -2196,7 +2251,7 @@ static void ProcessOne(std::wstring path) {
 
     // With the popup, the countdown already elapsed, so delete immediately.
     DWORD delay = (s.popup || forceImage) ? 0 : (DWORD)s.delaySeconds * 1000;
-    if (WaitStop(delay)) {
+    if (CleanupCancelled(delay, generation)) {
         AuditResult(s, AuditOutcome::Kept,
                     L"cleanup cancelled or stopped", path);
         return;
