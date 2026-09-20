@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         3.0.1
+// @version         3.1.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -181,11 +181,11 @@ An intelligent, highly configurable system responsiveness and memory engine for 
 #include <chrono>
 #include <cstdint>
 #include <deque>
-#include <map>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -500,31 +500,31 @@ struct ThrottledProcessInfo {
     bool cpuSetsApplied = false;
     DWORD staleSampleCount = 0;
 };
-static std::map<DWORD, ThrottledProcessInfo>
+static std::unordered_map<DWORD, ThrottledProcessInfo>
     g_throttledProcesses; // pid -> info
 struct CpuSample {
     ULONGLONG kernelPlusUser100ns = 0;
     std::chrono::steady_clock::time_point sampleTime{};
 };
-static std::map<DWORD, CpuSample> g_cpuSamples;
+static std::unordered_map<DWORD, CpuSample> g_cpuSamples;
 
 // AI Workload Tracking (Inference Activity Timestamps)
-static std::map<DWORD, std::chrono::steady_clock::time_point>
+static std::unordered_map<DWORD, std::chrono::steady_clock::time_point>
     g_aiLastInferenceTime;
 // Last known working-set size per AI pid; a meaningful change is used as a
 // second "still active" signal alongside CPU usage (see
 // UpdateAiProcessActivity).
-static std::map<DWORD, SIZE_T> g_aiLastWorkingSetSize;
-static std::map<DWORD, CpuSample> g_aiCpuSamples;
+static std::unordered_map<DWORD, SIZE_T> g_aiLastWorkingSetSize;
+static std::unordered_map<DWORD, CpuSample> g_aiCpuSamples;
 
 // Focus / Trim Bookkeeping & Multitasking Tracker
 static std::mutex g_focusMapMutex;
-static std::map<DWORD, std::chrono::steady_clock::time_point>
+static std::unordered_map<DWORD, std::chrono::steady_clock::time_point>
     g_processLastFocusedTime;
 static std::deque<std::chrono::steady_clock::time_point> g_focusSwitchHistory;
 
 // Only touched by the worker thread.
-static std::map<DWORD, std::chrono::steady_clock::time_point>
+static std::unordered_map<DWORD, std::chrono::steady_clock::time_point>
     g_processLastTrimmed;
 
 // Game-sweep debounce; only touched by the hook thread.
@@ -773,7 +773,7 @@ static bool IsInList(const std::wstring& name,
 }
 
 static bool IsKnownAiProcess(const std::wstring& name) {
-    static const std::vector<std::wstring> kAiProcesses = {
+    static const std::unordered_set<std::wstring> kAiProcesses = {
         L"llama-server.exe",
         L"llama-cli.exe",
         L"lm studio.exe",
@@ -810,7 +810,7 @@ static bool IsKnownAiProcess(const std::wstring& name) {
         L"lm-studio.exe",
         L"diffusion-webui.exe",
         L"invokeai-desktop.exe"};
-    if (IsInList(name, kAiProcesses))
+    if (kAiProcesses.count(name) != 0)
         return true;
 
     if (name.starts_with(L"koboldcpp"))
@@ -822,12 +822,12 @@ static bool IsKnownAiProcess(const std::wstring& name) {
 // Critical OS authentication and security dialogs that must NEVER be touched,
 // regardless of user settings or desktop state.
 static bool IsEssentialSystemSecurityProcess(const std::wstring& name) {
-    static const std::vector<std::wstring> kEssential = {
+    static const std::unordered_set<std::wstring> kEssential = {
         L"logonui.exe", L"lockapp.exe", L"consent.exe", L"credentialuibroker.exe",
         L"smartscreen.exe", L"securityhealthservice.exe", L"securityhealthsystray.exe",
         L"splwow64.exe", L"printfilterpipelinesvc.exe", L"spoolsv.exe",
         L"wudfhost.exe", L"devicecensus.exe"};
-    return IsInList(name, kEssential);
+    return kEssential.count(name) != 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -856,6 +856,110 @@ static bool IsPackagedApp(HANDLE hProcess) {
     UINT32 len = 0;
     LONG rc = GetPackageFullName(hProcess, &len, nullptr);
     return rc != APPMODEL_ERROR_NO_PACKAGE && len > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Process Classification & Bounded O(1) Cache (FlyWire Root-ID Lookup)
+// ---------------------------------------------------------------------------
+
+enum class ProcessClass : uint8_t {
+    Unknown = 0,
+    System,
+    Packaged,
+    AiEngine,
+    UserApp
+};
+
+struct ProcessClassEntry {
+    ProcessClass cls = ProcessClass::Unknown;
+    std::chrono::steady_clock::time_point cachedAt{};
+};
+
+static std::mutex g_classifyCacheMutex;
+static std::unordered_map<DWORD, ProcessClassEntry> g_processClassCache;
+static constexpr auto kClassifyCacheTtl = std::chrono::seconds(60);
+
+static ProcessClass GetProcessClassCached(DWORD pid, const std::wstring& name,
+                                          HANDLE hProcess = nullptr) {
+    auto now = std::chrono::steady_clock::now();
+    {
+        std::lock_guard<std::mutex> lock(g_classifyCacheMutex);
+        auto it = g_processClassCache.find(pid);
+        if (it != g_processClassCache.end() &&
+            (now - it->second.cachedAt) < kClassifyCacheTtl) {
+            if (it->second.cls != ProcessClass::Unknown) {
+                if (it->second.cls == ProcessClass::UserApp && hProcess != nullptr) {
+                    if (IsPackagedApp(hProcess)) {
+                        it->second.cls = ProcessClass::Packaged;
+                    }
+                }
+                return it->second.cls;
+            }
+        }
+    }
+
+    ProcessClass cls = ProcessClass::UserApp;
+    if (IsEssentialSystemSecurityProcess(name)) {
+        cls = ProcessClass::System;
+    } else if (IsKnownAiProcess(name)) {
+        cls = ProcessClass::AiEngine;
+    } else if (hProcess != nullptr && IsPackagedApp(hProcess)) {
+        cls = ProcessClass::Packaged;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_classifyCacheMutex);
+        if (g_processClassCache.size() >= 512) {
+            g_processClassCache.clear();
+        }
+        g_processClassCache[pid] = {cls, now};
+    }
+    return cls;
+}
+
+static bool IsPackagedAppCached(DWORD pid, HANDLE hProcess) {
+    if (!hProcess) {
+        return false;
+    }
+    auto now = std::chrono::steady_clock::now();
+    {
+        std::lock_guard<std::mutex> lock(g_classifyCacheMutex);
+        auto it = g_processClassCache.find(pid);
+        if (it != g_processClassCache.end() &&
+            (now - it->second.cachedAt) < kClassifyCacheTtl) {
+            if (it->second.cls == ProcessClass::Packaged) {
+                return true;
+            }
+            if (it->second.cls == ProcessClass::System ||
+                it->second.cls == ProcessClass::AiEngine) {
+                return false;
+            }
+        }
+    }
+
+    bool isPkg = IsPackagedApp(hProcess);
+    {
+        std::lock_guard<std::mutex> lock(g_classifyCacheMutex);
+        if (g_processClassCache.size() >= 512) {
+            g_processClassCache.clear();
+        }
+        auto& entry = g_processClassCache[pid];
+        entry.cachedAt = now;
+        if (isPkg) {
+            entry.cls = ProcessClass::Packaged;
+        } else if (entry.cls == ProcessClass::Unknown) {
+            entry.cls = ProcessClass::UserApp;
+        }
+    }
+    return isPkg;
+}
+
+static void PruneClassifyCache(const std::unordered_set<DWORD>& alivePids) {
+    std::lock_guard<std::mutex> lock(g_classifyCacheMutex);
+    for (auto it = g_processClassCache.begin(); it != g_processClassCache.end();) {
+        it = (alivePids.count(it->first) == 0) ? g_processClassCache.erase(it)
+                                               : std::next(it);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1007,7 +1111,7 @@ static std::unordered_set<DWORD> GetActiveAudioProcessIds() {
 // and maintain a sticky audio grace period (hysteresis against buffer gaps).
 static std::chrono::steady_clock::time_point g_audioPidsCacheTime{};
 static std::unordered_set<DWORD> g_audioPidsCache;
-static std::map<DWORD, std::chrono::steady_clock::time_point>
+static std::unordered_map<DWORD, std::chrono::steady_clock::time_point>
     g_audioPidLastActive;
 
 static std::unordered_set<DWORD>
@@ -1024,79 +1128,75 @@ GetActiveAudioProcessIdsCached(const ModSettings& settings) {
         return g_audioPidsCache;
     }
 
-    std::unordered_set<DWORD> freshPids = GetActiveAudioProcessIds();
-    for (DWORD pid : freshPids) {
+    auto rawPids = GetActiveAudioProcessIds();
+    for (DWORD pid : rawPids) {
         g_audioPidLastActive[pid] = now;
     }
 
-    // 30-second sticky grace period: protects against transient buffer pauses,
-    // stream chunk switching, or silent intervals in video playback.
-    std::unordered_set<DWORD> shieldedPids;
+    // Retain PIDs that were active within the last 5 seconds (grace period)
+    std::unordered_set<DWORD> combined;
     for (auto it = g_audioPidLastActive.begin();
          it != g_audioPidLastActive.end();) {
-        auto sec =
-            std::chrono::duration_cast<std::chrono::seconds>(now - it->second)
-                .count();
-        if (sec <= 30) {
-            shieldedPids.insert(it->first);
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                           now - it->second)
+                           .count();
+        if (elapsed <= 5) {
+            combined.insert(it->first);
             ++it;
         } else {
             it = g_audioPidLastActive.erase(it);
         }
     }
 
-    g_audioPidsCache = std::move(shieldedPids);
+    g_audioPidsCache = combined;
     g_audioPidsCacheTime = now;
     return g_audioPidsCache;
 }
 
 // ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// Process Snapshot Helper
+// Process Snapshot Cache (single toolhelp snapshot per watchdog cycle)
 // ---------------------------------------------------------------------------
 
 struct ProcessSnapshotEntry {
     DWORD pid = 0;
     DWORD parentPid = 0;
-    std::wstring name;
     DWORD threadCount = 0;
+    std::wstring name;
 };
 
-// Short cache so passes immediately following each other don't walk
-// the whole process list repeatedly for the same answer.
-static std::mutex g_processSnapshotMutex;
 static std::chrono::steady_clock::time_point g_processSnapshotCacheTime{};
 static std::vector<ProcessSnapshotEntry> g_processSnapshotCache;
 
 static std::vector<ProcessSnapshotEntry> CaptureProcessSnapshotCached() {
-    std::lock_guard<std::mutex> lock(g_processSnapshotMutex);
     auto now = std::chrono::steady_clock::now();
     if (g_processSnapshotCacheTime.time_since_epoch().count() != 0 &&
         std::chrono::duration_cast<std::chrono::milliseconds>(
             now - g_processSnapshotCacheTime)
-                .count() < 2000) {
+                .count() < 1000) {
+        return g_processSnapshotCache;
+    }
+
+    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnap == INVALID_HANDLE_VALUE) {
         return g_processSnapshotCache;
     }
 
     std::vector<ProcessSnapshotEntry> result;
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snapshot != INVALID_HANDLE_VALUE) {
-        PROCESSENTRY32W pe;
-        pe.dwSize = sizeof(PROCESSENTRY32W);
-        if (Process32FirstW(snapshot, &pe)) {
-            do {
-                ProcessSnapshotEntry entry;
-                entry.pid = pe.th32ProcessID;
-                entry.parentPid = pe.th32ParentProcessID;
-                entry.name = ToLower(pe.szExeFile);
-                entry.threadCount = pe.cntThreads;
-                result.push_back(std::move(entry));
-            } while (Process32NextW(snapshot, &pe));
-        }
-        CloseHandle(snapshot);
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof(pe);
+    if (Process32FirstW(hSnap, &pe)) {
+        do {
+            ProcessSnapshotEntry entry;
+            entry.pid = pe.th32ProcessID;
+            entry.parentPid = pe.th32ParentProcessID;
+            entry.threadCount = pe.cntThreads;
+            entry.name = ToLower(pe.szExeFile);
+            result.push_back(std::move(entry));
+        } while (Process32NextW(hSnap, &pe));
     }
+    CloseHandle(hSnap);
 
-    g_processSnapshotCache = std::move(result);
+    g_processSnapshotCache = result;
     g_processSnapshotCacheTime = now;
     return g_processSnapshotCache;
 }
@@ -1106,7 +1206,7 @@ static std::vector<ProcessSnapshotEntry> CaptureProcessSnapshotCached() {
 // ---------------------------------------------------------------------------
 
 static void CollectDescendants(
-    DWORD rootPid, const std::map<DWORD, std::vector<DWORD>>& childrenOf,
+    DWORD rootPid, const std::unordered_map<DWORD, std::vector<DWORD>>& childrenOf,
     std::vector<DWORD>& outDescendants, std::unordered_set<DWORD>& visited) {
     auto it = childrenOf.find(rootPid);
     if (it == childrenOf.end())
@@ -1241,7 +1341,7 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
         if (newForegroundPid != 0 && newForegroundPid != currentPid &&
             newForegroundPid != 4) {
             std::vector<ProcessSnapshotEntry> snapshot = CaptureProcessSnapshotCached();
-            std::map<DWORD, std::vector<DWORD>> childrenOf;
+            std::unordered_map<DWORD, std::vector<DWORD>> childrenOf;
             for (const auto& entry : snapshot) {
                 childrenOf[entry.parentPid].push_back(entry.pid);
             }
@@ -1280,8 +1380,8 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
 
     // 2. Discover entire process family (root + all descendants: renderers, GPU, worker processes)
     std::vector<ProcessSnapshotEntry> snapshot = CaptureProcessSnapshotCached();
-    std::map<DWORD, std::vector<DWORD>> childrenOf;
-    std::map<DWORD, std::wstring> nameByPid;
+    std::unordered_map<DWORD, std::vector<DWORD>> childrenOf;
+    std::unordered_map<DWORD, std::wstring> nameByPid;
     for (const auto& entry : snapshot) {
         childrenOf[entry.parentPid].push_back(entry.pid);
         nameByPid[entry.pid] = entry.name;
@@ -1412,7 +1512,7 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
 
 static double
 SampleCpuPercent(DWORD pid, HANDLE hProcess,
-                 std::map<DWORD, CpuSample>& sampleMap = g_cpuSamples) {
+                 std::unordered_map<DWORD, CpuSample>& sampleMap = g_cpuSamples) {
     FILETIME creation, exit, kernel, user;
     if (!GetProcessTimes(hProcess, &creation, &exit, &kernel, &user))
         return -1.0;
@@ -1450,7 +1550,7 @@ struct IoSample {
     ULONGLONG writeBytes = 0;
     std::chrono::steady_clock::time_point sampleTime{};
 };
-static std::map<DWORD, IoSample> g_ioSamples;
+static std::unordered_map<DWORD, IoSample> g_ioSamples;
 
 // Detects active disk writes (e.g. copying files to a USB flash drive, external SSD, or disk).
 // Returns true if the process is actively writing at >= 500 KB/s.
@@ -1606,7 +1706,7 @@ struct WindowState {
 };
 
 static BOOL CALLBACK EnumWindowStateProc(HWND hwnd, LPARAM lParam) {
-    auto* map = reinterpret_cast<std::map<DWORD, WindowState>*>(lParam);
+    auto* map = reinterpret_cast<std::unordered_map<DWORD, WindowState>*>(lParam);
     if (!IsWindowVisible(hwnd))
         return TRUE;
 
@@ -1638,9 +1738,9 @@ static BOOL CALLBACK EnumWindowStateProc(HWND hwnd, LPARAM lParam) {
 }
 
 static std::chrono::steady_clock::time_point g_windowStateCacheTime{};
-static std::map<DWORD, WindowState> g_windowStateCache;
+static std::unordered_map<DWORD, WindowState> g_windowStateCache;
 
-static std::map<DWORD, WindowState> BuildWindowStateMapCached() {
+static std::unordered_map<DWORD, WindowState> BuildWindowStateMapCached() {
     auto now = std::chrono::steady_clock::now();
     if (g_windowStateCacheTime.time_since_epoch().count() != 0 &&
         std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1649,7 +1749,7 @@ static std::map<DWORD, WindowState> BuildWindowStateMapCached() {
         return g_windowStateCache;
     }
 
-    std::map<DWORD, WindowState> map;
+    std::unordered_map<DWORD, WindowState> map;
     EnumWindows(EnumWindowStateProc, reinterpret_cast<LPARAM>(&map));
     g_windowStateCache = map;
     g_windowStateCacheTime = now;
@@ -1663,12 +1763,12 @@ static std::map<DWORD, WindowState> BuildWindowStateMapCached() {
 static std::unordered_set<DWORD>
 ExpandAudioProcessShield(const std::unordered_set<DWORD>& rawAudioPids,
                          const std::vector<ProcessSnapshotEntry>& processList,
-                         const std::map<DWORD, std::vector<DWORD>>& childrenOf,
-                         const std::map<DWORD, DWORD>& parentOf) {
+                         const std::unordered_map<DWORD, std::vector<DWORD>>& childrenOf,
+                         const std::unordered_map<DWORD, DWORD>& parentOf) {
     if (rawAudioPids.empty())
         return {};
 
-    std::map<DWORD, std::wstring> procNames;
+    std::unordered_map<DWORD, std::wstring> procNames;
     for (const auto& entry : processList) {
         procNames[entry.pid] = entry.name;
     }
@@ -1680,10 +1780,10 @@ ExpandAudioProcessShield(const std::unordered_set<DWORD>& rawAudioPids,
         auto itName = procNames.find(aPid);
         if (itName != procNames.end()) {
             const std::wstring& aName = itName->second;
-            static const std::vector<std::wstring> kGenericAudioHosts = {
+            static const std::unordered_set<std::wstring> kGenericAudioHosts = {
                 L"svchost.exe", L"msedgewebview2.exe", L"node.exe", L"rundll32.exe",
                 L"dllhost.exe", L"cmd.exe", L"powershell.exe"};
-            if (!IsInList(aName, kGenericAudioHosts)) {
+            if (kGenericAudioHosts.count(aName) == 0) {
                 for (const auto& kv : procNames) {
                     if (kv.second == aName) {
                         activeAudioPids.insert(kv.first);
@@ -1789,8 +1889,8 @@ static bool IsVoluntaryComputeTask(
     DWORD threadCount,
     double cpuPercent,
     bool isThrottled,
-    const std::map<DWORD, DWORD>& parentOf,
-    const std::map<DWORD, WindowState>& windowStates,
+    const std::unordered_map<DWORD, DWORD>& parentOf,
+    const std::unordered_map<DWORD, WindowState>& windowStates,
     const ModSettings& settings,
     DWORD coreCount) {
     // 1. Cooperative priority check:
@@ -1945,10 +2045,10 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
 
     std::vector<ProcessSnapshotEntry> snapshot = CaptureProcessSnapshotCached();
     std::unordered_set<DWORD> alivePids;
-    std::map<DWORD, std::wstring> procNames;
-    std::map<DWORD, std::vector<DWORD>> childrenOf;
-    std::map<DWORD, DWORD> parentOf;
-    std::map<DWORD, DWORD> threadCounts;
+    std::unordered_map<DWORD, std::wstring> procNames;
+    std::unordered_map<DWORD, std::vector<DWORD>> childrenOf;
+    std::unordered_map<DWORD, DWORD> parentOf;
+    std::unordered_map<DWORD, DWORD> threadCounts;
     for (const auto& entry : snapshot) {
         alivePids.insert(entry.pid);
         procNames[entry.pid] = entry.name;
@@ -1973,15 +2073,18 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
         }
     }
 
-    std::map<DWORD, WindowState> windowStates = BuildWindowStateMapCached();
+    std::unordered_map<DWORD, WindowState> windowStates = BuildWindowStateMapCached();
 
     for (DWORD pid : alivePids) {
         if (pid == 0 || pid == 4 || pid == currentPid || fgFamilyPids.count(pid))
             continue;
 
         const std::wstring& name = procNames[pid];
-        if (IsInList(name, settings.excludedProcesses) ||
-            IsEssentialSystemSecurityProcess(name))
+        if (IsInList(name, settings.excludedProcesses))
+            continue;
+
+        ProcessClass procClass = GetProcessClassCached(pid, name);
+        if (procClass == ProcessClass::System)
             continue;
 
         // Session-0/service processes aren't something the user is "using";
@@ -1989,7 +2092,7 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
         if (!IsInteractiveSessionProcess(pid))
             continue;
 
-        bool isAi = settings.enableSmartAiOptimization && IsKnownAiProcess(name);
+        bool isAi = settings.enableSmartAiOptimization && (procClass == ProcessClass::AiEngine);
 
         // Audio stream protection for entire browser/media tree:
         // If active or recently active, immediately restore priority if throttled.
@@ -2027,7 +2130,7 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
 
         // Packaged (UWP/MSIX) apps are already suspended/managed by Windows
         // itself; leave them alone rather than fight with the OS scheduler.
-        if (IsPackagedApp(hProc)) {
+        if (IsPackagedAppCached(pid, hProc)) {
             CloseHandle(hProc);
             continue;
         }
@@ -2209,6 +2312,7 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
     PruneDeadPids(g_aiLastInferenceTime, alivePids);
     PruneDeadPids(g_aiLastWorkingSetSize, alivePids);
     PruneAccessDeniedImmunity(alivePids);
+    PruneClassifyCache(alivePids);
 }
 
 // ---------------------------------------------------------------------------
@@ -2216,7 +2320,7 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
 // ---------------------------------------------------------------------------
 
 static bool IsExcludedFromGameDetection(const std::wstring& name) {
-    static const std::vector<std::wstring> kNonGames = {
+    static const std::unordered_set<std::wstring> kNonGames = {
         L"chrome.exe", L"msedge.exe", L"firefox.exe", L"brave.exe",
         L"opera.exe", L"vivaldi.exe", L"zen.exe",
         L"powerpnt.exe", L"excel.exe", L"winword.exe", L"outlook.exe",
@@ -2227,7 +2331,7 @@ static bool IsExcludedFromGameDetection(const std::wstring& name) {
         L"mstsc.exe", L"teamviewer.exe", L"anydesk.exe",
         L"windowsterminal.exe", L"cmd.exe", L"powershell.exe", L"conhost.exe",
         L"explorer.exe"};
-    return IsInList(name, kNonGames);
+    return kNonGames.count(name) != 0;
 }
 
 static bool IsProcessInGamingDirectory(DWORD pid) {
@@ -2422,7 +2526,7 @@ TryTrimProcess(DWORD pid, const ModSettings& settings,
     // Packaged (UWP/MSIX) apps are managed by Windows' Process Lifetime Manager;
     // leave them alone rather than fighting the OS and causing Start/Search
     // latency.
-    if (IsPackagedApp(hProc)) {
+    if (IsPackagedAppCached(pid, hProc)) {
         CloseHandle(hProc);
         return result;
     }
@@ -2525,9 +2629,9 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
         alivePids.insert(entry.pid);
     }
 
-    std::map<DWORD, std::vector<DWORD>> childrenOf;
-    std::map<DWORD, DWORD> parentOf;
-    std::map<DWORD, const ProcessSnapshotEntry*> byPid;
+    std::unordered_map<DWORD, std::vector<DWORD>> childrenOf;
+    std::unordered_map<DWORD, DWORD> parentOf;
+    std::unordered_map<DWORD, const ProcessSnapshotEntry*> byPid;
     for (const auto& entry : processList) {
         childrenOf[entry.parentPid].push_back(entry.pid);
         parentOf[entry.pid] = entry.parentPid;
@@ -2538,7 +2642,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
     std::unordered_set<DWORD> activeAudioPids =
         ExpandAudioProcessShield(rawAudioPids, processList, childrenOf, parentOf);
 
-    std::map<DWORD, WindowState> windowStates = BuildWindowStateMapCached();
+    std::unordered_map<DWORD, WindowState> windowStates = BuildWindowStateMapCached();
 
     std::vector<AppTrimEntry> trimmedEntries;
     std::unordered_set<DWORD> handledPids;
@@ -2740,6 +2844,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
     }
     PruneDeadPids(g_processLastTrimmed, alivePids);
     PruneAccessDeniedImmunity(alivePids);
+    PruneClassifyCache(alivePids);
 
     return stats;
 }
@@ -3515,6 +3620,10 @@ void WhTool_ModUninit() {
     {
         std::lock_guard<std::mutex> lock(g_immunitySetMutex);
         g_accessDeniedImmunitySet.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_classifyCacheMutex);
+        g_processClassCache.clear();
     }
 
     if (g_stopEvent) {
