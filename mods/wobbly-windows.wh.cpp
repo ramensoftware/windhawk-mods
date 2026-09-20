@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.111
+// @version         0.112
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
@@ -251,6 +251,7 @@ enum WindowEventHookIndex
     FOREGROUND_HOOK,
     MINIMIZE_HOOK,
     DESTROY_HOOK,
+    SYSTEM_DESKTOP_HOOK,
     CLOAK_HOOK,
     WINDOW_EVENT_HOOK_COUNT
 };
@@ -369,6 +370,7 @@ DwmGetWindowAttribute_t g_dwmGetWindowAttribute = nullptr;
 HWND g_lastForegroundWindow = nullptr;
 UINT_PTR g_desktopVisibilityTimer = 0;
 ULONGLONG g_desktopVisibilityDeadline = 0;
+bool g_systemDesktopResetPending = false;
 struct MilMatrix3x2D;
 struct D2DMatrix3x2F;
 using CMatrixTransformProxyUpdateDouble_t = long(__cdecl*)(void* pThis,
@@ -6739,6 +6741,8 @@ static bool IsDesktopHiddenAppWindow(HWND hwnd)
 
 static void RefreshDesktopVisibility()
 {
+    bool resetAll = g_systemDesktopResetPending;
+    g_systemDesktopResetPending = false;
     struct ActiveWindow
     {
         int slotIndex;
@@ -6754,37 +6758,50 @@ static void RefreshDesktopVisibility()
         }
     }
     ReleaseSRWLockShared(&g_animationSlotsLock);
-    int cloakedCount = 0;
+    int retiredCount = 0;
     for (int i = 0; i < activeCount; i++)
     {
-        if (IsShellCloakedWindow(activeWindows[i].hwnd))
+        if (resetAll || IsShellCloakedWindow(activeWindows[i].hwnd))
         {
             RetireAnimationSlot(activeWindows[i].slotIndex, activeWindows[i].hwnd);
-            cloakedCount++;
+            retiredCount++;
         }
     }
     // Old desktop objects can remain valid while pointing at a hidden visual.
     // Force the delayed backfill to read the active CWindowData object graph.
     ClearAllDwmWindowMappings();
-    for (ObservedWindowState& observed : g_observedWindows)
+    if (resetAll)
     {
-        if (IsShellCloakedWindow(observed.hwnd))
+        ResetDragInputState();
+        for (ObservedWindowState& observed : g_observedWindows)
         {
             observed = {};
+        }
+        g_pendingMaximizedStateWindow.store(nullptr, std::memory_order_release);
+    }
+    else
+    {
+        for (ObservedWindowState& observed : g_observedWindows)
+        {
+            if (IsShellCloakedWindow(observed.hwnd))
+            {
+                observed = {};
+            }
         }
     }
     RememberObservedWindowState(GetForegroundWindow());
     QueueExistingWindowBackfill();
-    Wh_Log(L"Desktop visibility changed: cloakedAnimations=%d, visible windows refreshed",
-           cloakedCount);
+    Wh_Log(L"Desktop visibility changed: mode=%s retiredAnimations=%d",
+           resetAll ? L"system-desktop-reset" : L"shell-cloak", retiredCount);
 }
 
-static void ScheduleDesktopVisibilityRefresh()
+static void ScheduleDesktopVisibilityRefresh(bool resetAll = false)
 {
     if (g_unloading.load(std::memory_order_acquire))
     {
         return;
     }
+    g_systemDesktopResetPending |= resetAll;
     g_desktopVisibilityDeadline = GetTickCount64() + 300;
     if (g_desktopVisibilityTimer)
     {
@@ -6867,6 +6884,15 @@ static void CALLBACK WinEventCallback(HWINEVENTHOOK, DWORD event, HWND hwnd, LON
         }
         break;
     }
+    case EVENT_SYSTEM_DESKTOPSWITCH:
+    {
+        // This is a Win32 input-desktop transition (for example lock/UAC),
+        // not a Windows virtual desktop notification. DWM can replace its
+        // scene objects across it, so invalidate every animation on return.
+        g_lastForegroundWindow = hwnd ? hwnd : GetForegroundWindow();
+        ScheduleDesktopVisibilityRefresh(true);
+        break;
+    }
     default:
         break;
     }
@@ -6882,13 +6908,15 @@ static bool InitializeWindowEventHooks()
         const wchar_t* name;
     };
     constexpr DWORD standardFlags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
-    // Keep DWM-originated cloak events; only ordinary events skip our process.
+    // Keep DWM-originated cloak/system-desktop events; ordinary events skip our process.
     const HookSpec specs[WINDOW_EVENT_HOOK_COUNT] = {
         {EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND, standardFlags, L"move/size"},
         {EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, standardFlags, L"location"},
         {EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, standardFlags, L"foreground"},
         {EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, standardFlags, L"minimize"},
         {EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, standardFlags, L"destroy"},
+        {EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH, WINEVENT_OUTOFCONTEXT,
+         L"system desktop"},
         {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_CLOAKED, WINEVENT_OUTOFCONTEXT, L"window cloak"},
     };
     for (int i = 0; i < WINDOW_EVENT_HOOK_COUNT; i++)
@@ -6922,6 +6950,7 @@ static void UninitializeWindowEventHooks()
         g_desktopVisibilityTimer = 0;
     }
     g_desktopVisibilityDeadline = 0;
+    g_systemDesktopResetPending = false;
     ResetExistingWindowBackfill();
     StopAllAnimations();
     for (HWINEVENTHOOK& hook : g_windowEventHooks)
