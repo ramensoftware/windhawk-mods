@@ -19,6 +19,13 @@ Drag three fingers on a precision touchpad to move the window under the cursor,
 grabbing it from anywhere, not just the title bar. Lift your fingers to drop
 it. Inspired by three finger drag on macOS.
 
+![Moving a window with three fingers and snapping it at the side of the screen](https://raw.githubusercontent.com/RodrigoThomazi/three-finger-drag-assets/main/windows_snap.gif)
+
+Windows moves the window itself, so holding **Shift** hands the drag to
+PowerToys FancyZones, the way a title bar drag does:
+
+![Holding Shift while dragging, so that FancyZones takes the window](https://raw.githubusercontent.com/RodrigoThomazi/three-finger-drag-assets/main/fancyzones_snap.gif)
+
 ## Features
 
 - Moves the windows of all programs, including programs running as
