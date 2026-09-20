@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.3.1
+// @version         1.3.2
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -113,6 +113,12 @@ cycle the style as usual.
 **Ctrl+Alt+H works from anywhere**, so you can always close the overlay even
 when something else has focus.
 
+If you turn on **Click through to the desktop**, none of the mouse controls
+apply: every click goes to the desktop instead, which is the point of it. The
+hotkey still shows and hides the overlay, the global key still changes the
+palette if you have it on, and style, amount and the wheel parameter come from
+the settings.
+
 **Start active** brings the overlay up as soon as the mod loads. Windhawk loads
 its mods when you sign in, so that means it is waiting on your chosen display
 after every reboot, not just the time you ticked the box.
@@ -130,34 +136,44 @@ The mod has to be **enabled in Windhawk** for that to do anything, because
 the event only exists while the mod is loaded. The overlay itself does not
 have to be on screen.
 
-[The site](https://vector.akilluminati47.pages.dev/) has the same thing as a
-file you can just download, which also tells you when the mod is disabled
-rather than doing nothing.
-
-If you would rather **Esc** and **Space** reached the overlay from any
-application, turn on **Global Esc and Space** in the settings. It is off by
-default on purpose: Esc is a heavily used key, and a reflexive press meant for
-a dialog or a search box in another window would end the session and release
-the keep-awake with nothing on screen to say it had happened.
+If you would rather **Esc** and the palette key reached the overlay from any
+application, turn on **Global Esc and Ctrl+Shift+Space** in the settings. The
+palette key is a chord there on purpose: plain Space from anywhere would step
+the palette on every space you type. The whole setting is off by default
+because Esc is a heavily used key, and a reflexive press meant for a dialog or
+a search box in another window would end the session and release the
+keep-awake with nothing on screen to say it had happened.
 
 The overlay sits above your wallpaper but *below* your windows: anything you
 open covers it normally, and it never steals focus by itself or appears in
 Alt+Tab.
 
-It does cover the desktop icons on the display it runs on, and a click there
-goes to the overlay rather than the desktop. That is inherent to sitting above
-the wallpaper. The **Display** setting defaults to your primary screen, which
-is the right choice on a single monitor machine; on more than one, point it at
-whichever display you are not working on and your icons stay reachable. Either
-way the overlay only goes for good when you press Esc or toggle it off.
+It does cover the desktop icons on the display it runs on, and by default a
+click there goes to the overlay rather than the desktop. Turn on **Click
+through to the desktop** and every click passes to the desktop instead, so the
+icons keep working with the artwork drawn over them. The overlay is then shown
+and hidden by the toggle hotkey rather than by clicking it, which is the trade
+that setting makes.
+
+Drawing *behind* the icons rather than over them is possible, and two mods in
+this catalog do it, but only by injecting into `explorer.exe` and rendering
+into the window between the wallpaper and the icon view. This mod is built not
+to load into another process at all, so that route is closed to it by design.
+
+The **Display** setting defaults to your primary screen, which is the right
+choice on a single monitor machine; on more than one, point it at whichever
+display you are not working on. Either way the overlay only goes for good when
+you press Esc or toggle it off.
 
 ## Color
 
 Seven palettes: aurora, ember, ocean, neon, forest, mono, and custom, which
 takes its colors from the two custom settings. **Space** steps to the next one
-while the overlay is running, and the one you land on is remembered, so you can
-pick a palette by eye instead of by name. Changing the palette in the settings
-overrides whatever you stepped to, so the setting is never a dead control.
+while the overlay has focus, and **Ctrl+Shift+Space** does the same from
+anywhere if the global key setting is on. The one you land on is remembered,
+so you can pick a palette by eye instead of by name. Changing the palette in
+the settings overrides whatever you stepped to, so the setting is never a dead
+control.
 
 **Hue shift** rotates the whole palette by a fixed number of degrees. It is a
 dial across the color wheel rather than a switch: 180 of its 359 degrees lands
@@ -258,9 +274,15 @@ want the mod further out of the way of a long job:
 - step the **amount** down a notch or two with right click.
 - prefer flow field or harmonograph over contours.
 
-Nothing is simulated at all while the overlay is genuinely occluded, and on
-more than one display the overlays are presented without waiting on vsync, so
-they do not divide a single refresh between them.
+Nothing is simulated at all while the overlay is genuinely occluded. That is
+narrower than it sounds: with desktop composition on, which is always on these
+days, an ordinary maximized window over the overlay is still composited and
+does not count. What does count is the workstation locked, or a fullscreen
+exclusive window on that display.
+
+On more than one display the overlays are presented without waiting on vsync,
+so they do not divide a single refresh between them. The cost is some tearing
+in the artwork, which single display users do not get.
 
 ## Source and credits
 
@@ -1440,29 +1462,57 @@ published at
   $name:he: אטימות (%)
   $description: Below 100 the desktop shows through the overlay. Clamped to 10-100.
 - globalKeys: false
-  $name: Global Esc and Space
-  $name:es-ES: Esc y Espacio globales
-  $name:pt-BR: Esc e Espaço globais
-  $name:fr-FR: Échap et Espace globaux
-  $name:de-DE: Esc und Leertaste global
-  $name:it-IT: Esc e Spazio globali
-  $name:nl-NL: Esc en spatie overal
-  $name:pl-PL: Globalne Esc i spacja
-  $name:tr-TR: Genel Esc ve Boşluk
-  $name:ru-RU: Глобальные Esc и пробел
-  $name:uk-UA: Глобальні Esc і пробіл
-  $name:zh-CN: 全局 Esc 和空格
-  $name:zh-TW: 全域 Esc 與空白鍵
-  $name:ja-JP: Esc とスペースを全体で有効
-  $name:ko-KR: 전역 Esc 및 스페이스
-  $name:ar: Esc والمسافة بشكل عام
-  $name:he: Esc ורווח גלובליים
+  $name: Global Esc and Ctrl+Shift+Space
+  $name:es-ES: Esc y Ctrl+Mayús+Espacio globales
+  $name:pt-BR: Esc e Ctrl+Shift+Espaço globais
+  $name:fr-FR: Échap et Ctrl+Maj+Espace globaux
+  $name:de-DE: Esc und Strg+Umschalt+Leertaste global
+  $name:it-IT: Esc e Ctrl+Maiusc+Spazio globali
+  $name:nl-NL: Esc en Ctrl+Shift+spatie overal
+  $name:pl-PL: Globalne Esc i Ctrl+Shift+spacja
+  $name:tr-TR: Genel Esc ve Ctrl+Shift+Boşluk
+  $name:ru-RU: Глобальные Esc и Ctrl+Shift+пробел
+  $name:uk-UA: Глобальні Esc і Ctrl+Shift+пробіл
+  $name:zh-CN: 全局 Esc 和 Ctrl+Shift+空格
+  $name:zh-TW: 全域 Esc 與 Ctrl+Shift+空白鍵
+  $name:ja-JP: Esc と Ctrl+Shift+スペースを全体で有効
+  $name:ko-KR: 전역 Esc 및 Ctrl+Shift+스페이스
+  $name:ar: Esc و Ctrl+Shift+المسافة بشكل عام
+  $name:he: Esc ו-Ctrl+Shift+רווח גלובליים
   $description: >-
-    Let Esc close the overlay and Space change the palette from any application,
-    not just when the overlay has focus. Off by default: Esc is a heavily used
-    key, and a reflexive press in another window would end the session and
-    release the keep-awake without any visible sign. The toggle hotkey above
-    always works regardless of this setting.
+    Let Esc close the overlay and Ctrl+Shift+Space change the palette from any
+    application, not just when the overlay has focus. The palette key is a
+    chord on purpose: plain Space from anywhere would step the palette on every
+    space you type. Off by default because Esc is a heavily used key, and a
+    reflexive press in another window would end the session and release the
+    keep-awake without any visible sign. Plain Space still changes the palette
+    when the overlay itself has focus, and the toggle hotkey above always works
+    regardless of this setting.
+- clickThrough: false
+  $name: Click through to the desktop
+  $name:es-ES: Clics hacia el escritorio
+  $name:pt-BR: Cliques passam para a área de trabalho
+  $name:fr-FR: Clics traversants vers le bureau
+  $name:de-DE: Klicks zum Desktop durchlassen
+  $name:it-IT: Clic trasparenti verso il desktop
+  $name:nl-NL: Klikken doorlaten naar bureaublad
+  $name:pl-PL: Przepuszczaj kliknięcia na pulpit
+  $name:tr-TR: Tıklamalar masaüstüne geçsin
+  $name:ru-RU: Пропускать клики на рабочий стол
+  $name:uk-UA: Пропускати кліки на робочий стіл
+  $name:zh-CN: 鼠标点击穿透到桌面
+  $name:zh-TW: 滑鼠點擊穿透至桌面
+  $name:ja-JP: クリックをデスクトップに透過
+  $name:ko-KR: 클릭을 바탕 화면으로 통과
+  $name:ar: تمرير النقرات إلى سطح المكتب
+  $name:he: העברת לחיצות לשולחן העבודה
+  $description: >-
+    Pass every click straight through to the desktop, so the icons under the
+    overlay stay usable. Worth turning on if you run the overlay on your only
+    display. The trade is that the overlay can no longer be clicked or
+    scrolled: the toggle hotkey shows and hides it, and the global key above
+    changes the palette, but style, amount and the wheel parameter come from
+    these settings rather than from the screen.
 - keepAwake: true
   $name: Keep the PC awake
   $name:es-ES: Mantener el PC despierto
@@ -1533,7 +1583,6 @@ published at
 
 #include <windows.h>
 #include <d2d1.h>
-#include <dwrite.h>
 #include <dwrite_3.h>
 #include <windhawk_utils.h>
 #include <sddl.h>
@@ -1547,6 +1596,7 @@ published at
 #include <cwchar>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -1832,6 +1882,8 @@ static const Strings* StringsFromSystem() {
     return nullptr;
 }
 
+// Kept in preference to std::clamp, which returns a reference to one of its
+// arguments: std::clamp(x + 1, 0, 9) is a dangling read, and this is not.
 template <typename T>
 static T ClampT(T v, T lo, T hi) {
     return v < lo ? lo : (v > hi ? hi : v);
@@ -1858,7 +1910,9 @@ struct Rng {
         if (b <= a) {
             return a;
         }
-        return a + (int)(Next() * (float)(b - a + 1)) % (b - a + 1);
+        // Next() is strictly below 1, so the cast already lands in [0, b-a]
+        // and the modulo this used to carry never had anything to do.
+        return a + (int)(Next() * (float)(b - a + 1));
     }
     float Sign() { return Next() < 0.5f ? -1.0f : 1.0f; }
 };
@@ -2801,7 +2855,9 @@ class GrowthScene : public Scene {
             }
         }
 
-        if (Total() < maxNodes_) {
+        // total, from the top of this step: nothing between there and here
+        // adds or removes a node, and Total() is a walk of every loop.
+        if (total < maxNodes_) {
             int grew = 0;
             for (size_t li = 0; li < loops_.size(); li++) {
                 std::vector<Node>& N = loops_[li].nodes;
@@ -3030,6 +3086,7 @@ struct Settings {
     int fps = 60;
     int opacity = 100;
     bool globalKeys = false;
+    bool clickThrough = false;
     bool keepAwake = true;
     bool startActive = false;
     bool workAreaOnly = false;
@@ -3094,7 +3151,7 @@ static void BuildPalette() {
     const Preset& chosen = kPresets[ClampT(g_paletteIndex, 0, kPaletteCount - 1)];
     g_palette.ink.clear();
 
-    if (std::wstring(chosen.name) == L"custom") {
+    if (wcscmp(chosen.name, L"custom") == 0) {
         g_palette.bg = RgbFromHex(g_settings.customBackground.empty()
                                       ? 0x05070d
                                       : ParseHex(g_settings.customBackground));
@@ -3990,8 +4047,25 @@ bool Overlay::Create() {
     // Bottom of the z-order: it sits above the wallpaper but under every
     // application window. Focusable on click so keyboard input reaches it, but
     // it is never raised.
+    //
+    // WS_EX_TRANSPARENT hands every click straight through to whatever is
+    // below, which at the bottom of the z-order is the desktop, so the icons
+    // the overlay is drawn over stay usable. WS_EX_NOACTIVATE goes with it:
+    // there is no point taking the focus for keys that can no longer be aimed
+    // at the window. The overlay is then driven by the toggle hotkey and, if
+    // it is on, the global key, which is what the setting says.
+    //
+    // WS_EX_LAYERED has to travel with them. Measured, not assumed: with
+    // WS_EX_TRANSPARENT alone a synthetic click still landed on the upper
+    // window, and only with both styles did it reach the one underneath. The
+    // pass through lives in the layered composition path, so at full opacity
+    // this is a layered window at alpha 255 rather than a plain one.
+    DWORD exStyle = WS_EX_TOOLWINDOW;
+    if (g_settings.clickThrough) {
+        exStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE;
+    }
     hwnd_ = CreateWindowExW(
-        WS_EX_TOOLWINDOW, kWindowClass, L"",
+        exStyle, kWindowClass, L"",
         WS_POPUP, rect_.left, rect_.top, rect_.right - rect_.left,
         rect_.bottom - rect_.top, nullptr, nullptr,
         g_modInstance, nullptr);
@@ -4001,10 +4075,15 @@ bool Overlay::Create() {
     }
     SetWindowLongPtrW(hwnd_, GWLP_USERDATA, (LONG_PTR)this);
 
-    if (g_settings.opacity < 100) {
+    // Verified rather than assumed: a WS_EX_LAYERED window that an
+    // ID2D1HwndRenderTarget presents to does honour the constant alpha on
+    // Windows 11, so this is a live control and not a dead one.
+    if (g_settings.opacity < 100 || g_settings.clickThrough) {
         SetWindowLongPtrW(hwnd_, GWL_EXSTYLE,
                           GetWindowLongPtrW(hwnd_, GWL_EXSTYLE) |
                               WS_EX_LAYERED);
+        // 255 at full opacity, which is what a click through window at 100
+        // gets: layered for the hit testing, unchanged on screen.
         BYTE a = (BYTE)(255 * g_settings.opacity / 100);
         SetLayeredWindowAttributes(hwnd_, 0, a, LWA_ALPHA);
     }
@@ -4575,10 +4654,12 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 // bit 30 is the previous key state: ignore auto-repeat so a
                 // held Space does not race through every palette.
                 //
-                // With Global Esc and Space on, the hook has already handled
-                // this press and the key reaches the focused overlay as well,
-                // which would step the palette twice for one press.
-                if (!(lp & (1 << 30)) && !g_kbdHookLive) {
+                // Ctrl+Shift+Space belongs to the global hook. If that is live
+                // it has already handled the press, and handling it here too
+                // would step the palette twice for one press.
+                bool chord = (GetKeyState(VK_CONTROL) & 0x8000) != 0 &&
+                             (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                if (!(lp & (1 << 30)) && !(chord && g_kbdHookLive)) {
                     Controller_RequestPalette();
                 }
                 return 0;
@@ -4660,6 +4741,13 @@ static int FirstEnabledStyle() {
 static std::atomic<bool> g_stateDirty{false};
 static int g_pendingStyle = 0, g_pendingAmount = 2, g_pendingParam = 500;
 
+// The palette gets its own flag rather than sharing g_stateDirty. The pending
+// style, amount and parameter above start at the hardcoded defaults and are
+// only filled in by SaveState, so a palette step flushing the shared flag
+// would write those defaults over whatever the user had actually set.
+static std::atomic<bool> g_paletteDirty{false};
+static int g_pendingPalette = 0, g_pendingPaletteFrom = 0;
+
 // Seconds since the last change, counted only while something is unsaved. The
 // flush used to happen on hide alone, so a sign-out or a reboot that took the
 // process down without an unload lost whatever style, amount and parameter the
@@ -4677,16 +4765,30 @@ static void SaveState(const Overlay* ov) {
     g_stateQuiet = 0;   // each change restarts the quiet period
 }
 
+static void SavePalette(int index, int from) {
+    g_pendingPalette = index;
+    g_pendingPaletteFrom = from;
+    g_paletteDirty = true;
+    g_stateQuiet = 0;
+}
+
+static bool StatePending() {
+    return g_stateDirty || g_paletteDirty;
+}
+
 static void FlushState() {
-    if (!g_stateDirty.exchange(false)) {
-        return;
+    if (g_stateDirty.exchange(false)) {
+        Wh_SetIntValue(L"state.style", g_pendingStyle);
+        Wh_SetIntValue(L"state.amount", g_pendingAmount);
+        Wh_SetIntValue(L"state.param", g_pendingParam);
+        // Stamp which setting values this state was derived from.
+        Wh_SetIntValue(L"state.amountFrom", g_settings.amount);
+        Wh_SetIntValue(L"state.paramFrom", g_settings.parameter);
     }
-    Wh_SetIntValue(L"state.style", g_pendingStyle);
-    Wh_SetIntValue(L"state.amount", g_pendingAmount);
-    Wh_SetIntValue(L"state.param", g_pendingParam);
-    // Stamp which setting values this state was derived from.
-    Wh_SetIntValue(L"state.amountFrom", g_settings.amount);
-    Wh_SetIntValue(L"state.paramFrom", g_settings.parameter);
+    if (g_paletteDirty.exchange(false)) {
+        Wh_SetIntValue(L"state.palette", g_pendingPalette);
+        Wh_SetIntValue(L"state.paletteFrom", g_pendingPaletteFrom);
+    }
 }
 
 // Clicks fan out to every overlay, the way the rotation timer already does,
@@ -4741,9 +4843,10 @@ static void Controller_Wheel(Overlay* ov, int delta) {
 static void Controller_CyclePalette() {
     g_paletteIndex = (g_paletteIndex + 1) % kPaletteCount;
     BuildPalette();
-    Wh_SetIntValue(L"state.palette", g_paletteIndex);
-    Wh_SetIntValue(L"state.paletteFrom",
-                   PaletteIndexFromName(g_settings.palette));
+    // Deferred, the way a wheel notch is. Stepped quickly this used to be two
+    // writes per press going straight to the store, which is the sort of thing
+    // that has no business happening several times a second.
+    SavePalette(g_paletteIndex, PaletteIndexFromName(g_settings.palette));
     for (size_t i = 0; i < g_overlays.size(); i++) {
         g_overlays[i]->FlashHud();
     }
@@ -4788,9 +4891,16 @@ static void Controller_RequestRebuild() {
     }
 }
 
-// A global low-level keyboard hook so Space and Esc work even when no overlay
-// owns the keyboard focus. It only watches the two keys and never swallows
-// anything, so normal typing is completely unaffected.
+// A global low-level keyboard hook so the overlay can be reached when it does
+// not own the keyboard focus. It never swallows anything, so normal typing is
+// completely unaffected.
+//
+// Esc is taken plain: it is a one shot with a visible result, and an escape
+// hatch that needs a chord is not much of an escape hatch. The palette key is
+// not taken plain, because plain Space from anywhere means every space in
+// every sentence you type steps the palette, silently and hundreds of times an
+// hour. Globally it is Ctrl+Shift+Space; plain Space still works when the
+// overlay itself has the focus, where you asked for it by clicking.
 // The hook gets no repeat flag, so the key down is latched here to step once
 // per physical press. It lives outside the callback because the hook can be
 // torn down and reinstalled with the key still held.
@@ -4808,7 +4918,9 @@ static LRESULT CALLBACK LowLevelKbdProc(int nCode, WPARAM wParam, LPARAM lParam)
         } else if (k->vkCode == VK_SPACE) {
             // The hook gets no repeat flag, so latch the key down ourselves
             // and step once per physical press.
-            if (down && !g_spaceHeld) {
+            bool chord = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
+                         (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+            if (down && chord && !g_spaceHeld) {
                 g_spaceHeld = true;
                 Controller_RequestPalette();
             } else if (up) {
@@ -5208,8 +5320,9 @@ static bool ParseHotkey(const std::wstring& s, UINT* mods, UINT* vk) {
     // that letter everywhere, all session, with nothing on screen to say why.
     // Function keys are a fair thing to take bare; letters and digits are not.
     if (m == 0 && !(key >= VK_F1 && key <= VK_F24)) {
-        Wh_Log(L"Hotkey '%s' has no modifier; letters and digits need one",
-               s.c_str());
+        // The caller reports the failure, with the rule, for every way of
+        // getting here. Logging it again from the parser was the same line
+        // twice for one bad string.
         return false;
     }
     *mods = m | MOD_NOREPEAT;
@@ -5297,6 +5410,7 @@ static void LoadSettings() {
     g_settings.fps = ClampT(Wh_GetIntSetting(L"fps"), 10, 240);
     g_settings.opacity = ClampT(Wh_GetIntSetting(L"opacity"), 10, 100);
     g_settings.globalKeys = Wh_GetIntSetting(L"globalKeys") != 0;
+    g_settings.clickThrough = Wh_GetIntSetting(L"clickThrough") != 0;
     g_settings.keepAwake = Wh_GetIntSetting(L"keepAwake") != 0;
     g_settings.startActive = Wh_GetIntSetting(L"startActive") != 0;
     g_settings.workAreaOnly = Wh_GetIntSetting(L"workAreaOnly") != 0;
@@ -5324,7 +5438,9 @@ static void RegisterHotkeyFromSettings() {
     } else if (!g_settings.hotkey.empty()) {
         // An empty value is the documented way to turn the hotkey off, so
         // only a non-empty string that will not parse is worth reporting.
-        Wh_Log(L"Could not parse the hotkey '%s'; no hotkey is registered",
+        Wh_Log(L"Could not parse the hotkey '%s'; no hotkey is registered. "
+               L"Letters and digits need a modifier such as Ctrl or Alt; "
+               L"function keys can stand on their own",
                g_settings.hotkey.c_str());
     }
 }
@@ -5547,7 +5663,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         lastRender = now;
         float dt = since > 0.25f ? 0.25f : since;
 
-        if (g_stateDirty) {
+        if (StatePending()) {
             g_stateQuiet += dt;
             if (g_stateQuiet >= kStateFlushDelay) {
                 FlushState();
