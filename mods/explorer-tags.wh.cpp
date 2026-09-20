@@ -2,7 +2,7 @@
 // @id              explorer-tags
 // @name            Explorer Tags
 // @description     Colored tags panel at the bottom of File Explorer's navigation pane, plus a Tags submenu in the file context menu
-// @version         0.6.1
+// @version         0.7.0
 // @author          buedgik
 // @github          https://github.com/buedgik
 // @homepage        https://github.com/buedgik/explorer-tags
@@ -54,8 +54,15 @@ old name back brings it back.
 The record of what is tagged is the mod's own bookkeeping, so it lives in the
 storage Windhawk keeps for the mod, in a folder per user. It stays outside the
 tags folder: deleting or moving the tags folder doesn't lose anything, the
-shortcuts are recreated. Uninstalling the mod (not merely disabling it) takes
-the record with it; the tag folders stay.
+shortcuts are recreated.
+
+It works the other way round too: the shortcuts are enough to rebuild the
+record. A shortcut in a tag's folder that the record doesn't know about is
+taken in, so losing the record — uninstalling the mod takes its storage with
+it — costs nothing while the tag folders are there, and you can tag a file
+by putting a shortcut to it in a tag's folder yourself. A tag whose name is
+no longer in the settings can't be rebuilt: put the name back and its files
+come back with it.
 
 ## Worth knowing
 
@@ -64,13 +71,10 @@ the record with it; the tag folders stay.
   exactly like a shortcut you deleted, and the tag goes with it. For the same
   reason, keep it somewhere quiet: the whole folder tree is watched, so a busy
   folder means constant rechecking.
-- **Deleting a shortcut removes the tag; renaming or moving one isn't
-  tracked.** A renamed shortcut is left behind as a file the mod no longer
-  knows about, and moving a shortcut from one tag's folder into another's
-  removes the first tag without adding the second. Restoring a deleted
-  shortcut from the Recycle Bin doesn't bring the tag back either: the tag
-  went when the shortcut did, and what comes back is a file the mod doesn't
-  know.
+- **What is in the tag folders is what is tagged.** Deleting a shortcut
+  removes the tag; renaming one keeps it; moving one into another tag's
+  folder moves the tag; restoring one from the Recycle Bin brings the tag
+  back. A shortcut that points at nothing is left alone, never deleted.
 - **A tagged file in the Recycle Bin keeps its tags.** Its shortcut stays,
   pointing where the file used to be, so restoring the file makes it work
   again. Emptying the bin is what finally removes the tag.
@@ -835,14 +839,32 @@ bool ReadShortcutTarget(const std::wstring& lnkPath, std::wstring& target) {
     return ok;
 }
 
-// The only function that deletes: only a .lnk directly inside the tag's folder.
-void DeleteLinkIn(const std::wstring& folder, const std::wstring& name) {
-    if (IsSafeLinkName(name)) {
-        std::wstring lnkPath = folder + L"\\" + name;
-        if (DeleteFileW(lnkPath.c_str())) {
-            NotifyShell(SHCNE_DELETE, lnkPath);
-        }
+// The only function that deletes: only a .lnk directly inside the tag's
+// folder. Says whether the shortcut is gone, which the caller has to know:
+// one left behind is one the folder still counts as tagged.
+bool DeleteLinkIn(const std::wstring& folder, const std::wstring& name) {
+    if (!IsSafeLinkName(name)) {
+        return false;
     }
+    std::wstring lnkPath = folder + L"\\" + name;
+    if (!DeleteFileW(lnkPath.c_str())) {
+        DWORD err = GetLastError();
+        if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) {
+            return true;
+        }
+        // Read-only is worth one more try: a shortcut restored from a backup
+        // or a copy carries the attribute and nothing else is in the way.
+        if (err == ERROR_ACCESS_DENIED &&
+            SetFileAttributesW(lnkPath.c_str(), FILE_ATTRIBUTE_NORMAL) &&
+            DeleteFileW(lnkPath.c_str())) {
+            NotifyShell(SHCNE_DELETE, lnkPath);
+            return true;
+        }
+        Wh_Log(L"Couldn't delete %s: %u", lnkPath.c_str(), err);
+        return false;
+    }
+    NotifyShell(SHCNE_DELETE, lnkPath);
+    return true;
 }
 
 std::wstring LinkBaseName(const std::wstring& path) {
@@ -913,8 +935,101 @@ struct Pending {
 
 // The shortcuts to delete are only deleted after the database has been
 // saved: if saving fails, the database still points to shortcuts that exist.
+std::wstring LowerPath(const std::wstring& path) {
+    std::wstring lower = path;
+    if (!lower.empty()) {
+        CharLowerBuffW(lower.data(), (DWORD)lower.size());
+    }
+    return lower;
+}
+
+// Shortcuts in a tag's folder that no row accounts for. Taking them in is how
+// a lost record comes back: the folder says which tag, the shortcut says which
+// file, and the file says who it is. It is also what makes dropping a shortcut
+// into a tag's folder, or moving one there from another tag, count as tagging.
+//
+// Only in a folder the mod marked as its own, and never for a shortcut that
+// points at nothing or that this sync is about to delete.
+void AdoptStrays(std::vector<Row>& rows, const std::wstring& tag, const std::wstring& folder,
+                 const std::wstring& root, const Pending& pending, bool& changed) {
+    std::unordered_set<std::wstring> known;
+    std::unordered_set<std::wstring> taggedPaths;
+    std::unordered_set<std::wstring> taggedIds;
+    for (const auto& r : rows) {
+        if (r.tag == tag) {
+            known.insert(LowerPath(r.lnk));
+            taggedPaths.insert(LowerPath(r.path));
+            if (!r.fileId.empty()) {
+                taggedIds.insert(r.volume + L"\t" + r.fileId);
+            }
+        }
+    }
+    for (const auto& d : pending.deletes) {
+        if (_wcsicmp(d.folder.c_str(), folder.c_str()) == 0) {
+            known.insert(LowerPath(d.lnk));
+        }
+    }
+
+    WIN32_FIND_DATAW find;
+    HANDLE h = FindFirstFileExW((folder + L"\\*.lnk").c_str(), FindExInfoBasic, &find,
+                                FindExSearchNameMatch, nullptr, 0);
+    if (h == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    do {
+        if (Stopping()) {
+            break;
+        }
+        if (find.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            continue;
+        }
+        std::wstring name = find.cFileName;
+        if (!IsSafeLinkName(name) || !known.insert(LowerPath(name)).second) {
+            continue;
+        }
+        std::wstring target;
+        if (!ReadShortcutTarget(folder + L"\\" + name, target) || target.empty() ||
+            !IsUtf8Safe(target) || CheckExists(target) != Exists::Yes) {
+            // Points nowhere, or at a name that wouldn't survive being
+            // saved: left alone, not deleted. It isn't ours to remove.
+            continue;
+        }
+        // The tag folders themselves don't get tagged, the same rule the
+        // menu follows: a shortcut to a shortcut, or to another tag's
+        // folder, would make the mod manage its own insides.
+        std::wstring rootPrefix = root + L"\\";
+        if (_wcsicmp(target.c_str(), root.c_str()) == 0 ||
+            (target.size() > rootPrefix.size() &&
+             _wcsnicmp(target.c_str(), rootPrefix.c_str(), rootPrefix.size()) == 0)) {
+            continue;
+        }
+        // Two shortcuts to the same file under one tag are one tag. By
+        // identity first, like everywhere else: the same file reached
+        // through another spelling is the same file.
+        std::wstring volume, fileId;
+        GetFileIdentity(target, volume, fileId);
+        if (!fileId.empty() && !taggedIds.insert(volume + L"\t" + fileId).second) {
+            continue;
+        }
+        if (!taggedPaths.insert(LowerPath(target)).second) {
+            continue;
+        }
+        Row row;
+        row.tag = tag;
+        row.lnk = name;
+        row.path = target;
+        row.volume = volume;
+        row.fileId = fileId;
+        rows.push_back(row);
+        changed = true;
+        Wh_Log(L"Took in %s under %s", name.c_str(), tag.c_str());
+    } while (FindNextFileW(h, &find));
+    FindClose(h);
+}
+
 void SyncTag(std::vector<Row>& rows, const std::wstring& tag, const std::wstring& folder,
-             bool ignoreMarkers, VolumeHandles& volumes, bool& changed, Pending& pending) {
+             const std::wstring& root, bool ignoreMarkers, VolumeHandles& volumes, bool& changed,
+             Pending& pending) {
     Exists folderState = CheckExists(folder);
     if (folderState == Exists::Error) {
         return;
@@ -949,6 +1064,9 @@ void SyncTag(std::vector<Row>& rows, const std::wstring& tag, const std::wstring
     // from another time, and the shortcuts may have different names.
     bool trusted = markerState == Exists::Yes && !ignoreMarkers;
     bool complete = true;
+    // Whether this folder is the mod's: it made it, or it keeps a tag's
+    // shortcuts in it. See the marker at the end.
+    bool ours = folderState == Exists::No;
 
     for (size_t i = 0; i < rows.size();) {
         if (Stopping()) {
@@ -958,6 +1076,9 @@ void SyncTag(std::vector<Row>& rows, const std::wstring& tag, const std::wstring
             i++;
             continue;
         }
+        // A row of this tag lives in this folder, so the folder is the
+        // mod's whoever created it.
+        ours = true;
         Row& r = rows[i];
 
         Exists lnkState = CheckExists(folder + L"\\" + r.lnk);
@@ -1022,10 +1143,23 @@ void SyncTag(std::vector<Row>& rows, const std::wstring& tag, const std::wstring
         i++;
     }
 
+    // Only in a folder that is ours and whose names are of this time: after
+    // the tags folder has been changed in the settings, the shortcuts in
+    // there are from another arrangement and the rows above are being
+    // rewritten anyway.
+    if (trusted) {
+        AdoptStrays(rows, tag, folder, root, pending, changed);
+    }
+
     // The marker only goes down after saving: if saving fails, the database
     // still has the shortcuts' old names, and a marked folder would remove
     // those tags.
-    if (!trusted && complete) {
+    //
+    // And only on a folder this mod put something in. Claiming one it merely
+    // found — the tags folder pointed at a place that already had a folder of
+    // that name in it — would hand every shortcut already in there to the
+    // tag on the next sync.
+    if (!trusted && complete && ours) {
         pending.markers.push_back(marker);
     }
 }
@@ -1057,14 +1191,6 @@ std::unordered_map<std::wstring, std::vector<std::wstring>> g_taggedByPath;
 std::unordered_map<std::wstring, std::wstring> g_linkTargets;     // lnk -> target
 std::unordered_set<std::wstring> g_readyFolders;  // tag folders known to exist
 SRWLOCK g_countsLock = SRWLOCK_INIT;
-
-std::wstring LowerPath(const std::wstring& path) {
-    std::wstring lower = path;
-    if (!lower.empty()) {
-        CharLowerBuffW(lower.data(), (DWORD)lower.size());
-    }
-    return lower;
-}
 
 void UpdateCounts(const std::vector<Row>& rows, const Settings& s) {
     std::vector<std::pair<std::wstring, int>> counts;
@@ -1181,19 +1307,29 @@ std::wstring LastRootPath() {
     return folder.empty() ? L"" : folder + L"\\last-root.txt";
 }
 
-bool RootChangedSinceLastSync(const Settings& s) {
+// "The folder was changed in the settings" and "I have no memory of any
+// folder" are not the same thing, and treating them alike deadlocked the
+// rebuild: the memory lives beside the record, so whatever takes the record
+// takes the memory too, and a folder that is only remembered once there are
+// rows could never be remembered again.
+enum class RootMemory { Same, Changed, Unknown };
+
+RootMemory LastRootState(const Settings& s) {
     std::wstring file = LastRootPath();
     HANDLE h = file.empty() ? INVALID_HANDLE_VALUE
                             : CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
                                           OPEN_EXISTING, 0, nullptr);
     if (h == INVALID_HANDLE_VALUE) {
-        return true;
+        return RootMemory::Unknown;
     }
     char buf[4096];
     DWORD read = 0;
     bool ok = ReadFile(h, buf, sizeof(buf), &read, nullptr);
     CloseHandle(h);
-    return !ok || FromUtf8(std::string(buf, read)) != s.root;
+    if (!ok) {
+        return RootMemory::Unknown;
+    }
+    return FromUtf8(std::string(buf, read)) == s.root ? RootMemory::Same : RootMemory::Changed;
 }
 
 void SaveLastRoot(const Settings& s) {
@@ -1231,22 +1367,22 @@ void SyncAll() {
     VolumeHandles volumes;
     bool changed = false;
     Pending pending;
-    bool rootChanged = RootChangedSinceLastSync(*s);
+    RootMemory rootState = LastRootState(*s);
     bool stopped = false;
     for (const auto& t : s->tags) {
         if (Stopping()) {
             stopped = true;
             break;
         }
-        SyncTag(rows, t.name, s->root + L"\\" + t.folderName, rootChanged, volumes, changed, pending);
+        SyncTag(rows, t.name, s->root + L"\\" + t.folderName, s->root,
+                rootState == RootMemory::Changed, volumes, changed, pending);
     }
     stopped |= Stopping();
     Commit(dbPath, rows, changed, pending);
     // Only worth remembering next to a database that exists: otherwise
     // merely enabling the mod would create the folder, which the readme says
-    // it doesn't. Until then every sync rebuilds instead of trusting markers,
-    // which is the safe direction.
-    if (rootChanged && !stopped && !rows.empty()) {
+    // it doesn't.
+    if (rootState != RootMemory::Same && !stopped && !rows.empty()) {
         SaveLastRoot(*s);
     }
     UpdateCounts(rows, *s);
@@ -1291,7 +1427,8 @@ void AddPaths(const std::wstring& tag, const std::vector<std::wstring>& paths) {
     VolumeHandles volumes;
     bool changed = false;
     Pending pending;
-    SyncTag(rows, tag, folder, RootChangedSinceLastSync(*s), volumes, changed, pending);
+    SyncTag(rows, tag, folder, s->root, LastRootState(*s) == RootMemory::Changed, volumes,
+            changed, pending);
     if (CheckExists(folder) == Exists::No) {
         // First file of this tag: this is where its folder is born.
         int err = SHCreateDirectoryExW(nullptr, folder.c_str(), nullptr);
@@ -1391,32 +1528,94 @@ void RemovePaths(const std::wstring& tag, const std::vector<std::wstring>& paths
         return;
     }
 
-    bool changed = false;
-    Pending pending;
+    // What the user asked to untag, as files.
+    struct Target {
+        std::wstring lower, volume, fileId;
+    };
+    std::vector<Target> targets;
     for (const std::wstring& original : paths) {
         if (Stopping()) {
-            break;
+            return;
         }
+        Target t;
         std::wstring path = TargetIfTagShortcut(original, s->root);
-        std::wstring vol, id;
-        GetFileIdentity(path, vol, id);
-        for (size_t i = 0; i < rows.size();) {
-            const Row& r = rows[i];
-            bool sameFile = (!id.empty() && r.volume == vol && r.fileId == id) ||
-                            _wcsicmp(r.path.c_str(), path.c_str()) == 0;
-            if (sameFile && (tag.empty() || r.tag == tag)) {
-                // The shortcut goes away after saving; the watcher sees it
-                // disappear and no longer finds the row, so there's nothing
-                // to undo.
-                pending.deletes.push_back({s->root + L"\\" + FolderNameFor(r.tag), r.lnk});
-                rows.erase(rows.begin() + i);
-                changed = true;
-                continue;
+        t.lower = LowerPath(path);
+        GetFileIdentity(path, t.volume, t.fileId);
+        targets.push_back(std::move(t));
+    }
+    auto wanted = [&targets](const std::wstring& path, const std::wstring& volume,
+                             const std::wstring& fileId) {
+        std::wstring lower = LowerPath(path);
+        for (const auto& t : targets) {
+            if ((!fileId.empty() && !t.fileId.empty() && t.volume == volume && t.fileId == fileId) ||
+                t.lower == lower) {
+                return true;
             }
-            i++;
+        }
+        return false;
+    };
+
+    // The shortcuts go first, and every shortcut in the folder that points at
+    // the file goes, not only the one the record names: what is left in the
+    // folder is what counts as tagged, so one left behind would put the tag
+    // straight back on the next sync.
+    std::unordered_set<std::wstring> folders;
+    for (const auto& r : rows) {
+        if ((tag.empty() || r.tag == tag) && wanted(r.path, r.volume, r.fileId)) {
+            folders.insert(s->root + L"\\" + FolderNameFor(r.tag));
         }
     }
-    Commit(dbPath, rows, changed, pending);
+    std::unordered_set<std::wstring> leftBehind;  // folder + tab + lowered target
+    for (const std::wstring& folder : folders) {
+        if (Stopping()) {
+            return;
+        }
+        WIN32_FIND_DATAW find;
+        HANDLE h = FindFirstFileExW((folder + L"\\*.lnk").c_str(), FindExInfoBasic, &find,
+                                    FindExSearchNameMatch, nullptr, 0);
+        if (h == INVALID_HANDLE_VALUE) {
+            continue;
+        }
+        do {
+            if (find.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                continue;
+            }
+            std::wstring target;
+            if (!ReadShortcutTarget(folder + L"\\" + find.cFileName, target)) {
+                continue;
+            }
+            std::wstring vol, id;
+            GetFileIdentity(target, vol, id);
+            if (!wanted(target, vol, id)) {
+                continue;
+            }
+            if (!DeleteLinkIn(folder, find.cFileName)) {
+                // Written both ways, because the row may name the file by
+                // another spelling than the shortcut does.
+                leftBehind.insert(folder + L"\t" + LowerPath(target));
+                if (!id.empty()) {
+                    leftBehind.insert(folder + L"\t" + vol + L"\t" + id);
+                }
+            }
+        } while (FindNextFileW(h, &find));
+        FindClose(h);
+    }
+
+    bool changed = false;
+    for (size_t i = 0; i < rows.size();) {
+        const Row& r = rows[i];
+        std::wstring rowFolder = s->root + L"\\" + FolderNameFor(r.tag);
+        bool survived = leftBehind.count(rowFolder + L"\t" + LowerPath(r.path)) > 0 ||
+                        (!r.fileId.empty() &&
+                         leftBehind.count(rowFolder + L"\t" + r.volume + L"\t" + r.fileId) > 0);
+        if ((tag.empty() || r.tag == tag) && wanted(r.path, r.volume, r.fileId) && !survived) {
+            rows.erase(rows.begin() + i);
+            changed = true;
+            continue;
+        }
+        i++;
+    }
+    Commit(dbPath, rows, changed, Pending());
     UpdateCounts(rows, *s);
 }
 
