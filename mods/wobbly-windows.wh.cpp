@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.112
+// @version         0.113
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
@@ -646,6 +646,8 @@ static void* GetTransitionVisualProxy(void* topLevelWindow3D)
 }
 
 static constexpr int MAX_ANIMATION_SLOTS = 6;
+static constexpr ULONGLONG DWM_SCENE_WAKE_FRESHNESS_MS = 250;
+static constexpr ULONGLONG DWM_SCENE_OWNER_STALE_MS = 1000;
 static constexpr ULONGLONG DWM_SCENE_STALL_TIMEOUT_MS = 3000;
 static constexpr ULONGLONG DWM_UNLOAD_CLEANUP_TIMEOUT_MS = 3000;
 
@@ -703,9 +705,11 @@ int g_dragAnimationSlot = -1;
 ULONGLONG g_animationOrderCounter = 0;
 std::atomic_bool g_unloading = false;
 std::atomic_bool g_sceneWakeScheduled = false;
+std::atomic_bool g_sceneWakeAwaitingNativeTimeline = false;
 std::atomic<ULONGLONG> g_sceneRequestedSerial = 0;
 std::atomic<ULONGLONG> g_sceneSubmittedSerial = 0;
 std::atomic<ULONGLONG> g_sceneWakePostTimestamp = 0;
+std::atomic<ULONGLONG> g_lastNativeTimelineTimestamp = 0;
 std::atomic<ULONGLONG> g_sceneWakeStallStartedAt = 0;
 std::atomic_bool g_sceneWakeStalled = false;
 std::atomic_bool g_sceneRecoveryCleanupPending = false;
@@ -2397,13 +2401,20 @@ static void DropAnimationSlotsForStoppedSceneThread()
     }
 }
 
-static bool RegisterDwmSceneThread(bool authoritativeTimeline)
+enum class SceneThreadRegistration
+{
+    ExistingOwner,
+    WakeBootstrap,
+    AuthoritativeTimeline,
+};
+
+static bool RegisterDwmSceneThread(SceneThreadRegistration registration)
 {
     DWORD currentThreadId = GetCurrentThreadId();
     DWORD ownerThreadId = g_dwmSceneThreadId.load(std::memory_order_acquire);
-    if (ownerThreadId == 0 && !authoritativeTimeline)
+    if (ownerThreadId == 0 && registration == SceneThreadRegistration::ExistingOwner)
     {
-        // AdvanceTimelines authoritatively identifies uDWM's scene thread.
+        // Only the initial targeted wake or AdvanceTimelines can claim ownership.
         return false;
     }
     if (ownerThreadId == 0 &&
@@ -2417,10 +2428,16 @@ static bool RegisterDwmSceneThread(bool authoritativeTimeline)
     {
         return true;
     }
-    if (authoritativeTimeline)
+    if (registration == SceneThreadRegistration::AuthoritativeTimeline)
     {
         // DWM can replace its scene owner after compositor/desktop teardown.
-        // Transfer ownership only after the previous thread has stopped.
+        // AdvanceTimelines is authoritative. A live but stale thread ID can be
+        // reused by another DWM thread after display/compositor teardown.
+        ULONGLONG now = GetTickCount64();
+        ULONGLONG lastTimeline =
+            g_lastNativeTimelineTimestamp.load(std::memory_order_acquire);
+        bool previousOwnerStale =
+            lastTimeline && now - lastTimeline >= DWM_SCENE_OWNER_STALE_MS;
         bool previousOwnerStopped = false;
         HANDLE previousThread = OpenThread(SYNCHRONIZE, FALSE, ownerThreadId);
         if (previousThread)
@@ -2432,7 +2449,7 @@ static bool RegisterDwmSceneThread(bool authoritativeTimeline)
         {
             previousOwnerStopped = GetLastError() == ERROR_INVALID_PARAMETER;
         }
-        if (previousOwnerStopped &&
+        if ((previousOwnerStopped || previousOwnerStale) &&
             g_dwmSceneThreadId.compare_exchange_strong(ownerThreadId, currentThreadId,
                                                        std::memory_order_acq_rel,
                                                        std::memory_order_acquire))
@@ -2444,6 +2461,10 @@ static bool RegisterDwmSceneThread(bool authoritativeTimeline)
             g_dwmCompositor.store(nullptr, std::memory_order_release);
             g_windowListForSceneWake.store(nullptr, std::memory_order_release);
             g_dwmObjectDiscoveryFailureCount.store(0, std::memory_order_release);
+            g_sceneWakeOutstanding.store(0, std::memory_order_release);
+            g_sceneWakeScheduled.store(false, std::memory_order_release);
+            g_sceneWakeAwaitingNativeTimeline.store(true, std::memory_order_release);
+            g_sceneWakePostTimestamp.store(0, std::memory_order_release);
             g_sceneSubmittedSerial.store(
                 g_sceneRequestedSerial.load(std::memory_order_acquire),
                 std::memory_order_release);
@@ -3408,10 +3429,11 @@ static long __cdecl ForceUpdateSceneHook(void* pThis)
     {
         return g_windowListForceUpdateSceneOriginal(pThis);
     }
-    bool canSubmit = RegisterDwmSceneThread(false);
+    bool canSubmit = RegisterDwmSceneThread(SceneThreadRegistration::ExistingOwner);
     bool outermostPass = canSubmit && !g_insideWobblyScenePass;
     if (outermostPass)
     {
+        g_sceneWakeAwaitingNativeTimeline.store(false, std::memory_order_release);
         g_insideWobblyScenePass = true;
         SubmitPendingWobblySceneWork();
     }
@@ -3434,10 +3456,11 @@ static long __cdecl UpdateSceneHook(void* pThis)
     {
         return g_windowListUpdateSceneOriginal(pThis);
     }
-    bool canSubmit = RegisterDwmSceneThread(false);
+    bool canSubmit = RegisterDwmSceneThread(SceneThreadRegistration::ExistingOwner);
     bool outermostPass = canSubmit && !g_insideWobblyScenePass;
     if (outermostPass)
     {
+        g_sceneWakeAwaitingNativeTimeline.store(false, std::memory_order_release);
         g_insideWobblyScenePass = true;
         SubmitPendingWobblySceneWork();
     }
@@ -3452,9 +3475,17 @@ static long __cdecl UpdateSceneHook(void* pThis)
 
 static void __cdecl AdvanceTimelinesHook(void* pThis, double currentTime)
 {
-    bool canSubmit = RegisterDwmSceneThread(true);
+    bool canSubmit =
+        RegisterDwmSceneThread(SceneThreadRegistration::AuthoritativeTimeline);
     if (canSubmit)
     {
+        g_lastNativeTimelineTimestamp.store(GetTickCount64(), std::memory_order_release);
+        if (g_sceneWakeAwaitingNativeTimeline.exchange(false,
+                                                        std::memory_order_acq_rel))
+        {
+            g_sceneWakeScheduled.store(false, std::memory_order_release);
+            g_sceneWakePostTimestamp.store(0, std::memory_order_release);
+        }
         if (CacheDwmObjectsFromDesktopManager(pThis))
         {
             g_dwmObjectDiscoveryFailureCount.store(0, std::memory_order_release);
@@ -3518,14 +3549,33 @@ static void __cdecl DesktopManagerHandleThreadMessageHook(UINT message,
         acknowledgeWake();
         return;
     }
-    if (!RegisterDwmSceneThread(true) || g_insideWobblyScenePass)
+    bool bootstrapWake =
+        g_dwmSceneThreadId.load(std::memory_order_acquire) == 0;
+    if (!RegisterDwmSceneThread(SceneThreadRegistration::WakeBootstrap) ||
+        g_insideWobblyScenePass)
     {
         g_sceneWakeScheduled.store(false, std::memory_order_release);
         g_sceneWakePostTimestamp.store(0, std::memory_order_release);
         acknowledgeWake();
         return;
     }
-
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG postedAt =
+        g_sceneWakePostTimestamp.load(std::memory_order_acquire);
+    if (!bootstrapWake && postedAt &&
+        now - postedAt > DWM_SCENE_WAKE_FRESHNESS_MS)
+    {
+        // Never drive private scene methods from a wake after display sleep or
+        // compositor teardown. The next native scene callback safely consumes
+        // the still-pending serial and revalidates cached DWM objects.
+        if (!g_sceneWakeAwaitingNativeTimeline.exchange(true,
+                                                         std::memory_order_acq_rel))
+        {
+            Wh_Log(L"DWM scene wake deferred until native scene activity resumes");
+        }
+        acknowledgeWake();
+        return;
+    }
     g_insideWobblyScenePass = true;
     SubmitPendingWobblySceneWork();
     BindPendingAnimationSlotTransforms(false);
@@ -4381,6 +4431,10 @@ static bool PostPendingDwmSceneWake(bool forceRepost)
     {
         return false;
     }
+    if (g_sceneWakeAwaitingNativeTimeline.load(std::memory_order_acquire))
+    {
+        return true;
+    }
     if (!forceRepost)
     {
         bool expected = false;
@@ -4394,6 +4448,10 @@ static bool PostPendingDwmSceneWake(bool forceRepost)
     {
         // Serial numbers make watchdog reposts idempotent.
         g_sceneWakeScheduled.store(true, std::memory_order_release);
+    }
+    if (g_sceneWakeOutstanding.load(std::memory_order_acquire) != 0)
+    {
+        return true;
     }
     void* manager = g_desktopManager.load(std::memory_order_acquire);
     DWORD sceneThreadId = g_dwmSceneThreadId.load(std::memory_order_acquire);
@@ -4422,7 +4480,16 @@ static bool PostPendingDwmSceneWake(bool forceRepost)
     }
     if (sceneThreadId)
     {
-        g_sceneWakeOutstanding.fetch_add(1, std::memory_order_acq_rel);
+        // PostThreadMessage queues are unbounded for our purposes. Keep one
+        // wake in flight so a powered-off display can't accumulate thousands
+        // of synchronous ForceUpdateScene calls for resume.
+        unsigned int expectedOutstanding = 0;
+        if (!g_sceneWakeOutstanding.compare_exchange_strong(
+                expectedOutstanding, 1, std::memory_order_acq_rel,
+                std::memory_order_acquire))
+        {
+            return true;
+        }
         if (PostThreadMessageW(sceneThreadId, g_dwmSceneWakeMessage,
                                DWM_SCENE_WAKE_WPARAM,
                                g_dwmSceneWakeToken.load(std::memory_order_acquire)))
@@ -4430,11 +4497,12 @@ static bool PostPendingDwmSceneWake(bool forceRepost)
             g_sceneWakePostTimestamp.store(GetTickCount64(), std::memory_order_release);
             return true;
         }
-        g_sceneWakeOutstanding.fetch_sub(1, std::memory_order_acq_rel);
+        g_sceneWakeOutstanding.store(0, std::memory_order_release);
     }
     // AdvanceTimelines consumes the pending serial when the scene thread is
     // first discovered or a thread-message wake can't be posted.
     g_sceneWakeScheduled.store(false, std::memory_order_release);
+    g_sceneWakeAwaitingNativeTimeline.store(false, std::memory_order_release);
     g_sceneWakePostTimestamp.store(0, std::memory_order_release);
     return false;
 }
@@ -7277,6 +7345,7 @@ BOOL Wh_ModInit()
     g_dwmObjectDiscoveryFailureCount.store(0, std::memory_order_release);
     g_sceneWakeScheduled.store(false, std::memory_order_release);
     g_sceneWakeOutstanding.store(0, std::memory_order_release);
+    g_sceneWakeAwaitingNativeTimeline.store(false, std::memory_order_release);
     LARGE_INTEGER wakeTokenCounter = {};
     QueryPerformanceCounter(&wakeTokenCounter);
     UINT_PTR wakeTokenSeed = static_cast<UINT_PTR>(wakeTokenCounter.QuadPart) ^
@@ -7287,6 +7356,7 @@ BOOL Wh_ModInit()
     g_sceneRequestedSerial.store(0, std::memory_order_release);
     g_sceneSubmittedSerial.store(0, std::memory_order_release);
     g_sceneWakePostTimestamp.store(0, std::memory_order_release);
+    g_lastNativeTimelineTimestamp.store(0, std::memory_order_release);
     g_sceneWakeStallStartedAt.store(0, std::memory_order_release);
     g_sceneWakeStalled.store(false, std::memory_order_release);
     g_sceneRecoveryCleanupPending.store(false, std::memory_order_release);
