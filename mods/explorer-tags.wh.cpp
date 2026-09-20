@@ -2,7 +2,7 @@
 // @id              explorer-tags
 // @name            Explorer Tags
 // @description     Colored tags panel at the bottom of File Explorer's navigation pane, plus a Tags submenu in the file context menu
-// @version         0.7.0
+// @version         0.7.1
 // @author          buedgik
 // @github          https://github.com/buedgik
 // @homepage        https://github.com/buedgik/explorer-tags
@@ -927,14 +927,14 @@ struct PendingDelete {
     std::wstring lnk;
 };
 
-// What's only done after the database has been saved.
+// What's only done after the database has been saved: if saving fails, the
+// database still points to shortcuts that exist, and to folders whose
+// markers would make missing shortcuts count as removed tags.
 struct Pending {
     std::vector<PendingDelete> deletes;
     std::vector<std::wstring> markers;
 };
 
-// The shortcuts to delete are only deleted after the database has been
-// saved: if saving fails, the database still points to shortcuts that exist.
 std::wstring LowerPath(const std::wstring& path) {
     std::wstring lower = path;
     if (!lower.empty()) {
@@ -970,6 +970,7 @@ void AdoptStrays(std::vector<Row>& rows, const std::wstring& tag, const std::wst
         }
     }
 
+    std::wstring rootPrefix = root + L"\\";
     WIN32_FIND_DATAW find;
     HANDLE h = FindFirstFileExW((folder + L"\\*.lnk").c_str(), FindExInfoBasic, &find,
                                 FindExSearchNameMatch, nullptr, 0);
@@ -997,7 +998,6 @@ void AdoptStrays(std::vector<Row>& rows, const std::wstring& tag, const std::wst
         // The tag folders themselves don't get tagged, the same rule the
         // menu follows: a shortcut to a shortcut, or to another tag's
         // folder, would make the mod manage its own insides.
-        std::wstring rootPrefix = root + L"\\";
         if (_wcsicmp(target.c_str(), root.c_str()) == 0 ||
             (target.size() > rootPrefix.size() &&
              _wcsnicmp(target.c_str(), rootPrefix.c_str(), rootPrefix.size()) == 0)) {
@@ -1141,6 +1141,22 @@ void SyncTag(std::vector<Row>& rows, const std::wstring& tag, const std::wstring
             }
         }
         i++;
+    }
+
+    // An empty folder is nobody's: there is nothing in it to hand to the
+    // tag, so claiming it costs nothing and is what lets a folder the panel
+    // opened — made without a marker, before anything was tagged — take in
+    // the first shortcut dropped into it.
+    if (!ours && !trusted) {
+        WIN32_FIND_DATAW find;
+        HANDLE h = FindFirstFileExW((folder + L"\\*.lnk").c_str(), FindExInfoBasic, &find,
+                                    FindExSearchNameMatch, nullptr, 0);
+        if (h == INVALID_HANDLE_VALUE) {
+            // Empty, and not some other reason for failing to look.
+            ours = GetLastError() == ERROR_FILE_NOT_FOUND;
+        } else {
+            FindClose(h);
+        }
     }
 
     // Only in a folder that is ours and whose names are of this time: after
@@ -1381,8 +1397,10 @@ void SyncAll() {
     Commit(dbPath, rows, changed, pending);
     // Only worth remembering next to a database that exists: otherwise
     // merely enabling the mod would create the folder, which the readme says
-    // it doesn't.
-    if (rootState != RootMemory::Same && !stopped && !rows.empty()) {
+    // it doesn't. Not "once there are rows": a record emptied of them, with
+    // the folder changed in the settings, would then never be remembered,
+    // and never trust a marker again.
+    if (rootState != RootMemory::Same && !stopped && CheckExists(dbPath) == Exists::Yes) {
         SaveLastRoot(*s);
     }
     UpdateCounts(rows, *s);
@@ -1576,18 +1594,51 @@ void RemovePaths(const std::wstring& tag, const std::vector<std::wstring>& paths
         if (h == INVALID_HANDLE_VALUE) {
             continue;
         }
+        // What the record already says about this folder's shortcuts. Only
+        // the names it doesn't know are worth opening: untagging one file in
+        // a folder of a thousand shouldn't read a thousand shortcuts.
+        std::unordered_map<std::wstring, const Row*> byName;
+        for (const auto& r : rows) {
+            if (_wcsicmp((s->root + L"\\" + FolderNameFor(r.tag)).c_str(), folder.c_str()) == 0) {
+                byName[LowerPath(r.lnk)] = &r;
+            }
+        }
         do {
             if (find.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
                 continue;
             }
-            std::wstring target;
-            if (!ReadShortcutTarget(folder + L"\\" + find.cFileName, target)) {
+            std::wstring target, vol, id;
+            auto known = byName.find(LowerPath(find.cFileName));
+            bool fromRecord = known != byName.end();
+            if (fromRecord) {
+                target = known->second->path;
+                vol = known->second->volume;
+                id = known->second->fileId;
+            } else if (!ReadShortcutTarget(folder + L"\\" + find.cFileName, target)) {
                 continue;
+            } else {
+                GetFileIdentity(target, vol, id);
             }
-            std::wstring vol, id;
-            GetFileIdentity(target, vol, id);
             if (!wanted(target, vol, id)) {
                 continue;
+            }
+            if (fromRecord) {
+                // The record was enough to rule this shortcut out, but not to
+                // delete it: one replaced behind the mod's back keeps its name
+                // and points somewhere else, and deleting it on the record's
+                // word would take another file's tag with it. So the few that
+                // are about to go are read from the disk first.
+                std::wstring real, realVol, realId;
+                if (!ReadShortcutTarget(folder + L"\\" + find.cFileName, real)) {
+                    continue;
+                }
+                GetFileIdentity(real, realVol, realId);
+                if (!wanted(real, realVol, realId)) {
+                    continue;
+                }
+                target = real;
+                vol = realVol;
+                id = realId;
             }
             if (!DeleteLinkIn(folder, find.cFileName)) {
                 // Written both ways, because the row may name the file by
