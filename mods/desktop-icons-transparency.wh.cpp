@@ -3,7 +3,7 @@
 // @name            Desktop Icons Transparency
 // @description     Adjusts the opacity of desktop icons and text labels without darkening the wallpaper
 // @version         1.0.0
-// @author          malinkadev
+// @author          zed712969-crypto
 // @github          https://github.com/zed712969-crypto
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -lgdi32 -lmsimg32 -luser32
@@ -12,11 +12,14 @@
 // ==WindhawkModReadme==
 /*
 # Desktop Icons Transparency
-A lightweight mod that seamlessly adjusts the opacity (alpha channel) of Windows desktop icons, including their text labels and drop shadows.
+A lightweight mod that adjusts the opacity (alpha channel) of Windows desktop icons, including their text labels and drop shadows.
+
+Unlike **Transparent Desktop Icons with Spotlight**, this mod applies a fixed opacity directly at draw time using native alpha blending — without creating DirectComposition overlays, duplicate wallpaper layers, or spotlight hover effects.
 
 ### Features
 - Synchronously fades icon images, labels, and text shadows.
-- Does not darken wallpaper or create black background artifacts.
+- Does not darken wallpaper or cause black background artifacts.
+- Scoped strictly to desktop repainting: does not affect taskbar, tooltips, context menus, or icon renaming.
 - Zero CPU and RAM overhead in idle.
 */
 // ==/WindhawkModReadme==
@@ -35,17 +38,36 @@ A lightweight mod that seamlessly adjusts the opacity (alpha channel) of Windows
 
 #include <windows.h>
 #include <commctrl.h>
-#include <commoncontrols.h>
+#include <algorithm>
+#include <windhawk_utils.h>
 
 struct {
     int opacity;
 } settings;
 
-static DWORD g_desktopThreadId = 0;
+static thread_local bool g_inDesktopPaint = false;
 static thread_local bool g_inDirectHook = false;
 static thread_local bool g_inTextHook = false;
 
-// Search for SysListView32 of the desktop
+// Subclass procedure: activates hooks strictly during desktop rendering
+LRESULT CALLBACK DesktopListSubclass(
+    HWND hWnd,
+    UINT uMsg,
+    WPARAM wParam,
+    LPARAM lParam,
+    UINT_PTR uIdSubclass,
+    DWORD_PTR dwRefData
+) {
+    if (uMsg == WM_PAINT || uMsg == WM_PRINTCLIENT) {
+        g_inDesktopPaint = true;
+        LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        g_inDesktopPaint = false;
+        return result;
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+// Locate SysListView32 belonging to current Explorer process
 HWND GetDesktopListView() {
     HWND hProgman = FindWindowW(L"Progman", L"Program Manager");
     HWND hDefView = NULL;
@@ -63,36 +85,39 @@ HWND GetDesktopListView() {
     }
 
     if (!hDefView) return NULL;
-    return FindWindowExW(hDefView, NULL, L"SysListView32", NULL);
-}
-
-bool IsDesktopThread() {
-    if (!g_desktopThreadId) {
-        HWND hListView = GetDesktopListView();
-        if (hListView) {
-            g_desktopThreadId = GetWindowThreadProcessId(hListView, NULL);
+    HWND hListView = FindWindowExW(hDefView, NULL, L"SysListView32", NULL);
+    if (hListView) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hListView, &pid);
+        if (pid != GetCurrentProcessId()) {
+            return NULL;
         }
     }
-    return (g_desktopThreadId != 0 && GetCurrentThreadId() == g_desktopThreadId);
+    return hListView;
 }
 
 // 1. Hook for ImageList_DrawIndirect
-using ImageList_DrawIndirect_t = BOOL (WINAPI *)(IMAGELISTDRAWPARAMS* pimldp);
+using ImageList_DrawIndirect_t = decltype(&ImageList_DrawIndirect);
 ImageList_DrawIndirect_t ImageList_DrawIndirect_Original = nullptr;
 
 BOOL WINAPI ImageList_DrawIndirect_Hook(IMAGELISTDRAWPARAMS* pimldp) {
-    if (pimldp && IsDesktopThread()) {
+    if (pimldp && g_inDesktopPaint) {
         if (settings.opacity <= 0) {
             return TRUE;
         }
 
-        if (settings.opacity < 100) {
-            pimldp->fState |= 0x00000008; // ILS_ALPHA
-            pimldp->Frame = (DWORD)((settings.opacity * 255) / 100);
+        IMAGELISTDRAWPARAMS params = {};
+        memcpy(&params, pimldp, std::min<DWORD>(pimldp->cbSize, sizeof(params)));
+        params.cbSize = sizeof(params);
+
+        if (!(params.fState & ILS_ALPHA)) {
+            params.Frame = 255;
         }
+        params.fState |= ILS_ALPHA;
+        params.Frame = (DWORD)((params.Frame * settings.opacity) / 100);
 
         g_inDirectHook = true;
-        BOOL result = ImageList_DrawIndirect_Original(pimldp);
+        BOOL result = ImageList_DrawIndirect_Original(&params);
         g_inDirectHook = false;
         return result;
     }
@@ -112,14 +137,13 @@ BOOL WINAPI GdiAlphaBlend_Hook(
     HDC hdcSrc, int xoriginSrc, int yoriginSrc, int wSrc, int hSrc,
     BLENDFUNCTION ftn
 ) {
-    if (!g_inDirectHook && !g_inTextHook && IsDesktopThread()) {
+    if (!g_inDirectHook && !g_inTextHook && g_inDesktopPaint) {
         if (settings.opacity <= 0) {
             return TRUE;
         }
 
         if (settings.opacity < 100) {
-            BYTE baseAlpha = ftn.SourceConstantAlpha ? ftn.SourceConstantAlpha : 255;
-            ftn.SourceConstantAlpha = (BYTE)((baseAlpha * settings.opacity) / 100);
+            ftn.SourceConstantAlpha = (BYTE)((ftn.SourceConstantAlpha * settings.opacity) / 100);
         }
     }
     return GdiAlphaBlend_Original(hdcDest, xoriginDest, yoriginDest, wDest, hDest,
@@ -127,17 +151,14 @@ BOOL WINAPI GdiAlphaBlend_Hook(
 }
 
 // 3. Hook for DrawShadowText
-using DrawShadowText_t = int (WINAPI *)(
-    HDC hdc, LPCWSTR pszText, UINT cch, RECT *prc, DWORD dwFlags,
-    COLORREF crText, COLORREF crShadow, int ixOffset, int iyOffset
-);
+using DrawShadowText_t = decltype(&DrawShadowText);
 DrawShadowText_t DrawShadowText_Original = nullptr;
 
 int WINAPI DrawShadowText_Hook(
     HDC hdc, LPCWSTR pszText, UINT cch, RECT *prc, DWORD dwFlags,
     COLORREF crText, COLORREF crShadow, int ixOffset, int iyOffset
 ) {
-    if (!IsDesktopThread() || g_inTextHook) {
+    if (!g_inDesktopPaint || g_inTextHook) {
         return DrawShadowText_Original(hdc, pszText, cch, prc, dwFlags, crText, crShadow, ixOffset, iyOffset);
     }
 
@@ -211,7 +232,7 @@ using DrawTextW_t = decltype(&DrawTextW);
 DrawTextW_t DrawTextW_Original = nullptr;
 
 int WINAPI DrawTextW_Hook(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, UINT format) {
-    if (!IsDesktopThread() || g_inTextHook) {
+    if (!g_inDesktopPaint || g_inTextHook) {
         return DrawTextW_Original(hdc, lpchText, cchText, lprc, format);
     }
 
@@ -291,12 +312,50 @@ BOOL WINAPI ExtTextOutW_Hook(
     HDC hdc, int x, int y, UINT options, const RECT *lprect,
     LPCWSTR lpString, UINT c, const INT *lpDx
 ) {
-    if (IsDesktopThread() && !g_inTextHook) {
+    if (g_inDesktopPaint && !g_inTextHook) {
         if (settings.opacity <= 0) {
             return TRUE;
         }
     }
     return ExtTextOutW_Original(hdc, x, y, options, lprect, lpString, c, lpDx);
+}
+
+// 6. Hook for CreateWindowExW (subclass newly created desktop list view)
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original = nullptr;
+
+HWND WINAPI CreateWindowExW_Hook(
+    DWORD dwExStyle,
+    LPCWSTR lpClassName,
+    LPCWSTR lpWindowName,
+    DWORD dwStyle,
+    int X,
+    int Y,
+    int nWidth,
+    int nHeight,
+    HWND hWndParent,
+    HMENU hMenu,
+    HINSTANCE hInstance,
+    LPVOID lpParam
+) {
+    HWND hWnd = CreateWindowExW_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle,
+        X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam
+    );
+
+    if (hWnd && lpClassName && !IS_INTRESOURCE(lpClassName)) {
+        if (_wcsicmp(lpClassName, L"SysListView32") == 0 && hWndParent) {
+            WCHAR parentClass[64] = {0};
+            if (GetClassNameW(hWndParent, parentClass, ARRAYSIZE(parentClass)) &&
+                _wcsicmp(parentClass, L"SHELLDLL_DefView") == 0) {
+                WindhawkUtils::SetWindowSubclassFromAnyThread(
+                    hWnd, DesktopListSubclass, 0
+                );
+            }
+        }
+    }
+
+    return hWnd;
 }
 
 void RepaintDesktop() {
@@ -322,66 +381,74 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    HWND hListView = GetDesktopListView();
-    if (hListView) {
-        g_desktopThreadId = GetWindowThreadProcessId(hListView, NULL);
-    }
+    WindhawkUtils::SetFunctionHook(
+        CreateWindowExW,
+        CreateWindowExW_Hook,
+        &CreateWindowExW_Original
+    );
 
-    // Hook comctl32.dll
-    HMODULE hComCtl = GetModuleHandleW(L"comctl32.dll");
-    if (hComCtl) {
-        void* pDrawIndirect = (void*)GetProcAddress(hComCtl, "ImageList_DrawIndirect");
-        if (pDrawIndirect) {
-            Wh_SetFunctionHook(pDrawIndirect,
-                               (void*)ImageList_DrawIndirect_Hook,
-                               (void**)&ImageList_DrawIndirect_Original);
-        }
+    WindhawkUtils::SetFunctionHook(
+        ImageList_DrawIndirect,
+        ImageList_DrawIndirect_Hook,
+        &ImageList_DrawIndirect_Original
+    );
 
-        void* pDrawShadowText = (void*)GetProcAddress(hComCtl, "DrawShadowText");
-        if (pDrawShadowText) {
-            Wh_SetFunctionHook(pDrawShadowText,
-                               (void*)DrawShadowText_Hook,
-                               (void**)&DrawShadowText_Original);
-        }
-    }
+    WindhawkUtils::SetFunctionHook(
+        DrawShadowText,
+        DrawShadowText_Hook,
+        &DrawShadowText_Original
+    );
 
-    // Hook user32.dll
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (hUser32) {
-        void* pDrawTextW = (void*)GetProcAddress(hUser32, "DrawTextW");
-        if (pDrawTextW) {
-            Wh_SetFunctionHook(pDrawTextW,
-                               (void*)DrawTextW_Hook,
-                               (void**)&DrawTextW_Original);
-        }
-    }
+    WindhawkUtils::SetFunctionHook(
+        DrawTextW,
+        DrawTextW_Hook,
+        &DrawTextW_Original
+    );
 
-    // Hook gdi32full.dll / gdi32.dll
+    WindhawkUtils::SetFunctionHook(
+        ExtTextOutW,
+        ExtTextOutW_Hook,
+        &ExtTextOutW_Original
+    );
+
     HMODULE hGdi = GetModuleHandleW(L"gdi32full.dll");
     if (!hGdi) hGdi = GetModuleHandleW(L"gdi32.dll");
     if (hGdi) {
         void* pGdiAlphaBlend = (void*)GetProcAddress(hGdi, "GdiAlphaBlend");
         if (pGdiAlphaBlend) {
-            Wh_SetFunctionHook(pGdiAlphaBlend,
-                               (void*)GdiAlphaBlend_Hook,
-                               (void**)&GdiAlphaBlend_Original);
-        }
-
-        void* pExtTextOutW = (void*)GetProcAddress(hGdi, "ExtTextOutW");
-        if (pExtTextOutW) {
-            Wh_SetFunctionHook(pExtTextOutW,
-                               (void*)ExtTextOutW_Hook,
-                               (void**)&ExtTextOutW_Original);
+            WindhawkUtils::SetFunctionHook(
+                (GdiAlphaBlend_t)pGdiAlphaBlend,
+                GdiAlphaBlend_Hook,
+                &GdiAlphaBlend_Original
+            );
         }
     }
 
-    RepaintDesktop();
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    Wh_Log(L"Desktop Icons Transparency AfterInit");
+
+    HWND hListView = GetDesktopListView();
+    if (hListView) {
+        WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hListView, DesktopListSubclass, 0
+        );
+        RepaintDesktop();
+    }
 }
 
 void Wh_ModUninit() {
     Wh_Log(L"Desktop Icons Transparency Uninit");
-    RepaintDesktop();
+
+    HWND hListView = GetDesktopListView();
+    if (hListView) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hListView, DesktopListSubclass, 0
+        );
+        RepaintDesktop();
+    }
 }
 
 void Wh_ModSettingsChanged() {
