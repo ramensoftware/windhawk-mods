@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.3.2
+// @version         1.3.3
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -600,9 +600,10 @@ published at
   $name:ar: لغة السطر المعروض
   $name:he: שפת השורה המוצגת
   $description: >-
-    Language for the line the overlay draws when you change something, and for
-    this settings page. Automatic follows the Windows display language and
-    falls back to English when that language is not one of the ones listed.
+    Language for the line the overlay draws when you change something.
+    Automatic follows the Windows display language and falls back to English
+    when that language is not one of the ones listed. This page itself follows
+    Windhawk's own language setting, not this one.
   $options:
   - auto: Automatic (match Windows)
   - en: English
@@ -1510,9 +1511,11 @@ published at
     Pass every click straight through to the desktop, so the icons under the
     overlay stay usable. Worth turning on if you run the overlay on your only
     display. The trade is that the overlay can no longer be clicked or
-    scrolled: the toggle hotkey shows and hides it, and the global key above
-    changes the palette, but style, amount and the wheel parameter come from
-    these settings rather than from the screen.
+    scrolled. The toggle hotkey still shows and hides it and the global key
+    above still changes the palette, but the amount and the wheel parameter
+    come from the settings above, and the style is whichever one you last left
+    it on, or the rotation if you have it on. To pin it to one style, leave
+    only that style ticked below.
 - keepAwake: true
   $name: Keep the PC awake
   $name:es-ES: Mantener el PC despierto
@@ -1883,7 +1886,10 @@ static const Strings* StringsFromSystem() {
 }
 
 // Kept in preference to std::clamp, which returns a reference to one of its
-// arguments: std::clamp(x + 1, 0, 9) is a dangling read, and this is not.
+// arguments, so the result must never be bound to one: with a temporary
+// argument, const auto& r = std::clamp(x + 1, 0, 9) dangles. Assigning by
+// value is perfectly safe there, so this is a preference rather than a fix;
+// returning by value just removes the trap.
 template <typename T>
 static T ClampT(T v, T lo, T hi) {
     return v < lo ? lo : (v > hi ? hi : v);
@@ -5080,7 +5086,33 @@ static std::vector<RECT> ComputeTargetRects() {
     }
 
     auto targetRect = [&](const MonitorEntry& m) -> RECT {
-        return g_settings.workAreaOnly ? m.work : m.rect;
+        if (g_settings.workAreaOnly) {
+            return m.work;
+        }
+        // One pixel short of the bottom edge, and here is why.
+        //
+        // The shell decides a fullscreen application is running by looking for
+        // a foreground window whose rectangle covers the monitor, and Focus
+        // Assist silences notifications when it finds one. Clicking the
+        // overlay makes it the foreground window, so on the default settings
+        // a single click would quietly turn the user's notifications off
+        // until something else took focus.
+        //
+        // Measured on Windows 11 rather than assumed: a WS_POPUP window with
+        // WS_EX_TOOLWINDOW covering the primary monitor exactly, once it is
+        // foreground, moves SHQueryUserNotificationState from
+        // QUNS_ACCEPTS_NOTIFICATIONS to QUNS_BUSY. One pixel short of the
+        // monitor it stays at QUNS_ACCEPTS_NOTIFICATIONS. The tool window
+        // style does not exempt it, and only the primary monitor counts.
+        //
+        // A pixel of wallpaper along the bottom edge is not something anyone
+        // will notice in a piece of generative line art. Losing notifications
+        // without being told is.
+        RECT r = m.rect;
+        if (r.bottom > r.top) {
+            r.bottom -= 1;
+        }
+        return r;
     };
     if (g_settings.monitor == L"all") {
         for (size_t i = 0; i < mons.size(); i++) {
