@@ -2,16 +2,18 @@
 // @id              shake-to-find-cursor
 // @name            Shake to Find Cursor
 // @description     Temporarily enlarges the mouse cursor when you shake the mouse, like macOS "Shake to locate"
-// @version         1.2
+// @version         1.3
 // @author          Darius Varnelis
 // @github          https://github.com/Darius-Varnelis
 // @include         windhawk.exe
-// @compilerOptions -luser32 -lgdi32 -lshell32 -ladvapi32
+// @compilerOptions -luser32 -lgdi32 -lshell32 -ladvapi32 -lshcore
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Shake to Find Cursor
+
+![Shake to Find Cursor demo](https://raw.githubusercontent.com/Darius-Varnelis/shake-to-find-cursor/main/shake-to-find.gif)
 
 Shake the mouse (or swipe back and forth on the touchpad) and the cursor grows
 so you can spot it instantly. Stop shaking and it shrinks back.
@@ -37,6 +39,18 @@ so you can spot it instantly. Stop shaking and it shrinks back.
   refresh rate. While animating, only the cursor that's on screen is resized,
   which keeps every frame cheap.
 
+## vs. macOS magnifying cursor
+
+The catalog already has [macOS magnifying cursor](https://windhawk.net/mods/mac-magnifying-cursor),
+which does something similar but works differently: it hides the system
+cursors and draws a scaled copy in its own overlay window, polling the cursor
+position every 16-40 ms. This mod instead replaces the real system cursors
+with bigger renders of your own cursor scheme, driven by raw input rather
+than polling. In practice that means no overlay lag or trailing, the enlarged
+cursor keeps your actual cursor style and colour, and there's no CPU cost
+while the mouse is idle. Don't enable both at once - they'll fight over the
+system cursors.
+
 ## Notes
 
 * Apps that draw their own custom cursor keep their small one.
@@ -45,6 +59,9 @@ so you can spot it instantly. Stop shaking and it shrinks back.
 * If the mod's process is killed while the cursor is big, the normal cursors
   are restored the next time the mod starts (re-applying a pointer scheme in
   Mouse Properties also fixes it).
+* Raw input may not reach the mod while an elevated window (Task Manager, a
+  UAC prompt, an installer) has focus, depending on Windows version. If so, a
+  shake over such a window won't be detected until focus moves elsewhere.
 */
 // ==/WindhawkModReadme==
 
@@ -92,6 +109,7 @@ so you can spot it instantly. Stop shaking and it shrinks back.
 
 #include <windows.h>
 #include <shellapi.h>
+#include <shellscalingapi.h>
 
 #include <algorithm>
 #include <cmath>
@@ -194,7 +212,14 @@ bool IsAnimatedCursorFile(PCWSTR path) {
     return length >= 4 && lstrcmpiW(path + length - 4, L".ani") == 0;
 }
 
-HCURSOR LoadCursorAtSize(const CursorType& type, PCWSTR schemePath, int size) {
+// pristineFallback, if given, is an owned copy of this cursor type's original
+// image, taken before any enlargement. It's the only safe fallback source:
+// the shared system cursor handle returned by LoadCursorW may already be
+// showing a previous frame's enlarged image by the time this runs.
+HCURSOR LoadCursorAtSize(const CursorType& type,
+                         PCWSTR schemePath,
+                         int size,
+                         HCURSOR pristineFallback) {
     HCURSOR cursor = nullptr;
 
     // 1. The scheme's own file. LoadImage picks the frame closest to the
@@ -214,12 +239,10 @@ HCURSOR LoadCursorAtSize(const CursorType& type, PCWSTR schemePath, int size) {
         }
     }
 
-    // 3. Last resort: stretch whatever the system cursor currently is.
-    if (!cursor) {
-        if (HCURSOR current = LoadCursorW(nullptr, MAKEINTRESOURCEW(type.id))) {
-            cursor = static_cast<HCURSOR>(
-                CopyImage(current, IMAGE_CURSOR, size, size, 0));
-        }
+    // 3. Last resort: stretch the pristine copy taken before enlargement.
+    if (!cursor && pristineFallback) {
+        cursor = static_cast<HCURSOR>(
+            CopyImage(pristineFallback, IMAGE_CURSOR, size, size, 0));
     }
 
     return cursor;
@@ -376,6 +399,7 @@ constexpr ULONGLONG kShakeGapMs = 200;
 // to touch the registry.
 struct CursorSource {
     HCURSOR systemHandle;  // Unchanged when SetSystemCursor swaps the image.
+    HCURSOR pristineCopy;  // Owned copy of the original image; see LoadCursorAtSize.
     WCHAR path[MAX_PATH];
     bool hasPath;
     bool animated;
@@ -406,6 +430,13 @@ void CaptureCursorSources(int normalSize) {
         const CursorType& type = kCursorTypes[i];
         CursorSource& source = g_sources[i];
         source.systemHandle = LoadCursorW(nullptr, MAKEINTRESOURCEW(type.id));
+        // Taken now, before SetCursorTypeSize ever runs for this type, so it's
+        // guaranteed to still be the original image.
+        source.pristineCopy =
+            source.systemHandle
+                ? static_cast<HCURSOR>(
+                      CopyImage(source.systemHandle, IMAGE_CURSOR, 0, 0, 0))
+                : nullptr;
         source.hasPath = GetSchemeCursorPath(type.registryName, source.path);
         source.animated = source.hasPath ? IsAnimatedCursorFile(source.path)
                                          : type.animatedByDefault;
@@ -419,8 +450,9 @@ void SetCursorTypeSize(size_t index, int size) {
         return;
     }
 
-    HCURSOR cursor = LoadCursorAtSize(
-        kCursorTypes[index], source.hasPath ? source.path : nullptr, size);
+    HCURSOR cursor =
+        LoadCursorAtSize(kCursorTypes[index], source.hasPath ? source.path : nullptr,
+                         size, source.pristineCopy);
     if (!cursor) {
         return;
     }
@@ -477,16 +509,24 @@ struct MonitorMetrics {
     int height;
 };
 
-// Refresh rate and height of the monitor the cursor is on.
+// Refresh rate and height of the monitor the cursor is on. The height is in
+// cursor-bitmap pixels, not display pixels: Windows re-scales a loaded system
+// cursor again by the monitor's DPI when it draws it, so a bitmap loaded at
+// the monitor's raw pixel height would end up displaying larger than the
+// screen on a scaled-up monitor. Dividing by the DPI factor here keeps the
+// size limit accurate to what's actually shown on screen.
 MonitorMetrics GetCursorMonitorMetrics() {
     int refreshRate = 60;
     int height = 0;
+    double dpiScale = 1.0;
 
     POINT pt;
     if (GetCursorPos(&pt)) {
+        HMONITOR monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+
         MONITORINFOEXW monitorInfo{};
         monitorInfo.cbSize = sizeof(monitorInfo);
-        if (GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST),
+        if (GetMonitorInfoW(monitor,
                             reinterpret_cast<LPMONITORINFO>(&monitorInfo))) {
             height = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
 
@@ -498,10 +538,19 @@ MonitorMetrics GetCursorMonitorMetrics() {
                 refreshRate = static_cast<int>(mode.dmDisplayFrequency);
             }
         }
+
+        UINT dpiX, dpiY;
+        if (SUCCEEDED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX,
+                                       &dpiY)) &&
+            dpiX > 0) {
+            dpiScale = dpiX / 96.0;
+        }
     }
 
     refreshRate = std::clamp(refreshRate, 30, 360);
-    return {10'000'000LL / refreshRate, height > 0 ? height : 1080};
+    const int rawHeight = height > 0 ? height : 1080;
+    return {10'000'000LL / refreshRate,
+           static_cast<int>(std::lround(rawHeight / dpiScale))};
 }
 
 double EaseOutCubic(double t) {
@@ -534,6 +583,12 @@ void StartTween(double to, int fullDurationMs, ULONGLONG now) {
 void GoIdle() {
     CancelWaitableTimer(g_timer);
     RestoreSystemCursors();  // Exact original cursors, all types.
+    for (CursorSource& source : g_sources) {
+        if (source.pristineCopy) {
+            DestroyCursor(source.pristineCopy);
+            source.pristineCopy = nullptr;
+        }
+    }
     g_phase = Phase::Idle;
     g_animating = false;
     g_shakeTimeMs = 0;
@@ -929,6 +984,11 @@ void WhTool_ModUninit() {
         WaitForSingleObject(g_workerThread, 5000);
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
+    }
+
+    if (g_workerReadyEvent) {
+        CloseHandle(g_workerReadyEvent);
+        g_workerReadyEvent = nullptr;
     }
 
     // Safety net in case the worker thread couldn't clean up in time.
