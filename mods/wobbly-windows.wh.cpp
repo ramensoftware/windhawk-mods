@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.110
+// @version         0.111
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
@@ -251,7 +251,6 @@ enum WindowEventHookIndex
     FOREGROUND_HOOK,
     MINIMIZE_HOOK,
     DESTROY_HOOK,
-    DESKTOP_SWITCH_HOOK,
     CLOAK_HOOK,
     WINDOW_EVENT_HOOK_COUNT
 };
@@ -303,7 +302,6 @@ static constexpr LPARAM NATIVE_TRANSITION_DIRECTION_UP = 0x40;
 static constexpr LPARAM NATIVE_TRANSITION_DIRECTION_DOWN = 0x80;
 std::atomic<HWND> g_pendingInteractiveTransitionWindow = nullptr;
 std::atomic<LPARAM> g_pendingInteractiveTransitionFlags = 0;
-std::atomic<ULONGLONG> g_windowStateThrobSuppressedUntil = 0;
 RECT g_realDraggedWindowRect = {};
 RECT g_lastDraggedWindowRect = {};
 bool g_lastDraggedWindowZoomed = false;
@@ -369,8 +367,8 @@ using DwmGetWindowAttribute_t = HRESULT(WINAPI*)(HWND hwnd, DWORD attribute, voi
 HMODULE g_dwmApiModule = nullptr;
 DwmGetWindowAttribute_t g_dwmGetWindowAttribute = nullptr;
 HWND g_lastForegroundWindow = nullptr;
-UINT_PTR g_virtualDesktopRefreshTimer = 0;
-ULONGLONG g_virtualDesktopRefreshDeadline = 0;
+UINT_PTR g_desktopVisibilityTimer = 0;
+ULONGLONG g_desktopVisibilityDeadline = 0;
 struct MilMatrix3x2D;
 struct D2DMatrix3x2F;
 using CMatrixTransformProxyUpdateDouble_t = long(__cdecl*)(void* pThis,
@@ -2397,11 +2395,11 @@ static void DropAnimationSlotsForStoppedSceneThread()
     }
 }
 
-static bool RegisterDwmSceneThread(bool authoritative)
+static bool RegisterDwmSceneThread(bool authoritativeTimeline)
 {
     DWORD currentThreadId = GetCurrentThreadId();
     DWORD ownerThreadId = g_dwmSceneThreadId.load(std::memory_order_acquire);
-    if (ownerThreadId == 0 && !authoritative)
+    if (ownerThreadId == 0 && !authoritativeTimeline)
     {
         // AdvanceTimelines authoritatively identifies uDWM's scene thread.
         return false;
@@ -2417,8 +2415,10 @@ static bool RegisterDwmSceneThread(bool authoritative)
     {
         return true;
     }
-    if (authoritative)
+    if (authoritativeTimeline)
     {
+        // DWM can replace its scene owner after compositor/desktop teardown.
+        // Transfer ownership only after the previous thread has stopped.
         bool previousOwnerStopped = false;
         HANDLE previousThread = OpenThread(SYNCHRONIZE, FALSE, ownerThreadId);
         if (previousThread)
@@ -3054,13 +3054,6 @@ static bool InitializeDwmHooks()
            g_topLevelWindow3DWindowDataOffset);
     void* compositor = FindDwmCompositor();
     g_dwmCompositor.store(compositor, std::memory_order_release);
-    bool canDiscoverCompositorFromTimeline = IsDwmFunctionPointerValid(
-        reinterpret_cast<void*>(g_desktopManagerAdvanceTimelinesOriginal));
-    if (!compositor && !canDiscoverCompositorFromTimeline)
-    {
-        Wh_Log(L"DWM compatibility: compositor unavailable and no timeline discovery hook exists");
-        return false;
-    }
     if (!compositor)
     {
         Wh_Log(L"DWM compatibility: compositor discovery deferred to the first scene timeline");
@@ -3413,7 +3406,7 @@ static long __cdecl ForceUpdateSceneHook(void* pThis)
     {
         return g_windowListForceUpdateSceneOriginal(pThis);
     }
-    bool canSubmit = RegisterDwmSceneThread(g_desktopManagerAdvanceTimelinesOriginal == nullptr);
+    bool canSubmit = RegisterDwmSceneThread(false);
     bool outermostPass = canSubmit && !g_insideWobblyScenePass;
     if (outermostPass)
     {
@@ -3439,7 +3432,7 @@ static long __cdecl UpdateSceneHook(void* pThis)
     {
         return g_windowListUpdateSceneOriginal(pThis);
     }
-    bool canSubmit = RegisterDwmSceneThread(g_desktopManagerAdvanceTimelinesOriginal == nullptr);
+    bool canSubmit = RegisterDwmSceneThread(false);
     bool outermostPass = canSubmit && !g_insideWobblyScenePass;
     if (outermostPass)
     {
@@ -4046,7 +4039,7 @@ static bool ReplaceAnimationWithStateThrob(WindowAnimationSlot& slot, int width,
 
 static WobblySettings GetSettingsSnapshot();
 static void UpdateAnimationFrame();
-static void RetireAnimationSlot(int slotIndex);
+static void RetireAnimationSlot(int slotIndex, HWND expectedWindow = nullptr);
 static void StopAllAnimations();
 static void MarkObservedWindowTransitionPending(HWND hwnd, bool expectedZoomed);
 static void HandleLocationChange(HWND hwnd, LONG idObject, LONG idChild);
@@ -4587,7 +4580,7 @@ static void StopAnimationClockIfIdle()
     g_sceneRecoveryCleanupPending.store(false, std::memory_order_release);
 }
 
-static void RetireAnimationSlot(int slotIndex)
+static void RetireAnimationSlot(int slotIndex, HWND expectedWindow)
 {
     if (slotIndex < 0 || slotIndex >= MAX_ANIMATION_SLOTS)
     {
@@ -4597,6 +4590,11 @@ static void RetireAnimationSlot(int slotIndex)
     HWND sceneWakeWindow = nullptr;
     AcquireSRWLockExclusive(&g_animationSlotsLock);
     WindowAnimationSlot& slot = g_animationSlots[slotIndex];
+    if (expectedWindow && (!slot.active || slot.hwnd != expectedWindow))
+    {
+        ReleaseSRWLockExclusive(&g_animationSlotsLock);
+        return;
+    }
     if (slot.active)
     {
         slot.active = false;
@@ -5730,6 +5728,8 @@ static void UpdateAnimationFrame()
         }
         if (now - g_lastSceneProgressTimestamp >= DWM_SCENE_STALL_TIMEOUT_MS)
         {
+            // Keep disable/update bounded if DWM stops servicing scene work
+            // while several transformed windows are settling.
             BeginSceneStallCleanup(L"no scene progress");
         }
         RequestDwmScenePass();
@@ -6435,9 +6435,7 @@ static void MarkObservedSnapTransition(HWND hwnd, bool transitionStarted)
 static void StartWindowStateThrob(HWND hwnd, bool maximizing, bool snapTransition = false,
                                   Vec2 direction = {})
 {
-    if (!hwnd || GetTickCount64() <
-                     g_windowStateThrobSuppressedUntil.load(std::memory_order_acquire) ||
-        g_realDragging.load(std::memory_order_relaxed) ||
+    if (!hwnd || g_realDragging.load(std::memory_order_relaxed) ||
         !IsEligibleWindowForStateThrob(hwnd) || !IsWindowVisible(hwnd) || IsIconic(hwnd) ||
         ShouldSuppressWindowStateThrob(hwnd))
     {
@@ -6733,57 +6731,70 @@ static bool IsShellCloakedWindow(HWND hwnd)
            (cloaked & dwmCloakedByShell) != 0;
 }
 
-static void HandleVirtualDesktopSwitch()
+static bool IsDesktopHiddenAppWindow(HWND hwnd)
 {
-    ULONGLONG now = GetTickCount64();
-    int slotsToRetire[MAX_ANIMATION_SLOTS] = {};
-    int retireCount = 0;
+    return IsEligibleWindowForStateThrob(hwnd) && !IsIconic(hwnd) &&
+           IsShellCloakedWindow(hwnd);
+}
+
+static void RefreshDesktopVisibility()
+{
+    struct ActiveWindow
+    {
+        int slotIndex;
+        HWND hwnd;
+    } activeWindows[MAX_ANIMATION_SLOTS] = {};
+    int activeCount = 0;
     AcquireSRWLockShared(&g_animationSlotsLock);
     for (int i = 0; i < MAX_ANIMATION_SLOTS; i++)
     {
         if (g_animationSlots[i].active)
         {
-            slotsToRetire[retireCount++] = i;
+            activeWindows[activeCount++] = {i, g_animationSlots[i].hwnd};
         }
     }
     ReleaseSRWLockShared(&g_animationSlotsLock);
-    for (int i = 0; i < retireCount; i++)
+    int cloakedCount = 0;
+    for (int i = 0; i < activeCount; i++)
     {
-        RetireAnimationSlot(slotsToRetire[i]);
+        if (IsShellCloakedWindow(activeWindows[i].hwnd))
+        {
+            RetireAnimationSlot(activeWindows[i].slotIndex, activeWindows[i].hwnd);
+            cloakedCount++;
+        }
     }
-    ResetDragInputState();
     // Old desktop objects can remain valid while pointing at a hidden visual.
     // Force the delayed backfill to read the active CWindowData object graph.
     ClearAllDwmWindowMappings();
     for (ObservedWindowState& observed : g_observedWindows)
     {
-        observed = {};
+        if (IsShellCloakedWindow(observed.hwnd))
+        {
+            observed = {};
+        }
     }
-    g_pendingMaximizedStateWindow.store(nullptr, std::memory_order_release);
-    g_maximizedStateCheckQueued.store(false, std::memory_order_release);
-    g_windowStateThrobSuppressedUntil.store(now + 750,
-                                            std::memory_order_release);
     RememberObservedWindowState(GetForegroundWindow());
     QueueExistingWindowBackfill();
-    Wh_Log(L"Virtual desktop changed: retired=%d, active windows refreshed", retireCount);
+    Wh_Log(L"Desktop visibility changed: cloakedAnimations=%d, visible windows refreshed",
+           cloakedCount);
 }
 
-static void ScheduleVirtualDesktopRefresh()
+static void ScheduleDesktopVisibilityRefresh()
 {
     if (g_unloading.load(std::memory_order_acquire))
     {
         return;
     }
-    g_virtualDesktopRefreshDeadline = GetTickCount64() + 300;
-    if (g_virtualDesktopRefreshTimer)
+    g_desktopVisibilityDeadline = GetTickCount64() + 300;
+    if (g_desktopVisibilityTimer)
     {
-        KillTimer(nullptr, g_virtualDesktopRefreshTimer);
+        KillTimer(nullptr, g_desktopVisibilityTimer);
     }
-    g_virtualDesktopRefreshTimer = SetTimer(nullptr, 0, 300, nullptr);
-    if (!g_virtualDesktopRefreshTimer)
+    g_desktopVisibilityTimer = SetTimer(nullptr, 0, 300, nullptr);
+    if (!g_desktopVisibilityTimer)
     {
-        g_virtualDesktopRefreshDeadline = 0;
-        HandleVirtualDesktopSwitch();
+        g_desktopVisibilityDeadline = 0;
+        RefreshDesktopVisibility();
     }
 }
 
@@ -6822,9 +6833,9 @@ static void CALLBACK WinEventCallback(HWINEVENTHOOK, DWORD event, HWND hwnd, LON
         HWND previousForeground = g_lastForegroundWindow;
         g_lastForegroundWindow = hwnd;
         if (previousForeground && previousForeground != hwnd &&
-            !IsIconic(previousForeground) && IsShellCloakedWindow(previousForeground))
+            IsDesktopHiddenAppWindow(previousForeground))
         {
-            ScheduleVirtualDesktopRefresh();
+            ScheduleDesktopVisibilityRefresh();
         }
         HandleObservedWindowLocationChange(hwnd, OBJID_WINDOW, CHILDID_SELF);
         break;
@@ -6849,17 +6860,11 @@ static void CALLBACK WinEventCallback(HWINEVENTHOOK, DWORD event, HWND hwnd, LON
     }
     case EVENT_OBJECT_CLOAKED:
     {
-        if (idObject == OBJID_WINDOW && idChild == CHILDID_SELF && !IsIconic(hwnd) &&
-            IsShellCloakedWindow(hwnd))
+        if (idObject == OBJID_WINDOW && idChild == CHILDID_SELF &&
+            IsDesktopHiddenAppWindow(hwnd))
         {
-            ScheduleVirtualDesktopRefresh();
+            ScheduleDesktopVisibilityRefresh();
         }
-        break;
-    }
-    case EVENT_SYSTEM_DESKTOPSWITCH:
-    {
-        g_lastForegroundWindow = hwnd ? hwnd : GetForegroundWindow();
-        ScheduleVirtualDesktopRefresh();
         break;
     }
     default:
@@ -6877,15 +6882,13 @@ static bool InitializeWindowEventHooks()
         const wchar_t* name;
     };
     constexpr DWORD standardFlags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
-    // Keep DWM-originated cloak/desktop events; only ordinary events skip our process.
+    // Keep DWM-originated cloak events; only ordinary events skip our process.
     const HookSpec specs[WINDOW_EVENT_HOOK_COUNT] = {
         {EVENT_SYSTEM_MOVESIZESTART, EVENT_SYSTEM_MOVESIZEEND, standardFlags, L"move/size"},
         {EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, standardFlags, L"location"},
         {EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, standardFlags, L"foreground"},
         {EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, standardFlags, L"minimize"},
         {EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY, standardFlags, L"destroy"},
-        {EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH, WINEVENT_OUTOFCONTEXT,
-         L"virtual desktop"},
         {EVENT_OBJECT_CLOAKED, EVENT_OBJECT_CLOAKED, WINEVENT_OUTOFCONTEXT, L"window cloak"},
     };
     for (int i = 0; i < WINDOW_EVENT_HOOK_COUNT; i++)
@@ -6913,12 +6916,12 @@ static bool InitializeWindowEventHooks()
 
 static void UninitializeWindowEventHooks()
 {
-    if (g_virtualDesktopRefreshTimer)
+    if (g_desktopVisibilityTimer)
     {
-        KillTimer(nullptr, g_virtualDesktopRefreshTimer);
-        g_virtualDesktopRefreshTimer = 0;
+        KillTimer(nullptr, g_desktopVisibilityTimer);
+        g_desktopVisibilityTimer = 0;
     }
-    g_virtualDesktopRefreshDeadline = 0;
+    g_desktopVisibilityDeadline = 0;
     ResetExistingWindowBackfill();
     StopAllAnimations();
     for (HWINEVENTHOOK& hook : g_windowEventHooks)
@@ -7014,23 +7017,23 @@ static DWORD WINAPI WindowEventThreadProc(LPVOID)
                 break;
             }
             if (message.message == WM_TIMER &&
-                message.wParam == g_virtualDesktopRefreshTimer)
+                message.wParam == g_desktopVisibilityTimer)
             {
-                KillTimer(nullptr, g_virtualDesktopRefreshTimer);
-                g_virtualDesktopRefreshTimer = 0;
+                KillTimer(nullptr, g_desktopVisibilityTimer);
+                g_desktopVisibilityTimer = 0;
                 ULONGLONG now = GetTickCount64();
-                if (now < g_virtualDesktopRefreshDeadline)
+                if (now < g_desktopVisibilityDeadline)
                 {
                     UINT remaining = static_cast<UINT>(
-                        std::max<ULONGLONG>(1, g_virtualDesktopRefreshDeadline - now));
-                    g_virtualDesktopRefreshTimer = SetTimer(nullptr, 0, remaining, nullptr);
-                    if (g_virtualDesktopRefreshTimer)
+                        std::max<ULONGLONG>(1, g_desktopVisibilityDeadline - now));
+                    g_desktopVisibilityTimer = SetTimer(nullptr, 0, remaining, nullptr);
+                    if (g_desktopVisibilityTimer)
                     {
                         continue;
                     }
                 }
-                g_virtualDesktopRefreshDeadline = 0;
-                HandleVirtualDesktopSwitch();
+                g_desktopVisibilityDeadline = 0;
+                RefreshDesktopVisibility();
                 continue;
             }
             if (message.message == WM_WOBBLY_MAXIMIZED_CHANGE)
@@ -7262,7 +7265,6 @@ BOOL Wh_ModInit()
     g_abandonedProxyCount.store(0, std::memory_order_release);
     g_sceneOwnershipResetPending.store(false, std::memory_order_release);
     g_lastBindPrerequisiteLog.store(0, std::memory_order_release);
-    g_windowStateThrobSuppressedUntil.store(0, std::memory_order_release);
     ResetExistingWindowBackfill();
     g_lastObservedScenePassCounter = 0;
     g_lastSceneProgressTimestamp = 0;
