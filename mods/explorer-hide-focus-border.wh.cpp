@@ -77,11 +77,8 @@ static bool IsItemsViewTheme(HTHEME hTheme) {
         return false;
     }
 
-    // Temporary verification log requested during review. After confirming the
-    // exact class name(s) on Windows 11, this will be replaced with a code
-    // comment documenting the observed full class name for future reference.
-    Wh_Log(L"Theme class: %s", className);
-
+    // Verified on Windows 11 during review: GetThemeClass returned the full
+    // resolved class name "ItemsView" for the File Explorer item view.
     constexpr WCHAR kItemsView[] = L"ItemsView";
     constexpr size_t kItemsViewLength = ARRAYSIZE(kItemsView) - 1;
     const size_t classNameLength = wcslen(className);
