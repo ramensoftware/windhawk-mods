@@ -507,6 +507,8 @@ each one's exact prior local value when it unloads.
 #include <functional>
 #include <limits>
 #include <list>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <vector>
 #include <winrt/base.h>
@@ -1740,7 +1742,7 @@ namespace ngs = windhawk_mod_templates::native_glyph_surface;
 
 // ============================================================
 // Property lease
-// Template block: _templates/property-lease.h v1.0 (verbatim copy —
+// Template block: _templates/property-lease.h v1.1 (verbatim copy —
 // keep in sync with the template; Windhawk mods are single-file).
 // ============================================================
 
@@ -1787,6 +1789,33 @@ public:
             }
         }
         snapshots_.clear();
+    }
+
+    // Put ONE object's properties back and forget them, leaving every other
+    // object's snapshots alone. For the case where a mod discovers that an
+    // element it began borrowing was never actually its business — handing
+    // that element back has to be possible without ending the whole lease.
+    void RestoreObject(DependencyObject const& object,
+                       RestoreErrorFn const& onError = {}) {
+        if (!object) return;
+        for (auto it = snapshots_.rbegin(); it != snapshots_.rend();) {
+            if (it->object != object) {
+                ++it;
+                continue;
+            }
+            try {
+                if (it->localValue == DependencyProperty::UnsetValue())
+                    it->object.ClearValue(it->property);
+                else
+                    it->object.SetValue(it->property, it->localValue);
+            } catch (...) {
+                if (onError) onError();
+            }
+            // Erase through the reverse iterator without invalidating the
+            // traversal: base() points one past the element being erased.
+            it = std::make_reverse_iterator(snapshots_.erase(
+                std::next(it).base()));
+        }
     }
 
     // Drop the snapshots WITHOUT restoring. For the case where the elements
@@ -1983,7 +2012,7 @@ namespace clr = windhawk_mod_templates::color_tokens;
 
 // ============================================================
 // Taskbar host
-// Template block: _templates/taskbar-host.h v1.1 (verbatim copy —
+// Template block: _templates/taskbar-host.h v1.2 (verbatim copy —
 // keep in sync with the template; Windhawk mods are single-file).
 // ============================================================
 
@@ -2326,6 +2355,20 @@ inline wchar_t const* OrientationName(Orientation orientation) {
 //
 // Stoppable and WAITED during unload. A detached thread that outlives
 // Wh_ModUninit runs mod code out of an unloaded DLL.
+//
+// STOP IS CALLED FROM MORE THAN ONE THREAD. Wh_ModUninit stops the loop from
+// Windhawk's thread while an Explorer taskbar rebuild can be starting it from
+// the taskbar's UI thread, and Start() stops the previous run before it begins
+// a new one. So the handles cannot live in bare members that each caller
+// closes: two callers would read the same handle and close it twice, and in
+// explorer.exe a double CloseHandle later closes whatever unrelated handle the
+// value was recycled into.
+//
+// One attempt therefore owns its handles through a shared Run, and EVERY
+// caller that observes a live Run waits for it. The mutex is held only across
+// the handoff, never across the wait: the retry thread marshals onto the UI
+// thread with SendMessage, so a UI-thread caller blocked on the mutex while
+// another thread waited under it could never service that message.
 
 class RetryLoop {
 public:
@@ -2333,80 +2376,120 @@ public:
     using AppliedFn = bool (*)();
     using AttemptFn = void (*)();
 
+    // No destructor on purpose. A namespace-scope loop's destructor would run
+    // at DLL detach, inside the loader lock, and Stop() waits on a thread —
+    // the owner stops it explicitly from Wh_ModUninit instead.
+
     void Start(AttemptFn attempt, AppliedFn applied,
                std::atomic<bool> const& unloading, int attempts = 5,
                DWORD intervalMs = 2000, bool forceFirstAttempt = false) {
         Stop();
         if (unloading) return;
-        attempt_ = attempt;
-        applied_ = applied;
-        unloading_ = &unloading;
-        attempts_ = attempts;
-        intervalMs_ = intervalMs;
-        forceFirstAttempt_ = forceFirstAttempt;
-        stopEvent_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!stopEvent_) return;
-        thread_ = CreateThread(
-            nullptr, 0,
-            [](void* parameter) -> DWORD {
-                auto* self = static_cast<RetryLoop*>(parameter);
-                for (int i = 0; i < self->attempts_ && !*self->unloading_;
-                     ++i) {
-                    // A settings reload can need one restore/reapply pass even
-                    // while `applied` truthfully says we still own live XAML.
-                    // Do not overload that ownership flag merely to wake the
-                    // retry loop; request a forced first attempt instead.
-                    if (self->applied_ &&
-                        !(self->forceFirstAttempt_ && i == 0) &&
-                        self->applied_()) break;
-                    if (i && WaitForSingleObject(self->stopEvent_,
-                                                 self->intervalMs_) !=
-                                 WAIT_TIMEOUT)
-                        break;
-                    if (self->attempt_) self->attempt_();
-                }
-                return 0;
-            },
-            this, 0, nullptr);
-        if (!thread_) {
-            CloseHandle(stopEvent_);
-            stopEvent_ = nullptr;
+
+        auto run = std::make_shared<Run>();
+        run->attempt = attempt;
+        run->applied = applied;
+        run->unloading = &unloading;
+        run->attempts = attempts;
+        run->intervalMs = intervalMs;
+        run->forceFirstAttempt = forceFirstAttempt;
+        run->stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!run->stopEvent) return;
+
+        // The thread carries a reference of its own, so the Run survives until
+        // both the loop and the thread are done with it, whichever ends first.
+        auto* parameter = new std::shared_ptr<Run>(run);
+        run->thread =
+            CreateThread(nullptr, 0, ThreadMain, parameter, 0, nullptr);
+        if (!run->thread) {
+            delete parameter;
+            return;
         }
+
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            if (!unloading) {
+                run_ = std::move(run);
+                return;
+            }
+        }
+        // Unload began while this attempt was being created, so the Stop that
+        // would have waited for it saw nothing. Wait for it here instead.
+        StopRun(run);
     }
 
-    // Pumps sent messages while waiting: the retry thread marshals onto the UI
-    // thread with SendMessage, so a plain wait from that same UI thread would
-    // deadlock against the thread it is waiting for.
     void Stop() {
-        if (stopEvent_) SetEvent(stopEvent_);
-        if (thread_) {
-            DWORD result;
-            do {
-                result = MsgWaitForMultipleObjects(1, &thread_, FALSE, INFINITE,
-                                                   QS_SENDMESSAGE);
-                if (result == WAIT_OBJECT_0 + 1) {
-                    MSG message;
-                    PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
-                }
-            } while (result == WAIT_OBJECT_0 + 1);
-            CloseHandle(thread_);
-            thread_ = nullptr;
+        std::shared_ptr<Run> run;
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            run = run_;  // shared, not moved: a concurrent Stop must wait too
         }
-        if (stopEvent_) {
-            CloseHandle(stopEvent_);
-            stopEvent_ = nullptr;
-        }
+        if (!run) return;
+        StopRun(run);
+        std::lock_guard<std::mutex> guard(mutex_);
+        if (run_ == run) run_.reset();
     }
 
 private:
-    HANDLE thread_ = nullptr;
-    HANDLE stopEvent_ = nullptr;
-    AttemptFn attempt_ = nullptr;
-    AppliedFn applied_ = nullptr;
-    std::atomic<bool> const* unloading_ = nullptr;
-    int attempts_ = 5;
-    DWORD intervalMs_ = 2000;
-    bool forceFirstAttempt_ = false;
+    struct Run {
+        HANDLE thread = nullptr;
+        HANDLE stopEvent = nullptr;
+        AttemptFn attempt = nullptr;
+        AppliedFn applied = nullptr;
+        std::atomic<bool> const* unloading = nullptr;
+        int attempts = 5;
+        DWORD intervalMs = 2000;
+        bool forceFirstAttempt = false;
+
+        // Closed exactly once, when the last of the loop and the thread lets
+        // go. Both have already stopped using them by then.
+        ~Run() {
+            if (thread) CloseHandle(thread);
+            if (stopEvent) CloseHandle(stopEvent);
+        }
+    };
+
+    static DWORD WINAPI ThreadMain(void* parameter) {
+        auto* owned = static_cast<std::shared_ptr<Run>*>(parameter);
+        std::shared_ptr<Run> run = *owned;
+        delete owned;
+        for (int i = 0; i < run->attempts && !*run->unloading; ++i) {
+            // A settings reload can need one restore/reapply pass even while
+            // `applied` truthfully says we still own live XAML. Do not
+            // overload that ownership flag merely to wake the retry loop;
+            // request a forced first attempt instead.
+            if (run->applied && !(run->forceFirstAttempt && i == 0) &&
+                run->applied())
+                break;
+            if (i && WaitForSingleObject(run->stopEvent, run->intervalMs) !=
+                         WAIT_TIMEOUT)
+                break;
+            if (run->attempt) run->attempt();
+        }
+        return 0;
+    }
+
+    // Signal and wait, pumping sent messages: a caller on the taskbar's UI
+    // thread would otherwise deadlock against the SendMessage the retry thread
+    // is making back to it. Idempotent — the stop event is manual-reset, and
+    // waiting on an already-exited thread returns at once.
+    static void StopRun(std::shared_ptr<Run> const& run) {
+        if (run->stopEvent) SetEvent(run->stopEvent);
+        if (!run->thread) return;
+        DWORD result;
+        do {
+            HANDLE thread = run->thread;
+            result = MsgWaitForMultipleObjects(1, &thread, FALSE, INFINITE,
+                                               QS_SENDMESSAGE);
+            if (result == WAIT_OBJECT_0 + 1) {
+                MSG message;
+                PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
+            }
+        } while (result == WAIT_OBJECT_0 + 1);
+    }
+
+    std::mutex mutex_;
+    std::shared_ptr<Run> run_;
 };
 
 }  // namespace windhawk_mod_templates::taskbar_host
@@ -2639,6 +2722,12 @@ static void LoadSettings() {
 // Probed once each, then reused. A Surface knows not just WHERE the stylable
 // leaf is but WHAT it is, so a setting that cannot apply to a given item is
 // dropped rather than silently written to the wrong element.
+//
+// Bare no_destroy rather than the optional<> wrapper, deliberately: a Surface
+// is assigned `= {}` by ResetElementRefs() on the UI thread, and that really
+// does release every member — the strong XAML refs, the shape vector and the
+// string. There is nothing left for a reset() to free, so the wrapper would
+// add indirection at every use for no lifetime difference.
 [[clang::no_destroy]] static ngs::Surface g_networkSurface{};
 [[clang::no_destroy]] static ngs::Surface g_volumeSurface{};
 [[clang::no_destroy]] static ngs::Surface g_batterySurface{};
@@ -2652,7 +2741,11 @@ static std::atomic<bool> g_applied{false};
 static std::atomic<bool> g_reapplyPending{false};
 // Stoppable and WAITED during unload: a detached retry thread that outlives
 // Wh_ModUninit would run mod code out of an unloaded DLL.
-static tbh::RetryLoop g_retryLoop;
+//
+// no_destroy: the loop owns a worker thread and its handles, and a destructor
+// at DLL detach would wait on that thread under the loader lock. Wh_ModUninit
+// stops and releases it explicitly.
+[[clang::no_destroy]] static tbh::RetryLoop g_retryLoop;
 
 [[clang::no_destroy]] static std::optional<std::list<FrameworkElement::Loaded_revoker>>
     g_autoRevokerList{std::in_place};
@@ -3336,6 +3429,10 @@ static CellContentMetrics PrepareIndependentItem(
 // IconView > ContainerGrid > ContentGrid > TextIconContent > ContainerGrid >
 // ... before reaching its InnerTextBlock. A limit tuned for the shallow case
 // silently truncates the deep one and the dump answers nothing.
+// Wh_Log expands to `if (logging enabled) { ...args... }`, so the class names
+// and sizes below cost nothing when logging is off. The tree walk itself does
+// still run — bounded to depth 4 of the battery subtree, once per apply, which
+// is not worth a switch of its own.
 static void LogItemSubtree(PCWSTR label, DependencyObject const& root,
                            int maxDepth = 4, int depth = 0) {
     if (depth > maxDepth) return;
@@ -3391,7 +3488,29 @@ static bool MeasureItemContentWidth(int item, FrameworkElement const& element) {
     return true;
 }
 
+// AN APPLY IS IN FLIGHT. ApplyLayout calls UpdateLayout(), which runs a
+// SYNCHRONOUS layout pass — and that pass can realize a new IconView and raise
+// its Loaded handler, which starts another apply while this one is still
+// mid-frame. g_inLayoutUpdated only covers the LayoutUpdated entry point; this
+// covers every entry point, including a settings change that reaches
+// ApplyLayout without going through LayoutUpdated at all.
+static bool g_applying = false;
+
+struct ApplyingScope {
+    bool entered = false;
+    ApplyingScope() {
+        if (!g_applying) {
+            g_applying = true;
+            entered = true;
+        }
+    }
+    ~ApplyingScope() {
+        if (entered) g_applying = false;
+    }
+};
+
 static void ApplyLayout(StackPanel const& sp, HWND hTaskbarWnd) {
+    ApplyingScope applying;
     if (g_omniStackPanel) return;
     if (!sp.IsItemsHost()) return;
 
@@ -3880,7 +3999,9 @@ static void OnLayoutUpdatedImpl() {
     auto savedOmniButton = g_omniButton;
     CleanupAndResetCurrentElements();
     g_omniButton = savedOmniButton;
-    ApplyLayout(sp, g_taskbarWnd);
+    // Validate the cached handle like every other consumer: Shell_TrayWnd can
+    // be recreated in-process, and the layout uses this for the taskbar's DPI.
+    ApplyLayout(sp, tbh::ResolveTaskbarWnd(g_taskbarWnd));
     RegisterLayoutUpdatedMonitor(sp);
 }
 
@@ -4043,6 +4164,7 @@ static bool ApplyAllSettings() {
 }
 
 static bool ApplyPendingSettings() {
+    ApplyingScope applying;
     if (g_reapplyPending.exchange(false)) {
         CleanupAndResetCurrentElements();
         g_applied = false;
@@ -4068,7 +4190,10 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
             [it](IInspectable const&, RoutedEventArgs const&) {
                 try {
                     g_autoRevokerList->erase(it);
-                    if (!g_unloading && (!g_applied || g_reapplyPending))
+                    // Not while an apply is already running: this handler can
+                    // be raised BY that apply's own UpdateLayout() call.
+                    if (!g_unloading && !g_applying &&
+                        (!g_applied || g_reapplyPending))
                         g_applied = ApplyPendingSettings();
                 } catch (...) {
                     LogCurrentUiException(L"IconView Loaded");
@@ -4127,16 +4252,20 @@ static bool HookSystemTraySymbols(HMODULE hModule) {
     return true;
 }
 
+// ONCE PER MODULE, EVEN ON FAILURE. HookSymbols must not run twice against the
+// same module: each extra call invalidates the symbol cache and forces a full
+// re-resolution. This flag therefore means "hooking has been ATTEMPTED", and
+// is never cleared — clearing it on failure made every subsequent
+// LoadLibraryExW that resolved to the tray module try again, without bound.
 static void HandleLoadedModuleIfSystemTray(HMODULE hModule, LPCWSTR lpLibFileName) {
     if (!g_systemTrayModuleHooked && GetSystemTrayModuleHandle() == hModule) {
-        bool expected = false;
-        if (!g_systemTrayModuleHooked.compare_exchange_strong(expected, true))
+        if (g_systemTrayModuleHooked.exchange(true))
             return;
         Wh_Log(L"[LoadLib] %s — hooking symbols", lpLibFileName);
         if (HookSystemTraySymbols(hModule)) {
             Wh_ApplyHookOperations();
         } else {
-            g_systemTrayModuleHooked = false;
+            Wh_Log(L"[LoadLib] System tray symbol hooks failed; not retrying");
         }
     }
 }
@@ -4206,10 +4335,11 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
     if (HMODULE hSysTray = GetSystemTrayModuleHandle()) {
-        if (HookSystemTraySymbols(hSysTray))
-            g_systemTrayModuleHooked = true;
-        else
-            Wh_Log(L"[Init] system tray symbol hooks failed");
+        // Mark the attempt before making it, so a failure here cannot be
+        // retried against the same module later.
+        g_systemTrayModuleHooked = true;
+        if (!HookSystemTraySymbols(hSysTray))
+            Wh_Log(L"[Init] system tray symbol hooks failed; not retrying");
     } else {
         Wh_Log(L"[Init] System tray module not loaded yet");
         HMODULE kb = GetModuleHandleW(L"kernelbase.dll");
@@ -4228,7 +4358,8 @@ void Wh_ModAfterInit() {
                 if (HookSystemTraySymbols(hSysTray)) {
                     Wh_ApplyHookOperations();
                 } else {
-                    g_systemTrayModuleHooked = false;
+                    Wh_Log(L"[AfterInit] system tray symbol hooks failed; "
+                           L"not retrying");
                 }
             }
         }
@@ -4244,32 +4375,47 @@ void Wh_ModUninit() {
     // VALIDATE THE CACHED HANDLE. Shell_TrayWnd can be recreated in-process, and
     // preferring a stale g_taskbarWnd made RunFromWindowThread fail outright
     // (GetWindowThreadProcessId returns 0), which skipped the whole teardown.
-    HWND hWnd = (g_taskbarWnd && IsWindow(g_taskbarWnd))
-                    ? g_taskbarWnd
-                    : FindCurrentProcessTaskbarWnd();
+    HWND hWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd);
     bool tornDown = false;
     if (hWnd) {
         tornDown = RunFromWindowThread(hWnd, [](void*) {
-            // Controlled UI-thread unload: revoke/restore on this thread, then
-            // reset() the no_destroy optionals to free their heap buffers.
-            g_autoRevokerList->clear();
-            CleanupAndResetCurrentElements();
-            g_autoRevokerList.reset();
-            g_lease.reset();
+            // EACH STEP IS GUARDED SEPARATELY, and that is the whole point.
+            // These all touch thread-affine XAML, so any one of them can
+            // throw — and an unguarded sequence would let the first failure
+            // skip every revocation after it. The dispatch would then report
+            // failure and drop to the fallback below, which runs on Windhawk's
+            // thread where a XAML revoke CANNOT work: LayoutUpdated(token) and
+            // the Loaded revoker destructors fail with RPC_E_WRONG_THREAD and
+            // get swallowed, leaving a live handler pointing into an image
+            // Windhawk is about to free.
+            //
+            // In practice this is the only realistic failure mode left: the
+            // handle is validated, SetWindowsHookExW effectively always
+            // succeeds, and SendMessageW completes while the taskbar thread is
+            // alive. So "dispatch failed" almost always means "the lambda
+            // threw" — the UI thread was right there, and the revocations
+            // could have happened. Guarding per step is what actually closes
+            // the hole; the fallback is only a last resort.
+            try { g_autoRevokerList->clear(); } catch (...) {}
+            try { RevokeLayoutUpdated(); } catch (...) {}
+            try { CleanupAndResetCurrentElements(); } catch (...) {}
+            try { g_autoRevokerList.reset(); } catch (...) {}
+            try { g_lease.reset(); } catch (...) {}
             g_applied = false;
         }, nullptr);
     }
 
     if (!tornDown) {
-        // NOTHING THAT CAN CALL INTO THIS MOD MAY OUTLIVE THE UNLOAD. Windhawk
-        // FreeLibrarys this image as soon as Wh_ModUninit returns, and every
-        // IconView that was constructed but never raised Loaded still holds a
-        // Loaded delegate whose code lives in it. Revoking off the UI thread is
-        // not ideal, but a dangling callback into a freed image is worse, so
-        // this runs regardless and swallows whatever the cross-thread revoke
-        // throws. The leased properties are deliberately left written: they are
-        // cosmetic, and restoring them needs the UI thread we just failed to
-        // reach.
+        // BEST EFFORT, AND HONESTLY SO. This runs on Windhawk's thread, where
+        // a revoke of a thread-affine XAML handler cannot succeed — it fails
+        // with RPC_E_WRONG_THREAD and is swallowed below. It is here because a
+        // dangling callback into a freed image is worse than trying and
+        // failing, and because the non-XAML parts (dropping cached references,
+        // freeing the optionals' buffers) do work from any thread. The
+        // guarded lambda above is what actually revokes a live handler; if
+        // this block is reached, assume it did not happen. The leased
+        // properties are deliberately left written: they are cosmetic, and
+        // restoring them needs the UI thread we just failed to reach.
         Wh_Log(L"[Uninit] Taskbar dispatch unavailable; revoking callbacks "
                L"anyway so nothing outlives the unload");
         try {
@@ -4304,24 +4450,33 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     StopRetryThread();
-    LoadSettings();
-    // A glyph-size or font-family change invalidates every width measured so
-    // far — the percentage's text width and every fit-to-content cell alike.
-    g_percentWidestDesired = 0.0;
-    SetPercentMeasuredText(nullptr);
-    for (double& width : g_itemContentWidth) width = 0.0;
-    g_remeasures = 0;
-    g_reapplyPending = true;
-    g_applied = false;
-    Wh_Log(L"[Settings] Updated");
     HWND hWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd);
     if (!hWnd) {
+        // No UI thread to load on, and nothing is reading g_settings either,
+        // so loading here is safe and the retry re-applies later.
+        LoadSettings();
+        g_reapplyPending = true;
+        g_applied = false;
         Wh_Log(L"[Settings] No taskbar window; scheduling retry");
         StartRetryThread();
         return;
     }
+    // LOAD ON THE UI THREAD. g_settings holds fixed wchar_t buffers that
+    // OnLayoutUpdated reads on the taskbar thread, so rewriting them from
+    // Windhawk's thread is a torn read waiting to happen. Doing the load
+    // inside the dispatch puts the write and every reader on one thread.
     if (!RunFromWindowThread(hWnd, [](void* parameter) {
         HWND window = static_cast<HWND>(parameter);
+        LoadSettings();
+        // A glyph-size or font-family change invalidates every width measured
+        // so far — the percentage's text width and every fit-to-content cell.
+        g_percentWidestDesired = 0.0;
+        SetPercentMeasuredText(nullptr);
+        for (double& width : g_itemContentWidth) width = 0.0;
+        g_remeasures = 0;
+        g_reapplyPending = true;
+        g_applied = false;
+        Wh_Log(L"[Settings] Updated");
         if (!GetTaskbarXamlRoot(window)) return;
         g_applied = ApplyPendingSettings();
     }, hWnd))
