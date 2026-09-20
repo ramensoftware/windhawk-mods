@@ -37,9 +37,9 @@ the themed focus border used by the modern File Explorer item view.
 - The implementation relies on an undocumented File Explorer theme detail:
   `ItemsView`, part 3, state 1 is used for the focus border on current Windows
   builds. A future Windows update may change this.
-- The resolved theme class is matched by an `ItemsView` suffix so dark-mode
-  variants such as `DarkMode_ItemsView` are covered without matching unrelated
-  classes such as `ListView`.
+- On the tested Windows 11 build, `GetThemeClass` resolved the File Explorer
+  item view to the full class name `ItemsView` in both the tested light/dark
+  scenarios, so the implementation matches that class name exactly.
 - The mod is scoped to `explorer.exe`; common Open/Save dialogs hosted by other
   applications are not affected.
 - Older Windows versions are untested.
@@ -79,13 +79,7 @@ static bool IsItemsViewTheme(HTHEME hTheme) {
 
     // Verified on Windows 11 during review: GetThemeClass returned the full
     // resolved class name "ItemsView" for the File Explorer item view.
-    constexpr WCHAR kItemsView[] = L"ItemsView";
-    constexpr size_t kItemsViewLength = ARRAYSIZE(kItemsView) - 1;
-    const size_t classNameLength = wcslen(className);
-
-    return classNameLength >= kItemsViewLength &&
-           _wcsicmp(className + classNameLength - kItemsViewLength,
-                    kItemsView) == 0;
+    return _wcsicmp(className, L"ItemsView") == 0;
 }
 
 static bool ShouldSuppressFocusBorder(HTHEME hTheme,
