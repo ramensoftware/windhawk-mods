@@ -2,7 +2,7 @@
 // @id              native-shadow-tuner
 // @name            Windows Shadows Tuner
 // @description     Adjust the size, blur and intensity of native Windows shadows.
-// @version         0.6.3
+// @version         0.6.4
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         dwm.exe
@@ -47,10 +47,11 @@ the requested appearance is identical to the original Windows appearance.
 The mod hooks a single uDWM function, `CWindowBorder::GetShadowParameters`,
 and scales the radius and alpha values it produces. To apply changes to windows
 that are already open and restore the original shadows when the mod is disabled,
-the mod asks DWM to rebuild its window visuals on load and unload. On the tested
-build, the change and restoration happen immediately without restarting
-`dwm.exe` or signing out. The mod creates no overlay windows and stores no
-persistent state.
+the mod briefly toggles the system drop-shadow setting off and on in memory so
+DWM rebuilds every window's shadow. The user profile isn't modified and no
+settings-change message is broadcast. Shadows can blink for a fraction of a
+second when the mod is loaded, unloaded, or its settings are changed. The mod
+creates no overlay windows and stores no persistent state.
 
 ## Compatibility
 
@@ -194,15 +195,21 @@ void __cdecl GetShadowParameters_Hook(int style,
 }
 
 void RequestDwmRefresh() {
-    if (HWND hDwm = FindWindowW(L"dwm", nullptr)) {
-        PostMessageW(
-            hDwm,
-            WM_DWMCOLORIZATIONCOLORCHANGED,
-            0,
-            0);
-    } else {
-        Wh_Log(L"DWM refresh window wasn't found.");
+    BOOL shadows = FALSE;
+    if (!SystemParametersInfoW(
+            SPI_GETDROPSHADOW, 0, &shadows, 0) ||
+        !shadows) {
+        return;
     }
+
+    SystemParametersInfoW(
+        SPI_SETDROPSHADOW, 0, reinterpret_cast<PVOID>(FALSE), 0);
+
+    // DWM releases the existing shadow brushes on the next composition frame.
+    Sleep(100);
+
+    SystemParametersInfoW(
+        SPI_SETDROPSHADOW, 0, reinterpret_cast<PVOID>(TRUE), 0);
 }
 
 }  // namespace
