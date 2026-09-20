@@ -87,7 +87,6 @@ Windhawk's Inclusion List.
 #include <windows.h>
 #include <uxtheme.h>
 #include <vssym32.h>
-#include <windhawk_utils.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -182,17 +181,19 @@ static COLORREF LoadColorRef(PCWSTR name, COLORREF fallback) {
         name, {GetRValue(fallback), GetGValue(fallback), GetBValue(fallback)});
     return RGB(color.r, color.g, color.b);
 }
-static bool ResolveUxThemeSymbols(HMODULE uxTheme, bool requireDarkMode) {
-    WindhawkUtils::SYMBOL_HOOK uxThemeDllHooks[] = {
-        {{L"GetThemeClass"}, &g_getThemeClass},
-        {{L"AllowDarkModeForWindow"}, &g_allowDarkModeForWindow, nullptr,
-         !requireDarkMode},
-        {{L"SetPreferredAppMode"}, &g_setPreferredAppMode, nullptr,
-         !requireDarkMode},
-    };
-    if (!WindhawkUtils::HookSymbols(
-            uxTheme, uxThemeDllHooks, ARRAYSIZE(uxThemeDllHooks))) {
-        Wh_Log(L"[ERROR] Couldn't resolve required uxtheme.dll symbols");
+static bool ResolveUxThemeFunctions(HMODULE uxTheme, bool requireDarkMode) {
+    // Private UxTheme exports used on Windows 11:
+    // https://github.com/winsiderss/systeminformer/blob/1ab5a1b98bf1de5ea92d189a29d1f28c476e27a4/phlib/guisup.c#L128-L139
+    g_getThemeClass = reinterpret_cast<GetThemeClass_t>(
+        GetProcAddress(uxTheme, MAKEINTRESOURCEA(74)));
+    g_allowDarkModeForWindow = reinterpret_cast<AllowDarkModeForWindow_t>(
+        GetProcAddress(uxTheme, MAKEINTRESOURCEA(133)));
+    g_setPreferredAppMode = reinterpret_cast<SetPreferredAppMode_t>(
+        GetProcAddress(uxTheme, MAKEINTRESOURCEA(135)));
+    if (!g_getThemeClass ||
+        (requireDarkMode &&
+         (!g_allowDarkModeForWindow || !g_setPreferredAppMode))) {
+        Wh_Log(L"[ERROR] Couldn't resolve required uxtheme.dll exports");
         return false;
     }
     return true;
@@ -1087,7 +1088,7 @@ bool Initialize(HostKind host, HMODULE uxTheme) {
     g_fixActive = g_fixActive && DetectDarkTheme();
     bool needDarkModeFunctions =
         g_isPrevhost && g_fixActive && g_useDarkScrollbar;
-    if (!ResolveUxThemeSymbols(uxTheme, needDarkModeFunctions))
+    if (!ResolveUxThemeFunctions(uxTheme, needDarkModeFunctions))
         return false;
     void* getThemeColor =
         reinterpret_cast<void*>(GetProcAddress(uxTheme, "GetThemeColor"));
