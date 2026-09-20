@@ -7,7 +7,7 @@
 // @github          https://github.com/sb4ssman
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -luuid -lgdi32 -lcomctl32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lshell32 -lshlwapi -luuid -lgdi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -285,12 +285,25 @@ caching, a tray-edge limit, and shared layout, settings, surface and tray-column
 - Behavior:
   - MaxMenuItems: 150
     $name: Max menu items per folder
-    $description: Limit menu size for very large folders. 0 = unlimited; 150 is the safe default.
+    $description: >-
+      Limit menu size for very large folders. 0 = unlimited; 150 is the safe
+      default. Values above 2000 are treated as 2000.
   - MaxDepth: 0
     $name: Subfolder depth
     $description: How many subfolder levels to include as nested menus. 0 = unlimited.
   - ShowHidden: false
-    $name: Show hidden/system items
+    $name: Show hidden items
+    $description: >-
+      Include items Windows marks hidden. Protected operating system files
+      stay hidden either way - those follow Explorer's own separate "Hide
+      protected operating system files" setting.
+  - UseLegacySettings: true
+    $name: Keep my 0.7 settings
+    $description: >-
+      Version 2.0 grouped every setting under a new name. With this on, a
+      value you customized in 0.7 keeps working until you change its 2.0
+      counterpart, so updating the mod does not reset your folders, sizes or
+      colors. Turn it off to use only the 2.0 settings.
   $name: Behavior
 
 */
@@ -315,7 +328,7 @@ caching, a tray-edge limit, and shared layout, settings, surface and tray-column
 
 #include <algorithm>
 #include <atomic>
-#include <climits>
+#include <cstring>
 #include <cwctype>
 #include <functional>
 #include <mutex>
@@ -326,6 +339,7 @@ caching, a tray-edge limit, and shared layout, settings, surface and tray-column
 #include <commctrl.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <shlwapi.h>
 #include <windhawk_utils.h>
 
 using namespace winrt::Windows::UI::Xaml;
@@ -1728,7 +1742,7 @@ inline bool Release(Panel const& parent, Lease& lease) {
 
 
 // Embedded from _templates/taskbar-host.h; verify with verify-template-parity.ps1.
-// Copy-source template v1.1: getting to the Windows 11 taskbar, and staying
+// Copy-source template v1.2: getting to the Windows 11 taskbar, and staying
 // attached to it.
 //
 // Every mod in this family opens with the same four moves — find the taskbar
@@ -1758,6 +1772,8 @@ inline bool Release(Panel const& parent, Lease& lease) {
 // for.
 
 #include <atomic>
+#include <memory>
+#include <mutex>
 
 #include <windows.h>
 
@@ -2103,6 +2119,20 @@ inline wchar_t const* OrientationName(Orientation orientation) {
 //
 // Stoppable and WAITED during unload. A detached thread that outlives
 // Wh_ModUninit runs mod code out of an unloaded DLL.
+//
+// STOP IS CALLED FROM MORE THAN ONE THREAD. Wh_ModUninit stops the loop from
+// Windhawk's thread while an Explorer taskbar rebuild can be starting it from
+// the taskbar's UI thread, and Start() stops the previous run before it begins
+// a new one. So the handles cannot live in bare members that each caller
+// closes: two callers would read the same handle and close it twice, and in
+// explorer.exe a double CloseHandle later closes whatever unrelated handle the
+// value was recycled into.
+//
+// One attempt therefore owns its handles through a shared Run, and EVERY
+// caller that observes a live Run waits for it. The mutex is held only across
+// the handoff, never across the wait: the retry thread marshals onto the UI
+// thread with SendMessage, so a UI-thread caller blocked on the mutex while
+// another thread waited under it could never service that message.
 
 class RetryLoop {
 public:
@@ -2110,72 +2140,120 @@ public:
     using AppliedFn = bool (*)();
     using AttemptFn = void (*)();
 
+    // No destructor on purpose. A namespace-scope loop's destructor would run
+    // at DLL detach, inside the loader lock, and Stop() waits on a thread —
+    // the owner stops it explicitly from Wh_ModUninit instead.
+
     void Start(AttemptFn attempt, AppliedFn applied,
                std::atomic<bool> const& unloading, int attempts = 5,
-               DWORD intervalMs = 2000) {
+               DWORD intervalMs = 2000, bool forceFirstAttempt = false) {
         Stop();
         if (unloading) return;
-        attempt_ = attempt;
-        applied_ = applied;
-        unloading_ = &unloading;
-        attempts_ = attempts;
-        intervalMs_ = intervalMs;
-        stopEvent_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!stopEvent_) return;
-        thread_ = CreateThread(
-            nullptr, 0,
-            [](void* parameter) -> DWORD {
-                auto* self = static_cast<RetryLoop*>(parameter);
-                for (int i = 0; i < self->attempts_ && !*self->unloading_;
-                     ++i) {
-                    if (self->applied_ && self->applied_()) break;
-                    if (i && WaitForSingleObject(self->stopEvent_,
-                                                 self->intervalMs_) !=
-                                 WAIT_TIMEOUT)
-                        break;
-                    if (self->attempt_) self->attempt_();
-                }
-                return 0;
-            },
-            this, 0, nullptr);
-        if (!thread_) {
-            CloseHandle(stopEvent_);
-            stopEvent_ = nullptr;
+
+        auto run = std::make_shared<Run>();
+        run->attempt = attempt;
+        run->applied = applied;
+        run->unloading = &unloading;
+        run->attempts = attempts;
+        run->intervalMs = intervalMs;
+        run->forceFirstAttempt = forceFirstAttempt;
+        run->stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (!run->stopEvent) return;
+
+        // The thread carries a reference of its own, so the Run survives until
+        // both the loop and the thread are done with it, whichever ends first.
+        auto* parameter = new std::shared_ptr<Run>(run);
+        run->thread =
+            CreateThread(nullptr, 0, ThreadMain, parameter, 0, nullptr);
+        if (!run->thread) {
+            delete parameter;
+            return;
         }
+
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            if (!unloading) {
+                run_ = std::move(run);
+                return;
+            }
+        }
+        // Unload began while this attempt was being created, so the Stop that
+        // would have waited for it saw nothing. Wait for it here instead.
+        StopRun(run);
     }
 
-    // Pumps sent messages while waiting: the retry thread marshals onto the UI
-    // thread with SendMessage, so a plain wait from that same UI thread would
-    // deadlock against the thread it is waiting for.
     void Stop() {
-        if (stopEvent_) SetEvent(stopEvent_);
-        if (thread_) {
-            DWORD result;
-            do {
-                result = MsgWaitForMultipleObjects(1, &thread_, FALSE, INFINITE,
-                                                   QS_SENDMESSAGE);
-                if (result == WAIT_OBJECT_0 + 1) {
-                    MSG message;
-                    PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
-                }
-            } while (result == WAIT_OBJECT_0 + 1);
-            CloseHandle(thread_);
-            thread_ = nullptr;
+        std::shared_ptr<Run> run;
+        {
+            std::lock_guard<std::mutex> guard(mutex_);
+            run = run_;  // shared, not moved: a concurrent Stop must wait too
         }
-        if (stopEvent_) {
-            CloseHandle(stopEvent_);
-            stopEvent_ = nullptr;
-        }
+        if (!run) return;
+        StopRun(run);
+        std::lock_guard<std::mutex> guard(mutex_);
+        if (run_ == run) run_.reset();
     }
 
 private:
-    HANDLE thread_ = nullptr;
-    HANDLE stopEvent_ = nullptr;
-    AttemptFn attempt_ = nullptr;
-    AppliedFn applied_ = nullptr;
-    std::atomic<bool> const* unloading_ = nullptr;
-    int attempts_ = 5;
-    DWORD intervalMs_ = 2000;
+    struct Run {
+        HANDLE thread = nullptr;
+        HANDLE stopEvent = nullptr;
+        AttemptFn attempt = nullptr;
+        AppliedFn applied = nullptr;
+        std::atomic<bool> const* unloading = nullptr;
+        int attempts = 5;
+        DWORD intervalMs = 2000;
+        bool forceFirstAttempt = false;
+
+        // Closed exactly once, when the last of the loop and the thread lets
+        // go. Both have already stopped using them by then.
+        ~Run() {
+            if (thread) CloseHandle(thread);
+            if (stopEvent) CloseHandle(stopEvent);
+        }
+    };
+
+    static DWORD WINAPI ThreadMain(void* parameter) {
+        auto* owned = static_cast<std::shared_ptr<Run>*>(parameter);
+        std::shared_ptr<Run> run = *owned;
+        delete owned;
+        for (int i = 0; i < run->attempts && !*run->unloading; ++i) {
+            // A settings reload can need one restore/reapply pass even while
+            // `applied` truthfully says we still own live XAML. Do not
+            // overload that ownership flag merely to wake the retry loop;
+            // request a forced first attempt instead.
+            if (run->applied && !(run->forceFirstAttempt && i == 0) &&
+                run->applied())
+                break;
+            if (i && WaitForSingleObject(run->stopEvent, run->intervalMs) !=
+                         WAIT_TIMEOUT)
+                break;
+            if (run->attempt) run->attempt();
+        }
+        return 0;
+    }
+
+    // Signal and wait, pumping sent messages: a caller on the taskbar's UI
+    // thread would otherwise deadlock against the SendMessage the retry thread
+    // is making back to it. Idempotent — the stop event is manual-reset, and
+    // waiting on an already-exited thread returns at once.
+    static void StopRun(std::shared_ptr<Run> const& run) {
+        if (run->stopEvent) SetEvent(run->stopEvent);
+        if (!run->thread) return;
+        DWORD result;
+        do {
+            HANDLE thread = run->thread;
+            result = MsgWaitForMultipleObjects(1, &thread, FALSE, INFINITE,
+                                               QS_SENDMESSAGE);
+            if (result == WAIT_OBJECT_0 + 1) {
+                MSG message;
+                PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
+            }
+        } while (result == WAIT_OBJECT_0 + 1);
+    }
+
+    std::mutex mutex_;
+    std::shared_ptr<Run> run_;
 };
 
 }  // namespace windhawk_mod_templates::taskbar_host
@@ -2291,6 +2369,8 @@ struct FolderEntry {
 };
 
 struct ModSettings {
+    // Read a customized 0.7 value while its 2.0 counterpart is untouched.
+    bool useLegacySettings = false;
     std::wstring position = L"beforeIcons";
     std::wstring arrangement = L"auto";
     ngl::FillOrder layoutFill = ngl::FillOrder::Rows;
@@ -2393,17 +2473,111 @@ static std::vector<FolderEntry> LoadFolders() {
     return folders;
 }
 
-static std::wstring GetStringSetting(PCWSTR name) {
-    sio::StringSetting value{name};
-    return value.Get();
+// WindhawkUtils::StringSetting already does the RAII free, and its `make`
+// takes the same format arguments Wh_GetStringSetting does, so the indexed
+// folder keys go through one reader like everything else.
+template <typename... Args>
+static std::wstring GetStringSetting(PCWSTR name, Args... args) {
+    auto value = WindhawkUtils::StringSetting::make(name, args...);
+    return value.get() ? std::wstring(value.get()) : std::wstring{};
+}
+
+// ---- Reading a 0.7 configuration ------------------------------------------
+//
+// 2.0 groups every setting key, and Windhawk cannot carry a value across a
+// rename. Windhawk also updates mods automatically, so without this the real
+// experience of the update is not "read the upgrade note" — it is "my folder
+// buttons reset to Desktop + Control Panel and my colors went back to
+// default", with the old values still sitting in storage, orphaned.
+//
+// So the 0.7 keys are still read. They are no longer DECLARED, which is fine:
+// an undeclared key still returns the stored user value. What it cannot do is
+// tell "unset" from "set to zero" — both read back as 0 or "". Hence the
+// probe below: establish that this install has a 0.7 configuration AT ALL,
+// and only then trust an individual legacy key against its 0.7 default.
+
+static bool HasLegacySettings() {
+    static PCWSTR const kProbeStrings[] = {
+        L"folders[0].target", L"position",        L"buttonText",
+        L"textColor",         L"backgroundColor", L"hoverBackgroundColor",
+    };
+    for (auto key : kProbeStrings) {
+        if (!GetStringSetting(key).empty())
+            return true;
+    }
+    static PCWSTR const kProbeInts[] = {
+        L"buttonWidth", L"buttonHeight", L"buttonSpacing", L"fontSize",
+        L"maxMenuItems", L"maxDepth", L"opacity",
+    };
+    for (auto key : kProbeInts) {
+        if (Wh_GetIntSetting(key) != 0)
+            return true;
+    }
+    return false;
+}
+
+// A 2.0 key wins as soon as it is changed from its declared default. Until
+// then a customized 0.7 value is used instead.
+static std::wstring PreferCurrentOrLegacyString(PCWSTR currentKey,
+                                                PCWSTR currentDefault,
+                                                PCWSTR legacyKey,
+                                                bool& usedLegacy) {
+    std::wstring current = GetStringSetting(currentKey);
+    if (!g_settings.useLegacySettings || current != currentDefault) {
+        return current;
+    }
+    std::wstring legacy = GetStringSetting(legacyKey);
+    if (legacy.empty()) {
+        return current;
+    }
+    usedLegacy = true;
+    return legacy;
+}
+
+static int PreferCurrentOrLegacyInt(PCWSTR currentKey, int currentDefault,
+                                    PCWSTR legacyKey, int legacyDefault,
+                                    int low, int high, bool& usedLegacy) {
+    int current = std::clamp(Wh_GetIntSetting(currentKey), low, high);
+    if (!g_settings.useLegacySettings || current != currentDefault) {
+        return current;
+    }
+    int legacy = Wh_GetIntSetting(legacyKey);
+    if (legacy == legacyDefault) {
+        return current;
+    }
+    usedLegacy = true;
+    return std::clamp(legacy, low, high);
+}
+
+// Whether the 2.0 folder list is untouched, i.e. exactly the two declared
+// defaults. Only then may a 0.7 list take over.
+static bool IsDefaultFolderList(std::vector<FolderEntry> const& folders) {
+    return folders.size() == 2 &&
+           folders[0].target == L"shell:Desktop" &&
+           folders[1].target == L"shell:ControlPanelFolder";
+}
+
+// 0.7 stored the folder list flat, with no per-folder icon switch.
+static std::vector<FolderEntry> LoadLegacyFolders() {
+    std::vector<FolderEntry> folders;
+    for (int i = 0;; i++) {
+        std::wstring target = Trim(GetStringSetting(L"folders[%d].target", i));
+        if (target.empty())
+            break;
+        std::wstring label = Trim(GetStringSetting(L"folders[%d].label", i));
+        folders.push_back({std::move(label), std::move(target), false});
+    }
+    return folders;
 }
 
 static void LoadSettings() {
-    auto clamp = [](int value, int lo, int hi) {
-        return std::max(lo, std::min(hi, value));
-    };
+    g_settings.useLegacySettings =
+        Wh_GetIntSetting(L"Behavior.UseLegacySettings") != 0 &&
+        HasLegacySettings();
+    bool usedLegacy = false;
 
-    g_settings.position = GetStringSetting(L"Placement.Position");
+    g_settings.position = PreferCurrentOrLegacyString(
+        L"Placement.Position", L"beforeIcons", L"position", usedLegacy);
     g_settings.arrangement = GetStringSetting(L"Layout.Arrangement");
     g_settings.layoutFill = GetStringSetting(L"Layout.FillOrder") == L"columns"
         ? ngl::FillOrder::Columns : ngl::FillOrder::Rows;
@@ -2411,29 +2585,76 @@ static void LoadSettings() {
     g_settings.justify = justify == L"start" ? ngl::Justify::Start
         : justify == L"end" ? ngl::Justify::End : ngl::Justify::Center;
     g_settings.appendNewItems = GetStringSetting(L"Layout.NewItems") != L"hide";
-    g_settings.padX = sio::LoadInt(L"Adjust.PadX", 0, 80);
+    // 0.7 reserved padding on each side separately; 2.0 has one horizontal
+    // value, so the wider of the two is what carries over.
+    g_settings.padX = PreferCurrentOrLegacyInt(
+        L"Adjust.PadX", 0,
+        Wh_GetIntSetting(L"groupPaddingLeft") >=
+                Wh_GetIntSetting(L"groupPaddingRight")
+            ? L"groupPaddingLeft"
+            : L"groupPaddingRight",
+        0, 0, 80, usedLegacy);
     g_settings.padY = sio::LoadInt(L"Adjust.PadY", 0, 80);
-    g_settings.buttonText = GetStringSetting(L"Content.DefaultLabel");
+    g_settings.buttonText = PreferCurrentOrLegacyString(
+        L"Content.DefaultLabel", L"\U0001F4C1", L"buttonText", usedLegacy);
+
     g_settings.folders = LoadFolders();
-    g_settings.buttonWidth = sio::LoadInt(L"Size.ItemWidth", 10, 256);
-    g_settings.buttonHeight = sio::LoadInt(L"Size.ItemHeight", 10, 256);
-    g_settings.buttonSpacing = sio::LoadInt(L"Size.ItemSpacing", 0, 80);
-    g_settings.maxMenuItems = std::clamp(
-        Wh_GetIntSetting(L"Behavior.MaxMenuItems"), 0, 2000);
-    g_settings.maxDepth = std::max(0, Wh_GetIntSetting(L"Behavior.MaxDepth"));
-    g_settings.showHidden = Wh_GetIntSetting(L"Behavior.ShowHidden") != 0;
-    g_settings.fontSize = std::max(1, Wh_GetIntSetting(L"Surface.FontSize"));
-    g_settings.textColor = GetStringSetting(L"Surface.TextColor");
-    g_settings.backgroundColor = GetStringSetting(L"Surface.BackgroundColor");
-    g_settings.hoverBackgroundColor = GetStringSetting(L"Surface.HoverBackgroundColor");
-    g_settings.pressedBackgroundColor = GetStringSetting(L"Surface.PressedBackgroundColor");
-    g_settings.borderColor = GetStringSetting(L"Surface.BorderColor");
-    g_settings.borderThickness = std::max(-1, Wh_GetIntSetting(L"Surface.BorderThickness"));
-    g_settings.cornerRadius = std::max(-1, Wh_GetIntSetting(L"Surface.CornerRadius"));
-    g_settings.opacityPct = std::clamp(Wh_GetIntSetting(L"Surface.Opacity"), 0, 100);
-    g_settings.shineEffect = Wh_GetIntSetting(L"Surface.ShineEffect") != 0;
-    g_settings.groupOffsetX = clamp(Wh_GetIntSetting(L"Adjust.OffsetX"), -80, 80);
-    g_settings.groupOffsetY = clamp(Wh_GetIntSetting(L"Adjust.OffsetY"), -80, 80);
+    if (g_settings.useLegacySettings && IsDefaultFolderList(g_settings.folders)) {
+        auto legacy = LoadLegacyFolders();
+        if (!legacy.empty()) {
+            g_settings.folders = std::move(legacy);
+            usedLegacy = true;
+        }
+    }
+
+    g_settings.buttonWidth = PreferCurrentOrLegacyInt(
+        L"Size.ItemWidth", 24, L"buttonWidth", 24, 10, 256, usedLegacy);
+    g_settings.buttonHeight = PreferCurrentOrLegacyInt(
+        L"Size.ItemHeight", 22, L"buttonHeight", 22, 10, 256, usedLegacy);
+    g_settings.buttonSpacing = PreferCurrentOrLegacyInt(
+        L"Size.ItemSpacing", 4, L"buttonSpacing", 4, 0, 80, usedLegacy);
+    g_settings.maxMenuItems = PreferCurrentOrLegacyInt(
+        L"Behavior.MaxMenuItems", 150, L"maxMenuItems", 0, 0, 2000,
+        usedLegacy);
+    g_settings.maxDepth = PreferCurrentOrLegacyInt(
+        L"Behavior.MaxDepth", 0, L"maxDepth", 0, 0, 64, usedLegacy);
+    g_settings.showHidden =
+        PreferCurrentOrLegacyInt(L"Behavior.ShowHidden", 0, L"showHidden", 0,
+                                 0, 1, usedLegacy) != 0;
+    g_settings.fontSize = PreferCurrentOrLegacyInt(
+        L"Surface.FontSize", 10, L"fontSize", 10, 1, 96, usedLegacy);
+    g_settings.textColor = PreferCurrentOrLegacyString(
+        L"Surface.TextColor", L"", L"textColor", usedLegacy);
+    g_settings.backgroundColor = PreferCurrentOrLegacyString(
+        L"Surface.BackgroundColor", L"", L"backgroundColor", usedLegacy);
+    g_settings.hoverBackgroundColor = PreferCurrentOrLegacyString(
+        L"Surface.HoverBackgroundColor", L"accent", L"hoverBackgroundColor",
+        usedLegacy);
+    g_settings.pressedBackgroundColor = PreferCurrentOrLegacyString(
+        L"Surface.PressedBackgroundColor", L"", L"pressedBackgroundColor",
+        usedLegacy);
+    g_settings.borderColor = PreferCurrentOrLegacyString(
+        L"Surface.BorderColor", L"", L"borderColor", usedLegacy);
+    g_settings.borderThickness = PreferCurrentOrLegacyInt(
+        L"Surface.BorderThickness", -1, L"borderThickness", -1, -1, 64,
+        usedLegacy);
+    g_settings.cornerRadius = PreferCurrentOrLegacyInt(
+        L"Surface.CornerRadius", -1, L"cornerRadius", -1, -1, 64, usedLegacy);
+    g_settings.opacityPct = PreferCurrentOrLegacyInt(
+        L"Surface.Opacity", 100, L"opacity", 100, 0, 100, usedLegacy);
+    g_settings.shineEffect =
+        PreferCurrentOrLegacyInt(L"Surface.ShineEffect", 0, L"shineEffect", 0,
+                                 0, 1, usedLegacy) != 0;
+    g_settings.groupOffsetX = PreferCurrentOrLegacyInt(
+        L"Adjust.OffsetX", 0, L"groupOffsetX", 0, -80, 80, usedLegacy);
+    g_settings.groupOffsetY = PreferCurrentOrLegacyInt(
+        L"Adjust.OffsetY", 0, L"groupOffsetY", 0, -80, 80, usedLegacy);
+
+    if (usedLegacy) {
+        Wh_Log(L"[Settings] Using your 0.7 values where the 2.0 setting is "
+               L"still at its default; change a 2.0 setting to take over, or "
+               L"turn off Behavior.UseLegacySettings");
+    }
 }
 
 // ============================================================
@@ -2463,8 +2684,17 @@ static SRWLOCK g_retryLock = SRWLOCK_INIT;
 // TrackPopupMenu owns a nested UI loop with two mod callbacks installed into
 // it. Unload ends that loop on its owning thread and waits for this event
 // before Windhawk can unload the code those callbacks execute.
+//
+// THE HOOK AND THE OWNER ARE GLOBAL ON PURPOSE. While the menu is up, the
+// taskbar thread is inside this mod's ShowFolderMenu frame with this mod's
+// WH_MSGFILTER hook installed. If unload gave up and returned while either was
+// live, Windhawk would FreeLibrary the image under a running call and take
+// Explorer with it. Keeping them reachable from a global is what lets
+// Wh_ModUninit undo them itself instead of hoping the menu unwinds.
 static std::atomic<int> g_menuLoopDepth{0};
 static HANDLE g_menuIdleEvent = nullptr;
+static HHOOK g_menuMsgFilterHook = nullptr;
+static HWND g_menuOwner = nullptr;
 
 // Lazy Shell menu loading state (per-ShowFolderMenu call, single-threaded UI).
 static UINT g_menuNextId = 1000;
@@ -2552,6 +2782,10 @@ static FrameworkElement FindLiveSystemTrayFrameGrid() {
 
 struct ShellMenuItem {
     std::wstring displayName;
+    // File name from the item's parsing name, read only at the merged Desktop
+    // root where duplicate detection needs to tell "the same file in two
+    // Desktop directories" from "two different files that display the same".
+    std::wstring fileName;
     PIDLIST_ABSOLUTE pidl = nullptr;
     bool canExpand = false;
 };
@@ -2625,36 +2859,48 @@ static bool BindFolderFromPidl(PCIDLIST_ABSOLUTE pidl, IShellFolder** folder) {
     return SUCCEEDED(hr) && *folder;
 }
 
-static std::wstring StrRetToString(STRRET const& str, PCUITEMID_CHILD pidl) {
-    if (str.uType == STRRET_WSTR) {
-        std::wstring result = str.pOleStr ? str.pOleStr : L"";
-        CoTaskMemFree(str.pOleStr);
-        return result;
+// The Shell's own converter, rather than a hand-rolled one. It matters for
+// STRRET_OFFSET in particular: that form points at a string embedded in the
+// item ID which is classically ANSI, not UTF-16, so reading it as LPCWSTR
+// yields garbage and can run off the end of the PIDL looking for a
+// terminator. StrRetToBufW handles all three forms and the free.
+static std::wstring StrRetToString(STRRET& str, PCUITEMID_CHILD pidl) {
+    WCHAR buffer[MAX_PATH * 2];
+    buffer[0] = L'\0';
+    if (FAILED(StrRetToBufW(&str, pidl, buffer, ARRAYSIZE(buffer))))
+        return L"";
+    return buffer;
+}
+
+// Small-icon metric at the TASKBAR's DPI, not the system one.
+// GetSystemMetrics reports the primary monitor's value, but the menu is laid
+// out on whichever monitor the taskbar is on — so on a mixed-DPI setup the
+// plain metric makes every menu bitmap visibly too small or too large beside
+// its text. GetSystemMetricsForDpi is Windows 10 1607+; resolve it
+// dynamically so an older build simply keeps the old behaviour.
+static int SmallIconMetricForTaskbar(int metric) {
+    using GetSystemMetricsForDpi_t = int(WINAPI*)(int, UINT);
+    static auto getForDpi = []() -> GetSystemMetricsForDpi_t {
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        return user32 ? reinterpret_cast<GetSystemMetricsForDpi_t>(
+                            GetProcAddress(user32, "GetSystemMetricsForDpi"))
+                      : nullptr;
+    }();
+    if (getForDpi) {
+        HWND taskbar = tbh::ResolveTaskbarWnd(g_taskbarWnd);
+        UINT dpi = taskbar ? GetDpiForWindow(taskbar) : 0;
+        if (dpi)
+            return getForDpi(metric, dpi);
     }
-
-    if (str.uType == STRRET_OFFSET)
-        return (LPCWSTR)(((const BYTE*)pidl) + str.uOffset);
-
-    if (str.uType == STRRET_CSTR) {
-        int needed = MultiByteToWideChar(CP_ACP, 0, str.cStr, -1, nullptr, 0);
-        if (needed > 0) {
-            std::wstring result(needed, L'\0');
-            MultiByteToWideChar(CP_ACP, 0, str.cStr, -1, result.data(), needed);
-            if (!result.empty() && result.back() == L'\0')
-                result.pop_back();
-            return result;
-        }
-    }
-
-    return L"";
+    return GetSystemMetrics(metric);
 }
 
 static HBITMAP BitmapFromIcon(HICON icon) {
     if (!icon)
         return nullptr;
 
-    int iconW = GetSystemMetrics(SM_CXSMICON);
-    int iconH = GetSystemMetrics(SM_CYSMICON);
+    int iconW = SmallIconMetricForTaskbar(SM_CXSMICON);
+    int iconH = SmallIconMetricForTaskbar(SM_CYSMICON);
     int bmpW = std::max(16, iconW);
     int bmpH = std::max(16, iconH);
 
@@ -2706,12 +2952,28 @@ static HBITMAP CreateMenuBitmapForPidl(PCIDLIST_ABSOLUTE pidl) {
     return bmp;
 }
 
+// True only for the Desktop namespace root, which is the one folder whose
+// enumeration merges two real directories.
+static bool IsDesktopNamespaceRoot(PCIDLIST_ABSOLUTE folderPidl) {
+    if (!folderPidl)
+        return false;
+    PIDLIST_ABSOLUTE desktop = nullptr;
+    if (FAILED(SHGetSpecialFolderLocation(nullptr, CSIDL_DESKTOP, &desktop)) ||
+        !desktop)
+        return false;
+    bool same = ILIsEqual(desktop, folderPidl);
+    CoTaskMemFree(desktop);
+    return same;
+}
+
 static std::vector<ShellMenuItem> EnumerateShellFolder(PCIDLIST_ABSOLUTE folderPidl) {
     std::vector<ShellMenuItem> items;
 
     IShellFolder* folder = nullptr;
     if (!BindFolderFromPidl(folderPidl, &folder))
         return items;
+
+    bool isDesktopRoot = IsDesktopNamespaceRoot(folderPidl);
 
     DWORD flags = SHCONTF_FOLDERS | SHCONTF_NONFOLDERS;
     if (g_settings.showHidden)
@@ -2727,7 +2989,19 @@ static std::vector<ShellMenuItem> EnumerateShellFolder(PCIDLIST_ABSOLUTE folderP
             if (SUCCEEDED(folder->GetDisplayNameOf(child, SHGDN_NORMAL, &str)))
                 displayName = StrRetToString(str, child);
 
-            SFGAOF attrs = SFGAO_FOLDER | SFGAO_HASSUBFOLDER | SFGAO_FILESYSTEM;
+            // Only the merged Desktop root needs the parsing name, and it
+            // costs a second Shell round trip per item, so do not pay for it
+            // in every folder.
+            std::wstring fileName;
+            if (isDesktopRoot) {
+                STRRET parse{};
+                if (SUCCEEDED(folder->GetDisplayNameOf(child, SHGDN_FORPARSING,
+                                                       &parse))) {
+                    fileName = FileNameFromPath(StrRetToString(parse, child));
+                }
+            }
+
+            SFGAOF attrs = SFGAO_FOLDER | SFGAO_FILESYSTEM;
             PCUITEMID_CHILD childConst = child;
             folder->GetAttributesOf(1, &childConst, &attrs);
 
@@ -2742,6 +3016,7 @@ static std::vector<ShellMenuItem> EnumerateShellFolder(PCIDLIST_ABSOLUTE folderP
 
             ShellMenuItem item;
             item.displayName = std::move(displayName);
+            item.fileName = std::move(fileName);
             item.pidl = abs;
             item.canExpand = (attrs & SFGAO_FOLDER) && (attrs & SFGAO_FILESYSTEM);
             items.push_back(std::move(item));
@@ -2756,17 +3031,27 @@ static std::vector<ShellMenuItem> EnumerateShellFolder(PCIDLIST_ABSOLUTE folderP
         return _wcsicmp(a.displayName.c_str(), b.displayName.c_str()) < 0;
     });
 
-    // The Desktop namespace merges user+public Desktop folders and virtual items,
-    // causing the same shortcut to appear multiple times. Remove consecutive
-    // duplicates by display name after sorting.
-    for (auto it = items.begin(); it != items.end(); ) {
-        auto next = it + 1;
-        if (next != items.end() &&
-                _wcsicmp(it->displayName.c_str(), next->displayName.c_str()) == 0) {
-            if (next->pidl) CoTaskMemFree(next->pidl);
-            items.erase(next);
-        } else {
-            ++it;
+    // The Desktop namespace ROOT merges the user's and the public Desktop
+    // folders, so one shortcut is enumerated twice there. Nowhere else.
+    //
+    // Deduplicating by DISPLAY name would be wrong even there: with "hide
+    // extensions for known file types" on — the Windows default — report.docx
+    // and report.pdf both display as "report", and one would silently vanish
+    // from the menu. The file name from the parsing name separates the two
+    // cases exactly: the merged duplicates share a file name (in different
+    // Desktop directories), while two different files do not.
+    if (isDesktopRoot) {
+        for (auto it = items.begin(); it != items.end();) {
+            auto next = it + 1;
+            bool duplicate =
+                next != items.end() && !it->fileName.empty() &&
+                _wcsicmp(it->fileName.c_str(), next->fileName.c_str()) == 0;
+            if (duplicate) {
+                if (next->pidl) CoTaskMemFree(next->pidl);
+                items.erase(next);
+            } else {
+                ++it;
+            }
         }
     }
 
@@ -3101,8 +3386,12 @@ static LRESULT CALLBACK FolderMenuMsgFilterProc(
                 // raw menu-input filter callback. Defer to the documented
                 // WM_MENURBUTTONUP owner-message path; TPM_RECURSE can then
                 // suspend and resume the outer popup correctly.
-                if (PostMessageW(g_taskbarWnd, WM_MENURBUTTONUP,
-                                 itemPosition,
+                // The menu's actual owner, not the cached taskbar handle:
+                // ShowFolderMenu resolved and validated that window, and if
+                // Shell_TrayWnd was recreated since the last apply the cached
+                // one is dead and the deferral would simply fail.
+                if (PostMessageW(g_menuOwner ? g_menuOwner : g_taskbarWnd,
+                                 WM_MENURBUTTONUP, itemPosition,
                                  reinterpret_cast<LPARAM>(itemMenu))) {
                     Wh_Log(L"[ContextMenu] Deferred menu id position=%u to owner",
                            itemPosition);
@@ -3177,6 +3466,17 @@ static LRESULT CALLBACK MenuOwnerSubclassProc(HWND hwnd, UINT msg, WPARAM wParam
 }
 
 static void ShowFolderMenu(FolderEntry folder) {
+    // Menu capture makes re-entry hard to reach, but the FreeMenuState() below
+    // would free PIDLs an already-open menu is still using. The depth counter
+    // is right here, so make it impossible rather than unlikely.
+    if (g_menuLoopDepth.load() > 0) {
+        Wh_Log(L"[Menu] A folder menu is already open; ignoring");
+        return;
+    }
+    if (g_unloading) {
+        return;
+    }
+
     HWND owner = tbh::ResolveTaskbarWnd(g_taskbarWnd);
     if (!owner || GetWindowThreadProcessId(owner, nullptr) != GetCurrentThreadId()) {
         Wh_Log(L"[Menu] Taskbar owner is unavailable on the current thread");
@@ -3225,20 +3525,21 @@ static void ShowFolderMenu(FolderEntry folder) {
         return;
     }
     g_activeFolderMenu = menu;
-    HHOOK menuHook = SetWindowsHookExW(
+    g_menuOwner = owner;
+    g_menuMsgFilterHook = SetWindowsHookExW(
         WH_MSGFILTER, FolderMenuMsgFilterProc,
         nullptr, GetCurrentThreadId());
-    if (!menuHook) {
+    if (!g_menuMsgFilterHook) {
         Wh_Log(L"[Menu] WH_MSGFILTER hook failed error=%u", GetLastError());
     }
     g_menuLoopDepth.fetch_add(1);
     if (g_menuIdleEvent) ResetEvent(g_menuIdleEvent);
     UINT cmd = TrackPopupMenu(menu, tpmAlign, pt.x, pt.y, 0, owner, nullptr);
-    if (g_menuLoopDepth.fetch_sub(1) == 1 && g_menuIdleEvent)
-        SetEvent(g_menuIdleEvent);
     PostMessageW(owner, WM_NULL, 0, 0);
-    if (menuHook)
-        UnhookWindowsHookEx(menuHook);
+    if (g_menuMsgFilterHook) {
+        UnhookWindowsHookEx(g_menuMsgFilterHook);
+        g_menuMsgFilterHook = nullptr;
+    }
     g_activeFolderMenu = nullptr;
 
     bool hasPendingShellCommand =
@@ -3271,6 +3572,14 @@ static void ShowFolderMenu(FolderEntry folder) {
         ClearPendingShellCommand();
     }
 
+    g_menuOwner = nullptr;
+    // SIGNAL LAST. The idle event is what Wh_ModUninit waits on, and its
+    // promise is "no mod code is running in the menu path any more" — not
+    // merely "TrackPopupMenu returned". Signalling it right after the loop
+    // exits would let unload proceed while this tail is still executing
+    // inside the image it is about to free.
+    if (g_menuLoopDepth.fetch_sub(1) == 1 && g_menuIdleEvent)
+        SetEvent(g_menuIdleEvent);
 }
 
 // ============================================================
@@ -3287,7 +3596,10 @@ struct FolderIconPixels {
     std::vector<BYTE> pixels;
 };
 static std::vector<FolderIconPixels> g_folderIcons; // exit-time-safe: heap-only
-[[clang::no_destroy]] static std::mutex g_folderIconsMutex;
+// No no_destroy: std::mutex has a trivial destructor here, so the attribute
+// would suppress nothing and only invite copying it onto types where it does
+// matter.
+static std::mutex g_folderIconsMutex;  // exit-time-safe: heap-only
 
 static int FolderIconSize() {
     HWND taskbar = tbh::ResolveTaskbarWnd(g_taskbarWnd);
@@ -3340,8 +3652,15 @@ static void PrepareFolderIcons() {
     HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     try {
         int size = FolderIconSize();
-        for (auto const& entry : g_settings.folders)
+        for (auto const& entry : g_settings.folders) {
+            // Each of these is a Shell round trip that can block for as long
+            // as an unreachable network target takes. Unload waits on this
+            // worker, so check between entries instead of making the user
+            // wait out the whole list.
+            if (g_unloading)
+                break;
             if (entry.useDefaultIcon) CacheFolderIcon(entry.target, size);
+        }
     } catch (...) { Wh_Log(L"[Icons] Shell icon extraction failed; using labels"); }
     if (SUCCEEDED(hr)) CoUninitialize();
 }
@@ -3512,10 +3831,15 @@ struct AppIconPlacement {
     Thickness appliedMargin{};
     winrt::event_token layoutToken{};
 };
-[[clang::no_destroy]] static AppIconPlacement g_appPlacement;
+// no_destroy optional rather than a bare no_destroy aggregate: the members are
+// strong XAML references, so the release has to be an explicit reset() on the
+// UI thread rather than whatever the CRT would do at detach.
+[[clang::no_destroy]] static std::optional<AppIconPlacement> g_appPlacement{
+    std::in_place};
 
 static bool PositionAfterAppIcons() noexcept {
-    auto& p = g_appPlacement;
+    if (!g_appPlacement) return false;
+    auto& p = *g_appPlacement;
     if (!p.root || !p.group || !p.repeater || !p.tray) return false;
     try {
         double right = 0;
@@ -3551,7 +3875,8 @@ static bool PositionAfterAppIcons() noexcept {
 }
 
 static void ReleaseAppIconPlacement() {
-    auto& p = g_appPlacement;
+    if (!g_appPlacement) return;
+    auto& p = *g_appPlacement;
     if (!p.root) return;
     try { p.root.LayoutUpdated(p.layoutToken); } catch (...) {}
     try {
@@ -3577,7 +3902,9 @@ static bool InjectAfterAppIcons(FrameworkElement root, double trayHeight) {
         return item.Name() == L"RootGrid";
     }).try_as<Grid>();
     if (!rootGrid) return false;
-    if (g_appPlacement.root == rootGrid && g_appPlacement.group) return PositionAfterAppIcons();
+    if (g_appPlacement && g_appPlacement->root == rootGrid &&
+        g_appPlacement->group)
+        return PositionAfterAppIcons();
     ReleaseAppIconPlacement();
     ClearButtonEventState();
     auto repeater = FindChildRecursive(rootGrid, [](FrameworkElement const& item) {
@@ -3595,11 +3922,12 @@ static bool InjectAfterAppIcons(FrameworkElement root, double trayHeight) {
     auto original = repeater.Margin();
     auto applied = original;
     applied.Right += group.Width() + g_settings.buttonSpacing;
-    g_appPlacement = {rootGrid, group, repeater, tray, original, applied, {}};
+    g_appPlacement.emplace(AppIconPlacement{rootGrid, group, repeater, tray,
+                                            original, applied, {}});
     try {
         repeater.Margin(applied);
         rootGrid.Children().Append(group);
-        g_appPlacement.layoutToken = rootGrid.LayoutUpdated([](auto const&, auto const&) {
+        g_appPlacement->layoutToken = rootGrid.LayoutUpdated([](auto const&, auto const&) {
             if (!g_unloading && !g_updatingSettings) PositionAfterAppIcons();
         });
         if (!PositionAfterAppIcons()) { ReleaseAppIconPlacement(); return false; }
@@ -3979,9 +4307,27 @@ static void StartRetryThread() {
 // Windhawk lifecycle
 // ============================================================
 
+// Exceptions thrown inside a UI callback are caught where they happen, which
+// is the only place they can be caught — but without this they are swallowed
+// with no trace at all.
+static void LogUiCallbackFailure(PCWSTR context) {
+    try {
+        throw;
+    } catch (winrt::hresult_error const& error) {
+        Wh_Log(L"[Lifecycle] %s failed hr=0x%08X: %s", context,
+               static_cast<unsigned>(error.code().value),
+               error.message().c_str());
+    } catch (std::exception const&) {
+        Wh_Log(L"[Lifecycle] %s failed with a C++ exception", context);
+    } catch (...) {
+        Wh_Log(L"[Lifecycle] %s failed with an unknown exception", context);
+    }
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L"[Init] Taskbar Folder Menus v2.0");
     LoadSettings();
+    tbh::SetExceptionLogger(LogUiCallbackFailure);
     g_menuIdleEvent = CreateEventW(nullptr, TRUE, TRUE, nullptr);
     if (!g_menuIdleEvent) {
         Wh_Log(L"[Init] Failed to create menu-idle event");
@@ -4011,33 +4357,70 @@ void Wh_ModUninit() {
 
     StopRetryThread();
 
-    HWND hWnd = FindCurrentProcessTaskbarWnd();
+    HWND hWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd);
     if (hWnd) {
-        // EndMenu has to execute on the taskbar thread. It only requests that
-        // TrackPopupMenu unwind, so wait for the loop to actually return
-        // before unloading its msg-filter hook and subclass procedures.
+        // EndMenu only REQUESTS that the active menu unwind, and with a nested
+        // Shell context menu up it ends that one rather than the folder popup
+        // underneath. So ask repeatedly, and add WM_CANCELMODE, until the menu
+        // path reports itself idle. Giving up here is not an option the way it
+        // is elsewhere: the taskbar thread would still be inside this mod's
+        // frame when Windhawk frees the image.
+        for (int attempt = 0; g_menuLoopDepth.load() > 0 && attempt < 50;
+             ++attempt) {
+            RunFromWindowThread(hWnd, [](void* parameter) {
+                HWND owner = static_cast<HWND>(parameter);
+                EndMenu();
+                if (owner)
+                    SendMessageW(owner, WM_CANCELMODE, 0, 0);
+            }, hWnd);
+            if (!g_menuIdleEvent)
+                break;
+            if (WaitForSingleObject(g_menuIdleEvent, 100) == WAIT_OBJECT_0)
+                break;
+        }
+
+        bool menuIdle = g_menuLoopDepth.load() == 0;
+        if (!menuIdle) {
+            Wh_Log(L"[Uninit] Folder menu did not unwind; removing its hook "
+                   L"and subclass anyway");
+        }
+
+        // Unconditional, whether or not the loop unwound. These are the two
+        // things that point into this image.
         RunFromWindowThread(hWnd, [](void* parameter) {
             HWND owner = static_cast<HWND>(parameter);
-            EndMenu();
+            if (g_menuMsgFilterHook) {
+                UnhookWindowsHookEx(g_menuMsgFilterHook);
+                g_menuMsgFilterHook = nullptr;
+            }
             RemoveWindowSubclass(owner, MenuOwnerSubclassProc, 1);
+            if (g_menuOwner && g_menuOwner != owner)
+                RemoveWindowSubclass(g_menuOwner, MenuOwnerSubclassProc, 1);
             ClearPendingShellCommand();
-        }, hWnd);
-        if (g_menuIdleEvent &&
-            WaitForSingleObject(g_menuIdleEvent, 5000) != WAIT_OBJECT_0) {
-            Wh_Log(L"[Uninit] Folder menu did not unwind within 5 seconds");
-        }
-        RunFromWindowThread(hWnd, [](void*) {
             RemoveButtonGrid();
             g_buttonEventStates.reset();
-        }, nullptr);
+            g_appPlacement.reset();
+        }, hWnd);
+
+        // Closing the event while the menu tail can still SetEvent it would
+        // signal whatever handle the value gets recycled into. One leaked
+        // handle in a process that is losing the mod anyway is the cheaper
+        // failure, so only close it once the loop is provably gone.
+        if (g_menuIdleEvent && menuIdle) {
+            CloseHandle(g_menuIdleEvent);
+            g_menuIdleEvent = nullptr;
+        } else if (g_menuIdleEvent) {
+            Wh_Log(L"[Uninit] Retaining the menu idle event; its loop is "
+                   L"still running");
+        }
     } else {
         // No known taskbar UI thread: retain no_destroy XAML state rather than
         // releasing it from Windhawk's callback thread after framework teardown.
         Wh_Log(L"[Uninit] No taskbar UI thread; retaining XAML state");
-    }
-    if (g_menuIdleEvent) {
-        CloseHandle(g_menuIdleEvent);
-        g_menuIdleEvent = nullptr;
+        if (g_menuIdleEvent && g_menuLoopDepth.load() == 0) {
+            CloseHandle(g_menuIdleEvent);
+            g_menuIdleEvent = nullptr;
+        }
     }
 }
 
