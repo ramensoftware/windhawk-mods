@@ -667,7 +667,7 @@ void Stop() {
     delete g; g = nullptr;
 }
 std::wstring Setting(const wchar_t* name) {
-    return WindhawkUtils::StringSetting(name).get();
+    return WindhawkUtils::StringSetting::make(name).get();
 }
 } // namespace ticker
 
