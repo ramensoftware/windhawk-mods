@@ -318,6 +318,40 @@
         "version": "1.0.2"
       }
     },
+    "agenda-in-calendar-view": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790005388000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790005388000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "lonfro",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Show .ics events in the calendar view in the Notification Centre like in Windows 10",
+        "github": "https://github.com/lonfro",
+        "include": [
+          "ShellExperienceHost.exe",
+          "ShellHost.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "Agenda in Calendar View",
+        "version": "1.0"
+      }
+    },
     "alt-drag": {
       "details": {
         "defaultSorting": 4080,
@@ -931,13 +965,14 @@
         ],
         "ratingUsers": 5,
         "reviews": 0,
-        "updated": 1789851248000,
+        "updated": 1790005367000,
         "users": 59
       },
       "metadata": {
         "author": "0Allu",
         "compilerOptions": "-lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -ladvapi32 -lmsimg32 -loleaut32 -lgdiplus",
         "description": "Quickly control master and per-app volume from the system tray",
+        "donateUrl": "https://ko-fi.com/0allu",
         "github": "https://github.com/0Allu",
         "homepage": "https://github.com/0Allu/better-volume-mixer",
         "include": [
@@ -945,7 +980,7 @@
         ],
         "license": "MIT",
         "name": "Better Volume Mixer",
-        "version": "1.0"
+        "version": "1.2"
       }
     },
     "block-smb-quick-access": {
@@ -5484,6 +5519,39 @@
         "version": "1.2"
       }
     },
+    "explorer-custom-shortcuts": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790005338000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790005338000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "ArvindSaini978",
+        "compilerOptions": "-lole32 -loleaut32 -lshlwapi",
+        "description": "Adds app-style keyboard shortcuts to File Explorer with dynamic tokens, selection modes, and internal commands.",
+        "github": "https://github.com/ArvindSaini978",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Custom Shortcuts",
+        "version": "1.0"
+      }
+    },
     "explorer-details-better-file-sizes": {
       "details": {
         "defaultSorting": 2130100,
@@ -9604,6 +9672,40 @@
         "version": "3.4.1"
       }
     },
+    "move-quietly": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790005358000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790005358000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Johhannas Reyn",
+        "compilerOptions": "-lole32 -luuid -lshell32",
+        "description": "Automatically keeps both items when Explorer copy or move operations hit a name conflict, without showing the replace/skip prompt.",
+        "github": "https://github.com/JohhannasReyn",
+        "homepage": "https://thegnosys.com/",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Move Conflicts Quietly",
+        "version": "1.0"
+      }
+    },
     "move-window-to-monitor": {
       "details": {
         "defaultSorting": 1368,
@@ -9822,6 +9924,38 @@
         "license": "MIT",
         "name": "Native Brightness Shortcut (Always On Top)",
         "version": "1.1.0"
+      }
+    },
+    "native-shadow-tuner": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790005349000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790005349000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "HaVeN80",
+        "compilerOptions": "-lwevtapi",
+        "description": "Adjust the size, blur and intensity of native Windows shadows.",
+        "github": "https://github.com/haven80",
+        "include": [
+          "dwm.exe"
+        ],
+        "name": "Windows Shadows Tuner",
+        "version": "0.6.4"
       }
     },
     "native-titlebars-uwp-lite": {
@@ -12618,6 +12752,39 @@
         "name": "Search Menu Inspect Helper",
         "twitter": "https://twitter.com/m417z",
         "version": "1.0"
+      }
+    },
+    "separate-system-tray-icons": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790005398000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790005398000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Asteski",
+        "compilerOptions": "-DWIN32_LEAN_AND_MEAN -lshell32 -lole32 -loleaut32 -lruntimeobject -luuid -liphlpapi -lwlanapi -lbthprops",
+        "description": "Replaces the grouped Windows 11 system tray button with separate sound, Bluetooth, network, Control Center, and battery buttons.",
+        "github": "https://github.com/Asteski",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Separate System Tray Icons",
+        "version": "1.0.0"
       }
     },
     "settings-to-control-panel": {

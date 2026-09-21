@@ -2,12 +2,425 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-21T10:04:31.000Z</updated>
+    <updated>2026-09-21T15:43:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Separate System Tray Icons 1.0.0]]></title>
+        <id>https://windhawk.net/mods/separate-system-tray-icons#953bdd63123ce7146fb52a71e53e8261369f7a92</id>
+        <link href="https://windhawk.net/mods/separate-system-tray-icons"/>
+        <updated>2026-09-21T15:43:18.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="separatesystemtrayicons">Separate System Tray Icons</h1>
+<p>Replaces the grouped Windows 11 system tray button with separate sound,
+Bluetooth, network, Control Center, and battery buttons. The original grouped
+button is hidden while the mod is active and restored when it is unloaded.</p>
+<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/e02d89d70dfb0ad3815b806e3eb2a49e56cb86b8/img/separate-system-tray-icons/separate-system-tray-icons.gif" alt="Demonstration" /></p>
+<p>This mod injects real XAML <code>FontIcon</code> elements into the Windows 11 taskbar tray.
+That means icons are drawn as XAML text/vector glyphs instead of rasterized HICON bitmaps.</p>
+<p>Buttons:</p>
+<ul>
+<li>Bluetooth -&gt; Bluetooth flyout</li>
+<li>Network -&gt; Network flyout</li>
+<li>Sound -&gt; Control Center, sound output picker or volume mixer</li>
+<li>Control Center -&gt; Control Center or a custom action</li>
+<li>Battery -&gt; Control Center or a custom action</li>
+</ul>
+<p>Use <strong>Toggle buttons visibility</strong> to choose which buttons appear. Drag items in
+<strong>Button order</strong> to arrange the buttons, including Battery. Removing an entry
+hides that button; adding it back shows it when its visibility toggle is enabled. The battery
+button appears only when Windows reports a battery.</p>
+<p>Sound supports mouse-wheel volume adjustment (unmuting first) and middle-click
+muting. <strong>Volume scroll step</strong> selects Windows' default step or 1, 5, or 10
+percentage points per wheel notch.</p>
+<p>Partial movements from smooth-scrolling mice accumulate into full wheel notches;
+horizontal scrolling does not change volume. Reach the buttons through Windows'
+taskbar keyboard navigation, then use Enter or Space to activate, or Shift+F10
+or the Menu key to open a context menu. Buttons expose their current tooltip
+information as accessible names and use system keyboard-focus visuals.</p>
+<p>Sound can show currently playing media in its tooltip and use an output-device
+glyph. Muted audio uses the standard mute glyph. Bluetooth can show connected
+devices and their battery percentages (when reported by Windows) in its tooltip
+and change appearance when switched off. Network can
+show Wi-Fi signal strength and open a custom URL for <strong>Perform speed test</strong>.</p>
+<h2 id="actionformats">Action formats</h2>
+<p>The custom-action prefix scheme and action-format documentation are adapted from
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/ultimate-custom-tray.wh.cpp">Ultimate Custom Tray</a>
+by <a href="https://github.com/Salyts">Salyts</a>, licensed under MIT.</p>
+<p>Select <strong>Custom action</strong> for <strong>Control Center action</strong> or <strong>Battery click action</strong>, then
+enter an action in that group's <strong>Custom action</strong> field.</p>
+<p>| Prefix | Example | Description |
+|--------|---------|-------------|
+| <code>" "</code> | <code>"C:\Program Files\app.exe"</code> | Opens a file or folder by absolute path. |
+| <code>~</code> | <code>~Downloads</code> | Opens a folder or file by name. |
+| <code>cmd:</code> | <code>cmd:control</code> | Runs a command through <code>cmd.exe</code>. |
+| <code>ps:</code> / <code>powershell:</code> | <code>ps:shutdown /r /f /t 0</code> | Runs through <code>powershell.exe</code>. |
+| <code>key:</code> / <code>hotkey:</code> | <code>key:Ctrl+Shift+Esc</code> | Simulates a keyboard shortcut with virtual key presses. |
+| <code>web:</code> | <code>web:https://windhawk.net/</code> | Opens a URL in the default browser. |
+| <code>ms-settings:</code> | <code>ms-settings:bluetooth</code> | Opens a Windows Settings page. |</p>
+<p>For shortcut actions, use <code>Modifier+Modifier+Key</code>.
+Supported modifiers: <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code>, <code>Win</code>.
+Examples: <code>key:Ctrl+Alt+D</code>, <code>hotkey:Win+R</code>, <code>key:0x7B</code> (F12 by VK code).</p>
+<h2 id="taskbarstylertargets">Taskbar Styler targets</h2>
+<p>Status changes use Windows notifications where available, with a 60-second
+fallback refresh. The Wi-Fi connecting animation updates every 500 ms while
+Windows reports an active connection attempt.
+This version currently manages the primary taskbar; separate-monitor taskbars
+are not supported by the current implementation.</p>
+<p>The injected buttons normally use <code>SystemTray.OmniButton</code>. If a fallback is
+needed, the mod logs the actual control class; the button names stay the same.</p>
+<p>| Target | Description |
+| --- | --- |
+| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlBluetooth</code> | Bluetooth button and its native template/hit target. |
+| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlNetwork</code> | Network button. |
+| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlSound</code> | Sound button, including wheel and middle-click handling. |
+| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlControlCenter</code> | Separate Control Center button; the original grouped button is always hidden. |
+| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlBattery</code> | Separate battery button, including its highlight and click handling. |
+| <code>TextBlock#SeparateTrayBatteryPercentage</code> | Battery percentage text. |
+| <code>Grid#SeparateTrayIconLayers</code> | Glyph host; battery uses natural dimensions, other buttons use a 16-by-16 host. |
+| <code>FontIcon#SeparateTrayIconPrimary</code> | Main status or output-device glyph. |
+| <code>FontIcon#SeparateTrayIconUnderlay</code> | Theme-aware grey underlying glyph, where applicable. |
+| <code>FontIcon#SeparateTrayIconOverlay</code> | Additional status layer, including Bluetooth's unavailable indicator and battery charge-level fill. |
+| <code>MenuFlyoutPresenter#SeparateTrayContextMenuPresenter</code> | WinUI context menu presenter, named when the menu opens. |</p>
+<p>The layer names are shared across buttons. An unqualified layer selector affects
+all matching buttons. For example:</p>
+<pre><code class="yaml language-yaml">controlStyles:
+  - target: FontIcon#SeparateTrayIconPrimary
+    styles:
+      - FontSize=16
+</code></pre>
+<h3 id="hoverhighlightsandgeneratedtemplates">Hover highlights and generated templates</h3>
+<p>The native button template contains <code>Border#BackgroundBorder</code> on the supported
+taskbar build. This is the existing hover-highlight element. Use the visual-tree
+paths in the mod logs to target it beneath a particular button. Template
+intermediate elements can vary between Windows builds: Taskbar Styler's <code>&gt;</code>
+requires a direct parent/child relationship, so do not assume the border or
+glyph host is a direct child of the button.</p>
+<h3 id="stylinglimitations">Styling limitations</h3>
+<p>The mod refreshes glyphs, foreground colors, visibility, overlay font sizes,
+and button dimensions as state changes. Styles for those properties can be
+overwritten by the next update. Stable names provide selectors, but external
+stylers may not observe every dynamically created element. In particular, the
+menu presenter receives its name after creation.</p>
+<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
+<p>In case if battery won't show properly on your system, System Battery (<em>Sysbatt.ttf</em>)
+font needs to be installed manually. It's part of <em>Windows.UI.ControlCenter</em>
+package, but is not actually installed by default. The missing font is stored in:</p>
+<pre><code>C:\Windows\SystemResources\Windows.UI.ControlCenter\Assets
+</code></pre>
+<p>In order to install the font, right-click the <em>Sysbatt.ttf</em> file, and choose <em>Install</em>
+from the context menu.</p>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Agenda in Calendar View 1.0]]></title>
+        <id>https://windhawk.net/mods/agenda-in-calendar-view#ef7c936660e01bd724df1a422cb3d4dc73f3fd0a</id>
+        <link href="https://windhawk.net/mods/agenda-in-calendar-view"/>
+        <updated>2026-09-21T15:43:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="agendaincalendar">Agenda in Calendar</h1>
+<p><img src="https://i.imgur.com/lQhwoAL.png" alt="Agenda in Calendar" /></p>
+<h2 id="bringbackthewindows10agendatowindows11">Bring back the Windows 10 Agenda to Windows 11</h2>
+<p>This mod brings the Windows 10-style agenda to Windows 11, allowing you to
+quickly and conveniently view your events from the Notification Centre.</p>
+<p>It supports <code>.ics</code> files from both local and remote locations.</p>
+<h2 id="details">Details</h2>
+<p><img src="https://i.imgur.com/EkWnp1c.png" alt="event" /></p>
+<p>The details shown include:</p>
+<ul>
+<li>Event name</li>
+<li>Event description</li>
+<li>Location</li>
+<li>Starting and ending time</li>
+</ul>
+<h2 id="additionalfeatures">Additional features</h2>
+<p><strong>Additional features include:</strong></p>
+<p>Keyboard navigation:</p>
+<ul>
+<li>You can move backward by a day or forward by a day using the left and right arrow keys.</li>
+</ul>
+<p>Hiding the focus panel:</p>
+<p><img src="https://i.imgur.com/xurxfJ9.png" alt="comparison" /></p>
+<p>Setting a maximum height (before it starts scrolling):</p>
+<p><img src="https://i.imgur.com/c9i40PA.png" alt="scrollViewer" /></p>
+<p>Checking events on other dates:</p>
+<p><img src="https://i.imgur.com/DM8tcj0.png" alt="calendar" /></p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Compatible with Windows 11 (both ShellExperienceHost.exe and ShellHost.exe).</li>
+<li>Supports recurring events (daily, weekly, monthly, yearly, including <code>BYDAY</code> ordinals such as "third Thursday" / <code>3TH</code> or "second Tuesday" / <code>2TU</code>, <code>BYMONTHDAY</code>, <code>WKST</code>, <code>EXDATE</code>, <code>RECURRENCE-ID</code>, and multi-day recurring events).</li>
+<li>Events are refreshed every time the notification pane is opened.<ul>
+<li>If events can't be fetched (e.g. no internet connection), previously-fetched events are shown.</li>
+<li>Smart caching avoids redundant fetches within the configured minimum fetch interval.</li>
+<li>You can click the Refresh button in the calendar header at any time to force an immediate refresh.</li></ul></li>
+<li>The mod resiliently accepts errors; if you have a problem, enable logging.</li>
+<li>Injection logic has been ported from m417z's <em>Start Menu Styler</em>.</li>
+<li>The creation of this mod was assisted by AI:<ul>
+<li>Sadly, I do not have experience with C++/Windhawk;</li>
+<li>However, I do have experience with WinUI (as I have created several WinUI apps in C#);</li>
+<li>As a result, the controls used <em>(inc. CalendarDatePicker, Border, Grid, TextBlock)</em> were manually structured, but the underlying implementation was generated using AI.</li></ul></li>
+</ul>
+<h2 id="faq">FAQ</h2>
+<ul>
+<li><strong>My local <code>.ics</code> file does not work!</strong></li>
+<li>First try going to its Properties in File Explorer, and ticking "Unblock".</li>
+<li>If that doesn't work, grant read permissions on your file to AppContainers by running:
+<code>icacls "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"</code>
+in PowerShell.
+This allows <code>ShellExperienceHost.exe</code> and <code>ShellHost.exe</code>, which host the calendar pane, to access your calendar file.
+<em>Note: <code>*S-1-15-2-1</code> grants read permissions to ALL APPLICATION PACKAGES (all UWP/packaged apps).</em></li>
+<li><strong>The bottom corners of the <em>Notifications</em> pane (immediately above the agenda) are not rounded!</strong>
+Set a maximum height for the Agenda in the mod settings to stop it from clipping the <em>Notifications</em> pane.</li>
+</ul>]]></content>
+        <author>
+            <name>lonfro</name>
+            <uri>https://github.com/lonfro</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Move Conflicts Quietly 1.0]]></title>
+        <id>https://windhawk.net/mods/move-quietly#3df241edf7d65e00297638c7069d89a3988e1c8c</id>
+        <link href="https://windhawk.net/mods/move-quietly"/>
+        <updated>2026-09-21T15:42:38.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="moveconflictsquietly">Move Conflicts Quietly</h1>
+<p>Move Conflicts Quietly removes the repetitive filename-conflict decision from
+Windows File Explorer copy and move operations.</p>
+<p>When an incoming item has the same name as an item that already exists in the
+destination, the mod keeps both by giving the incoming item the next free
+<code>name (n).ext</code> style name instead of showing the <strong>Replace or skip files</strong>
+prompt.</p>
+<p>For example, a collision such as:</p>
+<pre><code>report.txt
+</code></pre>
+<p>will normally produce a unique name similar to:</p>
+<pre><code>report (2).txt
+</code></pre>
+<p>Further collisions take the next free number: <code>report (3).txt</code>, and so on. An
+incoming <code>report (2).txt</code> that collides becomes <code>report (3).txt</code>, not
+<code>report (2) (2).txt</code>.</p>
+<h2 id="whatitaffects">What it affects</h2>
+<p>The mod targets File Explorer (<code>explorer.exe</code>) and applies automatic
+rename-on-collision behavior to copy and move operations performed through the
+Windows <code>IFileOperation</code> interface, including common Explorer operations such
+as copy/paste, cut/paste, and drag-and-drop moves.</p>
+<p>The mod does <strong>not</strong> intentionally suppress unrelated error or security UI.
+Permission errors, UAC/elevation prompts, disk errors, and other exceptional
+conditions are still handled by Windows normally.</p>
+<h2 id="howitworks">How it works</h2>
+<p>Explorer uses the Windows Shell <code>IFileOperation</code> COM interface for many file
+operations. This mod hooks the copy and move entry points. For every queued
+item it resolves the destination path, checks whether the name is already
+taken (on disk, or by another item queued in the same operation), and if so
+passes an explicit <code>name (n).ext</code> name to the Shell.</p>
+<p>As a safety net it also adds <code>FOF_RENAMEONCOLLISION</code> and
+<code>FOFX_PRESERVEFILEEXTENSIONS</code> to the operation, so that even when the mod
+cannot pick a name itself (a non-file-system destination, or a name that is
+taken between the check and the copy) the Shell still keeps both instead of
+prompting. In that fallback case the Shell chooses the name, which is its
+usual <code>name - Copy.ext</code> pattern.</p>
+<p>The flags are decided once, just before the operation runs, so that the whole
+queue is known. Existing operation flags are retained; if the caller did not
+set any, the documented <code>IFileOperation</code> defaults are used.</p>
+<h2 id="bypassingthemodforoneoperation">Bypassing the mod for one operation</h2>
+<p>Hold <strong>Shift</strong> (configurable) while dropping, or while clicking Paste in the
+context menu or the command bar, and the mod leaves that operation entirely to
+Explorer, prompt and all.</p>
+<p>Be aware that Shift is also Explorer's "force a move" drag modifier. If you
+habitually hold Shift while dragging, every such drop bypasses the mod — set
+the option to <strong>Disabled</strong> or the Windows key instead. Ctrl and Alt are worse
+choices: Ctrl is held during every Ctrl+V paste (so the mod would never act on
+a keyboard paste) and forces a copy on drop; Alt turns a drop into a shortcut.</p>
+<p>A held key cannot work with <strong>Ctrl+V</strong>: adding any modifier makes it a
+different shortcut that Explorer does not treat as Paste (and Win+Ctrl+V is
+taken by Windows). For keyboard pastes, set the <strong>lock</strong> option instead: while
+Caps Lock or Scroll Lock is on, the mod stands aside.</p>
+<h2 id="importantbehaviorandlimitations">Important behavior and limitations</h2>
+<ul>
+<li>Copying an item into its own folder is not renamed by the mod; Explorer's
+own naming applies (normally <code>name - Copy.ext</code>).</li>
+<li>Items that are not file-system objects (for example dragged out of a zip
+folder or a phone) fall back to the Shell's own collision naming.</li>
+<li>When a folder with the same name already exists in the destination, the
+default is to merge into it and apply the same keep-both renaming to any
+conflicting files inside. To do that the mod queues the folder's contents
+item by item, so Undo covers the individual items rather than the folder as
+a whole, and a merged move leaves the (now empty) source folder tree to be
+removed after the operation completes. The setting can instead hand merges
+to Explorer unchanged (conflicts inside prompt as usual) or keep both
+folders side by side as <code>Folder (2)</code>.</li>
+<li>Operations whose caller has already chosen a collision policy (for example
+"replace all" or "keep newer") before queueing items are left untouched.</li>
+<li>After a merged <strong>move</strong>, the emptied source folders are removed directly
+(not via the Recycle Bin, and not covered by Undo). Only empty folders are
+ever removed. Folders that are junctions or symbolic links are never merged;
+they are handed to Explorer unchanged.</li>
+<li>Merging a large folder resolves names for every item up front, before the
+progress dialog appears, and the dialog then lists the individual items.</li>
+<li>The hooks apply to every <code>IFileOperation</code> copy or move inside <code>explorer.exe</code>,
+which includes third-party shell extensions hosted there.</li>
+<li>This version targets 64-bit File Explorer.</li>
+<li>Rename-only and delete operations are not intentionally modified.</li>
+</ul>
+<h2 id="testing">Testing</h2>
+<p>Before relying on the mod with important data, test it with disposable files
+and folders. Useful cases include:</p>
+<ol>
+<li>Copy one file into a folder that already contains a file with the same name.</li>
+<li>Repeat the copy several times and verify that every copy is preserved.</li>
+<li>Test cut/paste and drag-and-drop moves with a destination conflict.</li>
+<li>Test a multi-file copy containing several conflicts.</li>
+<li>Test a same-name folder collision so you understand the folder behavior on
+your Windows version.</li>
+<li>For a folder merge, include a hidden file and a hidden+system file (for
+example <code>desktop.ini</code>) in the source and verify they arrive.</li>
+</ol>
+<h2 id="sourceandissues">Source and issues</h2>
+<p>Source code and issue tracking:
+https://github.com/JohhannasReyn/move-quietly</p>
+<p>If you find a copy or move path that still displays Explorer's conflict chooser,
+please include your Windows version, the exact operation used, and the Windhawk
+log output in the issue report.</p>]]></content>
+        <author>
+            <name>Johhannas Reyn</name>
+            <uri>https://github.com/JohhannasReyn</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Shadows Tuner 0.6.4]]></title>
+        <id>https://windhawk.net/mods/native-shadow-tuner#5ba5889e229443d62d6b13a03419c11dcbd6e01c</id>
+        <link href="https://windhawk.net/mods/native-shadow-tuner"/>
+        <updated>2026-09-21T15:42:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowsshadowstuner">Windows Shadows Tuner</h1>
+<p>Customize native Windows window shadows: make them lighter or more pronounced,
+and adjust their size and blur.</p>
+<h2 id="examples">Examples</h2>
+<p><strong>Shadow intensity and size comparison</strong></p>
+<p><img src="https://i.imgur.com/epfTlMZ.png" alt="Windows Shadows TUNER comparison" /></p>
+<h2 id="setup">Setup</h2>
+<p><code>dwm.exe</code> is a critical system process and Windhawk doesn't inject mods into it
+by default. Open Windhawk Settings, go to <strong>Advanced settings</strong>, then
+<strong>More advanced settings</strong>, and add <code>dwm.exe</code> to the process inclusion list.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Windhawk advanced settings" /></p>
+<h2 id="controls">Controls</h2>
+<ul>
+<li><strong>Intensity</strong>: controls the opacity of the native shadow. The default value is
+180%. Set it to 100% to restore the original Windows intensity, 50% for a
+lighter shadow, or 0% to make it invisible.</li>
+<li><strong>Size and blur</strong>: controls the shadow spread and blur. The default value is
+150%. Set it to 100% to restore the original Windows size.</li>
+</ul>
+<p>When both controls are set to 100%, the mod doesn't install any hooks because
+the requested appearance is identical to the original Windows appearance.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks a single uDWM function, <code>CWindowBorder::GetShadowParameters</code>,
+and scales the radius and alpha values it produces. To apply changes to windows
+that are already open and restore the original shadows when the mod is disabled,
+the mod briefly toggles the system drop-shadow setting off and on in memory so
+DWM rebuilds every window's shadow. The user profile isn't modified and no
+settings-change message is broadcast. Shadows can blink for a fraction of a
+second when the mod is loaded, unloaded, or its settings are changed. The mod
+creates no overlay windows and stores no persistent state.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Tested on Windows 11 25H2 build 26200.9445.</p>
+<p>Windows 11 24H2 (build 26100.x): the uDWM symbol resolves, but the current
+version hasn't been visually confirmed there yet. If you're on 24H2, please
+report whether the shadows change.</p>
+<p>Other Windows builds haven't been tested. If the required uDWM symbol can't
+be resolved, the mod logs the error and doesn't load.</p>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Custom Shortcuts 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-custom-shortcuts#3c1bddd5acf554972350bb9186c823c6a65126fb</id>
+        <link href="https://windhawk.net/mods/explorer-custom-shortcuts"/>
+        <updated>2026-09-21T15:42:18.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorercustomshortcuts">Explorer Custom Shortcuts</h1>
+<p>Adds customizable, app-style keyboard shortcuts to Windows File Explorer with parameter substitution, built-in shell commands, and custom token expansion.</p>
+<blockquote>
+  <p><strong>Input Protection:</strong> All custom shortcuts are automatically suppressed while renaming files, typing into the Address/Breadcrumb bar, typing into the Search box, or while focus is actively inside dialogs (such as Properties, Delete/Replace confirmations). When focus returns to the main File Explorer window, shortcuts resume immediately.</p>
+</blockquote>
+<hr />
+<h3 id="internalexplorercommands">Internal Explorer Commands</h3>
+<p>Instead of specifying an executable path, set <strong>Executable Path</strong> to one of the following <code>internal:</code> keywords:</p>
+<ul>
+<li><strong><code>internal:newTextFile</code></strong>: Creates a <code>New Text Document.txt</code> in the active folder and automatically selects/focuses it without UI freezes.</li>
+<li><strong><code>internal:newFolder</code></strong>: Creates a <code>New Folder</code> in the active folder and enters inline rename mode immediately.</li>
+<li><strong><code>internal:openRecycleBin</code></strong>: Navigates to the Recycle Bin in the current active tab.</li>
+<li><strong><code>internal:emptyRecycleBin</code></strong>: Empties the Recycle Bin with confirmation dialog.</li>
+<li><strong><code>internal:toggleHiddenFiles</code></strong>: Toggles visibility of hidden files and folders with immediate view refresh. <em>(Note: Changes persistent system-wide Windows Explorer settings).</em></li>
+<li><strong><code>internal:toggleFileExtensions</code></strong>: Toggles file name extensions on or off with immediate view refresh. <em>(Note: Changes persistent system-wide Windows Explorer settings).</em></li>
+<li><strong><code>internal:folderOptions</code></strong>: Opens the native File Explorer Folder Options dialog.</li>
+</ul>
+<blockquote>
+  <p><strong>Persistent Settings Notice:</strong> <code>internal:toggleHiddenFiles</code> and <code>internal:toggleFileExtensions</code> flip the native Windows Explorer shell settings directly (<code>SHGetSetSettings</code>). These changes affect all File Explorer surfaces globally and persist even if this mod is disabled or uninstalled.</p>
+</blockquote>
+<hr />
+<h3 id="availabletokensforargumentsexamples">Available Tokens for Arguments &amp; Examples</h3>
+<ul>
+<li><strong><code>%f</code></strong> — All selected items as space-separated quoted paths (<code>"C:\a.txt" "C:\b.png"</code>).</li>
+<li><strong><code>%files</code></strong> — Selected regular files only (skips selected folders).</li>
+<li><strong><code>%folders</code></strong> — Selected folders only (skips selected regular files).</li>
+<li><strong><code>%1</code></strong> — Quoted path of the first selected file or directory (<code>"C:\a.txt"</code>).</li>
+<li><strong><code>%n</code></strong> — File or folder names only without absolute directory paths (<code>"a.txt"</code>).</li>
+<li><strong><code>%c</code></strong> — Total number of selected items as an integer (<code>3</code>). In loop modes, this resolves to <code>1</code>.</li>
+<li><strong><code>%ext</code></strong> — File extension of the first selected item (<code>.png</code>).</li>
+<li><strong><code>%s</code></strong> — Space-separated paths with <strong>smart-quoting</strong> (automatically adds double-quotes only to paths containing spaces).</li>
+<li><strong><code>%d</code></strong> — Active directory open in the current tab (<code>C:\Users\Name\Documents</code>). Virtual folders like <em>This PC</em> or <em>Recycle Bin</em> resolve to an empty string.</li>
+<li><strong><code>%d_smart</code></strong> — Selected folder if one is highlighted; otherwise falls back to the current active directory.</li>
+<li><strong><code>%p</code></strong> — Parent directory path of the active tab.</li>
+</ul>
+<blockquote>
+  <p><strong>Shell Interpreter Security Notice:</strong> Path tokens are quoted according to standard Windows CRT command-line (<code>argv</code>) rules. If arguments are passed to script interpreters (e.g. <code>cmd.exe /c</code> or <code>powershell.exe -Command</code>), parameters may be re-parsed by that interpreter. Use native binary arguments or pass paths directly to target programs.</p>
+</blockquote>
+<hr />
+<h3 id="launchmodesusecases">Launch Modes &amp; Use Cases</h3>
+<ul>
+<li><strong><code>batch</code></strong> (Default): Executes the application exactly once and passes the resolved command-line arguments.</li>
+<li><em>Use Case:</em> Code editors (opening a directory), Media players (queuing files), or bulk tools like PowerRename.</li>
+<li><strong><code>loop_files</code></strong>: Executes the application once per selected file.</li>
+<li><em>Use Case:</em> Single-file image editors, batch converters, or per-file processing scripts.</li>
+<li><strong><code>loop_folders</code></strong>: Executes the application once per selected folder.</li>
+<li><em>Use Case:</em> Batch archiving folders individually or folder-specific terminal operations.</li>
+</ul>
+<hr />
+<h3 id="presetideasexternalappexamples">Preset Ideas &amp; External App Examples</h3>
+<p>You can add your own shortcuts using these templates in the settings:</p>
+<ul>
+<li><strong>Open Windows Terminal Here</strong></li>
+<li>Path: <code>wt.exe</code> | Args: <code>-d "%d"</code> | Mode: <code>batch</code></li>
+<li><strong>Open with Notepad</strong></li>
+<li>Path: <code>notepad.exe</code> | Args: <code>%1</code> | Mode: <code>loop_files</code></li>
+<li><strong>PowerToys PowerRename</strong> (Bulk rename selected items)</li>
+<li>Path: <code>C:\Program Files\PowerToys\WinUI3Apps\PowerToys.PowerRename.exe</code> | Args: <code>%f</code> | Mode: <code>batch</code></li>
+<li><strong>Search with Everything</strong> (Search current active directory)</li>
+<li>Path: <code>C:\Program Files\Everything\Everything.exe</code> | Args: <code>"%d"</code> | Mode: <code>batch</code></li>
+<li><strong>Open in VS Code</strong></li>
+<li>Path: <code>code</code> | Args: <code>"%d_smart"</code> | Mode: <code>batch</code></li>
+<li><strong>Queue in VLC Media Player</strong></li>
+<li>Path: <code>vlc.exe</code> | Args: <code>%f</code> | Mode: <code>batch</code></li>
+</ul>
+<hr />
+<h3 id="comparisonwithexistingmods">Comparison with Existing Mods</h3>
+<p>While related mods exist in the Windhawk repository, <strong>Explorer Custom Shortcuts</strong> provides a distinct, keyboard-first workflow engine:</p>
+<ul>
+<li><strong><code>explorer-command-bar</code></strong>: Adds visual custom toolbar buttons exclusively to the modern Windows 11 command bar. In contrast, this mod provides a pure, zero-UI, low-latency keyboard shortcut accelerator engine operating across both classic and tabbed Explorer windows. It introduces specialized batch looping capabilities (<code>loop_files</code>, <code>loop_folders</code>), rich token expansions (<code>%n</code>, <code>%ext</code>, <code>%c</code>, <code>%files</code>, <code>%folders</code>), and context-aware suppression during inline edits.</li>
+<li><strong><code>keyboard-shortcut-actions</code></strong>: A general-purpose desktop/window hotkey dispatcher without Explorer context awareness. This mod parses active Explorer tab navigation, item selections, and folder paths directly into CLI parameters.</li>
+<li><strong><code>toggle-hidden-files</code> / <code>explorer-ctrln-newfile</code> / <code>explorer-ctrlq-new-folder</code></strong>: Single-purpose mods; here, internal shell actions are optional presets within a single hotkey table, allowing users to bind them to whatever key combinations they prefer without installing multiple separate hooks.</li>
+</ul>
+<h3 id="attributionacknowledgments">Attribution &amp; Acknowledgments</h3>
+<p>Process execution concepts (<code>ResolveCommandPath</code>, <code>ExecuteApp</code>) and shell window inspection adapt techniques from <code>explorer-command-bar</code> (DanRotaru, MIT). Settings toggling follows patterns established in <code>toggle-hidden-files</code> (Asteski).</p>]]></content>
+        <author>
+            <name>ArvindSaini978</name>
+            <uri>https://github.com/ArvindSaini978</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Per-monitor brightness in Quick Settings 2.0]]></title>
         <id>https://windhawk.net/mods/per-monitor-brightness#1e9a228c451f2d5ceabd8b412c07fa726a4d583b</id>
@@ -1269,317 +1682,6 @@ On right click a menu with layout selection is displayed.</p>
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Minimize to tray 1.0]]></title>
-        <id>https://windhawk.net/mods/minimize-to-tray#0917d9c94623b841e260a07b9cf02ac6d6b5cadf</id>
-        <link href="https://windhawk.net/mods/minimize-to-tray"/>
-        <updated>2026-09-15T18:20:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="minimizetotray">Minimize to tray</h1>
-<p>Right-click a window's minimize button to hide the window in the system tray.</p>
-<p><img src="https://raw.githubusercontent.com/0Allu/minimize-to-tray/main/assets/minimize-to-tray-demo.gif" alt="Minimize to tray demo" /></p>
-<h2 id="usage">Usage</h2>
-<ul>
-<li>Right-click a window's minimize button to send it to the tray.</li>
-<li>Left-click its tray icon to restore it.</li>
-<li>Right-click its tray icon to restore or close the window.</li>
-</ul>
-<p>The application continues running while its window is hidden.</p>
-<h2 id="customtitlebars">Custom title bars</h2>
-<p>Standard Windows minimize buttons work automatically. For applications which
-draw their own title bar, the mod also uses an approximate Windows-style caption
-button layout. This compatibility detection is enabled by default and can be
-disabled in the mod settings if it conflicts with a particular application.</p>
-<p>Custom rules can override the generic geometry for applications with unusual
-title bars, such as Steam. A custom rule uses this format:</p>
-<p><code>executable|window class|height|min right|max right</code></p>
-<p>The three numeric values are in DPI-independent pixels. <code>height</code> is the maximum
-distance below the top of the window, and <code>min right</code> / <code>max right</code> define the
-button's distance from the right edge.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>Windows 10 version 1703 or later is required.</p>
-<p>Applications running with administrator privileges are not supported when the
-mod is running at normal user privileges. This is due to Windows User Interface
-Privilege Isolation (UIPI).</p>
-<p>Custom title bar compatibility detection applies only to unowned top-level
-application windows. Tool windows, non-activating windows, child windows,
-dialogs and owned popups are ignored.</p>
-<h2 id="safety">Safety</h2>
-<p>A tray icon is created before a window is hidden. If the tray icon cannot be
-created, the window is left visible. If the mod is disabled or unloaded
-normally, restore requests are posted for all windows hidden by the mod. Hidden
-windows are also recovered if the dedicated mod process restarts.</p>
-<p>If the dedicated tool process is forcibly terminated and the mod is then
-disabled before it can restart, recovery code cannot run. In that unusual case,
-the affected application may need to be restarted manually.</p>]]></content>
-        <author>
-            <name>0Allu</name>
-            <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[HWiNFO Registry Live Overlay 1.5.0]]></title>
-        <id>https://windhawk.net/mods/hwinfo-registry-live-overlay#ef8174354647d2f0af22d3e6ecf9e12d246a3b70</id>
-        <link href="https://windhawk.net/mods/hwinfo-registry-live-overlay"/>
-        <updated>2026-09-15T18:06:14.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hwinforegistryliveoverlay">HWiNFO Registry Live Overlay</h1>
-<p>A lightweight desktop overlay for displaying selected HWiNFO sensor values from the HWiNFO Gadget/VSB Registry output.</p>
-<p>The mod can be used to monitor values such as CPU power, GPU power, GPU temperature, VRAM usage, water-cooling pump RPM, coolant temperature, flow rate, PSU power, and other sensor values exposed by HWiNFO.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p><img src="https://i.imgur.com/tajpyvb.png" alt="HWiNFO Registry Live Overlay desktop overlay less sensors" /></p>
-<p><em>Shows the desktop overlay with selected HWiNFO Gadget/VSB sensor values, auto height, background gradient, and optional Water Age.</em></p>
-<p><img src="https://i.imgur.com/8yz5LV6.png" alt="HWiNFO Registry Live Overlay desktop overlay more sensors" /></p>
-<p><em>Shows the desktop overlay with more selected HWiNFO Gadget/VSB sensor values, auto height, background gradient, and optional Water Age.</em></p>
-<p><img src="https://i.imgur.com/StZ9Mum.png" alt="HWiNFO Registry Live Overlay export helper" /></p>
-<p><em>Shows the HTML registry export helper.</em></p>
-<p><img src="https://i.imgur.com/a2a69Gh.png" alt="HWiNFO64 Sensor Settings Gadget setup" /></p>
-<p><em>Shows where to enable HWiNFO Gadget reporting: enable reporting to Gadget, select a sensor, enable “Report value in Gadget”, note the index number, and click OK.</em></p>
-<p><em>Alternatively, use the built-in registry export helper to look up the Label and Registry value name for each sensor, then add a row for it in the Rows setting.</em></p>
-<p><img src="https://i.imgur.com/D9D4hVT.png" alt="HWiNFO Registry Live Overlay Rows input field" /></p>
-<p><em>Shows the Rows setting. Each row has a Label and a Registry value name, managed with Add/Remove/Reorder. Use Ctrl+Alt+R to export available HWiNFO Gadget/VSB values as HTML.</em></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Displays selected HWiNFO Gadget/VSB Registry values on the desktop</li>
-<li>Configurable sensor rows using a native array setting (Label + Registry value name)</li>
-<li>Custom font family, size, weight, and style</li>
-<li>Separate label and value colors</li>
-<li>Left/right alignment for label and value columns</li>
-<li>Optional background with opacity</li>
-<li>Optional gradient background</li>
-<li>Optional rounded corners and border</li>
-<li>Optional always-on-top mode</li>
-<li>Toggle hotkey to show or hide the overlay</li>
-<li>Drag hotkey for live positioning</li>
-<li>Optional remembered drag position</li>
-<li>Auto height based on visible rows and Water Age</li>
-<li>Optional Water Age display based on a configured coolant fill date</li>
-<li>HTML export of the current HWiNFO Gadget/VSB Registry sensor list</li>
-<li>Helpful message and HTML page when no HWiNFO Gadget/VSB sensors are found</li>
-</ul>
-<h2 id="hwinfosetup">HWiNFO setup</h2>
-<p>This mod reads the HWiNFO Gadget/VSB Registry output.</p>
-<p>In HWiNFO:</p>
-<ol>
-<li>Open the Sensors window.</li>
-<li>Click Configure Sensors.</li>
-<li>Open the HWiNFO Gadget tab.</li>
-<li>Enable reporting to Gadget globally.</li>
-<li>Select the sensor values you want to use.</li>
-<li>Enable Report value in Gadget for each selected value.</li>
-<li>Press OK.</li>
-<li>Use the registry export hotkey to create an HTML sensor list.</li>
-</ol>
-<p>The default registry path is:</p>
-<pre><code class="txt language-txt">HKCU\SOFTWARE\HWiNFO64\VSB
-</code></pre>
-<p>Typical value names are:</p>
-<pre><code class="txt language-txt">Sensor0 / Label0 / Value0 / ValueRaw0 / Color0
-Sensor1 / Label1 / Value1 / ValueRaw1 / Color1
-...
-</code></pre>
-<p>Rows are configured using the native Rows array setting. Each row has two fields:</p>
-<pre><code class="txt language-txt">Label:                Example Sensor
-Registry value name:  Value0
-</code></pre>
-<p>Use Add/Remove/Reorder in the Rows setting to manage rows. Use the export hotkey to find out which registry value name (<code>ValueN</code>) belongs to which HWiNFO sensor.</p>
-<h2 id="hotkeys">Hotkeys</h2>
-<p>Default hotkeys:</p>
-<pre><code class="txt language-txt">Ctrl + Alt + H = Show/hide overlay
-Ctrl + Alt + D = Toggle drag mode
-Ctrl + Alt + R = Export HWiNFO Gadget/VSB Registry sensor list as HTML
-</code></pre>
-<p>The hotkeys can be changed in the mod settings.</p>
-<h2 id="waterage">Water Age</h2>
-<p>The optional Water Age feature calculates the number of days since a configured coolant fill date.</p>
-<p>Example:</p>
-<pre><code class="txt language-txt">Water fill date: 2024-11-18
-Water max age: 730 days
-</code></pre>
-<p>The Water Age text can change color based on warning and alarm percentage thresholds.</p>
-<h2 id="notes">Notes</h2>
-<p>This mod does not read all HWiNFO sensors directly. It only reads values that HWiNFO exposes through its Gadget/VSB Registry reporting feature.</p>
-<p>This mod does not use HWiNFO Shared Memory.</p>
-<p>This is a separate mod from Taskbar System Info and Desktop Live Overlay because it is focused on arbitrary user-selected HWiNFO Gadget/VSB Registry values. Taskbar System Info can use the HWiNFO Gadget Registry for limited taskbar temperature display, while Desktop Live Overlay provides generic desktop metrics. This mod instead provides a dedicated multi-row desktop table for HWiNFO ValueN entries, an HTML registry export helper for mapping those entries to Windhawk rows, and the optional Water Age row.</p>
-<p>HWiNFO must be installed and running, and the desired sensor values must be enabled for Gadget reporting in HWiNFO.</p>
-<h2 id="creditsandthanks">Credits and thanks</h2>
-<p>Special thanks to Martin Malik / REALiX, the developer of HWiNFO, for creating HWiNFO and for providing the HWiNFO Gadget/VSB Registry reporting feature.</p>
-<p>Martin Malik kindly granted permission to go ahead with this mod.</p>
-<p>This mod is not affiliated with HWiNFO / REALiX. All sensor data is provided by HWiNFO. The mod only reads the registry values that the user explicitly enables in HWiNFO Sensor Settings.</p>
-<p>Please respect the HWiNFO license terms. If you like HWiNFO and use it regularly, please consider supporting development by purchasing a HWiNFO license, especially for professional or commercial use.</p>
-<h2 id="development">Development</h2>
-<p>Created by SilverAmd / Zarko.</p>
-<p>Development assistance:</p>
-<ul>
-<li>ChatGPT by OpenAI</li>
-<li>Claude by Anthropic</li>
-<li>Mistral Vibe</li>
-</ul>
-<h2 id="license">License</h2>
-<p>MIT</p>]]></content>
-        <author>
-            <name>SilverAmd</name>
-            <uri>https://github.com/SilverAmd</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Chromium Cursor Remap 1.0]]></title>
-        <id>https://windhawk.net/mods/chromium-cursor-remap#e180d87d310cc4a74135669933034a8185ebc852</id>
-        <link href="https://windhawk.net/mods/chromium-cursor-remap"/>
-        <updated>2026-09-15T17:59:54.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="chromiumcursorremap">Chromium Cursor Remap</h1>
-<p>Chromium browsers and Electron apps draw ten CSS cursors from bitmaps of their
-own instead of asking Windows: <code>grab</code>, <code>grabbing</code>, <code>zoom-in</code>, <code>zoom-out</code>,
-<code>cell</code>, <code>vertical-text</code>, <code>alias</code>, <code>copy</code>, <code>col-resize</code> and <code>row-resize</code>. Those
-bitmaps don't follow your Windows cursor scheme. This mod replaces them with
-cursors from that scheme, or with <code>.cur</code> / <code>.ani</code> files of your choice.</p>
-<p><img src="https://raw.githubusercontent.com/mazany/windhawk-images/5d2c26f93a023738d3597a6a7c8805a9124dc9b2/chromium-cursor-remap/before-after.png" alt="Chromium's own cursors (top) and the Windows cursors that replace them (bottom), in Microsoft Edge at 150% display scale" /></p>
-<p>Cursors that Chromium already takes from Windows (<code>default</code>, <code>pointer</code>, <code>text</code>,
-<code>wait</code>, <code>not-allowed</code>, the directional resize cursors and so on) are not
-touched, and neither are cursor images that a web page sets itself with
-<code>cursor: url(...)</code>.</p>
-<h2 id="defaultreplacements">Default replacements</h2>
-<p>| CSS cursor              | Replaced with                        |
-|-------------------------|--------------------------------------|
-| grab                    | Link select (<code>IDC_HAND</code>)             |
-| grabbing                | Move (<code>IDC_SIZEALL</code>)                 |
-| zoom-in, zoom-out, cell | Precision select (<code>IDC_CROSS</code>)       |
-| vertical-text           | Text select (<code>IDC_IBEAM</code>)            |
-| alias, copy             | Normal select (<code>IDC_ARROW</code>)          |
-| col-resize              | Horizontal resize (<code>IDC_SIZEWE</code>)     |
-| row-resize              | Vertical resize (<code>IDC_SIZENS</code>)       |</p>
-<h2 id="settings">Settings</h2>
-<p>Each cursor type has two settings:</p>
-<ul>
-<li><strong>Keep Chromium's own cursor</strong> leaves that type alone.</li>
-<li><strong>Custom cursor source</strong> takes either an <code>IDC_*</code> name - <code>IDC_ARROW</code>,
-<code>IDC_IBEAM</code>, <code>IDC_WAIT</code>, <code>IDC_CROSS</code>, <code>IDC_UPARROW</code>, <code>IDC_SIZENWSE</code>,
-<code>IDC_SIZENESW</code>, <code>IDC_SIZEWE</code>, <code>IDC_SIZENS</code>, <code>IDC_SIZEALL</code>, <code>IDC_NO</code>,
-<code>IDC_HAND</code>, <code>IDC_APPSTARTING</code>, <code>IDC_HELP</code>, <code>IDC_PIN</code>, <code>IDC_PERSON</code> - or the
-full path of a <code>.cur</code> or <code>.ani</code> file, such as <code>C:\Cursors\grab.ani</code>. Leave it
-empty for the default above; a source that cannot be loaded also falls back
-to the default.</li>
-</ul>
-<p><strong>Test mode</strong> puts one cursor (by default the busy cursor, <code>IDC_WAIT</code>) on every
-cursor the mod recognises, whatever the per-type settings say, so you can see at
-a glance which ones it catches. If the test cursor cannot be loaded, the
-per-type settings stay in force.</p>
-<p>Settings take effect without restarting the app.</p>
-<h2 id="testedwith">Tested with</h2>
-<ul>
-<li>Microsoft Edge 152 and 153, and Google Chrome 152: all ten cursor types replaced.</li>
-<li>MarkText 0.19.1, an Electron app.</li>
-<li>A 32-bit NW.js app: the mod stays in its main process and leaves its helper
-processes, and its bundled cursor images were checked to be recognised by
-the 32-bit build.</li>
-<li>The cursor images bundled with VS Code, Obsidian, Vivaldi and Steam's built-in
-browser (CEF) were checked to be recognised. Windhawk does not load mods into
-Steam installed under <code>Program Files</code> unless it is removed from Windhawk's
-process exclusion list, which lists it by default as a game folder.</li>
-</ul>
-<p>Other Chromium-based browsers and Electron or CEF apps should work the same way.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod is set to load into every program, because Electron and CEF apps can
-have any file name and a list of names misses most of them. It stays only in
-the main process of a Chromium-based app, which it recognises from the program
-file itself before installing any hook; anywhere else, including Chromium's own
-helper processes, it unloads again at once.</p>
-<p>In the processes where it stays, it watches <code>SetCursor</code>. The first time a cursor
-appears, the mod asks Windows which module and resource it was loaded from,
-loads that resource again at 32x32 and compares it with Chromium's ten bundled
-images. The answer does not depend on the size the app loaded the cursor at
-(checked from 32 to 72 px, which covers display scaling from 100% to 225%). A
-web page's own cursor image has no resource behind it and is left alone.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>The mod is also built for ARM64 apps; that build has not been tested.</li>
-<li>On screen, only 150% display scaling has been checked; other sizes were
-checked by loading the cursors at those sizes.</li>
-<li>Apps that host WebView2 in visual (composition) mode set the cursor from
-their own process, so their web content keeps Chromium's cursors.</li>
-<li>A CEF app that loads <code>libcef.dll</code> only after it has started is not
-recognised.</li>
-<li>Chromium's middle-click autoscroll cursors are not replaced.</li>
-<li>A <code>.cur</code> / <code>.ani</code> file is read once per app session. After editing a file in
-place, restart the app, or turn the mod off and on again.</li>
-<li>Custom files are loaded at the cursor size set in Windows.</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<p><strong>Icon Resource Redirect</strong> can also theme cursors, by redirecting the resources
-apps load them from; this mod was tested with it enabled. A Chromium cursor that
-Icon Resource Redirect has already redirected no longer matches Chromium's own
-images, so this mod leaves it as Icon Resource Redirect drew it.</p>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>Turn on logging for this mod in Windhawk. Each new cursor gets one log line
-naming the module and resource it came from, a hash of its image and the
-verdict. If a Chromium cursor stops being replaced after a browser update,
-Chromium has probably redrawn it: please report that log line together with the
-CSS cursor type in the Windhawk mods repository on GitHub
-(ramensoftware/windhawk-mods).</p>]]></content>
-        <author>
-            <name>mazany</name>
-            <uri>https://github.com/mazany</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Double-Click Window Edge to Maximize Width 1.0]]></title>
-        <id>https://windhawk.net/mods/edge-doubleclick-resize#c69dab54e3f2d6439b4cc6775ac4a9441d3766b8</id>
-        <link href="https://windhawk.net/mods/edge-doubleclick-resize"/>
-        <updated>2026-09-15T17:42:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="doubleclickwindowedgetomaximizewidth">Double-Click Window Edge to Maximize Width</h1>
-<p>Double-click on a window's border to resize it along one axis, without
-affecting the other:</p>
-<ul>
-<li>Left or right edge -&gt; maximizes the width (height stays unchanged).
-Double-click the same edge again to restore the previous width.</li>
-<li>Top or bottom edge -&gt; handled by Windows' own built-in vertical
-maximize/restore toggle (unchanged by this mod).</li>
-<li>A corner -&gt; maximizes both width and height together. Double-click
-the same corner again to restore the previous size.</li>
-</ul>
-<p>This adds a horizontal counterpart to Windows' existing vertical
-double-click-to-maximize behavior, which only covers the top/bottom
-edges natively.</p>
-<p><img src="https://i.imgur.com/B4HtYLf.gif" alt="demo" /></p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Applies to all windows (<code>@include *</code>).</li>
-<li>Only affects resizable windows that are not already maximized or
-minimized.</li>
-<li>Apps that implement their own non-client hit testing and never
-forward <code>WM_NCLBUTTONDBLCLK</code> to the default window procedure
-(e.g. many Chromium/Electron, WinUI, and Qt frameless windows) are
-not affected by this mod, since there's no reliable hook point for
-those. This is a limitation of the approach, not a bug.</li>
-<li>Uses the work area (excludes the taskbar) rather than the full
-monitor bounds.</li>
-</ul>
-<hr />
-<h2 id="">دبل كليك على حافة النافذة لتكبير العرض أو الطول</h2>
-<ul>
-<li>الحافة اليسرى أو اليمنى -&gt; يكبّر العرض بالكامل (يبقى الطول كما هو). دبل كليك مرة ثانية يرجّع العرض السابق.</li>
-<li>الحافة العلوية أو السفلية -&gt; يُترك سلوك ويندوز الأصلي (تكبير/استعادة الطول) كما هو.</li>
-<li>الزاوية -&gt; يكبّر الاثنين معاً. دبل كليك على نفس الزاوية يرجّع الحجم السابق.</li>
-</ul>]]></content>
-        <author>
-            <name>Hamid</name>
-            <uri>https://github.com/nh4700-ai</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AltDrag 1.0]]></title>
-        <id>https://windhawk.net/mods/alt-drag#cade2e296c8b0d782b05940db9585aed8a438680</id>
-        <link href="https://windhawk.net/mods/alt-drag"/>
-        <updated>2026-09-14T23:29:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="altdrag">AltDrag</h1>
-<p>Move any window by holding Alt and dragging it from anywhere, without having to
-grab the title bar.</p>
-<p>The idea was inspired by <a href="https://stefansundin.github.io/altdrag/">the original AltDrag
-tool</a>.</p>
-<p><img src="https://i.imgur.com/PY0arDE.gif" alt="Demonstration" /></p>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

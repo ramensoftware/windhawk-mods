@@ -2,12 +2,456 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-21T10:04:31.000Z</updated>
+    <updated>2026-09-21T15:43:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Separate System Tray Icons 1.0.0]]></title>
+        <id>https://windhawk.net/mods/separate-system-tray-icons#953bdd63123ce7146fb52a71e53e8261369f7a92</id>
+        <link href="https://windhawk.net/mods/separate-system-tray-icons"/>
+        <updated>2026-09-21T15:43:18.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="separatesystemtrayicons">Separate System Tray Icons</h1>
+<p>Replaces the grouped Windows 11 system tray button with separate sound,
+Bluetooth, network, Control Center, and battery buttons. The original grouped
+button is hidden while the mod is active and restored when it is unloaded.</p>
+<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/e02d89d70dfb0ad3815b806e3eb2a49e56cb86b8/img/separate-system-tray-icons/separate-system-tray-icons.gif" alt="Demonstration" /></p>
+<p>This mod injects real XAML <code>FontIcon</code> elements into the Windows 11 taskbar tray.
+That means icons are drawn as XAML text/vector glyphs instead of rasterized HICON bitmaps.</p>
+<p>Buttons:</p>
+<ul>
+<li>Bluetooth -&gt; Bluetooth flyout</li>
+<li>Network -&gt; Network flyout</li>
+<li>Sound -&gt; Control Center, sound output picker or volume mixer</li>
+<li>Control Center -&gt; Control Center or a custom action</li>
+<li>Battery -&gt; Control Center or a custom action</li>
+</ul>
+<p>Use <strong>Toggle buttons visibility</strong> to choose which buttons appear. Drag items in
+<strong>Button order</strong> to arrange the buttons, including Battery. Removing an entry
+hides that button; adding it back shows it when its visibility toggle is enabled. The battery
+button appears only when Windows reports a battery.</p>
+<p>Sound supports mouse-wheel volume adjustment (unmuting first) and middle-click
+muting. <strong>Volume scroll step</strong> selects Windows' default step or 1, 5, or 10
+percentage points per wheel notch.</p>
+<p>Partial movements from smooth-scrolling mice accumulate into full wheel notches;
+horizontal scrolling does not change volume. Reach the buttons through Windows'
+taskbar keyboard navigation, then use Enter or Space to activate, or Shift+F10
+or the Menu key to open a context menu. Buttons expose their current tooltip
+information as accessible names and use system keyboard-focus visuals.</p>
+<p>Sound can show currently playing media in its tooltip and use an output-device
+glyph. Muted audio uses the standard mute glyph. Bluetooth can show connected
+devices and their battery percentages (when reported by Windows) in its tooltip
+and change appearance when switched off. Network can
+show Wi-Fi signal strength and open a custom URL for <strong>Perform speed test</strong>.</p>
+<h2 id="actionformats">Action formats</h2>
+<p>The custom-action prefix scheme and action-format documentation are adapted from
+<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/ultimate-custom-tray.wh.cpp">Ultimate Custom Tray</a>
+by <a href="https://github.com/Salyts">Salyts</a>, licensed under MIT.</p>
+<p>Select <strong>Custom action</strong> for <strong>Control Center action</strong> or <strong>Battery click action</strong>, then
+enter an action in that group's <strong>Custom action</strong> field.</p>
+<p>| Prefix | Example | Description |
+|--------|---------|-------------|
+| <code>" "</code> | <code>"C:\Program Files\app.exe"</code> | Opens a file or folder by absolute path. |
+| <code>~</code> | <code>~Downloads</code> | Opens a folder or file by name. |
+| <code>cmd:</code> | <code>cmd:control</code> | Runs a command through <code>cmd.exe</code>. |
+| <code>ps:</code> / <code>powershell:</code> | <code>ps:shutdown /r /f /t 0</code> | Runs through <code>powershell.exe</code>. |
+| <code>key:</code> / <code>hotkey:</code> | <code>key:Ctrl+Shift+Esc</code> | Simulates a keyboard shortcut with virtual key presses. |
+| <code>web:</code> | <code>web:https://windhawk.net/</code> | Opens a URL in the default browser. |
+| <code>ms-settings:</code> | <code>ms-settings:bluetooth</code> | Opens a Windows Settings page. |</p>
+<p>For shortcut actions, use <code>Modifier+Modifier+Key</code>.
+Supported modifiers: <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code>, <code>Win</code>.
+Examples: <code>key:Ctrl+Alt+D</code>, <code>hotkey:Win+R</code>, <code>key:0x7B</code> (F12 by VK code).</p>
+<h2 id="taskbarstylertargets">Taskbar Styler targets</h2>
+<p>Status changes use Windows notifications where available, with a 60-second
+fallback refresh. The Wi-Fi connecting animation updates every 500 ms while
+Windows reports an active connection attempt.
+This version currently manages the primary taskbar; separate-monitor taskbars
+are not supported by the current implementation.</p>
+<p>The injected buttons normally use <code>SystemTray.OmniButton</code>. If a fallback is
+needed, the mod logs the actual control class; the button names stay the same.</p>
+<p>| Target | Description |
+| --- | --- |
+| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlBluetooth</code> | Bluetooth button and its native template/hit target. |
+| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlNetwork</code> | Network button. |
+| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlSound</code> | Sound button, including wheel and middle-click handling. |
+| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlControlCenter</code> | Separate Control Center button; the original grouped button is always hidden. |
+| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlBattery</code> | Separate battery button, including its highlight and click handling. |
+| <code>TextBlock#SeparateTrayBatteryPercentage</code> | Battery percentage text. |
+| <code>Grid#SeparateTrayIconLayers</code> | Glyph host; battery uses natural dimensions, other buttons use a 16-by-16 host. |
+| <code>FontIcon#SeparateTrayIconPrimary</code> | Main status or output-device glyph. |
+| <code>FontIcon#SeparateTrayIconUnderlay</code> | Theme-aware grey underlying glyph, where applicable. |
+| <code>FontIcon#SeparateTrayIconOverlay</code> | Additional status layer, including Bluetooth's unavailable indicator and battery charge-level fill. |
+| <code>MenuFlyoutPresenter#SeparateTrayContextMenuPresenter</code> | WinUI context menu presenter, named when the menu opens. |</p>
+<p>The layer names are shared across buttons. An unqualified layer selector affects
+all matching buttons. For example:</p>
+<pre><code class="yaml language-yaml">controlStyles:
+  - target: FontIcon#SeparateTrayIconPrimary
+    styles:
+      - FontSize=16
+</code></pre>
+<h3 id="hoverhighlightsandgeneratedtemplates">Hover highlights and generated templates</h3>
+<p>The native button template contains <code>Border#BackgroundBorder</code> on the supported
+taskbar build. This is the existing hover-highlight element. Use the visual-tree
+paths in the mod logs to target it beneath a particular button. Template
+intermediate elements can vary between Windows builds: Taskbar Styler's <code>&gt;</code>
+requires a direct parent/child relationship, so do not assume the border or
+glyph host is a direct child of the button.</p>
+<h3 id="stylinglimitations">Styling limitations</h3>
+<p>The mod refreshes glyphs, foreground colors, visibility, overlay font sizes,
+and button dimensions as state changes. Styles for those properties can be
+overwritten by the next update. Stable names provide selectors, but external
+stylers may not observe every dynamically created element. In particular, the
+menu presenter receives its name after creation.</p>
+<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
+<p>In case if battery won't show properly on your system, System Battery (<em>Sysbatt.ttf</em>)
+font needs to be installed manually. It's part of <em>Windows.UI.ControlCenter</em>
+package, but is not actually installed by default. The missing font is stored in:</p>
+<pre><code>C:\Windows\SystemResources\Windows.UI.ControlCenter\Assets
+</code></pre>
+<p>In order to install the font, right-click the <em>Sysbatt.ttf</em> file, and choose <em>Install</em>
+from the context menu.</p>]]></content>
+        <author>
+            <name>Asteski</name>
+            <uri>https://github.com/Asteski</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Agenda in Calendar View 1.0]]></title>
+        <id>https://windhawk.net/mods/agenda-in-calendar-view#ef7c936660e01bd724df1a422cb3d4dc73f3fd0a</id>
+        <link href="https://windhawk.net/mods/agenda-in-calendar-view"/>
+        <updated>2026-09-21T15:43:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="agendaincalendar">Agenda in Calendar</h1>
+<p><img src="https://i.imgur.com/lQhwoAL.png" alt="Agenda in Calendar" /></p>
+<h2 id="bringbackthewindows10agendatowindows11">Bring back the Windows 10 Agenda to Windows 11</h2>
+<p>This mod brings the Windows 10-style agenda to Windows 11, allowing you to
+quickly and conveniently view your events from the Notification Centre.</p>
+<p>It supports <code>.ics</code> files from both local and remote locations.</p>
+<h2 id="details">Details</h2>
+<p><img src="https://i.imgur.com/EkWnp1c.png" alt="event" /></p>
+<p>The details shown include:</p>
+<ul>
+<li>Event name</li>
+<li>Event description</li>
+<li>Location</li>
+<li>Starting and ending time</li>
+</ul>
+<h2 id="additionalfeatures">Additional features</h2>
+<p><strong>Additional features include:</strong></p>
+<p>Keyboard navigation:</p>
+<ul>
+<li>You can move backward by a day or forward by a day using the left and right arrow keys.</li>
+</ul>
+<p>Hiding the focus panel:</p>
+<p><img src="https://i.imgur.com/xurxfJ9.png" alt="comparison" /></p>
+<p>Setting a maximum height (before it starts scrolling):</p>
+<p><img src="https://i.imgur.com/c9i40PA.png" alt="scrollViewer" /></p>
+<p>Checking events on other dates:</p>
+<p><img src="https://i.imgur.com/DM8tcj0.png" alt="calendar" /></p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Compatible with Windows 11 (both ShellExperienceHost.exe and ShellHost.exe).</li>
+<li>Supports recurring events (daily, weekly, monthly, yearly, including <code>BYDAY</code> ordinals such as "third Thursday" / <code>3TH</code> or "second Tuesday" / <code>2TU</code>, <code>BYMONTHDAY</code>, <code>WKST</code>, <code>EXDATE</code>, <code>RECURRENCE-ID</code>, and multi-day recurring events).</li>
+<li>Events are refreshed every time the notification pane is opened.<ul>
+<li>If events can't be fetched (e.g. no internet connection), previously-fetched events are shown.</li>
+<li>Smart caching avoids redundant fetches within the configured minimum fetch interval.</li>
+<li>You can click the Refresh button in the calendar header at any time to force an immediate refresh.</li></ul></li>
+<li>The mod resiliently accepts errors; if you have a problem, enable logging.</li>
+<li>Injection logic has been ported from m417z's <em>Start Menu Styler</em>.</li>
+<li>The creation of this mod was assisted by AI:<ul>
+<li>Sadly, I do not have experience with C++/Windhawk;</li>
+<li>However, I do have experience with WinUI (as I have created several WinUI apps in C#);</li>
+<li>As a result, the controls used <em>(inc. CalendarDatePicker, Border, Grid, TextBlock)</em> were manually structured, but the underlying implementation was generated using AI.</li></ul></li>
+</ul>
+<h2 id="faq">FAQ</h2>
+<ul>
+<li><strong>My local <code>.ics</code> file does not work!</strong></li>
+<li>First try going to its Properties in File Explorer, and ticking "Unblock".</li>
+<li>If that doesn't work, grant read permissions on your file to AppContainers by running:
+<code>icacls "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"</code>
+in PowerShell.
+This allows <code>ShellExperienceHost.exe</code> and <code>ShellHost.exe</code>, which host the calendar pane, to access your calendar file.
+<em>Note: <code>*S-1-15-2-1</code> grants read permissions to ALL APPLICATION PACKAGES (all UWP/packaged apps).</em></li>
+<li><strong>The bottom corners of the <em>Notifications</em> pane (immediately above the agenda) are not rounded!</strong>
+Set a maximum height for the Agenda in the mod settings to stop it from clipping the <em>Notifications</em> pane.</li>
+</ul>]]></content>
+        <author>
+            <name>lonfro</name>
+            <uri>https://github.com/lonfro</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Better Volume Mixer 1.2]]></title>
+        <id>https://windhawk.net/mods/better-volume-mixer#bba90ef6f0dc76ff9dc38614b83adafbc84ca4df</id>
+        <link href="https://windhawk.net/mods/better-volume-mixer"/>
+        <updated>2026-09-21T15:42:47.000Z</updated>
+        <content type="html"><![CDATA[<!-- ⚠️ Please keep the template below intact and fill in the relevant sections. Any additional content can be placed above the template. -->
+<h2 id="changelog">Changelog</h2>
+<p>If this pull request updates an existing mod, describe the changes below:</p>
+<ul>
+<li>Added a dropdown selection for audio output devices</li>
+<li>Added compact mode</li>
+<li>Improved user interface visuals</li>
+</ul>
+<h2 id="modauthorship">Mod authorship</h2>
+<p>If this pull request introduces a new mod, please complete the section below.</p>
+<p>This mod was created by:</p>
+<ul>
+<li>- [ ] The submitter, without AI assistance</li>
+<li>- [x] The submitter, with AI assistance</li>
+<li>- [ ] Claude</li>
+<li>- [x] ChatGPT</li>
+<li>- [ ] Gemini</li>
+<li>- [ ] Another AI (please specify): </li>
+<li>- [ ] Other (please specify): </li>
+</ul>
+<p>Please select the options that best apply. Your selection does not affect the acceptance criteria, but it helps reviewers understand the context of the code and provide relevant feedback.</p>]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Move Conflicts Quietly 1.0]]></title>
+        <id>https://windhawk.net/mods/move-quietly#3df241edf7d65e00297638c7069d89a3988e1c8c</id>
+        <link href="https://windhawk.net/mods/move-quietly"/>
+        <updated>2026-09-21T15:42:38.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="moveconflictsquietly">Move Conflicts Quietly</h1>
+<p>Move Conflicts Quietly removes the repetitive filename-conflict decision from
+Windows File Explorer copy and move operations.</p>
+<p>When an incoming item has the same name as an item that already exists in the
+destination, the mod keeps both by giving the incoming item the next free
+<code>name (n).ext</code> style name instead of showing the <strong>Replace or skip files</strong>
+prompt.</p>
+<p>For example, a collision such as:</p>
+<pre><code>report.txt
+</code></pre>
+<p>will normally produce a unique name similar to:</p>
+<pre><code>report (2).txt
+</code></pre>
+<p>Further collisions take the next free number: <code>report (3).txt</code>, and so on. An
+incoming <code>report (2).txt</code> that collides becomes <code>report (3).txt</code>, not
+<code>report (2) (2).txt</code>.</p>
+<h2 id="whatitaffects">What it affects</h2>
+<p>The mod targets File Explorer (<code>explorer.exe</code>) and applies automatic
+rename-on-collision behavior to copy and move operations performed through the
+Windows <code>IFileOperation</code> interface, including common Explorer operations such
+as copy/paste, cut/paste, and drag-and-drop moves.</p>
+<p>The mod does <strong>not</strong> intentionally suppress unrelated error or security UI.
+Permission errors, UAC/elevation prompts, disk errors, and other exceptional
+conditions are still handled by Windows normally.</p>
+<h2 id="howitworks">How it works</h2>
+<p>Explorer uses the Windows Shell <code>IFileOperation</code> COM interface for many file
+operations. This mod hooks the copy and move entry points. For every queued
+item it resolves the destination path, checks whether the name is already
+taken (on disk, or by another item queued in the same operation), and if so
+passes an explicit <code>name (n).ext</code> name to the Shell.</p>
+<p>As a safety net it also adds <code>FOF_RENAMEONCOLLISION</code> and
+<code>FOFX_PRESERVEFILEEXTENSIONS</code> to the operation, so that even when the mod
+cannot pick a name itself (a non-file-system destination, or a name that is
+taken between the check and the copy) the Shell still keeps both instead of
+prompting. In that fallback case the Shell chooses the name, which is its
+usual <code>name - Copy.ext</code> pattern.</p>
+<p>The flags are decided once, just before the operation runs, so that the whole
+queue is known. Existing operation flags are retained; if the caller did not
+set any, the documented <code>IFileOperation</code> defaults are used.</p>
+<h2 id="bypassingthemodforoneoperation">Bypassing the mod for one operation</h2>
+<p>Hold <strong>Shift</strong> (configurable) while dropping, or while clicking Paste in the
+context menu or the command bar, and the mod leaves that operation entirely to
+Explorer, prompt and all.</p>
+<p>Be aware that Shift is also Explorer's "force a move" drag modifier. If you
+habitually hold Shift while dragging, every such drop bypasses the mod — set
+the option to <strong>Disabled</strong> or the Windows key instead. Ctrl and Alt are worse
+choices: Ctrl is held during every Ctrl+V paste (so the mod would never act on
+a keyboard paste) and forces a copy on drop; Alt turns a drop into a shortcut.</p>
+<p>A held key cannot work with <strong>Ctrl+V</strong>: adding any modifier makes it a
+different shortcut that Explorer does not treat as Paste (and Win+Ctrl+V is
+taken by Windows). For keyboard pastes, set the <strong>lock</strong> option instead: while
+Caps Lock or Scroll Lock is on, the mod stands aside.</p>
+<h2 id="importantbehaviorandlimitations">Important behavior and limitations</h2>
+<ul>
+<li>Copying an item into its own folder is not renamed by the mod; Explorer's
+own naming applies (normally <code>name - Copy.ext</code>).</li>
+<li>Items that are not file-system objects (for example dragged out of a zip
+folder or a phone) fall back to the Shell's own collision naming.</li>
+<li>When a folder with the same name already exists in the destination, the
+default is to merge into it and apply the same keep-both renaming to any
+conflicting files inside. To do that the mod queues the folder's contents
+item by item, so Undo covers the individual items rather than the folder as
+a whole, and a merged move leaves the (now empty) source folder tree to be
+removed after the operation completes. The setting can instead hand merges
+to Explorer unchanged (conflicts inside prompt as usual) or keep both
+folders side by side as <code>Folder (2)</code>.</li>
+<li>Operations whose caller has already chosen a collision policy (for example
+"replace all" or "keep newer") before queueing items are left untouched.</li>
+<li>After a merged <strong>move</strong>, the emptied source folders are removed directly
+(not via the Recycle Bin, and not covered by Undo). Only empty folders are
+ever removed. Folders that are junctions or symbolic links are never merged;
+they are handed to Explorer unchanged.</li>
+<li>Merging a large folder resolves names for every item up front, before the
+progress dialog appears, and the dialog then lists the individual items.</li>
+<li>The hooks apply to every <code>IFileOperation</code> copy or move inside <code>explorer.exe</code>,
+which includes third-party shell extensions hosted there.</li>
+<li>This version targets 64-bit File Explorer.</li>
+<li>Rename-only and delete operations are not intentionally modified.</li>
+</ul>
+<h2 id="testing">Testing</h2>
+<p>Before relying on the mod with important data, test it with disposable files
+and folders. Useful cases include:</p>
+<ol>
+<li>Copy one file into a folder that already contains a file with the same name.</li>
+<li>Repeat the copy several times and verify that every copy is preserved.</li>
+<li>Test cut/paste and drag-and-drop moves with a destination conflict.</li>
+<li>Test a multi-file copy containing several conflicts.</li>
+<li>Test a same-name folder collision so you understand the folder behavior on
+your Windows version.</li>
+<li>For a folder merge, include a hidden file and a hidden+system file (for
+example <code>desktop.ini</code>) in the source and verify they arrive.</li>
+</ol>
+<h2 id="sourceandissues">Source and issues</h2>
+<p>Source code and issue tracking:
+https://github.com/JohhannasReyn/move-quietly</p>
+<p>If you find a copy or move path that still displays Explorer's conflict chooser,
+please include your Windows version, the exact operation used, and the Windhawk
+log output in the issue report.</p>]]></content>
+        <author>
+            <name>Johhannas Reyn</name>
+            <uri>https://github.com/JohhannasReyn</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Shadows Tuner 0.6.4]]></title>
+        <id>https://windhawk.net/mods/native-shadow-tuner#5ba5889e229443d62d6b13a03419c11dcbd6e01c</id>
+        <link href="https://windhawk.net/mods/native-shadow-tuner"/>
+        <updated>2026-09-21T15:42:29.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windowsshadowstuner">Windows Shadows Tuner</h1>
+<p>Customize native Windows window shadows: make them lighter or more pronounced,
+and adjust their size and blur.</p>
+<h2 id="examples">Examples</h2>
+<p><strong>Shadow intensity and size comparison</strong></p>
+<p><img src="https://i.imgur.com/epfTlMZ.png" alt="Windows Shadows TUNER comparison" /></p>
+<h2 id="setup">Setup</h2>
+<p><code>dwm.exe</code> is a critical system process and Windhawk doesn't inject mods into it
+by default. Open Windhawk Settings, go to <strong>Advanced settings</strong>, then
+<strong>More advanced settings</strong>, and add <code>dwm.exe</code> to the process inclusion list.</p>
+<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Windhawk advanced settings" /></p>
+<h2 id="controls">Controls</h2>
+<ul>
+<li><strong>Intensity</strong>: controls the opacity of the native shadow. The default value is
+180%. Set it to 100% to restore the original Windows intensity, 50% for a
+lighter shadow, or 0% to make it invisible.</li>
+<li><strong>Size and blur</strong>: controls the shadow spread and blur. The default value is
+150%. Set it to 100% to restore the original Windows size.</li>
+</ul>
+<p>When both controls are set to 100%, the mod doesn't install any hooks because
+the requested appearance is identical to the original Windows appearance.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks a single uDWM function, <code>CWindowBorder::GetShadowParameters</code>,
+and scales the radius and alpha values it produces. To apply changes to windows
+that are already open and restore the original shadows when the mod is disabled,
+the mod briefly toggles the system drop-shadow setting off and on in memory so
+DWM rebuilds every window's shadow. The user profile isn't modified and no
+settings-change message is broadcast. Shadows can blink for a fraction of a
+second when the mod is loaded, unloaded, or its settings are changed. The mod
+creates no overlay windows and stores no persistent state.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Tested on Windows 11 25H2 build 26200.9445.</p>
+<p>Windows 11 24H2 (build 26100.x): the uDWM symbol resolves, but the current
+version hasn't been visually confirmed there yet. If you're on 24H2, please
+report whether the shadows change.</p>
+<p>Other Windows builds haven't been tested. If the required uDWM symbol can't
+be resolved, the mod logs the error and doesn't load.</p>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Custom Shortcuts 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-custom-shortcuts#3c1bddd5acf554972350bb9186c823c6a65126fb</id>
+        <link href="https://windhawk.net/mods/explorer-custom-shortcuts"/>
+        <updated>2026-09-21T15:42:18.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorercustomshortcuts">Explorer Custom Shortcuts</h1>
+<p>Adds customizable, app-style keyboard shortcuts to Windows File Explorer with parameter substitution, built-in shell commands, and custom token expansion.</p>
+<blockquote>
+  <p><strong>Input Protection:</strong> All custom shortcuts are automatically suppressed while renaming files, typing into the Address/Breadcrumb bar, typing into the Search box, or while focus is actively inside dialogs (such as Properties, Delete/Replace confirmations). When focus returns to the main File Explorer window, shortcuts resume immediately.</p>
+</blockquote>
+<hr />
+<h3 id="internalexplorercommands">Internal Explorer Commands</h3>
+<p>Instead of specifying an executable path, set <strong>Executable Path</strong> to one of the following <code>internal:</code> keywords:</p>
+<ul>
+<li><strong><code>internal:newTextFile</code></strong>: Creates a <code>New Text Document.txt</code> in the active folder and automatically selects/focuses it without UI freezes.</li>
+<li><strong><code>internal:newFolder</code></strong>: Creates a <code>New Folder</code> in the active folder and enters inline rename mode immediately.</li>
+<li><strong><code>internal:openRecycleBin</code></strong>: Navigates to the Recycle Bin in the current active tab.</li>
+<li><strong><code>internal:emptyRecycleBin</code></strong>: Empties the Recycle Bin with confirmation dialog.</li>
+<li><strong><code>internal:toggleHiddenFiles</code></strong>: Toggles visibility of hidden files and folders with immediate view refresh. <em>(Note: Changes persistent system-wide Windows Explorer settings).</em></li>
+<li><strong><code>internal:toggleFileExtensions</code></strong>: Toggles file name extensions on or off with immediate view refresh. <em>(Note: Changes persistent system-wide Windows Explorer settings).</em></li>
+<li><strong><code>internal:folderOptions</code></strong>: Opens the native File Explorer Folder Options dialog.</li>
+</ul>
+<blockquote>
+  <p><strong>Persistent Settings Notice:</strong> <code>internal:toggleHiddenFiles</code> and <code>internal:toggleFileExtensions</code> flip the native Windows Explorer shell settings directly (<code>SHGetSetSettings</code>). These changes affect all File Explorer surfaces globally and persist even if this mod is disabled or uninstalled.</p>
+</blockquote>
+<hr />
+<h3 id="availabletokensforargumentsexamples">Available Tokens for Arguments &amp; Examples</h3>
+<ul>
+<li><strong><code>%f</code></strong> — All selected items as space-separated quoted paths (<code>"C:\a.txt" "C:\b.png"</code>).</li>
+<li><strong><code>%files</code></strong> — Selected regular files only (skips selected folders).</li>
+<li><strong><code>%folders</code></strong> — Selected folders only (skips selected regular files).</li>
+<li><strong><code>%1</code></strong> — Quoted path of the first selected file or directory (<code>"C:\a.txt"</code>).</li>
+<li><strong><code>%n</code></strong> — File or folder names only without absolute directory paths (<code>"a.txt"</code>).</li>
+<li><strong><code>%c</code></strong> — Total number of selected items as an integer (<code>3</code>). In loop modes, this resolves to <code>1</code>.</li>
+<li><strong><code>%ext</code></strong> — File extension of the first selected item (<code>.png</code>).</li>
+<li><strong><code>%s</code></strong> — Space-separated paths with <strong>smart-quoting</strong> (automatically adds double-quotes only to paths containing spaces).</li>
+<li><strong><code>%d</code></strong> — Active directory open in the current tab (<code>C:\Users\Name\Documents</code>). Virtual folders like <em>This PC</em> or <em>Recycle Bin</em> resolve to an empty string.</li>
+<li><strong><code>%d_smart</code></strong> — Selected folder if one is highlighted; otherwise falls back to the current active directory.</li>
+<li><strong><code>%p</code></strong> — Parent directory path of the active tab.</li>
+</ul>
+<blockquote>
+  <p><strong>Shell Interpreter Security Notice:</strong> Path tokens are quoted according to standard Windows CRT command-line (<code>argv</code>) rules. If arguments are passed to script interpreters (e.g. <code>cmd.exe /c</code> or <code>powershell.exe -Command</code>), parameters may be re-parsed by that interpreter. Use native binary arguments or pass paths directly to target programs.</p>
+</blockquote>
+<hr />
+<h3 id="launchmodesusecases">Launch Modes &amp; Use Cases</h3>
+<ul>
+<li><strong><code>batch</code></strong> (Default): Executes the application exactly once and passes the resolved command-line arguments.</li>
+<li><em>Use Case:</em> Code editors (opening a directory), Media players (queuing files), or bulk tools like PowerRename.</li>
+<li><strong><code>loop_files</code></strong>: Executes the application once per selected file.</li>
+<li><em>Use Case:</em> Single-file image editors, batch converters, or per-file processing scripts.</li>
+<li><strong><code>loop_folders</code></strong>: Executes the application once per selected folder.</li>
+<li><em>Use Case:</em> Batch archiving folders individually or folder-specific terminal operations.</li>
+</ul>
+<hr />
+<h3 id="presetideasexternalappexamples">Preset Ideas &amp; External App Examples</h3>
+<p>You can add your own shortcuts using these templates in the settings:</p>
+<ul>
+<li><strong>Open Windows Terminal Here</strong></li>
+<li>Path: <code>wt.exe</code> | Args: <code>-d "%d"</code> | Mode: <code>batch</code></li>
+<li><strong>Open with Notepad</strong></li>
+<li>Path: <code>notepad.exe</code> | Args: <code>%1</code> | Mode: <code>loop_files</code></li>
+<li><strong>PowerToys PowerRename</strong> (Bulk rename selected items)</li>
+<li>Path: <code>C:\Program Files\PowerToys\WinUI3Apps\PowerToys.PowerRename.exe</code> | Args: <code>%f</code> | Mode: <code>batch</code></li>
+<li><strong>Search with Everything</strong> (Search current active directory)</li>
+<li>Path: <code>C:\Program Files\Everything\Everything.exe</code> | Args: <code>"%d"</code> | Mode: <code>batch</code></li>
+<li><strong>Open in VS Code</strong></li>
+<li>Path: <code>code</code> | Args: <code>"%d_smart"</code> | Mode: <code>batch</code></li>
+<li><strong>Queue in VLC Media Player</strong></li>
+<li>Path: <code>vlc.exe</code> | Args: <code>%f</code> | Mode: <code>batch</code></li>
+</ul>
+<hr />
+<h3 id="comparisonwithexistingmods">Comparison with Existing Mods</h3>
+<p>While related mods exist in the Windhawk repository, <strong>Explorer Custom Shortcuts</strong> provides a distinct, keyboard-first workflow engine:</p>
+<ul>
+<li><strong><code>explorer-command-bar</code></strong>: Adds visual custom toolbar buttons exclusively to the modern Windows 11 command bar. In contrast, this mod provides a pure, zero-UI, low-latency keyboard shortcut accelerator engine operating across both classic and tabbed Explorer windows. It introduces specialized batch looping capabilities (<code>loop_files</code>, <code>loop_folders</code>), rich token expansions (<code>%n</code>, <code>%ext</code>, <code>%c</code>, <code>%files</code>, <code>%folders</code>), and context-aware suppression during inline edits.</li>
+<li><strong><code>keyboard-shortcut-actions</code></strong>: A general-purpose desktop/window hotkey dispatcher without Explorer context awareness. This mod parses active Explorer tab navigation, item selections, and folder paths directly into CLI parameters.</li>
+<li><strong><code>toggle-hidden-files</code> / <code>explorer-ctrln-newfile</code> / <code>explorer-ctrlq-new-folder</code></strong>: Single-purpose mods; here, internal shell actions are optional presets within a single hotkey table, allowing users to bind them to whatever key combinations they prefer without installing multiple separate hooks.</li>
+</ul>
+<h3 id="attributionacknowledgments">Attribution &amp; Acknowledgments</h3>
+<p>Process execution concepts (<code>ResolveCommandPath</code>, <code>ExecuteApp</code>) and shell window inspection adapt techniques from <code>explorer-command-bar</code> (DanRotaru, MIT). Settings toggling follows patterns established in <code>toggle-hidden-files</code> (Asteski).</p>]]></content>
+        <author>
+            <name>ArvindSaini978</name>
+            <uri>https://github.com/ArvindSaini978</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Per-monitor brightness in Quick Settings 2.0]]></title>
         <id>https://windhawk.net/mods/per-monitor-brightness#1e9a228c451f2d5ceabd8b412c07fa726a4d583b</id>
@@ -616,438 +1060,6 @@ preventing shutdown" screen afterwards in rare cases.</p>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Network Flyout Recreation 5.1.0]]></title>
-        <id>https://windhawk.net/mods/win7-network-flyout-recreation#3cd24569eaf0a887463b47d98a3dee6579e383b3</id>
-        <link href="https://windhawk.net/mods/win7-network-flyout-recreation"/>
-        <updated>2026-09-20T17:15:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Tried to enhance the support for high contrast theme (credits to OrthodoxToolkits for the suggestion)</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[D3D9 Flip Model Upgrade 1.0]]></title>
-        <id>https://windhawk.net/mods/d3d9-flip-model-upgrade#68ea89198430663374733ef5f9ce360c04ef5695</id>
-        <link href="https://windhawk.net/mods/d3d9-flip-model-upgrade"/>
-        <updated>2026-09-19T21:55:59.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="d3d9flipmodelupgrade">D3D9 Flip Model Upgrade</h1>
-<p><strong>Important: close the game before this mod gets disabled, updated or
-reloaded.</strong> A game that runs with the mod keeps using the Direct3D 9Ex device
-and the emulated textures, which only work while the mod is loaded, so unloading
-the mod will most likely break or crash the game. That includes disabling the
-mod, changing its process inclusion list, and <strong>mod updates that Windhawk
-installs automatically in the background</strong>. If you play with this mod enabled,
-consider turning off automatic updates for it. Changing the settings is fine,
-they apply the next time the game creates or resets its device.</p>
-<p>Direct3D 9 games that run windowed or borderless present with the legacy
-<em>blt model</em>: every frame is copied and composed by DWM, which adds latency and
-blocks VRR. Windows 11's "Optimizations for windowed games" only covers
-DirectX 10/11, so D3D9 games are left behind.</p>
-<p>This mod transparently creates the game's device as a <strong>Direct3D 9Ex</strong> device
-with a <strong><code>D3DSWAPEFFECT_FLIPEX</code></strong> swap chain (the D3D9 flip model). Once the
-game window covers the whole screen (borderless fullscreen), DWM can promote it
-to <strong>Independent Flip</strong>, the same presentation path exclusive fullscreen uses.</p>
-<h2 id="howtoenablethemodforaprogram">How to enable the mod for a program</h2>
-<p>This mod doesn't target any process by default. In Windhawk, go to the mod's
-"Advanced" tab and scroll down to "Custom process inclusion list". In that box,
-put the filename of the game's <code>.exe</code>, then click "Save" and (re)start the game.</p>
-<h2 id="howtoverify">How to verify</h2>
-<p>Use <a href="https://github.com/GameTechDev/PresentMon">PresentMon</a> (or an overlay that
-shows the presentation mode, such as Special K or RTSS). A windowed D3D9 game
-normally shows <code>Composed: Copy with GPU GDI</code>. With the mod it should show
-<code>Hardware: Independent Flip</code> or <code>Hardware Composed: Independent Flip</code>.</p>
-<p>Independent Flip requires the game window to cover the entire monitor with
-nothing drawn on top of it. Run the game in its borderless mode, or turn on
-<strong>Force borderless fullscreen</strong> in the mod settings.</p>
-<p>A game that is not DPI aware gets stretched by DWM on a scaled display, which
-prevents Independent Flip as well. If that is the case, open the properties of
-the game executable, and under Compatibility, Change high DPI settings, set the
-high DPI scaling override to Application.</p>
-<h2 id="exclusivefullscreen">Exclusive fullscreen</h2>
-<p>Games running in exclusive fullscreen are left untouched by default: Windows'
-Fullscreen Optimizations already give them flip presentation. Turn on <strong>Force
-borderless fullscreen</strong> to convert them to an upgraded borderless window
-instead.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>Back buffer multisampling (MSAA requested directly on the swap chain) isn't
-supported by the flip model and is dropped. Use the <strong>Keep MSAA</strong> setting to
-skip the upgrade for such games instead.</li>
-<li>Games that lock the back buffer (some screenshot/readback code) lose that
-ability.</li>
-<li>Anything drawn into the game window with GDI disappears; the flip model only
-shows the Direct3D content.</li>
-<li>Games relying on <code>D3DSWAPEFFECT_COPY</code> keeping the previous frame's content
-may flicker.</li>
-<li><code>D3DPOOL_MANAGED</code> doesn't exist in D3D9Ex, so managed textures are emulated
-with a system memory texture plus a default pool copy, and managed buffers
-are created in the default pool. The Ex device is also hidden from D3DX
-(<code>d3dx9_*.dll</code>), which otherwise refuses to load managed textures. A few
-games may misbehave or fail to reset their device after a resolution change.
-Games that often lock or read back managed buffers may run slower.</li>
-<li>D3D9 replacements that don't use the system <code>d3d9.dll</code> (DXVK, d3d9on12
-wrappers) bypass this mod entirely.</li>
-<li>A Direct3D 9Ex device is never reported as lost. Games with logic that
-depends on losing the device after Alt+Tab may misbehave.</li>
-<li>Textures restored by a state block are not tracked. If the game modifies
-such a texture while it stays bound, the change shows up once the texture is
-bound again.</li>
-<li>The flip model can only present to the device window. Games that present the
-same swap chain to several windows will only draw to one of them.</li>
-<li>No guarantees of anti-cheat compatibility.</li>
-</ul>
-<p>Enable the mod's logging (Advanced → Debug logging) to see exactly what was
-changed and any failure codes.</p>]]></content>
-        <author>
-            <name>tria</name>
-            <uri>https://github.com/triatomic</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better Volume Mixer 1.0]]></title>
-        <id>https://windhawk.net/mods/better-volume-mixer#1d987911606d7b61a85fd941f78e1bc6a6fee6d4</id>
-        <link href="https://windhawk.net/mods/better-volume-mixer"/>
-        <updated>2026-09-19T20:54:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="bettervolumemixer">Better Volume Mixer</h1>
-<p>A simple volume mixer for Windows 11. Control your overall volume and individual
-apps from one small window.</p>
-<p><img src="https://raw.githubusercontent.com/0Allu/better-volume-mixer/main/assets/better-volume-mixer-demo.png" alt="Better Volume Mixer demo" /></p>
-<p>Click the speaker icon in the system tray to open or close the mixer. If it is
-hidden, open the tray overflow menu and drag the icon onto the taskbar.</p>
-<ul>
-<li>Adjust each app's volume with its slider or mute button.</li>
-<li>Scroll over a slider to change the volume with your mouse wheel.</li>
-<li>Click the pin beside an app to keep it at the top.</li>
-<li>Use Previous and Next when there are more apps than fit on one page.</li>
-</ul>
-<p>Choose your theme, background transparency, animations, and apps per page in
-the mod settings. If an app is missing, keep the mixer open and play some audio
-in it. Apps on other output devices are remembered after playing while the mixer
-is open, until their audio session ends.</p>
-<h2 id="hidethewindowsvolumeicon">Hide the Windows volume icon</h2>
-<p>To avoid having two volume icons, install
-<a href="https://windhawk.net/mods/taskbar-tray-system-icon-tweaks">Taskbar tray system icon tweaks</a>
-and enable <strong>Hide volume icon</strong> in its settings. This hides the Windows 11
-volume icon while keeping Better Volume Mixer's icon visible.</p>]]></content>
-        <author>
-            <name>0Allu</name>
-            <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Translucent Windows 1.8.2]]></title>
-        <id>https://windhawk.net/mods/translucent-windows#0d049bfe7e7d9cd8da6d84d260874ad3c78aa370</id>
-        <link href="https://windhawk.net/mods/translucent-windows"/>
-        <updated>2026-09-19T20:40:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed text alignment bug reported in some programs (e.g. YASB, Telegram Desktop etc.) introduced in the previous update.</li>
-<li>Fix the mod's accent color when changing the system accent color.</li>
-</ul>]]></content>
-        <author>
-            <name>Undisputed00x</name>
-            <uri>https://github.com/Undisputed00x</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows 7 Classic AutoPlay Dialog Restorer 1.1.0]]></title>
-        <id>https://windhawk.net/mods/win7-classic-autoplay-restorer#7e06ac1de042e15b1ce2c71b54a83eeec927159f</id>
-        <link href="https://windhawk.net/mods/win7-classic-autoplay-restorer"/>
-        <updated>2026-09-19T20:37:36.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Mitigated a potential cause of empty drives and generic "CD Drive"/"USB
-Drive" names appearing in the Navigation Pane after login (possible
-fix for #5463,  please report back if this persists).</li>
-<li>Updated the README</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Premiere Pro Theme 1.0.0]]></title>
-        <id>https://windhawk.net/mods/premiere-pro-theme#c2b85a85429190b8aa1e544da5a845d9abf8ed01</id>
-        <link href="https://windhawk.net/mods/premiere-pro-theme"/>
-        <updated>2026-09-19T17:17:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="premiereprotheme">Premiere Pro Theme</h1>
-<p>Recolors Premiere Pro far beyond what the Appearance brightness slider reaches,
-and does it consistently across the parts of the app that are painted in
-different ways.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p>The same project, palette by palette. First, Premiere without the mod:
-the Spectrum gray <code>#1D1D1D</code>, under the light title bar and menu bar that
-Windows gives it.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/stock.png" alt="Premiere Pro without the mod" /></p>
-<p><strong>Onyx</strong> — the default: near black, and neutral:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/onyx.png" alt="Onyx palette" /></p>
-<p><strong>Abyss</strong> — absolute black, for an OLED panel:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/abyss.png" alt="Abyss palette" /></p>
-<p><strong>Contrast</strong> — black panels with light dividers and pure white text:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/contrast.png" alt="Contrast palette" /></p>
-<p><strong>Premiere</strong> — the violet sampled from the app icon:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/premiere.png" alt="Premiere palette" /></p>
-<p><strong>Comfy</strong> — warm brown, low contrast for long sessions:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/comfy.png" alt="Comfy palette" /></p>
-<p><strong>Glitch</strong> — acid green with a magenta accent:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/glitch.png" alt="Glitch palette" /></p>
-<p><strong>Violet</strong> — a purple interface, not just a purple accent:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/violet.png" alt="Violet palette" /></p>
-<p><strong>Blossom</strong> — dark rose, pastel in its text and border:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/blossom.png" alt="Blossom palette" /></p>
-<p><strong>Ember</strong> — near black under a strong orange:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/ember.png" alt="Ember palette" /></p>
-<p><strong>Crimson</strong> — near black under a strong red:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/crimson.png" alt="Crimson palette" /></p>
-<p><strong>Amethyst</strong> — neutral panels, the purple only on the edges:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/amethyst.png" alt="Amethyst palette" /></p>
-<p><strong>Threshold</strong> — <code>#050505</code>, <code>#FFFFFF</code> and <code>#DC2626</code>:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/threshold.png" alt="Threshold palette" /></p>
-<h2 id="palettes">Palettes</h2>
-<p>Neutral:</p>
-<p>| Level   | Onyx      | Abyss     | Graphite  | Contrast  |
-|---------|-----------|-----------|-----------|-----------|
-| Base    | <code>#050505</code> | <code>#000000</code> | <code>#0D0D0D</code> | <code>#000000</code> |
-| Panel   | <code>#090909</code> | <code>#040404</code> | <code>#141414</code> | <code>#060606</code> |
-| Surface | <code>#0E0E0E</code> | <code>#080808</code> | <code>#1A1A1A</code> | <code>#101010</code> |
-| Raised  | <code>#161616</code> | <code>#101010</code> | <code>#232323</code> | <code>#202020</code> |
-| Border  | <code>#242424</code> | <code>#1C1C1C</code> | <code>#303030</code> | <code>#4A4A4A</code> |</p>
-<p>Tinted:</p>
-<p>| Level   | Premiere  | Comfy     | Neon      | Glitch    |
-|---------|-----------|-----------|-----------|-----------|
-| Base    | <code>#06060F</code> | <code>#100C09</code> | <code>#080508</code> | <code>#060A02</code> |
-| Panel   | <code>#0C0C20</code> | <code>#181310</code> | <code>#0E0A0D</code> | <code>#0C1305</code> |
-| Surface | <code>#131333</code> | <code>#211A15</code> | <code>#1A0F18</code> | <code>#131D08</code> |
-| Raised  | <code>#1E1E4D</code> | <code>#2E241C</code> | <code>#2A1526</code> | <code>#1E2C0C</code> |
-| Border  | <code>#33337A</code> | <code>#453528</code> | <code>#4D213F</code> | <code>#3C5410</code> |
-| Text    | <code>#D2D2F7</code> | <code>#EDE0D0</code> | <code>#FAF5EF</code> | <code>#E9F7C0</code> |
-| Accent  | <code>#3A3A99</code> | <code>#5A4028</code> | <code>#5C1F47</code> | <code>#B8157A</code> |</p>
-<p>Vivid — the hue is in the ramp, so the panels themselves carry it:</p>
-<p>| Level     | Violet    | Blossom   | Ember     | Crimson   | Miku      |
-|-----------|-----------|-----------|-----------|-----------|-----------|
-| Base      | <code>#0A0414</code> | <code>#120A0E</code> | <code>#0C0703</code> | <code>#0D0405</code> | <code>#061014</code> |
-| Panel     | <code>#120827</code> | <code>#180D13</code> | <code>#140B04</code> | <code>#150609</code> | <code>#0A1920</code> |
-| Surface   | <code>#1C0C3B</code> | <code>#241320</code> | <code>#1F1206</code> | <code>#200A0E</code> | <code>#10262D</code> |
-| Raised    | <code>#2A1257</code> | <code>#341B2E</code> | <code>#2E1A08</code> | <code>#300F15</code> | <code>#173740</code> |
-| Border    | <code>#4B2088</code> | <code>#5A2C4A</code> | <code>#55300C</code> | <code>#591A24</code> | <code>#28515C</code> |
-| Text      | <code>#E2D4FA</code> | <code>#FBDCE8</code> | <code>#FBE3C8</code> | <code>#F7D9DD</code> | <code>#DDFBFF</code> |
-| Accent    | <code>#6D28D9</code> | <code>#864160</code> | <code>#944108</code> | <code>#B91C1C</code> | <code>#0E7478</code> |
-| Highlight | <code>#7737DC</code> | <code>#934869</code> | <code>#9F4608</code> | <code>#BB2222</code> | <code>#2B6A68</code> |</p>
-<p>Strong accent on near black — the panels stay neutral, and the color is only the
-edge, the accent and the highlight:</p>
-<p>| Level     | Amethyst  | Threshold |
-|-----------|-----------|-----------|
-| Base      | <code>#050507</code> | <code>#050505</code> |
-| Panel     | <code>#09090D</code> | <code>#0A0A0A</code> |
-| Surface   | <code>#0F0F16</code> | <code>#121212</code> |
-| Raised    | <code>#181823</code> | <code>#1C1C1C</code> |
-| Border    | <code>#33254F</code> | <code>#2B2B2B</code> |
-| Text      | <code>#E4DCF2</code> | <code>#FFFFFF</code> |
-| Accent    | <code>#6730C6</code> | <code>#DC2626</code> |
-| Highlight | <code>#7537DF</code> | <code>#BC2020</code> |</p>
-<p><strong>Premiere</strong> takes its violet from the app's icon; <strong>Neon</strong> and <strong>Glitch</strong> come
-from reference artwork, and <strong>Comfy</strong> is the lightest, for long sessions.
-<strong>Contrast</strong> keeps a <code>#4A4A4A</code> border so edges stay legible on black panels.
-<strong>Blossom</strong> is pastel in its text and border only: a pastel background would
-leave Premiere's own light text unreadable. <strong>Threshold</strong> is
-threshold-editor.com.br's <code>#050505</code>, <code>#FFFFFF</code> and <code>#DC2626</code>. <strong>Miku</strong> is the
-one palette that sets a band of its own, <code>#020F13</code> — darker than its own
-deepest step, and holding more of the teal than that step does, so the picture
-carries against it instead of against flat gray.</p>
-<p>The accent stays out of the ramp, which is interpolated, so it only shows on
-hovered menu items and system highlights; each one is at least 4.5:1 against
-its palette's text.</p>
-<p>Contrast and the palettes with a <strong>Highlight</strong> row give Premiere's blue — track
-targeting, the focused panel's border, the active tool, selections, links —
-their own hue, each blue at its own brightness, so white text on a blue button
-keeps its contrast. The row is the track-targeting shade; Contrast's is the gray
-<code>#606060</code>. <strong>Palette highlight</strong> in the settings keeps the blue on any palette.</p>
-<h2 id="customthemes">Custom themes</h2>
-<p><strong>Custom</strong> takes its colors from the <strong>Custom theme</strong> group in the settings,
-one field each:</p>
-<p>| Field                  |          | What it colors                                                |
-|------------------------|----------|---------------------------------------------------------------|
-| <strong>Base</strong>               | required | the darkest step: the deepest background                      |
-| <strong>Panel</strong>              | required | the second step, and the title bar and menu bar               |
-| <strong>Surface</strong>            | required | the middle step                                               |
-| <strong>Raised</strong>             | required | the fourth step                                               |
-| <strong>Border</strong>             | required | the lightest step: dividers and edges                         |
-| <strong>Text</strong>               | required | menu and title bar text                                       |
-| <strong>Accent</strong>             | optional | hovered menu items; the border when left empty                |
-| <strong>Disabled text</strong>      | optional | disabled menu items; halfway from text to panel when empty    |
-| <strong>Highlight</strong>          | optional | the hue Premiere's blue takes; the blue stays when left empty |
-| <strong>Monitor background</strong> | optional | the band around the picture; the panel tone when left empty   |</p>
-<p>Colors are <code>#RRGGBB</code>. The group starts as Onyx, with <strong>Highlight</strong> and
-<strong>Monitor background</strong> empty. A required field left empty or misspelled falls
-back to Onyx's color, named in the log, so the interface never ends up half
-themed.</p>
-<p>One thing to know before copying a value out of the palette tables above:
-<strong>Highlight</strong> there is the shade the hue produces, not the hue. Violet's row
-reads <code>#7737DC</code>, which is what its <code>#6D28D9</code> becomes at the brightness of
-Premiere's own blue — so a custom theme wanting Violet's highlight takes
-<code>#6D28D9</code>. Every other row in those tables is the value the field takes
-directly.</p>
-<p><strong>Monitor background</strong> is the one worth setting on purpose. Stock Premiere
-paints the band around the picture the same tone as its panels, which is what
-the built-in palettes do and why this is left empty by default — Miku is the
-exception. Give it a darker value than <strong>Panel</strong> and the picture stands out
-against it; give it a lighter one to judge a shot against a brighter
-surround.</p>
-<h3 id="sharingone">Sharing one</h3>
-<p>The <strong>Settings</strong> tab has a text mode next to the visual one, and what it holds
-is the settings as YAML — the palette, then <code>customTheme</code> as a block under it:</p>
-<pre><code class="yaml language-yaml">palette: custom
-customTheme:
-  base: '#050505'
-  panel: '#0A0A0A'
-  surface: '#121212'
-  raised: '#1C1C1C'
-  border: '#2B2B2B'
-  text: '#FFFFFF'
-  accent: '#DC2626'
-  disabledText: '#8A8A8A'
-  highlight: '#DC2626'
-  monitor: ''
-</code></pre>
-<p><strong>To use a theme someone sent you</strong>, paste it into that box over what is there
-and save. The colors need their quotes: a bare <code>#</code> starts a comment in YAML.</p>
-<p><strong>To copy your own out</strong>, put the palette on <strong>Custom</strong> and read the mod's log.
-It writes the theme as one line, in YAML's flow form, which that box reads the
-same as the block above:</p>
-<pre><code class="yaml language-yaml">{palette: custom, customTheme: {base: '#050505', panel: '#0A0A0A', ...}}
-</code></pre>
-<p>The theme is what travels, not the document around it. Saving that box replaces
-every setting it is given, so a whole document from someone else would bring
-their layer switches along with their colors; anything you leave out goes back
-to its default. The log writes only the palette and the colors for that reason,
-and writes them resolved — a field left empty travels as the color it became.</p>
-<p>Keep the five steps dark and in order. Premiere's own text is light and is not
-recolored, and the monitor band is recognized by working back along the ramp,
-which a ramp that doubles back on itself would confuse.</p>
-<h2 id="whatitchangesandwhatitleavesalone">What it changes, and what it leaves alone</h2>
-<p>Each layer has its own switch in the settings:</p>
-<ul>
-<li><strong>Premiere interface</strong> — the theme colors served by <code>dvaui.dll</code>, Adobe's UI
-toolkit: panels, timeline, monitors.</li>
-<li><strong>Direct fills</strong> — surfaces Premiere paints without asking the theme: most of
-the monitor and timeline chrome.</li>
-<li><strong>Monitor band</strong> — the band around the picture in the Source and Program
-monitors, which Premiere draws on the GPU. The only layer that hooks
-Direct3D, so it has a switch of its own, and it is off until you turn it on.</li>
-<li><strong>Window and system dialogs</strong> — dark title bar, border and native dialogs.</li>
-<li><strong>Menu bar and menus</strong> — the File / Edit / Clip bar and its dropdowns.</li>
-<li><strong>GDI surfaces</strong> — brushes, pens and text backgrounds created by Premiere's
-own modules.</li>
-<li><strong>UXP panels</strong> — the Text panel, Import, Export, Quick Export, Progress,
-Preset Manager and the Home screen, which Premiere draws from stylesheets and
-design tokens of their own. Off by default, because those panels only follow
-it across a restart.</li>
-<li><strong>Palette highlight</strong> — Premiere's blue, on the palettes that carry a
-highlight.</li>
-</ul>
-<p>Saturated colors — clips, labels, warnings, and Premiere's blue unless the
-palette carries a highlight — pass through, and so does anything above the
-<strong>brightness ceiling</strong>: text, icons, and the <code>#4B4B4B</code> of disabled text. The
-UXP stylesheets are the exception, and only for borders and fills: a
-stylesheet says which property a color belongs to, so an input's outline is
-recolored a little past the ceiling while the disabled text at the very same
-value is not.
-Content is left alone whatever its color: the color picker's swatches, markers,
-Essential Graphics, and the parameter colors of Effect Controls, Lumetri and the
-monitors.</p>
-<h2 id="ifsomethingbecomesunreadable">If something becomes unreadable</h2>
-<p>Lower the ceiling. Raising it darkens more, starting with disabled text — which
-is exactly what disappears first.</p>
-<p>Settings apply while Premiere is running. Some surfaces keep the previous
-palette until Premiere restarts, because Premiere copies those colors into
-caches of its own.</p>
-<p>If a Premiere update ever makes a panel misbehave with the mod on, switch off
-<strong>Premiere interface</strong>, <strong>Direct fills</strong> and <strong>GDI surfaces</strong> together and
-restart Premiere. With all three off when the mod loads, it does not hook
-Premiere's own modules at all — and <strong>Monitor band</strong> off means it does not
-touch Direct3D either, not even to watch for the device.</p>
-<h2 id="othermodsthatdarkenmenus">Other mods that darken menus</h2>
-<p>If your menu bar ignores the palette, another mod is painting it first: any mod
-that darkens Win32 menus globally answers the same <code>DefWindowProc</code> messages
-before this one, with its own fixed color. Add <code>Adobe Premiere Pro.exe</code> to that
-mod's process <strong>exclusion</strong> list and this one takes over.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<p><strong>UXP panels change on restart</strong>, which is why they are off by default.
-Premiere reads their files once, when a panel loads, and the mod recolors that
-read — a temporary copy, deleted as soon as it is closed; nothing on disk
-changes. So turning the switch on, a palette switch, and turning it back off or
-disabling the mod all show on those panels after Premiere restarts. Frame.io
-and Adobe Stock carry no Spectrum grays and keep their own look.</p>
-<p>A panel keeps its colors twice — in its stylesheet and in a table of design
-tokens in its own script, which beats any stylesheet rule — and the mod
-recolors both, which is what makes the search fields and inputs in those
-panels match the rest instead of staying a stock gray box. It costs a panel
-one extra read of its own script as it loads. The how, with the measurements,
-is in the <a href="https://github.com/CakeDev4k/premiere-pro-theme">repository readme</a>.</p>
-<p><strong>The band around the video is drawn on the GPU</strong>, outside every layer above,
-by <code>DisplaySurface.dll</code>. The mod recognizes those draws by the module they
-come from and by the color they carry, and gives them the theme's <strong>Monitor
-background</strong>, or its panel tone when that is left empty.</p>
-<p>What shows behind the picture is black, and stays black in every palette: it
-is what a clip with an alpha channel is composited onto and what the monitor
-shows over a gap in the timeline, which is why a transparent PNG still sits on
-black.</p>
-<p><strong>Monitor band</strong> is its own switch and it ships off, because this is the only
-layer that hooks Direct3D — and on entry points every D3D12 program in the
-process shares, not on anything of Adobe's — and the only one that writes into
-a command list it does not own. Turn it on once the rest of the theme looks
-right on your build, and it is the first thing to turn off if the monitors
-misbehave; the rest of the theme is unaffected either way.</p>
-<p>No restart is needed to see it change. With the switch already on as Premiere
-starts, the layer goes in from the device Premiere itself creates; turned on
-later, from a device of the mod's own, which is only safe once the monitors
-have drawn — by then Premiere has settled which graphics runtime it uses.</p>
-<p>Turning it off stops the recoloring at once, and the band is Premiere's own
-gray again from the next frame. What it does not do is take the hooks back
-out: once the layer has gone in, the command list entry points stay hooked
-until Premiere is restarted or the mod is disabled. That only matters if you
-are chasing a conflict with a GPU overlay or a capture tool — for that, turn
-the switch off and restart Premiere, or disable the mod.</p>
-<p>Two things about it are worth knowing. It answers to <strong>Strength</strong> but not to
-the <strong>brightness ceiling</strong>: the band is recognized by its own shape, and takes
-the <strong>Monitor background</strong> color directly rather than a stop on the ramp. And
-it leaves a monitor smaller than 400x300 alone, so a Source or Program panel
-squeezed very narrow keeps Premiere's own gray while the other one is themed.</p>
-<p>The black <em>inside</em> the sequence frame is the rendered picture, not chrome, and
-stays black in every palette.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>The mod looks up each color function by name at startup, installs the ones the
-running build exports, and logs the rest, so a version that moved or dropped a
-function loses that surface, not the mod. Measured against the installed
-builds:</p>
-<p>| Premiere | Color functions found | Drawing primitives |
-|----------|-----------------------|--------------------|
-| 2026     | 31 of 31              | 4 of 4             |
-| 2023     | 27 of 31              | 4 of 4             |</p>
-<p>The four missing on 2023 do not exist there under any name, and their surfaces
-fall back to the Spectrum family, which both have. The window frame, the menu
-bar, the native dialogs and the band around the picture do not depend on the
-Premiere version: the band is recognized by the module that draws it and the
-shape of the work, not by an address inside it. Native dark
-mode needs Windows 10 build 17763 or newer; below that the mod still themes the
-interface and paints the menus itself.</p>
-<h2 id="questionsbugsandpalettes">Questions, bugs and palettes</h2>
-<p>Bug reports and palette suggestions are welcome on
-<a href="https://discord.gg/m5kVMR8Vuu">Discord</a>, where a Premiere build and a
-screenshot are usually all it takes to work one out.</p>
-<h2 id="credits">Credits</h2>
-<p>The menu bar technique — the undocumented <code>WM_UAHDRAWMENU</code> messages and the
-<code>DarkMode::Menu</code> theme class — comes from
-<a href="https://github.com/adzm/win32-darkmode">win32-darkmode</a> by adzm, MIT licensed.
-This mod is MIT as well.</p>]]></content>
-        <author>
-            <name>Threshold Editor</name>
-            <uri>https://github.com/CakeDev4k</uri>
         </author>
     </entry>
 </feed>
