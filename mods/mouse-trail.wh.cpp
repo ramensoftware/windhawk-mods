@@ -4536,6 +4536,9 @@ static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_P
                               DWORD dwTime, int vX, int vY) {
     if (!g_pNativeVS || !g_pD3DContext || !g_pCachedRTV) return false;
 
+    // 图集脏标记重建（在任何状态绑定前）/ Rebuild atlas on dirty flag (before any state binding)
+    if (g_charAtlasDirty && g_particleShape == 10) { BuildCharAtlas(); g_charAtlasDirty = false; }
+
     // 清空渲染目标（透明黑），RTV 随交换链缓存，避免每帧创建 COM 对象
     float clearColor[4] = {0, 0, 0, 0};
     g_pD3DContext->ClearRenderTargetView(g_pCachedRTV, clearColor);
@@ -6362,8 +6365,8 @@ static void RecreateSwapChain(int vW, int vH) {
         }
     }
     // 记录离屏资源实际使用的 AA 配置，供渲染循环检测运行时切换 / Record effective AA config for runtime change detection
-    g_createdMsaaSamples = g_pMSAARTV ? g_msaaSamples : 1;
-    g_createdSsaaScale = g_pSSAARTV ? g_ssaaScale : 1;
+    g_createdMsaaSamples = g_msaaSamples;
+    g_createdSsaaScale = g_ssaaScale;
 
     if (g_pDCompVisual) {
         g_pDCompVisual->SetContent(g_pSwapChain);
@@ -8162,7 +8165,7 @@ static void RenderFrame() {
                 if (pBackBuffer) pBackBuffer->Release();
             }
             // 物理可视化调试：用 D2D1 叠加绘制速度/受力向量、漩涡、引力源等（在 blit 之后，避免被清掉）/ Physics debug overlay AFTER blit
-            if (g_debugVelocity || g_debugForce || g_debugVortex || g_debugGravity || g_debugCollision) {
+            if (g_debugVelocity || g_debugForce || g_debugVortex || g_debugGravity || g_debugCollision || g_debugSpring) {
                 g_pD2DDC->SetTarget(g_pD2DTargetBitmap);
                 g_pD2DDC->BeginDraw();
                 RenderPhysicsDebugD2D(dwTime);
