@@ -111,7 +111,6 @@ haven't been tested.
 #include <atomic>
 #include <cmath>
 #include <cstdint>
-#include <cstdlib>
 #include <cwchar>
 #include <cwctype>
 #include <exception>
@@ -1002,6 +1001,7 @@ void Rebuild(OverflowState& state, bool opening) {
             state.tileHeight = tileHeight;
         }
 
+        bool logIcons = opening || state.iconCache.empty();
         if (opening) {
             state.iconCache.clear();
         }
@@ -1044,7 +1044,7 @@ void Rebuild(OverflowState& state, bool opening) {
             state.openFolder = -1;
         }
 
-        if (opening) {
+        if (logIcons) {
             for (const auto& icon : icons) {
                 Wh_Log(L"Icon: app=\"%s\" tooltip=\"%s\" name=\"%s\" folder=%d",
                        icon->appName.c_str(),
@@ -1109,6 +1109,23 @@ void Rebuild(OverflowState& state, bool opening) {
         Wh_Log(L"Rebuild failed: %08X %s", ex.code(), ex.message().c_str());
     } catch (...) {
         Wh_Log(L"Rebuild failed");
+    }
+}
+
+void RefreshTileSize(OverflowState& state) {
+    auto overflow = state.overflow.get();
+    if (!overflow) {
+        return;
+    }
+
+    overflow.UpdateLayout();
+
+    double width;
+    double height;
+    GetItemSize(state, &width, &height);
+    if (width != state.tileWidth || height != state.tileHeight) {
+        Rebuild(state);
+        overflow.UpdateLayout();
     }
 }
 
@@ -1581,23 +1598,24 @@ void WINAPI OverflowXamlIslandManager_Show_Hook(void* pThis,
             // Always open at the top level, and pick up renamed icons.
             state->openFolder = -1;
             Rebuild(*state, /*opening=*/true);
-            if (auto overflow = state->overflow.get()) {
-                overflow.UpdateLayout();
-
-                double width;
-                double height;
-                GetItemSize(*state, &width, &height);
-                if (width != state->tileWidth || height != state->tileHeight) {
-                    Rebuild(*state);
-                    overflow.UpdateLayout();
-                }
-            }
+            RefreshTileSize(*state);
         }
     } catch (...) {
         Wh_Log(L"Show: update failed");
     }
 
     OverflowXamlIslandManager_Show_Original(pThis, pt, inputDeviceKind);
+
+    if (!state && !g_unloading && g_states) {
+        state = FindState(pThis);
+        if (state && state->attached) {
+            try {
+                RefreshTileSize(*state);
+            } catch (...) {
+                Wh_Log(L"Show: update failed");
+            }
+        }
+    }
 
     if (state && state->attached) {
         struct Param {
@@ -1990,6 +2008,10 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
+    if (!g_overflowThreadId) {
+        return;
+    }
+
     auto cleanup = [] {
         if (!g_states) {
             return;
@@ -2028,7 +2050,7 @@ void Wh_ModSettingsChanged() {
     g_pendingSettings = std::move(settings);
     ReleaseSRWLockExclusive(&g_pendingSettingsLock);
 
-    if (!RunFromOverflowThread(ApplyPendingSettings)) {
+    if (g_overflowThreadId && !RunFromOverflowThread(ApplyPendingSettings)) {
         Wh_Log(L"Settings will be applied when the flyout opens");
     }
 }
