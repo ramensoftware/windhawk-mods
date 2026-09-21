@@ -550,9 +550,8 @@ class Client {
         wc.lpfnWndProc = &Client::WndProc;
         wc.hInstance = GetCurrentModuleHandle();
         wc.lpszClassName = kReplyClass;
-        UnregisterClassW(kReplyClass, GetCurrentModuleHandle());
         atom_ = RegisterClassExW(&wc);
-        if (!atom_ && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        if (!atom_) {
             return false;
         }
         hwnd_ = CreateWindowExW(0, kReplyClass, L"", WS_POPUP, 0, 0, 0, 0,
@@ -3083,9 +3082,7 @@ namespace wuxmi = winrt::Windows::UI::Xaml::Media::Imaging;
 namespace wuxma = winrt::Windows::UI::Xaml::Media::Animation;
 
 namespace {
-
 // Rec removed in favor of native Wh_Log
-
 }  // namespace
 
 static std::atomic<bool> g_quit{false};
@@ -3114,35 +3111,6 @@ TargetProcess IdentifyCurrentProcess() {
     return TargetProcess::Unknown;
 }
 
-void LogMsg(const wchar_t* fmt, ...) {
-    wchar_t body[2048] = {};
-    va_list args;
-    va_start(args, fmt);
-    _vsnwprintf_s(body, ARRAYSIZE(body), _TRUNCATE, fmt, args);
-    va_end(args);
-
-    Wh_Log(L"%ls", body);
-
-    wchar_t path[MAX_PATH];
-    DWORD n = GetTempPathW(MAX_PATH, path);
-    if (n && n <= MAX_PATH - 40) {
-        wcscat_s(path, MAX_PATH, L"start-everything.log");
-        HANDLE h = CreateFileW(path, FILE_APPEND_DATA,
-                               FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                               OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (h != INVALID_HANDLE_VALUE) {
-            SYSTEMTIME st;
-            GetLocalTime(&st);
-            wchar_t line[2300];
-            int len = wsprintfW(line, L"%02d:%02d:%02d.%03d [PID %lu] %ls\r\n", st.wHour,
-                               st.wMinute, st.wSecond, st.wMilliseconds, GetCurrentProcessId(), body);
-            DWORD written = 0;
-            WriteFile(h, line, len * sizeof(wchar_t), &written, nullptr);
-            CloseHandle(h);
-        }
-    }
-}
-
 // ===========================================================================
 // Domain: explorer.exe (Shell Focus Redirection)
 // ===========================================================================
@@ -3151,40 +3119,24 @@ using Explorer_SetForegroundWindow_t = BOOL(WINAPI*)(HWND);
 static Explorer_SetForegroundWindow_t pOriginalExplorerSetForegroundWindow = nullptr;
 
 static bool IsProcessNamed(DWORD pid, const wchar_t* name) {
-    if (!pid || pid == GetCurrentProcessId() || !name) return false;
+    if (!pid || pid == GetCurrentProcessId()) return false;
     HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!hProcess) return false;
     wchar_t path[MAX_PATH] = {};
     DWORD size = MAX_PATH;
     bool match = false;
     if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
-        PCWSTR exeName = wcsrchr(path, L'\\');
-        exeName = exeName ? (exeName + 1) : path;
-        match = (_wcsicmp(exeName, name) == 0);
+        match = (StrStrIW(path, name) != nullptr);
     }
     CloseHandle(hProcess);
     return match;
 }
 
 static HWND FindStartMenuCoreWindow() {
-    static HWND s_cached = nullptr;
-    if (s_cached && IsWindow(s_cached)) {
-        return s_cached;
-    }
-
-    HWND hStart = FindWindowW(L"Windows.UI.Core.CoreWindow", L"Start");
-    if (hStart && IsWindow(hStart)) {
-        s_cached = hStart;
-        return hStart;
-    }
-
     HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (tray) {
         HWND h = reinterpret_cast<HWND>(GetPropW(tray, L"WindhawkStartMenuHwnd"));
-        if (h && IsWindow(h)) {
-            s_cached = h;
-            return h;
-        }
+        if (h && IsWindow(h)) return h;
     }
 
     HWND found = nullptr;
@@ -3207,8 +3159,18 @@ static HWND FindStartMenuCoreWindow() {
     }, reinterpret_cast<LPARAM>(&found));
 
     if (found && IsWindow(found)) {
-        s_cached = found;
+        if (tray) {
+            SetPropW(tray, L"WindhawkStartMenuHwnd", found);
+        }
         return found;
+    }
+
+    HWND hStart = FindWindowW(L"Windows.UI.Core.CoreWindow", L"Start");
+    if (hStart && IsWindow(hStart)) {
+        if (tray) {
+            SetPropW(tray, L"WindhawkStartMenuHwnd", hStart);
+        }
+        return hStart;
     }
 
     return nullptr;
@@ -3421,8 +3383,17 @@ static LRESULT CALLBACK SearchHostSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPar
             Wh_Log(L"[SearchHost] WM_ACTIVATE (active) on 0x%p -> redirecting foreground to StartMenu", hWnd);
             HWND hStart = FindStartMenuCoreWindow();
             if (hStart && IsWindow(hStart)) {
-                SetForegroundWindow(hStart);
-                BringWindowToTop(hStart);
+                DWORD startTid = GetWindowThreadProcessId(hStart, nullptr);
+                DWORD curTid = GetCurrentThreadId();
+                if (startTid && startTid != curTid) {
+                    AttachThreadInput(curTid, startTid, TRUE);
+                    SetForegroundWindow(hStart);
+                    BringWindowToTop(hStart);
+                    AttachThreadInput(curTid, startTid, FALSE);
+                } else {
+                    SetForegroundWindow(hStart);
+                    BringWindowToTop(hStart);
+                }
             }
             return 0;
         }
@@ -3451,8 +3422,17 @@ static BOOL WINAPI Hook_SearchHost_SetForegroundWindow(HWND hWnd) {
     HWND hStart = FindStartMenuCoreWindow();
     if (hStart && IsWindow(hStart)) {
         Wh_Log(L"[SearchHost] Redirecting SetForegroundWindow to StartMenu 0x%p", hStart);
-        pOrigSearchHostSetForegroundWindow(hStart);
-        BringWindowToTop(hStart);
+        DWORD startTid = GetWindowThreadProcessId(hStart, nullptr);
+        DWORD curTid = GetCurrentThreadId();
+        if (startTid && startTid != curTid) {
+            AttachThreadInput(curTid, startTid, TRUE);
+            pOrigSearchHostSetForegroundWindow(hStart);
+            BringWindowToTop(hStart);
+            AttachThreadInput(curTid, startTid, FALSE);
+        } else {
+            pOrigSearchHostSetForegroundWindow(hStart);
+            BringWindowToTop(hStart);
+        }
     }
     return TRUE;
 }
@@ -3468,25 +3448,9 @@ static BOOL WINAPI Hook_SearchHost_BringWindowToTop(HWND hWnd) {
     return TRUE;
 }
 
-static std::mutex g_searchHostSubclassedMutex;
-static std::vector<HWND> g_searchHostSubclassedWindows;
-
-static void SubclassSearchHostWindow(HWND hWnd) {
-    if (!hWnd || !IsWindow(hWnd)) return;
-    std::lock_guard<std::mutex> lock(g_searchHostSubclassedMutex);
-    for (HWND h : g_searchHostSubclassedWindows) {
-        if (h == hWnd) return;
-    }
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SearchHostSubclassProc, 0)) {
-        g_searchHostSubclassedWindows.push_back(hWnd);
-        Wh_Log(L"[SearchHost] Subclassed window 0x%p", hWnd);
-    }
-}
-
 using ShowWindow_t = BOOL(WINAPI*)(HWND, int);
 static ShowWindow_t pOrigSearchHostShowWindow = nullptr;
 static BOOL WINAPI Hook_SearchHost_ShowWindow(HWND hWnd, int nCmdShow) {
-    SubclassSearchHostWindow(hWnd);
     if (nCmdShow == SW_SHOW || nCmdShow == SW_SHOWNORMAL || nCmdShow == SW_RESTORE || nCmdShow == SW_SHOWDEFAULT) {
         Wh_Log(L"[SearchHost] Redirected SearchHost ShowWindow to SW_HIDE");
         nCmdShow = SW_HIDE;
@@ -3497,7 +3461,6 @@ static BOOL WINAPI Hook_SearchHost_ShowWindow(HWND hWnd, int nCmdShow) {
 using SetWindowPos_t = BOOL(WINAPI*)(HWND, HWND, int, int, int, int, UINT);
 static SetWindowPos_t pOrigSearchHostSetWindowPos = nullptr;
 static BOOL WINAPI Hook_SearchHost_SetWindowPos(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
-    SubclassSearchHostWindow(hWnd);
     if (uFlags & SWP_SHOWWINDOW) {
         uFlags &= ~SWP_SHOWWINDOW;
         uFlags |= SWP_HIDEWINDOW;
@@ -3651,12 +3614,12 @@ void InitSearchHost() {
 [[clang::no_destroy]] static std::thread g_searchHostWatchdog;
 static void StartSearchHostWatchdog() {
     g_searchHostWatchdog = std::thread([] {
-        for (int i = 0; i < 20 && !g_quit.load(); ++i) {
+        for (int i = 0; i < 120 && !g_quit.load(); ++i) {
             EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
                 DWORD pid = 0;
                 GetWindowThreadProcessId(hwnd, &pid);
                 if (pid == GetCurrentProcessId()) {
-                    SubclassSearchHostWindow(hwnd);
+                    WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc, 0);
                 }
                 return TRUE;
             }, 0);
@@ -3779,8 +3742,6 @@ void LoadSettings() {
         g_settings.showKeyHints ? 1 : 0);
 }
 
-// GetCurrentModuleHandle defined earlier
-
 wux::DependencyObject FindDescendantByName(wux::DependencyObject const& root,
                                            std::wstring_view name,
                                            int maxDepth) {
@@ -3888,19 +3849,6 @@ void SyncOverlayBackground();
 
 wuxc::Border FindMenuAcrylicBorder() {
     try {
-        static winrt::weak_ref<wuxc::Border> s_cachedBorder;
-        static DWORD s_lastSearchTick = 0;
-
-        if (auto b = s_cachedBorder.get()) {
-            return b;
-        }
-
-        DWORD now = GetTickCount();
-        if (s_lastSearchTick != 0 && (now - s_lastSearchTick < 5000)) {
-            return nullptr;
-        }
-        s_lastSearchTick = now;
-
         wux::DependencyObject start = g_resultsHost ? g_resultsHost : g_stockButton;
         if (!start) return nullptr;
 
@@ -3913,9 +3861,8 @@ wuxc::Border FindMenuAcrylicBorder() {
             node = p;
         }
 
-        if (auto found = FindDescendantByName(root, L"AcrylicBorder", 4)) {
+        if (auto found = FindDescendantByName(root, L"AcrylicBorder", 10)) {
             if (auto b = found.try_as<wuxc::Border>()) {
-                s_cachedBorder = winrt::make_weak(b);
                 return b;
             }
         }
@@ -4071,116 +4018,6 @@ void HideOverlayAnimated() {
     }
 }
 
-struct SuppressedElement {
-    winrt::weak_ref<wux::FrameworkElement> element;
-    wux::Visibility visibility = wux::Visibility::Visible;
-    double opacity = 1.0;
-    bool hitTestVisible = true;
-    double height = std::numeric_limits<double>::quiet_NaN();
-    double maxHeight = std::numeric_limits<double>::quiet_NaN();
-    wux::Thickness margin{};
-    bool isControl = false;
-    bool tabStop = true;
-    bool onlyTabStop = false;
-};
-
-[[clang::no_destroy]] std::vector<SuppressedElement> g_suppressed;
-
-// Hides one of the shell's elements, remembering how to put it back.
-//
-// Every caller used to do this inline and none of them recorded anything,
-// which is why disabling the mod left the Start menu with no search box at
-// all and a cell that no longer measures.
-void SuppressShellElement(wux::FrameworkElement const& fe, bool collapse = true,
-                          bool zeroSize = false, bool onlyTabStop = false) {
-    if (!fe) {
-        return;
-    }
-    try {
-        for (auto const& item : g_suppressed) {
-            if (item.element.get() == fe) {
-                return;  // already recorded; keep original properties
-            }
-        }
-
-        SuppressedElement saved;
-        saved.element = winrt::make_weak(fe);
-        saved.onlyTabStop = onlyTabStop;
-        if (auto ctl = fe.try_as<wuxc::Control>()) {
-            saved.isControl = true;
-            saved.tabStop = ctl.IsTabStop();
-        }
-
-        if (onlyTabStop) {
-            g_suppressed.push_back(std::move(saved));
-            if (auto ctl = fe.try_as<wuxc::Control>()) {
-                ctl.IsTabStop(false);
-            }
-            return;
-        }
-
-        saved.visibility = fe.Visibility();
-        saved.opacity = fe.Opacity();
-        saved.hitTestVisible = fe.IsHitTestVisible();
-        saved.height = fe.Height();
-        saved.maxHeight = fe.MaxHeight();
-        saved.margin = fe.Margin();
-        g_suppressed.push_back(std::move(saved));
-
-        fe.Opacity(0.0);
-        fe.IsHitTestVisible(false);
-        if (collapse) {
-            fe.Visibility(wux::Visibility::Collapsed);
-        }
-        if (zeroSize) {
-            fe.MaxHeight(0.0);
-            fe.Height(0.0);
-            fe.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 0));
-        }
-    } catch (...) {
-    }
-}
-
-// Undoes all of it. XAML thread, and before this DLL goes away.
-void RestoreShellElements() {
-    size_t restored = 0;
-    for (auto it = g_suppressed.rbegin(); it != g_suppressed.rend(); ++it) {
-        auto fe = it->element.get();
-        if (!fe) {
-            continue;  // that tree is already gone; nothing to put back
-        }
-        try {
-            if (it->onlyTabStop) {
-                if (it->isControl) {
-                    if (auto ctl = fe.try_as<wuxc::Control>()) {
-                        ctl.IsTabStop(it->tabStop);
-                    }
-                }
-                ++restored;
-                continue;
-            }
-
-            fe.Visibility(it->visibility);
-            fe.Opacity(it->opacity);
-            fe.IsHitTestVisible(it->hitTestVisible);
-            // NaN is how XAML spells Auto, so this restores Auto correctly.
-            fe.Height(it->height);
-            fe.MaxHeight(it->maxHeight);
-            fe.Margin(it->margin);
-            if (it->isControl) {
-                if (auto ctl = fe.try_as<wuxc::Control>()) {
-                    ctl.IsTabStop(it->tabStop);
-                }
-            }
-            ++restored;
-        } catch (...) {
-        }
-    }
-    Wh_Log(L"teardown: restored %zu shell element(s) of %zu", restored,
-        g_suppressed.size());
-    g_suppressed.clear();
-}
-
 void HideAllOtherSearchBoxes(wux::DependencyObject const& root, int depth) {
     if (!root || depth < 0) return;
     try {
@@ -4195,7 +4032,9 @@ void HideAllOtherSearchBoxes(wux::DependencyObject const& root, int depth) {
                     cls.find(L"SearchControl") != std::wstring::npos ||
                     name.find(L"SearchBox") != std::wstring::npos ||
                     name.find(L"SearchBlock") != std::wstring::npos) {
-                    SuppressShellElement(fe, true, false);
+                    fe.Visibility(wux::Visibility::Collapsed);
+                    fe.Opacity(0.0);
+                    fe.IsHitTestVisible(false);
                     if (auto ctl = fe.try_as<wuxc::Control>()) {
                         ctl.IsTabStop(false);
                     }
@@ -4275,7 +4114,7 @@ void TakeForeground(bool force = false) {
         keybd_event(VK_MENU, 0, 0, 0);
         keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
 
-        if (currentTid && currentTid != callerTid && !IsHungAppWindow(current)) {
+        if (currentTid && currentTid != callerTid) {
             AttachThreadInput(callerTid, currentTid, TRUE);
             if (ourWindowTid && ourWindowTid != callerTid && ourWindowTid != currentTid) {
                 AttachThreadInput(ourWindowTid, currentTid, TRUE);
@@ -4328,14 +4167,6 @@ void TriggerMenuOpenFocus() {
             g_openFocus.Stop();
             g_openFocus = nullptr;
         }
-        if (g_ourBox) {
-            try {
-                auto now = wux::Input::FocusManager::GetFocusedElement();
-                if (now && now == g_ourBox) {
-                    return;
-                }
-            } catch (...) {}
-        }
         auto t = wux::DispatcherTimer();
         t.Interval(std::chrono::milliseconds(50));
         auto ticks = std::make_shared<int>(0);
@@ -4344,17 +4175,8 @@ void TriggerMenuOpenFocus() {
                 t.Stop();
                 return;
             }
-            if (g_ourBox) {
-                try {
-                    auto now = wux::Input::FocusManager::GetFocusedElement();
-                    if (now && now == g_ourBox) {
-                        t.Stop();
-                        return;
-                    }
-                } catch (...) {}
-            }
             FocusOurBoxNow();
-            if (++(*ticks) >= 2) {
+            if (++(*ticks) >= 4) {
                 t.Stop();
             }
         });
@@ -4438,7 +4260,7 @@ void DisarmScrollTabStops(wux::DependencyObject const& root, int depth = 15) {
     if (!root || depth < 0) return;
     if (auto scroller = root.try_as<wuxc::ScrollViewer>()) {
         if (scroller.IsTabStop()) {
-            SuppressShellElement(scroller.as<wux::FrameworkElement>(), false, false, /*onlyTabStop=*/true);
+            scroller.IsTabStop(false);
             Wh_Log(L"focus: proactively disabled IsTabStop on %ls", ElementLabel(root).c_str());
         }
     }
@@ -4609,6 +4431,7 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                 g_resultsHost.Opacity(0.0);
                 g_resultsHost.IsHitTestVisible(false);
                 if (g_resultsTranslate) g_resultsTranslate.Y(-8.0);
+                SyncOverlayBackground();
             }
             TriggerMenuOpenFocus();
         } else {
@@ -4648,7 +4471,7 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                     DWORD fgPid = 0;
                     if (fg) GetWindowThreadProcessId(fg, &fgPid);
                     if (fgPid != GetCurrentProcessId()) {
-                        LogMsg(L"subclass: WM_WINDOWPOSCHANGED uncloaked, fg=%p (ours=%p) -> claiming foreground", fg, hWnd);
+                        Wh_Log(L"subclass: WM_WINDOWPOSCHANGED uncloaked, fg=%p (ours=%p) -> claiming foreground", fg, hWnd);
                         g_suppressRefocus.store(false);
                         TakeForeground(true);
                         TriggerMenuOpenFocus();
@@ -4872,6 +4695,7 @@ std::atomic<bool> g_launchAsAdmin{false};
 
 [[clang::no_destroy]] wuxc::TextBlock g_resultsHeader{nullptr};
 
+// Opens what was clicked.
 static std::mutex g_launchHandlesMutex;
 static std::vector<HANDLE> g_launchHandles;
 
@@ -7037,7 +6861,88 @@ void SearchThreadMain() {
 // elements alive. Recorded in the order they were hidden and restored in
 // reverse, so if the same element was hidden twice the value that comes back
 // is the one from before the first time.
-// SuppressedElement & RestoreShellElements moved earlier
+struct SuppressedElement {
+    winrt::weak_ref<wux::FrameworkElement> element;
+    wux::Visibility visibility = wux::Visibility::Visible;
+    double opacity = 1.0;
+    bool hitTestVisible = true;
+    double height = std::numeric_limits<double>::quiet_NaN();
+    double maxHeight = std::numeric_limits<double>::quiet_NaN();
+    wux::Thickness margin{};
+    bool isControl = false;
+    bool tabStop = true;
+};
+
+[[clang::no_destroy]] std::vector<SuppressedElement> g_suppressed;
+
+// Hides one of the shell's elements, remembering how to put it back.
+//
+// Every caller used to do this inline and none of them recorded anything,
+// which is why disabling the mod left the Start menu with no search box at
+// all and a cell that no longer measures.
+void SuppressShellElement(wux::FrameworkElement const& fe, bool collapse = true,
+                          bool zeroSize = false) {
+    if (!fe) {
+        return;
+    }
+    try {
+        SuppressedElement saved;
+        saved.element = winrt::make_weak(fe);
+        saved.visibility = fe.Visibility();
+        saved.opacity = fe.Opacity();
+        saved.hitTestVisible = fe.IsHitTestVisible();
+        saved.height = fe.Height();
+        saved.maxHeight = fe.MaxHeight();
+        saved.margin = fe.Margin();
+        if (auto ctl = fe.try_as<wuxc::Control>()) {
+            saved.isControl = true;
+            saved.tabStop = ctl.IsTabStop();
+        }
+        g_suppressed.push_back(std::move(saved));
+
+        fe.Opacity(0.0);
+        fe.IsHitTestVisible(false);
+        if (collapse) {
+            fe.Visibility(wux::Visibility::Collapsed);
+        }
+        if (zeroSize) {
+            fe.MaxHeight(0.0);
+            fe.Height(0.0);
+            fe.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 0));
+        }
+    } catch (...) {
+    }
+}
+
+// Undoes all of it. XAML thread, and before this DLL goes away.
+void RestoreShellElements() {
+    size_t restored = 0;
+    for (auto it = g_suppressed.rbegin(); it != g_suppressed.rend(); ++it) {
+        auto fe = it->element.get();
+        if (!fe) {
+            continue;  // that tree is already gone; nothing to put back
+        }
+        try {
+            fe.Visibility(it->visibility);
+            fe.Opacity(it->opacity);
+            fe.IsHitTestVisible(it->hitTestVisible);
+            // NaN is how XAML spells Auto, so this restores Auto correctly.
+            fe.Height(it->height);
+            fe.MaxHeight(it->maxHeight);
+            fe.Margin(it->margin);
+            if (it->isControl) {
+                if (auto ctl = fe.try_as<wuxc::Control>()) {
+                    ctl.IsTabStop(it->tabStop);
+                }
+            }
+            ++restored;
+        } catch (...) {
+        }
+    }
+    Wh_Log(L"teardown: restored %zu shell element(s) of %zu", restored,
+        g_suppressed.size());
+    g_suppressed.clear();
+}
 
 void RecursivelyHideTextBlocks(wux::DependencyObject const& node, int depth = 0) {
     if (!node || depth > 8) return;
@@ -7133,10 +7038,18 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
         BuildResultsList(ownerPanel);
     }
 
-    // Proactively clean any other search boxes and disarm scroll tab stops in the immediate owner panel (MainContent)
+    // Proactively clean any other search boxes across the tree
     try {
-        HideAllOtherSearchBoxes(ownerPanel, 6);
-        DisarmScrollTabStops(ownerPanel, 6);
+        wux::DependencyObject node = cell;
+        wux::DependencyObject menuRoot = cell;
+        for (int up = 0; up < 12; ++up) {
+            auto parentNode = wuxm::VisualTreeHelper::GetParent(node);
+            if (!parentNode) break;
+            menuRoot = parentNode;
+            node = parentNode;
+        }
+        HideAllOtherSearchBoxes(menuRoot);
+        DisarmScrollTabStops(menuRoot);
     } catch (...) {}
 
     SubclassStartMenuWindow();
@@ -7218,6 +7131,7 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
                                     g_resultsHost.Opacity(0.0);
                                     g_resultsHost.IsHitTestVisible(false);
                                     if (g_resultsTranslate) g_resultsTranslate.Y(-8.0);
+                                    SyncOverlayBackground();
                                 }
                                 TriggerMenuOpenFocus();
                             } else {
@@ -7340,7 +7254,6 @@ void TeardownStartMenuUi() {
     g_activeApps.clear();
     g_appsHeaderHolder = nullptr;
     g_filesHeaderHolder = nullptr;
-
     RestoreShellElements();
     Wh_Log(L"teardown: lists and host released");
 
@@ -7490,9 +7403,11 @@ void Wh_ModAfterInit() {
                             } catch (...) {}
                         }
                     } else if (fg != ours && fgPid != GetCurrentProcessId()) {
+                        bool withinGrace = (now - openTick < 600);
                         bool isSearchOrNull = (fg == nullptr || IsProcessNamed(fgPid, L"SearchHost.exe"));
-                        if (isSearchOrNull) {
-                            Wh_Log(L"watchdog: reclaiming foreground from SearchHost/NULL (fg=%p pid=%lu)", fg, fgPid);
+                        if (withinGrace || isSearchOrNull) {
+                            Wh_Log(L"watchdog: reclaiming foreground from %ls (fg=%p pid=%lu)",
+                                isSearchOrNull ? L"SearchHost/NULL" : L"Other", fg, fgPid);
                             g_suppressRefocus.store(false);
                             TakeForeground(true);
                             if (g_resultsHost) {
@@ -7509,7 +7424,7 @@ void Wh_ModAfterInit() {
                 }
                 wasCloaked = isCloaked;
             }
-            Sleep(50);
+            Sleep(25);
         }
     });
 }
@@ -7542,7 +7457,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 }
 
 void Wh_ModUninit() {
-    Wh_Log(L"start-everything: Wh_ModUninit");
+    Wh_Log(L">");
 
     g_quit.store(true);
 
@@ -7561,16 +7476,14 @@ void Wh_ModUninit() {
     // is undoing; matching them is still strictly better than leaving the
     // process pointing at an unmapped DLL.
     if (g_targetProcess == TargetProcess::SearchHost) {
-        std::vector<HWND> toRemove;
-        {
-            std::lock_guard<std::mutex> lock(g_searchHostSubclassedMutex);
-            toRemove = std::move(g_searchHostSubclassedWindows);
-        }
-        for (HWND hwnd : toRemove) {
-            if (IsWindow(hwnd)) {
+        EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hwnd, &pid);
+            if (pid == GetCurrentProcessId()) {
                 WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc);
             }
-        }
+            return TRUE;
+        }, 0);
         return;
     }
 
