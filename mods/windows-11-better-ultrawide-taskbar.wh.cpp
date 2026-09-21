@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.67
+// @version         2.68
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -65,7 +65,9 @@ the dock. An app requesting attention receives an additional inset refractive
 lens with the native alert color.
 
 Liquid glass includes the reference site's Regular, Frosted, and Dark presets.
-Choose Custom to use the individual optical parameters.
+Regular is the reference defaults with no backdrop blur; Frosted adds it, and
+Dark also dims the backdrop. Choose Custom to use the individual optical
+parameters.
 
 The **Taskbar height and icon size** mod is detected automatically. When using
 it, set that mod's taskbar height to:
@@ -241,6 +243,12 @@ double g_buttonCornerRadius{12};
 double g_buttonVerticalPadding{4};
 double g_dockEdgeDistance{4};
 
+// Holds off the teardown in Wh_ModBeforeUninit while a hook or callback runs.
+struct ActiveScope {
+    ActiveScope() { ++g_active; }
+    ~ActiveScope() { --g_active; }
+};
+
 struct DockInsets {
     double top{};
     double bottom{};
@@ -343,11 +351,12 @@ LiquidSettings ApplyLiquidPreset(std::wstring_view preset,
                                  LiquidSettings custom) {
     if (preset != L"regular" && preset != L"frosted" && preset != L"dark")
         return custom;
+    // This struct's initialisers are ybouane/liquidglass DEFAULTS verbatim, so
+    // Regular is those untouched. Frosted and Dark are the reference site's only
+    // optical overrides: {blurAmount: 0.25} and {brightness: -0.3, blurAmount: 0.25}.
     LiquidSettings result;
-    result.blur = 0.25f;
-    if (preset == L"dark") {
-        result.brightness = -0.3f;
-    }
+    if (preset != L"regular") result.blur = 0.25f;
+    if (preset == L"dark") result.brightness = -0.3f;
     return result;
 }
 
@@ -609,8 +618,7 @@ void RestorePanels(HWND taskbar = nullptr, bool ownProcessOnly = false) {
 }
 
 BOOL WINAPI PanelSetWindowPos(HWND window, HWND after, int x, int y, int cx, int cy, UINT flags) {
-    ++g_active;
-    struct Finish { ~Finish() { --g_active; } } finish;
+    ActiveScope active;
     auto original = [&] { return SetWindowPos_Original(window, after, x, y, cx, cy, flags); };
     if (g_stopping || g_panelBusy || (flags & (SWP_HIDEWINDOW | SWP_ASYNCWINDOWPOS)) ||
         !IsPanel(window))
@@ -698,8 +706,7 @@ BOOL WINAPI PanelSetWindowPos(HWND window, HWND after, int x, int y, int cx, int
 }
 
 HRESULT WINAPI PanelDwmAttribute(HWND window, DWORD attribute, LPCVOID value, DWORD size) {
-    ++g_active;
-    struct Finish { ~Finish() { --g_active; } } finish;
+    ActiveScope active;
     if (!g_stopping && attribute == DWMWA_CLOAK && value && size == sizeof(BOOL) &&
         !*static_cast<const BOOL*>(value) && IsPanel(window)) {
         // Existing taskbar-vertical precedent: position BEFORE native uncloaking.
@@ -734,8 +741,7 @@ void CALLBACK PanelLocationEvent(HWINEVENTHOOK, DWORD event, HWND window,
 }
 
 BOOL WINAPI PanelDestroyWindow(HWND window) {
-    ++g_active;
-    struct Finish { ~Finish() { --g_active; } } finish;
+    ActiveScope active;
     // Property records belong to this HWND lifetime; never carry them to reuse.
     RemoveProp(window, kPanelPosition);
     RemoveProp(window, kPanelTaskbar);
@@ -759,8 +765,9 @@ bool Plan(double host, double buttons, double tray, double nativeCenter,
         return false;
     }
     double left = (host - buttons - kGap - tray) / 2;
-    // Windows can shift the native button strip left near the tray even while
-    // its repeater remains screen-centered. Use its measured slot.
+    // buttonsX is the pure specification of the button shift; production routes
+    // it through BoundaryThreshold's animated correction instead, but the check
+    // harness asserts the 12-DIP gap and centering from the pair. Keep both.
     result = {left + buttons / 2 - nativeCenter - nativeStartDelta,
               left + buttons + kGap - nativeTrayLeft};
     return true;
@@ -832,7 +839,6 @@ struct Root {
     uintptr_t anchorIdentity{};
     float anchorPrefix{};
     CompositionPropertySet metrics{nullptr};
-    CompositionPropertySet edges{nullptr};
     double nativeRightOverhang{NAN};
     double hostWidth{};
 };
@@ -1104,6 +1110,7 @@ float4 ps(VertexOutput input) : SV_Target {
     UINT height{};
     UINT blurWidth{};
     UINT blurHeight{};
+    bool pendingPresent{};
     LensConstants lens{};
     HRESULT failure{S_OK};
     std::chrono::steady_clock::time_point lastPresent{};
@@ -1315,16 +1322,49 @@ float4 ps(VertexOutput input) : SV_Target {
         return true;
     }
 
+    // imageSize is filled in by RenderLocked, so the caller's copy always
+    // differs from the stored one; compare everything else.
+    static bool SameLensInput(LensConstants a, LensConstants b) {
+        a.imageSize[0] = b.imageSize[0] = 0;
+        a.imageSize[1] = b.imageSize[1] = 0;
+        return memcmp(&a, &b, sizeof(a)) == 0;
+    }
+
     bool UpdateGeometry(RECT const& taskbarBounds, UINT pixelWidth,
                         UINT pixelHeight, LensConstants const& newLens) {
         std::lock_guard lock(mutex);
         if (!running || FAILED(failure) ||
             !ResizeLocked(pixelWidth, pixelHeight))
             return false;
+        bool changed = !geometryReady ||
+                       !EqualRect(&taskbarRect, &taskbarBounds) ||
+                       !SameLensInput(lens, newLens);
         taskbarRect = taskbarBounds;
         lens = newLens;
         geometryReady = true;
+        if (changed || pendingPresent) PresentLocked();
         return true;
+    }
+
+    // Capture frames are change-driven, so a geometry-only change (dock resize,
+    // a new attention lens) reaches the swap chain only if we present it. One
+    // present per refresh interval: 14ms would let this outrun a 60Hz compositor
+    // and block the taskbar UI thread on buffer release. A throttled present is
+    // owed, never dropped - the next UpdateGeometry or timer tick drains it.
+    void PresentLocked() {
+        auto now = std::chrono::steady_clock::now();
+        if (now - lastPresent < std::chrono::milliseconds(17)) {
+            pendingPresent = true;
+            return;
+        }
+        RenderLocked();
+        lastPresent = now;
+    }
+
+    void FlushPendingPresent() {
+        std::lock_guard lock(mutex);
+        if (running && !FAILED(failure) && geometryReady && pendingPresent)
+            PresentLocked();
     }
 
     float CurrentHalfWidth() {
@@ -1401,8 +1441,7 @@ float4 ps(VertexOutput input) : SV_Target {
             source->frameToken = source->pool.FrameArrived(
                 [weak, window](capture::Direct3D11CaptureFramePool const& sender,
                                winrt::Windows::Foundation::IInspectable const&) {
-                    ++g_active;
-                    struct Finish { ~Finish() { --g_active; } } finish;
+                    ActiveScope active;
                     if (g_stopping) return;
                     if (auto renderer = weak.lock())
                         renderer->OnFrame(window, sender);
@@ -1515,6 +1554,8 @@ float4 ps(VertexOutput input) : SV_Target {
             if (now - lastPresent >= std::chrono::milliseconds(14)) {
                 RenderLocked();
                 lastPresent = now;
+            } else {
+                pendingPresent = true;
             }
         } catch (...) {
             HRESULT error = winrt::to_hresult().value;
@@ -1532,6 +1573,7 @@ float4 ps(VertexOutput input) : SV_Target {
     void RenderLocked() {
         if (!running || !composite || !swapChain || width == 0 || height == 0)
             return;
+        pendingPresent = false;
         float clear[]{0, 0, 0, 0};
         context->ClearRenderTargetView(compositeTarget.get(), clear);
         int taskbarWidth = taskbarRect.right - taskbarRect.left;
@@ -1722,8 +1764,7 @@ uintptr_t CanonicalIdentity(FrameworkElement const& element) {
 }
 
 int WINAPI HideAnimation_Hook(void* self, void* element, unsigned context) {
-    ++g_active;
-    struct Finish { ~Finish() { --g_active; } } finish;
+    ActiveScope active;
     MotionEvent(element, Root::Source::Life::Hiding);
     int result = HideAnimation_Original(self, element, context);
     if (FAILED(result)) MotionEvent(element, Root::Source::Life::Active, true);
@@ -1731,8 +1772,7 @@ int WINAPI HideAnimation_Hook(void* self, void* element, unsigned context) {
 }
 
 void WINAPI StartAnimation_Hook(void* projectedElement, const void* animation) {
-    ++g_active;
-    struct Finish { ~Finish() { --g_active; } } finish;
+    ActiveScope active;
     void* abi{};
     if (!g_stopping && GetCurrentThreadId() == g_ownerThread && ReadLocal(projectedElement, abi))
     {
@@ -1742,8 +1782,7 @@ void WINAPI StartAnimation_Hook(void* projectedElement, const void* animation) {
 }
 
 void WINAPI HideCompleted_Hook(void* projectedAnimator, const void* projectedElement) {
-    ++g_active;
-    struct Finish { ~Finish() { --g_active; } } finish;
+    ActiveScope active;
     void* abi{};
     if (!g_stopping && GetCurrentThreadId() == g_ownerThread && ReadLocal(projectedElement, abi))
     {
@@ -1765,10 +1804,10 @@ void WINAPI HideCompleted_Hook(void* projectedAnimator, const void* projectedEle
 }
 
 void WINAPI UpdateVisualStates_Hook(void* self) {
-    ++g_active;
-    struct Finish { ~Finish() { --g_active; } } finish;
+    ActiveScope active;
     UpdateVisualStates_Original(self);
-    if (g_stopping || g_itemStateRefreshPending || !g_dispatch)
+    if (g_stopping || GetCurrentThreadId() != g_ownerThread ||
+        g_itemStateRefreshPending || !g_dispatch)
         return;
     if (PostMessage(g_dispatch, kRefreshItemStatesMessage, 0, 0))
         g_itemStateRefreshPending = true;
@@ -1939,6 +1978,15 @@ void RestoreStatePlate(Root::StatePlate& state) {
     state.element = nullptr;
 }
 
+// Give up on one plate without losing track of it: RestoreStatePlate clears
+// element, but the blocked entry must keep identifying its plate.
+void BlockStatePlate(Root::StatePlate& state) {
+    auto element = state.element;
+    RestoreStatePlate(state);
+    state.element = element;
+    state.blocked = true;
+}
+
 void PrepareStatePlate(Root& root, Root::StatePlate& state,
                        DockInsets insets) {
     if (state.blocked || !state.element) return;
@@ -1963,10 +2011,7 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
             if (state.visual && !currentClip) {
                 state.visual.Clip(state.clip);
             } else if (currentClip != state.clip) {
-                auto element = state.element;
-                RestoreStatePlate(state);
-                state.element = element;
-                state.blocked = true;
+                BlockStatePlate(state);
                 return;
             }
         }
@@ -1975,10 +2020,7 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
             if (!currentTransform) {
                 plate.RenderTransform(state.stretch);
             } else if (currentTransform != state.stretch) {
-                auto element = state.element;
-                RestoreStatePlate(state);
-                state.element = element;
-                state.blocked = true;
+                BlockStatePlate(state);
                 return;
             }
         }
@@ -2038,10 +2080,7 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         state.clipGeometry.CornerRadius(
             {radius, static_cast<float>(radius / scaleY)});
     } catch (...) {
-        auto element = state.element;
-        RestoreStatePlate(state);
-        state.element = element;
-        state.blocked = true;
+        BlockStatePlate(state);
         Wh_Log(L"[UWITEM] state plate unavailable hr=%08X",
                winrt::to_hresult().value);
     }
@@ -2133,24 +2172,6 @@ Root::Source::Life NextLife(Root::Source::Life current, Root::Source::Life event
     if (event == Root::Source::Life::Active && current == Root::Source::Life::Hiding && !cancelled)
         return current;
     return event;
-}
-
-std::wstring MaxExpression(size_t count, bool groups) {
-    std::vector<std::wstring> terms{groups ? L"anchor.Offset.X - geometry.prefix + geometry.floor" : L"0"};
-    for (size_t i = 0; i < count; ++i) {
-        auto name = L"b" + std::to_wstring(i);
-        terms.push_back(groups ? L"edges.e" + std::to_wstring(i)
-                               : name + L".Offset.X + " + name + L".Size.X");
-    }
-    // Balanced Max avoids a long nested expression on a wide populated taskbar.
-    while (terms.size() > 1) {
-        std::vector<std::wstring> next;
-        for (size_t i = 0; i < terms.size(); i += 2)
-            next.push_back(i + 1 == terms.size() ? terms[i]
-                : L"Max(" + terms[i] + L", " + terms[i + 1] + L")");
-        terms = std::move(next);
-    }
-    return terms[0];
 }
 
 void RestoreGlass(OwnedDock& dock) {
@@ -2517,9 +2538,6 @@ bool WholeGenerationReplaced(std::vector<uintptr_t> const& before,
            });
 }
 
-constexpr unsigned kEdgesPerGroup = 16; // Windows rejects a single 64-source expression as too long.
-unsigned EdgeGroups(size_t count) { return static_cast<unsigned>((count + kEdgesPerGroup - 1) / kEdgesPerGroup); }
-
 double BoundaryThreshold(double& overhang, double start, double buttons,
                          double width, double localTrayLeft) {
     // Native left = min((width-buttons)/2, rightLimit-buttons). The two
@@ -2540,26 +2558,6 @@ std::wstring EdgeExpression(bool buttons = false) {
            L", geometry.minX, geometry.maxX), geometry.vertical, 0)";
 }
 
-CompositionPropertySet BindEdges(Compositor const& compositor, std::vector<Visual> const& sources) {
-    if (sources.size() > 64) throw winrt::hresult_error(E_BOUNDS);
-    auto edges = compositor.CreatePropertySet();
-    for (unsigned group = 0; group < EdgeGroups(sources.size()); ++group) {
-        size_t start = group * kEdgesPerGroup;
-        size_t count = std::min(size_t{kEdgesPerGroup}, sources.size() - start);
-        auto expression = compositor.CreateExpressionAnimation(MaxExpression(count, false));
-        for (size_t i = 0; i < count; ++i)
-            expression.SetReferenceParameter(L"b" + std::to_wstring(i), sources[start + i]);
-        auto name = L"e" + std::to_wstring(group);
-        edges.InsertScalar(name, 0);
-        edges.StartAnimation(name, expression);
-    }
-    return edges;
-}
-
-void StopEdges(CompositionPropertySet const& edges, unsigned groups) {
-    if (edges) for (unsigned i = 0; i < groups; ++i) edges.StopAnimation(L"e" + std::to_wstring(i));
-}
-
 void StopFollower(Root& root) {
     if (root.follower) {
         root.trayTranslation.element.StopAnimation(root.follower);
@@ -2572,8 +2570,6 @@ void StopFollower(Root& root) {
     root.anchorIdentity = 0;
     root.anchorPrefix = 0;
     root.nativeRightOverhang = NAN;
-    StopEdges(root.edges, EdgeGroups(root.expressionSources.size()));
-    root.edges = nullptr;
     root.metrics = nullptr;
     root.expressionSources.clear();
     RestoreStatePlates(root);
@@ -2596,7 +2592,6 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
     });
     std::vector<uintptr_t> seen, selected;
     bool acquired = false;
-    float floor = 0;
     uintptr_t anchorIdentity{};
     float anchorX{};
     for (int i = 0; i < count; ++i) {
@@ -2605,10 +2600,7 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
         auto slot = Controls::Primitives::LayoutInformation::GetLayoutSlot(child);
         bool eligible = child.Visibility() == Visibility::Visible &&
                         EligibleSlot(slot.X, slot.Width, repeater.ActualWidth());
-        if (winrt::get_class_name(child) != L"Taskbar.TaskListButton") {
-            if (eligible) floor = std::max(floor, slot.X + slot.Width);
-            continue;
-        }
+        if (winrt::get_class_name(child) != L"Taskbar.TaskListButton") continue;
         auto identity = CanonicalIdentity(child);
         seen.push_back(identity);
         auto source = std::find_if(root.sources.begin(), root.sources.end(),
@@ -2653,10 +2645,10 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
                          winrt::get_abi(root.frame), selected.size());
     auto anchor = std::find_if(root.sources.begin(), root.sources.end(),
         [&](auto const& source) { return source.identity == anchorIdentity; });
-    if (!root.metrics) {
-        if (root.sources.empty()) throw winrt::hresult_error(E_PENDING);
-        root.metrics = root.sources.front().visual.Compositor().CreatePropertySet();
-    }
+    // Guards every anchor->visual dereference below, not just this first use.
+    if (anchor == root.sources.end()) throw winrt::hresult_error(E_PENDING);
+    if (!root.metrics)
+        root.metrics = anchor->visual.Compositor().CreatePropertySet();
     bool knownBoundary = std::isfinite(root.nativeRightOverhang);
     double threshold = BoundaryThreshold(root.nativeRightOverhang, startLeft, buttonsWidth,
                                          repeater.ActualWidth(), trayLeft - origin);
@@ -2665,9 +2657,7 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
                winrt::get_abi(root.frame), threshold, root.nativeRightOverhang, GetTickCount64());
     root.metrics.InsertScalar(L"threshold", static_cast<float>(threshold));
     root.metrics.InsertScalar(L"shift", static_cast<float>(shift));
-    root.metrics.InsertScalar(L"trayBase", static_cast<float>(origin + shift + kGap - trayLeft));
     root.metrics.InsertScalar(L"prefix", prefix);
-    root.metrics.InsertScalar(L"floor", std::max(0.0f, floor - static_cast<float>(startLeft)));
     root.metrics.InsertScalar(L"minX", static_cast<float>(-trayLeft));
     root.metrics.InsertScalar(L"maxX", static_cast<float>(root.hostWidth - trayWidth - trayLeft));
     root.metrics.InsertScalar(
@@ -2708,19 +2698,8 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
         expression.SetReferenceParameter(L"geometry", root.metrics);
         expression.SetReferenceParameter(L"anchor", anchor->visual);
     }
-    std::vector<Visual> visuals;
-    for (size_t i = 0; i < selected.size(); ++i) {
-        auto source = std::find_if(root.sources.begin(), root.sources.end(),
-            [&](auto const& value) { return value.identity == selected[i]; });
-        visuals.push_back(source->visual);
-    }
-    auto edges = BindEdges(root.metrics.Compositor(), visuals);
-    animation.SetReferenceParameter(L"edges", edges);
     animation.SetReferenceParameter(L"dock", root.dock.geometry);
-    buttonsAnimation.SetReferenceParameter(L"edges", edges);
     // Keep cleanup armed before starting; a failed start is restored by Refresh's caller.
-    StopEdges(root.edges, EdgeGroups(root.expressionSources.size()));
-    root.edges = edges;
     root.expressionSources = std::move(selected);
     root.follower = animation;
     root.buttonsFollower = buttonsAnimation;
@@ -2845,8 +2824,7 @@ void Refresh(Root& root) {
 
 void OnLayout(winrt::weak_ref<FrameworkElement> const& weak) {
     if (g_stopping) return;
-    ++g_active;
-    struct Finish { ~Finish() { --g_active; } } finish;
+    ActiveScope active;
     if (g_stopping || GetCurrentThreadId() != g_ownerThread || g_busy) return;
     FrameworkElement frame{nullptr};
     try { frame = weak.get(); }
@@ -2898,8 +2876,7 @@ winrt::weak_ref<FrameworkElement> MotionEvent(
 
 LRESULT QueryCurrentTray(HWND taskbar) {
     if (g_stopping || g_busy || GetCurrentThreadId() != g_ownerThread) return 0;
-    ++g_active;
-    struct Finish { ~Finish() { --g_active; } } finish;
+    ActiveScope active;
     for (auto& root : g_roots) {
         if (root.taskbar != taskbar || !root.follower || !GetProp(taskbar, kTrayShift)) continue;
         try {
@@ -2924,8 +2901,7 @@ LRESULT CALLBACK DispatchProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
     if (message == kQueryTrayMessage) return QueryCurrentTray(reinterpret_cast<HWND>(wp));
     if (message == kPrepareLiquidMessage) {
         g_liquidPreparePending = false;
-        ++g_active;
-        struct Finish { ~Finish() { --g_active; } } finish;
+        ActiveScope active;
         if (g_stopping) return 0;
         g_preparingLiquid = true;
         struct Unprepare { ~Unprepare() { g_preparingLiquid = false; } } unprepare;
@@ -2954,6 +2930,7 @@ LRESULT CALLBACK DispatchProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
                     ScheduleLiquidRetry(dock, failure);
                 } else {
                     dock.liquid->UpdateSources();
+                    dock.liquid->FlushPendingPresent();
                     if (dock.liquidShrinkReadyAt &&
                         now >= dock.liquidShrinkReadyAt)
                         retries.push_back(winrt::make_weak(root.frame));
@@ -3024,8 +3001,7 @@ void WatchFrame(FrameworkElement frame) {
 }
 
 void DiscoverExisting(HWND taskbar) {
-    ++g_active;
-    struct Finish { ~Finish() { --g_active; } } finish;
+    ActiveScope active;
     if (g_stopping) return;
     if (g_ownerThread && g_ownerThread != GetCurrentThreadId()) {
         Wh_Log(L"[UWPOS] startup unsupported UI thread taskbar=%p thread=%lu", taskbar, GetCurrentThreadId());
@@ -3081,8 +3057,7 @@ bool RequestDiscovery(HWND taskbar) {
 using Arrange_t = int(WINAPI*)(void*, Size, Size*);
 Arrange_t Arrange_Original;
 int WINAPI Arrange_Hook(void* self, Size size, Size* result) {
-    ++g_active;
-    struct Finish { ~Finish() { --g_active; } } finish;
+    ActiveScope active;
     int hr = Arrange_Original(self, size, result);
     if (g_stopping || FAILED(hr) || g_busy) return hr;
     try {
@@ -3154,7 +3129,8 @@ BOOL Wh_ModInit() {
     if (!WindhawkUtils::SetFunctionHook(SetWindowPos, PanelSetWindowPos, &SetWindowPos_Original) ||
         !WindhawkUtils::SetFunctionHook(DestroyWindow, PanelDestroyWindow, &DestroyWindow_Original)) return FALSE;
     if (!g_explorer) {
-        Wh_Log(L"[UWPANEL] initialized v2.67 Shell positioning hooks");
+        Wh_Log(L"[UWPANEL] initialized v" WH_MOD_VERSION
+               L" Shell positioning hooks");
         return TRUE;
     }
     if (!WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute, PanelDwmAttribute,
@@ -3199,7 +3175,8 @@ BOOL Wh_ModInit() {
         g_windowClass = 0;
         return FALSE;
     }
-    Wh_Log(L"[UWPOS] initialized v2.67; screenshot-safe liquid glass, native animation follower, gap=12 theme=%d heightMethod=automatic",
+    Wh_Log(L"[UWPOS] initialized v" WH_MOD_VERSION
+           L"; screenshot-safe liquid glass, native animation follower, gap=12 theme=%d heightMethod=automatic",
            static_cast<int>(g_theme));
     return TRUE;
 }
