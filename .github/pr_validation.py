@@ -5,11 +5,13 @@ PURPOSE:     Verifies the mod information in the modified mods.
 COPYRIGHT:   Copyright 2023 Mark Jansen <mark.jansen@reactos.org>
 '''
 
+import http.client
 import json
 import math
 import os
 import re
 import sys
+import time
 import unicodedata
 import urllib.error
 import urllib.parse
@@ -225,18 +227,50 @@ def get_mod_file_metadata(
     return properties, warnings
 
 
+FETCH_ATTEMPTS = 3
+
+
+class FetchError(Exception):
+    """A fetch failed even after retries, most likely due to a transient network
+    problem rather than anything in the mod being validated."""
+
+
+def fetch_url(url: str) -> bytes:
+    """Fetch a URL, retrying connection errors and 5xx responses. 4xx responses
+    are raised as HTTPError right away so callers can treat 404 as "not found"."""
+    last_error: Optional[Exception] = None
+    for attempt in range(1, FETCH_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(url) as response:
+                return response.read()
+        except urllib.error.HTTPError as e:
+            if e.code < 500:
+                raise
+            last_error = e
+        except (OSError, http.client.HTTPException) as e:
+            last_error = e
+
+        if attempt < FETCH_ATTEMPTS:
+            print(f'Fetching {url} failed ({last_error!r}), retrying...')
+            time.sleep(2)
+
+    raise FetchError(
+        f'Failed to fetch {url} after {FETCH_ATTEMPTS} attempts ({last_error!r}).'
+        ' This is most likely a temporary network error unrelated to the mod'
+        ' itself, re-run the workflow to try again.'
+    )
+
+
 @cache
 def get_mod_author_data():
     url = 'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mod_author_data.json'
-    response = urllib.request.urlopen(url).read()
-    return json.loads(response)
+    return json.loads(fetch_url(url))
 
 
 @cache
 def get_valid_license_identifiers_lowercase():
     url = 'https://spdx.org/licenses/licenses.json'
-    response = urllib.request.urlopen(url).read()
-    data = json.loads(response)
+    data = json.loads(fetch_url(url))
     return {license['licenseId'].lower() for license in data['licenses']}
 
 
@@ -249,8 +283,7 @@ def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
     """Fetch existing mod metadata from mods.windhawk.net, or None if mod doesn't exist."""
     try:
         url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}.wh.cpp'
-        response = urllib.request.urlopen(url)
-        content = response.read().decode('utf-8')
+        content = fetch_url(url).decode('utf-8')
 
         # Use existing robust metadata parser (no warnings needed for existing mods)
         properties, _ = get_mod_file_metadata(StringIO(content), warn_callback=None)
@@ -274,8 +307,7 @@ def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
     """Fetch list of existing versions for a mod, or None if mod doesn't exist."""
     try:
         url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}/versions.json'
-        response = urllib.request.urlopen(url)
-        data = json.loads(response.read())
+        data = json.loads(fetch_url(url))
         return [item['version'] for item in data]
     except urllib.error.HTTPError as e:
         if e.code == 404:
@@ -1282,8 +1314,7 @@ def get_all_mod_names() -> dict[str, str]:
 @cache
 def get_existing_windows_file_names():
     url = 'https://winbindex.m417z.com/data/filenames.json'
-    response = urllib.request.urlopen(url).read()
-    return json.loads(response)
+    return json.loads(fetch_url(url))
 
 
 def is_existing_windows_file_name(name: str):
@@ -1637,4 +1668,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except FetchError as e:
+        print(f'::error::{e}')
+        sys.exit(1)
