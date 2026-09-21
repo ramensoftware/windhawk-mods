@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.5.3
+// @version         1.5.4
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -48,9 +48,9 @@
 # Vector Screen Holder
 
 Fills a display with generative line art and holds the screen awake for as long
-as it runs. **It runs on your primary display, on any single display you name,
-or on all of them at once**, so one monitor is as well served as a couple, or
-the four or more an enthusiast keeps running.
+as it runs. **It runs on your primary display, on any single display you're
+running, or on all of them at once.** Art appears live on one monitor or a
+couple this way, and even four or more an enthusiast keeps running.
 
 Every frame is drawn as strokes through Direct2D on the GPU. There are no
 images, no video file and no fixed resolution, so the artwork is generated for
