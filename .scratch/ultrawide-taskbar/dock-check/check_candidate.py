@@ -322,6 +322,26 @@ int main() {
             assert(highlights.Shapes().Size() == 0);
         }
         {
+            // Two stops, and alphas lifted so the plate dim lands them at the
+            // measured native values: dark 0x1A/0x0F, light 0x05/0x0F.
+            auto outline = compositor.CreateRoundedRectangleGeometry();
+            auto rim = ButtonRim(outline, true);
+            assert(rim.Shapes().Size() == 1);
+            auto stroke = rim.Shapes().GetAt(0).as<CompositionSpriteShape>();
+            assert(stroke.StrokeThickness() == 2);
+            assert(stroke.Geometry() == outline);
+            auto brush =
+                stroke.StrokeBrush().as<CompositionLinearGradientBrush>();
+            assert(brush.ColorStops().Size() == 2);
+            assert(brush.ColorStops().GetAt(0).Color().A ==
+                   std::lround(0x1A / 0.32));
+            assert(brush.ColorStops().GetAt(0).Color().R == 255);
+            assert(ButtonRim(outline, false)
+                       .Shapes().GetAt(0).as<CompositionSpriteShape>()
+                       .StrokeBrush().as<CompositionLinearGradientBrush>()
+                       .ColorStops().GetAt(0).Color().R == 0);
+        }
+        {
             LiquidRenderer renderer;
             Root closingRoot;
             closingRoot.sources.emplace_back();
@@ -835,11 +855,12 @@ result = subprocess.run(["rtk", "proxy", str(executable)], check=True,
                         stdout=subprocess.PIPE, text=True, encoding="utf-8")
 assert "AdjustTaskbarFrameSize" not in code
 assert "plate.CornerRadius(" not in code
-# The button outline is Windows' own gradient rim, kept visible by dimming only
-# the fill. The mod must not draw its own stroke over it again; g_keepButtonRim
-# only chooses whether the native one stays.
-assert "ButtonBorder" not in code
-assert "CreateSpriteShape" not in code.split("ShapeVisual GlassHighlights")[0]
+# Dimming Windows' per-state Background instead of the element was tried and
+# reverted: the resting value comes from the template, InactiveNormal sets no
+# brush, so a local write outranks both and the hover highlight never clears.
+assert "appliedFill" not in code
+assert "blankedRim" not in code
+assert "plate.Background(state" not in code
 assert "originalCornerRadius" not in code
 assert "cornerRadiusOwned" not in code
 for removed in [

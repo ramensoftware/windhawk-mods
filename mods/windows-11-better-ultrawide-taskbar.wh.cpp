@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.79
+// @version         2.80
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -64,9 +64,9 @@ Task-button hover uses Windows' native animation as a translucent tint over
 the dock. An app requesting attention receives an additional inset refractive
 lens with the native alert color.
 
-**Task and tray buttons** keep Windows' own highlight outline, a faint gradient
-band along one edge that reads as a raised button. Turn the border off for a flat
-highlight instead.
+**Task and tray buttons** can carry the raised gradient outline Windows draws on a
+highlight. The dock's translucency fades the native one out, so the mod redraws it
+at matching strength; turn the border off for a flat highlight.
 
 Under the Liquid glass theme each task button can also carry its own refractive
 lens inside the dock, rendered by the same shader pass as the dock itself rather
@@ -115,7 +115,7 @@ setting.
 - button:
   - border: true
     $name: Border (default on)
-    $description: Keeps the Windows highlight outline, a faint gradient that reads as a raised button. Off blanks it for a flat highlight.
+    $description: Draws the raised gradient outline Windows puts on task button highlights, which the dock's translucency would otherwise fade out.
   - liquidLayer: false
     $name: Per-button liquid glass layer (default off)
     $description: Gives every task button its own refractive lens inside the dock. Liquid glass theme only.
@@ -243,11 +243,9 @@ constexpr DWORD kLiquidShrinkDelay = 700;
 // an unsupported build fails every one. Tune down if a broken tree costs too many
 // tree walks, up if a slow startup transition needs longer to settle.
 constexpr unsigned kRefreshRetryLimit = 10;
-// Native hover/active plates measured on a live taskbar: the fill is 50% white in
-// light theme and 5.9% in dark, while the rim is a 3-DIP gradient peaking near 10%
-// alpha. Scaling the element dropped that rim to ~3% and erased the bevel, so the
-// fill alone carries the dim.
-constexpr double kPlateFillScale = 0.32;
+// Translucency of the native highlight over the dock. Also divides the rim alphas
+// below, so a rim drawn inside the plate lands at native strength after this.
+constexpr double kPlateDimScale = 0.32;
 // One lens per realized task button; UpdateFollower already refuses more than 64.
 #define UW_BUTTON_LENS_CAP 64
 #define UW_STRINGIZE_IMPL(value) #value
@@ -871,8 +869,11 @@ struct OwnedDock {
 struct Root {
     struct StatePlate {
         Controls::Border element{nullptr};
-        Media::Brush appliedFill{nullptr};  // Our alpha-scaled copy of the fill.
-        Media::Brush blankedRim{nullptr};   // Transparent brush over the rim.
+        double originalOpacity{};
+        double appliedOpacity{};
+        bool opacityOwned{};
+        bool opacityWasLocal{};
+        ShapeVisual rim{nullptr};
         Visual visual{nullptr};
         CompositionGeometricClip clip{nullptr};
         CompositionRoundedRectangleGeometry clipGeometry{nullptr};
@@ -2023,13 +2024,9 @@ void RestoreStatePlate(Root::StatePlate& state) {
             state.stretch && state.element.RenderTransform() == state.stretch;
         bool clipMatch =
             state.clip && state.visual && state.visual.Clip() == state.clip;
-        // Clear rather than write the captured brush back: Windows swaps these per
-        // visual state, so restoring a hover-time brush would pin a visible plate
-        // at rest. Clearing lets the template and state setters take over again.
-        bool fillMatch = state.appliedFill &&
-                         state.element.Background() == state.appliedFill;
-        bool rimMatch = state.blankedRim &&
-                        state.element.BorderBrush() == state.blankedRim;
+        bool opacityMatch =
+            state.opacityOwned &&
+            std::abs(state.element.Opacity() - state.appliedOpacity) < 0.001;
         if (state.stretch) {
             if (transformMatch) {
                 state.element.ClearValue(UIElement::RenderTransformProperty());
@@ -2043,26 +2040,27 @@ void RestoreStatePlate(Root::StatePlate& state) {
             else
                 Wh_Log(L"[UWITEM] state plate clip ownership lost");
         }
-        if (state.appliedFill) {
-            if (fillMatch)
-                state.element.ClearValue(
-                    Controls::Border::BackgroundProperty());
+        if (state.rim) {
+            if (Hosting::ElementCompositionPreview::GetElementChildVisual(
+                    state.element) == state.rim)
+                Hosting::ElementCompositionPreview::SetElementChildVisual(
+                    state.element, nullptr);
             else
-                Wh_Log(L"[UWITEM] state plate fill ownership lost");
+                Wh_Log(L"[UWITEM] state plate rim ownership lost");
         }
-        if (state.blankedRim) {
-            if (rimMatch)
-                state.element.ClearValue(
-                    Controls::Border::BorderBrushProperty());
+        if (opacityMatch) {
+            if (state.opacityWasLocal)
+                state.element.Opacity(state.originalOpacity);
             else
-                Wh_Log(L"[UWITEM] state plate border ownership lost");
+                state.element.ClearValue(UIElement::OpacityProperty());
         }
     } catch (...) {
         Wh_Log(L"[UWITEM] state plate restore failed hr=%08X",
                winrt::to_hresult().value);
     }
-    state.appliedFill = nullptr;
-    state.blankedRim = nullptr;
+    state.opacityOwned = false;
+    state.opacityWasLocal = false;
+    state.rim = nullptr;
     state.visual = nullptr;
     state.clip = nullptr;
     state.clipGeometry = nullptr;
@@ -2079,6 +2077,36 @@ void BlockStatePlate(Root::StatePlate& state) {
     state.blocked = true;
 }
 
+// Replicates the native rim, measured off a live taskbar: a gradient band that is
+// black along the bottom edge in light theme and white along the top in dark. The
+// native brush spans an absolute 3 DIP, but only the two horizontal edges of a
+// 1-DIP stroke ever sample it, so a relative top-to-bottom ramp carries the same
+// cue. Alphas are divided by the plate dim so the result lands at native strength
+// after the element opacity multiplies it.
+ShapeVisual ButtonRim(CompositionRoundedRectangleGeometry const& outline,
+                      bool dark) {
+    auto compositor = outline.Compositor();
+    auto visual = compositor.CreateShapeVisual();
+    visual.RelativeSizeAdjustment({1, 1});
+    auto lift = [](unsigned alpha) {
+        return static_cast<uint8_t>(std::min<unsigned>(
+            255, static_cast<unsigned>(std::lround(alpha / kPlateDimScale))));
+    };
+    using Color = winrt::Windows::UI::Color;
+    auto gradient = compositor.CreateLinearGradientBrush();
+    gradient.StartPoint({0, 0});
+    gradient.EndPoint({0, 1});
+    gradient.ColorStops().Append(compositor.CreateColorGradientStop(
+        0, dark ? Color{lift(0x1A), 255, 255, 255} : Color{lift(0x05), 0, 0, 0}));
+    gradient.ColorStops().Append(compositor.CreateColorGradientStop(
+        1, dark ? Color{lift(0x0F), 255, 255, 255} : Color{lift(0x0F), 0, 0, 0}));
+    auto shape = compositor.CreateSpriteShape(outline);
+    shape.StrokeBrush(gradient);
+    shape.StrokeThickness(2);  // Outer half is clipped, leaving a 1-DIP rim.
+    visual.Shapes().Append(shape);
+    return visual;
+}
+
 void PrepareStatePlate(Root& root, Root::StatePlate& state,
                        DockInsets insets) {
     if (state.blocked || !state.element) return;
@@ -2087,35 +2115,24 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         auto parent = Media::VisualTreeHelper::GetParent(plate)
                           .try_as<FrameworkElement>();
         if (!parent) return;
-        // Dim the fill rather than the element. Windows rewrites Background on
-        // every visual state change, so a brush that is not ours is a fresh native
-        // one to scale; skipping our own keeps the alpha from compounding away.
-        if (g_theme != DockTheme::Native) {
-            auto fill = plate.Background();
-            if (fill && fill != state.appliedFill) {
-                if (auto solid = fill.try_as<Media::SolidColorBrush>()) {
-                    auto colour = solid.Color();
-                    colour.A = static_cast<uint8_t>(
-                        std::lround(colour.A * kPlateFillScale));
-                    state.appliedFill = Media::SolidColorBrush(colour);
-                    plate.Background(state.appliedFill);
-                } else if (!state.appliedFill) {
-                    // A gradient or brush we cannot scale stays untouched.
-                    Wh_Log(L"[UWITEM] plate fill is %s; left native",
-                           winrt::get_class_name(fill).c_str());
-                }
-            }
-            // Dimming the fill no longer hides the native outline, so blanking
-            // the brush is what the border toggle has to do.
-            if (!g_keepButtonRim) {
-                auto rim = plate.BorderBrush();
-                if (rim && rim != state.blankedRim) {
-                    state.blankedRim = Media::SolidColorBrush(
-                        winrt::Windows::UI::Color{0, 0, 0, 0});
-                    plate.BorderBrush(state.blankedRim);
-                }
-            }
+        // Dim the whole element. Mirroring Windows' per-state Background instead
+        // was tried and reverted: the resting value comes from the template and
+        // InactiveNormal sets no brush, so a local write outranks both and the
+        // hover highlight never goes away.
+        if (!state.opacityOwned) {
+            state.originalOpacity = plate.Opacity();
+            // A template or visual-state value must be handed back by clearing
+            // ours, not by pinning the number we happened to read.
+            state.opacityWasLocal =
+                plate.ReadLocalValue(UIElement::OpacityProperty()) !=
+                DependencyProperty::UnsetValue();
+            state.appliedOpacity =
+                g_theme == DockTheme::Native
+                    ? state.originalOpacity
+                    : state.originalOpacity * kPlateDimScale;
+            state.opacityOwned = true;
         }
+        plate.Opacity(state.appliedOpacity);
         if (!state.clip && plate.Clip()) return;
         if (state.clip) {
             auto currentClip =
@@ -2182,6 +2199,17 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
             state.clip = state.visual.Compositor().CreateGeometricClip(
                 state.clipGeometry);
             state.visual.Clip(state.clip);
+        }
+        // Only the fill plate. BackgroundBorder carries the same native gradient on
+        // its own control, and a control holding both would otherwise get two
+        // stacked rims. Never take a child visual someone else is using.
+        if (g_keepButtonRim && !state.rim &&
+            plate.Name() == L"BackgroundElement" &&
+            !Hosting::ElementCompositionPreview::GetElementChildVisual(plate)) {
+            state.rim = ButtonRim(state.clipGeometry,
+                                  plate.ActualTheme() == ElementTheme::Dark);
+            Hosting::ElementCompositionPreview::SetElementChildVisual(
+                plate, state.rim);
         }
         double scaleY = state.stretch ? state.stretch.ScaleY() : 1;
         float radius = static_cast<float>(std::min(
