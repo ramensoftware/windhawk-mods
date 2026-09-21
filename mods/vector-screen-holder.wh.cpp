@@ -377,8 +377,7 @@ published at
     The numbered choices come from the \\.\DISPLAYn device names, which
     usually match Windows Settings but can disagree once displays have been
     re-arranged. Match on resolution instead: the mod log lists every display
-    with its number, resolution and position each time it loads. Numbering
-    stops at Display 8; past that, use All displays.
+    with its number, resolution and position each time it loads.
   $options:
   - primary: Primary display
   - all: All displays
