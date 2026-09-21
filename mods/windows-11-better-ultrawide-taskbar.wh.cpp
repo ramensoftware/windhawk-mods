@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.81
+// @version         2.82
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -2529,18 +2529,30 @@ void AddButtonLenses(Root& root, LiquidRenderer::LensConstants& lens,
                                              L"BackgroundElement";
                                   });
         if (plate == plates.end()) continue;
-        auto point = plate->TransformToVisual(root.dock.background)
-                         .TransformPoint({0, 0});
-        double width = plate->ActualWidth();
-        double height = plate->ActualHeight();
-        if (!std::isfinite(point.X) || !std::isfinite(point.Y) ||
+        // The plate spans the whole taskbar row; what is visible is the region
+        // PrepareStatePlate clipped it to, which is already computed and already
+        // accounts for the button padding. Transforming that rect carries any
+        // stretch with it, since TransformToVisual includes the RenderTransform.
+        auto owned = std::find_if(
+            root.statePlates.begin(), root.statePlates.end(),
+            [&](auto const& candidate) { return candidate.element == *plate; });
+        if (owned == root.statePlates.end() || !owned->clipGeometry) continue;
+        auto offset = owned->clipGeometry.Offset();
+        auto extent = owned->clipGeometry.Size();
+        auto transform = plate->TransformToVisual(root.dock.background);
+        auto topLeft = transform.TransformPoint({offset.x, offset.y});
+        auto bottomRight = transform.TransformPoint(
+            {offset.x + extent.x, offset.y + extent.y});
+        double width = bottomRight.X - topLeft.X;
+        double height = bottomRight.Y - topLeft.Y;
+        if (!std::isfinite(topLeft.X) || !std::isfinite(topLeft.Y) ||
             width <= 2 || height <= 2)
             continue;
         auto index = lens.lensCount++;
         lens.lensRects[index][0] = static_cast<float>(
-            (point.X + width / 2) * scale);
+            (topLeft.X + width / 2) * scale);
         lens.lensRects[index][1] = static_cast<float>(
-            (point.Y + height / 2) * scale);
+            (topLeft.Y + height / 2) * scale);
         lens.lensRects[index][2] = static_cast<float>(width * scale / 2);
         lens.lensRects[index][3] = static_cast<float>(height * scale / 2);
 
