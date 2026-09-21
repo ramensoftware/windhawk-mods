@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.71
+// @version         2.72
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -242,6 +242,7 @@ bool g_explorer{};
 bool g_preparingLiquid{};  // Owner thread only.
 bool g_liquidPreparePending{};  // Owner thread only.
 bool g_itemStateRefreshPending{};  // Owner thread only.
+bool g_liquidTimerArmed{};  // Owner thread only.
 UINT g_discoverMessage{};
 enum class DockTheme { Native, Glass, Frosted, Liquid };
 DockTheme g_theme{};
@@ -1424,8 +1425,9 @@ float4 ps(VertexOutput input) : SV_Target {
         }
         std::vector<std::pair<HWND, RECT>> result;
         bool belowTaskbar = false;
-        for (HWND window = GetTopWindow(nullptr); window;
-             window = GetWindow(window, GW_HWNDNEXT)) {
+        HWND window = GetTopWindow(nullptr);
+        for (int scanned = 0; window && scanned < 4096;
+             window = GetWindow(window, GW_HWNDNEXT), ++scanned) {
             if (window == taskbar) {
                 belowTaskbar = true;
                 continue;
@@ -2167,6 +2169,10 @@ void RestoreStatePlates(Root& root) {
 }
 
 void RefreshAttentionStates(Root& root) {
+    // AddAttentionLenses is the only reader, and PrepareLiquid returns before it
+    // on every other theme. HasAttentionState walks four levels of visual tree and
+    // every visual state group per source, on every coalesced state change.
+    if (g_theme != DockTheme::Liquid) return;
     for (auto& source : root.sources) {
         if (auto element = source.element.get())
             source.requestingAttention = HasAttentionState(element);
@@ -2391,10 +2397,19 @@ DWORD LiquidRetryDelay(unsigned failures) {
     return 1000u << std::min(failures, 5u);
 }
 
+// SetTimer on a live id restarts the elapsed time, so re-arming from every layout
+// pass starved the poll that drives UpdateSources, the failure check and the
+// deferred present. Arm once and leave it running.
+void ArmLiquidTimer() {
+    if (g_liquidTimerArmed || !g_dispatch) return;
+    if (SetTimer(g_dispatch, kLiquidTimerId, 250, nullptr))
+        g_liquidTimerArmed = true;
+}
+
 void ScheduleLiquidRetry(OwnedDock& dock, HRESULT error) {
     DWORD delay = LiquidRetryDelay(dock.liquidFailures++);
     dock.liquidRetryAt = GetTickCount64() + delay;
-    if (g_dispatch) SetTimer(g_dispatch, kLiquidTimerId, 250, nullptr);
+    ArmLiquidTimer();
     Wh_Log(L"[UWLIQUID] transparent fallback hr=%08X; retry in %lu ms",
            error, delay);
 }
@@ -2518,7 +2533,7 @@ void PrepareLiquid(Root& root, Measurements const& m) {
         if (created) dock.liquid->UpdateSources();
         dock.liquidRetryAt = 0;
         dock.liquidFailures = 0;
-        if (g_dispatch) SetTimer(g_dispatch, kLiquidTimerId, 250, nullptr);
+        ArmLiquidTimer();
     } catch (...) {
         HRESULT error = winrt::to_hresult().value;
         StopLiquid(dock);
@@ -2661,7 +2676,8 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
             root.sources.push_back({identity, winrt::make_weak(child), visual, Root::Source::Life::Active});
             acquired = true;
             source = root.sources.end() - 1;
-            source->requestingAttention = HasAttentionState(child);
+            source->requestingAttention =
+                g_theme == DockTheme::Liquid && HasAttentionState(child);
         }
         if (IncludeSource(eligible, source->life)) selected.push_back(identity);
         if (eligible && source->life == Root::Source::Life::Active &&
@@ -3016,13 +3032,17 @@ LRESULT CALLBACK DispatchProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
             }
         }
         for (auto const& frame : retries) OnLayout(frame);
-        if (!active) KillTimer(window, kLiquidTimerId);
+        if (!active) {
+            KillTimer(window, kLiquidTimerId);
+            g_liquidTimerArmed = false;
+        }
         return 0;
     }
     if (message == kRestoreMessage) {
         g_liquidPreparePending = false;
         g_itemStateRefreshPending = false;
         KillTimer(window, kLiquidTimerId);
+        g_liquidTimerArmed = false;
         if (g_panelLocationHook) {
             UnhookWinEvent(g_panelLocationHook);
             g_panelLocationHook = nullptr;
