@@ -3122,12 +3122,7 @@ using Explorer_SetForegroundWindow_t = BOOL(WINAPI*)(HWND);
 static Explorer_SetForegroundWindow_t pOriginalExplorerSetForegroundWindow = nullptr;
 
 static bool IsProcessNamed(DWORD pid, const wchar_t* name) {
-    if (!pid || pid == GetCurrentProcessId()) return false;
-    static DWORD s_lastPid = 0;
-    static bool s_lastMatch = false;
-    if (pid == s_lastPid) {
-        return s_lastMatch;
-    }
+    if (!pid || pid == GetCurrentProcessId() || !name) return false;
     HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!hProcess) return false;
     wchar_t path[MAX_PATH] = {};
@@ -3139,8 +3134,6 @@ static bool IsProcessNamed(DWORD pid, const wchar_t* name) {
         match = (_wcsicmp(exeName, name) == 0);
     }
     CloseHandle(hProcess);
-    s_lastPid = pid;
-    s_lastMatch = match;
     return match;
 }
 
@@ -3866,6 +3859,19 @@ void SyncOverlayBackground();
 
 wuxc::Border FindMenuAcrylicBorder() {
     try {
+        static winrt::weak_ref<wuxc::Border> s_cachedBorder;
+        static DWORD s_lastSearchTick = 0;
+
+        if (auto b = s_cachedBorder.get()) {
+            return b;
+        }
+
+        DWORD now = GetTickCount();
+        if (s_lastSearchTick != 0 && (now - s_lastSearchTick < 5000)) {
+            return nullptr;
+        }
+        s_lastSearchTick = now;
+
         wux::DependencyObject start = g_resultsHost ? g_resultsHost : g_stockButton;
         if (!start) return nullptr;
 
@@ -3878,8 +3884,9 @@ wuxc::Border FindMenuAcrylicBorder() {
             node = p;
         }
 
-        if (auto found = FindDescendantByName(root, L"AcrylicBorder", 10)) {
+        if (auto found = FindDescendantByName(root, L"AcrylicBorder", 4)) {
             if (auto b = found.try_as<wuxc::Border>()) {
+                s_cachedBorder = winrt::make_weak(b);
                 return b;
             }
         }
@@ -4271,6 +4278,14 @@ void TriggerMenuOpenFocus() {
             g_openFocus.Stop();
             g_openFocus = nullptr;
         }
+        if (g_ourBox) {
+            try {
+                auto now = wux::Input::FocusManager::GetFocusedElement();
+                if (now && now == g_ourBox) {
+                    return;
+                }
+            } catch (...) {}
+        }
         auto t = wux::DispatcherTimer();
         t.Interval(std::chrono::milliseconds(50));
         auto ticks = std::make_shared<int>(0);
@@ -4279,8 +4294,17 @@ void TriggerMenuOpenFocus() {
                 t.Stop();
                 return;
             }
+            if (g_ourBox) {
+                try {
+                    auto now = wux::Input::FocusManager::GetFocusedElement();
+                    if (now && now == g_ourBox) {
+                        t.Stop();
+                        return;
+                    }
+                } catch (...) {}
+            }
             FocusOurBoxNow();
-            if (++(*ticks) >= 4) {
+            if (++(*ticks) >= 2) {
                 t.Stop();
             }
         });
@@ -4535,7 +4559,6 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                 g_resultsHost.Opacity(0.0);
                 g_resultsHost.IsHitTestVisible(false);
                 if (g_resultsTranslate) g_resultsTranslate.Y(-8.0);
-                SyncOverlayBackground();
             }
             TriggerMenuOpenFocus();
         } else {
@@ -4564,23 +4587,6 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
             if (g_refocus) {
                 g_refocus.Stop();
                 g_refocus = nullptr;
-            }
-        }
-    } else if (uMsg == WM_WINDOWPOSCHANGED) {
-        WINDOWPOS* wp = reinterpret_cast<WINDOWPOS*>(lParam);
-        if (wp && !(wp->flags & SWP_HIDEWINDOW)) {
-            if (!IsOurWindowCloaked()) {
-                HWND fg = GetForegroundWindow();
-                if (fg != hWnd) {
-                    DWORD fgPid = 0;
-                    if (fg) GetWindowThreadProcessId(fg, &fgPid);
-                    if (fgPid != GetCurrentProcessId()) {
-                        Wh_Log(L"subclass: WM_WINDOWPOSCHANGED uncloaked, fg=%p (ours=%p) -> claiming foreground", fg, hWnd);
-                        g_suppressRefocus.store(false);
-                        TakeForeground(true);
-                        TriggerMenuOpenFocus();
-                    }
-                }
             }
         }
     } else if (uMsg == WM_SETFOCUS) {
@@ -7145,7 +7151,6 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
                                     g_resultsHost.Opacity(0.0);
                                     g_resultsHost.IsHitTestVisible(false);
                                     if (g_resultsTranslate) g_resultsTranslate.Y(-8.0);
-                                    SyncOverlayBackground();
                                 }
                                 TriggerMenuOpenFocus();
                             } else {
@@ -7418,11 +7423,9 @@ void Wh_ModAfterInit() {
                             } catch (...) {}
                         }
                     } else if (fg != ours && fgPid != GetCurrentProcessId()) {
-                        bool withinGrace = (now - openTick < 600);
                         bool isSearchOrNull = (fg == nullptr || IsProcessNamed(fgPid, L"SearchHost.exe"));
-                        if (withinGrace || isSearchOrNull) {
-                            Wh_Log(L"watchdog: reclaiming foreground from %ls (fg=%p pid=%lu)",
-                                isSearchOrNull ? L"SearchHost/NULL" : L"Other", fg, fgPid);
+                        if (isSearchOrNull) {
+                            Wh_Log(L"watchdog: reclaiming foreground from SearchHost/NULL (fg=%p pid=%lu)", fg, fgPid);
                             g_suppressRefocus.store(false);
                             TakeForeground(true);
                             if (g_resultsHost) {
@@ -7439,7 +7442,7 @@ void Wh_ModAfterInit() {
                 }
                 wasCloaked = isCloaked;
             }
-            Sleep(25);
+            Sleep(50);
         }
     });
 }
