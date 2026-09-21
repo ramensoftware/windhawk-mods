@@ -2,7 +2,7 @@
 // @id              mutealert
 // @name            MuteAlert - Microphone Activity Taskbar Widget
 // @description     Shows live microphone activity, call mute state, volume controls, and headset mute synchronization in the Windows 11 taskbar.
-// @version         0.9.12
+// @version         0.9.13
 // @author          Nikolay
 // @github          https://github.com/Nikolay1243
 // @homepage        https://github.com/MuteAlert/windhawk
@@ -35,7 +35,8 @@ Adds a microphone button to the Windows 11 system tray area.
 * Scroll over the button to change the input volume.
 * Optionally lock the microphone at a chosen volume. Scrolling updates the
   locked target when this is enabled.
-* Left-click the button to mute or unmute the microphone.
+* Left-click the button to mute or unmute the microphone. An authoritative
+  vendor headset state can override this in full synchronization mode.
 * A secondary Slack, Teams, Zoom, or Google Meet logo shows the active call microphone
   state and focuses the call window when left-clicked.
 * Headset mute synchronization supports Windows hardware mute reporting,
@@ -49,6 +50,14 @@ Adds a microphone button to the Windows 11 system tray area.
 
 The widget follows the default Windows capture endpoint. Changing the default
 input device in Windows automatically moves the widget to the new device.
+
+> **Full headset synchronization:** When a vendor adapter can observe a
+> latched physical mute switch, that switch is the source of truth for the
+> configured Windows input role. While the switch reports unmuted, a mute made
+> with the widget, Windows, a keyboard shortcut, or another application is
+> released on the next headset status poll. This also applies when the default
+> input is a separate desk or XLR microphone. Use mute-only or status-only mode
+> if Windows privacy mutes must remain independent of the headset switch.
 
 Call-app monitoring and call synchronization are disabled by default. Enable
 only the Slack, Teams, Zoom, or Google Meet features you use. When enabled,
