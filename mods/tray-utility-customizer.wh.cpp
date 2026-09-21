@@ -61,11 +61,11 @@ positions each icon individually, at its native size by default.
 ## Upgrading from 1.x
 
 Version 2.0 groups the settings under `Placement`, `Content`, `Layout`, `Size`,
-`Adjust`, and `Behavior`. It keeps customized 1.x position, layout, size,
-group-offset, minimum-height, and detection values as a compatibility
-fallback while the matching 2.0 setting remains at its default. As soon as you
-customize the 2.0 counterpart, that value wins. Turn off
-`Behavior.Use1xFallback` if you deliberately want only the 2.0 defaults.
+`Adjust`, and `Behavior`. Windhawk cannot carry a value across a renamed
+setting, so **after updating, the mod starts from the 2.0 defaults until you
+re-apply your settings once.** Before updating, copy your settings from the
+mod's Settings page in **Textual mode**; afterwards, re-enter them in their new
+groups.
 
 Two things are worth knowing before you retype your layout:
 
@@ -76,11 +76,6 @@ Two things are worth knowing before you retype your layout:
   it did before.
 - **The twelve per-icon nudge settings are gone.** A nudge now rides in the
   arrangement itself: `emoji[+2,-1]`. One string, nothing to keep in sync.
-
-An old column-primary expression is transposed automatically as it is read, so
-its physical layout remains the same under the fixed 2.0 grammar. Existing
-per-icon nudges remain active through the fallback; re-enter them as
-`name[dx,dy]` in the one new arrangement field before turning the fallback off.
 
 ## Arrangement
 
@@ -184,7 +179,6 @@ distinct identity.
 | `Adjust.OffsetX` / `OffsetY` | `0` | Moves the group visually; reserves nothing |
 | `Behavior.MinimumTrayHeight` | `44` | Below this tray height the mod leaves everything native |
 | `Behavior.Detection` | `auto` | Guarded detection, or Force MainStack |
-| `Behavior.Use1xFallback` | on | Keep customized 1.x values until matching 2.0 settings are changed |
 
 ## Taskbar position
 
@@ -214,8 +208,8 @@ Windows 11 only puts the taskbar at the bottom, but two mods move it:
 ### 2.0
 
 - Adopted the grouped `Placement` / `Content` / `Layout` / `Size` / `Adjust` /
-  `Behavior` settings contract, while retaining customized 1.x values as an
-  opt-out compatibility fallback during the upgrade.
+  `Behavior` settings contract. 1.x settings are not read; re-apply them once
+  after updating (see "Upgrading from 1.x").
 - One `Layout.Arrangement` field replaces the layout expression, the primary
   axis, the group alignment, and all twelve per-icon nudge settings. `|` is
   always horizontal and `,` always vertical; nudges ride in the expression.
@@ -373,12 +367,6 @@ Windows 11 only puts the taskbar at the bottom, but two mods move it:
     $options:
     - "auto": "Automatic"
     - "forceMainStack": "Force MainStack (experimental)"
-  - Use1xFallback: true
-    $name: Keep customized 1.x settings
-    $description: >-
-      On upgrade, use customized 1.x position, layout, size, offset and
-      detection values until their 2.0 counterparts are changed. Turn this
-      off to use only the 2.0 defaults and settings.
   $name: Behavior
 */
 // ==/WindhawkModSettings==
@@ -424,7 +412,9 @@ using namespace winrt::Windows::UI::Xaml::Media;
 // code begins after them.
 
 // -- Settings values --------------------------------------------------------
-// Clamped int/bool setting reads and the $options choice table.
+// Clamped int/bool setting reads, fixed-buffer string reads, and the
+// $options choice table - so a renamed option fails loudly instead of
+// silently falling back.
 namespace tray_utility_settings {
 
 inline int Clamp(int value, int low, int high) {
@@ -450,6 +440,34 @@ struct Choice {
     wchar_t const* token;
     T value;
 };
+
+template <typename T, size_t N>
+inline T LoadChoice(PCWSTR key, Choice<T> const (&choices)[N], T fallback) {
+    auto setting = WindhawkUtils::StringSetting::make(key);
+    PCWSTR value = setting.get() ? setting.get() : L"";
+    if (!*value) return fallback;
+    for (auto const& choice : choices) {
+        if (_wcsicmp(value, choice.token) == 0) return choice.value;
+    }
+    return fallback;
+}
+
+// Copy a string setting into a fixed buffer, always NUL-terminated, using
+// `fallback` when the setting is empty. Fixed buffers rather than std::wstring
+// because a namespace-scope settings struct must not own heap - see the
+// exit-time destructor audit.
+//
+// Reading goes through WindhawkUtils::StringSetting rather than a local RAII
+// wrapper: it is the same contract, it already ships with Windhawk, and a
+// second copy of it is one more thing for a reader to check.
+template <size_t N>
+inline void LoadString(PCWSTR key, wchar_t (&buffer)[N],
+                       PCWSTR fallback = nullptr) {
+    auto setting = WindhawkUtils::StringSetting::make(key);
+    PCWSTR value = setting.get() ? setting.get() : L"";
+    if (!*value && fallback) value = fallback;
+    wcsncpy_s(buffer, N, value, _TRUNCATE);
+}
 
 }  // namespace tray_utility_settings
 
@@ -1262,6 +1280,12 @@ struct Dispatch {
     ThreadProc proc;
     void* parameter;
     bool succeeded = false;
+    // Every concurrent caller installs its own hook with this same proc, and
+    // each hook instance sees every message equal to g_dispatchMessage. With
+    // two dispatches in flight, both hooks are in the chain when either
+    // message arrives, so without this each callback would run twice. The
+    // hooks run one after another on the UI thread, so a plain flag suffices.
+    bool ran = false;
 };
 
 // The private message this mod dispatches on. Set before the hook is
@@ -1305,7 +1329,9 @@ inline bool RunFromWindowThread(HWND window, ThreadProc proc, void* parameter,
                     g_dispatchMessage.load(std::memory_order_acquire);
                 if (expected && call->message == expected) {
                     if (auto* dispatch =
-                            reinterpret_cast<Dispatch*>(call->lParam)) {
+                            reinterpret_cast<Dispatch*>(call->lParam);
+                        dispatch && !dispatch->ran) {
+                        dispatch->ran = true;
                         dispatch->succeeded =
                             Invoke(dispatch->proc, dispatch->parameter);
                     }
@@ -1602,16 +1628,24 @@ public:
             return;
         }
 
+        // PUBLISH BY EXCHANGE, AND WAIT FOR WHATEVER THIS DISPLACES. The Stop()
+        // above runs OUTSIDE the mutex and pumps sent messages while it waits,
+        // so a second Start() can slip in behind it: two callers both get past
+        // Stop(), and an unconditional store would drop the first run's last
+        // tracked reference. Its thread keeps going on its own reference with
+        // nothing able to stop it, and an unload inside that window frees the
+        // image under a thread still dereferencing `unloading`.
+        std::shared_ptr<Run> displaced;
         {
             std::lock_guard<std::mutex> guard(mutex_);
-            if (!unloading) {
-                run_ = std::move(run);
-                return;
-            }
+            if (!unloading)
+                displaced = std::exchange(run_, std::move(run));
         }
-        // Unload began while this attempt was being created, so the Stop that
-        // would have waited for it saw nothing. Wait for it here instead.
-        StopRun(run);
+        // `run` is only non-null here when unload began while this attempt was
+        // being created, so the Stop that would have waited for it saw nothing.
+        if (run) StopRun(run);
+        // A concurrent Start() installed its run after ours got past Stop().
+        if (displaced) StopRun(displaced);
     }
 
     void Stop() {
@@ -1650,10 +1684,11 @@ private:
         std::shared_ptr<Run> run = *owned;
         delete owned;
         for (int i = 0; i < run->attempts && !*run->unloading; ++i) {
-            // A settings reload can need one restore/reapply pass even while
-            // `applied` truthfully says we still own live XAML. Do not
-            // overload that ownership flag merely to wake the retry loop;
-            // request a forced first attempt instead.
+            // Opt-in, via forceFirstAttempt. A caller that clears its own
+            // "applied" flag before starting does not need it. It exists for
+            // the caller that must run one restore/reapply pass while `applied`
+            // still truthfully reports that it owns live XAML — so that flag
+            // does not have to be falsified just to wake this loop.
             if (run->applied && !(run->forceFirstAttempt && i == 0) &&
                 run->applied())
                 break;
@@ -1839,12 +1874,32 @@ inline bool ResolveSlot(Panel const& parent, Anchor anchor, int& slot) {
     return true;
 }
 
+inline bool Release(Panel const& parent, Lease& lease);
+
 inline bool AcquireAt(Panel const& parent, int slot,
                       std::wstring const& markerName, Lease& lease) {
     Kind kind = Classify(parent);
-    if (kind == Kind::Unsupported || slot < 0 || markerName.empty() ||
-        FindDirectChild(parent, markerName.c_str()))
+    if (kind == Kind::Unsupported || slot < 0 || markerName.empty())
         return false;
+
+    // A marker with this name already in the tray is either this caller's own
+    // live lease — refuse, acquiring twice would strand the first slot — or a
+    // leftover from an instance whose teardown never reached the UI thread.
+    // Refusing the leftover would block every later apply until Explorer
+    // restarts, so release it and take the slot fresh, correcting the
+    // requested slot if the released one sat before it.
+    if (auto stale = FindDirectChild(parent, markerName.c_str())) {
+        if (lease.markerName == markerName)
+            return false;
+        int staleSlot = kind == Kind::Columns
+                            ? Grid::GetColumn(stale)
+                            : IndexOfChild(parent, stale);
+        Lease leftover{markerName, staleSlot, kind};
+        if (!Release(parent, leftover))
+            return false;
+        if (staleSlot >= 0 && staleSlot < slot)
+            --slot;
+    }
 
     Grid marker;
     marker.Name(markerName);
@@ -2352,11 +2407,8 @@ struct Settings {
     int padY;
     int offsetX;
     int offsetY;
-    int legacyNudgeX[kUtilityCount];
-    int legacyNudgeY[kUtilityCount];
     int minimumTrayHeight;
     MergeMode mergeMode;
-    bool useLegacy1xFallback;
 };
 
 // Lifecycle: heap-only state destructs normally; direct XAML handles use
@@ -2409,9 +2461,10 @@ static std::atomic<bool> g_layoutApplied = false;
 // Only TrayUI::StartTaskbar makes the old XAML tree stale. A settings save
 // still owns live state and must restore it before rebuilding.
 static std::atomic<bool> g_treeStale = false;
-// A settled decision NOT to lay anything out — a vertical taskbar, or every
-// utility switched off. Distinct from "not applied yet": the retry must retire
-// on it, or the stand-down repeats once per attempt. Cleared on every apply
+// A settled decision NOT to lay anything out — a vertical taskbar, every
+// utility switched off, or a measured tray below the minimum height. Distinct
+// from "not applied yet" (tray not laid out, nothing populated): the retry
+// must retire on this, and must keep going on that. Cleared on every apply
 // and on an Explorer rebuild, so the decision is re-made rather than cached.
 static std::atomic<bool> g_stoodDown = false;
 // Grid on older taskbars, StackPanel since 26200.9457; Panel covers both.
@@ -2443,6 +2496,15 @@ struct HostWatcher {
 };
 [[clang::no_destroy]] static std::optional<std::vector<HostWatcher>>
     g_hostWatchers{std::in_place};
+// Visible-icon counts of the candidate hosts this apply did NOT manage. A host
+// that fills in later (MainStack populating after a chevron-only apply) has no
+// visibility change to watch, so the LayoutUpdated check compares these too.
+struct CandidateCount {
+    winrt::weak_ref<FrameworkElement> host;
+    int visibleIconViews = 0;
+};
+// Weak refs and ints only; weak_ref release is a plain refcount decrement.
+static std::vector<CandidateCount> g_candidateCounts;  // exit-time-safe: heap-only
 static winrt::event_token g_trayLayoutToken{};
 [[clang::no_destroy]] static DispatcherTimer g_reapplyTimer{nullptr};
 [[clang::no_destroy]] static DispatcherTimer g_startSettleTimer{nullptr};
@@ -2544,70 +2606,10 @@ static void CopyStringSetting(std::wstring const& value,
     wcsncpy_s(buffer, N, value.c_str(), _TRUNCATE);
 }
 
-template <typename T, size_t N>
-static T ChoiceFromText(std::wstring const& value,
-                        sio::Choice<T> const (&choices)[N], T fallback) {
-    for (auto const& choice : choices) {
-        if (_wcsicmp(value.c_str(), choice.token) == 0) {
-            return choice.value;
-        }
-    }
-    return fallback;
-}
-
-// A 2.0 key wins once it is changed from its declared default. Until then,
-// retain a non-empty 1.x value so updating the mod does not silently discard a
-// user's chosen position or expression. Windhawk's settings API has no
-// presence query or write API, so this is deliberately a read-only fallback.
-static std::wstring PreferCurrentOrLegacyString(PCWSTR currentKey,
-                                                PCWSTR currentDefault,
-                                                PCWSTR legacyKey,
-                                                bool& usedLegacy) {
-    std::wstring current = ReadStringSetting(currentKey);
-    if (!g_settings.useLegacy1xFallback ||
-        _wcsicmp(current.c_str(), currentDefault) != 0) {
-        return current;
-    }
-    std::wstring legacy = ReadStringSetting(legacyKey);
-    if (!legacy.empty()) {
-        usedLegacy = true;
-        return legacy;
-    }
-    return current;
-}
-
-static int PreferCurrentOrLegacyInt(PCWSTR currentKey, int currentDefault,
-                                    PCWSTR legacyKey, int low, int high,
-                                    bool& usedLegacy) {
-    int current = sio::LoadInt(currentKey, low, high);
-    int legacy = Wh_GetIntSetting(legacyKey);
-    if (!g_settings.useLegacy1xFallback || current != currentDefault ||
-        legacy == 0) {
-        return current;
-    }
-    usedLegacy = true;
-    return std::clamp(legacy, low, high);
-}
-
-// 1.x made | / , follow a selectable primary axis; 2.0 fixes them to
-// horizontal / vertical. A column-primary legacy layout has the opposite
-// spelling, except inside an offset's [x,y] pair.
-static std::wstring TransposeLegacyExpression(std::wstring expression) {
-    bool inOffset = false;
-    for (auto& character : expression) {
-        if (character == L'[') {
-            inOffset = true;
-        } else if (character == L']') {
-            inOffset = false;
-        } else if (!inOffset && character == L'|') {
-            character = L',';
-        } else if (!inOffset && character == L',') {
-            character = L'|';
-        }
-    }
-    return expression;
-}
-
+// Settings were reorganised into groups in 2.0. Windhawk cannot write a
+// setting, so any reader of the old 1.x keys would leave the settings page
+// showing one value while the mod used another; the README instead asks 1.x
+// users to re-apply their settings once.
 static void LoadSettings() {
     static constexpr sio::Choice<Position> kPositions[] = {
         {L"overflow", Position::Overflow},
@@ -2638,17 +2640,8 @@ static void LoadSettings() {
         {L"forceMainStack", MergeMode::ForceMainStack},
     };
 
-    g_settings.useLegacy1xFallback =
-        sio::LoadBool(L"Behavior.Use1xFallback");
-    std::fill(std::begin(g_settings.legacyNudgeX),
-              std::end(g_settings.legacyNudgeX), 0);
-    std::fill(std::begin(g_settings.legacyNudgeY),
-              std::end(g_settings.legacyNudgeY), 0);
-    bool usedLegacy = false;
-    auto position = PreferCurrentOrLegacyString(
-        L"Placement.Position", L"overflow", L"position", usedLegacy);
-    g_settings.position =
-        ChoiceFromText(position, kPositions, Position::Overflow);
+    g_settings.position = sio::LoadChoice(L"Placement.Position", kPositions,
+                                          Position::Overflow);
 
     static constexpr PCWSTR kContentKeys[kUtilityCount] = {
         L"Content.Overflow",        L"Content.Emoji",
@@ -2659,71 +2652,28 @@ static void LoadSettings() {
         g_settings.content[i] = sio::LoadBool(kContentKeys[i]);
     }
 
-    bool usedLegacyExpression = false;
-    auto expression = PreferCurrentOrLegacyString(
-        L"Layout.Arrangement", L"auto", L"layout", usedLegacyExpression);
-    usedLegacy = usedLegacy || usedLegacyExpression;
-    if (usedLegacyExpression &&
-        _wcsicmp(ReadStringSetting(L"primaryAxis").c_str(), L"column") == 0) {
-        expression = TransposeLegacyExpression(std::move(expression));
-    }
-    CopyStringSetting(expression, g_settings.arrangement,
-                      L"Layout.Arrangement");
-    g_settings.fillOrder = ChoiceFromText(
-        ReadStringSetting(L"Layout.FillOrder"), kFillOrders,
-        ngl::FillOrder::Rows);
-    g_settings.justify = ChoiceFromText(
-        PreferCurrentOrLegacyString(L"Layout.Justify", L"center",
-                                    L"crossAlign", usedLegacy),
-        kJustifies, ngl::Justify::Center);
-    g_settings.newItems = ChoiceFromText(
-        ReadStringSetting(L"Layout.NewItems"), kNewItems, NewItems::Append);
+    CopyStringSetting(ReadStringSetting(L"Layout.Arrangement"),
+                      g_settings.arrangement, L"Layout.Arrangement");
+    g_settings.fillOrder = sio::LoadChoice(L"Layout.FillOrder", kFillOrders,
+                                           ngl::FillOrder::Rows);
+    g_settings.justify = sio::LoadChoice(L"Layout.Justify", kJustifies,
+                                         ngl::Justify::Center);
+    g_settings.newItems =
+        sio::LoadChoice(L"Layout.NewItems", kNewItems, NewItems::Append);
 
-    g_settings.itemWidth = PreferCurrentOrLegacyInt(
-        L"Size.ItemWidth", 0, L"buttonWidth", 0, 96, usedLegacy);
-    g_settings.itemHeight = PreferCurrentOrLegacyInt(
-        L"Size.ItemHeight", 0, L"buttonHeight", 0, 96, usedLegacy);
-    g_settings.itemSpacing = PreferCurrentOrLegacyInt(
-        L"Size.ItemSpacing", 0, L"buttonSpacing", -16, 32, usedLegacy);
+    g_settings.itemWidth = sio::LoadInt(L"Size.ItemWidth", 0, 96);
+    g_settings.itemHeight = sio::LoadInt(L"Size.ItemHeight", 0, 96);
+    g_settings.itemSpacing = sio::LoadInt(L"Size.ItemSpacing", -16, 32);
 
     g_settings.padX = sio::LoadInt(L"Adjust.PadX", 0, 100);
     g_settings.padY = sio::LoadInt(L"Adjust.PadY", 0, 100);
-    g_settings.offsetX = PreferCurrentOrLegacyInt(
-        L"Adjust.OffsetX", 0, L"groupOffsetX", -100, 100, usedLegacy);
-    g_settings.offsetY = PreferCurrentOrLegacyInt(
-        L"Adjust.OffsetY", 0, L"groupOffsetY", -100, 100, usedLegacy);
+    g_settings.offsetX = sio::LoadInt(L"Adjust.OffsetX", -100, 100);
+    g_settings.offsetY = sio::LoadInt(L"Adjust.OffsetY", -100, 100);
 
-    g_settings.minimumTrayHeight = PreferCurrentOrLegacyInt(
-        L"Behavior.MinimumTrayHeight", 44, L"minimumTrayHeight", 0, 160,
-        usedLegacy);
-    g_settings.mergeMode = ChoiceFromText(
-        PreferCurrentOrLegacyString(L"Behavior.Detection", L"auto",
-                                    L"mergeMode", usedLegacy),
-        kMergeModes, MergeMode::Auto);
-    if (g_settings.useLegacy1xFallback) {
-        static constexpr PCWSTR kLegacyNudgeX[kUtilityCount] = {
-            L"overflowOffsetX", L"emojiOffsetX", L"touchKeyboardOffsetX",
-            L"penMenuOffsetX", L"virtualTouchpadOffsetX",
-            L"inputIndicatorOffsetX",
-        };
-        static constexpr PCWSTR kLegacyNudgeY[kUtilityCount] = {
-            L"overflowOffsetY", L"emojiOffsetY", L"touchKeyboardOffsetY",
-            L"penMenuOffsetY", L"virtualTouchpadOffsetY",
-            L"inputIndicatorOffsetY",
-        };
-        for (int i = 0; i < kUtilityCount; ++i) {
-            g_settings.legacyNudgeX[i] = std::clamp(
-                Wh_GetIntSetting(kLegacyNudgeX[i]), -100, 100);
-            g_settings.legacyNudgeY[i] = std::clamp(
-                Wh_GetIntSetting(kLegacyNudgeY[i]), -100, 100);
-            usedLegacy = usedLegacy || g_settings.legacyNudgeX[i] != 0 ||
-                         g_settings.legacyNudgeY[i] != 0;
-        }
-    }
-    if (usedLegacy) {
-        Wh_Log(L"[Settings] Using compatible 1.x values until their 2.0 "
-               L"counterparts are customized");
-    }
+    g_settings.minimumTrayHeight =
+        sio::LoadInt(L"Behavior.MinimumTrayHeight", 0, 160);
+    g_settings.mergeMode = sio::LoadChoice(L"Behavior.Detection", kMergeModes,
+                                           MergeMode::Auto);
 }
 
 // ── Taskbar plumbing ──────────────────────────────────────────────────────
@@ -2757,10 +2707,6 @@ static bool RunFromWindowThread(HWND window, dispatch::ThreadProc proc,
     return dispatch::RunFromWindowThread(
         window, proc, parameter,
         L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-}
-
-static HWND FindCurrentProcessTaskbarWnd() {
-    return taskbar_window::FindCurrentProcessTaskbarWnd();
 }
 
 static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
@@ -2798,23 +2744,6 @@ static bool TreeContainsStableIdentity(
         [identity](FrameworkElement const& child, int) {
             return ElementMatchesStableIdentity(child, identity);
         });
-}
-
-static FrameworkElement FindDirectTrayHost(
-    Panel const& trayGrid,
-    FrameworkElement element) {
-    DependencyObject current = element;
-    while (current) {
-        auto parent = VisualTreeHelper::GetParent(current);
-        if (!parent) {
-            return nullptr;
-        }
-        if (parent == trayGrid) {
-            return current.try_as<FrameworkElement>();
-        }
-        current = parent;
-    }
-    return nullptr;
 }
 
 static bool IsIconView(FrameworkElement const& element) {
@@ -3257,35 +3186,34 @@ static HostRecord CaptureHost(FrameworkElement const& element,
     marker.MaxWidth(0);
     marker.MaxHeight(0);
     marker.IsHitTestVisible(false);
-    if (record.ordered) {
-        // Insert where the host stands, so the marker holds its place in the
-        // child order. Appending would park it at the tray's far end.
-        int index = lease_column::IndexOfChild(trayGrid, element);
-        trayGrid.Children().InsertAt(
-            index < 0 ? trayGrid.Children().Size()
-                      : static_cast<uint32_t>(index),
-            marker);
-    } else {
+    if (!record.ordered) {
         Grid::SetColumn(marker, record.column);
         Grid::SetColumnSpan(marker, 1);
         Grid::SetRow(marker, record.row);
         Grid::SetRowSpan(marker, record.rowSpan);
-        trayGrid.Children().Append(marker);
     }
+    // Insert where the host stands on BOTH panel kinds, so the marker holds
+    // its place in the child order. On a StackPanel that order is the layout;
+    // on a Grid it is not, but keyboard and UIA traversal still follow it, and
+    // appending would leave the host after the clock once it is restored.
+    int index = lease_column::IndexOfChild(trayGrid, element);
+    trayGrid.Children().InsertAt(
+        index < 0 ? trayGrid.Children().Size() : static_cast<uint32_t>(index),
+        marker);
     record.columnMarker = marker;
     return record;
 }
 
-// Put a host back among the tray's children. A Grid child lands anywhere and is
-// positioned by its column afterwards; a StackPanel child has to land at the
-// right index, because there the index IS the position.
+// Put a host back among the tray's children at its marker's index, so the
+// child order is exactly what it was. On a StackPanel the index IS the
+// position; on a Grid the column is written back afterwards and the index
+// keeps keyboard/UIA order intact.
 static void ReturnHostToTray(FrameworkElement const& child) {
     if (!child || !g_layoutGrid) {
         return;
     }
     for (auto const& record : *g_hostRecords) {
-        if (record.element != child || !record.ordered ||
-            !record.columnMarker) {
+        if (record.element != child || !record.columnMarker) {
             continue;
         }
         int index = lease_column::IndexOfChild(g_layoutGrid,
@@ -3424,6 +3352,7 @@ struct IconTarget {
 
 static bool ApplyLayout() {
     ClearHostWatchers();
+    g_candidateCounts.clear();
     g_stoodDown = false;
 
     // After an in-place taskbar rebuild (TrayUI::StartTaskbar) the old XAML
@@ -3516,14 +3445,22 @@ static bool ApplyLayout() {
     auto mainStack =
         lease_column::FindDirectChild(trayGrid, L"MainStack");
 
+    // SETTLED vs NOT-YET. g_stoodDown retires the bounded retry, so it is set
+    // only for decisions another attempt cannot change. The tray frame is in
+    // the tree before its first arrange pass, so a zero height is "not laid
+    // out yet", never "too short" — returning false keeps the retry alive.
+    double trayHeight = trayGrid.ActualHeight();
+    if (trayHeight <= 0.0) {
+        Wh_Log(L"[Apply] Tray not laid out yet");
+        return false;
+    }
     if (g_settings.minimumTrayHeight > 0 &&
-        trayGrid.ActualHeight() <
-            static_cast<double>(g_settings.minimumTrayHeight)) {
+        trayHeight < static_cast<double>(g_settings.minimumTrayHeight)) {
         Wh_Log(
             L"[Apply] Tray height %.1f is below minimum %d",
-            trayGrid.ActualHeight(),
+            trayHeight,
             g_settings.minimumTrayHeight);
-        g_stoodDown = true;
+        g_stoodDown = true;  // settled: a measured tray that is too short
         return true;
     }
 
@@ -3547,9 +3484,10 @@ static bool ApplyLayout() {
     auto items = ResolveLayoutItems(trayGrid, overflowHost, mainStack,
                                     enabledTokens);
     if (items.empty()) {
-        Wh_Log(L"[Apply] No layout items found");
-        g_stoodDown = true;
-        return true;
+        // MainStack fills in from the tray view model after the frame exists,
+        // and with no hidden icons the chevron is collapsed too. Not settled.
+        Wh_Log(L"[Apply] No layout items found yet");
+        return false;
     }
 
     std::vector<std::wstring> presentTokens;
@@ -3668,9 +3606,9 @@ static bool ApplyLayout() {
     }
 
     if (placements.empty() || total.Empty()) {
-        Wh_Log(L"[Apply] Layout produced no placements");
-        g_stoodDown = true;
-        return true;
+        // Every present item resolved to an empty size — still measuring.
+        Wh_Log(L"[Apply] Layout produced no placements yet");
+        return false;
     }
 
     if (arrangement.wasAuto) {
@@ -3693,21 +3631,7 @@ static bool ApplyLayout() {
             if (item.token != placementToken) {
                 continue;
             }
-            int utilityIndex = -1;
-            for (int i = 0; i < kUtilityCount; ++i) {
-                if (item.token == kUtilityTokens[i]) {
-                    utilityIndex = i;
-                    break;
-                }
-            }
-            double legacyOffsetX = utilityIndex >= 0
-                                       ? g_settings.legacyNudgeX[utilityIndex]
-                                       : 0.0;
-            double legacyOffsetY = utilityIndex >= 0
-                                       ? g_settings.legacyNudgeY[utilityIndex]
-                                       : 0.0;
-            targets.push_back({item.element, placement.x + legacyOffsetX,
-                               placement.y + legacyOffsetY,
+            targets.push_back({item.element, placement.x, placement.y,
                                placement.size.width, placement.size.height});
             bool known = false;
             for (auto const& host : managedHosts) {
@@ -4017,19 +3941,41 @@ static bool ApplyLayout() {
         }
     }
 
+    // Remember the unmanaged candidates too (see g_candidateCounts).
+    for (auto const& child : trayGrid.Children()) {
+        auto element = child.try_as<FrameworkElement>();
+        if (!element || !IsUtilityCandidateHost(element)) {
+            continue;
+        }
+        bool managed = false;
+        for (auto const& host : managedHosts) {
+            if (host == element) {
+                managed = true;
+                break;
+            }
+        }
+        if (!managed) {
+            g_candidateCounts.push_back(
+                {winrt::make_weak(element), CountVisibleIconViews(element)});
+        }
+    }
+
     // Visibility watchers miss icons appearing or vanishing inside a host,
     // so verify on tray layout passes that every managed host is intact
-    // and its visible icon count is unchanged; any drift re-runs layout.
+    // and its visible icon count is unchanged, and that no unmanaged
+    // candidate has gained or lost icons; any drift re-runs layout.
     g_trayLayoutToken = trayGrid.LayoutUpdated(
         [](auto const&, auto const&) {
             if (g_unloading || !g_layoutApplied) {
                 return;
             }
             // Throttle: layout passes come in bursts (animations, clock
-            // ticks); one intactness check per 250 ms is plenty.
+            // ticks), and each check walks every candidate host's subtree.
+            // Utility icons change on a human timescale, so twice a second
+            // keeps this off the hot path without making a change feel late.
             static ULONGLONG lastCheckTick = 0;
             ULONGLONG nowTick = GetTickCount64();
-            if (nowTick - lastCheckTick < 250) {
+            if (nowTick - lastCheckTick < 500) {
                 return;
             }
             lastCheckTick = nowTick;
@@ -4054,6 +4000,17 @@ static bool ApplyLayout() {
                 if (changed) {
                     ScheduleReapply();
                     return;
+                }
+            }
+            for (auto const& candidate : g_candidateCounts) {
+                try {
+                    auto host = candidate.host.get();
+                    if (host && CountVisibleIconViews(host) !=
+                                    candidate.visibleIconViews) {
+                        ScheduleReapply();
+                        return;
+                    }
+                } catch (...) {
                 }
             }
         });
@@ -4135,10 +4092,18 @@ static void ApplyLayoutOnWindowThread() {
 // rebuild trigger all live in tray_utility_taskbar. Three things kick an apply —
 // this retry, an Explorer taskbar rebuild, and the visibility watchers — and
 // all three converge on the one idempotent ApplyLayout.
-// no_destroy: the loop owns a worker thread and its handles, and a destructor
-// at DLL detach would wait on that thread under the loader lock. Wh_ModUninit
-// stops and releases it explicitly.
+// no_destroy is not about waiting — RetryLoop's destructor waits for nothing;
+// it would only release the last Run and close two handles. It is kept so the
+// lab's exit-time-destructor audit stays exact (every namespace-scope object
+// with a non-trivial destructor is either marked or proven heap-only), and
+// Wh_ModUninit stops the loop explicitly.
 [[clang::no_destroy]] static retry_loop::RetryLoop g_retry;
+
+// Attempts x 1.5 s. Transient "not ready yet" states return false and keep
+// the loop alive, so the budget has to cover a tray that populates slowly at
+// sign-in, not just one that is briefly missing.
+static constexpr int kRetryAttempts = 20;
+static constexpr DWORD kRetryIntervalMs = 1500;
 
 // "Applied" must mean the work is DONE, not that the tray was found: the
 // retry stops on the first true, so a premature one retires the retry while
@@ -4161,7 +4126,8 @@ static void OnTaskbarRebuilt() {
     g_taskbarWnd.store(nullptr);
     g_treeStale = true;
     g_stoodDown = false;
-    g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading, 6, 1500, true);
+    g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading, kRetryAttempts,
+                  kRetryIntervalMs, true);
 }
 
 BOOL Wh_ModInit() {
@@ -4178,16 +4144,21 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    // One attempt covers loading into an already-running taskbar. Startup and
-    // rebuilds use the bounded TrayUI::StartTaskbar retry path.
-    ApplyLayoutOnWindowThread();
+    // The same bounded retry as a rebuild, not a single attempt: Windhawk can
+    // attach to an Explorer whose taskbar window exists while its tray XAML
+    // is still being built, and one failed attempt would never come back.
+    g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading, kRetryAttempts,
+                  kRetryIntervalMs, false);
 }
 
 void Wh_ModSettingsChanged() {
     g_retry.Stop();
     HWND hWnd = taskbar_window::ResolveTaskbarWnd(g_taskbarWnd.load());
     if (!hWnd) {
-        Wh_Log(L"[Settings] No taskbar UI thread; keeping the current layout");
+        // No taskbar thread means no layout pass can be reading g_settings,
+        // so load here; the next TrayUI::StartTaskbar applies the new values.
+        LoadSettings();
+        Wh_Log(L"[Settings] No taskbar UI thread; loaded for the next rebuild");
         return;
     }
     if (!RunFromWindowThread(
@@ -4202,8 +4173,8 @@ void Wh_ModSettingsChanged() {
                 // layout; the forced first pass restores it before applying
                 // the new settings.
                 g_stoodDown = false;
-                g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading, 6,
-                              1500, true);
+                g_retry.Start(RetryAttempt, LayoutIsApplied, g_unloading,
+                              kRetryAttempts, kRetryIntervalMs, true);
             },
             nullptr)) {
         Wh_Log(L"[Settings] Could not dispatch the reapply to the taskbar UI thread");
