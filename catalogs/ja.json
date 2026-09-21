@@ -6793,12 +6793,12 @@
         ],
         "ratingUsers": 32,
         "reviews": 0,
-        "updated": 1778623563000,
+        "updated": 1790007028000,
         "users": 856
       },
       "metadata": {
         "author": "Armaninyow",
-        "compilerOptions": "-lole32 -lshlwapi -lpropsys -lshell32 -lcomctl32",
+        "compilerOptions": "-lole32 -loleaut32 -lpropsys -lshell32 -lcomctl32 -lgdi32",
         "description": "Automatically fits all column widths to their content when refreshing in Details view. Has no effect on other view modes.",
         "github": "https://github.com/armaninyow",
         "include": [
@@ -6806,7 +6806,7 @@
         ],
         "license": "MIT",
         "name": "File Explorer Details Auto-Fit Columns",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "file-explorer-remove-suffixes": {

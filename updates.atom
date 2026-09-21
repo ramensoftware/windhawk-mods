@@ -2,12 +2,30 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-21T15:43:18.000Z</updated>
+    <updated>2026-09-21T16:10:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Explorer Details Auto-Fit Columns 1.1.0]]></title>
+        <id>https://windhawk.net/mods/file-explorer-details-autofit-columns#6858248034c1474292139aac070af354eda2e69a</id>
+        <link href="https://windhawk.net/mods/file-explorer-details-autofit-columns"/>
+        <updated>2026-09-21T16:10:28.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed "Right-click context menu → Refresh" and "The refresh button in the toolbar" not working</li>
+<li>Added Fit Mode settings</li>
+<li>Visible Rows Only (current one)</li>
+<li>Scan Entire Folder</li>
+<li>Elastic (macOS-like)</li>
+<li>Added Max Items to Scan setting</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Separate System Tray Icons 1.0.0]]></title>
         <id>https://windhawk.net/mods/separate-system-tray-icons#953bdd63123ce7146fb52a71e53e8261369f7a92</id>
@@ -186,27 +204,11 @@ Set a maximum height for the Agenda in the mod settings to stop it from clipping
         <id>https://windhawk.net/mods/better-volume-mixer#bba90ef6f0dc76ff9dc38614b83adafbc84ca4df</id>
         <link href="https://windhawk.net/mods/better-volume-mixer"/>
         <updated>2026-09-21T15:42:47.000Z</updated>
-        <content type="html"><![CDATA[<!-- ⚠️ Please keep the template below intact and fill in the relevant sections. Any additional content can be placed above the template. -->
-<h2 id="changelog">Changelog</h2>
-<p>If this pull request updates an existing mod, describe the changes below:</p>
-<ul>
+        <content type="html"><![CDATA[<ul>
 <li>Added a dropdown selection for audio output devices</li>
 <li>Added compact mode</li>
 <li>Improved user interface visuals</li>
-</ul>
-<h2 id="modauthorship">Mod authorship</h2>
-<p>If this pull request introduces a new mod, please complete the section below.</p>
-<p>This mod was created by:</p>
-<ul>
-<li>- [ ] The submitter, without AI assistance</li>
-<li>- [x] The submitter, with AI assistance</li>
-<li>- [ ] Claude</li>
-<li>- [x] ChatGPT</li>
-<li>- [ ] Gemini</li>
-<li>- [ ] Another AI (please specify): </li>
-<li>- [ ] Other (please specify): </li>
-</ul>
-<p>Please select the options that best apply. Your selection does not affect the acceptance criteria, but it helps reviewers understand the context of the code and provide relevant feedback.</p>]]></content>
+</ul>]]></content>
         <author>
             <name>0Allu</name>
             <uri>https://github.com/0Allu</uri>
@@ -1045,21 +1047,6 @@ preventing shutdown" screen afterwards in rare cases.</p>
         <author>
             <name>USER-TOURNE</name>
             <uri>https://github.com/USER-TOURNE</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Vista/7 Legacy Applet Restorer 3.2.0]]></title>
-        <id>https://windhawk.net/mods/win7-legacy-applet-restorer#1f9d3157e8c45e84587aae688b4e6a2d8eeae6ac</id>
-        <link href="https://windhawk.net/mods/win7-legacy-applet-restorer"/>
-        <updated>2026-09-20T17:16:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Restored the "Offline Files" applet (cscui.dll)</li>
-<li>Restored the corresponding task links</li>
-<li>Updated the README</li>
-</ul>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
         </author>
     </entry>
 </feed>
