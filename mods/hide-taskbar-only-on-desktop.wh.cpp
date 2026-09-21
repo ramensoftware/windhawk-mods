@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars when their displays are desktop-only or in detected fullscreen
-// @version         7.5.0
+// @version         7.6.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -33,7 +33,6 @@ Hides selected bottom-docked taskbars when their display has no relevant applica
 - Keyboard taskbar interaction such as Win+T and Win+B
 - Shell UI, taskbar popups, and desktop context-menu activity handled separately
 - Per-display borderless fullscreen tracking
-- Intentional support for up to 16 logical display entries
 - Recovery after taskbar recreation or tool-process restart
 - Optional stable monitor interface-name mapping
 
@@ -90,13 +89,12 @@ The mod intentionally supports up to 16 fixed logical display slots. Pinned moni
 
 The two mods should not be used on the same taskbar because both modify the taskbar window's transparency/style state.
 
-This mod is intentionally maintained as a separate mod because its desktop-only per-display predicate and display-selection model are its primary behavior, rather than optional details around an idle/fade state. Combining those rules into a fade-oriented state machine would change that mod's primary visibility model rather than simply adding a presentation option.
 
 ## Implementation
 
 The state logic runs in a dedicated Windhawk tool process. Taskbars are hidden with layered-window transparency plus click-through behavior instead of Windows' native taskbar auto-hide, so the normal desktop work area is intentionally unchanged.
 
-Fullscreen ownership is tracked per display for borderless monitor-sized windows. Foreground, move/size, and window-location events are used to update fullscreen transitions promptly, while short validation timers and a 5-second safety refresh cover transitions that do not produce a single reliable event. Taskbar focus is treated as a keyboard reveal only when it is not caused by mouse interaction, so clicking the taskbar does not get misclassified as keyboard navigation.
+Fullscreen ownership is tracked per display for borderless monitor-sized windows. Foreground, move/size, and per-owner window-location events update fullscreen transitions promptly, including geometry changes while the owner is in the background. Short validation timers and a 5-second safety refresh cover transitions that do not produce a single reliable event. Taskbar focus is treated as a keyboard reveal only when it is not caused by mouse interaction, so clicking the taskbar does not get misclassified as keyboard navigation.
 
 ## Limitations
 
@@ -308,7 +306,7 @@ bool GetWindowUlongPtrProp(HWND hwnd, const wchar_t* name, ULONG_PTR* value) {
 }
 
 bool SetWindowUlongPtrProp(HWND hwnd, const wchar_t* name, ULONG_PTR value) {
-    return SetPropW( hwnd, name, reinterpret_cast<HANDLE>(value + 1) ) != 0;
+    return SetPropW(hwnd, name, reinterpret_cast<HANDLE>(value + 1)) != 0;
 }
 
 void RemoveTaskbarOwnershipProperties(HWND hwnd) {
@@ -320,20 +318,20 @@ void RemoveTaskbarOwnershipProperties(HWND hwnd) {
     RemovePropW(hwnd, kTaskbarOriginalLayeredFlagsProp);
     RemovePropW(hwnd, kTaskbarOriginalLayeredAttributesValidProp);
 }
-bool DropStaleTaskbarOwnership(
-    HWND hwnd, LONG_PTR currentExStyle, bool stripAllModBits = false) {
+bool DropStaleTaskbarOwnership(HWND hwnd, LONG_PTR currentExStyle) {
     if (!hwnd) return false;
 
     ULONG_PTR originalExStyleValue = 0;
     const bool haveOriginalExStyle = GetWindowUlongPtrProp(
         hwnd, kTaskbarOriginalExStyleProp, &originalExStyleValue);
 
-    const LONG_PTR originalExStyle =
-        static_cast<LONG_PTR>(originalExStyleValue);
+    const LONG_PTR originalExStyle = static_cast<LONG_PTR>(originalExStyleValue);
+    // With a recorded original, strip only what the mod added; without one,
+    // there is nothing to compare against, so strip every bit it could have set.
     const LONG_PTR bitsToStrip =
-        stripAllModBits || !haveOriginalExStyle
-            ? kModTaskbarExStyleBits
-            : kModTaskbarExStyleBits & ~originalExStyle;
+        haveOriginalExStyle
+            ? kModTaskbarExStyleBits & ~originalExStyle
+            : kModTaskbarExStyleBits;
     const LONG_PTR restoredExStyle = currentExStyle & ~bitsToStrip;
 
     if (restoredExStyle != currentExStyle) {
@@ -344,10 +342,7 @@ bool DropStaleTaskbarOwnership(
             return false;
         }
 
-        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-                         SWP_NOACTIVATE | SWP_FRAMECHANGED |
-                         SWP_ASYNCWINDOWPOS);
+        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, kTaskbarFrameChangeFlags);
     }
 
     RemoveTaskbarOwnershipProperties(hwnd);
@@ -364,7 +359,7 @@ bool ForceRestoreTaskbar(HWND hwnd) {
     LONG_PTR exStyle = 0;
     if (!GetWindowExStyle(hwnd, &exStyle)) return false;
 
-    return DropStaleTaskbarOwnership(hwnd, exStyle, true);
+    return DropStaleTaskbarOwnership(hwnd, exStyle);
 }
 
 bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
@@ -418,9 +413,9 @@ bool MakeTaskbarTransparent(HWND hwnd, bool hide) {
             RemoveTaskbarOwnershipProperties(hwnd);
             return false;
         }
-    // Make the taskbar layered first, but keep it input-enabled while it
-    // is still visible. Apply alpha=0 before adding WS_EX_TRANSPARENT so
-    // there is no interval where an opaque taskbar is click-through.
+        // Make the taskbar layered first, but keep it input-enabled while it
+        // is still visible. Apply alpha=0 before adding WS_EX_TRANSPARENT so
+        // there is no interval where an opaque taskbar is click-through.
         SetLastError(ERROR_SUCCESS);
         LONG_PTR previousExStyle = SetWindowLongPtrW( hwnd, GWL_EXSTYLE, exStyle | WS_EX_LAYERED );
         if (previousExStyle == 0 && GetLastError() != ERROR_SUCCESS) {
@@ -725,12 +720,12 @@ bool IsMonitorSelected( int monitorNumber, const bool* selected ) {
 
 bool ShouldHideMonitor(const TaskbarMonitorState& state) {
     return
-        g_settings.hideAllMonitors || IsMonitorSelected( state.monitorNumber, g_settings.hideMonitor );
+        g_settings.hideAllMonitors || IsMonitorSelected(state.monitorNumber, g_settings.hideMonitor);
 }
 
 bool ShouldRevealOnHover(const TaskbarMonitorState& state) {
     return
-        g_settings.hoverAllMonitors || IsMonitorSelected( state.monitorNumber, g_settings.hoverMonitor );
+        g_settings.hoverAllMonitors || IsMonitorSelected(state.monitorNumber, g_settings.hoverMonitor);
 }
 
 bool GetWindowProcessImageName(DWORD pid, wchar_t* output, size_t outputCount) {
@@ -884,6 +879,25 @@ struct ScanContext {
     ShellProcessKindCache* processCache;
 };
 
+bool IsFullscreenGeometryForMonitor(HWND hwnd, const MonitorEntry& monitorEntry) {
+    if (!hwnd || !IsWindow(hwnd)) return false;
+
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    if ((style & WS_CAPTION) != 0 || (style & WS_THICKFRAME) != 0) return false;
+
+    RECT rect = {};
+    if (!GetWindowRect(hwnd, &rect) || rect.right <= rect.left ||
+        rect.bottom <= rect.top) {
+        return false;
+    }
+
+    constexpr LONG kFullscreenTolerance = 2;
+    return abs(rect.left - monitorEntry.rect.left) <= kFullscreenTolerance &&
+           abs(rect.top - monitorEntry.rect.top) <= kFullscreenTolerance &&
+           abs(rect.right - monitorEntry.rect.right) <= kFullscreenTolerance &&
+           abs(rect.bottom - monitorEntry.rect.bottom) <= kFullscreenTolerance;
+}
+
 bool IsFullscreenWindowForMonitor( HWND hwnd, const MonitorEntry& monitorEntry, ShellProcessKind processKind ) {
     if ( !hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) || IsIconic(hwnd) ) return false;
     WCHAR className[256] = {};
@@ -897,20 +911,11 @@ bool IsFullscreenWindowForMonitor( HWND hwnd, const MonitorEntry& monitorEntry, 
         IsTaskbarWindow(hwnd)) {
         return false;
     }
-    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     // Do not require WS_POPUP here. Chromium/Edge-style borderless fullscreen
     // windows can retain a normal overlapped style while removing the caption
     // and resize frame. The authoritative signal for this mod is an exact
     // monitor-sized rectangle together with the absence of caption/frame.
-    if ( (style & WS_CAPTION) != 0 || (style & WS_THICKFRAME) != 0 ) return false;
-    RECT rect = {};
-    if ( !GetWindowRect( hwnd, &rect ) || rect.right <= rect.left || rect.bottom <= rect.top ) return false;
-    constexpr LONG kFullscreenTolerance = 2;
-    return
-        abs(rect.left - monitorEntry.rect.left) <= kFullscreenTolerance &&
-        abs(rect.top - monitorEntry.rect.top) <= kFullscreenTolerance &&
-        abs(rect.right - monitorEntry.rect.right) <= kFullscreenTolerance &&
-        abs(rect.bottom - monitorEntry.rect.bottom) <= kFullscreenTolerance;
+    return IsFullscreenGeometryForMonitor(hwnd, monitorEntry);
 }
 
 int FindFullscreenOwnerIndex(HMONITOR monitor) {
@@ -1265,78 +1270,30 @@ void SetTaskbarState(TaskbarMonitorState& state, bool show) {
 
     if (show) {
         if (!state.hiddenByMod) return;
-
-        if (MakeTaskbarTransparent(state.hwnd, false)) {
+        if (MakeTaskbarTransparent(state.hwnd, false) ||
+            ForceRestoreTaskbar(state.hwnd)) {
             state.hiddenByMod = false;
         } else {
-            Wh_Log(L"Taskbar restore failed for %p, forcing visible", state.hwnd);
-            if (ForceRestoreTaskbar(state.hwnd)) {
-                state.hiddenByMod = false;
-            } else {
-                Wh_Log(L"Taskbar force-restore failed for %p", state.hwnd);
-            }
+            Wh_Log(L"Taskbar restore failed for %p", state.hwnd);
         }
         return;
     }
 
-    if (state.hiddenByMod) {
-        LONG_PTR exStyle = 0;
-        if (!GetWindowExStyle(state.hwnd, &exStyle)) return;
+    if (!state.hiddenByMod && !IsWindowVisible(state.hwnd)) return;
 
-        if (!(exStyle & WS_EX_LAYERED) ||
-            GetPropW(state.hwnd, kTaskbarOwnershipProp) == nullptr) {
-            if (DropStaleTaskbarOwnership(state.hwnd, exStyle)) {
-                state.hiddenByMod = false;
-            } else {
-                return;
-            }
-        } else {
-            COLORREF colorKey = 0;
-            BYTE alpha = 0;
-            DWORD layeredFlags = 0;
-            const bool attributesAvailable =
-                GetLayeredWindowAttributes(state.hwnd, &colorKey, &alpha,
-                                            &layeredFlags) != FALSE;
-            if (!attributesAvailable || !(layeredFlags & LWA_ALPHA) ||
-                alpha != 0) {
-                if (!SetLayeredWindowAttributes(state.hwnd, 0, 0, LWA_ALPHA)) {
-                    Wh_Log(L"Failed to keep taskbar transparent for %p",
-                           state.hwnd);
-                    if (ForceRestoreTaskbar(state.hwnd)) {
-                        state.hiddenByMod = false;
-                    }
-                    return;
-                }
-            }
-
-            if (GetWindowExStyle(state.hwnd, &exStyle) &&
-                !(exStyle & WS_EX_TRANSPARENT)) {
-                SetLastError(ERROR_SUCCESS);
-                if (SetWindowLongPtrW(state.hwnd, GWL_EXSTYLE,
-                                      exStyle | WS_EX_LAYERED | WS_EX_TRANSPARENT) ==
-                        0 &&
-                    GetLastError() != ERROR_SUCCESS) {
-                    Wh_Log(
-                        L"Failed to restore taskbar click-through style for %p",
-                        state.hwnd);
-                    if (ForceRestoreTaskbar(state.hwnd)) {
-                        state.hiddenByMod = false;
-                    }
-                }
-            }
-            return;
-        }
-    }
-
-    if (!IsWindowVisible(state.hwnd)) return;
-
+    // MakeTaskbarTransparent(hide=true) re-asserts alpha 0 and
+    // WS_EX_TRANSPARENT on an owned window, and safely drops stale ownership
+    // if another component removed WS_EX_LAYERED.
     if (MakeTaskbarTransparent(state.hwnd, true)) {
         state.hiddenByMod = true;
     } else {
         Wh_Log(L"Taskbar hide failed for %p", state.hwnd);
+        // Never leave a click-through taskbar visible after a partial hide.
+        if (state.hiddenByMod && ForceRestoreTaskbar(state.hwnd)) {
+            state.hiddenByMod = false;
+        }
     }
 }
-
 struct ShellPopupScanResult {
     bool visibleOnMonitor[kMaxMonitorNumbers];
 };
@@ -1846,12 +1803,27 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
     if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
     if (event == EVENT_OBJECT_LOCATIONCHANGE) {
         if (!hwnd) return;
+        MonitorList monitors = {};
+        bool haveMonitors = false;
+        bool ownerFound = false;
         for (size_t i = 0; i < kMaxMonitorNumbers; ++i) {
-            if (g_fullscreenOwners[i].hwnd == hwnd) {
-                PostRefresh();
-                break;
+            if (g_fullscreenOwners[i].hwnd != hwnd) continue;
+
+            ownerFound = true;
+            if (!haveMonitors) {
+                monitors = GetCurrentMonitors();
+                haveMonitors = true;
+            }
+
+            const HMONITOR monitor = g_fullscreenOwners[i].monitor;
+            const int monitorIndex = FindMonitorIndex(monitors, monitor);
+            if (monitorIndex < 0 ||
+                !IsFullscreenOwnerOnSameMonitor(hwnd, monitor) ||
+                !IsFullscreenGeometryForMonitor(hwnd, monitors.entries[monitorIndex])) {
+                ClearFullscreenOwnerAtIndex(i);
             }
         }
+        if (ownerFound) PostRefresh();
         return;
     }
     if (event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_HIDE) {
@@ -2321,9 +2293,9 @@ bool WaitForThreadWithTimeout(HANDLE thread, DWORD timeoutMs, const wchar_t* thr
 }
 
 void WhTool_ModUninit() {
-// Stop new cursor-triggered refreshes first, then shut down the worker that
-// owns all visibility decisions. This prevents the worker from changing the
-// taskbar while final restoration is in progress.
+    // Stop new cursor-triggered refreshes first, then shut down the worker that
+    // owns all visibility decisions. This prevents the worker from changing the
+    // taskbar while final restoration is in progress.
     if (g_cursorStopEvent) SetEvent(g_cursorStopEvent);
     if (g_workerThread) {
         if (!PostThreadMessageW( g_workerThreadId, WM_QUIT, 0, 0 )) Wh_Log(L"Failed to post worker shutdown message");
