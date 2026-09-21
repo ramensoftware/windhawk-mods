@@ -804,7 +804,10 @@ int main() {
     deferredLiquid.publishedShift = reinterpret_cast<HANDLE>(1);
     deferredLiquid.dock.highlights = materialMarker;
     g_theme = DockTheme::Liquid;
-    PrepareLiquid(deferredLiquid, 5120, 800, 600, 0);
+    // Values are inert: this exercises the deferred-initialisation return.
+    PrepareLiquid(deferredLiquid, Measurements{.host = 5120,
+                                              .trayWidth = 600,
+                                              .buttonsWidth = 800});
     assert(g_liquidPreparePending && !deferredLiquid.dock.liquid);
     MSG posted{};
     assert(PeekMessage(&posted, window, kPrepareLiquidMessage,

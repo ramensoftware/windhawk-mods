@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.69
+// @version         2.70
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -334,6 +334,14 @@ DockInsets GetButtonInsets(DockInsets insets, double height) {
         g_buttonVerticalPadding, 0.0,
         std::max(0.0, (height - insets.top - insets.bottom - 1) / 2));
     return {insets.top + padding, insets.bottom + padding};
+}
+
+// Orientation only swaps the two insets, so their sum is identical before and
+// after the native taskbar is resolved. Lets Refresh check the height it was
+// handed without reaching for the window.
+double DockInsetSum(double height) {
+    auto insets = PlanDockInsets(false, height, g_dockEdgeDistance);
+    return insets.top + insets.bottom;
 }
 
 double EffectiveDockRadius(double width, double height) {
@@ -759,6 +767,28 @@ BOOL WINAPI PanelDestroyWindow(HWND window) {
 }
 
 struct Placement { double buttonsX; double trayX; };
+
+// One measurement pass over the native layout, taken in Refresh and handed to
+// the dock, follower and liquid stages. Keeping it together stops them
+// disagreeing about geometry or re-reading it from the window mid-pass, and
+// names what used to be eleven positional doubles.
+struct Measurements {
+    double host{};
+    double origin{};
+    double startLeft{};
+    double trayLeft{};
+    double trayWidth{};
+    double buttonsWidth{};
+    double shift{};
+    double backgroundOrigin{};
+    double dockHeight{};
+    DockInsets insets{};
+
+    double dockOrigin() const { return origin - backgroundOrigin; }
+    double visibleDockHeight() const {
+        return dockHeight - insets.top - insets.bottom;
+    }
+};
 
 bool Plan(double host, double buttons, double tray, double nativeCenter,
           double nativeTrayLeft, double nativeStartDelta, Placement& result) {
@@ -2404,8 +2434,7 @@ void AddAttentionLenses(Root& root, LiquidRenderer::LensConstants& lens,
     lens.attentionTintOpacity = 0.22f;
 }
 
-void PrepareLiquid(Root& root, double host, double buttons,
-                   double trayWidth, double backgroundOrigin) {
+void PrepareLiquid(Root& root, Measurements const& m) {
     auto& dock = root.dock;
     if (g_theme != DockTheme::Liquid) {
         StopLiquid(dock);
@@ -2449,12 +2478,12 @@ void PrepareLiquid(Root& root, double host, double buttons,
                 dock.background, dock.attachedVisual);
             created = true;
         }
-        double dockLeft = (host - buttons - kGap - trayWidth) / 2 -
-                          kDockPadding - backgroundOrigin;
-        double dockWidth = buttons + kGap + trayWidth + 2 * kDockPadding;
-        auto insets = GetDockInsets(root.taskbar, dock.background.ActualHeight());
-        double dockHeight = dock.background.ActualHeight() -
-                            insets.top - insets.bottom;
+        double dockLeft = (m.host - m.buttonsWidth - kGap - m.trayWidth) / 2 -
+                          kDockPadding - m.backgroundOrigin;
+        double dockWidth =
+            m.buttonsWidth + kGap + m.trayWidth + 2 * kDockPadding;
+        auto insets = m.insets;
+        double dockHeight = m.visibleDockHeight();
         LiquidRenderer::LensConstants lens{};
         lens.center[0] = static_cast<float>(
             (dockLeft + dockWidth / 2) * scale);
@@ -2507,14 +2536,14 @@ void Restore(OwnedDock& dock) {
     dock.originalClip = nullptr;
 }
 
-bool PrepareDock(OwnedDock& dock, FrameworkElement background, HWND taskbar) {
+bool PrepareDock(OwnedDock& dock, FrameworkElement background,
+                 DockInsets insets) {
     if (dock.clip) {
         return dock.background == background && dock.visual.Clip() == dock.clip;
     }
     auto visual = Hosting::ElementCompositionPreview::GetElementVisual(background);
     auto compositor = visual.Compositor();
     auto geometry = compositor.CreateRoundedRectangleGeometry();
-    auto insets = GetDockInsets(taskbar, background.ActualHeight());
     double height = background.ActualHeight() - insets.top - insets.bottom;
     float radius = static_cast<float>(
         EffectiveDockRadius(background.ActualWidth(), height));
@@ -2585,12 +2614,7 @@ void StopFollower(Root& root) {
 }
 
 void UpdateFollower(Root& root, FrameworkElement const& repeater,
-                     FrameworkElement const& tray, double origin,
-                     double startLeft, double trayLeft, double trayWidth,
-                     double shift, double buttonsWidth, double dockOrigin,
-                     double dockHeight) {
-    auto insets = GetDockInsets(root.taskbar, dockHeight);
-    double visibleDockHeight = dockHeight - insets.top - insets.bottom;
+                    Measurements const& m) {
     int count = Media::VisualTreeHelper::GetChildrenCount(repeater);
     // ponytail: bound the experiment to 64 realized children; larger trees fall
     // back to native geometry instead of producing an unbounded expression.
@@ -2639,8 +2663,7 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
             return false;
         return true;
     });
-    PrepareStatePlates(root, repeater, tray, insets);
-    float prefix = anchorX - static_cast<float>(startLeft);
+    float prefix = anchorX - static_cast<float>(m.startLeft);
     bool replaced = root.anchorIdentity && WholeGenerationReplaced(
         root.expressionSources, selected, root.anchorPrefix, prefix);
     // A partial identity change is an app reorder/removal. A complete same-size
@@ -2658,29 +2681,34 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
     if (!root.metrics)
         root.metrics = anchor->visual.Compositor().CreatePropertySet();
     bool knownBoundary = std::isfinite(root.nativeRightOverhang);
-    double threshold = BoundaryThreshold(root.nativeRightOverhang, startLeft, buttonsWidth,
-                                         repeater.ActualWidth(), trayLeft - origin);
+    double threshold = BoundaryThreshold(
+        root.nativeRightOverhang, m.startLeft, m.buttonsWidth,
+        repeater.ActualWidth(), m.trayLeft - m.origin);
     if (!knownBoundary && std::isfinite(root.nativeRightOverhang))
         Wh_Log(L"[UWFOLLOW] boundary root=%p threshold=%.3f overhang=%.3f tick=%llu",
                winrt::get_abi(root.frame), threshold, root.nativeRightOverhang, GetTickCount64());
     root.metrics.InsertScalar(L"threshold", static_cast<float>(threshold));
-    root.metrics.InsertScalar(L"shift", static_cast<float>(shift));
+    root.metrics.InsertScalar(L"shift", static_cast<float>(m.shift));
     root.metrics.InsertScalar(L"prefix", prefix);
-    root.metrics.InsertScalar(L"minX", static_cast<float>(-trayLeft));
-    root.metrics.InsertScalar(L"maxX", static_cast<float>(root.hostWidth - trayWidth - trayLeft));
+    root.metrics.InsertScalar(L"minX", static_cast<float>(-m.trayLeft));
+    root.metrics.InsertScalar(L"maxX", static_cast<float>(m.host - m.trayWidth - m.trayLeft));
     root.metrics.InsertScalar(
         L"trayDockBase",
-        static_cast<float>(origin - dockOrigin - kDockPadding - trayWidth -
-                           trayLeft));
-    root.metrics.InsertScalar(L"dockOrigin", static_cast<float>(dockOrigin));
-    root.metrics.InsertScalar(L"center", static_cast<float>(root.hostWidth / 2 - (origin - dockOrigin)));
-    root.metrics.InsertScalar(L"padding", static_cast<float>(kDockPadding));
-    root.metrics.InsertScalar(L"margin", static_cast<float>(insets.top));
-    root.metrics.InsertScalar(L"height", static_cast<float>(visibleDockHeight));
+        static_cast<float>(m.origin - m.dockOrigin() - kDockPadding -
+                           m.trayWidth - m.trayLeft));
+    root.metrics.InsertScalar(L"dockOrigin", static_cast<float>(m.dockOrigin()));
     root.metrics.InsertScalar(
-        L"vertical", static_cast<float>((insets.top - insets.bottom) / 2));
+        L"center",
+        static_cast<float>(m.host / 2 - (m.origin - m.dockOrigin())));
+    root.metrics.InsertScalar(L"padding", static_cast<float>(kDockPadding));
+    root.metrics.InsertScalar(L"margin", static_cast<float>(m.insets.top));
+    root.metrics.InsertScalar(L"height",
+                              static_cast<float>(m.visibleDockHeight()));
+    root.metrics.InsertScalar(
+        L"vertical",
+        static_cast<float>((m.insets.top - m.insets.bottom) / 2));
     float radius = static_cast<float>(
-        EffectiveDockRadius(root.hostWidth, visibleDockHeight));
+        EffectiveDockRadius(m.host, m.visibleDockHeight()));
     root.dock.geometry.CornerRadius({radius, radius});
     if (root.follower && !acquired && selected == root.expressionSources) return;
     auto animation =
@@ -2779,11 +2807,10 @@ void Refresh(Root& root) {
     double expectedStart = (repeaterWidth - buttons) / 2;
     double trayLeft = tray.ActualOffset().x;
     Placement target{};
-    auto dockInsets = GetDockInsets(root.taskbar, background.ActualHeight());
     // Keep the full centered repeater budget. Account for the native strip's
     // layout offset without reading per-button animation transforms.
     bool supported = !overflowing && background.ActualWidth() > 0 &&
-        background.ActualHeight() > dockInsets.top + dockInsets.bottom &&
+        background.ActualHeight() > DockInsetSum(background.ActualHeight()) &&
         std::abs(frame.ActualWidth() - host) <= 1 &&
         Plan(host, buttons, trayWidth, nativeCenter, trayLeft, startTarget - expectedStart, target);
     if (!supported) {
@@ -2812,17 +2839,29 @@ void Refresh(Root& root) {
         RestoreRoot(root);
         return;
     }
-    if (!PrepareDock(root.dock, background, root.taskbar)) {
+    // PublishTray has resolved root.taskbar, so the orientation-dependent insets
+    // are settled here and every later stage reads this one copy.
+    Measurements m{
+        .host = host,
+        .origin = origin,
+        .startLeft = startTarget,
+        .trayLeft = trayLeft,
+        .trayWidth = trayWidth,
+        .buttonsWidth = buttons,
+        .shift = (host - trayWidth - kGap) / 2 - nativeCenter,
+        .backgroundOrigin =
+            background.TransformToVisual(parent).TransformPoint({0, 0}).X,
+        .dockHeight = background.ActualHeight(),
+        .insets = GetDockInsets(root.taskbar, background.ActualHeight()),
+    };
+    if (!PrepareDock(root.dock, background, m.insets)) {
         root.blocked = true;
         Wh_Log(L"[UWDOCK] clip ownership/tree change; root left native");
         RestoreRoot(root);
         return;
     }
-    double backgroundOrigin = background.TransformToVisual(parent).TransformPoint({0, 0}).X;
-    UpdateFollower(root, repeater, tray, origin, startTarget, trayLeft,
-                   trayWidth,
-                   (host - trayWidth - kGap) / 2 - nativeCenter, buttons,
-                   origin - backgroundOrigin, background.ActualHeight());
+    PrepareStatePlates(root, repeater, tray, m.insets);
+    UpdateFollower(root, repeater, m);
     PrepareGlass(root.dock);
     // Publication marks availability; popup hooks query current transformed
     // tray bounds on the owner thread instead of consuming this layout estimate.
@@ -2830,7 +2869,7 @@ void Refresh(Root& root) {
         RestoreRoot(root);
         return;
     }
-    PrepareLiquid(root, host, buttons, trayWidth, backgroundOrigin);
+    PrepareLiquid(root, m);
 }
 
 void OnLayout(winrt::weak_ref<FrameworkElement> const& weak) {
