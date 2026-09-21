@@ -6,6 +6,7 @@
 // @author          u2x1
 // @github          https://github.com/u2x1
 // @include         windhawk.exe
+// @include         windhawk-mod.exe
 // @include         windhawk-mod-uiaccess.exe
 // @compilerOptions -lole32 -loleaut32 -luuid
 // ==/WindhawkMod==
@@ -1203,7 +1204,7 @@ bool TogglePinWindow() {
 void RegisterHotkeys(HWND hwnd) {
   if (g_enableMoveWindow) {
     for (int i = 1; i <= g_maxDesktops; ++i) {
-      BOOL ok = RegisterHotKey(hwnd, HK_MOVE_BASE + i - 1, g_moveModifiers, '0' + i);
+      BOOL ok = RegisterHotKey(hwnd, HK_MOVE_BASE + i - 1, g_moveModifiers | MOD_NOREPEAT, '0' + i);
       Wh_Log(L"RegisterHotKey MOVE_%d: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
              i, g_moveModifiers, '0' + i, ok, ok ? 0 : GetLastError());
     }
@@ -1211,7 +1212,7 @@ void RegisterHotkeys(HWND hwnd) {
 
   if (g_enableSwitchDesktop) {
     for (int i = 1; i <= g_maxDesktops; ++i) {
-      BOOL ok = RegisterHotKey(hwnd, HK_SWITCH_BASE + i - 1, g_switchModifiers, '0' + i);
+      BOOL ok = RegisterHotKey(hwnd, HK_SWITCH_BASE + i - 1, g_switchModifiers | MOD_NOREPEAT, '0' + i);
       Wh_Log(L"RegisterHotKey SWITCH_%d: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
              i, g_switchModifiers, '0' + i, ok, ok ? 0 : GetLastError());
     }
@@ -1219,7 +1220,7 @@ void RegisterHotkeys(HWND hwnd) {
 
   if (g_enablePrevNextDesktop) {
     if (g_prevDesktopKey) {
-      BOOL ok = RegisterHotKey(hwnd, HK_PREV, g_utilityModifiers, g_prevDesktopKey);
+      BOOL ok = RegisterHotKey(hwnd, HK_PREV, g_utilityModifiers | MOD_NOREPEAT, g_prevDesktopKey);
       Wh_Log(L"RegisterHotKey PREV: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
              g_utilityModifiers, g_prevDesktopKey, ok, ok ? 0 : GetLastError());
     } else {
@@ -1227,7 +1228,7 @@ void RegisterHotkeys(HWND hwnd) {
     }
 
     if (g_nextDesktopKey) {
-      BOOL ok = RegisterHotKey(hwnd, HK_NEXT, g_utilityModifiers, g_nextDesktopKey);
+      BOOL ok = RegisterHotKey(hwnd, HK_NEXT, g_utilityModifiers | MOD_NOREPEAT, g_nextDesktopKey);
       Wh_Log(L"RegisterHotKey NEXT: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
              g_utilityModifiers, g_nextDesktopKey, ok, ok ? 0 : GetLastError());
     } else {
@@ -1235,7 +1236,7 @@ void RegisterHotkeys(HWND hwnd) {
     }
 
     if (g_lastDesktopKey) {
-      BOOL ok = RegisterHotKey(hwnd, HK_LAST, g_utilityModifiers, g_lastDesktopKey);
+      BOOL ok = RegisterHotKey(hwnd, HK_LAST, g_utilityModifiers | MOD_NOREPEAT, g_lastDesktopKey);
       Wh_Log(L"RegisterHotKey LAST: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
              g_utilityModifiers, g_lastDesktopKey, ok, ok ? 0 : GetLastError());
     } else {
@@ -1245,7 +1246,7 @@ void RegisterHotkeys(HWND hwnd) {
 
   if (g_enablePinWindow) {
     if (g_pinKey) {
-      BOOL ok = RegisterHotKey(hwnd, HK_PIN, g_utilityModifiers, g_pinKey);
+      BOOL ok = RegisterHotKey(hwnd, HK_PIN, g_utilityModifiers | MOD_NOREPEAT, g_pinKey);
       Wh_Log(L"RegisterHotKey PIN: modifiers=0x%X, vk=0x%X, result=%d, error=%lu",
              g_utilityModifiers, g_pinKey, ok, ok ? 0 : GetLastError());
     } else {
