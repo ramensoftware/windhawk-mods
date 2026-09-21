@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.4.3
+// @version         1.4.4
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -1485,7 +1485,8 @@ published at
     or typed at, so it runs entirely on what you set here: the palette, the
     amount and the wheel parameter come from the settings above, and the style
     is whichever one you last left it on, or the rotation if you have it on.
-    To pin it to one style, leave only that style ticked below.
+    To pin it to one style, leave only that style ticked in the four style
+    settings above.
 
     Esc at the overlay stops working as well, for the same reason: the window
     never takes focus, so the key never reaches it. That leaves the toggle
@@ -1632,13 +1633,6 @@ static const WCHAR kWindowClass[] = L"WindhawkVectorScreenHolderWnd";
 
 // The mod's own image, which owns the window class and the window procedure.
 static HINSTANCE g_modInstance = nullptr;
-
-// True only once SetWindowsHookEx has actually returned a hook. The window
-// proc uses it to stay off keys the hook has already handled, so it has to
-// follow the hook itself: gating on the setting, or on the hook thread merely
-// starting, would leave the key dead in both places whenever the hook failed
-// to install.
-static std::atomic<bool> g_kbdHookLive{false};
 
 // Set when more than one display is being driven. The worker renders the
 // overlays one after another inside a single loop iteration, and a vsynced
@@ -4052,7 +4046,6 @@ static void Controller_StepAmount(Overlay* ov);
 static void Controller_Wheel(Overlay* ov, int delta);
 static void Controller_RequestRebuild();
 static void Controller_RequestClose();
-static void Controller_RequestPalette();
 static void Controller_CyclePalette();
 
 bool Overlay::Create() {
@@ -4668,7 +4661,11 @@ LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 // hook no longer touches Space, so this is the only path that
                 // handles it and there is nothing to exclude.
                 if (!(lp & (1 << 30))) {
-                    Controller_RequestPalette();
+                    // Straight through, not posted. This window procedure
+                    // already runs on the worker thread, off the same message
+                    // loop that would have serviced the post, so bouncing a
+                    // message off ourselves only delayed it by an iteration.
+                    Controller_CyclePalette();
                 }
                 return 0;
             }
@@ -4722,7 +4719,6 @@ static const UINT WM_VSH_QUIT = WM_APP + 2;
 
 static const UINT WM_VSH_CLOSE = WM_APP + 3;
 static const UINT WM_VSH_REBUILD = WM_APP + 4;
-static const UINT WM_VSH_PALETTE = WM_APP + 5;
 
 static int NextEnabledStyle(int from) {
     for (int i = 1; i <= kStyleCount; i++) {
@@ -4862,19 +4858,13 @@ static void Controller_CyclePalette() {
 
 
 
-// The low level keyboard hook cannot call Controller_CyclePalette itself.
-// BuildPalette clears and refills g_palette while the worker thread is inside
-// Render reading it, g_overlays is owned by the worker, and a hook callback
-// holds up every keystroke on the system until it returns, with Windows
-// silently dropping the hook past LowLevelHooksTimeout. So the hook posts and
-// the worker does the work, the same way Esc already does.
-static void Controller_RequestPalette() {
-    DWORD tid = g_workerThreadId.load();
-    if (tid && !PostThreadMessageW(tid, WM_VSH_PALETTE, 0, 0)) {
-        Wh_Log(L"PostThreadMessage(PALETTE) failed (%u)", GetLastError());
-    }
-}
-
+// Esc still has to be posted rather than called. This one does come from the
+// hook thread, where calling HideOverlays directly would tear down windows the
+// worker owns from underneath it, and where a hook callback holds up every
+// keystroke on the system until it returns, with Windows silently dropping the
+// hook past LowLevelHooksTimeout. It is also reached from the window procedure,
+// where calling straight through would destroy the very Overlay whose window
+// procedure is on the stack.
 static void Controller_RequestClose() {
     DWORD tid = g_workerThreadId.load();
     if (tid && !PostThreadMessageW(tid, WM_VSH_CLOSE, 0, 0)) {
@@ -4944,11 +4934,6 @@ static DWORD WINAPI KbdHookThread(LPVOID) {
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        (LPCWSTR)&LowLevelKbdProc, &mod);
     HHOOK hook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKbdProc, mod, 0);
-    // Published here rather than beside CreateThread: the thread starting says
-    // nothing about whether the hook itself took. Setting it early meant that
-    // if this call failed, the window proc would still stand aside for a hook
-    // that was not there, and Space would be dead in both places.
-    g_kbdHookLive = hook != nullptr;
     if (!hook) {
         Wh_Log(L"SetWindowsHookEx failed (%u)", GetLastError());
     }
@@ -4995,7 +4980,6 @@ static void InstallKbdHook() {
 }
 
 static void UninstallKbdHook() {
-    g_kbdHookLive = false;
     if (!g_hookThread) {
         return;
     }
@@ -5016,10 +5000,11 @@ static void UninstallKbdHook() {
     if (WaitForSingleObject(g_hookThread, 5000) != WAIT_OBJECT_0) {
         // Deliberately leave g_hookThread set. Clearing it would let the next
         // InstallKbdHook start a second thread and a second WH_KEYBOARD_LL
-        // hook while this one's is still live, and every press would then be
-        // seen twice: Space would step two palettes at a time. Refusing to
-        // install another is the safe failure, and the global keys are the
-        // only thing lost until the process restarts.
+        // hook while this one's is still live, leaking the first and posting
+        // two closes for every Esc. HideOverlays tolerates the second post,
+        // but the leaked hook sits on every keystroke in the session for
+        // nothing. Refusing to install another is the safe failure, and
+        // global Esc is the only thing lost until the process restarts.
         Wh_Log(L"Keyboard hook thread did not exit in time; leaving it in "
                L"place, global keys stay off for this session");
         return;
@@ -5617,10 +5602,6 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                 }
                 if (msg.message == WM_VSH_CLOSE) {
                     HideOverlays();
-                    continue;
-                }
-                if (msg.message == WM_VSH_PALETTE) {
-                    Controller_CyclePalette();
                     continue;
                 }
                 if (msg.message == WM_VSH_REBUILD) {
