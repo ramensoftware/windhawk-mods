@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.73
+// @version         2.74
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -64,6 +64,10 @@ Task-button hover uses Windows' native animation as a translucent tint over
 the dock. An app requesting attention receives an additional inset refractive
 lens with the native alert color.
 
+**Task and tray buttons** can additionally draw a border on each highlight. It
+follows the same rounded shape the highlight is clipped to, so it stays aligned
+with the button corner radius, and it tracks the light or dark theme.
+
 Liquid glass includes the reference site's Regular, Frosted, and Dark presets.
 Regular is the reference defaults with no backdrop blur; Frosted adds it, and
 Dark also dims the backdrop. Choose Custom to use the individual optical
@@ -104,6 +108,15 @@ setting.
 - buttonVerticalPadding: 4
   $name: Button vertical padding (DIP, default 4)
   $description: Space above and below task and tray button highlights from 0 to 100.
+- button:
+  - border: false
+    $name: Border (default off)
+    $description: Outlines task and tray button highlights along the same rounded shape the highlight is clipped to.
+  - borderThickness: 1
+    $name: Border thickness (DIP, default 1)
+    $description: Border width from 1 to 10. Drawn inside the highlight edge.
+  $name: Task and tray buttons
+  $description: Appearance of the native task and tray button highlights.
 - edgeDistance: 4
   $name: Distance from screen edge (DIP, default 4)
   $description: Gap from 0 to 100. The native taskbar frame adjusts with the gap so the dock keeps its height.
@@ -250,6 +263,8 @@ double g_dockCornerRadius{12};
 double g_buttonCornerRadius{12};
 double g_buttonVerticalPadding{4};
 double g_dockEdgeDistance{4};
+bool g_buttonBorder{};
+double g_buttonBorderThickness{1};
 
 // Holds off the teardown in Wh_ModBeforeUninit while a hook or callback runs.
 struct ActiveScope {
@@ -854,6 +869,7 @@ struct Root {
         CompositionGeometricClip clip{nullptr};
         CompositionRoundedRectangleGeometry clipGeometry{nullptr};
         Media::CompositeTransform stretch{nullptr};
+        ShapeVisual border{nullptr};
         bool blocked{};
     };
     FrameworkElement frame{nullptr};
@@ -2010,6 +2026,14 @@ void RestoreStatePlate(Root::StatePlate& state) {
             else
                 Wh_Log(L"[UWITEM] state plate clip ownership lost");
         }
+        if (state.border) {
+            if (Hosting::ElementCompositionPreview::GetElementChildVisual(
+                    state.element) == state.border)
+                Hosting::ElementCompositionPreview::SetElementChildVisual(
+                    state.element, nullptr);
+            else
+                Wh_Log(L"[UWITEM] state plate border ownership lost");
+        }
         if (opacityMatch) {
             if (state.opacityWasLocal)
                 state.element.Opacity(state.originalOpacity);
@@ -2026,6 +2050,7 @@ void RestoreStatePlate(Root::StatePlate& state) {
     state.clip = nullptr;
     state.clipGeometry = nullptr;
     state.stretch = nullptr;
+    state.border = nullptr;
     state.element = nullptr;
 }
 
@@ -2036,6 +2061,24 @@ void BlockStatePlate(Root::StatePlate& state) {
     RestoreStatePlate(state);
     state.element = element;
     state.blocked = true;
+}
+
+// Stroke the geometry the clip already tracks, so the border follows the button
+// corner radius and size with no layout or animation of its own. Same approach as
+// the dock's rim in GlassHighlights: the clip removes the outer half of the
+// stroke, leaving g_buttonBorderThickness DIP inside the edge.
+ShapeVisual ButtonBorder(CompositionRoundedRectangleGeometry const& outline,
+                         bool dark) {
+    auto compositor = outline.Compositor();
+    auto visual = compositor.CreateShapeVisual();
+    visual.RelativeSizeAdjustment({1, 1});
+    auto shape = compositor.CreateSpriteShape(outline);
+    shape.StrokeBrush(compositor.CreateColorBrush(
+        dark ? winrt::Windows::UI::Color{150, 255, 255, 255}
+             : winrt::Windows::UI::Color{110, 0, 0, 0}));
+    shape.StrokeThickness(static_cast<float>(g_buttonBorderThickness * 2));
+    visual.Shapes().Append(shape);
+    return visual;
 }
 
 void PrepareStatePlate(Root& root, Root::StatePlate& state,
@@ -2126,6 +2169,15 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
             state.clip = state.visual.Compositor().CreateGeometricClip(
                 state.clipGeometry);
             state.visual.Clip(state.clip);
+        }
+        // Never take the child visual from someone who already uses it.
+        if (g_buttonBorder && !state.border &&
+            !Hosting::ElementCompositionPreview::GetElementChildVisual(plate)) {
+            state.border = ButtonBorder(
+                state.clipGeometry,
+                plate.ActualTheme() == ElementTheme::Dark);
+            Hosting::ElementCompositionPreview::SetElementChildVisual(
+                plate, state.border);
         }
         double scaleY = state.stretch ? state.stretch.ScaleY() : 1;
         float radius = static_cast<float>(std::min(
@@ -3212,6 +3264,9 @@ BOOL Wh_ModInit() {
         Wh_GetIntSetting(L"buttonVerticalPadding"), 0, 100);
     g_dockEdgeDistance = std::clamp(
         Wh_GetIntSetting(L"edgeDistance"), 0, 100);
+    g_buttonBorder = Wh_GetIntSetting(L"button.border") != 0;
+    g_buttonBorderThickness = std::clamp(
+        Wh_GetIntSetting(L"button.borderThickness"), 1, 10);
     auto theme = WindhawkUtils::StringSetting::make(L"theme");
     g_theme = ParseTheme(theme.get());
     if (g_theme == DockTheme::Liquid) {

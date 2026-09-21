@@ -320,6 +320,18 @@ int main() {
             assert(highlights.Shapes().Size() == 0);
         }
         {
+            // The clip takes the outer half, so the stroke is twice the setting.
+            auto outline = compositor.CreateRoundedRectangleGeometry();
+            g_buttonBorderThickness = 3;
+            auto border = ButtonBorder(outline, true);
+            assert(border.Shapes().Size() == 1);
+            auto stroke =
+                border.Shapes().GetAt(0).as<CompositionSpriteShape>();
+            assert(stroke.StrokeThickness() == 6);
+            assert(stroke.Geometry() == outline);
+            g_buttonBorderThickness = 1;
+        }
+        {
             LiquidRenderer renderer;
             Root closingRoot;
             closingRoot.sources.emplace_back();
