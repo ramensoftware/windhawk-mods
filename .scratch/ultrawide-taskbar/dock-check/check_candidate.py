@@ -169,8 +169,10 @@ int main() {
                                  std::pair{"boxBlurPs", "ps_5_0"},
                                  std::pair{"ps", "ps_5_0"}}) {
         winrt::com_ptr<ID3DBlob> shader, errors;
+        // Compile against the real cap, not a copy that can drift from it.
+        auto capText = std::to_string(kMaxButtonLenses);
         D3D_SHADER_MACRO macros[]{
-            {"ATTENTION_LENS_CAP", "8"}, {nullptr, nullptr}};
+            {"BUTTON_LENS_CAP", capText.c_str()}, {nullptr, nullptr}};
         HRESULT hr = D3DCompile(LiquidRenderer::kShader,
                                 sizeof(LiquidRenderer::kShader) - 1,
                                 "liquid-glass", macros, nullptr, entry, target,
@@ -870,8 +872,8 @@ assert re.search(
 )
 assert "DisableDockingForSession" not in code
 assert code.count("float zRadius") == 2
-assert "float4 attentionRects[8]" not in code
-assert "min(attentionCount, 8)" not in code
+assert "float4 lensRects[8]" not in code
+assert "min(lensCount, 8)" not in code
 assert "Permission is hereby granted" in code
 # Evaluate the actual expression strings emitted by the C++ implementation
 # against captured in-flight inputs. Windows above validates the real grammar;

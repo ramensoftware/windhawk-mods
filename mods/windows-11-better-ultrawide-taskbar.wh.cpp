@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.74
+// @version         2.75
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -239,10 +239,10 @@ constexpr DWORD kLiquidShrinkDelay = 700;
 // an unsupported build fails every one. Tune down if a broken tree costs too many
 // tree walks, up if a slow startup transition needs longer to settle.
 constexpr unsigned kRefreshRetryLimit = 10;
-#define UW_ATTENTION_LENS_CAP 8
+#define UW_BUTTON_LENS_CAP 8
 #define UW_STRINGIZE_IMPL(value) #value
 #define UW_STRINGIZE(value) UW_STRINGIZE_IMPL(value)
-constexpr size_t kMaxAttentionLenses = UW_ATTENTION_LENS_CAP;
+constexpr size_t kMaxButtonLenses = UW_BUTTON_LENS_CAP;
 constexpr wchar_t kWindowClass[] = L"Windhawk.BetterUltrawideTaskbar.2";
 std::atomic<bool> g_stopping{};
 std::atomic<unsigned> g_active{};
@@ -911,13 +911,13 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         float halfSize[2]{};
         float radius{};
         LiquidSettings optics;
-        float attentionRects[kMaxAttentionLenses][4]{};
-        float attentionTints[kMaxAttentionLenses][4]{};
-        float attentionRadii[kMaxAttentionLenses][4]{};
-        uint32_t attentionCount{};
-        float attentionRefraction{};
-        float attentionTintOpacity{};
-        float attentionPadding{};
+        float lensRects[kMaxButtonLenses][4]{};
+        float lensTints[kMaxButtonLenses][4]{};
+        float lensRadii[kMaxButtonLenses][4]{};
+        uint32_t lensCount{};
+        float lensRefraction{};
+        float alertTintOpacity{};
+        float lensPadding{};
     };
     static_assert(sizeof(LensConstants) % 16 == 0);
 
@@ -964,13 +964,13 @@ cbuffer Lens : register(b0) {
     float opacity;
     float brightness;
     float blurAmount;
-    float4 attentionRects[ATTENTION_LENS_CAP];
-    float4 attentionTints[ATTENTION_LENS_CAP];
-    float4 attentionRadii[ATTENTION_LENS_CAP];
-    uint attentionCount;
-    float attentionRefraction;
-    float attentionTintOpacity;
-    float attentionPadding;
+    float4 lensRects[BUTTON_LENS_CAP];
+    float4 lensTints[BUTTON_LENS_CAP];
+    float4 lensRadii[BUTTON_LENS_CAP];
+    uint lensCount;
+    float lensRefraction;
+    float alertTintOpacity;
+    float lensPadding;
 };
 cbuffer Copy : register(b1) {
     float2 copyOffset;
@@ -1115,10 +1115,10 @@ float4 ps(VertexOutput input) : SV_Target {
 
     // Attention is a second, smaller lens over the shared dock capture. Hover
     // remains the native animated plate with reduced opacity.
-    for (uint i = 0; i < min(attentionCount, ATTENTION_LENS_CAP); ++i) {
-        float4 rect = attentionRects[i];
+    for (uint i = 0; i < min(lensCount, BUTTON_LENS_CAP); ++i) {
+        float4 rect = lensRects[i];
         float2 itemPoint = pixel - rect.xy;
-        float4 itemRadii = attentionRadii[i];
+        float4 itemRadii = lensRadii[i];
         float itemDistance = roundedDistanceForCorners(
             itemPoint, rect.zw, itemRadii);
         if (itemDistance > 0) continue;
@@ -1131,9 +1131,9 @@ float4 ps(VertexOutput input) : SV_Target {
                 bevelHeightFor(-opticalDistanceForCorners(itemPoint - float2(0, 2), rect.zw, itemRadii), itemZ)) / 4;
         float itemDepth = smoothstep(0, max(itemZ, 0.5), itemInside);
         float2 itemShift = itemGradient * (1 - 1 / 1.5) *
-            attentionRefraction * 18;
+            lensRefraction * 18;
         itemShift += -itemPoint / max(rect.zw, 1) *
-            attentionRefraction * 3 * itemDepth;
+            lensRefraction * 3 * itemDepth;
         float3 itemGlass = blurAmount > 0.001
             ? blurredColor(pixel + itemShift)
             : backdrop.SampleLevel(
@@ -1142,8 +1142,8 @@ float4 ps(VertexOutput input) : SV_Target {
         float itemEdge = smoothstep(min(rect.z, rect.w) * 0.45, 0, itemInside);
         float itemMask = 1 - smoothstep(-1.5, 0.5, itemDistance);
         color = lerp(color, itemGlass, itemMask * 0.72);
-        color = lerp(color, attentionTints[i].rgb,
-                     itemMask * attentionTintOpacity);
+        color = lerp(color, lensTints[i].rgb,
+                     itemMask * alertTintOpacity);
         float itemInnerStroke = smoothstep(-2.5, -1.5, itemDistance) *
             (1 - smoothstep(-1, 0, itemDistance));
         float itemTopBias = 0.5 + 0.5 * (-itemPoint.y / rect.w);
@@ -1230,8 +1230,8 @@ float4 ps(VertexOutput input) : SV_Target {
             auto compile = [](const char* entry, const char* target) {
                 winrt::com_ptr<ID3DBlob> code;
                 D3D_SHADER_MACRO macros[]{
-                    {"ATTENTION_LENS_CAP",
-                     UW_STRINGIZE(UW_ATTENTION_LENS_CAP)},
+                    {"BUTTON_LENS_CAP",
+                     UW_STRINGIZE(UW_BUTTON_LENS_CAP)},
                     {nullptr, nullptr}};
                 winrt::check_hresult(D3DCompile(
                     kShader, sizeof(kShader) - 1, "liquid-glass", macros,
@@ -1798,7 +1798,7 @@ bool DeferLiquidShrink(float currentHalfWidth, float nextHalfWidth,
 
 #undef UW_STRINGIZE
 #undef UW_STRINGIZE_IMPL
-#undef UW_ATTENTION_LENS_CAP
+#undef UW_BUTTON_LENS_CAP
 
 winrt::weak_ref<FrameworkElement> MotionEvent(
     void* abi, Root::Source::Life life, bool cancelled = false,
@@ -2226,7 +2226,7 @@ void RestoreStatePlates(Root& root) {
 }
 
 void RefreshAttentionStates(Root& root) {
-    // AddAttentionLenses is the only reader, and PrepareLiquid returns before it
+    // AddButtonLenses is the only reader, and PrepareLiquid returns before it
     // on every other theme. HasAttentionState walks four levels of visual tree and
     // every visual state group per source, on every coalesced state change.
     if (g_theme != DockTheme::Liquid) return;
@@ -2471,10 +2471,10 @@ void ScheduleLiquidRetry(OwnedDock& dock, HRESULT error) {
            error, delay);
 }
 
-void AddAttentionLenses(Root& root, LiquidRenderer::LensConstants& lens,
+void AddButtonLenses(Root& root, LiquidRenderer::LensConstants& lens,
                         double scale) {
     for (auto const& source : root.sources) {
-        if (lens.attentionCount == kMaxAttentionLenses) break;
+        if (lens.lensCount == kMaxButtonLenses) break;
         auto element = source.element.get();
         if (!element || !source.requestingAttention) continue;
         std::vector<Controls::Border> plates;
@@ -2492,21 +2492,21 @@ void AddAttentionLenses(Root& root, LiquidRenderer::LensConstants& lens,
         if (!std::isfinite(point.X) || !std::isfinite(point.Y) ||
             width <= 2 || height <= 2)
             continue;
-        auto index = lens.attentionCount++;
-        lens.attentionRects[index][0] = static_cast<float>(
+        auto index = lens.lensCount++;
+        lens.lensRects[index][0] = static_cast<float>(
             (point.X + width / 2) * scale);
-        lens.attentionRects[index][1] = static_cast<float>(
+        lens.lensRects[index][1] = static_cast<float>(
             (point.Y + height / 2) * scale);
-        lens.attentionRects[index][2] = static_cast<float>(width * scale / 2);
-        lens.attentionRects[index][3] = static_cast<float>(height * scale / 2);
+        lens.lensRects[index][2] = static_cast<float>(width * scale / 2);
+        lens.lensRects[index][3] = static_cast<float>(height * scale / 2);
 
         winrt::Windows::UI::Color tint{255, 232, 72, 68};
         if (auto brush = plate->Background().try_as<Media::SolidColorBrush>())
             tint = brush.Color();
-        lens.attentionTints[index][0] = tint.R / 255.0f;
-        lens.attentionTints[index][1] = tint.G / 255.0f;
-        lens.attentionTints[index][2] = tint.B / 255.0f;
-        lens.attentionTints[index][3] = 0;
+        lens.lensTints[index][0] = tint.R / 255.0f;
+        lens.lensTints[index][1] = tint.G / 255.0f;
+        lens.lensTints[index][2] = tint.B / 255.0f;
+        lens.lensTints[index][3] = 0;
         // The visible plate is its own rounded rect intersected with our clip, and
         // a clip can only take area away, so the larger radius wins per corner. The
         // lens tracked the native radius alone and so under-rounded whenever
@@ -2518,11 +2518,11 @@ void AddAttentionLenses(Root& root, LiquidRenderer::LensConstants& lens,
                                     std::pair{1, corners.TopRight},
                                     std::pair{2, corners.BottomRight},
                                     std::pair{3, corners.BottomLeft}})
-            lens.attentionRadii[index][slot] = static_cast<float>(
+            lens.lensRadii[index][slot] = static_cast<float>(
                 std::max(corner, clipRadius) * scale);
     }
-    lens.attentionRefraction = lens.optics.refraction * 0.78f;
-    lens.attentionTintOpacity = 0.22f;
+    lens.lensRefraction = lens.optics.refraction * 0.78f;
+    lens.alertTintOpacity = 0.22f;
 }
 
 void PrepareLiquid(Root& root, Measurements const& m) {
@@ -2586,7 +2586,7 @@ void PrepareLiquid(Root& root, Measurements const& m) {
             EffectiveDockRadius(dockWidth, dockHeight) * scale);
         lens.optics = g_liquidSettings;
         lens.optics.zRadius *= static_cast<float>(scale);
-        AddAttentionLenses(root, lens, scale);
+        AddButtonLenses(root, lens, scale);
         if (DeferLiquidShrink(
                 dock.liquid->CurrentHalfWidth(), lens.halfSize[0],
                 GetTickCount64(), dock.liquidShrinkReadyAt,
