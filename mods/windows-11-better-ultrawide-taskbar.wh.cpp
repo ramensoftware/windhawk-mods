@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.68
+// @version         2.69
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -77,8 +77,11 @@ layout.
 
 If native controls do not fit, the visual tree is unsupported, taskbar
 ownership changes, or more than 64 children are realized, that taskbar stays
-in its native XAML layout. The configured frame height remains active until
-the mod is disabled because Windows exposes it as a process-wide setting.
+in its native XAML layout. Layout and capacity fallbacks recover on a later
+layout pass; a taskbar whose translation, clip or tree ownership was taken over
+stays native until the mod is re-enabled. The configured frame height remains
+active until the mod is disabled because Windows exposes it as a process-wide
+setting.
 */
 // ==/WindhawkModReadme==
 
@@ -219,6 +222,10 @@ constexpr UINT kPrepareLiquidMessage = WM_APP + 45;
 constexpr UINT kRefreshItemStatesMessage = WM_APP + 46;
 constexpr UINT_PTR kLiquidTimerId = 45;
 constexpr DWORD kLiquidShrinkDelay = 700;
+// A transient measurement fails a handful of consecutive layout passes at most;
+// an unsupported build fails every one. Tune down if a broken tree costs too many
+// tree walks, up if a slow startup transition needs longer to settle.
+constexpr unsigned kRefreshRetryLimit = 10;
 #define UW_ATTENTION_LENS_CAP 8
 #define UW_STRINGIZE_IMPL(value) #value
 #define UW_STRINGIZE(value) UW_STRINGIZE_IMPL(value)
@@ -820,6 +827,7 @@ struct Root {
     OwnedTranslation trayTranslation;
     OwnedDock dock;
     bool blocked{};
+    unsigned refreshFailures{};  // Consecutive retryable failures.
     bool fallbackReported{};
     HWND taskbar{};
     HANDLE publishedShift{};
@@ -2786,14 +2794,17 @@ void Refresh(Root& root) {
         RestoreRoot(root);
         return;
     }
-    root.fallbackReported = false;
     if (!root.follower && (!Prepare(repeater, root.buttonsTranslation) ||
                                    !Prepare(tray, root.trayTranslation))) {
-        root.blocked = true;
-        Wh_Log(L"[UWPOS] translation unavailable; root left native");
+        // A non-zero Translation may be a native animation in flight, so retry
+        // rather than latch; an owner that releases the channel is picked up.
+        if (!root.fallbackReported)
+            Wh_Log(L"[UWPOS] translation unavailable; native layout retained");
+        root.fallbackReported = true;
         RestoreRoot(root);
         return;
     }
+    root.fallbackReported = false;
     root.hostWidth = host;
     // The first publication resolves this XAML root to its native taskbar so
     // the dock can choose the monitor-facing edge before creating its clip.
@@ -2834,11 +2845,20 @@ void OnLayout(winrt::weak_ref<FrameworkElement> const& weak) {
     struct Unbusy { ~Unbusy() { g_busy = false; } } unbusy;
     for (auto& root : g_roots) {
         if (root.frame != frame) continue;
-        try { Refresh(root); }
-        catch (...) {
+        try {
+            Refresh(root);
+            root.refreshFailures = 0;
+        } catch (...) {
             auto error = winrt::to_hresult();
-            root.blocked = true;
-            Wh_Log(L"[UWPOS] refresh-error hr=%08X; root blocked", error.value);
+            // A native transition transform, an anchor that moved mid-flight and
+            // more than 64 realized children all clear on a later pass, so these
+            // retry. Ownership changes latch separately, above.
+            bool latch = ++root.refreshFailures >= kRefreshRetryLimit;
+            if (latch) root.blocked = true;
+            if (root.refreshFailures == 1 || latch)
+                Wh_Log(L"[UWPOS] refresh-error hr=%08X attempt=%u%s", error.value,
+                       root.refreshFailures,
+                       latch ? L"; root blocked, re-enable to retry" : L"; retrying");
             RestoreRoot(root);
         }
         break;
