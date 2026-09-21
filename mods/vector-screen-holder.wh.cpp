@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.4.4
+// @version         1.5.0
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -1596,6 +1596,7 @@ published at
 #include <dwrite_3.h>
 #include <windhawk_utils.h>
 #include <sddl.h>
+#include <shlobj.h>
 
 #include <algorithm>
 #include <atomic>
@@ -3977,6 +3978,20 @@ class Overlay {
     void NewScene();
     bool Occluded() const { return occluded_; }
     const RECT& Rect() const { return rect_; }
+    HWND Hwnd() const { return hwnd_; }
+
+    // Shift the window one pixel off its rectangle, or put it back. The
+    // window moves, rect_ does not, so the render target keeps its size and
+    // never has to be rebuilt, and the rebuild-only-when-moved comparison
+    // still sees the rectangle this overlay is meant to be covering.
+    void SetNudged(bool on) {
+        if (!hwnd_ || nudged_ == on) {
+            return;
+        }
+        nudged_ = on;
+        SetWindowPos(hwnd_, nullptr, rect_.left, rect_.top - (on ? 1 : 0),
+                     0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
     // Briefly show what just changed. The overlay is otherwise completely
     // clean, and this is the only text it ever draws.
     void FlashHud();
@@ -4021,6 +4036,7 @@ class Overlay {
     ID2D1BitmapRenderTarget* buf_ = nullptr;
     ID2D1Bitmap* bufBitmap_ = nullptr;
     bool occluded_ = false;
+    bool nudged_ = false;
     ID2D1SolidColorBrush* brush_ = nullptr;
 
     std::unique_ptr<Scene> scene_;
@@ -4714,6 +4730,73 @@ static float g_rotateTimer = 0;
 // a slow poll instead of stopping it, so the state can clear again.
 static bool g_allOccluded = false;
 
+// Windows decides an application is running fullscreen by looking for a window
+// that covers the monitor, and Focus Assist silences notifications while it
+// believes one is. Measured on Windows 11, this overlay is never counted: it
+// is forced to the bottom of the z-order on every position change, and a
+// window down there does not qualify even while it holds the foreground. That
+// is why it gives up no pixels and shows no seam.
+//
+// One measurement on one version is a thin thing to rest somebody's
+// notifications on, and older shells run older code. So rather than trusting
+// it, ask. While one of our own windows holds the foreground, nothing else can
+// be the fullscreen application, so if the shell answers QUNS_BUSY then the
+// assumption is wrong on this machine and we are the cause. The overlay then
+// steps one pixel off its rectangle, which is all it takes to stop covering
+// the monitor, and steps back when the focus goes elsewhere.
+//
+// Where the assumption holds, which is everywhere it has been run, the query
+// is the only thing that ever happens and nothing moves.
+static bool g_fullscreenNudge = false;
+static float g_notifyPoll = 0;
+
+static bool AnyOverlayForeground() {
+    HWND fg = GetForegroundWindow();
+    if (!fg) {
+        return false;
+    }
+    for (size_t i = 0; i < g_overlays.size(); i++) {
+        if (g_overlays[i]->Hwnd() == fg) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void PollFullscreenState(float dt) {
+    // Twice a second is plenty. This is off the render path, and it only
+    // matters while a window of ours is holding the foreground.
+    g_notifyPoll += dt;
+    if (g_notifyPoll < 0.5f) {
+        return;
+    }
+    g_notifyPoll = 0;
+
+    if (!AnyOverlayForeground()) {
+        g_fullscreenNudge = false;
+    } else if (!g_fullscreenNudge) {
+        // Only worth asking while it is still false. Once we have stepped
+        // aside the state reads clear again, and treating that as the answer
+        // would move the window back and forth for ever.
+        QUERY_USER_NOTIFICATION_STATE state = QUNS_ACCEPTS_NOTIFICATIONS;
+        if (SUCCEEDED(SHQueryUserNotificationState(&state)) &&
+            state == QUNS_BUSY) {
+            Wh_Log(L"This Windows build counts the overlay as a fullscreen "
+                   L"app; stepping one pixel aside so notifications are not "
+                   L"suppressed");
+            g_fullscreenNudge = true;
+        }
+    }
+
+    // Applied to every overlay on every poll rather than only on the change.
+    // SetNudged returns immediately when it is already where it should be, and
+    // this way a rebuild, which replaces every Overlay with a fresh one, does
+    // not leave the new windows sitting in the wrong place.
+    for (size_t i = 0; i < g_overlays.size(); i++) {
+        g_overlays[i]->SetNudged(g_fullscreenNudge);
+    }
+}
+
 static const UINT WM_VSH_SETTINGS = WM_APP + 1;
 static const UINT WM_VSH_QUIT = WM_APP + 2;
 
@@ -5228,6 +5311,8 @@ static void ShowOverlays() {
     // this would start the next one on the half second poll with its rotation
     // frozen, until the first render cleared it.
     g_allOccluded = false;
+    g_fullscreenNudge = false;
+    g_notifyPoll = 0;
     if (g_settings.globalKeys) {
         InstallKbdHook();
     }
@@ -5700,6 +5785,8 @@ static DWORD WINAPI WorkerThread(LPVOID) {
                 }
             }
         }
+
+        PollFullscreenState(dt);
 
         bool allOccluded = !g_overlays.empty();
         for (size_t i = 0; i < g_overlays.size(); i++) {
