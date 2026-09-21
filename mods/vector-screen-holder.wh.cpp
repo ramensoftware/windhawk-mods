@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.4.2
+// @version         1.4.3
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -1460,6 +1460,38 @@ published at
   $name:ar: العتامة (%)
   $name:he: אטימות (%)
   $description: Below 100 the desktop shows through the overlay. Clamped to 10-100.
+- clickThrough: false
+  $name: Click through to the desktop
+  $name:es-ES: Clics hacia el escritorio
+  $name:pt-BR: Cliques passam para a área de trabalho
+  $name:fr-FR: Clics traversants vers le bureau
+  $name:de-DE: Klicks zum Desktop durchlassen
+  $name:it-IT: Clic trasparenti verso il desktop
+  $name:nl-NL: Klikken doorlaten naar bureaublad
+  $name:pl-PL: Przepuszczaj kliknięcia na pulpit
+  $name:tr-TR: Tıklamalar masaüstüne geçsin
+  $name:ru-RU: Пропускать клики на рабочий стол
+  $name:uk-UA: Пропускати кліки на робочий стіл
+  $name:zh-CN: 鼠标点击穿透到桌面
+  $name:zh-TW: 滑鼠點擊穿透至桌面
+  $name:ja-JP: クリックをデスクトップに透過
+  $name:ko-KR: 클릭을 바탕 화면으로 통과
+  $name:ar: تمرير النقرات إلى سطح المكتب
+  $name:he: העברת לחיצות לשולחן העבודה
+  $description: >-
+    Pass every click straight through to the desktop, so the icons under the
+    overlay stay usable. Worth turning on if you run the overlay on your only
+    display. The trade is that the overlay can no longer be clicked, scrolled
+    or typed at, so it runs entirely on what you set here: the palette, the
+    amount and the wheel parameter come from the settings above, and the style
+    is whichever one you last left it on, or the rotation if you have it on.
+    To pin it to one style, leave only that style ticked below.
+
+    Esc at the overlay stops working as well, for the same reason: the window
+    never takes focus, so the key never reaches it. That leaves the toggle
+    hotkey above, which always works, and Global Esc directly below, which is
+    worth turning on if you want Esc to keep closing the overlay while this is
+    on.
 - globalKeys: false
   $name: Global Esc
   $name:es-ES: Esc global
@@ -1486,34 +1518,10 @@ published at
     watched globally, and the key is never swallowed, so the application you
     are in still sees it. The toggle hotkey above always works regardless of
     this setting.
-- clickThrough: false
-  $name: Click through to the desktop
-  $name:es-ES: Clics hacia el escritorio
-  $name:pt-BR: Cliques passam para a área de trabalho
-  $name:fr-FR: Clics traversants vers le bureau
-  $name:de-DE: Klicks zum Desktop durchlassen
-  $name:it-IT: Clic trasparenti verso il desktop
-  $name:nl-NL: Klikken doorlaten naar bureaublad
-  $name:pl-PL: Przepuszczaj kliknięcia na pulpit
-  $name:tr-TR: Tıklamalar masaüstüne geçsin
-  $name:ru-RU: Пропускать клики на рабочий стол
-  $name:uk-UA: Пропускати кліки на робочий стіл
-  $name:zh-CN: 鼠标点击穿透到桌面
-  $name:zh-TW: 滑鼠點擊穿透至桌面
-  $name:ja-JP: クリックをデスクトップに透過
-  $name:ko-KR: 클릭을 바탕 화면으로 통과
-  $name:ar: تمرير النقرات إلى سطح المكتب
-  $name:he: העברת לחיצות לשולחן העבודה
-  $description: >-
-    Pass every click straight through to the desktop, so the icons under the
-    overlay stay usable. Worth turning on if you run the overlay on your only
-    display. The trade is that the overlay can no longer be clicked, scrolled
-    or typed at, so it runs entirely on what you set here: the palette, the
-    amount and the wheel parameter come from the settings above, and the style
-    is whichever one you last left it on, or the rotation if you have it on.
-    To pin it to one style, leave only that style ticked below. The toggle
-    hotkey still shows and hides it, and Esc still closes it if the setting
-    below is on.
+
+    With Click through to the desktop on, this is the only way to close the
+    overlay with a key other than the hotkey, because the overlay never takes
+    focus in that mode and so never sees Esc itself.
 - keepAwake: true
   $name: Keep the PC awake
   $name:es-ES: Mantener el PC despierto
