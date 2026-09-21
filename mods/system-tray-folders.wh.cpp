@@ -36,8 +36,10 @@ tile to return.
 *Inside a folder*
 
 Icons inside a folder are the real tray icons, so clicking, right clicking and
-tooltips keep working. Icons can't be dragged into or out of folders; choose
-them in the settings instead.
+tooltips keep working. Dragging icons between the taskbar and the flyout and
+reordering them work as usual, and an icon dragged back into the flyout returns
+to its folder. Which folder an icon belongs to comes from the settings, not
+from dragging.
 
 ## Choosing icons
 
