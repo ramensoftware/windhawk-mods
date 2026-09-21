@@ -322,18 +322,6 @@ int main() {
             assert(highlights.Shapes().Size() == 0);
         }
         {
-            // The clip takes the outer half, so the stroke is twice the setting.
-            auto outline = compositor.CreateRoundedRectangleGeometry();
-            g_buttonBorderThickness = 3;
-            auto border = ButtonBorder(outline, true);
-            assert(border.Shapes().Size() == 1);
-            auto stroke =
-                border.Shapes().GetAt(0).as<CompositionSpriteShape>();
-            assert(stroke.StrokeThickness() == 6);
-            assert(stroke.Geometry() == outline);
-            g_buttonBorderThickness = 1;
-        }
-        {
             LiquidRenderer renderer;
             Root closingRoot;
             closingRoot.sources.emplace_back();
@@ -847,6 +835,9 @@ result = subprocess.run(["rtk", "proxy", str(executable)], check=True,
                         stdout=subprocess.PIPE, text=True, encoding="utf-8")
 assert "AdjustTaskbarFrameSize" not in code
 assert "plate.CornerRadius(" not in code
+# Superseded by the native gradient rim, which the fill-only dim keeps intact.
+assert "ButtonBorder" not in code
+assert "g_buttonBorder" not in code
 assert "originalCornerRadius" not in code
 assert "cornerRadiusOwned" not in code
 for removed in [
