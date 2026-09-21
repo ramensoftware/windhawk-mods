@@ -363,19 +363,19 @@ published at
   $name:ar: الشاشة
   $name:he: מסך
   $description: >-
-    Which display to hold. Any resolution and orientation works, because the
-    art is generated to fit whatever the display actually is. The numbered
-    choices come from the \\.\DISPLAYn device names. Those usually match the
-    numbers Windows Settings shows, but the two are produced by different
-    parts of Windows and can disagree after displays are re-arranged. The mod
-    log lists every display with its number, resolution and position when the
-    mod loads; use the resolution to confirm which is which. The list stops at
-    Display 8; beyond that, use All displays.
+    Where the art is drawn. Any resolution or orientation works: every display
+    gets art generated for its own size and shape, so nothing is stretched or
+    cropped to fit.
 
-    All but the primary display covers every screen except the one you work
-    on, which is the usual want on a desk with side monitors. On a machine
-    with only the one display it has nothing to cover, so it falls back to
-    that display and says so in the log.
+    All displays covers every screen. All but the primary covers every screen
+    except the one you work on, the usual want on a desk with side monitors;
+    with nothing but the primary connected it falls back to that and logs why.
+
+    The numbered choices come from the \\.\DISPLAYn device names, which
+    usually match Windows Settings but can disagree once displays have been
+    re-arranged. Match on resolution instead: the mod log lists every display
+    with its number, resolution and position each time it loads. Numbering
+    stops at Display 8; past that, use All displays.
   $options:
   - primary: Primary display
   - all: All displays
