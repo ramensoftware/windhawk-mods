@@ -667,7 +667,7 @@ class Client {
         return SendMessageTimeoutW(everything, WM_COPYDATA,
                                    reinterpret_cast<WPARAM>(hwnd_),
                                    reinterpret_cast<LPARAM>(&cds),
-                                   SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000,
+                                   SMTO_ABORTIFHUNG, 2000,
                                    &result) != 0;
     }
 
@@ -3496,94 +3496,32 @@ static HRESULT Hook_CallHandler(void* handler, void* str) {
     return pOrigCallHandler(handler, nullptr);
 }
 
-static bool GetTextSection(HMODULE hMod, BYTE** outStart, size_t* outSize) {
-    if (!hMod) return false;
-    auto dosHeader = reinterpret_cast<PIMAGE_DOS_HEADER>(hMod);
-    if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) return false;
-    auto ntHeaders = reinterpret_cast<PIMAGE_NT_HEADERS>((BYTE*)hMod + dosHeader->e_lfanew);
-    if (ntHeaders->Signature != IMAGE_NT_SIGNATURE) return false;
-
-    auto section = IMAGE_FIRST_SECTION(ntHeaders);
-    for (WORD i = 0; i < ntHeaders->FileHeader.NumberOfSections; ++i, ++section) {
-        if (strncmp((char*)section->Name, ".text", 5) == 0) {
-            *outStart = (BYTE*)hMod + section->VirtualAddress;
-            *outSize = section->Misc.VirtualSize;
-            return true;
-        }
-    }
-    return false;
-}
-
-static void* FindPattern(BYTE* base, size_t size, const BYTE* pattern, const char* mask) {
-    size_t patternLen = strlen(mask);
-    if (size < patternLen) return nullptr;
-    for (size_t i = 0; i <= size - patternLen; ++i) {
-        bool match = true;
-        for (size_t j = 0; j < patternLen; ++j) {
-            if (mask[j] == 'x' && base[i + j] != pattern[j]) {
-                match = false;
-                break;
-            }
-        }
-        if (match) {
-            return base + i;
-        }
-    }
-    return nullptr;
-}
-
 static bool g_searchUxHooked = false;
 static void HookSearchUx() {
     if (g_searchUxHooked) return;
     HMODULE hSearchUx = GetModuleHandleW(L"SearchUx.UI.dll");
     if (!hSearchUx) {
-        hSearchUx = LoadLibraryW(L"SearchUx.UI.dll");
+        hSearchUx = LoadLibraryExW(L"SearchUx.UI.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     }
     if (!hSearchUx) return;
-
-    BYTE* textStart = nullptr;
-    size_t textSize = 0;
-    if (!GetTextSection(hSearchUx, &textStart, &textSize)) {
-        Wh_Log(L"[SearchHost] Failed to query .text section of SearchUx.UI.dll");
-        return;
-    }
 
     const BYTE sigNotify[] = {
         0x40, 0x55, 0x53, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
         0x48, 0x8D, 0x6C, 0x24, 0xF1, 0x48, 0x81, 0xEC, 0xB8, 0x00, 0x00, 0x00
     };
-    const char maskNotify[] = "xxxxxxxxxxxxxxxxxxxxxxxxx";
 
-    void* pNotify = nullptr;
     void* pKnownNotify = (void*)((BYTE*)hSearchUx + 0x191F40);
     if (memcmp(pKnownNotify, sigNotify, sizeof(sigNotify)) == 0) {
-        pNotify = pKnownNotify;
-    } else {
-        pNotify = FindPattern(textStart, textSize, sigNotify, maskNotify);
-    }
-
-    if (pNotify) {
-        Wh_SetFunctionHook(pNotify, (void*)Hook_NotifyQueryTextChanged, (void**)&pOrigNotifyQueryTextChanged);
+        Wh_SetFunctionHook(pKnownNotify, (void*)Hook_NotifyQueryTextChanged, (void**)&pOrigNotifyQueryTextChanged);
         Wh_Log(L"[SearchHost] Hooked SearchUx.UI.dll!NotifyQueryTextChanged (CPU Spike Killer)");
+    } else {
+        Wh_Log(L"[SearchHost] SearchUx.UI.dll build does not match known RVA, skipping NotifyQueryTextChanged hook");
     }
 
-    const BYTE sigAuto[] = {
-        0x48, 0x83, 0xEC, 0x28, 0x48, 0x8B, 0x01, 0x48, 0x8B, 0x40, 0x48,
-        0xFF, 0x15, 0x00, 0x00, 0x00, 0x00, 0x85, 0xC0, 0x79, 0x08
-    };
-    const char maskAuto[] = "xxxxxxxxxxxxx????xxxx";
-
-    void* pAuto = nullptr;
     void* pKnownAuto = (void*)((BYTE*)hSearchUx + 0x2819F0);
     BYTE* bKnownAuto = (BYTE*)pKnownAuto;
     if (bKnownAuto[0] == 0x48 && bKnownAuto[1] == 0x83 && bKnownAuto[2] == 0xEC && bKnownAuto[3] == 0x28) {
-        pAuto = pKnownAuto;
-    } else {
-        pAuto = FindPattern(textStart, textSize, sigAuto, maskAuto);
-    }
-
-    if (pAuto) {
-        Wh_SetFunctionHook(pAuto, (void*)Hook_CallHandler, (void**)&pOrigCallHandler);
+        Wh_SetFunctionHook(pKnownAuto, (void*)Hook_CallHandler, (void**)&pOrigCallHandler);
         Wh_Log(L"[SearchHost] Hooked SearchUx.UI.dll!SetAutoCompleteQueryText");
     }
 
@@ -4018,6 +3956,103 @@ void HideOverlayAnimated() {
     }
 }
 
+struct SuppressedElement {
+    winrt::weak_ref<wux::FrameworkElement> element;
+    wux::Visibility visibility = wux::Visibility::Visible;
+    double opacity = 1.0;
+    bool hitTestVisible = true;
+    double height = std::numeric_limits<double>::quiet_NaN();
+    double maxHeight = std::numeric_limits<double>::quiet_NaN();
+    wux::Thickness margin{};
+    bool isControl = false;
+    bool tabStop = true;
+    bool tabStopOnly = false;
+};
+
+[[clang::no_destroy]] std::vector<SuppressedElement> g_suppressed;
+
+void SuppressShellElement(wux::FrameworkElement const& fe, bool collapse = true,
+                          bool zeroSize = false, bool tabStopOnly = false) {
+    if (!fe) {
+        return;
+    }
+    try {
+        SuppressedElement saved;
+        saved.element = winrt::make_weak(fe);
+        if (auto ctl = fe.try_as<wuxc::Control>()) {
+            saved.isControl = true;
+            saved.tabStop = ctl.IsTabStop();
+        }
+        saved.tabStopOnly = tabStopOnly;
+
+        if (tabStopOnly) {
+            g_suppressed.push_back(std::move(saved));
+            if (auto ctl = fe.try_as<wuxc::Control>()) {
+                ctl.IsTabStop(false);
+            }
+            return;
+        }
+
+        saved.visibility = fe.Visibility();
+        saved.opacity = fe.Opacity();
+        saved.hitTestVisible = fe.IsHitTestVisible();
+        saved.height = fe.Height();
+        saved.maxHeight = fe.MaxHeight();
+        saved.margin = fe.Margin();
+        g_suppressed.push_back(std::move(saved));
+
+        fe.Opacity(0.0);
+        fe.IsHitTestVisible(false);
+        if (collapse) {
+            fe.Visibility(wux::Visibility::Collapsed);
+        }
+        if (zeroSize) {
+            fe.MaxHeight(0.0);
+            fe.Height(0.0);
+            fe.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 0));
+        }
+    } catch (...) {
+    }
+}
+
+void RestoreShellElements() {
+    size_t restored = 0;
+    for (auto it = g_suppressed.rbegin(); it != g_suppressed.rend(); ++it) {
+        auto fe = it->element.get();
+        if (!fe) {
+            continue;
+        }
+        try {
+            if (it->tabStopOnly) {
+                if (it->isControl) {
+                    if (auto ctl = fe.try_as<wuxc::Control>()) {
+                        ctl.IsTabStop(it->tabStop);
+                    }
+                }
+                ++restored;
+                continue;
+            }
+
+            fe.Visibility(it->visibility);
+            fe.Opacity(it->opacity);
+            fe.IsHitTestVisible(it->hitTestVisible);
+            fe.Height(it->height);
+            fe.MaxHeight(it->maxHeight);
+            fe.Margin(it->margin);
+            if (it->isControl) {
+                if (auto ctl = fe.try_as<wuxc::Control>()) {
+                    ctl.IsTabStop(it->tabStop);
+                }
+            }
+            ++restored;
+        } catch (...) {
+        }
+    }
+    Wh_Log(L"teardown: restored %zu shell element(s) of %zu", restored,
+        g_suppressed.size());
+    g_suppressed.clear();
+}
+
 void HideAllOtherSearchBoxes(wux::DependencyObject const& root, int depth) {
     if (!root || depth < 0) return;
     try {
@@ -4032,9 +4067,7 @@ void HideAllOtherSearchBoxes(wux::DependencyObject const& root, int depth) {
                     cls.find(L"SearchControl") != std::wstring::npos ||
                     name.find(L"SearchBox") != std::wstring::npos ||
                     name.find(L"SearchBlock") != std::wstring::npos) {
-                    fe.Visibility(wux::Visibility::Collapsed);
-                    fe.Opacity(0.0);
-                    fe.IsHitTestVisible(false);
+                    SuppressShellElement(fe, true, false);
                     if (auto ctl = fe.try_as<wuxc::Control>()) {
                         ctl.IsTabStop(false);
                     }
@@ -4260,7 +4293,7 @@ void DisarmScrollTabStops(wux::DependencyObject const& root, int depth = 15) {
     if (!root || depth < 0) return;
     if (auto scroller = root.try_as<wuxc::ScrollViewer>()) {
         if (scroller.IsTabStop()) {
-            scroller.IsTabStop(false);
+            SuppressShellElement(scroller.as<wux::FrameworkElement>(), false, false, /*tabStopOnly=*/true);
             Wh_Log(L"focus: proactively disabled IsTabStop on %ls", ElementLabel(root).c_str());
         }
     }
@@ -4738,7 +4771,7 @@ static void WaitForTrackedLaunches() {
     }
     for (HANDLE h : handlesToJoin) {
         if (h) {
-            WaitForSingleObject(h, 2000);
+            WaitForSingleObject(h, INFINITE);
             CloseHandle(h);
         }
     }
@@ -6854,95 +6887,7 @@ void SearchThreadMain() {
 }
 
 
-// Everything of the shell's own that this mod hid, and what it looked like
-// before we touched it.
-//
-// Weak, because the Start menu rebuilds its tree and we must not keep dead
-// elements alive. Recorded in the order they were hidden and restored in
-// reverse, so if the same element was hidden twice the value that comes back
-// is the one from before the first time.
-struct SuppressedElement {
-    winrt::weak_ref<wux::FrameworkElement> element;
-    wux::Visibility visibility = wux::Visibility::Visible;
-    double opacity = 1.0;
-    bool hitTestVisible = true;
-    double height = std::numeric_limits<double>::quiet_NaN();
-    double maxHeight = std::numeric_limits<double>::quiet_NaN();
-    wux::Thickness margin{};
-    bool isControl = false;
-    bool tabStop = true;
-};
 
-[[clang::no_destroy]] std::vector<SuppressedElement> g_suppressed;
-
-// Hides one of the shell's elements, remembering how to put it back.
-//
-// Every caller used to do this inline and none of them recorded anything,
-// which is why disabling the mod left the Start menu with no search box at
-// all and a cell that no longer measures.
-void SuppressShellElement(wux::FrameworkElement const& fe, bool collapse = true,
-                          bool zeroSize = false) {
-    if (!fe) {
-        return;
-    }
-    try {
-        SuppressedElement saved;
-        saved.element = winrt::make_weak(fe);
-        saved.visibility = fe.Visibility();
-        saved.opacity = fe.Opacity();
-        saved.hitTestVisible = fe.IsHitTestVisible();
-        saved.height = fe.Height();
-        saved.maxHeight = fe.MaxHeight();
-        saved.margin = fe.Margin();
-        if (auto ctl = fe.try_as<wuxc::Control>()) {
-            saved.isControl = true;
-            saved.tabStop = ctl.IsTabStop();
-        }
-        g_suppressed.push_back(std::move(saved));
-
-        fe.Opacity(0.0);
-        fe.IsHitTestVisible(false);
-        if (collapse) {
-            fe.Visibility(wux::Visibility::Collapsed);
-        }
-        if (zeroSize) {
-            fe.MaxHeight(0.0);
-            fe.Height(0.0);
-            fe.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 0));
-        }
-    } catch (...) {
-    }
-}
-
-// Undoes all of it. XAML thread, and before this DLL goes away.
-void RestoreShellElements() {
-    size_t restored = 0;
-    for (auto it = g_suppressed.rbegin(); it != g_suppressed.rend(); ++it) {
-        auto fe = it->element.get();
-        if (!fe) {
-            continue;  // that tree is already gone; nothing to put back
-        }
-        try {
-            fe.Visibility(it->visibility);
-            fe.Opacity(it->opacity);
-            fe.IsHitTestVisible(it->hitTestVisible);
-            // NaN is how XAML spells Auto, so this restores Auto correctly.
-            fe.Height(it->height);
-            fe.MaxHeight(it->maxHeight);
-            fe.Margin(it->margin);
-            if (it->isControl) {
-                if (auto ctl = fe.try_as<wuxc::Control>()) {
-                    ctl.IsTabStop(it->tabStop);
-                }
-            }
-            ++restored;
-        } catch (...) {
-        }
-    }
-    Wh_Log(L"teardown: restored %zu shell element(s) of %zu", restored,
-        g_suppressed.size());
-    g_suppressed.clear();
-}
 
 void RecursivelyHideTextBlocks(wux::DependencyObject const& node, int depth = 0) {
     if (!node || depth > 8) return;
