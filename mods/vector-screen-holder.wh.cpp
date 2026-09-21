@@ -49,8 +49,9 @@
 
 Fills a display with generative line art and holds the screen awake for as long
 as it runs. **It runs on your primary display, on any single display you're
-running, or on all of them at once.** Art appears live on one monitor or a
-couple this way, and even four or more an enthusiast keeps running.
+running, on all of them at once, or on all but the one you work on.** Art
+appears live on one monitor or a couple this way, and even four or more an
+enthusiast keeps running.
 
 Every frame is drawn as strokes through Direct2D on the GPU. There are no
 images, no video file and no fixed resolution, so the artwork is generated for
@@ -161,9 +162,11 @@ into the window between the wallpaper and the icon view. This mod is built not
 to load into another process at all, so that route is closed to it by design.
 
 The **Display** setting defaults to your primary screen, which is the right
-choice on a single monitor machine; on more than one, point it at whichever
-display you are not working on. Either way the overlay only goes for good when
-you press Esc or toggle it off.
+choice on a single monitor machine. On more than one, point it at whichever
+display you are not working on, or pick **All but the primary display** and it
+covers every screen except that one, which is usually what a desk with side
+monitors wants. Either way the overlay only goes for good when you press Esc
+or toggle it off.
 
 ## Color
 
