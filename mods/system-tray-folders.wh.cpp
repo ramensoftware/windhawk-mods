@@ -345,7 +345,6 @@ constexpr GUID IID_INotificationAreaIcon6 = {
 constexpr int kNotificationAreaIcon6_get_AppFriendlyName = 6;
 
 // Resolved from symbols.
-void* g_overflowInterfaceVftable;
 GUID* g_iconConfigurationIid;
 void* g_iconConfigurationVftable;
 void* g_iconConfiguration_get_DataModel;
@@ -359,97 +358,6 @@ GUID* g_imageContentViewModelIid;
 void* g_imageContentViewModelVftable;
 void* g_imageContentViewModel_get_AutomationPropertyName;
 void* g_imageContentViewModel_get_IconImageSource;
-
-int g_dataModelSlot = -1;
-int g_udkObjectSlot = -1;
-int g_toolTipSlot = -1;
-int g_nameSlot = -1;
-int g_imageSlot = -1;
-
-bool IsReadable(void* address, size_t size) {
-    MEMORY_BASIC_INFORMATION mbi;
-    if (!address || !VirtualQuery(address, &mbi, sizeof(mbi))) {
-        return false;
-    }
-    if (mbi.State != MEM_COMMIT || (mbi.Protect & (PAGE_GUARD | PAGE_NOACCESS))) {
-        return false;
-    }
-    const DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
-                           PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE |
-                           PAGE_EXECUTE_WRITECOPY;
-    if (!(mbi.Protect & readable)) {
-        return false;
-    }
-    return (BYTE*)address + size <= (BYTE*)mbi.BaseAddress + mbi.RegionSize;
-}
-
-int FindVtableSlot(void* vtable, void* function) {
-    if (!vtable || !function) {
-        return -1;
-    }
-    void** slots = (void**)vtable;
-    for (int i = 6; i < 64; i++) {
-        if (!IsReadable(&slots[i], sizeof(void*))) {
-            break;
-        }
-        if (slots[i] == function) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-void* g_initializingManager;
-void* g_createdOverflowManager;
-[[clang::no_destroy]] winrt::com_ptr<IUnknown> g_createdOverflowInterface;
-
-// The overflow manager is a plain C++ object, so its layout is not part of any
-// contract. The NotificationAreaOverflow interface is recorded, with a
-// reference, while the manager creates it, and released when InitializeIfNeeded
-// returns. When the mod was loaded after the control was created, look for a
-// field that points at it instead of relying on a fixed field offset. Either
-// way, the candidate is verified by its vtable before calling into it.
-Controls::Control FindOverflowControl(void* manager) {
-    if (!manager || !g_overflowInterfaceVftable) {
-        return nullptr;
-    }
-
-    auto getControl = [](void* candidate) -> Controls::Control {
-        if (!candidate || ((ULONG_PTR)candidate & (sizeof(void*) - 1)) ||
-            !IsReadable(candidate, sizeof(void*)) ||
-            *(void**)candidate != g_overflowInterfaceVftable) {
-            return nullptr;
-        }
-
-        Controls::Control control{nullptr};
-        ((IUnknown*)candidate)
-            ->QueryInterface(winrt::guid_of<Controls::Control>(),
-                             winrt::put_abi(control));
-        if (control && control.XamlRoot()) {
-            return control;
-        }
-        return nullptr;
-    };
-
-    if (manager == g_createdOverflowManager) {
-        if (auto control = getControl(g_createdOverflowInterface.get())) {
-            return control;
-        }
-    }
-
-    for (size_t offset = 0; offset < 0x80; offset += sizeof(void*)) {
-        void** field = (void**)((BYTE*)manager + offset);
-        if (!IsReadable(field, sizeof(void*))) {
-            break;
-        }
-
-        if (auto control = getControl(*field)) {
-            return control;
-        }
-    }
-
-    return nullptr;
-}
 
 Markup::IXamlMember GetXamlMember(PCWSTR typeName, PCWSTR memberName) {
     auto provider =
@@ -481,7 +389,7 @@ struct IconInfo {
 
 // Queries an interface of an internal SystemTray.dll type. The result is only
 // returned if it's backed by the expected implementation vtable, which makes
-// calling its methods by slot index safe.
+// calling that implementation's methods, resolved from symbols, on it safe.
 winrt::com_ptr<IUnknown> QueryVerifiedInterface(wf::IInspectable const& object,
                                                 GUID const* iid,
                                                 void* expectedVftable) {
@@ -496,23 +404,23 @@ winrt::com_ptr<IUnknown> QueryVerifiedInterface(wf::IInspectable const& object,
     return result;
 }
 
-void* CallAbiGetter(IUnknown* object, int slot) {
-    void** vtable = *(void***)object;
+void* CallAbiGetter(IUnknown* object, void* getter) {
     void* value = nullptr;
-    HRESULT hr = ((HRESULT(WINAPI*)(void*, void**))vtable[slot])(object, &value);
+    HRESULT hr = ((HRESULT(WINAPI*)(void*, void**))getter)(object, &value);
     return SUCCEEDED(hr) ? value : nullptr;
 }
 
-std::wstring CallStringGetter(IUnknown* object, int slot) {
+std::wstring CallStringGetter(IUnknown* object, void* getter) {
     winrt::hstring value;
-    winrt::attach_abi(value, CallAbiGetter(object, slot));
+    winrt::attach_abi(value, CallAbiGetter(object, getter));
     return NormalizeName(value);
 }
 
 // The app name comes from the executable, so it stays the same regardless of
 // what the app puts in its tooltip.
 void ReadAppName(IconInfo& info) {
-    if (g_dataModelSlot < 0 || g_udkObjectSlot < 0) {
+    if (!g_iconConfiguration_get_DataModel ||
+        !g_notificationAreaIconsDataModel_get_UDKObject) {
         return;
     }
 
@@ -538,8 +446,9 @@ void ReadAppName(IconInfo& info) {
     }
 
     wf::IInspectable dataModel{nullptr};
-    winrt::attach_abi(dataModel, CallAbiGetter(configurationInterface.get(),
-                                               g_dataModelSlot));
+    winrt::attach_abi(dataModel,
+                      CallAbiGetter(configurationInterface.get(),
+                                    g_iconConfiguration_get_DataModel));
 
     auto dataModelInterface =
         QueryVerifiedInterface(dataModel, g_notificationAreaIconsDataModelIid,
@@ -549,8 +458,9 @@ void ReadAppName(IconInfo& info) {
     }
 
     wf::IInspectable udkIcon{nullptr};
-    winrt::attach_abi(udkIcon, CallAbiGetter(dataModelInterface.get(),
-                                             g_udkObjectSlot));
+    winrt::attach_abi(
+        udkIcon, CallAbiGetter(dataModelInterface.get(),
+                               g_notificationAreaIconsDataModel_get_UDKObject));
     if (!udkIcon) {
         return;
     }
@@ -560,8 +470,9 @@ void ReadAppName(IconInfo& info) {
     ((IUnknown*)winrt::get_abi(udkIcon))
         ->QueryInterface(IID_INotificationAreaIcon6, icon6.put_void());
     if (icon6) {
-        info.appName = CallStringGetter(
-            icon6.get(), kNotificationAreaIcon6_get_AppFriendlyName);
+        void* getter =
+            (*(void***)icon6.get())[kNotificationAreaIcon6_get_AppFriendlyName];
+        info.appName = CallStringGetter(icon6.get(), getter);
     }
 }
 
@@ -583,12 +494,13 @@ void ReadIconInfo(IconInfo& info) {
         return;
     }
 
-    if (g_toolTipSlot > 0) {
+    if (g_imageContentViewModel_get_ToolTipText) {
         if (auto baseInterface = QueryVerifiedInterface(
                 contentViewModel, g_iconContentViewModelIid,
                 g_imageContentViewModelBaseVftable)) {
             info.toolTip =
-                CallStringGetter(baseInterface.get(), g_toolTipSlot);
+                CallStringGetter(baseInterface.get(),
+                                 g_imageContentViewModel_get_ToolTipText);
         }
     }
 
@@ -600,13 +512,17 @@ void ReadIconInfo(IconInfo& info) {
         return;
     }
 
-    if (g_nameSlot > 0) {
-        info.name = CallStringGetter(imageInterface.get(), g_nameSlot);
+    if (g_imageContentViewModel_get_AutomationPropertyName) {
+        info.name = CallStringGetter(
+            imageInterface.get(),
+            g_imageContentViewModel_get_AutomationPropertyName);
     }
 
-    if (g_imageSlot > 0) {
-        winrt::attach_abi(info.image,
-                          CallAbiGetter(imageInterface.get(), g_imageSlot));
+    if (g_imageContentViewModel_get_IconImageSource) {
+        winrt::attach_abi(
+            info.image,
+            CallAbiGetter(imageInterface.get(),
+                          g_imageContentViewModel_get_IconImageSource));
     }
 }
 
@@ -1401,8 +1317,10 @@ std::shared_ptr<OverflowState> FindState(void* manager) {
     return nullptr;
 }
 
-std::shared_ptr<OverflowState> EnsureAttached(void* manager) {
-    if (!manager || g_unloading) {
+std::shared_ptr<OverflowState> EnsureAttached(
+    void* manager,
+    Controls::Control const& overflow) {
+    if (!manager || !overflow || g_unloading) {
         return nullptr;
     }
 
@@ -1415,17 +1333,9 @@ std::shared_ptr<OverflowState> EnsureAttached(void* manager) {
     if (state && state->detaching) {
         return nullptr;
     }
-    if (state && state->attached) {
-        auto overflow = state->overflow.get();
-        auto itemsControl = state->itemsControl.get();
-        if (overflow && itemsControl && overflow.XamlRoot()) {
-            return state;
-        }
-    }
-
-    auto overflow = FindOverflowControl(manager);
-    if (!overflow) {
-        return nullptr;
+    if (state && state->attached && state->overflow.get() == overflow &&
+        state->itemsControl.get()) {
+        return state;
     }
 
     auto states = *g_states;
@@ -1532,57 +1442,7 @@ void ApplyPendingSettings() {
 ////////////////////////////////////////////////////////////////////////////////
 // Hooks
 
-using OverflowXamlIslandManager_InitializeIfNeeded_t =
-    void(WINAPI*)(void* pThis);
-OverflowXamlIslandManager_InitializeIfNeeded_t
-    OverflowXamlIslandManager_InitializeIfNeeded_Original;
-void WINAPI OverflowXamlIslandManager_InitializeIfNeeded_Hook(void* pThis) {
-    auto resetCreated = ScopeExit([] {
-        g_createdOverflowManager = nullptr;
-        g_createdOverflowInterface = nullptr;
-    });
-
-    {
-        g_initializingManager = pThis;
-        auto reset = ScopeExit([] { g_initializingManager = nullptr; });
-        OverflowXamlIslandManager_InitializeIfNeeded_Original(pThis);
-    }
-
-    try {
-        ApplyPendingSettings();
-        EnsureAttached(pThis);
-    } catch (...) {
-        Wh_Log(L"InitializeIfNeeded: attach failed");
-    }
-}
-
-using NotificationAreaOverflow_NotificationAreaOverflow_t =
-    void*(WINAPI*)(void* pThis, void* viewModel, void* settings);
-NotificationAreaOverflow_NotificationAreaOverflow_t
-    NotificationAreaOverflow_NotificationAreaOverflow_Original;
-void* WINAPI NotificationAreaOverflow_NotificationAreaOverflow_Hook(
-    void* pThis,
-    void* viewModel,
-    void* settings) {
-    void* result = NotificationAreaOverflow_NotificationAreaOverflow_Original(
-        pThis, viewModel, settings);
-
-    if (g_initializingManager) {
-        for (size_t offset = 0; offset < 0x80; offset += sizeof(void*)) {
-            void* candidate = (BYTE*)pThis + offset;
-            if (!IsReadable(candidate, sizeof(void*))) {
-                break;
-            }
-            if (*(void**)candidate == g_overflowInterfaceVftable) {
-                g_createdOverflowManager = g_initializingManager;
-                g_createdOverflowInterface.copy_from((IUnknown*)candidate);
-                break;
-            }
-        }
-    }
-
-    return result;
-}
+void* g_showingManager;
 
 using OverflowXamlIslandManager_Show_t =
     void(WINAPI*)(void* pThis, POINT pt, int inputDeviceKind);
@@ -1592,55 +1452,82 @@ void WINAPI OverflowXamlIslandManager_Show_Hook(void* pThis,
                                                 int inputDeviceKind) {
     Wh_Log(L"Show %d,%d kind=%d", pt.x, pt.y, inputDeviceKind);
 
-    std::shared_ptr<OverflowState> state;
     try {
         ApplyPendingSettings();
-        state = EnsureAttached(pThis);
-        if (state) {
-            // Always open at the top level, and pick up renamed icons.
-            state->openFolder = -1;
-            Rebuild(*state, /*opening=*/true);
-            RefreshTileSize(*state);
-        }
+    } catch (...) {
+        Wh_Log(L"Show: applying settings failed");
+    }
+
+    {
+        g_showingManager = pThis;
+        auto reset = ScopeExit([] { g_showingManager = nullptr; });
+        OverflowXamlIslandManager_Show_Original(pThis, pt, inputDeviceKind);
+    }
+
+    if (g_unloading || !g_states) {
+        return;
+    }
+    auto state = FindState(pThis);
+    if (!state || !state->attached) {
+        return;
+    }
+
+    try {
+        RefreshTileSize(*state);
     } catch (...) {
         Wh_Log(L"Show: update failed");
     }
 
-    OverflowXamlIslandManager_Show_Original(pThis, pt, inputDeviceKind);
-
-    if (!state && !g_unloading && g_states) {
-        state = FindState(pThis);
-        if (state && state->attached) {
-            try {
-                RefreshTileSize(*state);
-            } catch (...) {
-                Wh_Log(L"Show: update failed");
+    struct Param {
+        HWND window;
+        int count;
+    } param{};
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            auto& param = *(Param*)lParam;
+            WCHAR className[64];
+            if (IsWindowVisible(hWnd) &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"TopLevelWindowForOverflowXamlIsland") ==
+                    0) {
+                param.window = hWnd;
+                param.count++;
             }
+            return TRUE;
+        },
+        (LPARAM)&param);
+    state->islandWindow = param.count == 1 ? param.window : nullptr;
+}
+
+// While Show positions the flyout, the manager measures its
+// NotificationAreaOverflow member through this function, before the window is
+// shown. Its `this` is that member, a C++/WinRT projected type, which holds
+// nothing but the control's interface pointer, so the control is taken from
+// there instead of from the manager's layout, which isn't part of any contract.
+using NotificationAreaOverflow_Measure_t =
+    void(WINAPI*)(void* pThis,
+                  winrt::Windows::Foundation::Size const* availableSize);
+NotificationAreaOverflow_Measure_t NotificationAreaOverflow_Measure_Original;
+void WINAPI NotificationAreaOverflow_Measure_Hook(
+    void* pThis,
+    winrt::Windows::Foundation::Size const* availableSize) {
+    if (void* manager = g_showingManager) {
+        try {
+            auto overflow = reinterpret_cast<wf::IInspectable const*>(pThis)
+                                ->try_as<Controls::Control>();
+            if (auto state = EnsureAttached(manager, overflow)) {
+                // Always open at the top level, and pick up renamed icons.
+                state->openFolder = -1;
+                Rebuild(*state, /*opening=*/true);
+                RefreshTileSize(*state);
+            }
+        } catch (...) {
+            Wh_Log(L"Show: update failed");
         }
     }
 
-    if (state && state->attached) {
-        struct Param {
-            HWND window;
-            int count;
-        } param{};
-        EnumThreadWindows(
-            GetCurrentThreadId(),
-            [](HWND hWnd, LPARAM lParam) -> BOOL {
-                auto& param = *(Param*)lParam;
-                WCHAR className[64];
-                if (IsWindowVisible(hWnd) &&
-                    GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-                    _wcsicmp(className,
-                             L"TopLevelWindowForOverflowXamlIsland") == 0) {
-                    param.window = hWnd;
-                    param.count++;
-                }
-                return TRUE;
-            },
-            (LPARAM)&param);
-        state->islandWindow = param.count == 1 ? param.window : nullptr;
-    }
+    NotificationAreaOverflow_Measure_Original(pThis, availableSize);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1798,24 +1685,14 @@ bool HookSystemTraySymbols(HMODULE module) {
     // SystemTray.dll, Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
-            {LR"(private: void __cdecl winrt::SystemTray::OverflowXamlIslandManager::InitializeIfNeeded(void))"},
-            &OverflowXamlIslandManager_InitializeIfNeeded_Original,
-            OverflowXamlIslandManager_InitializeIfNeeded_Hook,
-        },
-        {
             {LR"(public: void __cdecl winrt::SystemTray::OverflowXamlIslandManager::Show(struct tagPOINT,enum winrt::WindowsUdk::UI::Shell::InputDeviceKind))"},
             &OverflowXamlIslandManager_Show_Original,
             OverflowXamlIslandManager_Show_Hook,
         },
         {
-            {LR"(public: __cdecl winrt::SystemTray::implementation::NotificationAreaOverflow::NotificationAreaOverflow(struct winrt::SystemTray::SystemTrayViewModel const &,struct winrt::WindowsUdk::UI::Shell::TaskbarSettings const &))"},
-            &NotificationAreaOverflow_NotificationAreaOverflow_Original,
-            NotificationAreaOverflow_NotificationAreaOverflow_Hook,
-            true,
-        },
-        {
-            {LR"(const winrt::impl::produce<struct winrt::SystemTray::implementation::NotificationAreaOverflow,struct winrt::SystemTray::INotificationAreaOverflow>::`vftable')"},
-            &g_overflowInterfaceVftable,
+            {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IUIElement<struct winrt::SystemTray::NotificationAreaOverflow>::Measure(struct winrt::Windows::Foundation::Size const &)const )"},
+            &NotificationAreaOverflow_Measure_Original,
+            NotificationAreaOverflow_Measure_Hook,
         },
         {
             {LR"(struct guid::guid const winrt::impl::guid_v<struct winrt::SystemTray::IIconConfiguration>)"},
@@ -1903,27 +1780,24 @@ bool HookSystemTraySymbols(HMODULE module) {
         return false;
     }
 
-    g_dataModelSlot = FindVtableSlot(g_iconConfigurationVftable,
-                                     g_iconConfiguration_get_DataModel);
-    g_udkObjectSlot =
-        FindVtableSlot(g_notificationAreaIconsDataModelVftable,
-                       g_notificationAreaIconsDataModel_get_UDKObject);
-    g_toolTipSlot = FindVtableSlot(g_imageContentViewModelBaseVftable,
-                                   g_imageContentViewModel_get_ToolTipText);
-    g_nameSlot = FindVtableSlot(g_imageContentViewModelVftable,
-                                g_imageContentViewModel_get_AutomationPropertyName);
-    g_imageSlot = FindVtableSlot(g_imageContentViewModelVftable,
-                                 g_imageContentViewModel_get_IconImageSource);
-    Wh_Log(L"Vtable slots: dataModel=%d udk=%d tooltip=%d name=%d image=%d",
-        g_dataModelSlot, g_udkObjectSlot, g_toolTipSlot, g_nameSlot,
-        g_imageSlot);
+    bool appNames = g_iconConfigurationIid && g_iconConfigurationVftable &&
+                    g_iconConfiguration_get_DataModel &&
+                    g_notificationAreaIconsDataModelIid &&
+                    g_notificationAreaIconsDataModelVftable &&
+                    g_notificationAreaIconsDataModel_get_UDKObject;
+    bool toolTips = g_iconContentViewModelIid &&
+                    g_imageContentViewModelBaseVftable &&
+                    g_imageContentViewModel_get_ToolTipText;
+    bool names = g_imageContentViewModelIid && g_imageContentViewModelVftable &&
+                 g_imageContentViewModel_get_AutomationPropertyName;
+    Wh_Log(L"Icon names: app=%d tooltip=%d name=%d", appNames, toolTips,
+           names);
 
-    if (g_dataModelSlot < 0 || g_udkObjectSlot < 0 || !g_iconConfigurationIid ||
-        !g_notificationAreaIconsDataModelIid) {
+    if (!appNames) {
         Wh_Log(L"App name matching unavailable");
     }
 
-    if (g_toolTipSlot < 0 && g_nameSlot < 0) {
+    if (!toolTips && !names) {
         Wh_Log(L"Couldn't find the icon tooltip getters");
         return false;
     }
