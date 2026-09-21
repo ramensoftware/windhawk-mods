@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.72
+// @version         2.73
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -409,6 +409,7 @@ double WINAPI TaskbarConfiguration_GetFrameSize_Hook(int taskbarSize) {
     return height;
 }
 
+// ---- taskbar.dll symbol lookup and XAML root discovery ------------------
 // Same taskbar.dll root lookup used by hide-start-button and
 // taskbar-centered-start-split-icons. Resolve functions without hooking them.
 void* g_taskBandVtable{};
@@ -485,6 +486,7 @@ XamlRoot ExistingRoot(HWND taskbar) {
     return RootFromHost(host);
 }
 
+// ---- Cross-process flyout positioning -----------------------------------
 // Numeric HWND properties only: no pointers shared between Shell processes.
 constexpr wchar_t kTrayShift[] = L"Windhawk.UWPOS05.TrayShift";
 constexpr wchar_t kTrayDispatcher[] = L"Windhawk.UWPOS08.Dispatcher";
@@ -767,6 +769,7 @@ BOOL WINAPI PanelDestroyWindow(HWND window) {
     return DestroyWindow_Original(window);
 }
 
+// ---- Dock geometry and the native-animation follower --------------------
 struct Placement { double buttonsX; double trayX; };
 
 // One measurement pass over the native layout, taken in Refresh and handed to
@@ -884,6 +887,7 @@ struct Root {
 };
 std::vector<Root> g_roots;  // Confined to the one observed taskbar UI thread.
 
+// ---- Liquid glass: windowed capture and GPU refraction ------------------
 struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
     struct LensConstants {
         float imageSize[2]{};
@@ -1797,6 +1801,7 @@ ProjectedAnimation_t StartAnimation_Original;
 ProjectedAnimation_t HideCompleted_Original;
 UpdateVisualStates_t UpdateVisualStates_Original;
 
+// ---- Native animation hooks ---------------------------------------------
 uintptr_t CanonicalIdentity(FrameworkElement const& element) {
     winrt::com_ptr<::IUnknown> identity;
     winrt::check_hresult(static_cast<::IUnknown*>(winrt::get_abi(element))->QueryInterface(
@@ -2450,11 +2455,19 @@ void AddAttentionLenses(Root& root, LiquidRenderer::LensConstants& lens,
         lens.attentionTints[index][1] = tint.G / 255.0f;
         lens.attentionTints[index][2] = tint.B / 255.0f;
         lens.attentionTints[index][3] = 0;
+        // The visible plate is its own rounded rect intersected with our clip, and
+        // a clip can only take area away, so the larger radius wins per corner. The
+        // lens tracked the native radius alone and so under-rounded whenever
+        // buttonCornerRadius exceeded it, which is the default.
+        double clipRadius =
+            std::min({g_buttonCornerRadius, width / 2, height / 2});
         auto corners = plate->CornerRadius();
-        lens.attentionRadii[index][0] = static_cast<float>(corners.TopLeft * scale);
-        lens.attentionRadii[index][1] = static_cast<float>(corners.TopRight * scale);
-        lens.attentionRadii[index][2] = static_cast<float>(corners.BottomRight * scale);
-        lens.attentionRadii[index][3] = static_cast<float>(corners.BottomLeft * scale);
+        for (auto [slot, corner] : {std::pair{0, corners.TopLeft},
+                                    std::pair{1, corners.TopRight},
+                                    std::pair{2, corners.BottomRight},
+                                    std::pair{3, corners.BottomLeft}})
+            lens.attentionRadii[index][slot] = static_cast<float>(
+                std::max(corner, clipRadius) * scale);
     }
     lens.attentionRefraction = lens.optics.refraction * 0.78f;
     lens.attentionTintOpacity = 0.22f;
@@ -2793,6 +2806,7 @@ void RestoreRoot(Root& root) {
     catch (...) { Wh_Log(L"[UWDOCK] restoration-error"); }
 }
 
+// ---- The layout pass ----------------------------------------------------
 void Refresh(Root& root) {
     if (g_dockingDisabled || root.blocked) {
         RestoreRoot(root);
@@ -3188,6 +3202,7 @@ bool ResolveStartupSymbols() {
     return g_discoverMessage != 0;
 }
 
+// ---- Mod lifecycle ------------------------------------------------------
 BOOL Wh_ModInit() {
     g_dockCornerRadius = std::clamp(
         Wh_GetIntSetting(L"cornerRadius"), 0, 100);
