@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.75
+// @version         2.76
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -68,6 +68,10 @@ lens with the native alert color.
 follows the same rounded shape the highlight is clipped to, so it stays aligned
 with the button corner radius, and it tracks the light or dark theme.
 
+Under the Liquid glass theme each task button can also carry its own refractive
+lens inside the dock, rendered by the same shader pass as the dock itself rather
+than a second capture. Tray items share the dock lens.
+
 Liquid glass includes the reference site's Regular, Frosted, and Dark presets.
 Regular is the reference defaults with no backdrop blur; Frosted adds it, and
 Dark also dims the backdrop. Choose Custom to use the individual optical
@@ -115,6 +119,9 @@ setting.
   - borderThickness: 1
     $name: Border thickness (DIP, default 1)
     $description: Border width from 1 to 10. Drawn inside the highlight edge.
+  - liquidLayer: false
+    $name: Per-button liquid glass layer (default off)
+    $description: Gives every task button its own refractive lens inside the dock. Liquid glass theme only.
   $name: Task and tray buttons
   $description: Appearance of the native task and tray button highlights.
 - edgeDistance: 4
@@ -239,7 +246,8 @@ constexpr DWORD kLiquidShrinkDelay = 700;
 // an unsupported build fails every one. Tune down if a broken tree costs too many
 // tree walks, up if a slow startup transition needs longer to settle.
 constexpr unsigned kRefreshRetryLimit = 10;
-#define UW_BUTTON_LENS_CAP 8
+// One lens per realized task button; UpdateFollower already refuses more than 64.
+#define UW_BUTTON_LENS_CAP 64
 #define UW_STRINGIZE_IMPL(value) #value
 #define UW_STRINGIZE(value) UW_STRINGIZE_IMPL(value)
 constexpr size_t kMaxButtonLenses = UW_BUTTON_LENS_CAP;
@@ -265,6 +273,7 @@ double g_buttonVerticalPadding{4};
 double g_dockEdgeDistance{4};
 bool g_buttonBorder{};
 double g_buttonBorderThickness{1};
+bool g_buttonLiquidLayer{};
 
 // Holds off the teardown in Wh_ModBeforeUninit while a hook or callback runs.
 struct ActiveScope {
@@ -920,6 +929,11 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         float lensPadding{};
     };
     static_assert(sizeof(LensConstants) % 16 == 0);
+    // Pins the cbuffer arithmetic the HLSL side relies on: a 64-byte header,
+    // three float4 arrays, then four trailing scalars. Adding a member without
+    // accounting for it here would silently shift every lens the shader reads.
+    static_assert(sizeof(LensConstants) ==
+                  64 + 3 * 16 * kMaxButtonLenses + 16);
 
     struct CopyConstants {
         float offset[2]{};
@@ -1113,8 +1127,9 @@ float4 ps(VertexOutput input) : SV_Target {
     color += rim + innerGlow + innerStroke * edgeHighlight * 0.55 + environment;
     color = lerp(color, 1, fresnelAmount * 0.2);
 
-    // Attention is a second, smaller lens over the shared dock capture. Hover
-    // remains the native animated plate with reduced opacity.
+    // A second, smaller lens per button over the shared dock capture. Hover stays
+    // the native animated plate with reduced opacity, and the alert tint applies
+    // only to the lenses flagged for it in w.
     for (uint i = 0; i < min(lensCount, BUTTON_LENS_CAP); ++i) {
         float4 rect = lensRects[i];
         float2 itemPoint = pixel - rect.xy;
@@ -1143,7 +1158,7 @@ float4 ps(VertexOutput input) : SV_Target {
         float itemMask = 1 - smoothstep(-1.5, 0.5, itemDistance);
         color = lerp(color, itemGlass, itemMask * 0.72);
         color = lerp(color, lensTints[i].rgb,
-                     itemMask * alertTintOpacity);
+                     itemMask * alertTintOpacity * lensTints[i].a);
         float itemInnerStroke = smoothstep(-2.5, -1.5, itemDistance) *
             (1 - smoothstep(-1, 0, itemDistance));
         float itemTopBias = 0.5 + 0.5 * (-itemPoint.y / rect.w);
@@ -2473,10 +2488,17 @@ void ScheduleLiquidRetry(OwnedDock& dock, HRESULT error) {
 
 void AddButtonLenses(Root& root, LiquidRenderer::LensConstants& lens,
                         double scale) {
+    size_t dropped = 0;
     for (auto const& source : root.sources) {
-        if (lens.lensCount == kMaxButtonLenses) break;
         auto element = source.element.get();
-        if (!element || !source.requestingAttention) continue;
+        if (!element) continue;
+        // Attention always earns a lens. Every other button only when the
+        // per-button layer is switched on.
+        if (!source.requestingAttention && !g_buttonLiquidLayer) continue;
+        if (lens.lensCount == kMaxButtonLenses) {
+            ++dropped;
+            continue;
+        }
         std::vector<Controls::Border> plates;
         CollectStatePlates(element, plates, 4);
         auto plate = std::find_if(plates.begin(), plates.end(),
@@ -2506,7 +2528,10 @@ void AddButtonLenses(Root& root, LiquidRenderer::LensConstants& lens,
         lens.lensTints[index][0] = tint.R / 255.0f;
         lens.lensTints[index][1] = tint.G / 255.0f;
         lens.lensTints[index][2] = tint.B / 255.0f;
-        lens.lensTints[index][3] = 0;
+        // The fourth component selects the alert tint, so a plain button lens
+        // refracts without being coloured.
+        lens.lensTints[index][3] =
+            source.requestingAttention ? 1.0f : 0.0f;
         // The visible plate is its own rounded rect intersected with our clip, and
         // a clip can only take area away, so the larger radius wins per corner. The
         // lens tracked the native radius alone and so under-rounded whenever
@@ -2521,6 +2546,9 @@ void AddButtonLenses(Root& root, LiquidRenderer::LensConstants& lens,
             lens.lensRadii[index][slot] = static_cast<float>(
                 std::max(corner, clipRadius) * scale);
     }
+    if (dropped)
+        Wh_Log(L"[UWLIQUID] %zu button lenses past the %zu cap", dropped,
+               kMaxButtonLenses);
     lens.lensRefraction = lens.optics.refraction * 0.78f;
     lens.alertTintOpacity = 0.22f;
 }
@@ -3267,6 +3295,7 @@ BOOL Wh_ModInit() {
     g_buttonBorder = Wh_GetIntSetting(L"button.border") != 0;
     g_buttonBorderThickness = std::clamp(
         Wh_GetIntSetting(L"button.borderThickness"), 1, 10);
+    g_buttonLiquidLayer = Wh_GetIntSetting(L"button.liquidLayer") != 0;
     auto theme = WindhawkUtils::StringSetting::make(L"theme");
     g_theme = ParseTheme(theme.get());
     if (g_theme == DockTheme::Liquid) {
