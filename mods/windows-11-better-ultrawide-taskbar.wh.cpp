@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.33
+// @version         2.47
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -56,8 +56,8 @@ Choose **Dock theme** in the mod settings: Windows, Glass, Frosted glass, or
 Liquid glass. Liquid glass captures only desktop and app windows below the
 taskbar and refracts them with a GPU shader. The taskbar remains visible in
 screenshots and screen sharing. All themes follow the same animated dock
-outline. Windows acrylic remains the fallback when capture or GPU setup is
-unavailable, and transient GPU failures are retried automatically. High
+outline. Liquid keeps the native fill transparent while capture or GPU setup
+is unavailable, and transient GPU failures are retried automatically. High
 contrast retains the Windows material. Changing the setting reloads the mod.
 
 Task-button hover uses Windows' native animation as a translucent tint over
@@ -70,6 +70,7 @@ Choose Custom to use the individual optical parameters.
 The **Taskbar height and icon size** mod is detected automatically. When using
 it, set that mod's taskbar height to:
 `normal height + edge distance - 4`.
+Native hover plates are clipped to the dock without changing button layout.
 
 If native controls do not fit, the visual tree is unsupported, taskbar
 ownership changes, or more than 64 children are realized, that taskbar stays
@@ -208,6 +209,7 @@ constexpr UINT kQueryTrayMessage = WM_APP + 44;
 constexpr UINT kPrepareLiquidMessage = WM_APP + 45;
 constexpr UINT kRefreshItemStatesMessage = WM_APP + 46;
 constexpr UINT_PTR kLiquidTimerId = 45;
+constexpr DWORD kLiquidShrinkDelay = 700;
 #define UW_ATTENTION_LENS_CAP 8
 #define UW_STRINGIZE_IMPL(value) #value
 #define UW_STRINGIZE(value) UW_STRINGIZE_IMPL(value)
@@ -241,6 +243,17 @@ bool TaskbarAtTop(RECT const& taskbar, RECT const& monitor) {
     return topDistance < bottomDistance;
 }
 
+bool TaskbarAtTop(HWND taskbar) {
+    RECT taskbarRect{};
+    MONITORINFO monitor{};
+    monitor.cbSize = sizeof(monitor);
+    return taskbar && GetWindowRect(taskbar, &taskbarRect) &&
+           GetMonitorInfo(MonitorFromWindow(
+                              taskbar, MONITOR_DEFAULTTONEAREST),
+                          &monitor) &&
+           TaskbarAtTop(taskbarRect, monitor.rcMonitor);
+}
+
 DockInsets PlanDockInsets(bool taskbarAtTop, double height,
                           double edgeDistance) {
     double outer = std::clamp(
@@ -252,6 +265,18 @@ DockInsets PlanDockInsets(bool taskbarAtTop, double height,
 
 double DockFrameAdjustment(double edgeDistance) {
     return edgeDistance - kDockInnerMargin;
+}
+
+winrt::Windows::Foundation::Rect PlanVerticalClip(
+    double width, double height, double top, double bottom) {
+    if (!std::isfinite(width) || !std::isfinite(height) ||
+        !std::isfinite(top) || !std::isfinite(bottom) ||
+        width <= 0 || height <= 0 || bottom <= top)
+        return {};
+    top = std::clamp(top, 0.0, height);
+    bottom = std::clamp(bottom, top, height);
+    return {0, static_cast<float>(top), static_cast<float>(width),
+            static_cast<float>(bottom - top)};
 }
 
 bool IsTaskbarIconSizeModuleName(std::wstring_view name) {
@@ -277,15 +302,7 @@ bool TaskbarIconSizeLoaded() {
 }
 
 DockInsets GetDockInsets(HWND taskbar, double height) {
-    bool atTop = false;
-    RECT taskbarRect{};
-    MONITORINFO monitor{};
-    monitor.cbSize = sizeof(monitor);
-    if (taskbar && GetWindowRect(taskbar, &taskbarRect) &&
-        GetMonitorInfo(MonitorFromWindow(taskbar, MONITOR_DEFAULTTONEAREST),
-                       &monitor))
-        atTop = TaskbarAtTop(taskbarRect, monitor.rcMonitor);
-    return PlanDockInsets(atTop, height, g_dockEdgeDistance);
+    return PlanDockInsets(TaskbarAtTop(taskbar), height, g_dockEdgeDistance);
 }
 
 double EffectiveDockRadius(double width, double height) {
@@ -750,13 +767,15 @@ struct OwnedDock {
     Shapes::Rectangle stroke{nullptr};
     winrt::Windows::Foundation::IInspectable originalFill{nullptr};
     winrt::Windows::Foundation::IInspectable originalStroke{nullptr};
-    Media::AcrylicBrush material{nullptr};
+    Media::Brush material{nullptr};
     Media::SolidColorBrush transparentStroke{nullptr};
     ShapeVisual highlights{nullptr};
     Visual attachedVisual{nullptr};
     std::shared_ptr<LiquidRenderer> liquid;
     ElementTheme materialTheme{};
     bool materialBlocked{};
+    ULONGLONG liquidShrinkReadyAt{};
+    float liquidShrinkTarget{NAN};
     ULONGLONG liquidRetryAt{};
     unsigned liquidFailures{};
 };
@@ -779,6 +798,8 @@ struct Root {
         Controls::Border statePlate{nullptr};
         double originalPlateOpacity{};
         double appliedPlateOpacity{};
+        Media::RectangleGeometry originalPlateClip{nullptr};
+        Media::RectangleGeometry plateClip{nullptr};
         bool statePlateBlocked{};
         bool requestingAttention{};
     };
@@ -1054,6 +1075,7 @@ float4 ps(VertexOutput input) : SV_Target {
 
     std::mutex mutex;
     bool running{};
+    bool geometryReady{};
     HWND taskbar{};
     RECT taskbarRect{};
     UINT width{};
@@ -1279,7 +1301,13 @@ float4 ps(VertexOutput input) : SV_Target {
             return false;
         taskbarRect = taskbarBounds;
         lens = newLens;
+        geometryReady = true;
         return true;
+    }
+
+    float CurrentHalfWidth() {
+        std::lock_guard lock(mutex);
+        return geometryReady ? lens.halfSize[0] : NAN;
     }
 
     HRESULT Failure() {
@@ -1615,11 +1643,42 @@ float4 ps(VertexOutput input) : SV_Target {
     }
 };
 
+bool HoldLiquidGeometry(Root const& root, LiquidRenderer const& renderer) {
+    return renderer.geometryReady &&
+           std::any_of(root.sources.begin(), root.sources.end(),
+                       [](auto const& source) {
+                           return source.life == Root::Source::Life::Hiding;
+                       });
+}
+
+bool DeferLiquidShrink(float currentHalfWidth, float nextHalfWidth,
+                       ULONGLONG now, ULONGLONG& readyAt,
+                       float& pendingTarget) {
+    if (!std::isfinite(currentHalfWidth) ||
+        nextHalfWidth >= currentHalfWidth - 0.25f) {
+        readyAt = 0;
+        pendingTarget = NAN;
+        return false;
+    }
+    if (!std::isfinite(pendingTarget) ||
+        std::abs(pendingTarget - nextHalfWidth) > 0.25f) {
+        pendingTarget = nextHalfWidth;
+        readyAt = now + kLiquidShrinkDelay;
+    }
+    if (now < readyAt) return true;
+    readyAt = 0;
+    pendingTarget = NAN;
+    return false;
+}
+
 #undef UW_STRINGIZE
 #undef UW_STRINGIZE_IMPL
 #undef UW_ATTENTION_LENS_CAP
 
-void MotionEvent(void* abi, Root::Source::Life life, bool cancelled = false) noexcept;
+winrt::weak_ref<FrameworkElement> MotionEvent(
+    void* abi, Root::Source::Life life, bool cancelled = false,
+    bool refresh = true) noexcept;
+void OnLayout(winrt::weak_ref<FrameworkElement> const& weak);
 void Refresh(Root& root);
 void RefreshTaskbarHeight();
 
@@ -1666,9 +1725,20 @@ void WINAPI HideCompleted_Hook(void* projectedAnimator, const void* projectedEle
     void* abi{};
     if (!g_stopping && GetCurrentThreadId() == g_ownerThread && ReadLocal(projectedElement, abi))
     {
-        MotionEvent(abi, Root::Source::Life::Retired);
+        auto frame =
+            MotionEvent(abi, Root::Source::Life::Retired, false, false);
+        bool previousBusy = g_busy;
+        g_busy = true;
+        try {
+            HideCompleted_Original(projectedAnimator, projectedElement);
+        } catch (...) {
+            g_busy = previousBusy;
+            throw;
+        }
+        g_busy = previousBusy;
+        if (!previousBusy && frame) OnLayout(frame);
+        return;
     }
-    // Observe before the native completion call can recycle/park the element.
     HideCompleted_Original(projectedAnimator, projectedElement);
 }
 
@@ -1809,6 +1879,12 @@ bool HasAttentionState(FrameworkElement const& element, unsigned depth = 4) {
 void RestoreStatePlate(Root::Source& source) {
     if (!source.statePlate) return;
     try {
+        if (source.plateClip) {
+            if (source.statePlate.Clip() == source.plateClip)
+                source.statePlate.Clip(source.originalPlateClip);
+            else
+                Wh_Log(L"[UWITEM] state plate clip ownership lost");
+        }
         if (std::abs(source.statePlate.Opacity() -
                      source.appliedPlateOpacity) < 0.001)
             source.statePlate.Opacity(source.originalPlateOpacity);
@@ -1816,22 +1892,54 @@ void RestoreStatePlate(Root::Source& source) {
         Wh_Log(L"[UWITEM] state plate restore failed hr=%08X",
                winrt::to_hresult().value);
     }
+    source.originalPlateClip = nullptr;
+    source.plateClip = nullptr;
     source.statePlate = nullptr;
 }
 
-void PrepareStatePlate(Root::Source& source) {
-    if (g_theme == DockTheme::Native || source.statePlate ||
-        source.statePlateBlocked)
-        return;
+void PrepareStatePlate(Root& root, Root::Source& source, DockInsets insets) {
+    if (source.statePlateBlocked) return;
     try {
-        auto element = source.element.get();
-        auto plate = Descendant(element, L"BackgroundElement")
-                         .try_as<Controls::Border>();
-        if (!plate) return;
-        source.statePlate = plate;
-        source.originalPlateOpacity = plate.Opacity();
-        source.appliedPlateOpacity = source.originalPlateOpacity * 0.32;
-        plate.Opacity(source.appliedPlateOpacity);
+        auto plate = source.statePlate;
+        if (!plate) {
+            auto element = source.element.get();
+            plate = Descendant(element, L"BackgroundElement")
+                        .try_as<Controls::Border>();
+            if (!plate) return;
+            source.statePlate = plate;
+            source.originalPlateOpacity = plate.Opacity();
+            source.appliedPlateOpacity =
+                g_theme == DockTheme::Native
+                    ? source.originalPlateOpacity
+                    : source.originalPlateOpacity * 0.32;
+            plate.Opacity(source.appliedPlateOpacity);
+            source.originalPlateClip = plate.Clip();
+            if (source.originalPlateClip) {
+                source.statePlateBlocked = true;
+                return;
+            }
+        } else if (source.plateClip && plate.Clip() != source.plateClip) {
+            source.statePlateBlocked = true;
+            return;
+        }
+
+        auto transform = root.dock.background.TransformToVisual(plate);
+        double top = transform.TransformPoint(
+            {0, static_cast<float>(insets.top)}).Y;
+        double bottom = transform.TransformPoint(
+            {0, static_cast<float>(
+                    root.dock.background.ActualHeight() - insets.bottom)}).Y;
+        auto rect = PlanVerticalClip(
+            plate.ActualWidth(), plate.ActualHeight(), top, bottom);
+        if (rect.Width <= 0 || rect.Height <= 0)
+            throw winrt::hresult_error(E_BOUNDS);
+        if (!source.plateClip) {
+            source.plateClip = Media::RectangleGeometry();
+            source.plateClip.Rect(rect);
+            plate.Clip(source.plateClip);
+        } else {
+            source.plateClip.Rect(rect);
+        }
     } catch (...) {
         source.statePlateBlocked = true;
         Wh_Log(L"[UWITEM] state plate unavailable hr=%08X",
@@ -1922,7 +2030,7 @@ void RestoreGlass(OwnedDock& dock) {
         try {
             auto rectangle = stroke ? dock.stroke : dock.fill;
             Media::Brush applied = stroke ? dock.transparentStroke.as<Media::Brush>()
-                                          : dock.material.as<Media::Brush>();
+                                          : dock.material;
             auto original = stroke ? dock.originalStroke : dock.originalFill;
             if (rectangle.Fill() == applied) {
                 if (original == DependencyProperty::UnsetValue())
@@ -1938,6 +2046,8 @@ void RestoreGlass(OwnedDock& dock) {
     } catch (...) { Wh_Log(L"[UWGLASS] highlight detach failed hr=%08X", winrt::to_hresult().value); }
     if (dock.liquid) dock.liquid->Stop();
     dock.liquid.reset();
+    dock.liquidShrinkReadyAt = 0;
+    dock.liquidShrinkTarget = NAN;
     dock.highlights = nullptr;
     dock.attachedVisual = nullptr;
     dock.material = nullptr;
@@ -2018,16 +2128,23 @@ void PrepareGlass(OwnedDock& dock) {
                 throw winrt::hresult_error(E_NOTIMPL, L"Background brush binding retained");
         bool dark = theme == ElementTheme::Dark;
         bool frosted = g_theme == DockTheme::Frosted;
-        Media::AcrylicBrush material;
-        material.BackgroundSource(Media::AcrylicBackgroundSource::Backdrop);
-        material.TintColor(dark ? winrt::Windows::UI::Color{255, 24, 26, 32}
-                                : winrt::Windows::UI::Color{255, 250, 252, 255});
-        material.TintOpacity(frosted ? 0.45 : 0.08);
-        material.TintLuminosityOpacity(frosted ? 0.65 : 0.12);
-        material.FallbackColor(dark ? winrt::Windows::UI::Color{255, 32, 32, 32}
-                                    : winrt::Windows::UI::Color{255, 243, 243, 243});
+        Media::SolidColorBrush transparent(
+            winrt::Windows::UI::Color{0, 0, 0, 0});
+        Media::Brush material = transparent;
+        if (g_theme != DockTheme::Liquid) {
+            Media::AcrylicBrush acrylic;
+            acrylic.BackgroundSource(Media::AcrylicBackgroundSource::Backdrop);
+            acrylic.TintColor(
+                dark ? winrt::Windows::UI::Color{255, 24, 26, 32}
+                     : winrt::Windows::UI::Color{255, 250, 252, 255});
+            acrylic.TintOpacity(frosted ? 0.45 : 0.08);
+            acrylic.TintLuminosityOpacity(frosted ? 0.65 : 0.12);
+            acrylic.FallbackColor(
+                dark ? winrt::Windows::UI::Color{255, 32, 32, 32}
+                     : winrt::Windows::UI::Color{255, 243, 243, 243});
+            material = acrylic;
+        }
         auto highlights = GlassHighlights(dock.geometry, g_theme, dark);
-        Media::SolidColorBrush transparent(winrt::Windows::UI::Color{0, 0, 0, 0});
         dock.fill = fill;
         dock.stroke = stroke;
         dock.originalFill = originalFill;
@@ -2051,6 +2168,8 @@ void PrepareGlass(OwnedDock& dock) {
 }
 
 void StopLiquid(OwnedDock& dock) {
+    dock.liquidShrinkReadyAt = 0;
+    dock.liquidShrinkTarget = NAN;
     if (!dock.liquid) return;
     try {
         if (Hosting::ElementCompositionPreview::GetElementChildVisual(
@@ -2075,7 +2194,7 @@ void ScheduleLiquidRetry(OwnedDock& dock, HRESULT error) {
     DWORD delay = LiquidRetryDelay(dock.liquidFailures++);
     dock.liquidRetryAt = GetTickCount64() + delay;
     if (g_dispatch) SetTimer(g_dispatch, kLiquidTimerId, 250, nullptr);
-    Wh_Log(L"[UWLIQUID] acrylic fallback hr=%08X; retry in %lu ms",
+    Wh_Log(L"[UWLIQUID] transparent fallback hr=%08X; retry in %lu ms",
            error, delay);
 }
 
@@ -2131,6 +2250,7 @@ void PrepareLiquid(Root& root, double host, double buttons,
         StopLiquid(dock);
         return;
     }
+    if (dock.liquid && HoldLiquidGeometry(root, *dock.liquid)) return;
     if (dock.liquidRetryAt && GetTickCount64() < dock.liquidRetryAt) return;
     // Startup discovery arrives through SendMessage/WH_CALLWNDPROC. WinRT
     // rejects compositor setup from that input-synchronous call (8001010D).
@@ -2169,7 +2289,8 @@ void PrepareLiquid(Root& root, double host, double buttons,
         double dockHeight = dock.background.ActualHeight() -
                             insets.top - insets.bottom;
         LiquidRenderer::LensConstants lens{};
-        lens.center[0] = static_cast<float>((dockLeft + dockWidth / 2) * scale);
+        lens.center[0] = static_cast<float>(
+            (dockLeft + dockWidth / 2) * scale);
         lens.center[1] = static_cast<float>(
             (insets.top + dockHeight / 2) * scale);
         lens.halfSize[0] = static_cast<float>(dockWidth * scale / 2);
@@ -2179,6 +2300,11 @@ void PrepareLiquid(Root& root, double host, double buttons,
         lens.optics = g_liquidSettings;
         lens.optics.zRadius *= static_cast<float>(scale);
         AddAttentionLenses(root, lens, scale);
+        if (DeferLiquidShrink(
+                dock.liquid->CurrentHalfWidth(), lens.halfSize[0],
+                GetTickCount64(), dock.liquidShrinkReadyAt,
+                dock.liquidShrinkTarget))
+            return;
         if (!dock.liquid->UpdateGeometry(
                 taskbarRect, pixelWidth, pixelHeight, lens))
             throw winrt::hresult_error(E_FAIL, L"Liquid renderer unavailable");
@@ -2266,14 +2392,13 @@ double BoundaryThreshold(double& overhang, double start, double buttons,
     return std::isfinite(overhang) ? width - localTrayLeft - overhang : -width;
 }
 
-std::wstring EdgeExpression(size_t count, bool buttons = false) {
+std::wstring EdgeExpression(bool buttons = false) {
     // No retiring right edge feeds the parent: it would add a second reflow.
     std::wstring correction = L"Max(0, (geometry.threshold - (anchor.Offset.X - geometry.prefix)) / 2)";
     if (buttons)
         return L"Vector3(geometry.shift + " + correction +
                L", geometry.vertical, 0)";
-    return L"Vector3(Clamp(geometry.trayBase + " + MaxExpression(EdgeGroups(count), true) +
-           L" + " + correction +
+    return L"Vector3(Clamp(dock.Offset.X + dock.Size.X + geometry.trayDockBase"
            L", geometry.minX, geometry.maxX), geometry.vertical, 0)";
 }
 
@@ -2362,7 +2487,7 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater, double origin,
             source = root.sources.end() - 1;
             source->requestingAttention = HasAttentionState(child);
         }
-        PrepareStatePlate(*source);
+        PrepareStatePlate(root, *source, insets);
         if (IncludeSource(eligible, source->life)) selected.push_back(identity);
         if (eligible && source->life == Root::Source::Life::Active &&
             (!anchorIdentity || slot.X < anchorX)) {
@@ -2409,6 +2534,10 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater, double origin,
     root.metrics.InsertScalar(L"floor", std::max(0.0f, floor - static_cast<float>(startLeft)));
     root.metrics.InsertScalar(L"minX", static_cast<float>(-trayLeft));
     root.metrics.InsertScalar(L"maxX", static_cast<float>(root.hostWidth - trayWidth - trayLeft));
+    root.metrics.InsertScalar(
+        L"trayDockBase",
+        static_cast<float>(origin - dockOrigin - kDockPadding - trayWidth -
+                           trayLeft));
     root.metrics.InsertScalar(L"dockOrigin", static_cast<float>(dockOrigin));
     root.metrics.InsertScalar(L"center", static_cast<float>(root.hostWidth / 2 - (origin - dockOrigin)));
     root.metrics.InsertScalar(L"padding", static_cast<float>(kDockPadding));
@@ -2420,8 +2549,10 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater, double origin,
         EffectiveDockRadius(root.hostWidth, visibleDockHeight));
     root.dock.geometry.CornerRadius({radius, radius});
     if (root.follower && !acquired && selected == root.expressionSources) return;
-    auto animation = root.metrics.Compositor().CreateExpressionAnimation(EdgeExpression(selected.size()));
-    auto buttonsAnimation = root.metrics.Compositor().CreateExpressionAnimation(EdgeExpression(selected.size(), true));
+    auto animation =
+        root.metrics.Compositor().CreateExpressionAnimation(EdgeExpression());
+    auto buttonsAnimation =
+        root.metrics.Compositor().CreateExpressionAnimation(EdgeExpression(true));
     std::wstring dockLeft =
         L"geometry.dockOrigin + geometry.shift + Max(0, (geometry.threshold - "
         L"(anchor.Offset.X - geometry.prefix)) / 2) + anchor.Offset.X - "
@@ -2449,6 +2580,7 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater, double origin,
     }
     auto edges = BindEdges(root.metrics.Compositor(), visuals);
     animation.SetReferenceParameter(L"edges", edges);
+    animation.SetReferenceParameter(L"dock", root.dock.geometry);
     buttonsAnimation.SetReferenceParameter(L"edges", edges);
     // Keep cleanup armed before starting; a failed start is restored by Refresh's caller.
     StopEdges(root.edges, EdgeGroups(root.expressionSources.size()));
@@ -2598,8 +2730,9 @@ void OnLayout(winrt::weak_ref<FrameworkElement> const& weak) {
     }
 }
 
-void MotionEvent(void* abi, Root::Source::Life life, bool cancelled) noexcept {
-    if (g_stopping || GetCurrentThreadId() != g_ownerThread || !abi) return;
+winrt::weak_ref<FrameworkElement> MotionEvent(
+    void* abi, Root::Source::Life life, bool cancelled, bool refresh) noexcept {
+    if (g_stopping || GetCurrentThreadId() != g_ownerThread || !abi) return {};
     try {
         winrt::Windows::Foundation::IUnknown borrowed{nullptr};
         winrt::copy_from_abi(borrowed, abi);
@@ -2608,21 +2741,22 @@ void MotionEvent(void* abi, Root::Source::Life life, bool cancelled) noexcept {
             if (winrt::get_class_name(node) == L"Taskbar.TaskListButton") break;
             node = Media::VisualTreeHelper::GetParent(node).try_as<FrameworkElement>();
         }
-        if (!node || winrt::get_class_name(node) != L"Taskbar.TaskListButton") return;
+        if (!node || winrt::get_class_name(node) != L"Taskbar.TaskListButton")
+            return {};
         auto identity = CanonicalIdentity(node);
         for (auto& root : g_roots) {
             auto source = std::find_if(root.sources.begin(), root.sources.end(),
                 [&](auto const& value) { return value.identity == identity && value.element.get() == node; });
             if (source == root.sources.end()) continue;
             auto next = NextLife(source->life, life, cancelled);
-            if (next == source->life) return;
+            if (next == source->life) return {};
+            auto frame = winrt::make_weak(root.frame);
             source->life = next;
-            // Hide completion is observed before native recycling. Rebuild the
-            // reference set now; normal layout will then supply the new slots.
-            if (!g_busy) OnLayout(winrt::make_weak(root.frame));
-            return;
+            if (refresh && !g_busy) OnLayout(frame);
+            return frame;
         }
     } catch (...) { Wh_Log(L"[UWFOLLOW] lifecycle failed hr=%08X", winrt::to_hresult().value); }
+    return {};
 }
 
 LRESULT QueryCurrentTray(HWND taskbar) {
@@ -2683,6 +2817,9 @@ LRESULT CALLBACK DispatchProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
                     ScheduleLiquidRetry(dock, failure);
                 } else {
                     dock.liquid->UpdateSources();
+                    if (dock.liquidShrinkReadyAt &&
+                        now >= dock.liquidShrinkReadyAt)
+                        retries.push_back(winrt::make_weak(root.frame));
                 }
             } else if (dock.liquidRetryAt) {
                 active = true;
@@ -2876,7 +3013,7 @@ BOOL Wh_ModInit() {
     if (!WindhawkUtils::SetFunctionHook(SetWindowPos, PanelSetWindowPos, &SetWindowPos_Original) ||
         !WindhawkUtils::SetFunctionHook(DestroyWindow, PanelDestroyWindow, &DestroyWindow_Original)) return FALSE;
     if (!g_explorer) {
-        Wh_Log(L"[UWPANEL] initialized v2.33 Shell positioning hooks");
+        Wh_Log(L"[UWPANEL] initialized v2.47 Shell positioning hooks");
         return TRUE;
     }
     if (!WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute, PanelDwmAttribute,
@@ -2921,7 +3058,7 @@ BOOL Wh_ModInit() {
         g_windowClass = 0;
         return FALSE;
     }
-    Wh_Log(L"[UWPOS] initialized v2.33; screenshot-safe liquid glass, native animation follower, gap=12 theme=%d heightMethod=automatic",
+    Wh_Log(L"[UWPOS] initialized v2.47; screenshot-safe liquid glass, native animation follower, gap=12 theme=%d heightMethod=automatic",
            static_cast<int>(g_theme));
     return TRUE;
 }
