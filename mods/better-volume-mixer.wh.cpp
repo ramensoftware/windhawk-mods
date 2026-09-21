@@ -2,10 +2,11 @@
 // @id              better-volume-mixer
 // @name            Better Volume Mixer
 // @description     Quickly control master and per-app volume from the system tray
-// @version         1.0
+// @version         1.2
 // @author          0Allu
 // @github          https://github.com/0Allu
 // @homepage        https://github.com/0Allu/better-volume-mixer
+// @donateUrl       https://ko-fi.com/0allu
 // @include         windhawk.exe
 // @compilerOptions -lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -ladvapi32 -lmsimg32 -loleaut32 -lgdiplus
 // @license         MIT
@@ -23,15 +24,20 @@ apps from one small window.
 Click the speaker icon in the system tray to open or close the mixer. If it is
 hidden, open the tray overflow menu and drag the icon onto the taskbar.
 
+* Click the device selector under the title to switch playback devices.
 * Adjust each app's volume with its slider or mute button.
 * Scroll over a slider to change the volume with your mouse wheel.
 * Click the pin beside an app to keep it at the top.
 * Use Previous and Next when there are more apps than fit on one page.
 
 Choose your theme, background transparency, animations, and apps per page in
-the mod settings. If an app is missing, keep the mixer open and play some audio
-in it. Apps on other output devices are remembered after playing while the mixer
-is open, until their audio session ends.
+the mod settings. Turn on **Compact mode** for a smaller, denser layout with
+shorter rows. If an app is missing, keep the mixer open and play some audio in
+it. Apps on other output devices are remembered after playing while the mixer is
+open, until their audio session ends.
+
+Output switching changes normal playback; the communications device and apps
+assigned to a specific device keep their own routing.
 
 ## Hide the Windows volume icon
 
@@ -69,6 +75,9 @@ volume icon while keeping Better Volume Mixer's icon visible.
 - volumeStep: 2
   $name: Mouse-wheel volume step
   $description: Percentage points per mouse-wheel step over a slider. Valid range is 1 to 20; default is 2.
+- compactMode: false
+  $name: Compact mode
+  $description: Use a smaller, denser layout with shorter rows and a narrower window, so more apps fit at once. Off by default.
 - theme: system
   $name: Theme
   $description: Choose the mixer appearance or follow the current Windows theme.
@@ -187,6 +196,7 @@ constexpr int DRAG_MASTER = -1;
 struct Settings {
     std::wstring theme = L"system";
     bool showAllSessions = false;
+    bool compactMode = false;
     bool closeWhenFocusIsLost = true;
     bool animations = true;
     int backgroundOpacity = 85;
@@ -204,6 +214,7 @@ struct Theme {
     COLORREF accent;
     COLORREF muted;
     COLORREF divider;
+    COLORREF sliderOutline;
 };
 
 struct AppSession {
@@ -336,6 +347,8 @@ bool g_closeRequestPending;
 bool g_trayPressKnown;
 bool g_trayPressWasVisible;
 bool g_showingMixer;
+bool g_outputMenuOpen;
+bool g_outputHovered;
 
 int Scale(int value) {
     return MulDiv(value, g_dpi, 96);
@@ -366,6 +379,7 @@ void LoadSettings() {
     WindhawkUtils::StringSetting pageSize =
         WindhawkUtils::StringSetting::make(L"maxVisibleApps");
     g_settings.maxVisibleApps = ClampInt(_wtoi(pageSize.get()), 1, 15);
+    g_settings.compactMode = Wh_GetIntSetting(L"compactMode") != 0;
     g_settings.volumeStep =
         ClampInt(Wh_GetIntSetting(L"volumeStep"), 1, 20);
 }
@@ -489,11 +503,11 @@ void UpdateTheme() {
     if (light) {
         g_theme = {RGB(247, 248, 250), RGB(255, 255, 255), RGB(235, 238, 242),
                    RGB(27, 31, 38), RGB(98, 105, 117), RGB(218, 223, 230),
-                   accent, RGB(115, 122, 134), RGB(228, 231, 236)};
+                   accent, RGB(115, 122, 134), RGB(228, 231, 236), RGB(170, 175, 182)};
     } else {
         g_theme = {RGB(27, 29, 34), RGB(38, 41, 48), RGB(45, 49, 57),
                    RGB(242, 244, 248), RGB(159, 168, 183), RGB(65, 72, 84),
-                   accent, RGB(138, 146, 159), RGB(48, 53, 62)};
+                   accent, RGB(138, 146, 159), RGB(48, 53, 62), RGB(22, 24, 29)};
     }
 }
 
@@ -1107,21 +1121,67 @@ void ToggleRowMute(int row) {
     app.muted = newMuted;
 }
 
+// ---------------------------------------------------------------------------
+// Layout. Every metric that differs between the normal and compact layouts
+// lives in this block, so painting and hit-testing always agree.
+// ---------------------------------------------------------------------------
+
+bool IsCompact() {
+    return g_settings.compactMode;
+}
+
 int HeaderHeight() {
-    return Scale(76);
+    return Scale(IsCompact() ? 78 : 92);
 }
 
 int RowHeight() {
-    return Scale(68);
+    return Scale(IsCompact() ? 52 : 68);
+}
+
+// Space between the master row and the first app row (holds "Applications").
+int SectionGap() {
+    return Scale(IsCompact() ? 24 : 30);
+}
+
+// Space below the last row: page navigation when paged, otherwise padding.
+int FooterHeight(bool paged) {
+    if (IsCompact()) {
+        return Scale(paged ? 44 : 8);
+    }
+    return Scale(paged ? 52 : 12);
 }
 
 int RowTop(int visibleRow) {
     return HeaderHeight() + visibleRow * RowHeight() +
-           (visibleRow > 0 ? Scale(30) : 0);
+           (visibleRow > 0 ? SectionGap() : 0);
 }
 
 int PopupWidth() {
-    return Scale(420);
+    return Scale(IsCompact() ? 380 : 420);
+}
+
+RECT TitleRect(int width) {
+    if (IsCompact()) {
+        return {Scale(24), Scale(9), width - Scale(52), Scale(35)};
+    }
+    return {Scale(24), Scale(15), width - Scale(60), Scale(45)};
+}
+
+RECT CloseButtonRect(int width) {
+    if (IsCompact()) {
+        return {width - Scale(44), Scale(8), width - Scale(16), Scale(36)};
+    }
+    return {width - Scale(52), Scale(14), width - Scale(20), Scale(46)};
+}
+
+// The output selector is a full-width control on its own line below the
+// title, aligned with the row cards, so it no longer sits beside the close
+// button.
+RECT OutputPickerRect(int width) {
+    if (IsCompact()) {
+        return {Scale(12), Scale(42), width - Scale(12), Scale(68)};
+    }
+    return {Scale(12), Scale(52), width - Scale(12), Scale(82)};
 }
 
 int PageSize() {
@@ -1129,7 +1189,8 @@ int PageSize() {
 }
 
 int AppRowsForHeight(int availableHeight) {
-    int fixedHeight = HeaderHeight() + RowHeight() + Scale(30 + 52);
+    int fixedHeight = HeaderHeight() + RowHeight() + SectionGap() +
+                      FooterHeight(true);
     return ClampInt((availableHeight - fixedHeight) / RowHeight(), 1, 15);
 }
 
@@ -1162,32 +1223,92 @@ int PopupHeight() {
     // Keep navigation stationary on the last, partially filled page.
     int slots = std::max(1, std::min(static_cast<int>(g_apps->size()),
                                    PageSize()));
-    return HeaderHeight() + RowHeight() * (1 + slots) + Scale(30) +
-           Scale(PageCount() > 1 ? 52 : 12);
+    return HeaderHeight() + RowHeight() * (1 + slots) + SectionGap() +
+           FooterHeight(PageCount() > 1);
 }
 
 RECT PageButtonRect(bool next, const RECT& client) {
     int left = next ? client.right - Scale(120) : Scale(20);
+    if (IsCompact()) {
+        return {left, client.bottom - Scale(40), left + Scale(100),
+                client.bottom - Scale(12)};
+    }
     return {left, client.bottom - Scale(44), left + Scale(100),
             client.bottom - Scale(12)};
 }
 
+// Normal rows: icon and name/percent on the left, slider below the name,
+// pin over mute in a column on the right.
+// Compact rows: name, percent, pin and mute share one line, with the slider
+// on a second line spanning almost the full row width.
+RECT IconTileRectForRow(int visibleRow) {
+    int top = RowTop(visibleRow);
+    if (IsCompact()) {
+        return {Scale(22), top + Scale(10), Scale(52), top + Scale(40)};
+    }
+    return {Scale(22), top + Scale(13), Scale(58), top + Scale(49)};
+}
+
+RECT NameRectForRow(int visibleRow, int clientWidth) {
+    int top = RowTop(visibleRow);
+    if (IsCompact()) {
+        return {Scale(62), top + Scale(3), clientWidth - Scale(132),
+                top + Scale(27)};
+    }
+    return {Scale(68), top + Scale(9), clientWidth - Scale(132),
+            top + Scale(33)};
+}
+
+RECT PercentRectForRow(int visibleRow, int clientWidth) {
+    int top = RowTop(visibleRow);
+    if (IsCompact()) {
+        return {clientWidth - Scale(124), top + Scale(3),
+                clientWidth - Scale(76), top + Scale(27)};
+    }
+    return {clientWidth - Scale(124), top + Scale(9),
+            clientWidth - Scale(78), top + Scale(33)};
+}
+
 RECT SliderRectForRow(int visibleRow, int clientWidth) {
     int top = RowTop(visibleRow);
-    return {Scale(68), top + Scale(44), clientWidth - Scale(78),
-            top + Scale(48)};
+    if (IsCompact()) {
+        return {Scale(62), top + Scale(31), clientWidth - Scale(28),
+                top + Scale(39)};
+    }
+    return {Scale(68), top + Scale(42), clientWidth - Scale(78),
+            top + Scale(50)};
 }
 
 RECT MuteRectForRow(int visibleRow, int clientWidth) {
     int top = RowTop(visibleRow);
+    if (IsCompact()) {
+        return {clientWidth - Scale(46), top + Scale(3),
+                clientWidth - Scale(22), top + Scale(27)};
+    }
     return {clientWidth - Scale(58), top + Scale(visibleRow ? 32 : 22),
             clientWidth - Scale(22), top + Scale(visibleRow ? 64 : 58)};
 }
 
 RECT PinRectForRow(int visibleRow, int clientWidth) {
     int top = RowTop(visibleRow);
+    if (IsCompact()) {
+        return {clientWidth - Scale(72), top + Scale(3),
+                clientWidth - Scale(48), top + Scale(27)};
+    }
     return {clientWidth - Scale(56), top + Scale(1),
             clientWidth - Scale(24), top + Scale(29)};
+}
+
+// Grab zone around a slider. Compact rows keep it tighter vertically so it
+// does not swallow the name line above it.
+RECT SliderHitRect(int visibleRow, int clientWidth, bool forWheel) {
+    RECT rect = SliderRectForRow(visibleRow, clientWidth);
+    int vertical = IsCompact() ? 8 : 12;
+    if (forWheel) {
+        vertical += 2;
+    }
+    InflateRect(&rect, Scale(10), Scale(vertical));
+    return rect;
 }
 
 int RowFromPoint(POINT point) {
@@ -1197,10 +1318,10 @@ int RowFromPoint(POINT point) {
     int relative = point.y - HeaderHeight();
     int visibleRow = 0;
     if (relative >= RowHeight()) {
-        if (relative < RowHeight() + Scale(30)) {
+        if (relative < RowHeight() + SectionGap()) {
             return DRAG_NONE;
         }
-        visibleRow = 1 + (relative - RowHeight() - Scale(30)) / RowHeight();
+        visibleRow = 1 + (relative - RowHeight() - SectionGap()) / RowHeight();
     }
     if (visibleRow > VisibleAppCount()) {
         return DRAG_NONE;
@@ -1433,66 +1554,77 @@ float EaseTowards(float current, float target, float speed) {
 
 void DrawSlider(HDC dc, const RECT& rect, float volume, float peak,
                 bool muted, float hover) {
-    float shownVolume = ClampVolume(volume);
-
-    int centerY = (rect.top + rect.bottom) / 2;
-    int trackHeight = std::max(Scale(4), 2);
-    int meterHeight = std::max(Scale(2), 1);
-    int trackRadius = trackHeight / 2;
-    int meterRadius = meterHeight / 2;
-
-    RECT track = {
-        rect.left,
-        centerY - trackHeight / 2,
-        rect.right,
-        centerY + (trackHeight + 1) / 2
-    };
-
-    COLORREF inactiveTrack = MixColor(g_theme.track, g_theme.panel, 0.30f);
-    COLORREF activeTrack = muted
-        ? MixColor(g_theme.muted, g_theme.track, 0.70f)
-        : g_theme.accent;
-
-    DrawRoundedRect(dc, track, trackRadius, inactiveTrack);
-
-    int thumbX = track.left + static_cast<int>(
-        (track.right - track.left) * shownVolume);
-    thumbX = ClampInt(thumbX, track.left, track.right);
-
-    RECT fill = track;
-    fill.right = thumbX;
-    if (fill.right > fill.left) {
-        DrawRoundedRect(dc, fill, trackRadius, activeTrack);
-    }
-
-    if (!muted && peak > 0.01f) {
-        int peakX = track.left + static_cast<int>(
-            (track.right - track.left) * ClampVolume(peak));
-        RECT meter = {
-            track.left,
-            track.bottom + Scale(6),
-            peakX,
-            track.bottom + Scale(6) + meterHeight
-        };
-        if (meter.right > meter.left) {
-            DrawRoundedRect(dc, meter, meterRadius,
-                            MixColor(g_theme.accent, g_theme.track, 0.55f));
+    // Draw directly into the existing surface. The same antialiased shapes
+    // are used in both matte passes, preserving smooth transparent edges.
+    std::optional<Gdiplus::Graphics> graphics;
+    if (g_gdiplusToken) {
+        graphics.emplace(dc);
+        if (graphics->GetLastStatus() != Gdiplus::Ok ||
+            graphics->SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias) != Gdiplus::Ok ||
+            graphics->SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf) != Gdiplus::Ok) {
+            graphics.reset();
         }
     }
 
-    int thumbRadius = Scale(5) + static_cast<int>(Scale(1) * hover);
-    RECT thumb = {
-        thumbX - thumbRadius,
-        centerY - thumbRadius,
-        thumbX + thumbRadius,
-        centerY + thumbRadius
+    auto capsule = [&](float x, float y, float width, float height, COLORREF color) {
+        if (width <= 0.0f || height <= 0.0f) return;
+        float diameter = std::min(width, height);
+        if (graphics) {
+            Gdiplus::GraphicsPath path;
+            path.AddArc(x, y, diameter, diameter, 180.0f, 90.0f);
+            path.AddArc(x + width - diameter, y, diameter, diameter, 270.0f, 90.0f);
+            path.AddArc(x + width - diameter, y + height - diameter,
+                        diameter, diameter, 0.0f, 90.0f);
+            path.AddArc(x, y + height - diameter, diameter, diameter, 90.0f, 90.0f);
+            path.CloseFigure();
+            Gdiplus::SolidBrush brush(Gdiplus::Color(
+                255, GetRValue(color), GetGValue(color), GetBValue(color)));
+            graphics->FillPath(&brush, &path);
+        } else {
+            RECT bounds = {static_cast<LONG>(std::lround(x)),
+                           static_cast<LONG>(std::lround(y)),
+                           static_cast<LONG>(std::lround(x + width)),
+                           static_cast<LONG>(std::lround(y + height))};
+            DrawRoundedRect(dc, bounds, std::max(1, static_cast<int>(std::lround(diameter))),
+                            color);
+        }
     };
 
-    COLORREF thumbColor = muted
-        ? MixColor(g_theme.muted, g_theme.track, 0.55f)
-        : g_theme.accent;
+    float density = g_dpi / 96.0f;
+    float centerY = (rect.top + rect.bottom) * 0.5f;
+    float left = static_cast<float>(rect.left);
+    float width = static_cast<float>(rect.right - rect.left);
+    if (width <= 0.0f) return;
+    float trackHeight = 5.5f * density;
+    float trackTop = centerY - trackHeight * 0.5f;
+    float fillWidth = width * ClampVolume(volume);
+    float thumbX = left + fillWidth;
 
-    DrawRoundedRect(dc, thumb, thumbRadius * 2, thumbColor);
+    COLORREF inactiveTrack = MixColor(g_theme.track, g_theme.panel, 0.15f);
+    COLORREF activeTrack = muted
+        ? MixColor(g_theme.muted, g_theme.track, 0.35f)
+        : g_theme.accent;
+    capsule(left, trackTop, width, trackHeight, inactiveTrack);
+    capsule(left, trackTop, fillWidth, trackHeight, activeTrack);
+
+    if (!muted && peak > 0.01f) {
+        float meterTop = trackTop + trackHeight + 6.0f * density;
+        capsule(left, meterTop, width * ClampVolume(peak), 3.0f * density,
+                MixColor(g_theme.accent, g_theme.text, 0.15f));
+    }
+
+    // Match the grip to the theme: charcoal in dark mode, white in light mode.
+    // Keep the outer grip fixed; only the accent inset grows on hover.
+    float thumbDiameter = 14.0f * density;
+    float thumbRadius = thumbDiameter * 0.5f;
+    capsule(thumbX - thumbRadius, centerY - thumbRadius,
+            thumbDiameter, thumbDiameter, g_theme.sliderOutline);
+    float gripDiameter = thumbDiameter - 2.0f * density;
+    capsule(thumbX - gripDiameter * 0.5f, centerY - gripDiameter * 0.5f,
+            gripDiameter, gripDiameter, g_theme.panel);
+    float insetDiameter = (8.0f + 2.0f * ClampVolume(hover)) * density;
+    capsule(thumbX - insetDiameter * 0.5f, centerY - insetDiameter * 0.5f,
+            insetDiameter, insetDiameter, activeTrack);
 }
 
 void DrawMuteButton(HDC dc, int visibleRow, int clientWidth, bool muted) {
@@ -1552,28 +1684,31 @@ void DrawAudioRow(HDC dc, int visibleRow, int dataRow, int clientWidth) {
     COLORREF base = master ? g_theme.panel : g_theme.background;
     DrawSurface(dc, rowRect, Scale(16), MixColor(base, g_theme.hover, visual.hover));
 
-    RECT iconTile = {Scale(22), top + Scale(13), Scale(58), top + Scale(49)};
+    RECT iconTile = IconTileRectForRow(visibleRow);
     DrawSurface(dc, iconTile, Scale(10),
                     master ? g_theme.background : g_theme.panel);
     if (icon) {
-        DrawIconEx(dc, Scale(28), top + Scale(19), icon, Scale(24), Scale(24),
-                   0, nullptr, DI_NORMAL);
+        // The icon is always 24px; center it in whichever tile size is active.
+        int iconSize = Scale(24);
+        DrawIconEx(dc,
+                   iconTile.left + (iconTile.right - iconTile.left - iconSize) / 2,
+                   iconTile.top + (iconTile.bottom - iconTile.top - iconSize) / 2,
+                   icon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
     } else {
         DrawLabel(dc, L"\uE8D6", iconTile, g_symbolFont, g_theme.secondaryText,
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
 
-    RECT nameRect = {Scale(68), top + Scale(9), clientWidth - Scale(120),
-                     top + Scale(33)};
+    RECT nameRect = NameRectForRow(visibleRow, clientWidth);
     DrawLabel(dc, name, nameRect, g_bodyFont, g_theme.text,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
     WCHAR percent[16];
     swprintf_s(percent, L"%d%%",
                static_cast<int>(volume * 100.0f + 0.5f));
-    RECT percentRect = {clientWidth - Scale(116), top + Scale(9),
-                        clientWidth - Scale(78), top + Scale(33)};
-    DrawLabel(dc, percent, percentRect, g_smallFont, g_theme.secondaryText,
+    RECT percentRect = PercentRectForRow(visibleRow, clientWidth);
+    DrawLabel(dc, percent, percentRect, g_bodyFont,
+              muted ? g_theme.secondaryText : g_theme.text,
               DT_RIGHT | DT_VCENTER | DT_SINGLELINE, true);
 
     DrawSlider(dc, SliderRectForRow(visibleRow, clientWidth), visual.volume,
@@ -1596,17 +1731,34 @@ void RenderMixerContents(HDC dc, const RECT& client) {
         FillSolidRect(dc, client, g_theme.background);
     }
 
-    RECT titleRect = {Scale(24), Scale(16), client.right - Scale(60), Scale(43)};
-    DrawLabel(dc, L"Volume mixer", titleRect, g_titleFont, g_theme.text,
-              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    DrawLabel(dc, L"Volume mixer", TitleRect(client.right), g_titleFont,
+              g_theme.text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-    RECT subtitleRect = {Scale(24), Scale(43), client.right - Scale(60), Scale(64)};
+    // Output selector: a full-width control on its own line under the title.
+    // Like the page buttons it uses an opaque face, so it stays visible and
+    // clearly clickable at any background opacity.
+    RECT pickerRect = OutputPickerRect(client.right);
+    // Keep the output selector visually distinct from the surrounding cards.
+    // Both states are intentionally darker than the normal panel/hover colors.
+    COLORREF outputPickerColor = g_outputHovered || g_outputMenuOpen
+        ? MixColor(g_theme.hover, RGB(0, 0, 0), 0.12f)
+        : MixColor(g_theme.panel, RGB(0, 0, 0), 0.15f);
+    DrawRoundedRect(dc, pickerRect, Scale(16), outputPickerColor);
+    RECT deviceIconRect = {pickerRect.left + Scale(8), pickerRect.top,
+                           pickerRect.left + Scale(34), pickerRect.bottom};
+    DrawLabel(dc, L"\uE7F5", deviceIconRect, g_symbolFont, g_theme.secondaryText,
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    RECT deviceNameRect = {pickerRect.left + Scale(38), pickerRect.top,
+                           pickerRect.right - Scale(34), pickerRect.bottom};
     DrawLabel(dc, g_endpointName.empty() ? L"No output device" : g_endpointName,
-              subtitleRect, g_smallFont, g_theme.secondaryText,
+              deviceNameRect, g_bodyFont, g_theme.text,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    RECT arrowRect = {pickerRect.right - Scale(30), pickerRect.top,
+                      pickerRect.right - Scale(8), pickerRect.bottom};
+    DrawLabel(dc, L"\uE70D", arrowRect, g_symbolFont, g_theme.secondaryText,
+              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-    RECT closeRect = {client.right - Scale(52), Scale(17),
-                      client.right - Scale(20), Scale(49)};
+    RECT closeRect = CloseButtonRect(client.right);
     if (g_paintMatte != 1) {
         g_frameAnimating |= std::abs(g_closeHoverAmount -
                                      (g_closeHovered ? 1.0f : 0.0f)) >= 0.001f;
@@ -1626,8 +1778,10 @@ void RenderMixerContents(HDC dc, const RECT& client) {
     } else {
         DrawAudioRow(dc, 0, DRAG_MASTER, client.right);
 
-        RECT section = {Scale(24), HeaderHeight() + RowHeight() + Scale(5),
-                        client.right - Scale(24), RowTop(1) - Scale(3)};
+        RECT section = {Scale(24),
+                        HeaderHeight() + RowHeight() + Scale(IsCompact() ? 3 : 5),
+                        client.right - Scale(24),
+                        RowTop(1) - Scale(IsCompact() ? 2 : 3)};
         DrawLabel(dc, L"Applications", section, g_smallFont, g_theme.secondaryText,
                   DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         DrawLabel(dc, std::to_wstring(g_apps->size()), section, g_smallFont,
@@ -1658,8 +1812,9 @@ void RenderMixerContents(HDC dc, const RECT& client) {
             DrawLabel(dc, next ? L"Next" : L"Previous", button, g_smallFont,
                       g_theme.text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         }
-        RECT counter = {Scale(128), client.bottom - Scale(44),
-                        client.right - Scale(128), client.bottom - Scale(12)};
+        RECT previousButton = PageButtonRect(false, client);
+        RECT counter = {Scale(128), previousButton.top,
+                        client.right - Scale(128), previousButton.bottom};
         std::wstring text = L"Page " + std::to_wstring(g_scrollRow / PageSize() + 1) +
                             L" of " + std::to_wstring(PageCount());
         DrawLabel(dc, text, counter, g_smallFont, g_theme.secondaryText,
@@ -2051,7 +2206,8 @@ bool SpeakerShapeContains(float x, float y) {
     return inner || outer;
 }
 
-HICON CreateSpeakerIcon(int pixels, COLORREF color) {
+HICON CreateSpeakerIcon(int pixels, COLORREF color, float shapeScale = 1.0f,
+                        bool softenEdges = false) {
     pixels = ClampInt(pixels, 16, 256);
     BITMAPINFO info{};
     info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -2067,18 +2223,25 @@ HICON CreateSpeakerIcon(int pixels, COLORREF color) {
         return nullptr;
     }
     auto output = static_cast<DWORD*>(bits);
-    constexpr int samples = 4;
+    // The larger master icon benefits from a slightly wider coverage filter.
+    // Keep tray sampling unchanged so it remains crisp at small sizes.
+    const int samples = softenEdges ? 12 : 8;
+    const float sampleSpan = softenEdges ? 1.35f : 1.0f;
     for (int y = 0; y < pixels; ++y) {
         for (int x = 0; x < pixels; ++x) {
             int covered = 0;
             for (int sy = 0; sy < samples; ++sy) {
                 for (int sx = 0; sx < samples; ++sx) {
+                    float offsetX = ((sx + 0.5f) / samples - 0.5f) * sampleSpan;
+                    float offsetY = ((sy + 0.5f) / samples - 0.5f) * sampleSpan;
+                    float designX = (x + 0.5f + offsetX) * 16.0f / pixels;
+                    float designY = (y + 0.5f + offsetY) * 16.0f / pixels;
                     covered += SpeakerShapeContains(
-                        (x + (sx + 0.5f) / samples) * 16.0f / pixels,
-                        (y + (sy + 0.5f) / samples) * 16.0f / pixels);
+                        8.0f + (designX - 8.0f) / shapeScale,
+                        8.0f + (designY - 8.0f) / shapeScale);
                 }
             }
-            DWORD alpha = covered * 255 / (samples * samples);
+            DWORD alpha = (covered * 255 + samples * samples / 2) / (samples * samples);
             // Icons use premultiplied BGRA, including partially covered edges.
             output[y * pixels + x] = (alpha << 24) |
                 ((GetRValue(color) * alpha / 255) << 16) |
@@ -2110,7 +2273,10 @@ HICON LoadMixerIcon(int pixels, bool tray = false) {
             L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
         color = light ? RGB(30, 32, 36) : RGB(248, 249, 252);
     }
-    if (HICON icon = CreateSpeakerIcon(pixels, color)) return icon;
+    // Use more of the tray slot without changing the DPI-sized icon bitmap.
+    if (HICON icon = CreateSpeakerIcon(pixels, color, tray ? 1.12f : 1.0f, !tray)) {
+        return icon;
+    }
     WCHAR systemDirectory[MAX_PATH];
     UINT length = GetSystemDirectoryW(systemDirectory, ARRAYSIZE(systemDirectory));
     if (length && length < ARRAYSIZE(systemDirectory)) {
@@ -2208,11 +2374,149 @@ void ShowTrayMenu(HWND hWnd, int x, int y) {
     }
 }
 
+// Default-output switching uses the undocumented Windows shell policy interface.
+static const CLSID kCLSID_PolicyConfigClient = {
+    0x870af99c, 0x171d, 0x4f9e, {0xaf, 0x0d, 0xe6, 0x3d, 0xf4, 0x0c, 0x2b, 0xc9}};
+static const IID kIID_IPolicyConfig = {
+    0xf8679f50, 0x850a, 0x41cf, {0x9c, 0x72, 0x43, 0x0f, 0x29, 0x02, 0x90, 0xc8}};
+
+struct DeviceShareModeOpaque;
+
+// The undocumented interface used by the sound applet to change the default
+// endpoint. Only SetDefaultEndpoint is called, the other methods are declared
+// just to keep the vtable layout correct.
+struct IPolicyConfig : public IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetMixFormat(PCWSTR, WAVEFORMATEX**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetDeviceFormat(PCWSTR, INT, WAVEFORMATEX**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE ResetDeviceFormat(PCWSTR) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetDeviceFormat(PCWSTR, WAVEFORMATEX*, WAVEFORMATEX*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetProcessingPeriod(PCWSTR, INT, PINT64, PINT64) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetProcessingPeriod(PCWSTR, PINT64) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetShareMode(PCWSTR, DeviceShareModeOpaque*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetShareMode(PCWSTR, DeviceShareModeOpaque*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetPropertyValue(PCWSTR, const PROPERTYKEY&, PROPVARIANT*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetPropertyValue(PCWSTR, const PROPERTYKEY&, PROPVARIANT*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetDefaultEndpoint(PCWSTR deviceId, ERole role) = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetEndpointVisibility(PCWSTR, INT) = 0;
+};
+
+struct OutputDevice {
+    std::wstring id;
+    std::wstring name;
+};
+
+HRESULT SetPlaybackOutput(const std::wstring& id) {
+    IPolicyConfig* policy = nullptr;
+    HRESULT result = CoCreateInstance(kCLSID_PolicyConfigClient, nullptr, CLSCTX_INPROC_SERVER,
+                                      kIID_IPolicyConfig, reinterpret_cast<void**>(&policy));
+    if (SUCCEEDED(result)) {
+        // Change ordinary playback only. Preserve the communications output.
+        result = policy->SetDefaultEndpoint(id.c_str(), eMultimedia);
+        if (SUCCEEDED(result)) result = policy->SetDefaultEndpoint(id.c_str(), eConsole);
+        policy->Release();
+    }
+    return result;
+}
+
+void ShowOutputPicker(HWND window) {
+    if (g_outputMenuOpen || g_dragRow != DRAG_NONE) return;
+    g_outputMenuOpen = true;
+    KillTimer(window, TIMER_CHECK_FOCUS);
+    // Use a local snapshot: the menu's nested message loop can refresh audio.
+    std::vector<OutputDevice> outputs;
+    std::wstring currentId;
+    IMMDeviceEnumerator* enumerator = nullptr;
+    HRESULT result = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+        CLSCTX_INPROC_SERVER, __uuidof(IMMDeviceEnumerator),
+        reinterpret_cast<void**>(&enumerator));
+    if (SUCCEEDED(result)) {
+        IMMDevice* current = nullptr;
+        if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &current))) {
+            LPWSTR id = nullptr;
+            if (SUCCEEDED(current->GetId(&id)) && id) {
+                currentId = id; CoTaskMemFree(id);
+            }
+            current->Release();
+        }
+        IMMDeviceCollection* collection = nullptr;
+        result = enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &collection);
+        if (SUCCEEDED(result)) {
+            UINT count = 0; collection->GetCount(&count);
+            for (UINT i = 0; i < count; ++i) {
+                IMMDevice* device = nullptr;
+                if (FAILED(collection->Item(i, &device))) continue;
+                LPWSTR id = nullptr;
+                if (SUCCEEDED(device->GetId(&id)) && id) {
+                    outputs.push_back({id, ReadEndpointName(device)});
+                    CoTaskMemFree(id);
+                }
+                device->Release();
+            }
+            collection->Release();
+        }
+        enumerator->Release();
+    }
+    std::sort(outputs.begin(), outputs.end(), [](const auto& a, const auto& b) {
+        int order = _wcsicmp(a.name.c_str(), b.name.c_str());
+        return order ? order < 0 : a.id < b.id;
+    });
+    HMENU menu = CreatePopupMenu();
+    UINT selected = 0;
+    if (menu) {
+        for (size_t i = 0; i < outputs.size(); ++i) {
+            std::wstring label;
+            for (wchar_t c : outputs[i].name) {
+                label += c;
+                if (c == L'&') label += L'&';
+            }
+            AppendMenuW(menu, MF_STRING | (outputs[i].id == currentId ? MF_CHECKED : 0),
+                        i + 1, label.c_str());
+        }
+        if (outputs.empty()) AppendMenuW(menu, MF_STRING | MF_GRAYED, 0,
+            FAILED(result) ? L"Could not load audio outputs" : L"No available audio outputs");
+        RECT client{}; GetClientRect(window, &client);
+        RECT picker = OutputPickerRect(client.right);
+        POINT anchor{picker.left, picker.bottom}; ClientToScreen(window, &anchor);
+        SetForegroundWindow(window);
+        selected = TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN |
+                                    TPM_TOPALIGN | TPM_RIGHTBUTTON, anchor.x, anchor.y,
+                                    window, nullptr);
+        DestroyMenu(menu);
+    }
+    if (!IsWindow(window)) {
+        g_outputMenuOpen = false;
+        return;
+    }
+    if (selected && selected <= outputs.size()) {
+        result = SetPlaybackOutput(outputs[selected - 1].id);
+        if (FAILED(result)) {
+            Wh_Log(L"Mixer: output switch failed: 0x%08lX", static_cast<unsigned long>(result));
+            MessageBoxW(window, L"Windows could not fully switch the audio output. The device may have disconnected."
+                        L"\n\nYou can also select an output in Windows Sound settings.",
+                        L"Better Volume Mixer", MB_OK | MB_ICONWARNING);
+        }
+        RefreshAudioSessions(window, true);
+        g_scrollRow = 0;
+        g_rowVisuals.clear();
+        PositionMixer(window);
+    }
+    g_outputMenuOpen = false;
+    InvalidateRect(window, nullptr, FALSE);
+    // The user may have dismissed the menu by clicking another application.
+    if (g_settings.closeWhenFocusIsLost && IsWindowVisible(window))
+        SetTimer(window, TIMER_CHECK_FOCUS, 150, nullptr);
+}
+
 void HandlePointerMove(HWND hWnd, POINT point) {
     RECT client;
     GetClientRect(hWnd, &client);
-    RECT closeRect = {client.right - Scale(52), Scale(17),
-                      client.right - Scale(20), Scale(49)};
+    RECT closeRect = CloseButtonRect(client.right);
+    RECT pickerRect = OutputPickerRect(client.right);
+    bool outputHovered = PtInRect(&pickerRect, point) != FALSE;
+    if (outputHovered != g_outputHovered) {
+        g_outputHovered = outputHovered;
+        InvalidateRect(hWnd, nullptr, FALSE);
+    }
     bool closeHovered = PtInRect(&closeRect, point) != FALSE;
     int pageHovered = -1;
     if (PageCount() > 1) {
@@ -2329,7 +2633,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 HWND foreground = GetForegroundWindow();
                 bool mixerOwnsFocus = foreground == hWnd ||
                     (foreground && GetAncestor(foreground, GA_ROOTOWNER) == hWnd);
-                if (!g_showingMixer && !g_showRequestPending &&
+                if (!g_showingMixer && !g_showRequestPending && !g_outputMenuOpen &&
                     g_settings.closeWhenFocusIsLost && IsWindowVisible(hWnd) &&
                     !mixerOwnsFocus && GetCapture() != hWnd) {
                     Wh_Log(L"Mixer: closing after confirmed focus loss");
@@ -2369,6 +2673,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
         }
 
         case WM_MOUSELEAVE:
+            g_outputHovered = false;
             g_mouseTracking = false;
             g_hoverRow = DRAG_NONE;
             g_closeHovered = false;
@@ -2384,13 +2689,17 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             RECT client;
             GetClientRect(hWnd, &client);
 
-            RECT closeRect = {client.right - Scale(52), Scale(17),
-                              client.right - Scale(20), Scale(49)};
+            RECT closeRect = CloseButtonRect(client.right);
             if (PtInRect(&closeRect, point)) {
                 HideMixer(hWnd);
                 return 0;
             }
 
+            RECT pickerRect = OutputPickerRect(client.right);
+            if (PtInRect(&pickerRect, point)) {
+                ShowOutputPicker(hWnd);
+                return 0;
+            }
             if (PageCount() > 1) {
                 for (bool next : {false, true}) {
                     RECT button = PageButtonRect(next, client);
@@ -2418,8 +2727,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 return 0;
             }
 
-            RECT sliderRect = SliderRectForRow(visibleRow, client.right);
-            InflateRect(&sliderRect, 0, Scale(12));
+            RECT sliderRect = SliderHitRect(visibleRow, client.right, false);
             if (PtInRect(&sliderRect, point)) {
                 g_dragRow = row;
                 SetCapture(hWnd);
@@ -2448,9 +2756,8 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
 
             bool overSlider = false;
             if (row != DRAG_NONE) {
-                RECT slider = SliderRectForRow(VisibleRowForDataRow(row),
-                                                client.right);
-                InflateRect(&slider, 0, Scale(14));
+                RECT slider = SliderHitRect(VisibleRowForDataRow(row),
+                                            client.right, true);
                 overSlider = PtInRect(&slider, point) != FALSE;
             }
 
@@ -2481,7 +2788,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
         case WM_ACTIVATE:
             if (LOWORD(wParam) != WA_INACTIVE) {
                 KillTimer(hWnd, TIMER_CHECK_FOCUS);
-            } else if (!g_showingMixer && !g_showRequestPending &&
+            } else if (!g_showingMixer && !g_showRequestPending && !g_outputMenuOpen &&
                 g_settings.closeWhenFocusIsLost && IsWindowVisible(hWnd)) {
                 // Capture intent even if activation arrives before the tray's
                 // mouse-down callback. Focus dismissal remains independent.
