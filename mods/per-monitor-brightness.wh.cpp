@@ -1737,8 +1737,6 @@ struct SliderMetrics {
     // last native track and us, so the panel gives back whatever that padding
     // already provides.
     double gapBelow = -2;
-
-    bool measured = false;
 };
 
 // Only the position that butts up against the native rows is drawn to match
@@ -2495,11 +2493,6 @@ void ReArmStockSliderHide() {
     }
 }
 
-// The Control Center's L1Grid is a Grid whose row layout is not documented and
-// has changed across builds. Appending a row is only safe when it already
-// declares RowDefinitions; otherwise every existing child implicitly lives in
-// row 0 and adding a definition would re-flow the whole panel. In that case we
-// log the structure and leave the UI untouched.
 // Which row of L1Grid the panel should take, and what has to move for it.
 //
 // Rows are chosen by reading the grid rather than by hardcoding indices: the
@@ -2571,13 +2564,24 @@ int PlacePanelRow(wuxc::Grid const& grid, Injection& injection) {
         if (span > 1 && row + span > slidersRow && !injection.cardBorder.get()) {
             // Widened to a computed span, not by adding one.
             //
-            // Adding one is not idempotent, and this runs again every time the
-            // panel is re-injected into a grid that already has it -- the card
-            // was observed at span 5 on a grid with four rows, having been
-            // stretched once per injection while the restore only ever stepped
-            // it back by one. The span the card wants is fixed: from its own
-            // row through the lowest row it has to cover, which is our panel
-            // for "below" and the sliders in their new position for "above".
+            // Adding one is not idempotent, and the thing it is not idempotent
+            // across is mod reloads, not injections. InjectInto returns early
+            // on a grid that already holds the panel, so this runs once per
+            // view -- and the measurements agree: the card was seen at span 5
+            // while the footer had moved exactly one row, which three runs of
+            // this function could not produce.
+            //
+            // What outlives a reload is the view. It is built on first use and
+            // kept (see g_injecting), so installing a new build leaves the
+            // same Border in place, and each instance stretched it again from
+            // wherever the last one left it. A fresh ShellHost with a single
+            // injection reports span 3, which is the value below.
+            //
+            // The span the card wants is fixed: from its own row through the
+            // lowest row it has to cover, which is our panel for "below" and
+            // the sliders in their new position for "above". Computing it
+            // means an instance inheriting a stretched card settles on the
+            // right value instead of adding to it.
             const int lastCovered =
                 (g_panelPosition == PanelPosition::AboveSliders) ? slidersRow + 1
                                                                  : wantedRow;
@@ -2586,6 +2590,15 @@ int PlacePanelRow(wuxc::Grid const& grid, Injection& injection) {
                 injection.cardBorder = winrt::make_weak(fe);
                 injection.originalCardRowSpan = span;
                 wuxc::Grid::SetRowSpan(fe, wantedSpan);
+            } else if (span > wantedSpan) {
+                // Left stretched by an instance whose unload could not reach
+                // the XAML thread. Recorded but not changed: shrinking someone
+                // else's leftover to a value this instance never measured
+                // would be guessing, and it is visible here if it ever
+                // matters.
+                Wh_Log(L"Card arrived at span %d, wider than the %d this "
+                       L"layout needs; leaving it alone",
+                       span, wantedSpan);
             }
         }
     }
@@ -2688,7 +2701,11 @@ void MeasureNativeSliderMetrics(wux::FrameworkElement const& l1Grid) try {
         measured.gapAbove = nativeRowGap - (point.Y - groupTop);
 
         const double groupBottom = groupTop + groupFe.ActualHeight();
-        const double lowest = LowestSliderBottom(group, l1Grid, 12);
+        // Same depth as the search that found the slider in the first place.
+        // At 12 a tree any deeper would silently keep the default seam while
+        // every other metric was measured, which is the sort of half-measured
+        // result that is worse than either.
+        const double lowest = LowestSliderBottom(group, l1Grid, 30);
         if (lowest > 0 && groupBottom > lowest) {
             measured.gapBelow = nativeRowGap - (groupBottom - lowest);
         }
@@ -2705,13 +2722,12 @@ void MeasureNativeSliderMetrics(wux::FrameworkElement const& l1Grid) try {
         return;
     }
 
-    measured.measured = true;
     g_metrics = measured;
     Wh_Log(L"Native slider row: icon at %.0f, slider %.0f..%.0f of %.0f, "
-           L"height %.0f, seams %.0f/%.0f (%s)",
+           L"height %.0f, seams %.0f/%.0f",
            g_metrics.iconLeft, g_metrics.sliderLeft, g_metrics.sliderRight,
            g_metrics.groupWidth, g_metrics.rowHeight, g_metrics.gapAbove,
-           g_metrics.gapBelow, g_metrics.measured ? L"measured" : L"defaults");
+           g_metrics.gapBelow);
 } catch (...) {
     Wh_Log(L"Measuring the native slider row threw: %08X", winrt::to_hresult());
 }
@@ -2739,10 +2755,15 @@ bool InjectInto(wux::FrameworkElement const& l1Grid) {
     Wh_Log(L"L1Grid has %u RowDefinition(s), %u child(ren)", rowCount,
            grid.Children().Size());
 
+    // L1Grid's row layout is not documented and has changed across builds.
+    // Appending a row is only safe when the grid already declares
+    // RowDefinitions; otherwise every existing child implicitly lives in row 0
+    // and adding a definition would re-flow the whole panel.
     if (rowCount == 0) {
         // Either the grid genuinely has no rows (in which case appending one
         // would re-flow every existing child out of row 0), or it is not built
-        // yet and a later retry will succeed.
+        // yet and a later retry will succeed. Either way, log the structure
+        // and leave the UI untouched.
         if (!g_dumpedTree.exchange(true)) {
             Wh_Log(L"L1Grid declares no rows; refusing to re-flow it. "
                    L"Tree follows:");
