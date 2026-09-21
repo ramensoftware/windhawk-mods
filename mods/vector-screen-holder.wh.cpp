@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.5.4
+// @version         1.6.0
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -371,9 +371,15 @@ published at
     log lists every display with its number, resolution and position when the
     mod loads; use the resolution to confirm which is which. The list stops at
     Display 8; beyond that, use All displays.
+
+    All but the primary display covers every screen except the one you work
+    on, which is the usual want on a desk with side monitors. On a machine
+    with only the one display it has nothing to cover, so it falls back to
+    that display and says so in the log.
   $options:
   - primary: Primary display
   - all: All displays
+  - others: All but the primary display
   - "1": Display 1
   - "2": Display 2
   - "3": Display 3
@@ -385,6 +391,7 @@ published at
   $options:es-ES:
   - primary: Pantalla principal
   - all: Todas las pantallas
+  - others: Todas menos la principal
   - "1": Pantalla 1
   - "2": Pantalla 2
   - "3": Pantalla 3
@@ -396,6 +403,7 @@ published at
   $options:pt-BR:
   - primary: Tela principal
   - all: Todas as telas
+  - others: Todas exceto a principal
   - "1": Tela 1
   - "2": Tela 2
   - "3": Tela 3
@@ -407,6 +415,7 @@ published at
   $options:fr-FR:
   - primary: Écran principal
   - all: Tous les écrans
+  - others: Tous sauf l'écran principal
   - "1": Écran 1
   - "2": Écran 2
   - "3": Écran 3
@@ -418,6 +427,7 @@ published at
   $options:de-DE:
   - primary: Hauptbildschirm
   - all: Alle Bildschirme
+  - others: Alle außer dem Hauptbildschirm
   - "1": Bildschirm 1
   - "2": Bildschirm 2
   - "3": Bildschirm 3
@@ -429,6 +439,7 @@ published at
   $options:it-IT:
   - primary: Schermo principale
   - all: Tutti gli schermi
+  - others: Tutti tranne lo schermo principale
   - "1": Schermo 1
   - "2": Schermo 2
   - "3": Schermo 3
@@ -440,6 +451,7 @@ published at
   $options:nl-NL:
   - primary: Hoofdscherm
   - all: Alle schermen
+  - others: Alle behalve het hoofdscherm
   - "1": Scherm 1
   - "2": Scherm 2
   - "3": Scherm 3
@@ -451,6 +463,7 @@ published at
   $options:pl-PL:
   - primary: Ekran główny
   - all: Wszystkie ekrany
+  - others: Wszystkie oprócz głównego
   - "1": Ekran 1
   - "2": Ekran 2
   - "3": Ekran 3
@@ -462,6 +475,7 @@ published at
   $options:tr-TR:
   - primary: Birincil ekran
   - all: Tüm ekranlar
+  - others: Birincil dışındaki tüm ekranlar
   - "1": Ekran 1
   - "2": Ekran 2
   - "3": Ekran 3
@@ -473,6 +487,7 @@ published at
   $options:ru-RU:
   - primary: Основной экран
   - all: Все экраны
+  - others: Все, кроме основного
   - "1": Экран 1
   - "2": Экран 2
   - "3": Экран 3
@@ -484,6 +499,7 @@ published at
   $options:uk-UA:
   - primary: Основний екран
   - all: Усі екрани
+  - others: Усі, крім основного
   - "1": Екран 1
   - "2": Екран 2
   - "3": Екран 3
@@ -495,6 +511,7 @@ published at
   $options:zh-CN:
   - primary: 主显示器
   - all: 所有显示器
+  - others: 除主显示器外的所有显示器
   - "1": 显示器 1
   - "2": 显示器 2
   - "3": 显示器 3
@@ -506,6 +523,7 @@ published at
   $options:zh-TW:
   - primary: 主螢幕
   - all: 所有螢幕
+  - others: 主螢幕以外的所有螢幕
   - "1": 螢幕 1
   - "2": 螢幕 2
   - "3": 螢幕 3
@@ -517,6 +535,7 @@ published at
   $options:ja-JP:
   - primary: メイン ディスプレイ
   - all: すべてのディスプレイ
+  - others: メイン以外のすべてのディスプレイ
   - "1": ディスプレイ 1
   - "2": ディスプレイ 2
   - "3": ディスプレイ 3
@@ -528,6 +547,7 @@ published at
   $options:ko-KR:
   - primary: 주 디스플레이
   - all: 모든 디스플레이
+  - others: 기본 디스플레이를 제외한 전체
   - "1": 디스플레이 1
   - "2": 디스플레이 2
   - "3": 디스플레이 3
@@ -539,6 +559,7 @@ published at
   $options:ar:
   - primary: الشاشة الرئيسية
   - all: كل الشاشات
+  - others: كل الشاشات عدا الرئيسية
   - "1": الشاشة 1
   - "2": الشاشة 2
   - "3": الشاشة 3
@@ -550,6 +571,7 @@ published at
   $options:he:
   - primary: המסך הראשי
   - all: כל המסכים
+  - others: כל המסכים חוץ מהראשי
   - "1": מסך 1
   - "2": מסך 2
   - "3": מסך 3
@@ -5188,6 +5210,25 @@ static std::vector<RECT> ComputeTargetRects() {
     if (g_settings.monitor == L"all") {
         for (size_t i = 0; i < mons.size(); i++) {
             targets.push_back(targetRect(mons[i]));
+        }
+    } else if (g_settings.monitor == L"others") {
+        // Every display except the one being worked on. The point of this
+        // setting is a desk with side monitors: art on those, the main screen
+        // left alone.
+        for (size_t i = 0; i < mons.size(); i++) {
+            if (!mons[i].primary) {
+                targets.push_back(targetRect(mons[i]));
+            }
+        }
+        if (targets.empty()) {
+            // One display, and it is the primary, so the choice excludes
+            // everything. Falling back to it beats showing nothing at all,
+            // which would look like the mod is broken and would also leave
+            // the keep-awake off, since that only runs while the overlay is
+            // up. Logged, because it is not what was asked for.
+            Wh_Log(L"Only the primary display is connected, so All but the "
+                   L"primary has nothing to cover; using the primary");
+            targets.push_back(targetRect(mons[0]));
         }
     } else if (g_settings.monitor == L"primary") {
         for (size_t i = 0; i < mons.size(); i++) {
