@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.5.1
+// @version         1.5.2
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -1596,7 +1596,7 @@ published at
 #include <dwrite_3.h>
 #include <windhawk_utils.h>
 #include <sddl.h>
-#include <shlobj.h>
+#include <shellapi.h>
 
 #include <algorithm>
 #include <atomic>
@@ -4803,10 +4803,10 @@ static void PollFullscreenState(float dt) {
         }
     }
 
-    // Applied to every overlay on every poll rather than only on the change.
-    // SetNudged returns immediately when it is already where it should be, and
-    // this way a rebuild, which replaces every Overlay with a fresh one, does
-    // not leave the new windows sitting in the wrong place.
+    // Applied to every overlay on every poll rather than only when the flag
+    // turns over. SetNudged returns immediately when a window is already where
+    // it should be, so this costs nothing and keeps the windows and the flag
+    // in step without anything having to track the transitions.
     for (size_t i = 0; i < g_overlays.size(); i++) {
         g_overlays[i]->SetNudged(g_fullscreenNudge);
     }
