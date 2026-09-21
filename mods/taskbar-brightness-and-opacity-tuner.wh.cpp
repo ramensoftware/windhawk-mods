@@ -4,7 +4,7 @@
 // @name:zh-CN      任务栏亮度和透明度调节器
 // @description     Adjust the opacity of the taskbar background and of the icons and text, and dim the taskbar background, for a clean, beautiful taskbar which is easier on the eyes and on OLED displays
 // @description:zh-CN 分别调整任务栏背景与图标文字的不透明度，并可调暗任务栏背景，定制出简洁漂亮的任务栏，也更护眼、更适合 OLED 显示器
-// @version         1.10.0
+// @version         1.13.0
 // @author          lzxujun
 // @homepage        https://github.com/lzxujun
 // @license         GPL-3.0
@@ -39,19 +39,21 @@ The taskbar is adjusted in two independent layers, each displayed on a simple
 * **Icons and text** - buttons, labels and the system tray. 0 means fully
   transparent, 100 means unchanged.
 
-The taskbar background can additionally be dimmed on a 0-100 scale: 0 means
-unchanged, 100 means fully dimmed to black. Dimming renders the live backdrop
-behind the taskbar darker - a low, dark taskbar is easier on the eyes at
-night and reduces OLED burn-in. The mod only dims, never brightens.
+The taskbar background can additionally be dimmed on a 0-100 brightness
+scale: 0 means fully dimmed to black, 100 means unchanged. Dimming darkens
+exactly what the taskbar background itself shows, never an overlay painted
+on top of it - a low, dark taskbar is easier on the eyes at night and
+reduces OLED burn-in. The mod only dims, never brightens.
 
 Additionally:
 
 * **Show the taskbar top line** - shows or hides the thin line at the top
   edge of the taskbar.
-* The small gray rounded drag handle at the top center of the taskbar is part
-  of Windows itself (it is shown on the taskbar which Windows 11 locks by
-  default), it is not drawn by this mod. It fades together with the icon and
-  text layer; set the icon opacity to 0 to hide it completely.
+* The small gray rounded drag handle at the top center of the taskbar is
+  part of Windows itself (on the default, locked taskbar Windows renders it
+  permanently). Since v1.12.0 the mod no longer touches it at all, so it only
+  shows up when Windows itself shows it - it is never affected by the icon
+  and text opacity.
 
 ## Screenshots
 
@@ -78,10 +80,16 @@ opacity is adjusted exactly, with no visual tricks: the background blends
 into whatever is behind the taskbar, and the icons and text blend into the
 background.
 
-The background dimming is exact as well: the fill of the background rectangle
-is replaced with a brush which renders the live backdrop filtered by a color
-matrix effect, so what gets darker is the real content behind the taskbar -
-not an overlay painted on top of it.
+The background dimming is exact as well, in one of three ways: with
+transparency effects on, the taskbar fill is an acrylic brush and the color
+it shows - including the accent color when "Show accent color on Start and
+taskbar" is enabled - is dimmed by scaling the RGB channels of the brush's
+tint while the alpha is kept, so the material behind the taskbar stays
+untouched. When the fill is a plain solid color, the color itself is dimmed
+the same way. Otherwise the fill of the background rectangle is replaced with
+a brush which renders the live backdrop filtered by a color matrix effect, so
+what gets darker is the real content behind the taskbar - not an overlay
+painted on top of it.
 
 The icons and text layer is found by walking the taskbar visual tree: every
 subtree which contains neither the background nor a flyout host is adjusted
@@ -103,7 +111,8 @@ without depending on the class names of the individual containers.
 ## Notes
 
 * Windows 11 only (the mod relies on the XAML taskbar visual tree).
-* If nothing seems to happen, make sure at least one value differs from 100.
+* If nothing seems to happen, make sure at least one setting differs from
+  its default.
 * The background layer is the same XAML element which background mods such as
   **Windows 11 Taskbar Styler** or **Taskbar Background Helper** adjust. Two
   mods fighting over the same element can overwrite each other's result, so
@@ -113,13 +122,13 @@ without depending on the class names of the individual containers.
 
 // ==WindhawkModSettings==
 /*
-- backgroundBrightness: 0
-  $name: Background brightness (0 = unchanged, 100 = black)
-  $name:zh-CN: 背景亮度（0 = 不变，100 = 全黑）
+- backgroundBrightness: 100
+  $name: Background brightness (0 = black, 100 = unchanged)
+  $name:zh-CN: 背景亮度（0 = 全黑，100 = 不变）
   $description: >-
-    Dimming applied to the taskbar background material, from 0 (no change)
-    to 100 (fully dimmed to black). The mod only dims, never brightens.
-  $description:zh-CN: 任务栏背景材质的调暗量，0 表示不调整，100 表示调至全黑。本 mod 只调暗不调亮。
+    Brightness of the taskbar background material, from 0 (fully dimmed to
+    black) to 100 (no change). The mod only dims, never brightens.
+  $description:zh-CN: 任务栏背景材质的亮度，0 表示调至全黑，100 表示不调整。本 mod 只调暗不调亮。
 - backgroundOpacity: 100
   $name: Background opacity (0 = transparent, 100 = unchanged)
   $name:zh-CN: 背景不透明度（0 = 全透明，100 = 不变）
@@ -468,10 +477,12 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 // Mod logic
 
-// All values are shown to the user on a 0-100 scale. Brightness values are
-// dimming amounts: 0 means no change, 100 means fully dimmed to black.
+// All values are shown to the user on a 0-100 scale. The background
+// brightness is shown as a brightness (0 = fully dimmed to black, 100 = no
+// change) and is converted to a dimming amount at load time; the other
+// values are used as-is.
 struct {
-    int backgroundBrightness;  // 0..100 dimming amount
+    int backgroundDimming;     // 0..100 dimming amount
     int backgroundOpacity;     // 0..100, 100 = no change
     int iconsOpacity;          // 0..100, 100 = no change
     bool topLine;              // false = hide the taskbar top line
@@ -540,6 +551,17 @@ struct AppearanceState {
     bool backgroundFillReplaced = false;
     Media::Brush originalFillBrush = nullptr;
     winrt::weak_ref<Media::Brush> installedFillBrush;
+    // The brightness of an acrylic background is adjusted by dimming its
+    // TintColor in place: the brush itself is never replaced, so the DWM
+    // material behind it stays exactly as Windows drew it. tintAdjusted
+    // records that this path was taken. appliedTintColor serves as an
+    // ownership marker on restore: if the taskbar has changed the tint in
+    // the meantime (accent color change, theme switch), the saved original
+    // tint must not overwrite the newer value
+    // (AdoptExternalValueAsOriginal).
+    bool tintAdjusted = false;
+    winrt::Windows::UI::Color originalTintColor{};
+    winrt::Windows::UI::Color appliedTintColor{};
     // The taskbar top line rectangle. topLineHidden records whether the line
     // was actually hidden, so that restore only touches properties which were
     // modified. The line is hidden with Opacity only: that is a plain value
@@ -553,9 +575,10 @@ struct AppearanceState {
     bool topLineHidden = false;
     double originalTopLineOpacity = 1.0;
     // Foreground elements with their original opacity. The drag grip handle
-    // (Rectangle#Gripper) is deliberately part of this layer: it fades
-    // together with the icons instead of being hidden separately, so no mod
-    // code has to stay registered on the taskbar between applies.
+    // (Rectangle#Gripper) is NOT part of this layer since v1.12.0: Windows
+    // renders it permanently, so writing any layer opacity onto it made the
+    // handle surface at that opacity. It is system chrome, excluded via
+    // IsSystemChromeElement, and Windows manages its visibility itself.
     std::vector<std::pair<winrt::weak_ref<FrameworkElement>, double>>
         foregroundOpacity;
 };
@@ -711,13 +734,21 @@ bool IsBackgroundRectangle(FrameworkElement element) {
 }
 
 // System chrome inside the taskbar which is not icon and text content: the
-// stroke which closes the taskbar at the bottom screen edge. The drag grip
-// handle is deliberately NOT excluded: it is part of the icon and text layer
-// and fades together with the icons, which keeps the mod from having to leave
-// any of its own code registered on the taskbar between applies.
+// stroke which closes the taskbar at the bottom screen edge, and the drag
+// grip container. See the notes inside the function for why the grip is
+// excluded since v1.12.0.
 bool IsSystemChromeElement(FrameworkElement element) {
     try {
-        if (element.Name() == L"ScreenEdgeStroke") {
+        auto name = element.Name();
+        // ScreenEdgeStroke closes the taskbar at the bottom screen edge.
+        // GripperControl hosts the small drag handle at the top center of the
+        // taskbar: Windows renders it permanently (its native XAML opacity is
+        // 1.00), so fading it with the icon layer made it surface at that
+        // opacity. It is not icon and text content - it is excluded entirely
+        // and its visibility stays under Windows' own control (on the
+        // default, locked taskbar it is always rendered, not only while
+        // dragging icons).
+        if (name == L"ScreenEdgeStroke" || name == L"GripperControl") {
             return true;
         }
     } catch (...) {
@@ -945,6 +976,30 @@ std::vector<FrameworkElement> CollectForegroundElements(
 }
 
 void RestoreState(AppearanceState& state) {
+    if (state.tintAdjusted) {
+        state.tintAdjusted = false;
+        if (auto backgroundFill = state.backgroundFill.get()) {
+            if (auto rect = backgroundFill.try_as<Shapes::Rectangle>()) {
+                // The tint was adjusted in place. Put the saved original
+                // tint back only if the fill still shows the dimmed value
+                // the mod wrote: if Windows has rewritten the tint in the
+                // meantime (accent color change, theme switch), it has
+                // already restored itself and the saved value must not
+                // overwrite the newer one (the same idea as Taskbar
+                // Styler's AdoptExternalValueAsOriginal).
+                try {
+                    if (auto acrylic =
+                            rect.Fill().try_as<Media::AcrylicBrush>()) {
+                        if (acrylic.TintColor() == state.appliedTintColor) {
+                            acrylic.TintColor(state.originalTintColor);
+                        }
+                    }
+                } catch (...) {
+                }
+            }
+        }
+    }
+
     if (state.backgroundFillReplaced) {
         state.backgroundFillReplaced = false;
         if (auto backgroundFill = state.backgroundFill.get()) {
@@ -1031,7 +1086,7 @@ std::pair<AppearanceState*, size_t> FindStateForRoot(
 }
 
 bool IsNeutral() {
-    return g_settings.backgroundBrightness == 0 &&
+    return g_settings.backgroundDimming == 0 &&
            g_settings.backgroundOpacity == 100 &&
            g_settings.iconsOpacity == 100 && g_settings.topLine;
 }
@@ -1108,14 +1163,21 @@ void ApplyTopLineStyle(FrameworkElement content,
     }
 }
 
-// Adjusts the background rectangle: opacity directly, brightness by replacing
-// the fill with a live backdrop brush filtered by a color matrix effect. The
-// original fill is saved in the state so that RestoreState can put it back by
-// assignment.
+// Scales a single color channel by the dimming factor and clamps the result
+// to the byte range.
+BYTE ScaleColorChannel(BYTE value, float scale) {
+    int scaled = (int)(value * scale + 0.5f);
+    return (BYTE)std::clamp(scaled, 0, 255);
+}
+
+// Adjusts the background rectangle: opacity directly, brightness by one of
+// three strategies, tried in order: dimming the acrylic tint in place
+// (preferred), dimming the solid fill color itself, or replacing the fill
+// with a live backdrop brush filtered by a color matrix effect.
 void ApplyBackgroundStyle(Shapes::Rectangle const& backgroundFill,
                           AppearanceState& state) {
     bool hasOpacity = g_settings.backgroundOpacity != 100;
-    bool hasBrightness = g_settings.backgroundBrightness != 0;
+    bool hasBrightness = g_settings.backgroundDimming != 0;
 
     if (hasOpacity) {
         backgroundFill.Opacity(g_settings.backgroundOpacity / 100.0);
@@ -1125,12 +1187,76 @@ void ApplyBackgroundStyle(Shapes::Rectangle const& backgroundFill,
         return;
     }
 
+    float scale = 1.0f - g_settings.backgroundDimming / 100.0f;
+
+    // Prefer dimming an acrylic fill in place: with transparency effects on,
+    // the taskbar fill is an AcrylicBrush and the accent color (when "Show
+    // accent color on Start and taskbar" is enabled) only changes its
+    // TintColor. Scaling the RGB channels of the tint and keeping the alpha
+    // darkens exactly the color the taskbar is showing, while the brush - and
+    // with it the DWM material behind it - is left untouched.
+    if (auto acrylic = backgroundFill.Fill().try_as<Media::AcrylicBrush>()) {
+        try {
+            auto tint = acrylic.TintColor();
+            auto dimmed = winrt::Windows::UI::Color{};
+            dimmed.A = tint.A;
+            dimmed.R = ScaleColorChannel(tint.R, scale);
+            dimmed.G = ScaleColorChannel(tint.G, scale);
+            dimmed.B = ScaleColorChannel(tint.B, scale);
+
+            acrylic.TintColor(dimmed);
+            state.tintAdjusted = true;
+            state.originalTintColor = tint;
+            state.appliedTintColor = dimmed;
+            Wh_Log(L"Acrylic tint dimmed in place "
+                   L"(%02X%02X%02X%02X -> %02X%02X%02X%02X, scale=%.2f)",
+                   tint.A, tint.R, tint.G, tint.B, dimmed.A, dimmed.R,
+                   dimmed.G, dimmed.B, scale);
+            return;
+        } catch (...) {
+            // Fall through to the other strategies.
+        }
+    }
+
+    // Next, dim a plain solid fill directly: scaling the RGB channels and
+    // keeping the alpha reproduces exactly the color the taskbar is showing,
+    // only darker. This covers the taskbar when transparency effects are off
+    // and it draws a plain color - the backdrop approach below would dim the
+    // content behind the taskbar instead of the color on it.
+    if (auto solid = backgroundFill.Fill().try_as<Media::SolidColorBrush>()) {
+        try {
+            auto color = solid.Color();
+            auto dimmed = winrt::Windows::UI::Color{};
+            dimmed.A = color.A;
+            dimmed.R = ScaleColorChannel(color.R, scale);
+            dimmed.G = ScaleColorChannel(color.G, scale);
+            dimmed.B = ScaleColorChannel(color.B, scale);
+
+            auto dimBrush = Media::SolidColorBrush();
+            dimBrush.Color(dimmed);
+            dimBrush.Opacity(solid.Opacity());
+
+            state.originalFillBrush = solid;
+            state.installedFillBrush =
+                winrt::make_weak(dimBrush.as<Media::Brush>());
+            backgroundFill.Fill(dimBrush);
+            state.backgroundFillReplaced = true;
+            Wh_Log(L"Background fill dimmed directly "
+                   L"(color %02X%02X%02X%02X -> %02X%02X%02X%02X, scale=%.2f)",
+                   color.A, color.R, color.G, color.B, dimmed.A, dimmed.R,
+                   dimmed.G, dimmed.B, scale);
+            return;
+        } catch (...) {
+            // Fall through to the backdrop brush below.
+        }
+    }
+
     try {
         auto compositor =
             winrt::Windows::UI::Xaml::Hosting::ElementCompositionPreview::
                 GetElementVisual(backgroundFill)
                     .Compositor();
-        float brightness = -g_settings.backgroundBrightness / 100.0f;
+        float brightness = -g_settings.backgroundDimming / 100.0f;
         auto brush = winrt::make<BackdropAdjustBrush>(compositor, brightness);
         state.originalFillBrush = backgroundFill.Fill();
         state.installedFillBrush = winrt::make_weak(brush.as<Media::Brush>());
@@ -1161,7 +1287,11 @@ void ApplyForegroundStyle(std::vector<FrameworkElement> const& elements,
 
         state.foregroundOpacity.emplace_back(winrt::make_weak(element),
                                              element.Opacity());
-        element.Opacity(g_settings.iconsOpacity / 100.0);
+        // Fade multiplicatively instead of overwriting: an element the
+        // system itself has hidden (Opacity = 0) stays hidden, because
+        // original * factor is still 0. Elements the system shows
+        // (original = 1) get exactly the layer opacity.
+        element.Opacity(element.Opacity() * (g_settings.iconsOpacity / 100.0));
     }
 }
 
@@ -1203,9 +1333,9 @@ bool ApplyStyleImpl(XamlRoot xamlRoot) {
         return false;
     }
 
-    Wh_Log(L"Applying settings: background brightness=%d, opacity=%d, "
+    Wh_Log(L"Applying settings: background dimming=%d, opacity=%d, "
            L"icons opacity=%d",
-           g_settings.backgroundBrightness, g_settings.backgroundOpacity,
+           g_settings.backgroundDimming, g_settings.backgroundOpacity,
            g_settings.iconsOpacity);
 
     // The visual tree is keyed by the root content element.
@@ -1745,8 +1875,11 @@ bool HookTaskbarDllSymbols() {
 void LoadSettings() {
     // Values are clamped so that an out-of-range configuration cannot make
     // the taskbar more than fully transparent or more than fully opaque.
-    g_settings.backgroundBrightness =
-        std::clamp(Wh_GetIntSetting(L"backgroundBrightness"), 0, 100);
+    // The setting is shown as a brightness (0 = fully dimmed to black,
+    // 100 = no change); internally the dimming amount is used everywhere, so
+    // convert once here.
+    g_settings.backgroundDimming =
+        100 - std::clamp(Wh_GetIntSetting(L"backgroundBrightness"), 0, 100);
     g_settings.backgroundOpacity =
         std::clamp(Wh_GetIntSetting(L"backgroundOpacity"), 0, 100);
     g_settings.iconsOpacity =
