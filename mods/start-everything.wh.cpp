@@ -3114,6 +3114,35 @@ TargetProcess IdentifyCurrentProcess() {
     return TargetProcess::Unknown;
 }
 
+void LogMsg(const wchar_t* fmt, ...) {
+    wchar_t body[2048] = {};
+    va_list args;
+    va_start(args, fmt);
+    _vsnwprintf_s(body, ARRAYSIZE(body), _TRUNCATE, fmt, args);
+    va_end(args);
+
+    Wh_Log(L"%ls", body);
+
+    wchar_t path[MAX_PATH];
+    DWORD n = GetTempPathW(MAX_PATH, path);
+    if (n && n <= MAX_PATH - 40) {
+        wcscat_s(path, MAX_PATH, L"start-everything.log");
+        HANDLE h = CreateFileW(path, FILE_APPEND_DATA,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                               OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h != INVALID_HANDLE_VALUE) {
+            SYSTEMTIME st;
+            GetLocalTime(&st);
+            wchar_t line[2300];
+            int len = wsprintfW(line, L"%02d:%02d:%02d.%03d [PID %lu] %ls\r\n", st.wHour,
+                               st.wMinute, st.wSecond, st.wMilliseconds, GetCurrentProcessId(), body);
+            DWORD written = 0;
+            WriteFile(h, line, len * sizeof(wchar_t), &written, nullptr);
+            CloseHandle(h);
+        }
+    }
+}
+
 // ===========================================================================
 // Domain: explorer.exe (Shell Focus Redirection)
 // ===========================================================================
@@ -4238,8 +4267,29 @@ void TakeForeground(bool force = false) {
             return;
         }
 
-        SetForegroundWindow(ours);
-        BringWindowToTop(ours);
+        DWORD ourWindowTid = GetWindowThreadProcessId(ours, nullptr);
+        DWORD currentTid = current ? GetWindowThreadProcessId(current, nullptr) : 0;
+        DWORD callerTid = GetCurrentThreadId();
+
+        // Simulate Alt press/release to bypass Windows foreground restriction
+        keybd_event(VK_MENU, 0, 0, 0);
+        keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
+
+        if (currentTid && currentTid != callerTid && !IsHungAppWindow(current)) {
+            AttachThreadInput(callerTid, currentTid, TRUE);
+            if (ourWindowTid && ourWindowTid != callerTid && ourWindowTid != currentTid) {
+                AttachThreadInput(ourWindowTid, currentTid, TRUE);
+            }
+            SetForegroundWindow(ours);
+            BringWindowToTop(ours);
+            if (ourWindowTid && ourWindowTid != callerTid && ourWindowTid != currentTid) {
+                AttachThreadInput(ourWindowTid, currentTid, FALSE);
+            }
+            AttachThreadInput(callerTid, currentTid, FALSE);
+        } else {
+            SetForegroundWindow(ours);
+            BringWindowToTop(ours);
+        }
     } catch (...) {
     }
 }
@@ -4587,6 +4637,23 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
             if (g_refocus) {
                 g_refocus.Stop();
                 g_refocus = nullptr;
+            }
+        }
+    } else if (uMsg == WM_WINDOWPOSCHANGED) {
+        WINDOWPOS* wp = reinterpret_cast<WINDOWPOS*>(lParam);
+        if (wp && !(wp->flags & SWP_HIDEWINDOW)) {
+            if (!IsOurWindowCloaked()) {
+                HWND fg = GetForegroundWindow();
+                if (fg != hWnd) {
+                    DWORD fgPid = 0;
+                    if (fg) GetWindowThreadProcessId(fg, &fgPid);
+                    if (fgPid != GetCurrentProcessId()) {
+                        LogMsg(L"subclass: WM_WINDOWPOSCHANGED uncloaked, fg=%p (ours=%p) -> claiming foreground", fg, hWnd);
+                        g_suppressRefocus.store(false);
+                        TakeForeground(true);
+                        TriggerMenuOpenFocus();
+                    }
+                }
             }
         }
     } else if (uMsg == WM_SETFOCUS) {
