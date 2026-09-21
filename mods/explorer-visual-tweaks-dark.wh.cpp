@@ -2,7 +2,7 @@
 // @id           explorer-visual-tweaks-dark
 // @name         Explorer Visual Tweaks Dark
 // @description  Explorer selection, progress, and Preview Pane visual tweaks
-// @version      1.0.0
+// @version      1.0.1
 // @author       VitalS
 // @github       https://github.com/VitalSkib
 // @include      explorer.exe
@@ -27,6 +27,12 @@ Drive progress rendering replaces only the PROGRESS part/state pairs used by
 Explorer. Preview Pane fixes cover Explorer, Open/Save dialog hosts, and
 prevhost.exe.
 Selection and Progress settings apply immediately.
+ItemsView, Navigation Pane, and Progress customization can be disabled
+independently. Disabled rendering is passed through to the next handler.
+The Preview Pane switch follows the restart requirement below.
+**Compatibility:** When using other mods that customize the same elements,
+disable the overlapping blocks in this mod or the corresponding features in
+the other mods to avoid conflicts.
 ### Screenshots
 ![Explorer selections and drive progress](https://raw.githubusercontent.com/VitalSkib/files/refs/heads/main/explorer-visual-tweaks-dark-thispc.png)
 ![Preview Pane and plain-text preview](https://raw.githubusercontent.com/VitalSkib/files/refs/heads/main/explorer-visual-tweaks-dark-text.png)
@@ -40,48 +46,72 @@ Windhawk's Inclusion List.
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
-- cornerRadius: 2
-  $name: Selection corner radius (0-6)
-  $description: Visual corner rounding of selection backgrounds.
-- showBorder: true
-  $name: Show selection border
-  $description: Draws a 1 px border inside the selection background.
-- activeFillColor: "4D4D4D"
-  $name: Active fill color (RRGGBB)
-- activeBorderColor: "555555"
-  $name: Active border color (RRGGBB)
-- multiFillColor: "454545"
-  $name: Multi-select fill color (RRGGBB)
-- multiBorderColor: "505050"
-  $name: Multi-select border color (RRGGBB)
-- showFocusPill: true
-  $name: Show focus pill
-  $description: Draws the vertical focus indicator in the Navigation Pane.
-- focusPillColor: "4CC2FF"
-  $name: Focus pill color (RRGGBB)
-- radius: 4
-  $name: Progress radius (0-6)
-- fillLeft: "0078D7"
-  $name: Progress fill left (RRGGBB)
-- fillRight: "0094FE"
-  $name: Progress fill right (RRGGBB)
-- fullLeft: "E43060"
-  $name: Full progress left (RRGGBB)
-- fullRight: "ED6050"
-  $name: Full progress right (RRGGBB)
-- background: "454545"
-  $name: Progress background (RRGGBB)
-- showProgressBorder: true
-  $name: Show progress border
-  $description: Draws the background border and keeps the fill inset inside it.
-- backgroundBorder: "323232"
-  $name: Progress border (RRGGBB)
-- matchDetailsPaneBg: true
-  $name: Fix Preview Pane background color
-  $description: Applies this color fix in Windows dark app mode.
-- previewPaneBgColor: "191919"
-  $name: Preview Pane background color (RRGGBB)
-  $description: Shared Preview Pane and text-preview background color.
+- itemsView:
+    - customizeItemsView: true
+      $name: Enable file list customization
+      $description: Turn off to let Windows or another mod handle this block.
+  $name: File list selection (ItemsView)
+  $description: Selection backgrounds and ghost-highlight correction in the file list.
+- navigationPane:
+    - customizeNavigationPane: true
+      $name: Enable Navigation Pane customization
+      $description: Turn off to let Windows or another mod handle this block.
+    - showFocusPill: true
+      $name: Show focus pill
+      $description: Draws the vertical focus indicator in the Navigation Pane.
+    - focusPillColor: "4CC2FF"
+      $name: Focus pill color (RRGGBB)
+  $name: Navigation Pane
+  $description: Selection backgrounds and focus indicator in the left navigation pane.
+- selectionAppearance:
+    - cornerRadius: 2
+      $name: Selection corner radius (0-6)
+      $description: Visual corner rounding of selection backgrounds.
+    - showBorder: true
+      $name: Show selection border
+      $description: Draws a 1 px border inside the selection background.
+    - activeFillColor: "4D4D4D"
+      $name: Active fill color (RRGGBB)
+    - activeBorderColor: "555555"
+      $name: Active border color (RRGGBB)
+    - multiFillColor: "454545"
+      $name: Multi-select fill color (RRGGBB)
+    - multiBorderColor: "505050"
+      $name: Multi-select border color (RRGGBB)
+  $name: Shared selection appearance
+  $description: Colors, borders, and rounding for both enabled selection blocks above.
+- progress:
+    - customizeProgress: true
+      $name: Enable progress customization
+      $description: Turn off to let Windows or another mod handle this block.
+    - radius: 4
+      $name: Progress radius (0-6)
+    - fillLeft: "0078D7"
+      $name: Progress fill left (RRGGBB)
+    - fillRight: "0094FE"
+      $name: Progress fill right (RRGGBB)
+    - fullLeft: "E43060"
+      $name: Full progress left (RRGGBB)
+    - fullRight: "ED6050"
+      $name: Full progress right (RRGGBB)
+    - background: "454545"
+      $name: Progress background (RRGGBB)
+    - showProgressBorder: true
+      $name: Show progress border
+      $description: Draws the background border and keeps the fill inset inside it.
+    - backgroundBorder: "323232"
+      $name: Progress border (RRGGBB)
+  $name: Progress indicators
+  $description: Progress colors, gradients, borders, and rounding.
+- previewPane:
+    - matchDetailsPaneBg: true
+      $name: Enable Preview Pane customization
+      $description: Restart Explorer and included host applications after enabling or disabling.
+    - previewPaneBgColor: "191919"
+      $name: Preview Pane background color (RRGGBB)
+      $description: Shared Preview Pane and text-preview background color.
+  $name: Preview Pane
+  $description: Background and plain-text preview in dark app mode. Restart Explorer after changing or disabling this block.
 */
 // ==/WindhawkModSettings==
 #include <windows.h>
@@ -228,6 +258,7 @@ CacheEntry g_cache[kCacheCapacity] = {};
 int g_cacheSize;
 int g_radius = 4;
 bool g_showProgressBorder = true;
+std::atomic<bool> g_enabled{true};
 bool g_initialized;
 SRWLOCK g_lock = SRWLOCK_INIT;
 volatile LONG g_renderFailureLogged;
@@ -417,24 +448,27 @@ bool PaintResourceLocked(HDC hdc, const RECT& rect, const RECT* clip,
     return drawn;
 }
 void LoadSettings() {
-    g_radius = std::clamp(Wh_GetIntSetting(L"radius"), 0, 6);
+    g_enabled.store(Wh_GetIntSetting(L"progress.customizeProgress") != 0);
+    g_radius = std::clamp(Wh_GetIntSetting(L"progress.radius"), 0, 6);
     g_showProgressBorder =
-        Wh_GetIntSetting(L"showProgressBorder") != 0;
+        Wh_GetIntSetting(L"progress.showProgressBorder") != 0;
     g_resources[Normal].colorA =
-        LoadRgbColor(L"fillLeft", g_resources[Normal].colorA);
+        LoadRgbColor(L"progress.fillLeft", g_resources[Normal].colorA);
     g_resources[Normal].colorB =
-        LoadRgbColor(L"fillRight", g_resources[Normal].colorB);
+        LoadRgbColor(L"progress.fillRight", g_resources[Normal].colorB);
     g_resources[Full].colorA =
-        LoadRgbColor(L"fullLeft", g_resources[Full].colorA);
+        LoadRgbColor(L"progress.fullLeft", g_resources[Full].colorA);
     g_resources[Full].colorB =
-        LoadRgbColor(L"fullRight", g_resources[Full].colorB);
+        LoadRgbColor(L"progress.fullRight", g_resources[Full].colorB);
     g_resources[Background].colorA =
-        LoadRgbColor(L"background", g_resources[Background].colorA);
+        LoadRgbColor(L"progress.background", g_resources[Background].colorA);
     g_resources[Background].colorB =
-        LoadRgbColor(L"backgroundBorder", g_resources[Background].colorB);
+        LoadRgbColor(L"progress.backgroundBorder", g_resources[Background].colorB);
 }
 bool TryDraw(HTHEME theme, HDC hdc, int part, int state,
              const RECT* rect, const RECT* clip) {
+    if (!g_enabled.load())
+        return false;
     ResourceId id = FindResource(part, state);
     if (id == ResourceCount || !hdc || !rect || !IsProgressTheme(theme))
         return false;
@@ -446,7 +480,7 @@ bool TryDraw(HTHEME theme, HDC hdc, int part, int state,
     if (IsRectEmpty(&destination))
         return true;
     AcquireSRWLockExclusive(&g_lock);
-    if (!g_initialized) {
+    if (!g_initialized || !g_enabled.load()) {
         ReleaseSRWLockExclusive(&g_lock);
         return false;
     }
@@ -490,6 +524,8 @@ static ElementPointerGetter_t g_getParent = nullptr;
 static FocusedElementGetter_t g_getKeyFocusedElement = nullptr;
 static SRWLOCK g_resourceLock = SRWLOCK_INIT;
 static bool g_active = false;
+static std::atomic<bool> g_itemsViewEnabled{true};
+static std::atomic<bool> g_navigationPaneEnabled{true};
 static int g_borderWidth = 1;
 static HDC g_backgroundDc[2] = {nullptr, nullptr};
 static HBITMAP g_backgroundBitmap[2] = {nullptr, nullptr};
@@ -773,7 +809,7 @@ static void DrawResources(HDC dc, const RECT* rect, int backgroundIndex,
 HRESULT HandleDrawThemeBackground(HTHEME theme, HDC dc, int partId,
                                   int stateId, const RECT* rect,
                                   const RECT* clipRect) {
-    if (!rect || partId != TVP_TREEITEM ||
+    if (!g_navigationPaneEnabled.load() || !rect || partId != TVP_TREEITEM ||
         (stateId != TREIS_HOT && stateId != TREIS_SELECTED &&
          stateId != TREIS_SELECTEDNOTFOCUS &&
          stateId != TREIS_HOTSELECTED) ||
@@ -820,7 +856,7 @@ HRESULT WINAPI DrawThemeBackgroundExHook(HTHEME theme,
                                          int stateId,
                                          const RECT* rect,
                                          const DTBGOPTS* options) {
-    if (!rect) {
+    if (!g_itemsViewEnabled.load() || !rect) {
         return g_origDrawThemeBackgroundEx(
             theme, dc, partId, stateId, rect, options);
     }
@@ -869,23 +905,28 @@ HRESULT WINAPI DrawThemeBackgroundExHook(HTHEME theme,
     return S_OK;
 }
 static bool ApplySettings() {
-    int radius = Wh_GetIntSetting(L"cornerRadius");
+    bool itemsViewEnabled = Wh_GetIntSetting(L"itemsView.customizeItemsView") != 0;
+    bool navigationPaneEnabled =
+        Wh_GetIntSetting(L"navigationPane.customizeNavigationPane") != 0;
+    g_itemsViewEnabled.store(itemsViewEnabled);
+    g_navigationPaneEnabled.store(navigationPaneEnabled);
+    int radius = Wh_GetIntSetting(L"selectionAppearance.cornerRadius");
     radius = std::clamp(radius, 0, 6);
     int sampleRadius = radius * 2;
-    int borderWidth = Wh_GetIntSetting(L"showBorder") ? 1 : 0;
+    int borderWidth = Wh_GetIntSetting(L"selectionAppearance.showBorder") ? 1 : 0;
     int margin = std::max(sampleRadius, borderWidth);
     RgbColor activeFill =
-        LoadRgbColor(L"activeFillColor", {0x4D, 0x4D, 0x4D});
+        LoadRgbColor(L"selectionAppearance.activeFillColor", {0x4D, 0x4D, 0x4D});
     RgbColor activeBorder =
-        LoadRgbColor(L"activeBorderColor", {0x55, 0x55, 0x55});
+        LoadRgbColor(L"selectionAppearance.activeBorderColor", {0x55, 0x55, 0x55});
     RgbColor multiFill =
-        LoadRgbColor(L"multiFillColor", {0x45, 0x45, 0x45});
+        LoadRgbColor(L"selectionAppearance.multiFillColor", {0x45, 0x45, 0x45});
     RgbColor multiBorder =
-        LoadRgbColor(L"multiBorderColor", {0x50, 0x50, 0x50});
-    bool showFocusPill = Wh_GetIntSetting(L"showFocusPill") != 0;
+        LoadRgbColor(L"selectionAppearance.multiBorderColor", {0x50, 0x50, 0x50});
+    bool showFocusPill = Wh_GetIntSetting(L"navigationPane.showFocusPill") != 0;
     RgbColor pill = {};
     if (showFocusPill) {
-        pill = LoadRgbColor(L"focusPillColor", {0x4C, 0xC2, 0xFF});
+        pill = LoadRgbColor(L"navigationPane.focusPillColor", {0x4C, 0xC2, 0xFF});
     }
     BitmapResource active, multi, focus;
     if (!InitCustomNinePatch(active, sampleRadius, margin, borderWidth,
@@ -950,9 +991,9 @@ constexpr wchar_t kPreviewerClass[] =
 constexpr wchar_t kRichEditClass[] = L"RICHEDIT50W";
 constexpr int kReadingPaneBackgroundPart = 1;
 void LoadSettings() {
-    bool enabled = Wh_GetIntSetting(L"matchDetailsPaneBg") != 0;
+    bool enabled = Wh_GetIntSetting(L"previewPane.matchDetailsPaneBg") != 0;
     g_previewBgColor = LoadColorRef(
-        L"previewPaneBgColor", RGB(0x19, 0x19, 0x19));
+        L"previewPane.previewPaneBgColor", RGB(0x19, 0x19, 0x19));
     int luminance = (GetRValue(g_previewBgColor) * 299 +
                      GetGValue(g_previewBgColor) * 587 +
                      GetBValue(g_previewBgColor) * 114) / 1000;
