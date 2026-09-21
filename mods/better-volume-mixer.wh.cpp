@@ -8,7 +8,7 @@
 // @homepage        https://github.com/0Allu/better-volume-mixer
 // @donateUrl       https://ko-fi.com/0allu
 // @include         windhawk.exe
-// @compilerOptions -lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -ladvapi32 -lmsimg32 -loleaut32 -lgdiplus -luxtheme
+// @compilerOptions -lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -ladvapi32 -lmsimg32 -loleaut32 -lgdiplus
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -125,7 +125,6 @@ and enable **Hide volume icon** in its settings.
 
 #include <windows.h>
 #include <windowsx.h>
-#include <uxtheme.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <mmdeviceapi.h>
@@ -199,6 +198,7 @@ constexpr UINT WM_APP_TRAY = WM_APP + 1;
 constexpr UINT WM_APP_RELOAD_SETTINGS = WM_APP + 2;
 constexpr UINT WM_APP_SHOW_MIXER = WM_APP + 3;
 constexpr UINT WM_APP_FINISH_VOLUME_ENTRY = WM_APP + 4;
+constexpr UINT WM_APP_AUDIO_CHANGED = WM_APP + 5;
 constexpr UINT_PTR TIMER_METERS = 1;
 constexpr UINT_PTR TIMER_REFRESH = 2;
 constexpr UINT_PTR TIMER_CHECK_FOCUS = 3;
@@ -366,9 +366,15 @@ std::wstring g_endpointName;
 std::unordered_set<std::wstring> g_activatedSessions;
 std::unordered_set<std::wstring> g_liveSessions;
 // Session instance IDs survive UI refreshes and distinguish restarted apps.
-// Only value types are retained here, never COM references.
+// Access is shared by the UI and Core Audio notification threads.
+SRWLOCK g_defaultVolumeLock = SRWLOCK_INIT;
 std::unordered_map<std::wstring, int> g_appliedDefaultVolumes;
 std::unordered_set<std::wstring> g_liveDefaultSessions;
+
+HANDLE g_audioNotificationThread;
+HANDLE g_audioNotificationStopEvent;
+HANDLE g_audioNotificationRebuildEvent;
+std::atomic<bool> g_audioUiRefreshPosted;
 
 int g_dpi = 96;
 int g_scrollRow;
@@ -920,11 +926,17 @@ bool MatchesAppName(const std::wstring& target, const std::wstring& path,
            _wcsicmp(target.c_str(), BaseNameWithoutExtension(path).c_str()) == 0;
 }
 
-const CustomApp* FindCustomApp(const std::wstring& path, const std::wstring& name) {
-    for (const auto& rule : g_settings.customApps) {
+const CustomApp* FindCustomAppInRules(const std::vector<CustomApp>& rules,
+                                           const std::wstring& path,
+                                           const std::wstring& name) {
+    for (const auto& rule : rules) {
         if (MatchesAppName(rule.app, path, name)) return &rule;
     }
     return nullptr;
+}
+
+const CustomApp* FindCustomApp(const std::wstring& path, const std::wstring& name) {
+    return FindCustomAppInRules(g_settings.customApps, path, name);
 }
 
 bool IsAppHidden(const std::wstring& path, const std::wstring& name) {
@@ -932,29 +944,391 @@ bool IsAppHidden(const std::wstring& path, const std::wstring& name) {
         [&](const std::wstring& target) { return MatchesAppName(target, path, name); });
 }
 
+void ForgetAppliedDefaultVolume(const std::wstring& instanceId) {
+    if (instanceId.empty()) return;
+    AcquireSRWLockExclusive(&g_defaultVolumeLock);
+    g_appliedDefaultVolumes.erase(instanceId);
+    ReleaseSRWLockExclusive(&g_defaultVolumeLock);
+}
+
+bool ApplyTrackedDefaultVolume(const std::wstring& instanceId, int percent,
+                               ISimpleAudioVolume* volume) {
+    if (instanceId.empty() || !volume || percent < 0 || percent > 100) return false;
+
+    AcquireSRWLockExclusive(&g_defaultVolumeLock);
+    auto previous = g_appliedDefaultVolumes.find(instanceId);
+    if (previous != g_appliedDefaultVolumes.end() && previous->second == percent) {
+        ReleaseSRWLockExclusive(&g_defaultVolumeLock);
+        return false;
+    }
+
+    HRESULT result = volume->SetMasterVolume(percent / 100.0f, nullptr);
+    if (SUCCEEDED(result)) {
+        g_appliedDefaultVolumes[instanceId] = percent;
+    }
+    ReleaseSRWLockExclusive(&g_defaultVolumeLock);
+    return SUCCEEDED(result);
+}
+
+void QueueAudioUiRefresh(HWND window) {
+    bool expected = false;
+    if (!g_audioUiRefreshPosted.compare_exchange_strong(expected, true)) return;
+    if (!window || !PostMessageW(window, WM_APP_AUDIO_CHANGED, 0, 0)) {
+        g_audioUiRefreshPosted.store(false);
+    }
+}
+
+void ApplyDefaultRuleToSession(IAudioSessionControl* control,
+                               const std::vector<CustomApp>& rules) {
+    if (!control) return;
+
+    IAudioSessionControl2* control2 = nullptr;
+    ISimpleAudioVolume* volume = nullptr;
+    if (FAILED(control->QueryInterface(__uuidof(IAudioSessionControl2),
+                                       reinterpret_cast<void**>(&control2))) ||
+        FAILED(control->QueryInterface(__uuidof(ISimpleAudioVolume),
+                                       reinterpret_cast<void**>(&volume))) ||
+        !control2 || !volume) {
+        if (control2) control2->Release();
+        if (volume) volume->Release();
+        return;
+    }
+
+    LPWSTR rawInstanceId = nullptr;
+    std::wstring instanceId;
+    if (SUCCEEDED(control2->GetSessionInstanceIdentifier(&rawInstanceId)) &&
+        rawInstanceId) {
+        instanceId = rawInstanceId;
+    }
+    if (rawInstanceId) CoTaskMemFree(rawInstanceId);
+
+    DWORD processId = 0;
+    HRESULT processResult = control2->GetProcessId(&processId);
+    bool systemSounds = control2->IsSystemSoundsSession() == S_OK;
+    std::wstring processPath = SUCCEEDED(processResult)
+        ? GetProcessPath(processId) : std::wstring();
+    if (!IsAudioEngineSession(processPath, systemSounds)) {
+        std::wstring displayName = GetSessionDisplayName(
+            control, processId, systemSounds, &processPath);
+        const CustomApp* rule = FindCustomAppInRules(rules, processPath, displayName);
+        if (rule && rule->defaultVolume >= 0) {
+            ApplyTrackedDefaultVolume(instanceId, rule->defaultVolume, volume);
+        } else {
+            ForgetAppliedDefaultVolume(instanceId);
+        }
+    }
+
+    volume->Release();
+    control2->Release();
+}
+
+class AudioSessionNotification final : public IAudioSessionNotification {
+public:
+    AudioSessionNotification(HWND window, const std::vector<CustomApp>& rules)
+        : m_window(window), m_rules(rules) {}
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
+        if (!object) return E_POINTER;
+        *object = nullptr;
+        if (iid == __uuidof(IUnknown) || iid == __uuidof(IAudioSessionNotification)) {
+            *object = static_cast<IAudioSessionNotification*>(this);
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return static_cast<ULONG>(InterlockedIncrement(&m_references));
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG remaining = static_cast<ULONG>(InterlockedDecrement(&m_references));
+        if (!remaining) delete this;
+        return remaining;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnSessionCreated(IAudioSessionControl* newSession) override {
+        ApplyDefaultRuleToSession(newSession, m_rules);
+        QueueAudioUiRefresh(m_window);
+        return S_OK;
+    }
+
+private:
+    ~AudioSessionNotification() = default;
+    LONG m_references = 1;
+    HWND m_window;
+    std::vector<CustomApp> m_rules;
+};
+
+class EndpointNotification final : public IMMNotificationClient {
+public:
+    explicit EndpointNotification(HANDLE rebuildEvent) : m_rebuildEvent(rebuildEvent) {}
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
+        if (!object) return E_POINTER;
+        *object = nullptr;
+        if (iid == __uuidof(IUnknown) || iid == __uuidof(IMMNotificationClient)) {
+            *object = static_cast<IMMNotificationClient*>(this);
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return static_cast<ULONG>(InterlockedIncrement(&m_references));
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG remaining = static_cast<ULONG>(InterlockedDecrement(&m_references));
+        if (!remaining) delete this;
+        return remaining;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override {
+        SignalRebuild();
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override {
+        SignalRebuild();
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override {
+        SignalRebuild();
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole,
+                                                     LPCWSTR) override {
+        if (flow == eRender || flow == eAll) SignalRebuild();
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override {
+        return S_OK;
+    }
+
+private:
+    ~EndpointNotification() = default;
+
+    void SignalRebuild() {
+        if (m_rebuildEvent) SetEvent(m_rebuildEvent);
+    }
+
+    LONG m_references = 1;
+    HANDLE m_rebuildEvent;
+};
+
+struct AudioSessionWatcher {
+    IAudioSessionManager2* manager = nullptr;
+    AudioSessionNotification* notification = nullptr;
+
+    ~AudioSessionWatcher() {
+        if (manager && notification) {
+            manager->UnregisterSessionNotification(notification);
+        }
+        if (notification) notification->Release();
+        if (manager) manager->Release();
+    }
+};
+
+struct AudioNotificationContext {
+    HWND window;
+    HANDLE stopEvent;
+    HANDLE rebuildEvent;
+    std::vector<CustomApp> rules;
+};
+
+void PrimeSessionManager(IAudioSessionManager2* manager,
+                         const std::vector<CustomApp>& rules) {
+    IAudioSessionEnumerator* sessions = nullptr;
+    if (FAILED(manager->GetSessionEnumerator(&sessions)) || !sessions) return;
+
+    int count = 0;
+    if (SUCCEEDED(sessions->GetCount(&count))) {
+        for (int i = 0; i < count; ++i) {
+            IAudioSessionControl* control = nullptr;
+            if (SUCCEEDED(sessions->GetSession(i, &control)) && control) {
+                ApplyDefaultRuleToSession(control, rules);
+                control->Release();
+            }
+        }
+    }
+    sessions->Release();
+}
+
+void RebuildAudioSessionWatchers(
+        IMMDeviceEnumerator* enumerator, AudioNotificationContext* context,
+        std::vector<std::unique_ptr<AudioSessionWatcher>>& watchers) {
+    watchers.clear();
+
+    IMMDeviceCollection* devices = nullptr;
+    HRESULT hr = enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &devices);
+    if (FAILED(hr) || !devices) {
+        Wh_Log(L"Mixer: notification endpoint enumeration failed: 0x%08lX",
+               static_cast<unsigned long>(hr));
+        return;
+    }
+
+    UINT count = 0;
+    if (FAILED(devices->GetCount(&count))) count = 0;
+    for (UINT i = 0; i < count; ++i) {
+        IMMDevice* device = nullptr;
+        if (FAILED(devices->Item(i, &device)) || !device) continue;
+
+        IAudioSessionManager2* manager = nullptr;
+        hr = device->Activate(__uuidof(IAudioSessionManager2), CLSCTX_INPROC_SERVER,
+                              nullptr, reinterpret_cast<void**>(&manager));
+        device->Release();
+        if (FAILED(hr) || !manager) continue;
+
+        auto* notification = new AudioSessionNotification(context->window, context->rules);
+        hr = manager->RegisterSessionNotification(notification);
+        if (FAILED(hr)) {
+            notification->Release();
+            manager->Release();
+            continue;
+        }
+
+        auto watcher = std::make_unique<AudioSessionWatcher>();
+        watcher->manager = manager;
+        watcher->notification = notification;
+        PrimeSessionManager(manager, context->rules);
+        watchers.push_back(std::move(watcher));
+    }
+    devices->Release();
+}
+
+DWORD WINAPI AudioNotificationThreadProc(LPVOID parameter) {
+    std::unique_ptr<AudioNotificationContext> context(
+        static_cast<AudioNotificationContext*>(parameter));
+    HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(comResult)) {
+        Wh_Log(L"Mixer: audio notification COM initialization failed: 0x%08lX",
+               static_cast<unsigned long>(comResult));
+        return 1;
+    }
+
+    IMMDeviceEnumerator* enumerator = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                  CLSCTX_INPROC_SERVER,
+                                  __uuidof(IMMDeviceEnumerator),
+                                  reinterpret_cast<void**>(&enumerator));
+    if (FAILED(hr) || !enumerator) {
+        Wh_Log(L"Mixer: audio notification device enumerator failed: 0x%08lX",
+               static_cast<unsigned long>(hr));
+        CoUninitialize();
+        return 1;
+    }
+
+    auto* endpointNotification = new EndpointNotification(context->rebuildEvent);
+    bool endpointRegistered = SUCCEEDED(
+        enumerator->RegisterEndpointNotificationCallback(endpointNotification));
+    if (!endpointRegistered) {
+        Wh_Log(L"Mixer: endpoint notification registration failed");
+    }
+
+    std::vector<std::unique_ptr<AudioSessionWatcher>> watchers;
+    RebuildAudioSessionWatchers(enumerator, context.get(), watchers);
+
+    HANDLE events[] = {context->stopEvent, context->rebuildEvent};
+    while (true) {
+        DWORD wait = WaitForMultipleObjects(2, events, FALSE, INFINITE);
+        if (wait == WAIT_OBJECT_0) break;
+        if (wait == WAIT_OBJECT_0 + 1) {
+            RebuildAudioSessionWatchers(enumerator, context.get(), watchers);
+            QueueAudioUiRefresh(context->window);
+            continue;
+        }
+        break;
+    }
+
+    watchers.clear();
+    if (endpointRegistered) {
+        enumerator->UnregisterEndpointNotificationCallback(endpointNotification);
+    }
+    endpointNotification->Release();
+    enumerator->Release();
+    CoUninitialize();
+    return 0;
+}
+
+bool StopDefaultVolumeNotifications() {
+    if (!g_audioNotificationThread) return true;
+
+    if (g_audioNotificationStopEvent) SetEvent(g_audioNotificationStopEvent);
+    DWORD wait = WaitForSingleObject(g_audioNotificationThread, 5000);
+    if (wait != WAIT_OBJECT_0) {
+        Wh_Log(L"Mixer: audio notification thread did not stop in time");
+        return false;
+    }
+
+    CloseHandle(g_audioNotificationThread);
+    g_audioNotificationThread = nullptr;
+    if (g_audioNotificationStopEvent) {
+        CloseHandle(g_audioNotificationStopEvent);
+        g_audioNotificationStopEvent = nullptr;
+    }
+    if (g_audioNotificationRebuildEvent) {
+        CloseHandle(g_audioNotificationRebuildEvent);
+        g_audioNotificationRebuildEvent = nullptr;
+    }
+    g_audioUiRefreshPosted.store(false);
+    return true;
+}
+
+void StartDefaultVolumeNotifications(HWND window) {
+    if (!HasDefaultVolumeRules() || g_audioNotificationThread) return;
+
+    g_audioNotificationStopEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_audioNotificationRebuildEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_audioNotificationStopEvent || !g_audioNotificationRebuildEvent) {
+        Wh_Log(L"Mixer: could not create audio notification events");
+        if (g_audioNotificationStopEvent) CloseHandle(g_audioNotificationStopEvent);
+        if (g_audioNotificationRebuildEvent) CloseHandle(g_audioNotificationRebuildEvent);
+        g_audioNotificationStopEvent = nullptr;
+        g_audioNotificationRebuildEvent = nullptr;
+        return;
+    }
+
+    auto* context = new AudioNotificationContext{
+        window, g_audioNotificationStopEvent, g_audioNotificationRebuildEvent,
+        g_settings.customApps};
+    g_audioNotificationThread = CreateThread(
+        nullptr, 0, AudioNotificationThreadProc, context, 0, nullptr);
+    if (!g_audioNotificationThread) {
+        Wh_Log(L"Mixer: could not start audio notification thread, error %lu",
+               GetLastError());
+        delete context;
+        CloseHandle(g_audioNotificationStopEvent);
+        CloseHandle(g_audioNotificationRebuildEvent);
+        g_audioNotificationStopEvent = nullptr;
+        g_audioNotificationRebuildEvent = nullptr;
+    }
+}
+
 void ApplyDefaultVolume(const CustomApp* rule, const std::wstring& instanceId,
                         ISimpleAudioVolume* volume) {
     if (instanceId.empty()) return;
     if (!rule || rule->defaultVolume < 0) {
-        g_appliedDefaultVolumes.erase(instanceId);
+        ForgetAppliedDefaultVolume(instanceId);
         return;
     }
-    auto previous = g_appliedDefaultVolumes.find(instanceId);
-    if (previous != g_appliedDefaultVolumes.end() && previous->second == rule->defaultVolume) {
-        return;
-    }
-    if (SUCCEEDED(volume->SetMasterVolume(rule->defaultVolume / 100.0f, nullptr))) {
-        g_appliedDefaultVolumes[instanceId] = rule->defaultVolume;
-    }
+    ApplyTrackedDefaultVolume(instanceId, rule->defaultVolume, volume);
 }
 
 void PruneDefaultVolumes(bool completeScan) {
     // An unavailable device/service is not evidence that a session ended.
     if (!completeScan) return;
+    AcquireSRWLockExclusive(&g_defaultVolumeLock);
     for (auto it = g_appliedDefaultVolumes.begin(); it != g_appliedDefaultVolumes.end();) {
         if (!g_liveDefaultSessions.count(it->first)) it = g_appliedDefaultVolumes.erase(it);
         else ++it;
     }
+    ReleaseSRWLockExclusive(&g_defaultVolumeLock);
 }
 
 bool AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics,
@@ -2708,7 +3082,7 @@ void HideMixer(HWND hWnd) {
     g_showRequestPending = false;
     KillTimer(hWnd, TIMER_CHECK_FOCUS);
     KillTimer(hWnd, TIMER_METERS);
-    if (!HasDefaultVolumeRules()) KillTimer(hWnd, TIMER_REFRESH);
+    KillTimer(hWnd, TIMER_REFRESH);
     g_paintTimerInterval = 0;
     g_openTime = 0;
     g_dragRow = DRAG_NONE;
@@ -3193,7 +3567,10 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             ApplyTransparencyStyle(hWnd);
             DWORD corner = 2;  // DWMWCP_ROUND.
             DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
-            if (HasDefaultVolumeRules()) SetTimer(hWnd, TIMER_REFRESH, 1000, nullptr);
+            if (HasDefaultVolumeRules()) {
+                RefreshAudioSessions(hWnd);
+                StartDefaultVolumeNotifications(hWnd);
+            }
             return 0;
         }
 
@@ -3242,16 +3619,31 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             }
             return 0;
 
+        case WM_APP_AUDIO_CHANGED:
+            g_audioUiRefreshPosted.store(false);
+            if (IsWindowVisible(hWnd)) {
+                RefreshAudioSessions(hWnd);
+                PositionMixer(hWnd);
+                POINT point{};
+                if (GetCursorPos(&point)) {
+                    ScreenToClient(hWnd, &point);
+                    UpdateNameTooltip(hWnd, point);
+                }
+            }
+            return 0;
+
         case WM_APP_RELOAD_SETTINGS:
             FinishVolumeEntry(hWnd, false, false);
             CancelNameTooltip(hWnd);
             SelectRow(DRAG_MASTER);
+            StopDefaultVolumeNotifications();
             LoadSettings();
-            if (IsWindowVisible(hWnd) || HasDefaultVolumeRules()) {
+            if (IsWindowVisible(hWnd)) {
                 SetTimer(hWnd, TIMER_REFRESH, 1000, nullptr);
             } else {
                 KillTimer(hWnd, TIMER_REFRESH);
             }
+            StartDefaultVolumeNotifications(hWnd);
             g_transparencyFailed = false;
             ApplyTransparencyStyle(hWnd);
             UpdateMotionPreference(hWnd);
@@ -3289,15 +3681,13 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             }
             if (wParam == TIMER_REFRESH) {
                 // KillTimer doesn't remove a timer message already in the queue.
-                if (IsWindowVisible(hWnd) || HasDefaultVolumeRules()) {
+                if (IsWindowVisible(hWnd)) {
                     RefreshAudioSessions(hWnd);
-                    if (IsWindowVisible(hWnd)) {
-                        PositionMixer(hWnd);
-                        POINT point{};
-                        if (GetCursorPos(&point)) {
-                            ScreenToClient(hWnd, &point);
-                            UpdateNameTooltip(hWnd, point);
-                        }
+                    PositionMixer(hWnd);
+                    POINT point{};
+                    if (GetCursorPos(&point)) {
+                        ScreenToClient(hWnd, &point);
+                        UpdateNameTooltip(hWnd, point);
                     }
                 }
                 return 0;
@@ -3509,6 +3899,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
         case WM_DESTROY:
             FinishVolumeEntry(hWnd, false, false);
             CancelNameTooltip(hWnd);
+            StopDefaultVolumeNotifications();
             if (g_nameTooltip) {
                 DestroyWindow(g_nameTooltip);
                 g_nameTooltip = nullptr;
@@ -3523,7 +3914,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             ReleaseAudioData();
             g_activatedSessions.clear();
             g_liveSessions.clear();
+            AcquireSRWLockExclusive(&g_defaultVolumeLock);
             g_appliedDefaultVolumes.clear();
+            ReleaseSRWLockExclusive(&g_defaultVolumeLock);
             g_liveDefaultSessions.clear();
             g_rowVisuals.clear();
             ClearIconCache();
