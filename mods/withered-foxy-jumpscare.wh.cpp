@@ -23,8 +23,9 @@ Every check interval (1 second by default) the mod rolls a die. With the
 default chance of **1 in 100000**, the jumpscare happens about once every 28
 hours of uptime.
 
-The jumpscare is drawn in a transparent fullscreen window on top of all other
-windows, on the monitor of the active window. Press **Esc** to close it early.
+The jumpscare is drawn in a transparent always-on-top window on the monitor
+of the active window. Press **Esc** to close it early. With "Steal focus" off,
+the Esc key also reaches the app underneath.
 
 ## Files
 
@@ -35,7 +36,8 @@ the mod is removed. The default files are hosted in the
 repository.
 
 Turn off "Auto download" to never contact the network. In that case, set
-"Image" and "Sound" to your own files, otherwise the mod does nothing.
+"Image" and "Sound" to your own files, otherwise the mod does nothing. If the
+download fails, turn "Auto download" off and on again to retry.
 
 You can use your own files instead:
 
@@ -218,7 +220,11 @@ void LoadSettings() {
     g_settings.imagePath = ReadStringSetting(L"imagePath");
     g_settings.soundPath = ReadStringSetting(L"soundPath");
     g_settings.chromaKey = Wh_GetIntSetting(L"chromaKey");
-    g_settings.autoDownload = Wh_GetIntSetting(L"autoDownload");
+    bool autoDownload = Wh_GetIntSetting(L"autoDownload");
+    if (autoDownload && !g_settings.autoDownload) {
+        g_downloadAttempted = false;
+    }
+    g_settings.autoDownload = autoDownload;
     g_downloadImage = false;
     g_downloadSound = false;
 
@@ -846,6 +852,7 @@ void RunJumpscare(std::vector<Frame>& frames, std::mt19937_64& rng) {
     ReleaseDC(nullptr, screenDc);
     DestroyWindow(hwnd);
     PumpMessages();
+    frames.clear();
 
     if (g_settings.forceForeground && previousForeground &&
         IsWindow(previousForeground)) {
@@ -880,7 +887,7 @@ DWORD WINAPI WorkerThread(LPVOID parameter) {
         return 1;
     }
 
-    std::vector<Frame> frames = LoadFrames();
+    std::vector<Frame> frames;
 
     std::random_device randomDevice;
     LARGE_INTEGER counter;
