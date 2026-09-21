@@ -32,18 +32,27 @@ Each of the two surfaces has its own switch in the settings:
 
 ## Why it works this way
 
-Subclassing the clicked control does not work, and neither does intercepting
-the frame's WM_PARENTNOTIFY. Logging every window inside an Explorer frame
-shows WM_PARENTNOTIFY propagating all the way up the chain while
-WM_MBUTTONDOWN itself reaches no window procedure at all: Explorer consumes
-the click in its message pump, in the pre-translate step that runs before
-DispatchMessage. WM_PARENTNOTIFY still fires because the system emits it when
-the message is queued, not when it is delivered.
+The middle-button messages are dropped on their way to the window procedure,
+by hooking `DispatchMessageW` and returning without calling the original.
+`PeekMessageW` is hooked as well, rewriting the same messages to `WM_NULL`,
+because Explorer runs inner modal loops - drag detection after a button press,
+for one - that pull messages straight out of the queue instead of going
+through the main pump.
 
-So the message has to be caught on its way out of the queue. This mod hooks
-GetMessageW and PeekMessageW and rewrites the middle-button messages bound for
-those two surfaces into WM_NULL, which happens before anything in Explorer can
-look at them.
+`GetMessageW` is deliberately *not* hooked. It blocks until a message arrives,
+so a hook frame would sit on the stack of every idle message loop in
+explorer.exe for as long as it waits, and Windhawk could not unmap the mod
+while that is true - disabling or updating the mod would hang in the
+"unloading" state.
+
+## Interaction with other mods
+
+Because the clicks are dropped before the window procedure runs, other mods
+that act on the middle button in these two surfaces stop seeing it while this
+mod is enabled - `autoscroll-win32`, for example. Mods keyed off
+`WM_PARENTNOTIFY`, such as `click-on-empty-explorer`, still fire, since the
+system sends that notification when the message is queued rather than when it
+is delivered.
 */
 // ==/WindhawkModReadme==
 
@@ -76,11 +85,14 @@ void LoadSettings() {
     g_blockNavPane = Wh_GetIntSetting(L"blockNavPane") != 0;
 }
 
-// Walks up from hWnd looking for a window of the given class. The depth limit
-// keeps a malformed chain from turning into a long climb.
+// Walks up from hWnd looking for a window of the given class. GA_PARENT rather
+// than GetParent: GetParent returns the owner for a top-level window, which
+// could wander off a child chain into an owner chain. The depth limit keeps a
+// malformed chain from turning into a long climb.
 bool HasAncestorClass(HWND hWnd, PCWSTR className) {
-    HWND parent = GetParent(hWnd);
-    for (int depth = 0; parent && depth < 24; depth++) {
+    HWND desktop = GetDesktopWindow();
+    HWND parent = GetAncestor(hWnd, GA_PARENT);
+    for (int depth = 0; parent && parent != desktop && depth < 24; depth++) {
         WCHAR parentClass[256];
         if (!GetClassName(parent, parentClass, ARRAYSIZE(parentClass))) {
             return false;
@@ -88,7 +100,7 @@ bool HasAncestorClass(HWND hWnd, PCWSTR className) {
         if (wcscmp(parentClass, className) == 0) {
             return true;
         }
-        parent = GetParent(parent);
+        parent = GetAncestor(parent, GA_PARENT);
     }
     return false;
 }
@@ -126,13 +138,13 @@ TargetKind ClassifyWindow(HWND hWnd) {
     return kTargetNone;
 }
 
-// Rewrites a middle-button message into WM_NULL when it targets a surface the
-// user asked us to silence. The class walk only runs for the three middle
-// button messages, so the common path through the message pump stays a single
+// True when the message is a middle-button click on a surface the user asked
+// us to silence. The class walk only runs for the three middle button
+// messages, so the common path through the message pump stays a single
 // integer comparison.
-void NeutralizeIfBlocked(MSG* msg) {
+bool ShouldBlock(const MSG* msg) {
     if (!msg) {
-        return;
+        return false;
     }
 
     switch (msg->message) {
@@ -141,44 +153,28 @@ void NeutralizeIfBlocked(MSG* msg) {
         case WM_MBUTTONDBLCLK:
             break;
         default:
-            return;
+            return false;
     }
 
-    bool block;
     switch (ClassifyWindow(msg->hwnd)) {
         case kTargetFileList:
-            block = g_blockFileList.load();
-            break;
+            return g_blockFileList.load();
         case kTargetNavPane:
-            block = g_blockNavPane.load();
-            break;
+            return g_blockNavPane.load();
         default:
-            return;
+            return false;
     }
-
-    if (!block) {
-        return;
-    }
-
-    Wh_Log(L"Dropped 0x%04X for %p", msg->message, msg->hwnd);
-    msg->message = WM_NULL;
-    msg->wParam = 0;
-    msg->lParam = 0;
 }
 
-using GetMessageW_t = decltype(&GetMessageW);
-GetMessageW_t GetMessageW_Original;
+using DispatchMessageW_t = decltype(&DispatchMessageW);
+DispatchMessageW_t DispatchMessageW_Original;
 
-BOOL WINAPI GetMessageW_Hook(LPMSG lpMsg,
-                             HWND hWnd,
-                             UINT wMsgFilterMin,
-                             UINT wMsgFilterMax) {
-    BOOL result =
-        GetMessageW_Original(lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax);
-    if (result > 0) {
-        NeutralizeIfBlocked(lpMsg);
+LRESULT WINAPI DispatchMessageW_Hook(const MSG* lpMsg) {
+    if (ShouldBlock(lpMsg)) {
+        Wh_Log(L"Dropped 0x%04X for %p", lpMsg->message, lpMsg->hwnd);
+        return 0;
     }
-    return result;
+    return DispatchMessageW_Original(lpMsg);
 }
 
 using PeekMessageW_t = decltype(&PeekMessageW);
@@ -191,11 +187,14 @@ BOOL WINAPI PeekMessageW_Hook(LPMSG lpMsg,
                               UINT wRemoveMsg) {
     BOOL result = PeekMessageW_Original(lpMsg, hWnd, wMsgFilterMin,
                                         wMsgFilterMax, wRemoveMsg);
-    if (result) {
+    if (result && ShouldBlock(lpMsg)) {
         // Rewritten for PM_NOREMOVE too: the caller must not see the real
         // message either way. The message stays queued in that case, and the
         // later removing call gets neutralized in turn.
-        NeutralizeIfBlocked(lpMsg);
+        Wh_Log(L"Dropped 0x%04X for %p (peek)", lpMsg->message, lpMsg->hwnd);
+        lpMsg->message = WM_NULL;
+        lpMsg->wParam = 0;
+        lpMsg->lParam = 0;
     }
     return result;
 }
@@ -203,10 +202,14 @@ BOOL WINAPI PeekMessageW_Hook(LPMSG lpMsg,
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    Wh_SetFunctionHook((void*)GetMessageW, (void*)GetMessageW_Hook,
-                       (void**)&GetMessageW_Original);
-    Wh_SetFunctionHook((void*)PeekMessageW, (void*)PeekMessageW_Hook,
-                       (void**)&PeekMessageW_Original);
+    if (!WindhawkUtils::SetFunctionHook(DispatchMessageW, DispatchMessageW_Hook,
+                                        &DispatchMessageW_Original)) {
+        return FALSE;
+    }
+    if (!WindhawkUtils::SetFunctionHook(PeekMessageW, PeekMessageW_Hook,
+                                        &PeekMessageW_Original)) {
+        return FALSE;
+    }
     return TRUE;
 }
 
