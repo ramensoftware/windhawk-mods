@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.76
+// @version         2.77
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -246,6 +246,11 @@ constexpr DWORD kLiquidShrinkDelay = 700;
 // an unsupported build fails every one. Tune down if a broken tree costs too many
 // tree walks, up if a slow startup transition needs longer to settle.
 constexpr unsigned kRefreshRetryLimit = 10;
+// Native hover/active plates measured on a live taskbar: the fill is 50% white in
+// light theme and 5.9% in dark, while the rim is a 3-DIP gradient peaking near 10%
+// alpha. Scaling the element dropped that rim to ~3% and erased the bevel, so the
+// fill alone carries the dim.
+constexpr double kPlateFillScale = 0.32;
 // One lens per realized task button; UpdateFollower already refuses more than 64.
 #define UW_BUTTON_LENS_CAP 64
 #define UW_STRINGIZE_IMPL(value) #value
@@ -870,10 +875,8 @@ struct OwnedDock {
 struct Root {
     struct StatePlate {
         Controls::Border element{nullptr};
-        double originalOpacity{};
-        double appliedOpacity{};
-        bool opacityOwned{};
-        bool opacityWasLocal{};
+        Media::Brush nativeFill{nullptr};   // Last brush Windows set.
+        Media::Brush appliedFill{nullptr};  // Our alpha-scaled copy of it.
         Visual visual{nullptr};
         CompositionGeometricClip clip{nullptr};
         CompositionRoundedRectangleGeometry clipGeometry{nullptr};
@@ -2025,9 +2028,8 @@ void RestoreStatePlate(Root::StatePlate& state) {
             state.stretch && state.element.RenderTransform() == state.stretch;
         bool clipMatch =
             state.clip && state.visual && state.visual.Clip() == state.clip;
-        bool opacityMatch =
-            state.opacityOwned &&
-            std::abs(state.element.Opacity() - state.appliedOpacity) < 0.001;
+        bool fillMatch = state.appliedFill &&
+                         state.element.Background() == state.appliedFill;
         if (state.stretch) {
             if (transformMatch) {
                 state.element.ClearValue(UIElement::RenderTransformProperty());
@@ -2049,18 +2051,18 @@ void RestoreStatePlate(Root::StatePlate& state) {
             else
                 Wh_Log(L"[UWITEM] state plate border ownership lost");
         }
-        if (opacityMatch) {
-            if (state.opacityWasLocal)
-                state.element.Opacity(state.originalOpacity);
+        if (state.appliedFill) {
+            if (fillMatch)
+                state.element.Background(state.nativeFill);
             else
-                state.element.ClearValue(UIElement::OpacityProperty());
+                Wh_Log(L"[UWITEM] state plate fill ownership lost");
         }
     } catch (...) {
         Wh_Log(L"[UWITEM] state plate restore failed hr=%08X",
                winrt::to_hresult().value);
     }
-    state.opacityOwned = false;
-    state.opacityWasLocal = false;
+    state.nativeFill = nullptr;
+    state.appliedFill = nullptr;
     state.visual = nullptr;
     state.clip = nullptr;
     state.clipGeometry = nullptr;
@@ -2104,20 +2106,26 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         auto parent = Media::VisualTreeHelper::GetParent(plate)
                           .try_as<FrameworkElement>();
         if (!parent) return;
-        if (!state.opacityOwned) {
-            state.originalOpacity = plate.Opacity();
-            // A template or visual-state value must be handed back by clearing
-            // ours, not by pinning the number we happened to read.
-            state.opacityWasLocal =
-                plate.ReadLocalValue(UIElement::OpacityProperty()) !=
-                DependencyProperty::UnsetValue();
-            state.appliedOpacity =
-                g_theme == DockTheme::Native
-                    ? state.originalOpacity
-                    : state.originalOpacity * 0.32;
-            state.opacityOwned = true;
+        // Dim the fill rather than the element. Windows rewrites Background on
+        // every visual state change, so a brush that is not ours is a fresh native
+        // one to scale; skipping our own keeps the alpha from compounding away.
+        if (g_theme != DockTheme::Native) {
+            auto fill = plate.Background();
+            if (fill && fill != state.appliedFill) {
+                if (auto solid = fill.try_as<Media::SolidColorBrush>()) {
+                    auto colour = solid.Color();
+                    colour.A = static_cast<uint8_t>(
+                        std::lround(colour.A * kPlateFillScale));
+                    state.nativeFill = fill;
+                    state.appliedFill = Media::SolidColorBrush(colour);
+                    plate.Background(state.appliedFill);
+                } else if (!state.appliedFill) {
+                    // A gradient or brush we cannot scale stays untouched.
+                    Wh_Log(L"[UWITEM] plate fill is %s; left native",
+                           winrt::get_class_name(fill).c_str());
+                }
+            }
         }
-        plate.Opacity(state.appliedOpacity);
         if (!state.clip && plate.Clip()) return;
         if (state.clip) {
             auto currentClip =
