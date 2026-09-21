@@ -641,7 +641,7 @@ Windhawk 高度可定制鼠标拖尾特效模组。基于原生 D3D11 + DirectCo
 - aa_mode: smooth
   $name: Anti-Aliasing
   $name:zh-CN: 抗锯齿
-  $name:zh-TW: アンチエイリアス
+  $name:zh-TW: 反鋸齒
   $name:ja-JP: アンチエイリアス
   $description: Edge anti-aliasing algorithm.
   $description:zh-CN: 边缘抗锯齿算法。
@@ -679,11 +679,11 @@ Windhawk 高度可定制鼠标拖尾特效模组。基于原生 D3D11 + DirectCo
 - msaa_level: 4x
   $name: MSAA Level
   $name:zh-CN: MSAA 级别
-  $name:zh-TW: MSAA レベル
+  $name:zh-TW: MSAA 等級
   $name:ja-JP: MSAAレベル
   $description: MSAA sample count.
   $description:zh-CN: MSAA 采样数。
-  $description:zh-TW: MSAAサンプル数。
+  $description:zh-TW: MSAA 取樣倍數。
   $description:ja-JP: MSAAサンプル数。
   $options:
   - 2x: 2x
@@ -708,16 +708,16 @@ Windhawk 高度可定制鼠标拖尾特效模组。基于原生 D3D11 + DirectCo
   $name:ja-JP: SSAAを有効化
   $description: Supersample Anti-Aliasing. Render at higher resolution then downsample. Best quality but GPU intensive.
   $description:zh-CN: 超采样抗锯齿，更高分辨率渲染再降采样。质量最高但耗 GPU。
-  $description:zh-TW: スーパーサンプリングAA。高解像度レンダリング後ダウンサンプル。最高画質だがGPU負荷大。
+  $description:zh-TW: 超取樣反鋸齒。以高解析度渲染後縮小。畫質最佳但GPU負擔大。
   $description:ja-JP: スーパーサンプリングAA。最高画質。
 - ssaa_level: 2x
   $name: SSAA Scale
   $name:zh-CN: SSAA 缩放
-  $name:zh-TW: SSAA スケール
+  $name:zh-TW: SSAA 倍率
   $name:ja-JP: SSAAスケール
   $description: Render resolution scale factor.
   $description:zh-CN: 渲染分辨率缩放倍数。
-  $description:zh-TW: レンダリング解像度倍率。
+  $description:zh-TW: 渲染解析度倍率。
   $description:ja-JP: レンダリング解像度倍率。
   $options:
   - 2x: 2x
@@ -3323,6 +3323,7 @@ int g_charAtlasRows = 0;                          // 图集行数 / atlas rows
 int g_charAtlasCellW = 0;                          // 单元格宽 / cell width
 int g_charAtlasCellH = 0;                         // 单元格高 / cell height
 float g_textAspectRatio = 1.0f;                      // 文字宽高比 / text cell aspect ratio
+bool g_charAtlasDirty = true;                            // 图集脏标记（设置变更时重建）/ atlas dirty flag (rebuild on settings change)
 std::vector<std::wstring> g_atlasChars;                // 图集词组列表 / atlas phrase list
 
 // 构建字符图集：把所有字符渲染到一张 D3D11 纹理 / Build char atlas: render all chars to one D3D11 texture
@@ -3361,17 +3362,30 @@ static void BuildCharAtlas() {
     if (g_atlasChars.empty()) g_atlasChars.push_back(L" ");
 
     // 图集布局：16列，行数按字符数算 / Atlas layout: 16 cols, rows by char count
+    int phraseCount = (int)g_atlasChars.size();
     g_charAtlasCols = 16;
+    // 词组少时减少列数，避免图集过宽 / Reduce columns when few phrases to avoid oversized atlas
+    if (phraseCount < g_charAtlasCols) g_charAtlasCols = phraseCount;
     g_charAtlasRows = ((int)g_atlasChars.size() + g_charAtlasCols - 1) / g_charAtlasCols;
     if (g_charAtlasRows < 1) g_charAtlasRows = 1;
     int maxPhraseLen = 1;
     for (auto &s : g_atlasChars) { int l = (int)s.length(); if (l > maxPhraseLen) maxPhraseLen = l; }
-    const float SS = 2.0f; // 超采样倍数 / supersampling factor
+    float SS = 2.0f; // 超采样倍数 / supersampling factor
     g_charAtlasCellW = (int)(g_textFontSize * maxPhraseLen * SS + 16);
     g_charAtlasCellH = (int)(g_textFontSize * SS + 8);
     g_textAspectRatio = (g_charAtlasCellH > 0) ? (float)g_charAtlasCellW / (float)g_charAtlasCellH : 1.0f;
     UINT atlasW = (UINT)(g_charAtlasCols * g_charAtlasCellW);
     UINT atlasH = (UINT)(g_charAtlasRows * g_charAtlasCellH);
+    // 钳制到 D3D11 纹理上限，必要时降低超采样 / Clamp to D3D11 texture limit, reduce SS if needed
+    const UINT maxTexDim = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+    while ((atlasW > maxTexDim || atlasH > maxTexDim) && SS > 1.0f) {
+        SS -= 0.5f;
+        g_charAtlasCellW = (int)(g_textFontSize * maxPhraseLen * SS + 16);
+        g_charAtlasCellH = (int)(g_textFontSize * SS + 8);
+        g_textAspectRatio = (g_charAtlasCellH > 0) ? (float)g_charAtlasCellW / (float)g_charAtlasCellH : 1.0f;
+        atlasW = (UINT)(g_charAtlasCols * g_charAtlasCellW);
+        atlasH = (UINT)(g_charAtlasRows * g_charAtlasCellH);
+    }
 
     // 创建 D3D11 纹理 / Create D3D11 texture
     if (g_pCharAtlasTex) { g_pCharAtlasTex->Release(); g_pCharAtlasTex = nullptr; }
@@ -3710,16 +3724,7 @@ static void NativeRenderParticles(int screenW, int screenH) {
     if (!g_pParticleVS || !g_pParticlePS || !g_pParticleInstanceBuf || g_particles.empty()) return;
     static bool loggedNative = false;
     if (!loggedNative) { Wh_Log(L"[CharAtlas] NativeRenderParticles called, g_particleShape=%d, particles=%d", g_particleShape, (int)g_particles.size()); loggedNative = true; }
-    // 字号热更新：变化时重建字符图集 / Font size hot reload: rebuild atlas when changed
-    static int lastAtlasFontSize = 0;
-    static char lastAtlasText[256] = "";
-    char currentText[256];
-    WideCharToMultiByte(CP_UTF8, 0, g_textContent, -1, currentText, 256, nullptr, nullptr);
-    if (g_particleShape == 10 && (lastAtlasFontSize != g_textFontSize || strcmp(lastAtlasText, currentText) != 0)) {
-        BuildCharAtlas();
-        lastAtlasFontSize = g_textFontSize;
-        strncpy(lastAtlasText, currentText, 255);
-    }
+
 
     // 3D深度排序：z大的（后面）先渲染，z小的（前面）后渲染覆盖，实现前后遮挡 / 3D depth sort: far (large z) drawn first, near (small z) overlaps for occlusion
     // 仅在漩涡活跃时排序，避免普通模式下的性能开销 / Only sort when vortices active to avoid overhead in normal mode
@@ -4522,6 +4527,8 @@ static void RenderPhysicsDebugD2D(DWORD dwTime) {
     if (brushYellow) brushYellow->Release();
     if (brushCyan) brushCyan->Release();
     if (brushCyanFill) brushCyanFill->Release();
+    if (brushSpringLoose) brushSpringLoose->Release();
+    if (brushSpringTaut) brushSpringTaut->Release();
 }
 
 static bool NativeRenderFrame(int screenW, int screenH, const std::vector<D2D1_POINT_2F>& smoothed,
@@ -5424,6 +5431,7 @@ void LoadSettings() {
     int tfsVal = Wh_GetIntSetting(L"text_font_size");
     if (tfsVal < 10) tfsVal = 10; if (tfsVal > 100) tfsVal = 100;
     g_textFontSize = tfsVal;
+    g_charAtlasDirty = true;  // 文字设置变更，标记图集需重建 / text settings changed, mark atlas dirty
     // 物理可视化调试（独立开关）/ Physics visualization debug (independent toggles)
     g_debugVelocity = Wh_GetIntSetting(L"enable_debug_velocity") != 0;
     g_debugForce = Wh_GetIntSetting(L"enable_debug_force") != 0;
@@ -6272,6 +6280,14 @@ static void RecreateSwapChain(int vW, int vH) {
     if (useSSAA) {
         renderW = vW * g_ssaaScale;
         renderH = vH * g_ssaaScale;
+        // 钳制到 D3D11 纹理上限 / Clamp to D3D11 texture limit
+        const UINT maxDim = D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+        if ((UINT)renderW > maxDim || (UINT)renderH > maxDim) {
+            Wh_Log(L"SSAA: %dx exceeds texture limit, disabling SSAA", g_ssaaScale);
+            useSSAA = false;
+            g_ssaaScale = 1;
+            renderW = vW; renderH = vH;
+        }
     }
 
     // 创建离屏渲染纹理（可能带 MSAA）/ Create offscreen RT (possibly with MSAA)
@@ -6299,6 +6315,7 @@ static void RecreateSwapChain(int vW, int vH) {
     rtDesc.CPUAccessFlags = 0;
     rtDesc.MiscFlags = 0;
 
+    bool msAAOk = false;
     if (useMSAA) {
         // MSAA 离屏纹理 / MSAA offscreen texture
         if (SUCCEEDED(g_pD3DDevice->CreateTexture2D(&rtDesc, nullptr, &g_pMSAATexture))) {
@@ -6311,23 +6328,42 @@ static void RecreateSwapChain(int vW, int vH) {
         if (SUCCEEDED(g_pD3DDevice->CreateTexture2D(&rtDesc, nullptr, &g_pSSAAResolveTexture))) {
             g_pD3DDevice->CreateShaderResourceView(g_pSSAAResolveTexture, nullptr, &g_pSSAAResolveSRV);
         }
-        g_pCachedRTV->Release(); g_pCachedRTV = g_pMSAARTV;
-        g_pMSAARTV->AddRef();
-        Wh_Log(L"MSAA: %dx + SSAA: %dx enabled", g_msaaSamples, g_ssaaScale);
-    } else if (useSSAA) {
+        if (g_pMSAARTV && g_pSSAAResolveSRV) {
+            g_pCachedRTV->Release(); g_pCachedRTV = g_pMSAARTV;
+            g_pMSAARTV->AddRef();
+            msAAOk = true;
+            Wh_Log(L"MSAA: %dx + SSAA: %dx enabled", g_msaaSamples, g_ssaaScale);
+        } else {
+            Wh_Log(L"MSAA: offscreen creation failed, disabling MSAA");
+            if (g_pMSAATexture) { g_pMSAATexture->Release(); g_pMSAATexture = nullptr; }
+            if (g_pMSAARTV) { g_pMSAARTV->Release(); g_pMSAARTV = nullptr; }
+            g_msaaSamples = 1;
+        }
+    }
+    if (!msAAOk && useSSAA) {
         // 纯 SSAA 离屏纹理（带 SRV 供 blit）/ Pure SSAA offscreen (with SRV for blit)
         rtDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
         if (SUCCEEDED(g_pD3DDevice->CreateTexture2D(&rtDesc, nullptr, &g_pSSAATexture))) {
             g_pD3DDevice->CreateRenderTargetView(g_pSSAATexture, nullptr, &g_pSSAARTV);
             g_pD3DDevice->CreateShaderResourceView(g_pSSAATexture, nullptr, &g_pSSAASRV);
-            g_pCachedRTV->Release(); g_pCachedRTV = g_pSSAARTV;
-            g_pSSAARTV->AddRef();
-            Wh_Log(L"SSAA: %dx enabled (%dx%d)", g_ssaaScale, renderW, renderH);
+            if (g_pSSAARTV && g_pSSAASRV) {
+                g_pCachedRTV->Release(); g_pCachedRTV = g_pSSAARTV;
+                g_pSSAARTV->AddRef();
+                Wh_Log(L"SSAA: %dx enabled (%dx%d)", g_ssaaScale, renderW, renderH);
+            }
+        }
+        if (!g_pSSAARTV || !g_pSSAASRV) {
+            Wh_Log(L"SSAA: offscreen creation failed, disabling SSAA");
+            useSSAA = false;
+            g_ssaaScale = 1;
+            if (g_pSSAATexture) { g_pSSAATexture->Release(); g_pSSAATexture = nullptr; }
+            if (g_pSSAARTV) { g_pSSAARTV->Release(); g_pSSAARTV = nullptr; }
+            if (g_pSSAASRV) { g_pSSAASRV->Release(); g_pSSAASRV = nullptr; }
         }
     }
     // 记录离屏资源实际使用的 AA 配置，供渲染循环检测运行时切换 / Record effective AA config for runtime change detection
-    g_createdMsaaSamples = g_pMSAATexture ? g_msaaSamples : 1;
-    g_createdSsaaScale = useSSAA ? g_ssaaScale : 1;
+    g_createdMsaaSamples = g_pMSAARTV ? g_msaaSamples : 1;
+    g_createdSsaaScale = g_pSSAARTV ? g_ssaaScale : 1;
 
     if (g_pDCompVisual) {
         g_pDCompVisual->SetContent(g_pSwapChain);
