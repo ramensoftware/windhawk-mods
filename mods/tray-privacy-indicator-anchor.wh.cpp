@@ -29,12 +29,13 @@ demanding attention:
 
 ![Idle location and microphone placeholders](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/location-mic-availble-not-in-use.png)
 
-All four unavailable indicators in a single row:
+All four unavailable indicators in a single row, arranged as
+`location | mic | camera | copilot`:
 
 ![All four privacy indicators unavailable in one row](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/all-4-disabled.png)
 
-The same four indicators in a compact block, which is what `auto` picks when
-the taskbar is tall enough for two rows:
+The same four indicators in a compact block, which is what `auto` picks on a
+standard taskbar, where two rows of the default 16 px icons fit:
 
 ![All four unavailable indicators in a compact grid](https://raw.githubusercontent.com/sb4ssman/Windhawk-Mod-Lab/main/privacy-indicator-anchor/assets/all-4-disabled-grid.png)
 
@@ -74,7 +75,8 @@ Copilot reports its installation state and links to the relevant settings:
 - Idle opacity setting so inactive icons can be subtle but still reserve space
 - One nestable **Arrangement** expression places the icons in any shape —
   fitted to your taskbar height automatically, or written out by hand
-- Turn any of the four icons off individually
+- Turn any of the four icons off individually; Windows' own indicator for that
+  device then stays visible, so nothing goes unreported
 - Tray placement before icons, before OmniButton, before clock, after clock, or after Show Desktop
 - Experimental placement immediately left or right of Start
 - Per-icon and per-group pixel nudges inside the arrangement expression, plus a
@@ -115,8 +117,9 @@ field that does. Its default value is the word `auto`:
   order` chooses whether they fill across rows or down columns; `Short row or
   column` aligns a ragged last group. The shape is worked out for you: the mod
   takes the narrowest grid that fits the height, preferring the one that wastes
-  the fewest slots — four icons on a double-height taskbar become a 2×2 block,
-  not a lopsided 3+1.
+  the fewest slots. A standard taskbar already fits two rows of the default
+  16 px icons, so four icons become a 2×2 block, not a lopsided 3+1; write
+  `location | mic | camera | copilot` for a single row instead.
 - **Anything else** is an arrangement you write. Names sit side by side with
   `|` and stack with `,`, and parentheses group them:
 
@@ -230,9 +233,13 @@ Copilot opens taskbar or installed-app settings.
 
 `Behavior` -> `Suppress Windows privacy indicators` is on by default, so the
 mod hides Windows' own pop-in indicators and mirrors their state into the
-stable placeholders. Turn it off temporarily when comparing against Windows'
-native tray glyphs during testing. Everything the mod changes on a native icon
-is restored to its exact prior value when the mod unloads.
+stable placeholders. A native indicator is only ever hidden while this mod is
+showing a placeholder for that same device: if its icon is turned off in
+`Content`, if the placeholders could not be placed, or on a vertical taskbar,
+Windows' indicator stays exactly as Windows draws it. Turn the setting off
+temporarily when comparing against Windows' native tray glyphs during testing.
+Everything the mod changes on a native icon is restored to its exact prior
+value when the mod unloads.
 */
 // ==/WindhawkModReadme==
 
@@ -390,7 +397,8 @@ is restored to its exact prior value when the mod unloads.
     $name: Suppress Windows privacy indicators
     $description: >-
       Hides Windows' pop-in indicators and mirrors their state into these
-      stable placeholders. Turn off temporarily when testing native behavior.
+      stable placeholders. An indicator is only hidden while its placeholder is
+      shown. Turn off temporarily when testing native behavior.
   $name: Behavior
 */
 // ==/WindhawkModSettings==
@@ -425,6 +433,7 @@ is restored to its exact prior value when the mod unloads.
 #include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <cwchar>
 #include <cwctype>
@@ -448,131 +457,169 @@ using namespace winrt::Windows::UI::Xaml;
 using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
 
-// ============================================================
-// Nested group layout
-// Template block: _templates/nested-group-layout.h v2.6 (verbatim copy —
-// keep in sync with the template; Windhawk mods are single-file).
-// ============================================================
+// ==ModComponents==
+// Self-contained building blocks this mod is built from. Each
+// section below is one contract in its own namespace; the mod's own
+// code begins after them.
 
-// Copy-source template v2.0: nested group layout — pixel-space placement of
-// named items described by ONE layout expression. No Windows or WinRT
-// dependency; the caller supplies pixel sizes and the taskbar metrics.
-//
-// This is the only element arranger in the mod family. It backs a single
-// user-facing setting, `Layout.Arrangement`, whose default value is the word
-// `auto`:
-//
-//   auto            -> ChooseShape() picks rows x columns from the available
-//                      taskbar height, BuildGridExpression() emits the
-//                      equivalent expression, and the mod logs it.
-//   anything else   -> that string IS the layout.
-//
-// Because the Windhawk settings API is read-only (windhawk_api.h has no
-// setter), a mod can never fill the field in for the user. Logging the
-// expansion is the supported path: the user pastes the logged expression back
-// into the same field to take manual control. There is one field and one
-// string, so nothing can drift out of sync with anything else.
-//
-// Grammar:
-//   expr  := stack ('|' stack)*      '|' places groups side by side
-//   stack := unit (',' unit)*        ',' stacks units top to bottom
-//   unit  := leaf | '(' expr ')'     parens nest, orientation never flips
-//   leaf  := token ('[' dx ',' dy ']')?
-//
-// "1, 2 | 3, 4" is a 2x2 block. "a | b, c | d" is three columns with b over c
-// (the diamond). Nesting is arbitrary: "a | (b, (c | d)), e | f". '|' always
-// means horizontal and ',' always means vertical, at every depth — there is no
-// primary-axis setting to reason about.
-//
-// OFFSETS ride in the expression: "1[+2,-1] | 2 | 3" shifts item 1 two pixels
-// right and one up. A parenthesized group takes one too — "(1, 2)[3,0] | 3"
-// moves that whole column. Offsets are cosmetic: they move their own leaf or
-// their own group's contents, and change neither the measured size nor any
-// neighbor's position. This replaces every keyed per-item offset setting;
-// there is no second string to maintain.
-//
-// A separator is always required: "1 (2 | 3)" is a parse error, not an
-// implicit "1 | (2 | 3)". Silently reinterpreting a missing separator would
-// turn a typo into a different layout instead of a logged, recoverable error.
-//
-// Tokens are caller-defined names resolved to pixel sizes by a callback. A
-// token that resolves to an empty size (width or height <= 0) is skipped and
-// consumes no space, so absent items collapse out of the arrangement.
-//
-// PADDING vs OFFSET. Config.padX / padY are symmetric outer padding: they
-// participate in layout and are included in the returned totalSize. Group
-// offset (Adjust.OffsetX / OffsetY) is a visual translation that must NOT
-// reserve space, so it is deliberately not handled here — the mod applies it
-// to the container it places, after this arranger has sized the group.
-//
-// Every group is centered on its cross axis by Config.justify.
+// -- Settings values --------------------------------------------------------
+// Clamped int/bool setting reads, fixed-buffer string reads, and the
+// $options choice table - so a renamed option fails loudly instead of
+// silently falling back.
+namespace privacy_anchor_settings {
 
-#include <algorithm>
-#include <cwctype>
-#include <cstdlib>
-#include <functional>
-#include <string>
-#include <vector>
+inline int Clamp(int value, int low, int high) {
+    return std::max(low, std::min(high, value));
+}
 
-namespace windhawk_mod_templates::nested_group_layout {
+inline int LoadInt(PCWSTR key, int low, int high) {
+    return Clamp(Wh_GetIntSetting(key), low, high);
+}
+
+inline bool LoadBool(PCWSTR key) {
+    return Wh_GetIntSetting(key) != 0;
+}
+
+// A $options choice, matched case-insensitively against a table of tokens.
+// Returns the matching entry's value, or `fallback` when nothing matches —
+// which also covers the unset case, since an unset string is empty.
+//
+// Use a table rather than a chain of comparisons, so the accepted literals and
+// their enum mapping stay adjacent when this mod's settings evolve.
+template <typename T>
+struct Choice {
+    wchar_t const* token;
+    T value;
+};
+
+template <typename T, size_t N>
+inline T LoadChoice(PCWSTR key, Choice<T> const (&choices)[N], T fallback) {
+    auto setting = WindhawkUtils::StringSetting::make(key);
+    PCWSTR value = setting.get() ? setting.get() : L"";
+    if (!*value) return fallback;
+    for (auto const& choice : choices) {
+        if (_wcsicmp(value, choice.token) == 0) return choice.value;
+    }
+    return fallback;
+}
+
+// Copy a string setting into a fixed buffer, always NUL-terminated, using
+// `fallback` when the setting is empty. Fixed buffers rather than std::wstring
+// because a namespace-scope settings struct must not own heap - see the
+// exit-time destructor audit.
+//
+// Reading goes through WindhawkUtils::StringSetting rather than a local RAII
+// wrapper: it is the same contract, it already ships with Windhawk, and a
+// second copy of it is one more thing for a reader to check.
+template <size_t N>
+inline void LoadString(PCWSTR key, wchar_t (&buffer)[N],
+                       PCWSTR fallback = nullptr) {
+    auto setting = WindhawkUtils::StringSetting::make(key);
+    PCWSTR value = setting.get() ? setting.get() : L"";
+    if (!*value && fallback) value = fallback;
+    wcsncpy_s(buffer, N, value, _TRUNCATE);
+}
+
+}  // namespace privacy_anchor_settings
+
+// -- Color tokens -----------------------------------------------------------
+// Parse a user-typed color setting - hex, an accent token, or transparent -
+// into a Color or a Brush. An empty or unparseable value means 'leave this
+// native', never a fallback color.
+namespace privacy_anchor_color_tokens {
+
+using winrt::Windows::UI::Color;
+using winrt::Windows::UI::Xaml::Media::Brush;
+using winrt::Windows::UI::Xaml::Media::SolidColorBrush;
+
+// Reported when the Windows accent color cannot be read, so the mod can log.
+using AccentErrorFn = void (*)();
+
+// false means "no color here" — an empty setting, an unknown token, or bad
+// hex. Callers must treat all three the same: leave the native value alone.
+inline bool Parse(wchar_t const* value, Color& out,
+                  AccentErrorFn onAccentError = nullptr) {
+    using winrt::Windows::UI::ViewManagement::UIColorType;
+    if (!value || !*value) return false;
+
+    if (_wcsicmp(value, L"transparent") == 0) {
+        out = {0, 0, 0, 0};
+        return true;
+    }
+
+    static const struct {
+        wchar_t const* token;
+        UIColorType type;
+    } kAccentTokens[] = {
+        {L"accent", UIColorType::Accent},
+        {L"accentLight", UIColorType::AccentLight2},
+        {L"accentDark", UIColorType::AccentDark1},
+        {L"accentLight1", UIColorType::AccentLight1},
+        {L"accentLight2", UIColorType::AccentLight2},
+        {L"accentLight3", UIColorType::AccentLight3},
+        {L"accentDark1", UIColorType::AccentDark1},
+        {L"accentDark2", UIColorType::AccentDark2},
+        {L"accentDark3", UIColorType::AccentDark3},
+    };
+    for (auto const& entry : kAccentTokens) {
+        if (_wcsicmp(value, entry.token) != 0) continue;
+        try {
+            winrt::Windows::UI::ViewManagement::UISettings settings;
+            out = settings.GetColorValue(entry.type);
+            return true;
+        } catch (...) {
+            if (onAccentError) onAccentError();
+            return false;
+        }
+    }
+
+    wchar_t const* digits = (*value == L'#') ? value + 1 : value;
+    size_t length = wcslen(digits);
+    if (length != 6 && length != 8) return false;
+    for (size_t i = 0; i < length; ++i) {
+        if (!iswxdigit(digits[i])) return false;
+    }
+    wchar_t buffer[9]{};
+    wcsncpy(buffer, digits, 8);
+    unsigned long packed = wcstoul(buffer, nullptr, 16);
+    if (length == 6) {
+        out = {255, BYTE(packed >> 16), BYTE(packed >> 8), BYTE(packed)};
+    } else {
+        out = {BYTE(packed >> 24), BYTE(packed >> 16), BYTE(packed >> 8),
+               BYTE(packed)};
+    }
+    return true;
+}
+
+// nullptr means "no color here". Never a fallback brush — a caller that wrote
+// a default color on parse failure would make an empty setting paint.
+inline Brush ParseBrush(wchar_t const* value,
+                        AccentErrorFn onAccentError = nullptr) {
+    Color color{};
+    if (!Parse(value, color, onAccentError)) return nullptr;
+    SolidColorBrush brush;
+    brush.Color(color);
+    return brush;
+}
+
+}  // namespace privacy_anchor_color_tokens
+
+// -- Arrangement expression -------------------------------------------------
+// One user-typed string - names joined by '|' (side by side) and ','
+// (stacked), nested with parentheses, nudged with [dx,dy] - parsed,
+// measured and arranged into concrete placements. Includes the automatic
+// grid shape and the policy for items a written arrangement does not name.
+namespace privacy_anchor_layout {
 
 enum class Axis { Horizontal, Vertical };  // node orientation, not a setting
 enum class Justify { Start, Center, End };
 enum class FillOrder { Rows, Columns };
 
-// An item is sized either absolutely (width x height) or RELATIVE TO THE AXIS
-// its group happens to lay out along. Axis-relative sizing exists because an
-// item like a Task View button should be "as wide as it needs and as tall as
-// the buttons beside it" when it is a column, and the mirror image when it is
-// a row — and in a hand-written arrangement the mod cannot know which it will
-// be. The parent group knows its own axis, so it resolves this at measure and
-// arrange time:
-//
-//   thickness — extent ALONG the group's axis (its width as a column, its
-//               height as a row)
-//   cross     — extent ACROSS the group's axis; 0 means fill, i.e. match
-//               whatever the rest of the group measures
 struct Size {
     double width = 0.0;
     double height = 0.0;
-    bool axisRelative = false;
-    double thickness = 0.0;
-    double cross = 0.0;
-
-    bool Empty() const {
-        return axisRelative ? thickness <= 0.0
-                            : (width <= 0.0 || height <= 0.0);
-    }
+    bool Empty() const { return width <= 0.0 || height <= 0.0; }
 };
-
-// Size an item against its group's axis. cross = 0 fills the group.
-inline Size AlongAxis(double thickness, double cross = 0.0) {
-    Size size;
-    size.axisRelative = true;
-    size.thickness = thickness;
-    size.cross = cross;
-    return size;
-}
-
-// CONTENT-SIZED ITEMS. A settings-driven item size describes a GLYPH: a box of
-// a chosen width that a character is centered in. It does not describe TEXT.
-// "9%", "80%", and "100%" are three different widths, a font or locale change
-// moves them again, and a battery percentage grows while you watch it. Handing
-// such an item the same fixed width as its neighbours reserves too little
-// space, and the overflow is discovered at paint time — as a clipped edge.
-//
-// The SizeResolver is a callback precisely so a mod can answer with something
-// it measured. Measure the live element (native_glyph_surface::MeasureNatural)
-// and pass the result through here: the arrangement then RESERVES the real
-// width, the group's total grows to match, and nothing clips.
-//
-// `minimum` keeps a short value from collapsing below the item size the user
-// chose, so "9%" still lines up with the glyphs above it. Round `measured` up
-// and add a pixel or two of slack, or the item will re-measure every time its
-// text ticks over.
-inline Size ContentAlong(double measured, double minimum, double cross) {
-    return {std::max(measured, minimum), cross};
-}
 
 // Cosmetic per-leaf nudge parsed from the expression's "[dx,dy]" suffix.
 struct Offset {
@@ -638,7 +685,7 @@ private:
     // Measure is memoized, so this is no longer a running-time limit — it is a
     // STACK limit, and it is refused at parse time so the user gets a real
     // error instead of a crash. Nothing legible needs this many levels; the
-    // deepest arrangement in this family's own documentation uses three.
+    // deepest arrangement in this mod's own documentation uses three.
     static constexpr int kMaxNestingDepth = 24;
 
     Node ParseExpr(int depth = 0) {
@@ -726,7 +773,14 @@ private:
             return 0.0;
         }
         position_ += consumed;
-        return value;
+        if (!std::isfinite(value)) {
+            Fail(position_ - consumed, L"a finite number");
+            return 0.0;
+        }
+        // Offsets are cosmetic. Keep expression nudges within the same
+        // user-facing range as Adjust.OffsetX/Y so a typo cannot move an icon
+        // outside its owned group or hand XAML NaN/infinity.
+        return std::clamp(value, -100.0, 100.0);
     }
 
     static bool IsDelimiter(wchar_t c) {
@@ -761,20 +815,8 @@ inline bool Parse(std::wstring const& text, Node& root,
 
 // ---- Token vocabulary -------------------------------------------------------
 //
-// A token is an item's stable IDENTITY, never its displayed label. Labels are
-// not unique, can contain the expression's own delimiters, can be empty or an
-// emoji, and renaming one would silently break an arrangement the user wrote.
-// Each mod declares its vocabulary and documents it:
-//
-//   fixed set     -> semantic names: wifi, volume, battery, percent, clock
-//   dynamic set   -> 1, 2, 3, ... because the set changes at runtime
-//   either        -> an extra named item such as "master"
-//
-// A dynamic mod may accept a readable alias for a number (desktop2 == 2). Log
-// the token-to-label map next to the arrangement so a user can tell which
-// number is which item without the arrangement depending on the labels.
-//
-// Matching is case-insensitive: someone typing "Wifi" means wifi.
+// Tokens are stable utility identities, compared case-insensitively so an
+// arrangement remains readable without depending on localized labels.
 
 inline bool TokenIs(std::wstring const& token, wchar_t const* name) {
     size_t i = 0;
@@ -782,24 +824,6 @@ inline bool TokenIs(std::wstring const& token, wchar_t const* name) {
         if (towlower(token[i]) != towlower(name[i]))
             return false;
     return i == token.size() && !name[i];
-}
-
-// "desktop2" -> 2 with prefix L"desktop"; 0 when the token does not match.
-inline int TokenIndexWithPrefix(std::wstring const& token,
-                                wchar_t const* prefix) {
-    size_t i = 0;
-    for (; prefix[i]; ++i)
-        if (i >= token.size() || towlower(token[i]) != towlower(prefix[i]))
-            return 0;
-    if (i >= token.size())
-        return 0;
-    int value = 0;
-    for (; i < token.size(); ++i) {
-        if (token[i] < L'0' || token[i] > L'9')
-            return 0;
-        value = value * 10 + (token[i] - L'0');
-    }
-    return value;
 }
 
 using SizeResolver = std::function<Size(std::wstring const&)>;
@@ -837,10 +861,8 @@ inline Size MeasureNode(Node const& node, Config const& config,
     if (!node.token.empty())
         return resolve(node.token);
 
-    // The grammar wraps every unit in a group, so most groups have a single
-    // child. Such a group IS its child — pass the size through verbatim, or an
-    // axis-relative child would be flattened into a concrete size by its own
-    // wrapper before the real parent ever sees it.
+    // The grammar wraps every unit in a group, so a single-child group is its
+    // child and introduces no geometry of its own.
     {
         Node const* only = nullptr;
         int visible = 0;
@@ -857,58 +879,23 @@ inline Size MeasureNode(Node const& node, Config const& config,
 
     double main = 0.0;
     double cross = 0.0;
-    double fillFallback = 0.0;
     int placed = 0;
     for (auto const& child : node.children) {
         Size size = MeasureCached(child, config, resolve, cache);
         if (size.Empty())
             continue;
-        double childMain, childCross;
-        if (size.axisRelative) {
-            childMain = size.thickness;
-            // A filling item takes its cross extent FROM the group, so it must
-            // not drive the group's cross size — otherwise it would size itself.
-            childCross = size.cross;
-            fillFallback = std::max(fillFallback, size.thickness);
-        } else {
-            childMain =
-                node.axis == Axis::Horizontal ? size.width : size.height;
-            childCross =
-                node.axis == Axis::Horizontal ? size.height : size.width;
-        }
+        double childMain =
+            node.axis == Axis::Horizontal ? size.width : size.height;
+        double childCross =
+            node.axis == Axis::Horizontal ? size.height : size.width;
         main += (placed ? config.spacing : 0.0) + childMain;
         cross = std::max(cross, childCross);
         ++placed;
     }
     if (!placed)
         return {};
-    // Degenerate case: every child fills, so nothing established a cross size.
-    // Fall back to the largest thickness rather than collapsing the group.
-    if (cross <= 0.0)
-        cross = fillFallback;
     return node.axis == Axis::Horizontal ? Size{main, cross}
                                          : Size{cross, main};
-}
-
-// Measure one tree on its own. Prefer Compute(), which shares a single cache
-// across the measure and arrange passes; this overload exists for call sites
-// that measure a tree by itself.
-inline Size Measure(Node const& node, Config const& config,
-                    SizeResolver const& resolve) {
-    MeasureCache cache;
-    return MeasureCached(node, config, resolve, cache);
-}
-
-// Resolve a child's size against its parent group's axis, so an axis-relative
-// item becomes concrete width x height.
-inline Size ConcreteSize(Size const& size, Axis axis, Size const& groupTotal) {
-    if (!size.axisRelative)
-        return size;
-    double groupCross =
-        axis == Axis::Horizontal ? groupTotal.height : groupTotal.width;
-    double cross = size.cross > 0.0 ? size.cross : groupCross;
-    return axis == Axis::Horizontal ? Size{size.thickness, cross}
-                                    : Size{cross, size.thickness};
 }
 
 inline void ArrangeCached(Node const& node, Config const& config,
@@ -930,8 +917,7 @@ inline void ArrangeCached(Node const& node, Config const& config,
     x += node.offset.x;
     y += node.offset.y;
 
-    // Single-child group: forward the size the real parent already resolved,
-    // so axis-relative sizing survives the grammar's per-unit wrapper.
+    // A single-child group only carries an optional offset.
     {
         Node const* only = nullptr;
         int visible = 0;
@@ -943,8 +929,7 @@ inline void ArrangeCached(Node const& node, Config const& config,
                 break;
         }
         if (visible == 1) {
-            ArrangeCached(*only, config, resolve, x, y, out, cache,
-                          resolvedSize);
+            ArrangeCached(*only, config, resolve, x, y, out, cache);
             return;
         }
     }
@@ -954,7 +939,7 @@ inline void ArrangeCached(Node const& node, Config const& config,
         Size measured = MeasureCached(child, config, resolve, cache);
         if (measured.Empty())
             continue;
-        Size size = ConcreteSize(measured, node.axis, total);
+        Size size = measured;
         double unused = node.axis == Axis::Horizontal
                             ? total.height - size.height
                             : total.width - size.width;
@@ -971,16 +956,6 @@ inline void ArrangeCached(Node const& node, Config const& config,
             cursor += size.height + config.spacing;
         }
     }
-}
-
-// Arrange one tree on its own. Prefer Compute(); this overload exists for call
-// sites that drive the arranger directly.
-inline void Arrange(Node const& node, Config const& config,
-                    SizeResolver const& resolve, double x, double y,
-                    std::vector<Placement>& out,
-                    Size const* resolvedSize = nullptr) {
-    MeasureCache cache;
-    ArrangeCached(node, config, resolve, x, y, out, cache, resolvedSize);
 }
 
 // Parse + measure + arrange in one call. Returns false only on a parse error
@@ -1006,31 +981,11 @@ inline bool Compute(std::wstring const& text, Config const& config,
         totalSize = {};
         return true;
     }
-    if (inner.axisRelative) {
-        // The whole arrangement is one axis-relative item, so there is no group
-        // for it to fill against; square it off on its own thickness.
-        double cross = inner.cross > 0.0 ? inner.cross : inner.thickness;
-        inner = Size{inner.thickness, cross};
-    }
     ArrangeCached(root, config, resolve, config.padX, config.padY, placements,
                   cache, &inner);
     totalSize = {inner.width + config.padX * 2.0,
                  inner.height + config.padY * 2.0};
     return true;
-}
-
-// ---- Taskbar metrics --------------------------------------------------------
-//
-// The taskbar rect comes from GetWindowRect in PHYSICAL pixels while every XAML
-// size is a DIP. Dividing one by the other is the DPI bug flagged on PR #4855
-// (blocking) and #4843. The mod supplies the raw numbers:
-//
-//   RECT r{}; GetWindowRect(hTaskbarWnd, &r);
-//   int rows = AvailableRows(r.bottom - r.top, GetDpiForWindow(hTaskbarWnd),
-//                            itemHeight, spacing);
-
-inline double PixelsToDip(double physicalPixels, unsigned dpi) {
-    return dpi ? physicalPixels * 96.0 / (double)dpi : physicalPixels;
 }
 
 // How many item rows fit in a height already expressed in DIPs. Pitch is one
@@ -1047,12 +1002,6 @@ inline int RowsInHeight(double heightDip, double itemHeight, double spacing) {
     if (pitch <= 0.0 || heightDip <= 0.0)
         return 1;
     return std::max(1, (int)((heightDip + std::max(0.0, spacing)) / pitch));
-}
-
-// Convenience for the common case with nothing else reserved.
-inline int AvailableRows(double taskbarHeightPx, unsigned dpi,
-                         double itemHeight, double spacing) {
-    return RowsInHeight(PixelsToDip(taskbarHeightPx, dpi), itemHeight, spacing);
 }
 
 // ---- The auto shape ---------------------------------------------------------
@@ -1143,10 +1092,11 @@ inline std::wstring BuildAutoExpression(int count, int maxRows, FillOrder fill,
 
 // ---- Items the arrangement forgot -------------------------------------------
 //
-// A hand-written arrangement names the items that existed when it was written.
-// When the set is dynamic — a desktop is added, a folder appears — the new item
+// A hand-written arrangement names the utilities that existed when it was
+// written. Windows shows and hides these live — the touch keyboard comes and
+// goes, the taskbar settings toggle the rest — so a utility that appears later
 // is in no group, resolves to nothing, and silently vanishes from the taskbar.
-// That is a trap, so a mod with a dynamic set offers a policy:
+// That is a trap, hence Layout.NewItems:
 //
 //   Append (default) — arrange the unlisted items automatically and put that
 //                      block after everything the user wrote, so a new item is
@@ -1154,14 +1104,14 @@ inline std::wstring BuildAutoExpression(int count, int maxRows, FillOrder fill,
 //   Ignore           — the arrangement is the whole truth; unlisted items stay
 //                      off the taskbar until the user adds them.
 //
-// A mod that appends should log that it did, so the user knows to fold the new
-// item into their arrangement when they next edit it.
+// Appending is logged, so the user knows to fold the new item into their
+// arrangement when they next edit it.
 
-// Whether a token the user wrote refers to the same item as one the mod
-// expects. Defaults to a case-insensitive name match, which is WRONG for any
-// mod that accepts aliases: "desktop1" and "1" are the same button, and
-// comparing them as strings makes every aliased item look missing and get
-// appended a second time. A mod with a vocabulary must supply this.
+// Whether a token the user wrote refers to the same item as the one expected.
+// A plain case-insensitive name match is WRONG here, because the vocabulary
+// accepts aliases: "chevron" and "overflow" are one button, and comparing them
+// as strings makes an aliased item look missing and get appended a second
+// time. SameUtility below supplies the identity comparison.
 using TokenMatcher =
     std::function<bool(std::wstring const& placed, std::wstring const& expected)>;
 
@@ -1235,17 +1185,461 @@ inline Arrangement ResolveArrangement(std::wstring const& setting, int count,
     return {setting, false};
 }
 
-}  // namespace windhawk_mod_templates::nested_group_layout
+}  // namespace privacy_anchor_layout
 
-namespace ngl = windhawk_mod_templates::nested_group_layout;
+// -- Property lease ---------------------------------------------------------
+// Snapshot a dependency property's exact prior local value before writing
+// it, and put that value back - or clear the property when there was none -
+// on unload.
+namespace privacy_anchor_property_lease {
 
-// ============================================================
-// Injected SystemTrayFrameGrid column
-// Template block: _templates/injected-grid-column.h v1.3 (verbatim copy —
-// keep in sync with the template; Windhawk mods are single-file).
-// ============================================================
+using winrt::Windows::Foundation::IInspectable;
+using winrt::Windows::UI::Xaml::DependencyObject;
+using winrt::Windows::UI::Xaml::DependencyProperty;
 
-namespace windhawk_mod_templates::injected_grid_column {
+struct Snapshot {
+    DependencyObject object{nullptr};
+    DependencyProperty property{nullptr};
+    IInspectable localValue{nullptr};
+};
+
+// Reported per failed restore so the mod can log in its own voice.
+using RestoreErrorFn = std::function<void()>;
+
+class Lease {
+public:
+    // Announce a mutation BEFORE making it. Safe to call repeatedly; only the
+    // first call for a given (object, property) records anything.
+    void Track(DependencyObject const& object,
+               DependencyProperty const& property) {
+        if (!object || !property) return;
+        for (auto const& snapshot : snapshots_) {
+            if (snapshot.object == object && snapshot.property == property)
+                return;
+        }
+        snapshots_.push_back(
+            {object, property, object.ReadLocalValue(property)});
+    }
+
+    // Put everything back, newest first, and forget it. Call on the UI thread.
+    void RestoreAll(RestoreErrorFn const& onError = {}) {
+        for (auto it = snapshots_.rbegin(); it != snapshots_.rend(); ++it) {
+            try {
+                if (it->localValue == DependencyProperty::UnsetValue())
+                    it->object.ClearValue(it->property);
+                else
+                    it->object.SetValue(it->property, it->localValue);
+            } catch (...) {
+                if (onError) onError();
+            }
+        }
+        snapshots_.clear();
+    }
+
+    // Put ONE object's properties back and forget them, leaving every other
+    // object's snapshots alone. For the case where a mod discovers that an
+    // element it began borrowing was never actually its business — handing
+    // that element back has to be possible without ending the whole lease.
+    void RestoreObject(DependencyObject const& object,
+                       RestoreErrorFn const& onError = {}) {
+        if (!object) return;
+        for (auto it = snapshots_.rbegin(); it != snapshots_.rend();) {
+            if (it->object != object) {
+                ++it;
+                continue;
+            }
+            try {
+                if (it->localValue == DependencyProperty::UnsetValue())
+                    it->object.ClearValue(it->property);
+                else
+                    it->object.SetValue(it->property, it->localValue);
+            } catch (...) {
+                if (onError) onError();
+            }
+            // Erase through the reverse iterator without invalidating the
+            // traversal: base() points one past the element being erased.
+            it = std::make_reverse_iterator(snapshots_.erase(
+                std::next(it).base()));
+        }
+    }
+
+    // Drop the snapshots WITHOUT restoring. For the case where the elements
+    // are already gone (an Explorer rebuild threw the tree away), so restoring
+    // would only throw. Do not use it to "skip" a restore that could run.
+    void Abandon() { snapshots_.clear(); }
+
+    size_t Count() const { return snapshots_.size(); }
+    bool Empty() const { return snapshots_.empty(); }
+
+private:
+    std::vector<Snapshot> snapshots_;
+};
+
+}  // namespace privacy_anchor_property_lease
+
+// -- Taskbar window discovery -----------------------------------------------
+// Find this process's Shell_TrayWnd, and validate a cached handle before
+// preferring it.
+namespace privacy_anchor_taskbar_window {
+
+// ---- Window discovery -------------------------------------------------------
+
+
+inline HWND FindCurrentProcessTaskbarWnd() {
+    HWND result = nullptr;
+    EnumWindows(
+        [](HWND window, LPARAM parameter) -> BOOL {
+            DWORD processId = 0;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(window, &processId) &&
+                processId == GetCurrentProcessId() &&
+                GetClassName(window, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(parameter) = window;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&result));
+    return result;
+}
+
+// Shell_TrayWnd can be recreated inside Explorer. A cache is useful only while
+// it names a live window; otherwise rediscover before dispatch or teardown.
+inline HWND ResolveTaskbarWnd(HWND cached) {
+    if (cached && IsWindow(cached))
+        return cached;
+    return FindCurrentProcessTaskbarWnd();
+}
+
+}  // namespace privacy_anchor_taskbar_window
+
+// -- UI-thread dispatch -----------------------------------------------------
+// Marshal a callback onto the taskbar's UI thread with a CALLWNDPROC hook
+// and a private registered message, reporting whether it actually ran.
+namespace privacy_anchor_dispatch {
+
+// ---- UI-thread marshalling --------------------------------------------------
+//
+// XAML may only be touched from the thread that owns it. This posts work onto
+// the taskbar's thread with a CALLWNDPROC hook and a private registered
+// message, and reports whether the callback actually ran — a caller that
+// assumes it did will corrupt its own state when the dispatch failed.
+
+using ThreadProc = void (*)(void*);
+using ExceptionLogFn = void (*)(PCWSTR context);
+
+inline ExceptionLogFn g_logException = nullptr;
+
+// Point this at the mod's logger once in Wh_ModInit so failures inside a UI
+// callback are reported in the mod's own voice.
+inline void SetExceptionLogger(ExceptionLogFn logger) {
+    g_logException = logger;
+}
+
+inline bool Invoke(ThreadProc proc, void* parameter) {
+    try {
+        proc(parameter);
+        return true;
+    } catch (...) {
+        if (g_logException) g_logException(L"UI callback");
+    }
+    return false;
+}
+
+struct Dispatch {
+    ThreadProc proc;
+    void* parameter;
+    bool succeeded = false;
+    // Every concurrent caller installs its own hook with this same proc, and
+    // each hook instance sees every message equal to g_dispatchMessage. With
+    // two dispatches in flight, both hooks are in the chain when either
+    // message arrives, so without this each callback would run twice. The
+    // hooks run one after another on the UI thread, so a plain flag suffices.
+    bool ran = false;
+};
+
+// The private message this mod dispatches on. Set before the hook is
+// installed, and read by the hook proc to recognise its own message.
+//
+// A CALLWNDPROC HOOK SEES EVERY MESSAGE SENT TO EVERY WINDOW ON THE TASKBAR'S
+// UI THREAD. `lParam` for all of those is arbitrary — an integer, a flag, a
+// pointer to something else entirely. So the message MUST be checked first,
+// against a value that does not come from lParam, and only then may lParam be
+// treated as a Dispatch*. Reading anything out of lParam before that check
+// dereferences whatever happened to be in the message and takes Explorer down
+// with it.
+//
+// Atomic because the caller may be the retry thread while the hook
+// proc runs on the taskbar's UI thread. RegisterWindowMessageW returns the
+// same value for the same string for the lifetime of the session, so this
+// settles on one value immediately and never changes again.
+inline std::atomic<UINT> g_dispatchMessage{0};
+
+// messageName must embed WH_MOD_ID, so two mods cannot collide on the message.
+inline bool RunFromWindowThread(HWND window, ThreadProc proc, void* parameter,
+                                PCWSTR messageName) {
+    UINT message = RegisterWindowMessageW(messageName);
+    if (!message) return false;
+
+    DWORD threadId = GetWindowThreadProcessId(window, nullptr);
+    if (!threadId) return false;
+    if (threadId == GetCurrentThreadId()) return Invoke(proc, parameter);
+
+    g_dispatchMessage.store(message, std::memory_order_release);
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (code == HC_ACTION) {
+                auto const* call = reinterpret_cast<CWPSTRUCT const*>(lParam);
+                // Message first. Only our own private message carries a
+                // Dispatch* in lParam; everything else carries something we
+                // must not touch.
+                UINT expected =
+                    g_dispatchMessage.load(std::memory_order_acquire);
+                if (expected && call->message == expected) {
+                    if (auto* dispatch =
+                            reinterpret_cast<Dispatch*>(call->lParam);
+                        dispatch && !dispatch->ran) {
+                        dispatch->ran = true;
+                        dispatch->succeeded =
+                            Invoke(dispatch->proc, dispatch->parameter);
+                    }
+                }
+            }
+            return CallNextHookEx(nullptr, code, wParam, lParam);
+        },
+        nullptr, threadId);
+    if (!hook) return false;
+
+    Dispatch dispatch{proc, parameter};
+    SendMessageW(window, message, 0, reinterpret_cast<LPARAM>(&dispatch));
+    UnhookWindowsHookEx(hook);
+    return dispatch.succeeded;
+}
+
+}  // namespace privacy_anchor_dispatch
+
+// -- Taskbar XamlRoot -------------------------------------------------------
+// Hook the taskbar.dll symbols, reach the taskbar's XamlRoot, and call back
+// when Explorer rebuilds the taskbar in place.
+namespace dispatch = privacy_anchor_dispatch;
+namespace privacy_anchor_taskbar_xaml {
+
+using winrt::Windows::UI::Xaml::FrameworkElement;
+using winrt::Windows::UI::Xaml::XamlRoot;
+
+// ---- XamlRoot ---------------------------------------------------------------
+
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
+using TaskbarHost_FrameHeight_t = int(WINAPI*)(void*);
+using Ref_count_base_Decref_t = void(WINAPI*)(void*);
+using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
+
+inline CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
+inline TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
+inline Ref_count_base_Decref_t Ref_count_base_Decref_Original = nullptr;
+inline TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original = nullptr;
+inline void* CTaskBand_ITaskListWndSite_vftable = nullptr;
+
+// The mod's rebuild callback, invoked after Explorer rebuilds the taskbar.
+inline void (*g_onTaskbarRebuilt)() = nullptr;
+
+inline void WINAPI TrayUI_StartTaskbar_Hook(void* self) {
+    TrayUI_StartTaskbar_Original(self);
+    try {
+        if (g_onTaskbarRebuilt) g_onTaskbarRebuilt();
+    } catch (...) {
+        if (dispatch::g_logException)
+            dispatch::g_logException(L"TrayUI::StartTaskbar hook");
+    }
+}
+
+inline bool HookTaskbarSymbols(void (*onTaskbarRebuilt)()) {
+    g_onTaskbarRebuilt = onTaskbarRebuilt;
+    HMODULE taskbar = LoadLibraryExW(L"taskbar.dll", nullptr,
+                                     LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!taskbar) return false;
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &CTaskBand_ITaskListWndSite_vftable},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+         &CTaskBand_GetTaskbarHost_Original},
+        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+         &TaskbarHost_FrameHeight_Original},
+        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+         &Ref_count_base_Decref_Original},
+        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
+         &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},
+    };
+    return WindhawkUtils::HookSymbols(taskbar, taskbarDllHooks,
+                                      ARRAYSIZE(taskbarDllHooks));
+}
+
+// The FrameworkElement lives at an offset inside TaskbarHost that MOVES
+// between Windows builds, so it is read out of TaskbarHost::FrameHeight's
+// prologue at runtime rather than hardcoded.
+inline size_t FrameworkElementOffset() {
+    size_t offset = 0x10;
+#if defined(_M_X64)
+    BYTE const* code =
+        reinterpret_cast<BYTE const*>(TaskbarHost_FrameHeight_Original);
+    if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
+        code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
+        code[7] <= 0x7F) {
+        offset = code[7];
+    }
+#elif defined(_M_ARM64)
+    DWORD const* code =
+        reinterpret_cast<DWORD const*>(TaskbarHost_FrameHeight_Original);
+    if (code[0] == 0xD503237F && (code[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        code[2] == 0x910003FD && (code[3] & 0xFFF00FE0) == 0xF8400C00) {
+        offset = (code[3] >> 12) & 0xFF;
+    }
+#else
+#error "Unsupported architecture"
+#endif
+    return offset;
+}
+
+inline XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
+    if (!CTaskBand_GetTaskbarHost_Original ||
+        !TaskbarHost_FrameHeight_Original || !Ref_count_base_Decref_Original ||
+        !CTaskBand_ITaskListWndSite_vftable)
+        return nullptr;
+
+    HWND taskSwWnd = (HWND)GetProp(taskbarWnd, L"TaskbandHWND");
+    if (!taskSwWnd) return nullptr;
+    void* taskBand = (void*)GetWindowLongPtr(taskSwWnd, 0);
+    if (!taskBand) return nullptr;
+
+    void* site = taskBand;
+    for (int i = 0; *(void**)site != CTaskBand_ITaskListWndSite_vftable; ++i) {
+        if (i == 20) return nullptr;
+        site = (void**)site + 1;
+    }
+
+    void* host[2]{};
+    CTaskBand_GetTaskbarHost_Original(site, host);
+    if (!host[0] || !host[1]) {
+        if (host[1]) Ref_count_base_Decref_Original(host[1]);
+        return nullptr;
+    }
+
+    auto* unknown =
+        *(IUnknown**)((BYTE*)host[0] + FrameworkElementOffset());
+    if (!unknown) {
+        Ref_count_base_Decref_Original(host[1]);
+        return nullptr;
+    }
+    FrameworkElement element = nullptr;
+    unknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                            winrt::put_abi(element));
+    auto result = element ? element.XamlRoot() : nullptr;
+    Ref_count_base_Decref_Original(host[1]);
+    return result;
+}
+
+}  // namespace privacy_anchor_taskbar_xaml
+
+// -- Taskbar metrics and orientation ----------------------------------------
+// The taskbar's rect in DIPs, and whether a horizontal-layout model applies
+// at all - so a mod stands down on a vertical taskbar instead of arranging
+// into a rotated coordinate space.
+namespace privacy_anchor_taskbar_metrics {
+
+// ---- Taskbar metrics and orientation ----------------------------------------
+//
+// WHERE THE TASKBAR IS, AND WHETHER THIS MOD CAN WORK THERE.
+//
+// Windows 11 itself only puts the taskbar at the bottom. Two mods by m417z
+// move it, and both are first-class parts of the ecosystem this mod has to
+// live in:
+//
+//   taskbar-on-top       — bottom -> top. FINE here. Everything
+//                          here is positioned relative to the taskbar's own
+//                          XAML tree, never to screen coordinates, so a top
+//                          taskbar is the same tree at a different y.
+//
+//   taskbar-vertical     — bottom -> left/right. NOT COMPATIBLE, and not for
+//                          a reason cooperation can fix. It walks the very
+//                          same path this mod walks
+//                          (ControlCenterButton > Grid > ContentPresenter >
+//                          ItemsPresenter > StackPanel) and applies a
+//                          RotateTransform to `RenderTransform` on those
+//                          children. Positioning here sets a
+//                          TranslateTransform on the SAME property of the SAME
+//                          elements. One dependency property, two owners, last
+//                          writer wins — the two layouts cannot coexist.
+//
+// So: DETECT AND STAND DOWN, loudly, rather than fight and paint garbage. The
+// detection is the taskbar's own rect aspect, not a check for a specific mod —
+// it is the condition that matters, and it stays true however the taskbar got
+// that way.
+//
+// The rect is in PHYSICAL pixels and every XAML size is a DIP, so conversion
+// belongs here instead of being re-derived at each call site.
+
+enum class Orientation { Horizontal, Vertical };
+
+struct Metrics {
+    bool valid = false;
+    RECT rect{};
+    UINT dpi = 96;
+    Orientation orientation = Orientation::Horizontal;
+    // The extent the arranged group has to fit INTO: the taskbar's height when
+    // it runs across the screen, its width when it runs down the side.
+    double constrainedDip = 0.0;
+    // The extent it can run ALONG.
+    double alongDip = 0.0;
+};
+
+inline Metrics GetMetrics(HWND taskbarWnd) {
+    Metrics metrics;
+    if (!taskbarWnd || !GetWindowRect(taskbarWnd, &metrics.rect))
+        return metrics;
+
+    metrics.valid = true;
+    metrics.dpi = GetDpiForWindow(taskbarWnd);
+    if (!metrics.dpi) metrics.dpi = 96;
+
+    double width = (double)(metrics.rect.right - metrics.rect.left);
+    double height = (double)(metrics.rect.bottom - metrics.rect.top);
+    double scale = 96.0 / (double)metrics.dpi;
+
+    // Taller than wide means it runs down a side. Nothing else can produce
+    // that shape, so this needs no cooperation from whatever moved it.
+    metrics.orientation =
+        height > width ? Orientation::Vertical : Orientation::Horizontal;
+    if (metrics.orientation == Orientation::Horizontal) {
+        metrics.constrainedDip = height * scale;
+        metrics.alongDip = width * scale;
+    } else {
+        metrics.constrainedDip = width * scale;
+        metrics.alongDip = height * scale;
+    }
+    return metrics;
+}
+
+// Whether this mod's layout model applies at all. Checked BEFORE touching
+// anything, so a taskbar it does not describe is left exactly as it was found
+// rather than arranged into a coordinate space someone else is rotating.
+inline bool LayoutModelApplies(Metrics const& metrics) {
+    return metrics.valid && metrics.orientation == Orientation::Horizontal;
+}
+
+inline wchar_t const* OrientationName(Orientation orientation) {
+    return orientation == Orientation::Vertical ? L"vertical" : L"horizontal";
+}
+
+}  // namespace privacy_anchor_taskbar_metrics
+
+// -- Tray slot lease --------------------------------------------------------
+// Lease a position in the tray panel - a column on a Grid, a child index on
+// a StackPanel - tracked by a named zero-size marker so the release stays
+// exact after other mods inject siblings around it.
+namespace privacy_anchor_slot_lease {
 
 using winrt::Windows::UI::Xaml::FrameworkElement;
 using winrt::Windows::UI::Xaml::GridUnitType;
@@ -1390,12 +1784,32 @@ inline bool ResolveSlot(Panel const& parent, Anchor anchor, int& slot) {
     return true;
 }
 
+inline bool Release(Panel const& parent, Lease& lease);
+
 inline bool AcquireAt(Panel const& parent, int slot,
                       std::wstring const& markerName, Lease& lease) {
     Kind kind = Classify(parent);
-    if (kind == Kind::Unsupported || slot < 0 || markerName.empty() ||
-        FindDirectChild(parent, markerName.c_str()))
+    if (kind == Kind::Unsupported || slot < 0 || markerName.empty())
         return false;
+
+    // A marker with this name already in the tray is either this caller's own
+    // live lease — refuse, acquiring twice would strand the first slot — or a
+    // leftover from an instance whose teardown never reached the UI thread.
+    // Refusing the leftover would block every later apply until Explorer
+    // restarts, so release it and take the slot fresh, correcting the
+    // requested slot if the released one sat before it.
+    if (auto stale = FindDirectChild(parent, markerName.c_str())) {
+        if (lease.markerName == markerName)
+            return false;
+        int staleSlot = kind == Kind::Columns
+                            ? Grid::GetColumn(stale)
+                            : IndexOfChild(parent, stale);
+        Lease leftover{markerName, staleSlot, kind};
+        if (!Release(parent, leftover))
+            return false;
+        if (staleSlot >= 0 && staleSlot < slot)
+            --slot;
+    }
 
     Grid marker;
     marker.Name(markerName);
@@ -1528,22 +1942,18 @@ inline bool Release(Panel const& parent, Lease& lease) {
     return true;
 }
 
-} // namespace windhawk_mod_templates::injected_grid_column
+}  // namespace privacy_anchor_slot_lease
 
-namespace lease_column = windhawk_mod_templates::injected_grid_column;
+// -- Start-adjacent lane placement ------------------------------------------
+// Place owned content beside the Start button and reserve room for it by
+// pushing the task list, following Start as a centered taskbar re-flows.
+// Reserves a lane; it does not overlay Start.
+namespace privacy_anchor_start_placement {
 
-// ============================================================
-// Start-adjacent owned group
-// Template block: _templates/start-placement.h v1.4 (verbatim copy — keep in
-// sync with the template; Windhawk mods are single-file).
-// ============================================================
-
-namespace windhawk_mod_templates::start_placement {
-
-using winrt::Windows::Foundation::IInspectable;
 using winrt::Windows::UI::Xaml::DependencyObject;
 using winrt::Windows::UI::Xaml::DependencyProperty;
 using winrt::Windows::UI::Xaml::FrameworkElement;
+using winrt::Windows::Foundation::IInspectable;
 using winrt::Windows::UI::Xaml::HorizontalAlignment;
 using winrt::Windows::UI::Xaml::Thickness;
 using winrt::Windows::UI::Xaml::UIElement;
@@ -1557,7 +1967,6 @@ using winrt::Windows::UI::Xaml::Media::VisualTreeHelper;
 
 enum class Side {
     Left,
-    Over,   // overlays Start; reserves no space, nudged clear by the adopter
     Right,
 };
 
@@ -1567,9 +1976,6 @@ struct Lease {
     FrameworkElement startButton{nullptr};
     FrameworkElement taskItemsPanel{nullptr};
     Thickness groupOriginalMargin{};
-    // The task panel's margin is still needed as a VALUE while the lease is
-    // live, because the push is computed relative to it. The local-value
-    // snapshot beside it is what the release puts back.
     Thickness taskItemsPanelOriginalMargin{};
     IInspectable taskItemsPanelMarginLocal{nullptr};
     IInspectable startRenderTransformLocal{nullptr};
@@ -1579,10 +1985,6 @@ struct Lease {
     double spacing = 0.0;
 };
 
-// Put back a borrowed dependency property's exact prior LOCAL value, or clear
-// the property when it had none. Clearing is the important half: an element
-// whose value came from its template has no local value, and writing a
-// concrete one back would override that binding permanently.
 inline void RestoreLocalValue(DependencyObject const& object,
                               DependencyProperty const& property,
                               IInspectable const& value) {
@@ -1673,10 +2075,7 @@ inline bool Position(Lease& lease) noexcept {
         double rawX = point.X - currentShift;
 
         double spacing = std::max(0.0, lease.spacing);
-        bool overlays = lease.side == Side::Over;
-        // Over reserves nothing, so the repeater keeps its own margin. Writing
-        // the push here would open a lane the group is not going to occupy.
-        double push = overlays ? 0.0 : groupWidth + spacing;
+        double push = groupWidth + spacing;
         if (lease.taskItemsPanel) {
             auto margin = lease.taskItemsPanel.Margin();
             double needed =
@@ -1695,9 +2094,7 @@ inline bool Position(Lease& lease) noexcept {
         // roles invert: the pushed items leave the Right gap by themselves,
         // and a Left group needs Start pushed out of the way instead.
         double neededShift;
-        if (overlays)
-            neededShift = 0.0;  // Start stays exactly where Windows put it
-        else if (lease.side == Side::Left)
+        if (lease.side == Side::Left)
             neededShift = lease.startInTaskItemsPanel ? 0.0 : push;
         else
             neededShift = lease.startInTaskItemsPanel ? -push : 0.0;
@@ -1705,13 +2102,9 @@ inline bool Position(Lease& lease) noexcept {
             neededShift = 0.0;
 
         if (std::fabs(neededShift) <= 0.5) {
-            // No shift wanted: hand the property back as it was found, rather
-            // than clearing it. Another mod's transform on Start is not ours
-            // to delete, and this path runs on every layout pass.
-            if (existingShift || lease.startButton.RenderTransform())
-                RestoreLocalValue(lease.startButton,
-                                  UIElement::RenderTransformProperty(),
-                                  lease.startRenderTransformLocal);
+            RestoreLocalValue(lease.startButton,
+                              UIElement::RenderTransformProperty(),
+                              lease.startRenderTransformLocal);
         } else if (std::fabs(currentShift - neededShift) > 0.5) {
             TranslateTransform startShift;
             startShift.X(neededShift);
@@ -1720,30 +2113,18 @@ inline bool Position(Lease& lease) noexcept {
 
         // Place the group relative to where Start actually ends up.
         double startFinalX = rawX + neededShift;
-        double left = overlays ? startFinalX
-                    : lease.side == Side::Left
+        double left = lease.side == Side::Left
                           ? startFinalX - groupWidth - spacing
                           : startFinalX + startWidth + spacing;
         if (left < 0.0)
             left = 0.0;
 
-        // v1.2: center against the taskbar root; Start's own box is not a
-        // reliable vertical reference.
-        // v1.3: except for Over, which is DEFINED relative to Start — the
-        // adopter's vertical offset nudges it above or below Start from there,
-        // and root-centering would make that nudge start from the wrong place.
-        // Start's box is still the weaker reference, so fall back to root when
-        // it reports nothing usable.
+        // Center against the taskbar root; Start's own box is not a reliable
+        // vertical reference.
         double rootHeight = lease.rootGrid.ActualHeight();
         double startCenteredTop = point.Y + (startHeight - groupHeight) / 2.0;
-        double top;
-        if (overlays)
-            top = startHeight > 0.0 || rootHeight <= 0.0
-                      ? startCenteredTop
-                      : (rootHeight - groupHeight) / 2.0;
-        else
-            top = rootHeight > 0.0 ? (rootHeight - groupHeight) / 2.0
-                                   : startCenteredTop;
+        double top = rootHeight > 0.0 ? (rootHeight - groupHeight) / 2.0
+                                      : startCenteredTop;
         if (top < 0.0)
             top = 0.0;
         double rootWidth = lease.rootGrid.ActualWidth();
@@ -1808,7 +2189,6 @@ inline bool Acquire(FrameworkElement const& root, Grid const& group,
     lease.rootGrid = rootGrid;
     lease.startButton = startButton;
     lease.groupOriginalMargin = group.Margin();
-    // Snapshot BEFORE the first write, so the release can be exact.
     lease.startRenderTransformLocal = startButton.ReadLocalValue(
         UIElement::RenderTransformProperty());
     lease.side = side;
@@ -1860,851 +2240,20 @@ inline bool Acquire(FrameworkElement const& root, Grid const& group,
     return true;
 }
 
-} // namespace windhawk_mod_templates::start_placement
-
-namespace start_placement = windhawk_mod_templates::start_placement;
-
-// ============================================================
-// Color tokens
-// Template block: _templates/color-tokens.h (verbatim copy —
-// keep in sync with the template; Windhawk mods are single-file).
-// ============================================================
-
-namespace windhawk_mod_templates::color_tokens {
-
-using winrt::Windows::UI::Color;
-using winrt::Windows::UI::Xaml::Media::Brush;
-using winrt::Windows::UI::Xaml::Media::SolidColorBrush;
-
-// Reported when the Windows accent color cannot be read, so the mod can log.
-using AccentErrorFn = void (*)();
-
-// false means "no color here" — an empty setting, an unknown token, or bad
-// hex. Callers must treat all three the same: leave the native value alone.
-inline bool Parse(wchar_t const* value, Color& out,
-                  AccentErrorFn onAccentError = nullptr) {
-    using winrt::Windows::UI::ViewManagement::UIColorType;
-    if (!value || !*value) return false;
-
-    if (_wcsicmp(value, L"transparent") == 0) {
-        out = {0, 0, 0, 0};
-        return true;
-    }
-
-    static const struct {
-        wchar_t const* token;
-        UIColorType type;
-    } kAccentTokens[] = {
-        {L"accent", UIColorType::Accent},
-        {L"accentLight", UIColorType::AccentLight2},
-        {L"accentDark", UIColorType::AccentDark1},
-        {L"accentLight1", UIColorType::AccentLight1},
-        {L"accentLight2", UIColorType::AccentLight2},
-        {L"accentLight3", UIColorType::AccentLight3},
-        {L"accentDark1", UIColorType::AccentDark1},
-        {L"accentDark2", UIColorType::AccentDark2},
-        {L"accentDark3", UIColorType::AccentDark3},
-    };
-    for (auto const& entry : kAccentTokens) {
-        if (_wcsicmp(value, entry.token) != 0) continue;
-        try {
-            winrt::Windows::UI::ViewManagement::UISettings settings;
-            out = settings.GetColorValue(entry.type);
-            return true;
-        } catch (...) {
-            if (onAccentError) onAccentError();
-            return false;
-        }
-    }
-
-    wchar_t const* digits = (*value == L'#') ? value + 1 : value;
-    size_t length = wcslen(digits);
-    if (length != 6 && length != 8) return false;
-    for (size_t i = 0; i < length; ++i) {
-        if (!iswxdigit(digits[i])) return false;
-    }
-    wchar_t buffer[9]{};
-    wcsncpy(buffer, digits, 8);
-    unsigned long packed = wcstoul(buffer, nullptr, 16);
-    if (length == 6) {
-        out = {255, BYTE(packed >> 16), BYTE(packed >> 8), BYTE(packed)};
-    } else {
-        out = {BYTE(packed >> 24), BYTE(packed >> 16), BYTE(packed >> 8),
-               BYTE(packed)};
-    }
-    return true;
-}
-
-// nullptr means "no color here". Never a fallback brush — a caller that wrote
-// a default color on parse failure would make an empty setting paint.
-inline Brush ParseBrush(wchar_t const* value,
-                        AccentErrorFn onAccentError = nullptr) {
-    Color color{};
-    if (!Parse(value, color, onAccentError)) return nullptr;
-    SolidColorBrush brush;
-    brush.Color(color);
-    return brush;
-}
-
-}  // namespace windhawk_mod_templates::color_tokens
-
-namespace clr = windhawk_mod_templates::color_tokens;
-
-// ============================================================
-// Visual tree walk
-// Template block: _templates/visual-tree-walk.h (verbatim copy —
-// keep in sync with the template; Windhawk mods are single-file).
-// ============================================================
-
-namespace windhawk_mod_templates::visual_tree_walk {
-
-using winrt::Windows::UI::Xaml::FrameworkElement;
-using winrt::Windows::UI::Xaml::Controls::StackPanel;
-using winrt::Windows::UI::Xaml::Media::VisualTreeHelper;
-
-// Depth-first visit of every FrameworkElement descendant (root excluded).
-// The visitor returns true to stop the walk early.
-inline bool ForEachDescendant(
-    FrameworkElement const& root, int maxDepth,
-    std::function<bool(FrameworkElement const&, int)> const& visit,
-    int depth = 0) {
-    if (!root || depth >= maxDepth)
-        return false;
-    int count = VisualTreeHelper::GetChildrenCount(root);
-    for (int i = 0; i < count; ++i) {
-        auto child =
-            VisualTreeHelper::GetChild(root, i).try_as<FrameworkElement>();
-        if (!child)
-            continue;
-        if (visit(child, depth + 1))
-            return true;
-        if (ForEachDescendant(child, maxDepth, visit, depth + 1))
-            return true;
-    }
-    return false;
-}
-
-// First descendant matching the predicate, depth-first document order.
-inline FrameworkElement FindDescendant(
-    FrameworkElement const& root, int maxDepth,
-    std::function<bool(FrameworkElement const&)> const& predicate) {
-    FrameworkElement found = nullptr;
-    ForEachDescendant(root, maxDepth,
-                      [&](FrameworkElement const& element, int) {
-                          if (predicate(element)) {
-                              found = element;
-                              return true;
-                          }
-                          return false;
-                      });
-    return found;
-}
-
-// Every descendant matching the predicate, in depth-first document order —
-// which is also visual order for the tray's horizontal stacks.
-inline void CollectDescendants(
-    FrameworkElement const& root, int maxDepth,
-    std::function<bool(FrameworkElement const&)> const& predicate,
-    std::vector<FrameworkElement>& out) {
-    ForEachDescendant(root, maxDepth,
-                      [&](FrameworkElement const& element, int) {
-                          if (predicate(element))
-                              out.push_back(element);
-                          return false;
-                      });
-}
-
-// The OmniButton battery walk: the first non-items-host StackPanel
-// descendant — the inner panel whose children are the individually
-// addressable native elements (glyph, percent, per-icon views).
-inline StackPanel FindInnerStackPanel(FrameworkElement const& root,
-                                      int maxDepth) {
-    StackPanel found = nullptr;
-    ForEachDescendant(root, maxDepth,
-                      [&](FrameworkElement const& element, int) {
-                          auto panel = element.try_as<StackPanel>();
-                          if (panel && !panel.IsItemsHost()) {
-                              found = panel;
-                              return true;
-                          }
-                          return false;
-                      });
-    return found;
-}
-
-}  // namespace windhawk_mod_templates::visual_tree_walk
-
-namespace vtw = windhawk_mod_templates::visual_tree_walk;
-
-// ============================================================
-// Settings IO
-// Template block: _templates/settings-io.h (verbatim copy —
-// keep in sync with the template; Windhawk mods are single-file).
-// ============================================================
-
-namespace windhawk_mod_templates::settings_io {
-
-inline int Clamp(int value, int low, int high) {
-    return std::max(low, std::min(high, value));
-}
-
-// Frees on every path, including the ones a hand-written loader forgets.
-class StringSetting {
-public:
-    explicit StringSetting(PCWSTR key) : value_(Wh_GetStringSetting(key)) {}
-    ~StringSetting() {
-        if (value_) Wh_FreeStringSetting(value_);
-    }
-    StringSetting(StringSetting const&) = delete;
-    StringSetting& operator=(StringSetting const&) = delete;
-
-    // Never nullptr in practice, but do not rely on that at the call site.
-    PCWSTR Get() const { return value_ ? value_ : L""; }
-    bool Empty() const { return !value_ || !value_[0]; }
-
-private:
-    PCWSTR value_ = nullptr;
-};
-
-// Copy a string setting into a fixed buffer, always NUL-terminated. Fixed
-// buffers rather than std::wstring because a namespace-scope settings struct
-// must not own heap — see the exit-time destructor audit.
-template <size_t N>
-inline void LoadString(PCWSTR key, wchar_t (&buffer)[N]) {
-    StringSetting setting(key);
-    if (setting.Empty()) {
-        buffer[0] = L'\0';
-        return;
-    }
-    wcsncpy(buffer, setting.Get(), N - 1);
-    buffer[N - 1] = L'\0';
-}
-
-// Same, but substitutes `fallback` when the setting is empty.
-template <size_t N>
-inline void LoadString(PCWSTR key, wchar_t (&buffer)[N], PCWSTR fallback) {
-    LoadString(key, buffer);
-    if (!buffer[0] && fallback) {
-        wcsncpy(buffer, fallback, N - 1);
-        buffer[N - 1] = L'\0';
-    }
-}
-
-inline int LoadInt(PCWSTR key, int low, int high) {
-    return Clamp(Wh_GetIntSetting(key), low, high);
-}
-
-inline bool LoadBool(PCWSTR key) {
-    return Wh_GetIntSetting(key) != 0;
-}
-
-// A $options choice, matched case-insensitively against a table of tokens.
-// Returns the matching entry's value, or `fallback` when nothing matches —
-// which also covers the unset case, since an unset string is empty.
-//
-// Use this rather than a chain of _wcsicmp: after ANY option is renamed, a
-// stale literal in a hand-written chain fails silently and the mod quietly
-// falls back. That cost this lab a release (Indicator symbols reverted to
-// numbers because `labelFormat == L"dot"` was never true again).
-template <typename T>
-struct Choice {
-    wchar_t const* token;
-    T value;
-};
-
-template <typename T, size_t N>
-inline T LoadChoice(PCWSTR key, Choice<T> const (&choices)[N], T fallback) {
-    StringSetting setting(key);
-    if (setting.Empty()) return fallback;
-    for (auto const& choice : choices) {
-        if (_wcsicmp(setting.Get(), choice.token) == 0) return choice.value;
-    }
-    return fallback;
-}
-
-}  // namespace windhawk_mod_templates::settings_io
-
-namespace sio = windhawk_mod_templates::settings_io;
-
-// ============================================================
-// Taskbar host
-// Template block: _templates/taskbar-host.h (verbatim copy —
-// keep in sync with the template; Windhawk mods are single-file).
-// ============================================================
-
-namespace windhawk_mod_templates::taskbar_host {
-
-using winrt::Windows::UI::Xaml::FrameworkElement;
-using winrt::Windows::UI::Xaml::XamlRoot;
-
-// ---- Window discovery -------------------------------------------------------
-
-inline HWND FindCurrentProcessTaskbarWnd() {
-    HWND result = nullptr;
-    EnumWindows(
-        [](HWND window, LPARAM parameter) -> BOOL {
-            DWORD processId = 0;
-            WCHAR className[32];
-            if (GetWindowThreadProcessId(window, &processId) &&
-                processId == GetCurrentProcessId() &&
-                GetClassName(window, className, ARRAYSIZE(className)) &&
-                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
-                *reinterpret_cast<HWND*>(parameter) = window;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&result));
-    return result;
-}
-
-// A CACHED TASKBAR HANDLE IS NOT PROOF THE WINDOW STILL EXISTS. Shell_TrayWnd
-// can be recreated inside the same Explorer process, and every mod here cached
-// it and then preferred the cache unconditionally:
-//
-//     HWND w = g_taskbarWnd ? g_taskbarWnd : FindCurrentProcessTaskbarWnd();
-//
-// After a recreate that hands back a dead handle forever, because the live
-// window is only ever looked up when the cache is null. GetWindowThreadProcessId
-// then returns 0, RunFromWindowThread fails, and the caller silently does
-// nothing — which is survivable on a retry path but not on the unload path,
-// where it means the mod's callbacks are never revoked before its image is
-// freed. Flagged by the AI review on PR #4855. Validate, then fall back.
-inline HWND ResolveTaskbarWnd(HWND cached) {
-    if (cached && IsWindow(cached))
-        return cached;
-    return FindCurrentProcessTaskbarWnd();
-}
-
-// ---- UI-thread marshalling --------------------------------------------------
-//
-// XAML may only be touched from the thread that owns it. This posts work onto
-// the taskbar's thread with a CALLWNDPROC hook and a private registered
-// message, and reports whether the callback actually ran — a caller that
-// assumes it did will corrupt its own state when the dispatch failed.
-
-using ThreadProc = void (*)(void*);
-using ExceptionLogFn = void (*)(PCWSTR context);
-
-inline ExceptionLogFn g_logException = nullptr;
-
-// Point this at the mod's logger once in Wh_ModInit so failures inside a UI
-// callback are reported in the mod's own voice.
-inline void SetExceptionLogger(ExceptionLogFn logger) {
-    g_logException = logger;
-}
-
-inline bool Invoke(ThreadProc proc, void* parameter) {
-    try {
-        proc(parameter);
-        return true;
-    } catch (...) {
-        if (g_logException) g_logException(L"UI callback");
-    }
-    return false;
-}
-
-struct Dispatch {
-    ThreadProc proc;
-    void* parameter;
-    bool succeeded = false;
-};
-
-// The private message this mod dispatches on. Set before the hook is
-// installed, and read by the hook proc to recognise its own message.
-//
-// A CALLWNDPROC HOOK SEES EVERY MESSAGE SENT TO EVERY WINDOW ON THE TASKBAR'S
-// UI THREAD. `lParam` for all of those is arbitrary — an integer, a flag, a
-// pointer to something else entirely. So the message MUST be checked first,
-// against a value that does not come from lParam, and only then may lParam be
-// treated as a Dispatch*. Reading anything out of lParam before that check
-// dereferences whatever happened to be in the message and takes Explorer down
-// with it — which is exactly what an earlier revision of this template did.
-// Atomic because the caller may be the retry thread while the hook proc runs
-// on the taskbar's UI thread. RegisterWindowMessageW returns the same value
-// for the same string for the lifetime of the session, so this settles on one
-// value immediately and never changes again — the pre-template code got the
-// same property from a function-local `static UINT` magic static, which a
-// parameterised template cannot use.
-inline std::atomic<UINT> g_dispatchMessage{0};
-
-// messageName must embed WH_MOD_ID, so two mods cannot collide on the message.
-inline bool RunFromWindowThread(HWND window, ThreadProc proc, void* parameter,
-                                PCWSTR messageName) {
-    UINT message = RegisterWindowMessageW(messageName);
-    if (!message) return false;
-
-    DWORD threadId = GetWindowThreadProcessId(window, nullptr);
-    if (!threadId) return false;
-    if (threadId == GetCurrentThreadId()) return Invoke(proc, parameter);
-
-    g_dispatchMessage.store(message, std::memory_order_release);
-
-    HHOOK hook = SetWindowsHookExW(
-        WH_CALLWNDPROC,
-        [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
-            if (code == HC_ACTION) {
-                auto const* call = reinterpret_cast<CWPSTRUCT const*>(lParam);
-                // Message first. Only our own private message carries a
-                // Dispatch* in lParam; everything else carries something we
-                // must not touch.
-                UINT expected =
-                    g_dispatchMessage.load(std::memory_order_acquire);
-                if (expected && call->message == expected) {
-                    if (auto* dispatch =
-                            reinterpret_cast<Dispatch*>(call->lParam)) {
-                        dispatch->succeeded =
-                            Invoke(dispatch->proc, dispatch->parameter);
-                    }
-                }
-            }
-            return CallNextHookEx(nullptr, code, wParam, lParam);
-        },
-        nullptr, threadId);
-    if (!hook) return false;
-
-    Dispatch dispatch{proc, parameter};
-    SendMessageW(window, message, 0, reinterpret_cast<LPARAM>(&dispatch));
-    UnhookWindowsHookEx(hook);
-    return dispatch.succeeded;
-}
-
-// ---- XamlRoot ---------------------------------------------------------------
-
-using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void*, void*);
-using TaskbarHost_FrameHeight_t = int(WINAPI*)(void*);
-using Ref_count_base_Decref_t = void(WINAPI*)(void*);
-using TrayUI_StartTaskbar_t = void(WINAPI*)(void*);
-
-inline CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
-inline TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
-inline Ref_count_base_Decref_t Ref_count_base_Decref_Original = nullptr;
-inline TrayUI_StartTaskbar_t TrayUI_StartTaskbar_Original = nullptr;
-inline void* CTaskBand_ITaskListWndSite_vftable = nullptr;
-
-// The mod's rebuild callback, invoked after Explorer rebuilds the taskbar.
-inline void (*g_onTaskbarRebuilt)() = nullptr;
-
-inline void WINAPI TrayUI_StartTaskbar_Hook(void* self) {
-    TrayUI_StartTaskbar_Original(self);
-    try {
-        if (g_onTaskbarRebuilt) g_onTaskbarRebuilt();
-    } catch (...) {
-        if (g_logException) g_logException(L"TrayUI::StartTaskbar hook");
-    }
-}
-
-inline bool HookTaskbarSymbols(void (*onTaskbarRebuilt)()) {
-    g_onTaskbarRebuilt = onTaskbarRebuilt;
-    HMODULE taskbar = LoadLibraryExW(L"taskbar.dll", nullptr,
-                                     LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!taskbar) return false;
-    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
-        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
-         &CTaskBand_ITaskListWndSite_vftable},
-        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
-         &CTaskBand_GetTaskbarHost_Original},
-        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
-         &TaskbarHost_FrameHeight_Original},
-        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
-         &Ref_count_base_Decref_Original},
-        {{LR"(public: virtual void __cdecl TrayUI::StartTaskbar(void))"},
-         &TrayUI_StartTaskbar_Original, TrayUI_StartTaskbar_Hook},
-    };
-    return WindhawkUtils::HookSymbols(taskbar, taskbarDllHooks,
-                                      ARRAYSIZE(taskbarDllHooks));
-}
-
-// The FrameworkElement lives at an offset inside TaskbarHost that MOVES
-// between Windows builds, so it is read out of TaskbarHost::FrameHeight's
-// prologue at runtime rather than hardcoded.
-inline size_t FrameworkElementOffset() {
-    size_t offset = 0x10;
-#if defined(_M_X64)
-    BYTE const* code =
-        reinterpret_cast<BYTE const*>(TaskbarHost_FrameHeight_Original);
-    if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
-        code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
-        code[7] <= 0x7F) {
-        offset = code[7];
-    }
-#elif defined(_M_ARM64)
-    DWORD const* code =
-        reinterpret_cast<DWORD const*>(TaskbarHost_FrameHeight_Original);
-    if (code[0] == 0xD503237F && (code[1] & 0xFFC07FFF) == 0xA9807BFD &&
-        code[2] == 0x910003FD && (code[3] & 0xFFF00FE0) == 0xF8400C00) {
-        offset = (code[3] >> 12) & 0xFF;
-    }
-#else
-#error "Unsupported architecture"
-#endif
-    return offset;
-}
-
-inline XamlRoot GetTaskbarXamlRoot(HWND taskbarWnd) {
-    if (!CTaskBand_GetTaskbarHost_Original ||
-        !TaskbarHost_FrameHeight_Original || !Ref_count_base_Decref_Original ||
-        !CTaskBand_ITaskListWndSite_vftable)
-        return nullptr;
-
-    HWND taskSwWnd = (HWND)GetProp(taskbarWnd, L"TaskbandHWND");
-    if (!taskSwWnd) return nullptr;
-    void* taskBand = (void*)GetWindowLongPtr(taskSwWnd, 0);
-    if (!taskBand) return nullptr;
-
-    void* site = taskBand;
-    for (int i = 0; *(void**)site != CTaskBand_ITaskListWndSite_vftable; ++i) {
-        if (i == 20) return nullptr;
-        site = (void**)site + 1;
-    }
-
-    void* host[2]{};
-    CTaskBand_GetTaskbarHost_Original(site, host);
-    if (!host[0] || !host[1]) {
-        if (host[1]) Ref_count_base_Decref_Original(host[1]);
-        return nullptr;
-    }
-
-    auto* unknown =
-        *(IUnknown**)((BYTE*)host[0] + FrameworkElementOffset());
-    if (!unknown) {
-        Ref_count_base_Decref_Original(host[1]);
-        return nullptr;
-    }
-    FrameworkElement element = nullptr;
-    unknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
-                            winrt::put_abi(element));
-    auto result = element ? element.XamlRoot() : nullptr;
-    Ref_count_base_Decref_Original(host[1]);
-    return result;
-}
-
-// ---- Taskbar metrics and orientation ----------------------------------------
-//
-// WHERE THE TASKBAR IS, AND WHETHER THIS FAMILY CAN WORK THERE.
-//
-// Windows 11 itself only puts the taskbar at the bottom. Two mods by m417z
-// move it, and both are first-class parts of the ecosystem these mods have to
-// live in:
-//
-//   taskbar-on-top       — bottom -> top. FINE for this family. Everything
-//                          here is positioned relative to the taskbar's own
-//                          XAML tree, never to screen coordinates, so a top
-//                          taskbar is the same tree at a different y.
-//
-//   taskbar-vertical     — bottom -> left/right. NOT COMPATIBLE, and not for
-//                          a reason cooperation can fix. It walks the very
-//                          same path this family walks
-//                          (ControlCenterButton > Grid > ContentPresenter >
-//                          ItemsPresenter > StackPanel) and applies a
-//                          RotateTransform to `RenderTransform` on those
-//                          children. Positioning here sets a
-//                          TranslateTransform on the SAME property of the SAME
-//                          elements. One dependency property, two owners, last
-//                          writer wins — there is no version of this where
-//                          both mods are correct. m417z documents the same
-//                          class of conflict for taskbar-multirow.
-//
-// So: DETECT AND STAND DOWN, loudly, rather than fight and paint garbage. The
-// detection is the taskbar's own rect aspect, not a check for a specific mod —
-// it is the condition that matters, and it stays true however the taskbar got
-// that way.
-//
-// The rect is in PHYSICAL pixels and every XAML size is a DIP, so the DIP
-// conversion lives here too rather than being re-derived per mod. That is the
-// bug that was blocking on PR #4855 and #4843.
-
-enum class Orientation { Horizontal, Vertical };
-
-struct Metrics {
-    bool valid = false;
-    RECT rect{};
-    UINT dpi = 96;
-    Orientation orientation = Orientation::Horizontal;
-    // The extent this family's grid has to fit INTO: the taskbar's height when
-    // it runs across the screen, its width when it runs down the side.
-    double constrainedDip = 0.0;
-    // The extent it can run ALONG.
-    double alongDip = 0.0;
-};
-
-inline Metrics GetMetrics(HWND taskbarWnd) {
-    Metrics metrics;
-    if (!taskbarWnd || !GetWindowRect(taskbarWnd, &metrics.rect))
-        return metrics;
-
-    metrics.valid = true;
-    metrics.dpi = GetDpiForWindow(taskbarWnd);
-    if (!metrics.dpi) metrics.dpi = 96;
-
-    double width = (double)(metrics.rect.right - metrics.rect.left);
-    double height = (double)(metrics.rect.bottom - metrics.rect.top);
-    double scale = 96.0 / (double)metrics.dpi;
-
-    // Taller than wide means it runs down a side. Nothing else can produce
-    // that shape, so this needs no cooperation from whatever moved it.
-    metrics.orientation =
-        height > width ? Orientation::Vertical : Orientation::Horizontal;
-    if (metrics.orientation == Orientation::Horizontal) {
-        metrics.constrainedDip = height * scale;
-        metrics.alongDip = width * scale;
-    } else {
-        metrics.constrainedDip = width * scale;
-        metrics.alongDip = height * scale;
-    }
-    return metrics;
-}
-
-// Whether this family's layout model applies at all. A mod must check this
-// BEFORE touching anything and stand down cleanly if it is false — leaving the
-// taskbar exactly as it found it — rather than arranging into a coordinate
-// space someone else is rotating.
-inline bool LayoutModelApplies(Metrics const& metrics) {
-    return metrics.valid && metrics.orientation == Orientation::Horizontal;
-}
-
-inline wchar_t const* OrientationName(Orientation orientation) {
-    return orientation == Orientation::Vertical ? L"vertical" : L"horizontal";
-}
-
-// ---- Bounded retry ----------------------------------------------------------
-//
-// Stoppable and WAITED during unload. A detached thread that outlives
-// Wh_ModUninit runs mod code out of an unloaded DLL.
-//
-// STOP IS CALLED FROM MORE THAN ONE THREAD. Wh_ModUninit stops the loop from
-// Windhawk's thread while an Explorer taskbar rebuild can be starting it from
-// the taskbar's UI thread, and Start() stops the previous run before it begins
-// a new one. So the handles cannot live in bare members that each caller
-// closes: two callers would read the same handle and close it twice, and in
-// explorer.exe a double CloseHandle later closes whatever unrelated handle the
-// value was recycled into.
-//
-// One attempt therefore owns its handles through a shared Run, and EVERY
-// caller that observes a live Run waits for it. The mutex is held only across
-// the handoff, never across the wait: the retry thread marshals onto the UI
-// thread with SendMessage, so a UI-thread caller blocked on the mutex while
-// another thread waited under it could never service that message.
-
-class RetryLoop {
-public:
-    // applied: has the work finished? unloading: stop immediately.
-    using AppliedFn = bool (*)();
-    using AttemptFn = void (*)();
-
-    // No destructor on purpose. A namespace-scope loop's destructor would run
-    // at DLL detach, inside the loader lock, and Stop() waits on a thread —
-    // the owner stops it explicitly from Wh_ModUninit instead.
-
-    void Start(AttemptFn attempt, AppliedFn applied,
-               std::atomic<bool> const& unloading, int attempts = 5,
-               DWORD intervalMs = 2000, bool forceFirstAttempt = false) {
-        Stop();
-        if (unloading) return;
-
-        auto run = std::make_shared<Run>();
-        run->attempt = attempt;
-        run->applied = applied;
-        run->unloading = &unloading;
-        run->attempts = attempts;
-        run->intervalMs = intervalMs;
-        run->forceFirstAttempt = forceFirstAttempt;
-        run->stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!run->stopEvent) return;
-
-        // The thread carries a reference of its own, so the Run survives until
-        // both the loop and the thread are done with it, whichever ends first.
-        auto* parameter = new std::shared_ptr<Run>(run);
-        run->thread =
-            CreateThread(nullptr, 0, ThreadMain, parameter, 0, nullptr);
-        if (!run->thread) {
-            delete parameter;
-            return;
-        }
-
-        {
-            std::lock_guard<std::mutex> guard(mutex_);
-            if (!unloading) {
-                run_ = std::move(run);
-                return;
-            }
-        }
-        // Unload began while this attempt was being created, so the Stop that
-        // would have waited for it saw nothing. Wait for it here instead.
-        StopRun(run);
-    }
-
-    void Stop() {
-        std::shared_ptr<Run> run;
-        {
-            std::lock_guard<std::mutex> guard(mutex_);
-            run = run_;  // shared, not moved: a concurrent Stop must wait too
-        }
-        if (!run) return;
-        StopRun(run);
-        std::lock_guard<std::mutex> guard(mutex_);
-        if (run_ == run) run_.reset();
-    }
-
-private:
-    struct Run {
-        HANDLE thread = nullptr;
-        HANDLE stopEvent = nullptr;
-        AttemptFn attempt = nullptr;
-        AppliedFn applied = nullptr;
-        std::atomic<bool> const* unloading = nullptr;
-        int attempts = 5;
-        DWORD intervalMs = 2000;
-        bool forceFirstAttempt = false;
-
-        // Closed exactly once, when the last of the loop and the thread lets
-        // go. Both have already stopped using them by then.
-        ~Run() {
-            if (thread) CloseHandle(thread);
-            if (stopEvent) CloseHandle(stopEvent);
-        }
-    };
-
-    static DWORD WINAPI ThreadMain(void* parameter) {
-        auto* owned = static_cast<std::shared_ptr<Run>*>(parameter);
-        std::shared_ptr<Run> run = *owned;
-        delete owned;
-        for (int i = 0; i < run->attempts && !*run->unloading; ++i) {
-            // A settings reload can need one restore/reapply pass even while
-            // `applied` truthfully says we still own live XAML. Do not
-            // overload that ownership flag merely to wake the retry loop;
-            // request a forced first attempt instead.
-            if (run->applied && !(run->forceFirstAttempt && i == 0) &&
-                run->applied())
-                break;
-            if (i && WaitForSingleObject(run->stopEvent, run->intervalMs) !=
-                         WAIT_TIMEOUT)
-                break;
-            if (run->attempt) run->attempt();
-        }
-        return 0;
-    }
-
-    // Signal and wait, pumping sent messages: a caller on the taskbar's UI
-    // thread would otherwise deadlock against the SendMessage the retry thread
-    // is making back to it. Idempotent — the stop event is manual-reset, and
-    // waiting on an already-exited thread returns at once.
-    static void StopRun(std::shared_ptr<Run> const& run) {
-        if (run->stopEvent) SetEvent(run->stopEvent);
-        if (!run->thread) return;
-        DWORD result;
-        do {
-            HANDLE thread = run->thread;
-            result = MsgWaitForMultipleObjects(1, &thread, FALSE, INFINITE,
-                                               QS_SENDMESSAGE);
-            if (result == WAIT_OBJECT_0 + 1) {
-                MSG message;
-                PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
-            }
-        } while (result == WAIT_OBJECT_0 + 1);
-    }
-
-    std::mutex mutex_;
-    std::shared_ptr<Run> run_;
-};
-
-}  // namespace windhawk_mod_templates::taskbar_host
-
-namespace tbh = windhawk_mod_templates::taskbar_host;
-
-// ============================================================
-// Property lease
-// Template block: _templates/property-lease.h (verbatim copy —
-// keep in sync with the template; Windhawk mods are single-file).
-// ============================================================
-
-namespace windhawk_mod_templates::property_lease {
-
-using winrt::Windows::Foundation::IInspectable;
-using winrt::Windows::UI::Xaml::DependencyObject;
-using winrt::Windows::UI::Xaml::DependencyProperty;
-
-struct Snapshot {
-    DependencyObject object{nullptr};
-    DependencyProperty property{nullptr};
-    IInspectable localValue{nullptr};
-};
-
-// Reported per failed restore so the mod can log in its own voice.
-using RestoreErrorFn = std::function<void()>;
-
-class Lease {
-public:
-    // Announce a mutation BEFORE making it. Safe to call repeatedly; only the
-    // first call for a given (object, property) records anything.
-    void Track(DependencyObject const& object,
-               DependencyProperty const& property) {
-        if (!object || !property) return;
-        for (auto const& snapshot : snapshots_) {
-            if (snapshot.object == object && snapshot.property == property)
-                return;
-        }
-        snapshots_.push_back(
-            {object, property, object.ReadLocalValue(property)});
-    }
-
-    // Put everything back, newest first, and forget it. Call on the UI thread.
-    void RestoreAll(RestoreErrorFn const& onError = {}) {
-        for (auto it = snapshots_.rbegin(); it != snapshots_.rend(); ++it) {
-            try {
-                if (it->localValue == DependencyProperty::UnsetValue())
-                    it->object.ClearValue(it->property);
-                else
-                    it->object.SetValue(it->property, it->localValue);
-            } catch (...) {
-                if (onError) onError();
-            }
-        }
-        snapshots_.clear();
-    }
-
-    // Put ONE object's properties back and forget them, leaving every other
-    // object's snapshots alone. For the case where a mod discovers that an
-    // element it began borrowing was never actually its business — handing
-    // that element back has to be possible without ending the whole lease.
-    void RestoreObject(DependencyObject const& object,
-                       RestoreErrorFn const& onError = {}) {
-        if (!object) return;
-        for (auto it = snapshots_.rbegin(); it != snapshots_.rend();) {
-            if (it->object != object) {
-                ++it;
-                continue;
-            }
-            try {
-                if (it->localValue == DependencyProperty::UnsetValue())
-                    it->object.ClearValue(it->property);
-                else
-                    it->object.SetValue(it->property, it->localValue);
-            } catch (...) {
-                if (onError) onError();
-            }
-            // Erase through the reverse iterator without invalidating the
-            // traversal: base() points one past the element being erased.
-            it = std::make_reverse_iterator(snapshots_.erase(
-                std::next(it).base()));
-        }
-    }
-
-    // Drop the snapshots WITHOUT restoring. For the case where the elements
-    // are already gone (an Explorer rebuild threw the tree away), so restoring
-    // would only throw. Do not use it to "skip" a restore that could run.
-    void Abandon() { snapshots_.clear(); }
-
-    size_t Count() const { return snapshots_.size(); }
-    bool Empty() const { return snapshots_.empty(); }
-
-private:
-    std::vector<Snapshot> snapshots_;
-};
-
-}  // namespace windhawk_mod_templates::property_lease
-
-namespace ple = windhawk_mod_templates::property_lease;
+}  // namespace privacy_anchor_start_placement
+
+// ==/ModComponents==
+
+namespace sio = privacy_anchor_settings;
+namespace clr = privacy_anchor_color_tokens;
+namespace ngl = privacy_anchor_layout;
+namespace ple = privacy_anchor_property_lease;
+namespace taskbar_window = privacy_anchor_taskbar_window;
+namespace dispatch = privacy_anchor_dispatch;
+namespace taskbar_xaml = privacy_anchor_taskbar_xaml;
+namespace taskbar_metrics = privacy_anchor_taskbar_metrics;
+namespace lease_column = privacy_anchor_slot_lease;
+namespace start_placement = privacy_anchor_start_placement;
 
 
 
@@ -2805,14 +2354,9 @@ static std::atomic<bool> g_cameraHardwareDetectionEnabled{false};
 static std::atomic<bool> g_cameraItemEnabled{true};
 static std::atomic<bool> g_copilotItemEnabled{true};
 
-// The one color-token parser now lives in _templates/color-tokens.h, embedded
-// above. Three independent copies of it existed across this family (this mod,
-// button-surface, OmniButton) and agreed only by luck; this is the delegation
-// that retires the third. Empty or unparseable still returns false, meaning
-// keep the native behavior — never a fallback color.
-//
-// One deliberate widening: the template accepts hex with or without a leading
-// '#', where this copy required it. Nothing that worked before stops working.
+// Color tokens are parsed by the color-token component above. Empty or
+// unparseable returns false, meaning keep the native behavior — never a
+// fallback color. Hex is accepted with or without a leading '#'.
 static void LogAccentReadFailure() {
     Wh_Log(L"[Color] Failed to read the Windows accent color");
 }
@@ -2824,11 +2368,11 @@ static bool ParseColorToken(const wchar_t* s, winrt::Windows::UI::Color& out) {
 // Every color setting reads the same way: parse the token, and a false result
 // means "leave this one native" — never a fallback color.
 static bool LoadColorSetting(PCWSTR key, winrt::Windows::UI::Color& out) {
-    sio::StringSetting setting(key);
-    return ParseColorToken(setting.Get(), out);
+    auto setting = WindhawkUtils::StringSetting::make(key);
+    return ParseColorToken(setting.get() ? setting.get() : L"", out);
 }
 
-static void LoadSettings() {
+static void LoadSettings(ModSettings& s) {
     static constexpr sio::Choice<Position> kPositions[] = {
         {L"beforeIcons", Position::BeforeIcons},
         {L"beforeOmni", Position::BeforeOmni},
@@ -2838,21 +2382,21 @@ static void LoadSettings() {
         {L"leftOfStart", Position::LeftOfStart},
         {L"rightOfStart", Position::RightOfStart},
     };
-    g_settings.position =
+    s.position =
         sio::LoadChoice(L"Placement.Position", kPositions, Position::BeforeOmni);
 
-    g_settings.location = sio::LoadBool(L"Content.Location");
-    g_settings.microphone = sio::LoadBool(L"Content.Microphone");
-    g_settings.camera = sio::LoadBool(L"Content.Camera");
-    g_settings.copilot = sio::LoadBool(L"Content.Copilot");
+    s.location = sio::LoadBool(L"Content.Location");
+    s.microphone = sio::LoadBool(L"Content.Microphone");
+    s.camera = sio::LoadBool(L"Content.Camera");
+    s.copilot = sio::LoadBool(L"Content.Copilot");
 
-    sio::LoadString(L"Layout.Arrangement", g_settings.arrangement, L"auto");
+    sio::LoadString(L"Layout.Arrangement", s.arrangement, L"auto");
 
     static constexpr sio::Choice<ngl::FillOrder> kFillOrders[] = {
         {L"rows", ngl::FillOrder::Rows},
         {L"columns", ngl::FillOrder::Columns},
     };
-    g_settings.fillOrder =
+    s.fillOrder =
         sio::LoadChoice(L"Layout.FillOrder", kFillOrders, ngl::FillOrder::Rows);
 
     static constexpr sio::Choice<ngl::Justify> kJustifications[] = {
@@ -2860,47 +2404,47 @@ static void LoadSettings() {
         {L"center", ngl::Justify::Center},
         {L"end", ngl::Justify::End},
     };
-    g_settings.justify = sio::LoadChoice(L"Layout.Justify", kJustifications,
+    s.justify = sio::LoadChoice(L"Layout.Justify", kJustifications,
                                          ngl::Justify::Center);
 
     static constexpr sio::Choice<bool> kNewItemPolicies[] = {
         {L"append", true},
         {L"ignore", false},
     };
-    g_settings.appendNewItems =
+    s.appendNewItems =
         sio::LoadChoice(L"Layout.NewItems", kNewItemPolicies, true);
 
-    g_settings.itemSize = sio::LoadInt(L"Size.ItemSize", 8, 48);
-    g_settings.itemSpacing = sio::LoadInt(L"Size.ItemSpacing", 0, 40);
+    s.itemSize = sio::LoadInt(L"Size.ItemSize", 8, 48);
+    s.itemSpacing = sio::LoadInt(L"Size.ItemSpacing", 0, 40);
 
-    g_settings.padX = sio::LoadInt(L"Adjust.PadX", 0, 40);
-    g_settings.padY = sio::LoadInt(L"Adjust.PadY", 0, 40);
-    g_settings.offsetX = sio::LoadInt(L"Adjust.OffsetX", -40, 40);
-    g_settings.offsetY = sio::LoadInt(L"Adjust.OffsetY", -40, 40);
+    s.padX = sio::LoadInt(L"Adjust.PadX", 0, 40);
+    s.padY = sio::LoadInt(L"Adjust.PadY", 0, 40);
+    s.offsetX = sio::LoadInt(L"Adjust.OffsetX", -40, 40);
+    s.offsetY = sio::LoadInt(L"Adjust.OffsetY", -40, 40);
 
-    g_settings.idleOpacity = sio::LoadInt(L"Surface.IdleOpacity", 0, 100);
-    g_settings.activeOpacity = sio::LoadInt(L"Surface.ActiveOpacity", 0, 100);
-    g_settings.glowEnabled = sio::LoadBool(L"Surface.GlowEnabled");
-    g_settings.glowOpacity = sio::LoadInt(L"Surface.GlowOpacity", 0, 100);
-    g_settings.slashColorSet =
-        LoadColorSetting(L"Surface.SlashColor", g_settings.slashColorValue);
+    s.idleOpacity = sio::LoadInt(L"Surface.IdleOpacity", 0, 100);
+    s.activeOpacity = sio::LoadInt(L"Surface.ActiveOpacity", 0, 100);
+    s.glowEnabled = sio::LoadBool(L"Surface.GlowEnabled");
+    s.glowOpacity = sio::LoadInt(L"Surface.GlowOpacity", 0, 100);
+    s.slashColorSet =
+        LoadColorSetting(L"Surface.SlashColor", s.slashColorValue);
 
     static constexpr sio::Choice<bool> kSlashDirections[] = {
         {L"falling", true},
         {L"rising", false},
     };
-    g_settings.slashFalling =
+    s.slashFalling =
         sio::LoadChoice(L"Surface.SlashDirection", kSlashDirections, true);
 
-    g_settings.slashOpacity = sio::LoadInt(L"Surface.SlashOpacity", 0, 100);
-    g_settings.idleColorSet =
-        LoadColorSetting(L"Surface.IdleColor", g_settings.idleColorValue);
-    g_settings.activeColorSet =
-        LoadColorSetting(L"Surface.ActiveColor", g_settings.activeColorValue);
-    g_settings.disabledOpacity = sio::LoadInt(L"Surface.DisabledOpacity", 0, 100);
-    g_settings.disabledColorSet =
-        LoadColorSetting(L"Surface.DisabledColor", g_settings.disabledColorValue);
-    g_settings.alertWhenBlockedAndActive =
+    s.slashOpacity = sio::LoadInt(L"Surface.SlashOpacity", 0, 100);
+    s.idleColorSet =
+        LoadColorSetting(L"Surface.IdleColor", s.idleColorValue);
+    s.activeColorSet =
+        LoadColorSetting(L"Surface.ActiveColor", s.activeColorValue);
+    s.disabledOpacity = sio::LoadInt(L"Surface.DisabledOpacity", 0, 100);
+    s.disabledColorSet =
+        LoadColorSetting(L"Surface.DisabledColor", s.disabledColorValue);
+    s.alertWhenBlockedAndActive =
         sio::LoadBool(L"Surface.AlertWhenBlockedAndActive");
 
     static constexpr sio::Choice<GlowStyle> kGlowStyles[] = {
@@ -2908,22 +2452,22 @@ static void LoadSettings() {
         {L"pulse", GlowStyle::Pulse},
         {L"radiate", GlowStyle::Radiate},
     };
-    g_settings.glowStyle =
+    s.glowStyle =
         sio::LoadChoice(L"Surface.GlowStyle", kGlowStyles, GlowStyle::Radiate);
 
-    g_settings.glowColorSet =
-        LoadColorSetting(L"Surface.GlowColor", g_settings.glowColorValue);
-    g_settings.glowSize = sio::LoadInt(L"Surface.GlowSize", 100, 300);
-    g_settings.glowSpeed = sio::LoadInt(L"Surface.GlowSpeed", 250, 5000);
+    s.glowColorSet =
+        LoadColorSetting(L"Surface.GlowColor", s.glowColorValue);
+    s.glowSize = sio::LoadInt(L"Surface.GlowSize", 100, 300);
+    s.glowSpeed = sio::LoadInt(L"Surface.GlowSpeed", 250, 5000);
 
-    g_settings.cameraHardwareDetection =
+    s.cameraHardwareDetection =
         sio::LoadBool(L"Behavior.CameraHardwareDetection");
-    g_settings.suppressNativeIndicators =
+    s.suppressNativeIndicators =
         sio::LoadBool(L"Behavior.SuppressNativeIndicators");
     g_cameraHardwareDetectionEnabled.store(
-        g_settings.cameraHardwareDetection);
-    g_cameraItemEnabled.store(g_settings.camera);
-    g_copilotItemEnabled.store(g_settings.copilot);
+        s.cameraHardwareDetection);
+    g_cameraItemEnabled.store(s.camera);
+    g_copilotItemEnabled.store(s.copilot);
 }
 
 // ============================================================
@@ -2964,7 +2508,9 @@ enum StateRefreshFlags : DWORD {
 };
 
 static std::atomic<bool> g_unloading{false};
-static HWND              g_taskbarWnd           = nullptr;
+// Atomic: written on the taskbar thread (apply, rebuild) and read from the
+// state worker and Windhawk's settings/unload thread. Load once per use.
+static std::atomic<HWND>  g_taskbarWnd{nullptr};
 // The window whose thread this mod's XAML callbacks were actually registered
 // on, remembered AT INJECTION TIME. g_taskbarWnd is cleared on an Explorer
 // rebuild, and unload is the moment Shell_TrayWnd is least likely to be
@@ -2972,7 +2518,7 @@ static HWND              g_taskbarWnd           = nullptr;
 // thread stops being cosmetic, because Windhawk frees this image as soon as
 // Wh_ModUninit returns and every Loaded revoker, property-changed callback,
 // Tapped handler and LayoutUpdated token would still point into it.
-static HWND              g_uiHostWnd            = nullptr;
+static std::atomic<HWND>  g_uiHostWnd{nullptr};
 static std::atomic<bool>  g_systemTrayModuleHooked{false};
 static std::atomic<bool>  g_taskbarRestarted{false};
 static HANDLE            g_retryThread          = nullptr;
@@ -3032,7 +2578,10 @@ static std::atomic<bool> g_taskbarDarkTheme{true};
 [[clang::no_destroy]] static FrameworkElement g_copilotSlashIcon = nullptr;
 [[clang::no_destroy]] static FrameworkElement g_syntheticParent = nullptr;
 static lease_column::Lease g_columnLease;  // exit-time-safe: heap-only
-[[clang::no_destroy]] static start_placement::Lease g_startLease;
+// Optional-backed like the other XAML holders, so Wh_ModUninit can reset() it
+// on the UI thread instead of leaving an exit-time destructor to release XAML.
+[[clang::no_destroy]] static std::optional<start_placement::Lease>
+    g_startLease{std::in_place};
 
 struct SlotEventState {
     FrameworkElement element{nullptr};
@@ -3057,6 +2606,10 @@ struct PrivacyState {
     int64_t textToken       = 0;
     int64_t visibilityToken = 0;
     Type    type      = Type::Location;
+    // False while the InnerTextBlock is still empty. An unknown type sets no
+    // active flag and is never suppressed: guessing would both light the
+    // wrong synthetic icon and hide an indicator nothing may be replacing.
+    bool    typeKnown = false;
 };
 // PrivacyState holds only winrt::weak_ref and integers; weak_ref release is a
 // thread-safe in-process refcount decrement, so the normal destructor is
@@ -3136,20 +2689,11 @@ static HMODULE GetSystemTrayModuleHandle() {
 
 // ============================================================
 // Taskbar discovery, XAML root, and window-thread dispatch
-// All of this is now _templates/taskbar-host.h, embedded above. The mod keeps
-// only its own exception logger and its rebuild callback.
-//
-// The CTaskBand walk, the runtime-disassembled FrameworkElement offset, the
-// taskbar.dll symbol hooks, and the CALLWNDPROC dispatch all moved out
-// verbatim. The dispatch is the one worth naming: a WH_CALLWNDPROC hook sees
-// every message sent to every window on the taskbar's UI thread, so the
-// message must be compared BEFORE lParam is treated as a Dispatch*. Both this
-// mod and the template already got that right; the template now states the
-// rule in capitals because reordering it once took Explorer down in
-// OmniButton.
+// The mechanics are the components above; the mod adds only its own
+// exception logger, the dispatch message name, and its rebuild callback.
 // ============================================================
 
-using WindowThreadProc = tbh::ThreadProc;
+using WindowThreadProc = dispatch::ThreadProc;
 
 static void LogCurrentUiException(PCWSTR context) noexcept {
     try {
@@ -3166,18 +2710,18 @@ static void LogCurrentUiException(PCWSTR context) noexcept {
 }
 
 static XamlRoot GetTaskbarXamlRoot(HWND taskbarWindow) {
-    return tbh::GetTaskbarXamlRoot(taskbarWindow);
+    return taskbar_xaml::GetTaskbarXamlRoot(taskbarWindow);
 }
 
 static bool RunFromWindowThread(HWND window, WindowThreadProc proc,
                                 void* parameter) {
-    return tbh::RunFromWindowThread(
+    return dispatch::RunFromWindowThread(
         window, proc, parameter,
         L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 }
 
 static HWND FindCurrentProcessTaskbarWnd() {
-    return tbh::FindCurrentProcessTaskbarWnd();
+    return taskbar_window::FindCurrentProcessTaskbarWnd();
 }
 
 // ============================================================
@@ -3202,14 +2746,20 @@ static FrameworkElement FindChildByClassName(FrameworkElement element, PCWSTR cl
     return nullptr;
 }
 
-// Kept as a thin wrapper rather than replacing every call site: the signature
-// takes its predicate by value and dozens of lambdas here rely on that. The
-// walk itself is now the template's.
+// First descendant (root excluded) matching the predicate, depth-first in
+// document order, bounded by maxDepth.
 static FrameworkElement FindChildRecursive(FrameworkElement const& element,
     std::function<bool(FrameworkElement)> const& cb, int maxDepth = 20) {
-    return vtw::FindDescendant(
-        element, maxDepth,
-        [&cb](FrameworkElement const& child) { return cb(child); });
+    if (!element || maxDepth <= 0) return nullptr;
+    int n = VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < n; i++) {
+        auto child = VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
+        if (!child) continue;
+        if (cb(child)) return child;
+        if (auto found = FindChildRecursive(child, cb, maxDepth - 1))
+            return found;
+    }
+    return nullptr;
 }
 
 // ============================================================
@@ -3264,11 +2814,12 @@ static bool IsChildOfElementByName(FrameworkElement const& element,
     return false;
 }
 
-// The stacks the privacy indicators actually live in. ControlCenterButton is
-// deliberately absent: that is the one that must never be tracked.
+// The stack the privacy indicators actually live in, and the only one
+// ScanMainStack walks, so the Loaded path and the scan agree. ControlCenterButton
+// must never be tracked; NonActivatableStack hosts the language bar, whose IME
+// icon would otherwise be taken for an indicator while its text is still empty.
 static bool IsPrivacyIndicatorHostStack(FrameworkElement const& iconView) {
-    return IsChildOfElementByName(iconView, L"MainStack") ||
-           IsChildOfElementByName(iconView, L"NonActivatableStack");
+    return IsChildOfElementByName(iconView, L"MainStack");
 }
 
 // ============================================================
@@ -3350,8 +2901,8 @@ static ngl::Config PrivacyLayoutConfig() {
 }
 
 static int AvailablePrivacyRows() {
-    HWND window = tbh::ResolveTaskbarWnd(g_taskbarWnd);
-    auto metrics = tbh::GetMetrics(window);
+    HWND window = taskbar_window::ResolveTaskbarWnd(g_taskbarWnd);
+    auto metrics = taskbar_metrics::GetMetrics(window);
     if (!metrics.valid) {
         Wh_Log(L"[Layout] No taskbar window - assuming a single row");
         return 1;
@@ -3366,7 +2917,7 @@ static int AvailablePrivacyRows() {
         (double)g_settings.itemSpacing);
     Wh_Log(L"[Layout] %s taskbar, %.0f dip across at %udpi, %.0f reserved "
            L"-> %d row(s) for privacy icons",
-           tbh::OrientationName(metrics.orientation), metrics.constrainedDip,
+           taskbar_metrics::OrientationName(metrics.orientation), metrics.constrainedDip,
            metrics.dpi, reserved, rows);
     return rows;
 }
@@ -5008,8 +4559,9 @@ static void UpdatePrivacyStates(DWORD flags) {
            g_locDisabled.load(), g_micDisabled.load(), g_camDisabled.load(),
            g_copilotInstalled.load(), g_copilotActive.load(),
            g_copilotDisabled.load());
-    if (changed && !g_unloading && g_taskbarWnd) {
-        RunFromWindowThread(g_taskbarWnd, [](void*) {
+    HWND taskbarWnd = g_taskbarWnd.load();
+    if (changed && !g_unloading && taskbarWnd) {
+        RunFromWindowThread(taskbarWnd, [](void*) {
             if (!g_unloading) UpdateSyntheticState();
         }, nullptr);
     }
@@ -5146,7 +4698,38 @@ static void ApplyOffset(FrameworkElement const& fe, int x, int y) {
     }
 }
 
+// Logged once per orientation change rather than on every retry.
+static bool g_verticalStandDownLogged = false;
+
+// A vertical taskbar ("Vertical Taskbar for Windows 11") walks the same tray
+// path this mod walks and owns RenderTransform on those children to rotate
+// them. This mod positions its anchor group by writing that same property on
+// the same elements, so the two cannot both be right: stand down and leave the
+// taskbar exactly as found. Every injection path asks this, not only the
+// retry path, or the first privacy IconView to load injects anyway.
+static bool TaskbarRequiresStandDown(HWND window) {
+    if (!window) return false;
+    auto metrics = taskbar_metrics::GetMetrics(window);
+    if (!metrics.valid || taskbar_metrics::LayoutModelApplies(metrics)) {
+        g_verticalStandDownLogged = false;
+        return false;
+    }
+    if (!g_verticalStandDownLogged) {
+        g_verticalStandDownLogged = true;
+        Wh_Log(L"[Apply] Taskbar is %s - standing down. This mod places "
+               L"its group with RenderTransform, which a vertical taskbar "
+               L"mod already owns on the same elements; leaving the "
+               L"native tray untouched.",
+               taskbar_metrics::OrientationName(metrics.orientation));
+    }
+    return true;
+}
+
 static bool InjectSyntheticIcons(FrameworkElement root) {
+    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (TaskbarRequiresStandDown(taskbarWnd))
+        return false;
+
     try {
         auto theme = root.ActualTheme();
         if (theme == ElementTheme::Dark)
@@ -5302,24 +4885,29 @@ static bool InjectSyntheticIcons(FrameworkElement root) {
         slot.VerticalAlignment(VerticalAlignment::Top);
         slot.Margin({placement.x, placement.y, 0.0, 0.0});
 
-        winrt::Windows::UI::Color glowColor;
-        if (g_settings.glowColorSet) {
-            glowColor = g_settings.glowColorValue;
-        } else if (g_settings.activeColorSet) {
-            glowColor = g_settings.activeColorValue;
-        } else {
-            try {
-                winrt::Windows::UI::ViewManagement::UISettings ui;
-                glowColor = ui.GetColorValue(
-                    winrt::Windows::UI::ViewManagement::UIColorType::Accent);
-            } catch (...) {
-                glowColor = {255, 0, 120, 215};  // Windows blue fallback
-            }
-        }
-
+        // The glow tree (halos, rings, and their storyboards) is only built
+        // when glow is on. A settings change rebuilds the whole bar, and every
+        // consumer goes through SetGlowActive, which accepts a null element.
         FrameworkElement iconFe = nullptr;
-        FrameworkElement glowFe = MakeGlowVisual(glowColor);
-        slot.Children().Append(glowFe);
+        FrameworkElement glowFe = nullptr;
+        if (g_settings.glowEnabled) {
+            winrt::Windows::UI::Color glowColor;
+            if (g_settings.glowColorSet) {
+                glowColor = g_settings.glowColorValue;
+            } else if (g_settings.activeColorSet) {
+                glowColor = g_settings.activeColorValue;
+            } else {
+                try {
+                    winrt::Windows::UI::ViewManagement::UISettings ui;
+                    glowColor = ui.GetColorValue(
+                        winrt::Windows::UI::ViewManagement::UIColorType::Accent);
+                } catch (...) {
+                    glowColor = {255, 0, 120, 215};  // Windows blue fallback
+                }
+            }
+            glowFe = MakeGlowVisual(glowColor);
+            slot.Children().Append(glowFe);
+        }
 
         if (itemKind == PrivacyItemKind::Copilot) {
             bool isDark = g_taskbarDarkTheme.load();
@@ -5485,15 +5073,16 @@ static bool InjectSyntheticIcons(FrameworkElement root) {
         auto side = g_settings.position == Position::LeftOfStart
                         ? start_placement::Side::Left
                         : start_placement::Side::Right;
-        if (!start_placement::Acquire(
+        if (!g_startLease ||
+            !start_placement::Acquire(
                 root, bar, side, g_settings.itemSpacing,
-                g_startLease)) {
+                *g_startLease)) {
             Wh_Log(L"[Inject] Start anchor unavailable: %s",
                    PositionName(g_settings.position));
             RemoveSyntheticIcons();
             return false;
         }
-        g_syntheticParent = g_startLease.rootGrid;
+        g_syntheticParent = g_startLease->rootGrid;
     } else {
         if (!lease_column::AcquireAt(
                 gridParent, insertCol, L"PrivacyAnchorColumnMarker",
@@ -5502,15 +5091,10 @@ static bool InjectSyntheticIcons(FrameworkElement root) {
             RemoveSyntheticIcons();
             return false;
         }
-        bool placed = false;
-        try {
-            placed = lease_column::PlaceChild(gridParent, g_columnLease, bar);
-        } catch (...) {
-            lease_column::Release(gridParent, g_columnLease);
-            throw;
-        }
-        if (!placed) {
-            lease_column::Release(gridParent, g_columnLease);
+        // A throw here unwinds through UnwindPublishOnThrow, whose
+        // RemoveSyntheticIcons releases the lease; releasing it here as well
+        // would only log a spurious "lease was not live".
+        if (!lease_column::PlaceChild(gridParent, g_columnLease, bar)) {
             Wh_Log(L"[Inject] Could not place PrivacyAnchorBar in the lease");
             RemoveSyntheticIcons();
             return false;
@@ -5519,6 +5103,11 @@ static bool InjectSyntheticIcons(FrameworkElement root) {
     }
 
     g_syntheticGrid   = bar;
+    // Every callback on the bar lives on this window's thread. Remember it
+    // here, where injection succeeds on every path (the IconView Loaded path
+    // never reaches the end of ApplyStyle), so teardown dispatches to the
+    // thread that owns the callbacks rather than re-deriving Shell_TrayWnd.
+    if (taskbarWnd) g_uiHostWnd = taskbarWnd;
 
     UpdateSyntheticState();
     Wh_Log(L"[Inject] PrivacyAnchorBar: %d icon(s), %.0fx%.0f",
@@ -5569,8 +5158,8 @@ static void RemoveSyntheticIcons() {
 
     auto gridParent =
         g_syntheticParent ? g_syntheticParent.try_as<Panel>() : nullptr;
-    if (g_startLease.group) {
-        if (!start_placement::Release(g_startLease))
+    if (g_startLease && g_startLease->group) {
+        if (!start_placement::Release(*g_startLease))
             Wh_Log(L"[Remove] Start placement lease was not live");
     } else if (gridParent) {
         // GUARD EACH STEP SEPARATELY. The realistic trigger here is the tray
@@ -5660,16 +5249,75 @@ static void UntrackPrivacyElement(TextBlock const& textBlock) {
             }
         }
 
-        // Its type was a guess from an empty glyph, so drop the flag it set.
-        SetPrivacyActive(it->type, false);
+        // Only a known type ever set a flag; an unknown one has none to drop,
+        // and clearing a guess would mask a real, still-active indicator.
+        if (it->typeKnown)
+            SetPrivacyActive(it->type, false);
         g_privacyStates.erase(it);
         return;
     }
 }
 
-static void ApplyPrivacyIndicatorBehavior(FrameworkElement iconView) {
+// HIDDEN WITH NOTHING IN ITS PLACE MUST BE UNREACHABLE. A native indicator may
+// only be collapsed while this mod's bar is on screen AND carries a slot for
+// that indicator's type. Every other case — injection failed or stood down,
+// all four Content toggles off, this one device's toggle off, or the glyph not
+// yet known — leaves Windows' own indicator exactly as Windows drew it.
+static bool SyntheticSlotReplaces(PrivacyState::Type type) {
+    if (!g_syntheticGrid) return false;
+    switch (type) {
+        case PrivacyState::Type::Location: return static_cast<bool>(g_locSlot);
+        case PrivacyState::Type::Mic:      return static_cast<bool>(g_micSlot);
+        case PrivacyState::Type::Camera:   return static_cast<bool>(g_camSlot);
+        case PrivacyState::Type::Both:
+            return g_locSlot && g_micSlot;
+    }
+    return false;
+}
+
+static PrivacyState* FindPrivacyStateByIconView(FrameworkElement const& iconView) {
     for (auto& s : g_privacyStates)
-        if (s.iconViewRef.get() == iconView) return;
+        if (s.iconViewRef.get() == iconView) return &s;
+    return nullptr;
+}
+
+// Collapse the native icon when it is replaced; otherwise hand back anything
+// this mod wrote on it. Re-evaluated whenever the glyph or visibility changes.
+//
+// Restoring writes Visibility, which raises this icon's visibility callback
+// synchronously, which calls back in here. RestoreObject is mid-iteration over
+// its snapshot list at that moment, so the nested call must not touch the
+// lease; the guard turns it into a no-op.
+static void ApplyNativeSuppression(FrameworkElement const& iconView,
+                                   PrivacyState const& state) {
+    static bool restoring = false;
+    if (restoring) return;
+    bool suppress = g_settings.suppressNativeIndicators && state.typeKnown &&
+                    SyntheticSlotReplaces(state.type);
+    if (suppress) {
+        if (iconView.Visibility() == Visibility::Collapsed &&
+            !iconView.IsHitTestVisible())
+            return;
+        TrackProperty(iconView, UIElement::VisibilityProperty());
+        TrackProperty(iconView, UIElement::IsHitTestVisibleProperty());
+        iconView.Visibility(Visibility::Collapsed);
+        iconView.IsHitTestVisible(false);
+    } else if (g_lease) {
+        restoring = true;
+        g_lease->RestoreObject(iconView, [] {
+            Wh_Log(L"[Privacy] Failed to restore an unreplaced icon");
+        });
+        restoring = false;
+    }
+}
+
+static void ApplyPrivacyIndicatorBehavior(FrameworkElement iconView) {
+    // Already tracked: the bar may have appeared (or lost a slot) since, so
+    // re-decide suppression rather than returning on the stale decision.
+    if (auto* existing = FindPrivacyStateByIconView(iconView)) {
+        ApplyNativeSuppression(iconView, *existing);
+        return;
+    }
 
     FrameworkElement child = iconView;
     if (!(child = FindChildByName(child, L"ContainerGrid")))    return;
@@ -5694,13 +5342,15 @@ static void ApplyPrivacyIndicatorBehavior(FrameworkElement iconView) {
     }
     if (!IsPrivacyText(text)) return;
 
-    PrivacyState::Type type = DetectPrivacyType(text);
-    SetPrivacyActive(type, !text.empty());
-
     PrivacyState state;
     state.iconViewRef  = winrt::make_weak(iconView);
     state.textBlockRef = tb;
-    state.type         = type;
+    // An empty glyph says nothing about the type; wait for the text callback.
+    state.typeKnown    = !text.empty();
+    if (state.typeKnown) {
+        state.type = DetectPrivacyType(text);
+        SetPrivacyActive(state.type, true);
+    }
 
     state.textToken = tb.RegisterPropertyChangedCallback(
         TextBlock::TextProperty(),
@@ -5724,24 +5374,33 @@ static void ApplyPrivacyIndicatorBehavior(FrameworkElement iconView) {
                     UntrackPrivacyElement(tbRef);
                     return;
                 }
-                if (newText.empty()) {
-                    for (auto& s : g_privacyStates) {
-                        if (s.textBlockRef.get() == tbRef) {
-                            SetPrivacyActive(s.type, false);
-                            break;
-                        }
+                PrivacyState* state = nullptr;
+                for (auto& s : g_privacyStates) {
+                    if (s.textBlockRef.get() == tbRef) {
+                        state = &s;
+                        break;
                     }
+                }
+                if (!state) return;
+                if (newText.empty()) {
+                    // The indicator went idle; its type stays known.
+                    if (state->typeKnown)
+                        SetPrivacyActive(state->type, false);
                 } else {
                     auto detectedType = DetectPrivacyType(newText);
-                    for (auto& s : g_privacyStates) {
-                        if (s.textBlockRef.get() == tbRef) {
-                            if (s.type != detectedType)
-                                SetPrivacyActive(s.type, false);
-                            s.type = detectedType;
-                            break;
-                        }
-                    }
+                    if (state->typeKnown && state->type != detectedType)
+                        SetPrivacyActive(state->type, false);
+                    state->type = detectedType;
+                    state->typeKnown = true;
+                    // SetPrivacyActive can re-enter XAML; re-find the entry
+                    // rather than holding a pointer into the vector across it.
                     SetPrivacyActive(detectedType, true);
+                    for (auto& s : g_privacyStates) {
+                        if (s.textBlockRef.get() != tbRef) continue;
+                        if (auto iv = s.iconViewRef.get())
+                            ApplyNativeSuppression(iv, s);
+                        break;
+                    }
                 }
             } catch (...) {
                 LogCurrentUiException(L"privacy text callback");
@@ -5753,28 +5412,22 @@ static void ApplyPrivacyIndicatorBehavior(FrameworkElement iconView) {
         [](DependencyObject sender, DependencyProperty) {
             try {
                 if (g_unloading) return;
-                if (!g_settings.suppressNativeIndicators) return;
                 auto iconView = sender.try_as<FrameworkElement>();
                 if (!iconView || iconView.Visibility() == Visibility::Collapsed) return;
-                TrackProperty(iconView, UIElement::VisibilityProperty());
-                TrackProperty(iconView, UIElement::IsHitTestVisibleProperty());
-                iconView.Visibility(Visibility::Collapsed);
-                iconView.IsHitTestVisible(false);
+                if (auto* s = FindPrivacyStateByIconView(iconView))
+                    ApplyNativeSuppression(iconView, *s);
             } catch (...) {
                 LogCurrentUiException(L"privacy visibility callback");
             }
         });
 
     g_privacyStates.push_back(std::move(state));
-    if (g_settings.suppressNativeIndicators) {
-        TrackProperty(iconView, UIElement::VisibilityProperty());
-        TrackProperty(iconView, UIElement::IsHitTestVisibleProperty());
-        iconView.Visibility(Visibility::Collapsed);
-        iconView.IsHitTestVisible(false);
-    } else {
-        iconView.IsHitTestVisible(true);
-    }
-    Wh_Log(L"[Privacy] Tracking indicator type=%d", (int)type);
+    ApplyNativeSuppression(iconView, g_privacyStates.back());
+    if (g_privacyStates.back().typeKnown)
+        Wh_Log(L"[Privacy] Tracking indicator type=%d",
+               (int)g_privacyStates.back().type);
+    else
+        Wh_Log(L"[Privacy] Tracking indicator, glyph not yet known");
 }
 
 static void ScanMainStack(FrameworkElement mainStack) {
@@ -5844,7 +5497,7 @@ static void ClearPrivacyStates() {
 
 static bool ApplyStyle() {
     Wh_Log(L"[Apply] enter");
-    HWND hWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd);
+    HWND hWnd = taskbar_window::ResolveTaskbarWnd(g_taskbarWnd);
     if (!hWnd) { Wh_Log(L"[Apply] No taskbar window"); return false; }
     g_taskbarWnd = hWnd;
 
@@ -5857,6 +5510,11 @@ static bool ApplyStyle() {
 
     if (!g_syntheticGrid && !InjectSyntheticIcons(root))
         return false;
+
+    // All four Content toggles off: InjectSyntheticIcons succeeds with no bar.
+    // Nothing replaces the native indicators, so do not track them at all.
+    if (!g_syntheticGrid)
+        return true;
 
     auto sysGrid = FindChildRecursive(root, [](FrameworkElement fe) {
         return fe.Name() == L"SystemTrayFrameGrid";
@@ -5872,34 +5530,23 @@ static bool ApplyStyle() {
     return true;
 }
 
-// Logged once per orientation change rather than on every retry.
-static bool g_verticalStandDownLogged = false;
-
 static bool ApplyOnTaskbarThread() {
     HWND window = FindCurrentProcessTaskbarWnd();
     if (!window) return false;
     g_taskbarWnd = window;
 
-    // A vertical taskbar ("Vertical Taskbar for Windows 11") walks the same
-    // tray path this mod walks and owns RenderTransform on those children to
-    // rotate them. This mod positions its anchor group by writing that same
-    // property on the same elements, so the two cannot both be right. Stand
-    // down completely and leave the taskbar exactly as found; returning true
-    // retires the retry loop, and an Explorer rebuild re-evaluates if the user
-    // turns that mod off.
-    auto metrics = tbh::GetMetrics(window);
-    if (metrics.valid && !tbh::LayoutModelApplies(metrics)) {
-        if (!g_verticalStandDownLogged) {
-            g_verticalStandDownLogged = true;
-            Wh_Log(L"[Apply] Taskbar is %s - standing down. This mod places "
-                   L"its group with RenderTransform, which a vertical taskbar "
-                   L"mod already owns on the same elements; leaving the "
-                   L"native tray untouched.",
-                   tbh::OrientationName(metrics.orientation));
-        }
+    // Standing down is complete in both directions. Clear the rebuild flag
+    // first, or every later IconView Loaded re-enters this path; and take
+    // down anything already injected (the taskbar can turn vertical while the
+    // bar is up), which also hands every native indicator back. Returning
+    // true retires the retry loop; an Explorer rebuild or a settings change
+    // re-evaluates.
+    if (TaskbarRequiresStandDown(window)) {
+        g_taskbarRestarted.store(false);
+        if (g_syntheticGrid || !g_privacyStates.empty())
+            RemoveModUi();
         return true;
     }
-    g_verticalStandDownLogged = false;
 
     if (!GetTaskbarXamlRoot(window)) return false;
     if (g_taskbarRestarted.load()) {
@@ -5919,7 +5566,7 @@ static bool ApplyOnTaskbarThread() {
 }
 
 static void ApplyStyleOnWindowThread() {
-    HWND window = tbh::ResolveTaskbarWnd(g_taskbarWnd);
+    HWND window = taskbar_window::ResolveTaskbarWnd(g_taskbarWnd);
     if (!window) return;
     RunFromWindowThread(
         window, [](void*) { ApplyOnTaskbarThread(); }, nullptr);
@@ -6003,7 +5650,12 @@ void* WINAPI IconView_IconView_Hook(void* pThis) {
                                 if (root) InjectSyntheticIcons(root);
                             }
                         }
-                        ApplyPrivacyIndicatorBehavior(fe);
+                        // Injection failed, stood down, or has nothing to
+                        // show: there is no bar to replace this indicator, so
+                        // leave it entirely to Windows. (Suppression itself is
+                        // gated per type in ApplyNativeSuppression as well.)
+                        if (g_syntheticGrid)
+                            ApplyPrivacyIndicatorBehavior(fe);
                     }
                 } catch (...) {
                     LogCurrentUiException(L"IconView Loaded callback");
@@ -6027,7 +5679,7 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags) {
 }
 
 static bool HookTaskbarDllSymbols() {
-    return tbh::HookTaskbarSymbols(OnTaskbarRebuilt);
+    return taskbar_xaml::HookTaskbarSymbols(OnTaskbarRebuilt);
 }
 
 static bool HookSystemTraySymbols(HMODULE h) {
@@ -6065,8 +5717,9 @@ BOOL Wh_ModInit() {
     Wh_Log(L"[Init] Privacy Anchor v2.0");
     // Failures inside a template-marshalled UI callback report in this mod's
     // voice rather than vanishing.
-    tbh::SetExceptionLogger(LogCurrentUiException);
-    LoadSettings();
+    dispatch::SetExceptionLogger(LogCurrentUiException);
+    // No hook is live yet, so no other thread can be reading g_settings.
+    LoadSettings(g_settings);
 
     if (!HookTaskbarDllSymbols()) {
         Wh_Log(L"[Init] taskbar.dll symbols failed");
@@ -6225,8 +5878,14 @@ void Wh_ModAfterInit() {
 
         static constexpr ULONGLONG kCopilotIntervalMs = 60 * 1000;
         static constexpr ULONGLONG kHealthIntervalMs = 5 * 60 * 1000;
+        // The AppModel repository keys churn on every Store app update, and
+        // each notification would re-scan both hives for a Copilot package.
+        // Registry-driven Copilot re-checks are coalesced to one per window;
+        // Copilot's installed state changes rarely, so 2 s of latency is free.
+        static constexpr ULONGLONG kCopilotStateDebounceMs = 2000;
         ULONGLONG nextCopilotCheck = GetTickCount64() + kCopilotIntervalMs;
         ULONGLONG nextHealthCheck = GetTickCount64() + kHealthIntervalMs;
+        ULONGLONG copilotStateDue = 0;  // 0 = nothing pending
 
         auto delayUntil = [](ULONGLONG deadline) -> DWORD {
             ULONGLONG now = GetTickCount64();
@@ -6245,6 +5904,8 @@ void Wh_ModAfterInit() {
                 timeout = std::min(timeout, delayUntil(nextCopilotCheck));
             timeout = std::min(timeout, cameraMonitor.NextActionDelayMs());
             timeout = std::min(timeout, registryMonitor.NextActionDelayMs());
+            if (copilotStateDue)
+                timeout = std::min(timeout, delayUntil(copilotStateDue));
 
             DWORD wait = WaitForMultipleObjects(
                 static_cast<DWORD>(waitEvents.size()), waitEvents.data(),
@@ -6262,7 +5923,14 @@ void Wh_ModAfterInit() {
             } else if (wait >= WAIT_OBJECT_0 + 2 &&
                        wait < WAIT_OBJECT_0 + waitEvents.size()) {
                 HANDLE signaled = waitEvents[wait - WAIT_OBJECT_0];
-                flags |= registryMonitor.HandleSignaled(signaled);
+                DWORD registryFlags = registryMonitor.HandleSignaled(signaled);
+                if (registryFlags & RefreshCopilotState) {
+                    registryFlags &= ~RefreshCopilotState;
+                    if (!copilotStateDue)
+                        copilotStateDue =
+                            GetTickCount64() + kCopilotStateDebounceMs;
+                }
+                flags |= registryFlags;
             }
 
             if (flags & RefreshMonitorSetup) {
@@ -6281,6 +5949,10 @@ void Wh_ModAfterInit() {
             flags |= registryMonitor.RefreshRegistrations();
 
             ULONGLONG now = GetTickCount64();
+            if (copilotStateDue && now >= copilotStateDue) {
+                flags |= RefreshCopilotState;
+                copilotStateDue = 0;
+            }
             if (g_copilotItemEnabled.load() && now >= nextCopilotCheck) {
                 flags |= RefreshCopilotActivity;
                 nextCopilotCheck = now + kCopilotIntervalMs;
@@ -6319,8 +5991,8 @@ void Wh_ModUninit() {
     // thread — clear them inside RunFromWindowThread, not here.
     // Prefer the window remembered at injection time; ResolveTaskbarWnd only
     // falls back to rediscovering Shell_TrayWnd when that one is already gone.
-    HWND hWnd = tbh::ResolveTaskbarWnd(g_uiHostWnd ? g_uiHostWnd
-                                                   : g_taskbarWnd);
+    HWND hostWnd = g_uiHostWnd.load();
+    HWND hWnd = taskbar_window::ResolveTaskbarWnd(hostWnd ? hostWnd : g_taskbarWnd.load());
     if (hWnd) {
         bool cleaned = RunFromWindowThread(hWnd, [](void*) {
             RemoveModUi();
@@ -6330,13 +6002,14 @@ void Wh_ModUninit() {
             g_glowAnimationStates.reset();
             g_loadedRevokers.reset();
             g_lease.reset();
+            g_startLease.reset();
         }, nullptr);
         if (!cleaned) {
             Wh_Log(L"[Uninit] Taskbar cleanup dispatch failed; retrying callback removal");
             // CHECK THE RETRY'S RESULT. A discarded failure here reads as a
             // successful unload while every callback is still registered in a
             // tree that outlives this image.
-            HWND retryWnd = tbh::ResolveTaskbarWnd(nullptr);
+            HWND retryWnd = taskbar_window::ResolveTaskbarWnd(nullptr);
             bool retried =
                 retryWnd && RunFromWindowThread(retryWnd, [](void*) {
                     RemoveModUi();
@@ -6357,27 +6030,46 @@ void Wh_ModUninit() {
 }
 
 void Wh_ModSettingsChanged() {
-    LoadSettings();
+    // Load into a copy on this (Windhawk's) thread and publish it on the
+    // taskbar thread, which is the only thread that reads g_settings once the
+    // hooks are live. The state worker reads only the atomics LoadSettings
+    // stores directly.
+    ModSettings next;
+    LoadSettings(next);
     Wh_Log(L"[Settings] arrangement=%s enabled=%d/%d/%d/%d "
            L"suppressNative=%d cameraHardware=%d glow=%d/%s "
            L"opacity=%d reach=%d speed=%d",
-           g_settings.arrangement,
-           g_settings.location ? 1 : 0, g_settings.microphone ? 1 : 0,
-           g_settings.camera ? 1 : 0, g_settings.copilot ? 1 : 0,
-           g_settings.suppressNativeIndicators ? 1 : 0,
+           next.arrangement,
+           next.location ? 1 : 0, next.microphone ? 1 : 0,
+           next.camera ? 1 : 0, next.copilot ? 1 : 0,
+           next.suppressNativeIndicators ? 1 : 0,
            g_cameraHardwareDetectionEnabled.load() ? 1 : 0,
-           g_settings.glowEnabled ? 1 : 0, GlowStyleName(g_settings.glowStyle),
-           g_settings.glowOpacity, g_settings.glowSize,
-           g_settings.glowSpeed);
+           next.glowEnabled ? 1 : 0, GlowStyleName(next.glowStyle),
+           next.glowOpacity, next.glowSize,
+           next.glowSpeed);
 
     RequestStateRefresh(RefreshAll | RefreshMonitorSetup);
 
-    HWND hWnd = tbh::ResolveTaskbarWnd(g_taskbarWnd);
-    if (!hWnd) return;
-    RunFromWindowThread(hWnd, [](void* parameter) {
-        HWND window = static_cast<HWND>(parameter);
-        if (!GetTaskbarXamlRoot(window)) return;
-        RemoveModUi();
-        ApplyOnTaskbarThread();
-    }, hWnd);
+    struct SettingsDispatch {
+        ModSettings const* next;
+        HWND window;
+        bool ran;
+    } settingsDispatch{&next, taskbar_window::ResolveTaskbarWnd(g_taskbarWnd.load()),
+                       false};
+
+    // RunFromWindowThread is synchronous, so the stack copy outlives the call.
+    if (settingsDispatch.window) {
+        RunFromWindowThread(settingsDispatch.window, [](void* parameter) {
+            auto* d = static_cast<SettingsDispatch*>(parameter);
+            d->ran = true;
+            g_settings = *d->next;
+            if (!GetTaskbarXamlRoot(d->window)) return;
+            RemoveModUi();
+            ApplyOnTaskbarThread();
+        }, &settingsDispatch);
+    }
+    // No taskbar thread took it: nothing is reading g_settings there, so
+    // publish here rather than lose the change.
+    if (!settingsDispatch.ran)
+        g_settings = next;
 }
