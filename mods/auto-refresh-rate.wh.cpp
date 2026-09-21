@@ -1877,7 +1877,9 @@ void CycleRefreshRatesViaHotkey() {
 VOID CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND, LONG, LONG, DWORD, DWORD) {
     if (event == EVENT_SYSTEM_FOREGROUND && g_hWnd) {
         if (!g_foregroundPending.exchange(true)) {
-            PostMessageW(g_hWnd, WM_APP_FOREGROUND_CHANGED, 0, 0);
+            if (!PostMessageW(g_hWnd, WM_APP_FOREGROUND_CHANGED, 0, 0)) {
+                g_foregroundPending.store(false);
+            }
         }
     }
 }
@@ -2022,6 +2024,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         return 0;
 
     case WM_DESTROY:
+        g_foregroundPending.store(false);
         g_hWnd.store(nullptr);
         PostQuitMessage(0);
         return 0;
@@ -2064,9 +2067,11 @@ DWORD WINAPI PowerMonitorThreadProc(LPVOID lpParam) {
         }
     }
 
+    g_foregroundPending.store(false);
+
     g_hWinEventHook = SetWinEventHook(
         EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc,
-        0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+        0, 0, WINEVENT_OUTOFCONTEXT);
 
     if (g_settings.timeScheduleEnabled) {
         SetTimer(hWnd, TIMER_ID_TIME_CHECK, TIME_CHECK_INTERVAL_MS, nullptr);
