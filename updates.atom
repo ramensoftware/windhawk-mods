@@ -2,12 +2,111 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-21T16:10:28.000Z</updated>
+    <updated>2026-09-21T18:00:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Three Finger Drag 1.0.0]]></title>
+        <id>https://windhawk.net/mods/three-finger-drag#3be36182336cc873fa1e06bee5386bb4aa6de93a</id>
+        <link href="https://windhawk.net/mods/three-finger-drag"/>
+        <updated>2026-09-21T18:00:28.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="threefingerdrag">Three Finger Drag</h1>
+<p>Drag three fingers on a precision touchpad to move the window under the cursor,
+grabbing it from anywhere, not just the title bar. Lift your fingers to drop
+it. Inspired by three finger drag on macOS.</p>
+<p><img src="https://raw.githubusercontent.com/RodrigoThomazi/three-finger-drag-assets/main/windows_snap.gif" alt="Moving a window with three fingers and snapping it at the side of the screen" /></p>
+<p>Windows moves the window itself, so holding <strong>Shift</strong> hands the drag to
+PowerToys FancyZones, the way a title bar drag does:</p>
+<p><img src="https://raw.githubusercontent.com/RodrigoThomazi/three-finger-drag-assets/main/fancyzones_snap.gif" alt="Holding Shift while dragging, so that FancyZones takes the window" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Moves the windows of all programs, including programs running as
+administrator. The mod runs in a process of its own, and loads a small
+helper into programs running as administrator, which Windows doesn't let
+other programs move.</li>
+<li>Native move: windows are moved by Windows itself, the way a title bar drag
+moves them, so Snap Layouts, Aero Snap and PowerToys FancyZones work as
+usual. Programs the mod doesn't run in are moved by the mod instead.</li>
+<li>Snapping of its own, when native move is off or unavailable: drop a window
+with the cursor at the top edge of the screen to maximize it, at a side to
+fill half of the screen, or at a corner to fill a quarter. A preview shows
+where the window will go.</li>
+<li>A maximized or snapped window goes back to its previous size as you drag it,
+keeping the spot you grabbed under the cursor, the way a title bar drag does.</li>
+<li>Acceleration: faster finger movements take the cursor farther.</li>
+<li>Between monitors, the cursor stops at the shared edge for a moment, so that
+a window can be snapped there too.</li>
+<li>Press <strong>Esc</strong> while dragging to put the window back where it was.</li>
+<li>Optional: resize a window by grabbing it near one of its edges or corners.</li>
+<li>Optional: macOS drag mode, where the fingers hold the left mouse button
+instead, to select text, drag files or move a window by its title bar.</li>
+<li>Lifting and putting your fingers back within a configurable delay keeps
+dragging the same window.</li>
+</ul>
+<h2 id="windowstouchpadgestures">Windows touchpad gestures</h2>
+<p>Windows has its own three and four finger swipes (switch apps, show the desktop,
+switch desktops). While they're on, Windows responds to the same swipe as the
+mod. Programs can't change these settings: only the Settings app applies them
+right away.</p>
+<p>With <strong>Number of fingers</strong> set to <strong>Automatic</strong> (the default), the mod reads
+your touchpad settings and picks the gesture that's free:</p>
+<ul>
+<li>three fingers if the Windows three-finger swipes are off,</li>
+<li>otherwise four fingers if the Windows four-finger swipes are off.</li>
+</ul>
+<p>If both are on, the mod uses three fingers and, the first time you drag, shows
+a notice with a shortcut to the touchpad settings. The macOS setup works well:
+set <strong>Three-finger gestures → Swipes</strong> to <strong>Nothing</strong>, and give the four-finger
+swipes the actions you used with three.</p>
+<p>Swipes have to be off in all four directions: Windows picks a swipe by the
+direction the fingers start moving in, which a drag can start in too. Taps are
+free, so the three-finger tap can keep any action.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Requires a precision touchpad.</li>
+<li>The touchpad is read in a dedicated process of the mod's own. Programs
+running as administrator get a helper, and with native move on the mod also
+loads into the other programs, where it only hooks message retrieval and
+stays idle until a drag.</li>
+<li>What works while a program running as administrator is in the foreground
+depends on Windhawk's own level. Running Windhawk as administrator, as it
+asks to be, leaves nothing out. Otherwise such a program's helper moves the
+cursor and its windows, but the window isn't brought to the front, Esc
+doesn't cancel a direct move, and macOS drag mode can't click. A helper only
+ever moves its program's windows, moves the cursor and presses the button on
+the mod's own overlay, so that it can't be used to control the program.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>Native move follows the approach <a href="https://windhawk.net/mods/alt-drag">AltDrag</a>
+takes: hooks on message retrieval turn a press into the move loop Windows
+itself runs. Both mods are under the GPL v3.</p>]]></content>
+        <author>
+            <name>rodrigothomazi</name>
+            <uri>https://github.com/RodrigoThomazi</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Visual Tweaks Dark 1.0.1]]></title>
+        <id>https://windhawk.net/mods/explorer-visual-tweaks-dark#5185fb6ac35cff1f84cb447f83e649f9ce17cf0f</id>
+        <link href="https://windhawk.net/mods/explorer-visual-tweaks-dark"/>
+        <updated>2026-09-21T18:00:20.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Adds independent switches for file list selection, Navigation Pane customization, and progress indicators, alongside the existing Preview Pane switch.</li>
+<li>Organizes settings into named groups, with clearly labeled shared selection appearance settings.</li>
+<li>Disabled Selection and Progress blocks pass drawing calls through unchanged, without custom rendering or selection-state suppression.</li>
+<li>Applies Selection switches independently of graphics resource creation, so resource creation failures cannot prevent disabling a block.</li>
+<li>Adds guidance on disabling overlapping features when combining mods.</li>
+</ul>
+<p>Preview Pane changes still require restarting Explorer and affected host applications.</p>
+<p>Settings now use grouped keys. Previously customized values need to be reapplied after updating.</p>]]></content>
+        <author>
+            <name>VitalS</name>
+            <uri>https://github.com/VitalSkib</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[File Explorer Details Auto-Fit Columns 1.1.0]]></title>
         <id>https://windhawk.net/mods/file-explorer-details-autofit-columns#6858248034c1474292139aac070af354eda2e69a</id>
@@ -1007,46 +1106,6 @@ preventing shutdown" screen afterwards in rare cases.</p>
         <author>
             <name>ReDrag</name>
             <uri>https://github.com/redrag2105</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar System Info 1.5.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-system-info#e81aaa5fd7a81fb12eb0ebde2ce65a435be0d936</id>
-        <link href="https://windhawk.net/mods/taskbar-system-info"/>
-        <updated>2026-09-20T17:17:42.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add a <strong>Taskbar monitor</strong> setting to place the widget on the primary or a secondary display. If the selected display is unavailable, use the primary taskbar and retry the selected display automatically.</li>
-<li>Add <strong>adaptive colors</strong> for light, dark and Windows high-contrast themes, while retaining manual color settings.</li>
-<li>Scale the widget down on short taskbars so its two rows fit without clipping.</li>
-<li>Use the Windows Processor Utility counter for CPU usage when available, aligning the reading with Task Manager's frequency-aware measurement. Keep the existing CPU counter as a fallback.</li>
-<li>Add <strong>Automatic / Dedicated / Shared</strong> GPU-memory selection and improve automatic handling of integrated GPUs with a small dedicated-memory reservation.</li>
-<li>Improve recovery when GPU/VRAM counters stop returning data, while keeping CPU and RAM readings visible. Show unavailable GPU readings as <code>--%</code> instead of treating them as idle.</li>
-<li>Keep CPU/GPU graph history when samples are missing, show gaps for unavailable data, and use measurement timestamps to preserve the selected history duration.</li>
-<li>Improve HWiNFO temperature-sensor matching when sensor records change, and fix temperature parsing with comma decimal separators.</li>
-<li>Expand the built-in guide with a quick start, explanations of each setting, HWiNFO setup instructions and troubleshooting for missing temperatures.</li>
-</ul>]]></content>
-        <author>
-            <name>Yevhenii Starychenko</name>
-            <uri>https://github.com/starychenko</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tourne'Table [Audio Visualizer] 1.3.0]]></title>
-        <id>https://windhawk.net/mods/tourne-table-desktop-audio-visualizer#e4bfa7249dca8ae600280c33614715815211823b</id>
-        <link href="https://windhawk.net/mods/tourne-table-desktop-audio-visualizer"/>
-        <updated>2026-09-20T17:16:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><p><strong>New: Input Gain (dB)</strong>, a fixed level trim on the captured audio, range -24 to +24. Loopback capture sees each app's own volume slider but not the Windows master slider, so a music app held at a low volume reads as quiet no matter how loud the system is. This is the control for that, and it is also the only setting that scales the Oscilloscope waveform directly.</p></li>
-<li><p><strong>New: Auto Gain</strong>, off by default, with <strong>Auto Gain Max Boost (dB)</strong>, range 0 to 24. Adapts the level so quiet sources still fill the bars without retuning Sensitivity per app or per track. Boost only, held steady through silence, and idle shutdown behaves exactly as it did before.</p></li>
-<li><p><strong>Fixed:</strong> Pause When Covered never triggered for a visualizer positioned near a screen edge. Coverage was measured against the whole visualizer including any part hanging off-screen, which can never be covered by a window, so the reading could never reach the default 100% threshold.</p></li>
-<li><p><strong>Fixed:</strong> the Now Playing Font check could warn about a font that is genuinely installed, after a cold boot. Mods start before Windows has finished registering fonts, so the check now retries for ten seconds before reporting anything.</p></li>
-<li><p><strong>Fixed:</strong> the Oscilloscope trace could be drawn past the edge of its panel on a hot signal. It now clips flat at full scale.</p></li>
-<li><p><strong>Fixed:</strong> clearing a saved position wrote to storage synchronously from inside a low-level input hook, where everything blocks all system input until it returns. It now uses the same deferred save the keyboard nudges already did.</p></li>
-<li><p><strong>Changed:</strong> removed the one-shot import of the position file that pre-catalog builds wrote. The mod now performs no file I/O at all.</p></li>
-</ul>]]></content>
-        <author>
-            <name>USER-TOURNE</name>
-            <uri>https://github.com/USER-TOURNE</uri>
         </author>
     </entry>
 </feed>

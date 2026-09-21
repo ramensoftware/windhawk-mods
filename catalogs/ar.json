@@ -6471,7 +6471,7 @@
         ],
         "ratingUsers": 0,
         "reviews": 0,
-        "updated": 1789930854000,
+        "updated": 1790013620000,
         "users": 4
       },
       "metadata": {
@@ -6487,7 +6487,7 @@
           "prevhost.exe"
         ],
         "name": "Explorer Visual Tweaks Dark",
-        "version": "1.0.0"
+        "version": "1.0.1"
       }
     },
     "explorerframe-fixes-for-win11-22h2plus": {
@@ -16186,6 +16186,35 @@
           "regedit.exe"
         ],
         "name": "Themed Regedit ListView",
+        "version": "1.0.0"
+      }
+    },
+    "three-finger-drag": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790013628000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790013628000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "rodrigothomazi",
+        "compilerOptions": "-lhid -ldwmapi -lwtsapi32 -lgdi32",
+        "description": "Move and snap any window by dragging three fingers on a precision touchpad, like on macOS",
+        "github": "https://github.com/RodrigoThomazi",
+        "include": [
+          "*"
+        ],
+        "name": "Three Finger Drag",
         "version": "1.0.0"
       }
     },

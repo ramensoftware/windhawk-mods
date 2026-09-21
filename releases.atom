@@ -2,12 +2,92 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-21T15:43:18.000Z</updated>
+    <updated>2026-09-21T18:00:28.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Three Finger Drag 1.0.0]]></title>
+        <id>https://windhawk.net/mods/three-finger-drag#3be36182336cc873fa1e06bee5386bb4aa6de93a</id>
+        <link href="https://windhawk.net/mods/three-finger-drag"/>
+        <updated>2026-09-21T18:00:28.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="threefingerdrag">Three Finger Drag</h1>
+<p>Drag three fingers on a precision touchpad to move the window under the cursor,
+grabbing it from anywhere, not just the title bar. Lift your fingers to drop
+it. Inspired by three finger drag on macOS.</p>
+<p><img src="https://raw.githubusercontent.com/RodrigoThomazi/three-finger-drag-assets/main/windows_snap.gif" alt="Moving a window with three fingers and snapping it at the side of the screen" /></p>
+<p>Windows moves the window itself, so holding <strong>Shift</strong> hands the drag to
+PowerToys FancyZones, the way a title bar drag does:</p>
+<p><img src="https://raw.githubusercontent.com/RodrigoThomazi/three-finger-drag-assets/main/fancyzones_snap.gif" alt="Holding Shift while dragging, so that FancyZones takes the window" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Moves the windows of all programs, including programs running as
+administrator. The mod runs in a process of its own, and loads a small
+helper into programs running as administrator, which Windows doesn't let
+other programs move.</li>
+<li>Native move: windows are moved by Windows itself, the way a title bar drag
+moves them, so Snap Layouts, Aero Snap and PowerToys FancyZones work as
+usual. Programs the mod doesn't run in are moved by the mod instead.</li>
+<li>Snapping of its own, when native move is off or unavailable: drop a window
+with the cursor at the top edge of the screen to maximize it, at a side to
+fill half of the screen, or at a corner to fill a quarter. A preview shows
+where the window will go.</li>
+<li>A maximized or snapped window goes back to its previous size as you drag it,
+keeping the spot you grabbed under the cursor, the way a title bar drag does.</li>
+<li>Acceleration: faster finger movements take the cursor farther.</li>
+<li>Between monitors, the cursor stops at the shared edge for a moment, so that
+a window can be snapped there too.</li>
+<li>Press <strong>Esc</strong> while dragging to put the window back where it was.</li>
+<li>Optional: resize a window by grabbing it near one of its edges or corners.</li>
+<li>Optional: macOS drag mode, where the fingers hold the left mouse button
+instead, to select text, drag files or move a window by its title bar.</li>
+<li>Lifting and putting your fingers back within a configurable delay keeps
+dragging the same window.</li>
+</ul>
+<h2 id="windowstouchpadgestures">Windows touchpad gestures</h2>
+<p>Windows has its own three and four finger swipes (switch apps, show the desktop,
+switch desktops). While they're on, Windows responds to the same swipe as the
+mod. Programs can't change these settings: only the Settings app applies them
+right away.</p>
+<p>With <strong>Number of fingers</strong> set to <strong>Automatic</strong> (the default), the mod reads
+your touchpad settings and picks the gesture that's free:</p>
+<ul>
+<li>three fingers if the Windows three-finger swipes are off,</li>
+<li>otherwise four fingers if the Windows four-finger swipes are off.</li>
+</ul>
+<p>If both are on, the mod uses three fingers and, the first time you drag, shows
+a notice with a shortcut to the touchpad settings. The macOS setup works well:
+set <strong>Three-finger gestures → Swipes</strong> to <strong>Nothing</strong>, and give the four-finger
+swipes the actions you used with three.</p>
+<p>Swipes have to be off in all four directions: Windows picks a swipe by the
+direction the fingers start moving in, which a drag can start in too. Taps are
+free, so the three-finger tap can keep any action.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Requires a precision touchpad.</li>
+<li>The touchpad is read in a dedicated process of the mod's own. Programs
+running as administrator get a helper, and with native move on the mod also
+loads into the other programs, where it only hooks message retrieval and
+stays idle until a drag.</li>
+<li>What works while a program running as administrator is in the foreground
+depends on Windhawk's own level. Running Windhawk as administrator, as it
+asks to be, leaves nothing out. Otherwise such a program's helper moves the
+cursor and its windows, but the window isn't brought to the front, Esc
+doesn't cancel a direct move, and macOS drag mode can't click. A helper only
+ever moves its program's windows, moves the cursor and presses the button on
+the mod's own overlay, so that it can't be used to control the program.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<p>Native move follows the approach <a href="https://windhawk.net/mods/alt-drag">AltDrag</a>
+takes: hooks on message retrieval turn a press into the move loop Windows
+itself runs. Both mods are under the GPL v3.</p>]]></content>
+        <author>
+            <name>rodrigothomazi</name>
+            <uri>https://github.com/RodrigoThomazi</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Separate System Tray Icons 1.0.0]]></title>
         <id>https://windhawk.net/mods/separate-system-tray-icons#953bdd63123ce7146fb52a71e53e8261369f7a92</id>
@@ -1661,27 +1741,6 @@ mod by m417z (GPL-3.0).</p>]]></content>
         <author>
             <name>Martin Kaiser</name>
             <uri>https://github.com/Martin-Kaiser-0</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic Tray Keyboard Layout Indicator 6.1.0]]></title>
-        <id>https://windhawk.net/mods/classic-tray-keyboard-layout-indicator#5c768b0801763b3a8374c9bed5a0f2de49690b82</id>
-        <link href="https://windhawk.net/mods/classic-tray-keyboard-layout-indicator"/>
-        <updated>2026-09-15T18:23:09.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="keyboardlayouttrayindicator">Keyboard Layout Tray Indicator</h1>
-<p><img src="https://i.imgur.com/L4i2WhE.png" alt="Screenshot" /></p>
-<p>Displays current keyboard layout in the system tray as a two-letter code, 
-in the style of Windows 2000. This is an alternative to the default indicator.
-On right click a menu with layout selection is displayed.</p>
-<ul>
-<li><strong>Left click</strong> — cycle through installed layouts</li>
-<li><strong>Right click</strong> — pick layout from list</li>
-</ul>
-<p>The mod may go out on sync in elevated windows if you're using more than two layouts.</p>
-<p><strong>Note:</strong> This mod only works with the classic taskbar.</p>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
