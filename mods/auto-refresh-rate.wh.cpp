@@ -367,6 +367,7 @@ constexpr UINT_PTR TIMER_ID_TIME_CHECK          = 4;
 constexpr UINT_PTR TIMER_ID_FOREGROUND_DEBOUNCE = 6;
 constexpr UINT_PTR TIMER_ID_QUIET_SWITCH        = 7;
 constexpr UINT_PTR TIMER_ID_COOLDOWN_SWITCH     = 8;
+constexpr UINT_PTR TIMER_ID_INHIBIT_RECHECK     = 9;
 
 constexpr UINT_PTR TIMER_ID_OSD_HOLD            = 101;
 constexpr UINT_PTR TIMER_ID_OSD_FADE            = 102;
@@ -379,6 +380,7 @@ constexpr DWORD DISPLAY_CHANGE_DELAY_MS         = 500;
 constexpr DWORD FOREGROUND_DEBOUNCE_MS          = 100;
 constexpr DWORD QUIET_SWITCH_TIMEOUT_MS         = 2000;
 constexpr DWORD TIME_CHECK_INTERVAL_MS          = 30000;
+constexpr DWORD INHIBIT_RECHECK_INTERVAL_MS     = 2500;
 
 // ============================================================================
 // Mod Configuration & State
@@ -784,6 +786,11 @@ struct TimeOfDay {
 
 static ULONGLONG s_lastInhibitCheckTick = 0;
 static std::optional<std::wstring> s_cachedInhibitMatch;
+
+void InvalidateInhibitAppCache() noexcept {
+    s_lastInhibitCheckTick = 0;
+    s_cachedInhibitMatch = std::nullopt;
+}
 
 [[nodiscard]] std::optional<std::wstring> CheckAppInRunningList(const std::vector<std::wstring>& list) {
     if (list.empty()) return std::nullopt;
@@ -1200,7 +1207,9 @@ void LoadSettings() {
 // Target refresh rate evaluation policy
 // ============================================================================
 
-[[nodiscard]] DWORD EvaluateTargetRefreshRate(const PowerStateSnapshot& state, std::wstring& outReason, std::wstring& outBrief) {
+[[nodiscard]] DWORD EvaluateTargetRefreshRate(const PowerStateSnapshot& state, std::wstring& outReason, std::wstring& outBrief, bool& outIsInhibited) {
+    outIsInhibited = false;
+
     // 1. Manual hotkey lock
     if (g_manualOverrideActive && g_manualOverrideHz > 0) {
         outBrief = L"Manual lock";
@@ -1212,18 +1221,18 @@ void LoadSettings() {
     if (g_settings.inhibitAppsEnabled) {
         std::wstring foreProc = GetForegroundProcessName();
         if (!foreProc.empty() && IsAppInList(foreProc, g_parsedInhibitApps)) {
-            DWORD currentHz = GetCurrentPrimaryRefreshRate();
             outBrief = L"Protected: " + FormatAppNameForDisplay(foreProc);
-            outReason = L"Protected app in focus ('" + foreProc + L"'), maintaining " + std::to_wstring(currentHz) + L" Hz";
-            return currentHz;
+            outReason = L"Protected app in focus ('" + foreProc + L"'), display switching inhibited";
+            outIsInhibited = true;
+            return GetCurrentPrimaryRefreshRate();
         }
 
         auto matchedInhibit = CheckAppInRunningList(g_parsedInhibitApps);
         if (matchedInhibit) {
-            DWORD currentHz = GetCurrentPrimaryRefreshRate();
             outBrief = L"Protected: " + FormatAppNameForDisplay(*matchedInhibit);
-            outReason = L"Protected app running ('" + *matchedInhibit + L"'), maintaining " + std::to_wstring(currentHz) + L" Hz";
-            return currentHz;
+            outReason = L"Protected app running ('" + *matchedInhibit + L"'), display switching inhibited";
+            outIsInhibited = true;
+            return GetCurrentPrimaryRefreshRate();
         }
     }
 
@@ -1735,8 +1744,24 @@ void SynchronizeAndApplyPolicy(bool forceOsd, const std::wstring& forcedBrief) {
     g_state.powerScheme = QueryEffectivePowerPersonality(g_state.isAC);
 
     std::wstring reason, brief;
-    DWORD targetHz = EvaluateTargetRefreshRate(g_state, reason, brief);
+    bool isInhibited = false;
+    DWORD targetHz = EvaluateTargetRefreshRate(g_state, reason, brief, isInhibited);
     if (!forcedBrief.empty()) brief = forcedBrief;
+
+    if (isInhibited) {
+        if (g_hWnd) {
+            SetTimer(g_hWnd, TIMER_ID_INHIBIT_RECHECK, INHIBIT_RECHECK_INTERVAL_MS, nullptr);
+            KillTimer(g_hWnd, TIMER_ID_QUIET_SWITCH);
+            KillTimer(g_hWnd, TIMER_ID_COOLDOWN_SWITCH);
+        }
+        PrintStatusDashboard(g_state, targetHz, reason);
+        Wh_Log(L"Auto Refresh Rate: Switching inhibited by protected application. Re-checking in %u ms.", INHIBIT_RECHECK_INTERVAL_MS);
+        return;
+    } else {
+        if (g_hWnd) {
+            KillTimer(g_hWnd, TIMER_ID_INHIBIT_RECHECK);
+        }
+    }
 
     DWORD currentHz = GetCurrentPrimaryRefreshRate();
     bool wouldChangeRate = (targetHz != currentHz &&
@@ -1960,6 +1985,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
             KillTimer(hWnd, wParam);
             SynchronizeAndApplyPolicy();
             return 0;
+        } else if (wParam == TIMER_ID_INHIBIT_RECHECK) {
+            KillTimer(hWnd, TIMER_ID_INHIBIT_RECHECK);
+            InvalidateInhibitAppCache();
+            SynchronizeAndApplyPolicy();
+            return 0;
         }
         break;
 
@@ -1975,6 +2005,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         KillTimer(hWnd, TIMER_ID_TIME_CHECK);
         KillTimer(hWnd, TIMER_ID_QUIET_SWITCH);
         KillTimer(hWnd, TIMER_ID_COOLDOWN_SWITCH);
+        KillTimer(hWnd, TIMER_ID_INHIBIT_RECHECK);
 
         UnregisterHotKey(hWnd, HOTKEY_ID_CYCLE);
         if (g_hWinEventHook) {
