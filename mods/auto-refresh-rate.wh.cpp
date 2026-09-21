@@ -1661,7 +1661,7 @@ void ShowOsdBadge(DWORD hz, const std::wstring& reasonBrief) {
         return false;
     }
 
-    DWORD flags = CDS_UPDATEREGISTRY | (noReset ? CDS_NORESET : 0);
+    DWORD flags = (noReset ? CDS_NORESET : 0);
     if (ChangeDisplaySettingsExW(pDevParam, &dmTarget, nullptr, flags, nullptr) == DISP_CHANGE_SUCCESSFUL) {
         if (pOutChanged) *pOutChanged = true;
         Wh_Log(L"Success: Display (%s) set to %u Hz.", pDevLog, resolved);
@@ -2145,5 +2145,9 @@ void Wh_ModUninit() {
         CloseHandle(g_hMutex);
         g_hMutex = nullptr;
     }
+
+    // Restore displays to default settings recorded in registry upon mod unload
+    ChangeDisplaySettingsExW(nullptr, nullptr, nullptr, 0, nullptr);
+
     Wh_Log(L"Auto Refresh Rate mod uninitialized.");
 }
