@@ -1674,8 +1674,9 @@ void ApplyRefreshRateToTargets(DWORD targetHz, const std::wstring& reasonBrief, 
     auto devices = GetTargetDisplayDevices(g_settings.targetDisplayAll);
     if (devices.empty()) return;
 
-    bool rateChanged = false;
     bool isMulti = (g_settings.targetDisplayAll && devices.size() > 1);
+    bool anyStaged = false;
+    bool allStagesSucceeded = true;
 
     for (const auto& dev : devices) {
         const WCHAR* pDev = dev.empty() ? nullptr : dev.c_str();
@@ -1685,22 +1686,32 @@ void ApplyRefreshRateToTargets(DWORD targetHz, const std::wstring& reasonBrief, 
         }
 
         bool changed = false;
-        if (SetDisplayRefreshRate(pDev, devTargetHz, isMulti, &changed) && changed) {
-            rateChanged = true;
+        if (!SetDisplayRefreshRate(pDev, devTargetHz, isMulti, &changed)) {
+            allStagesSucceeded = false;
+        } else if (changed) {
+            anyStaged = true;
         }
     }
 
-    if (isMulti && rateChanged) {
-        if (ChangeDisplaySettingsExW(nullptr, nullptr, nullptr, 0, nullptr) != DISP_CHANGE_SUCCESSFUL) {
-            Wh_Log(L"Failed to apply global multi-display settings.");
+    bool commitSuccessful = false;
+    if (isMulti) {
+        if (anyStaged) {
+            if (allStagesSucceeded && ChangeDisplaySettingsExW(nullptr, nullptr, nullptr, 0, nullptr) == DISP_CHANGE_SUCCESSFUL) {
+                commitSuccessful = true;
+            } else {
+                Wh_Log(L"Multi-display refresh rate commit failed or partial stage failure. Reverting staged changes...");
+                ChangeDisplaySettingsExW(nullptr, nullptr, nullptr, 0, nullptr);
+            }
         }
+    } else {
+        commitSuccessful = anyStaged;
     }
 
-    if (rateChanged) {
+    if (commitSuccessful) {
         g_lastSuccessfulSwitchTick = GetTickCount64();
     }
 
-    if (rateChanged || forceOsd) {
+    if (commitSuccessful || forceOsd) {
         DWORD osdHz = (targetHz == 0) ? GetCurrentPrimaryRefreshRate() : targetHz;
         ShowOsdBadge(osdHz, reasonBrief);
     }
