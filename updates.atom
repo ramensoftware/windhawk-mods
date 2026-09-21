@@ -683,8 +683,14 @@ immediately.</li>
         <id>https://windhawk.net/mods/snap-sentry#e79dd48287abe987ba9e3869db2ca45983891469</id>
         <link href="https://windhawk.net/mods/snap-sentry"/>
         <updated>2026-09-21T10:02:57.000Z</updated>
-        <content type="html"><![CDATA[<p>adds an option to clean up identical screenshots after it copies the image. off by default, and it only looks at recent captures from this run, not the older files already sitting in the folder. a duplicate goes to the recycle bin even when normal deletion is set to permanent, so it's always recoverable.</p>
-<p>it rechecks the earlier copy before recycling anything. if that one's gone or changed, or the two don't still match byte for byte, the new shot stays. changing a setting cancels a pending cleanup. each capture gets a log line for what happened to it.</p>]]></content>
+        <content type="html"><![CDATA[<ul>
+<li>Added an optional setting to remove duplicate screenshots. When the same image is captured again, the extra copy is moved to the Recycle Bin so the folder does not fill up with identical shots. It is off by default.</li>
+<li>Only exact, byte-for-byte duplicates taken during the current session are removed, and only while SnapSentry is set to copy the image itself. Files that were already in the folder are left alone.</li>
+<li>A removed duplicate always goes to the Recycle Bin so it can be restored, even when normal deletion is set to permanent. The earlier copy is kept, and SnapSentry confirms it is still there before removing anything.</li>
+<li>The log now records the outcome for each screenshot: copied, kept, recycled, skipped, or deleted.</li>
+<li>Screenshots are still copied to the clipboard when Windows cannot show a notification.</li>
+<li>Fixed a watched folder being ignored when its path had a stray space at the start or end.</li>
+</ul>]]></content>
         <author>
             <name>mario0318</name>
             <uri>https://github.com/mario0318</uri>
