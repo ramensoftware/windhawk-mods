@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-clock-spacer
 // @name            Taskbar Clock Spacer
-// @description     Companion for Taskbar Clock Customization: adds a %s% elastic spacer token that distributes leftover clock width between items. Windows 11 only.
+// @description     Companion for Taskbar Clock Customization: a %s% token for explicit, weightable gaps between clock items, where its built-in Justified alignment stretches every space. Windows 11 only.
 // @version         1.1
 // @author          sb4ssman
 // @github          https://github.com/sb4ssman
@@ -39,6 +39,25 @@ installed. Set a fixed width using either:
 Either one works. 120 px is a reasonable starting point.
 
 Windows 11 only. This mod does not work on Windows 10.
+
+## Try the built-in option first
+
+Taskbar Clock Customization 1.8 and later can spread a line across a fixed
+width on its own: set its **Text alignment** to **Justified**, use ordinary
+spaces where you want the gaps, and use a non-breaking space inside items you
+want kept together. If that looks right for your clock, you don't need this mod.
+
+What `%s%` does that **Justified** does not:
+
+- **Gaps only where you put them.** Justified stretches every space in the
+  line, and can widen the spacing between characters — its author noted large
+  gaps opening inside `MB/s`. With `%s%`, ordinary spaces and the characters
+  inside each item are left exactly as they are.
+- **Weighted gaps.** `%s%%s%` takes twice the share of a single `%s%`.
+- **A minimum gap.** **Minimum spacer width** keeps every gap visible even when
+  the text nearly fills the clock.
+- **Gaps inside the weather.** `{spacer}` works inside the Weather format, where
+  the weather text arrives as one pre-formatted string.
 
 ## What it does
 
@@ -134,8 +153,10 @@ stays stable.
 
 The spacer was first offered as a patch to Taskbar Clock Customization itself
 ([m417z/my-windhawk-mods#68](https://github.com/m417z/my-windhawk-mods/pull/68)).
-The maintainer preferred an approach that does not add generated layout elements,
-so this companion mod carries the feature separately and leaves that mod
+Its maintainer preferred an approach without generated layout elements and
+added the **Justified** text alignment described above, then judged creating
+extra text elements to be out of scope for that mod. This companion carries the
+explicit-gap approach separately and leaves Taskbar Clock Customization
 untouched.
 */
 // ==/WindhawkModReadme==
@@ -183,80 +204,25 @@ using namespace winrt::Windows::UI::Xaml::Media;
 
 // ============================================================
 // Visual tree walk
-//
-// A focused local implementation, deliberately NOT an embed of
-// _templates/visual-tree-walk.h: an embed has to be a verbatim copy of the
-// whole namespace body, and this mod runs exactly one query over the clock's
-// own subtree. Carrying the collectors and the inner-panel search it never
-// calls only made the file longer to read.
 // ============================================================
 
-namespace clock_spacer_tree_walk {
-
-using winrt::Windows::UI::Xaml::FrameworkElement;
-using winrt::Windows::UI::Xaml::Media::VisualTreeHelper;
-
-// Depth-first visit of every FrameworkElement descendant (root excluded).
-// The visitor returns true to stop the walk early.
-inline bool ForEachDescendant(
-    FrameworkElement const& root, int maxDepth,
-    std::function<bool(FrameworkElement const&, int)> const& visit,
-    int depth = 0) {
-    if (!root || depth >= maxDepth)
-        return false;
-    int count = VisualTreeHelper::GetChildrenCount(root);
+// First descendant (root excluded) matching the predicate, depth-first in
+// document order, bounded by maxDepth. This mod runs exactly one kind of
+// query, over the clock's own subtree.
+static FrameworkElement FindChildRecursive(FrameworkElement const& element,
+    std::function<bool(FrameworkElement)> const& cb, int maxDepth = 20) {
+    if (!element || maxDepth <= 0) return nullptr;
+    int count = VisualTreeHelper::GetChildrenCount(element);
     for (int i = 0; i < count; ++i) {
         auto child =
-            VisualTreeHelper::GetChild(root, i).try_as<FrameworkElement>();
-        if (!child)
-            continue;
-        if (visit(child, depth + 1))
-            return true;
-        if (ForEachDescendant(child, maxDepth, visit, depth + 1))
-            return true;
+            VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
+        if (!child) continue;
+        if (cb(child)) return child;
+        if (auto found = FindChildRecursive(child, cb, maxDepth - 1))
+            return found;
     }
-    return false;
+    return nullptr;
 }
-
-// First descendant matching the predicate, depth-first document order.
-inline FrameworkElement FindDescendant(
-    FrameworkElement const& root, int maxDepth,
-    std::function<bool(FrameworkElement const&)> const& predicate) {
-    FrameworkElement found = nullptr;
-    ForEachDescendant(root, maxDepth,
-                      [&](FrameworkElement const& element, int) {
-                          if (predicate(element)) {
-                              found = element;
-                              return true;
-                          }
-                          return false;
-                      });
-    return found;
-}
-
-}  // namespace clock_spacer_tree_walk
-
-namespace vtw = clock_spacer_tree_walk;
-
-// ============================================================
-// Settings values
-// ============================================================
-
-namespace clock_spacer_settings {
-
-inline int Clamp(int value, int low, int high) {
-    return std::max(low, std::min(high, value));
-}
-
-// Read and clamp in one step, so an out-of-range value can never reach the
-// layout code even if a clamp at a call site is later edited away.
-inline int LoadInt(PCWSTR key, int low, int high) {
-    return Clamp(Wh_GetIntSetting(key), low, high);
-}
-
-}  // namespace clock_spacer_settings
-
-namespace sio = clock_spacer_settings;
 
 // ============================================================
 // Taskbar window and UI-thread dispatch
@@ -268,9 +234,7 @@ namespace sio = clock_spacer_settings;
 // deliver the element itself.
 // ============================================================
 
-namespace clock_spacer_taskbar {
-
-inline HWND FindCurrentProcessTaskbarWnd() {
+static HWND FindCurrentProcessTaskbarWnd() {
     HWND result = nullptr;
     EnumWindows(
         [](HWND window, LPARAM parameter) -> BOOL {
@@ -289,30 +253,18 @@ inline HWND FindCurrentProcessTaskbarWnd() {
     return result;
 }
 
-// ---- UI-thread marshalling --------------------------------------------------
-//
-// XAML may only be touched from the thread that owns it. This posts work onto
+// XAML may only be touched from the thread that owns it. This runs work on
 // the taskbar's thread with a CALLWNDPROC hook and a private registered
 // message, and reports whether the callback actually ran — a caller that
 // assumes it did will corrupt its own state when the dispatch failed.
-
 using ThreadProc = void (*)(void*);
-using ExceptionLogFn = void (*)(PCWSTR context);
 
-inline ExceptionLogFn g_logException = nullptr;
-
-// Pointed at this mod's logger in Wh_ModInit, so a failure inside a UI
-// callback is reported instead of silently swallowed.
-inline void SetExceptionLogger(ExceptionLogFn logger) {
-    g_logException = logger;
-}
-
-inline bool Invoke(ThreadProc proc, void* parameter) {
+static bool InvokeUiCallback(ThreadProc proc, void* parameter) {
     try {
         proc(parameter);
         return true;
     } catch (...) {
-        if (g_logException) g_logException(L"UI callback");
+        Wh_Log(L"UI callback failed with an exception");
     }
     return false;
 }
@@ -321,34 +273,29 @@ struct Dispatch {
     ThreadProc proc;
     void* parameter;
     bool succeeded = false;
+    // Each concurrent caller installs its own hook with the same proc, and
+    // every hook instance sees every message equal to g_dispatchMessage, so
+    // with two dispatches in flight each would otherwise run twice. The hooks
+    // run one after another on the UI thread, so a plain flag suffices.
+    bool ran = false;
 };
 
-// The private message this mod dispatches on. Set before the hook is
-// installed, and read by the hook proc to recognise its own message.
-//
 // A CALLWNDPROC HOOK SEES EVERY MESSAGE SENT TO EVERY WINDOW ON THE TASKBAR'S
-// UI THREAD. `lParam` for all of those is arbitrary — an integer, a flag, a
-// pointer to something else entirely. So the message MUST be checked first,
-// against a value that does not come from lParam, and only then may lParam be
-// treated as a Dispatch*. Reading anything out of lParam before that check
-// dereferences whatever happened to be in the message and takes Explorer down
-// with it.
-//
-// Atomic because the hook proc runs on the taskbar's UI thread while the
-// caller may be another. RegisterWindowMessageW returns the same value for the
-// same string for the lifetime of the session, so this settles on one value
-// immediately and never changes again.
-inline std::atomic<UINT> g_dispatchMessage{0};
+// UI THREAD. `lParam` for all of those is arbitrary, so the message MUST be
+// checked first, against a value that does not come from lParam, and only then
+// may lParam be treated as a Dispatch*. Atomic because the hook proc runs on
+// the taskbar's UI thread while the caller may be another; it settles on one
+// value for the session.
+static std::atomic<UINT> g_dispatchMessage{0};
 
-// messageName must embed WH_MOD_ID, so two mods cannot collide on the message.
-inline bool RunFromWindowThread(HWND window, ThreadProc proc, void* parameter,
-                                PCWSTR messageName) {
-    UINT message = RegisterWindowMessageW(messageName);
+static bool RunFromWindowThread(HWND window, ThreadProc proc, void* parameter) {
+    UINT message =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
     if (!message) return false;
 
     DWORD threadId = GetWindowThreadProcessId(window, nullptr);
     if (!threadId) return false;
-    if (threadId == GetCurrentThreadId()) return Invoke(proc, parameter);
+    if (threadId == GetCurrentThreadId()) return InvokeUiCallback(proc, parameter);
 
     g_dispatchMessage.store(message, std::memory_order_release);
 
@@ -357,16 +304,15 @@ inline bool RunFromWindowThread(HWND window, ThreadProc proc, void* parameter,
         [](int code, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (code == HC_ACTION) {
                 auto const* call = reinterpret_cast<CWPSTRUCT const*>(lParam);
-                // Message first. Only our own private message carries a
-                // Dispatch* in lParam; everything else carries something we
-                // must not touch.
                 UINT expected =
                     g_dispatchMessage.load(std::memory_order_acquire);
                 if (expected && call->message == expected) {
                     if (auto* dispatch =
-                            reinterpret_cast<Dispatch*>(call->lParam)) {
+                            reinterpret_cast<Dispatch*>(call->lParam);
+                        dispatch && !dispatch->ran) {
+                        dispatch->ran = true;
                         dispatch->succeeded =
-                            Invoke(dispatch->proc, dispatch->parameter);
+                            InvokeUiCallback(dispatch->proc, dispatch->parameter);
                     }
                 }
             }
@@ -380,10 +326,6 @@ inline bool RunFromWindowThread(HWND window, ThreadProc proc, void* parameter,
     UnhookWindowsHookEx(hook);
     return dispatch.succeeded;
 }
-
-}  // namespace clock_spacer_taskbar
-
-namespace tbh = clock_spacer_taskbar;
 
 // ============================================================
 // Settings
@@ -401,10 +343,10 @@ static ModSettings g_settings;
 static constexpr int kMaxWidthDip = 4000;
 
 static void LoadSettings() {
-    // sio::LoadInt reads and clamps in one step, so an out-of-range value can
-    // never reach the layout code even if a clamp line is later edited away.
-    g_settings.maxWidth = sio::LoadInt(L"maxWidth", 0, kMaxWidthDip);
-    g_settings.minSpacerWidth = sio::LoadInt(L"minSpacerWidth", 0, kMaxWidthDip);
+    g_settings.maxWidth =
+        std::clamp(Wh_GetIntSetting(L"maxWidth"), 0, kMaxWidthDip);
+    g_settings.minSpacerWidth =
+        std::clamp(Wh_GetIntSetting(L"minSpacerWidth"), 0, kMaxWidthDip);
 }
 
 // Generated subtrees are reused across clock ticks. They must be rebuilt when a
@@ -452,19 +394,6 @@ struct SpacerState {
 // any thread. The normal destructor is therefore correct and leak-free, while a
 // [[clang::no_destroy]] would only leak the vector's buffer on every unload.
 static std::vector<SpacerState> g_states;  // exit-time-safe: heap-only
-
-// ============================================================
-// XAML helpers
-// ============================================================
-
-// Kept as a thin wrapper: the signature takes its predicate by value and the
-// call sites rely on that. The walk itself is now the template's.
-static FrameworkElement FindChildRecursive(FrameworkElement const& element,
-    std::function<bool(FrameworkElement)> const& cb, int maxDepth = 20) {
-    return vtw::FindDescendant(
-        element, maxDepth,
-        [&cb](FrameworkElement const& child) { return cb(child); });
-}
 
 // ============================================================
 // Spacer geometry
@@ -527,6 +456,11 @@ static void CopyTextStyle(TextBlock src, TextBlock dst) {
     dst.FontStyle(src.FontStyle());
     dst.FontStretch(src.FontStretch());
     dst.CharacterSpacing(src.CharacterSpacing());
+    // Taskbar Clock Customization's "Line height" lands on the source block as
+    // these two; without them spaced lines stack at the font's natural height
+    // while the unspaced block beside them honours the user's setting.
+    dst.LineHeight(src.LineHeight());
+    dst.LineStackingStrategy(src.LineStackingStrategy());
     dst.Foreground(src.Foreground());
     dst.TextAlignment(src.TextAlignment());
     dst.TextWrapping(TextWrapping::NoWrap);
@@ -827,6 +761,12 @@ static void UpdateSpacerLine(SpacerState& state) {
     StackPanel generated;
     generated.Name(original.Name() + L"_SpacerPanel");
     generated.Orientation(Orientation::Vertical);
+    // No Spacing between rows, deliberately. An unspaced multi-line block is
+    // ONE TextBlock whose lines are separated only by its line height, which
+    // CopyTextStyle carries onto each row. Taskbar Clock Customization's
+    // "Text spacing" is the gap between the time and date blocks in the shared
+    // panel, not between lines, so copying it here would add a gap the
+    // unspaced block does not have.
     generated.HorizontalAlignment(HorizontalAlignment::Stretch);
     generated.VerticalAlignment(VerticalAlignment::Center);
     ApplyPanelWidthConstraint(generated, width);
@@ -865,12 +805,14 @@ static void SetupSpacerForTextBlock(StackPanel parent, TextBlock textBlock) {
         return !state.originalRef.get();
     });
 
+    // RECORD BEFORE BUILDING. UpdateSpacerLine inserts a generated panel into
+    // the live tree; if it threw after that on a state not yet in g_states,
+    // unload would have nothing to remove the panel with.
     SpacerState state;
     state.originalRef = winrt::make_weak(textBlock);
     state.parentRef   = winrt::make_weak(parent);
-    UpdateSpacerLine(state);
-
     g_states.push_back(std::move(state));
+    UpdateSpacerLine(g_states.back());
 
     g_states.back().textToken = textBlock.RegisterPropertyChangedCallback(
         TextBlock::TextProperty(),
@@ -907,19 +849,6 @@ static void ApplySpacerToDateTimeContent(FrameworkElement element) {
         found++;
     }
     if (!found) Wh_Log(L"No text blocks found in DateTimeIconContent");
-}
-
-using RunFromWindowThreadProc_t = tbh::ThreadProc;
-
-static bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc,
-                                void* procParam) {
-    return tbh::RunFromWindowThread(
-        hWnd, proc, procParam,
-        L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-}
-
-static HWND FindCurrentProcessTaskbarWnd() {
-    return tbh::FindCurrentProcessTaskbarWnd();
 }
 
 // ============================================================
@@ -1024,9 +953,6 @@ static HMODULE GetSystemTrayModuleHandle() {
 // mod would sit resident doing nothing but logging that it loaded.
 // get_ViewModel is optional because it only covers already-rendered clocks;
 // losing it costs one reload of Explorer, not the feature.
-//
-// The module comment below has to stay DIRECTLY above the array — the upstream
-// PR validator reads the line immediately preceding it.
 static bool HookSystemTraySymbols(HMODULE h) {
     // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK systemTrayModuleHooks[] = {
@@ -1058,12 +984,9 @@ static void TryHookSystemTrayModule(PCWSTR reason) {
         Wh_Log(L"System tray symbol hooks failed");
 }
 
-// Preferred wait-for-module path: TrayUI::StartTaskbar runs once the taskbar is
-// actually starting, by which point the system tray module is loaded. This
-// replaces watching every DLL load in the process.
-
-// A late-load fallback. TrayUI::StartTaskbar is a rebuild signal, not a
-// guarantee that SystemTray.dll was loaded before this mod initialized.
+// The late-load path. When the system tray module is not yet loaded at init
+// (the mod was enabled before Explorer finished starting), watching
+// LoadLibraryExW is how the hooks get placed once it arrives.
 using LoadLibraryExW_t = HMODULE (WINAPI*)(LPCWSTR, HANDLE, DWORD);
 LoadLibraryExW_t LoadLibraryExW_Original;
 
@@ -1085,18 +1008,30 @@ static void HandleLoadedModuleIfSystemTray(HMODULE hModule, LPCWSTR lpLibFileNam
 // Uninit
 // ============================================================
 
+// ONE ENTRY'S FAILURE MUST NOT STRAND THE REST. Unload retries this whole
+// function if the dispatch reports failure, so an exception escaping from
+// entry k would re-throw on every retry and leave the callbacks of entries
+// k+1..n registered on live XAML that outlives this image. Each entry is
+// guarded on its own, and its token is zeroed as soon as it is unregistered,
+// which makes a retry safe to run over entries already handled.
 static void ClearSpacerStates() {
     for (auto& state : g_states) {
-        if (auto textBlock = state.originalRef.get()) {
-            if (state.textToken)
-                textBlock.UnregisterPropertyChangedCallback(
-                    TextBlock::TextProperty(), state.textToken);
-            RestoreSourceTextBlock(state, textBlock);
+        try {
+            if (auto textBlock = state.originalRef.get()) {
+                if (state.textToken) {
+                    textBlock.UnregisterPropertyChangedCallback(
+                        TextBlock::TextProperty(), state.textToken);
+                    state.textToken = 0;
+                }
+                RestoreSourceTextBlock(state, textBlock);
+            }
+            // The parent StackPanel is intentionally untouched: this mod never
+            // sets anything on it, and clearing MaxWidth here would erase
+            // Taskbar Clock Customization's fixed clock width.
+            RemoveGeneratedPanel(state);
+        } catch (...) {
+            Wh_Log(L"Cleanup of one clock line failed; continuing");
         }
-        // The parent StackPanel is intentionally untouched: this mod no longer
-        // sets anything on it, and clearing MaxWidth here would erase Taskbar
-        // Clock Customization's fixed clock width.
-        RemoveGeneratedPanel(state);
     }
     g_states.clear();
 }
@@ -1105,16 +1040,9 @@ static void ClearSpacerStates() {
 // Windhawk lifecycle
 // ============================================================
 
-// A UI-callback failure reported in this mod's own voice, so a throw inside a
-// dispatched callback is not swallowed silently.
-static void LogUiCallbackFailure(PCWSTR context) {
-    Wh_Log(L"%s failed with an exception", context);
-}
-
 BOOL Wh_ModInit() {
-    Wh_Log(L"Clock Spacer v1.1");
+    Wh_Log(L"Clock Spacer v%s", WH_MOD_VERSION);
     LoadSettings();
-    tbh::SetExceptionLogger(LogUiCallbackFailure);
 
     // The system-tray symbols are the whole mod. There are deliberately no
     // taskbar.dll hooks: a rebuilt taskbar re-templates its DateTimeIconContent,
