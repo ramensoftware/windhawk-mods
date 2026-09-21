@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.5.0
+// @version         1.5.1
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -3154,6 +3154,21 @@ static int PaletteIndexFromName(const std::wstring& name) {
     return 0;
 }
 
+// A stamp of the two custom colour settings, so a change to either can be
+// noticed across a restart. FNV-1a, which is plenty for telling "these are the
+// same two strings" from "these are not", and stays positive so that -1 can
+// mean nothing was ever stored.
+static int CustomColorStamp() {
+    unsigned h = 2166136261u;
+    const std::wstring both =
+        g_settings.customColors + L'\n' + g_settings.customBackground;
+    for (size_t i = 0; i < both.size(); i++) {
+        h ^= (unsigned)both[i];
+        h *= 16777619u;
+    }
+    return (int)(h & 0x7fffffffu);
+}
+
 static void BuildPalette() {
     const Preset& chosen = kPresets[ClampT(g_paletteIndex, 0, kPaletteCount - 1)];
     g_palette.ink.clear();
@@ -4834,6 +4849,7 @@ static int g_pendingStyle = 0, g_pendingAmount = 2, g_pendingParam = 500;
 // would write those defaults over whatever the user had actually set.
 static std::atomic<bool> g_paletteDirty{false};
 static int g_pendingPalette = 0, g_pendingPaletteFrom = 0;
+static int g_pendingCustomFrom = 0;
 
 // Seconds since the last change, counted only while something is unsaved. The
 // flush used to happen on hide alone, so a sign-out or a reboot that took the
@@ -4855,6 +4871,7 @@ static void SaveState(const Overlay* ov) {
 static void SavePalette(int index, int from) {
     g_pendingPalette = index;
     g_pendingPaletteFrom = from;
+    g_pendingCustomFrom = CustomColorStamp();
     g_paletteDirty = true;
     g_stateQuiet = 0;
 }
@@ -4875,6 +4892,7 @@ static void FlushState() {
     if (g_paletteDirty.exchange(false)) {
         Wh_SetIntValue(L"state.palette", g_pendingPalette);
         Wh_SetIntValue(L"state.paletteFrom", g_pendingPaletteFrom);
+        Wh_SetIntValue(L"state.customFrom", g_pendingCustomFrom);
     }
 }
 
@@ -5270,7 +5288,22 @@ static void ShowOverlays() {
     // the setting overrides it, so the settings UI is never a dead control.
     int fromSetting = PaletteIndexFromName(g_settings.palette);
     g_paletteIndex = fromSetting;
-    if (Wh_GetIntValue(L"state.paletteFrom", -1) == fromSetting) {
+    bool settingUnchanged =
+        Wh_GetIntValue(L"state.paletteFrom", -1) == fromSetting;
+
+    // Editing the custom colours says what you want to see just as plainly as
+    // picking from the dropdown does, so it has to count as the setting
+    // changing. It did not, and the result was a trap: with the palette set to
+    // custom, stepping away with Space and then going to change the colours
+    // left the stepped palette overriding them for ever, so the colour fields
+    // looked dead and only touching the dropdown got you out. Every other
+    // palette escaped it because choosing one is a change to the dropdown.
+    if (settingUnchanged && fromSetting == PaletteIndexFromName(L"custom") &&
+        Wh_GetIntValue(L"state.customFrom", -1) != CustomColorStamp()) {
+        settingUnchanged = false;
+    }
+
+    if (settingUnchanged) {
         g_paletteIndex =
             ClampT(Wh_GetIntValue(L"state.palette", fromSetting), 0,
                    kPaletteCount - 1);
