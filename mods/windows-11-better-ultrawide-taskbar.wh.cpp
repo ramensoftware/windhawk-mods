@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.53
+// @version         2.67
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -44,9 +44,9 @@
 # Windows 11 Better Ultrawide Taskbar
 
 Centers the taskbar buttons, a 12-DIP gap, and the system tray as one rounded
-dock on each monitor. Windows keeps control of button sizing and animations;
-the mod follows Windows' existing compositor motion instead of polling or
-copying its easing.
+dock on each monitor. The mod uses Windows' native sizing and animation paths;
+it follows the existing compositor motion instead of polling or copying its
+easing.
 
 The mod supports native Windows labels and the Taskbar Labels mod in fixed and
 adaptive width modes. Quick Settings, notifications, and the calendar follow
@@ -93,6 +93,12 @@ the mod is disabled because Windows exposes it as a process-wide setting.
 - cornerRadius: 12
   $name: Taskbar corner radius (DIP, default 12)
   $description: Rounded dock corner radius from 0 to 100.
+- buttonCornerRadius: 12
+  $name: Button corner radius (DIP, default 12)
+  $description: Rounded task and tray button highlights from 0 to 100.
+- buttonVerticalPadding: 4
+  $name: Button vertical padding (DIP, default 4)
+  $description: Space above and below task and tray button highlights from 0 to 100.
 - edgeDistance: 4
   $name: Distance from screen edge (DIP, default 4)
   $description: Gap from 0 to 100. The native taskbar frame adjusts with the gap so the dock keeps its height.
@@ -231,6 +237,8 @@ UINT g_discoverMessage{};
 enum class DockTheme { Native, Glass, Frosted, Liquid };
 DockTheme g_theme{};
 double g_dockCornerRadius{12};
+double g_buttonCornerRadius{12};
+double g_buttonVerticalPadding{4};
 double g_dockEdgeDistance{4};
 
 struct DockInsets {
@@ -304,6 +312,13 @@ bool TaskbarIconSizeLoaded() {
 
 DockInsets GetDockInsets(HWND taskbar, double height) {
     return PlanDockInsets(TaskbarAtTop(taskbar), height, g_dockEdgeDistance);
+}
+
+DockInsets GetButtonInsets(DockInsets insets, double height) {
+    double padding = std::clamp(
+        g_buttonVerticalPadding, 0.0,
+        std::max(0.0, (height - insets.top - insets.bottom - 1) / 2));
+    return {insets.top + padding, insets.bottom + padding};
 }
 
 double EffectiveDockRadius(double width, double height) {
@@ -786,7 +801,9 @@ struct Root {
         double originalOpacity{};
         double appliedOpacity{};
         bool opacityOwned{};
-        Media::RectangleGeometry clip{nullptr};
+        Visual visual{nullptr};
+        CompositionGeometricClip clip{nullptr};
+        CompositionRoundedRectangleGeometry clipGeometry{nullptr};
         Media::CompositeTransform stretch{nullptr};
         bool blocked{};
     };
@@ -1751,8 +1768,7 @@ void WINAPI UpdateVisualStates_Hook(void* self) {
     ++g_active;
     struct Finish { ~Finish() { --g_active; } } finish;
     UpdateVisualStates_Original(self);
-    if (g_stopping || g_theme == DockTheme::Native ||
-        g_itemStateRefreshPending || !g_dispatch)
+    if (g_stopping || g_itemStateRefreshPending || !g_dispatch)
         return;
     if (PostMessage(g_dispatch, kRefreshItemStatesMessage, 0, 0))
         g_itemStateRefreshPending = true;
@@ -1889,29 +1905,36 @@ bool HasAttentionState(FrameworkElement const& element, unsigned depth = 4) {
 void RestoreStatePlate(Root::StatePlate& state) {
     if (!state.element) return;
     try {
+        bool transformMatch =
+            state.stretch && state.element.RenderTransform() == state.stretch;
+        bool clipMatch =
+            state.clip && state.visual && state.visual.Clip() == state.clip;
+        bool opacityMatch =
+            state.opacityOwned &&
+            std::abs(state.element.Opacity() - state.appliedOpacity) < 0.001;
         if (state.stretch) {
-            if (state.element.RenderTransform() == state.stretch) {
+            if (transformMatch) {
                 state.element.ClearValue(UIElement::RenderTransformProperty());
             } else {
                 Wh_Log(L"[UWITEM] state plate transform ownership lost");
             }
         }
         if (state.clip) {
-            if (state.element.Clip() == state.clip)
-                state.element.Clip(nullptr);
+            if (clipMatch)
+                state.visual.Clip(nullptr);
             else
                 Wh_Log(L"[UWITEM] state plate clip ownership lost");
         }
-        if (state.opacityOwned &&
-            std::abs(state.element.Opacity() -
-                     state.appliedOpacity) < 0.001)
+        if (opacityMatch)
             state.element.Opacity(state.originalOpacity);
     } catch (...) {
         Wh_Log(L"[UWITEM] state plate restore failed hr=%08X",
                winrt::to_hresult().value);
     }
     state.opacityOwned = false;
+    state.visual = nullptr;
     state.clip = nullptr;
+    state.clipGeometry = nullptr;
     state.stretch = nullptr;
     state.element = nullptr;
 }
@@ -1921,41 +1944,56 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
     if (state.blocked || !state.element) return;
     auto plate = state.element;
     try {
+        auto parent = Media::VisualTreeHelper::GetParent(plate)
+                          .try_as<FrameworkElement>();
+        if (!parent) return;
         if (!state.opacityOwned) {
             state.originalOpacity = plate.Opacity();
             state.appliedOpacity =
                 g_theme == DockTheme::Native
                     ? state.originalOpacity
                     : state.originalOpacity * 0.32;
-            plate.Opacity(state.appliedOpacity);
             state.opacityOwned = true;
         }
+        plate.Opacity(state.appliedOpacity);
         if (!state.clip && plate.Clip()) return;
-        if (state.clip && plate.Clip() != state.clip) {
-            auto element = state.element;
-            RestoreStatePlate(state);
-            state.element = element;
-            state.blocked = true;
-            return;
-        }
-        if (state.stretch && plate.RenderTransform() != state.stretch) {
-            auto element = state.element;
-            RestoreStatePlate(state);
-            state.element = element;
-            state.blocked = true;
-            return;
+        if (state.clip) {
+            auto currentClip =
+                state.visual ? state.visual.Clip() : nullptr;
+            if (state.visual && !currentClip) {
+                state.visual.Clip(state.clip);
+            } else if (currentClip != state.clip) {
+                auto element = state.element;
+                RestoreStatePlate(state);
+                state.element = element;
+                state.blocked = true;
+                return;
+            }
         }
         if (state.stretch) {
-            state.stretch.ScaleY(1);
-            state.stretch.TranslateY(0);
+            auto currentTransform = plate.RenderTransform();
+            if (!currentTransform) {
+                plate.RenderTransform(state.stretch);
+            } else if (currentTransform != state.stretch) {
+                auto element = state.element;
+                RestoreStatePlate(state);
+                state.element = element;
+                state.blocked = true;
+                return;
+            }
         }
-
-        auto transform = root.dock.background.TransformToVisual(plate);
+        auto transform = root.dock.background.TransformToVisual(parent);
+        double plateTop = plate.ActualOffset().y;
         double top = transform.TransformPoint(
-            {0, static_cast<float>(insets.top)}).Y;
+                         {0, static_cast<float>(insets.top)})
+                         .Y -
+                     plateTop;
         double bottom = transform.TransformPoint(
-            {0, static_cast<float>(
-                    root.dock.background.ActualHeight() - insets.bottom)}).Y;
+                            {0, static_cast<float>(
+                                    root.dock.background.ActualHeight() -
+                                    insets.bottom)})
+                            .Y -
+                        plateTop;
         auto rect = PlanVerticalClip(
             plate.ActualWidth(), plate.ActualHeight(), top, bottom);
         if (rect.Width <= 0 || rect.Height <= 0) return;
@@ -1979,12 +2017,26 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
             state.stretch = nullptr;
         }
         if (!state.clip) {
-            state.clip = Media::RectangleGeometry();
-            state.clip.Rect(rect);
-            plate.Clip(state.clip);
-        } else {
-            state.clip.Rect(rect);
+            state.visual =
+                Hosting::ElementCompositionPreview::GetElementVisual(plate);
+            if (state.visual.Clip()) {
+                state.visual = nullptr;
+                return;
+            }
+            state.clipGeometry =
+                state.visual.Compositor().CreateRoundedRectangleGeometry();
+            state.clip = state.visual.Compositor().CreateGeometricClip(
+                state.clipGeometry);
+            state.visual.Clip(state.clip);
         }
+        double scaleY = state.stretch ? state.stretch.ScaleY() : 1;
+        float radius = static_cast<float>(std::min(
+            {g_buttonCornerRadius, static_cast<double>(rect.Width) / 2,
+             rect.Height * scaleY / 2}));
+        state.clipGeometry.Offset({rect.X, rect.Y});
+        state.clipGeometry.Size({rect.Width, rect.Height});
+        state.clipGeometry.CornerRadius(
+            {radius, static_cast<float>(radius / scaleY)});
     } catch (...) {
         auto element = state.element;
         RestoreStatePlate(state);
@@ -1997,6 +2049,8 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
 
 void PrepareStatePlates(Root& root, FrameworkElement const& buttons,
                         FrameworkElement const& tray, DockInsets insets) {
+    insets = GetButtonInsets(
+        insets, root.dock.background.ActualHeight());
     std::vector<Controls::Border> plates;
     CollectStatePlates(buttons, plates);
     CollectStatePlates(tray, plates);
@@ -3068,6 +3122,10 @@ bool ResolveStartupSymbols() {
 BOOL Wh_ModInit() {
     g_dockCornerRadius = std::clamp(
         Wh_GetIntSetting(L"cornerRadius"), 0, 100);
+    g_buttonCornerRadius = std::clamp(
+        Wh_GetIntSetting(L"buttonCornerRadius"), 0, 100);
+    g_buttonVerticalPadding = std::clamp(
+        Wh_GetIntSetting(L"buttonVerticalPadding"), 0, 100);
     g_dockEdgeDistance = std::clamp(
         Wh_GetIntSetting(L"edgeDistance"), 0, 100);
     auto theme = WindhawkUtils::StringSetting::make(L"theme");
@@ -3096,7 +3154,7 @@ BOOL Wh_ModInit() {
     if (!WindhawkUtils::SetFunctionHook(SetWindowPos, PanelSetWindowPos, &SetWindowPos_Original) ||
         !WindhawkUtils::SetFunctionHook(DestroyWindow, PanelDestroyWindow, &DestroyWindow_Original)) return FALSE;
     if (!g_explorer) {
-        Wh_Log(L"[UWPANEL] initialized v2.53 Shell positioning hooks");
+        Wh_Log(L"[UWPANEL] initialized v2.67 Shell positioning hooks");
         return TRUE;
     }
     if (!WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute, PanelDwmAttribute,
@@ -3141,7 +3199,7 @@ BOOL Wh_ModInit() {
         g_windowClass = 0;
         return FALSE;
     }
-    Wh_Log(L"[UWPOS] initialized v2.53; screenshot-safe liquid glass, native animation follower, gap=12 theme=%d heightMethod=automatic",
+    Wh_Log(L"[UWPOS] initialized v2.67; screenshot-safe liquid glass, native animation follower, gap=12 theme=%d heightMethod=automatic",
            static_cast<int>(g_theme));
     return TRUE;
 }
@@ -3174,10 +3232,8 @@ void Wh_ModBeforeUninit() {
     g_dockingDisabled = true;
     // Wait for mutation/discovery to finish before dispatching UI-thread cleanup.
     while (g_active) Sleep(1);
-    if (g_explorer) {
-        RefreshTaskbarHeight();
-    }
     if (HWND window = g_dispatch) SendMessage(window, kRestoreMessage, 0, 0);
+    if (g_explorer) RefreshTaskbarHeight();
     // Closing the free-threaded capture pools prevents new frame callbacks.
     while (g_active) Sleep(1);
     RestorePanels(nullptr, !g_explorer);
