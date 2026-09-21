@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.80
+// @version         2.81
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -68,9 +68,10 @@ lens with the native alert color.
 highlight. The dock's translucency fades the native one out, so the mod redraws it
 at matching strength; turn the border off for a flat highlight.
 
-Under the Liquid glass theme each task button can also carry its own refractive
-lens inside the dock, rendered by the same shader pass as the dock itself rather
-than a second capture. Tray items share the dock lens.
+Under the Liquid glass theme each task button can also become its own piece of
+liquid glass inside the dock, carrying the same edge displacement, chromatic split,
+specular and fresnel as the dock itself. It is the same shader pass, not a second
+capture. Tray items share the dock lens.
 
 Liquid glass includes the reference site's Regular, Frosted, and Dark presets.
 Regular is the reference defaults with no backdrop blur; Frosted adds it, and
@@ -118,7 +119,7 @@ setting.
     $description: Draws the raised gradient outline Windows puts on task button highlights, which the dock's translucency would otherwise fade out.
   - liquidLayer: false
     $name: Per-button liquid glass layer (default off)
-    $description: Gives every task button its own refractive lens inside the dock. Liquid glass theme only.
+    $description: Renders every task button as its own piece of liquid glass inside the dock, with the same edge displacement, chromatic split, specular and fresnel as the dock. Liquid glass theme only.
   $name: Task and tray buttons
   $description: Appearance of the native task and tray button highlights.
 - edgeDistance: 4
@@ -1061,6 +1062,74 @@ float bevelHeightFor(float inside, float depthRadius) {
 float3 blurredColor(float2 pixel) {
     return blurredBackdrop.SampleLevel(linearClamp, pixel / imageSize, 0).rgb;
 }
+// One glass surface. The dock and every button are the same material at different
+// scales, so they share this and differ only in the gains handed in.
+struct Glass {
+    float distance;
+    float inside;
+    float3 normal;
+    float depth;
+    float2 shift;
+    float edge;
+};
+Glass glassAt(float2 p, float2 halfExtent, float4 radii, float depthRadius,
+              float refractionAmount, float shiftGain, float radialGain,
+              float edgeGain) {
+    Glass g;
+    g.distance = roundedDistanceForCorners(p, halfExtent, radii);
+    g.inside = -g.distance;
+    float e = 2;
+    float opticalInside = -opticalDistanceForCorners(p, halfExtent, radii);
+    float lensZ = min(depthRadius, min(halfExtent.x, halfExtent.y));
+    float hCenter = bevelHeightFor(opticalInside, lensZ);
+    float2 gradient = float2(
+        bevelHeightFor(-opticalDistanceForCorners(p + float2(e, 0), halfExtent, radii), lensZ) -
+            bevelHeightFor(-opticalDistanceForCorners(p - float2(e, 0), halfExtent, radii), lensZ),
+        bevelHeightFor(-opticalDistanceForCorners(p + float2(0, e), halfExtent, radii), lensZ) -
+            bevelHeightFor(-opticalDistanceForCorners(p - float2(0, e), halfExtent, radii), lensZ)) / (2 * e);
+    g.normal = normalize(float3(-gradient, 1));
+    g.depth = smoothstep(0, max(lensZ, 0.5), opticalInside);
+    float refractivePower = 1 - 1 / 1.5;
+    float normalizedThickness = hCenter / max(lensZ, 0.5);
+    g.shift = gradient * refractivePower * (2 + normalizedThickness * 0.5) *
+              refractionAmount * shiftGain;
+    g.shift += -p / max(halfExtent, 1) * refractionAmount * radialGain * g.depth;
+    g.edge = smoothstep(min(halfExtent.x, halfExtent.y) * edgeGain, 0, g.inside);
+    return g;
+}
+// Refracted, chromatically split and optionally blurred backdrop for one surface.
+float3 refractedBackdrop(float2 pixel, Glass g) {
+    float chromaPixels = chroma * 36 * (g.edge * 0.7 + 0.3);
+    float2 chromaShift = g.normal.xy * chromaPixels;
+    float2 samplePixel = pixel + g.shift;
+    float3 sharp;
+    sharp.r = backdrop.SampleLevel(linearClamp,
+        (samplePixel + chromaShift) / imageSize, 0).r;
+    sharp.g = backdrop.SampleLevel(linearClamp, samplePixel / imageSize, 0).g;
+    sharp.b = backdrop.SampleLevel(linearClamp,
+        (samplePixel - chromaShift) / imageSize, 0).b;
+    if (blurAmount > 0.001)
+        return lerp(sharp, blurredColor(samplePixel), 1 - g.edge * 0.15);
+    return sharp;
+}
+// Specular, fresnel, rim and inner stroke for one surface.
+float3 glassLighting(Glass g, float2 p, float2 halfExtent, out float fresnelAmount) {
+    fresnelAmount = pow(1 - abs(g.normal.z), 4) * fresnel;
+    float3 view = float3(0, 0, 1);
+    float highlight = pow(saturate(dot(g.normal,
+        normalize(normalize(float3(0.4, 0.7, 1)) + view))), 90);
+    highlight += pow(saturate(dot(g.normal,
+        normalize(normalize(float3(-0.3, -0.5, 1)) + view))), 50) * 0.3;
+    float innerStroke = smoothstep(-2.5, -1.5, g.distance) *
+                        (1 - smoothstep(-1, 0, g.distance));
+    float topBias = 0.5 + 0.5 * (-p.y / halfExtent.y);
+    innerStroke *= 0.4 + 0.6 * topBias;
+    float rim = g.edge * edgeHighlight * 0.22;
+    float innerGlow = smoothstep(5, 0, g.inside) * edgeHighlight * 0.15;
+    float environment = (g.normal.y * 0.5 + 0.5) * fresnelAmount * 0.08;
+    return highlight * specular + rim + innerGlow +
+           innerStroke * edgeHighlight * 0.55 + environment;
+}
 float4 ps(VertexOutput input) : SV_Target {
     float2 pixel = input.position.xy;
     float2 p = pixel - center;
@@ -1071,102 +1140,38 @@ float4 ps(VertexOutput input) : SV_Target {
 
     // Biconvex pill profile adapted from ybouane/liquidglass (MIT):
     // https://github.com/ybouane/liquidglass. The curved height field creates
-    // the reference's raised glass distortion across the whole surface.
-    float inside = -distance;
-    float e = 2;
-    float opticalInside = -opticalDistance(p);
-    float lensZ = min(zRadius, min(halfSize.x, halfSize.y));
-    float hCenter = bevelHeightFor(opticalInside, lensZ);
-    float2 heightGradient = float2(
-        bevelHeightFor(-opticalDistance(p + float2(e, 0)), lensZ) -
-            bevelHeightFor(-opticalDistance(p - float2(e, 0)), lensZ),
-        bevelHeightFor(-opticalDistance(p + float2(0, e)), lensZ) -
-            bevelHeightFor(-opticalDistance(p - float2(0, e)), lensZ)) / (2 * e);
-    float3 normal = normalize(float3(-heightGradient, 1));
-    float depth = smoothstep(0, lensZ, opticalInside);
-    float refractivePower = 1 - 1 / 1.5;
-    float normalizedThickness = hCenter / max(lensZ, 0.5);
-    float2 shift = heightGradient * refractivePower *
-        (2 + normalizedThickness * 0.5) * refraction * 30;
-    shift += -p / max(halfSize, 1) * refraction * 4 * depth;
-
-    float maxDepth = min(halfSize.x, halfSize.y);
-    float edge = smoothstep(maxDepth * 0.35, 0, inside);
-    float chromaPixels = chroma * 36 * (edge * 0.7 + 0.3);
-    float2 chromaShift = normal.xy * chromaPixels;
-    float2 samplePixel = pixel + shift;
-    float3 sharp;
-    sharp.r = backdrop.SampleLevel(linearClamp,
-        (samplePixel + chromaShift) / imageSize, 0).r;
-    sharp.g = backdrop.SampleLevel(linearClamp,
-        samplePixel / imageSize, 0).g;
-    sharp.b = backdrop.SampleLevel(linearClamp,
-        (samplePixel - chromaShift) / imageSize, 0).b;
-    float3 color = sharp;
-    if (blurAmount > 0.001)
-        color = lerp(sharp, blurredColor(samplePixel),
-                     1 - edge * 0.15);
-    color *= (1 + brightness) * (1 + 0.06 * depth);
-
-    float fresnelAmount = pow(1 - abs(normal.z), 4) * fresnel;
-    float3 view = float3(0, 0, 1);
-    float highlight = pow(saturate(dot(normal,
-        normalize(normalize(float3(0.4, 0.7, 1)) + view))), 90);
-    highlight += pow(saturate(dot(normal,
-        normalize(normalize(float3(-0.3, -0.5, 1)) + view))), 50) * 0.3;
-    color += highlight * specular;
-
-    float innerStroke = smoothstep(-2.5, -1.5, distance) *
-                        (1 - smoothstep(-1, 0, distance));
-    float topBias = 0.5 + 0.5 * (-p.y / halfSize.y);
-    innerStroke *= 0.4 + 0.6 * topBias;
-    float rim = edge * edgeHighlight * 0.22;
-    float innerGlow = smoothstep(5, 0, inside) * edgeHighlight * 0.15;
-    float environment = (normal.y * 0.5 + 0.5) * fresnelAmount * 0.08;
-    color += rim + innerGlow + innerStroke * edgeHighlight * 0.55 + environment;
+    // the reference's raised glass distortion across the whole surface. These are
+    // the dock's gains; radius is already clamped to min(halfSize), so four equal
+    // corners here match the single-radius distance functions this replaced.
+    Glass dock = glassAt(p, halfSize, float4(radius, radius, radius, radius),
+                         zRadius, refraction, 30, 4, 0.35);
+    float3 color = refractedBackdrop(pixel, dock);
+    color *= (1 + brightness) * (1 + 0.06 * dock.depth);
+    float fresnelAmount;
+    color += glassLighting(dock, p, halfSize, fresnelAmount);
     color = lerp(color, 1, fresnelAmount * 0.2);
 
-    // A second, smaller lens per button over the shared dock capture. Hover stays
-    // the native animated plate with reduced opacity, and the alert tint applies
-    // only to the lenses flagged for it in w.
+    // Each button is a glass surface in its own right over the shared dock capture,
+    // carrying the same displacement, chromatic split, specular and fresnel as the
+    // dock at button scale. Buttons do not overlap, so a pixel enters the body at
+    // most once and the cheap distance rejects it for every other lens. The alert
+    // tint applies only to the lenses flagged for it in w.
     for (uint i = 0; i < min(lensCount, BUTTON_LENS_CAP); ++i) {
         float4 rect = lensRects[i];
         float2 itemPoint = pixel - rect.xy;
         float4 itemRadii = lensRadii[i];
-        float itemDistance = roundedDistanceForCorners(
-            itemPoint, rect.zw, itemRadii);
-        if (itemDistance > 0) continue;
-        float itemInside = -itemDistance;
-        float itemZ = min(zRadius * 0.65, min(rect.z, rect.w));
-        float2 itemGradient = float2(
-            bevelHeightFor(-opticalDistanceForCorners(itemPoint + float2(2, 0), rect.zw, itemRadii), itemZ) -
-                bevelHeightFor(-opticalDistanceForCorners(itemPoint - float2(2, 0), rect.zw, itemRadii), itemZ),
-            bevelHeightFor(-opticalDistanceForCorners(itemPoint + float2(0, 2), rect.zw, itemRadii), itemZ) -
-                bevelHeightFor(-opticalDistanceForCorners(itemPoint - float2(0, 2), rect.zw, itemRadii), itemZ)) / 4;
-        float itemDepth = smoothstep(0, max(itemZ, 0.5), itemInside);
-        float2 itemShift = itemGradient * (1 - 1 / 1.5) *
-            lensRefraction * 18;
-        itemShift += -itemPoint / max(rect.zw, 1) *
-            lensRefraction * 3 * itemDepth;
-        float3 itemGlass = blurAmount > 0.001
-            ? blurredColor(pixel + itemShift)
-            : backdrop.SampleLevel(
-                  linearClamp, (pixel + itemShift) / imageSize, 0).rgb;
-        itemGlass *= (1 + brightness) * (1 + 0.08 * itemDepth);
-        float itemEdge = smoothstep(min(rect.z, rect.w) * 0.45, 0, itemInside);
-        float itemMask = 1 - smoothstep(-1.5, 0.5, itemDistance);
+        if (roundedDistanceForCorners(itemPoint, rect.zw, itemRadii) > 0) continue;
+        Glass item = glassAt(itemPoint, rect.zw, itemRadii, zRadius * 0.65,
+                             lensRefraction, 18, 3, 0.45);
+        float3 itemGlass = refractedBackdrop(pixel, item);
+        itemGlass *= (1 + brightness) * (1 + 0.08 * item.depth);
+        float itemMask = 1 - smoothstep(-1.5, 0.5, item.distance);
         color = lerp(color, itemGlass, itemMask * 0.72);
         color = lerp(color, lensTints[i].rgb,
                      itemMask * alertTintOpacity * lensTints[i].a);
-        float itemInnerStroke = smoothstep(-2.5, -1.5, itemDistance) *
-            (1 - smoothstep(-1, 0, itemDistance));
-        float itemTopBias = 0.5 + 0.5 * (-itemPoint.y / rect.w);
-        itemInnerStroke *= 0.4 + 0.6 * itemTopBias;
-        float itemRim = itemEdge * edgeHighlight * 0.22;
-        float itemInnerGlow = smoothstep(5, 0, itemInside) *
-                              edgeHighlight * 0.15;
-        color += itemMask * (itemRim + itemInnerGlow +
-            itemInnerStroke * edgeHighlight * 0.55);
+        float itemFresnel;
+        color += itemMask * glassLighting(item, itemPoint, rect.zw, itemFresnel);
+        color = lerp(color, 1, itemMask * itemFresnel * 0.2);
     }
 
     float mask = 1 - smoothstep(-1.5, 0.5, distance);
