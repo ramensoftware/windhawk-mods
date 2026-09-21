@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.47
+// @version         2.53
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -70,7 +70,8 @@ Choose Custom to use the individual optical parameters.
 The **Taskbar height and icon size** mod is detected automatically. When using
 it, set that mod's taskbar height to:
 `normal height + edge distance - 4`.
-Native hover plates are clipped to the dock without changing button layout.
+Native task and tray hover plates fit the dock without changing button
+layout.
 
 If native controls do not fit, the visual tree is unsupported, taskbar
 ownership changes, or more than 64 children are realized, that taskbar stays
@@ -780,6 +781,15 @@ struct OwnedDock {
     unsigned liquidFailures{};
 };
 struct Root {
+    struct StatePlate {
+        Controls::Border element{nullptr};
+        double originalOpacity{};
+        double appliedOpacity{};
+        bool opacityOwned{};
+        Media::RectangleGeometry clip{nullptr};
+        Media::CompositeTransform stretch{nullptr};
+        bool blocked{};
+    };
     FrameworkElement frame{nullptr};
     winrt::event_token layoutToken{};
     OwnedTranslation buttonsTranslation;
@@ -795,15 +805,10 @@ struct Root {
         winrt::weak_ref<FrameworkElement> element;
         Visual visual{nullptr};
         enum class Life { Active, Hiding, Retired } life{};
-        Controls::Border statePlate{nullptr};
-        double originalPlateOpacity{};
-        double appliedPlateOpacity{};
-        Media::RectangleGeometry originalPlateClip{nullptr};
-        Media::RectangleGeometry plateClip{nullptr};
-        bool statePlateBlocked{};
         bool requestingAttention{};
     };
     std::vector<Source> sources;
+    std::vector<StatePlate> statePlates;
     std::vector<uintptr_t> expressionSources;
     ExpressionAnimation follower{nullptr};
     ExpressionAnimation buttonsFollower{nullptr};
@@ -1839,18 +1844,23 @@ FrameworkElement Child(FrameworkElement parent, const wchar_t* name,
     return nullptr;
 }
 
-FrameworkElement Descendant(FrameworkElement const& parent,
-                            const wchar_t* name, unsigned depth = 4) {
-    if (!parent || !depth) return nullptr;
+void CollectStatePlates(FrameworkElement const& parent,
+                        std::vector<Controls::Border>& result,
+                        unsigned depth = 16) {
+    if (!parent || !depth) return;
     int count = Media::VisualTreeHelper::GetChildrenCount(parent);
     for (int i = 0; i < count; ++i) {
         auto child = Media::VisualTreeHelper::GetChild(parent, i)
                          .try_as<FrameworkElement>();
         if (!child) continue;
-        if (child.Name() == name) return child;
-        if (auto result = Descendant(child, name, depth - 1)) return result;
+        if (auto border = child.try_as<Controls::Border>()) {
+            auto name = border.Name();
+            if (name == L"BackgroundElement" ||
+                name == L"BackgroundBorder")
+                result.push_back(border);
+        }
+        CollectStatePlates(child, result, depth - 1);
     }
-    return nullptr;
 }
 
 bool IsAttentionStateName(std::wstring_view name) {
@@ -1876,51 +1886,68 @@ bool HasAttentionState(FrameworkElement const& element, unsigned depth = 4) {
     return false;
 }
 
-void RestoreStatePlate(Root::Source& source) {
-    if (!source.statePlate) return;
+void RestoreStatePlate(Root::StatePlate& state) {
+    if (!state.element) return;
     try {
-        if (source.plateClip) {
-            if (source.statePlate.Clip() == source.plateClip)
-                source.statePlate.Clip(source.originalPlateClip);
+        if (state.stretch) {
+            if (state.element.RenderTransform() == state.stretch) {
+                state.element.ClearValue(UIElement::RenderTransformProperty());
+            } else {
+                Wh_Log(L"[UWITEM] state plate transform ownership lost");
+            }
+        }
+        if (state.clip) {
+            if (state.element.Clip() == state.clip)
+                state.element.Clip(nullptr);
             else
                 Wh_Log(L"[UWITEM] state plate clip ownership lost");
         }
-        if (std::abs(source.statePlate.Opacity() -
-                     source.appliedPlateOpacity) < 0.001)
-            source.statePlate.Opacity(source.originalPlateOpacity);
+        if (state.opacityOwned &&
+            std::abs(state.element.Opacity() -
+                     state.appliedOpacity) < 0.001)
+            state.element.Opacity(state.originalOpacity);
     } catch (...) {
         Wh_Log(L"[UWITEM] state plate restore failed hr=%08X",
                winrt::to_hresult().value);
     }
-    source.originalPlateClip = nullptr;
-    source.plateClip = nullptr;
-    source.statePlate = nullptr;
+    state.opacityOwned = false;
+    state.clip = nullptr;
+    state.stretch = nullptr;
+    state.element = nullptr;
 }
 
-void PrepareStatePlate(Root& root, Root::Source& source, DockInsets insets) {
-    if (source.statePlateBlocked) return;
+void PrepareStatePlate(Root& root, Root::StatePlate& state,
+                       DockInsets insets) {
+    if (state.blocked || !state.element) return;
+    auto plate = state.element;
     try {
-        auto plate = source.statePlate;
-        if (!plate) {
-            auto element = source.element.get();
-            plate = Descendant(element, L"BackgroundElement")
-                        .try_as<Controls::Border>();
-            if (!plate) return;
-            source.statePlate = plate;
-            source.originalPlateOpacity = plate.Opacity();
-            source.appliedPlateOpacity =
+        if (!state.opacityOwned) {
+            state.originalOpacity = plate.Opacity();
+            state.appliedOpacity =
                 g_theme == DockTheme::Native
-                    ? source.originalPlateOpacity
-                    : source.originalPlateOpacity * 0.32;
-            plate.Opacity(source.appliedPlateOpacity);
-            source.originalPlateClip = plate.Clip();
-            if (source.originalPlateClip) {
-                source.statePlateBlocked = true;
-                return;
-            }
-        } else if (source.plateClip && plate.Clip() != source.plateClip) {
-            source.statePlateBlocked = true;
+                    ? state.originalOpacity
+                    : state.originalOpacity * 0.32;
+            plate.Opacity(state.appliedOpacity);
+            state.opacityOwned = true;
+        }
+        if (!state.clip && plate.Clip()) return;
+        if (state.clip && plate.Clip() != state.clip) {
+            auto element = state.element;
+            RestoreStatePlate(state);
+            state.element = element;
+            state.blocked = true;
             return;
+        }
+        if (state.stretch && plate.RenderTransform() != state.stretch) {
+            auto element = state.element;
+            RestoreStatePlate(state);
+            state.element = element;
+            state.blocked = true;
+            return;
+        }
+        if (state.stretch) {
+            state.stretch.ScaleY(1);
+            state.stretch.TranslateY(0);
         }
 
         auto transform = root.dock.background.TransformToVisual(plate);
@@ -1931,20 +1958,70 @@ void PrepareStatePlate(Root& root, Root::Source& source, DockInsets insets) {
                     root.dock.background.ActualHeight() - insets.bottom)}).Y;
         auto rect = PlanVerticalClip(
             plate.ActualWidth(), plate.ActualHeight(), top, bottom);
-        if (rect.Width <= 0 || rect.Height <= 0)
-            throw winrt::hresult_error(E_BOUNDS);
-        if (!source.plateClip) {
-            source.plateClip = Media::RectangleGeometry();
-            source.plateClip.Rect(rect);
-            plate.Clip(source.plateClip);
+        if (rect.Width <= 0 || rect.Height <= 0) return;
+        bool needsStretch =
+            top < 0 || bottom > plate.ActualHeight();
+        if (needsStretch &&
+            plate.ReadLocalValue(UIElement::RenderTransformProperty()) ==
+                DependencyProperty::UnsetValue()) {
+            state.stretch = Media::CompositeTransform();
+            plate.RenderTransform(state.stretch);
+        }
+        if (needsStretch && state.stretch) {
+            state.stretch.ScaleY(
+                (bottom - top) / plate.ActualHeight());
+            state.stretch.TranslateY(top);
+            rect = PlanVerticalClip(plate.ActualWidth(),
+                                    plate.ActualHeight(), 0,
+                                    plate.ActualHeight());
+        } else if (!needsStretch && state.stretch) {
+            plate.ClearValue(UIElement::RenderTransformProperty());
+            state.stretch = nullptr;
+        }
+        if (!state.clip) {
+            state.clip = Media::RectangleGeometry();
+            state.clip.Rect(rect);
+            plate.Clip(state.clip);
         } else {
-            source.plateClip.Rect(rect);
+            state.clip.Rect(rect);
         }
     } catch (...) {
-        source.statePlateBlocked = true;
+        auto element = state.element;
+        RestoreStatePlate(state);
+        state.element = element;
+        state.blocked = true;
         Wh_Log(L"[UWITEM] state plate unavailable hr=%08X",
                winrt::to_hresult().value);
     }
+}
+
+void PrepareStatePlates(Root& root, FrameworkElement const& buttons,
+                        FrameworkElement const& tray, DockInsets insets) {
+    std::vector<Controls::Border> plates;
+    CollectStatePlates(buttons, plates);
+    CollectStatePlates(tray, plates);
+    std::erase_if(root.statePlates, [&](auto& state) {
+        if (std::find(plates.begin(), plates.end(), state.element) !=
+            plates.end())
+            return false;
+        RestoreStatePlate(state);
+        return true;
+    });
+    for (auto const& plate : plates) {
+        auto state = std::find_if(
+            root.statePlates.begin(), root.statePlates.end(),
+            [&](auto const& value) { return value.element == plate; });
+        if (state == root.statePlates.end()) {
+            root.statePlates.push_back({plate});
+            state = root.statePlates.end() - 1;
+        }
+        PrepareStatePlate(root, *state, insets);
+    }
+}
+
+void RestoreStatePlates(Root& root) {
+    for (auto& state : root.statePlates) RestoreStatePlate(state);
+    root.statePlates.clear();
 }
 
 void RefreshAttentionStates(Root& root) {
@@ -2203,12 +2280,19 @@ void AddAttentionLenses(Root& root, LiquidRenderer::LensConstants& lens,
     for (auto const& source : root.sources) {
         if (lens.attentionCount == kMaxAttentionLenses) break;
         auto element = source.element.get();
-        auto plate = source.statePlate;
-        if (!element || !plate || !source.requestingAttention) continue;
-        auto point = plate.TransformToVisual(root.dock.background)
+        if (!element || !source.requestingAttention) continue;
+        std::vector<Controls::Border> plates;
+        CollectStatePlates(element, plates, 4);
+        auto plate = std::find_if(plates.begin(), plates.end(),
+                                  [](auto const& candidate) {
+                                      return candidate.Name() ==
+                                             L"BackgroundElement";
+                                  });
+        if (plate == plates.end()) continue;
+        auto point = plate->TransformToVisual(root.dock.background)
                          .TransformPoint({0, 0});
-        double width = plate.ActualWidth();
-        double height = plate.ActualHeight();
+        double width = plate->ActualWidth();
+        double height = plate->ActualHeight();
         if (!std::isfinite(point.X) || !std::isfinite(point.Y) ||
             width <= 2 || height <= 2)
             continue;
@@ -2221,13 +2305,13 @@ void AddAttentionLenses(Root& root, LiquidRenderer::LensConstants& lens,
         lens.attentionRects[index][3] = static_cast<float>(height * scale / 2);
 
         winrt::Windows::UI::Color tint{255, 232, 72, 68};
-        if (auto brush = plate.Background().try_as<Media::SolidColorBrush>())
+        if (auto brush = plate->Background().try_as<Media::SolidColorBrush>())
             tint = brush.Color();
         lens.attentionTints[index][0] = tint.R / 255.0f;
         lens.attentionTints[index][1] = tint.G / 255.0f;
         lens.attentionTints[index][2] = tint.B / 255.0f;
         lens.attentionTints[index][3] = 0;
-        auto corners = plate.CornerRadius();
+        auto corners = plate->CornerRadius();
         lens.attentionRadii[index][0] = static_cast<float>(corners.TopLeft * scale);
         lens.attentionRadii[index][1] = static_cast<float>(corners.TopRight * scale);
         lens.attentionRadii[index][2] = static_cast<float>(corners.BottomRight * scale);
@@ -2438,11 +2522,12 @@ void StopFollower(Root& root) {
     root.edges = nullptr;
     root.metrics = nullptr;
     root.expressionSources.clear();
-    for (auto& source : root.sources) RestoreStatePlate(source);
+    RestoreStatePlates(root);
     root.sources.clear();
 }
 
-void UpdateFollower(Root& root, FrameworkElement const& repeater, double origin,
+void UpdateFollower(Root& root, FrameworkElement const& repeater,
+                     FrameworkElement const& tray, double origin,
                      double startLeft, double trayLeft, double trayWidth,
                      double shift, double buttonsWidth, double dockOrigin,
                      double dockHeight) {
@@ -2453,9 +2538,7 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater, double origin,
     // back to native geometry instead of producing an unbounded expression.
     if (count > 64) throw winrt::hresult_error(E_BOUNDS);
     std::erase_if(root.sources, [](auto& source) {
-        if (source.element.get()) return false;
-        RestoreStatePlate(source);
-        return true;
+        return !source.element.get();
     });
     std::vector<uintptr_t> seen, selected;
     bool acquired = false;
@@ -2487,7 +2570,6 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater, double origin,
             source = root.sources.end() - 1;
             source->requestingAttention = HasAttentionState(child);
         }
-        PrepareStatePlate(root, *source, insets);
         if (IncludeSource(eligible, source->life)) selected.push_back(identity);
         if (eligible && source->life == Root::Source::Life::Active &&
             (!anchorIdentity || slot.X < anchorX)) {
@@ -2501,9 +2583,9 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater, double origin,
     std::erase_if(root.sources, [&](auto& source) {
         if (std::find(seen.begin(), seen.end(), source.identity) != seen.end())
             return false;
-        RestoreStatePlate(source);
         return true;
     });
+    PrepareStatePlates(root, repeater, tray, insets);
     float prefix = anchorX - static_cast<float>(startLeft);
     bool replaced = root.anchorIdentity && WholeGenerationReplaced(
         root.expressionSources, selected, root.anchorPrefix, prefix);
@@ -2693,7 +2775,8 @@ void Refresh(Root& root) {
         return;
     }
     double backgroundOrigin = background.TransformToVisual(parent).TransformPoint({0, 0}).X;
-    UpdateFollower(root, repeater, origin, startTarget, trayLeft, trayWidth,
+    UpdateFollower(root, repeater, tray, origin, startTarget, trayLeft,
+                   trayWidth,
                    (host - trayWidth - kGap) / 2 - nativeCenter, buttons,
                    origin - backgroundOrigin, background.ActualHeight());
     PrepareGlass(root.dock);
@@ -3013,7 +3096,7 @@ BOOL Wh_ModInit() {
     if (!WindhawkUtils::SetFunctionHook(SetWindowPos, PanelSetWindowPos, &SetWindowPos_Original) ||
         !WindhawkUtils::SetFunctionHook(DestroyWindow, PanelDestroyWindow, &DestroyWindow_Original)) return FALSE;
     if (!g_explorer) {
-        Wh_Log(L"[UWPANEL] initialized v2.47 Shell positioning hooks");
+        Wh_Log(L"[UWPANEL] initialized v2.53 Shell positioning hooks");
         return TRUE;
     }
     if (!WindhawkUtils::SetFunctionHook(DwmSetWindowAttribute, PanelDwmAttribute,
@@ -3058,7 +3141,7 @@ BOOL Wh_ModInit() {
         g_windowClass = 0;
         return FALSE;
     }
-    Wh_Log(L"[UWPOS] initialized v2.47; screenshot-safe liquid glass, native animation follower, gap=12 theme=%d heightMethod=automatic",
+    Wh_Log(L"[UWPOS] initialized v2.53; screenshot-safe liquid glass, native animation follower, gap=12 theme=%d heightMethod=automatic",
            static_cast<int>(g_theme));
     return TRUE;
 }
