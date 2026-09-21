@@ -2,12 +2,187 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-20T19:00:54.000Z</updated>
+    <updated>2026-09-21T10:04:31.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Per-monitor brightness in Quick Settings 2.0]]></title>
+        <id>https://windhawk.net/mods/per-monitor-brightness#1e9a228c451f2d5ceabd8b412c07fa726a4d583b</id>
+        <link href="https://windhawk.net/mods/per-monitor-brightness"/>
+        <updated>2026-09-21T10:04:31.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="permonitorbrightnessinquicksettings">Per-monitor brightness in Quick Settings</h1>
+<p>Windows gives you exactly one brightness slider no matter how many monitors you
+have, and on a desktop it gives you none at all. This mod adds a labelled slider
+for every connected display, right in the Quick Settings panel, each showing its
+current level and carrying the shell's own animated brightness icon.</p>
+<p><img src="https://raw.githubusercontent.com/bardelyne/per-monitor-brightness/main/screenshot.png" alt="Per-monitor brightness sliders in Quick Settings" /></p>
+<h2 id="howeachdisplayisdriven">How each display is driven</h2>
+<ul>
+<li><strong>External monitors</strong> use <strong>DDC/CI</strong> (VCP code <code>0x10</code>), the I2C side-channel
+in the video cable that the monitor's own on-screen menu uses. Most monitors
+made in the last decade support it; some budget panels and some USB-C docks
+do not.</li>
+<li><strong>Laptop internal panels</strong> use <strong>WMI</strong>, the same path the stock slider takes.</li>
+</ul>
+<p>A display that answers neither is listed as uncontrollable rather than being
+silently dropped.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>One titled slider per display, showing the live percentage.</li>
+<li>Sliders ordered left to right to match how the monitors sit on your desk.</li>
+<li>Displays identified by EDID device path, so the right slider follows the right
+monitor across hotplug, reordering and reboots.</li>
+<li>Each slider snaps to what its monitor can actually represent. Panels do not
+all use a 0-100 scale -- a Samsung G32 reports 0-50 -- so offering 1% steps
+would just mean several slider positions that write the same value.</li>
+<li>Function keys move the sliders live, and can optionally drive external
+monitors too, which they cannot do on their own.</li>
+<li>Monitors plugged in or unplugged are picked up immediately.</li>
+<li>Values are re-read whenever the panel opens, so changes made elsewhere show up.</li>
+<li>The stock brightness slider can be hidden, since it duplicates the built-in
+panel's row.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><p><strong>Hide the built-in brightness slider</strong> -- on by default; the stock slider
+only controls the internal panel, which already has its own row here.</p></li>
+<li><p><strong>Laptop brightness keys control every monitor</strong> -- <code>off</code> by default.
+<code>relative</code> shifts other monitors by the same amount, preserving their offset;
+<code>match</code> sets them all to the same percentage.</p>
+<p>It is off by default because Windows raises the same event for a brightness
+key, for the power plan's AC/battery levels, and for idle dimming, with no
+way to tell them apart -- so unplugging the charger or walking away would
+also write to every external monitor. Unlike everything else this mod does,
+that write survives turning the setting off: the monitor stores the value
+itself.</p></li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<p>Requires a Windows 11 build where the Control Center is hosted by
+<code>ShellHost.exe</code> -- developed and tested on 25H2 (build 26200).</p>
+<p>Earlier builds host it in <code>ShellExperienceHost.exe</code> and are <strong>not supported</strong>.
+That process is not included, but the reason has changed and is now only that
+it is untested. The original objection -- that a second XAML host would start a
+second brightness engine, doubling the WMI connection, the DDC/CI probe and the
+response to every brightness keypress -- no longer applies: the engine starts
+only where <code>ControlCenter.dll</code> is loaded, so a process that never hosts the
+Control Center never starts one.</p>
+<p>What remains unverified is whether the hooked symbol and the <code>L1Grid</code> layout
+this mod depends on are the same on those builds. Without one to test on, the
+include stays off.</p>
+<h2 id="notesandlimitations">Notes and limitations</h2>
+<ul>
+<li>A DDC/CI write takes roughly 50-60 ms, and the bus saturates while dragging.
+All hardware access happens on a background thread and repeated values
+collapse into a single write, so dragging never stalls the shell -- but an
+external monitor will visibly step rather than fade. The internal panel is
+around ten times faster and looks smooth.</li>
+<li>DDC/CI has no notification channel: a monitor only ever answers what the host
+asks it. Brightness changed using the monitor's own buttons therefore cannot
+be detected, and only shows up the next time the panel is opened.</li>
+<li>Not every monitor implements DDC/CI correctly. A display that does not answer
+at all is listed as uncontrollable and gets no slider; one that answers but
+misbehaves shows up as writes reporting <code>ok=0</code>. Either way, turn on logging
+for this mod in Windhawk (the mod's <strong>Advanced</strong> settings -&gt; <strong>Logging</strong>) to
+see which.</li>
+<li>A monitor that was asleep, switched to another input, or behind a dock that
+was still enumerating when you signed in will fail that first check through
+no fault of its own. It is retried rather than written off for the session:
+opening the panel again re-probes it, backing off from 30 seconds to at most
+16 minutes between attempts, and unplugging and replugging it starts over
+immediately.</li>
+</ul>]]></content>
+        <author>
+            <name>bardelyne</name>
+            <uri>https://github.com/bardelyne</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Desktop Icons Transparency 1.0.0]]></title>
+        <id>https://windhawk.net/mods/desktop-icons-transparency#bc6a3d1b64ba1cb348c263d8c8e75a74bf3dde71</id>
+        <link href="https://windhawk.net/mods/desktop-icons-transparency"/>
+        <updated>2026-09-21T10:04:12.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopiconstransparency">Desktop Icons Transparency</h1>
+<p>A lightweight mod that adjusts the opacity (alpha channel) of Windows desktop icons, including their text labels and drop shadows.</p>
+<p>Unlike <strong>Transparent Desktop Icons with Spotlight</strong>, this mod applies a fixed opacity directly at draw time using native alpha blending — without creating DirectComposition overlays, duplicate wallpaper layers, or spotlight hover effects.</p>
+<h3 id="features">Features</h3>
+<ul>
+<li>Synchronously fades icon images, labels, and text shadows.</li>
+<li>Does not darken wallpaper or cause black background artifacts.</li>
+<li>Scoped strictly to desktop repainting: does not affect taskbar, tooltips, context menus, Explorer folder windows, or icon renaming.</li>
+<li>Zero CPU and RAM overhead in idle.</li>
+</ul>]]></content>
+        <author>
+            <name>zed712969-crypto</name>
+            <uri>https://github.com/zed712969-crypto</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[PivotLink: Browser Router 1.1]]></title>
+        <id>https://windhawk.net/mods/pivotlink-browser-router#beada6729de84b91790c87ebf19c28274c163975</id>
+        <link href="https://windhawk.net/mods/pivotlink-browser-router"/>
+        <updated>2026-09-21T10:03:31.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added bypass method — press a secondary mouse button simultaneously with left-click to skip routing and let the OS default browser handle the link. Options: Mouse Back + Click (default), Mouse Forward + Click, Right + Left Click, Ctrl, or Disabled.</li>
+<li>Bypass uses cross-process shared memory (with AppContainer-accessible DACL) so it works reliably in sandboxed/UWP apps like WhatsApp and Microsoft Store.</li>
+</ul>]]></content>
+        <author>
+            <name>gauthumj</name>
+            <uri>https://github.com/gauthumj</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[SnapSentry 0.21.1]]></title>
+        <id>https://windhawk.net/mods/snap-sentry#e79dd48287abe987ba9e3869db2ca45983891469</id>
+        <link href="https://windhawk.net/mods/snap-sentry"/>
+        <updated>2026-09-21T10:02:57.000Z</updated>
+        <content type="html"><![CDATA[<p>adds an option to clean up identical screenshots after it copies the image. off by default, and it only looks at recent captures from this run, not the older files already sitting in the folder. a duplicate goes to the recycle bin even when normal deletion is set to permanent, so it's always recoverable.</p>
+<p>it rechecks the earlier copy before recycling anything. if that one's gone or changed, or the two don't still match byte for byte, the new shot stays. changing a setting cancels a pending cleanup. each capture gets a log line for what happened to it.</p>]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[File Explorer Focus Border Remover 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-hide-focus-border#2fbe603edfe78de8a03f7ec29458e68203a30862</id>
+        <link href="https://windhawk.net/mods/explorer-hide-focus-border"/>
+        <updated>2026-09-21T10:02:17.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="fileexplorerfocusborderremover">File Explorer Focus Border Remover</h1>
+<p>Removes the white rectangular focus border around selected files, folders and
+drives in Windows 11 File Explorer while keeping the normal selection and hover
+highlights intact.</p>
+<p>This is different from <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/no-focus-rectangle.wh.cpp">No Focus Rectangle</a>:
+that mod suppresses the classic dotted <code>DrawFocusRect</code>, while this mod targets
+the themed focus border used by the modern File Explorer item view.</p>
+<h2 id="beforeafter">Before / After</h2>
+<p><img src="https://raw.githubusercontent.com/NoMorePlz/windhawk-mods/cbf6be5c3a729079aff4d7cd44011f5189ed771f/assets/explorer-hide-focus-border-before-after-v2.png" alt="Before and after" /></p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Designed for Windows 11 File Explorer.</li>
+<li>The effect is applied at draw time, so it takes effect without restarting
+Explorer when the mod is enabled.</li>
+<li>The implementation relies on an undocumented File Explorer theme detail:
+<code>ItemsView</code>, part 3, state 1 is used for the focus border on current Windows
+builds. A future Windows update may change this.</li>
+<li>On the tested Windows 11 build, <code>GetThemeClass</code> resolved the File Explorer
+item view to the full class name <code>ItemsView</code> in both the tested light/dark
+scenarios, so the implementation matches that class name exactly.</li>
+<li>The mod is scoped to <code>explorer.exe</code>; common Open/Save dialogs hosted by other
+applications are not affected.</li>
+<li>Older Windows versions are untested.</li>
+<li>The intended targets include regular File Explorer items and
+<strong>This PC > Devices and drives</strong>.</li>
+<li>The same focus-border effect can also be changed by the <strong>Rounded Selection</strong>
+option in Win32 UI Modernizer; using both for this effect is redundant.</li>
+</ul>]]></content>
+        <author>
+            <name>Hùng</name>
+            <uri>https://github.com/NoMorePlz</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Visual Tweaks Dark 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-visual-tweaks-dark#0e6b56702ef4219f8b01cfce98cd8a4f7d4adcfb</id>
@@ -873,380 +1048,6 @@ This mod is MIT as well.</p>]]></content>
         <author>
             <name>Threshold Editor</name>
             <uri>https://github.com/CakeDev4k</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tourne'Table [Audio Visualizer] 1.2.0]]></title>
-        <id>https://windhawk.net/mods/tourne-table-desktop-audio-visualizer#9485e30106c141ddc8472442a43c1c740d7ce4b3</id>
-        <link href="https://windhawk.net/mods/tourne-table-desktop-audio-visualizer"/>
-        <updated>2026-09-18T00:46:29.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/BANNER/tourne-header.png" alt="Tourne'Table - a ghost in your desktop's shell" /></p>
-<h1 id="tournetableaudiovisualizer"><code>Tourne'Table</code> <strong>[Audio Visualizer]</strong></h1>
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/11.gif" alt="Tourne'Table Audio Visualizer" /></p>
-<p><em>The Oscilloscope shape running live audio: bottom-left placement, blurred panel, single-pixel border.</em></p>
-<blockquote>
-  <p><strong>A real-time audio visualizer that lives on your Windows desktop.</strong>
-  Built on the foundation of Salyts' Desktop Audio Visualizer, rebuilt around performance.</p>
-</blockquote>
-<p>Play music. Bars dance on your wallpaper. That's the whole idea.</p>
-<p>It listens to <strong>whatever your PC is already playing</strong> (Spotify, YouTube, a game, a call) and draws it behind your desktop icons. No virtual audio cable, no drivers, nothing to configure. It just picks up your system audio.</p>
-<p>It is built to be cheap to run. The render thread wakes only at the frame rate you ask for, the wallpaper blur is computed once instead of every frame, and the drawing surface is sized to the widget rather than the whole desktop, so at a 144 FPS target the visualizer costs about <strong>a third of one CPU core</strong> and <strong>one degree</strong> of CPU package temperature while it plays, and nothing at all while it doesn't.</p>
-<h2 id="aboutthisproject">ABOUT THIS PROJECT</h2>
-<p>Built with an emphasis on lower resource consumption, more efficient rendering, better frame pacing, expanded visualization options, dynamic album-art integration, native Windows media info, deeper customization, and power-conscious idle behavior.</p>
-<p>The goal is simple:</p>
-<blockquote>
-  <p><strong>Make the desktop move with the music, without making the CPU move mountains to do it.</strong></p>
-</blockquote>
-<h2 id="runsasitsownprocess">Runs as its own process</h2>
-<p>Tourne'Table doesn't live inside <code>explorer.exe</code>. It runs as its own dedicated process using Windhawk's tool-mod pattern, so you'll see it as its own entry in Task Manager, separate from the shell. Restarting <code>explorer.exe</code> doesn't kill it. It just reattaches behind the desktop icons once the shell is back. Requires a Windhawk build with tool-mod support (1.7.3+, including the 2.0 alpha line).</p>
-<hr />
-<h2 id="performanceataglance">◈ PERFORMANCE AT A GLANCE</h2>
-<p>Measured on an <strong>Intel Core Ultra 265KF</strong> (8 P-cores plus 12 E-cores), running a 120-bar oscilloscope at a 144 FPS target with background blur on, and with media controls, the peak-frequency readout, peak hold and beat flash all enabled.</p>
-<p>Every figure below is the <strong>change against an idle baseline</strong>, captured back to back in the same session with the same music playing in both, so what you are reading is the cost of the mod rather than whatever else the machine happened to be doing.</p>
-<p>| Metric | Cost of running it |
-|:--|--:|
-| Total CPU usage | <strong>+1.6 percentage points</strong> <em>(about 0.3 of one core)</em> |
-| Peak single-thread | <strong>+10.1 points</strong> |
-| CPU package power | <strong>+7.2 W</strong> |
-| CPU package temperature | <strong>+1.0 °C</strong> |</p>
-<p>Medians across 543 samples with it running and 384 without, at 1.25 s intervals. Medians rather than averages because both captures contained brief unrelated background spikes, and a median is not moved by them.</p>
-<p>When audio stops, rendering stops, not "slows down," <em>stops</em>.</p>
-<p>Full methodology, raw traces and caveats live in <a href="https://github.com/USER-TOURNE/TOURNE-TABLE">the project repo</a> rather than on this page.</p>
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/10.gif" alt="Tourne'Table Audio Visualizer" /></p>
-<p><em>Bottom-left placement against a dark wallpaper, with the Now Playing label sitting above the panel.</em></p>
-<hr />
-<h2 id="visualstyles">◆ VISUAL STYLES</h2>
-<h3 id="8shapes">8 Shapes</h3>
-<p>| Shape | What it does |
-|:--|:--|
-| <strong>Stereo</strong> | Classic equalizer bars. Low notes left, high notes right. |
-| <strong>Mountain</strong> | Peaks in the middle, tapers toward both edges. |
-| <strong>Mirror</strong> | The opposite, grows from the outside edges inward. |
-| <strong>Wave</strong> | Normal bars with a slow ripple rolling through them. |
-| <strong>Breathe</strong> | A gentle swell that rises with the music instead of jumping. |
-| <strong>Dots</strong> | Stacked dots instead of solid bars, old LED-meter look. |
-| <strong>Radial</strong> | Bars shoot outward from a center point, like a sunburst. |
-| <strong>Oscilloscope</strong> | A single line tracing the actual sound wave. |</p>
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/8.gif" alt="Oscilloscope closeup" /></p>
-<p><em>Closeup: the waveform drawn as one continuous line, with the Now Playing label and media buttons alongside.</em></p>
-<h3 id="9colormodes">9 Color Modes</h3>
-<p>| Mode | What it does |
-|:--|:--|
-| <strong>Solid</strong> | One flat color. |
-| <strong>Gradient</strong> | Fades between two colors across the bars. |
-| <strong>Reactive Gradient</strong> | Shifts toward the second color as things get <em>louder</em>. |
-| <strong>Windows Accent</strong> | Matches your Windows accent color, updating instantly. |
-| <strong>Album Art</strong> | Pulls the dominant color from the playing track's cover. |
-| <strong>Dynamic Album</strong> | Gradient between the cover art's two strongest colors. |
-| <strong>Acrylic</strong> | Grows more opaque the louder it gets, invisible in silence. |
-| <strong>Rainbow Cycle</strong> | Continuously cycling hue, adjustable speed. |
-| <strong>Tourne</strong> | Built-in teal → red gradient from my personal palette. |</p>
-<h3 id="plus">Plus</h3>
-<ul>
-<li><strong>2 orientations</strong>: bars grow vertically or horizontally</li>
-<li><strong>3 anchors</strong>: grow from the Bottom, the Top, or <strong>both directions from the Middle</strong></li>
-<li><strong>Peak Hold Caps</strong>: thin markers hang at each bar's recent peak and slowly fall <em>(classic hardware EQ)</em></li>
-<li><strong>Beat Flash</strong>: bars brighten on detected bass hits, on top of any color mode</li>
-<li><strong>Multiband Oscilloscope</strong>: the waveform tints toward whichever part of the spectrum is loudest</li>
-</ul>
-<hr />
-<h2 id="nowplayingdisplay">♪ NOW PLAYING DISPLAY</h2>
-<p>Shows the current <strong>artist and title</strong> above the visualizer, pulled from the same Windows media session that powers your volume popup. Works with Spotify, browsers, and most media players.</p>
-<p>Fades in on track change, fades out after a configurable delay. Custom color, font family and size.</p>
-<hr />
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/7.gif" alt="Oscilloscope closeup" /></p>
-<p><em>A narrower panel. The trace scales to whatever width the bar settings give it.</em></p>
-<h2 id="thepalette">◐ THE PALETTE</h2>
-<p>This project follows my personal theming palette: reflected in the repo screenshots. It can be changed to any hex / RGB / RGBA value you want.</p>
-<p>| Name | Hex | RGB |
-|:--|:--|:--|
-| Green | <code>#15ffa2</code> | <code>21, 255, 162</code> |
-| Red | <code>#ff8f8f</code> | <code>255, 143, 143</code> |
-| Pale Green | <code>#64aa89</code> | <code>100, 170, 137</code> |
-| Alt Pale Green | <code>#6ba6a0</code> | <code>107, 166, 160</code> |
-| Pale Red | <code>#a95d5d</code> | <code>169, 93, 93</code> |
-| Dark Teal <em>(background)</em> | <code>#121c21</code> | <code>18, 28, 33</code> |</p>
-<p>The built-in <strong>Tourne</strong> color mode is drawn from these.</p>
-<hr />
-<h1 id="everysettingexplained">✦ EVERY SETTING, EXPLAINED</h1>
-<p><strong>You don't need any of this to use the mod.</strong> The defaults work. This is for when you want to tweak something and you're wondering what a word means.</p>
-<h2 id="appearance">Appearance</h2>
-<p><strong>Shape</strong>: Which of the 8 styles above to draw.</p>
-<p><strong>Orientation</strong>: <em>Horizontal</em> = a row of bars growing up and down. <em>Vertical</em> = a column growing left and right.</p>
-<p><strong>Bar Count</strong>: How many bars. More = finer detail, wider visualizer. Range <strong>1-2048</strong> (enough to span a 4K or ultrawide screen).</p>
-<p><strong>Bar Width</strong>: How fat each bar is, in pixels.</p>
-<p><strong>Bar Gap</strong>: Space between bars, in pixels. Set to <code>0</code> and they touch.</p>
-<p><strong>Bar Max Size</strong>: How tall a bar gets at full volume. This is the overall height of the visualizer.</p>
-<p><strong>Bar Idle Size</strong>: How tall bars sit in silence. <code>0</code> makes them vanish completely; a few pixels leaves a thin resting line.</p>
-<p><strong>Bar Corner Radius</strong>: How rounded the bar corners are. One number rounds all four equally, or give four numbers separated by spaces for individual control: <code>top-left top-right bottom-right bottom-left</code>. Example: <code>5 5 0 0</code> rounds only the top.</p>
-<p><strong>Color Mode</strong>: Which of the 9 coloring styles above to use.</p>
-<p><strong>Color</strong>: The color used in Solid mode. Format is <code>#AARRGGBB</code> or <code>#RRGGBB</code>: that's <strong>A</strong>lpha (transparency), then <strong>R</strong>ed, <strong>G</strong>reen, <strong>B</strong>lue in hex. Lower the first two digits to make it see-through.</p>
-<p><strong>Gradient Color 1 / 2</strong>: Start and end colors for the gradient modes.</p>
-<p><strong>Sensitivity</strong>: How hard the bars react. Too low and quiet music barely moves them; too high and everything slams to max. Range 0-300. Turn it down for bass-heavy tracks, up for quiet recordings.</p>
-<p><strong>EQ Preset</strong>: Which frequencies get emphasized <em>visually</em>. Doesn't touch your actual audio.
-<code>Default</code> no adjustment · <code>Bass</code> boosts lows · <code>Rock</code> boosts mids and highs · <code>Pop</code> heavy on highs · <code>Jazz</code> warmer, gentler highs · <code>Electronic</code> boosts bass and treble, scoops the middle.</p>
-<p><strong>FFT Size</strong>: How finely sound gets analyzed. An FFT is the math that splits audio into separate frequencies: think of it as sorting sound into buckets by pitch. More buckets = finer detail, slightly more CPU.
-<code>1024</code> fastest, plenty for most · <code>2048</code> / <code>4096</code> noticeably crisper · <code>8192</code> maximum detail.</p>
-<blockquote>
-  <p><strong>Note. This is an admittedly 'beta' implementation for now.</strong> Everything up to <code>8192</code> runs near-flawlessly with almost no overhead, <em>with the caveat that you're using anything other than the Oscilloscope shape.</em></p>
-  <p><strong>One more note:</strong> the higher the FFT Size, the more accurate the Sensitivity slider becomes for your specific audio setup. The correlation generally runs: <strong>as FFT Size goes up, your Sensitivity will need to go up too.</strong> For now that means fine-tuning Sensitivity per EQ Preset <em>and</em> per FFT Size, for your particular placement, size and personal adjustments.</p>
-</blockquote>
-<p><strong>Frequency Scale</strong>: How the frequency range spreads across the bars. This matters more than it sounds.</p>
-<ul>
-<li><strong>Log</strong>: the natural-feeling default. Gives bass and treble roughly equal visual space, matching how humans hear pitch.</li>
-<li><strong>Linear</strong>: spreads by raw Hz. Since most musical energy lives low, this crams all the action into a sliver on the left and leaves the right mostly dead. Technically accurate, visually dull.</li>
-<li><strong>Mel</strong>: uses the <em>mel scale</em>, built from research on how people actually perceive pitch. Like Log, tuned to human hearing.</li>
-</ul>
-<p><strong>Peak Frequency Readout</strong>: Shows the loudest note as a live number, e.g. <code>1.2 kHz</code>.</p>
-<p><strong>Peak Readout Position</strong>: Where that number sits. Horizontal: Left / Center / Right. Vertical: Above / Top / Middle / Bottom / Below.</p>
-<blockquote>
-  <p><strong>Above</strong> and <strong>Below</strong> place it fully <em>outside</em> the bars so it never overlaps the visualization.</p>
-</blockquote>
-<p><strong>Multiband Oscilloscope Coloring</strong>: Only affects the Oscilloscope shape. The line tints toward whatever part of the spectrum is loudest: warm for bass, green for mids, blue for treble. Overrides Color Mode for that shape.</p>
-<p><strong>Anchor</strong>: Which edge bars grow from. <code>Bottom</code> rise upward <em>(classic)</em> · <code>Top</code> hang downward · <code>Middle</code> grow <strong>both directions</strong> from a center line.</p>
-<p><strong>Peak Hold Caps</strong>: Leaves a thin marker floating at each bar's recent peak, which slowly drifts down.</p>
-<p><strong>Beat Flash</strong> + <strong>Intensity</strong>: Flashes bars brighter on bass hits. Intensity controls how hard.</p>
-<p><strong>Rainbow Cycle Speed</strong>: How fast the rainbow rotates. Rainbow mode only.</p>
-<p><strong>Now Playing Text</strong>: Toggles the artist/title display.</p>
-<p><strong>Now Playing Color / Font / Font Size</strong>: Styling for that text. The font must be <strong>installed on your system</strong>: type the exact family name. Windows silently falls back to a default on a typo rather than erroring, so double-check spelling if nothing changes.</p>
-<blockquote>
-  <p>The Peak Frequency Readout shares these same font settings.</p>
-</blockquote>
-<p><strong>Now Playing Display Seconds</strong>: How long the text stays up after a track change before fading.</p>
-<h2 id="position">Position</h2>
-<p><strong>Horizontal Position</strong>: Left-to-right placement as a percentage. <code>0</code> hard left, <code>50</code> centered, <code>100</code> hard right.</p>
-<p><strong>Vertical Position</strong>: Top-to-bottom, same idea. <code>0</code> top, <code>100</code> bottom.</p>
-<p><strong>Monitor</strong>: Which screen to draw on. <code>1</code> is your first monitor.</p>
-<h2 id="background">Background</h2>
-<p><strong>Enabled</strong>: Draws a panel behind the bars. Turn off for bars floating directly on the wallpaper.</p>
-<p><strong>Color</strong>: Panel color in <code>#AARRGGBB</code>. The alpha controls transparency.</p>
-<p><strong>Padding</strong>: Breathing room between the bars and the panel edge.</p>
-<p><strong>Corner Radius</strong>: How rounded the panel corners are. Same one-or-four-value rules as bar radius.</p>
-<p><strong>Blur</strong>: Frosted-glass blur of your wallpaper behind the panel. <code>0</code> disables.</p>
-<blockquote>
-  <p>This used to be the single most expensive setting in the mod. It's now computed once and cached, so it's essentially free per frame.</p>
-</blockquote>
-<p><strong>Border Size / Border Color</strong>: A thin outline around the panel. <code>0</code> for none.</p>
-<h2 id="performance">Performance</h2>
-<p><strong>Target FPS</strong>: How many times per second it redraws. Higher = smoother, more CPU. Little point exceeding your monitor's refresh rate.</p>
-<p><strong>Pause On Fullscreen</strong>: Stops completely when a fullscreen app runs. Detects both true fullscreen <em>(games)</em> and borderless windows. Since the visualizer lives on the desktop it's invisible anyway. This just stops it burning power. Resumes automatically.</p>
-<p><strong>Pause When Silent (seconds)</strong>: After this long without audio, drops to a trickle instead of full speed. <code>0</code> disables.</p>
-<p><strong>Auto-Hide When Idle</strong> + <strong>Delay</strong>: Fades out entirely after prolonged silence. Once fully faded it <strong>stops rendering completely</strong>, not just invisible, genuinely doing nothing until audio returns.</p>
-<p><strong>Pause When Covered</strong>: Stops rendering <em>and</em> audio capture while fully hidden behind another window.</p>
-<blockquote>
-  <p><strong>Off by default.</strong> Reliably detecting "am I covered?" on Windows 11 is genuinely tricky: the shell is full of invisible windows that report themselves as visible. The check is deliberately conservative (only a fully-covering, real application window counts), but if the visualizer ever vanishes when it shouldn't, this is the switch to flip.</p>
-</blockquote>
-<hr />
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/4.gif" alt="Oscilloscope closeup" /></p>
-<p><em>The same shape in a warm colour: the Oscilloscope picks up Color Mode like every other shape.</em></p>
-<h1 id="wheretheefficiencycomesfrom">▲ WHERE THE EFFICIENCY COMES FROM</h1>
-<p>In rough order of measured impact.</p>
-<h3 id="1precisionframepacingthebiggestsinglewin">1. Precision frame pacing: the biggest single win</h3>
-<p>The obvious way to pace a desktop widget is <code>DwmFlush()</code>, which blocks until the monitor's next refresh. That wakes the render thread <strong>on every vertical blank, forever</strong> (60, 144, 240+ times a second) regardless of the target FPS, whether anything needs redrawing, or whether the visualizer is even visible.</p>
-<p>This barely registers as CPU% in Task Manager, because the thread is blocked, not spinning. But every wake-up drags a core out of deep idle. Do that continuously and the core never settles into its efficient sleep states, which reads as a small, permanent bump in package power and temperature. The classic "low usage, still runs warm" signature.</p>
-<blockquote>
-  <p><strong>Note:</strong> this becomes exponentially more noticeable on AMD architecture.</p>
-  <p><strong>Note:</strong> also exponentially more noticeable if you have <strong>C-States disabled</strong> in your BIOS or elsewhere. Shoutout to Process Lasso, Core Director, Park Control and HWiNFO64 for helping me work out why all my E-cores were sitting at 65-70 °C when they were supposed to be idle.</p>
-</blockquote>
-<p><strong>Instead:</strong> a high-resolution waitable timer firing only at the configured rate. Plain <code>Sleep()</code> isn't good enough. It's quantized to ~15.6 ms, which would turn a 60 FPS target into stuttery 30-40 FPS.</p>
-<h3 id="2prerenderedbackgroundblur">2. Pre-rendered background blur</h3>
-<p>A Gaussian blur is a full-image convolution: the most expensive thing Direct2D does in this scene. Recomputing it every frame is pure waste, because its input (your wallpaper) never changes.</p>
-<p><strong>Instead:</strong> it is computed exactly once into a cached bitmap, and each frame just copies that. The cache covers only the widget's bounding box, which is <strong>tens of KB of video memory rather than several MB</strong>. It re-bakes automatically if the widget moves or resizes.</p>
-<h3 id="3widgetsizedrendersurface">3. Widget-sized render surface</h3>
-<p>The visualizer occupies a thin strip, so a desktop-spanning render surface would clear and present millions of untouched pixels every frame, and park two full-desktop buffers in VRAM.</p>
-<p><strong>Instead:</strong> the surface is sized to the widget's bounding box, and the composition layer is offset to position it. That is roughly an order of magnitude less per-frame pixel work and VRAM.</p>
-<h3 id="4cachedgeometry">4. Cached geometry</h3>
-<p>Building the background panel and border means allocating a path geometry and constructing four lines and four arcs by hand. It is rebuilt only when size, padding, radii or border width actually change (in normal use, almost never) rather than every frame.</p>
-<h3 id="5cachedmonitorlookup">5. Cached monitor lookup</h3>
-<p><code>EnumDisplayMonitors()</code> is a real round-trip through the display driver stack. The monitor is resolved once and cached, refreshed on display change, instead of being looked up per frame.</p>
-<h3 id="6reducedframelatency">6. Reduced frame latency</h3>
-<p>DXGI queues up to three frames ahead by default. For a passive widget that's pure latency and power draw with no upside. Capped at <strong>1</strong>.</p>
-<h3 id="7genuineidleshutdown">7. Genuine idle shutdown</h3>
-<p><strong>Auto-Hide</strong> now stops rendering completely once faded: presents one blank frame, then exits the render path entirely. <strong>Pause When Covered</strong> stops rendering and capture while hidden, checked once per second rather than per frame.</p>
-<hr />
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/2.gif" alt="Tourne'Table Audio Visualizer" /></p>
-<p><em>The full-width strip in a red colour mode.</em></p>
-<h1 id="onthenumbers">▦ ON THE NUMBERS</h1>
-<p>The figures above come from HWiNFO64 sensor logging: two captures taken back to back in one session, one with the mod running and one with it disabled, with the same music playing throughout both so the only thing that changed was the mod itself. 543 samples running, 384 disabled, at 1.25 s intervals.</p>
-<p>The full write-up (raw tables, the method, run-to-run variance, and an honest account of where the measurements fall short) is in <a href="https://github.com/USER-TOURNE/TOURNE-TABLE">the project repo</a>. It does not belong on a catalog page, so it is not reproduced here.</p>
-<p>The caveats worth stating up front: <strong>HWiNFO measures the whole machine, not this process alone.</strong> A number quoted as the mod's cost therefore includes the work the mod causes elsewhere, in the compositor and the graphics driver, not only the time spent in its own threads. That makes it larger than a per-process trace would show, and it is the honest figure to quote, because it is what the machine actually pays. Both captures also contained short unrelated background spikes, which is why the numbers above are medians rather than averages.</p>
-<hr />
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/3.gif" alt="Tourne'Table Audio Visualizer" /></p>
-<p><em>Near-silence: the trace flattens out. When audio stops entirely, the render loop stops with it.</em></p>
-<h2 id="credits">♥ CREDITS</h2>
-<p><strong><a href="https://github.com/USER-TOURNE">USER-TOURNE</a></strong>: Author and maintainer: performance work, new features, benchmarking and documentation.</p>
-<p><strong><a href="https://github.com/Salyts">Salyts</a></strong>: Original author of Desktop Audio Visualizer. This project exists because the foundation was good enough to be worth optimizing. Author of his own mod and repo; and a base for this one.</p>
-<p><strong><a href="https://github.com/GR0UD">GR0UD</a></strong>: Audio visualizer code the original was adapted from. Author of his own work; and the base for Salyts.</p>
-<h3 id="acoincidenceworthacknowledging">A coincidence worth acknowledging</h3>
-<p>While I was midway through my initial testing, <strong>NeiZ</strong> (author/maintainer, with <strong>SuperSmile123</strong> contributing) released <a href="https://github.com/ramensoftware/windhawk-mods/commit/e01d0d0dbd6204804235831fd7f68821e4614028">Desktop Audio Visualizer Plus</a> (<code>neiz-supersmile-audio-visualizer</code>). I had planned to publish my own commit that same night: holy coincidence.</p>
-<p>His release spurred another round of testing on my end, and I've since gone through roughly twelve more iterations. I didn't want to ship something that essentially achieved what I was already going for, especially if they'd figuratively led me out to pasture to put a bullet in me: aha.</p>
-<p>To be explicit about attribution: <strong>I did not borrow from or reference NeiZ or SuperSmile123's work at any point</strong>, other than benchmarking theirs for efficiency to decide whether continuing development was worth it. Thanks to them and their contributors regardless.</p>
-<hr />
-<h2 id="license">◘ LICENSE</h2>
-<p>Released under the <strong>MIT License</strong>.</p>
-<pre><code>MIT License
-
-Copyright (c) 2026 USER-TOURNE
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-</code></pre>
-<h3 id="inthespiritofthewtfpl">In the spirit of the WTFPL</h3>
-<blockquote>
-  <p><strong>0. You just do what the fuck you want to.</strong></p>
-  <p>Take it. Fork it. Gut it. Rewrite the parts I got wrong. Ship it. Sell it.
-  Learn something from it and never speak to me again.</p>
-  <p>The only thing MIT actually asks is that the copyright line rides along: 
-  keep the notice, and we're square.</p>
-  <p><em>(I went with MIT over the real WTFPL for one boring reason: this thing
-runs a DLL loaded by Windhawk, and MIT comes with a warranty disclaimer.
-The WTFPL does not. Same energy, fewer ways for my life to get complicated.)</em></p>
-</blockquote>
-<h3 id="thirdpartynotices">Third-party notices</h3>
-<p>This project builds on upstream work by <strong>Salyts</strong> and <strong>GR0UD</strong>. Their original
-code carries its own license terms: if you redistribute this, carry their notices
-along with mine.</p>
-<hr />
-<h2 id="support">❖ SUPPORT</h2>
-<p>If this saved you some degrees, some watts, or just made your desktop nicer to
-look at, you can throw something in the hat. Entirely optional, genuinely appreciated.</p>
-<p><strong><a href="https://ko-fi.com/tourne">ko-fi.com/tourne</a></strong></p>]]></content>
-        <author>
-            <name>USER-TOURNE</name>
-            <uri>https://github.com/USER-TOURNE</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.3.14]]></title>
-        <id>https://windhawk.net/mods/taskbar-vertical#38468ddcc6fd3b16536af293da0a0a6cfa4ddbf2</id>
-        <link href="https://windhawk.net/mods/taskbar-vertical"/>
-        <updated>2026-09-18T00:45:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed misaligned task item labels in the latest Windows version.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.1.8]]></title>
-        <id>https://windhawk.net/mods/taskbar-on-top#a6ca3ccb45e4efc76e546d1704ef2fbe6c7f1370</id>
-        <link href="https://windhawk.net/mods/taskbar-on-top"/>
-        <updated>2026-09-18T00:36:27.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed the jump lists (context menus) of task items not opening in the latest Windows version.</li>
-<li>Fixed the taskbar empty space context menu not clickable with the mouse in the latest Windows version.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Split: Running Left, Pinned Right 0.3.18]]></title>
-        <id>https://windhawk.net/mods/taskbar-split#30a93c50006ebd91a988ef6ba6f461ac903cb5c3</id>
-        <link href="https://windhawk.net/mods/taskbar-split"/>
-        <updated>2026-09-17T23:11:06.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarsplit">Taskbar Split</h1>
-<p>Creates two dynamic application zones on the Windows 11 taskbar:</p>
-<p><img src="https://raw.githubusercontent.com/Artllex/taskbar-split/main/assets/taskbar-split.png" alt="Taskbar Split: running applications on the left and closed pinned applications on the right" /></p>
-<p><code>[Start/System] [Running apps]  &lt;flexible empty space&gt;  [Closed pinned apps] [Tray/Clock]</code></p>
-<p>Launching a pinned app moves it to the left zone and restores its normal size.
-Closing the app returns its pinned icon to the right zone, where icons can be
-smaller and packed more densely. Newly running buttons are appended to the right end of the running zone.</p>
-<p>Drag with the left mouse button to reorder within a section. The dragged
-icon follows the mouse within that section and neighbours make room as it
-crosses their centres. Escape cancels the move; sections cannot be crossed.
-Left-drag is intentionally handled by this mod to keep reordering inside each
-section. It replaces native left-drag for buttons with a recognized Appid.
-Disable "Enable section dragging" to use native input instead; section
-boundaries are then not enforced during dragging. The split layout stays active.</p>
-<p>Per-app order is saved in Windhawk storage after a completed drag and restored
-after Explorer restarts; Windows' persistent pin list is not changed. Buttons
-without a recognized stable Appid retain native input and are not persisted.
-Separate windows sharing one Appid share a rank; their relative window order
-is not persisted. Up to 256 app identities per section are remembered.</p>
-<p>Native Widgets space is reserved when system buttons retain their Windows positions.
-For a left-aligned Start menu, also select Left taskbar alignment in Windows settings.</p>
-<p>Targets the horizontal primary taskbar on Windows 11 x64 and ARM64.
-Disable the mod to immediately return to the standard Windows layout.</p>
-<p>Unlike "Taskbar Start Button Centered Origin", this mod splits by running
-versus closed pinned apps, not by window position on the screen.
-Do not combine with "Start button always on the left",
-"Taskbar Start Button Centered Origin" (taskbar-centered-start-split-icons), or other mods that
-reposition or scale taskbar buttons. They can override the same layout.
-On crowded taskbars, reduced spacing can overlap buttons; reduce the pinned
-icon size or the middle gap, or unpin applications to free space.</p>
-<p>Buttons are positioned through their native XAML arrange rectangles. Closed
-pinned buttons are additionally scaled, including their hover/focus visuals.
-The overflow button follows the running group; Windows still decides which
-applications appear in the overflow menu. Secondary taskbars stay unchanged.</p>
-<p>This mod keeps Start at the left edge and uses the full space up to the tray
-for a launcher/workspace split. Centered Origin instead organizes windows
-around a centered Start button. Separate settings keep these distinct layouts
-easy to configure; enable only one positioning mod at a time.</p>]]></content>
-        <author>
-            <name>Arkadiusz</name>
-            <uri>https://github.com/Artllex</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SumatraPDF scroll tabs with mouse wheel 1.0.0]]></title>
-        <id>https://windhawk.net/mods/sumatrapdf-wheel-scroll-tabs#6b8f938410d8c4946775574001ed53728eff76f8</id>
-        <link href="https://windhawk.net/mods/sumatrapdf-wheel-scroll-tabs"/>
-        <updated>2026-09-17T21:55:57.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="sumatrapdfscrolltabswithmousewheel">SumatraPDF scroll tabs with mouse wheel</h1>
-<p><img src="https://i.imgur.com/xJ4gxoL.gif" alt="demonstration" /></p>
-<p>Use the mouse wheel while hovering over the tab bar of SumatraPDF to switch
-between tabs, the same way the "Chrome/Edge scroll tabs with mouse wheel" mod
-does it for browsers.</p>
-<ul>
-<li>Scrolling down switches to the next tab (to the right), scrolling up to the
-previous tab. SumatraPDF wraps around at both ends. The direction can be
-reversed in the settings.</li>
-<li>Only plain wheel events over the tab bar are intercepted. Ctrl+wheel (zoom),
-Shift+wheel (horizontal scrolling) and wheel events anywhere else are left to
-SumatraPDF.</li>
-<li>Works with the tab bar in SumatraPDF's own title bar (the default with
-<code>UseTabs = true</code>) as well as with a plain tab bar below the menu.</li>
-<li>Both the installed (<code>SumatraPDF.exe</code>) and the portable
-(<code>SumatraPDF-x.y.z-64.exe</code>) builds are covered.</li>
-</ul>
-<h2 id="howitworks">How it works</h2>
-<p>SumatraPDF 3.5 and newer have "Next Tab" / "Previous Tab" commands, bound to
-Ctrl+PageDown / Ctrl+PageUp by default. The mod reads the ids of these commands
-from the accelerator table SumatraPDF registers and posts the matching command
-to the main window, so a wheel notch does exactly the same as pressing the
-shortcut.</p>
-<p>This means the mod relies on Ctrl+PageDown / Ctrl+PageUp being bound to
-"Next Tab" / "Previous Tab". If you rebound these shortcuts to something else
-in the advanced settings (<code>Shortcuts</code>), the wheel triggers whatever they are
-bound to now.</p>
-<p>SumatraPDF versions before 3.5 aren't supported: they have no tab switching
-commands and use Ctrl+PageDown / Ctrl+PageUp for page navigation. The mod stays
-inactive there.</p>
-<h2 id="credits">Credits</h2>
-<p>Based on the <a href="https://windhawk.net/mods/chrome-wheel-scroll-tabs">Chrome/Edge scroll tabs with mouse wheel</a>
-mod by m417z (GPL-3.0).</p>]]></content>
-        <author>
-            <name>Martin Kaiser</name>
-            <uri>https://github.com/Martin-Kaiser-0</uri>
         </author>
     </entry>
 </feed>

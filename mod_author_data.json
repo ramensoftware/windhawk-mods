@@ -147,6 +147,11 @@
     "github": "https://github.com/babamohammed2022",
     "homepages": []
   },
+  "https://github.com/bardelyne": {
+    "author": "bardelyne",
+    "github": "https://github.com/bardelyne",
+    "homepages": []
+  },
   "https://github.com/barrypp": {
     "author": "barry",
     "github": "https://github.com/barrypp",
@@ -440,7 +445,9 @@
   "https://github.com/gauthumj": {
     "author": "gauthumj",
     "github": "https://github.com/gauthumj",
-    "homepages": []
+    "homepages": [
+      "https://www.gauthumj.in/"
+    ]
   },
   "https://github.com/georgiai1": {
     "author": "Georgi AI",
@@ -812,6 +819,11 @@
     "homepages": [
       "https://github.com/MuteAlert/windhawk"
     ]
+  },
+  "https://github.com/nomoreplz": {
+    "author": "Hùng",
+    "github": "https://github.com/NoMorePlz",
+    "homepages": []
   },
   "https://github.com/nox1st": {
     "author": "noX1st",
@@ -1240,6 +1252,11 @@
     "homepages": [
       "https://github.com/ZainYoussef/WinDraw"
     ]
+  },
+  "https://github.com/zed712969-crypto": {
+    "author": "zed712969-crypto",
+    "github": "https://github.com/zed712969-crypto",
+    "homepages": []
   },
   "https://github.com/zeonxr": {
     "author": "ZeonXr",

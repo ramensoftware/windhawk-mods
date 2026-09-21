@@ -1,3 +1,9 @@
+## 0.21.1 ([Sep 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e79dd48287abe987ba9e3869db2ca45983891469/mods/snap-sentry.wh.cpp))
+
+adds an option to clean up identical screenshots after it copies the image. off by default, and it only looks at recent captures from this run, not the older files already sitting in the folder. a duplicate goes to the recycle bin even when normal deletion is set to permanent, so it's always recoverable.
+
+it rechecks the earlier copy before recycling anything. if that one's gone or changed, or the two don't still match byte for byte, the new shot stays. changing a setting cancels a pending cleanup. each capture gets a log line for what happened to it.
+
 ## 0.18.8 ([Aug 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d2af22192847759b3de9d7df43f2364b75331c58/mods/snap-sentry.wh.cpp))
 
 - When a multi-page or animated image is kept instead of deleted, a notice now says so. Before, that only appeared in the log.

@@ -3910,6 +3910,35 @@
         "version": "1.0.0"
       }
     },
+    "desktop-icons-transparency": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789985052000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1789985052000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "zed712969-crypto",
+        "compilerOptions": "-lcomctl32 -lgdi32 -lmsimg32 -luser32",
+        "description": "Adjusts the opacity of desktop icons and text labels without darkening the wallpaper",
+        "github": "https://github.com/zed712969-crypto",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Desktop Icons Transparency",
+        "version": "1.0.0"
+      }
+    },
     "desktop-icons-view": {
       "details": {
         "defaultSorting": 1200,
@@ -5682,6 +5711,39 @@
         "name": "Classic Explorer navigation bar",
         "twitter": "https://twitter.com/m417z",
         "version": "1.0.8"
+      }
+    },
+    "explorer-hide-focus-border": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789984937000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1789984937000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Hùng",
+        "compilerOptions": "-luxtheme",
+        "description": "Removes the white focus border around selected items in File Explorer while preserving the normal selection highlight.",
+        "github": "https://github.com/NoMorePlz",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "File Explorer Focus Border Remover",
+        "version": "1.0.0"
       }
     },
     "explorer-info-bar": {
@@ -11050,6 +11112,39 @@
         "version": "1.0.0"
       }
     },
+    "per-monitor-brightness": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1789985071000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1789985071000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "bardelyne",
+        "compilerOptions": "-ldxva2 -lole32 -loleaut32 -lwbemuuid -luuid -lruntimeobject",
+        "description": "Adds a titled brightness slider for every connected monitor to the Windows 11 Quick Settings panel",
+        "github": "https://github.com/bardelyne",
+        "include": [
+          "ShellHost.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Per-monitor brightness in Quick Settings",
+        "version": "2.0"
+      }
+    },
     "per-monitor-scale-switcher": {
       "details": {
         "defaultSorting": 366,
@@ -11294,7 +11389,7 @@
         ],
         "ratingUsers": 3,
         "reviews": 0,
-        "updated": 1784042990000,
+        "updated": 1789985011000,
         "users": 48
       },
       "metadata": {
@@ -11302,12 +11397,13 @@
         "compilerOptions": "-lshell32",
         "description": "Lightweight link redirection tool with an intuitive 5-tier ranked configuration layout.",
         "github": "https://github.com/gauthumj",
+        "homepage": "https://www.gauthumj.in/",
         "include": [
           "*"
         ],
         "license": "MIT",
         "name": "PivotLink: Browser Router",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "power-action-countdown": {
@@ -12914,12 +13010,12 @@
         ],
         "ratingUsers": 10,
         "reviews": 0,
-        "updated": 1787922818000,
+        "updated": 1789984977000,
         "users": 136
       },
       "metadata": {
         "author": "mario0318",
-        "compilerOptions": "-lole32 -lshell32 -lcomctl32 -lwindowscodecs -lruntimeobject -ladvapi32 -luuid",
+        "compilerOptions": "-lole32 -lshell32 -lcomctl32 -lwindowscodecs -lruntimeobject -ladvapi32 -lbcrypt -luuid",
         "description": "Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.",
         "github": "https://github.com/mario0318",
         "include": [
@@ -12927,7 +13023,7 @@
         ],
         "license": "GPL-3.0",
         "name": "SnapSentry",
-        "version": "0.18.8"
+        "version": "0.21.1"
       }
     },
     "spoof-light-dark-theme": {
