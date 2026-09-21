@@ -835,9 +835,11 @@ result = subprocess.run(["rtk", "proxy", str(executable)], check=True,
                         stdout=subprocess.PIPE, text=True, encoding="utf-8")
 assert "AdjustTaskbarFrameSize" not in code
 assert "plate.CornerRadius(" not in code
-# Superseded by the native gradient rim, which the fill-only dim keeps intact.
+# The button outline is Windows' own gradient rim, kept visible by dimming only
+# the fill. The mod must not draw its own stroke over it again; g_keepButtonRim
+# only chooses whether the native one stays.
 assert "ButtonBorder" not in code
-assert "g_buttonBorder" not in code
+assert "CreateSpriteShape" not in code.split("ShapeVisual GlassHighlights")[0]
 assert "originalCornerRadius" not in code
 assert "cornerRadiusOwned" not in code
 for removed in [

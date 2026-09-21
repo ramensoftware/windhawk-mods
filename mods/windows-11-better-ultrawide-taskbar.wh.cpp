@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.78
+// @version         2.79
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -64,6 +64,10 @@ Task-button hover uses Windows' native animation as a translucent tint over
 the dock. An app requesting attention receives an additional inset refractive
 lens with the native alert color.
 
+**Task and tray buttons** keep Windows' own highlight outline, a faint gradient
+band along one edge that reads as a raised button. Turn the border off for a flat
+highlight instead.
+
 Under the Liquid glass theme each task button can also carry its own refractive
 lens inside the dock, rendered by the same shader pass as the dock itself rather
 than a second capture. Tray items share the dock lens.
@@ -109,6 +113,9 @@ setting.
   $name: Button vertical padding (DIP, default 4)
   $description: Space above and below task and tray button highlights from 0 to 100.
 - button:
+  - border: true
+    $name: Border (default on)
+    $description: Keeps the Windows highlight outline, a faint gradient that reads as a raised button. Off blanks it for a flat highlight.
   - liquidLayer: false
     $name: Per-button liquid glass layer (default off)
     $description: Gives every task button its own refractive lens inside the dock. Liquid glass theme only.
@@ -266,6 +273,7 @@ double g_dockCornerRadius{12};
 double g_buttonCornerRadius{12};
 double g_buttonVerticalPadding{4};
 double g_dockEdgeDistance{4};
+bool g_keepButtonRim{true};
 bool g_buttonLiquidLayer{};
 
 // Holds off the teardown in Wh_ModBeforeUninit while a hook or callback runs.
@@ -863,8 +871,8 @@ struct OwnedDock {
 struct Root {
     struct StatePlate {
         Controls::Border element{nullptr};
-        Media::Brush nativeFill{nullptr};   // Last brush Windows set.
-        Media::Brush appliedFill{nullptr};  // Our alpha-scaled copy of it.
+        Media::Brush appliedFill{nullptr};  // Our alpha-scaled copy of the fill.
+        Media::Brush blankedRim{nullptr};   // Transparent brush over the rim.
         Visual visual{nullptr};
         CompositionGeometricClip clip{nullptr};
         CompositionRoundedRectangleGeometry clipGeometry{nullptr};
@@ -2015,8 +2023,13 @@ void RestoreStatePlate(Root::StatePlate& state) {
             state.stretch && state.element.RenderTransform() == state.stretch;
         bool clipMatch =
             state.clip && state.visual && state.visual.Clip() == state.clip;
+        // Clear rather than write the captured brush back: Windows swaps these per
+        // visual state, so restoring a hover-time brush would pin a visible plate
+        // at rest. Clearing lets the template and state setters take over again.
         bool fillMatch = state.appliedFill &&
                          state.element.Background() == state.appliedFill;
+        bool rimMatch = state.blankedRim &&
+                        state.element.BorderBrush() == state.blankedRim;
         if (state.stretch) {
             if (transformMatch) {
                 state.element.ClearValue(UIElement::RenderTransformProperty());
@@ -2032,16 +2045,24 @@ void RestoreStatePlate(Root::StatePlate& state) {
         }
         if (state.appliedFill) {
             if (fillMatch)
-                state.element.Background(state.nativeFill);
+                state.element.ClearValue(
+                    Controls::Border::BackgroundProperty());
             else
                 Wh_Log(L"[UWITEM] state plate fill ownership lost");
+        }
+        if (state.blankedRim) {
+            if (rimMatch)
+                state.element.ClearValue(
+                    Controls::Border::BorderBrushProperty());
+            else
+                Wh_Log(L"[UWITEM] state plate border ownership lost");
         }
     } catch (...) {
         Wh_Log(L"[UWITEM] state plate restore failed hr=%08X",
                winrt::to_hresult().value);
     }
-    state.nativeFill = nullptr;
     state.appliedFill = nullptr;
+    state.blankedRim = nullptr;
     state.visual = nullptr;
     state.clip = nullptr;
     state.clipGeometry = nullptr;
@@ -2076,13 +2097,22 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
                     auto colour = solid.Color();
                     colour.A = static_cast<uint8_t>(
                         std::lround(colour.A * kPlateFillScale));
-                    state.nativeFill = fill;
                     state.appliedFill = Media::SolidColorBrush(colour);
                     plate.Background(state.appliedFill);
                 } else if (!state.appliedFill) {
                     // A gradient or brush we cannot scale stays untouched.
                     Wh_Log(L"[UWITEM] plate fill is %s; left native",
                            winrt::get_class_name(fill).c_str());
+                }
+            }
+            // Dimming the fill no longer hides the native outline, so blanking
+            // the brush is what the border toggle has to do.
+            if (!g_keepButtonRim) {
+                auto rim = plate.BorderBrush();
+                if (rim && rim != state.blankedRim) {
+                    state.blankedRim = Media::SolidColorBrush(
+                        winrt::Windows::UI::Color{0, 0, 0, 0});
+                    plate.BorderBrush(state.blankedRim);
                 }
             }
         }
@@ -3251,6 +3281,7 @@ BOOL Wh_ModInit() {
         Wh_GetIntSetting(L"buttonVerticalPadding"), 0, 100);
     g_dockEdgeDistance = std::clamp(
         Wh_GetIntSetting(L"edgeDistance"), 0, 100);
+    g_keepButtonRim = Wh_GetIntSetting(L"button.border") != 0;
     g_buttonLiquidLayer = Wh_GetIntSetting(L"button.liquidLayer") != 0;
     auto theme = WindhawkUtils::StringSetting::make(L"theme");
     g_theme = ParseTheme(theme.get());
