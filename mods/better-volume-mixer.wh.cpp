@@ -374,6 +374,7 @@ std::unordered_set<std::wstring> g_liveDefaultSessions;
 HANDLE g_audioNotificationThread;
 HANDLE g_audioNotificationStopEvent;
 HANDLE g_audioNotificationRebuildEvent;
+HANDLE g_audioNotificationSessionEvent;
 std::atomic<bool> g_audioUiRefreshPosted;
 
 int g_dpi = 96;
@@ -955,19 +956,20 @@ bool ApplyTrackedDefaultVolume(const std::wstring& instanceId, int percent,
                                ISimpleAudioVolume* volume) {
     if (instanceId.empty() || !volume || percent < 0 || percent > 100) return false;
 
-    AcquireSRWLockExclusive(&g_defaultVolumeLock);
+    AcquireSRWLockShared(&g_defaultVolumeLock);
     auto previous = g_appliedDefaultVolumes.find(instanceId);
-    if (previous != g_appliedDefaultVolumes.end() && previous->second == percent) {
-        ReleaseSRWLockExclusive(&g_defaultVolumeLock);
-        return false;
-    }
+    bool alreadyApplied = previous != g_appliedDefaultVolumes.end() &&
+                          previous->second == percent;
+    ReleaseSRWLockShared(&g_defaultVolumeLock);
+    if (alreadyApplied) return false;
 
     HRESULT result = volume->SetMasterVolume(percent / 100.0f, nullptr);
-    if (SUCCEEDED(result)) {
-        g_appliedDefaultVolumes[instanceId] = percent;
-    }
+    if (FAILED(result)) return false;
+
+    AcquireSRWLockExclusive(&g_defaultVolumeLock);
+    g_appliedDefaultVolumes[instanceId] = percent;
     ReleaseSRWLockExclusive(&g_defaultVolumeLock);
-    return SUCCEEDED(result);
+    return true;
 }
 
 void QueueAudioUiRefresh(HWND window) {
@@ -1022,10 +1024,20 @@ void ApplyDefaultRuleToSession(IAudioSessionControl* control,
     control2->Release();
 }
 
+struct AudioNotificationContext {
+    HWND window;
+    HANDLE stopEvent;
+    HANDLE rebuildEvent;
+    HANDLE sessionEvent;
+    SRWLOCK pendingLock = SRWLOCK_INIT;
+    std::vector<IAudioSessionControl*> pendingSessions;
+    std::vector<CustomApp> rules;
+};
+
 class AudioSessionNotification final : public IAudioSessionNotification {
 public:
-    AudioSessionNotification(HWND window, const std::vector<CustomApp>& rules)
-        : m_window(window), m_rules(rules) {}
+    explicit AudioSessionNotification(AudioNotificationContext* context)
+        : m_context(context) {}
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
         if (!object) return E_POINTER;
@@ -1049,16 +1061,20 @@ public:
     }
 
     HRESULT STDMETHODCALLTYPE OnSessionCreated(IAudioSessionControl* newSession) override {
-        ApplyDefaultRuleToSession(newSession, m_rules);
-        QueueAudioUiRefresh(m_window);
+        if (!newSession || !m_context) return S_OK;
+
+        newSession->AddRef();
+        AcquireSRWLockExclusive(&m_context->pendingLock);
+        m_context->pendingSessions.push_back(newSession);
+        ReleaseSRWLockExclusive(&m_context->pendingLock);
+        SetEvent(m_context->sessionEvent);
         return S_OK;
     }
 
 private:
     ~AudioSessionNotification() = default;
     LONG m_references = 1;
-    HWND m_window;
-    std::vector<CustomApp> m_rules;
+    AudioNotificationContext* m_context;
 };
 
 class EndpointNotification final : public IMMNotificationClient {
@@ -1135,13 +1151,6 @@ struct AudioSessionWatcher {
     }
 };
 
-struct AudioNotificationContext {
-    HWND window;
-    HANDLE stopEvent;
-    HANDLE rebuildEvent;
-    std::vector<CustomApp> rules;
-};
-
 void PrimeSessionManager(IAudioSessionManager2* manager,
                          const std::vector<CustomApp>& rules) {
     IAudioSessionEnumerator* sessions = nullptr;
@@ -1185,7 +1194,7 @@ void RebuildAudioSessionWatchers(
         device->Release();
         if (FAILED(hr) || !manager) continue;
 
-        auto* notification = new AudioSessionNotification(context->window, context->rules);
+        auto* notification = new AudioSessionNotification(context);
         hr = manager->RegisterSessionNotification(notification);
         if (FAILED(hr)) {
             notification->Release();
@@ -1200,6 +1209,24 @@ void RebuildAudioSessionWatchers(
         watchers.push_back(std::move(watcher));
     }
     devices->Release();
+}
+
+void DrainPendingAudioSessions(AudioNotificationContext* context, bool applyRules) {
+    std::vector<IAudioSessionControl*> pending;
+    AcquireSRWLockExclusive(&context->pendingLock);
+    pending.swap(context->pendingSessions);
+    ReleaseSRWLockExclusive(&context->pendingLock);
+
+    for (IAudioSessionControl* control : pending) {
+        if (applyRules) {
+            ApplyDefaultRuleToSession(control, context->rules);
+        }
+        control->Release();
+    }
+
+    if (applyRules && !pending.empty()) {
+        QueueAudioUiRefresh(context->window);
+    }
 }
 
 DWORD WINAPI AudioNotificationThreadProc(LPVOID parameter) {
@@ -1234,19 +1261,25 @@ DWORD WINAPI AudioNotificationThreadProc(LPVOID parameter) {
     std::vector<std::unique_ptr<AudioSessionWatcher>> watchers;
     RebuildAudioSessionWatchers(enumerator, context.get(), watchers);
 
-    HANDLE events[] = {context->stopEvent, context->rebuildEvent};
+    HANDLE events[] = {
+        context->stopEvent, context->rebuildEvent, context->sessionEvent};
     while (true) {
-        DWORD wait = WaitForMultipleObjects(2, events, FALSE, INFINITE);
+        DWORD wait = WaitForMultipleObjects(3, events, FALSE, INFINITE);
         if (wait == WAIT_OBJECT_0) break;
         if (wait == WAIT_OBJECT_0 + 1) {
             RebuildAudioSessionWatchers(enumerator, context.get(), watchers);
             QueueAudioUiRefresh(context->window);
             continue;
         }
+        if (wait == WAIT_OBJECT_0 + 2) {
+            DrainPendingAudioSessions(context.get(), true);
+            continue;
+        }
         break;
     }
 
     watchers.clear();
+    DrainPendingAudioSessions(context.get(), false);
     if (endpointRegistered) {
         enumerator->UnregisterEndpointNotificationCallback(endpointNotification);
     }
@@ -1276,6 +1309,10 @@ bool StopDefaultVolumeNotifications() {
         CloseHandle(g_audioNotificationRebuildEvent);
         g_audioNotificationRebuildEvent = nullptr;
     }
+    if (g_audioNotificationSessionEvent) {
+        CloseHandle(g_audioNotificationSessionEvent);
+        g_audioNotificationSessionEvent = nullptr;
+    }
     g_audioUiRefreshPosted.store(false);
     return true;
 }
@@ -1285,18 +1322,25 @@ void StartDefaultVolumeNotifications(HWND window) {
 
     g_audioNotificationStopEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_audioNotificationRebuildEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!g_audioNotificationStopEvent || !g_audioNotificationRebuildEvent) {
+    g_audioNotificationSessionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_audioNotificationStopEvent || !g_audioNotificationRebuildEvent ||
+        !g_audioNotificationSessionEvent) {
         Wh_Log(L"Mixer: could not create audio notification events");
         if (g_audioNotificationStopEvent) CloseHandle(g_audioNotificationStopEvent);
         if (g_audioNotificationRebuildEvent) CloseHandle(g_audioNotificationRebuildEvent);
+        if (g_audioNotificationSessionEvent) CloseHandle(g_audioNotificationSessionEvent);
         g_audioNotificationStopEvent = nullptr;
         g_audioNotificationRebuildEvent = nullptr;
+        g_audioNotificationSessionEvent = nullptr;
         return;
     }
 
-    auto* context = new AudioNotificationContext{
-        window, g_audioNotificationStopEvent, g_audioNotificationRebuildEvent,
-        g_settings.customApps};
+    auto* context = new AudioNotificationContext;
+    context->window = window;
+    context->stopEvent = g_audioNotificationStopEvent;
+    context->rebuildEvent = g_audioNotificationRebuildEvent;
+    context->sessionEvent = g_audioNotificationSessionEvent;
+    context->rules = g_settings.customApps;
     g_audioNotificationThread = CreateThread(
         nullptr, 0, AudioNotificationThreadProc, context, 0, nullptr);
     if (!g_audioNotificationThread) {
@@ -1305,8 +1349,10 @@ void StartDefaultVolumeNotifications(HWND window) {
         delete context;
         CloseHandle(g_audioNotificationStopEvent);
         CloseHandle(g_audioNotificationRebuildEvent);
+        CloseHandle(g_audioNotificationSessionEvent);
         g_audioNotificationStopEvent = nullptr;
         g_audioNotificationRebuildEvent = nullptr;
+        g_audioNotificationSessionEvent = nullptr;
     }
 }
 
