@@ -3123,23 +3123,46 @@ static Explorer_SetForegroundWindow_t pOriginalExplorerSetForegroundWindow = nul
 
 static bool IsProcessNamed(DWORD pid, const wchar_t* name) {
     if (!pid || pid == GetCurrentProcessId()) return false;
+    static DWORD s_lastPid = 0;
+    static bool s_lastMatch = false;
+    if (pid == s_lastPid) {
+        return s_lastMatch;
+    }
     HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!hProcess) return false;
     wchar_t path[MAX_PATH] = {};
     DWORD size = MAX_PATH;
     bool match = false;
     if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
-        match = (StrStrIW(path, name) != nullptr);
+        PCWSTR exeName = wcsrchr(path, L'\\');
+        exeName = exeName ? (exeName + 1) : path;
+        match = (_wcsicmp(exeName, name) == 0);
     }
     CloseHandle(hProcess);
+    s_lastPid = pid;
+    s_lastMatch = match;
     return match;
 }
 
 static HWND FindStartMenuCoreWindow() {
+    static HWND s_cached = nullptr;
+    if (s_cached && IsWindow(s_cached)) {
+        return s_cached;
+    }
+
+    HWND hStart = FindWindowW(L"Windows.UI.Core.CoreWindow", L"Start");
+    if (hStart && IsWindow(hStart)) {
+        s_cached = hStart;
+        return hStart;
+    }
+
     HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (tray) {
         HWND h = reinterpret_cast<HWND>(GetPropW(tray, L"WindhawkStartMenuHwnd"));
-        if (h && IsWindow(h)) return h;
+        if (h && IsWindow(h)) {
+            s_cached = h;
+            return h;
+        }
     }
 
     HWND found = nullptr;
@@ -3162,18 +3185,8 @@ static HWND FindStartMenuCoreWindow() {
     }, reinterpret_cast<LPARAM>(&found));
 
     if (found && IsWindow(found)) {
-        if (tray) {
-            SetPropW(tray, L"WindhawkStartMenuHwnd", found);
-        }
+        s_cached = found;
         return found;
-    }
-
-    HWND hStart = FindWindowW(L"Windows.UI.Core.CoreWindow", L"Start");
-    if (hStart && IsWindow(hStart)) {
-        if (tray) {
-            SetPropW(tray, L"WindhawkStartMenuHwnd", hStart);
-        }
-        return hStart;
     }
 
     return nullptr;
@@ -3386,17 +3399,8 @@ static LRESULT CALLBACK SearchHostSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPar
             Wh_Log(L"[SearchHost] WM_ACTIVATE (active) on 0x%p -> redirecting foreground to StartMenu", hWnd);
             HWND hStart = FindStartMenuCoreWindow();
             if (hStart && IsWindow(hStart)) {
-                DWORD startTid = GetWindowThreadProcessId(hStart, nullptr);
-                DWORD curTid = GetCurrentThreadId();
-                if (startTid && startTid != curTid) {
-                    AttachThreadInput(curTid, startTid, TRUE);
-                    SetForegroundWindow(hStart);
-                    BringWindowToTop(hStart);
-                    AttachThreadInput(curTid, startTid, FALSE);
-                } else {
-                    SetForegroundWindow(hStart);
-                    BringWindowToTop(hStart);
-                }
+                SetForegroundWindow(hStart);
+                BringWindowToTop(hStart);
             }
             return 0;
         }
@@ -3425,17 +3429,8 @@ static BOOL WINAPI Hook_SearchHost_SetForegroundWindow(HWND hWnd) {
     HWND hStart = FindStartMenuCoreWindow();
     if (hStart && IsWindow(hStart)) {
         Wh_Log(L"[SearchHost] Redirecting SetForegroundWindow to StartMenu 0x%p", hStart);
-        DWORD startTid = GetWindowThreadProcessId(hStart, nullptr);
-        DWORD curTid = GetCurrentThreadId();
-        if (startTid && startTid != curTid) {
-            AttachThreadInput(curTid, startTid, TRUE);
-            pOrigSearchHostSetForegroundWindow(hStart);
-            BringWindowToTop(hStart);
-            AttachThreadInput(curTid, startTid, FALSE);
-        } else {
-            pOrigSearchHostSetForegroundWindow(hStart);
-            BringWindowToTop(hStart);
-        }
+        pOrigSearchHostSetForegroundWindow(hStart);
+        BringWindowToTop(hStart);
     }
     return TRUE;
 }
@@ -4236,29 +4231,8 @@ void TakeForeground(bool force = false) {
             return;
         }
 
-        DWORD ourWindowTid = GetWindowThreadProcessId(ours, nullptr);
-        DWORD currentTid = current ? GetWindowThreadProcessId(current, nullptr) : 0;
-        DWORD callerTid = GetCurrentThreadId();
-
-        // Simulate Alt press/release to bypass Windows foreground restriction
-        keybd_event(VK_MENU, 0, 0, 0);
-        keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
-
-        if (currentTid && currentTid != callerTid) {
-            AttachThreadInput(callerTid, currentTid, TRUE);
-            if (ourWindowTid && ourWindowTid != callerTid && ourWindowTid != currentTid) {
-                AttachThreadInput(ourWindowTid, currentTid, TRUE);
-            }
-            SetForegroundWindow(ours);
-            BringWindowToTop(ours);
-            if (ourWindowTid && ourWindowTid != callerTid && ourWindowTid != currentTid) {
-                AttachThreadInput(ourWindowTid, currentTid, FALSE);
-            }
-            AttachThreadInput(callerTid, currentTid, FALSE);
-        } else {
-            SetForegroundWindow(ours);
-            BringWindowToTop(ours);
-        }
+        SetForegroundWindow(ours);
+        BringWindowToTop(ours);
     } catch (...) {
     }
 }
@@ -7086,18 +7060,10 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
         BuildResultsList(ownerPanel);
     }
 
-    // Proactively clean any other search boxes across the tree
+    // Proactively clean any other search boxes and disarm scroll tab stops in the immediate owner panel (MainContent)
     try {
-        wux::DependencyObject node = cell;
-        wux::DependencyObject menuRoot = cell;
-        for (int up = 0; up < 12; ++up) {
-            auto parentNode = wuxm::VisualTreeHelper::GetParent(node);
-            if (!parentNode) break;
-            menuRoot = parentNode;
-            node = parentNode;
-        }
-        HideAllOtherSearchBoxes(menuRoot);
-        DisarmScrollTabStops(menuRoot);
+        HideAllOtherSearchBoxes(ownerPanel, 6);
+        DisarmScrollTabStops(ownerPanel, 6);
     } catch (...) {}
 
     SubclassStartMenuWindow();
