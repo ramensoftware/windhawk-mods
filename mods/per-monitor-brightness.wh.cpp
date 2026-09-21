@@ -1731,6 +1731,13 @@ struct SliderMetrics {
     // gives the difference back.
     double gapAbove = -6;
 
+    // And what to leave above it when it sits directly below the group.
+    //
+    // Same arithmetic mirrored: the group's bottom padding sits between the
+    // last native track and us, so the panel gives back whatever that padding
+    // already provides.
+    double gapBelow = -2;
+
     bool measured = false;
 };
 
@@ -1739,7 +1746,11 @@ struct SliderMetrics {
 // the one at the bottom is outside the card entirely, where matching a row it
 // is nowhere near would be imitation for its own sake.
 bool UseNativeMetrics() {
-    return g_panelPosition == PanelPosition::AboveSliders;
+    // Both positions inside the card are drawn to the shell's own row. Only
+    // the one at the bottom keeps the panel's own proportions -- it is outside
+    // the card entirely, where matching a row it is nowhere near would be
+    // imitation for its own sake.
+    return g_panelPosition != PanelPosition::Bottom;
 }
 
 // The panel's own look, for every other position: what it had before there
@@ -2082,6 +2093,16 @@ void TryCaptureBrightnessSource(wux::FrameworkElement const& l1Grid) {
 
 // Either the shell's real AnimatedIcon, or the Segoe Fluent brightness glyph
 // when the Lottie could not be borrowed or cannot be driven by level.
+// Both icon variants are built to this, and the row arithmetic uses the
+// constant rather than reading Width() back off the element.
+//
+// The fallback glyph had no Width at all, so Width() returned NaN -- XAML's
+// spelling of Auto -- and the icon-to-track gap computed from it was NaN,
+// which then went into a Thickness. That is not a rare path: it is what every
+// desktop gets, since with no internal panel there is no brightness Lottie to
+// borrow.
+inline constexpr double kIconSize = 20;
+
 wux::FrameworkElement MakeBrightnessIcon() {
     if (g_brightnessSource) {
         try {
@@ -2111,8 +2132,8 @@ wux::FrameworkElement MakeBrightnessIcon() {
                 if (SUCCEEDED(instance->QueryInterface(
                         winrt::guid_of<wux::FrameworkElement>(),
                         winrt::put_abi(element)))) {
-                    element.Width(20);
-                    element.Height(20);
+                    element.Width(kIconSize);
+                    element.Height(kIconSize);
                     return element;
                 }
             }
@@ -2125,6 +2146,8 @@ wux::FrameworkElement MakeBrightnessIcon() {
     wuxc::FontIcon font;
     font.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
     font.Glyph(L"");  // Brightness
+    font.Width(kIconSize);
+    font.Height(kIconSize);
     return font;
 }
 
@@ -2185,6 +2208,13 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
         injection.builtFor.push_back(d.stableId);
     }
 
+    // A panel with nothing in it still carries its margin, which inside the
+    // card is a blank strip under the sliders. That happens before the first
+    // enumeration -- the early-inject path injects on purpose before the
+    // displays are known -- and permanently when hideUnsupported hides every
+    // one of them.
+    panel.Visibility(wux::Visibility::Collapsed);
+
     for (const brightness::Display& d : displays) {
         const bool controllable = d.transport != brightness::Transport::None;
         if (!controllable && g_hideUnsupported) {
@@ -2236,7 +2266,7 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
         // edge, so what is left over after the icon is the gap.
         const double iconGap =
             UseNativeMetrics()
-                ? g_metrics.sliderLeft - g_metrics.iconLeft - icon.Width()
+                ? g_metrics.sliderLeft - g_metrics.iconLeft - kIconSize
                 : kOwnIconGap;
         icon.Margin(wux::ThicknessHelper::FromLengths(0, 0, iconGap, 0));
         wuxc::Grid::SetColumn(icon, 0);
@@ -2300,6 +2330,10 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
                                       winrt::make_weak(icon),
                                       winrt::make_weak(title)});
     }
+
+    if (panel.Children().Size() > 0) {
+        panel.Visibility(wux::Visibility::Visible);
+    }
 }
 
 wuxc::StackPanel BuildSliderPanel(Injection& injection) {
@@ -2309,11 +2343,16 @@ wuxc::StackPanel BuildSliderPanel(Injection& injection) {
     if (UseNativeMetrics()) {
         // Left and right come from the native row so the icon column and the
         // far end of the track line up with it; the panel used to be 6px left
-        // of the icons and 42px past the end of the sliders. The bottom is
-        // the seam with the group immediately below.
+        // of the icons and 42px past the end of the sliders.
+        //
+        // The seam goes on whichever edge touches the group, and the other
+        // edge gets a plain gap -- these rows carry titles, so they are a
+        // group of their own rather than more of the same list.
+        const bool above = g_panelPosition == PanelPosition::AboveSliders;
         panel.Margin(wux::ThicknessHelper::FromLengths(
-            g_metrics.iconLeft, 8,
-            g_metrics.groupWidth - g_metrics.sliderRight, g_metrics.gapAbove));
+            g_metrics.iconLeft, above ? 8 : g_metrics.gapBelow,
+            g_metrics.groupWidth - g_metrics.sliderRight,
+            above ? g_metrics.gapAbove : 8));
     } else {
         panel.Margin(
             wux::ThicknessHelper::FromLengths(kOwnMargin, 4, kOwnMargin, 8));
@@ -2519,27 +2558,75 @@ int PlacePanelRow(wuxc::Grid const& grid, Injection& injection) {
             continue;
         }
 
-        // An element that starts above the new row but spans across it is the
-        // card. Stretching it is what makes the panel look like part of the
-        // flyout rather than something sitting under it -- and it is only
-        // right for a span that already reached the sliders, so a decorative
-        // border somewhere else is left alone.
-        if (span > 1 && row + span > wantedRow && !injection.cardBorder.get()) {
-            injection.cardBorder = winrt::make_weak(fe);
-            injection.originalCardRowSpan = span;
-            wuxc::Grid::SetRowSpan(fe, span + 1);
+        // The card is whatever spans the sliders row. Widening it by one is
+        // what puts the panel inside it rather than underneath it.
+        //
+        // The test is against the sliders row, not the row being taken. Asking
+        // whether the card crosses the *new* row is only true when the new row
+        // is above the sliders: for "below", the new row sits immediately
+        // after the card's last row, 0 + 2 > 2 is false, and the default
+        // position quietly landed outside the card -- which is the very look
+        // the issue was about. The sliders row is inside the card by
+        // definition, on both sides of it.
+        if (span > 1 && row + span > slidersRow && !injection.cardBorder.get()) {
+            // Widened to a computed span, not by adding one.
+            //
+            // Adding one is not idempotent, and this runs again every time the
+            // panel is re-injected into a grid that already has it -- the card
+            // was observed at span 5 on a grid with four rows, having been
+            // stretched once per injection while the restore only ever stepped
+            // it back by one. The span the card wants is fixed: from its own
+            // row through the lowest row it has to cover, which is our panel
+            // for "below" and the sliders in their new position for "above".
+            const int lastCovered =
+                (g_panelPosition == PanelPosition::AboveSliders) ? slidersRow + 1
+                                                                 : wantedRow;
+            const int wantedSpan = lastCovered - row + 1;
+            if (span < wantedSpan) {
+                injection.cardBorder = winrt::make_weak(fe);
+                injection.originalCardRowSpan = span;
+                wuxc::Grid::SetRowSpan(fe, wantedSpan);
+            }
         }
     }
 
+    int cardSpanNow = 0;
+    if (auto card = injection.cardBorder.get()) {
+        cardSpanNow = wuxc::Grid::GetRowSpan(card);
+    }
     Wh_Log(L"Panel takes row %d (sliders were row %d); moved %zu child(ren) "
            L"down, card span %d -> %d",
            wantedRow, slidersRow, injection.movedChildren.size(),
-           injection.originalCardRowSpan,
-           injection.originalCardRowSpan ? injection.originalCardRowSpan + 1
-                                         : 0);
+           injection.originalCardRowSpan, cardSpanNow);
     return wantedRow;
 }
 
+
+// How far the lowest realized native track sits above the bottom of the
+// group. The first row gives the top inset; only the last row gives this one,
+// and which row that is depends on how many the shell drew.
+double LowestSliderBottom(wux::DependencyObject const& node,
+                          wux::FrameworkElement const& origin, int maxDepth) {
+    double lowest = 0;
+    if (maxDepth < 0) {
+        return lowest;
+    }
+    if (ElementLabel(node).find(L"AsyncSlider") != std::wstring::npos) {
+        if (auto fe = node.try_as<wux::FrameworkElement>()) {
+            if (fe.ActualHeight() > 0) {
+                auto point = fe.TransformToVisual(origin).TransformPoint({0, 0});
+                lowest = point.Y + fe.ActualHeight();
+            }
+        }
+    }
+    int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
+    for (int i = 0; i < count; ++i) {
+        lowest = std::max(lowest,
+                          LowestSliderBottom(wuxm::VisualTreeHelper::GetChild(node, i),
+                                             origin, maxDepth - 1));
+    }
+    return lowest;
+}
 
 // The first realized native slider, and the icon sharing its row.
 void MeasureNativeSliderMetrics(wux::FrameworkElement const& l1Grid) try {
@@ -2599,6 +2686,12 @@ void MeasureNativeSliderMetrics(wux::FrameworkElement const& l1Grid) try {
         const double sliderInset = point.Y - rowTop;
         const double nativeRowGap = 2 * (rowFe.Margin().Top + sliderInset);
         measured.gapAbove = nativeRowGap - (point.Y - groupTop);
+
+        const double groupBottom = groupTop + groupFe.ActualHeight();
+        const double lowest = LowestSliderBottom(group, l1Grid, 12);
+        if (lowest > 0 && groupBottom > lowest) {
+            measured.gapBelow = nativeRowGap - (groupBottom - lowest);
+        }
     }
 
     // A row that measures as nonsense is worse than the defaults.
@@ -2615,9 +2708,10 @@ void MeasureNativeSliderMetrics(wux::FrameworkElement const& l1Grid) try {
     measured.measured = true;
     g_metrics = measured;
     Wh_Log(L"Native slider row: icon at %.0f, slider %.0f..%.0f of %.0f, "
-           L"height %.0f, seam %.0f",
+           L"height %.0f, seams %.0f/%.0f (%s)",
            g_metrics.iconLeft, g_metrics.sliderLeft, g_metrics.sliderRight,
-           g_metrics.groupWidth, g_metrics.rowHeight, g_metrics.gapAbove);
+           g_metrics.groupWidth, g_metrics.rowHeight, g_metrics.gapAbove,
+           g_metrics.gapBelow, g_metrics.measured ? L"measured" : L"defaults");
 } catch (...) {
     Wh_Log(L"Measuring the native slider row threw: %08X", winrt::to_hresult());
 }
@@ -3772,15 +3866,17 @@ void LoadSettings() {
     g_hideStockBrightness = Wh_GetIntSetting(L"hideStockBrightness") != 0;
     g_hideUnsupported = Wh_GetIntSetting(L"hideUnsupported") != 0;
 
+    // No truthiness test: StringSetting converts through operator PCWSTR(),
+    // and Wh_GetStringSetting returns L"" rather than NULL, so the check that
+    // used to wrap this was always taken.
     g_panelPosition = PanelPosition::BelowSliders;
-    if (WindhawkUtils::StringSetting position =
-            WindhawkUtils::StringSetting::make(L"panelPosition")) {
-        std::wstring_view value{position.get()};
-        if (value == L"aboveSliders") {
-            g_panelPosition = PanelPosition::AboveSliders;
-        } else if (value == L"bottom") {
-            g_panelPosition = PanelPosition::Bottom;
-        }
+    WindhawkUtils::StringSetting position =
+        WindhawkUtils::StringSetting::make(L"panelPosition");
+    std::wstring_view positionValue{position.get()};
+    if (positionValue == L"aboveSliders") {
+        g_panelPosition = PanelPosition::AboveSliders;
+    } else if (positionValue == L"bottom") {
+        g_panelPosition = PanelPosition::Bottom;
     }
 
     // Wh_GetStringSetting returns L"" rather than NULL on failure, so a
@@ -3802,8 +3898,11 @@ void LoadSettings() {
         g_engine->SetFollowMode(followMode);
     }
 
-    Wh_Log(L"hideStockBrightness=%d followInternalBrightness=%d",
-           g_hideStockBrightness ? 1 : 0, static_cast<int>(followMode));
+    Wh_Log(L"hideStockBrightness=%d followInternalBrightness=%d "
+           L"panelPosition=%s hideUnsupported=%d",
+           g_hideStockBrightness ? 1 : 0, static_cast<int>(followMode),
+           positionValue.empty() ? L"belowSliders" : position.get(),
+           g_hideUnsupported ? 1 : 0);
 }
 
 BOOL Wh_ModInit() {
