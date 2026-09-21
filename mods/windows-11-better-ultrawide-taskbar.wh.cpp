@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.70
+// @version         2.71
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -845,6 +845,7 @@ struct Root {
         double originalOpacity{};
         double appliedOpacity{};
         bool opacityOwned{};
+        bool opacityWasLocal{};
         Visual visual{nullptr};
         CompositionGeometricClip clip{nullptr};
         CompositionRoundedRectangleGeometry clipGeometry{nullptr};
@@ -2002,13 +2003,18 @@ void RestoreStatePlate(Root::StatePlate& state) {
             else
                 Wh_Log(L"[UWITEM] state plate clip ownership lost");
         }
-        if (opacityMatch)
-            state.element.Opacity(state.originalOpacity);
+        if (opacityMatch) {
+            if (state.opacityWasLocal)
+                state.element.Opacity(state.originalOpacity);
+            else
+                state.element.ClearValue(UIElement::OpacityProperty());
+        }
     } catch (...) {
         Wh_Log(L"[UWITEM] state plate restore failed hr=%08X",
                winrt::to_hresult().value);
     }
     state.opacityOwned = false;
+    state.opacityWasLocal = false;
     state.visual = nullptr;
     state.clip = nullptr;
     state.clipGeometry = nullptr;
@@ -2035,6 +2041,11 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         if (!parent) return;
         if (!state.opacityOwned) {
             state.originalOpacity = plate.Opacity();
+            // A template or visual-state value must be handed back by clearing
+            // ours, not by pinning the number we happened to read.
+            state.opacityWasLocal =
+                plate.ReadLocalValue(UIElement::OpacityProperty()) !=
+                DependencyProperty::UnsetValue();
             state.appliedOpacity =
                 g_theme == DockTheme::Native
                     ? state.originalOpacity
@@ -2635,6 +2646,10 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
         if (winrt::get_class_name(child) != L"Taskbar.TaskListButton") continue;
         auto identity = CanonicalIdentity(child);
         seen.push_back(identity);
+        // Identity alone is unambiguous here: the erase_if above dropped every
+        // source whose element is gone, so a surviving entry's canonical IUnknown
+        // cannot have been recycled by a different live button. MotionEvent also
+        // compares the element because it has no such prune in front of it.
         auto source = std::find_if(root.sources.begin(), root.sources.end(),
             [&](auto const& value) { return value.identity == identity; });
         if (source == root.sources.end()) {
