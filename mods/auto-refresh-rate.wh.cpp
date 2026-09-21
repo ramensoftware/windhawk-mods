@@ -861,7 +861,7 @@ static std::optional<std::wstring> s_cachedInhibitMatch;
     }
     outRates = std::move(dedup);
 
-    if (outRates.empty()) return (targetHz > 1 ? targetHz : 60);
+    if (outRates.empty()) return 0; // Fail closed: no supported modes enumerated
 
     // targetHz == 0: Highest supported refresh rate
     if (targetHz == 0) return outRates.back();
@@ -896,9 +896,10 @@ static std::optional<std::wstring> s_cachedInhibitMatch;
 [[nodiscard]] DWORD GetMaxRefreshRate(const WCHAR* pDevice = nullptr) {
     DEVMODEW dm = {};
     dm.dmSize = sizeof(dm);
-    if (!EnumDisplaySettingsExW(pDevice, ENUM_CURRENT_SETTINGS, &dm, EDS_ROTATEDMODE)) return 144;
+    if (!EnumDisplaySettingsExW(pDevice, ENUM_CURRENT_SETTINGS, &dm, EDS_ROTATEDMODE)) return 60;
     std::vector<DWORD> rates;
-    return ResolveRefreshRate(pDevice, 0, dm, rates);
+    DWORD res = ResolveRefreshRate(pDevice, 0, dm, rates);
+    return (res > 0) ? res : (dm.dmDisplayFrequency > 0 ? dm.dmDisplayFrequency : 60);
 }
 
 [[nodiscard]] DWORD GetMinRefreshRate(const WCHAR* pDevice = nullptr) {
@@ -906,7 +907,8 @@ static std::optional<std::wstring> s_cachedInhibitMatch;
     dm.dmSize = sizeof(dm);
     if (!EnumDisplaySettingsExW(pDevice, ENUM_CURRENT_SETTINGS, &dm, EDS_ROTATEDMODE)) return 60;
     std::vector<DWORD> rates;
-    return ResolveRefreshRate(pDevice, 1, dm, rates);
+    DWORD res = ResolveRefreshRate(pDevice, 1, dm, rates);
+    return (res > 0) ? res : (dm.dmDisplayFrequency > 0 ? dm.dmDisplayFrequency : 60);
 }
 
 [[nodiscard]] std::optional<std::wstring> IsForegroundWindowFullscreen(const std::wstring& knownProc = L"") {
