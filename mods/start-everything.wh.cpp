@@ -1,4 +1,4 @@
-﻿// ==WindhawkMod==
+// ==WindhawkMod==
 // @id              start-everything
 // @name            Everything & Power Tools in the Start Menu
 // @description     Native Everything search inside the Start menu, complete SearchHost disconnection, and seamless focus management.
@@ -10,7 +10,7 @@
 // @include         explorer.exe
 // @architecture    x86-64
 // @license         GPL-3.0
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lcomctl32 -ldwmapi -luser32 -liphlpapi
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -luuid -lshell32 -lshlwapi -lcomctl32 -ldwmapi -luser32 -liphlpapi -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
