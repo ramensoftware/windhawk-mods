@@ -2,25 +2,27 @@
 // @id              taskbar-disk-space-label
 // @name            Taskbar Disk Space Label
 // @description     A simple disk space label integrated into the Windows taskbar
-// @version         1.42
+// @version         1.43
 // @author          allelimo
 // @github          https://github.com/allelimo
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lgdi32
-// @license         MIT
+// @license         GPL-3.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 
-# Taskbar Countdown Timer ori my mod
+# Taskbar Disk Space Label
 
-A lightweight free/available disk space label integrated directly into the Windows 11 taskbar.
-This is kind of a "remix" of the Taskbar Countdown Timer module by Richi (https://github.com/richilp)
-Everything that works ok is by Richi, bad parts are mine.
-I've just removed things that does not seem necessary and chganged the button into a label, but I'm not really shure about what I did,
-I'm still trying to learn. In fact, the module does not apply the setting change without a manual restart, but I don't know how to do it.
+A lightweight free/available disk space label integrated directly into the
+Windows 11 taskbar. This is kind of a "remix" of the Taskbar Countdown Timer
+module by Richi (https://github.com/richilp) Everything that works ok is by
+Richi, bad parts are mine. I've just removed things that does not seem necessary
+and chganged the button into a label, but I'm not really shure about what I did,
+I'm still trying to learn. In fact, the module does not apply the setting change
+without a manual restart, but I don't know how to do it.
 
 ## Features
 
@@ -33,12 +35,11 @@ not yet...
 */
 // ==/WindhawkModReadme==
 
-
 // ==WindhawkModSettings==
 /*
 - diskLetter: "C"
-  $name: Disk 
-  $description: Letter of the disk to be checked (please use the format "C:\")
+  $name: Disk
+  $description: Drive letter, e.g. C
 */
 // ==/WindhawkModSettings==
 
@@ -46,41 +47,41 @@ not yet...
 #undef GetCurrentTime
 #endif
 
-//#include <algorithm>
+// #include <algorithm>
 #include <atomic>
-//#include <chrono>
+// #include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
 #include <list>
-//#include <memory>
-#include <cwchar>
-#include <string>
+// #include <memory>
 #include <dwmapi.h>
 #include <windhawk_utils.h>
+#include <cwchar>
+#include <string>
 
-#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.UI.Xaml.h>
-#include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.h>
 
 using namespace winrt::Windows::UI::Xaml;
 using namespace winrt::Windows::UI::Xaml::Controls;
 using namespace winrt::Windows::UI::Xaml::Media;
 
-
 // -----------------------------------------------------------------------------
 // Globals
 // -----------------------------------------------------------------------------
 
-[[clang::no_destroy]] static TextBlock g_timerText{nullptr};
+[[clang::no_destroy]] static TextBlock g_labelText{nullptr};
 
 static std::atomic<HWND> g_taskbarWnd{nullptr};
 static std::atomic_bool g_labelInjected{false};
 static std::atomic_bool g_systemTrayModuleHooked{false};
 
+[[clang::no_destroy]] static ColumnDefinition g_labelColumn{nullptr};  // g_labelColumn
 [[clang::no_destroy]] static std::list<FrameworkElement::Loaded_revoker>
     g_loadedRevokers;
 
@@ -98,6 +99,8 @@ struct {
 
 static void ApplyDiskSpaceLabelIfAvailable();
 
+[[clang::no_destroy]] static DispatcherTimer g_refreshTimer{nullptr};
+static winrt::event_token g_refreshTickToken{};
 
 // -----------------------------------------------------------------------------
 // XAML helpers
@@ -106,8 +109,7 @@ static void ApplyDiskSpaceLabelIfAvailable();
 static FrameworkElement FindChildRecursive(
     FrameworkElement element,
     const std::function<bool(FrameworkElement)>& callback,
-    int maxDepth = 20)
-{
+    int maxDepth = 20) {
     if (!element || maxDepth <= 0) {
         return nullptr;
     }
@@ -116,8 +118,7 @@ static FrameworkElement FindChildRecursive(
 
     for (int i = 0; i < count; i++) {
         auto child =
-            VisualTreeHelper::GetChild(element, i)
-                .try_as<FrameworkElement>();
+            VisualTreeHelper::GetChild(element, i).try_as<FrameworkElement>();
 
         if (!child) {
             continue;
@@ -127,12 +128,7 @@ static FrameworkElement FindChildRecursive(
             return child;
         }
 
-        auto found =
-            FindChildRecursive(
-                child,
-                callback,
-                maxDepth - 1
-            );
+        auto found = FindChildRecursive(child, callback, maxDepth - 1);
 
         if (found) {
             return found;
@@ -142,219 +138,133 @@ static FrameworkElement FindChildRecursive(
     return nullptr;
 }
 
-
 // -----------------------------------------------------------------------------
 // Taskbar window
 // -----------------------------------------------------------------------------
 
-static HWND FindCurrentProcessTaskbarWnd()
-{
+static HWND FindCurrentProcessTaskbarWnd() {
     HWND result = nullptr;
 
     EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL
-        {
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
             DWORD pid = 0;
             WCHAR className[32];
 
-            if (GetWindowThreadProcessId(
-                    hWnd,
-                    &pid) &&
+            if (GetWindowThreadProcessId(hWnd, &pid) &&
                 pid == GetCurrentProcessId() &&
-                GetClassNameW(
-                    hWnd,
-                    className,
-                    ARRAYSIZE(className)) &&
-                _wcsicmp(
-                    className,
-                    L"Shell_TrayWnd") == 0)
-            {
-                *reinterpret_cast<HWND*>(lParam) =
-                    hWnd;
+                GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
 
                 return FALSE;
             }
 
             return TRUE;
         },
-        reinterpret_cast<LPARAM>(&result)
-    );
+        reinterpret_cast<LPARAM>(&result));
 
     return result;
 }
-
 
 // -----------------------------------------------------------------------------
 // taskbar.dll symbols
 // -----------------------------------------------------------------------------
 
-using CTaskBand_GetTaskbarHost_t =
-    void* (WINAPI*)(void* pThis, void* result);
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void* result);
 
-static CTaskBand_GetTaskbarHost_t
-    CTaskBand_GetTaskbarHost_Original = nullptr;
+static CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original = nullptr;
 
+using TaskbarHost_FrameHeight_t = int(WINAPI*)(void* pThis);
 
-using TaskbarHost_FrameHeight_t =
-    int (WINAPI*)(void* pThis);
+static TaskbarHost_FrameHeight_t TaskbarHost_FrameHeight_Original = nullptr;
 
-static TaskbarHost_FrameHeight_t
-    TaskbarHost_FrameHeight_Original = nullptr;
+using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
 
-
-using std__Ref_count_base__Decref_t =
-    void (WINAPI*)(void* pThis);
-
-static std__Ref_count_base__Decref_t
-    std__Ref_count_base__Decref_Original = nullptr;
-
-
-static void* CTaskBand_ITaskListWndSite_vftable =
+static std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original =
     nullptr;
 
+static void* CTaskBand_ITaskListWndSite_vftable = nullptr;
 
-static bool HookTaskbarDllSymbols()
-{
-    HMODULE module = LoadLibraryExW(
-        L"taskbar.dll",
-        nullptr,
-        LOAD_LIBRARY_SEARCH_SYSTEM32
-    );
+static bool HookTaskbarDllSymbols() {
+    HMODULE module =
+        LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
     if (!module) {
-        Wh_Log(
-            L"ERROR: Could not load taskbar.dll"
-        );
+        Wh_Log(L"ERROR: Could not load taskbar.dll");
 
         return false;
     }
 
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
-        {
-            {
-                LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"
-            },
-            &CTaskBand_ITaskListWndSite_vftable
-        },
-        {
-            {
-                LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"
-            },
-            &CTaskBand_GetTaskbarHost_Original
-        },
-        {
-            {
-                LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"
-            },
-            &TaskbarHost_FrameHeight_Original
-        },
-        {
-            {
-                LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"
-            },
-            &std__Ref_count_base__Decref_Original
-        },
+        {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+         &CTaskBand_ITaskListWndSite_vftable},
+        {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+         &CTaskBand_GetTaskbarHost_Original},
+        {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+         &TaskbarHost_FrameHeight_Original},
+        {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+         &std__Ref_count_base__Decref_Original},
     };
 
-    return WindhawkUtils::HookSymbols(
-        module,
-        taskbarDllHooks,
-        ARRAYSIZE(taskbarDllHooks)
-    );
+    return WindhawkUtils::HookSymbols(module, taskbarDllHooks,
+                                      ARRAYSIZE(taskbarDllHooks));
 }
-
 
 // -----------------------------------------------------------------------------
 // Get taskbar XAML root
 // -----------------------------------------------------------------------------
 
-static XamlRoot GetTaskbarXamlRoot(
-    HWND hTaskbarWnd)
-{
+static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     if (!CTaskBand_GetTaskbarHost_Original ||
         !TaskbarHost_FrameHeight_Original ||
         !std__Ref_count_base__Decref_Original ||
-        !CTaskBand_ITaskListWndSite_vftable)
-    {
-        Wh_Log(
-            L"ERROR: Required symbols are missing"
-        );
+        !CTaskBand_ITaskListWndSite_vftable) {
+        Wh_Log(L"ERROR: Required symbols are missing");
 
         return nullptr;
     }
 
     HWND hTaskSwWnd =
-        reinterpret_cast<HWND>(
-            GetPropW(
-                hTaskbarWnd,
-                L"TaskbandHWND"
-            )
-        );
+        reinterpret_cast<HWND>(GetPropW(hTaskbarWnd, L"TaskbandHWND"));
 
     if (!hTaskSwWnd) {
-        Wh_Log(
-            L"ERROR: TaskbandHWND not found"
-        );
+        Wh_Log(L"ERROR: TaskbandHWND not found");
 
         return nullptr;
     }
 
-    void* taskBand =
-        reinterpret_cast<void*>(
-            GetWindowLongPtrW(
-                hTaskSwWnd,
-                0
-            )
-        );
+    void* taskBand = reinterpret_cast<void*>(GetWindowLongPtrW(hTaskSwWnd, 0));
 
     if (!taskBand) {
-        Wh_Log(
-            L"ERROR: CTaskBand object not found"
-        );
+        Wh_Log(L"ERROR: CTaskBand object not found");
 
         return nullptr;
     }
 
     void* taskBandForSite = taskBand;
 
-    for (int i = 0;
-         *reinterpret_cast<void**>(
-             taskBandForSite) !=
-             CTaskBand_ITaskListWndSite_vftable;
-         i++)
-    {
+    for (int i = 0; *reinterpret_cast<void**>(taskBandForSite) !=
+                    CTaskBand_ITaskListWndSite_vftable;
+         i++) {
         if (i == 20) {
-            Wh_Log(
-                L"ERROR: ITaskListWndSite vftable not found"
-            );
+            Wh_Log(L"ERROR: ITaskListWndSite vftable not found");
 
             return nullptr;
         }
 
-        taskBandForSite =
-            reinterpret_cast<void**>(
-                taskBandForSite) + 1;
+        taskBandForSite = reinterpret_cast<void**>(taskBandForSite) + 1;
     }
 
     void* taskbarHostSharedPtr[2]{};
 
-    CTaskBand_GetTaskbarHost_Original(
-        taskBandForSite,
-        taskbarHostSharedPtr
-    );
+    CTaskBand_GetTaskbarHost_Original(taskBandForSite, taskbarHostSharedPtr);
 
-    if (!taskbarHostSharedPtr[0] ||
-        !taskbarHostSharedPtr[1])
-    {
+    if (!taskbarHostSharedPtr[0] || !taskbarHostSharedPtr[1]) {
         if (taskbarHostSharedPtr[1]) {
-            std__Ref_count_base__Decref_Original(
-                taskbarHostSharedPtr[1]
-            );
+            std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
         }
 
-        Wh_Log(
-            L"ERROR: TaskbarHost not obtained"
-        );
+        Wh_Log(L"ERROR: TaskbarHost not obtained");
 
         return nullptr;
     }
@@ -363,122 +273,74 @@ static XamlRoot GetTaskbarXamlRoot(
 
 #if defined(_M_X64)
     const BYTE* code =
-        reinterpret_cast<const BYTE*>(
-            TaskbarHost_FrameHeight_Original
-        );
+        reinterpret_cast<const BYTE*>(TaskbarHost_FrameHeight_Original);
 
-    if (code[0] == 0x48 &&
-        code[1] == 0x83 &&
-        code[2] == 0xEC &&
-        code[4] == 0x48 &&
-        code[5] == 0x83 &&
-        code[6] == 0xC1 &&
-        code[7] <= 0x7F)
-    {
+    if (code[0] == 0x48 && code[1] == 0x83 && code[2] == 0xEC &&
+        code[4] == 0x48 && code[5] == 0x83 && code[6] == 0xC1 &&
+        code[7] <= 0x7F) {
         offset = code[7];
-    }
-    else {
-        Wh_Log(
-            L"Unsupported TaskbarHost::FrameHeight"
-        );
-        std__Ref_count_base__Decref_Original(
-            taskbarHostSharedPtr[1]
-        );
+    } else {
+        Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
         return nullptr;
     }
 #elif defined(_M_ARM64)
     const DWORD* p =
-        reinterpret_cast<const DWORD*>(
-            TaskbarHost_FrameHeight_Original
-        );
+        reinterpret_cast<const DWORD*>(TaskbarHost_FrameHeight_Original);
 
-    if (p[0] == 0xD503237F &&
-        (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
-        p[2] == 0x910003FD &&
-        (p[3] & 0xFFF00FE0) == 0xF8400C00)
-    {
+    if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+        p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
         offset = (p[3] >> 12) & 0xFF;
-    }
-    else {
-        Wh_Log(
-            L"Unsupported TaskbarHost::FrameHeight"
-        );
-        std__Ref_count_base__Decref_Original(
-            taskbarHostSharedPtr[1]
-        );
+    } else {
+        Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
         return nullptr;
     }
 #else
 #error "Unsupported architecture"
 #endif
 
-    auto* unknown =
-        *reinterpret_cast<IUnknown**>(
-            reinterpret_cast<BYTE*>(
-                taskbarHostSharedPtr[0]
-            ) + offset
-        );
+    auto* unknown = *reinterpret_cast<IUnknown**>(
+        reinterpret_cast<BYTE*>(taskbarHostSharedPtr[0]) + offset);
 
     if (!unknown) {
-        Wh_Log(
-            L"ERROR: Taskbar XAML object not found"
-        );
+        Wh_Log(L"ERROR: Taskbar XAML object not found");
 
-        std__Ref_count_base__Decref_Original(
-            taskbarHostSharedPtr[1]
-        );
+        std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
 
         return nullptr;
     }
 
     FrameworkElement taskbarElement = nullptr;
 
-    unknown->QueryInterface(
-        winrt::guid_of<FrameworkElement>(),
-        winrt::put_abi(taskbarElement)
-    );
+    unknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                            winrt::put_abi(taskbarElement));
 
-    auto result =
-        taskbarElement
-            ? taskbarElement.XamlRoot()
-            : nullptr;
+    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
 
-    std__Ref_count_base__Decref_Original(
-        taskbarHostSharedPtr[1]
-    );
+    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
 
     return result;
 }
-
 
 // -----------------------------------------------------------------------------
 // Execute code on taskbar XAML thread
 // -----------------------------------------------------------------------------
 
-using RunFromWindowThreadProc_t =
-    void (*)(void*);
+using RunFromWindowThreadProc_t = void (*)(void*);
 
-static bool RunFromWindowThread(
-    HWND hWnd,
-    RunFromWindowThreadProc_t proc,
-    void* procParam)
-{
+static bool RunFromWindowThread(HWND hWnd,
+                                RunFromWindowThreadProc_t proc,
+                                void* procParam) {
     static const UINT message =
-        RegisterWindowMessageW(
-            L"Windhawk_RunFromWindowThread_" WH_MOD_ID
-        );
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
-    struct Param
-    {
+    struct Param {
         RunFromWindowThreadProc_t proc;
         void* procParam;
     };
 
-    DWORD threadId =
-        GetWindowThreadProcessId(
-            hWnd,
-            nullptr
-        );
+    DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
 
     if (!threadId) {
         return false;
@@ -491,72 +353,82 @@ static bool RunFromWindowThread(
 
     HHOOK hook = SetWindowsHookExW(
         WH_CALLWNDPROC,
-        [](int nCode,
-           WPARAM wParam,
-           LPARAM lParam) -> LRESULT
-        {
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
             if (nCode == HC_ACTION) {
                 const CWPSTRUCT* cwp =
-                    reinterpret_cast<
-                        const CWPSTRUCT*>(
-                            lParam
-                        );
+                    reinterpret_cast<const CWPSTRUCT*>(lParam);
 
                 if (cwp->message == message) {
-                    auto* param =
-                        reinterpret_cast<Param*>(
-                            cwp->lParam
-                        );
+                    auto* param = reinterpret_cast<Param*>(cwp->lParam);
 
-                    param->proc(
-                        param->procParam
-                    );
+                    param->proc(param->procParam);
                 }
             }
 
-            return CallNextHookEx(
-                nullptr,
-                nCode,
-                wParam,
-                lParam
-            );
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
         },
-        nullptr,
-        threadId
-    );
+        nullptr, threadId);
 
     if (!hook) {
         return false;
     }
 
-    Param param{
-        proc,
-        procParam
-    };
+    Param param{proc, procParam};
 
-    SendMessageW(
-        hWnd,
-        message,
-        0,
-        reinterpret_cast<LPARAM>(&param)
-    );
+    SendMessageW(hWnd, message, 0, reinterpret_cast<LPARAM>(&param));
 
     UnhookWindowsHookEx(hook);
 
     return true;
 }
 
+// Then pass GetDiskRootPath().c_str() to GetDiskFreeSpaceExW,
+// show root.substr(0, 2) (C:) in the label, and handle the empty/failed case
+// explicitly (e.g. show C: n/a) rather than 00/00.
+
+// Accepts "C", "C:" or "C:\" and returns "C:\" (empty if unset).
+static std::wstring GetDiskRootPath() {
+    std::wstring root = g_settings.mysettings_diskLetter;
+    if (root.empty()) {
+        return root;
+    }
+    if (root.size() == 1) {
+        root += L':';
+    }
+    if (root.back() != L'\\') {
+        root += L'\\';
+    }
+
+    std::transform(root.begin(), root.end(), root.begin(), ::toupper);
+
+    return root;
+}
+
+static std::wstring GetDiskLabel() {
+    std::wstring root = g_settings.mysettings_diskLetter;
+    if (root.empty()) {
+        return root;
+    }
+    if (root.size() == 1) {
+        root += L':';
+    }
+
+    std::transform(root.begin(), root.end(), root.begin(), ::toupper);
+
+    return root;
+}
 
 // -----------------------------------------------------------------------------
 // Get disk information: available free space, total space, total free space
 // -----------------------------------------------------------------------------
 void GetDiskInfo() {
-
     ULARGE_INTEGER freeAvailable, totalBytes, totalFree;
 
     // Call GetDiskFreeSpaceExA for the selected drive
-    if (GetDiskFreeSpaceExW(g_settings.mysettings_diskLetter, &freeAvailable, &totalBytes, &totalFree)) {
-
+    // if (GetDiskFreeSpaceExW(g_settings.mysettings_diskLetter, &freeAvailable,
+    // &totalBytes, &totalFree)) {
+    if (GetDiskFreeSpaceExW(GetDiskRootPath().c_str(), &freeAvailable,
+                            &totalBytes, &totalFree)) {
         myspacefree = totalFree.QuadPart / (1024 * 1024 * 1024);
         myspacetot = totalBytes.QuadPart / (1024 * 1024 * 1024);
 
@@ -566,210 +438,244 @@ void GetDiskInfo() {
     }
 }
 
-
 // -----------------------------------------------------------------------------
 // Format space information to be displayed on the taskbar label
 // -----------------------------------------------------------------------------
-static std::wstring FormatSpace(
-    int spacefree, int spacetot, LPCWSTR diskletter)
-{
+static std::wstring FormatSpace(int spacefree,
+                                int spacetot,
+                                LPCWSTR diskletter) {
+    
+    std::wstring str = GetDiskLabel().c_str();
 
-    std::wstring str(diskletter);
-    str.pop_back();
-    LPCWSTR trimmed = str.c_str();
+    //std::wstring str = GetDiskRootPath().c_str();
+    //str.substr(0, 2);
+    diskletter = str.c_str();
 
     wchar_t text[64]{};
 
-    swprintf_s(
-        text,
-        L"%s %02d/%02d",
-        trimmed,
-        spacefree,
-        spacetot
-    );
+    if (spacefree == 0 && spacetot == 0) {
+        swprintf_s(text, L"%s n/a",
+                   // diskletter,
+                   // GetDiskLabel().c_str(),
+                   diskletter);
+    }
+
+    // std::wstring str(diskletter);
+    // str.pop_back();
+    // LPCWSTR trimmed = str.c_str();
+
+    // show root.substr(0, 2) (C:) in the label,
+
+    else {
+        swprintf_s(text, L"%s %02d/%02d",
+                   // diskletter,
+                   // GetDiskLabel().c_str(),
+                   diskletter, spacefree, spacetot);
+    }
 
     return text;
 }
 
+void LoadSettings() {
+    g_settings.mysettings_diskLetter = Wh_GetStringSetting(L"diskLetter");
+    // g_settings.mysettings_diskLetter =
+    // WindhawkUtils::StringSetting(L"diskLetter");
+}
 
+static void RefreshDiskSpaceLabel(void*) {
+    LoadSettings();
+    if (g_labelText) {
+        GetDiskInfo();
+        g_labelText.Text(FormatSpace(myspacefree, myspacetot,
+                                     g_settings.mysettings_diskLetter));
+    }
+}
 
 // -----------------------------------------------------------------------------
-// Add/remove taskbar button
+// Add/remove taskbar label
 // -----------------------------------------------------------------------------
 
-static void AddDiskSpaceLabel(
-    void* param)
-{
+static void AddDiskSpaceLabel(void* param) {
     if (g_unloading.load()) {
         return;
     }
 
-    HWND taskbar =
-        reinterpret_cast<HWND>(param);
+    HWND taskbar = reinterpret_cast<HWND>(param);
 
-    auto xamlRoot =
-        GetTaskbarXamlRoot(taskbar);
+    auto xamlRoot = GetTaskbarXamlRoot(taskbar);
 
     if (!xamlRoot) {
         return;
     }
 
-    auto content =
-        xamlRoot.Content()
-            .try_as<FrameworkElement>();
+    auto content = xamlRoot.Content().try_as<FrameworkElement>();
 
     if (!content) {
         return;
     }
 
-    auto tray =
-        FindChildRecursive(
-            content,
-            [](FrameworkElement element)
-            {
-                return
-                    element.Name() ==
-                    L"SystemTrayFrameGrid";
-            }
-        );
+    auto tray = FindChildRecursive(content, [](FrameworkElement element) {
+        return element.Name() == L"SystemTrayFrameGrid";
+    });
 
     if (!tray) {
         return;
     }
 
-    auto panel =
-        tray.try_as<Panel>();
+    auto panel = tray.try_as<Panel>();
 
     if (!panel) {
         return;
     }
 
-    auto existing =
-        FindChildRecursive(
-            tray,
-            [](FrameworkElement element)
-            {
-                return
-                    element.Name() ==
-                    L"TaskbarDiskSpaceLabel";
-            }
-        );
+    auto existing = FindChildRecursive(tray, [](FrameworkElement element) {
+        return element.Name() == L"TaskbarDiskSpaceLabel";
+    });
 
-    // The current XAML tree already has our button.
+    // The current XAML tree already has our label.
     if (existing) {
         g_taskbarWnd.store(taskbar);
         g_labelInjected.store(true);
         return;
     }
+
+    g_labelText = nullptr;
+    g_labelColumn = nullptr;
     
-    g_timerText = nullptr;
-    g_timerText = TextBlock();
-   
-    g_timerText.Name(
-        L"TaskbarDiskSpaceLabel"
-    );
+    g_labelText = TextBlock();
+
+    g_labelText.Name(L"TaskbarDiskSpaceLabel");
 
     // get disk iformation
     GetDiskInfo();
 
     // format the info to be displayed
-    g_timerText.Text(FormatSpace(myspacefree, myspacetot, g_settings.mysettings_diskLetter));
-     
-    g_timerText.VerticalAlignment(
-        VerticalAlignment::Center
-    );
+    g_labelText.Text(
+        FormatSpace(myspacefree, myspacetot, g_settings.mysettings_diskLetter));
 
-    
-    auto children =
-        panel.Children();
+    g_labelText.VerticalAlignment(VerticalAlignment::Center);
+    g_labelText.Padding(Thickness{4, 0, 4, 0});
+    g_labelText.FontSize(14); //maybe make this configurable
+    //g_labelText.FontFamily(L"Segoe UI Variable Display");
 
-    auto trayClass =
-        winrt::get_class_name(tray);
+    auto children = panel.Children();
 
-    if (trayClass ==
-        L"Windows.UI.Xaml.Controls.StackPanel")
-    {
-        children.InsertAt(
-            0,
-            //g_timerButton
-            g_timerText
-        );
-    }
-    else {
-        auto trayGrid =
-            tray.try_as<Grid>();
+    auto trayClass = winrt::get_class_name(tray);
+
+    if (trayClass == L"Windows.UI.Xaml.Controls.StackPanel") {
+        children.InsertAt(0, g_labelText);
+    } else {
+        auto trayGrid = tray.try_as<Grid>();
 
         if (!trayGrid) {
-            Wh_Log(
-                L"ERROR: Unsupported SystemTrayFrameGrid layout class: %s",
-                trayClass.c_str()
-            );
-  
+            Wh_Log(L"ERROR: Unsupported SystemTrayFrameGrid layout class: %s",
+                   trayClass.c_str());
+
             return;
         }
-     
-        children.InsertAt(
-            0,
-            g_timerText
-        );
+
+    auto columns = trayGrid.ColumnDefinitions(); //allelimo check
+
+        g_labelColumn = ColumnDefinition();
+
+        g_labelColumn.Width(GridLengthHelper::Auto());
+
+        columns.InsertAt(0, g_labelColumn);
+
+        for (uint32_t i = 0; i < children.Size(); i++) {
+            auto child = children.GetAt(i).try_as<FrameworkElement>();
+
+            if (!child) {
+                continue;
+            }
+
+            Grid::SetColumn(child, Grid::GetColumn(child) + 1);
+        }
+
+        Grid::SetColumn(g_labelText, 0); //allelimo check
+
+
+        children.InsertAt(0, g_labelText);
     }
 
+    // In AddDiskSpaceLabel, after the TextBlock is inserted:
+    g_refreshTimer = DispatcherTimer();
+    g_refreshTimer.Interval(std::chrono::seconds(60));
+    g_refreshTickToken = g_refreshTimer.Tick(
+        [](auto&&, auto&&) { RefreshDiskSpaceLabel(nullptr); });
+    g_refreshTimer.Start();
 
     g_taskbarWnd.store(taskbar);
     g_labelInjected.store(true);
 
-    Wh_Log(
-        L"Timer button added to taskbar"
-    );
+    Wh_Log(L"Label added to taskbar");
 }
 
-static void RemoveDiskSpaceLabel(
-    void*)
-{
- 
-    if (g_timerText) {
-
+static void RemoveDiskSpaceLabel(void*) {
+    if (g_labelText) {
         auto parentElement =
-            VisualTreeHelper::GetParent(
-                //g_timerButton
-                g_timerText
-            ).try_as<FrameworkElement>();
+            VisualTreeHelper::GetParent(g_labelText).try_as<FrameworkElement>();
 
-        auto parent =
-            parentElement.try_as<Panel>();
+        auto parent = parentElement.try_as<Panel>();
 
         if (parent) {
-            auto children =
-                parent.Children();
+            auto children = parent.Children();
 
             uint32_t index = 0;
 
-            if (children.IndexOf(
-                g_timerText,
-                index))
-            {
+            if (children.IndexOf(g_labelText, index)) {
                 children.RemoveAt(index);
             }
 
-            auto parentGrid =
-                parentElement.try_as<Grid>();
+            auto parentGrid = parentElement.try_as<Grid>();
+
+            if (parentGrid && g_labelColumn) {   //allelimo check
+                auto columns = parentGrid.ColumnDefinitions();
+
+                uint32_t columnIndex = 0;
+                if (columns.IndexOf(g_labelColumn, columnIndex)) {
+                    for (uint32_t i = 0; i < children.Size(); i++) {
+                        auto child =
+                            children.GetAt(i).try_as<FrameworkElement>();
+
+                        if (!child) {
+                            continue;
+                        }
+
+                        int currentColumn = Grid::GetColumn(child);
+
+                        if (currentColumn > static_cast<int>(columnIndex)) {
+                            Grid::SetColumn(child, currentColumn - 1);
+                        }
+                    }
+
+                    columns.RemoveAt(columnIndex);
+                }
+            }
+
+
         }
     }
 
+    // In RemoveDiskSpaceLabel, before g_diskText is released:
+    if (g_refreshTimer) {
+        g_refreshTimer.Stop();
+        g_refreshTimer.Tick(g_refreshTickToken);
+        g_refreshTimer = nullptr;
+    }
+
     g_loadedRevokers.clear();
-    g_timerText = nullptr;
+    g_labelColumn = nullptr;
+    g_labelText = nullptr;
     g_labelInjected.store(false);
 }
 
-
-static void ApplyDiskSpaceLabelIfAvailable()
-{
+static void ApplyDiskSpaceLabelIfAvailable() {
     if (g_unloading.load()) {
         return;
     }
 
-    HWND taskbar =
-        FindCurrentProcessTaskbarWnd();
+    HWND taskbar = FindCurrentProcessTaskbarWnd();
 
     if (!taskbar) {
         return;
@@ -777,26 +683,14 @@ static void ApplyDiskSpaceLabelIfAvailable()
 
     g_taskbarWnd.store(taskbar);
 
-    if (!RunFromWindowThread(
-            taskbar,
-            AddDiskSpaceLabel,
-            taskbar))
-    {
+    if (!RunFromWindowThread(taskbar, AddDiskSpaceLabel, taskbar)) {
         Wh_Log(L"Could not access taskbar UI thread");
     }
 }
 
-
-static DWORD WINAPI RetryThreadProc(
-    LPVOID)
-{
-    for (int i = 0;
-         i < 5 && !g_unloading.load();
-         i++)
-    {
-        if (g_labelInjected.load() ||
-            g_unloading.load())
-        {
+static DWORD WINAPI RetryThreadProc(LPVOID) {
+    for (int i = 0; i < 5 && !g_unloading.load(); i++) {
+        if (g_labelInjected.load() || g_unloading.load()) {
             break;
         }
 
@@ -807,49 +701,32 @@ static DWORD WINAPI RetryThreadProc(
     return 0;
 }
 
-
 // -----------------------------------------------------------------------------
 // System tray rebuild hook
 // -----------------------------------------------------------------------------
 
-using IconView_IconView_t =
-    void* (WINAPI*)(void* pThis);
+using IconView_IconView_t = void*(WINAPI*)(void* pThis);
 
-static IconView_IconView_t
-    IconView_IconView_Original = nullptr;
+static IconView_IconView_t IconView_IconView_Original = nullptr;
 
-using LoadLibraryExW_t =
-    HMODULE (WINAPI*)(LPCWSTR, HANDLE, DWORD);
+using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 
-static LoadLibraryExW_t
-    LoadLibraryExW_Original = nullptr;
+static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
 
-
-static HMODULE GetSystemTrayModuleHandle()
-{
-    if (HMODULE module =
-            GetModuleHandleW(L"SystemTray.dll"))
-    {
+static HMODULE GetSystemTrayModuleHandle() {
+    if (HMODULE module = GetModuleHandleW(L"SystemTray.dll")) {
         return module;
     }
 
-    if (HMODULE module =
-            GetModuleHandleW(L"Taskbar.View.dll"))
-    {
+    if (HMODULE module = GetModuleHandleW(L"Taskbar.View.dll")) {
         return module;
     }
 
-    return GetModuleHandleW(
-        L"ExplorerExtensions.dll"
-    );
+    return GetModuleHandleW(L"ExplorerExtensions.dll");
 }
 
-
-static void* WINAPI IconView_IconView_Hook(
-    void* pThis)
-{
-    auto result =
-        IconView_IconView_Original(pThis);
+static void* WINAPI IconView_IconView_Hook(void* pThis) {
+    auto result = IconView_IconView_Original(pThis);
 
     if (g_unloading.load()) {
         return result;
@@ -857,11 +734,8 @@ static void* WINAPI IconView_IconView_Hook(
 
     FrameworkElement iconView = nullptr;
 
-    reinterpret_cast<IUnknown**>(pThis)[1]
-        ->QueryInterface(
-            winrt::guid_of<FrameworkElement>(),
-            winrt::put_abi(iconView)
-        );
+    reinterpret_cast<IUnknown**>(pThis)[1]->QueryInterface(
+        winrt::guid_of<FrameworkElement>(), winrt::put_abi(iconView));
 
     if (!iconView) {
         return result;
@@ -870,50 +744,36 @@ static void* WINAPI IconView_IconView_Hook(
     g_loadedRevokers.emplace_back();
     auto it = std::prev(g_loadedRevokers.end());
 
-    *it = iconView.Loaded(
-        winrt::auto_revoke_t{},
-        [it](
-            winrt::Windows::Foundation::IInspectable const&,
-            RoutedEventArgs const&)
-        {
-            g_loadedRevokers.erase(it);
+    *it = iconView.Loaded(winrt::auto_revoke_t{},
+                          [it](winrt::Windows::Foundation::IInspectable const&,
+                               RoutedEventArgs const&) {
+                              g_loadedRevokers.erase(it);
 
-            if (g_unloading.load()) {
-                return;
-            }
+                              if (g_unloading.load()) {
+                                  return;
+                              }
 
-            // A new IconView means the tray may have rebuilt its XAML tree.
-            g_labelInjected.store(false);
-            ApplyDiskSpaceLabelIfAvailable();
-        }
-    );
+                              // A new IconView means the tray may have rebuilt
+                              // its XAML tree.
+                              g_labelInjected.store(false);
+                              ApplyDiskSpaceLabelIfAvailable();
+                          });
 
     return result;
 }
 
-
-static bool HookSystemTraySymbols(
-    HMODULE module)
-{
+static bool HookSystemTraySymbols(HMODULE module) {
     WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {{
-        {
-            LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"
-        },
+        {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
         &IconView_IconView_Original,
         IconView_IconView_Hook,
     }};
 
-    return WindhawkUtils::HookSymbols(
-        module,
-        systemTrayDllHooks,
-        ARRAYSIZE(systemTrayDllHooks)
-    );
+    return WindhawkUtils::HookSymbols(module, systemTrayDllHooks,
+                                      ARRAYSIZE(systemTrayDllHooks));
 }
 
-
-static void HandleLoadedModuleIfSystemTray(
-    HMODULE module)
-{
+static void HandleLoadedModuleIfSystemTray(HMODULE module) {
     if (GetSystemTrayModuleHandle() != module) {
         return;
     }
@@ -921,25 +781,16 @@ static void HandleLoadedModuleIfSystemTray(
     if (!g_systemTrayModuleHooked.exchange(true)) {
         if (HookSystemTraySymbols(module)) {
             Wh_ApplyHookOperations();
-        }
-        else {
+        } else {
             g_systemTrayModuleHooked.store(false);
         }
     }
 }
 
-
-static HMODULE WINAPI LoadLibraryExW_Hook(
-    LPCWSTR fileName,
-    HANDLE file,
-    DWORD flags)
-{
-    HMODULE module =
-        LoadLibraryExW_Original(
-            fileName,
-            file,
-            flags
-        );
+static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
+                                          HANDLE file,
+                                          DWORD flags) {
+    HMODULE module = LoadLibraryExW_Original(fileName, file, flags);
 
     if (module) {
         HandleLoadedModuleIfSystemTray(module);
@@ -948,84 +799,49 @@ static HMODULE WINAPI LoadLibraryExW_Hook(
     return module;
 }
 
-
-static DWORD PumpWaitForThread(
-    HANDLE thread)
-{
+static DWORD PumpWaitForThread(HANDLE thread) {
     if (!thread) {
         return WAIT_OBJECT_0;
     }
 
     DWORD result;
     do {
-        result = MsgWaitForMultipleObjects(
-            1,
-            &thread,
-            FALSE,
-            INFINITE,
-            QS_SENDMESSAGE
-        );
+        result = MsgWaitForMultipleObjects(1, &thread, FALSE, INFINITE,
+                                           QS_SENDMESSAGE);
 
         if (result == WAIT_OBJECT_0 + 1) {
             MSG message;
-            PeekMessageW(
-                &message,
-                nullptr,
-                0,
-                0,
-                PM_NOREMOVE
-            );
+            PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
         }
     } while (result == WAIT_OBJECT_0 + 1);
 
     return result;
 }
 
-
 // -----------------------------------------------------------------------------
 // Windhawk
 // -----------------------------------------------------------------------------
 
-
-void LoadSettings() {
-    g_settings.mysettings_diskLetter = Wh_GetStringSetting(L"diskLetter");
-}
-
-
-BOOL Wh_ModInit()
-{
-    Wh_Log(
-        L"Taskbar Countdown Timer loading"
-    );
+BOOL Wh_ModInit() {
+    Wh_Log(L"Taskbar Disk Space Label loading");
 
     g_unloading.store(false);
 
     HMODULE module = nullptr;
 
-    if (!GetModuleHandleExW(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-            reinterpret_cast<LPCWSTR>(
-                &g_modInstance
-            ),
-            &module))
-    {
-        Wh_Log(
-            L"ERROR: Could not resolve mod module handle"
-        );
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<LPCWSTR>(&g_modInstance),
+                            &module)) {
+        Wh_Log(L"ERROR: Could not resolve mod module handle");
 
         return FALSE;
     }
 
-    g_modInstance =
-        reinterpret_cast<HINSTANCE>(
-            module
-        );
+    g_modInstance = reinterpret_cast<HINSTANCE>(module);
 
     if (!HookTaskbarDllSymbols()) {
-        Wh_Log(
-            L"ERROR: Failed to resolve taskbar.dll symbols"
-        );
+        Wh_Log(L"ERROR: Failed to resolve taskbar.dll symbols");
 
         return FALSE;
     }
@@ -1034,23 +850,17 @@ BOOL Wh_ModInit()
         if (HookSystemTraySymbols(systemTray)) {
             g_systemTrayModuleHooked.store(true);
         }
-    }
-    else {
-        HMODULE kernelbase =
-            GetModuleHandleW(L"kernelbase.dll");
+    } else {
+        HMODULE kernelbase = GetModuleHandleW(L"kernelbase.dll");
 
-        auto loadLibraryExW = kernelbase
-            ? reinterpret_cast<LoadLibraryExW_t>(
-                  GetProcAddress(kernelbase, "LoadLibraryExW")
-              )
-            : nullptr;
+        auto loadLibraryExW =
+            kernelbase ? reinterpret_cast<LoadLibraryExW_t>(
+                             GetProcAddress(kernelbase, "LoadLibraryExW"))
+                       : nullptr;
 
         if (loadLibraryExW) {
-            WindhawkUtils::SetFunctionHook(
-                loadLibraryExW,
-                LoadLibraryExW_Hook,
-                &LoadLibraryExW_Original
-            );
+            WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
+                                           &LoadLibraryExW_Original);
         }
     }
 
@@ -1059,40 +869,27 @@ BOOL Wh_ModInit()
     return TRUE;
 }
 
-
-void Wh_ModAfterInit()
-{
+void Wh_ModAfterInit() {
     if (HMODULE systemTray = GetSystemTrayModuleHandle()) {
         HandleLoadedModuleIfSystemTray(systemTray);
     }
 
     ApplyDiskSpaceLabelIfAvailable();
 
-    //if (g_retryStopEvent) {
-        g_retryThread =
-            CreateThread(
-                nullptr,
-                0,
-                RetryThreadProc,
-                nullptr,
-                0,
-                nullptr
-            );
+    // if (g_retryStopEvent) {
+    g_retryThread =
+        CreateThread(nullptr, 0, RetryThreadProc, nullptr, 0, nullptr);
     //}
-    }
+}
 //}
 
-
-void Wh_ModBeforeUninit()
-{
+void Wh_ModBeforeUninit() {
     g_unloading.store(true);
 }
 
-
-void Wh_ModUninit()
-{
+void Wh_ModUninit() {
     g_unloading.store(true);
-    
+
     if (g_retryThread) {
         PumpWaitForThread(g_retryThread);
         CloseHandle(g_retryThread);
@@ -1101,21 +898,15 @@ void Wh_ModUninit()
 
     bool removed = false;
 
-    for (int attempt = 0;
-         attempt < 5 && !removed;
-         attempt++)
-    {
+    for (int attempt = 0; attempt < 5 && !removed; attempt++) {
         HWND taskbar = g_taskbarWnd.load();
         if (!taskbar || !IsWindow(taskbar)) {
             taskbar = FindCurrentProcessTaskbarWnd();
         }
 
         if (taskbar) {
-            removed = RunFromWindowThread(
-                taskbar,
-                RemoveDiskSpaceLabel,
-                nullptr
-            );
+            removed =
+                RunFromWindowThread(taskbar, RemoveDiskSpaceLabel, nullptr);
         }
 
         if (!removed) {
@@ -1124,12 +915,18 @@ void Wh_ModUninit()
     }
 
     if (!removed && g_labelInjected.load()) {
-        Wh_Log(
-            L"ERROR: Could not remove timer XAML objects before unload"
-        );
+        Wh_Log(L"ERROR: Could not remove timer XAML objects before unload");
     }
 
-    Wh_Log(
-        L"Taskbar Countdown Timer unloaded"
-    );
+    Wh_Log(L"Taskbar Disk Space Label unloaded");
+}
+
+void Wh_ModSettingsChanged() {
+    HWND taskbar = g_taskbarWnd.load();
+    if (!taskbar || !IsWindow(taskbar)) {
+        taskbar = FindCurrentProcessTaskbarWnd();
+    }
+    if (taskbar) {
+        RunFromWindowThread(taskbar, RefreshDiskSpaceLabel, nullptr);
+    }
 }
