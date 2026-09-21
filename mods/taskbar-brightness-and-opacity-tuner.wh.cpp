@@ -4,7 +4,7 @@
 // @name:zh-CN      任务栏亮度和透明度调节器
 // @description     Adjust the opacity of the taskbar background and of the icons and text, and dim the taskbar background, for a clean, beautiful taskbar which is easier on the eyes and on OLED displays
 // @description:zh-CN 分别调整任务栏背景与图标文字的不透明度，并可调暗任务栏背景，定制出简洁漂亮的任务栏，也更护眼、更适合 OLED 显示器
-// @version         1.9.3
+// @version         1.10.0
 // @author          lzxujun
 // @homepage        https://github.com/lzxujun
 // @license         GPL-3.0
@@ -48,11 +48,10 @@ Additionally:
 
 * **Show the taskbar top line** - shows or hides the thin line at the top
   edge of the taskbar.
-* The small gray rounded drag handle at the top center of the taskbar is
-  always hidden while the mod is active. That handle is part of Windows itself
-  (it shows while the taskbar is unlocked), it is not drawn by this mod. If
-  Windows shows it again later, e.g. after the taskbar was locked and
-  unlocked, the mod hides it again automatically.
+* The small gray rounded drag handle at the top center of the taskbar is part
+  of Windows itself (it is shown on the taskbar which Windows 11 locks by
+  default), it is not drawn by this mod. It fades together with the icon and
+  text layer; set the icon opacity to 0 to hide it completely.
 
 ## Screenshots
 
@@ -95,7 +94,7 @@ without depending on the class names of the individual containers.
 * **Windows 11 Taskbar Styler** can restyle the top line, the drag grip and
   the background (and much more), but it takes style rules. This mod is a
   zero-configuration dial instead: two 0-100 values cover the whole taskbar
-  at once, no rules to write, and the drag grip is hidden automatically.
+  at once, no rules to write.
 * **Taskbar Background Helper** and **Dynamic Taskbar Transparency** adjust
   the background only (blur/acrylic/color, or per-shell-state opacity). This
   mod adjusts the background opacity and dimming as well, but additionally
@@ -150,6 +149,7 @@ without depending on the class names of the individual containers.
 #include <algorithm>
 #include <atomic>
 #include <cwchar>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -530,11 +530,16 @@ struct AppearanceState {
     // rectangle was replaced with a backdrop brush (background dimming). The
     // original brush is held and put back by assignment: elements of the
     // taskbar XAML template receive their values as local values, so
-    // ClearValue would wipe the fill instead of reverting it. RestoreState
-    // only ever runs on the taskbar UI thread, so the strong reference is
-    // always released from the thread the object belongs to.
+    // ClearValue would wipe the fill instead of reverting it. installedFillBrush
+    // holds a weak reference to the brush the mod installed: the taskbar can
+    // replace the fill with its own brush in the meantime (theme changes and
+    // transparency toggles rewrite the background), and the saved brush must
+    // then not overwrite that newer value. RestoreState only ever runs on the
+    // taskbar UI thread, so the strong reference is always released from the
+    // thread the object belongs to.
     bool backgroundFillReplaced = false;
     Media::Brush originalFillBrush = nullptr;
+    winrt::weak_ref<Media::Brush> installedFillBrush;
     // The taskbar top line rectangle. topLineHidden records whether the line
     // was actually hidden, so that restore only touches properties which were
     // modified. The line is hidden with Opacity only: that is a plain value
@@ -547,13 +552,10 @@ struct AppearanceState {
     winrt::weak_ref<FrameworkElement> topLine;
     bool topLineHidden = false;
     double originalTopLineOpacity = 1.0;
-    // The taskbar drag grip handle (Rectangle#Gripper). The handle is hidden
-    // while the mod is active; the property-changed callback re-hides it when
-    // Windows makes it visible again (locking and unlocking the taskbar does).
-    winrt::weak_ref<FrameworkElement> grip;
-    Visibility originalGripVisibility = Visibility::Visible;
-    int64_t gripVisibilityToken = 0;
-    // Foreground elements with their original opacity.
+    // Foreground elements with their original opacity. The drag grip handle
+    // (Rectangle#Gripper) is deliberately part of this layer: it fades
+    // together with the icons instead of being hidden separately, so no mod
+    // code has to stay registered on the taskbar between applies.
     std::vector<std::pair<winrt::weak_ref<FrameworkElement>, double>>
         foregroundOpacity;
 };
@@ -562,10 +564,14 @@ struct AppearanceState {
 // brush saved for the background fill restore. RestoreAllStates() always runs
 // on the taskbar UI thread (settings changes, neutral settings and unload all
 // go through ApplyPassOnTaskbarThread), so the brush is released from the
-// thread it belongs to. The only path which could release it elsewhere is
-// process termination running global destructors, where nothing can be served
-// anymore anyway.
-std::vector<AppearanceState> g_states;
+// thread it belongs to. [[clang::no_destroy]] keeps the CRT from running the
+// automatic destructor at process termination: at that point the XAML core is
+// already gone, and releasing the thread-affine brush there crashes Explorer
+// on every restart, sign-out and shutdown while a brightness is configured
+// (see https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown,
+// case 5). The container is released explicitly on the taskbar thread instead.
+[[clang::no_destroy]] std::optional<std::vector<AppearanceState>> g_states{
+    std::in_place};
 
 HWND FindCurrentProcessTaskbarWnd() {
     HWND hTaskbarWnd = nullptr;
@@ -705,17 +711,11 @@ bool IsBackgroundRectangle(FrameworkElement element) {
 }
 
 // System chrome inside the taskbar which is not icon and text content: the
-// drag grip handle (shown while the taskbar is unlocked) and the stroke which
-// closes the taskbar at the bottom screen edge. Adjusting these has no useful
-// effect and the grip would show up as a gray bar of its own.
+// stroke which closes the taskbar at the bottom screen edge. The drag grip
+// handle is deliberately NOT excluded: it is part of the icon and text layer
+// and fades together with the icons, which keeps the mod from having to leave
+// any of its own code registered on the taskbar between applies.
 bool IsSystemChromeElement(FrameworkElement element) {
-    try {
-        if (std::wstring_view(winrt::get_class_name(element).c_str())
-                .starts_with(L"Taskbar.Gripper")) {
-            return true;
-        }
-    } catch (...) {
-    }
     try {
         if (element.Name() == L"ScreenEdgeStroke") {
             return true;
@@ -773,30 +773,6 @@ bool IsPureIconSubtree(FrameworkElement element) {
     return true;
 }
 
-bool ContainsElement(std::vector<FrameworkElement> const& elements,
-                     FrameworkElement element) {
-    return std::find(elements.begin(), elements.end(), element) !=
-           elements.end();
-}
-
-bool HasCollectedAncestor(std::vector<FrameworkElement> const& elements,
-                          FrameworkElement element) {
-    try {
-        auto parent = Media::VisualTreeHelper::GetParent(element)
-                          .try_as<FrameworkElement>();
-        while (parent) {
-            if (ContainsElement(elements, parent)) {
-                return true;
-            }
-            parent = Media::VisualTreeHelper::GetParent(parent)
-                         .try_as<FrameworkElement>();
-        }
-    } catch (...) {
-    }
-
-    return false;
-}
-
 // The taskbar XAML tree looks roughly like this (Windows 11):
 //
 //   <content element of the taskbar XamlRoot>
@@ -827,10 +803,11 @@ void CollectIconLayers(FrameworkElement element,
         return;
     }
 
+    // The walk is pre-order and stops descending once an element has been
+    // collected, so no element is visited twice and no descendant of a
+    // collected element is ever reached.
     if (IsFlyoutHost(element) || IsBackgroundRectangle(element) ||
-        IsSystemChromeElement(element) ||
-        ContainsElement(elements, element) ||
-        HasCollectedAncestor(elements, element)) {
+        IsSystemChromeElement(element)) {
         return;
     }
 
@@ -908,9 +885,13 @@ void DumpVisualTree(FrameworkElement root, int maxDepth, int maxElements) {
         }
 
         logged++;
-        std::wstring line((size_t)depth * 2, L' ');
-        line += DescribeElement(element);
-        Wh_Log(L"%s", line.c_str());
+        // Built inside the Wh_Log arguments: when logging is disabled the
+        // macro skips them, and the per-element string work (a COM call for
+        // the class name) is not done at all.
+        Wh_Log(L"%s",
+               (std::wstring((size_t)depth * 2, L' ') +
+                DescribeElement(element))
+                   .c_str());
 
         int childrenCount = 0;
         try {
@@ -965,67 +946,84 @@ std::vector<FrameworkElement> CollectForegroundElements(
 
 void RestoreState(AppearanceState& state) {
     if (state.backgroundFillReplaced) {
+        state.backgroundFillReplaced = false;
         if (auto backgroundFill = state.backgroundFill.get()) {
             if (auto rect = backgroundFill.try_as<Shapes::Rectangle>()) {
                 // The fill was replaced with a backdrop brush for the
                 // brightness adjustment. Put the saved brush back by
                 // assignment: template elements hold their values as local
                 // values, so ClearValue would wipe the fill instead of
-                // reverting it.
-                rect.Fill(state.originalFillBrush);
+                // reverting it. The comparison makes sure the taskbar has
+                // not replaced our brush with its own in the meantime
+                // (theme changes and transparency toggles rewrite the
+                // background): if it has, the taskbar has already restored
+                // itself and the saved brush must not overwrite the newer
+                // value (the same idea as Taskbar Styler's
+                // AdoptExternalValueAsOriginal).
+                try {
+                    if (state.installedFillBrush.get() == rect.Fill()) {
+                        rect.Fill(state.originalFillBrush);
+                    }
+                } catch (...) {
+                }
             }
         }
         state.originalFillBrush = nullptr;
-        state.backgroundFillReplaced = false;
+        state.installedFillBrush = nullptr;
     }
 
     if (auto backgroundFill = state.backgroundFill.get()) {
-        backgroundFill.Opacity(state.originalFillOpacity);
+        try {
+            backgroundFill.Opacity(state.originalFillOpacity);
+        } catch (...) {
+        }
     }
 
     if (state.topLineHidden) {
         if (auto topLine = state.topLine.get()) {
             // The line was hidden with Opacity only; assigning the saved value
             // back brings it back verbatim.
-            topLine.Opacity(state.originalTopLineOpacity);
+            try {
+                topLine.Opacity(state.originalTopLineOpacity);
+            } catch (...) {
+            }
         }
-    }
-
-    if (auto grip = state.grip.get()) {
-        // Unregister the re-hide callback before restoring the visibility,
-        // otherwise the callback would immediately collapse it again.
-        if (state.gripVisibilityToken) {
-            grip.UnregisterPropertyChangedCallback(
-                UIElement::VisibilityProperty(), state.gripVisibilityToken);
-            state.gripVisibilityToken = 0;
-        }
-        grip.Visibility(state.originalGripVisibility);
+        state.topLineHidden = false;
     }
 
     for (auto& [element, originalOpacity] : state.foregroundOpacity) {
         if (auto elem = element.get()) {
-            elem.Opacity(originalOpacity);
+            try {
+                elem.Opacity(originalOpacity);
+            } catch (...) {
+            }
         }
     }
 }
 
 // Restores all tracked taskbars and forgets about them. Used when all settings
 // are back to their defaults, or when the mod is unloading, so that nothing is
-// left adjusted.
+// left adjusted. A failure of one state must not stop the others: an aborted
+// loop would leave mod-image code (the backdrop brush) installed on the
+// remaining taskbars, which crashes Explorer once the mod is unloaded.
 void RestoreAllStates() {
-    for (auto& state : g_states) {
-        RestoreState(state);
+    for (auto& state : *g_states) {
+        try {
+            RestoreState(state);
+        } catch (...) {
+            Wh_Log(L"RestoreState failed with an exception");
+        }
     }
 
-    g_states.clear();
+    g_states->clear();
 }
 
 std::pair<AppearanceState*, size_t> FindStateForRoot(
     FrameworkElement root) {
-    for (size_t i = 0; i < g_states.size(); i++) {
-        if (auto stateRoot = g_states[i].root.get();
+    for (size_t i = 0; i < g_states->size(); i++) {
+        if (auto stateRoot = (*g_states)[i].root.get();
             stateRoot && stateRoot == root) {
-            return {&g_states[i], i};
+            return {&(*g_states)[i], i};
         }
     }
 
@@ -1110,40 +1108,6 @@ void ApplyTopLineStyle(FrameworkElement content,
     }
 }
 
-// Records and hides the drag grip handle: the small gray rounded handle at the
-// top center of the taskbar (Rectangle#Gripper inside Taskbar.Gripper#
-// GripperControl). It is part of Windows (it shows while the taskbar is
-// unlocked) and is not affected by the opacity adjustments, so it is always
-// hidden while the mod is active - a gray handle would otherwise stick out of
-// an otherwise adjusted taskbar. The original state is recorded so that
-// RestoreState can bring it back.
-void ApplyGripStyle(FrameworkElement content, AppearanceState& state) {
-    auto gripElem = FindDescendantByName(content, L"Gripper");
-    if (!gripElem) {
-        Wh_Log(L"Grip handle not found");
-        return;
-    }
-
-    state.grip = winrt::make_weak(gripElem);
-    state.originalGripVisibility = gripElem.Visibility();
-
-    gripElem.Visibility(Visibility::Collapsed);
-
-    // Windows keeps the grip visible after lock/unlock cycles and re-shows it
-    // when the taskbar is unlocked again. Re-hide it whenever it shows up
-    // again while the mod is active.
-    state.gripVisibilityToken = gripElem.RegisterPropertyChangedCallback(
-        UIElement::VisibilityProperty(),
-        [](DependencyObject sender, DependencyProperty) {
-            if (auto elem = sender.try_as<FrameworkElement>();
-                elem && elem.Visibility() == Visibility::Visible) {
-                elem.Visibility(Visibility::Collapsed);
-            }
-        });
-
-    Wh_Log(L"Grip handle hidden");
-}
-
 // Adjusts the background rectangle: opacity directly, brightness by replacing
 // the fill with a live backdrop brush filtered by a color matrix effect. The
 // original fill is saved in the state so that RestoreState can put it back by
@@ -1169,6 +1133,7 @@ void ApplyBackgroundStyle(Shapes::Rectangle const& backgroundFill,
         float brightness = -g_settings.backgroundBrightness / 100.0f;
         auto brush = winrt::make<BackdropAdjustBrush>(compositor, brightness);
         state.originalFillBrush = backgroundFill.Fill();
+        state.installedFillBrush = winrt::make_weak(brush.as<Media::Brush>());
         backgroundFill.Fill(brush);
         state.backgroundFillReplaced = true;
         Wh_Log(L"Background fill replaced (brightness=%.2f)", brightness);
@@ -1297,10 +1262,15 @@ bool ApplyStyleImpl(XamlRoot xamlRoot) {
     // Restore any previous state for this root before re-applying.
     if (state) {
         RestoreState(*state);
-        g_states.erase(g_states.begin() + stateIndex);
+        g_states->erase(g_states->begin() + stateIndex);
     }
 
-    AppearanceState newState;
+    // The state is added to the container before it is filled in: if any of
+    // the steps below throws, ApplyStyle's top level catch reports the
+    // failure, and the partially applied state is still tracked and restored
+    // like any other - most importantly, a replaced background fill is never
+    // left behind unaccounted for.
+    AppearanceState& newState = g_states->emplace_back();
     newState.root = winrt::make_weak(content);
     newState.backgroundFill =
         winrt::make_weak(backgroundFill.as<FrameworkElement>());
@@ -1308,15 +1278,12 @@ bool ApplyStyleImpl(XamlRoot xamlRoot) {
 
     ApplyTopLineStyle(content, backgroundFillElem, newState);
 
-    ApplyGripStyle(content, newState);
-
     ApplyBackgroundStyle(backgroundFill, newState);
 
     if (hasForegroundOpacity) {
         ApplyForegroundStyle(foregroundElements, newState);
     }
 
-    g_states.push_back(std::move(newState));
     return true;
 }
 
@@ -1461,7 +1428,14 @@ bool RunFromWindowThread(HWND hWnd,
                 if (cwp->message == runFromWindowThreadRegisteredMsg) {
                     RUN_FROM_WINDOW_THREAD_PARAM* param =
                         (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
-                    param->proc(param->procParam);
+                    // A catch-all keeps a WinRT exception (XamlRoot() can
+                    // throw while the tree is being torn down) from unwinding
+                    // through user32's message dispatch.
+                    try {
+                        param->proc(param->procParam);
+                    } catch (...) {
+                        Wh_Log(L"Taskbar thread callback threw an exception");
+                    }
                 }
             }
 
@@ -1495,6 +1469,52 @@ struct ApplyPassResult {
     bool allReady = true;
 };
 
+// Applies to a single taskbar window. Shared by the full pass and by the
+// retry timer, which passes its own window only: a secondary taskbar which is
+// still initializing must not re-apply to the already finished primary one
+// every tick.
+void ApplyPassToWindow(HWND hWnd, ApplyPassResult* result) {
+    WCHAR szClassName[32];
+    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+        return;
+    }
+
+    XamlRoot xamlRoot = nullptr;
+    if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0) {
+        xamlRoot = GetTaskbarXamlRoot(hWnd);
+    } else if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
+        xamlRoot = GetSecondaryTaskbarXamlRoot(hWnd);
+    } else {
+        return;
+    }
+
+    result->sawTaskbar = true;
+
+    if (g_unloading.load()) {
+        // Stop a retry which is still in flight, so that no timer
+        // callback can outlive the mod, and restore unconditionally:
+        // RestoreAllStates() works off the stored weak refs and does
+        // not need a XamlRoot. A skipped restore would leave the
+        // taskbar holding the background fill brush, which lives in
+        // the mod image and crashes Explorer once the mod is unloaded.
+        StopApplyRetry(hWnd);
+        RestoreAllStates();
+        return;
+    }
+
+    if (!xamlRoot) {
+        Wh_Log(L"Getting XamlRoot failed");
+        result->allReady = false;
+    } else if (!ApplyStyle(xamlRoot)) {
+        // The taskbar XAML tree is created asynchronously, so on a
+        // fresh start-up the elements are still missing here. Retry
+        // until they exist instead of silently doing nothing.
+        Wh_Log(L"ApplyStyle failed (taskbar XAML tree not ready yet?)");
+        result->allReady = false;
+        ScheduleApplyRetry(hWnd);
+    }
+}
+
 void WINAPI ApplyPassOnTaskbarThread(void* parameter) {
     ApplyPassResult* result = (ApplyPassResult*)parameter;
 
@@ -1503,48 +1523,7 @@ void WINAPI ApplyPassOnTaskbarThread(void* parameter) {
     EnumThreadWindows(
         GetCurrentThreadId(),
         [](HWND hWnd, LPARAM lParam) -> BOOL {
-            ApplyPassResult* result = (ApplyPassResult*)lParam;
-
-            WCHAR szClassName[32];
-            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
-                return TRUE;
-            }
-
-            XamlRoot xamlRoot = nullptr;
-            if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0) {
-                xamlRoot = GetTaskbarXamlRoot(hWnd);
-            } else if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
-                xamlRoot = GetSecondaryTaskbarXamlRoot(hWnd);
-            } else {
-                return TRUE;
-            }
-
-            result->sawTaskbar = true;
-
-            if (g_unloading.load()) {
-                // Stop a retry which is still in flight, so that no timer
-                // callback can outlive the mod, and restore unconditionally:
-                // RestoreAllStates() works off the stored weak refs and does
-                // not need a XamlRoot. A skipped restore would leave the
-                // taskbar holding the background fill brush, which lives in
-                // the mod image and crashes Explorer once the mod is unloaded.
-                StopApplyRetry(hWnd);
-                RestoreAllStates();
-                return TRUE;
-            }
-
-            if (!xamlRoot) {
-                Wh_Log(L"Getting XamlRoot failed");
-                result->allReady = false;
-            } else if (!ApplyStyle(xamlRoot)) {
-                // The taskbar XAML tree is created asynchronously, so on a
-                // fresh start-up the elements are still missing here. Retry
-                // until they exist instead of silently doing nothing.
-                Wh_Log(L"ApplyStyle failed (taskbar XAML tree not ready yet?)");
-                result->allReady = false;
-                ScheduleApplyRetry(hWnd);
-            }
-
+            ApplyPassToWindow(hWnd, (ApplyPassResult*)lParam);
             return TRUE;
         },
         (LPARAM)result);
@@ -1566,17 +1545,12 @@ void WINAPI ApplyPassOnTaskbarThread(void* parameter) {
 // flight.
 
 // The timer ID must not collide with the timers of the taskbar itself or with
-// timers of other mods on the same window. An atom is unique process-wide;
-// the unusual constant is only a fallback for the unlikely case that the atom
-// could not be created.
-UINT_PTR GetApplyRetryTimerId() {
-    static UINT_PTR timerId = []() -> UINT_PTR {
-        ATOM atom =
-            GlobalAddAtom(L"Windhawk_TaskbarAppearanceTuner_RetryTimer");
-        return atom ? (UINT_PTR)atom : 0x7A9C;
-    }();
-    return timerId;
-}
+// timers of other mods on the same window. A deliberately unusual constant is
+// enough here: the timer lives on a window which the mod subclasses itself,
+// so WM_TIMER for this ID is only ever dispatched while the mod's subclass is
+// installed (a GlobalAddAtom would leak one reference per mod load, as it is
+// never released).
+constexpr UINT_PTR kApplyRetryTimerId = 0x7A9C5A17;
 
 constexpr UINT kApplyRetryIntervalMs = 150;
 constexpr ULONGLONG kApplyRetryTotalMs = 8000;
@@ -1608,9 +1582,13 @@ void RemoveApplyRetryDeadline(HWND hWnd) {
 // deterministically and WM_TIMER is only dispatched while it is installed.
 LRESULT CALLBACK ApplyRetrySubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                                         LPARAM lParam, DWORD_PTR) {
-    if (uMsg == WM_TIMER && wParam == GetApplyRetryTimerId()) {
+    if (uMsg == WM_TIMER && wParam == kApplyRetryTimerId) {
+        // Retry only the window which owns this timer, not every taskbar on
+        // the thread: a secondary taskbar which is still initializing must
+        // not restore and re-apply the already finished primary one every
+        // 150 ms for up to 8 seconds.
         ApplyPassResult result;
-        ApplyPassOnTaskbarThread(&result);
+        ApplyPassToWindow(hWnd, &result);
 
         if ((result.sawTaskbar && result.allReady) ||
             GetTickCount64() >= GetApplyRetryDeadline(hWnd)) {
@@ -1644,7 +1622,7 @@ void ScheduleApplyRetry(HWND hTaskbarWnd) {
     }
 
     // Idempotent: re-arming a running timer just restarts it.
-    if (SetTimer(hTaskbarWnd, GetApplyRetryTimerId(), kApplyRetryIntervalMs,
+    if (SetTimer(hTaskbarWnd, kApplyRetryTimerId, kApplyRetryIntervalMs,
                  nullptr)) {
         Wh_Log(L"Taskbar XAML tree not ready, retrying every %u ms",
                kApplyRetryIntervalMs);
@@ -1655,7 +1633,7 @@ void ScheduleApplyRetry(HWND hTaskbarWnd) {
 
 // Must be called on the taskbar window thread.
 void StopApplyRetry(HWND hTaskbarWnd) {
-    KillTimer(hTaskbarWnd, GetApplyRetryTimerId());
+    KillTimer(hTaskbarWnd, kApplyRetryTimerId);
     RemoveApplyRetryDeadline(hTaskbarWnd);
     WindhawkUtils::RemoveWindowSubclassFromAnyThread(hTaskbarWnd,
                                                     ApplyRetrySubclassProc);
@@ -1781,7 +1759,7 @@ BOOL Wh_ModInit() {
 
     // Wh_ModInit can run again without the DLL having been unloaded.
     g_treeDumped = false;
-    g_states.clear();
+    g_states.emplace();
 
     LoadSettings();
 
@@ -1816,11 +1794,11 @@ void Wh_ModUninit() {
     Wh_Log(L">");
 
     // RestoreAllStates() already ran on the taskbar UI thread during unload
-    // (see ApplyPassOnTaskbarThread), so the vector is empty here. The state
-    // holds only weak references and value types, so even if something is
-    // left over, the automatic destructor at process shutdown cannot touch a
-    // live XAML object.
-    g_states.clear();
+    // (see ApplyPassOnTaskbarThread), so the vector is empty here. reset()
+    // releases the container explicitly; combined with [[clang::no_destroy]]
+    // it guarantees that the automatic destructor at process termination
+    // never touches the strong XAML brush the state may hold.
+    g_states.reset();
 }
 
 void Wh_ModSettingsChanged() {
