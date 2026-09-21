@@ -34,7 +34,7 @@
 // @description:ko-KR 선택한 디스플레이를 제너러티브 라인 아트로 채우고 실행 중에는 PC가 유휴 상태로 전환되지 않도록 합니다
 // @description:ar   يملأ الشاشة التي تختارها بفن خطي توليدي ويمنع الكمبيوتر من الخمول أثناء تشغيله
 // @description:he   ממלא מסך לבחירתך באמנות קווית גנרטיבית ומונע מהמחשב לעבור למצב סרק בזמן שהוא פועל
-// @version         1.6.0
+// @version         1.6.1
 // @author          akilluminati47
 // @github          https://github.com/akilluminati47
 // @homepage        https://vector.akilluminati47.pages.dev/
@@ -5584,19 +5584,62 @@ static void LoadSettings() {
     BuildPalette();
 }
 
+// RegisterHotKey takes a combination for the whole session and refuses it to
+// everyone else, so it fails whenever another application already owns the one
+// that was asked for. Until now that was the end of it: one failed call and
+// the hotkey was dead until the mod was reloaded, with only a line in a log
+// nobody reads to say why. The combination can come free again, though, as
+// soon as whatever claimed it exits, so the attempt is kept and retried.
+//
+// Quietly, because a user who leaves a conflicting application running all day
+// should not find the log full of one line every five seconds. The failure is
+// reported once when it happens and once more if it ever succeeds.
+static const DWORD kHotkeyRetryMs = 5000;
+static bool g_hotkeyPending = false;
+static UINT g_hotkeyMods = 0, g_hotkeyVk = 0;
+static ULONGLONG g_hotkeyNextTry = 0;
+
+static void RetryHotkeyIfDue() {
+    if (!g_hotkeyPending || g_hotkeyRegistered) {
+        return;
+    }
+    ULONGLONG now = GetTickCount64();
+    if (now < g_hotkeyNextTry) {
+        return;
+    }
+    g_hotkeyNextTry = now + kHotkeyRetryMs;
+    if (RegisterHotKey(nullptr, kHotkeyId, g_hotkeyMods, g_hotkeyVk)) {
+        g_hotkeyRegistered = true;
+        g_hotkeyPending = false;
+        Wh_Log(L"Hotkey '%s' registered on a retry; whatever was holding it "
+               L"has let go",
+               g_settings.hotkey.c_str());
+    }
+}
+
 static void RegisterHotkeyFromSettings() {
     if (g_hotkeyRegistered) {
         UnregisterHotKey(nullptr, kHotkeyId);
         g_hotkeyRegistered = false;
     }
+    // Whatever was outstanding belonged to the old setting.
+    g_hotkeyPending = false;
+
     UINT mods = 0, vk = 0;
     if (ParseHotkey(g_settings.hotkey, &mods, &vk)) {
         if (RegisterHotKey(nullptr, kHotkeyId, mods, vk)) {
             g_hotkeyRegistered = true;
             Wh_Log(L"Hotkey registered: %s", g_settings.hotkey.c_str());
         } else {
-            Wh_Log(L"RegisterHotKey failed for '%s' (%u)",
-                   g_settings.hotkey.c_str(), GetLastError());
+            Wh_Log(L"RegisterHotKey failed for '%s' (%u); another application "
+                   L"is holding that combination. Retrying every %u seconds "
+                   L"in case it lets go",
+                   g_settings.hotkey.c_str(), GetLastError(),
+                   kHotkeyRetryMs / 1000);
+            g_hotkeyMods = mods;
+            g_hotkeyVk = vk;
+            g_hotkeyPending = true;
+            g_hotkeyNextTry = GetTickCount64() + kHotkeyRetryMs;
         }
     } else if (!g_settings.hotkey.empty()) {
         // An empty value is the documented way to turn the hotkey off, so
@@ -5688,6 +5731,10 @@ static DWORD WINAPI WorkerThread(LPVOID) {
     }
 
     while (g_running) {
+        // Before the render gate, not after it: the overlay is usually hidden
+        // when the hotkey matters, and the gate only runs while it is up.
+        RetryHotkeyIfDue();
+
         HANDLE handles[3];
         DWORD count = 0;
         DWORD toggleIdx = (DWORD)-1;
@@ -5719,6 +5766,11 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         // Without a timer the wait must still end on its own, or the overlay
         // would advance only when a message happened to arrive.
         DWORD waitMs = (g_active && !frameTimer) ? 1 : INFINITE;
+        if (g_hotkeyPending && waitMs > kHotkeyRetryMs) {
+            // With the overlay hidden this wait is otherwise infinite, and
+            // nothing would wake the loop to make the next attempt.
+            waitMs = kHotkeyRetryMs;
+        }
         DWORD r = MsgWaitForMultipleObjects(count, count ? handles : nullptr,
                                             FALSE, waitMs, QS_ALLINPUT);
 
@@ -5882,6 +5934,7 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         UnregisterHotKey(nullptr, kHotkeyId);
         g_hotkeyRegistered = false;
     }
+    g_hotkeyPending = false;
     if (g_toggleEvent) {
         CloseHandle(g_toggleEvent);
         g_toggleEvent = nullptr;
