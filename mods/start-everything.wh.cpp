@@ -550,8 +550,9 @@ class Client {
         wc.lpfnWndProc = &Client::WndProc;
         wc.hInstance = GetCurrentModuleHandle();
         wc.lpszClassName = kReplyClass;
+        UnregisterClassW(kReplyClass, GetCurrentModuleHandle());
         atom_ = RegisterClassExW(&wc);
-        if (!atom_) {
+        if (!atom_ && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
             return false;
         }
         hwnd_ = CreateWindowExW(0, kReplyClass, L"", WS_POPUP, 0, 0, 0, 0,
@@ -3450,9 +3451,25 @@ static BOOL WINAPI Hook_SearchHost_BringWindowToTop(HWND hWnd) {
     return TRUE;
 }
 
+static std::mutex g_searchHostSubclassedMutex;
+static std::vector<HWND> g_searchHostSubclassedWindows;
+
+static void SubclassSearchHostWindow(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return;
+    std::lock_guard<std::mutex> lock(g_searchHostSubclassedMutex);
+    for (HWND h : g_searchHostSubclassedWindows) {
+        if (h == hWnd) return;
+    }
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SearchHostSubclassProc, 0)) {
+        g_searchHostSubclassedWindows.push_back(hWnd);
+        Wh_Log(L"[SearchHost] Subclassed window 0x%p", hWnd);
+    }
+}
+
 using ShowWindow_t = BOOL(WINAPI*)(HWND, int);
 static ShowWindow_t pOrigSearchHostShowWindow = nullptr;
 static BOOL WINAPI Hook_SearchHost_ShowWindow(HWND hWnd, int nCmdShow) {
+    SubclassSearchHostWindow(hWnd);
     if (nCmdShow == SW_SHOW || nCmdShow == SW_SHOWNORMAL || nCmdShow == SW_RESTORE || nCmdShow == SW_SHOWDEFAULT) {
         Wh_Log(L"[SearchHost] Redirected SearchHost ShowWindow to SW_HIDE");
         nCmdShow = SW_HIDE;
@@ -3463,6 +3480,7 @@ static BOOL WINAPI Hook_SearchHost_ShowWindow(HWND hWnd, int nCmdShow) {
 using SetWindowPos_t = BOOL(WINAPI*)(HWND, HWND, int, int, int, int, UINT);
 static SetWindowPos_t pOrigSearchHostSetWindowPos = nullptr;
 static BOOL WINAPI Hook_SearchHost_SetWindowPos(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
+    SubclassSearchHostWindow(hWnd);
     if (uFlags & SWP_SHOWWINDOW) {
         uFlags &= ~SWP_SHOWWINDOW;
         uFlags |= SWP_HIDEWINDOW;
@@ -3616,12 +3634,12 @@ void InitSearchHost() {
 [[clang::no_destroy]] static std::thread g_searchHostWatchdog;
 static void StartSearchHostWatchdog() {
     g_searchHostWatchdog = std::thread([] {
-        for (int i = 0; i < 120 && !g_quit.load(); ++i) {
+        for (int i = 0; i < 20 && !g_quit.load(); ++i) {
             EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
                 DWORD pid = 0;
                 GetWindowThreadProcessId(hwnd, &pid);
                 if (pid == GetCurrentProcessId()) {
-                    WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc, 0);
+                    SubclassSearchHostWindow(hwnd);
                 }
                 return TRUE;
             }, 0);
@@ -4032,6 +4050,7 @@ struct SuppressedElement {
     wux::Thickness margin{};
     bool isControl = false;
     bool tabStop = true;
+    bool onlyTabStop = false;
 };
 
 [[clang::no_destroy]] std::vector<SuppressedElement> g_suppressed;
@@ -4042,23 +4061,39 @@ struct SuppressedElement {
 // which is why disabling the mod left the Start menu with no search box at
 // all and a cell that no longer measures.
 void SuppressShellElement(wux::FrameworkElement const& fe, bool collapse = true,
-                          bool zeroSize = false) {
+                          bool zeroSize = false, bool onlyTabStop = false) {
     if (!fe) {
         return;
     }
     try {
+        for (auto const& item : g_suppressed) {
+            if (item.element.get() == fe) {
+                return;  // already recorded; keep original properties
+            }
+        }
+
         SuppressedElement saved;
         saved.element = winrt::make_weak(fe);
+        saved.onlyTabStop = onlyTabStop;
+        if (auto ctl = fe.try_as<wuxc::Control>()) {
+            saved.isControl = true;
+            saved.tabStop = ctl.IsTabStop();
+        }
+
+        if (onlyTabStop) {
+            g_suppressed.push_back(std::move(saved));
+            if (auto ctl = fe.try_as<wuxc::Control>()) {
+                ctl.IsTabStop(false);
+            }
+            return;
+        }
+
         saved.visibility = fe.Visibility();
         saved.opacity = fe.Opacity();
         saved.hitTestVisible = fe.IsHitTestVisible();
         saved.height = fe.Height();
         saved.maxHeight = fe.MaxHeight();
         saved.margin = fe.Margin();
-        if (auto ctl = fe.try_as<wuxc::Control>()) {
-            saved.isControl = true;
-            saved.tabStop = ctl.IsTabStop();
-        }
         g_suppressed.push_back(std::move(saved));
 
         fe.Opacity(0.0);
@@ -4084,6 +4119,16 @@ void RestoreShellElements() {
             continue;  // that tree is already gone; nothing to put back
         }
         try {
+            if (it->onlyTabStop) {
+                if (it->isControl) {
+                    if (auto ctl = fe.try_as<wuxc::Control>()) {
+                        ctl.IsTabStop(it->tabStop);
+                    }
+                }
+                ++restored;
+                continue;
+            }
+
             fe.Visibility(it->visibility);
             fe.Opacity(it->opacity);
             fe.IsHitTestVisible(it->hitTestVisible);
@@ -4345,8 +4390,7 @@ void DisarmScrollTabStops(wux::DependencyObject const& root, int depth = 15) {
     if (!root || depth < 0) return;
     if (auto scroller = root.try_as<wuxc::ScrollViewer>()) {
         if (scroller.IsTabStop()) {
-            SuppressShellElement(scroller.as<wux::FrameworkElement>(), false, false);
-            scroller.IsTabStop(false);
+            SuppressShellElement(scroller.as<wux::FrameworkElement>(), false, false, /*onlyTabStop=*/true);
             Wh_Log(L"focus: proactively disabled IsTabStop on %ls", ElementLabel(root).c_str());
         }
     }
@@ -7429,7 +7473,7 @@ void Wh_ModAfterInit() {
                 }
                 wasCloaked = isCloaked;
             }
-            Sleep(wasCloaked ? 150 : 40);
+            Sleep(25);
         }
     });
 }
@@ -7481,14 +7525,16 @@ void Wh_ModUninit() {
     // is undoing; matching them is still strictly better than leaving the
     // process pointing at an unmapped DLL.
     if (g_targetProcess == TargetProcess::SearchHost) {
-        EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(hwnd, &pid);
-            if (pid == GetCurrentProcessId()) {
+        std::vector<HWND> toRemove;
+        {
+            std::lock_guard<std::mutex> lock(g_searchHostSubclassedMutex);
+            toRemove = std::move(g_searchHostSubclassedWindows);
+        }
+        for (HWND hwnd : toRemove) {
+            if (IsWindow(hwnd)) {
                 WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc);
             }
-            return TRUE;
-        }, 0);
+        }
         return;
     }
 
