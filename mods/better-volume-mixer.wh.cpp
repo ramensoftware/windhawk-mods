@@ -2,7 +2,7 @@
 // @id              better-volume-mixer
 // @name            Better Volume Mixer
 // @description     Quickly control master and per-app volume from the system tray
-// @version         1.2
+// @version         1.4.2
 // @author          0Allu
 // @github          https://github.com/0Allu
 // @homepage        https://github.com/0Allu/better-volume-mixer
@@ -16,40 +16,68 @@
 /*
 # Better Volume Mixer
 
-A simple volume mixer for Windows 11. Control your overall volume and individual
-apps from one small window.
+A compact volume mixer for Windows 11. Control master volume, individual apps,
+and playback devices directly from the system tray.
 
-![Better Volume Mixer demo](https://raw.githubusercontent.com/0Allu/better-volume-mixer/main/assets/better-volume-mixer-demo.png)
+![Better Volume Mixer demo](https://raw.githubusercontent.com/0Allu/better-volume-mixer/main/assets/volume-mixer-demo.png)
 
 Click the speaker icon in the system tray to open or close the mixer. If it is
 hidden, open the tray overflow menu and drag the icon onto the taskbar.
 
-* Click the device selector under the title to switch playback devices.
-* Adjust each app's volume with its slider or mute button.
-* Scroll over a slider to change the volume with your mouse wheel.
-* Click the pin beside an app to keep it at the top.
-* Use Previous and Next when there are more apps than fit on one page.
+## Features
 
-Choose your theme, background transparency, animations, and apps per page in
-the mod settings. Turn on **Compact mode** for a smaller, denser layout with
-shorter rows. If an app is missing, keep the mixer open and play some audio in
-it. Apps on other output devices are remembered after playing while the mixer is
-open, until their audio session ends.
+* Master and per-app volume controls
+* Quick playback device switching
+* Mute buttons and middle-click mute
+* Mouse-wheel volume adjustment
+* Exact volume entry
+* Keyboard controls
+* Pin apps to the top of the mixer
+* Custom app names and default volumes
+* Hide selected applications
+* Full-name tooltips for shortened app and device names
+* Compact mode
+* Light, dark, and system themes
+* Background transparency, blur, and animations
+* Configurable apps per page
 
-Output switching changes normal playback; the communications device and apps
-assigned to a specific device keep their own routing.
+Most appearance and behavior options can be changed from the mod settings.
 
 ## Hide the Windows volume icon
 
 To avoid having two volume icons, install
 [Taskbar tray system icon tweaks](https://windhawk.net/mods/taskbar-tray-system-icon-tweaks)
-and enable **Hide volume icon** in its settings. This hides the Windows 11
-volume icon while keeping Better Volume Mixer's icon visible.
+and enable **Hide volume icon** in its settings.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- compactMode: false
+  $name: Compact mode
+  $description: Use a smaller, denser layout with shorter rows and a narrower window, so more apps fit at once. Off by default.
+- theme: system
+  $name: Theme
+  $description: Choose the mixer appearance or follow the current Windows theme.
+  $options:
+  - system: Follow Windows
+  - dark: Dark
+  - light: Light
+- backgroundOpacity: 85
+  $name: Background opacity
+  $description: Background opacity from 0 to 100 percent. Text and controls remain opaque. Blur is applied where supported by Windows.
+- volumeStep: 5
+  $name: Mouse-wheel volume step
+  $description: Percentage points per mouse-wheel step over an app or master-volume row. Valid range is 1 to 20; default is 5.
+- keyboardControls: false
+  $name: Keyboard controls
+  $description: Up/Down selects a row, Left/Right changes volume by the mouse-wheel step, and M toggles mute. Works while the mixer is focused. Off by default.
+- exactVolumeEntry: false
+  $name: Exact volume entry
+  $description: Click a percentage to enter a whole number from 0 to 100. Enter applies it; Escape or clicking elsewhere cancels. Off by default.
+- animations: true
+  $name: Enable animations
+  $description: Animate opening, hover effects, and volume changes. The Windows animation preference is also respected.
 - closeWhenFocusIsLost: true
   $name: Close when focus is lost
   $description: Automatically close the mixer when you click somewhere else.
@@ -72,28 +100,24 @@ volume icon while keeping Better Volume Mixer's icon visible.
   - "13": "13"
   - "14": "14"
   - "15": "15"
-- volumeStep: 2
-  $name: Mouse-wheel volume step
-  $description: Percentage points per mouse-wheel step over a slider. Valid range is 1 to 20; default is 2.
-- compactMode: false
-  $name: Compact mode
-  $description: Use a smaller, denser layout with shorter rows and a narrower window, so more apps fit at once. Off by default.
-- theme: system
-  $name: Theme
-  $description: Choose the mixer appearance or follow the current Windows theme.
-  $options:
-  - system: Follow Windows
-  - dark: Dark
-  - light: Light
-- backgroundOpacity: 85
-  $name: Background opacity
-  $description: Background opacity from 0 to 100 percent. Text and controls remain opaque. Blur is applied where supported by Windows.
-- animations: true
-  $name: Enable animations
-  $description: Animate opening, hover effects, and volume changes. The Windows animation preference is also respected.
 - showAllSessions: false
   $name: Show all audio sessions
   $description: Also show unused or idle audio sessions on other playback devices. Most users can leave this off.
+- customApps:
+  - - app: ""
+      $name: App name
+      $description: Enter the executable name (for example Spotify.exe or Spotify), its full path, or the original name shown in the mixer. Matching ignores capitalization. Leave blank to ignore this entry.
+    - displayName: ""
+      $name: Custom display name
+      $description: Leave blank to keep the original name.
+    - defaultVolume: -1
+      $name: Default volume percentage
+      $description: Use 0 to 100, or -1 to leave volume unchanged. Applied once when a session is detected, even with the mixer closed, and again if you change this default. Mute status is preserved.
+  $name: Custom app configuration
+  $description: Add an entry for each app to customize. The first matching entry wins. Up to 256 entries are supported.
+- hiddenApps: [""]
+  $name: Hidden applications
+  $description: Add executable names (for example Spotify.exe or Spotify), full paths, or original mixer names to hide. Matching ignores capitalization. Blank entries are ignored. Hiding does not mute the app or disable its configured default volume. Up to 256 entries are supported.
 */
 // ==/WindhawkModSettings==
 
@@ -146,8 +170,6 @@ __CRT_UUID_DECL(IAudioMeterInformation, 0xc02216f6, 0x8c67, 0x4b5b,
 
 namespace {
 
-// Device friendly-name property, defined locally to avoid an external SDK
-// PKEY_Device_FriendlyName symbol dependency in Windhawk's toolchain.
 constexpr PROPERTYKEY kDeviceFriendlyName = {
     {0xa45c254e, 0xdf1c, 0x4efd,
      {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}},
@@ -175,10 +197,13 @@ constexpr PROPERTYKEY kDeviceFriendlyName = {
 constexpr UINT WM_APP_TRAY = WM_APP + 1;
 constexpr UINT WM_APP_RELOAD_SETTINGS = WM_APP + 2;
 constexpr UINT WM_APP_SHOW_MIXER = WM_APP + 3;
+constexpr UINT WM_APP_FINISH_VOLUME_ENTRY = WM_APP + 4;
+constexpr UINT WM_APP_AUDIO_CHANGED = WM_APP + 5;
 constexpr UINT_PTR TIMER_METERS = 1;
 constexpr UINT_PTR TIMER_REFRESH = 2;
 constexpr UINT_PTR TIMER_CHECK_FOCUS = 3;
-// Also use a distinct 16-bit numeric ID for callback/legacy compatibility.
+constexpr UINT_PTR TIMER_NAME_TOOLTIP = 4;
+constexpr UINT NAME_TOOLTIP_DELAY = 1000;
 constexpr UINT TRAY_ICON_ID = 0x4D58;
 // Generated once for this mod. Never regenerate it on startup or on updates.
 constexpr GUID MIXER_TRAY_GUID = {
@@ -193,6 +218,12 @@ constexpr UINT MENU_WINDOWS_MIXER = 4;
 constexpr int DRAG_NONE = -2;
 constexpr int DRAG_MASTER = -1;
 
+struct CustomApp {
+    std::wstring app;
+    std::wstring displayName;
+    int defaultVolume = -1;
+};
+
 struct Settings {
     std::wstring theme = L"system";
     bool showAllSessions = false;
@@ -201,7 +232,11 @@ struct Settings {
     bool animations = true;
     int backgroundOpacity = 85;
     int maxVisibleApps = 7;
-    int volumeStep = 2;
+    int volumeStep = 5;
+    bool keyboardControls = false;
+    bool exactVolumeEntry = false;
+    std::vector<CustomApp> customApps;
+    std::vector<std::wstring> hiddenApps;
 };
 
 struct Theme {
@@ -289,8 +324,6 @@ UINT g_taskbarCreatedMessage;
 
 HICON g_trayIcon;
 HICON g_masterIcon;
-// Cache source icons, but hand each row an owned CopyIcon so refresh/cleanup
-// cannot invalidate an icon that is still being drawn.
 std::unordered_map<std::wstring, HICON> g_iconCache;
 HFONT g_titleFont;
 HFONT g_bodyFont;
@@ -332,6 +365,17 @@ std::wstring g_endpointName;
 // they can be reused, and one process can have sessions on multiple outputs.
 std::unordered_set<std::wstring> g_activatedSessions;
 std::unordered_set<std::wstring> g_liveSessions;
+// Session instance IDs survive UI refreshes and distinguish restarted apps.
+// Access is shared by the UI and Core Audio notification threads.
+SRWLOCK g_defaultVolumeLock = SRWLOCK_INIT;
+std::unordered_map<std::wstring, int> g_appliedDefaultVolumes;
+std::unordered_set<std::wstring> g_liveDefaultSessions;
+
+HANDLE g_audioNotificationThread;
+HANDLE g_audioNotificationStopEvent;
+HANDLE g_audioNotificationRebuildEvent;
+HANDLE g_audioNotificationSessionEvent;
+std::atomic<bool> g_audioUiRefreshPosted;
 
 int g_dpi = 96;
 int g_scrollRow;
@@ -349,6 +393,45 @@ bool g_trayPressWasVisible;
 bool g_showingMixer;
 bool g_outputMenuOpen;
 bool g_outputHovered;
+HWND g_nameTooltip;
+std::wstring g_nameTooltipText;
+RECT g_nameTooltipRect{};
+bool g_nameTooltipClipped;
+ULONGLONG g_nameTooltipSince;
+
+void CancelNameTooltip(HWND window);
+
+int g_selectedRow = DRAG_MASTER;
+DWORD g_selectedProcessId;
+std::wstring g_selectedPinKey;
+HWND g_volumeEntry;
+HWND g_volumeEdit;
+int g_volumeEntryRow = DRAG_NONE;
+ULONG_PTR g_volumeEntryGeneration;
+constexpr PCWSTR VOLUME_ENTRY_CLASS = L"WindhawkBetterVolumeMixerEntry";
+constexpr PCWSTR NAME_TOOLTIP_CLASS = L"WindhawkBetterVolumeMixerTooltip";
+
+void SelectRow(int row) {
+    g_selectedRow = row;
+    g_selectedPinKey.clear();
+    if (row >= 0 && row < static_cast<int>(g_apps->size())) {
+        g_selectedProcessId = (*g_apps)[row].processId;
+        g_selectedPinKey = (*g_apps)[row].pinKey;
+    }
+}
+
+void RestoreSelectedRow() {
+    if (g_selectedRow < 0) return;
+    for (size_t i = 0; i < g_apps->size(); ++i) {
+        const auto& app = (*g_apps)[i];
+        if (app.processId == g_selectedProcessId && app.pinKey == g_selectedPinKey) {
+            g_selectedRow = static_cast<int>(i);
+            return;
+        }
+    }
+    SelectRow(DRAG_MASTER);
+}
+
 
 int Scale(int value) {
     return MulDiv(value, g_dpi, 96);
@@ -360,6 +443,18 @@ int ClampInt(int value, int minimum, int maximum) {
 
 float ClampVolume(float value) {
     return value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
+}
+
+std::wstring TrimSetting(const wchar_t* value) {
+    std::wstring text = value ? value : L"";
+    size_t first = text.find_first_not_of(L" \t\r\n");
+    if (first == std::wstring::npos) return {};
+    return text.substr(first, text.find_last_not_of(L" \t\r\n") - first + 1);
+}
+
+bool HasDefaultVolumeRules() {
+    return std::any_of(g_settings.customApps.begin(), g_settings.customApps.end(),
+                      [](const CustomApp& rule) { return rule.defaultVolume >= 0; });
 }
 
 void LoadSettings() {
@@ -380,8 +475,31 @@ void LoadSettings() {
         WindhawkUtils::StringSetting::make(L"maxVisibleApps");
     g_settings.maxVisibleApps = ClampInt(_wtoi(pageSize.get()), 1, 15);
     g_settings.compactMode = Wh_GetIntSetting(L"compactMode") != 0;
+    g_settings.keyboardControls = Wh_GetIntSetting(L"keyboardControls") != 0;
+    g_settings.exactVolumeEntry = Wh_GetIntSetting(L"exactVolumeEntry") != 0;
     g_settings.volumeStep =
         ClampInt(Wh_GetIntSetting(L"volumeStep"), 1, 20);
+
+    g_settings.customApps.clear();
+    // The settings API has no array length query. Scan a bounded range so a
+    // blank entry does not hide valid entries placed after it.
+    for (int i = 0; i < 256; ++i) {
+        auto app = WindhawkUtils::StringSetting::make(L"customApps[%d].app", i);
+        CustomApp rule;
+        rule.app = TrimSetting(app.get());
+        if (rule.app.empty()) continue;
+        auto name = WindhawkUtils::StringSetting::make(L"customApps[%d].displayName", i);
+        rule.displayName = TrimSetting(name.get());
+        int volume = Wh_GetIntSetting(L"customApps[%d].defaultVolume", i);
+        rule.defaultVolume = volume >= 0 && volume <= 100 ? volume : -1;
+        g_settings.customApps.push_back(std::move(rule));
+    }
+    g_settings.hiddenApps.clear();
+    for (int i = 0; i < 256; ++i) {
+        auto app = WindhawkUtils::StringSetting::make(L"hiddenApps[%d]", i);
+        std::wstring name = TrimSetting(app.get());
+        if (!name.empty()) g_settings.hiddenApps.push_back(std::move(name));
+    }
 }
 
 enum class AccentState : int {
@@ -545,7 +663,6 @@ Gdiplus::Font* CreateTypographyFont(PCWSTR preferredFamily, float pixels) {
         if (font->GetLastStatus() == Gdiplus::Ok) return font;
         delete font;
     }
-    // Some Windows/GDI+ combinations cannot resolve the variable font family.
     font = new Gdiplus::Font(L"Segoe UI", pixels, Gdiplus::FontStyleRegular,
                              Gdiplus::UnitPixel);
     if (font->GetLastStatus() == Gdiplus::Ok) return font;
@@ -577,8 +694,6 @@ void CreateFonts(HWND hWnd) {
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe Fluent Icons");
     if (g_gdiplusToken) {
-        // Fractional device-pixel sizes and typographic advances avoid rounding
-        // each character's spacing to GDI's integer-width font metrics.
         float density = g_dpi / 96.0f;
         g_titleTypography = CreateTypographyFont(L"Segoe UI Semibold", 20.0f * density);
         g_bodyTypography = CreateTypographyFont(L"Segoe UI Variable Text", 14.0f * density);
@@ -651,8 +766,6 @@ HICON ExtractSizedIcon(const std::wstring& path, int pixels) {
         DestroyIcon(icon);
     }
 
-    // Shell associations can provide an icon even when a file has no embedded
-    // icon resources. Prefer the large version, never the 16px small version.
     SHFILEINFOW info = {};
     if (SHGetFileInfoW(path.c_str(), FILE_ATTRIBUTE_NORMAL, &info, sizeof(info),
                        SHGFI_ICON | SHGFI_LARGEICON)) {
@@ -778,13 +891,13 @@ std::wstring SourcePinKey(std::wstring path, const std::wstring& name,
 
 bool AppSortOrder(const AppSession& left, const AppSession& right) {
     if (left.pinned != right.pinned) return left.pinned > right.pinned;
-    // Playback changes should not shuffle pinned sources around.
     if (!left.pinned && left.active != right.active) return left.active > right.active;
     int nameOrder = _wcsicmp(left.name.c_str(), right.name.c_str());
     return nameOrder ? nameOrder < 0 : left.pinKey < right.pinKey;
 }
 
 void ToggleSourcePin(HWND window, int row) {
+    CancelNameTooltip(window);
     if (row < 0 || row >= static_cast<int>(g_apps->size())) return;
     std::wstring key = (*g_apps)[row].pinKey;
     bool pinned = !(*g_apps)[row].pinned;
@@ -797,11 +910,475 @@ void ToggleSourcePin(HWND window, int row) {
     for (auto& app : *g_apps) if (app.pinKey == key) app.pinned = pinned;
     std::stable_sort(g_apps->begin(), g_apps->end(), AppSortOrder);
     g_scrollRow = 0;
+    SelectRow(DRAG_MASTER);
     g_hoverRow = DRAG_NONE;
     InvalidateRect(window, nullptr, FALSE);
 }
 
-void AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics) {
+bool MatchesAppName(const std::wstring& target, const std::wstring& path,
+                    const std::wstring& name) {
+    if (target.empty()) return false;
+    if (_wcsicmp(target.c_str(), name.c_str()) == 0) return true;
+    if (path.empty()) return false;
+    size_t slash = path.find_last_of(L"\\/");
+    const wchar_t* filename = path.c_str() + (slash == std::wstring::npos ? 0 : slash + 1);
+    return _wcsicmp(target.c_str(), path.c_str()) == 0 ||
+           _wcsicmp(target.c_str(), filename) == 0 ||
+           _wcsicmp(target.c_str(), BaseNameWithoutExtension(path).c_str()) == 0;
+}
+
+const CustomApp* FindCustomAppInRules(const std::vector<CustomApp>& rules,
+                                           const std::wstring& path,
+                                           const std::wstring& name) {
+    for (const auto& rule : rules) {
+        if (MatchesAppName(rule.app, path, name)) return &rule;
+    }
+    return nullptr;
+}
+
+const CustomApp* FindCustomApp(const std::wstring& path, const std::wstring& name) {
+    return FindCustomAppInRules(g_settings.customApps, path, name);
+}
+
+bool IsAppHidden(const std::wstring& path, const std::wstring& name) {
+    return std::any_of(g_settings.hiddenApps.begin(), g_settings.hiddenApps.end(),
+        [&](const std::wstring& target) { return MatchesAppName(target, path, name); });
+}
+
+void ForgetAppliedDefaultVolume(const std::wstring& instanceId) {
+    if (instanceId.empty()) return;
+    AcquireSRWLockExclusive(&g_defaultVolumeLock);
+    g_appliedDefaultVolumes.erase(instanceId);
+    ReleaseSRWLockExclusive(&g_defaultVolumeLock);
+}
+
+bool ApplyTrackedDefaultVolume(const std::wstring& instanceId, int percent,
+                               ISimpleAudioVolume* volume) {
+    if (instanceId.empty() || !volume || percent < 0 || percent > 100) return false;
+
+    AcquireSRWLockShared(&g_defaultVolumeLock);
+    auto previous = g_appliedDefaultVolumes.find(instanceId);
+    bool alreadyApplied = previous != g_appliedDefaultVolumes.end() &&
+                          previous->second == percent;
+    ReleaseSRWLockShared(&g_defaultVolumeLock);
+    if (alreadyApplied) return false;
+
+    HRESULT result = volume->SetMasterVolume(percent / 100.0f, nullptr);
+    if (FAILED(result)) return false;
+
+    AcquireSRWLockExclusive(&g_defaultVolumeLock);
+    g_appliedDefaultVolumes[instanceId] = percent;
+    ReleaseSRWLockExclusive(&g_defaultVolumeLock);
+    return true;
+}
+
+void QueueAudioUiRefresh(HWND window) {
+    bool expected = false;
+    if (!g_audioUiRefreshPosted.compare_exchange_strong(expected, true)) return;
+    if (!window || !PostMessageW(window, WM_APP_AUDIO_CHANGED, 0, 0)) {
+        g_audioUiRefreshPosted.store(false);
+    }
+}
+
+void ApplyDefaultRuleToSession(IAudioSessionControl* control,
+                               const std::vector<CustomApp>& rules) {
+    if (!control) return;
+
+    IAudioSessionControl2* control2 = nullptr;
+    ISimpleAudioVolume* volume = nullptr;
+    if (FAILED(control->QueryInterface(__uuidof(IAudioSessionControl2),
+                                       reinterpret_cast<void**>(&control2))) ||
+        FAILED(control->QueryInterface(__uuidof(ISimpleAudioVolume),
+                                       reinterpret_cast<void**>(&volume))) ||
+        !control2 || !volume) {
+        if (control2) control2->Release();
+        if (volume) volume->Release();
+        return;
+    }
+
+    LPWSTR rawInstanceId = nullptr;
+    std::wstring instanceId;
+    if (SUCCEEDED(control2->GetSessionInstanceIdentifier(&rawInstanceId)) &&
+        rawInstanceId) {
+        instanceId = rawInstanceId;
+    }
+    if (rawInstanceId) CoTaskMemFree(rawInstanceId);
+
+    DWORD processId = 0;
+    HRESULT processResult = control2->GetProcessId(&processId);
+    bool systemSounds = control2->IsSystemSoundsSession() == S_OK;
+    std::wstring processPath = SUCCEEDED(processResult)
+        ? GetProcessPath(processId) : std::wstring();
+    if (!IsAudioEngineSession(processPath, systemSounds)) {
+        std::wstring displayName = GetSessionDisplayName(
+            control, processId, systemSounds, &processPath);
+        const CustomApp* rule = FindCustomAppInRules(rules, processPath, displayName);
+        if (rule && rule->defaultVolume >= 0) {
+            ApplyTrackedDefaultVolume(instanceId, rule->defaultVolume, volume);
+        } else {
+            ForgetAppliedDefaultVolume(instanceId);
+        }
+    }
+
+    volume->Release();
+    control2->Release();
+}
+
+struct AudioNotificationContext {
+    HWND window;
+    HANDLE stopEvent;
+    HANDLE rebuildEvent;
+    HANDLE sessionEvent;
+    SRWLOCK pendingLock = SRWLOCK_INIT;
+    std::vector<IAudioSessionControl*> pendingSessions;
+    std::vector<CustomApp> rules;
+};
+
+class AudioSessionNotification final : public IAudioSessionNotification {
+public:
+    explicit AudioSessionNotification(AudioNotificationContext* context)
+        : m_context(context) {}
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
+        if (!object) return E_POINTER;
+        *object = nullptr;
+        if (iid == __uuidof(IUnknown) || iid == __uuidof(IAudioSessionNotification)) {
+            *object = static_cast<IAudioSessionNotification*>(this);
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return static_cast<ULONG>(InterlockedIncrement(&m_references));
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG remaining = static_cast<ULONG>(InterlockedDecrement(&m_references));
+        if (!remaining) delete this;
+        return remaining;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnSessionCreated(IAudioSessionControl* newSession) override {
+        if (!newSession || !m_context) return S_OK;
+
+        newSession->AddRef();
+        AcquireSRWLockExclusive(&m_context->pendingLock);
+        m_context->pendingSessions.push_back(newSession);
+        ReleaseSRWLockExclusive(&m_context->pendingLock);
+        SetEvent(m_context->sessionEvent);
+        return S_OK;
+    }
+
+private:
+    ~AudioSessionNotification() = default;
+    LONG m_references = 1;
+    AudioNotificationContext* m_context;
+};
+
+class EndpointNotification final : public IMMNotificationClient {
+public:
+    explicit EndpointNotification(HANDLE rebuildEvent) : m_rebuildEvent(rebuildEvent) {}
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
+        if (!object) return E_POINTER;
+        *object = nullptr;
+        if (iid == __uuidof(IUnknown) || iid == __uuidof(IMMNotificationClient)) {
+            *object = static_cast<IMMNotificationClient*>(this);
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return static_cast<ULONG>(InterlockedIncrement(&m_references));
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG remaining = static_cast<ULONG>(InterlockedDecrement(&m_references));
+        if (!remaining) delete this;
+        return remaining;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override {
+        SignalRebuild();
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override {
+        SignalRebuild();
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override {
+        SignalRebuild();
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow, ERole,
+                                                     LPCWSTR) override {
+        if (flow == eRender || flow == eAll) SignalRebuild();
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override {
+        return S_OK;
+    }
+
+private:
+    ~EndpointNotification() = default;
+
+    void SignalRebuild() {
+        if (m_rebuildEvent) SetEvent(m_rebuildEvent);
+    }
+
+    LONG m_references = 1;
+    HANDLE m_rebuildEvent;
+};
+
+struct AudioSessionWatcher {
+    IAudioSessionManager2* manager = nullptr;
+    AudioSessionNotification* notification = nullptr;
+
+    ~AudioSessionWatcher() {
+        if (manager && notification) {
+            manager->UnregisterSessionNotification(notification);
+        }
+        if (notification) notification->Release();
+        if (manager) manager->Release();
+    }
+};
+
+void PrimeSessionManager(IAudioSessionManager2* manager,
+                         const std::vector<CustomApp>& rules) {
+    IAudioSessionEnumerator* sessions = nullptr;
+    if (FAILED(manager->GetSessionEnumerator(&sessions)) || !sessions) return;
+
+    int count = 0;
+    if (SUCCEEDED(sessions->GetCount(&count))) {
+        for (int i = 0; i < count; ++i) {
+            IAudioSessionControl* control = nullptr;
+            if (SUCCEEDED(sessions->GetSession(i, &control)) && control) {
+                ApplyDefaultRuleToSession(control, rules);
+                control->Release();
+            }
+        }
+    }
+    sessions->Release();
+}
+
+void RebuildAudioSessionWatchers(
+        IMMDeviceEnumerator* enumerator, AudioNotificationContext* context,
+        std::vector<std::unique_ptr<AudioSessionWatcher>>& watchers) {
+    watchers.clear();
+
+    IMMDeviceCollection* devices = nullptr;
+    HRESULT hr = enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &devices);
+    if (FAILED(hr) || !devices) {
+        Wh_Log(L"Mixer: notification endpoint enumeration failed: 0x%08lX",
+               static_cast<unsigned long>(hr));
+        return;
+    }
+
+    UINT count = 0;
+    if (FAILED(devices->GetCount(&count))) count = 0;
+    for (UINT i = 0; i < count; ++i) {
+        IMMDevice* device = nullptr;
+        if (FAILED(devices->Item(i, &device)) || !device) continue;
+
+        IAudioSessionManager2* manager = nullptr;
+        hr = device->Activate(__uuidof(IAudioSessionManager2), CLSCTX_INPROC_SERVER,
+                              nullptr, reinterpret_cast<void**>(&manager));
+        device->Release();
+        if (FAILED(hr) || !manager) continue;
+
+        auto* notification = new AudioSessionNotification(context);
+        hr = manager->RegisterSessionNotification(notification);
+        if (FAILED(hr)) {
+            notification->Release();
+            manager->Release();
+            continue;
+        }
+
+        auto watcher = std::make_unique<AudioSessionWatcher>();
+        watcher->manager = manager;
+        watcher->notification = notification;
+        PrimeSessionManager(manager, context->rules);
+        watchers.push_back(std::move(watcher));
+    }
+    devices->Release();
+}
+
+void DrainPendingAudioSessions(AudioNotificationContext* context, bool applyRules) {
+    std::vector<IAudioSessionControl*> pending;
+    AcquireSRWLockExclusive(&context->pendingLock);
+    pending.swap(context->pendingSessions);
+    ReleaseSRWLockExclusive(&context->pendingLock);
+
+    for (IAudioSessionControl* control : pending) {
+        if (applyRules) {
+            ApplyDefaultRuleToSession(control, context->rules);
+        }
+        control->Release();
+    }
+
+    if (applyRules && !pending.empty()) {
+        QueueAudioUiRefresh(context->window);
+    }
+}
+
+DWORD WINAPI AudioNotificationThreadProc(LPVOID parameter) {
+    std::unique_ptr<AudioNotificationContext> context(
+        static_cast<AudioNotificationContext*>(parameter));
+    HRESULT comResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(comResult)) {
+        Wh_Log(L"Mixer: audio notification COM initialization failed: 0x%08lX",
+               static_cast<unsigned long>(comResult));
+        return 1;
+    }
+
+    IMMDeviceEnumerator* enumerator = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                  CLSCTX_INPROC_SERVER,
+                                  __uuidof(IMMDeviceEnumerator),
+                                  reinterpret_cast<void**>(&enumerator));
+    if (FAILED(hr) || !enumerator) {
+        Wh_Log(L"Mixer: audio notification device enumerator failed: 0x%08lX",
+               static_cast<unsigned long>(hr));
+        CoUninitialize();
+        return 1;
+    }
+
+    auto* endpointNotification = new EndpointNotification(context->rebuildEvent);
+    bool endpointRegistered = SUCCEEDED(
+        enumerator->RegisterEndpointNotificationCallback(endpointNotification));
+    if (!endpointRegistered) {
+        Wh_Log(L"Mixer: endpoint notification registration failed");
+    }
+
+    std::vector<std::unique_ptr<AudioSessionWatcher>> watchers;
+    RebuildAudioSessionWatchers(enumerator, context.get(), watchers);
+
+    HANDLE events[] = {
+        context->stopEvent, context->rebuildEvent, context->sessionEvent};
+    while (true) {
+        DWORD wait = WaitForMultipleObjects(3, events, FALSE, INFINITE);
+        if (wait == WAIT_OBJECT_0) break;
+        if (wait == WAIT_OBJECT_0 + 1) {
+            RebuildAudioSessionWatchers(enumerator, context.get(), watchers);
+            QueueAudioUiRefresh(context->window);
+            continue;
+        }
+        if (wait == WAIT_OBJECT_0 + 2) {
+            DrainPendingAudioSessions(context.get(), true);
+            continue;
+        }
+        break;
+    }
+
+    watchers.clear();
+    DrainPendingAudioSessions(context.get(), false);
+    if (endpointRegistered) {
+        enumerator->UnregisterEndpointNotificationCallback(endpointNotification);
+    }
+    endpointNotification->Release();
+    enumerator->Release();
+    CoUninitialize();
+    return 0;
+}
+
+bool StopDefaultVolumeNotifications() {
+    if (!g_audioNotificationThread) return true;
+
+    if (g_audioNotificationStopEvent) SetEvent(g_audioNotificationStopEvent);
+    DWORD wait = WaitForSingleObject(g_audioNotificationThread, 5000);
+    if (wait != WAIT_OBJECT_0) {
+        Wh_Log(L"Mixer: audio notification thread did not stop in time");
+        return false;
+    }
+
+    CloseHandle(g_audioNotificationThread);
+    g_audioNotificationThread = nullptr;
+    if (g_audioNotificationStopEvent) {
+        CloseHandle(g_audioNotificationStopEvent);
+        g_audioNotificationStopEvent = nullptr;
+    }
+    if (g_audioNotificationRebuildEvent) {
+        CloseHandle(g_audioNotificationRebuildEvent);
+        g_audioNotificationRebuildEvent = nullptr;
+    }
+    if (g_audioNotificationSessionEvent) {
+        CloseHandle(g_audioNotificationSessionEvent);
+        g_audioNotificationSessionEvent = nullptr;
+    }
+    g_audioUiRefreshPosted.store(false);
+    return true;
+}
+
+void StartDefaultVolumeNotifications(HWND window) {
+    if (!HasDefaultVolumeRules() || g_audioNotificationThread) return;
+
+    g_audioNotificationStopEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_audioNotificationRebuildEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_audioNotificationSessionEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_audioNotificationStopEvent || !g_audioNotificationRebuildEvent ||
+        !g_audioNotificationSessionEvent) {
+        Wh_Log(L"Mixer: could not create audio notification events");
+        if (g_audioNotificationStopEvent) CloseHandle(g_audioNotificationStopEvent);
+        if (g_audioNotificationRebuildEvent) CloseHandle(g_audioNotificationRebuildEvent);
+        if (g_audioNotificationSessionEvent) CloseHandle(g_audioNotificationSessionEvent);
+        g_audioNotificationStopEvent = nullptr;
+        g_audioNotificationRebuildEvent = nullptr;
+        g_audioNotificationSessionEvent = nullptr;
+        return;
+    }
+
+    auto* context = new AudioNotificationContext;
+    context->window = window;
+    context->stopEvent = g_audioNotificationStopEvent;
+    context->rebuildEvent = g_audioNotificationRebuildEvent;
+    context->sessionEvent = g_audioNotificationSessionEvent;
+    context->rules = g_settings.customApps;
+    g_audioNotificationThread = CreateThread(
+        nullptr, 0, AudioNotificationThreadProc, context, 0, nullptr);
+    if (!g_audioNotificationThread) {
+        Wh_Log(L"Mixer: could not start audio notification thread, error %lu",
+               GetLastError());
+        delete context;
+        CloseHandle(g_audioNotificationStopEvent);
+        CloseHandle(g_audioNotificationRebuildEvent);
+        CloseHandle(g_audioNotificationSessionEvent);
+        g_audioNotificationStopEvent = nullptr;
+        g_audioNotificationRebuildEvent = nullptr;
+        g_audioNotificationSessionEvent = nullptr;
+    }
+}
+
+void ApplyDefaultVolume(const CustomApp* rule, const std::wstring& instanceId,
+                        ISimpleAudioVolume* volume) {
+    if (instanceId.empty()) return;
+    if (!rule || rule->defaultVolume < 0) {
+        ForgetAppliedDefaultVolume(instanceId);
+        return;
+    }
+    ApplyTrackedDefaultVolume(instanceId, rule->defaultVolume, volume);
+}
+
+void PruneDefaultVolumes(bool completeScan) {
+    // An unavailable device/service is not evidence that a session ended.
+    if (!completeScan) return;
+    AcquireSRWLockExclusive(&g_defaultVolumeLock);
+    for (auto it = g_appliedDefaultVolumes.begin(); it != g_appliedDefaultVolumes.end();) {
+        if (!g_liveDefaultSessions.count(it->first)) it = g_appliedDefaultVolumes.erase(it);
+        else ++it;
+    }
+    ReleaseSRWLockExclusive(&g_defaultVolumeLock);
+}
+
+bool AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics,
+                          bool buildRows) {
     std::wstring endpointName = ReadEndpointName(device);
     std::wstring endpointId = endpointName;
     LPWSTR rawEndpointId = nullptr;
@@ -816,7 +1393,7 @@ void AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics) {
             Wh_Log(L"Mixer: session manager failed for '%s': 0x%08lX",
                    endpointName.c_str(), static_cast<unsigned long>(hr));
         }
-        return;
+        return false;
     }
 
     IAudioSessionEnumerator* sessions = nullptr;
@@ -827,7 +1404,7 @@ void AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics) {
             Wh_Log(L"Mixer: session enumeration failed for '%s': 0x%08lX",
                    endpointName.c_str(), static_cast<unsigned long>(hr));
         }
-        return;
+        return false;
     }
 
     // This map is scoped to a single device. Do not merge volume controls
@@ -835,6 +1412,7 @@ void AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics) {
     std::unordered_map<std::wstring, size_t> groupByProcess;
     int count = 0;
     hr = sessions->GetCount(&count);
+    bool complete = SUCCEEDED(hr);
     if (diagnostics) {
         Wh_Log(L"Mixer: output '%s', default=%d, sessions=%d, result=0x%08lX",
                endpointName.c_str(), isDefault, count,
@@ -843,11 +1421,12 @@ void AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics) {
     for (int i = 0; i < count; i++) {
         IAudioSessionControl* control = nullptr;
         if (FAILED(sessions->GetSession(i, &control)) || !control) {
+            complete = false;
             continue;
         }
 
         AudioSessionState state = AudioSessionStateExpired;
-        control->GetState(&state);
+        if (FAILED(control->GetState(&state))) complete = false;
         if (state == AudioSessionStateExpired) {
             control->Release();
             continue;
@@ -860,6 +1439,7 @@ void AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics) {
             FAILED(control->QueryInterface(__uuidof(ISimpleAudioVolume),
                                            reinterpret_cast<void**>(&volume))) ||
             !control2 || !volume) {
+            complete = false;
             if (control2) {
                 control2->Release();
             }
@@ -889,7 +1469,7 @@ void AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics) {
         std::wstring displayName = GetSessionDisplayName(control, processId,
                                                          systemSounds, &processPath);
         std::wstring pinKey = SourcePinKey(processPath, displayName, endpointId, systemSounds);
-        bool pinned = Wh_GetIntValue(pinKey.c_str(), 0) != 0;
+        bool pinned = buildRows && Wh_GetIntValue(pinKey.c_str(), 0) != 0;
         LPWSTR rawInstanceId = nullptr;
         std::wstring instanceId;
         if (SUCCEEDED(control2->GetSessionInstanceIdentifier(&rawInstanceId)) &&
@@ -899,7 +1479,16 @@ void AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics) {
         if (rawInstanceId) {
             CoTaskMemFree(rawInstanceId);
         }
-        if (!ShouldIncludeSession(state, instanceId, isDefault) && !pinned) {
+        if (instanceId.empty()) complete = false;
+        else g_liveDefaultSessions.insert(instanceId);
+        bool hidden = IsAppHidden(processPath, displayName);
+        const CustomApp* custom = FindCustomApp(processPath, displayName);
+        ApplyDefaultVolume(custom, instanceId, volume);
+        // Build identity before applying the alias, so renaming keeps pins and
+        // keyboard selection attached to the original source.
+        if (custom && !custom->displayName.empty()) displayName = custom->displayName;
+        bool include = ShouldIncludeSession(state, instanceId, isDefault);
+        if (!buildRows || hidden || (!include && !pinned)) {
             volume->Release();
             control2->Release();
             control->Release();
@@ -959,16 +1548,19 @@ void AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics) {
         control->Release();
     }
     sessions->Release();
+    return complete;
 }
 
 void ClampPageOffset();
 
 void RefreshAudioSessions(HWND hWnd, bool diagnostics = false) {
-    if (g_dragRow != DRAG_NONE) {
+    if (g_dragRow != DRAG_NONE || g_volumeEntry) {
         return;
     }
 
+    bool buildRows = IsWindowVisible(hWnd) || diagnostics;
     g_liveSessions.clear();
+    g_liveDefaultSessions.clear();
     ReleaseAudioData();
     IMMDeviceEnumerator* enumerator = nullptr;
     HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
@@ -980,6 +1572,7 @@ void RefreshAudioSessions(HWND hWnd, bool diagnostics = false) {
             Wh_Log(L"Mixer: device enumeration failed: 0x%08lX",
                    static_cast<unsigned long>(hr));
         }
+        RestoreSelectedRow();
         ClampPageOffset();
         InvalidateRect(hWnd, nullptr, FALSE);
         return;
@@ -1000,17 +1593,19 @@ void RefreshAudioSessions(HWND hWnd, bool diagnostics = false) {
                                  reinterpret_cast<void**>(&g_endpointVolume));
     }
 
+    bool completeScan = true;
     IMMDeviceCollection* devices = nullptr;
     hr = enumerator->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &devices);
     if (SUCCEEDED(hr) && devices) {
         UINT count = 0;
-        devices->GetCount(&count);
+        if (FAILED(devices->GetCount(&count))) completeScan = false;
         if (diagnostics) {
             Wh_Log(L"Mixer: scanning %u active playback outputs", count);
         }
         for (UINT i = 0; i < count; ++i) {
             IMMDevice* device = nullptr;
             if (FAILED(devices->Item(i, &device)) || !device) {
+                completeScan = false;
                 continue;
             }
             LPWSTR id = nullptr;
@@ -1019,18 +1614,19 @@ void RefreshAudioSessions(HWND hWnd, bool diagnostics = false) {
                 isDefault = !defaultId.empty() && defaultId == id;
                 CoTaskMemFree(id);
             }
-            AppendDeviceSessions(device, isDefault, diagnostics);
+            if (!AppendDeviceSessions(device, isDefault, diagnostics, buildRows)) completeScan = false;
             device->Release();
         }
         devices->Release();
     } else {
+        completeScan = false;
         if (diagnostics) {
             Wh_Log(L"Mixer: playback collection failed: 0x%08lX",
                    static_cast<unsigned long>(hr));
         }
         // Preserve default-device functionality if collection enumeration fails.
         if (defaultDevice) {
-            AppendDeviceSessions(defaultDevice, true, diagnostics);
+            AppendDeviceSessions(defaultDevice, true, diagnostics, buildRows);
         }
     }
     if (defaultDevice) {
@@ -1038,10 +1634,13 @@ void RefreshAudioSessions(HWND hWnd, bool diagnostics = false) {
     }
     enumerator->Release();
 
+    PruneDefaultVolumes(completeScan);
+    g_liveDefaultSessions.clear();
     PrunePlaybackHistory();
 
     std::stable_sort(g_apps->begin(), g_apps->end(), AppSortOrder);
 
+    RestoreSelectedRow();
     g_audioAvailable = g_endpointVolume != nullptr || !g_apps->empty();
     ClampPageOffset();
     InvalidateRect(hWnd, nullptr, FALSE);
@@ -1121,29 +1720,22 @@ void ToggleRowMute(int row) {
     app.muted = newMuted;
 }
 
-// ---------------------------------------------------------------------------
-// Layout. Every metric that differs between the normal and compact layouts
-// lives in this block, so painting and hit-testing always agree.
-// ---------------------------------------------------------------------------
-
 bool IsCompact() {
     return g_settings.compactMode;
 }
 
 int HeaderHeight() {
-    return Scale(IsCompact() ? 78 : 92);
+    return Scale(IsCompact() ? 46 : 92);
 }
 
 int RowHeight() {
     return Scale(IsCompact() ? 52 : 68);
 }
 
-// Space between the master row and the first app row (holds "Applications").
 int SectionGap() {
     return Scale(IsCompact() ? 24 : 30);
 }
 
-// Space below the last row: page navigation when paged, otherwise padding.
 int FooterHeight(bool paged) {
     if (IsCompact()) {
         return Scale(paged ? 44 : 8);
@@ -1161,9 +1753,6 @@ int PopupWidth() {
 }
 
 RECT TitleRect(int width) {
-    if (IsCompact()) {
-        return {Scale(24), Scale(9), width - Scale(52), Scale(35)};
-    }
     return {Scale(24), Scale(15), width - Scale(60), Scale(45)};
 }
 
@@ -1174,14 +1763,17 @@ RECT CloseButtonRect(int width) {
     return {width - Scale(52), Scale(14), width - Scale(20), Scale(46)};
 }
 
-// The output selector is a full-width control on its own line below the
-// title, aligned with the row cards, so it no longer sits beside the close
-// button.
 RECT OutputPickerRect(int width) {
     if (IsCompact()) {
-        return {Scale(12), Scale(42), width - Scale(12), Scale(68)};
+        return {Scale(12), Scale(8), width - Scale(52), Scale(36)};
     }
     return {Scale(12), Scale(52), width - Scale(12), Scale(82)};
+}
+
+RECT DeviceNameRect(int width) {
+    RECT picker = OutputPickerRect(width);
+    return {picker.left + Scale(38), picker.top,
+            picker.right - Scale(34), picker.bottom};
 }
 
 int PageSize() {
@@ -1202,14 +1794,18 @@ int PageCount() {
 void ClampPageOffset() {
     int page = ClampInt(g_scrollRow / PageSize(), 0, PageCount() - 1);
     g_scrollRow = page * PageSize();
+    if (g_settings.keyboardControls && g_selectedRow >= 0) {
+        g_scrollRow = (g_selectedRow / PageSize()) * PageSize();
+    }
 }
 
 void ChangePage(HWND window, int delta) {
-    // A captured slider always continues to refer to the same source.
-    if (g_dragRow != DRAG_NONE || PageCount() <= 1) return;
+    CancelNameTooltip(window);
+    if (g_dragRow != DRAG_NONE || g_volumeEntry || PageCount() <= 1) return;
     int pages = PageCount();
     int page = (g_scrollRow / PageSize() + delta % pages + pages) % pages;
     g_scrollRow = page * PageSize();
+    SelectRow(g_scrollRow);
     g_hoverRow = DRAG_NONE;
     InvalidateRect(window, nullptr, FALSE);
 }
@@ -1220,7 +1816,6 @@ int VisibleAppCount() {
 }
 
 int PopupHeight() {
-    // Keep navigation stationary on the last, partially filled page.
     int slots = std::max(1, std::min(static_cast<int>(g_apps->size()),
                                    PageSize()));
     return HeaderHeight() + RowHeight() * (1 + slots) + SectionGap() +
@@ -1237,10 +1832,6 @@ RECT PageButtonRect(bool next, const RECT& client) {
             client.bottom - Scale(12)};
 }
 
-// Normal rows: icon and name/percent on the left, slider below the name,
-// pin over mute in a column on the right.
-// Compact rows: name, percent, pin and mute share one line, with the slider
-// on a second line spanning almost the full row width.
 RECT IconTileRectForRow(int visibleRow) {
     int top = RowTop(visibleRow);
     if (IsCompact()) {
@@ -1262,6 +1853,10 @@ RECT NameRectForRow(int visibleRow, int clientWidth) {
 RECT PercentRectForRow(int visibleRow, int clientWidth) {
     int top = RowTop(visibleRow);
     if (IsCompact()) {
+        if (visibleRow == 0) {
+            return {clientWidth - Scale(100), top + Scale(3),
+                    clientWidth - Scale(50), top + Scale(27)};
+        }
         return {clientWidth - Scale(124), top + Scale(3),
                 clientWidth - Scale(76), top + Scale(27)};
     }
@@ -1299,14 +1894,9 @@ RECT PinRectForRow(int visibleRow, int clientWidth) {
             clientWidth - Scale(24), top + Scale(29)};
 }
 
-// Grab zone around a slider. Compact rows keep it tighter vertically so it
-// does not swallow the name line above it.
-RECT SliderHitRect(int visibleRow, int clientWidth, bool forWheel) {
+RECT SliderHitRect(int visibleRow, int clientWidth) {
     RECT rect = SliderRectForRow(visibleRow, clientWidth);
     int vertical = IsCompact() ? 8 : 12;
-    if (forWheel) {
-        vertical += 2;
-    }
     InflateRect(&rect, Scale(10), Scale(vertical));
     return rect;
 }
@@ -1337,6 +1927,164 @@ int RowFromPoint(POINT point) {
 
 int VisibleRowForDataRow(int row) {
     return row == DRAG_MASTER ? 0 : row - g_scrollRow + 1;
+}
+
+// A separate owned popup keeps the native text editor visible over the
+// UpdateLayeredWindow surface. Audio enumeration is paused until it closes.
+bool ParseVolumePercent(const std::wstring& text, int& value) {
+    if (text.empty() || text.size() > 3) return false;
+    int parsed = 0;
+    for (wchar_t c : text) {
+        if (c < L'0' || c > L'9') return false;
+        parsed = parsed * 10 + (c - L'0');
+    }
+    if (parsed > 100) return false;
+    value = parsed;
+    return true;
+}
+
+bool FinishVolumeEntry(HWND owner, bool commit, bool returnFocus) {
+    if (!g_volumeEntry) return true;
+    if (commit) {
+        WCHAR text[32]{};
+        GetWindowTextW(g_volumeEdit, text, ARRAYSIZE(text));
+        int percent;
+        if (!ParseVolumePercent(text, percent)) {
+            MessageBeep(MB_ICONWARNING);
+            SendMessageW(g_volumeEdit, EM_SETSEL, 0, -1);
+            return false;
+        }
+        SetRowVolume(g_volumeEntryRow, percent / 100.0f);
+    }
+    HWND entry = g_volumeEntry;
+    g_volumeEntry = nullptr;
+    g_volumeEdit = nullptr;
+    g_volumeEntryRow = DRAG_NONE;
+    ++g_volumeEntryGeneration;
+    DestroyWindow(entry);
+    if (returnFocus && IsWindowVisible(owner)) SetFocus(owner);
+    InvalidateRect(owner, nullptr, FALSE);
+    return true;
+}
+
+LRESULT CALLBACK VolumeEntryProc(HWND window, UINT message, WPARAM wParam,
+                                 LPARAM lParam) {
+    HWND owner = GetWindow(window, GW_OWNER);
+    switch (message) {
+        case WM_SETFOCUS:
+            if (g_volumeEdit) SetFocus(g_volumeEdit);
+            return 0;
+        case WM_COMMAND:
+            if (HIWORD(wParam) != EN_KILLFOCUS) break;
+            PostMessageW(owner, WM_APP_FINISH_VOLUME_ENTRY, 0,
+                         static_cast<LPARAM>(g_volumeEntryGeneration));
+            return 0;
+        case WM_ACTIVATE:
+            if (LOWORD(wParam) == WA_INACTIVE) {
+                PostMessageW(owner, WM_APP_FINISH_VOLUME_ENTRY, 0,
+                             static_cast<LPARAM>(g_volumeEntryGeneration));
+                SetTimer(owner, TIMER_CHECK_FOCUS, 150, nullptr);
+            }
+            break;
+        case WM_CLOSE:
+            PostMessageW(owner, WM_APP_FINISH_VOLUME_ENTRY, 0,
+                         static_cast<LPARAM>(g_volumeEntryGeneration));
+            return 0;
+        case WM_CTLCOLOREDIT: {
+            HDC dc = reinterpret_cast<HDC>(wParam);
+            SetTextColor(dc, g_theme.text);
+            SetBkColor(dc, g_theme.panel);
+            SetDCBrushColor(dc, g_theme.panel);
+            return reinterpret_cast<LRESULT>(GetStockObject(DC_BRUSH));
+        }
+        case WM_ERASEBKGND: {
+            RECT rect{};
+            GetClientRect(window, &rect);
+            HDC dc = reinterpret_cast<HDC>(wParam);
+            SetDCBrushColor(dc, g_theme.panel);
+            FillRect(dc, &rect, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+            return 1;
+        }
+    }
+    return DefWindowProcW(window, message, wParam, lParam);
+}
+
+void BeginVolumeEntry(HWND owner, int row) {
+    if (!g_settings.exactVolumeEntry || g_dragRow != DRAG_NONE ||
+        (row == DRAG_MASTER && !g_endpointVolume)) return;
+    FinishVolumeEntry(owner, false, false);
+    RECT client{};
+    GetClientRect(owner, &client);
+    RECT rect = PercentRectForRow(VisibleRowForDataRow(row), client.right);
+    POINT origin{rect.left, rect.top};
+    ClientToScreen(owner, &origin);
+    HINSTANCE instance = GetModuleHandleW(nullptr);
+    g_volumeEntryRow = row;
+    ++g_volumeEntryGeneration;
+    g_volumeEntry = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+        VOLUME_ENTRY_CLASS, L"Volume (0-100%)", WS_POPUP | WS_BORDER,
+        origin.x, origin.y, rect.right - rect.left, rect.bottom - rect.top,
+        owner, nullptr, instance, nullptr);
+    if (!g_volumeEntry) {
+        g_volumeEntryRow = DRAG_NONE;
+        return;
+    }
+    GetClientRect(g_volumeEntry, &client);
+    g_volumeEdit = CreateWindowExW(0, L"EDIT", L"",
+        WS_CHILD | WS_VISIBLE | ES_CENTER | ES_NUMBER | ES_AUTOHSCROLL,
+        0, 0, client.right, client.bottom,
+        g_volumeEntry, nullptr, instance, nullptr);
+    if (!g_volumeEdit) {
+        FinishVolumeEntry(owner, false, false);
+        return;
+    }
+    SendMessageW(g_volumeEdit, EM_SETLIMITTEXT, 16, 0);
+    SendMessageW(g_volumeEdit, WM_SETFONT, reinterpret_cast<WPARAM>(g_bodyFont), TRUE);
+    float volume = row == DRAG_MASTER ? GetMasterVolume() : (*g_apps)[row].volume;
+    std::wstring text = std::to_wstring(static_cast<int>(volume * 100.0f + 0.5f));
+    SetWindowTextW(g_volumeEdit, text.c_str());
+    SendMessageW(g_volumeEdit, EM_SETSEL, 0, -1);
+    ShowWindow(g_volumeEntry, SW_SHOW);
+    SetFocus(g_volumeEdit);
+}
+
+void MoveKeyboardSelection(HWND window, int direction) {
+    CancelNameTooltip(window);
+    int row = g_selectedRow;
+    if (row == DRAG_MASTER && direction > 0 && !g_apps->empty()) {
+        row = g_scrollRow;
+    } else {
+        row = ClampInt(row + direction, DRAG_MASTER,
+                       static_cast<int>(g_apps->size()) - 1);
+    }
+    SelectRow(row);
+    ClampPageOffset();
+    InvalidateRect(window, nullptr, FALSE);
+}
+
+bool HandleRowKey(HWND window, WPARAM key, LPARAM flags) {
+    if (!g_settings.keyboardControls || g_volumeEntry || g_dragRow != DRAG_NONE ||
+        (GetKeyState(VK_CONTROL) & 0x8000) || (GetKeyState(VK_MENU) & 0x8000)) {
+        return false;
+    }
+    if (key == VK_UP || key == VK_DOWN) {
+        MoveKeyboardSelection(window, key == VK_DOWN ? 1 : -1);
+        return true;
+    }
+    if (key == VK_LEFT || key == VK_RIGHT) {
+        float volume = g_selectedRow == DRAG_MASTER ? GetMasterVolume()
+            : (*g_apps)[g_selectedRow].volume;
+        SetRowVolume(g_selectedRow, volume +
+            (key == VK_RIGHT ? 1 : -1) * g_settings.volumeStep / 100.0f);
+        InvalidateRect(window, nullptr, FALSE);
+        return true;
+    }
+    if (key == 'M') {
+        if (!(flags & (1LL << 30))) ToggleRowMute(g_selectedRow);
+        InvalidateRect(window, nullptr, FALSE);
+        return true;
+    }
+    return false;
 }
 
 void ApplyVolumeFromPoint(HWND hWnd, int row, int x) {
@@ -1390,7 +2138,6 @@ struct TextCaches {
     LabelCache general;
     LabelCache percentages;
 };
-// Explicitly reset on the UI thread before fonts/GDI+ are destroyed.
 std::optional<TextCaches> g_textCache;
 constexpr int TEXT_SUPERSAMPLE = 6;
 
@@ -1431,7 +2178,6 @@ bool DrawSmoothLabel(HDC dc, const std::wstring& text, const RECT& rect,
                           label.dc, 0, 0, width, height, operation) != FALSE;
     };
     if (!g_textCache) g_textCache.emplace();
-    // A volume drag must not evict application names from the general cache.
     LabelCache& cache = percentage ? g_textCache->percentages : g_textCache->general;
     for (const auto& label : cache.labels) {
         if (label->font == font && label->format == format && label->color == color &&
@@ -1439,8 +2185,6 @@ bool DrawSmoothLabel(HDC dc, const std::wstring& text, const RECT& rect,
             return blend(*label);
     }
 
-    // Layout stays in physical screen pixels. Only rasterization is enlarged;
-    // app names, percentages and ellipses therefore retain their existing layout.
     Gdiplus::Bitmap mask(width * TEXT_SUPERSAMPLE, height * TEXT_SUPERSAMPLE,
                          PixelFormat32bppARGB);
     if (mask.GetLastStatus() != Gdiplus::Ok) return false;
@@ -1519,12 +2263,298 @@ void DrawLabel(HDC dc, const std::wstring& text, RECT rect, HFONT font,
         font == g_smallFont ? g_smallTypography : nullptr;
     if (typography && typography->GetLastStatus() == Gdiplus::Ok &&
         DrawSmoothLabel(dc, text, rect, font, typography, color, format, percentage)) return;
-    // Keep Fluent icon glyphs and a fallback path independent of GDI+.
     HGDIOBJ oldFont = SelectObject(dc, font);
     SetTextColor(dc, color);
     SetBkMode(dc, TRANSPARENT);
     DrawTextW(dc, text.c_str(), -1, &rect, format | DT_NOPREFIX);
     SelectObject(dc, oldFont);
+}
+
+void CancelNameTooltip(HWND window) {
+    KillTimer(window, TIMER_NAME_TOOLTIP);
+    if (g_nameTooltip && IsWindowVisible(g_nameTooltip)) {
+        ShowWindow(g_nameTooltip, SW_HIDE);
+    }
+    g_nameTooltipText.clear();
+    g_nameTooltipClipped = false;
+    g_nameTooltipSince = 0;
+}
+
+bool NameIsClipped(HWND window, const std::wstring& text, const RECT& rect) {
+    int width = rect.right - rect.left;
+    if (text.empty() || width <= 0) return false;
+
+    if (g_bodyTypography && g_bodyTypography->GetLastStatus() == Gdiplus::Ok) {
+        Gdiplus::Bitmap bitmap(1, 1, PixelFormat32bppARGB);
+        Gdiplus::Graphics graphics(&bitmap);
+        graphics.SetPageUnit(Gdiplus::UnitPixel);
+        graphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+
+        Gdiplus::StringFormat layout(Gdiplus::StringFormat::GenericTypographic());
+        layout.SetFormatFlags(Gdiplus::StringFormatFlagsNoFitBlackBox |
+                              Gdiplus::StringFormatFlagsNoWrap);
+        layout.SetTrimming(Gdiplus::StringTrimmingNone);
+
+        Gdiplus::RectF measured{};
+        if (graphics.MeasureString(
+                text.c_str(), static_cast<int>(text.size()), g_bodyTypography,
+                Gdiplus::PointF(0.0f, 0.0f), &layout, &measured) == Gdiplus::Ok) {
+            return measured.Width > static_cast<float>(width);
+        }
+    }
+
+    HDC dc = GetDC(window);
+    if (!dc) return false;
+    HGDIOBJ oldFont = SelectObject(dc, g_bodyFont);
+    RECT measured{};
+    DrawTextW(dc, text.c_str(), -1, &measured,
+              DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+    SelectObject(dc, oldFont);
+    ReleaseDC(window, dc);
+    return measured.right - measured.left > width;
+}
+
+void UpdateNameTooltip(HWND window, POINT point) {
+    if (!IsWindowVisible(window) || g_outputMenuOpen || g_volumeEntry ||
+        g_dragRow != DRAG_NONE) {
+        CancelNameTooltip(window);
+        return;
+    }
+
+    RECT client{};
+    GetClientRect(window, &client);
+    RECT rect = DeviceNameRect(client.right);
+    std::wstring text;
+
+    if (PtInRect(&rect, point)) {
+        text = g_endpointName.empty() ? L"No output device" : g_endpointName;
+    } else if (PtInRect(&client, point)) {
+        int row = RowFromPoint(point);
+        if (row != DRAG_NONE) {
+            rect = NameRectForRow(VisibleRowForDataRow(row), client.right);
+            if (PtInRect(&rect, point)) {
+                text = row == DRAG_MASTER
+                    ? (g_endpointVolume ? L"Master volume" : L"Output unavailable")
+                    : (*g_apps)[row].name;
+            }
+        }
+    }
+
+    if (text == g_nameTooltipText && EqualRect(&rect, &g_nameTooltipRect)) return;
+
+    CancelNameTooltip(window);
+    g_nameTooltipText = std::move(text);
+    g_nameTooltipRect = rect;
+    g_nameTooltipClipped = NameIsClipped(window, g_nameTooltipText, rect);
+
+    if (g_nameTooltipClipped) {
+        g_nameTooltipSince = GetTickCount64();
+        SetTimer(window, TIMER_NAME_TOOLTIP, NAME_TOOLTIP_DELAY, nullptr);
+    }
+}
+
+void PaintNameTooltip(HWND window, HDC dc) {
+    RECT client{};
+    GetClientRect(window, &client);
+
+    HBRUSH background = CreateSolidBrush(g_theme.panel);
+    FillRect(dc, &client, background);
+    DeleteObject(background);
+
+    RECT textRect = client;
+    InflateRect(&textRect, -Scale(8), -Scale(3));
+
+    DrawLabel(dc, g_nameTooltipText, textRect, g_bodyFont, g_theme.text,
+              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+}
+
+SIZE MeasureNameTooltipText() {
+    SIZE result{0, 0};
+    if (g_nameTooltipText.empty()) return result;
+
+    if (g_bodyTypography && g_bodyTypography->GetLastStatus() == Gdiplus::Ok) {
+        Gdiplus::Bitmap bitmap(1, 1, PixelFormat32bppARGB);
+        Gdiplus::Graphics graphics(&bitmap);
+        graphics.SetPageUnit(Gdiplus::UnitPixel);
+        graphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+
+        Gdiplus::StringFormat layout(Gdiplus::StringFormat::GenericTypographic());
+        layout.SetFormatFlags(Gdiplus::StringFormatFlagsNoFitBlackBox |
+                              Gdiplus::StringFormatFlagsNoWrap);
+        layout.SetTrimming(Gdiplus::StringTrimmingNone);
+
+        Gdiplus::RectF measured{};
+        if (graphics.MeasureString(
+                g_nameTooltipText.c_str(),
+                static_cast<int>(g_nameTooltipText.size()),
+                g_bodyTypography,
+                Gdiplus::PointF(0.0f, 0.0f),
+                &layout,
+                &measured) == Gdiplus::Ok) {
+            result.cx = static_cast<LONG>(std::ceil(measured.Width));
+            result.cy = static_cast<LONG>(std::ceil(measured.Height)) + Scale(2);
+            return result;
+        }
+    }
+
+    HWND owner = g_hWnd.load();
+    HDC dc = owner ? GetDC(owner) : nullptr;
+    if (!dc) return result;
+
+    HGDIOBJ oldFont = SelectObject(dc, g_bodyFont);
+    RECT measured{};
+    DrawTextW(dc, g_nameTooltipText.c_str(), -1, &measured,
+              DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+    SelectObject(dc, oldFont);
+    ReleaseDC(owner, dc);
+
+    result.cx = measured.right - measured.left;
+    result.cy = measured.bottom - measured.top;
+    return result;
+}
+
+void ApplyNameTooltipWindowStyle() {
+    if (!g_nameTooltip) return;
+
+    LONG_PTR exStyle = GetWindowLongPtrW(g_nameTooltip, GWL_EXSTYLE);
+
+    if (g_settings.backgroundOpacity < 100) {
+        if (!(exStyle & WS_EX_LAYERED)) {
+            exStyle |= WS_EX_LAYERED;
+            SetWindowLongPtrW(g_nameTooltip, GWL_EXSTYLE, exStyle);
+        }
+
+        int tooltipOpacity = std::max(85, g_settings.backgroundOpacity);
+        BYTE alpha = static_cast<BYTE>(MulDiv(255, tooltipOpacity, 100));
+        SetLayeredWindowAttributes(g_nameTooltip, 0, alpha, LWA_ALPHA);
+    } else if (exStyle & WS_EX_LAYERED) {
+        exStyle &= ~WS_EX_LAYERED;
+        SetWindowLongPtrW(g_nameTooltip, GWL_EXSTYLE, exStyle);
+    }
+
+    RECT bounds{};
+    if (GetWindowRect(g_nameTooltip, &bounds)) {
+        int width = bounds.right - bounds.left;
+        int height = bounds.bottom - bounds.top;
+        int radius = Scale(8);
+
+        HRGN region = CreateRoundRectRgn(
+            0, 0, width + 1, height + 1, radius, radius);
+
+        if (region && !SetWindowRgn(g_nameTooltip, region, TRUE)) {
+            DeleteObject(region);
+        }
+    }
+}
+
+void PositionNameTooltip(POINT cursor) {
+    if (!g_nameTooltip || g_nameTooltipText.empty()) return;
+
+    SIZE measured = MeasureNameTooltipText();
+
+    int width = std::max(
+        Scale(28), static_cast<int>(measured.cx) + Scale(16));
+    int height = std::max(
+        Scale(26), static_cast<int>(measured.cy) + Scale(6));
+
+    int x = cursor.x + Scale(12);
+    int y = cursor.y + Scale(20);
+
+    HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitorInfo{sizeof(monitorInfo)};
+
+    if (monitor && GetMonitorInfoW(monitor, &monitorInfo)) {
+        const RECT& work = monitorInfo.rcWork;
+        int workWidth = work.right - work.left;
+
+        width = std::min(width, std::max(Scale(40), workWidth - Scale(16)));
+
+        if (x + width > work.right - Scale(8)) {
+            x = work.right - Scale(8) - width;
+        }
+        if (x < work.left + Scale(8)) {
+            x = work.left + Scale(8);
+        }
+
+        if (y + height > work.bottom - Scale(8)) {
+            y = cursor.y - height - Scale(12);
+        }
+        if (y < work.top + Scale(8)) {
+            y = work.top + Scale(8);
+        }
+    }
+
+    SetWindowPos(
+        g_nameTooltip, HWND_TOPMOST, x, y, width, height,
+        SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+
+    ApplyNameTooltipWindowStyle();
+    InvalidateRect(g_nameTooltip, nullptr, FALSE);
+    UpdateWindow(g_nameTooltip);
+}
+
+LRESULT CALLBACK NameTooltipProc(HWND window, UINT message,
+                                 WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+        case WM_NCHITTEST:
+            return HTTRANSPARENT;
+
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
+
+        case WM_ERASEBKGND:
+            return 1;
+
+        case WM_PAINT: {
+            PAINTSTRUCT paint{};
+            HDC dc = BeginPaint(window, &paint);
+            PaintNameTooltip(window, dc);
+            EndPaint(window, &paint);
+            return 0;
+        }
+
+        case WM_PRINTCLIENT:
+            if (reinterpret_cast<HDC>(wParam)) {
+                PaintNameTooltip(window, reinterpret_cast<HDC>(wParam));
+            }
+            return 0;
+    }
+
+    return DefWindowProcW(window, message, wParam, lParam);
+}
+
+void ShowNameTooltip(HWND window) {
+    KillTimer(window, TIMER_NAME_TOOLTIP);
+
+    POINT point{};
+    if (!GetCursorPos(&point) || WindowFromPoint(point) != window) {
+        CancelNameTooltip(window);
+        return;
+    }
+
+    POINT clientPoint = point;
+    ScreenToClient(window, &clientPoint);
+    UpdateNameTooltip(window, clientPoint);
+
+    if (!g_nameTooltipClipped) return;
+
+    ULONGLONG elapsed = GetTickCount64() - g_nameTooltipSince;
+    if (elapsed < NAME_TOOLTIP_DELAY) {
+        SetTimer(window, TIMER_NAME_TOOLTIP,
+                 NAME_TOOLTIP_DELAY - static_cast<UINT>(elapsed), nullptr);
+        return;
+    }
+
+    if (!g_nameTooltip) {
+        g_nameTooltip = CreateWindowExW(
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            NAME_TOOLTIP_CLASS, L"", WS_POPUP,
+            0, 0, 1, 1, window, nullptr, GetModuleHandleW(nullptr), nullptr);
+
+        if (!g_nameTooltip) return;
+    }
+
+    PositionNameTooltip(point);
 }
 
 COLORREF MixColor(COLORREF from, COLORREF to, float amount) {
@@ -1554,8 +2584,6 @@ float EaseTowards(float current, float target, float speed) {
 
 void DrawSlider(HDC dc, const RECT& rect, float volume, float peak,
                 bool muted, float hover) {
-    // Draw directly into the existing surface. The same antialiased shapes
-    // are used in both matte passes, preserving smooth transparent edges.
     std::optional<Gdiplus::Graphics> graphics;
     if (g_gdiplusToken) {
         graphics.emplace(dc);
@@ -1613,8 +2641,6 @@ void DrawSlider(HDC dc, const RECT& rect, float volume, float peak,
                 MixColor(g_theme.accent, g_theme.text, 0.15f));
     }
 
-    // Match the grip to the theme: charcoal in dark mode, white in light mode.
-    // Keep the outer grip fixed; only the accent inset grows on hover.
     float thumbDiameter = 14.0f * density;
     float thumbRadius = thumbDiameter * 0.5f;
     capsule(thumbX - thumbRadius, centerY - thumbRadius,
@@ -1684,11 +2710,16 @@ void DrawAudioRow(HDC dc, int visibleRow, int dataRow, int clientWidth) {
     COLORREF base = master ? g_theme.panel : g_theme.background;
     DrawSurface(dc, rowRect, Scale(16), MixColor(base, g_theme.hover, visual.hover));
 
+    if (g_settings.keyboardControls && g_selectedRow == dataRow) {
+        RECT marker{Scale(14), top + Scale(12), Scale(17),
+                    top + RowHeight() - Scale(14)};
+        DrawRoundedRect(dc, marker, Scale(3), g_theme.accent);
+    }
+
     RECT iconTile = IconTileRectForRow(visibleRow);
     DrawSurface(dc, iconTile, Scale(10),
                     master ? g_theme.background : g_theme.panel);
     if (icon) {
-        // The icon is always 24px; center it in whichever tile size is active.
         int iconSize = Scale(24);
         DrawIconEx(dc,
                    iconTile.left + (iconTile.right - iconTile.left - iconSize) / 2,
@@ -1731,25 +2762,21 @@ void RenderMixerContents(HDC dc, const RECT& client) {
         FillSolidRect(dc, client, g_theme.background);
     }
 
-    DrawLabel(dc, L"Volume mixer", TitleRect(client.right), g_titleFont,
-              g_theme.text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    if (!IsCompact()) {
+        DrawLabel(dc, L"Volume mixer", TitleRect(client.right), g_titleFont,
+                  g_theme.text, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    }
 
-    // Output selector: a full-width control on its own line under the title.
-    // Like the page buttons it uses an opaque face, so it stays visible and
-    // clearly clickable at any background opacity.
     RECT pickerRect = OutputPickerRect(client.right);
-    // Keep the output selector visually distinct from the surrounding cards.
-    // Both states are intentionally darker than the normal panel/hover colors.
     COLORREF outputPickerColor = g_outputHovered || g_outputMenuOpen
         ? MixColor(g_theme.hover, RGB(0, 0, 0), 0.12f)
         : MixColor(g_theme.panel, RGB(0, 0, 0), 0.15f);
-    DrawRoundedRect(dc, pickerRect, Scale(16), outputPickerColor);
+    DrawSurface(dc, pickerRect, Scale(16), outputPickerColor);
     RECT deviceIconRect = {pickerRect.left + Scale(8), pickerRect.top,
                            pickerRect.left + Scale(34), pickerRect.bottom};
     DrawLabel(dc, L"\uE7F5", deviceIconRect, g_symbolFont, g_theme.secondaryText,
               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    RECT deviceNameRect = {pickerRect.left + Scale(38), pickerRect.top,
-                           pickerRect.right - Scale(34), pickerRect.bottom};
+    RECT deviceNameRect = DeviceNameRect(client.right);
     DrawLabel(dc, g_endpointName.empty() ? L"No output device" : g_endpointName,
               deviceNameRect, g_bodyFont, g_theme.text,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -1807,7 +2834,6 @@ void RenderMixerContents(HDC dc, const RECT& client) {
         for (bool next : {false, true}) {
             RECT button = PageButtonRect(next, client);
             bool hovered = g_hoverPageButton == (next ? 1 : 0);
-            // Opaque button faces remain clickable even at 0% background opacity.
             DrawRoundedRect(dc, button, Scale(8), hovered ? g_theme.hover : g_theme.panel);
             DrawLabel(dc, next ? L"Next" : L"Previous", button, g_smallFont,
                       g_theme.text, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -1890,8 +2916,6 @@ bool PaintTransparentMixer(HWND window, const RECT& client, ULONGLONG now) {
         ? ClampVolume(static_cast<float>(now - g_openTime) / 160.0f) : 1.0f;
     reveal = 1.0f - std::pow(1.0f - reveal, 3.0f);
     int offset = static_cast<int>(Scale(8) * (1.0f - reveal));
-    // Work bottom-up so the reveal can shift rows in place without overwriting
-    // unread source pixels. The actual window and its hit boxes do not move.
     for (int y = client.bottom - 1; y >= 0; --y) {
         for (int x = 0; x < client.right; ++x) {
             size_t destination = static_cast<size_t>(y) * client.right + x;
@@ -1952,8 +2976,6 @@ void PaintMixer(HWND hWnd) {
         ? ClampVolume(static_cast<float>(now - g_openTime) / 160.0f) : 1.0f;
     reveal = 1.0f - std::pow(1.0f - reveal, 3.0f);
     if (reveal < 1.0f) {
-        // Composite into a second buffer. The actual window stays stationary
-        // and opaque, preserving normal DWM corners, focus, and tray behavior.
         HDC composite = CreateCompatibleDC(windowDc);
         HBITMAP frame = CreateCompatibleBitmap(windowDc, client.right, client.bottom);
         if (composite && frame) {
@@ -2041,9 +3063,9 @@ void ShowMixer(HWND hWnd) {
     }
     g_showingMixer = true;
     KillTimer(hWnd, TIMER_CHECK_FOCUS);
-    // This function always opens; toggle intent is resolved before queuing.
     bool opening = !IsWindowVisible(hWnd);
     if (opening) {
+        SelectRow(DRAG_MASTER);
         RefreshAudioSessions(hWnd, true);
         UpdateMotionPreference(hWnd);
         g_openTime = g_motionEnabled ? GetTickCount64() : 0;
@@ -2101,6 +3123,8 @@ void QueueTrayToggle(HWND hWnd, bool keyboard) {
 }
 
 void HideMixer(HWND hWnd) {
+    FinishVolumeEntry(hWnd, false, false);
+    CancelNameTooltip(hWnd);
     g_showRequestPending = false;
     KillTimer(hWnd, TIMER_CHECK_FOCUS);
     KillTimer(hWnd, TIMER_METERS);
@@ -2183,8 +3207,6 @@ void RemoveTrayIcon(HWND hWnd) {
 }
 
 bool SpeakerShapeContains(float x, float y) {
-    // A solid speaker silhouette with two separated sound-wave arcs, in a
-    // 16x16 design grid. Rasterized from geometry, not a scaled app icon.
     constexpr float points[][2] = {
         {1.5f, 5.5f}, {4.5f, 5.5f}, {8.0f, 2.5f},
         {8.0f, 13.5f}, {4.5f, 10.5f}, {1.5f, 10.5f}};
@@ -2223,8 +3245,6 @@ HICON CreateSpeakerIcon(int pixels, COLORREF color, float shapeScale = 1.0f,
         return nullptr;
     }
     auto output = static_cast<DWORD*>(bits);
-    // The larger master icon benefits from a slightly wider coverage filter.
-    // Keep tray sampling unchanged so it remains crisp at small sizes.
     const int samples = softenEdges ? 12 : 8;
     const float sampleSpan = softenEdges ? 1.35f : 1.0f;
     for (int y = 0; y < pixels; ++y) {
@@ -2242,7 +3262,6 @@ HICON CreateSpeakerIcon(int pixels, COLORREF color, float shapeScale = 1.0f,
                 }
             }
             DWORD alpha = (covered * 255 + samples * samples / 2) / (samples * samples);
-            // Icons use premultiplied BGRA, including partially covered edges.
             output[y * pixels + x] = (alpha << 24) |
                 ((GetRValue(color) * alpha / 255) << 16) |
                 ((GetGValue(color) * alpha / 255) << 8) |
@@ -2273,7 +3292,6 @@ HICON LoadMixerIcon(int pixels, bool tray = false) {
             L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
         color = light ? RGB(30, 32, 36) : RGB(248, 249, 252);
     }
-    // Use more of the tray slot without changing the DPI-sized icon bitmap.
     if (HICON icon = CreateSpeakerIcon(pixels, color, tray ? 1.12f : 1.0f, !tray)) {
         return icon;
     }
@@ -2291,7 +3309,6 @@ HICON LoadMixerIcon(int pixels, bool tray = false) {
 }
 
 void RefreshIconSizes(HWND hWnd) {
-    // The popup and taskbar may be on monitors with different scale factors.
     HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
     UINT trayDpi = taskbar ? GetDpiForWindow(taskbar) : 96;
     if (!trayDpi) {
@@ -2418,11 +3435,32 @@ HRESULT SetPlaybackOutput(const std::wstring& id) {
     return result;
 }
 
+LRESULT CALLBACK OutputMenuMessageFilter(int code, WPARAM wParam, LPARAM lParam) {
+    if (code == MSGF_MENU && g_outputMenuOpen) {
+        const MSG* message = reinterpret_cast<const MSG*>(lParam);
+        HWND window = g_hWnd.load();
+        if (window && (message->message == WM_LBUTTONDOWN ||
+                       message->message == WM_LBUTTONDBLCLK) &&
+            WindowFromPoint(message->pt) == window) {
+            RECT client{};
+            GetClientRect(window, &client);
+            RECT picker = OutputPickerRect(client.right);
+            POINT point = message->pt;
+            ScreenToClient(window, &point);
+            if (PtInRect(&picker, point)) {
+                EndMenu();
+                return TRUE; // This click only closes the list; never replay it.
+            }
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
 void ShowOutputPicker(HWND window) {
+    CancelNameTooltip(window);
     if (g_outputMenuOpen || g_dragRow != DRAG_NONE) return;
     g_outputMenuOpen = true;
     KillTimer(window, TIMER_CHECK_FOCUS);
-    // Use a local snapshot: the menu's nested message loop can refresh audio.
     std::vector<OutputDevice> outputs;
     std::wstring currentId;
     IMMDeviceEnumerator* enumerator = nullptr;
@@ -2478,9 +3516,13 @@ void ShowOutputPicker(HWND window) {
         RECT picker = OutputPickerRect(client.right);
         POINT anchor{picker.left, picker.bottom}; ClientToScreen(window, &anchor);
         SetForegroundWindow(window);
+        HHOOK filter = SetWindowsHookExW(WH_MSGFILTER, OutputMenuMessageFilter,
+                                         nullptr, GetCurrentThreadId());
+        if (!filter) Wh_Log(L"Mixer: output-menu click filter failed, error %lu", GetLastError());
         selected = TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN |
                                     TPM_TOPALIGN | TPM_RIGHTBUTTON, anchor.x, anchor.y,
                                     window, nullptr);
+        if (filter) UnhookWindowsHookEx(filter);
         DestroyMenu(menu);
     }
     if (!IsWindow(window)) {
@@ -2495,6 +3537,7 @@ void ShowOutputPicker(HWND window) {
                         L"\n\nYou can also select an output in Windows Sound settings.",
                         L"Better Volume Mixer", MB_OK | MB_ICONWARNING);
         }
+        SelectRow(DRAG_MASTER);
         RefreshAudioSessions(window, true);
         g_scrollRow = 0;
         g_rowVisuals.clear();
@@ -2502,12 +3545,12 @@ void ShowOutputPicker(HWND window) {
     }
     g_outputMenuOpen = false;
     InvalidateRect(window, nullptr, FALSE);
-    // The user may have dismissed the menu by clicking another application.
     if (g_settings.closeWhenFocusIsLost && IsWindowVisible(window))
         SetTimer(window, TIMER_CHECK_FOCUS, 150, nullptr);
 }
 
 void HandlePointerMove(HWND hWnd, POINT point) {
+    UpdateNameTooltip(hWnd, point);
     RECT client;
     GetClientRect(hWnd, &client);
     RECT closeRect = CloseButtonRect(client.right);
@@ -2570,6 +3613,10 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             ApplyTransparencyStyle(hWnd);
             DWORD corner = 2;  // DWMWCP_ROUND.
             DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
+            if (HasDefaultVolumeRules()) {
+                RefreshAudioSessions(hWnd);
+                StartDefaultVolumeNotifications(hWnd);
+            }
             return 0;
         }
 
@@ -2612,8 +3659,37 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             }
             return 0;
 
+        case WM_APP_FINISH_VOLUME_ENTRY:
+            if (g_volumeEntry && static_cast<ULONG_PTR>(lParam) == g_volumeEntryGeneration) {
+                FinishVolumeEntry(hWnd, wParam != 0, wParam != 0);
+            }
+            return 0;
+
+        case WM_APP_AUDIO_CHANGED:
+            g_audioUiRefreshPosted.store(false);
+            if (IsWindowVisible(hWnd)) {
+                RefreshAudioSessions(hWnd);
+                PositionMixer(hWnd);
+                POINT point{};
+                if (GetCursorPos(&point)) {
+                    ScreenToClient(hWnd, &point);
+                    UpdateNameTooltip(hWnd, point);
+                }
+            }
+            return 0;
+
         case WM_APP_RELOAD_SETTINGS:
+            FinishVolumeEntry(hWnd, false, false);
+            CancelNameTooltip(hWnd);
+            SelectRow(DRAG_MASTER);
+            StopDefaultVolumeNotifications();
             LoadSettings();
+            if (IsWindowVisible(hWnd)) {
+                SetTimer(hWnd, TIMER_REFRESH, 1000, nullptr);
+            } else {
+                KillTimer(hWnd, TIMER_REFRESH);
+            }
+            StartDefaultVolumeNotifications(hWnd);
             g_transparencyFailed = false;
             ApplyTransparencyStyle(hWnd);
             UpdateMotionPreference(hWnd);
@@ -2628,6 +3704,10 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             return 0;
 
         case WM_TIMER:
+            if (wParam == TIMER_NAME_TOOLTIP) {
+                ShowNameTooltip(hWnd);
+                return 0;
+            }
             if (wParam == TIMER_CHECK_FOCUS) {
                 KillTimer(hWnd, TIMER_CHECK_FOCUS);
                 HWND foreground = GetForegroundWindow();
@@ -2650,6 +3730,11 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 if (IsWindowVisible(hWnd)) {
                     RefreshAudioSessions(hWnd);
                     PositionMixer(hWnd);
+                    POINT point{};
+                    if (GetCursorPos(&point)) {
+                        ScreenToClient(hWnd, &point);
+                        UpdateNameTooltip(hWnd, point);
+                    }
                 }
                 return 0;
             }
@@ -2673,6 +3758,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
         }
 
         case WM_MOUSELEAVE:
+            CancelNameTooltip(hWnd);
             g_outputHovered = false;
             g_mouseTracking = false;
             g_hoverRow = DRAG_NONE;
@@ -2682,8 +3768,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             return 0;
 
         case WM_LBUTTONDOWN: {
-            // Finish the visual reveal before handling exact slider hit boxes.
+            CancelNameTooltip(hWnd);
             g_openTime = 0;
+            FinishVolumeEntry(hWnd, false, false);
             SetFocus(hWnd);
             POINT point = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             RECT client;
@@ -2714,7 +3801,14 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             if (row == DRAG_NONE) {
                 return 0;
             }
+            SelectRow(row);
+            InvalidateRect(hWnd, nullptr, FALSE);
             int visibleRow = VisibleRowForDataRow(row);
+            RECT percentRect = PercentRectForRow(visibleRow, client.right);
+            if (g_settings.exactVolumeEntry && PtInRect(&percentRect, point)) {
+                BeginVolumeEntry(hWnd, row);
+                return 0;
+            }
             RECT pinRect = PinRectForRow(visibleRow, client.right);
             if (row >= 0 && PtInRect(&pinRect, point)) {
                 ToggleSourcePin(hWnd, row);
@@ -2727,11 +3821,24 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 return 0;
             }
 
-            RECT sliderRect = SliderHitRect(visibleRow, client.right, false);
+            RECT sliderRect = SliderHitRect(visibleRow, client.right);
             if (PtInRect(&sliderRect, point)) {
                 g_dragRow = row;
                 SetCapture(hWnd);
                 ApplyVolumeFromPoint(hWnd, row, point.x);
+            }
+            return 0;
+        }
+
+        case WM_MBUTTONDOWN: {
+            CancelNameTooltip(hWnd);
+            if (g_dragRow != DRAG_NONE) return 0;
+            FinishVolumeEntry(hWnd, false, false);
+            int row = RowFromPoint({GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)});
+            if (row != DRAG_NONE) {
+                SelectRow(row);
+                ToggleRowMute(row);
+                InvalidateRect(hWnd, nullptr, FALSE);
             }
             return 0;
         }
@@ -2748,21 +3855,16 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             return 0;
 
         case WM_MOUSEWHEEL: {
+            if (g_volumeEntry || g_dragRow != DRAG_NONE) return 0;
             POINT point = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ScreenToClient(hWnd, &point);
-            int row = RowFromPoint(point);
             RECT client;
             GetClientRect(hWnd, &client);
-
-            bool overSlider = false;
-            if (row != DRAG_NONE) {
-                RECT slider = SliderHitRect(VisibleRowForDataRow(row),
-                                            client.right, true);
-                overSlider = PtInRect(&slider, point) != FALSE;
-            }
+            if (!PtInRect(&client, point)) return 0;
+            int row = RowFromPoint(point);
 
             int notches = GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA;
-            if (overSlider && notches) {
+            if (row != DRAG_NONE && notches) {
                 float current = row == DRAG_MASTER ? GetMasterVolume()
                                                    : (*g_apps)[row].volume;
                 SetRowVolume(row, current + notches *
@@ -2775,6 +3877,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
         }
 
         case WM_KEYDOWN:
+            if (HandleRowKey(hWnd, wParam, lParam)) return 0;
             if (wParam == VK_ESCAPE) {
                 HideMixer(hWnd);
                 return 0;
@@ -2818,11 +3921,15 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             break;
 
         case WM_DISPLAYCHANGE:
+            FinishVolumeEntry(hWnd, false, false);
+            CancelNameTooltip(hWnd);
             RefreshIconSizes(hWnd);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
         case WM_DPICHANGED: {
+            FinishVolumeEntry(hWnd, false, false);
+            CancelNameTooltip(hWnd);
             g_dpi = HIWORD(wParam);
             CreateFonts(hWnd);
             RefreshIconSizes(hWnd);
@@ -2836,6 +3943,13 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
         }
 
         case WM_DESTROY:
+            FinishVolumeEntry(hWnd, false, false);
+            CancelNameTooltip(hWnd);
+            StopDefaultVolumeNotifications();
+            if (g_nameTooltip) {
+                DestroyWindow(g_nameTooltip);
+                g_nameTooltip = nullptr;
+            }
             g_blackFrame.Reset();
             g_whiteFrame.Reset();
             KillTimer(hWnd, TIMER_METERS);
@@ -2846,6 +3960,10 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             ReleaseAudioData();
             g_activatedSessions.clear();
             g_liveSessions.clear();
+            AcquireSRWLockExclusive(&g_defaultVolumeLock);
+            g_appliedDefaultVolumes.clear();
+            ReleaseSRWLockExclusive(&g_defaultVolumeLock);
+            g_liveDefaultSessions.clear();
             g_rowVisuals.clear();
             ClearIconCache();
             if (g_masterIcon) {
@@ -2868,7 +3986,6 @@ constexpr PCWSTR WINDOW_CLASS_NAME = L"WindhawkBetterTaskbarVolumeMixer";
 
 DWORD WINAPI ThreadProc(LPVOID) {
     Wh_Log(L"Mixer: UI thread started, PID=%lu", GetCurrentProcessId());
-    // Limit the DPI override to our own UI thread, not the Windhawk launcher.
     if (!SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
         Wh_Log(L"Mixer: per-monitor DPI setup failed, error %lu", GetLastError());
     }
@@ -2903,12 +4020,41 @@ DWORD WINAPI ThreadProc(LPVOID) {
         return 1;
     }
 
+    WNDCLASSEXW entryClass{};
+    entryClass.cbSize = sizeof(entryClass);
+    entryClass.lpfnWndProc = VolumeEntryProc;
+    entryClass.hInstance = windowClass.hInstance;
+    entryClass.hCursor = LoadCursorW(nullptr, IDC_IBEAM);
+    entryClass.lpszClassName = VOLUME_ENTRY_CLASS;
+    if (!RegisterClassExW(&entryClass)) {
+        UnregisterClassW(WINDOW_CLASS_NAME, windowClass.hInstance);
+        SetEvent(g_windowReadyEvent);
+        CoUninitialize();
+        return 1;
+    }
+
+    WNDCLASSEXW tooltipClass{};
+    tooltipClass.cbSize = sizeof(tooltipClass);
+    tooltipClass.lpfnWndProc = NameTooltipProc;
+    tooltipClass.hInstance = windowClass.hInstance;
+    tooltipClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    tooltipClass.lpszClassName = NAME_TOOLTIP_CLASS;
+    if (!RegisterClassExW(&tooltipClass)) {
+        UnregisterClassW(VOLUME_ENTRY_CLASS, windowClass.hInstance);
+        UnregisterClassW(WINDOW_CLASS_NAME, windowClass.hInstance);
+        SetEvent(g_windowReadyEvent);
+        CoUninitialize();
+        return 1;
+    }
+
     HWND hWnd = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST, WINDOW_CLASS_NAME, L"Volume mixer",
         WS_POPUP, 0, 0, 420, 400, nullptr, nullptr, windowClass.hInstance,
         nullptr);
     if (!hWnd) {
         Wh_Log(L"CreateWindowExW failed, error %u", GetLastError());
+        UnregisterClassW(NAME_TOOLTIP_CLASS, windowClass.hInstance);
+        UnregisterClassW(VOLUME_ENTRY_CLASS, windowClass.hInstance);
         UnregisterClassW(WINDOW_CLASS_NAME, windowClass.hInstance);
         SetEvent(g_windowReadyEvent);
         if (g_trayIcon) {
@@ -2933,6 +4079,16 @@ DWORD WINAPI ThreadProc(LPVOID) {
             Wh_Log(L"Mixer: GetMessage failed, error %lu", GetLastError());
             break;
         }
+        if (message.hwnd == g_volumeEdit && message.message == WM_KEYDOWN) {
+            if (message.wParam == VK_RETURN || message.wParam == VK_ESCAPE) {
+                FinishVolumeEntry(hWnd, message.wParam == VK_RETURN, true);
+                continue;
+            }
+            if (message.wParam == 'A' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+                SendMessageW(g_volumeEdit, EM_SETSEL, 0, -1);
+                continue;
+            }
+        }
         TranslateMessage(&message);
         DispatchMessageW(&message);
     }
@@ -2940,6 +4096,8 @@ DWORD WINAPI ThreadProc(LPVOID) {
     if (IsWindow(hWnd)) DestroyWindow(hWnd);
     g_hWnd.store(nullptr);
     g_apps.reset();
+    UnregisterClassW(NAME_TOOLTIP_CLASS, windowClass.hInstance);
+    UnregisterClassW(VOLUME_ENTRY_CLASS, windowClass.hInstance);
     UnregisterClassW(WINDOW_CLASS_NAME, windowClass.hInstance);
     if (g_trayIcon) {
         DestroyIcon(g_trayIcon);
@@ -3006,20 +4164,6 @@ void WhTool_ModUninit() {
         g_windowReadyEvent = nullptr;
     }
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// Windhawk tool mod implementation for mods which don't need to inject to other
-// processes or hook other functions. Context:
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
-//
-// The mod will load and run in a dedicated windhawk.exe process.
-//
-// Paste the code below as part of the mod code, and use these callbacks:
-// * WhTool_ModInit
-// * WhTool_ModSettingsChanged
-// * WhTool_ModUninit
-//
-// Currently, other callbacks are not supported.
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
