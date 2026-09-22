@@ -8059,12 +8059,9 @@ static void RenderFrame() {
     if (isDrawing) {
         hideDelayCounter = 0;
         if (!isWindowVisible) {
-            // 用 SetWindowPos 显示（不激活），并强制刷新 WS_EX_TRANSPARENT 确保 DComp 窗口点击穿透
-            // Use SetWindowPos to show (no activate), and force-refresh WS_EX_TRANSPARENT to ensure DComp window click-through
+            // 用 SetWindowPos 显示（不激活）；点击穿透由 WM_NCHITTEST 返回 HTTRANSPARENT 实现
+            // Show with SetWindowPos (no activate); click-through via WM_NCHITTEST returning HTTRANSPARENT
             SetWindowPos(g_overlayHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-            LONG_PTR exStyle = GetWindowLongPtrW(g_overlayHwnd, GWL_EXSTYLE);
-            SetWindowLongPtrW(g_overlayHwnd, GWL_EXSTYLE, (exStyle & ~WS_EX_TRANSPARENT) | WS_EX_TRANSPARENT);
-            SetWindowPos(g_overlayHwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
             isWindowVisible = true;
         }
     } else if (!surfaceDirty) {
@@ -8647,16 +8644,6 @@ static bool InitAllRenderResources() {
         g_pDCompDevice->CreateVisual(&g_pDCompVisual);
         if (g_pDCompTarget && g_pDCompVisual) g_pDCompTarget->SetRoot(g_pDCompVisual);
         Wh_Log(L"Recover: DComp device ready");
-        // WS_EX_NOREDIRECTIONBITMAP 下 DWM 可能不尊重创建时的 WS_EX_TRANSPARENT，DComp 就绪后动态重设确保点击穿透
-        // With WS_EX_NOREDIRECTIONBITMAP, DWM may not respect WS_EX_TRANSPARENT set at creation; re-apply after DComp is ready to ensure click-through
-        if (g_overlayHwnd) {
-            LONG_PTR exStyle = GetWindowLongPtrW(g_overlayHwnd, GWL_EXSTYLE);
-            if (!(exStyle & WS_EX_TRANSPARENT)) {
-                SetWindowLongPtrW(g_overlayHwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT);
-                SetWindowPos(g_overlayHwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-                Wh_Log(L"Recover: re-applied WS_EX_TRANSPARENT for click-through");
-            }
-        }
     }
 
     // ---- 交换链 ----
@@ -8721,7 +8708,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     int sx = g_virtX, sy = g_virtY;
     int sw = g_virtW, sh = g_virtH;
     g_overlayHwnd = CreateWindowEx(
-        WS_EX_TRANSPARENT | WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, CN,
+        WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, CN,
         L"MouseTrailOverlay", WS_POPUP, sx, sy, sw, sh, NULL, NULL, hi, NULL);
     if (!g_overlayHwnd) {
         Wh_Log(L"OverlayThread: CreateWindowEx failed: %d", GetLastError());
