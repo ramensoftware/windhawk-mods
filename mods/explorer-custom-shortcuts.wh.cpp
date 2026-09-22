@@ -2,7 +2,7 @@
 // @id              explorer-custom-shortcuts
 // @name            Explorer Custom Shortcuts
 // @description     Adds app-style keyboard shortcuts to File Explorer with dynamic tokens, selection modes, and internal commands.
-// @version         1.2.0
+// @version         1.3.0
 // @author          ArvindSaini978
 // @github          https://github.com/ArvindSaini978
 // @include         explorer.exe
@@ -27,6 +27,7 @@ Instead of specifying an executable path, set **Executable Path** to one of the 
 
 * **`internal:newTextFile`**: Creates a `New Text Document.txt` in the active folder and automatically selects/focuses it without UI freezes.
 * **`internal:newFolder`**: Creates a `New Folder` in the active folder and enters inline rename mode immediately.
+* **`internal:openParentFolder`**: Navigates the current active tab up one level to its parent directory.
 * **`internal:openRecycleBin`**: Navigates to the Recycle Bin in the current active tab.
 * **`internal:emptyRecycleBin`**: Empties the Recycle Bin with confirmation dialog.
 * **`internal:toggleHiddenFiles`**: Toggles visibility of hidden files and folders with immediate view refresh. *(Note: Changes persistent system-wide Windows Explorer settings).*
@@ -108,7 +109,7 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - enabled: true
       $name: "Enabled"
     - key: "T"
-      $name: "Key (A-Z, 0-9, F1-F12, Delete, Space, Enter, Tab)"
+      $name: "Key (A-Z, 0-9, F1-F12, Backspace, Delete, Insert, Home, End, PageUp, PageDown, Space, Enter, Tab)"
     - ctrl: true
       $name: "Require Ctrl"
     - shift: false
@@ -200,13 +201,14 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - args: ""
     - mode: ""
   $name: "Custom Shortcuts"
-  $description: "List of customizable shortcuts. Supported keys: A-Z, 0-9, F1-F12, Delete/Del, Space, Enter, and Tab. Modifiers (Ctrl, Shift, or Alt) are required for all keys except F1-F12."
+  $description: "List of customizable shortcuts. Supported keys: A-Z, 0-9, F1-F12, Backspace, Delete, Insert, Home, End, PageUp/PgUp, PageDown/PgDn, Space, Enter, and Tab. Modifiers (Ctrl, Shift, or Alt) are required for all keys except F1-F12."
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <initguid.h>
 #include <shlobj.h>
+#include <shobjidl.h>
 #include <exdisp.h>
 #include <shlguid.h>
 #include <shlwapi.h>
@@ -284,11 +286,16 @@ std::wstring ResolveCommandPath(const std::wstring& command) {
 }
 
 int ParseKey(std::wstring keyStr) {
-    keyStr.erase(keyStr.begin(), std::find_if(keyStr.begin(), keyStr.end(), [](wchar_t ch) { return !iswspace(ch); }));
-    keyStr.erase(std::find_if(keyStr.rbegin(), keyStr.rend(), [](wchar_t ch) { return !iswspace(ch); }).base(), keyStr.end());
+    // Trim leading whitespace and quotes
+    auto isTrimChar = [](wchar_t ch) { return iswspace(ch) || ch == L'"' || ch == L'\''; };
+    keyStr.erase(keyStr.begin(), std::find_if(keyStr.begin(), keyStr.end(), [&](wchar_t ch) { return !isTrimChar(ch); }));
+    // Trim trailing whitespace and quotes
+    keyStr.erase(std::find_if(keyStr.rbegin(), keyStr.rend(), [&](wchar_t ch) { return !isTrimChar(ch); }).base(), keyStr.end());
+    // Convert to uppercase
     std::transform(keyStr.begin(), keyStr.end(), keyStr.begin(), ::towupper);
     if (keyStr.empty()) return 0;
 
+    // F1 - F12
     if (keyStr.length() > 1 && keyStr[0] == L'F') {
         try {
             int fNum = std::stoi(keyStr.substr(1));
@@ -299,17 +306,26 @@ int ParseKey(std::wstring keyStr) {
         return 0;
     }
 
+    // Special and Navigation Keys
     if (_wcsicmp(keyStr.c_str(), L"DELETE") == 0 || _wcsicmp(keyStr.c_str(), L"DEL") == 0) return VK_DELETE;
+    if (_wcsicmp(keyStr.c_str(), L"BACKSPACE") == 0 || _wcsicmp(keyStr.c_str(), L"BACK") == 0) return VK_BACK;
     if (_wcsicmp(keyStr.c_str(), L"SPACE") == 0) return VK_SPACE;
-    if (_wcsicmp(keyStr.c_str(), L"ENTER") == 0) return VK_RETURN;
+    if (_wcsicmp(keyStr.c_str(), L"ENTER") == 0 || _wcsicmp(keyStr.c_str(), L"RETURN") == 0) return VK_RETURN;
     if (_wcsicmp(keyStr.c_str(), L"TAB") == 0) return VK_TAB;
-    
+    if (_wcsicmp(keyStr.c_str(), L"INSERT") == 0 || _wcsicmp(keyStr.c_str(), L"INS") == 0) return VK_INSERT;
+    if (_wcsicmp(keyStr.c_str(), L"HOME") == 0) return VK_HOME;
+    if (_wcsicmp(keyStr.c_str(), L"END") == 0) return VK_END;
+    if (_wcsicmp(keyStr.c_str(), L"PAGEUP") == 0 || _wcsicmp(keyStr.c_str(), L"PGUP") == 0) return VK_PRIOR;
+    if (_wcsicmp(keyStr.c_str(), L"PAGEDOWN") == 0 || _wcsicmp(keyStr.c_str(), L"PGDN") == 0) return VK_NEXT;
+
+    // Single Alphanumeric (A-Z, 0-9)
     if (keyStr.length() == 1) {
         wchar_t c = keyStr[0];
         if ((c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9')) {
             return c;
         }
     }
+
     return 0;
 }
 
@@ -684,6 +700,10 @@ bool SetClipboardTextHelper(HWND hWnd, const std::wstring& text) {
     return true;
 }
 
+#ifndef SBSP_PARENT_FOLDER
+#define SBSP_PARENT_FOLDER 0x0002
+#endif
+
 void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND capturedFocus) {
     if (_wcsicmp(command.c_str(), L"internal:folderOptions") == 0) {
         ExecuteApp(L"rundll32.exe", L"shell32.dll,Options_RunDLL 0", L"");
@@ -887,6 +907,53 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND cap
                 }
                 CoTaskMemFree(pidlTarget);
             }
+        }
+        psv->Release();
+        return;
+    }
+    
+    if (_wcsicmp(command.c_str(), L"internal:openParentFolder") == 0) {
+        IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
+        if (!psv) return;
+
+        IServiceProvider* psp = nullptr;
+        if (SUCCEEDED(psv->QueryInterface(IID_PPV_ARGS(&psp))) && psp) {
+            IShellBrowser* psb = nullptr;
+            if (SUCCEEDED(psp->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&psb))) && psb) {
+                // Method 1: Get the parent PIDL via IPersistFolder2
+                bool navigated = false;
+                IFolderView* pfv = nullptr;
+                if (SUCCEEDED(psv->QueryInterface(IID_PPV_ARGS(&pfv))) && pfv) {
+                    IPersistFolder2* ppf2 = nullptr;
+                    if (SUCCEEDED(pfv->GetFolder(IID_PPV_ARGS(&ppf2))) && ppf2) {
+                        PIDLIST_ABSOLUTE pidlCurrent = nullptr;
+                        if (SUCCEEDED(ppf2->GetCurFolder(&pidlCurrent)) && pidlCurrent) {
+                            PIDLIST_ABSOLUTE pidlParent = ILClone(pidlCurrent);
+                            if (pidlParent) {
+                                if (ILRemoveLastID(pidlParent)) {
+                                    HRESULT hr = psb->BrowseObject(pidlParent, SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
+                                    if (SUCCEEDED(hr)) navigated = true;
+                                }
+                                ILFree(pidlParent);
+                            }
+                            CoTaskMemFree(pidlCurrent);
+                        }
+                        ppf2->Release();
+                    }
+                    pfv->Release();
+                }
+
+                // Method 2: Fallback to Shell command message if BrowseObject fails
+                if (!navigated) {
+                    HWND hBrowserWnd = nullptr;
+                    if (SUCCEEDED(psb->GetWindow(&hBrowserWnd)) && hBrowserWnd) {
+                        SendMessageW(hBrowserWnd, WM_COMMAND, 41061, 0);
+                    }
+                }
+
+                psb->Release();
+            }
+            psp->Release();
         }
         psv->Release();
         return;
