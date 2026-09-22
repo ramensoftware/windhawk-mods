@@ -941,13 +941,16 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 
     if (g_d2dFactory) {
         D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
-            D2D1_RENDER_TARGET_TYPE_DEFAULT,
+            D2D1_RENDER_TARGET_TYPE_HARDWARE,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
             0, 0, D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE, D2D1_FEATURE_LEVEL_DEFAULT
         );
-        rtProps.type = D2D1_RENDER_TARGET_TYPE_HARDWARE;
-        if (FAILED(g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt)) || !rt) {
-            rt = nullptr;
+        HRESULT hrRt = g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
+        if (FAILED(hrRt) || !rt) {
+            // DEFAULT already means "hardware if available, otherwise software",
+            // so log which path actually ran - otherwise a silent fallback makes
+            // any perf claim unverifiable.
+            Wh_Log(L"Hardware DC render target failed (0x%08X), falling back to default", hrRt);
             rtProps.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
             g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
         }
