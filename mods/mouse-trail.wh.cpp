@@ -3152,6 +3152,10 @@ cbuffer ConstantBuffer : register(b0) {
     float strokeWidthPx;
     float trailStrokeEnabled;
     float trailStrokeHalf;
+    float aaInnerCoef;   // AA边缘柔和系数（CPU预计算：0=off, 0.5/0.15/0.8）/ AA inner coefficient (CPU precomputed)
+    float aaEdgeCoef;    // 粒子AA边缘系数（0=off, 0.025/0.012/0.05）/ particle AA edge coefficient
+    float aaEdgeMin;     // 粒子AA边缘下限 / particle AA edge min
+    float aaEdgeMax;     // 粒子AA边缘上限 / particle AA edge max
 };
 
 struct PS_INPUT {
@@ -3163,23 +3167,15 @@ struct PS_INPUT {
 };
 
 float4 PSMain(PS_INPUT input) : SV_TARGET {
-    // 抗锯齿边缘：根据aaMode调整边缘过渡宽度 / AA edge: adjust transition width based on aaMode
+    // 抗锯齿边缘：系数已在CPU预计算，PS只需2路分支 / AA edge: coefficient precomputed on CPU, 2-way branch
     float absV = abs(input.v);
     float edgeFade;
-    if (aaMode < 0.5) {
+    if (aaInnerCoef <= 0.0) {
         // off：硬边 / off: hard edge
         edgeFade = (absV < 1.0) ? 1.0 : 0.0;
-    } else if (aaMode < 1.5) {
-        // smooth：默认平滑 / smooth: default
-        float inner = 1.0 - edgeSoftness * 0.5;
-        edgeFade = 1.0 - smoothstep(inner, 1.0, absV);
-    } else if (aaMode < 2.5) {
-        // crisp：锐利窄边 / crisp: narrow sharp edge
-        float inner = 1.0 - edgeSoftness * 0.15;
-        edgeFade = 1.0 - smoothstep(inner, 1.0, absV);
     } else {
-        // extra：超宽柔和边 / extra: wide soft edge
-        float inner = 1.0 - edgeSoftness * 0.8;
+        // smooth/crisp/extra：系数预计算 / coefficient precomputed
+        float inner = 1.0 - edgeSoftness * aaInnerCoef;
         edgeFade = 1.0 - smoothstep(inner, 1.0, absV);
     }
     // Early discard: 完全在边缘外的像素直接丢弃 / Early discard: skip pixels fully outside edge
@@ -3337,9 +3333,16 @@ cbuffer ConstantBuffer : register(b0) {
     float strokeColorB;     // 自定义描边颜色B / custom stroke color B
     float strokeColorMul;   // auto模式描边变暗系数（0~1）/ auto-mode stroke darkening factor
     float strokeWidthPx;    // SDF形状描边单侧厚度（屏幕像素）/ SDF shape stroke one-side thickness (screen px)
+    float trailStrokeEnabled; // 布局对齐（native PS用，粒子PS忽略）/ layout alignment (native PS only)
+    float trailStrokeHalf;    // 布局对齐 / layout alignment
+    float aaInnerCoef;        // AA系数（CPU预计算）/ AA coefficient (CPU precomputed)
+    float aaEdgeCoef;         // 粒子AA边缘系数 / particle AA edge coefficient
+    float aaEdgeMin;          // 粒子AA边缘下限 / particle AA edge min
+    float aaEdgeMax;          // 粒子AA边缘上限 / particle AA edge max
 };
 
 Texture2D charAtlasTex : register(t0);
+Texture2D charAtlasDilatedTex : register(t1); // 预膨胀图集（文字描边用）/ pre-dilated atlas (for text stroke)
 SamplerState charAtlasSampler : register(s0);
 
 struct PS_INPUT {
@@ -3406,17 +3409,9 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
         float2 cellUV = input.uv;
         float2 atlasUV = float2((col + cellUV.x) / atlasCols, (row + cellUV.y) / atlasRows);
         float4 tex = charAtlasTex.Sample(charAtlasSampler, atlasUV);
-        // 文字描边：采样8邻域最大alpha（膨胀字形），减去中心alpha得到轮廓环，与发光叠加 / Text stroke: 8-neighbor max alpha (dilated glyph) minus center = outline ring, layered with glow
+        // 文字描边：预膨胀图集已在构建时完成8邻域max，PS只需1次采样 / Text stroke: pre-dilated atlas, 8-neighbor max done at build time, 1 sample here
         if (strokeEnabled > 0.5) {
-            float aMax = tex.a;
-            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2( strokeStepU, 0.0)).a);
-            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(-strokeStepU, 0.0)).a);
-            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(0.0,  strokeStepV)).a);
-            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(0.0, -strokeStepV)).a);
-            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2( strokeStepU,  strokeStepV)).a);
-            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(-strokeStepU,  strokeStepV)).a);
-            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2( strokeStepU, -strokeStepV)).a);
-            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(-strokeStepU, -strokeStepV)).a);
+            float aMax = charAtlasDilatedTex.Sample(charAtlasSampler, atlasUV).a;
             float outline = saturate(aMax - tex.a);   // 轮廓环，仅字形边缘附近非零 / outline ring, nonzero only near glyph edge
             // 描边颜色：auto=主色变暗，custom=自定义RGB / stroke color: auto=darkened fill, custom=RGB
             float3 strokeRgb = (strokeColorMode > 0.5)
@@ -3442,18 +3437,12 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
     // SDF软边缘抗锯齿，边缘宽度随aaMode和粒子大小自适应 / SDF soft-edge AA, width adapts to aaMode and particle size
     float sdf = shapeSDF(p, r, input.shape);
     float edge;
-    if (aaMode < 0.5) {
+    if (aaEdgeCoef <= 0.0) {
         // off：硬边 / off: hard edge
         edge = 0.003;
-    } else if (aaMode < 1.5) {
-        // smooth：默认 / smooth: default
-        edge = clamp(0.025 * (input.size / 12.0), 0.01, 0.08);
-    } else if (aaMode < 2.5) {
-        // crisp：窄边 / crisp: narrow
-        edge = clamp(0.012 * (input.size / 12.0), 0.005, 0.04);
     } else {
-        // extra：宽边 / extra: wide
-        edge = clamp(0.05 * (input.size / 12.0), 0.02, 0.12);
+        // smooth/crisp/extra：系数和钳制范围已在CPU预计算 / coeff and clamp bounds precomputed on CPU
+        edge = clamp(aaEdgeCoef * (input.size / 12.0), aaEdgeMin, aaEdgeMax);
     }
     float mask = smoothstep(-edge, edge, sdf);
     // 描边轮廓环（|sdf| 环带，形状边缘），非文字形状同样生效 / stroke outline ring (|sdf| band) for non-text shapes
@@ -3511,6 +3500,30 @@ float4 PSMain(VS_OUT input) : SV_TARGET {
 }
 )";
 
+// 文字图集膨胀PS：在图集构建时一次完成8邻域max-alpha膨胀，运行时PS从9采样降为2
+// Atlas dilation PS: 8-neighbor max-alpha done once at build time, runtime PS 9->2 samples
+static const char* g_dilatePS = R"(
+Texture2D srcTex : register(t0);
+SamplerState srcSampler : register(s0);
+cbuffer DilateCB : register(b1) {
+    float2 dilateUV;  // 膨胀偏移（图集UV空间）/ dilation offset (atlas UV space)
+    float2 _pad;
+};
+struct VS_OUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+float4 PSMain(VS_OUT input) : SV_TARGET {
+    float a = srcTex.Sample(srcSampler, input.uv).a;
+    a = max(a, srcTex.Sample(srcSampler, input.uv + float2( dilateUV.x, 0)).a);
+    a = max(a, srcTex.Sample(srcSampler, input.uv + float2(-dilateUV.x, 0)).a);
+    a = max(a, srcTex.Sample(srcSampler, input.uv + float2(0,  dilateUV.y)).a);
+    a = max(a, srcTex.Sample(srcSampler, input.uv + float2(0, -dilateUV.y)).a);
+    a = max(a, srcTex.Sample(srcSampler, input.uv + float2( dilateUV.x,  dilateUV.y)).a);
+    a = max(a, srcTex.Sample(srcSampler, input.uv + float2(-dilateUV.x,  dilateUV.y)).a);
+    a = max(a, srcTex.Sample(srcSampler, input.uv + float2( dilateUV.x, -dilateUV.y)).a);
+    a = max(a, srcTex.Sample(srcSampler, input.uv + float2(-dilateUV.x, -dilateUV.y)).a);
+    return float4(1.0, 1.0, 1.0, a);
+}
+)";
+
 // ---- 顶点结构（v3.3：添加 v 垂直坐标用于软边缘和管光）----
 struct VertexPosColor {
     float x, y, z;     // 位置 + 深度（2.5D）
@@ -3546,6 +3559,10 @@ ID3D11BlendState* g_pAdditiveBlend = nullptr;  // 加法混合状态（发光用
 ID3D11RasterizerState* g_pRasterState = nullptr;
 ID3D11Texture2D* g_pCharAtlasTex = nullptr;       // 字符图集纹理 / char atlas texture
 ID3D11ShaderResourceView* g_pCharAtlasSRV = nullptr; // 字符图集 SRV / char atlas SRV
+ID3D11Texture2D* g_pCharAtlasDilatedTex = nullptr;   // 预膨胀字符图集纹理 / pre-dilated char atlas texture
+ID3D11ShaderResourceView* g_pCharAtlasDilatedSRV = nullptr; // 预膨胀图集 SRV / dilated atlas SRV
+ID3D11PixelShader* g_pDilatePS = nullptr;            // 图集膨胀PS / atlas dilation pixel shader
+ID3D11Buffer* g_pDilateCB = nullptr;                 // 膨胀常量缓冲 / dilation constant buffer
 ID3D11SamplerState* g_pCharAtlasSampler = nullptr;     // 字符图集采样器 / char atlas sampler
 int g_charAtlasCols = 0;                           // 图集列数 / atlas columns
 int g_charAtlasRows = 0;                          // 图集行数 / atlas rows
@@ -3722,6 +3739,112 @@ static void BuildCharAtlas() {
     if (pOldTarget) pOldTarget->Release();
     pBmp->Release();
     pSurface->Release();
+
+    // ---- GPU预膨胀图集：文字描边8邻域max膨胀在构建时一次完成，PS从9采样降为2采样 ----
+    // Pre-dilate atlas: 8-neighbor max done once at build time, reduces PS samples 9->2
+    if (g_pD3DDevice && g_pD3DContext && g_pCharAtlasTex && g_pCharAtlasSRV && g_pBlitVB && g_pBlitVS && g_pDilatePS && g_pBlitLayout) {
+        if (g_pCharAtlasDilatedTex) { g_pCharAtlasDilatedTex->Release(); g_pCharAtlasDilatedTex = nullptr; }
+        if (g_pCharAtlasDilatedSRV) { g_pCharAtlasDilatedSRV->Release(); g_pCharAtlasDilatedSRV = nullptr; }
+
+        D3D11_TEXTURE2D_DESC dilDesc = {};
+        dilDesc.Width = atlasW;
+        dilDesc.Height = atlasH;
+        dilDesc.MipLevels = 1;
+        dilDesc.ArraySize = 1;
+        dilDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        dilDesc.SampleDesc.Count = 1;
+        dilDesc.Usage = D3D11_USAGE_DEFAULT;
+        dilDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+        if (SUCCEEDED(g_pD3DDevice->CreateTexture2D(&dilDesc, nullptr, &g_pCharAtlasDilatedTex))) {
+            D3D11_SHADER_RESOURCE_VIEW_DESC dilSrvDesc = {};
+            dilSrvDesc.Format = dilDesc.Format;
+            dilSrvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+            dilSrvDesc.Texture2D.MipLevels = 1;
+            g_pD3DDevice->CreateShaderResourceView(g_pCharAtlasDilatedTex, &dilSrvDesc, &g_pCharAtlasDilatedSRV);
+            ID3D11RenderTargetView *pDilRTV = nullptr;
+            if (g_pCharAtlasDilatedSRV && SUCCEEDED(g_pD3DDevice->CreateRenderTargetView(g_pCharAtlasDilatedTex, nullptr, &pDilRTV))) {
+                // 保存状态 / Save state
+                ID3D11RenderTargetView *pOldRTV = nullptr;
+                ID3D11VertexShader *pOldVS = nullptr;
+                ID3D11PixelShader *pOldPS = nullptr;
+                ID3D11Buffer *pOldVB = nullptr;
+                ID3D11InputLayout *pOldLayout = nullptr;
+                ID3D11ShaderResourceView *pOldSRV = nullptr;
+                ID3D11SamplerState *pOldSamp = nullptr;
+                ID3D11BlendState *pOldBlend = nullptr;
+                ID3D11Buffer *pOldCB = nullptr;
+                FLOAT oldBlendFactor[4] = {1,1,1,1};
+                UINT oldSampleMask = 0, oldStride = 0, oldOffset = 0;
+                D3D11_VIEWPORT oldVP; UINT numVP = 1;
+                D3D11_PRIMITIVE_TOPOLOGY oldTopo;
+                g_pD3DContext->OMGetRenderTargets(1, &pOldRTV, nullptr);
+                g_pD3DContext->VSGetShader(&pOldVS, nullptr, nullptr);
+                g_pD3DContext->PSGetShader(&pOldPS, nullptr, nullptr);
+                g_pD3DContext->IAGetVertexBuffers(0, 1, &pOldVB, &oldStride, &oldOffset);
+                g_pD3DContext->IAGetInputLayout(&pOldLayout);
+                g_pD3DContext->PSGetShaderResources(0, 1, &pOldSRV);
+                g_pD3DContext->PSGetSamplers(0, 1, &pOldSamp);
+                g_pD3DContext->OMGetBlendState(&pOldBlend, oldBlendFactor, &oldSampleMask);
+                g_pD3DContext->PSGetConstantBuffers(1, 1, &pOldCB);
+                g_pD3DContext->RSGetViewports(&numVP, &oldVP);
+                g_pD3DContext->IAGetPrimitiveTopology(&oldTopo);
+
+                // 更新膨胀常量缓冲 / Update dilate constant buffer
+                if (g_pDilateCB) {
+                    D3D11_MAPPED_SUBRESOURCE dilMap;
+                    if (SUCCEEDED(g_pD3DContext->Map(g_pDilateCB, 0, D3D11_MAP_WRITE_DISCARD, 0, &dilMap))) {
+                        float *d = (float*)dilMap.pData;
+                        float sw = (float)(g_particleStrokeWidth > 0 ? g_particleStrokeWidth : 0);
+                        d[0] = (atlasW > 0) ? sw / (float)atlasW : 0.0f;
+                        d[1] = (atlasH > 0) ? sw / (float)atlasH : 0.0f;
+                        g_pD3DContext->Unmap(g_pDilateCB, 0);
+                    }
+                }
+
+                // 绘制膨胀全屏四边形 / Draw dilation fullscreen quad
+                float clearColor[4] = {0,0,0,0};
+                D3D11_VIEWPORT dilVP = {0, 0, (float)atlasW, (float)atlasH, 0, 1};
+                g_pD3DContext->RSSetViewports(1, &dilVP);
+                g_pD3DContext->OMSetRenderTargets(1, &pDilRTV, nullptr);
+                g_pD3DContext->ClearRenderTargetView(pDilRTV, clearColor);
+                g_pD3DContext->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
+                g_pD3DContext->IASetInputLayout(g_pBlitLayout);
+                g_pD3DContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+                UINT bs = 16, bo = 0;
+                g_pD3DContext->IASetVertexBuffers(0, 1, &g_pBlitVB, &bs, &bo);
+                g_pD3DContext->VSSetShader(g_pBlitVS, nullptr, 0);
+                g_pD3DContext->PSSetShader(g_pDilatePS, nullptr, 0);
+                g_pD3DContext->PSSetShaderResources(0, 1, &g_pCharAtlasSRV);
+                g_pD3DContext->PSSetSamplers(0, 1, &g_pBlitSampler);
+                g_pD3DContext->PSSetConstantBuffers(1, 1, &g_pDilateCB);
+                g_pD3DContext->Draw(4, 0);
+
+                // 恢复状态 / Restore state
+                g_pD3DContext->OMSetRenderTargets(1, &pOldRTV, nullptr);
+                g_pD3DContext->VSSetShader(pOldVS, nullptr, 0);
+                g_pD3DContext->PSSetShader(pOldPS, nullptr, 0);
+                g_pD3DContext->IASetVertexBuffers(0, 1, &pOldVB, &oldStride, &oldOffset);
+                g_pD3DContext->IASetInputLayout(pOldLayout);
+                g_pD3DContext->PSSetShaderResources(0, 1, &pOldSRV);
+                g_pD3DContext->PSSetSamplers(0, 1, &pOldSamp);
+                g_pD3DContext->PSSetConstantBuffers(1, 1, &pOldCB);
+                g_pD3DContext->OMSetBlendState(pOldBlend, oldBlendFactor, oldSampleMask);
+                g_pD3DContext->RSSetViewports(1, &oldVP);
+                g_pD3DContext->IASetPrimitiveTopology(oldTopo);
+                if (pOldRTV) pOldRTV->Release();
+                if (pOldVS) pOldVS->Release();
+                if (pOldPS) pOldPS->Release();
+                if (pOldVB) pOldVB->Release();
+                if (pOldLayout) pOldLayout->Release();
+                if (pOldSRV) pOldSRV->Release();
+                if (pOldSamp) pOldSamp->Release();
+                if (pOldBlend) pOldBlend->Release();
+                if (pOldCB) pOldCB->Release();
+                pDilRTV->Release();
+            }
+        }
+    }
+
     Wh_Log(L"[CharAtlas] built OK, atlasW=%d atlasH=%d phrases=%d cols=%d rows=%d cellW=%d", atlasW, atlasH, (int)g_atlasChars.size(), g_charAtlasCols, g_charAtlasRows, g_charAtlasCellW);
 }
 static void ReleaseNativeRendering();  // 前向声明，供 InitNativeRendering 失败清理调用
@@ -3835,7 +3958,7 @@ static bool InitNativeRendering() {
 
         // 常量缓冲（包含屏幕尺寸、透视、渐变停止点）/ Constant buffer (screen size, perspective, gradient stops)
         D3D11_BUFFER_DESC cbDesc = {};
-        cbDesc.ByteWidth = 368;  // 对齐到 16 字节 / Aligned to 16 bytes
+        cbDesc.ByteWidth = 384;  // 96 floats (含AA预计算字段)，对齐到16字节 / 96 floats incl AA precomputed fields, 16-byte aligned
         cbDesc.Usage = D3D11_USAGE_DYNAMIC;
         cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -3912,6 +4035,22 @@ static bool InitNativeRendering() {
         samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
         if (FAILED(g_pD3DDevice->CreateSamplerState(&samplerDesc, &g_pCharAtlasSampler))) break;
 
+        // 编译图集膨胀PS / Compile atlas dilation pixel shader
+        ID3DBlob *dpsBlob = nullptr;
+        if (!CompileShader(g_dilatePS, "PSMain", "ps_4_0", &dpsBlob)) break;
+        if (FAILED(g_pD3DDevice->CreatePixelShader(dpsBlob->GetBufferPointer(), dpsBlob->GetBufferSize(), nullptr, &g_pDilatePS))) { dpsBlob->Release(); break; }
+        dpsBlob->Release();
+
+        // 创建膨胀常量缓冲（float2 + padding，16字节）/ Create dilation constant buffer (float2 + pad, 16 bytes)
+        {
+            D3D11_BUFFER_DESC dilCbDesc = {};
+            dilCbDesc.ByteWidth = 16;
+            dilCbDesc.Usage = D3D11_USAGE_DYNAMIC;
+            dilCbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            dilCbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            g_pD3DDevice->CreateBuffer(&dilCbDesc, nullptr, &g_pDilateCB);
+        }
+
         ok = true;
     } while (false);
 
@@ -3937,6 +4076,10 @@ static void ReleaseNativeRendering() {
     if (g_pParticleVS) { g_pParticleVS->Release(); g_pParticleVS = nullptr; }
     if (g_pCharAtlasSRV) { g_pCharAtlasSRV->Release(); g_pCharAtlasSRV = nullptr; }
     if (g_pCharAtlasTex) { g_pCharAtlasTex->Release(); g_pCharAtlasTex = nullptr; }
+    if (g_pCharAtlasDilatedSRV) { g_pCharAtlasDilatedSRV->Release(); g_pCharAtlasDilatedSRV = nullptr; }
+    if (g_pCharAtlasDilatedTex) { g_pCharAtlasDilatedTex->Release(); g_pCharAtlasDilatedTex = nullptr; }
+    if (g_pDilatePS) { g_pDilatePS->Release(); g_pDilatePS = nullptr; }
+    if (g_pDilateCB) { g_pDilateCB->Release(); g_pDilateCB = nullptr; }
     if (g_pParticlePS) { g_pParticlePS->Release(); g_pParticlePS = nullptr; }
     if (g_pNativeLayout) { g_pNativeLayout->Release(); g_pNativeLayout = nullptr; }
     if (g_pParticleLayout) { g_pParticleLayout->Release(); g_pParticleLayout = nullptr; }
@@ -4006,6 +4149,13 @@ static void UpdateConstantBuffer(int width, int height, const GradData* cols = n
             data[86] = g_particleStrokeWidth * 0.5f;                        // strokeWidthPx（SDF形状描边单侧屏幕像素，图集px→屏幕px约÷2）/ one-side screen px
             data[87] = g_enableTrailStroke ? 1.0f : 0.0f;                   // trailStrokeEnabled
             data[88] = (float)(g_trailStrokeWidth > 0 ? g_trailStrokeWidth : 0) / 100.0f; // trailStrokeHalf（v 空间比例）
+            // AA系数预计算（消除PS内4路分支）/ AA coefficients precomputed (eliminate 4-way branch in PS)
+            switch (g_aaMode) {
+                case 0:  data[89]=0.0f;  data[90]=0.0f;   data[91]=0.0f;   data[92]=0.0f;   break; // off
+                case 1:  data[89]=0.5f;  data[90]=0.025f; data[91]=0.01f;  data[92]=0.08f;  break; // smooth
+                case 2:  data[89]=0.15f; data[90]=0.012f; data[91]=0.005f; data[92]=0.04f;  break; // crisp
+                default: data[89]=0.8f;  data[90]=0.05f;  data[91]=0.02f;  data[92]=0.12f; break; // extra
+            }
         }
         g_pD3DContext->Unmap(g_pConstantBuffer, 0);
     }
@@ -4118,7 +4268,8 @@ static void NativeRenderParticles(int screenW, int screenH) {
     g_pD3DContext->PSSetConstantBuffers(0, 1, &g_pConstantBuffer);
     // 绑定字符图集纹理（文字形状用）/ Bind char atlas texture (for text shape)
     if (g_particleShape == 10 && g_pCharAtlasSRV) {
-        g_pD3DContext->PSSetShaderResources(0, 1, &g_pCharAtlasSRV);
+        ID3D11ShaderResourceView* srvs[2] = {g_pCharAtlasSRV, g_pCharAtlasDilatedSRV};
+        g_pD3DContext->PSSetShaderResources(0, 2, srvs);
         g_pD3DContext->PSSetSamplers(0, 1, &g_pCharAtlasSampler);
     }
     g_pD3DContext->RSSetState(g_pRasterState);
@@ -4142,7 +4293,7 @@ static void NativeRenderParticles(int screenW, int screenH) {
         g_pD3DContext->DrawInstanced(6, normalCount, 0, MAX_PER_LAYER);
     }
     // 解绑纹理和采样器，避免影响其他渲染 / Unbind texture and sampler
-    { ID3D11ShaderResourceView *nullSRV = nullptr; g_pD3DContext->PSSetShaderResources(0, 1, &nullSRV); }
+    { ID3D11ShaderResourceView *nullSRV[2] = {nullptr, nullptr}; g_pD3DContext->PSSetShaderResources(0, 2, nullSRV); }
     { ID3D11SamplerState *nullSampler = nullptr; g_pD3DContext->PSSetSamplers(0, 1, &nullSampler); }
 }
 
