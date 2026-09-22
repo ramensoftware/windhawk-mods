@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.82
+// @version         2.83
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -69,9 +69,10 @@ highlight. The dock's translucency fades the native one out, so the mod redraws 
 at matching strength; turn the border off for a flat highlight.
 
 Under the Liquid glass theme each task button can also become its own piece of
-liquid glass inside the dock, carrying the same edge displacement, chromatic split,
-specular and fresnel as the dock itself. It is the same shader pass, not a second
-capture. Tray items share the dock lens.
+liquid glass, carved out of the dock rather than layered over it: the dock is not
+drawn beneath a button, and the button refracts the backdrop directly with the same
+edge displacement, chromatic split, specular and fresnel as the dock itself. It is
+the same shader pass, not a second capture. Tray items share the dock lens.
 
 Liquid glass includes the reference site's Regular, Frosted, and Dark presets.
 Regular is the reference defaults with no backdrop blur; Frosted adds it, and
@@ -119,7 +120,7 @@ setting.
     $description: Draws the raised gradient outline Windows puts on task button highlights, which the dock's translucency would otherwise fade out.
   - liquidLayer: false
     $name: Per-button liquid glass layer (default off)
-    $description: Renders every task button as its own piece of liquid glass inside the dock, with the same edge displacement, chromatic split, specular and fresnel as the dock. Liquid glass theme only.
+    $description: Carves every task button out of the dock as its own piece of liquid glass, sampling the backdrop directly with the same edge displacement, chromatic split, specular and fresnel as the dock. Liquid glass theme only.
   $name: Task and tray buttons
   $description: Appearance of the native task and tray button highlights.
 - edgeDistance: 4
@@ -926,7 +927,7 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         uint32_t lensCount{};
         float lensRefraction{};
         float alertTintOpacity{};
-        float lensPadding{};
+        float lensBlend{};
     };
     static_assert(sizeof(LensConstants) % 16 == 0);
     // Pins the cbuffer arithmetic the HLSL side relies on: a 64-byte header,
@@ -984,7 +985,7 @@ cbuffer Lens : register(b0) {
     uint lensCount;
     float lensRefraction;
     float alertTintOpacity;
-    float lensPadding;
+    float lensBlend;
 };
 cbuffer Copy : register(b1) {
     float2 copyOffset;
@@ -1138,40 +1139,50 @@ float4 ps(VertexOutput input) : SV_Target {
     float4 original = backdrop.SampleLevel(linearClamp, pixel / imageSize, 0);
     if (original.a <= 0.001) return 0;
 
+    // Each button is a glass surface in its own right, carved out of the dock rather
+    // than layered over it: where a button covers a pixel the dock's glass is not
+    // shaded at all and the button refracts the backdrop itself, so the two
+    // materials' rim and specular never stack. Buttons do not overlap, so the first
+    // hit wins and the cheap distance rejects every other lens. The alert tint
+    // applies only to the lenses flagged for it in w.
+    float coverage = 0;
+    float3 buttonColor = 0;
+    for (uint i = 0; i < min(lensCount, BUTTON_LENS_CAP); ++i) {
+        float4 rect = lensRects[i];
+        float2 itemPoint = pixel - rect.xy;
+        float4 itemRadii = lensRadii[i];
+        if (roundedDistanceForCorners(itemPoint, rect.zw, itemRadii) > 0.5)
+            continue;
+        Glass item = glassAt(itemPoint, rect.zw, itemRadii, zRadius * 0.65,
+                             lensRefraction, 18, 3, 0.45);
+        float itemMask = 1 - smoothstep(-1.5, 0.5, item.distance);
+        if (itemMask <= 0) continue;
+        buttonColor = refractedBackdrop(pixel, item);
+        buttonColor *= (1 + brightness) * (1 + 0.08 * item.depth);
+        buttonColor = lerp(buttonColor, lensTints[i].rgb,
+                           alertTintOpacity * lensTints[i].a);
+        float itemFresnel;
+        buttonColor += glassLighting(item, itemPoint, rect.zw, itemFresnel);
+        buttonColor = lerp(buttonColor, 1, itemFresnel * 0.2);
+        coverage = itemMask * lensBlend;
+        break;
+    }
+
     // Biconvex pill profile adapted from ybouane/liquidglass (MIT):
     // https://github.com/ybouane/liquidglass. The curved height field creates
     // the reference's raised glass distortion across the whole surface. These are
     // the dock's gains; radius is already clamped to min(halfSize), so four equal
     // corners here match the single-radius distance functions this replaced.
-    Glass dock = glassAt(p, halfSize, float4(radius, radius, radius, radius),
-                         zRadius, refraction, 30, 4, 0.35);
-    float3 color = refractedBackdrop(pixel, dock);
-    color *= (1 + brightness) * (1 + 0.06 * dock.depth);
-    float fresnelAmount;
-    color += glassLighting(dock, p, halfSize, fresnelAmount);
-    color = lerp(color, 1, fresnelAmount * 0.2);
-
-    // Each button is a glass surface in its own right over the shared dock capture,
-    // carrying the same displacement, chromatic split, specular and fresnel as the
-    // dock at button scale. Buttons do not overlap, so a pixel enters the body at
-    // most once and the cheap distance rejects it for every other lens. The alert
-    // tint applies only to the lenses flagged for it in w.
-    for (uint i = 0; i < min(lensCount, BUTTON_LENS_CAP); ++i) {
-        float4 rect = lensRects[i];
-        float2 itemPoint = pixel - rect.xy;
-        float4 itemRadii = lensRadii[i];
-        if (roundedDistanceForCorners(itemPoint, rect.zw, itemRadii) > 0) continue;
-        Glass item = glassAt(itemPoint, rect.zw, itemRadii, zRadius * 0.65,
-                             lensRefraction, 18, 3, 0.45);
-        float3 itemGlass = refractedBackdrop(pixel, item);
-        itemGlass *= (1 + brightness) * (1 + 0.08 * item.depth);
-        float itemMask = 1 - smoothstep(-1.5, 0.5, item.distance);
-        color = lerp(color, itemGlass, itemMask * 0.72);
-        color = lerp(color, lensTints[i].rgb,
-                     itemMask * alertTintOpacity * lensTints[i].a);
-        float itemFresnel;
-        color += itemMask * glassLighting(item, itemPoint, rect.zw, itemFresnel);
-        color = lerp(color, 1, itemMask * itemFresnel * 0.2);
+    float3 color = buttonColor;
+    if (coverage < 0.999) {
+        Glass dock = glassAt(p, halfSize, float4(radius, radius, radius, radius),
+                             zRadius, refraction, 30, 4, 0.35);
+        float3 dockColor = refractedBackdrop(pixel, dock);
+        dockColor *= (1 + brightness) * (1 + 0.06 * dock.depth);
+        float fresnelAmount;
+        dockColor += glassLighting(dock, p, halfSize, fresnelAmount);
+        dockColor = lerp(dockColor, 1, fresnelAmount * 0.2);
+        color = lerp(dockColor, buttonColor, coverage);
     }
 
     float mask = 1 - smoothstep(-1.5, 0.5, distance);
@@ -2585,6 +2596,9 @@ void AddButtonLenses(Root& root, LiquidRenderer::LensConstants& lens,
                kMaxButtonLenses);
     lens.lensRefraction = lens.optics.refraction * 0.78f;
     lens.alertTintOpacity = 0.22f;
+    // Carve the dock away under a button when the per-button layer is on. A lone
+    // attention lens keeps the layered blend it has always had.
+    lens.lensBlend = g_buttonLiquidLayer ? 1.0f : 0.72f;
 }
 
 void PrepareLiquid(Root& root, Measurements const& m) {
