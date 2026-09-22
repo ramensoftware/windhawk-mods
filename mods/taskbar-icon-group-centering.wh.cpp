@@ -4,7 +4,7 @@
 // @name:zh-CN      任务栏图标组居中
 // @description     Center the taskbar icons after a chosen position as one group relative to the whole taskbar. Requires the taskbar to be set to Left alignment.
 // @description:zh-CN 把任务栏中指定位置之后的图标作为一组相对整条任务栏居中。需要把任务栏对齐方式设为左对齐。
-// @version         1.2.5
+// @version         1.2.8
 // @author          Suioio
 // @github          https://github.com/Suioio
 // @license         GPL-3.0
@@ -146,9 +146,10 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
   unaffected: the spacing returns as soon as the icon is dropped.
 - The taskbar hooks rely on Windows component symbols, vtable slots and a
   machine-code pattern. A Windows update that changes them can stop the mod from
-  working; the mod log records failed reconciliations in that case. If the
-  alignment getter is the one that moved, the mod keeps working and falls back to
-  reading the stored alignment.
+  working; the mod log records failed reconciliations in that case. The alignment
+  is read from both getters Windows has served it from, so the mod keeps working
+  when that value moves between builds. Where neither can be hooked, the stored
+  value is used and the mod starts from left rather than centred.
 - If unload cannot detach its event handlers from the taskbar thread, those
   handlers stay registered and applied margins may not be handed back; the mod
   log records it. This limitation is shared with the mod it was derived from.
@@ -229,7 +230,7 @@ Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.
 
 - 关闭正好位于分割点上的“未固定”图标（左组最后一个、或居中组第一个）时，被移除的正是模组正在测量的按钮，间距可能有一个布局帧的陈旧感（几十毫秒）后自行恢复正常。分割点锚定在该按钮**本身**、而不是它在“已实现列表”中的位置，因此其它位置出现或消失按钮都不会再让它移位；只有边界按钮确实消失约四分之一秒后才会重新锚定。
 - 拖动图标时，Explorer 会把被拖图标做成跟随光标的浮动副本；把它停在空隙中间时，视觉上会像“空隙被劈成两半、中间夹着图标”。模组写入的间距并未改变，放下图标即恢复。
-- 任务栏挂钩依赖 Windows 组件的符号、虚表槽位与一段机器码特征；Windows 更新若改变它们，模组可能失效，届时模组日志会记录重排失败。若移动的是对齐 getter，模组仍可工作，会退回到读取存储的对齐值。
+- 任务栏挂钩依赖 Windows 组件的符号、虚表槽位与一段机器码特征；Windows 更新若改变它们，模组可能失效，届时模组日志会记录重排失败。对齐值会同时从 Windows 曾提供的两个 getter 读取，因此该值在版本间搬家时模组仍可工作；两者都挂钩不上时使用存储值，且默认按左对齐处理。
 - 若卸载时无法从任务栏线程注销事件处理器，这些处理器会保留、已应用的边距可能未归还；模组日志会记录。这一限制与其来源模组相同。
 
 */
@@ -296,15 +297,17 @@ std::atomic<unsigned int> g_settingsGeneration{0};
 std::atomic<bool> g_taskbarViewDllLoaded{false};
 std::atomic<bool> g_unloading{false};
 
-// The alignment the shell itself reads from TaskbarSettings::get_Alignment:
-// 0 = left, 1 = centered. The hook below keeps it current on every build that
-// exposes that symbol, and Wh_ModInit seeds it once for the case where the
-// shell already read it before this mod was loaded. The mod never writes it.
-std::atomic<int> g_taskbarAlignment{1};
+// The alignment the shell itself reads: 0 = left, 1 = centered. Two getters
+// feed it, TaskbarSettings::get_Alignment in taskbar.dll and TaskbarFrame::
+// get_Alignment in Taskbar.View.dll, because Windows moved the value between
+// builds. The starting value is 0 (left), not the Windows default of 1
+// (centered): if no getter is found and the stored value cannot be read
+// either, centering an already centered taskbar writes a gap of about zero.
+std::atomic<int> g_taskbarAlignment{0};
 std::atomic<bool> g_taskbarAlignmentHookLoaded{false};
 
-// The stored alignment, read only where that getter could not be hooked.
-// Missing value is reported as 1, which is the Windows 11 default.
+// The stored alignment, read only while no getter has been hooked; a failed
+// read leaves the starting value above in place, so the mod still applies.
 static const wchar_t kTaskbarAdvancedKey[] =
     L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
 
@@ -677,9 +680,21 @@ void* TaskbarHost_FrameHeight_Original;
 using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
 std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
 
+// Both getters record here: any thread stores, the UI-thread paths read. One
+// line per real change, so a switch is visible in the log without spamming it.
+void RecordTaskbarAlignment(int alignment) {
+    const int previous =
+        g_taskbarAlignment.exchange(alignment, std::memory_order_acq_rel);
+    if (previous != alignment) {
+        Wh_Log(L"taskbar alignment changed to %d", alignment);
+    }
+}
+
 // Same technique as the taskbar-on-top mod: the alignment the shell itself
-// reads is taken from this getter instead of being guessed from the layout, so
-// the mod cannot mistake one alignment for the other.
+// reads is taken from the getter instead of being guessed from the layout.
+// Windows has moved that getter between builds: taskbar.dll serves it as
+// TaskbarSettings::get_Alignment, Taskbar.View.dll as TaskbarFrame::
+// get_Alignment. Both are hooked as optional entries.
 using ITaskbarSettings_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,
                                                           int* alignment);
 ITaskbarSettings_get_Alignment_t ITaskbarSettings_get_Alignment_Original;
@@ -688,12 +703,24 @@ HRESULT WINAPI ITaskbarSettings_get_Alignment_Hook(void* pThis,
                                                    int* alignment) {
     HRESULT ret = ITaskbarSettings_get_Alignment_Original(pThis, alignment);
     if (SUCCEEDED(ret)) {
-        // Any thread: store only, the UI-thread paths read it. One line per
-        // real change, so a switch is visible in the log without spamming it.
-        const int previous = g_taskbarAlignment.exchange(
-            *alignment, std::memory_order_acq_rel);
-        if (previous != *alignment) {
-            Wh_Log(L"taskbar alignment changed to %d", *alignment);
+        RecordTaskbarAlignment(*alignment);
+    }
+    return ret;
+}
+
+using TaskbarFrame_get_Alignment_t = HRESULT(WINAPI*)(void* pThis,
+                                                      int* alignment);
+TaskbarFrame_get_Alignment_t TaskbarFrame_get_Alignment_Original;
+
+HRESULT WINAPI TaskbarFrame_get_Alignment_Hook(void* pThis, int* alignment) {
+    HRESULT ret = TaskbarFrame_get_Alignment_Original(pThis, alignment);
+    if (SUCCEEDED(ret)) {
+        // The taskbar.dll getter is the source this mod has always used, so it
+        // decides wherever it exists. This one, which is where the value moved
+        // on newer builds, is only read when that one is missing, so adding it
+        // cannot change the behaviour of the builds the mod was tested on.
+        if (ITaskbarSettings_get_Alignment_Original == nullptr) {
+            RecordTaskbarAlignment(*alignment);
         }
     }
     return ret;
@@ -3197,7 +3224,7 @@ bool HookTaskbarDllSymbols() {
             {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::WindowsUdk::UI::Shell::implementation::TaskbarSettings,struct winrt::WindowsUdk::UI::Shell::ITaskbarSettings>::get_Alignment(int *))"},
             &ITaskbarSettings_get_Alignment_Original,
             ITaskbarSettings_get_Alignment_Hook,
-            true,  // Optional: the stored alignment is read instead when missing.
+            true,  // Optional: Taskbar.View.dll serves this getter on newer builds.
         },
     };
 
@@ -3209,16 +3236,16 @@ bool HookTaskbarDllSymbols() {
     // The alignment getter is the one entry above that may be missing, because
     // Windows has moved it between builds. Marking it optional lets this call
     // succeed on such a build, so its symbol cache is persisted and no error is
-    // logged; the mod then loads with the stored alignment read by the layout
-    // monitor instead.
+    // logged; Taskbar.View.dll then supplies the value, and the stored one is
+    // read by the layout monitor while neither getter is hooked.
     const bool alignmentGetterHooked =
         ITaskbarSettings_get_Alignment_Original != nullptr;
 
     g_taskbarAlignmentHookLoaded.store(alignmentGetterHooked,
                                        std::memory_order_release);
     if (!alignmentGetterHooked) {
-        Wh_Log(L"TaskbarSettings::get_Alignment was not found in taskbar.dll; "
-               L"reading the stored alignment instead");
+        Wh_Log(L"TaskbarSettings::get_Alignment is missing from taskbar.dll; "
+               L"trying Taskbar.View.dll");
     }
 
     return true;
@@ -3232,11 +3259,27 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             &TaskListButton_UpdateVisualStates_Original,
             TaskListButton_UpdateVisualStates_Hook,
         },
+        {
+            {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Taskbar::ITaskbarFrame>::get_Alignment(int *))"},
+            &TaskbarFrame_get_Alignment_Original,
+            TaskbarFrame_get_Alignment_Hook,
+            true,  // Optional: taskbar.dll serves the getter on older builds.
+        },
     };
 
     if (!HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks))) {
         Wh_Log(L"HookSymbols failed");
         return false;
+    }
+
+    // Both getters have been attempted by now. If neither attached, the stored
+    // value is the remaining source and the layout monitor re-reads it, while
+    // the mod still applies because g_taskbarAlignment starts at left.
+    if (TaskbarFrame_get_Alignment_Original != nullptr) {
+        g_taskbarAlignmentHookLoaded.store(true, std::memory_order_release);
+    } else if (!g_taskbarAlignmentHookLoaded.load(std::memory_order_acquire)) {
+        Wh_Log(L"no taskbar alignment getter in taskbar.dll or Taskbar.View.dll; "
+               L"treating the taskbar as left-aligned");
     }
 
     return true;
