@@ -48,10 +48,8 @@
 # Vector Screen Holder
 
 Fills a display with generative line art and holds the screen awake for as long
-as it runs. **It runs on your primary display, on any single display you're
-running, on all of them at once, or on all but the one you work on.** Art
-appears live on one monitor or a couple this way, and even four or more an
-enthusiast keeps running.
+as it runs. **It runs on your primary display, on any single display you name,
+on all of them at once, or on all but the one you work on.**
 
 Every frame is drawn as strokes through Direct2D on the GPU. There are no
 images, no video file and no fixed resolution, so the artwork is generated for
