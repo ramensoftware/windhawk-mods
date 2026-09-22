@@ -177,7 +177,7 @@ static bool InitializeHook()
     HRESULT initHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     bool mustUninitialize = SUCCEEDED(initHr);
 
-    if (FAILED(initHr) && initHr != RPC_E_CHANGED_MODE && initHr != S_FALSE) {
+    if (FAILED(initHr) && initHr != RPC_E_CHANGED_MODE) {
         Wh_Log(L"CoInitializeEx failed: 0x%08X",
                static_cast<UINT>(initHr));
         return false;
