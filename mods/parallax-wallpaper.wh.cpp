@@ -2,11 +2,12 @@
 // @id              parallax-wallpaper
 // @name            Parallax Wallpaper
 // @description     Smooth mouse-reactive wallpaper with optional perspective, four motion presets, independent multi-monitor support, and HDR-aware rendering
-// @version         0.8.1
+// @version         0.9.0
 // @author          HaVeN80
 // @github          https://github.com/haven80
-// @include         explorer.exe
-// @compilerOptions -lgdi32 -lgdiplus -lole32 -luuid -ldwmapi -ld2d1 -ld3d11 -ldxgi
+// @license         MIT
+// @include         windhawk.exe
+// @compilerOptions -lgdi32 -lgdiplus -lole32 -luuid -ldwmapi -ld2d1 -ld3d11 -ldxgi -ldcomp -lshell32
 // ==/WindhawkMod==
 
 // clang-format off
@@ -18,6 +19,9 @@ Adds subtle depth to your desktop by moving the wallpaper in response to the
 mouse. Desktop icons stay in place. Each monitor uses its own Windows wallpaper
 or an optional local image.
 
+The mod runs in its own background process rather than inside Explorer, so a
+graphics driver problem cannot take the shell down with it.
+![Parallax Wallpaper demo](https://i.imgur.com/jW1oE6J.gif)
 ## Motion presets
 
 | Preset | Character | Horizontal / vertical travel | Approx. settling time | Dead zone |
@@ -83,8 +87,8 @@ new targets. Other monitors finish their existing movement and then stop. When
 disabled, all monitors follow the pointer's relative position on the active
 monitor. Images remain separate; this is not a continuous panoramic wallpaper.
 
-Display connections, disconnections, resolution changes, HDR changes and
-wallpaper changes are detected automatically. Rebuilding the layout resets the
+Display connections, disconnections, resolution changes, HDR changes,
+wallpaper changes and Explorer restarts are detected automatically. Rebuilding the layout resets the
 motion to the center.
 
 ### Per-monitor rules
@@ -118,23 +122,25 @@ SDR files; this does not add high-dynamic-range highlights.
 
 Monitors without HDR, including SDR monitors that only use Windows' automatic
 color management, keep the standard rendering path. The option requires
-**Subpixel motion**. If the pipeline, the GPU or the swap chain is unavailable,
-that monitor falls back to standard rendering, and ultimately to GDI. Failures
-are retried with increasing intervals and written to the mod log with the
-HRESULT. GPU resets (driver updates, remote desktop sessions) are recovered
-automatically.
+**Subpixel motion**. If the HDR or perspective pipeline fails on a monitor, that
+monitor continues with standard rendering. Failures are retried with increasing
+intervals and written to the mod log with the HRESULT. GPU resets (driver
+updates, remote desktop sessions) are recovered automatically.
 
 ## Performance and compatibility
 
 Images are decoded and resized once on a background thread and reused, so
-loading a large image does not stall Explorer's desktop. EXIF orientation is
+loading a large image does not interrupt the animation. EXIF orientation is
 honored. Supported formats are those GDI+ decodes (JPEG, PNG, BMP, GIF, TIFF);
 other formats are reported once in the log and the monitor keeps Windows' own
 wallpaper.
 
-Direct2D enables fractional-pixel movement; GDI rendering is used if Direct2D
-fails. Subpixel motion can also be disabled manually if graphics problems
-occur; this also turns off perspective and HDR color management.
+Rendering uses Direct3D 11, Direct2D and DirectComposition, which works on
+both desktop layouts. Without a usable GPU driver, Direct3D's software renderer
+(WARP) is used. If rendering fails on a monitor, that monitor shows the regular
+Windows wallpaper and rendering is retried with increasing intervals. With
+**Subpixel motion** off, the image moves in whole-pixel steps; this also turns
+off perspective and HDR color management.
 
 Automatic frame rate follows the highest detected display refresh rate, capped
 at 240 Hz. This is a requested rate, not a guarantee of FPS or hardware frame
@@ -152,12 +158,12 @@ updates; unrecognized layouts are left untouched.
 
 ## Limitations
 
-- Tested on Windows 11 25H2 build (26200.9445).
+- Intended for Windows 10 and Windows 11.
 - Images use aspect-preserving **Fill** cropping with extra space for movement.
   Fit, Center, Tile, and continuous Span are not implemented.
 - Transitions between images are not included.
-- Perspective and HDR color management require a Direct3D 11-capable GPU and
-  driver.
+- Perspective and HDR color management are designed for a Direct3D 11-capable
+  GPU; on the software renderer they work but cost noticeably more CPU.
 - Solid-color desktops without an image remain unchanged.
 - Do not combine this mod with another animated-wallpaper application.
 */
@@ -212,7 +218,7 @@ updates; unrecognized layouts are left untouched.
   $description: 0 follows the highest detected refresh rate, up to 240. Otherwise choose 30 to 240; 60 reduces resource usage.
 - smoothRendering: true
   $name: Subpixel motion
-  $description: Recommended for the smoothest movement. Disable if graphics problems occur. Perspective and HDR color management also require this.
+  $description: Recommended. When off, the image moves in whole-pixel steps, and perspective and HDR color management are disabled.
 - hdrColorManagement: true
   $name: HDR color management
   $description: On monitors with Windows HDR turned on, renders through a native scRGB pipeline that follows Windows' SDR content brightness. No effect on other monitors or if Subpixel motion is off.
@@ -288,11 +294,13 @@ updates; unrecognized layouts are left untouched.
 #include <d2d1_1.h>
 #include <d2d1effects.h>
 #include <d3d11.h>
+#include <dcomp.h>
 #include <dwmapi.h>
 #include <dxgi1_6.h>
 #include <gdiplus.h>
 #include <objbase.h>
 #include <objidl.h>
+#include <shellapi.h>
 #include <shobjidl.h>
 #include <windows.h>
 #include <algorithm>
@@ -300,6 +308,7 @@ updates; unrecognized layouts are left untouched.
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -338,14 +347,15 @@ HANDLE g_thread = nullptr, g_stop = nullptr, g_settingsEvent = nullptr;
 HWND g_controller = nullptr, g_parent = nullptr, g_icons = nullptr;
 IDesktopWallpaper* g_wallpaper = nullptr;
 ID2D1Factory1* g_d2d = nullptr;
-// Shared Direct3D 11 / Direct2D device for the effect pipeline (perspective
-// and HDR). Created lazily and recreated after a device loss.
+// Shared Direct3D 11 / Direct2D / DirectComposition devices. Created lazily
+// and recreated after a device loss.
 ID3D11Device* g_d3dDevice = nullptr;
 IDXGIDevice* g_dxgiDevice = nullptr;
 ID2D1Device* g_d2dDevice = nullptr;
 IDXGIFactory2* g_dxgiFactory = nullptr;
-double g_effectDeviceRetryAt = 0;
-int g_effectDeviceFailures = 0, g_deviceLosses = 0;
+IDCompositionDevice* g_dcomp = nullptr;
+double g_deviceRetryAt = 0;
+int g_deviceFailures = 0, g_deviceLosses = 0;
 bool g_rebuild = true, g_rebuilding = false, g_retryWindows = false;
 ULONGLONG g_nextMaintenance = 0;
 double g_lastTick = 0;
@@ -596,28 +606,28 @@ struct Pane {
     Display display;
     Options options;
     HWND window = nullptr;
+    bool shown = false;
     // Decoded image, larger than the monitor by the travel on each side.
-    HDC cache = nullptr;
-    HBITMAP bitmap = nullptr, oldBitmap = nullptr;
+    HBITMAP bitmap = nullptr;
     void* pixels = nullptr;
     int width = 0, height = 0, cacheWidth = 0, cacheHeight = 0;
-    int cropX = 0, cropY = 0;
-    // Standard Direct2D renderer.
-    ID2D1HwndRenderTarget* target = nullptr;
-    ID2D1Bitmap* texture = nullptr;
-    double retrySmooth = 0;
-    int smoothFailures = 0;
-    // Effect renderer: perspective and/or HDR color management.
+    int cropX = 0, cropY = 0;  // Whole-pixel offsets when subpixel is off.
+    // GPU renderer: Direct2D into a composition swap chain, attached to the
+    // window through DirectComposition.
     IDXGISwapChain1* swap = nullptr;
+    IDCompositionTarget* compositionTarget = nullptr;
+    IDCompositionVisual* visual = nullptr;
     ID2D1DeviceContext* context = nullptr;
     ID2D1Bitmap1* swapTarget = nullptr;
     ID2D1Bitmap1* source = nullptr;
     ID2D1Effect* perspectiveEffect = nullptr;
     ID2D1Effect* colorEffect = nullptr;
     ID2D1Effect* whiteEffect = nullptr;
-    ID2D1Image* output = nullptr;  // Output of the last effect in the chain.
-    double retryEffect = 0;
-    int effectFailures = 0;
+    ID2D1Image* output = nullptr;  // Image drawn each frame.
+    bool effectsDisabled = false;
+    bool dirty = true;
+    double retryRender = 0;
+    int failures = 0;
     double perspectiveZoom = 1;
     // Motion state.
     double x = 0, y = 0, vx = 0, vy = 0, acceptedX = 0, acceptedY = 0;
@@ -633,18 +643,10 @@ struct Pane {
     Pane() = default;
     Pane(const Pane&) = delete;
     Pane& operator=(const Pane&) = delete;
-    void FreeSmooth() {
-        if (texture)
-            texture->Release();
-        if (target)
-            target->Release();
-        texture = nullptr;
-        target = nullptr;
-    }
-    void FreeEffects() {
+    void FreeRenderer() {
+        bool composed = compositionTarget || visual;
         if (output)
             output->Release();
-        output = nullptr;
         if (whiteEffect)
             whiteEffect->Release();
         if (colorEffect)
@@ -659,41 +661,52 @@ struct Pane {
             swapTarget->Release();
         if (context)
             context->Release();
+        if (visual)
+            visual->Release();
+        if (compositionTarget)
+            compositionTarget->Release();
         if (swap)
             swap->Release();
+        output = nullptr;
         whiteEffect = colorEffect = perspectiveEffect = nullptr;
         source = swapTarget = nullptr;
         context = nullptr;
+        visual = nullptr;
+        compositionTarget = nullptr;
         swap = nullptr;
+        if (composed && g_dcomp)
+            g_dcomp->Commit();
     }
-    void FreeRenderers() {
-        FreeSmooth();
-        FreeEffects();
-    }
-    void FreeCache() {
-        FreeRenderers();
-        if (cache) {
-            SelectObject(cache, oldBitmap);
-            DeleteDC(cache);
-        }
+    void FreeImage() {
+        FreeRenderer();
         if (bitmap)
             DeleteObject(bitmap);
-        cache = nullptr;
-        bitmap = oldBitmap = nullptr;
+        bitmap = nullptr;
         pixels = nullptr;
     }
     ~Pane() {
-        // Release swap chains before their window is destroyed.
-        FreeCache();
+        // Release the swap chain and composition target before the window.
+        FreeImage();
         if (window && IsWindow(window))
             DestroyWindow(window);
     }
 };
-std::vector<std::unique_ptr<Pane>> g_panes;
+// Panes own GPU resources and windows created on the render thread. They are
+// released explicitly in RenderThread's teardown, never by the automatic
+// destructor at process shutdown.
+[[clang::no_destroy]] std::optional<std::vector<std::unique_ptr<Pane>>> g_panes;
 std::vector<Display> g_layout;
 
+// Hides a pane so the regular Windows wallpaper shows through until the pane
+// renders again.
+void HidePane(Pane& pane) {
+    if (pane.shown && pane.window && IsWindow(pane.window))
+        ShowWindow(pane.window, SW_HIDE);
+    pane.shown = false;
+    pane.dirty = true;
+}
 Pane* FindPane(uint64_t serial) {
-    for (auto& pane : g_panes)
+    for (auto& pane : *g_panes)
         if (pane->serial == serial)
             return pane.get();
     return nullptr;
@@ -948,18 +961,34 @@ bool SameLayout(const std::vector<Display>& a, const std::vector<Display>& b) {
 // ---------------------------------------------------------------------------
 // Desktop attachment.
 
-BOOL CALLBACK FindIconHost(HWND window, LPARAM result) {
+// The process that owns the desktop (Progman). The mod runs in its own
+// process, so windows are matched against the shell's process instead.
+DWORD ShellProcessId() {
+    DWORD process = 0;
+    if (HWND shell = GetShellWindow())
+        GetWindowThreadProcessId(shell, &process);
+    return process;
+}
+struct IconHostSearch {
+    DWORD shellProcess;
+    HWND result;
+};
+BOOL CALLBACK FindIconHost(HWND window, LPARAM data) {
+    auto search = reinterpret_cast<IconHostSearch*>(data);
     DWORD process = 0;
     GetWindowThreadProcessId(window, &process);
-    if (process == GetCurrentProcessId() && IsWindowVisible(window) &&
+    if (process == search->shellProcess && IsWindowVisible(window) &&
         FindWindowExW(window, nullptr, L"SHELLDLL_DefView", nullptr)) {
-        *reinterpret_cast<HWND*>(result) = window;
+        search->result = window;
         return FALSE;
     }
     return TRUE;
 }
 HWND FindWallpaperHost(HWND& iconView) {
     iconView = nullptr;
+    DWORD shellProcess = ShellProcessId();
+    if (!shellProcess)
+        return nullptr;
     HWND progman = FindWindowW(L"Progman", nullptr);
     DWORD owner = 0;
     if (progman) {
@@ -967,7 +996,7 @@ HWND FindWallpaperHost(HWND& iconView) {
         HWND view =
             FindWindowExW(progman, nullptr, L"SHELLDLL_DefView", nullptr);
         HWND wallpaper = FindWindowExW(progman, nullptr, L"WorkerW", nullptr);
-        if (owner == GetCurrentProcessId() && view && wallpaper &&
+        if (owner == shellProcess && view && wallpaper &&
             (GetWindowLongPtrW(progman, GWL_EXSTYLE) &
              WS_EX_NOREDIRECTIONBITMAP) &&
             (GetWindowLongPtrW(view, GWL_EXSTYLE) & WS_EX_LAYERED)) {
@@ -975,15 +1004,15 @@ HWND FindWallpaperHost(HWND& iconView) {
             return progman;
         }
     }
-    HWND icons = nullptr;
-    EnumWindows(FindIconHost, reinterpret_cast<LPARAM>(&icons));
-    if (!icons)
+    IconHostSearch search{shellProcess, nullptr};
+    EnumWindows(FindIconHost, reinterpret_cast<LPARAM>(&search));
+    if (!search.result)
         return nullptr;
-    HWND host = FindWindowExW(nullptr, icons, L"WorkerW", nullptr);
+    HWND host = FindWindowExW(nullptr, search.result, L"WorkerW", nullptr);
     owner = 0;
     if (host)
         GetWindowThreadProcessId(host, &owner);
-    if (!host || !IsWindowVisible(host) || owner != GetCurrentProcessId() ||
+    if (!host || !IsWindowVisible(host) || owner != shellProcess ||
         FindWindowExW(host, nullptr, L"SHELLDLL_DefView", nullptr))
         return nullptr;
     return host;
@@ -1081,8 +1110,8 @@ void RefreshImage(Pane& pane) {
     if (!pane.window || !IsWindow(pane.window))
         return;  // COM can dispatch window messages.
     if (path.empty()) {
-        ShowWindow(pane.window, SW_HIDE);
-        pane.FreeCache();
+        HidePane(pane);
+        pane.FreeImage();
         pane.path.clear();
         pane.stamp = {};
         pane.loading = false;
@@ -1090,11 +1119,8 @@ void RefreshImage(Pane& pane) {
         return;
     }
     FILETIME stamp = FileStamp(path);
-    if (pane.cache && path == pane.path && SameStamp(stamp, pane.stamp)) {
-        if (!IsWindowVisible(pane.window) && Position(pane, SWP_SHOWWINDOW))
-            InvalidateRect(pane.window, nullptr, FALSE);
+    if (pane.pixels && path == pane.path && SameStamp(stamp, pane.stamp))
         return;
-    }
     if (pane.loading && path == pane.pendingPath &&
         SameStamp(stamp, pane.pendingStamp))
         return;
@@ -1113,17 +1139,8 @@ void RefreshImage(Pane& pane) {
     RequestLoad(std::move(request));
 }
 bool InstallImage(Pane& pane, LoadResult& result) {
-    HDC dc = CreateCompatibleDC(nullptr);
-    HGDIOBJ old = dc ? SelectObject(dc, result.bitmap) : nullptr;
-    if (!dc || !old || old == HGDI_ERROR) {
-        if (dc)
-            DeleteDC(dc);
-        return false;
-    }
-    pane.FreeCache();
-    pane.cache = dc;
+    pane.FreeImage();
     pane.bitmap = result.bitmap;
-    pane.oldBitmap = static_cast<HBITMAP>(old);
     pane.pixels = result.pixels;
     result.bitmap = nullptr;
     pane.path = result.path;
@@ -1136,8 +1153,9 @@ bool InstallImage(Pane& pane, LoadResult& result) {
     pane.submittedTiltX = pane.submittedTiltY = 0;
     pane.cropX = pane.options.x;
     pane.cropY = pane.options.y;
-    Position(pane, SWP_SHOWWINDOW);
-    InvalidateRect(pane.window, nullptr, FALSE);
+    pane.retryRender = 0;
+    pane.failures = 0;
+    pane.dirty = true;  // Rendered and shown on the next frame.
     return true;
 }
 void ProcessLoadResults() {
@@ -1258,7 +1276,9 @@ D2D1_MATRIX_4X4_F PerspectiveMatrix(const Pane& pane) {
 }
 
 // ---------------------------------------------------------------------------
-// Rendering.
+// Rendering: Direct3D 11 + Direct2D into composition swap chains, attached to
+// the pane windows with DirectComposition. This works on the classic WorkerW
+// layout and on the layered Windows 11 layout, across processes.
 
 template <typename T>
 HRESULT SetProperty(ID2D1Effect* effect, UINT32 index, const T& value) {
@@ -1271,72 +1291,16 @@ bool IsDeviceLost(HRESULT hr) {
            hr == DXGI_ERROR_DEVICE_HUNG ||
            hr == static_cast<HRESULT>(D2DERR_RECREATE_TARGET);
 }
-
-bool DrawSmooth(Pane& pane) {
-    if (!g_smoothRendering || !g_d2d || !pane.pixels || pane.swap ||
-        ClockMs() < pane.retrySmooth)
-        return false;
-    HRESULT hr = S_OK;
-    if (!pane.target) {
-        auto properties = D2D1::RenderTargetProperties(
-            D2D1_RENDER_TARGET_TYPE_DEFAULT,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                              D2D1_ALPHA_MODE_IGNORE),
-            96, 96);
-        auto window = D2D1::HwndRenderTargetProperties(
-            pane.window, D2D1::SizeU(pane.width, pane.height),
-            D2D1_PRESENT_OPTIONS_IMMEDIATELY);
-        hr = g_d2d->CreateHwndRenderTarget(properties, window, &pane.target);
-        if (SUCCEEDED(hr)) {
-            auto bitmap = D2D1::BitmapProperties(
-                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
-                                  D2D1_ALPHA_MODE_IGNORE),
-                96, 96);
-            hr = pane.target->CreateBitmap(
-                D2D1::SizeU(pane.cacheWidth, pane.cacheHeight), pane.pixels,
-                pane.cacheWidth * 4, bitmap, &pane.texture);
-        }
-    }
-    if (SUCCEEDED(hr)) {
-        float x = static_cast<float>(pane.options.x + pane.x);
-        float y = static_cast<float>(pane.options.y + pane.y);
-        pane.target->BeginDraw();
-        pane.target->DrawBitmap(
-            pane.texture,
-            D2D1::RectF(0, 0, static_cast<float>(pane.width),
-                        static_cast<float>(pane.height)),
-            1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
-            D2D1::RectF(x, y, x + pane.width, y + pane.height));
-        hr = pane.target->EndDraw();
-    }
-    if (SUCCEEDED(hr)) {
-        pane.smoothFailures = 0;
-        return true;
-    }
-    pane.FreeSmooth();
-    ++pane.smoothFailures;
-    if (pane.smoothFailures >= kMaxConsecutiveFailures) {
-        pane.retrySmooth = kNever;
-        Wh_Log(
-            L"Direct2D rendering failed for %s (0x%08lX); using GDI until "
-            L"the layout or settings change",
-            pane.display.name.c_str(), static_cast<unsigned long>(hr));
-    } else {
-        // A lost render target is recreated on the next frame.
-        double delay = IsDeviceLost(hr) ? 0 : Backoff(pane.smoothFailures);
-        pane.retrySmooth = ClockMs() + delay;
-        Wh_Log(
-            L"Direct2D rendering failed for %s (0x%08lX); GDI fallback, "
-            L"retry in %d ms",
-            pane.display.name.c_str(), static_cast<unsigned long>(hr),
-            static_cast<int>(delay));
-    }
-    return false;
+bool UsesEffects(const Pane& pane) {
+    return WantsEffects(pane) && !pane.effectsDisabled;
 }
 
-void ReleaseEffectDevice() {
-    for (auto& pane : g_panes)
-        pane->FreeEffects();
+void ReleaseDevice() {
+    if (g_panes)
+        for (auto& pane : *g_panes)
+            pane->FreeRenderer();
+    if (g_dcomp)
+        g_dcomp->Release();
     if (g_dxgiFactory)
         g_dxgiFactory->Release();
     if (g_d2dDevice)
@@ -1345,41 +1309,49 @@ void ReleaseEffectDevice() {
         g_dxgiDevice->Release();
     if (g_d3dDevice)
         g_d3dDevice->Release();
+    g_dcomp = nullptr;
     g_dxgiFactory = nullptr;
     g_d2dDevice = nullptr;
     g_dxgiDevice = nullptr;
     g_d3dDevice = nullptr;
 }
 // Driver updates, TDRs and remote desktop sessions remove the device. Every
-// effect resource belongs to it, so all of them are recreated.
+// GPU resource belongs to it, so all of them are recreated.
 void HandleDeviceLoss(HRESULT hr) {
     ++g_deviceLosses;
     double delay = Backoff(g_deviceLosses) / 4;  // 0.5 s, 1 s, 2 s ... 15 s.
     if (g_deviceLosses <= kMaxConsecutiveFailures)
-        Wh_Log(
-            L"GPU device lost (0x%08lX); recreating the effect pipeline in "
-            L"%d ms",
-            static_cast<unsigned long>(hr), static_cast<int>(delay));
-    ReleaseEffectDevice();
-    g_effectDeviceRetryAt = ClockMs() + delay;
-    for (auto& pane : g_panes)
-        if (pane->window)
-            InvalidateRect(pane->window, nullptr, FALSE);
+        Wh_Log(L"GPU device lost (0x%08lX); recreating the renderer in %d ms",
+               static_cast<unsigned long>(hr), static_cast<int>(delay));
+    if (g_panes)
+        for (auto& pane : *g_panes)
+            HidePane(*pane);
+    ReleaseDevice();
+    g_deviceRetryAt = ClockMs() + delay;
 }
-bool EnsureEffectDevice() {
-    if (g_d2dDevice) {
+bool EnsureDevice() {
+    if (g_dcomp) {
         HRESULT reason = g_d3dDevice->GetDeviceRemovedReason();
         if (SUCCEEDED(reason))
             return true;
         HandleDeviceLoss(reason);
     }
-    if (!g_d2d || ClockMs() < g_effectDeviceRetryAt)
+    if (!g_d2d || ClockMs() < g_deviceRetryAt)
         return false;
-    D3D_FEATURE_LEVEL level{};
-    HRESULT hr =
-        D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
-                          D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0,
-                          D3D11_SDK_VERSION, &g_d3dDevice, &level, nullptr);
+    HRESULT hr = E_FAIL;
+    // WARP keeps the mod working without a usable GPU driver.
+    for (D3D_DRIVER_TYPE type :
+         {D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_WARP}) {
+        D3D_FEATURE_LEVEL level{};
+        hr = D3D11CreateDevice(
+            nullptr, type, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr,
+            0, D3D11_SDK_VERSION, &g_d3dDevice, &level, nullptr);
+        if (SUCCEEDED(hr)) {
+            if (type == D3D_DRIVER_TYPE_WARP)
+                Wh_Log(L"Hardware Direct3D unavailable; using WARP");
+            break;
+        }
+    }
     if (SUCCEEDED(hr))
         hr = g_d3dDevice->QueryInterface(IID_PPV_ARGS(&g_dxgiDevice));
     if (SUCCEEDED(hr))
@@ -1392,20 +1364,22 @@ bool EnsureEffectDevice() {
             adapter->Release();
         }
     }
+    if (SUCCEEDED(hr))
+        hr = DCompositionCreateDevice(g_dxgiDevice, IID_PPV_ARGS(&g_dcomp));
     if (SUCCEEDED(hr)) {
-        g_effectDeviceFailures = 0;
+        g_deviceFailures = 0;
         return true;
     }
-    ReleaseEffectDevice();
-    ++g_effectDeviceFailures;
-    double delay = Backoff(g_effectDeviceFailures);
-    g_effectDeviceRetryAt = ClockMs() + delay;
-    if (g_effectDeviceFailures <= kMaxConsecutiveFailures)
+    ReleaseDevice();
+    ++g_deviceFailures;
+    double delay = Backoff(g_deviceFailures);
+    g_deviceRetryAt = ClockMs() + delay;
+    if (g_deviceFailures <= kMaxConsecutiveFailures)
         Wh_Log(
-            L"Effect pipeline unavailable (0x%08lX); standard rendering, "
+            L"Renderer unavailable (0x%08lX); Windows wallpaper shown, "
             L"retry in %d ms%s",
             static_cast<unsigned long>(hr), static_cast<int>(delay),
-            g_effectDeviceFailures == kMaxConsecutiveFailures
+            g_deviceFailures == kMaxConsecutiveFailures
                 ? L" (further failures are not logged)"
                 : L"");
     return false;
@@ -1440,11 +1414,14 @@ HRESULT SetSwapChainColorSpace(IDXGISwapChain1* swap, bool hdr) {
     swap3->Release();
     return hr;
 }
-// Builds the chain source -> [3D transform] -> [color management -> white
-// level] -> swap chain. The geometric transform works on 8-bit sRGB data; the
+// Builds source -> [3D transform] -> [color management -> white level] ->
+// swap chain. The geometric transform works on 8-bit sRGB data; the
 // conversion to linear scRGB happens last, straight into the FP16 target.
-HRESULT CreateEffects(Pane& pane) {
-    const bool hdr = UsesHdr(pane), perspective = UsesPerspective(pane);
+// Without effects, the source bitmap is drawn directly.
+HRESULT CreateRenderer(Pane& pane) {
+    const bool effects = UsesEffects(pane);
+    const bool hdr = effects && UsesHdr(pane);
+    const bool perspective = effects && UsesPerspective(pane);
     const DXGI_FORMAT format =
         hdr ? DXGI_FORMAT_R16G16B16A16_FLOAT : DXGI_FORMAT_B8G8R8A8_UNORM;
     HRESULT hr = g_d2dDevice->CreateDeviceContext(
@@ -1474,17 +1451,14 @@ HRESULT CreateEffects(Pane& pane) {
         desc.SampleDesc.Count = 1;
         desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         desc.BufferCount = 2;
+        desc.Scaling = DXGI_SCALING_STRETCH;
         desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
         desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
-        hr = g_dxgiFactory->CreateSwapChainForHwnd(
-            g_d3dDevice, pane.window, &desc, nullptr, nullptr, &pane.swap);
+        hr = g_dxgiFactory->CreateSwapChainForComposition(g_d3dDevice, &desc,
+                                                          nullptr, &pane.swap);
     }
-    if (SUCCEEDED(hr)) {
-        // Keep DXGI from reacting to Explorer's window messages.
-        g_dxgiFactory->MakeWindowAssociation(
-            pane.window, DXGI_MWA_NO_WINDOW_CHANGES | DXGI_MWA_NO_ALT_ENTER);
+    if (SUCCEEDED(hr))
         hr = SetSwapChainColorSpace(pane.swap, hdr);
-    }
     if (SUCCEEDED(hr)) {
         IDXGISurface* surface = nullptr;
         hr = pane.swap->GetBuffer(0, IID_PPV_ARGS(&surface));
@@ -1560,69 +1534,88 @@ HRESULT CreateEffects(Pane& pane) {
             last = pane.whiteEffect;
         }
     }
-    if (SUCCEEDED(hr) && !last)
-        hr = E_UNEXPECTED;
+    if (SUCCEEDED(hr)) {
+        if (last) {
+            last->GetOutput(&pane.output);
+        } else {
+            pane.output = pane.source;
+            pane.output->AddRef();
+        }
+    }
     if (SUCCEEDED(hr))
-        last->GetOutput(&pane.output);
+        hr = g_dcomp->CreateTargetForHwnd(pane.window, TRUE,
+                                          &pane.compositionTarget);
+    if (SUCCEEDED(hr))
+        hr = g_dcomp->CreateVisual(&pane.visual);
+    if (SUCCEEDED(hr))
+        hr = pane.visual->SetContent(pane.swap);
+    if (SUCCEEDED(hr))
+        hr = pane.compositionTarget->SetRoot(pane.visual);
+    if (SUCCEEDED(hr))
+        hr = g_dcomp->Commit();
     return hr;
 }
-void EffectFailed(Pane& pane, HRESULT hr, const wchar_t* stage) {
-    pane.FreeEffects();
+void RenderFailed(Pane& pane, HRESULT hr, const wchar_t* stage) {
+    pane.FreeRenderer();
+    HidePane(pane);
     if (IsDeviceLost(hr)) {
         HandleDeviceLoss(hr);
         return;
     }
-    ++pane.effectFailures;
-    if (pane.effectFailures >= kMaxConsecutiveFailures) {
-        pane.retryEffect = kNever;
+    ++pane.failures;
+    if (UsesEffects(pane) && pane.failures >= 3) {
+        pane.effectsDisabled = true;
+        pane.failures = 0;
+        pane.retryRender = 0;
         Wh_Log(
-            L"Effect %s failed for %s (0x%08lX); perspective/HDR disabled "
-            L"on this monitor until the layout or settings change",
+            L"Perspective/HDR %s failed for %s (0x%08lX); using standard "
+            L"rendering on this monitor until the layout or settings change",
             stage, pane.display.name.c_str(), static_cast<unsigned long>(hr));
-    } else {
-        double delay = Backoff(pane.effectFailures);
-        pane.retryEffect = ClockMs() + delay;
-        Wh_Log(
-            L"Effect %s failed for %s (0x%08lX); standard rendering, "
-            L"retry in %d ms",
-            stage, pane.display.name.c_str(), static_cast<unsigned long>(hr),
-            static_cast<int>(delay));
+        return;
     }
+    if (pane.failures >= kMaxConsecutiveFailures) {
+        pane.retryRender = kNever;
+        Wh_Log(
+            L"Rendering %s failed for %s (0x%08lX); the Windows wallpaper "
+            L"stays visible on this monitor until the layout or settings "
+            L"change",
+            stage, pane.display.name.c_str(), static_cast<unsigned long>(hr));
+        return;
+    }
+    double delay = Backoff(pane.failures);
+    pane.retryRender = ClockMs() + delay;
+    Wh_Log(L"Rendering %s failed for %s (0x%08lX); retry in %d ms", stage,
+           pane.display.name.c_str(), static_cast<unsigned long>(hr),
+           static_cast<int>(delay));
 }
-bool DrawEffects(Pane& pane) {
-    if (!WantsEffects(pane) || !pane.pixels || ClockMs() < pane.retryEffect ||
-        !EnsureEffectDevice())
+bool Render(Pane& pane) {
+    if (!pane.pixels || !pane.window || ClockMs() < pane.retryRender ||
+        !EnsureDevice())
         return false;
     HRESULT hr = S_OK;
     if (!pane.context) {
-        pane.FreeSmooth();  // One presentation model per window at a time.
-        hr = CreateEffects(pane);
+        hr = CreateRenderer(pane);
         if (FAILED(hr)) {
-            EffectFailed(pane, hr, L"setup");
+            RenderFailed(pane, hr, L"setup");
             return false;
         }
     }
-    D2D1_POINT_2F offset = D2D1::Point2F(0, 0);
-    D2D1_RECT_F area;
+    pane.context->BeginDraw();
+    pane.context->Clear(D2D1::ColorF(0, 0, 0, 1));
     if (pane.perspectiveEffect) {
+        pane.context->SetTransform(D2D1::Matrix3x2F::Identity());
         hr = SetProperty(pane.perspectiveEffect, kTransform3DMatrix,
                          PerspectiveMatrix(pane));
-        area = D2D1::RectF(0, 0, float(pane.width), float(pane.height));
     } else {
-        float x = static_cast<float>(pane.options.x + pane.x);
-        float y = static_cast<float>(pane.options.y + pane.y);
-        area = D2D1::RectF(x, y, x + pane.width, y + pane.height);
+        double x = g_smoothRendering ? pane.options.x + pane.x : pane.cropX;
+        double y = g_smoothRendering ? pane.options.y + pane.y : pane.cropY;
+        pane.context->SetTransform(D2D1::Matrix3x2F::Translation(
+            static_cast<float>(-x), static_cast<float>(-y)));
     }
-    pane.context->BeginDraw();
-    if (SUCCEEDED(hr)) {
-        // Flip-model buffers keep older frames; clear what the transformed
-        // image may leave uncovered.
-        if (pane.perspectiveEffect)
-            pane.context->Clear(D2D1::ColorF(0, 0, 0, 1));
-        pane.context->DrawImage(pane.output, &offset, &area,
+    if (SUCCEEDED(hr))
+        pane.context->DrawImage(pane.output, nullptr, nullptr,
                                 D2D1_INTERPOLATION_MODE_LINEAR,
-                                D2D1_COMPOSITE_MODE_SOURCE_COPY);
-    }
+                                D2D1_COMPOSITE_MODE_SOURCE_OVER);
     HRESULT endHr = pane.context->EndDraw();
     if (SUCCEEDED(hr))
         hr = endHr;
@@ -1630,13 +1623,16 @@ bool DrawEffects(Pane& pane) {
         DXGI_PRESENT_PARAMETERS present{};
         hr = pane.swap->Present1(0, 0, &present);
     }
-    if (SUCCEEDED(hr)) {
-        pane.effectFailures = 0;
-        g_deviceLosses = 0;
-        return true;
+    if (FAILED(hr)) {
+        RenderFailed(pane, hr, L"drawing");
+        return false;
     }
-    EffectFailed(pane, hr, L"rendering");
-    return false;
+    pane.failures = 0;
+    g_deviceLosses = 0;
+    pane.dirty = false;
+    if (!pane.shown)
+        pane.shown = Position(pane, SWP_SHOWWINDOW);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1668,7 +1664,7 @@ void UpdatePause() {
                 full = GetWindowRect(foreground, &rect) != FALSE;
         }
     }
-    for (auto& p : g_panes) {
+    for (auto& p : *g_panes) {
         bool pause = full && Covers(rect, p->display.rect);
         if (pause && !p->paused) {
             p->vx = p->vy = 0;
@@ -1765,34 +1761,39 @@ Activity Tick() {
     double elapsed = now - g_lastTick;
     g_lastTick = now;
     POINT cursor{};
-    if (!GetCursorPos(&cursor))
-        return Activity::Dormant;  // Secure desktop or session switch.
+    bool haveCursor = GetCursorPos(&cursor) != FALSE;  // Fails on the secure
+                                                       // desktop.
     // Use all displays, including ones where the animation is disabled.
     const Display* active = nullptr;
-    for (const auto& d : g_layout)
-        if (PtInRect(&d.rect, cursor)) {
-            active = &d;
-            break;
-        }
+    if (haveCursor)
+        for (const auto& d : g_layout)
+            if (PtInRect(&d.rect, cursor)) {
+                active = &d;
+                break;
+            }
     double nx = 0, ny = 0;
     if (active)
         Normalized(active->rect, cursor, nx, ny);
     bool moving = false, animatable = false;
-    for (auto& p : g_panes) {
-        if (!p->cache || p->paused || !p->window || !IsWindowVisible(p->window))
+    for (auto& p : *g_panes) {
+        if (!p->pixels || !p->window)
             continue;
-        animatable = true;
-        if (active && ShouldAnimate(*p, *active))
-            AcceptInput(*p, nx, ny);
-        if (Advance(*p, elapsed)) {
-            moving = true;
-            InvalidateRect(p->window, nullptr, FALSE);
-            UpdateWindow(p->window);  // Paint once per scheduled frame, without
-                                      // WM_PAINT starvation.
+        if (!p->paused && haveCursor) {
+            animatable = true;
+            if (active && ShouldAnimate(*p, *active))
+                AcceptInput(*p, nx, ny);
+            if (Advance(*p, elapsed)) {
+                moving = true;
+                p->dirty = true;
+            }
+            moving =
+                moving || std::abs(p->vx) > 0.005 || std::abs(p->vy) > 0.005 ||
+                (UsesPerspective(*p) &&
+                 (std::abs(p->tiltVx) > 0.005 || std::abs(p->tiltVy) > 0.005));
         }
-        moving = moving || std::abs(p->vx) > 0.005 || std::abs(p->vy) > 0.005 ||
-                 (UsesPerspective(*p) &&
-                  (std::abs(p->tiltVx) > 0.005 || std::abs(p->tiltVy) > 0.005));
+        // New images, retries and device recovery also go through here.
+        if (p->dirty && now >= p->retryRender)
+            Render(*p);
     }
     return moving       ? Activity::Moving
            : animatable ? Activity::Idle
@@ -1815,16 +1816,12 @@ LRESULT CALLBACK WindowProc(HWND window, UINT msg, WPARAM wp, LPARAM lp) {
             return 1;
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
+        case WM_NCHITTEST:
+            return HTTRANSPARENT;
         case WM_PAINT: {
+            // Content is presented through DirectComposition.
             PAINTSTRUCT paint{};
-            HDC dc = BeginPaint(window, &paint);
-            if (pane && pane->cache && !DrawEffects(*pane) &&
-                !DrawSmooth(*pane)) {
-                const RECT& r = paint.rcPaint;
-                BitBlt(dc, r.left, r.top, r.right - r.left, r.bottom - r.top,
-                       pane->cache, pane->cropX + r.left, pane->cropY + r.top,
-                       SRCCOPY);
-            }
+            BeginPaint(window, &paint);
             EndPaint(window, &paint);
             return 0;
         }
@@ -1841,6 +1838,7 @@ LRESULT CALLBACK WindowProc(HWND window, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_NCDESTROY:
             if (pane) {
                 pane->window = nullptr;
+                pane->shown = false;
                 if (!g_rebuilding)
                     g_rebuild = true;
             }
@@ -1850,17 +1848,32 @@ LRESULT CALLBACK WindowProc(HWND window, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(window, msg, wp, lp);
 }
 
+void CreateWallpaperInterface() {
+    if (g_wallpaper) {
+        g_wallpaper->Release();
+        g_wallpaper = nullptr;
+    }
+    if (FAILED(CoCreateInstance(CLSID_DesktopWallpaper, nullptr, CLSCTX_ALL,
+                                IID_PPV_ARGS(&g_wallpaper))))
+        g_wallpaper = nullptr;
+    if (!g_wallpaper)
+        Wh_Log(L"IDesktopWallpaper unavailable; using the common wallpaper");
+}
+
 void Rebuild(const std::vector<Display>& layout, HWND parent, HWND icons) {
     g_rebuilding = true;
     g_rebuild = false;
     g_retryWindows = false;
-    g_panes.clear();
+    g_panes->clear();
+    // After an Explorer restart, reconnect to the new shell.
+    if (parent != g_parent && parent)
+        CreateWallpaperInterface();
     g_layout = layout;
     g_parent = parent;
     g_icons = icons;
     // A new layout or new settings deserve a fresh attempt at the GPU path.
-    g_effectDeviceRetryAt = 0;
-    g_effectDeviceFailures = 0;
+    g_deviceRetryAt = 0;
+    g_deviceFailures = 0;
     g_deviceLosses = 0;
     g_fps = g_requestedFps ? g_requestedFps : 60;
     if (!g_requestedFps) {
@@ -1875,6 +1888,8 @@ void Rebuild(const std::vector<Display>& layout, HWND parent, HWND icons) {
         }
     }
     if (g_parent) {
+        Wh_Log(L"Desktop layout: %s",
+               g_icons ? L"layered (Progman)" : L"classic (WorkerW)");
         for (const auto& d : layout) {
             if (WaitForSingleObject(g_stop, 0) != WAIT_TIMEOUT)
                 break;
@@ -1899,22 +1914,24 @@ void Rebuild(const std::vector<Display>& layout, HWND parent, HWND icons) {
             p->cropX = options.x;
             p->cropY = options.y;
             p->perspectiveZoom = PerspectiveZoom(*p);
-            // WS_EX_NOPARENTNOTIFY avoids synchronous notifications to
-            // Explorer's desktop thread when panes are created or destroyed.
+            // The pane is a child of Explorer's wallpaper host, created by
+            // this process. It has no redirection surface: content comes only
+            // from DirectComposition. WS_EX_NOPARENTNOTIFY avoids synchronous
+            // notifications to Explorer when panes are created or destroyed.
             p->window = CreateWindowExW(
-                WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_NOPARENTNOTIFY |
-                    (g_icons ? WS_EX_LAYERED | WS_EX_TRANSPARENT : 0),
+                WS_EX_NOREDIRECTIONBITMAP | WS_EX_NOACTIVATE |
+                    WS_EX_TOOLWINDOW | WS_EX_NOPARENTNOTIFY | WS_EX_TRANSPARENT,
                 kClass, L"", WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 0, 0, g_parent,
                 nullptr, GetModuleHandleW(nullptr), p.get());
-            if (!p->window || (g_icons && !SetLayeredWindowAttributes(
-                                              p->window, 0, 255, LWA_ALPHA))) {
+            if (!p->window) {
                 Wh_Log(L"Window setup failed for %s, error=%lu", d.name.c_str(),
                        GetLastError());
                 g_retryWindows = true;
                 continue;
             }
+            Position(*p, 0);  // Shown after the first successful frame.
             Pane* pane = p.get();
-            g_panes.push_back(std::move(p));
+            g_panes->push_back(std::move(p));
             RefreshImage(*pane);
         }
     } else {
@@ -1925,16 +1942,6 @@ void Rebuild(const std::vector<Display>& layout, HWND parent, HWND icons) {
     UpdatePause();
 }
 void Maintenance() {
-    // Explorer can have separate folder processes. Stop if this is not the
-    // process that owns the desktop, including when the desktop appeared later.
-    HWND shell = GetShellWindow();
-    DWORD shellProcess = 0;
-    if (shell)
-        GetWindowThreadProcessId(shell, &shellProcess);
-    if (shellProcess && shellProcess != GetCurrentProcessId()) {
-        SetEvent(g_stop);
-        return;
-    }
     auto layout = Displays();
     HWND icons = nullptr;
     HWND parent = FindWallpaperHost(icons);
@@ -1943,7 +1950,7 @@ void Maintenance() {
         DWORD owner = 0;
         if (progman)
             GetWindowThreadProcessId(progman, &owner);
-        if (progman && owner == GetCurrentProcessId()) {
+        if (progman && owner && owner == ShellProcessId()) {
             // Ask Explorer to create the WorkerW wallpaper layer.
             DWORD_PTR result = 0;
             SendMessageTimeoutW(progman, 0x052C, 0xD, 1, SMTO_ABORTIFHUNG, 1000,
@@ -1957,8 +1964,7 @@ void Maintenance() {
         return;
     }
     g_layout = layout;
-    double now = ClockMs();
-    for (auto& p : g_panes) {
+    for (auto& p : *g_panes) {
         // Follow Windows' SDR brightness slider without a rebuild.
         for (const auto& d : layout) {
             if (d.name != p->display.name ||
@@ -1966,21 +1972,12 @@ void Maintenance() {
                 continue;
             p->display.sdrWhiteLevel = d.sdrWhiteLevel;
             if (FAILED(ApplyWhiteLevel(*p)))
-                p->FreeEffects();
-            if (p->window)
-                InvalidateRect(p->window, nullptr, FALSE);
+                p->FreeRenderer();
+            p->dirty = true;
         }
         RefreshImage(*p);
-        if (!p->window)
-            continue;
-        if (g_icons && IsWindowVisible(p->window) && !LayerOrderValid(*p))
+        if (p->window && p->shown && g_icons && !LayerOrderValid(*p))
             Position(*p, 0);
-        // Repaint when a renderer that failed earlier is due for a retry.
-        bool effectDue = WantsEffects(*p) && !p->swap && now >= p->retryEffect;
-        bool smoothDue = g_smoothRendering && !p->swap && !p->target &&
-                         now >= p->retrySmooth;
-        if (p->cache && (effectDue || smoothDue))
-            InvalidateRect(p->window, nullptr, FALSE);
     }
 }
 
@@ -2004,11 +2001,12 @@ DWORD WINAPI RenderThread(void*) {
     HINSTANCE instance = GetModuleHandleW(nullptr);
     bool registered = false;
     HANDLE frameTimer = nullptr;
+    g_panes.emplace();
     g_parent = g_icons = nullptr;
     g_rebuild = true;
     g_nextMaintenance = 0;
-    g_effectDeviceRetryAt = 0;
-    g_effectDeviceFailures = g_deviceLosses = 0;
+    g_deviceRetryAt = 0;
+    g_deviceFailures = g_deviceLosses = 0;
     InitializeCriticalSection(&g_loadLock);
     g_loadLockReady = true;
     g_loaderStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -2022,14 +2020,9 @@ DWORD WINAPI RenderThread(void*) {
             Wh_Log(L"Loader thread unavailable; images load synchronously");
         if (FAILED(
                 D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_d2d)))
-            Wh_Log(L"Direct2D initialization failed; using GDI");
+            Wh_Log(L"Direct2D initialization failed; the mod stays idle");
         if (SUCCEEDED(com))
-            CoCreateInstance(CLSID_DesktopWallpaper, nullptr, CLSCTX_ALL,
-                             IID_PPV_ARGS(&g_wallpaper));
-        if (!g_wallpaper)
-            Wh_Log(
-                L"IDesktopWallpaper unavailable; using the common "
-                L"wallpaper");
+            CreateWallpaperInterface();
         ReadSettings();
         WNDCLASSW wc{};
         wc.lpfnWndProc = WindowProc;
@@ -2103,7 +2096,8 @@ DWORD WINAPI RenderThread(void*) {
             CancelWaitableTimer(frameTimer);
             CloseHandle(frameTimer);
         }
-        g_panes.clear();
+        // Destroys the pane windows and their GPU resources on this thread.
+        g_panes.reset();
         g_layout.clear();
         g_rules.clear();
         if (g_controller)
@@ -2115,7 +2109,7 @@ DWORD WINAPI RenderThread(void*) {
             g_wallpaper->Release();
             g_wallpaper = nullptr;
         }
-        ReleaseEffectDevice();
+        ReleaseDevice();
         if (g_d2d) {
             g_d2d->Release();
             g_d2d = nullptr;
@@ -2126,6 +2120,7 @@ DWORD WINAPI RenderThread(void*) {
         Wh_Log(L"Initialization failed, error=%lu", GetLastError());
     }
     StopLoader();
+    g_panes.reset();
     for (HANDLE* event : {&g_loaderStop, &g_loadWake, &g_loadDone}) {
         if (*event)
             CloseHandle(*event);
@@ -2141,15 +2136,10 @@ DWORD WINAPI RenderThread(void*) {
 }
 
 // ---------------------------------------------------------------------------
-// Windhawk entry points.
+// Tool mod callbacks. The mod runs in a dedicated windhawk.exe process, so a
+// failure in the renderer cannot affect Explorer.
 
-BOOL Wh_ModInit() {
-    HWND shell = GetShellWindow();
-    DWORD shellProcess = 0;
-    if (shell)
-        GetWindowThreadProcessId(shell, &shellProcess);
-    if (shellProcess && shellProcess != GetCurrentProcessId())
-        return FALSE;
+BOOL WhTool_ModInit() {
     g_stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_settingsEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (g_stop && g_settingsEvent)
@@ -2163,11 +2153,11 @@ BOOL Wh_ModInit() {
     g_stop = g_settingsEvent = nullptr;
     return FALSE;
 }
-void Wh_ModBeforeUninit() {
-    if (g_stop)
-        SetEvent(g_stop);
+void WhTool_ModSettingsChanged() {
+    if (g_settingsEvent)
+        SetEvent(g_settingsEvent);
 }
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     if (g_thread) {
         SetEvent(g_stop);
         WaitForSingleObject(g_thread, INFINITE);
@@ -2180,7 +2170,182 @@ void Wh_ModUninit() {
         CloseHandle(g_settingsEvent);
     g_stop = g_settingsEvent = nullptr;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
 void Wh_ModSettingsChanged() {
-    if (g_settingsEvent)
-        SetEvent(g_settingsEvent);
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
