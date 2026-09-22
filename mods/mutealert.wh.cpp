@@ -2,7 +2,7 @@
 // @id              mutealert
 // @name            MuteAlert - Microphone Activity Taskbar Widget
 // @description     Shows live microphone activity, call mute state, volume controls, and headset mute synchronization in the Windows 11 taskbar.
-// @version         0.9.10
+// @version         0.9.13
 // @author          Nikolay
 // @github          https://github.com/Nikolay1243
 // @homepage        https://github.com/MuteAlert/windhawk
@@ -35,7 +35,8 @@ Adds a microphone button to the Windows 11 system tray area.
 * Scroll over the button to change the input volume.
 * Optionally lock the microphone at a chosen volume. Scrolling updates the
   locked target when this is enabled.
-* Left-click the button to mute or unmute the microphone.
+* Left-click the button to mute or unmute the microphone. An authoritative
+  vendor headset state can override this in full synchronization mode.
 * A secondary Slack, Teams, Zoom, or Google Meet logo shows the active call microphone
   state and focuses the call window when left-clicked.
 * Headset mute synchronization supports Windows hardware mute reporting,
@@ -49,6 +50,14 @@ Adds a microphone button to the Windows 11 system tray area.
 
 The widget follows the default Windows capture endpoint. Changing the default
 input device in Windows automatically moves the widget to the new device.
+
+> **Full headset synchronization:** When a vendor adapter can observe a
+> latched physical mute switch, that switch is the source of truth for the
+> configured Windows input role. While the switch reports unmuted, a mute made
+> with the widget, Windows, a keyboard shortcut, or another application is
+> released on the next headset status poll. This also applies when the default
+> input is a separate desk or XLR microphone. Use mute-only or status-only mode
+> if Windows privacy mutes must remain independent of the headset switch.
 
 Call-app monitoring and call synchronization are disabled by default. Enable
 only the Slack, Teams, Zoom, or Google Meet features you use. When enabled,
@@ -141,7 +150,7 @@ volume control, call state, and headset integration.
 - Headset:
   - headsetSyncMode: off
     $name: Headset mute synchronization
-    $description: Uses Windows hardware mute, standard HID mute controls, or a supported vendor adapter. For supported vendor adapters, full mode releases a Windows mute only when MuteAlert still owns it on the same input. Manual Windows mutes are preserved, and call apps unmute only after a physical transition. An observable vendor mute is re-applied to Windows on each status poll; active-call mute retries are limited to once every five seconds. Silence is never interpreted as physical mute.
+    $description: Uses Windows hardware mute, standard HID mute controls, or a supported vendor adapter. In full mode, an observable vendor state is authoritative for the Windows input and is re-applied on each status poll. Standard HID controls synchronize their explicit mute or unmute action. Call apps unmute only after a physical transition, and active-call mute retries are limited to once every five seconds. Silence is never interpreted as physical mute.
     $options:
     - full: Sync physical mute and unmute changes
     - muteOnly: Sync only physical mute changes
@@ -1033,8 +1042,8 @@ static void QueueHeadsetMute() {
     QueueHeadsetMuteRequest(2);
 }
 
-static void QueueOwnedHeadsetUnmute() {
-    QueueHeadsetMuteRequest(3);
+static void QueueHeadsetUnmute() {
+    QueueHeadsetMuteRequest(1);
 }
 
 static constexpr int kCallCommandNone = -1;
@@ -2199,7 +2208,7 @@ static DWORD WINAPI AudioThreadProc(void*) {
         unsigned muteCommand = static_cast<unsigned>(muteRequest & 3);
         unsigned long long muteDeadline = muteRequest >> 2;
         bool muteRequestExpired =
-            muteCommand == 3 && now > muteDeadline;
+            (muteCommand == 1 || muteCommand == 3) && now > muteDeadline;
         if (muteCommand != 0 && !muteRequestExpired) {
             bool requireOwnedEndpoint = muteCommand == 3;
             bool targetMuted = muteCommand == 2;
@@ -2233,8 +2242,7 @@ static DWORD WINAPI AudioThreadProc(void*) {
             }
         } else {
             if (muteRequestExpired) {
-                RecordDiagnosticEvent(
-                    L"Expired headset-owned unmute request");
+                RecordDiagnosticEvent(L"Expired headset unmute request");
             }
             unsigned int toggles = g_pendingMuteToggles.exchange(0);
             if ((toggles & 1U) != 0) {
@@ -2805,7 +2813,7 @@ static void ResolveStandardHidAction() {
         if (targetMuted) {
             QueueHeadsetMute();
         } else {
-            QueueOwnedHeadsetUnmute();
+            QueueHeadsetUnmute();
         }
     }
     if (g_settings.headsetSyncCalls) {
@@ -3332,16 +3340,10 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
                         lastVendorCallMuteAssert = now;
                     }
                 } else if (!observation.muted && syncUnmute) {
-                    bool ownershipRelease =
-                        !stateTransition &&
-                        g_windowsMutedByHeadset.load();
-                    bool releaseHeadsetMute =
-                        stateTransition || ownershipRelease;
-                    if (g_settings.headsetSyncWindows &&
-                        releaseHeadsetMute) {
+                    if (g_settings.headsetSyncWindows) {
                         bool audioKnown = g_audioAvailable.load();
                         if (!audioKnown || g_audioMuted.load()) {
-                            QueueOwnedHeadsetUnmute();
+                            QueueHeadsetUnmute();
                         } else if (audioKnown) {
                             ClearHeadsetMuteOwnership();
                         }
