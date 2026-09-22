@@ -8697,10 +8697,8 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         return MA_NOACTIVATEANDEAT;
     }
     if (msg == WM_NCHITTEST) {
-        // 无 WS_EX_LAYERED 的 DComp 窗口：显式返回 HTTRANSPARENT 让鼠标穿透到下方窗口
-        // DComp window without WS_EX_LAYERED: return HTTRANSPARENT to pass mouse through to window below
-        static bool s_loggedHitTest = false;
-        if (!s_loggedHitTest) { Wh_Log(L"WM_NCHITTEST called, returning HTTRANSPARENT"); s_loggedHitTest = true; }
+        // 双保险：WS_EX_LAYERED|WS_EX_TRANSPARENT 已由内核做色键命中测试，这里再返回 HTTRANSPARENT
+        // Belt-and-suspenders: layered color key handles kernel hit-testing, also return HTTRANSPARENT
         return HTTRANSPARENT;
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
@@ -8717,13 +8715,13 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     wc.lpfnWndProc = OverlayWndProc;
     wc.hInstance = hi;
     wc.lpszClassName = CN;
-    wc.hbrBackground = nullptr;
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);  // 黑色背景用于 LWA_COLORKEY 色键透明 / black bg for color-key transparency
     RegisterClass(&wc);
     UpdateVirtualScreenCache();
     int sx = g_virtX, sy = g_virtY;
     int sw = g_virtW, sh = g_virtH;
     g_overlayHwnd = CreateWindowEx(
-        WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, CN,
+        WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, CN,
         L"MouseTrailOverlay", WS_POPUP, sx, sy, sw, sh, NULL, NULL, hi, NULL);
     if (!g_overlayHwnd) {
         Wh_Log(L"OverlayThread: CreateWindowEx failed: %d", GetLastError());
@@ -8731,6 +8729,11 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
         CoUninitialize();
         return 0;
     }
+    // 黑色色键透明：重定向表面为黑色 -> 全部抠除透明且点击穿透（WS_EX_TRANSPARENT 需要 WS_EX_LAYERED 才生效）
+    // DComp 视觉树由 DWM 独立合成，彩色拖尾不受色键影响；睡眠唤醒 DComp 丢失时回退表面也是透明的，不会黑屏
+    // Black color key: redirection surface is black -> fully keyed transparent + click-through (WS_EX_TRANSPARENT requires WS_EX_LAYERED)
+    // DComp visual tree is composited independently by DWM, colored trail unaffected; after sleep DComp loss, fallback surface is also transparent (no black screen)
+    SetLayeredWindowAttributes(g_overlayHwnd, RGB(0, 0, 0), 255, LWA_COLORKEY);
     // 屏幕捕获排除在 LoadSettings 中根据颜色模式动态设置 / Screen capture exclusion dynamically set in LoadSettings based on color mode
     Wh_Log(L"OverlayThread: window created (%dx%d at %d,%d), initially hidden", sw, sh, sx, sy);
     // 不立即 ShowWindow，等渲染线程首次有内容绘制时再显示，避免渲染失败时全屏透明窗口残留 / Don't ShowWindow immediately, wait until render thread first draws content, avoids fullscreen transparent window residue on render failure
