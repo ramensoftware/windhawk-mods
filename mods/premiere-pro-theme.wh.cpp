@@ -8020,10 +8020,17 @@ void Wh_ModSettingsChanged() {
 
         A settings change is the user in Windhawk's own window, so Premiere is
         up and its device is made; the framed window is what says so.
+
+        The candidate is tested before the window is looked for. Publishing
+        without one does nothing, and that is every build that ships
+        DisplaySurface.dll and every 26.3 session where the band switch has
+        never been on — so the load this does anyway saves them all an
+        EnumWindows.
     */
     ProbeStaticDisplaySurface();
 
-    if (HasFramedWindow()) {
+    if (g_staticDisplaySurfaceEnd.load(std::memory_order_acquire) &&
+        HasFramedWindow()) {
         PublishStaticDisplaySurface();
     }
 
