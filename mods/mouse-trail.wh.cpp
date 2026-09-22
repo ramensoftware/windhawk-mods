@@ -6795,7 +6795,7 @@ static void RenderFrame() {
     if (isGameCached) {
         // 游戏中隐藏覆盖层窗口，避免全屏顶层窗口阻挡游戏的独立翻转/MPO / Hide overlay in game to avoid topmost window blocking independent flip/MPO
         if (!gameHidden) {
-            ShowWindowAsync(g_overlayHwnd, SW_HIDE);
+            SetWindowPos(g_overlayHwnd, nullptr, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
             gameHidden = true;
             isWindowVisible = false;  // 同步窗口可见状态，避免退出游戏后窗口不显示 / Sync window visibility, avoid window not showing after exiting game
         }
@@ -8059,13 +8059,18 @@ static void RenderFrame() {
     if (isDrawing) {
         hideDelayCounter = 0;
         if (!isWindowVisible) {
-            ShowWindowAsync(g_overlayHwnd, SW_SHOWNA);
+            // 用 SetWindowPos 显示（不激活），并强制刷新 WS_EX_TRANSPARENT 确保 DComp 窗口点击穿透
+            // Use SetWindowPos to show (no activate), and force-refresh WS_EX_TRANSPARENT to ensure DComp window click-through
+            SetWindowPos(g_overlayHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            LONG_PTR exStyle = GetWindowLongPtrW(g_overlayHwnd, GWL_EXSTYLE);
+            SetWindowLongPtrW(g_overlayHwnd, GWL_EXSTYLE, (exStyle & ~WS_EX_TRANSPARENT) | WS_EX_TRANSPARENT);
+            SetWindowPos(g_overlayHwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
             isWindowVisible = true;
         }
     } else if (!surfaceDirty) {
         hideDelayCounter++;
         if (hideDelayCounter >= 3 && isWindowVisible) {
-            ShowWindowAsync(g_overlayHwnd, SW_HIDE);
+            SetWindowPos(g_overlayHwnd, nullptr, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
             isWindowVisible = false;
         }
     } else {
