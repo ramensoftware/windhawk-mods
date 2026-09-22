@@ -13,6 +13,21 @@
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/ramensoftware/windhawk-mods/issues
+
+// ==WindhawkModReadme==
+/*
+# Double Click hide Desktop Icons
+
+Hides or shows desktop icons by double-clicking on an empty space on the desktop.
+
+## Features
+- Double-click on any empty area of the desktop to toggle desktop icons.
+- Seamlessly hooks into Explorer after system boot.
+*/
+// ==/WindhawkModReadme==
 
 #include <windows.h>
 #include <windowsx.h>
