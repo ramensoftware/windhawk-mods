@@ -552,7 +552,7 @@ class Client {
         wc.hInstance = GetCurrentModuleHandle();
         wc.lpszClassName = kReplyClass;
         atom_ = RegisterClassExW(&wc);
-        if (!atom_) {
+        if (!atom_ && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
             return false;
         }
         hwnd_ = CreateWindowExW(0, kReplyClass, L"", WS_POPUP, 0, 0, 0, 0,
@@ -579,7 +579,7 @@ class Client {
 
     bool Query(const std::wstring& text, DWORD maxResults,
                std::vector<Result>* out, DWORD* totalMatches,
-               DWORD timeoutMs = 2000,
+               DWORD timeoutMs = 300,
                DWORD requestFlags = kDefaultRequestFlags,
                DWORD sortType = kSortNameAscending) {
         HWND everything = FindIpcWindow();
@@ -668,7 +668,7 @@ class Client {
         return SendMessageTimeoutW(everything, WM_COPYDATA,
                                    reinterpret_cast<WPARAM>(hwnd_),
                                    reinterpret_cast<LPARAM>(&cds),
-                                   SMTO_ABORTIFHUNG, 2000,
+                                   SMTO_ABORTIFHUNG, 300,
                                    &result) != 0;
     }
 
@@ -1610,6 +1610,16 @@ inline std::wstring ExtractExeName(const std::wstring& path) {
     if (path.starts_with(L"control ")) {
         return L"control";
     }
+    std::wstring lower = ToLower(path);
+    size_t exePos = lower.find(L".exe");
+    if (exePos != std::wstring::npos) {
+        size_t start = lower.find_last_of(L"\\/._", exePos - 1);
+        if (start == std::wstring::npos) {
+            return lower.substr(0, exePos);
+        } else {
+            return lower.substr(start + 1, exePos - (start + 1));
+        }
+    }
     size_t lastSlash = path.find_last_of(L"\\/");
     std::wstring filename = (lastSlash != std::wstring::npos) ? path.substr(lastSlash + 1) : path;
     size_t dot = filename.find_last_of(L'.');
@@ -1703,6 +1713,24 @@ inline void PopulateAppAliases(App& a) {
         a.aliases.insert(a.aliases.end(), {L"msinfo32", L"msinfo"});
     } else if (a.nameLower == L"settings") {
         a.aliases.insert(a.aliases.end(), {L"settings", L"control", L"preferences", L"config"});
+    } else if (a.nameLower == L"word" || a.exeNameLower == L"winword" || a.targetPathLower.find(L"winword") != std::wstring::npos) {
+        a.aliases.insert(a.aliases.end(), {L"winword", L"winword.exe", L"word", L"doc", L"docx", L"document", L"office"});
+        if (a.exeNameLower.empty()) a.exeNameLower = L"winword";
+    } else if (a.nameLower == L"excel" || a.exeNameLower == L"excel" || a.targetPathLower.find(L"excel") != std::wstring::npos) {
+        a.aliases.insert(a.aliases.end(), {L"excel", L"excel.exe", L"xls", L"xlsx", L"sheet", L"spreadsheet", L"office"});
+        if (a.exeNameLower.empty()) a.exeNameLower = L"excel";
+    } else if (a.nameLower == L"powerpoint" || a.exeNameLower == L"powerpnt" || a.targetPathLower.find(L"powerpnt") != std::wstring::npos) {
+        a.aliases.insert(a.aliases.end(), {L"powerpnt", L"powerpnt.exe", L"powerpoint", L"ppt", L"pptx", L"slides", L"presentation", L"office"});
+        if (a.exeNameLower.empty()) a.exeNameLower = L"powerpnt";
+    } else if (a.nameLower == L"access" || a.exeNameLower == L"msaccess" || a.targetPathLower.find(L"msaccess") != std::wstring::npos) {
+        a.aliases.insert(a.aliases.end(), {L"msaccess", L"msaccess.exe", L"access", L"database", L"accdb", L"mdb", L"office"});
+        if (a.exeNameLower.empty()) a.exeNameLower = L"msaccess";
+    } else if (a.nameLower == L"outlook" || a.exeNameLower == L"outlook" || a.targetPathLower.find(L"outlook") != std::wstring::npos) {
+        a.aliases.insert(a.aliases.end(), {L"outlook", L"outlook.exe", L"mail", L"email", L"calendar", L"office"});
+        if (a.exeNameLower.empty()) a.exeNameLower = L"outlook";
+    } else if (a.nameLower == L"onenote" || a.exeNameLower == L"onenote" || a.targetPathLower.find(L"onenote") != std::wstring::npos) {
+        a.aliases.insert(a.aliases.end(), {L"onenote", L"onenote.exe", L"notes", L"notebook", L"office"});
+        if (a.exeNameLower.empty()) a.exeNameLower = L"onenote";
     }
 }
 
@@ -5503,9 +5531,17 @@ void RenderResults() try {
             }
             g_footerStatus.Text(winrt::hstring{statusStr});
         } else {
-            std::wstring statusStr = L"Everything \u2022 " + std::to_wstring(total) + L" matches";
-            if (!appNames.empty() || !files.empty()) {
-                statusStr += L" (" + std::to_wstring(appNames.size()) + L" apps, " + std::to_wstring(files.size()) + L" files shown)";
+            std::wstring statusStr;
+            if (everything::FindIpcWindow()) {
+                statusStr = L"Everything \u2022 " + std::to_wstring(total) + L" matches";
+                if (!appNames.empty() || !files.empty()) {
+                    statusStr += L" (" + std::to_wstring(appNames.size()) + L" apps, " + std::to_wstring(files.size()) + L" files shown)";
+                }
+            } else {
+                statusStr = L"Everything (not running)";
+                if (!appNames.empty()) {
+                    statusStr += L" \u2022 " + std::to_wstring(appNames.size()) + L" apps shown";
+                }
             }
             g_footerStatus.Text(winrt::hstring{statusStr});
         }
@@ -6640,9 +6676,11 @@ void SearchThreadMain() {
                           .count();
             if (!ok) {
                 Wh_Log(L"search: '%ls' failed (Everything running?)", query.c_str());
-                continue;
+                pool.clear();
+                total = 0;
+            } else {
+                ranker::Rank(&pool, query, static_cast<size_t>(maxFiles));
             }
-            ranker::Rank(&pool, query, static_cast<size_t>(maxFiles));
         }
 
         // Apps are a name match over an index built once at startup, so this
