@@ -9,7 +9,7 @@
 // @include explorer.exe
 // ==/WindhawkMod==
 
-// ==WindhawkModReadme==
+// ==WindhawkModReadme ==
 // ==/WindhawkModReadme==
 
 #define WIN32_LEAN_AND_MEAN
