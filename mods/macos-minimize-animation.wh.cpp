@@ -946,13 +946,17 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
             0, 0, D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE, D2D1_FEATURE_LEVEL_DEFAULT
         );
         HRESULT hrRt = g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
-        if (FAILED(hrRt) || !rt) {
+        if (SUCCEEDED(hrRt) && rt) {
             // DEFAULT already means "hardware if available, otherwise software",
-            // so log which path actually ran - otherwise a silent fallback makes
-            // any perf claim unverifiable.
+            // so log which path actually ran - otherwise a silent fallback (or a
+            // silent success) makes any perf claim unverifiable. This is the only
+            // Wh_Log in the mod, so every outcome must be distinguishable.
+            Wh_Log(L"D2D DC render target: hardware (0x%08X)", hrRt);
+        } else {
             Wh_Log(L"Hardware DC render target failed (0x%08X), falling back to default", hrRt);
             rtProps.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
-            g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
+            hrRt = g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
+            Wh_Log(L"Default DC render target: 0x%08X", hrRt);
         }
         if (rt) {
             // Potassiumuncher's v1.5: text AA fixed once at creation (the geometry
