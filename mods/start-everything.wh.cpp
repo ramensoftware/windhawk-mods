@@ -5117,8 +5117,11 @@ void LaunchSelectedApp(int index, bool asAdmin) {
         if (asAdmin && !row.canRunAsAdmin) {
             asAdmin = false;
         }
-        g_launchAsAdmin.store(asAdmin);
-        g_launchRequest.store(which);
+        {
+            std::lock_guard<std::mutex> lock(g_queryMutex);
+            g_launchAsAdmin.store(asAdmin);
+            g_launchRequest.store(which);
+        }
         g_queryWake.notify_all();
         Wh_Log(L"launch app: index %d ('%ls'), asAdmin=%d", index, row.title.c_str(), asAdmin ? 1 : 0);
     }
@@ -6261,8 +6264,8 @@ void QueueQuery(std::wstring text) {
     {
         std::lock_guard<std::mutex> lock(g_queryMutex);
         g_pendingQuery = std::move(text);
+        g_queryDirty.store(true);
     }
-    g_queryDirty.store(true);
     g_queryWake.notify_all();
 }
 
@@ -7490,7 +7493,10 @@ void Wh_ModUninit() {
         g_hGetMsgHook = nullptr;
     }
 
-    g_searchQuit.store(true);
+    {
+        std::lock_guard<std::mutex> lock(g_queryMutex);
+        g_searchQuit.store(true);
+    }
     g_queryWake.notify_all();
     if (g_searchThread.joinable()) {
         g_searchThread.join();
