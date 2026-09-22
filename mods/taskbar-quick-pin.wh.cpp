@@ -32,9 +32,6 @@ A lightweight icon dock that sits just left of the Start button on the
 Windows 11 taskbar. Drag any app onto it to pin, click to launch or focus, and
 drag it off (or double-right-click) to unpin.
 
-No extra DLLs, no service, no installer  --  just a single-file mod injected
-into `explorer.exe`.
-
 ## Quick usage
 
 | Action | Result |
@@ -74,6 +71,7 @@ out. You can also raise the **Startup delay** setting.
   a shell limitation  --  no Win32 API resolves every icon reliably.
 - Some UWP apps may occasionally resolve to their host process if their window
   isn't ready yet.
+- English UI strings Only
 
 ## v2.5.1
 
@@ -102,7 +100,6 @@ live; the two noted below need a mod reload.
 | Icon size | Icon size in px before DPI scaling (16 - 48). | 33 |
 | Dock gap from Start | Gap between the dock and the Start button (0 - 40 px). | 6 |
 | Separator opacity | Visibility of the right-edge divider line (0 - 100). | 100 |
-| Glass overlay | Pin-limit feedback style: on = whole-dock red tint, off = separator-line flash. | on |
 | Drag to reorder | Drag icons left/right to rearrange; off = drag only unpins. | on |
 | Double-right-click to unpin | Unpin an icon with a double right-click (dust effect). | off |
 | Rapid-click unpin-all (opt-in) | Three quick clicks on an icon unpins EVERYTHING. Off so it can't fire by accident. | off |
@@ -111,8 +108,7 @@ live; the two noted below need a mod reload.
 | Drag tether (rope) | Shows the stretchy thread while dragging an icon off. | on |
 | Drag tether - thickness | Rope thickness, 1 (hair) to 10 (cord). | 2 |
 | Drag tether - break length | How far you pull before the rope snaps (150 - 650 px). | 450 |
-| Drag tether - colour mode | Fixed single colour (uses the hue below) or dynamic Rainbow. | fixed |
-| Drag tether - hue | Rope hue in fixed mode (0 - 359). | 30 |
+| Drag tether - hue | Rope colour hue (0 - 359). | 30 |
 | Unpin trigger | Only when the rope BREAKS, or rope breaks OR released outside the dock. | ropeBreak |
 | Corner roundness | 0 = square, 1 - 40 = slight, 41 - 100 = full pill. | 100 |
 | Explorer workspace pins | Allow File Explorer to be dragged in as a workspace pin. | off |
@@ -159,15 +155,6 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
   $description: >-
     Visibility of the right-edge separator line that divides the dock from the
     rest of the taskbar (0 = hidden, 100 = fully visible).
-
-- enableGlassOverlay: true
-  $name: Glass overlay
-  $description: >-
-    Controls how pin-limit feedback is shown. On: the whole dock briefly
-    tints red when you hit the pin limit (a bolder, full-dock signal). Off:
-    only the right-edge separator line flashes red instead. The frosted-glass
-    look itself is always applied by the system backdrop and does not depend
-    on this setting.
 
 - enableReorder: true
   $name: Drag to reorder
@@ -228,21 +215,11 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
     and unpins the app (150 - 650). Lower = snaps sooner, higher = lets you drag
     further before it breaks. Applies live.
 
-- dragTetherColorMode: fixed
-  $name: Drag tether  --  colour mode
-  $description: >-
-    How the drag rope is coloured. "Fixed" draws a single earthy colour (set the
-    hue below). "Rainbow" cycles the hue dynamically as you drag. Applies live.
-  $options:
-  - fixed: Fixed single colour (uses the hue below)
-  - rainbow: Dynamic rainbow
-
 - dragTetherHue: 30
   $name: Drag tether  --  hue (0 - 359)
   $description: >-
-    Colour hue of the drag rope when colour mode is "Fixed" (0 - 359 degrees on
-    the colour wheel). Default 30 = warm tan/brown. Ignored in rainbow mode.
-    Applies live.
+    Colour hue of the drag rope (0 - 359 degrees on the colour wheel).
+    Default 30 = warm tan/brown. Applies live.
 
 - unpinTrigger: ropeBreak
   $name: Unpin trigger (drag-off)
@@ -363,6 +340,7 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
 // ============================================================
 //  INCLUDES
 // ============================================================
+#include <initguid.h>   // MUST be first: defines DEFINE_GUID to emit storage
 #include <windows.h>
 #include <windowsx.h>
 #include <shlwapi.h>
@@ -372,7 +350,6 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
 #include <dwmapi.h>
 #include <mmsystem.h>
 #include <exdisp.h>
-#include <initguid.h>
 #include <commoncontrols.h>
 #include <uiautomation.h>
 #include <vector>
@@ -464,7 +441,6 @@ static const float ROPE_BREAK_MARGIN_PX   = 12.f;  // Small over-stretch give: t
 
 // Drag-rope appearance (user settings; loaded in Wh_ModInit / Wh_ModSettingsChanged).
 static int  THREAD_THICKNESS  = 2;    // "dragTetherThickness" 1..6 (core stroke width)
-static int  THREAD_COLOR_MODE = 1;    // "dragTetherColorMode": 0 = dynamic rainbow, 1 = fixed (DEFAULT: single earthy colour, not neon)
 static int  THREAD_HUE        = 30;   // "dragTetherHue" 0..359; default 30 = warm tan/brown (earthy thread)
 
 // Interaction settings (user settings; loaded in Wh_ModInit / Wh_ModSettingsChanged).
@@ -478,7 +454,9 @@ static int  BASE_ICON_SIZE       = 33;
 static int  BASE_ICON_SPACING    = 12;
 static int  DOCK_GAP_FROM_START  = 6;      // Gap between dock right edge and Start (user-configurable, clamp 0..40)
 static int  SEPARATOR_OPACITY    = 100;
-static bool ENABLE_GLASS_OVERLAY = true;   // Premium glass gradient behind dock
+// ENABLE_GLASS_OVERLAY removed: ApplyDockGlassTint / DrawGlassEdge were no-ops
+// and the setting description ("whole-dock red tint") was never implemented.
+// Shipping a setting that inverts what its label says is worse than no setting.
 static bool ENABLE_REORDER       = true;   // Drag-to-reorder within dock
 static bool ENABLE_SCROLL_NAV    = true;   // Scroll-wheel navigation across pins
 static int  CORNER_ROUNDNESS     = 100;    // 0 = square dock, 100 = fully rounded (DWM)
@@ -548,6 +526,16 @@ static SystemState g_systemState = STATE_BOOT;
 // settled to STATE_STABLE so polling backs off -- instead of the old behaviour
 // of returning early every call and spinning in STATE_BOOT at 100 ms forever.
 static bool g_layoutUnsupported = false;
+
+// FIX (Issue 1): taskbar ownership is no longer a HARD init failure. On a cold
+// Explorer start / sign-in, Shell_TrayWnd may not exist yet when Wh_ModInit
+// runs, so the owner PID resolves to 0. Rather than fail init (which left the
+// one true shell process without a dock), the mod initialises normally and the
+// worker thread re-probes ownership during STATE_BOOT. g_dockOwnershipDecided
+// flips true once the worker has positively resolved ownership; until then the
+// dock stays idle. A second explorer.exe that resolves a DIFFERENT owner is
+// still rejected in Wh_ModInit (STARTUP_DISOWN) so no duplicate dock is drawn.
+static bool g_dockOwnershipDecided = false;
 
 // ============================================================
 //  EXCLUDED APPS  --  system processes that must never be pinned
@@ -786,7 +774,7 @@ static const UINT HOTKEY_PIN_ID        = 1777;        // WM_HOTKEY wParam identi
 // global hotkey is re-registered on its OWNING thread when the user changes the
 // modifier/key setting -- RegisterHotKey/UnregisterHotKey must run on the thread
 // that created g_overlayWnd, so a settings-thread call would silently no-op.
-static const UINT WM_QPD_REREGISTER_HOTKEY = WM_APP + 7;
+static const UINT WM_QPD_REREGISTER_HOTKEY  = WM_APP + 7;
 static UINT    g_hotkeyMods       = MOD_CONTROL | MOD_ALT;
 static UINT    g_hotkeyKey        = 'P';               // Default: Ctrl+Alt+P
 
@@ -931,66 +919,49 @@ static HINSTANCE GetModHInstance() {
 //  (Fix for review item: "$options on numeric settings won't
 //   produce a dropdown".)
 // ============================================================
+// Note: Wh_GetStringSetting never returns NULL -- it returns L"" when the key
+// is absent. The if (v) guards that were here were therefore dead. Use a local
+// std::wstring to get automatic lifetime instead of manual Wh_FreeStringSetting.
 static int LoadUnpinTriggerSetting() {
-    PCWSTR v = Wh_GetStringSetting(L"unpinTrigger");
-    int result = 0;   // 0 = ropeBreak (default)
-    if (v) {
-        if (_wcsicmp(v, L"ropeBreakOrOutside") == 0) result = 1;
-        else                                         result = 0;
-        Wh_FreeStringSetting(v);
-    }
-    return result;
-}
-
-static int LoadColorModeSetting() {
-    PCWSTR v = Wh_GetStringSetting(L"dragTetherColorMode");
-    int result = 1;   // 1 = fixed (default)
-    if (v) {
-        if (_wcsicmp(v, L"rainbow") == 0) result = 0;
-        else                              result = 1;
-        Wh_FreeStringSetting(v);
-    }
-    return result;
+    PCWSTR raw = Wh_GetStringSetting(L"unpinTrigger");
+    std::wstring v(raw ? raw : L"");
+    Wh_FreeStringSetting(raw);
+    if (_wcsicmp(v.c_str(), L"ropeBreakOrOutside") == 0) return 1;
+    return 0;   // default: ropeBreak
 }
 
 static UINT LoadHotkeyModifiersSetting() {
-    PCWSTR v = Wh_GetStringSetting(L"hotkeyModifiers");
-    UINT result = MOD_CONTROL | MOD_ALT;   // default ctrlAlt
-    if (v) {
-        if      (_wcsicmp(v, L"none")      == 0) result = 0;
-        else if (_wcsicmp(v, L"alt")       == 0) result = MOD_ALT;
-        else if (_wcsicmp(v, L"ctrl")      == 0) result = MOD_CONTROL;
-        else if (_wcsicmp(v, L"ctrlAlt")   == 0) result = MOD_CONTROL | MOD_ALT;
-        else if (_wcsicmp(v, L"shift")     == 0) result = MOD_SHIFT;
-        else if (_wcsicmp(v, L"ctrlShift") == 0) result = MOD_CONTROL | MOD_SHIFT;
-        else if (_wcsicmp(v, L"altShift")  == 0) result = MOD_ALT | MOD_SHIFT;
-        else if (_wcsicmp(v, L"win")       == 0) result = MOD_WIN;
-        else if (_wcsicmp(v, L"winAlt")    == 0) result = MOD_WIN | MOD_ALT;
-        else if (_wcsicmp(v, L"winCtrl")   == 0) result = MOD_WIN | MOD_CONTROL;
-        Wh_FreeStringSetting(v);
-    }
-    return result;
+    PCWSTR raw = Wh_GetStringSetting(L"hotkeyModifiers");
+    std::wstring v(raw ? raw : L"");
+    Wh_FreeStringSetting(raw);
+    if      (_wcsicmp(v.c_str(), L"none")      == 0) return 0;
+    else if (_wcsicmp(v.c_str(), L"alt")       == 0) return MOD_ALT;
+    else if (_wcsicmp(v.c_str(), L"ctrl")      == 0) return MOD_CONTROL;
+    else if (_wcsicmp(v.c_str(), L"shift")     == 0) return MOD_SHIFT;
+    else if (_wcsicmp(v.c_str(), L"ctrlShift") == 0) return MOD_CONTROL | MOD_SHIFT;
+    else if (_wcsicmp(v.c_str(), L"altShift")  == 0) return MOD_ALT | MOD_SHIFT;
+    else if (_wcsicmp(v.c_str(), L"win")       == 0) return MOD_WIN;
+    else if (_wcsicmp(v.c_str(), L"winAlt")    == 0) return MOD_WIN | MOD_ALT;
+    else if (_wcsicmp(v.c_str(), L"winCtrl")   == 0) return MOD_WIN | MOD_CONTROL;
+    return MOD_CONTROL | MOD_ALT;   // default: ctrlAlt
 }
 
 static UINT LoadHotkeyKeySetting() {
-    PCWSTR v = Wh_GetStringSetting(L"hotkeyKey");
-    UINT result = 'P';   // default
-    if (v) {
-        if (_wcsicmp(v, L"none") == 0) {
-            result = 0;
-        } else if (v[0] >= L'A' && v[0] <= L'Z' && v[1] == L'\0') {
-            // Single letter token: VK code equals the uppercase ASCII value.
-            result = (UINT)v[0];
-        } else if ((v[0] == L'F' || v[0] == L'f') && v[1] != L'\0') {
-            // Function-key token "F1".."F12".
-            int fn = 0;
-            for (const wchar_t* p = v + 1; *p >= L'0' && *p <= L'9'; ++p)
-                fn = fn * 10 + (int)(*p - L'0');
-            if (fn >= 1 && fn <= 12) result = (UINT)(VK_F1 + (fn - 1));
-        }
-        Wh_FreeStringSetting(v);
+    PCWSTR raw = Wh_GetStringSetting(L"hotkeyKey");
+    std::wstring v(raw ? raw : L"");
+    Wh_FreeStringSetting(raw);
+    const wchar_t* s = v.c_str();
+    if (_wcsicmp(s, L"none") == 0) return 0;
+    if (s[0] >= L'A' && s[0] <= L'Z' && s[1] == L'\0')
+        return (UINT)s[0];   // single letter: VK == uppercase ASCII
+    if ((s[0] == L'F' || s[0] == L'f') && s[1] != L'\0') {
+        // Function-key token "F1".."F12".
+        int fn = 0;
+        for (const wchar_t* p = s + 1; *p >= L'0' && *p <= L'9'; ++p)
+            fn = fn * 10 + (int)(*p - L'0');
+        if (fn >= 1 && fn <= 12) return (UINT)(VK_F1 + (fn - 1));
     }
-    return result;
+    return 'P';   // default
 }
 
 // Wh_Log is variadic printf-style and auto-prefixed with the mod name, and is a
@@ -1117,20 +1088,26 @@ static bool     SaveWorkspaceSnapshot(const WorkspaceSnapshot& snapshot);
 // Only the ONE process that owns the real taskbar (Shell_TrayWnd) may create
 // the dock. Every other explorer.exe inits as a no-op.
 //
-// Pure decision mirrored (per this repo's tests/*.h convention) in
-// tests/single_instance_gate.h as ProcessShouldOwnDock -- keep the two in sync.
-static inline bool ProcessShouldOwnDock(DWORD currentPid, DWORD taskbarOwnerPid) {
-    return taskbarOwnerPid != 0 && taskbarOwnerPid == currentPid;
-}
+// ProcessOwnsTaskbar and ProcessShouldOwnDock were removed: superseded by
+// ProbeStartupOwnership (tri-state, line ~1116) which is called from Wh_ModInit
+// and WorkerThread. The plain bool they returned could not distinguish "taskbar
+// not up yet" (DEFER) from "another owner" (DISOWN), causing a cold-boot race
+// that silently disabled the dock in the one true shell process.
+// ProbeStartupOwnership inlines the same ownership check directly.
 
-// True only in the explorer.exe process that owns Shell_TrayWnd. A missing
-// taskbar (owner pid 0) yields false, so no process claims the dock until the
-// shell is up -- Wh_ModInit fails cleanly and Windhawk retries.
-static bool ProcessOwnsTaskbar() {
+// FIX (Issue 1): tri-state startup ownership. Unlike ProcessOwnsTaskbar (a plain
+// bool), this distinguishes "taskbar not up yet" (owner pid 0 -> STARTUP_DEFER,
+// keep polling during boot) from "another explorer.exe owns it" (STARTUP_DISOWN,
+// stay idle). Wh_ModInit uses this so a cold-boot race no longer hard-fails the
+// one true shell process; the worker re-probes until it resolves OWN or DISOWN.
+// Pure decision mirrored in tests/startup_ownership.h as DecideStartupOwnership.
+enum QpStartupOwnership { QP_STARTUP_DEFER = 0, QP_STARTUP_OWN, QP_STARTUP_DISOWN };
+static QpStartupOwnership ProbeStartupOwnership() {
     HWND tb = FindWindowW(L"Shell_TrayWnd", NULL);
     DWORD ownerPid = 0;
     if (tb) GetWindowThreadProcessId(tb, &ownerPid);
-    return ProcessShouldOwnDock(GetCurrentProcessId(), ownerPid);
+    if (ownerPid == 0) return QP_STARTUP_DEFER;
+    return (ownerPid == GetCurrentProcessId()) ? QP_STARTUP_OWN : QP_STARTUP_DISOWN;
 }
 
 // ============================================================
@@ -1264,7 +1241,12 @@ static inline QpLayoutDecision QpDecideTaskbarLayout(long tbrLeft, long tbrRight
                                                      int dockGapPx, int dockWidth,
                                                      int minRoom) {
     if (tbrRight <= tbrLeft) return QP_LAYOUT_PENDING;
-    if (startLeft <= tbrLeft || startLeft >= tbrRight) return QP_LAYOUT_PENDING;
+    // startLeft strictly inside taskbar bounds required for a trustworthy probe:
+    //   >= tbrRight: nonsensical read -- probe failed, keep retrying (PENDING).
+    //   <= tbrLeft:  Start hugs the left edge -- this IS the left-aligned layout;
+    //                it's a confirmed bad layout, not a missing probe (UNSUPPORTED).
+    if (startLeft >= tbrRight) return QP_LAYOUT_PENDING;
+    if (startLeft <= tbrLeft)  return QP_LAYOUT_UNSUPPORTED;
     if (dockGapPx < 0) dockGapPx = 0;
     long room = (startLeft - (long)dockGapPx) - tbrLeft;
     if (room < 0) room = 0;
@@ -1428,8 +1410,14 @@ static void RefreshTaskbarCache() {
         }
         g_layoutUnsupported = true;
         g_systemState       = STATE_STABLE;   // terminal/idle: polling backs off
+        // FIX (Issue 2): hide BOTH the overlay AND the input window. Hiding only
+        // the overlay left the transparent g_inputWnd sitting at its last (now
+        // wrong) position, still eating clicks over Start on a left-aligned
+        // taskbar. Hide both so nothing is left at an old/fake position.
         if (g_overlayWnd && IsWindow(g_overlayWnd))
             ShowWindow(g_overlayWnd, SW_HIDE);
+        if (g_inputWnd && IsWindow(g_inputWnd))
+            ShowWindow(g_inputWnd, SW_HIDE);
         return;
     }
 
@@ -1438,8 +1426,14 @@ static void RefreshTaskbarCache() {
     // normal state-machine flow below re-establish geometry.
     if (g_layoutUnsupported) {
         g_layoutUnsupported = false;
+        // FIX (Issue 2): restore BOTH windows we hid above (overlay + input),
+        // mirroring the hide path, so the dock and its click surface both come
+        // back. RepositionOverlay below re-seats them at the now-valid geometry
+        // so neither is left at an old/fake position.
         if (g_overlayWnd && IsWindow(g_overlayWnd))
             ShowWindow(g_overlayWnd, SW_SHOWNOACTIVATE);
+        if (g_inputWnd && IsWindow(g_inputWnd))
+            ShowWindow(g_inputWnd, SW_SHOWNOACTIVATE);
         DEBUG_LOG(L"GEOMETRY: room reappeared left of Start -- dock re-enabled");
     }
 
@@ -4231,8 +4225,25 @@ static bool PromptWorkspaceName(HWND owner, const std::wstring& currentName, std
     // GetMessageW until some unrelated message happened to arrive. Check IsWindow
     // AFTER each dispatch instead: the message that closes the dialog is the one we
     // just processed, so we break out immediately and never block post-close.
+    // FIX (Issue 6): this nested modal loop MUST cope with WM_QUIT. GetMessageW
+    // returns 0 (not >0) when it dequeues WM_QUIT and, crucially, CONSUMES it.
+    // The old `while (GetMessageW(...) > 0)` therefore swallowed the WM_QUIT that
+    // Wh_ModUninit posts to tear the UI thread down: the loop just exited, the
+    // outer UiThreadProc pump never saw WM_QUIT, so its GetMessageW blocked
+    // forever and Wh_ModUninit's INFINITE thread-join hung -- disabling/reloading
+    // the mod while the rename dialog was open froze. Now: on WM_QUIT we close
+    // the dialog, RE-POST WM_QUIT so the outer loop receives it, and return.
     MSG msg;
-    while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+    for (;;) {
+        BOOL got = GetMessageW(&msg, NULL, 0, 0);
+        if (got == 0) {
+            // WM_QUIT dequeued and consumed here. Tear the dialog down safely
+            // and hand WM_QUIT back to the outer UiThreadProc pump.
+            if (IsWindow(dlg)) DestroyWindow(dlg);
+            PostQuitMessage((int)msg.wParam);
+            break;
+        }
+        if (got == -1) break;   // GetMessageW error -- bail out of the modal loop
         if (!IsDialogMessageW(dlg, &msg)) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
@@ -4959,31 +4970,9 @@ static void DisableDockAcrylic(HWND hwnd) {
 }
 // Pick a state-based tint and apply it to the given dock window. Alpha stays low
 // so red/green/yellow read as blurry coloured glass, not solid colour.
-static void ApplyDockGlassTint(HWND hwnd) {
-    if (!hwnd || !IsWindow(hwnd)) return;
-    // FIX (black background slab on real GPUs -- clean in VM, ugly on hardware):
-    // The frosted look + coloured drag feedback used to be produced by the
-    // undocumented ACCENT_ENABLE_ACRYLICBLURBEHIND accent (SetDockAcrylic). On a
-    // VM there is no hardware compositor, so DWM silently ignores that accent and
-    // the dock fell back to pure LWA_COLORKEY transparency -- which is exactly why
-    // it looked clean there. On a real Windows 11 machine the accent DOES take
-    // effect, but ACCENT_ENABLE_ACRYLICBLURBEHIND no longer resolves to
-    // translucent blur behind a colour-keyed layered window: it composites against
-    // an opaque backing and paints a solid BLACK slab under the icons and the drag
-    // "rope". A LWA_COLORKEY window can only do binary (all-or-nothing)
-    // transparency and cannot carry a translucent backdrop, so mixing the two is
-    // unsupported. We therefore DISABLE the acrylic accent unconditionally and let
-    // the background stay purely colour-key transparent -- identical, clean output
-    // on both the VM and real hardware. The subtle glass rim is still drawn by
-    // DrawGlassEdge in WM_PAINT.
-    //
-    // This is intentionally a no-op now: the acrylic accent is never enabled
-    // anywhere (SetDockAcrylic was removed), and it is defensively disabled ONCE
-    // at window creation in ApplyNativeBackdrop(). Keeping this a no-op avoids a
-    // per-frame SetWindowCompositionAttribute() call from WM_PAINT, which could
-    // trigger needless recomposition and hurt the smooth feel during animations.
-    (void)hwnd;
-}
+// ApplyDockGlassTint removed: it was a no-op ((void)hwnd) since SetDockAcrylic
+// was removed. The acrylic accent is disabled once at window creation in
+// ApplyNativeBackdrop(); no per-frame call is needed or wanted.
 
 static void ApplyNativeBackdrop(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd)) return;
@@ -5105,18 +5094,8 @@ static void PresentPaintBuffer(HDC targetDC, int w, int h) {
         BitBlt(targetDC, 0, 0, w, h, g_paintDC, 0, 0, SRCCOPY);
 }
 
-// macOS-style glass edge: a hairline rounded border plus a soft top sheen
-// (the classic light-catch), drawn on top of the DWM acrylic panel. Theme-
-// aware so it reads cleanly on both light and dark taskbars.
-static void DrawGlassEdge(HDC hdc, const RECT& cr) {
-    if (!ENABLE_GLASS_OVERLAY) return;
-    // REMOVED (on request): the thin "top sheen" hairline that used to be
-    // stroked across the dock's upper edge (cr.top + 2). It read as an
-    // unnecessary thin line -- easily mistaken for a slider/control -- and the
-    // glass look is already fully provided by the DWM acrylic panel + rounded
-    // corner region, so no GDI edge line is drawn any more.
-    (void)hdc; (void)cr;
-}
+// DrawGlassEdge removed: it was a no-op (body was (void)hdc; (void)cr) and
+// guarded by the now-removed ENABLE_GLASS_OVERLAY flag.
 
 // ============================================================
 //  LOCK INDICATOR  --  breathing gold edge glow
@@ -5697,29 +5676,21 @@ static void DrawTetherRope(float srcX, float srcY, float tipX, float tipY,
     float bx = tipX - left, by = tipY - top;   // cursor grip (buffer space)
     float alpha = g_tetherBreakFade;
 
-    // Colour (user setting). Rainbow mode: hue sweeps over time AND along the
-    // length -> lively, multi-colour. Fixed mode: a chosen hue with a small
-    // along-length shimmer so it still reads as a gradient, not a flat line.
-    // SINGLE COLOUR ONLY. The dynamic multi-hue "rainbow" mode is intentionally
-    // disabled -- the thread must always be one calm, earthy strand (never RGB).
-    // THREAD_COLOR_MODE is ignored for rendering; kept only for settings compat.
-    bool  rainbow = false;
-    (void)THREAD_COLOR_MODE;
-    float baseHue = rainbow ? ((float)(GetTickCount() % 4000) / 4000.f * 360.f)
-                            : (float)THREAD_HUE;
-    // Along-length colour variation: wide sweep for rainbow. The fixed thread
-    // is now a TRUE single colour (no along-length hue shift) per the request
-    // for "only single color -- no dynamic color".
-    float hueSpan = rainbow ? 160.f : 0.f;
+    // Colour (user setting). The drag rope is ALWAYS a single, calm earthy
+    // strand at the user's chosen hue -- one flat tone, no along-length hue
+    // shift. (The old dynamic multi-hue "Rainbow" mode was removed: it was
+    // advertised in the settings but never rendered, so the setting and all its
+    // dead branches are gone. baseHue/hueSpan are kept as plain values because
+    // the gradient stroke code below still reads them.)
+    float baseHue = (float)THREAD_HUE;
+    float hueSpan = 0.f;   // TRUE single colour: no along-length hue shift
 
-    // EARTHY THREAD look (fixed mode = default): further muted so it stops
-    // reading as a neon/glowing wire and instead looks like a real cotton/jute
-    // strand -- a soft warm tan/greige (~RGB 189,170,151). Saturation and
-    // brightness are both pulled down: low sat kills the neon cast, a mid
-    // value keeps ONE flat tone that stays legible on BOTH light and dark
-    // taskbars (neither pure white nor pure dark). Rainbow keeps its vivid mix.
-    float sat = rainbow ? 0.85f : 0.20f;   // lower sat -> earthy, no neon cast
-    float val = rainbow ? 1.00f : 0.74f;   // mid value -> calm thread, not glow
+    // EARTHY THREAD look: muted so it stops reading as a neon/glowing wire and
+    // instead looks like a real cotton/jute strand -- a soft warm tan/greige
+    // (~RGB 189,170,151). Low saturation kills the neon cast; a mid value keeps
+    // ONE flat tone that stays legible on BOTH light and dark taskbars.
+    float sat = 0.20f;   // low sat -> earthy, no neon cast
+    float val = 0.74f;   // mid value -> calm thread, not glow
 
     // Thickness (user setting 1..6): crisp solid core + a hair of halo.
     // REFINED to read as a fine THREAD rather than a heavy rope -- the core is
@@ -5758,7 +5729,7 @@ static void DrawTetherRope(float srcX, float srcY, float tipX, float tipY,
             // Keep the visible core at least ~0.9px so even the thinnest thread
             // renders as a smooth, gap-free strand rather than a dotted hairline.
             float pr = (pass == 0) ? haloR : std::max(coreR, 0.9f);
-            float pa = ((pass == 0) ? alpha * (rainbow ? 0.22f : 0.12f) : alpha) * aMul;   // dimmer halo for the earthy thread (less glow); subtle halo for rainbow, solid core
+            float pa = ((pass == 0) ? alpha * 0.12f : alpha) * aMul;   // dimmer halo for the earthy thread (less glow), solid core
             float px0 = sax, py0 = say;
             for (int s = 1; s <= segN; ++s) {
                 float t = (float)s / segN, omt = 1.f - t;
@@ -6716,8 +6687,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             return 0;
         }
 
-        // macOS-style glass: hairline border + top sheen around the pill.
-        DrawGlassEdge(hdc, cr);
+        // (DrawGlassEdge removed -- was a no-op, guarded by removed setting.)
         // Locked-state indicator: gold breathing edge glow (no-op when unlocked).
         DrawLockGlow(hdc, cr);
         int n = (int)g_pinnedApps.size();
@@ -6736,23 +6706,11 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             }
             g_hoverIndex       = -1;
             g_dragFromDockIdx  = -1;
-            // FIX (dock stays red after unpin): this empty-dock branch previously
-            // returned WITHOUT refreshing the acrylic tint, so when the LAST icon
-            // was unpinned the window kept whatever accent the drag left behind --
-            // the vivid red "unpin" feedback -- and it never reset to neutral.
-            // Recompute the tint here (the drag state is already reset, so this
-            // resolves to the neutral frosted glass) before presenting.
-            ApplyDockGlassTint(hwnd);
             LeaveCriticalSection(&g_cs);
             if (usingBackBuffer) PresentPaintBuffer(paintDC, paintW, paintH);
             EndPaint(hwnd, &ps);
             return 0;
         }
-
-        // Tinted frosted-glass state feedback is now provided by the acrylic
-        // blur (ApplyDockGlassTint) instead of an opaque GradientFill, so the
-        // dock body stays translucent and the wallpaper blurs through.
-        ApplyDockGlassTint(hwnd);
 
         // Cursor position  --  used by icon loop hover scale, reorder visual, and separator
         POINT cursorPt;
@@ -7033,9 +6991,8 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                 const COLORREF FEEDBACK_GREEN = RGB(  0, 220,  90);   // vivid green
                 const COLORREF FEEDBACK_NEUTRAL = RGB( 80,  80,  80);
 
-                // When glass overlay is active, the dock itself tints red for limit
-                // flash  --  the separator reverts to neutral so we don't double-signal.
-                COLORREF lineColor = (g_limitFlashActive && !ENABLE_GLASS_OVERLAY)
+                // Separator flashes red on pin-limit, green while dragging over dock.
+                COLORREF lineColor = (g_limitFlashActive)
                                                                ? FEEDBACK_RED
                                    : (inDrop && g_dragState == DRAG_DRAGGING)
                                                                ? FEEDBACK_GREEN
@@ -7671,6 +7628,28 @@ DWORD WINAPI WorkerThread(LPVOID) {
         GetCursorPos(&cursor);
         DWORD now = GetTickCount();
 
+        // FIX (Issue 1): if Wh_ModInit deferred the ownership decision (the
+        // taskbar wasn't up yet at load), keep re-probing here during boot.
+        //   DEFER  -> taskbar still not up: stay idle this cycle, poll again.
+        //   OWN    -> this is the shell process: activate the dock from now on.
+        //   DISOWN -> another explorer.exe owns the taskbar: stay idle forever
+        //             (never build a duplicate dock) -- park on g_exitEvent.
+        if (!g_dockOwnershipDecided) {
+            QpStartupOwnership own = ProbeStartupOwnership();
+            if (own == QP_STARTUP_OWN) {
+                g_dockOwnershipDecided = true;
+                DEBUG_LOG(L"OWNERSHIP: taskbar resolved to this process -- dock activated");
+            } else if (own == QP_STARTUP_DISOWN) {
+                LOG_IMPORTANT(L"OWNERSHIP: another explorer.exe owns the taskbar -- dock stays idle");
+                WaitForSingleObject(g_exitEvent, INFINITE);
+                return 0;
+            } else {
+                // STARTUP_DEFER: taskbar not up yet. Idle one poll cycle.
+                WaitForSingleObject(g_exitEvent, 100);
+                continue;
+            }
+        }
+
         // Safety geometry poll + running-state + auto-hide check.
         // Poll every 100 ms while still in boot/stabilizing so the dock becomes
         // visible within one poll cycle after Wh_ModInit.  Once geometry is locked
@@ -7699,8 +7678,14 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // block below (Stage 5), only after a real drag AND dock intent AND a
         // pinnable-candidate check have all passed.
 
-        // Boot watchdog: force geometry recovery if dock width is still 0 after 100 ms
-        if (g_dockLocalW == 0 && (int)(now - bootWatchdogStart) > 100) {
+        // Boot watchdog: force geometry recovery if dock width is still 0 after 100 ms.
+        // FIX (Issue 2): skip while the layout is UNSUPPORTED. There, g_dockLocalW
+        // stays 0 by design (RefreshTaskbarCache returns before locking a width),
+        // so without this guard the watchdog would hammer RefreshTaskbarCache every
+        // 100 ms forever on a left-aligned taskbar. RefreshTaskbarCache still runs
+        // on the normal geometry poll above, which re-enables the dock if room
+        // reappears -- the watchdog is only for the genuine zero-width boot race.
+        if (!g_layoutUnsupported && g_dockLocalW == 0 && (int)(now - bootWatchdogStart) > 100) {
             DEBUG_LOG(L"WATCHDOG: forcing geometry refresh");
             RefreshTaskbarCache();
             if (g_dockLocalW > 0) {
@@ -7784,11 +7769,18 @@ DWORD WINAPI WorkerThread(LPVOID) {
         {
             static DWORD s_lastTopMostMs = 0;
             if (now - s_lastTopMostMs > 3000) {
+                // FIX (Issue 3): Z-order maintenance ONLY -- do NOT pass
+                // SWP_SHOWWINDOW here. This periodic re-assert must never change
+                // visibility: with SWP_SHOWWINDOW it would silently re-show a
+                // dock that another code path intentionally hid (e.g. the
+                // unsupported/left-aligned layout, or auto-hide). Visibility is
+                // owned solely by the ShowWindow calls in those paths; this block
+                // only keeps the windows on top.
                 if (g_inputWnd && IsWindow(g_inputWnd))
                     SetWindowPos(g_inputWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 SetWindowPos(g_overlayWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 s_lastTopMostMs = now;
             }
         }
@@ -7798,6 +7790,10 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // ================================================================
         //  DRAG STATE MACHINE
         // ================================================================
+        // Do not process any drag logic when the layout is unsupported (dock
+        // hidden): g_cachedDockRect describes a stale/invalid rect that would
+        // accept drops onto a region with no dock visible.
+        if (g_layoutUnsupported) { lastLDown = lDown; continue; }
 
         // IDLE / CANCELLED -> PRESS (mouse down)
         if ((g_dragState == DRAG_IDLE || g_dragState == DRAG_CANCELLED) &&
@@ -9025,14 +9021,13 @@ static void LoadSettings() {
     BASE_ICON_SIZE       = Wh_GetIntSetting(L"iconSize",          33);
     BASE_ICON_SPACING    = 12;   // fixed per-icon gap (iconSpacing setting removed from the Windhawk UI)
     SEPARATOR_OPACITY    = Wh_GetIntSetting(L"separatorOpacity", 100);
-    ENABLE_GLASS_OVERLAY = Wh_GetIntSetting(L"enableGlassOverlay", 1) != 0;
+    // enableGlassOverlay removed (setting was dead -- no visible effect).
     ENABLE_REORDER       = Wh_GetIntSetting(L"enableReorder",       1) != 0;
     ENABLE_SCROLL_NAV    = Wh_GetIntSetting(L"enableScrollNav",     1) != 0;
     ENABLE_ICON_THREADS  = Wh_GetIntSetting(L"enableDragTether",    1) != 0;
     THREAD_THICKNESS     = std::max(1, std::min(10, Wh_GetIntSetting(L"dragTetherThickness", 2)));
     THREAD_MAX_STRETCH_PX = (float)std::max(150, std::min(650, Wh_GetIntSetting(L"dragRopeBreakLength", 450)));
     UNPIN_TRIGGER        = LoadUnpinTriggerSetting();
-    THREAD_COLOR_MODE    = LoadColorModeSetting();
     THREAD_HUE           = ((Wh_GetIntSetting(L"dragTetherHue", 30) % 360) + 360) % 360;
     ENABLE_DOUBLE_RCLICK_UNPIN = Wh_GetIntSetting(L"enableDoubleRightClickUnpin", 0) != 0;
     ENABLE_RAPID_UNPIN_ALL     = Wh_GetIntSetting(L"enableRapidUnpinAll", 0) != 0;
@@ -9073,11 +9068,21 @@ BOOL Wh_ModInit() {
     // no-op -- otherwise it draws a duplicate dock and runs a second, conflicting
     // drag resolver. Returning FALSE here creates NO resources, so Wh_ModUninit
     // has nothing to tear down.
-    if (!ProcessOwnsTaskbar()) {
-        Wh_Log(L"INIT: not the taskbar-owning explorer.exe (pid=%u) -- dock disabled in this process",
+    // FIX (Issue 1): ownership is NOT a hard init failure any more. Only a
+    // process that POSITIVELY resolves a DIFFERENT taskbar owner is a no-op
+    // (STARTUP_DISOWN) -- that still blocks a second explorer.exe from drawing a
+    // duplicate dock. When the taskbar isn't up yet (STARTUP_DEFER, owner pid 0
+    // on a cold start / sign-in) we init normally and let WorkerThread re-probe
+    // ownership during STATE_BOOT, so the one true shell process is never left
+    // permanently without a dock.
+    QpStartupOwnership startupOwn = ProbeStartupOwnership();
+    if (startupOwn == QP_STARTUP_DISOWN) {
+        Wh_Log(L"INIT: another explorer.exe owns the taskbar (pid=%u) -- dock disabled in this process",
                (unsigned)GetCurrentProcessId());
         return FALSE;
     }
+    // OWN: activate immediately. DEFER: leave inactive; the worker decides.
+    g_dockOwnershipDecided = (startupOwn == QP_STARTUP_OWN);
 
     // FIX-A8 (#11): the optional startup delay was moved OUT of Wh_ModInit and
     // into the worker thread (see WorkerThread) so init returns promptly and
@@ -9129,9 +9134,9 @@ BOOL Wh_ModInit() {
 
     if (ENABLE_AUTOHIDE_SYNC) UpdateAutoHideState();  // only when user enables sync
 
-    LOG_IMPORTANT(L"INIT: v31.0.0 OK. state=%d pinned=%d glass=%d reorder=%d explorerWorkspaces=%d delay=%d hotkey=0x%X+0x%X autohide=%d",
+    LOG_IMPORTANT(L"INIT: v2.5.1 OK. state=%d pinned=%d reorder=%d explorerWorkspaces=%d delay=%d hotkey=0x%X+0x%X autohide=%d",
               g_systemState, (int)g_pinnedApps.size(),
-              (int)ENABLE_GLASS_OVERLAY, (int)ENABLE_REORDER,
+              (int)ENABLE_REORDER,
               (int)ENABLE_EXPLORER_WORKSPACE_PINS,
               STARTUP_DELAY_MS,
               g_hotkeyMods, g_hotkeyKey, (int)ENABLE_AUTOHIDE_SYNC);
@@ -9310,15 +9315,13 @@ void Wh_ModUninit() {
 }
 
 // Called by Windhawk whenever the user changes mod settings in the UI.
-// Re-reads all settings, invalidates the dock-width cache, and refreshes
-// the overlay so changes take effect immediately without a mod reload.
+// Re-reads all settings, then signals the worker thread to re-run geometry
+// discovery rather than calling RefreshTaskbarCache/RepositionOverlay directly
+// from this arbitrary thread -- those functions touch g_fixedDockWidth,
+// g_systemState, g_dockCurrentX/Y, and g_cachedDockRect which the worker owns.
 void Wh_ModSettingsChanged() {
     // Read and clamp all user settings (shared with Wh_ModInit via LoadSettings).
     LoadSettings();
-
-    // Invalidate cached dock-width so it is recalculated with new sizes/DPI.
-    g_fixedDockWidth = 0;
-    g_lastDpiForWidth = 0;
 
     // LIVE DOCK-GAP FIX: the dock's X is protected by a jitter lock
     // (g_stabilizedDockLeft / g_dockPositionLocked) that ignores horizontal
@@ -9332,22 +9335,25 @@ void Wh_ModSettingsChanged() {
     // there smoothly. This makes DOCK_GAP_FROM_START apply live and precisely.
     g_dockPositionLocked = false;
 
-    // Refresh geometry and force an immediate repaint.
-    RefreshTaskbarCache();
-    RepositionOverlay();
+    // Signal the worker: invalidate the cached dock width (written as volatile,
+    // safe from any thread) and set the dirty flag so the worker's next poll
+    // iteration immediately calls RefreshTaskbarCache + RepositionOverlay.
+    // This removes the race on g_fixedDockWidth / g_systemState / g_dockCurrentX/Y
+    // / g_cachedDockRect that existed when those calls happened here directly.
+    g_fixedDockWidth  = 0;
+    g_lastDpiForWidth = 0;
+    g_dockWidthDirty  = true;
+
+    // Backdrop + repaint requests are safe to post/call from any thread.
     if (g_overlayWnd && IsWindow(g_overlayWnd)) {
         ApplyNativeBackdrop(g_overlayWnd);
         InvalidateRect(g_overlayWnd, NULL, FALSE);
-        // FIX (Issue 6): the hotkey mods/key may have changed. Re-register on
-        // the overlay's owning thread (PostMessage) instead of here -- this
-        // handler runs on an arbitrary thread and Register/UnregisterHotKey are
-        // only valid on the window's creating thread. Previously the new hotkey
-        // setting was ignored until a full mod reload.
+        // FIX (Issue 6): re-register hotkey on the overlay's owning thread.
         PostMessageW(g_overlayWnd, WM_QPD_REREGISTER_HOTKEY, 0, 0);
     }
 
-    LOG_IMPORTANT(L"SETTINGS CHANGED: maxPins=%d iconSz=%d spacing=%d glass=%d reorder=%d explorerWorkspaces=%d",
+    LOG_IMPORTANT(L"SETTINGS CHANGED: maxPins=%d iconSz=%d spacing=%d reorder=%d explorerWorkspaces=%d",
               MAX_PINNED_APPS, BASE_ICON_SIZE, BASE_ICON_SPACING,
-              (int)ENABLE_GLASS_OVERLAY, (int)ENABLE_REORDER,
+              (int)ENABLE_REORDER,
               (int)ENABLE_EXPLORER_WORKSPACE_PINS);
 }
