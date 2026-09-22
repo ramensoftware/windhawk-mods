@@ -1031,6 +1031,72 @@ Windhawk 高度可定制鼠标拖尾特效模组。基于原生 D3D11 + DirectCo
   $description:zh-CN: 粒子形状设为文字字符时的字符屏幕大小（像素，10-200）。
   $description:zh-TW: 粒子形狀設為文字字元時的螢幕大小（像素，10-200）。
   $description:ja-JP: パーティクル形状をテキストに設定時の文字の画面サイズ（ピクセル、10-200）。
+- enable_text_chunk: true
+  $name: Long Text Chunking
+  $name:zh-CN: 长句分段
+  $name:zh-TW: 長句分段
+  $name:ja-JP: 長文分割
+  $description: Split long text into short chunks and cycle through them, instead of rendering one long straight string. Emoji are kept intact.
+  $description:zh-CN: 将长句切分成短段并循环切换显示，避免一整句又直又长。Emoji 表情不会被切断。
+  $description:zh-TW: 將長句切分成短段並循環切換顯示，避免一整句又直又長。Emoji 表情不會被切斷。
+  $description:ja-JP: 長い文を短いチャンクに分割して循環表示し、一直手に長く表示されるのを防ぎます。絵文字は分断されません。
+- text_chunk_mode: particle
+  $name: Chunk Cycle Mode
+  $name:zh-CN: 分段轮播模式
+  $name:zh-TW: 分段輪播模式
+  $name:ja-JP: チャンク切替モード
+  $description: "Per Particle: each particle cycles chunks on its own age (scattered fragments). Global Sync: all particles show and switch the same chunk together."
+  $description:zh-CN: 逐粒子：每个粒子按自身存活时间独立切换（散落碎片感）。全局同步：所有粒子同一时刻一起显示并切换同一段。
+  $description:zh-TW: 逐粒子：每個粒子按自身存活時間獨立切換（散落碎片感）。全域同步：所有粒子同一時刻一起顯示並切換同一段。
+  $description:ja-JP: パーティクル毎：各パーティクルが独自の経過時間で切替（散らばる破片風）。全体同期：全パーティクルが同時に同じチャンクを表示・切替。
+  $options:
+  - particle: Per Particle
+  - global: Global Sync
+  $options:zh-CN:
+  - particle: 逐粒子
+  - global: 全局同步
+  $options:zh-TW:
+  - particle: 逐粒子
+  - global: 全域同步
+  $options:ja-JP:
+  - particle: パーティクル毎
+  - global: 全体同期
+- text_chunk_max: 3
+  $name: Max Chars Per Chunk
+  $name:zh-CN: 每段最多字数
+  $name:zh-TW: 每段最多字數
+  $name:ja-JP: 1チャンクの最大文字数
+  $description: Maximum number of characters per chunk (1-8). Longer text is split at this width.
+  $description:zh-CN: 每段最多显示几个字（1-8），超过此长度的文字按此宽度切分。
+  $description:zh-TW: 每段最多顯示幾個字（1-8），超過此長度的文字按此寬度切分。
+  $description:ja-JP: 1チャンクあたりの最大文字数（1-8）。この幅で長文を分割します。
+- text_chunk_delay: 600
+  $name: Chunk Switch Delay (ms)
+  $name:zh-CN: 分段切换延迟（毫秒）
+  $name:zh-TW: 分段切換延遲（毫秒）
+  $name:ja-JP: チャンク切替間隔（ミリ秒）
+  $description: Time each chunk stays before switching to the next (100-3000 ms).
+  $description:zh-CN: 每段停留多久后切换到下一段（100-3000 毫秒）。
+  $description:zh-TW: 每段停留多久後切換到下一段（100-3000 毫秒）。
+  $description:ja-JP: 次のチャンクへ切り替わるまでの表示時間（100-3000 ミリ秒）。
+- text_offset_x: 0
+  $name: Text Offset X
+  $name:zh-CN: 文字水平偏移
+  $name:zh-TW: 文字水平偏移
+  $name:ja-JP: テキスト左右オフセット
+  $description: Horizontal spawn offset of text particles relative to the cursor (-100 to 100 px).
+  $description:zh-CN: 文字粒子相对光标的水平生成位置偏移（-100 到 100 像素）。
+  $description:zh-TW: 文字粒子相對游標的水平生成位置偏移（-100 到 100 像素）。
+  $description:ja-JP: テキストパーティクルのカーソルに対する左右の生成オフセット（-100〜100 px）。
+- text_offset_y: 0
+  $name: Text Offset Y
+  $name:zh-CN: 文字垂直偏移
+  $name:zh-TW: 文字垂直偏移
+  $name:ja-JP: テキスト上下オフセット
+  $description: Vertical spawn offset of text particles relative to the cursor (-100 to 100 px).
+  $description:zh-CN: 文字粒子相对光标的垂直生成位置偏移（-100 到 100 像素）。
+  $description:zh-TW: 文字粒子相對游標的垂直生成位置偏移（-100 到 100 像素）。
+  $description:ja-JP: テキストパーティクルのカーソルに対する上下の生成オフセット（-100〜100 px）。
 
 # ===== 形状拖尾 =====
 - shape_type: heart
@@ -2243,6 +2309,12 @@ bool g_textPointsDirty = true;                  // 文字或字号改变后需�
 static void BuildTextPoints();
 wchar_t g_textContent[256] = L"Hi";             // 文字内容 / text content
 int g_textFontSize = 120;                       // 字号 / font size
+bool g_enableTextChunk = true;                  // 长句分段开关 / long-text chunking toggle
+int  g_textChunkMode = 0;                       // 0=逐粒子 particle, 1=全局同步 global
+int  g_textChunkMax = 3;                        // 每段最多码点数 / max codepoints per chunk
+int  g_textChunkDelay = 600;                    // 分段切换延迟(ms) / chunk switch delay (ms)
+int  g_textOffsetX = 0;                         // 文字相对光标 X 偏移 / text spawn X offset
+int  g_textOffsetY = 0;                         // 文字相对光标 Y 偏移 / text spawn Y offset
 int g_textSpacing = 4;                          // 采样点间距（像素）/ sample spacing (px)
 bool g_enableTextParticles = false;             // 文字粒子开关 / text particles toggle
 ID2D1Device *g_pD2DDevice = nullptr;
@@ -2553,6 +2625,8 @@ struct Particle {
     int shapeType;
     wchar_t textChar; // 文字形状时的字符 / character for text shape
     float charIndex;  // 字符图集索引 / char atlas index
+    int chunkStart;   // 所属词组的起始图集格 / first atlas cell of owning phrase
+    int chunkCount;   // 所属词组占用的格数（>1 时启用轮播）/ atlas cells of owning phrase (>1 enables cycling)
     float colorOffset[3]; // 随机偏色（RGB，约 ±20/255），生成后不变
     float vortexBrightness[3]; // 漩涡亮度调制（向心力/3D效果），与色差分离
     float debugForceX, debugForceY; // 调试用：本帧总受力（物理可视化）
@@ -3216,7 +3290,7 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
     // 文字字符形状：采样字符图集纹理 / Text char shape: sample char atlas texture
     if (input.shape > 9.5) {
         int idx = (int)input.charIdx;
-        int cols = 16;
+        int cols = (int)atlasCols;
         int row = idx / cols;
         int col = idx % cols;
         float2 cellUV = input.uv;
@@ -3328,8 +3402,10 @@ int g_charAtlasCellW = 0;                          // 单元格宽 / cell width
 int g_charAtlasCellH = 0;                         // 单元格高 / cell height
 float g_textAspectRatio = 1.0f;                      // 文字宽高比 / text cell aspect ratio
 bool g_charAtlasDirty = true;                            // 图集脏标记（设置变更时重建）/ atlas dirty flag (rebuild on settings change)
-std::vector<std::wstring> g_atlasChars;                // 图集词组列表 / atlas phrase list
-
+std::vector<std::wstring> g_atlasChars;                // 图集格子列表（分段后为各片段）/ atlas cell list (chunks after splitting)
+std::vector<int> g_phraseChunkStart;                    // 每个原始词组在图集中的起始格 / first atlas cell of each original phrase
+std::vector<int> g_phraseChunkCount;                    // 每个原始词组占用的格数 / atlas cells per original phrase
+DWORD g_globalChunkClock = 0;                           // 全局同步轮播时钟起点(ms) / global sync cycle clock origin (ms)
 // 构建字符图集：把所有字符渲染到一张 D3D11 纹理 / Build char atlas: render all chars to one D3D11 texture
 static void BuildCharAtlas() {
     Wh_Log(L"[CharAtlas] BuildCharAtlas called, dev=%p factory=%p fmt=%p", g_pD3DDevice, g_pD2DFactory, g_pTextFormat);
@@ -3346,31 +3422,74 @@ static void BuildCharAtlas() {
         }
     }
     if (!g_pD3DDevice || !g_pD2DFactory || !g_pTextFormat) { Wh_Log(L"[CharAtlas] early return null deps"); return; }
-    // 解析 text_content，按逗号/竖线分隔成多个内容 / Parse text_content, split by comma/pipe
-    g_atlasChars.clear();
-    wchar_t buffer[256];
-    int bi = 0;
-    for (int i = 0; g_textContent[i] != 0 && i < 255; i++) {
-        wchar_t ch = g_textContent[i];
-        if (ch == L',' || ch == L'，' || ch == L'|' || ch == L'｜') {
-            if (bi > 0) { buffer[bi] = 0; g_atlasChars.push_back(buffer); bi = 0; }
-            continue;
+    // 解析 text_content，按逗号/竖线分隔成多个原始词组 / Parse text_content into original phrases by comma/pipe
+    std::vector<std::wstring> phrases;
+    {
+        wchar_t buffer[256];
+        int bi = 0;
+        for (int i = 0; g_textContent[i] != 0 && i < 255; i++) {
+            wchar_t ch = g_textContent[i];
+            if (ch == L',' || ch == L'，' || ch == L'|' || ch == L'｜') {
+                if (bi > 0) { buffer[bi] = 0; phrases.push_back(buffer); bi = 0; }
+                continue;
+            }
+            if (bi < 255) buffer[bi++] = ch;
         }
-        if (bi < 255) buffer[bi++] = ch;
+        if (bi > 0) { buffer[bi] = 0; phrases.push_back(buffer); }
     }
-    if (bi > 0) { buffer[bi] = 0; g_atlasChars.push_back(buffer); }
+    if (phrases.empty()) phrases.push_back(L" ");
 
-    if (g_atlasChars.empty()) g_atlasChars.push_back(L" ");
+    // 码点计数：代理对(Emoji)算一个码点 / Count codepoints: a surrogate pair (emoji) counts as one
+    auto CodePointLen = [](const std::wstring &s) -> int {
+        int n = 0;
+        for (size_t k = 0; k < s.size();) {
+            wchar_t c = s[k];
+            k += (c >= 0xD800 && c <= 0xDBFF && k + 1 < s.size()) ? 2 : 1;
+            n++;
+        }
+        return n;
+    };
+    // 按码点边界切分长词组，绝不在代理对(Emoji)中间切开 / Split a long phrase on codepoint boundaries, never mid-surrogate-pair
+    auto SplitChunks = [](const std::wstring &s, int maxCP) {
+        std::vector<std::wstring> out;
+        size_t start = 0, k = 0; int cp = 0;
+        while (k < s.size()) {
+            wchar_t c = s[k];
+            size_t adv = (c >= 0xD800 && c <= 0xDBFF && k + 1 < s.size()) ? 2 : 1;
+            k += adv; cp++;
+            if (cp >= maxCP) { out.push_back(s.substr(start, k - start)); start = k; cp = 0; }
+        }
+        if (start < s.size()) out.push_back(s.substr(start));
+        return out;
+    };
 
-    // 图集布局：16列，行数按字符数算 / Atlas layout: 16 cols, rows by char count
+    // 展开为图集格子：超长词组切成多格，并记录词组→格子区间 / Expand into atlas cells: split overlong phrases, record phrase->cell range
+    g_atlasChars.clear();
+    g_phraseChunkStart.clear();
+    g_phraseChunkCount.clear();
+    for (auto &ph : phrases) {
+        int cellStart = (int)g_atlasChars.size();
+        g_phraseChunkStart.push_back(cellStart);
+        if (g_enableTextChunk && CodePointLen(ph) > g_textChunkMax) {
+            std::vector<std::wstring> chunks = SplitChunks(ph, g_textChunkMax);
+            for (auto &ck : chunks) g_atlasChars.push_back(ck);
+        } else {
+            g_atlasChars.push_back(ph);
+        }
+        g_phraseChunkCount.push_back((int)g_atlasChars.size() - cellStart);
+    }
+    // 重置全局同步轮播时钟 / Reset global-sync cycle clock
+    g_globalChunkClock = GetTickCount();
+
+    // 图集布局：16列，行数按格子数算 / Atlas layout: 16 cols, rows by cell count
     int phraseCount = (int)g_atlasChars.size();
     g_charAtlasCols = 16;
-    // 词组少时减少列数，避免图集过宽 / Reduce columns when few phrases to avoid oversized atlas
+    // 格子少时减少列数，避免图集过宽 / Reduce columns when few cells to avoid oversized atlas
     if (phraseCount < g_charAtlasCols) g_charAtlasCols = phraseCount;
     g_charAtlasRows = ((int)g_atlasChars.size() + g_charAtlasCols - 1) / g_charAtlasCols;
     if (g_charAtlasRows < 1) g_charAtlasRows = 1;
     int maxPhraseLen = 1;
-    for (auto &s : g_atlasChars) { int l = (int)s.length(); if (l > maxPhraseLen) maxPhraseLen = l; }
+    for (auto &s : g_atlasChars) { int l = CodePointLen(s); if (l > maxPhraseLen) maxPhraseLen = l; }
     float SS = 2.0f; // 超采样倍数 / supersampling factor
     g_charAtlasCellW = (int)(g_textFontSize * maxPhraseLen * SS + 16);
     g_charAtlasCellH = (int)(g_textFontSize * SS + 8);
@@ -4732,6 +4851,7 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         float spawnRadius = Rand01() * 8.0f;  // 0-8 像素的随机偏移 / 0-8px random offset
         float px = x + cosf(spawnAngle) * spawnRadius;
         float py = y + sinf(spawnAngle) * spawnRadius;
+        if (st == 10) { px += (float)g_textOffsetX; py += (float)g_textOffsetY; }  // text particle spawn offset vs cursor
         Particle p;
         p.x = px; p.y = py;
         p.vx = cosf(angle) * speed; p.vy = sinf(angle) * speed;
@@ -4764,12 +4884,17 @@ static void SpawnParticles(float x, float y, int count, float speedMin, float sp
         // 文字形状：从 text_content 取一个字符 / Text shape: pick a char from text_content
         p.textChar = 0;
         p.charIndex = 0;
-        if (st == 10 && !g_atlasChars.empty()) {
-            int clen = (int)g_atlasChars.size();
-            int ci = (int)(Rand01() * (float)clen);
-            if (ci >= clen) ci = clen - 1;
-            p.charIndex = (float)ci;
-        // p.textChar no longer needed for GPU path / GPU路徑不需要textChar
+        p.chunkStart = 0;
+        p.chunkCount = 1;
+        if (st == 10 && !g_phraseChunkStart.empty()) {
+            // 随机选一个原始词组并记录其格子区间，初始显示第一段 / Pick a random original phrase, record its cell range, start on first chunk
+            int phraseCount = (int)g_phraseChunkStart.size();
+            int pi = (int)(Rand01() * (float)phraseCount);
+            if (pi >= phraseCount) pi = phraseCount - 1;
+            p.chunkStart = g_phraseChunkStart[pi];
+            p.chunkCount = g_phraseChunkCount[pi];
+            if (p.chunkCount < 1) p.chunkCount = 1;
+            p.charIndex = (float)p.chunkStart;
         }
         p.z = (Rand01() - 0.5f) * 0.8f;
         p.rotation = Rand01() * twoPi;
@@ -5436,6 +5561,27 @@ void LoadSettings() {
     int tfsVal = Wh_GetIntSetting(L"text_font_size");
     if (tfsVal < 10) tfsVal = 10; if (tfsVal > 200) tfsVal = 200;
     g_textFontSize = tfsVal;
+    // 长句分段轮播设置 / Long-text chunk cycling settings
+    g_enableTextChunk = Wh_GetIntSetting(L"enable_text_chunk") != 0;
+    int tcmVal = 3;
+    PCWSTR pChunkMode = Wh_GetStringSetting(L"text_chunk_mode");
+    if (pChunkMode) {
+        if (wcscmp(pChunkMode, L"global") == 0) tcmVal = 1; else tcmVal = 0;
+        Wh_FreeStringSetting(pChunkMode);
+    }
+    g_textChunkMode = tcmVal;
+    int tcmMax = Wh_GetIntSetting(L"text_chunk_max");
+    if (tcmMax < 1) tcmMax = 1; if (tcmMax > 8) tcmMax = 8;
+    g_textChunkMax = tcmMax;
+    int tcdVal = Wh_GetIntSetting(L"text_chunk_delay");
+    if (tcdVal < 100) tcdVal = 100; if (tcdVal > 3000) tcdVal = 3000;
+    g_textChunkDelay = tcdVal;
+    int toxVal = Wh_GetIntSetting(L"text_offset_x");
+    if (toxVal < -100) toxVal = -100; if (toxVal > 100) toxVal = 100;
+    g_textOffsetX = toxVal;
+    int toyVal = Wh_GetIntSetting(L"text_offset_y");
+    if (toyVal < -100) toyVal = -100; if (toyVal > 100) toyVal = 100;
+    g_textOffsetY = toyVal;
     g_charAtlasDirty = true;  // 文字设置变更，标记图集需重建 / text settings changed, mark atlas dirty
     // 物理可视化调试（独立开关）/ Physics visualization debug (independent toggles)
     g_debugVelocity = Wh_GetIntSetting(L"enable_debug_velocity") != 0;
@@ -8022,6 +8168,14 @@ static void RenderFrame() {
         if (g_enableParticleSpin) {
             p.rotation += p.spinSpeed;
             p.spinSpeed *= 0.995f;  // 旋转空气阻尼 / Spin air damping
+        }
+        // 文字分段轮播：逐粒子模式按自身存活时间，全局模式按统一时钟 / Text chunk cycling: per-particle uses own age, global mode uses a shared clock
+        if (p.shapeType == 10 && p.chunkCount > 1) {
+            DWORD chunkBase = (g_textChunkMode == 1) ? g_globalChunkClock : p.startTime;
+            DWORD chunkElapsed = dwTime - chunkBase;
+            int chunkSlot = (int)(chunkElapsed / (DWORD)g_textChunkDelay) % p.chunkCount;
+            if (chunkSlot < 0) chunkSlot = 0;
+            p.charIndex = (float)(p.chunkStart + chunkSlot);
         }
         // 光标吸附：质量大的吸附加速度小 / Cursor attraction: heavier particles attract less
         if (g_particleAttraction > 0) {
