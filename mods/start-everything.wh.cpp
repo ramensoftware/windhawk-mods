@@ -4130,6 +4130,10 @@ bool IsOurWindowCloaked() {
 }
 
 std::atomic<bool> g_suppressRefocus{false};
+std::atomic<bool> g_appIndexNeedsRefresh{false};
+std::atomic<ULONGLONG> g_lastAppIndexRebuildTick{0};
+
+void RequestAppIndexRefresh();
 
 void TakeForeground(bool force = false) {
     try {
@@ -4205,6 +4209,7 @@ void TriggerMenuOpenFocus() {
         g_suppressRefocus.store(false);
         TakeForeground(true);
         FocusOurBoxNow();
+        RequestAppIndexRefresh();
         if (g_openFocus) {
             g_openFocus.Stop();
             g_openFocus = nullptr;
@@ -4701,6 +4706,14 @@ std::atomic<DWORD> g_totalMatches{0};
 [[clang::no_destroy]] std::wstring g_pendingQuery;
 std::atomic<bool> g_searchQuit{false};
 std::atomic<bool> g_queryDirty{false};
+
+void RequestAppIndexRefresh() {
+    ULONGLONG now = GetTickCount64();
+    if (now - g_lastAppIndexRebuildTick.load() >= 5000) {
+        g_appIndexNeedsRefresh.store(true);
+        g_queryWake.notify_all();
+    }
+}
 
 // A row as the XAML thread needs it: text, an optional icon as raw BGRA, and
 // what to do when it is clicked.
@@ -6466,7 +6479,8 @@ void SearchThreadMain() {
 
     apps::Index appIndex;
     if (appIndex.Rebuild()) {
-        Wh_Log(L"apps: indexed");
+        g_lastAppIndexRebuildTick.store(GetTickCount64());
+        Wh_Log(L"apps: indexed (%zu apps)", appIndex.Count());
     } else {
         Wh_Log(L"apps: index failed");
     }
@@ -6497,7 +6511,7 @@ void SearchThreadMain() {
         {
             std::unique_lock<std::mutex> lock(g_queryMutex);
             g_queryWake.wait_for(lock, std::chrono::milliseconds(200), [] {
-                return g_queryDirty.load() || g_searchQuit.load() || (g_launchRequest.load() >= 0);
+                return g_queryDirty.load() || g_searchQuit.load() || (g_launchRequest.load() >= 0) || g_appIndexNeedsRefresh.load();
             });
             if (g_searchQuit.load()) {
                 if (SUCCEEDED(comHr)) {
@@ -6526,6 +6540,17 @@ void SearchThreadMain() {
                 }
                 continue;
             }
+
+            bool shouldRebuild = g_appIndexNeedsRefresh.exchange(false);
+            if (shouldRebuild) {
+                lock.unlock();
+                if (appIndex.Rebuild()) {
+                    g_lastAppIndexRebuildTick.store(GetTickCount64());
+                    Wh_Log(L"apps: dynamically refreshed (%zu apps)", appIndex.Count());
+                }
+                lock.lock();
+            }
+
             if (!g_queryDirty.exchange(false)) {
                 continue;
             }
@@ -7348,6 +7373,7 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
         return TRUE;
     }
     LoadSettings();
+    RequestAppIndexRefresh();
     if (g_resultsHost) {
         try {
             g_resultsHost.Dispatcher().RunAsync(
