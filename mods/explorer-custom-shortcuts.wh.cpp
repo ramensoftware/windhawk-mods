@@ -911,7 +911,7 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND cap
         psv->Release();
         return;
     }
-    
+    //
     if (_wcsicmp(command.c_str(), L"internal:openParentFolder") == 0) {
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         if (!psv) return;
