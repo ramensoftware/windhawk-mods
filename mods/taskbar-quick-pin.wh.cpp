@@ -2,7 +2,7 @@
 // @id              taskbar-quick-pin
 // @name            Left Taskbar Quick Pin Dock
 // @description     A persistent icon dock anchored left of the Start button. Drag any app to pin it. Left-click to launch or focus. Double-right-click to unpin. Drag within the dock to reorder.
-// @version         2.5.0
+// @version         2.5.1
 // @author          Ashix
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
@@ -18,11 +18,19 @@
 /*
 # Left Taskbar Quick Pin Dock
 
+## ⚠️ **Only for Windows 11 with a _centered_ taskbar**
+
+**This mod supports Windows 11 only, and only when the taskbar is centered
+(the default). Left-aligned or otherwise repositioned taskbars are _not_
+supported.** On an unsupported layout it does **not** crash or cause any
+issue -- the dock simply detects there's no room, stays hidden, and does
+nothing. It just won't work there.
+
+![Live preview of the Left Taskbar Quick Pin Dock](https://raw.githubusercontent.com/k-ashix/taskbar-quick-pin/main/src/preview.gif)
+
 A lightweight icon dock that sits just left of the Start button on the
 Windows 11 taskbar. Drag any app onto it to pin, click to launch or focus, and
-drag it off (or double-right-click) to unpin. It's your own list  --  separate
-from the taskbar's own pinned apps  --  and it survives Explorer restarts and
-reboots.
+drag it off (or double-right-click) to unpin.
 
 No extra DLLs, no service, no installer  --  just a single-file mod injected
 into `explorer.exe`.
@@ -62,13 +70,26 @@ out. You can also raise the **Startup delay** setting.
 
 ## Known limitations
 
-- Secondary-monitor docks are mirrored and **read-only**  --  Beta
 - A few apps with custom icon handlers may show a generic Windows icon. This is
   a shell limitation  --  no Win32 API resolves every icon reliably.
 - Some UWP apps may occasionally resolve to their host process if their window
   isn't ready yet.
 
-## Screenshot (TBA)
+## v2.5.1
+
+- ⚡ **Code optimised & lower memory usage.** — No behavioural change,
+  just leaner and lighter.
+- 🪜 **New 5-stage resolve pipeline to cut resource usage.** App identity is now
+  settled through five ordered stages.
+  1. **Cache hit** — Reuse the last resolved identity for the window/point (no work).
+  2. **Fast window probe** — Cheap `Get*`/class checks before any heavyweight call.
+  3. **UIAutomation resolve** — The authoritative taskbar-surface lookup, only if 1–2 miss.
+  4. **Process fallback** — Cursor-inside process match when UIA can't name the target.
+  5. **Miss / sentinel** — Give up cleanly (no pin) instead of guessing wrong.
+- 🔁 **Workspace pins re-open every time.** — A Pinned workspace dock icon now resolves to the `"Explorer workspace"`.
+- ⌨️ **Bare-key P / U / L gestures now work when enabled.** — These gestures act on the foreground window.
+- 🪟 **Focus-if-running targets a real window.** — Improved
+- 🆔 **Collision-free workspace IDs.** `MakeWorkspaceId` now uses `CoCreateGuid`
 
 ## Settings reference
 
@@ -81,7 +102,7 @@ live; the two noted below need a mod reload.
 | Icon size | Icon size in px before DPI scaling (16 - 48). | 33 |
 | Dock gap from Start | Gap between the dock and the Start button (0 - 40 px). | 6 |
 | Separator opacity | Visibility of the right-edge divider line (0 - 100). | 100 |
-| Glass overlay | Frosted-glass tint + richer pin/unpin colour feedback. | on |
+| Glass overlay | Pin-limit feedback style: on = whole-dock red tint, off = separator-line flash. | on |
 | Drag to reorder | Drag icons left/right to rearrange; off = drag only unpins. | on |
 | Double-right-click to unpin | Unpin an icon with a double right-click (dust effect). | off |
 | Rapid-click unpin-all (opt-in) | Three quick clicks on an icon unpins EVERYTHING. Off so it can't fire by accident. | off |
@@ -95,7 +116,6 @@ live; the two noted below need a mod reload.
 | Unpin trigger | Only when the rope BREAKS, or rope breaks OR released outside the dock. | ropeBreak |
 | Corner roundness | 0 = square, 1 - 40 = slight, 41 - 100 = full pill. | 100 |
 | Explorer workspace pins | Allow File Explorer to be dragged in as a workspace pin. | off |
-| Multi-monitor dock | Mirrored, read-only dock on secondary monitors. *(Reload to apply.)* | off |
 | Startup delay | Extra wait before the dock loads (0 - 3000 ms). | 0 |
 | Sync with taskbar auto-hide | Hide the dock when the taskbar auto-hides. | off |
 | Pin hotkey - modifiers | Modifier keys for the pin/unpin hotkey (or Disabled). | Ctrl + Alt |
@@ -143,9 +163,11 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
 - enableGlassOverlay: true
   $name: Glass overlay
   $description: >-
-    Draws a subtle gradient tint behind the dock for a frosted-glass look.
-    Also upgrades pin/unpin feedback from a flat separator flash to a
-    full-dock colour shift.
+    Controls how pin-limit feedback is shown. On: the whole dock briefly
+    tints red when you hit the pin limit (a bolder, full-dock signal). Off:
+    only the right-edge separator line flashes red instead. The frosted-glass
+    look itself is always applied by the system backdrop and does not depend
+    on this setting.
 
 - enableReorder: true
   $name: Drag to reorder
@@ -250,13 +272,6 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
     pin. When disabled, explorer.exe remains excluded so the dock only accepts
     normal application pins.
 
-- multiMonitorDock: false
-  $name: Multi-monitor dock
-  $description: >-
-    Show a mirrored, read-only dock on each secondary monitor's taskbar.
-    Only the primary dock supports pinning and unpinning.
-    Requires a mod reload to take effect after toggling.
-
 - startupDelay: 0
   $name: Startup delay (ms)
   $description: >-
@@ -333,6 +348,15 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
   - F10: F10
   - F11: F11
   - F12: F12
+
+- debugLogging: false
+  $name: Verbose debug logging
+  $description: >-
+    Off by default. When on (and Windhawk logging is enabled), the mod also
+    emits high-frequency diagnostic traces  --  drag-source resolver steps,
+    per-frame rope draw state, geometry churn. Leave this OFF for a clean log;
+    turn it on only when reproducing a specific issue. One-off events (pins,
+    launches, errors) are always logged regardless of this setting.
 */
 // ==/WindhawkModSettings==
 
@@ -341,7 +365,6 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
 // ============================================================
 #include <windows.h>
 #include <windowsx.h>
-#include <psapi.h>
 #include <shlwapi.h>
 #include <shellapi.h>
 #include <shobjidl.h>
@@ -358,7 +381,6 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
 #include <algorithm>
 #include <sstream>
 #include <ctime>
-#include <cstdarg>
 #include <atomic>
 
 #ifndef DWMWA_SYSTEMBACKDROP_TYPE
@@ -392,11 +414,12 @@ static const int   BASE_DOCK_PAD_RIGHT    = 8;     // Right internal padding
 static const int   BASE_SECTION_GAP       = 20;    // Gap between workspace and app regions
 static const int   BASE_MAGNETIC_RANGE    = 60;    // Ghost visibility radius beyond dock
 static const int   BASE_GHOST_SIZE        = 40;    // Drag ghost size in pixels
-static const int   CLICK_MAX_MS           = 300;   // Max duration for a click (not a drag)
+// CLICK_MAX_MS was removed: the press->release state machine is a polling loop,
+// so a time cap silently ate real clicks (see the PRESS->IDLE comment). Click
+// vs. drag is now decided on MOVEMENT ONLY (CLICK_MAX_MOVE_PX).
 static const int   CLICK_MAX_MOVE_PX      = 5;     // Max cursor movement for a click
 static const int   MIN_VALID_DOCK_WIDTH   = 80;    // Minimum acceptable dock pixel width
 static const int   BOOT_PHASE_MS          = 300;   // Boot stabilisation timeout (dynamic exit preferred; halved from 600 to reach a stable dock sooner on boot)
-[[maybe_unused]] static const int DOCK_SAFE_GAP = 6; // Legacy fallback; live gap is DOCK_GAP_FROM_START (user setting)
 static const int   RAPID_CLICK_THRESHOLD  = 3;     // Clicks to trigger unpin-all (reduced from 5 for usability)
 static const int   RAPID_CLICK_WINDOW_MS  = 1000;  // Window for rapid-click detection (ms)
 static const int   MAGNETIC_ZONE_EXPAND_PX = 8;    // Expand magnetic zone up/down
@@ -404,8 +427,6 @@ static const int   POS_LOCK_THRESHOLD     = 20;    // Ignore dock position chang
 static const int   POS_RESET_THRESHOLD    = 100;   // Full lock reset if change > this px
 static const int   RUNNING_STATE_CHECK_MS = 500;   // Period between running-app window scans
 static bool        ENABLE_AUTOHIDE_SYNC   = false; // Sync dock visibility with taskbar auto-hide
-static const int   HOVER_SAMPLE_MS        = 80;    // UIA call rate limit during idle hover tracking
-static const int   STABILITY_CONFIRM_MS   = 150;   // Min ms a candidate must be stable before use
 static const int   SHAKE_DURATION_MS      = 400;   // Duration of limit-hit shake animation
 static const float SHAKE_AMPLITUDE_PX     = 3.f;   // Peak pixel displacement during shake
 
@@ -439,6 +460,7 @@ static const float THREAD_TAUT_PX         = 90.f;  // TUNED 60->90: bow straight
 static float       THREAD_MAX_STRETCH_PX  = 450.f; // "dragRopeBreakLength" (user setting, 150..650 px): the rope's MAX length. Once the pull passes this the rope TEARS in the middle and unpins. Loaded in Wh_ModInit / Wh_ModSettingsChanged.
 static int         UNPIN_TRIGGER          = 0;     // "unpinTrigger": 0 = unpin ONLY when the rope breaks (release-without-break recoils + stays pinned); 1 = rope breaks OR icon released outside the dock. Loaded in Wh_ModInit / Wh_ModSettingsChanged.
 static const int   THREAD_BREAK_MS        = 340;   // Snap/recoil duration (raised 200->340 so the torn halves + fray + flash read as a real break, not a quick cut).
+static const float ROPE_BREAK_MARGIN_PX   = 12.f;  // Small over-stretch give: the rope tears only once pulled a little PAST its break length, so one boundary-straddling cursor sample can't fire an abrupt "mechanical" cut. Pairs with the strain build-up for an organic snap.
 
 // Drag-rope appearance (user settings; loaded in Wh_ModInit / Wh_ModSettingsChanged).
 static int  THREAD_THICKNESS  = 2;    // "dragTetherThickness" 1..6 (core stroke width)
@@ -461,7 +483,6 @@ static bool ENABLE_REORDER       = true;   // Drag-to-reorder within dock
 static bool ENABLE_SCROLL_NAV    = true;   // Scroll-wheel navigation across pins
 static int  CORNER_ROUNDNESS     = 100;    // 0 = square dock, 100 = fully rounded (DWM)
 static bool ENABLE_EXPLORER_WORKSPACE_PINS = false; // User-controlled explorer.exe exclusion
-static bool MULTI_MONITOR_DOCK   = false;  // Secondary-monitor mirror docks
 static int  STARTUP_DELAY_MS     = 0;      // Extra init delay (slow machines)
 
 // DPI-scaled values  --  set by RefreshDpiScale(), never set manually
@@ -506,6 +527,10 @@ static const wchar_t* GHOST_CLASS   = L"QPDockGhost";
 enum DragState {
     DRAG_IDLE,      // No interaction in progress
     DRAG_PRESS,     // Mouse down, waiting for move threshold
+    DRAG_CANDIDATE, // Real drag confirmed (non-dock source), no dock intent yet --
+                    // nothing expensive has run: no resolver, no UIA, no OpenProcess,
+                    // no icon extraction. Re-checked every frame; only advances to
+                    // DRAG_DRAGGING once the cursor actually shows dock intent.
     DRAG_REORDER,   // Dragging a pinned icon within the dock to reorder
     DRAG_DRAGGING,  // Threshold crossed, ghost visible (unpin / external drop)
     DRAG_DROPPED,   // Drop has been processed
@@ -518,6 +543,11 @@ static std::atomic<DragState> g_dragState{DRAG_IDLE};  // FIX #8: written by wor
 // ============================================================
 enum SystemState { STATE_BOOT, STATE_STABILIZING, STATE_STABLE };
 static SystemState g_systemState = STATE_BOOT;
+// FIX (Issue 2): set when the taskbar is left-aligned (Start hugs the left edge)
+// so there is no room for the dock. The dock is hidden and the state machine is
+// settled to STATE_STABLE so polling backs off -- instead of the old behaviour
+// of returning early every call and spinning in STATE_BOOT at 100 ms forever.
+static bool g_layoutUnsupported = false;
 
 // ============================================================
 //  EXCLUDED APPS  --  system processes that must never be pinned
@@ -695,6 +725,12 @@ static HICON   g_dragGhostIcon   = NULL;
 static bool    g_dragFromDock    = false;
 static int     g_dragFromDockIdx = -1;
 static bool    g_dropZoneActive  = false;
+// Stage-1 lightweight source classification, recorded at mouse-down for a
+// non-dock press (WindowFromPoint only -- see GetRealWindowFromPoint). NOT a
+// resolved identity: no path, no process, no icon. Consumed once, at the
+// Stage 3/4 dock-intent gate in DRAG_CANDIDATE, to decide whether the source
+// is even worth the Stage 5 resolve.
+static HWND    g_dragCandidateWindow = NULL;
 
 // Rapid-click state
 static int     g_rapidClickCount = 0;
@@ -746,17 +782,15 @@ static const DWORD SCROLL_NAV_LOCK_MS = 700; // How long a wheel-selected highli
 
 // Pin/unpin hotkey
 static const UINT HOTKEY_PIN_ID        = 1777;        // WM_HOTKEY wParam identifier
-// WM_APP message posted by the worker thread to trigger secondary dock
-// rebuild on the main thread (DestroyWindow must only be called by the
-// thread that created the window -- i.e. the main thread).
-static const UINT WM_QPD_REBUILD_SECONDARY = WM_APP + 1;
+// FIX (Issue 6): posted to the overlay window (from Wh_ModSettingsChanged) so the
+// global hotkey is re-registered on its OWNING thread when the user changes the
+// modifier/key setting -- RegisterHotKey/UnregisterHotKey must run on the thread
+// that created g_overlayWnd, so a settings-thread call would silently no-op.
+static const UINT WM_QPD_REREGISTER_HOTKEY = WM_APP + 7;
 static UINT    g_hotkeyMods       = MOD_CONTROL | MOD_ALT;
 static UINT    g_hotkeyKey        = 'P';               // Default: Ctrl+Alt+P
 
 // Hover candidate  --  pre-sampled resolver result for anti-flicker stability
-static std::wstring g_hoverCandidate;
-static DWORD        g_hoverCandidateTime = 0;  // Tick when current candidate was first seen
-static DWORD        g_hoverLastSample    = 0;  // Tick of last resolver call during hover
 
 // Launch rate limiting
 static DWORD   g_lastLaunchTime = 0;
@@ -782,18 +816,6 @@ static int     g_lastSmartLaunchIdx  = -1;
 // ============================================================
 static int g_reorderSrcIdx    = -1;  // Index of icon being reordered
 static int g_reorderTargetIdx = -1;  // Current target slot
-
-// ============================================================
-//  GLOBALS  --  multi-monitor secondary docks
-// ============================================================
-struct SecondaryDock {
-    HWND overlay  = NULL;
-    RECT tbRect   = {};
-    RECT dockRect = {};
-    int  localW   = 0;
-    int  localH   = 0;
-};
-static std::vector<SecondaryDock> g_secondaryDocks;
 
 // ============================================================
 //  GLOBALS  --  pinned apps list
@@ -854,11 +876,18 @@ static HANDLE g_uiThread     = NULL;
 static DWORD  g_uiThreadId   = 0;
 static HANDLE g_uiReadyEvent = NULL;  // signaled by the UI thread once windows exist (or creation failed)
 static bool   g_uiInitOk     = false; // set by the UI thread; read by Wh_ModInit after the ready event
-// FIX-B2 (#6): LaunchWorkspaceAsync's thread is now tracked so Wh_ModUninit can
-// join it before the mod image is unloaded. g_launchWorkspaceStop lets the
-// worker bail out early if the mod is being torn down mid-launch.
-static HANDLE  g_launchWorkspaceThread = NULL;
-static std::atomic<bool> g_launchWorkspaceStop{false};
+// FIX-B2 (#6) + review #4 (Bug A): LaunchWorkspaceAsync's threads are tracked so
+// Wh_ModUninit can join EVERY outstanding one before the mod image unloads. The
+// old single-slot design closed+overwrote a still-running thread's handle when a
+// second launch overlapped it, dropping the join point -- that thread then ran
+// mod code after FreeLibrary (return address in the unmapped image) and crashed
+// the host. We now keep a list and only reap handles that have already finished.
+// g_launchWorkspaceStop lets the worker bail out early if the mod is being torn
+// down mid-launch. g_launchCs guards the list (UI + worker threads both launch).
+static std::vector<HANDLE> g_launchWorkspaceThreads;
+static CRITICAL_SECTION    g_launchCs;
+static bool                g_launchCsInit = false;
+static std::atomic<bool>   g_launchWorkspaceStop{false};
 // FIX-B3 (#3): the mod's own module handle. Window classes must be registered
 // with (and unregistered against) THIS handle, not GetModuleHandleW(NULL) which
 // returns explorer.exe. Populated in Wh_ModInit via GetModHInstance().
@@ -878,11 +907,6 @@ static HINSTANCE GetModHInstance() {
     }
     return g_hModule;
 }
-
-// Dedicated lock for g_secondaryDocks  --  worker thread iterates it (RepaintSecondaryDocks)
-// while the main thread may destroy/recreate it (Wh_ModUninit).
-static CRITICAL_SECTION g_secondaryDocksCS;
-static bool    g_secondaryDocksCSInit = false;
 
 // FIX-A7 (#4): g_winEventHook / WinEventProc removed. The hook could never fire
 // and the worker poll loop already drives every geometry refresh; see the note
@@ -969,31 +993,48 @@ static UINT LoadHotkeyKeySetting() {
     return result;
 }
 
-// Wh_Log is variadic printf-style and auto-prefixed with the mod name, so the
-// four level macros collapse to the same thin wrapper. LOG_RATE keeps its old
-// parameter list for call-site compatibility but ignores level/key/cooldown
-// (the args are dropped by the preprocessor, so they're never even evaluated) --
-// rate limiting is no longer needed because Wh_Log is a no-op unless logging is
-// enabled in the Windhawk UI.
-#define LOG_ERROR(fmt, ...)                       Wh_Log(fmt, ##__VA_ARGS__)
-#define LOG_IMPORTANT(fmt, ...)                   Wh_Log(fmt, ##__VA_ARGS__)
-#define DEBUG_LOG(fmt, ...)                       Wh_Log(fmt, ##__VA_ARGS__)
-#define TRACE_LOG(fmt, ...)                       Wh_Log(fmt, ##__VA_ARGS__)
-#define LOG_RATE(level, key, cooldown, fmt, ...)  Wh_Log(fmt, ##__VA_ARGS__)
+// Wh_Log is variadic printf-style and auto-prefixed with the mod name, and is a
+// no-op unless "Logging enabled" is toggled in the Windhawk UI. On top of that
+// GLOBAL gate we add ONE in-mod verbosity tier so an enabled log stays clean and
+// professional by default:
+//
+//   * LOG_ERROR / LOG_IMPORTANT  -- genuine one-off events (pins, launches,
+//     failures). Always emitted when logging is on. Low volume.
+//   * DEBUG_LOG / TRACE_LOG      -- high-frequency diagnostics (resolver steps,
+//     per-frame rope state, geometry churn). GUARDED behind g_debugLogging so
+//     they are silent unless the user opts in via the "Verbose debug logging"
+//     setting. This is what was drowning the terminal in noise.
+//
+// g_debugLogging is loaded in LoadSettings (default false). The guard is a plain
+// bool test, so a suppressed trace costs nothing but the branch.
+static bool g_debugLogging = false;
 
-// DragTraceLog  --  logs every state transition immediately. Only called on
-// genuine state changes, never per-frame, so verbosity stays controlled.
+#define LOG_ERROR(fmt, ...)      Wh_Log(fmt, ##__VA_ARGS__)
+#define LOG_IMPORTANT(fmt, ...)  Wh_Log(fmt, ##__VA_ARGS__)
+#define DEBUG_LOG(fmt, ...)      do { if (g_debugLogging) Wh_Log(fmt, ##__VA_ARGS__); } while (0)
+#define TRACE_LOG(fmt, ...)      do { if (g_debugLogging) Wh_Log(fmt, ##__VA_ARGS__); } while (0)
+// LOG_RATE keeps its old parameter list for call-site compatibility but ignores
+// level/key/cooldown (dropped by the preprocessor, never evaluated). Treated as
+// a guarded diagnostic like DEBUG_LOG.
+#define LOG_RATE(level, key, cooldown, fmt, ...)  do { if (g_debugLogging) Wh_Log(fmt, ##__VA_ARGS__); } while (0)
+
+// DragTraceLog  --  a genuine state transition (never per-frame). Kept at the
+// always-on tier so the drag lifecycle is still readable in a clean log.
 static void DragTraceLog(const wchar_t* event, const wchar_t* detail = L"") {
     if (detail && detail[0]) Wh_Log(L"[DRAG] %s | %s", event, detail);
     else                     Wh_Log(L"[DRAG] %s", event);
 }
 
+// DragDebugLog / DragTraceVerboseLog  --  high-frequency drag diagnostics,
+// guarded behind g_debugLogging so they do not clutter the terminal by default.
 static void DragDebugLog(const wchar_t* event, const wchar_t* detail = L"") {
+    if (!g_debugLogging) return;
     if (detail && detail[0]) Wh_Log(L"[DRAG] %s | %s", event, detail);
     else                     Wh_Log(L"[DRAG] %s", event);
 }
 
 static void DragTraceVerboseLog(const wchar_t* event, const wchar_t* detail = L"") {
+    if (!g_debugLogging) return;
     if (detail && detail[0]) Wh_Log(L"[DRAG] %s | %s", event, detail);
     else                     Wh_Log(L"[DRAG] %s", event);
 }
@@ -1005,7 +1046,6 @@ void  SavePinnedApps();
 void  LoadPinnedApps();
 void  RepositionOverlay();
 RECT  GetIconRectLocal(int index, int totalCount);
-int   MaxIconsFit();
 static int CountPinsByType(PinType type);   // fwd decl: used by RefreshTaskbarCache (defined later)
 bool  IsPinned(const std::wstring& path);
 void  PinApp(const std::wstring& path);
@@ -1022,6 +1062,7 @@ static void     UpdateAutoHideState();
 static bool     IsNearDockZone(POINT screenPt);
 static bool     IsCursorInDockOrTaskbarRegion(POINT screenPt);
 static int      HitTestIcon(POINT screenPt);
+static void     ForceForegroundWindow(HWND hwnd);  // fwd: defined near SmartLaunch, used earlier
 static void     UpdateDockTargetPosition(float newTargetX, float newTargetY);
 static bool     AnimateDockPositionStep();
 static HICON    LoadAppIconStrict(const std::wstring& path);
@@ -1044,10 +1085,6 @@ static void     UpdateRunningState();
 static void     ShowPinContextMenu(HWND hwnd, int idx, POINT screenPt);
 static void     UpdateWorkspaceSnapshotByIndex(int idx);
 static void     RenameWorkspaceByIndex(int idx);
-static void     InitSecondaryDocks();
-static void     DestroySecondaryDocks();
-static void     RepaintSecondaryDocks();
-LRESULT CALLBACK SecondaryOverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 static void     ApplyDockRegion(HWND hwnd);
 static bool     IsCursorOverTaskbar(POINT pt);
 static HWND     GetRealWindowFromPoint(POINT pt);
@@ -1065,6 +1102,36 @@ static std::wstring Resolver_Layer3_ProcessFallback(POINT pt);
 static bool     IsExplorerWorkspaceDragSource(POINT pt, HWND* outExplorerHwnd = NULL);
 static bool     CaptureWorkspaceSnapshot(WorkspaceSnapshot& snapshot, HWND ownerHwnd = NULL);
 static bool     SaveWorkspaceSnapshot(const WorkspaceSnapshot& snapshot);
+
+// ============================================================
+//  SINGLE-INSTANCE GATE
+// ============================================================
+// The mod declares `// @include explorer.exe`, so Wh_ModInit runs in EVERY
+// explorer.exe process. Windows routinely runs more than one: a File Explorer
+// window opened by RestoreExplorerWindowGroup ("explorer.exe /n,...") or by the
+// "open folder windows in a separate process" shell option spawns a second
+// explorer.exe, which also injected this mod and drew a SECOND dock -- two
+// overlays with different geometry plus two competing drag resolvers, so every
+// drag after opening a pinned Explorer window was rejected.
+//
+// Only the ONE process that owns the real taskbar (Shell_TrayWnd) may create
+// the dock. Every other explorer.exe inits as a no-op.
+//
+// Pure decision mirrored (per this repo's tests/*.h convention) in
+// tests/single_instance_gate.h as ProcessShouldOwnDock -- keep the two in sync.
+static inline bool ProcessShouldOwnDock(DWORD currentPid, DWORD taskbarOwnerPid) {
+    return taskbarOwnerPid != 0 && taskbarOwnerPid == currentPid;
+}
+
+// True only in the explorer.exe process that owns Shell_TrayWnd. A missing
+// taskbar (owner pid 0) yields false, so no process claims the dock until the
+// shell is up -- Wh_ModInit fails cleanly and Windhawk retries.
+static bool ProcessOwnsTaskbar() {
+    HWND tb = FindWindowW(L"Shell_TrayWnd", NULL);
+    DWORD ownerPid = 0;
+    if (tb) GetWindowThreadProcessId(tb, &ownerPid);
+    return ProcessShouldOwnDock(GetCurrentProcessId(), ownerPid);
+}
 
 // ============================================================
 //  DPI SCALING
@@ -1177,6 +1244,35 @@ static void UpdateDockTargetPosition(float newTargetX, float newTargetY) {
 // ============================================================
 //  TASKBAR CACHE REFRESH  --  called on change events and at boot
 // ============================================================
+// ---- Taskbar layout decision (refinement Issue 2) --------------------------
+// Left-aligned taskbars (Win11 "Align: Left", all Win10) put Start at ~tbr.left
+// + 16, so the dock -- which anchors to the LEFT of Start -- has no room. The
+// old code bailed with `if (startLeft <= tbr.left + 50) return;` BEFORE the
+// state machine ran, so g_systemState never left STATE_BOOT: the dock was
+// clamped over Start (eating clicks) and the worker polled at 100 ms forever.
+//
+// This helper turns that single early-return into three explicit outcomes so
+// the caller can ALWAYS settle the state machine instead of spinning:
+//   QP_LAYOUT_OK          -> room left of Start; place the dock normally.
+//   QP_LAYOUT_UNSUPPORTED -> left-aligned / no room; hide dock, go idle.
+//   QP_LAYOUT_PENDING     -> geometry not trustworthy yet; keep booting.
+// (Mirrors DecideTaskbarLayout in tests/taskbar_layout.h, which unit-tests this
+// exact decision.)
+enum QpLayoutDecision { QP_LAYOUT_PENDING = 0, QP_LAYOUT_OK, QP_LAYOUT_UNSUPPORTED };
+static inline QpLayoutDecision QpDecideTaskbarLayout(long tbrLeft, long tbrRight,
+                                                     long startLeft,
+                                                     int dockGapPx, int dockWidth,
+                                                     int minRoom) {
+    if (tbrRight <= tbrLeft) return QP_LAYOUT_PENDING;
+    if (startLeft <= tbrLeft || startLeft >= tbrRight) return QP_LAYOUT_PENDING;
+    if (dockGapPx < 0) dockGapPx = 0;
+    long room = (startLeft - (long)dockGapPx) - tbrLeft;
+    if (room < 0) room = 0;
+    int need = dockWidth < minRoom ? dockWidth : minRoom;
+    if (need < 1) need = 1;
+    return (room >= need) ? QP_LAYOUT_OK : QP_LAYOUT_UNSUPPORTED;
+}
+
 static void RefreshTaskbarCache() {
     HWND tb = FindWindowW(L"Shell_TrayWnd", NULL);
     if (!tb) return;
@@ -1306,7 +1402,46 @@ static void RefreshTaskbarCache() {
         s_lastGeomLog = now;
     }
 
-    if (newW <= 0 || startLeft <= tbr.left + 50) return;
+    // FIX (Issue 2): classify the layout instead of the old blanket early-return
+    // `if (newW <= 0 || startLeft <= tbr.left + 50) return;`, which fired on every
+    // call for a LEFT-ALIGNED taskbar (Start at ~tbr.left+16) and left the state
+    // machine stuck in STATE_BOOT forever (dock clamped over Start, 100 ms poll
+    // that never backs off). Decide against the *intended* dock width
+    // (g_fixedDockWidth), not the left-edge-clamped newW.
+    QpLayoutDecision layout = QpDecideTaskbarLayout(
+        tbr.left, tbr.right, startLeft, DOCK_GAP_PX,
+        g_fixedDockWidth, MIN_VALID_DOCK_WIDTH);
+
+    if (layout == QP_LAYOUT_PENDING) {
+        // Geometry not trustworthy yet (cold boot / Start not detected). Keep
+        // the boot poll running; do NOT commit to a layout or settle the state.
+        return;
+    }
+
+    if (layout == QP_LAYOUT_UNSUPPORTED) {
+        // Left-aligned taskbar: no room for the dock. Hide it and SETTLE the
+        // state machine to STATE_STABLE so the worker's poll cadence relaxes
+        // (STATE_STABLE -> 500 ms) instead of spinning at 100 ms in STATE_BOOT.
+        if (!g_layoutUnsupported) {
+            DEBUG_LOG(L"GEOMETRY: left-aligned taskbar -- no room for dock, hiding (startLeft=%d tbLeft=%d)",
+                      (int)startLeft, (int)tbr.left);
+        }
+        g_layoutUnsupported = true;
+        g_systemState       = STATE_STABLE;   // terminal/idle: polling backs off
+        if (g_overlayWnd && IsWindow(g_overlayWnd))
+            ShowWindow(g_overlayWnd, SW_HIDE);
+        return;
+    }
+
+    // QP_LAYOUT_OK: there is room. If we were previously hidden as unsupported
+    // (e.g. the user just switched Start back to centered), un-hide and let the
+    // normal state-machine flow below re-establish geometry.
+    if (g_layoutUnsupported) {
+        g_layoutUnsupported = false;
+        if (g_overlayWnd && IsWindow(g_overlayWnd))
+            ShowWindow(g_overlayWnd, SW_SHOWNOACTIVATE);
+        DEBUG_LOG(L"GEOMETRY: room reappeared left of Start -- dock re-enabled");
+    }
 
     // Helper lambda: re-seat all pinned-app icon positions from the now-valid
     // g_dockLocalW.  LoadPinnedApps runs before geometry is ready, so all icons
@@ -1486,10 +1621,6 @@ RECT GetIconRectLocal(int index, int totalCount) {
 }
 
 // Maximum icons that can be physically laid out in the current dock width.
-int MaxIconsFit() {
-    return MAX_WORKSPACE_PINS + MAX_APP_PINS;
-}
-
 // ============================================================
 //  ZONE HELPERS  --  all screen-space coordinates
 // ============================================================
@@ -1580,6 +1711,13 @@ static int HitTestIcon(POINT screenPt) {
 // ============================================================
 void RepositionOverlay() {
     if (!g_overlayWnd || !IsWindow(g_overlayWnd)) return;
+
+    // FIX (Issue 2): on an unsupported (left-aligned) layout the dock is hidden
+    // and has no valid geometry. Do nothing here -- otherwise the emergency
+    // fallback below would force g_dockLocalW=200 at a negative X and the
+    // reposition/show path would un-hide the dock we deliberately hid, parking
+    // it back on top of Start. RefreshTaskbarCache re-shows it if room returns.
+    if (g_layoutUnsupported) return;
 
     // Emergency fallback: if dock size is still zero, provide a safe default
     if (g_dockLocalW <= 0) {
@@ -2055,17 +2193,33 @@ static BOOL CALLBACK TitleMatchEnumProc(HWND hwnd, LPARAM lp) {
     GetWindowTextW(hwnd, title, 256);
     if (!title[0]) return TRUE;
 
-    // Score the match quality
-    int score = 0;
-    if (_wcsicmp(title, c->needle) == 0)        score = 100;  // Exact
-    else if (StrStrIW(title, c->needle) != NULL) score = 60;  // Title contains needle
-    else if (StrStrIW(c->needle, title) != NULL) score = 40;  // Needle contains title
+    // Score the match quality using TIERS, not a flat scale.
+    //
+    // BUG FIX ("skips most actions when the real windhawk.exe is open and
+    // foreground"): the old flat scale (exact=100, title-contains-needle=60,
+    // needle-contains-title=40, +20 app / -30 tool) let a foreground Windhawk
+    // window -- an app window whose title embeds the mod moniker / target exe
+    // name -- out-score the button's EXACT-title target once style bonuses were
+    // applied, so the resolver picked windhawk.exe (then discarded it) and the
+    // taskbar path MISSed with no fallback.
+    //
+    // Fix: an exact match is its own tier that no substring match + style bonus
+    // can ever beat. Style is only a small INTRA-tier tie-break. Mirrors
+    // tests/title_match.h (Tm_ScoreTier / Tm_Score).
+    //   tier 3 = exact, 2 = window-title-in-needle, 1 = needle-in-window-title
+    int tier;
+    if (_wcsicmp(title, c->needle) == 0)         tier = 3;  // Exact
+    else if (StrStrIW(title, c->needle) != NULL) tier = 1;  // Title contains needle
+    else if (StrStrIW(c->needle, title) != NULL) tier = 2;  // Needle contains title
     else return TRUE;
 
-    // Prefer proper app windows
+    int score = tier * 1000;
+
+    // Prefer proper app windows -- but only as a small tie-break WITHIN a tier,
+    // never large enough to promote a weaker tier above a stronger one.
     LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-    if (ex & WS_EX_APPWINDOW)  score += 20;
-    if (ex & WS_EX_TOOLWINDOW) score -= 30;
+    if (ex & WS_EX_APPWINDOW)  score += 2;
+    if (ex & WS_EX_TOOLWINDOW) score -= 3;
 
     if (score > c->bestScore) {
         c->bestScore = score;
@@ -2224,6 +2378,56 @@ static std::wstring Resolver_Layer2_TaskbarIntelligence(POINT pt) {
         pElement->Release();
     }
 
+    // Seam-recovery retry: an exact-pixel ElementFromPoint can land in the
+    // ~1-3px gap BETWEEN two taskbar buttons (or a hair above/below a button's
+    // clickable sub-rect) and return the explorer taskbar container, giving an
+    // empty result and an immediate MISS -- with no fallback on the taskbar
+    // path. Retry UIA at a small, bounded ring of nudged points snapped toward
+    // the button-row center. This stays UIA-only (still taskbar-authoritative;
+    // it never consults the foreground/active window or process enum), and the
+    // horizontal nudge is clamped to < half a button pitch so a probe can never
+    // resolve a NEIGHBORING button. Mirrors tests/taskbar_probe.h BuildTaskbarProbes.
+    if (result.empty()) {
+        // Button pitch/mid-Y derived from the taskbar rect. Win11 taskbar
+        // buttons are ~square, so the taskbar row height is a good pitch proxy.
+        int tbHeight  = tbRect.bottom - tbRect.top;
+        int pitch     = (tbHeight > 12) ? tbHeight : 44;      // sane fallback
+        int midY      = (tbRect.top + tbRect.bottom) / 2;
+
+        int hStep = pitch / 3; if (hStep < 1) hStep = 1;
+        int hMax  = (pitch / 2) - 1; if (hMax < 1) hMax = 1;
+
+        // Ordered nearest-first: center-Y first, then symmetric horizontal nudges.
+        std::vector<POINT> probes;
+        if (midY != pt.y) probes.push_back(POINT{ pt.x, midY });
+        for (int dx = hStep; dx <= hMax && result.empty(); dx += hStep) {
+            probes.push_back(POINT{ pt.x - dx, midY });
+            probes.push_back(POINT{ pt.x + dx, midY });
+        }
+
+        for (const POINT& pp : probes) {
+            if (!result.empty()) break;
+            IUIAutomationElement* pProbe = NULL;
+            if (SUCCEEDED(pAuto->ElementFromPoint(pp, &pProbe)) && pProbe) {
+                result = ResolveElement(pProbe);
+                if (result.empty()) {
+                    IUIAutomationTreeWalker* pW = NULL;
+                    if (SUCCEEDED(pAuto->get_RawViewWalker(&pW)) && pW) {
+                        IUIAutomationElement* pPar = NULL;
+                        if (SUCCEEDED(pW->GetParentElement(pProbe, &pPar)) && pPar) {
+                            result = ResolveElement(pPar);
+                            pPar->Release();
+                        }
+                        pW->Release();
+                    }
+                }
+                pProbe->Release();
+            }
+        }
+        if (!result.empty())
+            DragTraceVerboseLog(L"RESOLVER: L2 seam-recovery", result.c_str());
+    }
+
     pAuto->Release();
     if (SUCCEEDED(hrInit)) CoUninitialize();
     return result;
@@ -2243,19 +2447,20 @@ static BOOL CALLBACK Layer3EnumProc(HWND hwnd, LPARAM lp) {
     RECT rc;
     if (!GetWindowRect(hwnd, &rc)) return TRUE;
 
-    bool inside = PtInRect(&rc, c->pt) != 0;
-    int  dist   = 1000;
-    if (!inside) {
-        int dx = 0, dy = 0;
-        if (c->pt.x < rc.left)   dx = rc.left   - c->pt.x;
-        else if (c->pt.x > rc.right)  dx = c->pt.x - rc.right;
-        if (c->pt.y < rc.top)    dy = rc.top    - c->pt.y;
-        else if (c->pt.y > rc.bottom) dy = c->pt.y - rc.bottom;
-        dist = dx + dy;
-    } else {
-        dist = 0;
-    }
-    if (dist > 50) return TRUE;
+    // Manhattan gap from the cursor to this window's rect: 0 inside, dx+dy
+    // outside. (Mirrors Layer3PointRectDistance in tests/layer3_accept.h,
+    // which unit-tests this exact geometry.)
+    int dx = 0, dy = 0;
+    if (c->pt.x < rc.left)        dx = rc.left - c->pt.x;
+    else if (c->pt.x > rc.right)  dx = c->pt.x - rc.right;
+    if (c->pt.y < rc.top)         dy = rc.top - c->pt.y;
+    else if (c->pt.y > rc.bottom) dy = c->pt.y - rc.bottom;
+    int dist = dx + dy;
+    // Functionality-note #1: only accept a window the cursor is actually INSIDE
+    // (dist == 0). The old "within 50 px" radius let a press on the desktop or
+    // on a window's edge resolve to a neighbouring app and pin the wrong thing.
+    // (Mirrors Layer3AcceptsDistance in tests/layer3_accept.h.)
+    if (dist != 0) return TRUE;
 
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
@@ -2314,7 +2519,20 @@ static std::wstring ResolveDragSourceZeroRejection(POINT pt) {
                 RECT r = GetIconRectLocal(i, n);
                 InflateRect(&r, 2, 2);
                 if (PtInRect(&r, local)) {
-                    std::wstring p = g_pinnedApps[i].exePath;
+                    // A dock-icon hit must NEVER resolve to empty. A WORKSPACE
+                    // pin carries a workspaceId and has an empty exePath; return
+                    // the workspace sentinel the press path uses instead of "".
+                    // Returning "" here (the old behaviour) made the resolver
+                    // fall through to L1/L2/L3, which all miss over the dock, so
+                    // a workspace pin could be opened only once and never again.
+                    // Mirrors tests/dock_icon_resolve.h ResolveDockIconSource.
+                    std::wstring p;
+                    if (g_pinnedApps[i].type == PIN_WORKSPACE)
+                        p = g_pinnedApps[i].workspaceId.empty()
+                                ? std::wstring()
+                                : std::wstring(L"Explorer workspace");
+                    else
+                        p = g_pinnedApps[i].exePath;
                     LeaveCriticalSection(&g_cs);
                     DragTraceVerboseLog(L"RESOLVER: dock icon", p.c_str());
                     return p;
@@ -2452,8 +2670,26 @@ static std::wstring WorkspaceLenName(const std::wstring& workspaceId) {
 }
 
 static std::wstring MakeWorkspaceId() {
+    // Functionality-note #10: GetTickCount() ^ time(NULL) could collide for two
+    // workspaces pinned in the same second on the same tick. A GUID gives 128
+    // bits of collision-free entropy. (Formatting mirrors FormatWorkspaceId in
+    // tests/workspace_id.h, which unit-tests the exact layout.)
+    GUID g = {};
     wchar_t buf[64] = {};
-    swprintf_s(buf, L"workspace_%08X_%08X", (unsigned)GetTickCount(), (unsigned)time(NULL));
+    if (SUCCEEDED(CoCreateGuid(&g))) {
+        swprintf_s(buf, L"workspace_%08X_%08X_%08X_%08X",
+                   (unsigned)g.Data1,
+                   ((unsigned)g.Data2 << 16) | (unsigned)g.Data3,
+                   ((unsigned)g.Data4[0] << 24) | ((unsigned)g.Data4[1] << 16) |
+                   ((unsigned)g.Data4[2] << 8)  |  (unsigned)g.Data4[3],
+                   ((unsigned)g.Data4[4] << 24) | ((unsigned)g.Data4[5] << 16) |
+                   ((unsigned)g.Data4[6] << 8)  |  (unsigned)g.Data4[7]);
+    } else {
+        // CoCreateGuid effectively never fails, but keep a unique fallback.
+        swprintf_s(buf, L"workspace_%08X_%08X_%08X_%08X",
+                   (unsigned)GetTickCount(), (unsigned)time(NULL),
+                   (unsigned)GetCurrentProcessId(), (unsigned)GetTickCount());
+    }
     return buf;
 }
 
@@ -2501,6 +2737,11 @@ static bool SaveWorkspaceSnapshot(const WorkspaceSnapshot& snapshot) {
     if (snapshot.id.empty()) return false;   // FIX-C3 (#7)
 
     std::wstring body;
+    // MEM: reserve up front so the ~dozen `+=` appends below don't trigger a
+    // chain of geometric reallocations (each realloc copies the whole buffer).
+    // Sized from the actual snapshot so it fits in one allocation in the common
+    // case without over-committing.
+    body.reserve(128 + snapshot.folderPaths.size() * 96 + snapshot.windows.size() * 160);
     body += L"{\r\n";
     body += L"  \"id\": \"" + JsonEscape(snapshot.id) + L"\",\r\n";
     body += L"  \"displayName\": \"" + JsonEscape(snapshot.displayName) + L"\",\r\n";
@@ -3244,6 +3485,69 @@ static void LaunchApp(int idx) {
     ShellExecuteExW(&sei);
 }
 
+// ------------------------------------------------------------------
+//  Workspace click: focus an already-open window instead of opening a
+//  duplicate. Mirrors PickWorkspaceWindowToFocus in tests/workspace_focus.h
+//  (unit-tested there with no Win32/COM deps). The app-pin path already
+//  focuses a running app (FindRunningAppWindow -> SetForegroundWindow);
+//  this gives workspace pins the same behaviour, so a second click doesn't
+//  stack another Explorer window on the same folder.
+// ------------------------------------------------------------------
+struct OpenExplorerWindow {
+    HWND         hwnd;
+    std::wstring folder;
+};
+
+static std::wstring NormalizeForCompare(std::wstring p) {
+    for (wchar_t& c : p)
+        if (c == L'/') c = L'\\';
+    if (p.size() >= 2 &&
+        ((p[0] >= L'A' && p[0] <= L'Z') || (p[0] >= L'a' && p[0] <= L'z')) &&
+        p[1] == L':') {
+        if (p.size() == 2)      p += L"\\";                              // "C:"    -> "C:\"
+        else if (p[2] != L'\\') p = p.substr(0, 2) + L"\\" + p.substr(2); // "C:x" -> "C:\x"
+    }
+    while (p.size() > 3 && p.back() == L'\\')
+        p.pop_back();
+    return p;
+}
+
+static bool WorkspaceFoldersMatch(const std::wstring& a, const std::wstring& b) {
+    return _wcsicmp(NormalizeForCompare(a).c_str(),
+                    NormalizeForCompare(b).c_str()) == 0;
+}
+
+// Returns the index into `open` of a window already showing `primaryFolder`
+// (focus it), or -1 when none matches (open a new window).
+static int PickWorkspaceWindowToFocus(const std::wstring& primaryFolder,
+                                      const std::vector<OpenExplorerWindow>& open) {
+    if (primaryFolder.empty())
+        return -1;
+    for (int i = 0; i < (int)open.size(); ++i) {
+        if (open[i].hwnd && WorkspaceFoldersMatch(open[i].folder, primaryFolder))
+            return i;
+    }
+    return -1;
+}
+
+// Try several candidate folders (a workspace group's tab folders, active tab
+// first). Empty candidates are skipped -- a virtual Explorer location (This PC,
+// Home, a library) resolves to "" at capture time, so keying the focus-if-open
+// decision on ONLY the active tab meant such a workspace stacked a duplicate
+// window on every click. Mirrors PickWorkspaceWindowToFocusAny in
+// tests/workspace_focus.h.
+static int PickWorkspaceWindowToFocusAny(const std::vector<std::wstring>& candidateFolders,
+                                         const std::vector<OpenExplorerWindow>& open) {
+    for (const std::wstring& folder : candidateFolders) {
+        if (folder.empty())
+            continue;
+        int idx = PickWorkspaceWindowToFocus(folder, open);
+        if (idx >= 0)
+            return idx;
+    }
+    return -1;
+}
+
 static void LaunchWorkspace(const std::wstring& workspaceId) {
     WorkspaceSnapshot snapshot;
     if (!LoadWorkspaceSnapshot(workspaceId, snapshot)) {
@@ -3286,33 +3590,49 @@ static DWORD WINAPI LaunchWorkspaceThread(LPVOID param) {
 
 static void LaunchWorkspaceAsync(const std::wstring& workspaceId) {
     if (workspaceId.empty()) return;
-    // FIX-B2 (#6): keep the thread handle in a global so Wh_ModUninit can join it
-    // before the image unloads. If a previous launch thread is still tracked,
-    // reap it first (join if finished, else leave it -- Wh_ModUninit will wait)
-    // so we never leak the handle.
-    if (g_launchWorkspaceThread) {
-        if (WaitForSingleObject(g_launchWorkspaceThread, 0) == WAIT_OBJECT_0) {
-            CloseHandle(g_launchWorkspaceThread);
-            g_launchWorkspaceThread = NULL;
+
+    // Review #4 (Bug A): never drop a still-running launch thread. Track every
+    // outstanding handle in g_launchWorkspaceThreads and only reap the ones that
+    // have already finished; Wh_ModUninit joins whatever is left. Also refuse to
+    // start a new launch once teardown has begun, so we can't spawn a thread that
+    // outlives Wh_ModUninit's join (which is reachable from the UI thread's
+    // "Restore Workspace" menu path).
+    if (g_launchWorkspaceStop.load()) return;
+    if (!g_launchCsInit) { LaunchWorkspace(workspaceId); return; }
+
+    HANDLE h = NULL;
+    std::wstring* ownedId = new std::wstring(workspaceId);
+
+    EnterCriticalSection(&g_launchCs);
+    // Reap any finished handles first (join point already satisfied).
+    for (size_t i = 0; i < g_launchWorkspaceThreads.size();) {
+        HANDLE t = g_launchWorkspaceThreads[i];
+        if (WaitForSingleObject(t, 0) == WAIT_OBJECT_0) {
+            CloseHandle(t);
+            g_launchWorkspaceThreads.erase(g_launchWorkspaceThreads.begin() + i);
+        } else {
+            ++i;   // still running -- KEEP it so Wh_ModUninit can join it
         }
     }
-    std::wstring* ownedId = new std::wstring(workspaceId);
-    HANDLE h = CreateThread(NULL, 0, LaunchWorkspaceThread, ownedId, 0, NULL);
-    if (h) {
-        // If an older handle is still running, don't lose it: close the new one's
-        // predecessor only when reaped above. Store the freshest handle; the rare
-        // overlap case still gets joined via the stop flag in Wh_ModUninit.
-        if (g_launchWorkspaceThread) CloseHandle(g_launchWorkspaceThread);
-        g_launchWorkspaceThread = h;
-    } else {
+    h = CreateThread(NULL, 0, LaunchWorkspaceThread, ownedId, 0, NULL);
+    if (h) g_launchWorkspaceThreads.push_back(h);
+    LeaveCriticalSection(&g_launchCs);
+
+    if (!h) {
         delete ownedId;
-        LaunchWorkspace(workspaceId);
+        LaunchWorkspace(workspaceId);   // fall back to synchronous launch
     }
 }
 
 struct RunningCtx { const wchar_t* path; HWND found; };
 static BOOL CALLBACK FindRunningProc(HWND hwnd, LPARAM lp) {
     if (!IsWindowVisible(hwnd)) return TRUE;
+    // Functionality-note #3: the first visible top-level window of a process can
+    // be a splash screen, a tooltip host or a hidden helper rather than the main
+    // window. Skip tool windows and untitled windows so focus-if-running latches
+    // onto a real app window. (Same idiom as RunStateEnumProc below.)
+    if (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) return TRUE;
+    if (GetWindowTextLengthW(hwnd) == 0) return TRUE;
     RunningCtx* c = (RunningCtx*)lp;
     DWORD pid = 0;
     GetWindowThreadProcessId(hwnd, &pid);
@@ -3408,6 +3728,12 @@ static IWebBrowserApp* FindExplorerAppForFolder(const std::wstring& folder, HWND
     return found;
 }
 
+// Poll granularity for the Explorer-workspace restore wait loops. Reduced from
+// 80ms so a workspace pin's window/tab is detected sooner (cuts perceived launch
+// latency vs. an app pin) WITHOUT changing the overall timeout budgets. Mirrors
+// kRestorePollIntervalMs in tests/poll_timing.h.
+static const DWORD kRestorePollIntervalMs = 20;
+
 static IWebBrowserApp* WaitForNewExplorerAppForFolder(
     const std::wstring& folder,
     const std::vector<HWND>& existingWindows,
@@ -3415,6 +3741,11 @@ static IWebBrowserApp* WaitForNewExplorerAppForFolder(
     HWND* outHwnd = NULL) {
     DWORD start = GetTickCount();
     while (GetTickCount() - start < timeoutMs) {
+        // Review #4 (Bug B): bail the instant the mod is being torn down instead
+        // of Sleep(80)-polling for the full timeout. Otherwise disabling the mod
+        // mid-restore made Wh_ModUninit's INFINITE join block for up to ~15 s
+        // (4500 + 2500 ms per tab). Checked at the top of every iteration.
+        if (g_launchWorkspaceStop.load()) return NULL;
         std::vector<ExplorerTab> tabs = EnumerateExplorerTabs();
         for (auto& tab : tabs) {
             bool knownWindow = false;
@@ -3433,8 +3764,11 @@ static IWebBrowserApp* WaitForNewExplorerAppForFolder(
             }
         }
         ReleaseExplorerTabs(tabs);
-        Sleep(80);
+        // Sleep on g_exitEvent, not a blind Sleep(80): a teardown wakes us at once.
+        if (g_exitEvent && WaitForSingleObject(g_exitEvent, kRestorePollIntervalMs) == WAIT_OBJECT_0)
+            return NULL;
     }
+    if (g_launchWorkspaceStop.load()) return NULL;
     return FindExplorerAppForFolder(folder, outHwnd);
 }
 
@@ -3451,9 +3785,10 @@ static bool NavigateExplorerTab(IWebBrowserApp* app, const std::wstring& folder)
     return SUCCEEDED(hr);
 }
 
-static IUIAutomationElement* FindNamedDescendant(IUIAutomation* automation,
-                                                 IUIAutomationElement* root,
-                                                 const wchar_t* name) {
+static IUIAutomationElement* FindNamedInScope(IUIAutomation* automation,
+                                              IUIAutomationElement* root,
+                                              const wchar_t* name,
+                                              enum TreeScope scope) {
     if (!automation || !root || !name) return NULL;
     VARIANT v;
     VariantInit(&v);
@@ -3465,27 +3800,69 @@ static IUIAutomationElement* FindNamedDescendant(IUIAutomation* automation,
     IUIAutomationElement* found = NULL;
     HRESULT hr = automation->CreatePropertyCondition(UIA_NamePropertyId, v, &cond);
     if (SUCCEEDED(hr) && cond) {
-        root->FindFirst(TreeScope_Subtree, cond, &found);
+        root->FindFirst(scope, cond, &found);
         cond->Release();
     }
     VariantClear(&v);
     return found;
 }
 
-static bool InvokeExplorerNewTab(HWND hwnd) {
-    if (!hwnd || !IsWindow(hwnd)) return false;
+static IUIAutomationElement* FindNamedDescendant(IUIAutomation* automation,
+                                                 IUIAutomationElement* root,
+                                                 const wchar_t* name) {
+    return FindNamedInScope(automation, root, name, TreeScope_Subtree);
+}
+
+// Locate the Explorer tab strip so the "New tab" search runs over a SMALL
+// subtree instead of the entire window. Falls back to NULL (caller then
+// searches the whole window) if the tab bar can't be identified.
+static IUIAutomationElement* FindExplorerTabBar(IUIAutomation* automation,
+                                                IUIAutomationElement* root) {
+    if (!automation || !root) return NULL;
+    // Windows 11 File Explorer exposes the tab strip as a Tab control
+    // (UIA_TabControlTypeId). Restrict to that; if absent, let caller fall back.
+    VARIANT v;
+    VariantInit(&v);
+    v.vt = VT_I4;
+    v.lVal = UIA_TabControlTypeId;
+    IUIAutomationCondition* cond = NULL;
+    IUIAutomationElement* tabBar = NULL;
+    if (SUCCEEDED(automation->CreatePropertyCondition(UIA_ControlTypePropertyId, v, &cond)) && cond) {
+        root->FindFirst(TreeScope_Subtree, cond, &tabBar);
+        cond->Release();
+    }
+    VariantClear(&v);
+    return tabBar;
+}
+
+// Reuses a caller-provided IUIAutomation instance so a multi-tab restore does
+// not pay CoCreateInstance(CLSID_CUIAutomation) once PER tab (the dominant
+// per-tab cost). Also scopes the "New tab" lookup to the tab bar when found.
+static bool InvokeExplorerNewTab(IUIAutomation* automation, HWND hwnd) {
+    if (!automation || !hwnd || !IsWindow(hwnd)) return false;
 
     bool ok = false;
-    IUIAutomation* automation = NULL;
-    HRESULT hr = CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER,
-                                  IID_IUIAutomation, (void**)&automation);
-    if (SUCCEEDED(hr) && automation) {
+    HRESULT hr = S_OK;
+    {
         IUIAutomationElement* root = NULL;
         hr = automation->ElementFromHandle(hwnd, &root);
         if (SUCCEEDED(hr) && root) {
-            IUIAutomationElement* newTab = FindNamedDescendant(automation, root, L"New tab");
+            // Scope to the tab bar first (small subtree); fall back to the whole
+            // window only if the tab bar isn't found.
+            IUIAutomationElement* tabBar = FindExplorerTabBar(automation, root);
+            IUIAutomationElement* scope  = tabBar ? tabBar : root;
+
+            IUIAutomationElement* newTab =
+                FindNamedInScope(automation, scope, L"New tab", TreeScope_Descendants);
             if (!newTab)
-                newTab = FindNamedDescendant(automation, root, L"Add new tab");
+                newTab = FindNamedInScope(automation, scope, L"Add new tab", TreeScope_Descendants);
+            // Last resort: full-window subtree search (old behaviour).
+            if (!newTab && tabBar) {
+                newTab = FindNamedDescendant(automation, root, L"New tab");
+                if (!newTab)
+                    newTab = FindNamedDescendant(automation, root, L"Add new tab");
+            }
+            if (tabBar) tabBar->Release();
             if (newTab) {
                 IUIAutomationInvokePattern* invoke = NULL;
                 hr = newTab->GetCurrentPatternAs(UIA_InvokePatternId,
@@ -3508,9 +3885,6 @@ static bool InvokeExplorerNewTab(HWND hwnd) {
         } else {
             LOG_ERROR(L"EXPLORER TABS: ElementFromHandle failed hr=0x%08X hwnd=%p", (unsigned)hr, hwnd);
         }
-        automation->Release();
-    } else {
-        LOG_ERROR(L"EXPLORER TABS: CUIAutomation unavailable hr=0x%08X", (unsigned)hr);
     }
     return ok;
 }
@@ -3520,6 +3894,9 @@ static IWebBrowserApp* WaitForNewExplorerTab(HWND hwnd,
                                              DWORD timeoutMs) {
     DWORD start = GetTickCount();
     while (GetTickCount() - start < timeoutMs) {
+        // Review #4 (Bug B): abort at once on teardown instead of polling for the
+        // full timeout -- see WaitForNewExplorerAppForFolder above.
+        if (g_launchWorkspaceStop.load()) return NULL;
         std::vector<ExplorerTab> tabs = EnumerateExplorerTabs(hwnd);
         for (auto& tab : tabs) {
             bool known = false;
@@ -3537,7 +3914,8 @@ static IWebBrowserApp* WaitForNewExplorerTab(HWND hwnd,
             }
         }
         ReleaseExplorerTabs(tabs);
-        Sleep(80);
+        if (g_exitEvent && WaitForSingleObject(g_exitEvent, kRestorePollIntervalMs) == WAIT_OBJECT_0)
+            return NULL;
     }
     return NULL;
 }
@@ -3592,7 +3970,7 @@ static bool FocusExplorerTabByFolder(HWND hwnd, const std::wstring& folder) {
     }
 
     if (hwnd && IsWindow(hwnd)) {
-        SetForegroundWindow(hwnd);
+        ForceForegroundWindow(hwnd);
         return true;
     }
     return selected;
@@ -3611,14 +3989,50 @@ static void RestoreExplorerWindowGroup(const WorkspaceSnapshot::WindowGroup& gro
                   (int)group.tabPaths.size(), group.activeTab);
 
     std::vector<HWND> existingExplorerWindows;
+    std::vector<OpenExplorerWindow> openWindows;   // FIX: per-tab {hwnd, folder} for focus-if-open
     {
         std::vector<ExplorerTab> existingTabs = EnumerateExplorerTabs();
         for (const auto& tab : existingTabs) {
             if (std::find(existingExplorerWindows.begin(), existingExplorerWindows.end(), tab.hwnd)
                 == existingExplorerWindows.end())
                 existingExplorerWindows.push_back(tab.hwnd);
+            openWindows.push_back({ tab.hwnd, tab.folder });
         }
         ReleaseExplorerTabs(existingTabs);
+    }
+
+    // FIX (duplicate-window bug): if a window already shows this group's active
+    // folder, focus it and skip the ShellExecute that would stack a second
+    // window on the same doc. Mirrors the app-pin focus-if-running path.
+    // (Decision mirrors PickWorkspaceWindowToFocus in tests/workspace_focus.h.)
+    {
+        int activeIdx = std::max(0, std::min(group.activeTab,
+                                             (int)group.tabPaths.size() - 1));
+        // FIX (duplicate-window bug on virtual active tabs): the active tab can
+        // be a virtual Explorer location (This PC / Home / a library), which
+        // FolderPathFromExplorer reports as "" at capture time. Keying the
+        // focus-if-open decision on ONLY that tab meant such a workspace could
+        // never match an open window and stacked a duplicate on every click.
+        // Try the active tab first, then the remaining tab folders. (Decision
+        // mirrors PickWorkspaceWindowToFocusAny in tests/workspace_focus.h.)
+        std::vector<std::wstring> candidateFolders;
+        candidateFolders.push_back(group.tabPaths[activeIdx]);
+        for (int i = 0; i < (int)group.tabPaths.size(); ++i)
+            if (i != activeIdx) candidateFolders.push_back(group.tabPaths[i]);
+
+        int focusIdx = PickWorkspaceWindowToFocusAny(candidateFolders, openWindows);
+        if (focusIdx >= 0) {
+            const std::wstring& primaryFolder = openWindows[focusIdx].folder;
+            HWND existing = openWindows[focusIdx].hwnd;
+            if (existing && IsWindow(existing)) {
+                if (IsIconic(existing)) ShowWindow(existing, SW_RESTORE);
+                FocusExplorerTabByFolder(existing, primaryFolder);
+            }
+            LOG_IMPORTANT(L"EXPLORER RESTORE: focused already-open window folder=%s",
+                          primaryFolder.c_str());
+            if (SUCCEEDED(hrInit)) CoUninitialize();
+            return;
+        }
     }
 
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
@@ -3649,9 +4063,18 @@ static void RestoreExplorerWindowGroup(const WorkspaceSnapshot::WindowGroup& gro
     NavigateExplorerTab(first, group.tabPaths[0]);
     first->Release();
 
+    // Create ONE UIAutomation instance and reuse it for every "New tab" invoke.
+    // Previously InvokeExplorerNewTab did CoCreateInstance(CLSID_CUIAutomation)
+    // per tab -- the dominant per-tab cost in a multi-tab workspace restore.
+    IUIAutomation* sharedAutomation = NULL;
+    HRESULT hrUia = CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER,
+                                     IID_IUIAutomation, (void**)&sharedAutomation);
+    if (FAILED(hrUia) || !sharedAutomation)
+        LOG_ERROR(L"EXPLORER RESTORE: CUIAutomation unavailable hr=0x%08X", (unsigned)hrUia);
+
     int restored = 1;
     for (size_t i = 1; i < group.tabPaths.size(); ++i) {
-        if (!InvokeExplorerNewTab(hwnd)) {
+        if (!InvokeExplorerNewTab(sharedAutomation, hwnd)) {
             LOG_ERROR(L"EXPLORER RESTORE: native tab creation failed index=%d folder=%s",
                       (int)i, group.tabPaths[i].c_str());
             continue;
@@ -3671,11 +4094,13 @@ static void RestoreExplorerWindowGroup(const WorkspaceSnapshot::WindowGroup& gro
         tab->Release();
     }
 
+    if (sharedAutomation) sharedAutomation->Release();
+
     int active = std::max(0, std::min(group.activeTab, (int)group.tabPaths.size() - 1));
     if (active < (int)group.tabPaths.size())
         FocusExplorerTabByFolder(hwnd, group.tabPaths[active]);
     else if (hwnd && IsWindow(hwnd))
-        SetForegroundWindow(hwnd);
+        ForceForegroundWindow(hwnd);
 
     LOG_IMPORTANT(L"EXPLORER RESTORE: complete restored=%d requested=%d hwnd=%p",
                   restored, (int)group.tabPaths.size(), hwnd);
@@ -3918,6 +4343,43 @@ static void ShowPinContextMenu(HWND hwnd, int idx, POINT screenPt) {
 }
 
 // Smart launch: focus if running, otherwise launch (rate-limited).
+// Force a window to the foreground even when a DIFFERENT app currently holds
+// the foreground. A bare SetForegroundWindow() from explorer's worker thread is
+// REFUSED by Windows' foreground lock when another thread owns the foreground
+// (SPI_SETFOREGROUNDLOCKTIMEOUT) -- the call silently fails and the taskbar
+// button just flashes. This is why clicks were "skipped" while the real
+// windhawk.exe (or any app) was foreground.
+//
+// Fix: attach our input queue to the current foreground thread's input queue so
+// the OS treats the call as coming from the foreground thread, then set it.
+// The attach/detach decision mirrors tests/foreground_focus.h PlanForegroundFocus.
+static void ForceForegroundWindow(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+
+    if (IsIconic(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+
+    HWND  fg          = GetForegroundWindow();
+    DWORD callerTid   = GetCurrentThreadId();
+    DWORD targetTid   = GetWindowThreadProcessId(hwnd, NULL);
+    DWORD foregroundTid = fg ? GetWindowThreadProcessId(fg, NULL) : 0;
+
+    // Decide whether we must attach (see tests/foreground_focus.h).
+    bool  needsAttach = (foregroundTid != 0 &&
+                         foregroundTid != targetTid &&
+                         foregroundTid != callerTid);
+
+    if (needsAttach) AttachThreadInput(callerTid, foregroundTid, TRUE);
+
+    // Nudge past the lock, then take foreground.
+    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    BringWindowToTop(hwnd);
+    SetForegroundWindow(hwnd);
+    SetActiveWindow(hwnd);
+
+    if (needsAttach) AttachThreadInput(callerTid, foregroundTid, FALSE);
+}
+
 static void SmartLaunch(int idx) {
     // Snapshot the path under CS before any long-running operation.
     // A hotkey unpin on the main thread can call UnpinAppByIndex (erase) while
@@ -3960,11 +4422,10 @@ static void SmartLaunch(int idx) {
     // Check running state before any rate limiting
     HWND running = FindRunningAppWindow(path);
     if (running) {
-        if (IsIconic(running)) ShowWindow(running, SW_RESTORE);
-        SetWindowPos(running, HWND_TOP, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-        SetForegroundWindow(running);
-        SetActiveWindow(running);
+        // Use the foreground-lock-aware path: a bare SetForegroundWindow is
+        // refused when another app (e.g. windhawk.exe) currently holds the
+        // foreground, so the click appeared to do nothing.
+        ForceForegroundWindow(running);
         DragTraceLog(L"FOCUS: brought to front", path.c_str());
         return;
     }
@@ -4028,17 +4489,59 @@ void SavePinnedApps() {
 // Remove invalid entries from the list.
 // Must be called WITHOUT the critical section held.
 static void ValidateAndCleanPinnedList() {
+    // Review (Optional): do NOT hold g_cs across LoadWorkspaceSnapshot's storage
+    // I/O (Wh_GetIntValue/Wh_GetStringValue). The old code held the lock for the
+    // whole pass, stalling the worker (reorder/reposition) on disk latency for
+    // every workspace pin. Split into three phases:
+    //   1. Under lock: decide app-pin verdicts (in-memory only) and COPY the
+    //      workspace ids that need a storage lookup. No I/O under the lock.
+    //   2. Lock released: run LoadWorkspaceSnapshot per copied id -> collect the
+    //      ids that are stale/missing.
+    //   3. Re-take the lock and erase the entries now known invalid, matching by
+    //      identity (type + id/path) so a concurrent PinApp/reorder between the
+    //      phases can't make us erase the wrong row.
+    std::vector<std::wstring> workspaceIdsToCheck;   // phase 1 -> phase 2
+    std::vector<std::wstring> invalidExePaths;       // app pins invalid (phase 1)
+    std::vector<std::wstring> invalidWorkspaceIds;   // phase 3 erase set
+
+    // ---- Phase 1: snapshot under the lock, no storage I/O ----
+    EnterCriticalSection(&g_cs);
+    for (size_t i = 0; i < g_pinnedApps.size(); ++i) {
+        const auto& e = g_pinnedApps[i];
+        if (e.type == PIN_WORKSPACE) {
+            if (!e.icon || e.workspaceId.empty())
+                invalidWorkspaceIds.push_back(e.workspaceId);   // decided already
+            else
+                workspaceIdsToCheck.push_back(e.workspaceId);   // needs a lookup
+        } else {
+            if (!e.icon || e.exePath.empty()
+                || IsExplorerExePath(e.exePath) || IsExcludedApp(e.exePath))
+                invalidExePaths.push_back(e.exePath);
+        }
+    }
+    LeaveCriticalSection(&g_cs);
+
+    // ---- Phase 2: storage I/O with the lock RELEASED ----
+    for (const auto& id : workspaceIdsToCheck) {
+        WorkspaceSnapshot snapshot;
+        if (!LoadWorkspaceSnapshot(id, snapshot))
+            invalidWorkspaceIds.push_back(id);
+    }
+
+    if (invalidExePaths.empty() && invalidWorkspaceIds.empty())
+        return;   // nothing to remove -- skip the re-lock entirely
+
+    // ---- Phase 3: re-take the lock and erase, matching by identity ----
     EnterCriticalSection(&g_cs);
     for (int i = (int)g_pinnedApps.size() - 1; i >= 0; --i) {
-        bool invalid = !g_pinnedApps[i].icon;
-        if (!invalid && g_pinnedApps[i].type == PIN_WORKSPACE) {
-            WorkspaceSnapshot snapshot;
-            invalid = g_pinnedApps[i].workspaceId.empty()
-                   || !LoadWorkspaceSnapshot(g_pinnedApps[i].workspaceId, snapshot);
-        } else if (!invalid) {
-            invalid = g_pinnedApps[i].exePath.empty()
-                   || IsExplorerExePath(g_pinnedApps[i].exePath)
-                   || IsExcludedApp(g_pinnedApps[i].exePath);
+        const auto& e = g_pinnedApps[i];
+        bool invalid = false;
+        if (e.type == PIN_WORKSPACE) {
+            for (const auto& id : invalidWorkspaceIds)
+                if (e.workspaceId == id) { invalid = true; break; }
+        } else {
+            for (const auto& path : invalidExePaths)
+                if (e.exePath == path) { invalid = true; break; }
         }
         if (invalid) {
             if (g_pinnedApps[i].icon) DestroyIcon(g_pinnedApps[i].icon);
@@ -4187,6 +4690,51 @@ static void PremultiplyAlpha(BYTE* bits, int pixelCount) {
         px[0] = (BYTE)(px[0] * a / 255);
         px[1] = (BYTE)(px[1] * a / 255);
         px[2] = (BYTE)(px[2] * a / 255);
+    }
+}
+
+// ---- Content sub-rect helpers (refinement item 8) --------------------------
+// The rope/vanish surfaces are FIXED-size (never resized -> no black-slab flash
+// on real GPUs) but only a small content box is drawn each frame. Clearing and
+// premultiplying the WHOLE surface every frame is hundreds of MB/s of pointless
+// memory traffic inside explorer.exe. These helpers touch ONLY the content box.
+//
+// Content is anchored at the buffer top-left, so a content extent (cw, ch)
+// occupies buffer rows [0,ch) x cols [0,cw). The caller unions the current box
+// with the previous frame's box so a shrinking effect leaves no stale pixels on
+// the re-presented surface, and clamps to the surface so these loops stay in
+// bounds. (Mirrors ComputeClearBounds in tests/subrect_bounds.h, which unit-
+// tests this exact geometry.)
+static inline int ClearBoundsSpan(int cur, int prev, int surf) {
+    int v = cur > prev ? cur : prev;
+    if (v < 0) v = 0;
+    if (v > surf) v = surf;
+    return v;
+}
+
+// Zero rows [0,rectH) x cols [0,rectW) of a BGRA surface whose stride is surfW.
+static inline void ClearSurfaceRect(BYTE* bits, int surfW, int rectW, int rectH) {
+    if (rectW <= 0 || rectH <= 0) return;
+    if (rectW == surfW) {                       // full-width -> one contiguous memset
+        memset(bits, 0, (size_t)surfW * rectH * 4);
+        return;
+    }
+    for (int y = 0; y < rectH; ++y)
+        memset(bits + (size_t)y * surfW * 4, 0, (size_t)rectW * 4);
+}
+
+// Premultiply only rows [0,rectH) x cols [0,rectW) of a BGRA surface (stride surfW).
+static inline void PremultiplyAlphaRect(BYTE* bits, int surfW, int rectW, int rectH) {
+    if (rectW <= 0 || rectH <= 0) return;
+    for (int y = 0; y < rectH; ++y) {
+        BYTE* row = bits + (size_t)y * surfW * 4;
+        for (int x = 0; x < rectW; ++x) {
+            BYTE* px = row + (size_t)x * 4;
+            BYTE  a  = px[3];
+            px[0] = (BYTE)(px[0] * a / 255);
+            px[1] = (BYTE)(px[1] * a / 255);
+            px[2] = (BYTE)(px[2] * a / 255);
+        }
     }
 }
 
@@ -4381,13 +4929,6 @@ enum QP_ACCENT_STATE { QP_ACCENT_DISABLED = 0, QP_ACCENT_ENABLE_ACRYLICBLURBEHIN
 struct QP_ACCENT_POLICY { int AccentState; int AccentFlags; unsigned int GradientColor; int AnimationId; };
 struct QP_WINCOMPATTRDATA { int Attrib; PVOID pvData; SIZE_T cbData; };
 typedef BOOL (WINAPI *QP_pSetWindowCompositionAttribute)(HWND, QP_WINCOMPATTRDATA*);
-// ABGR packing for GradientColor: 0xAABBGGRR
-// [[maybe_unused]]: retained as documentation of the accent GradientColor byte
-// order; its only former caller (SetDockAcrylic) was removed, so silence
-// -Wunused-function without deleting the reference helper.
-[[maybe_unused]] static inline unsigned int QP_ABGR(int a, int r, int g, int b) {
-    return ((unsigned)(a) << 24) | ((unsigned)(b) << 16) | ((unsigned)(g) << 8) | (unsigned)(r);
-}
 static QP_pSetWindowCompositionAttribute QP_GetSetWCA() {
     static QP_pSetWindowCompositionAttribute fn = (QP_pSetWindowCompositionAttribute)-1;
     if (fn == (QP_pSetWindowCompositionAttribute)-1) {
@@ -4679,6 +5220,8 @@ static HBITMAP g_tetherDIB  = NULL;
 static BYTE*   g_tetherBits = NULL;
 static int     g_tetherW    = 0;
 static int     g_tetherH    = 0;
+static int     g_tetherPrevClearW = 0;    // content box cleared last frame (item 8: sub-rect clear)
+static int     g_tetherPrevClearH = 0;
 static float   g_tetherBreakFade = 1.f;   // 1 = solid, fades to 0 once taut past break
 static float   g_tetherTipX = 0.f, g_tetherTipY = 0.f;  // smoothed moving end (whip lag)
 static bool    g_tetherTipInit = false;
@@ -4724,6 +5267,8 @@ static int     g_vanishOriginX  = 0;     // SCREEN top-left of the overlay windo
 static int     g_vanishOriginY  = 0;
 static int     g_vanishBoxW     = 0;     // overlay window size covering every mote + its drift
 static int     g_vanishBoxH     = 0;
+static int     g_vanishPrevClearW = 0;   // content box cleared last frame (item 8: sub-rect clear)
+static int     g_vanishPrevClearH = 0;
 static int     g_vanishAccentR  = 220;   // accent tint = the icon's own natural colour (ember flash)
 static int     g_vanishAccentG  = 210;
 static int     g_vanishAccentB  = 190;
@@ -4860,6 +5405,7 @@ static bool EnsureTetherSurface() {
     }
     if (!g_tetherDIB) { g_tetherBits = NULL; g_tetherW = g_tetherH = 0; return false; }
     g_tetherW = dim; g_tetherH = dim;
+    g_tetherPrevClearW = g_tetherPrevClearH = 0;   // fresh zeroed DIB: nothing stale to clear
     return true;
 }
 
@@ -5049,7 +5595,15 @@ static void PresentPhysicsRope(float alpha, float stretch01 = 0.f) {
     // resized (that is what caused the black-slab flash on real GPUs). The
     // surplus buffer area beyond the content stays fully transparent.
     int w = g_tetherW, h = g_tetherH;
-    memset(g_tetherBits, 0, (size_t)w * h * 4);
+    // Item 8: clear/premultiply ONLY the content box, not the whole fixed surface.
+    // Content is anchored at the buffer top-left (drawn at coord-left/top), so it
+    // occupies [0,clearW) x [0,clearH). Union with last frame's box so a shrinking
+    // rope leaves no stale pixels on the re-presented surface; clamp to the surface.
+    int clearW = ClearBoundsSpan(cw, g_tetherPrevClearW, w);
+    int clearH = ClearBoundsSpan(ch, g_tetherPrevClearH, h);
+    ClearSurfaceRect(g_tetherBits, w, clearW, clearH);
+    g_tetherPrevClearW = (cw < 0 ? 0 : (cw > w ? w : cw));
+    g_tetherPrevClearH = (ch < 0 ? 0 : (ch > h ? h : ch));
     g_tetherWasVisible = true;
 
     // Earthy single-colour thin thread (same palette + thickness as DrawTetherRope).
@@ -5078,7 +5632,7 @@ static void PresentPhysicsRope(float alpha, float stretch01 = 0.f) {
     TetherPlot(w, h, g_ropeX[0]           - left, g_ropeY[0]           - top, r8, g8, b8, alpha, coreR + 0.4f);
     TetherPlot(w, h, g_ropeX[g_ropeN - 1] - left, g_ropeY[g_ropeN - 1] - top, r8, g8, b8, alpha, coreR + 0.4f);
 
-    PremultiplyAlpha(g_tetherBits, w * h);
+    PremultiplyAlphaRect(g_tetherBits, w, clearW, clearH);   // item 8: content box only
 
     HDC sdc = GetDC(NULL);
     if (!sdc) return;
@@ -5121,7 +5675,7 @@ static void DrawTetherRope(float srcX, float srcY, float tipX, float tipY,
     int cw = right - left, ch = bottom - top;   // content extent (tiny-guard only)
     if (cw < 2 || ch < 2) { if (g_tetherWnd) ShowWindow(g_tetherWnd, SW_HIDE); return; }
     if (!EnsureTetherSurface()) {
-        LOG_IMPORTANT(L"TETHER-DBG EnsureTetherSurface FAILED cw=%d ch=%d wnd=%p", cw, ch, (void*)g_tetherWnd);
+        DEBUG_LOG(L"TETHER-DBG EnsureTetherSurface FAILED cw=%d ch=%d wnd=%p", cw, ch, (void*)g_tetherWnd);
         return;
     }
 
@@ -5129,9 +5683,14 @@ static void DrawTetherRope(float srcX, float srcY, float tipX, float tipY,
     // GPUs; the window only MOVES, like the ghost). Draw the tear into the
     // top-left region (offset by left/top); the surplus stays transparent.
     int w = g_tetherW, h = g_tetherH;
-    // One contiguous clear to fully-transparent, then rebuild straight-alpha
-    // from scratch this frame (no persistent state to corrupt).
-    memset(g_tetherBits, 0, (size_t)w * h * 4);
+    // Item 8: clear only the content box (anchored top-left), unioned with last
+    // frame's box so a shrinking tear leaves no stale pixels on the re-presented
+    // fixed surface; clamp to the surface. Rebuild straight-alpha from scratch.
+    int clearW = ClearBoundsSpan(cw, g_tetherPrevClearW, w);
+    int clearH = ClearBoundsSpan(ch, g_tetherPrevClearH, h);
+    ClearSurfaceRect(g_tetherBits, w, clearW, clearH);
+    g_tetherPrevClearW = (cw < 0 ? 0 : (cw > w ? w : cw));
+    g_tetherPrevClearH = (ch < 0 ? 0 : (ch > h ? h : ch));
     g_tetherWasVisible = true;
 
     float ax = srcX - left, ay = srcY - top;   // dock anchor (buffer space)
@@ -5299,8 +5858,8 @@ static void DrawTetherRope(float srcX, float srcY, float tipX, float tipY,
     }
 
     // ULW_ALPHA needs premultiplied RGB; runs exactly once per frame on the
-    // freshly-rebuilt straight-alpha buffer.
-    PremultiplyAlpha(g_tetherBits, w * h);
+    // freshly-rebuilt straight-alpha buffer. Item 8: content box only.
+    PremultiplyAlphaRect(g_tetherBits, w, clearW, clearH);
 
     HDC sdc = GetDC(NULL);
     if (!sdc) return;
@@ -5351,14 +5910,14 @@ static void UpdateTetherWindow(POINT cursorPt) {
     bool inDrag = ENABLE_ICON_THREADS && g_dragFromDock &&
                   g_dragState == DRAG_DRAGGING && g_dragFromDockIdx >= 0;
 
-    // TEMP DIAGNOSTIC: edge-triggered log each time the tether "active" gate
-    // flips. Shows WHY the rope may not run (threads off? never DRAGGING?).
-    // Remove once the rope is confirmed working.
+    // Diagnostic (guarded): edge-triggered log each time the tether "active"
+    // gate flips. Shows WHY the rope may not run (threads off? never DRAGGING?).
+    // Silent unless "Verbose debug logging" is enabled.
     static bool s_prevInDrag = false;
     if (inDrag != s_prevInDrag) {
-        LOG_IMPORTANT(L"TETHER-DBG inDrag=%d state=%d fromDock=%d idx=%d threadsOn=%d dropZone=%d",
-                      (int)inDrag, (int)g_dragState, (int)g_dragFromDock,
-                      g_dragFromDockIdx, (int)ENABLE_ICON_THREADS, (int)g_dropZoneActive);
+        DEBUG_LOG(L"TETHER-DBG inDrag=%d state=%d fromDock=%d idx=%d threadsOn=%d dropZone=%d",
+                  (int)inDrag, (int)g_dragState, (int)g_dragFromDock,
+                  g_dragFromDockIdx, (int)ENABLE_ICON_THREADS, (int)g_dropZoneActive);
         s_prevInDrag = inDrag;
     }
 
@@ -5551,7 +6110,7 @@ static void UpdateTetherWindow(POINT cursorPt) {
     //   * !g_tetherBreaking  -> fire exactly once per pull-off.
     //   * !g_dropZoneActive  -> only when actually pulled OFF the dock, so
     //     sliding along the taskbar near the dock never auto-unpins.
-    if (!g_tetherBreaking && !g_dropZoneActive && dist >= THREAD_MAX_STRETCH_PX) {
+    if (!g_tetherBreaking && !g_dropZoneActive && dist >= THREAD_MAX_STRETCH_PX + ROPE_BREAK_MARGIN_PX) {
         int lockedIdx = g_dragFromDockIdx;
 
         // Snapshot the pinned icon for the disintegration BEFORE unpinning
@@ -5605,12 +6164,14 @@ static void UpdateTetherWindow(POINT cursorPt) {
     // Intact (or retracting) rope: one thin, flowing-gradient thread from the
     // dock anchor to the cursor. The shared renderer handles surface, colour,
     // stroke and present; alpha comes from g_tetherBreakFade (so retract fades).
-    // TEMP DIAGNOSTIC (throttled ~4/sec): confirms the live-rope draw is reached
-    // and shows the endpoints. Remove once the rope is confirmed working.
-    { static DWORD s_t = 0; DWORD nowt = GetTickCount();
+    // Diagnostic (guarded, throttled ~4/sec): confirms the live-rope draw is
+    // reached and shows the endpoints. Silent unless "Verbose debug logging" is
+    // enabled -- this used to spam the terminal ~4x/sec for the whole drag.
+    if (g_debugLogging) {
+      static DWORD s_t = 0; DWORD nowt = GetTickCount();
       if (nowt - s_t > 250) { s_t = nowt;
-        LOG_IMPORTANT(L"TETHER-DBG live-draw src=(%.0f,%.0f) tip=(%.0f,%.0f) dist=%.0f fade=%.2f",
-                      srcX, srcY, tipX, tipY, dist, g_tetherBreakFade); } }
+        DEBUG_LOG(L"TETHER-DBG live-draw src=(%.0f,%.0f) tip=(%.0f,%.0f) dist=%.0f fade=%.2f",
+                  srcX, srcY, tipX, tipY, dist, g_tetherBreakFade); } }
     // Advance + present the VERLET rope. Rest length = straight distance plus a
     // little slack (grows as the rope goes slack, ~none when taut) so the
     // surplus length sags into an organic arc under gravity while a hard pull
@@ -5741,6 +6302,7 @@ static bool EnsureVanishSurface() {
     }
     if (!g_vanishDIB) { g_vanishBits = NULL; g_vanishW = g_vanishH = 0; return false; }
     g_vanishW = w; g_vanishH = h;
+    g_vanishPrevClearW = g_vanishPrevClearH = 0;   // fresh zeroed DIB: nothing stale to clear
     return true;
 }
 
@@ -5862,7 +6424,16 @@ static void UpdateVanishWindow() {
     // memset, VanishPlot stride, PremultiplyAlpha span and the ULW size that
     // follow all operate on the whole fixed surface.
     int w = g_vanishW, h = g_vanishH;
-    memset(g_vanishBits, 0, (size_t)w * h * 4);
+    // Item 8: clear only the content box (motes drawn at mote-origin, anchored
+    // top-left, so within [0,boxW) x [0,boxH)), unioned with last frame's box so
+    // drifted dust from the previous frame is wiped; clamp to the fixed surface.
+    int clearW = ClearBoundsSpan(g_vanishBoxW, g_vanishPrevClearW, w);
+    int clearH = ClearBoundsSpan(g_vanishBoxH, g_vanishPrevClearH, h);
+    ClearSurfaceRect(g_vanishBits, w, clearW, clearH);
+    // Remember THIS effect's own box (not the unioned span) so a later, smaller
+    // effect doesn't keep clearing a stale larger box forever.
+    g_vanishPrevClearW = (g_vanishBoxW < 0 ? 0 : (g_vanishBoxW > w ? w : g_vanishBoxW));
+    g_vanishPrevClearH = (g_vanishBoxH < 0 ? 0 : (g_vanishBoxH > h ? h : g_vanishBoxH));
 
     // Accent = the icon's own natural colour (lifted toward white), so the
     // ignition flash adapts per icon instead of a fixed warm white.
@@ -5890,7 +6461,7 @@ static void UpdateVanishWindow() {
         VanishPlot(w, h, fx, fy, r8, g8, b8, a, rad);
     }
 
-    PremultiplyAlpha(g_vanishBits, w * h);
+    PremultiplyAlphaRect(g_vanishBits, w, clearW, clearH);   // item 8: content box only
 
     HDC sdc = GetDC(NULL);
     if (!sdc) return;
@@ -6377,6 +6948,15 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
                 // Follow the icon's spread offset so the running-dot stays under
                 // its icon during magnification (mirrors the draw loop's shift).
                 baseX += (int)lroundf(app.hoverShiftX);
+                // Skip overflow/parked icons, same guard as the main icon pass.
+                // Overflow pins (>MAX_VISIBLE_APP_SLOTS) park off the LEFT
+                // (negative x) or off the RIGHT (>= g_dockLocalW). Without this
+                // the running-dot for a parked icon drew at the parked x --
+                // leaking a stray dot beside the real dock (the phantom "second
+                // dock" cluster), most visibly right after a pin/unpin bumps
+                // the count. Bound the dot to the visible dock exactly like the
+                // icon it belongs to.
+                if (baseX < 0 || baseX >= g_dockLocalW) continue;
                 int cx    = baseX + ICON_SIZE / 2;
                 int dotSz = 3;
                 int dotY  = r.bottom + 2;
@@ -6549,8 +7129,6 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 
         LeaveCriticalSection(&g_cs);
         if (usingBackBuffer) PresentPaintBuffer(paintDC, paintW, paintH);
-        // Keep secondary monitor docks in sync (cheap InvalidateRect calls only)
-        RepaintSecondaryDocks();
         EndPaint(hwnd, &ps);
         return 0;
     }
@@ -6741,14 +7319,18 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         return 0;
     }
 
-    // Worker thread posts this when secondary docks need rebuilding.
-    // DestroyWindow is only safe on the thread that created the window
-    // (the main thread), so it cannot be called from WorkerThread directly.
-    case WM_QPD_REBUILD_SECONDARY:
-        if (MULTI_MONITOR_DOCK) {
-            DestroySecondaryDocks();
-            InitSecondaryDocks();
-        }
+    case WM_QPD_REREGISTER_HOTKEY:
+        // FIX (Issue 6): re-register the global hotkey after a settings change.
+        // Runs on the overlay window's OWNING thread (this proc), which is the
+        // thread that originally called RegisterHotKey -- the only thread on
+        // which Register/UnregisterHotKey are valid. Always unregister the old
+        // binding first (unconditionally: the previous key may differ from the
+        // current globals, so we must not gate the unregister on current values),
+        // then register the new one unless the user disabled it (mods/key == 0).
+        UnregisterHotKey(hwnd, HOTKEY_PIN_ID);
+        if (g_hotkeyKey != 0 && g_hotkeyMods != 0)
+            RegisterHotKey(hwnd, HOTKEY_PIN_ID, g_hotkeyMods, g_hotkeyKey);
+        DEBUG_LOG(L"HOTKEY: re-registered live mods:0x%X key:0x%X", g_hotkeyMods, g_hotkeyKey);
         return 0;
 
     case WM_HOTKEY:
@@ -7023,10 +7605,9 @@ static bool CreateGhostWindow() {
 // FIX-A7 (#4): WinEventProc removed together with its SetWinEventHook
 // registration. The hook could never fire (inverted event range,
 // WINEVENT_SKIPOWNPROCESS excluded explorer.exe, idThread pinned to our own
-// thread) and every geometry refresh + secondary-dock rebuild it would have
-// performed is already driven by the worker poll loop below (see the
-// HasTaskbarGeometryChanged -> RefreshTaskbarCache -> RepositionOverlay ->
-// PostMessage(WM_QPD_REBUILD_SECONDARY) block).
+// thread) and every geometry refresh it would have performed is already driven
+// by the worker poll loop below (see the
+// HasTaskbarGeometryChanged -> RefreshTaskbarCache -> RepositionOverlay block).
 
 // ============================================================
 //  WORKER THREAD  --  input polling and animation loop
@@ -7100,21 +7681,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
             if (needRefresh) {
                 RefreshTaskbarCache();
                 RepositionOverlay();
-                if (MULTI_MONITOR_DOCK) {
-                    // FIX: secondary dock windows were created on the main thread;
-                    // DestroyWindow from the worker thread is undefined behaviour.
-                    // Post to the overlay wndproc to rebuild on the correct thread.
-                    // Rate-limit to once every 2 s (matching the WinEventProc path):
-                    // during boot/stabilization this poll fires every 100 ms and,
-                    // without a guard, tore down and recreated every secondary-monitor
-                    // dock on each cycle -- visible flicker + churn on multi-mon setups.
-                    static DWORD s_lastSecondaryRebuildWk = 0;
-                    if (now - s_lastSecondaryRebuildWk >= 2000) {
-                        s_lastSecondaryRebuildWk = now;
-                        if (g_overlayWnd && IsWindow(g_overlayWnd))
-                            PostMessageW(g_overlayWnd, WM_QPD_REBUILD_SECONDARY, 0, 0);
-                    }
-                }
             }
             if (ENABLE_AUTOHIDE_SYNC) UpdateAutoHideState();
             UpdateRunningState();
@@ -7122,31 +7688,16 @@ DWORD WINAPI WorkerThread(LPVOID) {
             lastGeometryCheck = now;
         }
 
-        // -- Hover stability tracking (adaptive) -------------------------------
-        // Pre-samples the resolver so PRESS uses a temporally stable identity
-        // rather than resolving cold at click time.  ResolveDragSourceAtPoint
-        // performs a cross-process UI Automation hit-test (several ms and can
-        // briefly block the input queue), so we only pay for it when it can
-        // actually change the result:
-        //   * the cursor has physically moved since the last sample, OR
-        //   * we do not yet have a candidate.
-        // A stationary cursor over the same target no longer spams UIA every
-        // HOVER_SAMPLE_MS, removing the biggest source of idle input latency.
-        static POINT s_lastSamplePt = { -100000, -100000 };
-        if (g_dragState == DRAG_IDLE &&
-            now - g_hoverLastSample >= (DWORD)HOVER_SAMPLE_MS &&
-            (IsInDockZone(cursor, 30) || IsCursorOverTaskbar(cursor))) {
-            int moved = abs(cursor.x - s_lastSamplePt.x) + abs(cursor.y - s_lastSamplePt.y);
-            if (moved >= 3 || g_hoverCandidate.empty()) {
-                std::wstring fresh = ResolveDragSourceAtPoint(cursor);
-                if (_wcsicmp(fresh.c_str(), g_hoverCandidate.c_str()) != 0) {
-                    g_hoverCandidate     = fresh;
-                    g_hoverCandidateTime = now;
-                }
-                s_lastSamplePt = cursor;
-            }
-            g_hoverLastSample = now;
-        }
+        // -- Hover pre-sampling: REMOVED --------------------------------------
+        // This used to call ResolveDragSourceAtPoint() on a timer purely from
+        // idle hovering near the dock/taskbar, with no mouse button down and no
+        // drag underway at all. That is exactly the unnecessary work the new
+        // drag-intent pipeline exists to eliminate: normal hovering (and, by
+        // extension, normal clicks) must never reach the resolver, UI
+        // Automation, OpenProcess, or icon extraction. Source identity is now
+        // resolved at most once per genuine drag-to-pin, in the DRAG_CANDIDATE
+        // block below (Stage 5), only after a real drag AND dock intent AND a
+        // pinnable-candidate check have all passed.
 
         // Boot watchdog: force geometry recovery if dock width is still 0 after 100 ms
         if (g_dockLocalW == 0 && (int)(now - bootWatchdogStart) > 100) {
@@ -7160,32 +7711,22 @@ DWORD WINAPI WorkerThread(LPVOID) {
             bootWatchdogStart = now;
         }
 
-        if (!g_overlayWnd || !IsWindow(g_overlayWnd)) { WaitForSingleObject(g_exitEvent, 16); continue; }
-
-        // Re-assert HWND_TOPMOST every 3 s  --  avoids hammering DWM every frame.
-        // Per-frame SetWindowPos was the single largest source of input jitter.
-        {
-            static DWORD s_lastTopMostMs = 0;
-            if (now - s_lastTopMostMs > 3000) {
-                if (g_inputWnd && IsWindow(g_inputWnd))
-                    SetWindowPos(g_inputWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-                SetWindowPos(g_overlayWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-                s_lastTopMostMs = now;
-            }
-        }
-
-        bool lDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-
         // ================================================================
         //  KEYBOARD TRIPLE-TAP GESTURE  --  tap P x3 = pin, tap U x3 = unpin
         // ================================================================
-        // Rising-edge count of the bare P / U keys. Three taps inside
-        // KEY_TAP_WINDOW_MS pin / unpin the focused app through the same
-        // validated pipeline as the drag and the Ctrl+Alt+P hotkey. A held key
-        // counts as one tap (edge-detected), and the counter resets when taps
-        // are too slow so it does not fire during ordinary typing.
+        // Rising-edge count of the bare P / U / L keys. Three taps inside
+        // KEY_TAP_WINDOW_MS pin / unpin the focused app (or toggle the lock)
+        // through the same validated pipeline as the drag and the Ctrl+Alt+P
+        // hotkey. A held key counts as one tap (edge-detected), and the counter
+        // resets when taps are too slow so it does not fire during typing.
+        //
+        // IMPORTANT: this runs BEFORE the "no overlay window" continue-guard
+        // below. These gestures act on GetForegroundWindow() and never touch the
+        // dock's overlay window, so they must work whenever the feature is on --
+        // even if the overlay hasn't come up yet (e.g. while the dock is still
+        // stabilising its geometry). Gating them behind the overlay guard was the
+        // "P/U/L do nothing even when enabled" bug. (Decision mirrored in
+        // tests/key_gesture_gating.h: ShouldEvalKeyGesture takes no overlay arg.)
         if (ENABLE_KEY_GESTURES) {
             bool pDown    = (GetAsyncKeyState('P') & 0x8000) != 0;
             bool uDown    = (GetAsyncKeyState('U') & 0x8000) != 0;
@@ -7236,6 +7777,24 @@ DWORD WINAPI WorkerThread(LPVOID) {
             g_lWasDown = lKeyDown;
         }
 
+        if (!g_overlayWnd || !IsWindow(g_overlayWnd)) { WaitForSingleObject(g_exitEvent, 16); continue; }
+
+        // Re-assert HWND_TOPMOST every 3 s  --  avoids hammering DWM every frame.
+        // Per-frame SetWindowPos was the single largest source of input jitter.
+        {
+            static DWORD s_lastTopMostMs = 0;
+            if (now - s_lastTopMostMs > 3000) {
+                if (g_inputWnd && IsWindow(g_inputWnd))
+                    SetWindowPos(g_inputWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                SetWindowPos(g_overlayWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                s_lastTopMostMs = now;
+            }
+        }
+
+        bool lDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+
         // ================================================================
         //  DRAG STATE MACHINE
         // ================================================================
@@ -7256,8 +7815,29 @@ DWORD WINAPI WorkerThread(LPVOID) {
             g_lockedExplorerHwnd = NULL;
             if (g_dragGhostIcon) { DestroyIcon(g_dragGhostIcon); g_dragGhostIcon = NULL; }
 
+            // ================================================================
+            // INTERNAL vs EXTERNAL DRAG SPLIT (single decision point)
+            // ================================================================
+            // HitTestIcon is the ONE branch that decides which of the two
+            // completely separate paths this press belongs to:
+            //   dockIdx >= 0  -> INTERNAL drag path (reorder / unpin an
+            //                    existing pin). Source is already known --
+            //                    it's g_pinnedApps[dockIdx] -- so it NEVER
+            //                    resolves, probes UI Automation, opens a
+            //                    process, or detects workspaces.
+            //   dockIdx <  0  -> EXTERNAL drag path (drag-to-pin from
+            //                    Explorer / Chrome / any app / the taskbar).
+            //                    Source is UNKNOWN and only becomes known via
+            //                    the 5-stage pipeline below, gated on
+            //                    g_dragFromDock == false the whole way through
+            //                    (see DRAG_CANDIDATE below, which the internal
+            //                    path can never enter).
+            // These two paths never merge back together: g_dragFromDock, set
+            // exactly once here, is what every later stage checks to stay on
+            // its own side of the split.
             int dockIdx = HitTestIcon(cursor);
             if (dockIdx >= 0) {
+                // ---------------- INTERNAL DRAG PATH ----------------
                 // FIX-1: HitTestIcon acquires then releases g_cs.  The window
                 // between its return and here is a dangling-index window: the
                 // main thread (hotkey / right-click) may call UnpinAppByIndex
@@ -7297,81 +7877,219 @@ DWORD WINAPI WorkerThread(LPVOID) {
                     DragTraceLog(L"PRESS: dock index gone before snapshot  --  abort");
                 }
             } else {
+                // ---------------- EXTERNAL DRAG PATH ----------------
                 // Source: taskbar button or application window.
-                // Prefer the pre-confirmed hover candidate (stable across STABILITY_CONFIRM_MS)
-                // over a cold resolve at press time  --  eliminates first-frame identity flicker.
-                HWND workspaceHwnd = NULL;
-                bool workspaceSource = ENABLE_EXPLORER_WORKSPACE_PINS &&
-                                       IsExplorerWorkspaceDragSource(cursor, &workspaceHwnd);
-                std::wstring path;
-                if (workspaceSource) {
-                    path = L"Explorer workspace";
-                    g_draggedPinType = PIN_WORKSPACE;
-                    g_draggedExplorerHwnd = workspaceHwnd;
-                    DragTraceLog(L"PRESS: Explorer workspace");
-                } else {
-                    DWORD candidateAge = now - g_hoverCandidateTime;
-                    if (!g_hoverCandidate.empty() &&
-                        candidateAge >= (DWORD)STABILITY_CONFIRM_MS &&
-                        candidateAge <= (DWORD)(HOVER_SAMPLE_MS * 6)) {
-                        path = g_hoverCandidate;
-                        DragTraceLog(L"PRESS: stable candidate", path.c_str());
+                // Stage 1 (Mouse Down): record ONLY the lightweight source
+                // classification. WindowFromPoint (via GetRealWindowFromPoint)
+                // is existing lightweight hit-testing and is allowed here.
+                // ResolveDragSourceAtPoint, UI Automation, OpenProcess, icon
+                // extraction, and Explorer workspace resolution are FORBIDDEN
+                // at this stage -- every one of them is now deferred to Stage 5,
+                // which only runs once a real drag has also shown dock intent
+                // over a candidate that survives Stage 4 validation (see the
+                // DRAG_CANDIDATE block below). This is what removes the
+                // resolver/UIA/OpenProcess/icon-extraction cost from ordinary
+                // clicks on Chrome, Explorer, Notepad, Terminal, etc.
+                g_dragCandidateWindow = GetRealWindowFromPoint(cursor);
+                g_draggedPinType = PIN_APP;
+                g_dragState = DRAG_PRESS;
+                DragTraceLog(L"PRESS: lightweight candidate recorded (no resolve)");
+            }
+        }
+
+        // PRESS -> DRAG_REORDER or DRAG_CANDIDATE (real drag threshold crossed)
+        if (g_dragState == DRAG_PRESS && lDown) {
+            int dx = abs(cursor.x - g_dragStartPt.x);
+            int dy = abs(cursor.y - g_dragStartPt.y);
+            // Stage 2 (Real Drag Detection): use the system's own drag
+            // thresholds (SM_CXDRAG / SM_CYDRAG) rather than a fixed guess --
+            // these already reflect the user's pointer/DPI settings. Queried
+            // once and cached; they do not change during a session.
+            static const int s_dragCX = GetSystemMetrics(SM_CXDRAG);
+            static const int s_dragCY = GetSystemMetrics(SM_CYDRAG);
+            if (dx > s_dragCX || dy > s_dragCY) {
+                // This is the LAST point where the two paths are decided --
+                // g_dragFromDock was set once, at PRESS, and is not touched
+                // between here and there. From this branch onward the two
+                // paths share no code: INTERNAL never reaches DRAG_CANDIDATE
+                // (so it can never reach Stage 4/5 either), and EXTERNAL never
+                // touches g_reorderSrcIdx / g_dragFromDockIdx.
+                if (g_dragFromDock) {
+                    // ---------------- INTERNAL DRAG PATH ----------------
+                    // Source is a pinned icon -- already known at PRESS with no
+                    // resolver call, so it can transition immediately. No
+                    // ResolveDragSourceAtPoint, UI Automation, OpenProcess, or
+                    // workspace detection anywhere in this branch or in what it
+                    // leads to (DRAG_REORDER, the rope tether, rope-break unpin,
+                    // drop-outside-dock unpin -- all keyed off g_dragFromDockIdx,
+                    // never off a resolved path).
+                    if (ENABLE_REORDER && IsInDockZone(cursor)) {
+                        // Cursor stayed inside dock -> enter reorder mode
+                        g_reorderSrcIdx    = g_dragFromDockIdx;
+                        g_reorderTargetIdx = g_dragFromDockIdx;
+                        g_dragState        = DRAG_REORDER;
+                        if (g_ghostWnd) ShowWindow(g_ghostWnd, SW_HIDE);
+                        DragTraceLog(L"REORDER: started", g_draggedAppPath.c_str());
                     } else {
-                        path = ResolveDragSourceAtPoint(cursor);
-                        DragTraceLog(L"PRESS: fresh resolve", path.c_str());
+                        g_lockedDragPath = g_draggedAppPath;  // Hard lock  --  never re-resolved
+                        g_lockedDragPinType = g_draggedPinType;
+                        g_lockedExplorerHwnd = g_draggedExplorerHwnd;
+                        g_dragState      = DRAG_DRAGGING;
+                        DragTraceLog(L"DRAG CONFIRMED", g_draggedAppPath.c_str());
                     }
-                    g_draggedPinType = PIN_APP;
-                }
-                if (path.empty()) {
-                    g_dragState = DRAG_CANCELLED;
-                    DragTraceLog(L"REJECT: no valid source");
                 } else {
-                    g_draggedAppPath = path;
-                    HICON tmp = workspaceSource ? LoadFolderIcon(L"C:\\") : LoadAppIconStrict(path);
-                    if (tmp) {
-                        g_dragGhostIcon = CopyIcon(tmp);
-                        DestroyIcon(tmp);
-                    }
-                    g_dragState = DRAG_PRESS;
+                    // ---------------- EXTERNAL DRAG PATH ----------------
+                    // Stage 3 gate: a real drag exists, but dock intent has not
+                    // been shown yet. Enter the candidate state -- checked every
+                    // frame below -- WITHOUT calling the resolver here. Nothing
+                    // expensive has run for this drag yet. DRAG_CANDIDATE is
+                    // ONLY ever entered from this else-branch, i.e. only when
+                    // g_dragFromDock is false -- an internal (dock-icon) drag
+                    // can structurally never reach Stage 4 or Stage 5.
+                    g_dragState = DRAG_CANDIDATE;
+                    DragTraceLog(L"CANDIDATE: real drag confirmed, awaiting dock intent");
                 }
             }
         }
 
-        // PRESS -> DRAG_REORDER or DRAGGING (threshold crossed)
-        if (g_dragState == DRAG_PRESS && lDown) {
-            int dx = abs(cursor.x - g_dragStartPt.x);
-            int dy = abs(cursor.y - g_dragStartPt.y);
-            if (dx > DRAG_THRESHOLD_PX || dy > DRAG_THRESHOLD_PX) {
-                if (ENABLE_REORDER && g_dragFromDock && IsInDockZone(cursor)) {
-                    // Cursor stayed inside dock -> enter reorder mode
-                    g_reorderSrcIdx    = g_dragFromDockIdx;
-                    g_reorderTargetIdx = g_dragFromDockIdx;
-                    g_dragState        = DRAG_REORDER;
-                    if (g_ghostWnd) ShowWindow(g_ghostWnd, SW_HIDE);
-                    DragTraceLog(L"REORDER: started", g_draggedAppPath.c_str());
-                } else if (!g_draggedAppPath.empty()) {
-                    g_lockedDragPath = g_draggedAppPath;  // Hard lock  --  never re-resolved
-                    g_lockedDragPinType = g_draggedPinType;
-                    g_lockedExplorerHwnd = g_draggedExplorerHwnd;
-                    g_dragState      = DRAG_DRAGGING;
-                    DragTraceLog(L"DRAG CONFIRMED", g_draggedAppPath.c_str());
-                } else {
+        // ================================================================
+        // EXTERNAL DRAG PATH ONLY -- DRAG_CANDIDATE (Stages 3 to 5)
+        // ================================================================
+        // Reachable only from the g_dragFromDock == false branch above, so a
+        // dock-icon (internal) drag never executes any code in this block --
+        // reorder/unpin never resolves, probes UIA, opens a process, or
+        // detects workspaces. A real (non-dock-source) drag is in
+        // progress but has not yet shown dock intent, so still nothing
+        // expensive has run. Every frame we only do a cheap geometry check
+        // (IsNearDockZone / IsCursorOverTaskbar); the resolver, UI Automation,
+        // OpenProcess, and icon extraction stay off until that check actually
+        // passes. A drag that never approaches the dock/taskbar -- e.g. moving
+        // a window across the desktop or to another monitor -- costs nothing
+        // beyond this rect test for its entire lifetime and is never resolved.
+        if (g_dragState == DRAG_CANDIDATE) {
+            if (!lDown) {
+                // Released without ever showing dock intent: a normal drag
+                // elsewhere. Never resolved, never treated as a click either
+                // (the real-drag threshold was already crossed).
+                g_dragState = DRAG_IDLE;
+                g_dragCandidateWindow = NULL;
+                DragTraceLog(L"CANDIDATE: released without dock intent -- ignored");
+            } else if (IsNearDockZone(cursor) || IsCursorOverTaskbar(cursor)) {
+                // Stage 4 (Source Validation): before paying for Stage 5, check
+                // whether the recorded candidate is even potentially pinnable.
+                // A closed/gone window, or the desktop/shell surfaces caught by
+                // IsSystemWindow, can never be pinned, so reject here and never
+                // call the resolver.
+                HWND candidateWnd = g_dragCandidateWindow;
+                bool pinnableCandidate = candidateWnd && IsWindow(candidateWnd) &&
+                                         !IsSystemWindow(candidateWnd);
+                if (!pinnableCandidate) {
                     g_dragState = DRAG_CANCELLED;
-                    DragTraceLog(L"CANCEL: no path at threshold");
+                    DragTraceLog(L"REJECT: source not pinnable (Stage 4)");
+                } else {
+                    // Stage 5 (Expensive Resolution): reached exactly once per
+                    // genuine drag-to-pin -- only after a real drag, dock
+                    // intent, AND a pinnable candidate have all been confirmed.
+                    //
+                    // Resolve at the RECORDED START POINT (g_dragStartPt), not
+                    // the current cursor position. By the time dock intent
+                    // fires, the cursor is over the dock/taskbar -- resolving
+                    // "cursor" there identifies whatever taskbar button or
+                    // window happens to be under it NOW (e.g. Chrome's taskbar
+                    // icon), not what the user actually grabbed at mouse-down
+                    // (e.g. an Explorer window). The source is the window/app
+                    // the drag STARTED from, so it must be resolved from where
+                    // the drag started.
+                    POINT resolvePt = g_dragStartPt;
+                    std::wstring path = ResolveDragSourceAtPoint(resolvePt);
+                    DragTraceLog(L"STAGE5: resolve", path.c_str());
+
+                    // FIX (dock froze while the workspace feature was ON): only run
+                    // the expensive IShellWindows enumerate + UI Automation probe
+                    // when the cheap resolve already says the pressed window is
+                    // explorer.exe. (Gate mirrors ShouldConfirmExplorerWorkspace in
+                    // tests/workspace_press_gate.h.)
+                    // FIX ("[DRAG] REJECT: no valid source" when pinning Explorer):
+                    // ResolveDragSourceAtPoint intentionally returns "" for
+                    // explorer.exe, so the gate also keys on whether the window
+                    // under the cursor is owned by explorer.exe -- a cheap
+                    // GetProcessPath check, no COM scan -- so an empty resolve
+                    // over a real Explorer window still probes while desktop/
+                    // other-app presses do not.
+                    // (Gate mirrors ShouldConfirmExplorerWorkspacePress in
+                    //  tests/workspace_press_gate.h.)
+                    HWND workspaceHwnd = NULL;
+                    bool workspaceSource = false;
+                    if (ENABLE_EXPLORER_WORKSPACE_PINS) {
+                        bool pressedWindowIsExplorer =
+                            IsExplorerExePath(path) ||
+                            IsExplorerExePath(GetProcessPath(candidateWnd));
+                        // Same fix as above: probe the ORIGINAL press point, not
+                        // the current (near-dock) cursor position, so the
+                        // workspace check identifies the Explorer window/tab the
+                        // drag actually started from.
+                        workspaceSource =
+                            pressedWindowIsExplorer &&
+                            IsExplorerWorkspaceDragSource(resolvePt, &workspaceHwnd);
+                    }
+                    if (workspaceSource) {
+                        path = L"Explorer workspace";
+                        g_draggedPinType = PIN_WORKSPACE;
+                        g_draggedExplorerHwnd = workspaceHwnd;
+                        DragTraceLog(L"STAGE5: Explorer workspace");
+                    } else {
+                        g_draggedPinType = PIN_APP;
+                    }
+
+                    if (path.empty()) {
+                        g_dragState = DRAG_CANCELLED;
+                        DragTraceLog(L"REJECT: no valid source");
+                    } else {
+                        g_draggedAppPath = path;
+                        HICON tmp = workspaceSource ? LoadFolderIcon(L"C:\\") : LoadAppIconStrict(path);
+                        if (tmp) {
+                            g_dragGhostIcon = CopyIcon(tmp);
+                            DestroyIcon(tmp);
+                        }
+                        // After successful resolution: dock animations, hover
+                        // effects, and preview visuals start via the normal
+                        // DRAG_DRAGGING rendering path below.
+                        g_lockedDragPath = g_draggedAppPath;
+                        g_lockedDragPinType = g_draggedPinType;
+                        g_lockedExplorerHwnd = g_draggedExplorerHwnd;
+                        g_dragState = DRAG_DRAGGING;
+                        DragTraceLog(L"DRAG CONFIRMED (dock intent)", g_draggedAppPath.c_str());
+                    }
                 }
+                g_dragCandidateWindow = NULL;
             }
+            // else: real drag continues with no dock intent yet -- do nothing.
         }
 
         // DRAG_REORDER  --  update target slot and animate icons while button held
         if (g_dragState == DRAG_REORDER && lDown) {
-            int n = (int)g_pinnedApps.size();
-            if (n > 1 && g_reorderSrcIdx >= 0 && g_reorderSrcIdx < n) {
-                int newTarget = CalculateReorderSlot(cursor, n);
-                newTarget = std::max(0, std::min(newTarget, n - 1));
-                if (newTarget != g_reorderTargetIdx) {
-                    g_reorderTargetIdx = newTarget;
-                    UpdateReorderPositions();
+            // FIX (#5): g_pinnedApps.size() and CalculateReorderSlot() (which
+            // indexes g_pinnedApps and calls GetIconRectLocal) were read on this
+            // worker thread WITHOUT g_cs. A Ctrl+Alt+P PinApp on the UI thread can
+            // push_back concurrently and reallocate the vector mid-read -> torn
+            // size / use-after-free. Take the lock for the read + slot computation,
+            // then release it before UpdateReorderPositions() (which re-acquires
+            // g_cs itself). n stays a consistent snapshot for the bounds clamp.
+            int newTarget = -1;
+            bool haveTarget = false;
+            if (g_csInitialized) {
+                EnterCriticalSection(&g_cs);
+                int n = (int)g_pinnedApps.size();
+                if (n > 1 && g_reorderSrcIdx >= 0 && g_reorderSrcIdx < n) {
+                    newTarget = CalculateReorderSlot(cursor, n);
+                    newTarget = std::max(0, std::min(newTarget, n - 1));
+                    haveTarget = true;
                 }
+                LeaveCriticalSection(&g_cs);
+            }
+            if (haveTarget && newTarget != g_reorderTargetIdx) {
+                g_reorderTargetIdx = newTarget;
+                UpdateReorderPositions();
             }
             if (g_overlayWnd) InvalidateRect(g_overlayWnd, NULL, FALSE);
 
@@ -7410,12 +8128,16 @@ DWORD WINAPI WorkerThread(LPVOID) {
 
         // PRESS -> IDLE (mouse up before threshold = click)
         if (g_dragState == DRAG_PRESS && !lDown && lastLDown) {
-            DWORD elapsed = now - g_mouseDownTime;
             int   dx      = abs(cursor.x - g_dragStartPt.x);
             int   dy      = abs(cursor.y - g_dragStartPt.y);
-            bool  wasClick = (elapsed < (DWORD)CLICK_MAX_MS &&
-                              dx <= CLICK_MAX_MOVE_PX &&
-                              dy <= CLICK_MAX_MOVE_PX);
+            // A release still in DRAG_PRESS never crossed DRAG_THRESHOLD_PX, so
+            // by definition it is a click. Decide on MOVEMENT ONLY -- the former
+            // `elapsed < CLICK_MAX_MS` cap silently ate real clicks because this
+            // state machine is a polling loop (GetAsyncKeyState on 8/16/50ms
+            // sleeps): a foreground change after a launch could push the observed
+            // press->release span past 300ms even for a quick human click.
+            // Mirrors tests/click_vs_drag.h IsPressReleaseAClick.
+            bool  wasClick = (dx <= CLICK_MAX_MOVE_PX && dy <= CLICK_MAX_MOVE_PX);
 
             g_dragState = DRAG_IDLE;
             if (wasClick) {
@@ -7614,7 +8336,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
             GhostCleanup();
             g_dragState = DRAG_IDLE;
             if (g_overlayWnd) InvalidateRect(g_overlayWnd, NULL, FALSE);
-            RepaintSecondaryDocks();
         }
 
         // ---- RAPID-CLICK RESET (3+ clicks in RAPID_CLICK_WINDOW_MS) ----
@@ -7623,12 +8344,13 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // Detection zone: dock area + a 40px leftward extension so clicks slightly
         // outside the dock (on the taskbar to the left of icons) are also counted.
         if (g_dragState == DRAG_IDLE && !lDown && lastLDown) {
-            DWORD elapsed = now - g_mouseDownTime;
             int   dx      = abs(cursor.x - g_dragStartPt.x);
             int   dy      = abs(cursor.y - g_dragStartPt.y);
-            bool  wasClick = (elapsed < (DWORD)CLICK_MAX_MS &&
-                              dx <= CLICK_MAX_MOVE_PX &&
-                              dy <= CLICK_MAX_MOVE_PX);
+            // Movement-only, same rationale as the PRESS->IDLE launch above: the
+            // polling loop inflates elapsed time, so the former CLICK_MAX_MS cap
+            // dropped valid clicks. The rapid-click *sequence* window is tracked
+            // separately below. Mirrors tests/click_vs_drag.h IsPressReleaseAClick.
+            bool  wasClick = (dx <= CLICK_MAX_MOVE_PX && dy <= CLICK_MAX_MOVE_PX);
             if (wasClick) {
                 // Use a widened hit zone for rapid-click counting: dock area plus
                 // 40px extended to the left (where no icon slot is, but finger/click
@@ -7949,7 +8671,13 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // the fast cadence during boot lets initialisation run straight through
         // to completion (boot is only a few hundred ms, so no steady-state cost).
         bool notStableYet = (g_systemState != STATE_STABLE);
+        // DRAG_PRESS is included deliberately: while the button is down but the
+        // move threshold has not yet been crossed, a quick flick to tear an icon
+        // off must be sampled at the fast cadence -- otherwise the loop sat at
+        // the 16/50 ms idle cadence and the gesture ended (button up) before it
+        // ever ticked in PRESS, so the drag was missed and read as a click.
         if (g_dragState == DRAG_DRAGGING || g_dragState == DRAG_REORDER ||
+            g_dragState == DRAG_PRESS || g_dragState == DRAG_CANDIDATE ||
             g_anyAnimationActive || g_dockPosAnimActive) {
             g_idleFrames = 0;
             SetHighResTimer(true);
@@ -8049,7 +8777,12 @@ static void UpdateAutoHideState() {
 
 static void UpdateRunningState() {
     // 1) Enumerate candidate windows -> unique PIDs (no per-window OpenProcess).
-    std::vector<DWORD> pids;
+    // MEM: reuse the scan buffers across cycles. UpdateRunningState is called
+    // only from the single WorkerThread, so a function-static buffer is safe and
+    // avoids re-allocating this vector's backing store on every 500 ms poll
+    // (clear() keeps the capacity; the elements are trivially destroyed).
+    static std::vector<DWORD> pids;
+    pids.clear();
     pids.reserve(64);
     RunStateCtx ctx;
     ctx.pids = &pids;
@@ -8062,7 +8795,11 @@ static void UpdateRunningState() {
 
     // 3) Resolve each unique PID to a path (cached).  Copy into a local list so
     //    later cache growth cannot invalidate the strings we match against.
-    std::vector<std::wstring> runningPaths;
+    // MEM: same worker-thread-only reuse as `pids` above -- clear() frees each
+    // string's storage but keeps the vector's element array, so we don't churn
+    // the heap allocating/freeing this list on every poll cycle.
+    static std::vector<std::wstring> runningPaths;
+    runningPaths.clear();
     runningPaths.reserve(pids.size());
     for (DWORD pid : pids) {
         std::wstring p = ResolvePidPath(pid);
@@ -8098,7 +8835,10 @@ static void UpdateRunningState() {
 // ============================================================
 static int CalculateReorderSlot(POINT screenPt, int n) {
     // Map screen X to overlay-local X and find the closest slot midpoint.
-    // Safe to call outside CS  --  only reads g_dockCurrentX (float, atomic read).
+    // CALLER MUST HOLD g_cs: this indexes g_pinnedApps[i].type and calls
+    // GetIconRectLocal (which also reads g_pinnedApps), so a concurrent PinApp
+    // push_back on the UI thread could reallocate the vector mid-read. (The old
+    // "safe to call outside CS" note was wrong -- it reads more than g_dockCurrentX.)
     if (n <= 1) return 0;
     int localX = screenPt.x - (int)g_dockCurrentX;
     PinType reorderType = g_draggedPinType;
@@ -8186,160 +8926,6 @@ static void CommitReorder() {
 }
 
 // ============================================================
-//  SECONDARY DOCK (MULTI-MONITOR) HELPERS
-// ============================================================
-
-LRESULT CALLBACK SecondaryOverlayProc(HWND hwnd, UINT msg,
-                                       WPARAM wParam, LPARAM lParam) {
-    if (msg == WM_PAINT) {
-        PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(hwnd, &ps);
-        if (!hdc) return 0;
-
-        RECT cr = {};
-        GetClientRect(hwnd, &cr);
-        // Use RGB(1,0,1) matching the colour-key set in SetLayeredWindowAttributes
-        if (!g_blackBrush) g_blackBrush = CreateSolidBrush(RGB(1, 0, 1));
-        FillRect(hdc, &cr, g_blackBrush);
-
-        if (!g_csInitialized) { EndPaint(hwnd, &ps); return 0; }
-        EnterCriticalSection(&g_cs);
-        int n = (int)g_pinnedApps.size();
-
-        // Frosted blur (same as primary). ApplyNativeBackdrop already applied the
-        // neutral acrylic tint to secondary docks; no opaque fill so the blur shows.
-        if (ENABLE_GLASS_OVERLAY && cr.right > 0) ApplyDockGlassTint(hwnd);
-
-        // Draw icons at canonical positions  --  no animation state on secondary docks
-        for (int i = 0; i < n; ++i) {
-            const auto& app = g_pinnedApps[i];
-            if (!app.icon || app.opacity < 0.05f) continue;
-            // FIX (dock/mirror desync): while an icon is being dragged OFF the
-            // real dock to unpin, the primary overlay hides it (see the
-            // `continue` in OverlayWndProc's icon loop). The mirror must hide it
-            // too, otherwise the same icon appears detached on the real dock but
-            // still present on the mirror -- reading as a duplicate/ghost icon
-            // (the "two icons/threads for one icon" artifact across dock+mirror).
-            if (g_dragFromDock && i == g_dragFromDockIdx &&
-                g_dragState == DRAG_DRAGGING) continue;
-            RECT r = GetIconRectLocal(i, n);
-            // Clean premultiplied blit so mirror icons match the primary dock
-            // (no dark edge fringe; crisp downscale).
-            BlitIconAlpha(hdc, app.icon, r.left, r.top, ICON_SIZE, (BYTE)(int)(255 * app.opacity));
-        }
-
-        // Separator
-        if (SEPARATOR_OPACITY > 0 && n > 0) {
-            if (!g_linePenNormal) g_linePenNormal = CreatePen(PS_SOLID, 1, RGB(80, 80, 80));
-            HPEN old = (HPEN)SelectObject(hdc, g_linePenNormal);
-            MoveToEx(hdc, cr.right - 1, cr.top + 3, NULL);
-            LineTo  (hdc, cr.right - 1, cr.bottom - 3);
-            SelectObject(hdc, old);
-        }
-
-        LeaveCriticalSection(&g_cs);
-        EndPaint(hwnd, &ps);
-        return 0;
-    }
-    // Secondary docks are visual-only  --  pass all hit-testing to the desktop below
-    if (msg == WM_NCHITTEST) return HTTRANSPARENT;
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
-}
-
-static void InitSecondaryDocks() {
-    if (!MULTI_MONITOR_DOCK || g_fixedDockWidth <= 0) return;
-
-    // IDEMPOTENCY GUARD (never stack a second mirror-dock layer): every caller
-    // is expected to DestroySecondaryDocks() first, but the rebuild is posted
-    // cross-thread (WM_QPD_REBUILD_SECONDARY) and rate-limited on two paths
-    // (WinEventProc + WorkerThread), so a race could reach Init while a live set
-    // still exists -- appending to it would leave two overlapping mirror docks
-    // (the reported duplicate/"second dock" layer). Tear down any live set here
-    // before building the fresh one so we always end with exactly one layer.
-    if (!g_secondaryDocks.empty()) DestroySecondaryDocks();
-
-    // Register the secondary window class once
-    static bool s_classRegistered = false;
-    if (!s_classRegistered) {
-        WNDCLASSEXW wc   = { sizeof(wc) };
-        wc.lpfnWndProc   = SecondaryOverlayProc;
-        wc.hInstance     = GetModHInstance();   // FIX-B3 (#3): mod module, not explorer.exe
-        wc.lpszClassName = L"WH_QPDockSecondary";
-        wc.style         = CS_HREDRAW | CS_VREDRAW;
-        RegisterClassExW(&wc);
-        s_classRegistered = true;
-    }
-
-    // Enumerate Shell_SecondaryTrayWnd windows  --  one per secondary monitor
-    // Build the new list locally; only acquire the lock to commit it.
-    std::vector<SecondaryDock> newDocks;
-    HWND sec = NULL;
-    while ((sec = FindWindowExW(NULL, sec, L"Shell_SecondaryTrayWnd", NULL)) != NULL) {
-        RECT tbr = {};
-        if (!GetWindowRect(sec, &tbr)) continue;
-        int tbW = tbr.right - tbr.left;
-        int tbH = tbr.bottom - tbr.top;
-        if (tbW < 100 || tbH < 20) continue;
-
-        // Position dock at the left edge of the secondary taskbar
-        int dockLeft  = tbr.left;
-        int dockRight = dockLeft + g_fixedDockWidth;
-        if (dockRight > tbr.right) dockRight = tbr.right;
-
-        HWND hwnd = CreateWindowExW(
-            WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT,
-            L"WH_QPDockSecondary", L"", WS_POPUP,
-            dockLeft, tbr.top, dockRight - dockLeft, tbH,
-            NULL, NULL, GetModHInstance(), NULL);   // FIX-B3 (#3)
-        if (!hwnd) continue;
-
-        SetLayeredWindowAttributes(hwnd, RGB(1, 0, 1), 0, LWA_COLORKEY);
-        SetWindowPos(hwnd, HWND_TOPMOST, dockLeft, tbr.top,
-                     dockRight - dockLeft, tbH,
-                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
-
-        SecondaryDock sd;
-        sd.tbRect   = tbr;
-        sd.dockRect = { dockLeft, tbr.top, dockRight, tbr.bottom };
-        sd.localW   = dockRight - dockLeft;
-        sd.localH   = tbH;
-        sd.overlay  = hwnd;
-        newDocks.push_back(sd);
-    }
-
-    // FIX-3: commit under g_secondaryDocksCS so RepaintSecondaryDocks on the
-    // worker thread never races the push_back.
-    if (g_secondaryDocksCSInit) EnterCriticalSection(&g_secondaryDocksCS);
-    for (auto& nd : newDocks) g_secondaryDocks.push_back(nd);
-    if (g_secondaryDocksCSInit) LeaveCriticalSection(&g_secondaryDocksCS);
-}
-
-static void DestroySecondaryDocks() {
-    // FIX-3: take the lock before clearing the vector so RepaintSecondaryDocks
-    // on the worker thread cannot iterate a partially-cleared container.
-    if (g_secondaryDocksCSInit) EnterCriticalSection(&g_secondaryDocksCS);
-    std::vector<SecondaryDock> toDestroy;
-    toDestroy.swap(g_secondaryDocks);  // move out atomically under the lock
-    if (g_secondaryDocksCSInit) LeaveCriticalSection(&g_secondaryDocksCS);
-
-    // Destroy the HWNDs outside the lock  --  DestroyWindow can block briefly
-    for (auto& sd : toDestroy)
-        if (sd.overlay && IsWindow(sd.overlay))
-            DestroyWindow(sd.overlay);
-}
-
-static void RepaintSecondaryDocks() {
-    // FIX-3: guard the iteration so we cannot read a vector that is being
-    // cleared by DestroySecondaryDocks on another thread.
-    // Cheap: only posts WM_PAINT  --  no rendering on the calling thread.
-    if (g_secondaryDocksCSInit) EnterCriticalSection(&g_secondaryDocksCS);
-    for (auto& sd : g_secondaryDocks)
-        if (sd.overlay && IsWindow(sd.overlay))
-            InvalidateRect(sd.overlay, NULL, FALSE);
-    if (g_secondaryDocksCSInit) LeaveCriticalSection(&g_secondaryDocksCS);
-}
-
-// ============================================================
 //  MODULE ENTRY POINTS
 // ============================================================
 // Forward declaration  --  Wh_ModInit calls this on any failure path to ensure
@@ -8348,10 +8934,10 @@ static void RepaintSecondaryDocks() {
 void Wh_ModUninit();
 
 // FIX-C1 (#1/#2/#8): the dedicated UI thread. It creates every top-level window
-// (input owner, overlay, ghost, the pre-warmed tether/vanish layers, and the
-// secondary-monitor docks), registers the pin hotkey (inside CreateOverlayWindow),
+// (input owner, overlay, ghost, the pre-warmed tether/vanish layers),
+// registers the pin hotkey (inside CreateOverlayWindow),
 // then runs a real GetMessageW/DispatchMessageW loop so WM_PAINT / WM_MOUSE* /
-// WM_MOUSEWHEEL / WM_HOTKEY / WM_QPD_REBUILD_SECONDARY are actually dispatched.
+// WM_MOUSEWHEEL / WM_HOTKEY are actually dispatched.
 // On WM_QUIT it destroys those windows and unregisters the classes -- on the SAME
 // thread that created them, which is what DestroyWindow / UnregisterHotKey /
 // UnregisterClassW require. Wh_ModInit waits on g_uiReadyEvent so the worker only
@@ -8392,15 +8978,12 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
             InvalidateRect(g_overlayWnd, NULL, FALSE);
         }
         RepositionOverlay();
-
-        // Multi-monitor: create secondary dock overlays after geometry is ready.
-        InitSecondaryDocks();
     }
 
     g_uiInitOk = ok;
     if (g_uiReadyEvent) SetEvent(g_uiReadyEvent);
 
-    // The guaranteed message pump the overlay/ghost/secondary windows never had.
+    // The guaranteed message pump the overlay/ghost windows never had.
     if (ok) {
         MSG msg;
         while (GetMessageW(&msg, NULL, 0, 0) > 0) {
@@ -8416,7 +8999,6 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     // are intentionally NOT deleted here to avoid a double-free with Wh_ModUninit.
     if (g_overlayWnd && IsWindow(g_overlayWnd) && g_hotkeyKey != 0 && g_hotkeyMods != 0)
         UnregisterHotKey(g_overlayWnd, HOTKEY_PIN_ID);
-    DestroySecondaryDocks();
     if (g_tetherWnd) { DestroyWindow(g_tetherWnd); g_tetherWnd = NULL; }
     if (g_vanishWnd) { DestroyWindow(g_vanishWnd); g_vanishWnd = NULL; }
     if (g_ghostWnd)  { DestroyWindow(g_ghostWnd);  g_ghostWnd  = NULL; }
@@ -8429,7 +9011,6 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
         UnregisterClassW(GHOST_CLASS,           hInst);   // QPDockGhost
         UnregisterClassW(L"QPDockTether",       hInst);
         UnregisterClassW(L"QPDockVanish",       hInst);
-        UnregisterClassW(L"WH_QPDockSecondary", hInst);
         UnregisterClassW(L"QPDockRenameDialog", hInst);
     }
     return 0;
@@ -8458,11 +9039,11 @@ static void LoadSettings() {
     ENABLE_KEY_GESTURES        = Wh_GetIntSetting(L"enableKeyGestures", 0) != 0;
     CORNER_ROUNDNESS     = Wh_GetIntSetting(L"cornerRoundness",     100);
     ENABLE_EXPLORER_WORKSPACE_PINS = Wh_GetIntSetting(L"enableExplorerWorkspacePins", 0) != 0;
-    MULTI_MONITOR_DOCK   = Wh_GetIntSetting(L"multiMonitorDock",    0) != 0;
     STARTUP_DELAY_MS     = Wh_GetIntSetting(L"startupDelay",        0);
     DOCK_GAP_FROM_START  = Wh_GetIntSetting(L"dockGapFromStart",    6);
     // Auto-hide sync: default OFF  --  dock stays visible even if taskbar auto-hides
     ENABLE_AUTOHIDE_SYNC = Wh_GetIntSetting(L"autoHideSync", 0) != 0;
+    g_debugLogging       = Wh_GetIntSetting(L"debugLogging", 0) != 0;
     // Hotkey: 0 modifiers or 0 key = disabled. Clamp modifiers to valid MOD_* flags.
     g_hotkeyMods = LoadHotkeyModifiersSetting();
     g_hotkeyKey  = LoadHotkeyKeySetting();
@@ -8485,6 +9066,19 @@ BOOL Wh_ModInit() {
     // Read and clamp all user settings (shared with Wh_ModSettingsChanged).
     LoadSettings();
 
+    // SINGLE-INSTANCE GATE: this mod is injected into EVERY explorer.exe. Only
+    // the process that owns the real taskbar (Shell_TrayWnd) may build the dock;
+    // any other explorer.exe (e.g. a File Explorer window spawned by workspace
+    // restore, or by "open folder windows in a separate process") must init as a
+    // no-op -- otherwise it draws a duplicate dock and runs a second, conflicting
+    // drag resolver. Returning FALSE here creates NO resources, so Wh_ModUninit
+    // has nothing to tear down.
+    if (!ProcessOwnsTaskbar()) {
+        Wh_Log(L"INIT: not the taskbar-owning explorer.exe (pid=%u) -- dock disabled in this process",
+               (unsigned)GetCurrentProcessId());
+        return FALSE;
+    }
+
     // FIX-A8 (#11): the optional startup delay was moved OUT of Wh_ModInit and
     // into the worker thread (see WorkerThread) so init returns promptly and
     // never blocks Explorer startup / the Windhawk Engine thread for up to 3 s.
@@ -8492,11 +9086,10 @@ BOOL Wh_ModInit() {
     InitializeCriticalSection(&g_cs);
     g_csInitialized = true;
 
-    // FIX-3: secondary-docks CS must be live before any possible call to the
-    // Init/Destroy/Repaint helpers (including the secondary dock path in the
-    // worker thread geometry poll).
-    InitializeCriticalSection(&g_secondaryDocksCS);
-    g_secondaryDocksCSInit = true;
+    // Review #4 (Bug A): guards the outstanding launch-thread list.
+    InitializeCriticalSection(&g_launchCs);
+    g_launchCsInit = true;
+    g_launchWorkspaceStop.store(false);   // reset in case of a reload
 
     g_exitEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!g_exitEvent) { Wh_ModUninit(); return FALSE; }
@@ -8504,6 +9097,7 @@ BOOL Wh_ModInit() {
     QueryPerformanceFrequency(&g_perfFreq);  // enable sub-ms animation timing
     g_bootStartTime = GetTickCount();
     g_systemState   = STATE_BOOT;
+    g_layoutUnsupported = false;   // FIX (Issue 2): re-probe layout fresh on init
 
     // FIX-A8 (#11): single non-blocking geometry probe. Try once so the FIRST
     // paint uses correct geometry when the taskbar/DWM are already up (the common
@@ -8514,16 +9108,15 @@ BOOL Wh_ModInit() {
     RefreshTaskbarCache();
     LoadPinnedApps();
 
-    // FIX-C1 (#1/#2/#8): all top-level windows, the pin hotkey, and the secondary
-    // docks are now created / pumped / destroyed on the dedicated UI thread
+    // FIX-C1 (#1/#2/#8): all top-level windows and the pin hotkey are now
+    // created / pumped / destroyed on the dedicated UI thread
     // (UiThreadProc) so they finally have a guaranteed GetMessageW/DispatchMessageW
     // pump and are torn down on their creating thread. Windhawk lifecycle callbacks
     // (this function) run on an arbitrary, non-pumping thread, so we must own one.
     // Start the UI thread and wait for it to finish creating its windows before
     // starting the worker, which immediately expects g_overlayWnd/g_inputWnd to exist.
     // (The former SetWinEventHook was already removed in FIX-A7 -- the worker poll
-    // drives every geometry update and posts WM_QPD_REBUILD_SECONDARY, now actually
-    // dispatched by this thread's pump.)
+    // drives every geometry update, now actually dispatched by this thread's pump.)
     g_uiReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!g_uiReadyEvent) { Wh_ModUninit(); return FALSE; }
     g_uiThread = CreateThread(NULL, 0, UiThreadProc, NULL, 0, NULL);
@@ -8536,11 +9129,11 @@ BOOL Wh_ModInit() {
 
     if (ENABLE_AUTOHIDE_SYNC) UpdateAutoHideState();  // only when user enables sync
 
-    LOG_IMPORTANT(L"INIT: v31.0.0 OK. state=%d pinned=%d glass=%d reorder=%d explorerWorkspaces=%d multimon=%d delay=%d hotkey=0x%X+0x%X autohide=%d",
+    LOG_IMPORTANT(L"INIT: v31.0.0 OK. state=%d pinned=%d glass=%d reorder=%d explorerWorkspaces=%d delay=%d hotkey=0x%X+0x%X autohide=%d",
               g_systemState, (int)g_pinnedApps.size(),
               (int)ENABLE_GLASS_OVERLAY, (int)ENABLE_REORDER,
               (int)ENABLE_EXPLORER_WORKSPACE_PINS,
-              (int)MULTI_MONITOR_DOCK, STARTUP_DELAY_MS,
+              STARTUP_DELAY_MS,
               g_hotkeyMods, g_hotkeyKey, (int)ENABLE_AUTOHIDE_SYNC);
     return TRUE;
 }
@@ -8570,16 +9163,13 @@ void Wh_ModUninit() {
         }
     }
 
-    // FIX-B2 (#6): join the workspace-launch thread too. LaunchWorkspaceThread
-    // runs LoadWorkspaceSnapshot + COM + ShellExecuteExW (seconds of work); if
-    // the mod is disabled/reloaded meanwhile the image is unmapped underneath
-    // it. Signal the stop flag and wait for it to finish before we return.
+    // FIX-B2 (#6) + review #4: signal the launch stop flag NOW, before the UI
+    // thread is quit. Because LaunchWorkspaceAsync refuses to start once this is
+    // set, the UI thread's "Restore Workspace" menu path can no longer spawn a
+    // launch thread that would outlive the drain below. The actual join of the
+    // launch threads is deferred until AFTER the UI thread has been joined (see
+    // below) so no in-flight menu handler can push a new handle after the drain.
     g_launchWorkspaceStop.store(true);
-    if (g_launchWorkspaceThread) {
-        WaitForSingleObject(g_launchWorkspaceThread, INFINITE);
-        CloseHandle(g_launchWorkspaceThread);
-        g_launchWorkspaceThread = NULL;
-    }
 
     // FIX-C1 (#1/#2/#3): now that the worker (which may cross-thread SendMessage
     // into the overlay) has exited, ask the UI thread to quit. WM_QUIT breaks its
@@ -8602,6 +9192,24 @@ void Wh_ModUninit() {
         g_uiReadyEvent = NULL;
     }
 
+    // Review #4 (Bug A): now that BOTH the worker and the UI thread are joined,
+    // no code path can spawn another launch thread. Drain and join every handle
+    // still outstanding before the image is unmapped, so no LaunchWorkspaceThread
+    // is ever executing mod code after FreeLibrary. The stop flag was set above,
+    // so each thread's LaunchWorkspace body is already short-circuited; the wait
+    // just reaps them.
+    if (g_launchCsInit) {
+        EnterCriticalSection(&g_launchCs);
+        for (HANDLE t : g_launchWorkspaceThreads) {
+            WaitForSingleObject(t, INFINITE);
+            CloseHandle(t);
+        }
+        g_launchWorkspaceThreads.clear();
+        LeaveCriticalSection(&g_launchCs);
+        DeleteCriticalSection(&g_launchCs);
+        g_launchCsInit = false;
+    }
+
     if (g_exitEvent) {
         CloseHandle(g_exitEvent);
         g_exitEvent = NULL;
@@ -8609,22 +9217,15 @@ void Wh_ModUninit() {
 
     SetHighResTimer(false);  // release 1ms timer period if still held
 
-    // Destroy secondary monitor docks first (they repaint from the same icon handles)
-    DestroySecondaryDocks();
-    // FIX-3: secondary-docks CS  --  delete after DestroySecondaryDocks so no further
-    // callers can attempt to acquire it (all callers check g_secondaryDocksCSInit first).
-    if (g_secondaryDocksCSInit) {
-        g_secondaryDocksCSInit = false;
-        DeleteCriticalSection(&g_secondaryDocksCS);
-    }
-
     // Destroy GDI resources in reverse creation order
     if (g_tetherDIB) { DeleteObject(g_tetherDIB); g_tetherDIB = NULL; g_tetherBits = NULL; }
     if (g_tetherWnd) { DestroyWindow(g_tetherWnd); g_tetherWnd = NULL; }
     g_tetherW = g_tetherH = 0;
+    g_tetherPrevClearW = g_tetherPrevClearH = 0;
     if (g_vanishDIB) { DeleteObject(g_vanishDIB); g_vanishDIB = NULL; g_vanishBits = NULL; }
     if (g_vanishWnd) { DestroyWindow(g_vanishWnd); g_vanishWnd = NULL; }
     g_vanishW = g_vanishH = 0;
+    g_vanishPrevClearW = g_vanishPrevClearH = 0;
     g_vanishActive = false;
     g_vanishParticles.clear();
     // Release any cross-thread vanish request that was posted (double-right-click)
@@ -8655,7 +9256,6 @@ void Wh_ModUninit() {
         UnregisterClassW(GHOST_CLASS,          hInst);   // QPDockGhost
         UnregisterClassW(L"QPDockTether",      hInst);
         UnregisterClassW(L"QPDockVanish",      hInst);
-        UnregisterClassW(L"WH_QPDockSecondary", hInst);
         UnregisterClassW(L"QPDockRenameDialog", hInst);
     }
 
@@ -8738,6 +9338,12 @@ void Wh_ModSettingsChanged() {
     if (g_overlayWnd && IsWindow(g_overlayWnd)) {
         ApplyNativeBackdrop(g_overlayWnd);
         InvalidateRect(g_overlayWnd, NULL, FALSE);
+        // FIX (Issue 6): the hotkey mods/key may have changed. Re-register on
+        // the overlay's owning thread (PostMessage) instead of here -- this
+        // handler runs on an arbitrary thread and Register/UnregisterHotKey are
+        // only valid on the window's creating thread. Previously the new hotkey
+        // setting was ignored until a full mod reload.
+        PostMessageW(g_overlayWnd, WM_QPD_REREGISTER_HOTKEY, 0, 0);
     }
 
     LOG_IMPORTANT(L"SETTINGS CHANGED: maxPins=%d iconSz=%d spacing=%d glass=%d reorder=%d explorerWorkspaces=%d",
