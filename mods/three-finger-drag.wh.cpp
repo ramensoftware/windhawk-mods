@@ -2,7 +2,7 @@
 // @id              three-finger-drag
 // @name            Three Finger Drag
 // @description     Move and snap any window by dragging three fingers on a precision touchpad, like on macOS
-// @version         1.0.0
+// @version         1.1.0
 // @author          rodrigothomazi
 // @github          https://github.com/RodrigoThomazi
 // @include         *
@@ -18,6 +18,9 @@
 Drag three fingers on a precision touchpad to move the window under the cursor,
 grabbing it from anywhere, not just the title bar. Lift your fingers to drop
 it. Inspired by three finger drag on macOS.
+
+Coming from a Mac? Set **Mode** to **macOS drag** to select text and drag files
+with three fingers, the way you're used to.
 
 ![Moving a window with three fingers and snapping it at the side of the screen](https://raw.githubusercontent.com/RodrigoThomazi/three-finger-drag-assets/main/windows_snap.gif)
 
@@ -80,9 +83,8 @@ free, so the three-finger tap can keep any action.
   running as administrator get a helper, and with native move on the mod also
   loads into the other programs, where it only hooks message retrieval and
   stays idle until a drag.
-- What works while a program running as administrator is in the foreground
-  depends on Windhawk's own level. Running Windhawk as administrator, as it
-  asks to be, leaves nothing out. Otherwise such a program's helper moves the
+- Windhawk starts the mod's process without administrator rights, so while a
+  program running as administrator is in the foreground, its helper moves the
   cursor and its windows, but the window isn't brought to the front, Esc
   doesn't cancel a direct move, and macOS drag mode can't click. A helper only
   ever moves its program's windows, moves the cursor and presses the button on
@@ -325,6 +327,47 @@ constexpr UINT kNativeStartTimeoutMs = 2000;
 // doesn't come.
 constexpr ULONGLONG kPressOverlayTimeoutMs = 3000;
 
+// What the mod's own presses carry in their extra information, so that the
+// overlay of a drag takes none but them, see IsOwnPress.
+constexpr ULONG_PTR kPressMark = 0x33464447;
+
+// How long a thread watches for the loop a drag mode press may start, see
+// OnLoopWatch. The loop, if it comes, comes with the press.
+constexpr ULONGLONG kLoopWatchTimeoutMs = 1000;
+
+// How long the press announced to a window's thread is expected for. It's
+// sent right before the press and taken from the queue right after, so this
+// only has to outlast a thread getting to the two of them.
+constexpr ULONGLONG kPressAnnounceTimeoutMs = 1000;
+
+// How long a request sent ahead of a drag is good for, see ArmNativeDrag. The
+// thread it went to drops the overlay it put up after kPressOverlayTimeoutMs,
+// and a press with nothing to land on would land in the program itself, so
+// the fingers stopping on the way never outlast it: what's asked for is asked
+// again well before then, and a drag takes it over only while it's fresh.
+constexpr ULONGLONG kArmTimeoutMs = 1000;
+
+// The first moves of a loop, which put the window under the press rather
+// than follow the fingers, and so say nothing about how it takes them.
+constexpr int kLoopSettleMoves = 3;
+
+// How far the window may be from where the move it took would have put it
+// before it counts as behind, in pixels, and how many moves in a row it has
+// to be behind to be taken as not reading the moves at all.
+constexpr int kLoopGapSlack = 8;
+constexpr int kLoopBehindMoves = 4;
+
+// How many moves may be on their way to a loop at once: while it isn't known
+// whether it brings them up to date, and once it's known that it doesn't. The
+// ones the fingers make meanwhile are dropped, so that the window is never
+// more than these behind the cursor, however long the drag goes.
+constexpr int kNativeCursorAhead = 3;
+constexpr int kNativeCursorPaced = 1;
+
+// How long a loop which takes nothing, because it's busy or because it's
+// over, holds the cursor back before the moves on their way are written off.
+constexpr ULONGLONG kNativeCursorStallMs = 200;
+
 // Finger speeds, in touchpad widths per second, between which acceleration
 // goes from none to full.
 constexpr double kAccelerationLowSpeed = 0.2;
@@ -393,16 +436,25 @@ UINT g_helperButtonMessage =
     RegisterWindowMessage(L"Windhawk_ThreeFingerDrag_Button_" WH_MOD_ID);
 
 // Native move, to the window: prepare a drag, with the system command in
-// wParam, or call it off. From the window's thread, with the window in wParam:
-// ready for the press, and the loop started.
+// wParam, call it off, or the press is on its way. From the window's thread,
+// with the window in wParam: ready for the press, with the overlay's point in
+// lParam, the loop started, and the loop took a move.
 UINT g_nativePrepareMessage =
     RegisterWindowMessage(L"Windhawk_ThreeFingerDrag_NativePrepare_" WH_MOD_ID);
 UINT g_nativeCancelMessage =
     RegisterWindowMessage(L"Windhawk_ThreeFingerDrag_NativeCancel_" WH_MOD_ID);
+UINT g_nativePressMessage =
+    RegisterWindowMessage(L"Windhawk_ThreeFingerDrag_NativePress_" WH_MOD_ID);
 UINT g_nativeReadyMessage =
     RegisterWindowMessage(L"Windhawk_ThreeFingerDrag_NativeReady_" WH_MOD_ID);
 UINT g_nativeStartedMessage =
     RegisterWindowMessage(L"Windhawk_ThreeFingerDrag_NativeStarted_" WH_MOD_ID);
+// Drag mode, to the window under the press: the loop it may start is to be
+// watched for and its moves reported, see WatchDragLoop.
+UINT g_dragWatchMessage =
+    RegisterWindowMessage(L"Windhawk_ThreeFingerDrag_DragWatch_" WH_MOD_ID);
+UINT g_nativeTookMessage =
+    RegisterWindowMessage(L"Windhawk_ThreeFingerDrag_NativeTook_" WH_MOD_ID);
 
 // A frame a helper forwards to the main part: the finger count in the top 8
 // bits of wParam and the key of their set below, the centroid in lParam.
@@ -600,6 +652,22 @@ struct {
     UINT nativeCommand;
     bool nativeButtonDown;
     ULONGLONG nativeRequestTime;
+    // Native move: how many positions are on their way to the loop, when the
+    // last one went and when the last was taken, whether a newer one waits
+    // behind them, whether the loop reports the moves it takes at all, and
+    // how many it's sent at once, 0 for as many as the fingers make.
+    int nativeCursorOut;
+    ULONGLONG nativeCursorTime;
+    ULONGLONG nativeCursorTaken;
+    bool nativeCursorHeld;
+    bool nativeCursorReports;
+    int nativeCursorLimit;
+    // Drag mode: the window asked to report the loop its press may start.
+    HWND dragWatch;
+    // Native move: how many moves the loop took, and when it took the first,
+    // for the pace in the log.
+    int nativeMoves;
+    ULONGLONG nativeFirstMove;
     // The cursor's push against an edge shared by two monitors.
     int edgePush;
     // The smoothed finger speed, and when the last frame came.
@@ -641,6 +709,7 @@ void SendLeftButton(bool up) {
     bool swapped = GetSystemMetrics(SM_SWAPBUTTON);
     INPUT input{};
     input.type = INPUT_MOUSE;
+    input.mi.dwExtraInfo = kPressMark;
     input.mi.dwFlags =
         up ? (swapped ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_LEFTUP)
            : (swapped ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN);
@@ -1137,9 +1206,51 @@ bool CanMoveWindow(HWND hWnd) {
     return !IsExcludedProgram(hWnd);
 }
 
+bool IsOverlayClass(HWND hWnd) {
+    WCHAR className[64] = L"";
+    if (!GetClassName(hWnd, className, ARRAYSIZE(className))) {
+        return false;
+    }
+
+    return _wcsicmp(className, kPressOverlayClassName) == 0 ||
+           _wcsicmp(className, kCursorOverlayClassName) == 0;
+}
+
+// The topmost window below an overlay of this mod's own which pt is in. The
+// overlay a thread puts up for a press sits right under the cursor, which is
+// where the press has to land, so it's what a hit test finds there while a
+// drag is being got ready, see ArmNativeDrag, and for as long as one left
+// behind takes to go. The window wanted is the one it covers.
+HWND WindowUnderOverlay(HWND hOverlayWnd, POINT pt) {
+    for (HWND hWnd = GetWindow(hOverlayWnd, GW_HWNDNEXT); hWnd;
+         hWnd = GetWindow(hWnd, GW_HWNDNEXT)) {
+        RECT rc;
+        DWORD cloaked = 0;
+        if (IsOverlayClass(hWnd) || !IsWindowVisible(hWnd) ||
+            (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_TRANSPARENT) ||
+            !GetWindowRect(hWnd, &rc) || !PtInRect(&rc, pt)) {
+            continue;
+        }
+
+        if (SUCCEEDED(DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, &cloaked,
+                                            sizeof(cloaked))) &&
+            cloaked) {
+            continue;
+        }
+
+        return hWnd;
+    }
+
+    return nullptr;
+}
+
 HWND WindowToMoveAt(POINT pt) {
     HWND hWnd = WindowFromPoint(pt);
     HWND hRootWnd = hWnd ? GetAncestor(hWnd, GA_ROOT) : nullptr;
+    if (hRootWnd && IsOverlayClass(hRootWnd)) {
+        hRootWnd = WindowUnderOverlay(hRootWnd, pt);
+    }
+
     if (!hRootWnd || !CanMoveWindow(hRootWnd)) {
         return nullptr;
     }
@@ -1656,6 +1767,59 @@ void RemoveEscapeHook() {
 
 // The drag.
 
+// A window's thread getting ready for a drag which hasn't begun. The request
+// goes out with the first motion, so that the thread has the rest of the way
+// to the start distance to answer it: a thread busy with its own work takes
+// hundreds of milliseconds, and the drag would otherwise start by standing
+// still for them. See ArmNativeDrag and StartNativeDrag.
+struct {
+    HWND target;
+    UINT command;
+    bool ready;
+    POINT press;
+    ULONGLONG time;
+} g_arm;
+
+// The fingers went somewhere else, or nowhere: the thread is let go, and the
+// overlay it put up comes down.
+void CancelArm() {
+    if (!g_arm.target) {
+        return;
+    }
+
+    PostMessage(g_arm.target, g_nativeCancelMessage, 0, 0);
+    g_arm = {};
+}
+
+// A drag mode press lands where the cursor is, and if that's a title bar, or
+// anything else the window moves by, the window's thread runs the same loop a
+// native move runs. Nothing here starts it, so the window under the press is
+// asked to watch for it and report the moves it takes, which paces them the
+// same way, see OnNativeTook. A press which starts no loop, e.g. one which
+// selects text, is answered by nothing and the moves go at the pace of the
+// fingers, the way they always did.
+void WatchDragLoop(POINT cursor) {
+    HWND hWnd = WindowFromPoint(cursor);
+    HWND hRootWnd = hWnd ? GetAncestor(hWnd, GA_ROOT) : nullptr;
+    if (hRootWnd && IsOverlayClass(hRootWnd)) {
+        hRootWnd = WindowUnderOverlay(hRootWnd, cursor);
+    }
+
+    if (!hRootWnd) {
+        Wh_Log(L"No window under the press");
+        return;
+    }
+
+    WCHAR className[64] = L"";
+    GetClassName(hRootWnd, className, ARRAYSIZE(className));
+    Wh_Log(L"Pressing on %08X, class %s", (DWORD)(ULONG_PTR)hRootWnd,
+           className);
+
+    if (PostMessage(hRootWnd, g_dragWatchMessage, 0, 0)) {
+        g_state.dragWatch = hRootWnd;
+    }
+}
+
 void BeginDrag() {
     POINT cursor;
     GetCursorPos(&cursor);
@@ -1680,7 +1844,9 @@ void BeginDrag() {
     }
 
     if (!g_settings.moveMode) {
+        CancelArm();
         Wh_Log(L"Starting a drag, holding the left button");
+        WatchDragLoop(cursor);
         SendLeftButton(false);
         g_state.buttonDown = true;
         return;
@@ -1689,6 +1855,7 @@ void BeginDrag() {
     // With no window to move, the fingers still move the cursor.
     HWND hWnd = WindowToMoveAt(cursor);
     if (!hWnd) {
+        CancelArm();
         Wh_Log(L"No window to move under the cursor");
         return;
     }
@@ -1731,6 +1898,8 @@ void BeginDrag() {
 
 // Moves or resizes the window from here, as opposed to native move.
 void StartDirectDrag() {
+    CancelArm();
+
     if (!g_state.resizeEdges) {
         g_state.grab = CalcGrab(g_state.target, g_state.startCursor);
     }
@@ -1749,30 +1918,179 @@ UINT SizeEdgeOfEdges(UINT edges) {
     return WMSZ_BOTTOMRIGHT;
 }
 
-// Asks the window's thread to prepare, see OnNativeReady. The cursor stays
-// where it is until the loop runs, see MoveCursorBy.
+// The fingers have gone far enough to mean a drag, if not yet far enough to
+// be one: the window under the cursor is asked to get ready now, so that the
+// press can go in as soon as the drag begins. The cursor doesn't move until
+// then, so the overlay ends up right under it.
+void ArmNativeDrag() {
+    // The fingers stopped on the way and the thread is about to give up on
+    // the press: it's asked again for the same window, where the cursor still
+    // is, so that its overlay stays up and an answer already on its way stays
+    // good.
+    if (g_arm.target) {
+        if (GetTickCount64() - g_arm.time < kArmTimeoutMs) {
+            return;
+        }
+
+        if (PostMessage(g_arm.target, g_nativePrepareMessage, g_arm.command,
+                        0)) {
+            g_arm.time = GetTickCount64();
+            return;
+        }
+
+        g_arm = {};
+    }
+
+    if (!g_settings.moveMode || !g_settings.nativeMove) {
+        return;
+    }
+
+    POINT cursor;
+    if (!GetCursorPos(&cursor)) {
+        return;
+    }
+
+    HWND hWnd = WindowToMoveAt(cursor);
+    if (!hWnd || !HasNativeMove(hWnd)) {
+        return;
+    }
+
+    UINT edges = g_settings.resizeFromEdges ? ResizeEdgesAt(hWnd, cursor) : 0;
+    UINT command =
+        edges ? SC_SIZE | SizeEdgeOfEdges(edges) : SC_MOVE | HTCAPTION;
+    if (!PostMessage(hWnd, g_nativePrepareMessage, command, 0)) {
+        Wh_Log(L"PostMessage error: %u", GetLastError());
+        return;
+    }
+
+    g_arm.target = hWnd;
+    g_arm.command = command;
+    g_arm.time = GetTickCount64();
+}
+
+// A window slow to move takes the moves one at a time, and the ones the
+// fingers send meanwhile pile up in front of it, so the window falls further
+// behind the cursor the longer the drag goes. Only so many are on their way
+// at a time then, and the last is always the latest: the ones in between are
+// dropped, the way the system itself drops the moves a busy window doesn't
+// get to.
+//
+// A loop which stops taking them, because it's busy or because it's over,
+// doesn't hold the cursor back for longer than kNativeCursorStallMs: what's
+// written off here are moves it never took.
+bool NativeCursorOnItsWay() {
+    if (g_state.nativeCursorOut <= 0) {
+        return false;
+    }
+
+    ULONGLONG last = g_state.nativeCursorTaken > g_state.nativeCursorTime
+                         ? g_state.nativeCursorTaken
+                         : g_state.nativeCursorTime;
+    if (GetTickCount64() - last >= kNativeCursorStallMs) {
+        // A loop which takes nothing for that long is one which ended, e.g.
+        // with Esc, or one which stopped reading its queue: the moves go at
+        // the pace of the fingers again until it says otherwise.
+        g_state.nativeCursorOut = 0;
+        g_state.nativeCursorReports = false;
+        return false;
+    }
+
+    return true;
+}
+
+// Whether the loop has as many moves on their way as it's sent at once. One
+// which reports nothing is fed as fast as the fingers go, the way every loop
+// was before.
+bool NativeCursorFull() {
+    return g_state.nativeCursorReports && g_state.nativeCursorLimit > 0 &&
+           g_state.nativeCursorOut >= g_state.nativeCursorLimit &&
+           NativeCursorOnItsWay();
+}
+
+void SendNativeCursor() {
+    g_state.nativeCursorHeld = false;
+    g_state.nativeCursorOut++;
+    g_state.nativeCursorTime = GetTickCount64();
+    MoveCursorTo(g_state.cursor);
+}
+
+// Every frame, moved or not: a position held back goes out once the loop took
+// the one before it, or once it had long enough, like UpdateTarget.
+void UpdateNativeCursor() {
+    if (!g_state.nativeCursorHeld || NativeCursorFull()) {
+        return;
+    }
+
+    SendNativeCursor();
+}
+
+void OnNativeReady(HWND hWnd, POINT press);
+
+// Takes over the request the first motion sent, see ArmNativeDrag, or asks
+// the window's thread now, see OnNativeReady. The cursor goes on with the
+// fingers meanwhile, and goes back to the overlay for the press.
 bool StartNativeDrag() {
     UINT command = g_state.resizeEdges
                        ? SC_SIZE | SizeEdgeOfEdges(g_state.resizeEdges)
                        : SC_MOVE | HTCAPTION;
-    if (!PostMessage(g_state.target, g_nativePrepareMessage, command, 0)) {
-        Wh_Log(L"PostMessage error: %u", GetLastError());
-        return false;
+
+    // The fingers may have ended up on another window, or on an edge of this
+    // one, since, and a request old enough for the overlay to be gone is no
+    // good either: what was asked for then is no use now.
+    bool armed = g_arm.target == g_state.target && g_arm.command == command &&
+                 GetTickCount64() - g_arm.time < kArmTimeoutMs;
+    if (!armed) {
+        CancelArm();
+        if (!PostMessage(g_state.target, g_nativePrepareMessage, command, 0)) {
+            Wh_Log(L"PostMessage error: %u", GetLastError());
+            return false;
+        }
     }
 
     g_state.native = true;
     g_state.nativePhase = NativePhase::kPreparing;
     g_state.nativeCommand = command;
-    g_state.nativeRequestTime = GetTickCount64();
+    g_state.nativeRequestTime = armed ? g_arm.time : GetTickCount64();
     SetTimer(g_hWnd, kNativeTimerId, kNativeStartTimeoutMs, nullptr);
+
+    if (armed) {
+        bool ready = g_arm.ready;
+        POINT press = g_arm.press;
+        g_arm = {};
+        if (ready) {
+            OnNativeReady(g_state.target, press);
+        }
+    }
+
     return true;
 }
 
-// The overlay is up under the cursor: the press goes in.
-void OnNativeReady(HWND hWnd) {
-    if (!g_state.dragging || hWnd != g_state.target || !g_state.native ||
-        g_state.nativePhase != NativePhase::kPreparing) {
+// The overlay is up where the cursor was when the drag was asked for, which
+// is where the press has to land. The cursor went on with the fingers
+// meanwhile, all the longer on a thread busy with its own work, so it goes
+// back for the press and comes straight back, within the one frame: the move,
+// the press and the move back are taken in that order, so the loop starts at
+// the overlay and its first move is the one which catches up.
+void OnNativeReady(HWND hWnd, POINT press) {
+    // Ready before the fingers made a drag of it: the press waits for the
+    // drag to begin, and the overlay stays up until then, see StartNativeDrag.
+    if (!g_state.dragging && hWnd == g_arm.target) {
+        g_arm.ready = true;
+        g_arm.press = press;
+        return;
+    }
+
+    // A window of somebody else's drag, or of none, is let go. This one
+    // answering again, to a request sent twice while the fingers were on
+    // their way, is left alone: the press is already on its way to its
+    // overlay, and calling the drag off would take it down under it.
+    bool mine = g_state.dragging && g_state.native && hWnd == g_state.target;
+    if (!mine) {
         PostMessage(hWnd, g_nativeCancelMessage, 0, 0);
+        return;
+    }
+
+    if (g_state.nativePhase != NativePhase::kPreparing) {
         return;
     }
 
@@ -1780,11 +2098,28 @@ void OnNativeReady(HWND hWnd) {
     Wh_Log(L"Ready after %llu ms, pressing%s",
            GetTickCount64() - g_state.nativeRequestTime,
            ForegroundHelper() ? L" through the helper" : L"");
+
+    // The press is announced before it goes: the window's thread takes a
+    // posted message before an input one, so the announcement is there when
+    // the press arrives, and a press without one is somebody else's, see
+    // IsOwnPress.
+    PostMessage(hWnd, g_nativePressMessage, 0, 0);
+
+    bool away = press.x != g_state.cursor.x || press.y != g_state.cursor.y;
+    if (away) {
+        MoveCursorTo(press);
+    }
+
     SetNativeButton(true);
     g_state.nativeButtonDown = true;
+
+    if (away) {
+        MoveCursorTo(g_state.cursor);
+    }
 }
 
-// The loop runs: the cursor catches up with the fingers, and the loop with it.
+// The loop runs: it's given where the fingers are by now, which is what the
+// window takes the drag up from.
 void OnNativeStarted(HWND hWnd) {
     if (!g_state.dragging || hWnd != g_state.target || !g_state.native ||
         g_state.nativePhase != NativePhase::kPressing) {
@@ -1799,12 +2134,50 @@ void OnNativeStarted(HWND hWnd) {
     MoveCursorTo(g_state.cursor);
 }
 
+// The loop took a move, so it's ready for the next: the position held back
+// for it, if any, goes now, and how many go at once is what its answers say,
+// see NativeCursorFull.
+void OnNativeTook(HWND hWnd, bool fresh) {
+    bool ours = g_state.native
+                    ? (hWnd == g_state.target &&
+                       g_state.nativePhase == NativePhase::kRunning)
+                    : (hWnd && hWnd == g_state.dragWatch);
+    if (!g_state.dragging || !ours) {
+        return;
+    }
+
+    g_state.nativeCursorReports = true;
+    // A loop which brings the moves up to date as it takes them, see
+    // RefreshLoopMove, puts the window where the cursor is however many it
+    // has waiting, so the fingers may go ahead of it; one which goes by the
+    // moves themselves is never sent more than it took.
+    g_state.nativeCursorLimit = fresh ? kNativeCursorAhead : kNativeCursorPaced;
+    if (!g_state.nativeMoves++) {
+        g_state.nativeFirstMove = GetTickCount64();
+    }
+
+    g_state.nativeCursorTaken = GetTickCount64();
+    if (g_state.nativeCursorOut > 0) {
+        g_state.nativeCursorOut--;
+    }
+
+    if (g_state.nativeCursorHeld && !NativeCursorFull()) {
+        SendNativeCursor();
+    }
+}
+
 // Releases the button, which ends a running loop, and calls off a drag the
 // window's thread is still preparing.
 void StopNativeDrag() {
     KillTimer(g_hWnd, kNativeTimerId);
 
     if (g_state.nativeButtonDown) {
+        // The last position first, so that the window ends where the fingers
+        // left it: the release comes behind it in the same queue.
+        if (g_state.nativeCursorHeld) {
+            SendNativeCursor();
+        }
+
         SetNativeButton(false);
         g_state.nativeButtonDown = false;
     }
@@ -1825,7 +2198,6 @@ void OnNativeTimeout() {
            (DWORD)(ULONG_PTR)g_state.target);
     StopNativeDrag();
     g_state.native = false;
-    MoveCursorTo(g_state.cursor);
     StartDirectDrag();
 }
 
@@ -1859,13 +2231,33 @@ void CancelDrag() {
     HideCursorOverlay();
 }
 
+// The pace the loop took the moves at, whether it was a native move's own
+// loop or the one a drag mode press started, and what it hadn't taken yet.
+void LogLoopPace() {
+    if (g_state.nativeMoves > 1) {
+        Wh_Log(L"The loop took %d moves, one every %llu ms, %d at a time, "
+               L"%d still on the way",
+               g_state.nativeMoves,
+               (GetTickCount64() - g_state.nativeFirstMove) /
+                   (g_state.nativeMoves - 1),
+               g_state.nativeCursorLimit, g_state.nativeCursorOut);
+    }
+}
+
 void EndDrag() {
     Wh_Log(L"Ending the drag");
+    LogLoopPace();
 
     KillTimer(g_hWnd, kReleaseTimerId);
     RemoveEscapeHook();
 
     if (g_state.buttonDown) {
+        // The last position first, so that the window ends where the fingers
+        // left it: the release comes behind it in the same queue.
+        if (g_state.nativeCursorHeld) {
+            SendNativeCursor();
+        }
+
         SendLeftButton(true);
         g_state.buttonDown = false;
     }
@@ -1892,8 +2284,10 @@ void EndDrag() {
 // with one finger during the release delay. The drag picks up from there, the
 // window keeping its place relative to the cursor.
 void ResyncDrag() {
-    // The cursor is held still on purpose, see MoveCursorBy.
-    if (g_state.native && g_state.nativePhase != NativePhase::kRunning) {
+    // A position on its way to a slow loop, or waiting behind one, is where
+    // the cursor is being taken: that gap is this part's own doing, and
+    // picking the drag up from the cursor would undo it.
+    if (g_state.nativeCursorHeld || NativeCursorOnItsWay()) {
         return;
     }
 
@@ -1990,20 +2384,25 @@ void MoveCursorBy(double du, double dv) {
 
     POINT next{g_state.cursor.x + ix, g_state.cursor.y + iy};
 
-    // The press has to land on the overlay the window's thread put up where
-    // the cursor is, so the cursor waits there, and the fingers' motion is
-    // kept for when the loop runs.
-    if (g_state.native && g_state.nativePhase != NativePhase::kRunning) {
-        g_state.cursor = ClampToMonitors(next);
-        return;
-    }
-
     if (ResistsSharedEdges()) {
         next = ResistSharedEdge(next);
     }
 
     g_state.cursor = ClampToMonitors(next);
     PlaceCursorOverlay();
+
+    // The loop of a native move, or the one a drag mode press started, see
+    // WatchDragLoop: either way it's the loop that sets the pace.
+    if (g_state.nativeCursorReports) {
+        if (NativeCursorFull()) {
+            g_state.nativeCursorHeld = true;
+            return;
+        }
+
+        SendNativeCursor();
+        return;
+    }
+
     MoveCursorTo(g_state.cursor);
 }
 
@@ -2026,6 +2425,7 @@ void OnFingers(double u, double v, DWORD idsKey) {
 
     // A new set of fingers starts over from where it is, with no jump.
     if (!g_state.tracking || idsKey != g_state.idsKey) {
+        CancelArm();
         g_state.velocity = 0;
         g_state.tracking = true;
         g_state.idsKey = idsKey;
@@ -2049,6 +2449,10 @@ void OnFingers(double u, double v, DWORD idsKey) {
                         PixelScale();
         if (travel >= g_settings.startDistance) {
             BeginDrag();
+        } else if (travel * 3 >= g_settings.startDistance) {
+            // A third of the way there is enough to mean it, and leaves the
+            // rest of the way for the window's thread to get ready in.
+            ArmNativeDrag();
         }
         return;
     }
@@ -2056,14 +2460,21 @@ void OnFingers(double u, double v, DWORD idsKey) {
     double gain = AccelerationGain(du, dv, dt);
     MoveCursorBy(du * gain, dv * gain);
 
-    // Every frame, moved or not: a position held back for a busy window goes
-    // out once it caught up.
+    // Every frame, moved or not: a position held back for a busy window or a
+    // slow loop goes out once it caught up.
+    UpdateNativeCursor();
     UpdateTarget(false);
     UpdatePreview();
 }
 
 void OnOtherFingerCount(int count, int fingers) {
     g_state.tracking = false;
+
+    // The fingers of a drag which never began go their own way: whatever was
+    // getting ready for them stops.
+    if (!g_state.dragging) {
+        CancelArm();
+    }
 
     // An extra finger, e.g. a resting thumb, doesn't end the drag.
     if (!g_state.dragging || count > fingers || g_state.releasePending) {
@@ -2358,12 +2769,18 @@ void OnInputDeviceChange(WPARAM change, HANDLE hDevice) {
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (uMsg == g_nativeReadyMessage) {
-        OnNativeReady((HWND)LongToHandle((LONG)(DWORD)wParam));
+        OnNativeReady((HWND)LongToHandle((LONG)(DWORD)wParam),
+                      POINT{(SHORT)LOWORD(lParam), (SHORT)HIWORD(lParam)});
         return 0;
     }
 
     if (uMsg == g_nativeStartedMessage) {
         OnNativeStarted((HWND)LongToHandle((LONG)(DWORD)wParam));
+        return 0;
+    }
+
+    if (uMsg == g_nativeTookMessage) {
+        OnNativeTook((HWND)LongToHandle((LONG)(DWORD)wParam), lParam != 0);
         return 0;
     }
 
@@ -2501,7 +2918,8 @@ void RunTouchpad(HINSTANCE hInstance) {
     // The answers of a window's thread come from any level, a sandboxed
     // program's below this one, an ordinary program's below it when Windhawk
     // runs as administrator.
-    for (UINT message : {g_nativeReadyMessage, g_nativeStartedMessage}) {
+    for (UINT message : {g_nativeReadyMessage, g_nativeStartedMessage,
+                         g_nativeTookMessage}) {
         ChangeWindowMessageFilterEx(g_hWnd, message, MSGFLT_ALLOW, nullptr);
     }
 
@@ -2586,11 +3004,34 @@ thread_local UINT g_pendingCommand;
 thread_local HWND g_pressOverlayWnd;
 thread_local ULONGLONG g_pressOverlayTime;
 
+// The press the main part announced, and when, and whether a press carrying
+// the mark was ever seen on this thread, see IsOwnPress.
+thread_local bool g_pressAnnounced;
+thread_local ULONGLONG g_pressAnnouncedTime;
+thread_local bool g_pressMarkSeen;
+
 // The loop this thread runs for a drag, its system command, and whether it's
 // over, with the button still held.
 thread_local HWND g_loopWnd;
 thread_local UINT g_loopCommand;
 thread_local bool g_loopEnded;
+
+// Whether the loop was found to go by something else than the moves it's
+// given, how many it took, the point the last one carried, the distance the
+// window kept from it, and how many moves in a row it didn't keep it, see
+// RefreshLoopMove.
+thread_local bool g_loopPaced;
+thread_local int g_loopMoves;
+thread_local POINT g_loopPoint;
+thread_local POINT g_loopGap;
+thread_local int g_loopBehind;
+
+// Whether the loop is one to watch for rather than one already running, when
+// the watch began, and whether it's a drag mode loop, which is the program's
+// own to end and to draw the cursor of, see OnLoopWatch.
+thread_local bool g_loopWatch;
+thread_local ULONGLONG g_loopWatchTime;
+thread_local bool g_loopFromWatch;
 
 // The overlays of all threads, which unloading closes: a window can only be
 // destroyed by its own thread.
@@ -2605,6 +3046,11 @@ void DiscardMessage(MSG* msg) {
 
 // Until the pointer leaves the drag threshold the loop only holds the
 // capture; past it, the thread is flagged as moving or sizing.
+// A thread which watched for a loop that never came, and then retrieved no
+// message to notice it, is left watching. A drag starting on it now says the
+// watch is over, whatever the thread did meanwhile.
+void DropStaleWatch();
+
 bool IsLoopActive() {
     GUITHREADINFO info{.cbSize = sizeof(info)};
     if (!g_loopWnd || !GetGUIThreadInfo(GetCurrentThreadId(), &info)) {
@@ -2708,19 +3154,86 @@ void HidePressOverlay() {
     g_pressOverlayWnd = nullptr;
 }
 
-void NotifyMain(UINT message, HWND hWnd) {
-    if (HWND hMainWnd = FindWindow(kWindowClassName, nullptr)) {
-        PostMessage(hMainWnd, message, (WPARAM)(DWORD)HandleToLong(hWnd), 0);
+// The main part's window, looked up once a drag and kept for the rest of it:
+// the moves the loop takes are answered on its own thread, where work holds
+// the drag up. It's dropped between drags because the main part is a process
+// of its own, which comes and goes, e.g. on a settings change, and answering
+// the window it used to have would leave the drag waiting on nobody.
+thread_local HWND g_mainWnd;
+
+void NotifyMain(UINT message, HWND hWnd, LPARAM lParam) {
+    if (!g_mainWnd) {
+        g_mainWnd = FindWindow(kWindowClassName, nullptr);
+        if (!g_mainWnd) {
+            return;
+        }
     }
+
+    PostMessage(g_mainWnd, message, (WPARAM)(DWORD)HandleToLong(hWnd), lParam);
 }
 
 void ForgetDrag() {
     g_pendingWnd = nullptr;
     g_pendingCommand = 0;
+    g_pressAnnounced = false;
     g_loopWnd = nullptr;
     g_loopCommand = 0;
     g_loopEnded = false;
+    g_loopWatch = false;
+    g_loopFromWatch = false;
     HidePressOverlay();
+}
+
+// A move can wait in the queue while the loop is busy with the one before it,
+// and the loop puts the window where the point the move carries says. Taking
+// that point up to where the cursor is now puts the window where the fingers
+// are instead of where they were, so the main part can send the moves at the
+// pace of the fingers rather than at the pace of the window.
+//
+// Whether the loop reads the point back can't be asked, so it's watched: the
+// window should stay the same distance from the point it was last given, and
+// one which falls behind and stays behind is going by something else. The
+// main part is told so, and goes back to holding the moves back for it, which
+// is what every loop got before this and what a resize still gets, its window
+// not being one which follows the cursor.
+bool RefreshLoopMove(MSG* msg) {
+    POINT pt;
+    RECT rect;
+    if (g_loopPaced || (g_loopCommand & 0xFFF0) != SC_MOVE ||
+        !GetCursorPos(&pt) || !GetWindowRect(g_loopWnd, &rect)) {
+        return false;
+    }
+
+    msg->pt = pt;
+    POINT client = pt;
+    if (ScreenToClient(msg->hwnd, &client)) {
+        msg->lParam = MAKELPARAM(client.x, client.y);
+    }
+
+    POINT gap{rect.left - g_loopPoint.x, rect.top - g_loopPoint.y};
+    int offX = gap.x - g_loopGap.x;
+    int offY = gap.y - g_loopGap.y;
+    g_loopPoint = pt;
+    g_loopGap = gap;
+
+    if (++g_loopMoves <= kLoopSettleMoves) {
+        return true;
+    }
+
+    if (offX >= -kLoopGapSlack && offX <= kLoopGapSlack &&
+        offY >= -kLoopGapSlack && offY <= kLoopGapSlack) {
+        g_loopBehind = 0;
+        return true;
+    }
+
+    // Behind once is the window put somewhere of its own accord, e.g. by a
+    // snap; behind over and over is the point going unread.
+    if (++g_loopBehind < kLoopBehindMoves) {
+        return true;
+    }
+
+    g_loopPaced = true;
+    return false;
 }
 
 // Puts the overlay up where the cursor is, which the main part holds still
@@ -2731,6 +3244,7 @@ void OnPrepareRequest(MSG* msg) {
     POINT pt = msg->pt;
     DiscardMessage(msg);
 
+    DropStaleWatch();
     if (g_loopWnd || !IsDragCommand(command, hWnd)) {
         return;
     }
@@ -2741,8 +3255,9 @@ void OnPrepareRequest(MSG* msg) {
 
     g_pendingWnd = hWnd;
     g_pendingCommand = command;
+    g_mainWnd = nullptr;
     Wh_Log(L"Ready to drag %08X", (DWORD)(ULONG_PTR)hWnd);
-    NotifyMain(g_nativeReadyMessage, hWnd);
+    NotifyMain(g_nativeReadyMessage, hWnd, PackPair(pt.x, pt.y));
 }
 
 void OnCancelRequest(MSG* msg) {
@@ -2750,6 +3265,67 @@ void OnCancelRequest(MSG* msg) {
     if (!g_loopWnd) {
         ForgetDrag();
     }
+}
+
+// The press is on its way, see OnNativeReady.
+void OnPressAnnounce(MSG* msg) {
+    DiscardMessage(msg);
+    if (g_pendingWnd) {
+        g_pressAnnounced = true;
+        g_pressAnnouncedTime = GetTickCount64();
+    }
+}
+
+void DropStaleWatch() {
+    if (g_loopWatch && !IsLoopActive()) {
+        ForgetDrag();
+    }
+}
+
+// A drag mode press is on its way to this window, see WatchDragLoop. The loop
+// it may start is this thread's own, so it's watched for here rather than
+// started here: until it shows, nothing is done to the moves.
+void OnLoopWatch(MSG* msg) {
+    HWND hWnd = msg->hwnd;
+    DiscardMessage(msg);
+
+    DropStaleWatch();
+    if (g_loopWnd || !IsWindow(hWnd)) {
+        return;
+    }
+
+    g_loopWnd = hWnd;
+    g_loopCommand = SC_MOVE | HTCAPTION;
+    g_loopEnded = false;
+    g_loopWatch = true;
+    g_loopWatchTime = GetTickCount64();
+    g_loopFromWatch = true;
+    g_loopPaced = false;
+    g_loopMoves = 0;
+    g_loopBehind = 0;
+    g_loopPoint = {};
+    g_loopGap = {};
+}
+
+// Whether the press on the overlay is the one the mod sent, rather than one
+// of the user's own, which would otherwise start a drag they didn't ask for:
+// the overlay is up, invisible, from the first motion of a gesture which may
+// still turn out to be something else. The mod's press is announced, and
+// carries its mark. Whether the mark can be read here is the system's to say,
+// so the first press which does carry it settles that it can, and from then
+// on nothing else passes.
+bool IsOwnPress() {
+    if (!g_pressAnnounced ||
+        GetTickCount64() - g_pressAnnouncedTime > kPressAnnounceTimeoutMs) {
+        return false;
+    }
+
+    if (GetMessageExtraInfo() == (LPARAM)kPressMark) {
+        g_pressMarkSeen = true;
+        return true;
+    }
+
+    return !g_pressMarkSeen;
 }
 
 // The press this thread was prepared for: it's retrieved here, as a press on
@@ -2768,8 +3344,14 @@ void OnOverlayPress(MSG* msg) {
     g_loopWnd = hWnd;
     g_loopCommand = command;
     g_loopEnded = false;
+    g_loopFromWatch = false;
+    g_loopPaced = false;
+    g_loopMoves = 0;
+    g_loopBehind = 0;
+    g_loopPoint = {};
+    g_loopGap = {};
     Wh_Log(L"Press taken, starting the loop of %08X", (DWORD)(ULONG_PTR)hWnd);
-    NotifyMain(g_nativeStartedMessage, hWnd);
+    NotifyMain(g_nativeStartedMessage, hWnd, 0);
 
     msg->hwnd = hWnd;
     msg->message = WM_SYSCOMMAND;
@@ -2790,12 +3372,23 @@ void OnMessageRetrieved(MSG* msg) {
         return;
     }
 
-    if (!g_pressOverlayWnd) {
+    if (msg->message == g_nativePressMessage) {
+        OnPressAnnounce(msg);
         return;
     }
 
-    if (msg->hwnd == g_pressOverlayWnd) {
-        if (msg->message == WM_LBUTTONDOWN && g_pendingWnd) {
+    if (msg->message == g_dragWatchMessage) {
+        OnLoopWatch(msg);
+        return;
+    }
+
+    if (!g_pressOverlayWnd && !g_loopWnd) {
+        return;
+    }
+
+    if (g_pressOverlayWnd && msg->hwnd == g_pressOverlayWnd) {
+        if (msg->message == WM_LBUTTONDOWN && g_pendingWnd && IsOwnPress()) {
+            g_pressAnnounced = false;
             OnOverlayPress(msg);
         }
         return;
@@ -2803,14 +3396,43 @@ void OnMessageRetrieved(MSG* msg) {
 
     if (g_loopWnd) {
         if (IsLoopActive()) {
+            if (g_loopWatch) {
+                g_loopWatch = false;
+                Wh_Log(L"The press started the loop of %08X",
+                       (DWORD)(ULONG_PTR)g_loopWnd);
+            }
             // The loop takes the moves without dispatching them, which would
             // leave the class cursor showing. The overlay isn't moved along:
             // the loop holds the capture, and any work here holds up the
             // loop.
             if (msg->message == WM_MOUSEMOVE) {
-                SetCursor(LoadCursor(nullptr, CursorOfCommand(g_loopCommand)));
+                if (!g_loopFromWatch) {
+                    SetCursor(
+                        LoadCursor(nullptr, CursorOfCommand(g_loopCommand)));
+                }
+                // Taking this one is what asks for the next, so that a
+                // window slow to move is never sent more than it takes, and
+                // it says whether more than that would do it any harm. A post
+                // and no more than that: work here holds the loop up.
+                NotifyMain(g_nativeTookMessage, g_loopWnd,
+                           RefreshLoopMove(msg) ? 1 : 0);
+            }
+        } else if (g_loopWatch) {
+            // Still waiting for the press, or the press landed on something
+            // else, e.g. it selects text or takes hold of a file: there's no
+            // loop to pace, and one only ever comes with the press. The
+            // button says nothing here, being up until the press lands.
+            if (GetTickCount64() - g_loopWatchTime > kLoopWatchTimeoutMs) {
+                Wh_Log(L"The press of %08X started no loop",
+                       (DWORD)(ULONG_PTR)g_loopWnd);
+                ForgetDrag();
             }
         } else if (GetKeyState(VK_LBUTTON) >= 0) {
+            ForgetDrag();
+        } else if (g_loopFromWatch) {
+            // A drag mode loop over on its own, e.g. with Esc: the button is
+            // the program's own to be released over, so nothing is put under
+            // the cursor for it.
             ForgetDrag();
         } else if (!g_loopEnded) {
             // Over on its own, e.g. with Esc, with the button still held: the
@@ -3371,6 +3993,8 @@ BOOL ModInitOther() {
         // unless Windhawk runs as administrator.
         ChangeWindowMessageFilter(g_nativePrepareMessage, MSGFLT_ADD);
         ChangeWindowMessageFilter(g_nativeCancelMessage, MSGFLT_ADD);
+        ChangeWindowMessageFilter(g_nativePressMessage, MSGFLT_ADD);
+        ChangeWindowMessageFilter(g_dragWatchMessage, MSGFLT_ADD);
 
         g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
         if (g_stopEvent) {
@@ -3382,6 +4006,8 @@ BOOL ModInitOther() {
             Wh_Log(L"Can't start the helper: %u", GetLastError());
             ChangeWindowMessageFilter(g_nativePrepareMessage, MSGFLT_REMOVE);
             ChangeWindowMessageFilter(g_nativeCancelMessage, MSGFLT_REMOVE);
+            ChangeWindowMessageFilter(g_nativePressMessage, MSGFLT_REMOVE);
+            ChangeWindowMessageFilter(g_dragWatchMessage, MSGFLT_REMOVE);
             if (g_stopEvent) {
                 CloseHandle(g_stopEvent);
                 g_stopEvent = nullptr;
@@ -3432,6 +4058,8 @@ void ModUninitOther() {
 
     ChangeWindowMessageFilter(g_nativePrepareMessage, MSGFLT_REMOVE);
     ChangeWindowMessageFilter(g_nativeCancelMessage, MSGFLT_REMOVE);
+    ChangeWindowMessageFilter(g_nativePressMessage, MSGFLT_REMOVE);
+    ChangeWindowMessageFilter(g_dragWatchMessage, MSGFLT_REMOVE);
 
     SetEvent(g_stopEvent);
     WaitForSingleObject(g_thread, INFINITE);
