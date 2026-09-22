@@ -26,7 +26,7 @@ A high-performance, native replacement for Windows 11 Start Menu search powered 
 - Instant Everything Search: Sub-millisecond file querying directly through the voidtools Everything Win32 IPC interface. Instant results across millions of files without background indexing lag or disk thrashing.
 - Smart Apps and Settings Search: Fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, and Windows Settings URIs (ms-settings:) with high-resolution shell icons.
 - On-Demand Animated Palette: The Start Menu stays completely clean and uncluttered when idle. The search palette smoothly reveals with a 140ms ease-out animation the moment you type or click the top search trigger, and collapses on empty or Escape.
-- Complete SearchHost Disconnection: Intercepts SearchBoxViewModel::NotifyQueryTextChanged in SearchUx.UI.dll to completely stop background Bing queries, Edge WebView2 child processes, and indexing CPU spikes.
+- Complete SearchHost Disconnection: Prevents background Bing web queries, Edge WebView2 child processes, and indexing CPU spikes via process, database file, and COM interception (with direct SearchBoxViewModel interception on supported Windows 11 builds).
 - Inline Calculator: Type /c <expression> (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200, /c 2^10) to evaluate math expressions instantly. Press Enter to copy the result.
 - Configurable Unit Conversions: Type /c <number> [unit] to convert units using formulas configured in Mod Settings. Users can add, edit, or delete conversion items individually from the settings UI.
 - Network Interface Inspector: Type /ip to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
@@ -200,6 +200,7 @@ All searches will now seamlessly route through the native Start Menu (Windows Ke
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <shlwapi.h>
+#include <limits>
 
 inline HMODULE GetCurrentModuleHandle() {
     HMODULE module = nullptr;
@@ -3520,9 +3521,16 @@ static void HookSearchUx() {
 
     void* pKnownAuto = (void*)((BYTE*)hSearchUx + 0x2819F0);
     BYTE* bKnownAuto = (BYTE*)pKnownAuto;
-    if (bKnownAuto[0] == 0x48 && bKnownAuto[1] == 0x83 && bKnownAuto[2] == 0xEC && bKnownAuto[3] == 0x28) {
+    const BYTE sigAutoPrefix[] = {
+        0x48, 0x83, 0xEC, 0x28, 0x48, 0x8B, 0x01, 0x48, 0x8B, 0x40, 0x48, 0xFF, 0x15
+    };
+    const BYTE sigAutoSuffix[] = { 0x85, 0xC0, 0x79, 0x08 };
+    if (memcmp(bKnownAuto, sigAutoPrefix, sizeof(sigAutoPrefix)) == 0 &&
+        memcmp(bKnownAuto + 17, sigAutoSuffix, sizeof(sigAutoSuffix)) == 0) {
         Wh_SetFunctionHook(pKnownAuto, (void*)Hook_CallHandler, (void**)&pOrigCallHandler);
         Wh_Log(L"[SearchHost] Hooked SearchUx.UI.dll!SetAutoCompleteQueryText");
+    } else {
+        Wh_Log(L"[SearchHost] SearchUx.UI.dll build does not match known AutoComplete signature, skipping");
     }
 
     g_searchUxHooked = true;
@@ -4195,22 +4203,32 @@ void FocusOurBoxNow() {
 void TriggerMenuOpenFocus() {
     try {
         g_suppressRefocus.store(false);
+        TakeForeground(true);
         FocusOurBoxNow();
         if (g_openFocus) {
             g_openFocus.Stop();
             g_openFocus = nullptr;
         }
         auto t = wux::DispatcherTimer();
-        t.Interval(std::chrono::milliseconds(50));
+        t.Interval(std::chrono::milliseconds(60));
         auto ticks = std::make_shared<int>(0);
-        t.Tick([t, ticks](wf::IInspectable const&, wf::IInspectable const&) {
+        t.Tick([ticks](wf::IInspectable const& sender, wf::IInspectable const&) {
+            auto timer = sender.try_as<wux::DispatcherTimer>();
             if (g_suppressRefocus.load()) {
-                t.Stop();
+                if (timer) timer.Stop();
                 return;
             }
+            HWND ours = GetOurCoreWindow();
+            HWND fg = GetForegroundWindow();
+            DWORD fgPid = 0;
+            if (fg) GetWindowThreadProcessId(fg, &fgPid);
+            // Reclaim foreground from SearchHost or other window if lost within the 600ms grace window
+            if (fg != ours && fgPid != GetCurrentProcessId()) {
+                TakeForeground(true);
+            }
             FocusOurBoxNow();
-            if (++(*ticks) >= 4) {
-                t.Stop();
+            if (++(*ticks) >= 10) { // 10 * 60ms = 600ms grace window
+                if (timer) timer.Stop();
             }
         });
         t.Start();
@@ -4262,8 +4280,10 @@ void RestoreWindowSoon() {
         }
         auto back = wux::DispatcherTimer();
         back.Interval(std::chrono::milliseconds(40));
-        back.Tick([back](wf::IInspectable const&, wf::IInspectable const&) {
-            back.Stop();
+        back.Tick([](wf::IInspectable const& sender, wf::IInspectable const&) {
+            if (auto timer = sender.try_as<wux::DispatcherTimer>()) {
+                timer.Stop();
+            }
             if (g_suppressRefocus.load()) return;
             if (!g_isOverlayVisible.load()) return;
             if (g_ourBox) {
@@ -4607,6 +4627,11 @@ void CALLBACK AttachWatchProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
     if ((event != EVENT_OBJECT_SHOW && event != EVENT_OBJECT_UNCLOAKED) ||
         !hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
         return;
+    }
+    if (event == EVENT_OBJECT_UNCLOAKED) {
+        g_suppressRefocus.store(false);
+        TakeForeground(true);
+        TriggerMenuOpenFocus();
     }
     // In-context, so this is the thread that raised the event. The filter is
     // Window::Current() returning something rather than a class name, because
@@ -7274,9 +7299,7 @@ UINT GetTeardownMessage() {
 // Mod entry points
 // ===========================================================================
 
-namespace {
-[[clang::no_destroy]] std::thread g_uncloakWatchdog;
-}  // namespace
+
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
@@ -7316,62 +7339,6 @@ void Wh_ModAfterInit() {
     g_searchThread = std::thread(SearchThreadMain);
 
     StartAttachWatch();
-
-
-
-    g_uncloakWatchdog = std::thread([] {
-        bool wasCloaked = true;
-        DWORD openTick = 0;
-        while (!g_quit.load()) {
-            HWND ours = GetOurCoreWindow();
-            if (ours && IsWindow(ours)) {
-                bool isCloaked = IsOurWindowCloaked();
-                if (!isCloaked) {
-                    HWND fg = GetForegroundWindow();
-                    DWORD fgPid = 0;
-                    if (fg) GetWindowThreadProcessId(fg, &fgPid);
-                    DWORD now = GetTickCount();
-
-                    if (wasCloaked) {
-                        openTick = now;
-                        Wh_Log(L"watchdog: menu uncloaked! fg=%p pid=%lu ours=%p -> claiming foreground & focus",
-                            fg, fgPid, ours);
-                        g_suppressRefocus.store(false);
-                        TakeForeground(true);
-                        if (g_resultsHost) {
-                            try {
-                                g_resultsHost.Dispatcher().RunAsync(
-                                    winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
-                                    []() {
-                                        TriggerMenuOpenFocus();
-                                    });
-                            } catch (...) {}
-                        }
-                    } else if (fg != ours && fgPid != GetCurrentProcessId()) {
-                        bool withinGrace = (now - openTick < 600);
-                        bool isSearchOrNull = (fg == nullptr || IsProcessNamed(fgPid, L"SearchHost.exe"));
-                        if (withinGrace || isSearchOrNull) {
-                            Wh_Log(L"watchdog: reclaiming foreground from %ls (fg=%p pid=%lu)",
-                                isSearchOrNull ? L"SearchHost/NULL" : L"Other", fg, fgPid);
-                            g_suppressRefocus.store(false);
-                            TakeForeground(true);
-                            if (g_resultsHost) {
-                                try {
-                                    g_resultsHost.Dispatcher().RunAsync(
-                                        winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
-                                        []() {
-                                            TriggerMenuOpenFocus();
-                                        });
-                                } catch (...) {}
-                            }
-                        }
-                    }
-                }
-                wasCloaked = isCloaked;
-            }
-            Sleep(25);
-        }
-    });
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
@@ -7446,9 +7413,6 @@ void Wh_ModUninit() {
     g_queryWake.notify_all();
     if (g_searchThread.joinable()) {
         g_searchThread.join();
-    }
-    if (g_uncloakWatchdog.joinable()) {
-        g_uncloakWatchdog.join();
     }
     WaitForTrackedLaunches();
 
