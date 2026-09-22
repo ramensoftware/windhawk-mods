@@ -326,14 +326,6 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
   - F11: F11
   - F12: F12
 
-- debugLogging: false
-  $name: Verbose debug logging
-  $description: >-
-    Off by default. When on (and Windhawk logging is enabled), the mod also
-    emits high-frequency diagnostic traces  --  drag-source resolver steps,
-    per-frame rope draw state, geometry churn. Leave this OFF for a clean log;
-    turn it on only when reproducing a specific issue. One-off events (pins,
-    launches, errors) are always logged regardless of this setting.
 */
 // ==/WindhawkModSettings==
 
@@ -902,13 +894,10 @@ static HINSTANCE GetModHInstance() {
 
 // ============================================================
 //  DEBUG LOGGING
-//  FIX (D2 optional): the custom logging layer (LogLevel enum, g_logLevel,
-//  ShouldLog, the QPLog / QPLogRateLimited functions, the rate-limit buckets and
-//  the logLevel setting) reimplemented what Windhawk's own Wh_Log already does.
-//  Wh_Log is auto-prefixed with the mod name, formats printf-style, and is gated
-//  by the "Logging enabled" toggle in the Windhawk UI (a cheap check when off),
-//  so the whole layer was removed. The LOG_* / DEBUG_LOG / TRACE_LOG / LOG_RATE
-//  macros below are now thin Wh_Log wrappers, leaving every call site unchanged.
+//  All logging goes straight to Windhawk's own Wh_Log, which is auto-prefixed
+//  with the mod name, formats printf-style, and is gated by the "Logging
+//  enabled" toggle in the Windhawk UI (a cheap check when off). No in-mod
+//  logging layer or verbosity gate is used.
 // ============================================================
 
 // ============================================================
@@ -964,48 +953,10 @@ static UINT LoadHotkeyKeySetting() {
     return 'P';   // default
 }
 
-// Wh_Log is variadic printf-style and auto-prefixed with the mod name, and is a
-// no-op unless "Logging enabled" is toggled in the Windhawk UI. On top of that
-// GLOBAL gate we add ONE in-mod verbosity tier so an enabled log stays clean and
-// professional by default:
-//
-//   * LOG_ERROR / LOG_IMPORTANT  -- genuine one-off events (pins, launches,
-//     failures). Always emitted when logging is on. Low volume.
-//   * DEBUG_LOG / TRACE_LOG      -- high-frequency diagnostics (resolver steps,
-//     per-frame rope state, geometry churn). GUARDED behind g_debugLogging so
-//     they are silent unless the user opts in via the "Verbose debug logging"
-//     setting. This is what was drowning the terminal in noise.
-//
-// g_debugLogging is loaded in LoadSettings (default false). The guard is a plain
-// bool test, so a suppressed trace costs nothing but the branch.
-static bool g_debugLogging = false;
+// Logging goes straight to Wh_Log (Windhawk's own "Logging enabled" toggle is the only gate).
 
-#define LOG_ERROR(fmt, ...)      Wh_Log(fmt, ##__VA_ARGS__)
-#define LOG_IMPORTANT(fmt, ...)  Wh_Log(fmt, ##__VA_ARGS__)
-#define DEBUG_LOG(fmt, ...)      do { if (g_debugLogging) Wh_Log(fmt, ##__VA_ARGS__); } while (0)
-#define TRACE_LOG(fmt, ...)      do { if (g_debugLogging) Wh_Log(fmt, ##__VA_ARGS__); } while (0)
-// LOG_RATE keeps its old parameter list for call-site compatibility but ignores
-// level/key/cooldown (dropped by the preprocessor, never evaluated). Treated as
-// a guarded diagnostic like DEBUG_LOG.
-#define LOG_RATE(level, key, cooldown, fmt, ...)  do { if (g_debugLogging) Wh_Log(fmt, ##__VA_ARGS__); } while (0)
-
-// DragTraceLog  --  a genuine state transition (never per-frame). Kept at the
-// always-on tier so the drag lifecycle is still readable in a clean log.
+// DragTraceLog  --  a genuine drag state transition (never per-frame).
 static void DragTraceLog(const wchar_t* event, const wchar_t* detail = L"") {
-    if (detail && detail[0]) Wh_Log(L"[DRAG] %s | %s", event, detail);
-    else                     Wh_Log(L"[DRAG] %s", event);
-}
-
-// DragDebugLog / DragTraceVerboseLog  --  high-frequency drag diagnostics,
-// guarded behind g_debugLogging so they do not clutter the terminal by default.
-static void DragDebugLog(const wchar_t* event, const wchar_t* detail = L"") {
-    if (!g_debugLogging) return;
-    if (detail && detail[0]) Wh_Log(L"[DRAG] %s | %s", event, detail);
-    else                     Wh_Log(L"[DRAG] %s", event);
-}
-
-static void DragTraceVerboseLog(const wchar_t* event, const wchar_t* detail = L"") {
-    if (!g_debugLogging) return;
     if (detail && detail[0]) Wh_Log(L"[DRAG] %s | %s", event, detail);
     else                     Wh_Log(L"[DRAG] %s", event);
 }
@@ -1380,7 +1331,7 @@ static void RefreshTaskbarCache() {
     static DWORD s_lastGeomLog = 0;
     DWORD now = GetTickCount();
     if (now - s_lastGeomLog > 1000) {
-        DEBUG_LOG(L"GEOMETRY: w=%d dockLeft=%d startLeft=%d", newW, dockLeft, startLeft);
+        Wh_Log(L"GEOMETRY: w=%d dockLeft=%d startLeft=%d", newW, dockLeft, startLeft);
         s_lastGeomLog = now;
     }
 
@@ -1405,7 +1356,7 @@ static void RefreshTaskbarCache() {
         // state machine to STATE_STABLE so the worker's poll cadence relaxes
         // (STATE_STABLE -> 500 ms) instead of spinning at 100 ms in STATE_BOOT.
         if (!g_layoutUnsupported) {
-            DEBUG_LOG(L"GEOMETRY: left-aligned taskbar -- no room for dock, hiding (startLeft=%d tbLeft=%d)",
+            Wh_Log(L"GEOMETRY: left-aligned taskbar -- no room for dock, hiding (startLeft=%d tbLeft=%d)",
                       (int)startLeft, (int)tbr.left);
         }
         g_layoutUnsupported = true;
@@ -1434,7 +1385,7 @@ static void RefreshTaskbarCache() {
             ShowWindow(g_overlayWnd, SW_SHOWNOACTIVATE);
         if (g_inputWnd && IsWindow(g_inputWnd))
             ShowWindow(g_inputWnd, SW_SHOWNOACTIVATE);
-        DEBUG_LOG(L"GEOMETRY: room reappeared left of Start -- dock re-enabled");
+        Wh_Log(L"GEOMETRY: room reappeared left of Start -- dock re-enabled");
     }
 
     // Helper lambda: re-seat all pinned-app icon positions from the now-valid
@@ -1472,7 +1423,7 @@ static void RefreshTaskbarCache() {
             g_stableGeometryCount = 1;      // boot reading counts as first stable sample
             g_lastStableWidth     = newW;   // seed so next agreeing call hits count>=2
             ReseatIconPositions();   // positions were 0 from LoadPinnedApps
-            DEBUG_LOG(L"BOOT: first geometry accepted w=%d", newW);
+            Wh_Log(L"BOOT: first geometry accepted w=%d", newW);
             RepositionOverlay();
             if (g_overlayWnd && IsWindow(g_overlayWnd))
                 InvalidateRect(g_overlayWnd, NULL, FALSE);
@@ -1495,7 +1446,7 @@ static void RefreshTaskbarCache() {
                 g_dockWidthLocked = true;
                 g_systemState     = STATE_STABLE;
                 ReseatIconPositions();  // final geometry lock  --  settle all icons
-                DEBUG_LOG(L"GEOMETRY: STABLE w=%d h=%d", newW, newH);
+                Wh_Log(L"GEOMETRY: STABLE w=%d h=%d", newW, newH);
                 RepositionOverlay();
                 if (g_overlayWnd && IsWindow(g_overlayWnd))
                     InvalidateRect(g_overlayWnd, NULL, FALSE);
@@ -1509,7 +1460,7 @@ static void RefreshTaskbarCache() {
             g_dockWidthLocked = true;
             g_systemState     = STATE_STABLE;
             ReseatIconPositions();  // timeout path also needs position correction
-            DEBUG_LOG(L"GEOMETRY: STABLE (boot timeout) w=%d", g_dockLocalW);
+            Wh_Log(L"GEOMETRY: STABLE (boot timeout) w=%d", g_dockLocalW);
         }
         return;
     }
@@ -1522,7 +1473,7 @@ static void RefreshTaskbarCache() {
     if (newW != g_dockLocalW && newW > MIN_VALID_DOCK_WIDTH) {
         g_dockLocalW = newW;
         ReseatIconPositions();
-        DEBUG_LOG(L"GEOMETRY: width update w=%d", newW);
+        Wh_Log(L"GEOMETRY: width update w=%d", newW);
         RepositionOverlay();
         if (g_overlayWnd && IsWindow(g_overlayWnd))
             InvalidateRect(g_overlayWnd, NULL, FALSE);
@@ -1706,28 +1657,44 @@ static int HitTestIcon(POINT screenPt) {
 void RepositionOverlay() {
     if (!g_overlayWnd || !IsWindow(g_overlayWnd)) return;
 
-    // FIX (Issue 2): on an unsupported (left-aligned) layout the dock is hidden
-    // and has no valid geometry. Do nothing here -- otherwise the emergency
-    // fallback below would force g_dockLocalW=200 at a negative X and the
-    // reposition/show path would un-hide the dock we deliberately hid, parking
-    // it back on top of Start. RefreshTaskbarCache re-shows it if room returns.
-    if (g_layoutUnsupported) return;
+    // FIX (Issue 3 -- "show first, decide later"): visibility is owned solely
+    // by the worker once it has (a) resolved that THIS process owns the taskbar
+    // (g_dockOwnershipDecided -- set only on QP_STARTUP_OWN; a DISOWN parks the
+    // worker forever and never sets it) and (b) produced a real QP_LAYOUT_OK
+    // geometry. Until both hold, keep BOTH windows hidden so the 1/255-alpha
+    // HTCLIENT input window can never sit in the top-left corner swallowing
+    // clicks, and no mini-dock flashes there on a cold start. This also covers
+    // the DISOWN case (a non-owner explorer.exe must never show the dock).
+    if (!g_dockOwnershipDecided) {
+        if (g_inputWnd && IsWindow(g_inputWnd)) ShowWindow(g_inputWnd, SW_HIDE);
+        ShowWindow(g_overlayWnd, SW_HIDE);
+        return;
+    }
 
-    // Emergency fallback: if dock size is still zero, provide a safe default
+    // FIX (Issue 2): on an unsupported (left-aligned) layout the dock is hidden
+    // and has no valid geometry. Keep both windows hidden and return so the
+    // reposition/show path can never un-hide the dock we deliberately hid,
+    // parking it back on top of Start. RefreshTaskbarCache re-shows it if room
+    // returns.
+    if (g_layoutUnsupported) {
+        if (g_inputWnd && IsWindow(g_inputWnd)) ShowWindow(g_inputWnd, SW_HIDE);
+        ShowWindow(g_overlayWnd, SW_HIDE);
+        return;
+    }
+
+    // FIX (Hotfix 2 -- premature fallback regression): if dock size is still
+    // zero we do NOT yet have valid geometry. The synthetic 200x48 fallback was
+    // removed entirely: it could un-hide the dock before RefreshTaskbarCache had
+    // resolved a real geometry, violating the "stay hidden until valid ownership
+    // + valid geometry" invariant. The worker's boot/stabilization path already
+    // waits for valid geometry and calls RefreshTaskbarCache() -> RepositionOverlay()
+    // once it is available, so no synthetic fallback is needed. Until then, keep
+    // BOTH windows hidden (no top-left mini-dock flash, no premature show).
     if (g_dockLocalW <= 0) {
-        g_dockLocalW = 200;
-        g_dockLocalH = 48;
-        HWND tb = FindWindowW(L"Shell_TrayWnd", NULL);
-        if (tb) {
-            RECT tbr = {};
-            GetWindowRect(tb, &tbr);
-            LONG sl = GetStartButtonLeftEdge(tb, tbr);
-            g_dockCurrentX = (float)(sl - DOCK_GAP_PX - g_dockLocalW);
-            g_dockCurrentY = (float)tbr.top;
-            g_dockTargetX  = g_dockCurrentX;
-            g_dockTargetY  = g_dockCurrentY;
-        }
-        DEBUG_LOG(L"FALLBACK: forced dock geometry w=%d h=%d", g_dockLocalW, g_dockLocalH);
+        if (g_inputWnd && IsWindow(g_inputWnd))
+            ShowWindow(g_inputWnd, SW_HIDE);
+        ShowWindow(g_overlayWnd, SW_HIDE);
+        return;
     }
 
     int w = g_dockLocalW;
@@ -1739,7 +1706,7 @@ void RepositionOverlay() {
     static int   s_lastReposX   = -9999;
     DWORD now = GetTickCount();
     if (abs(x - s_lastReposX) > 50 || now - s_lastReposLog > 2000) {
-        DEBUG_LOG(L"REPOSITION: x=%d y=%d w=%d h=%d", x, y, w, h);
+        Wh_Log(L"REPOSITION: x=%d y=%d w=%d h=%d", x, y, w, h);
         s_lastReposLog = now;
         s_lastReposX   = x;
     }
@@ -2418,8 +2385,6 @@ static std::wstring Resolver_Layer2_TaskbarIntelligence(POINT pt) {
                 pProbe->Release();
             }
         }
-        if (!result.empty())
-            DragTraceVerboseLog(L"RESOLVER: L2 seam-recovery", result.c_str());
     }
 
     pAuto->Release();
@@ -2528,7 +2493,6 @@ static std::wstring ResolveDragSourceZeroRejection(POINT pt) {
                     else
                         p = g_pinnedApps[i].exePath;
                     LeaveCriticalSection(&g_cs);
-                    DragTraceVerboseLog(L"RESOLVER: dock icon", p.c_str());
                     return p;
                 }
             }
@@ -2553,8 +2517,6 @@ static std::wstring ResolveDragSourceZeroRejection(POINT pt) {
     if (overTaskbar) {
         // Taskbar-exclusive pipeline: UIAutomation only
         result = Resolver_Layer2_TaskbarIntelligence(pt);
-        if (!result.empty())
-            DragTraceVerboseLog(L"RESOLVER: L2 taskbar", result.c_str());
         // Deliberate: no L1, no L3, no active-window fallback on taskbar path
     } else {
         // Non-taskbar pipeline: UI hit -> process enum
@@ -2567,21 +2529,17 @@ static std::wstring ResolveDragSourceZeroRejection(POINT pt) {
                 if (IsTrueSystemWindow(root)) {
                     result.clear();  // System window  --  discard
                 } else {
-                    DragTraceVerboseLog(L"RESOLVER: L1 hit", result.c_str());
                 }
             }
         }
         // L3 only runs off-taskbar and only as a true last resort
         if (result.empty()) {
             result = Resolver_Layer3_ProcessFallback(pt);
-            if (!result.empty())
-                DragTraceVerboseLog(L"RESOLVER: L3 process enum", result.c_str());
         }
     }
 
     if (result.empty()) {
-        LOG_RATE(LOG_TRACE, L"resolver-miss", 5000,
-                 L"RESOLVER MISS: all layers failed near (%d,%d)", pt.x, pt.y);
+        Wh_Log(L"RESOLVER MISS: all layers failed near (%d,%d)", pt.x, pt.y);
         return L"";
     }
 
@@ -2589,23 +2547,19 @@ static std::wstring ResolveDragSourceZeroRejection(POINT pt) {
     if (IsExplorerExePath(result))
         return L"";
     if (IsExcludedApp(result)) {
-        DragTraceVerboseLog(L"RESOLVER: excluded", result.c_str());
         return L"";
     }
     if (StrStrIW(result.c_str(), L"ApplicationFrameHost.exe")) {
-        DragTraceVerboseLog(L"RESOLVER: unresolved UWP host rejected");
         return L"";
     }
 
     // Require an extractable icon  --  no ghost pins
     HICON testIcon = LoadAppIconStrict(result);
     if (!testIcon) {
-        DragDebugLog(L"RESOLVER: no icon  --  rejected", result.c_str());
         return L"";
     }
     DestroyIcon(testIcon);
 
-    DragTraceVerboseLog(L"RESOLVER: OK", result.c_str());
     return result;
 }
 
@@ -2941,7 +2895,7 @@ static int ActiveExplorerTabIndexFromUIA(HWND hwnd,
 static bool CaptureWorkspaceSnapshot(WorkspaceSnapshot& snapshot, HWND ownerHwnd) {
     HRESULT hrInit = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     if (FAILED(hrInit) && hrInit != RPC_E_CHANGED_MODE) {
-        LOG_ERROR(L"WORKSPACE CAPTURE: CoInitializeEx failed hr=0x%08X", (unsigned)hrInit);
+        Wh_Log(L"WORKSPACE CAPTURE: CoInitializeEx failed hr=0x%08X", (unsigned)hrInit);
         return false;
     }
 
@@ -2949,7 +2903,7 @@ static bool CaptureWorkspaceSnapshot(WorkspaceSnapshot& snapshot, HWND ownerHwnd
     HRESULT hr = CoCreateInstance(CLSID_ShellWindows, NULL, CLSCTX_ALL,
                                   IID_IShellWindows, (void**)&shellWindows);
     if (FAILED(hr) || !shellWindows) {
-        LOG_ERROR(L"WORKSPACE CAPTURE: ShellWindows unavailable hr=0x%08X", (unsigned)hr);
+        Wh_Log(L"WORKSPACE CAPTURE: ShellWindows unavailable hr=0x%08X", (unsigned)hr);
         if (SUCCEEDED(hrInit)) CoUninitialize();
         return false;
     }
@@ -3004,7 +2958,7 @@ static bool CaptureWorkspaceSnapshot(WorkspaceSnapshot& snapshot, HWND ownerHwnd
 
     if (folders.empty()) {
         if (SUCCEEDED(hrInit)) CoUninitialize();
-        LOG_IMPORTANT(L"WORKSPACE CAPTURE: no Explorer folder tabs found");
+        Wh_Log(L"WORKSPACE CAPTURE: no Explorer folder tabs found");
         return false;
     }
 
@@ -3200,7 +3154,7 @@ void PinApp(const std::wstring& path) {
         LeaveCriticalSection(&g_cs);
         DestroyIcon(icon);
         TriggerLimitFlash();
-        LOG_IMPORTANT(L"PIN BLOCKED limit=%d: %s", cap, path.c_str());
+        Wh_Log(L"PIN BLOCKED limit=%d: %s", cap, path.c_str());
         return;
     }
 
@@ -3235,7 +3189,7 @@ void PinApp(const std::wstring& path) {
     if (g_overlayWnd && IsWindow(g_overlayWnd))
         InvalidateRect(g_overlayWnd, NULL, FALSE);
 
-    LOG_IMPORTANT(L"PIN OK: %s (total=%d)", path.c_str(), (int)g_pinnedApps.size());
+    Wh_Log(L"PIN OK: %s (total=%d)", path.c_str(), (int)g_pinnedApps.size());
 }
 
 void PinWorkspace(HWND explorerHwnd) {
@@ -3249,7 +3203,7 @@ void PinWorkspace(HWND explorerHwnd) {
         DragTraceLog(L"WORKSPACE PIN REJECT: no Explorer folders");
         return;
     }
-    LOG_IMPORTANT(L"WORKSPACE CAPTURE OK: owner=%p windows=%d folders=%d active=%d",
+    Wh_Log(L"WORKSPACE CAPTURE OK: owner=%p windows=%d folders=%d active=%d",
                   explorerHwnd,
                   (int)snapshot.windows.size(), (int)snapshot.folderPaths.size(),
                   snapshot.windows.empty() ? 0 : snapshot.windows[0].activeTab);
@@ -3276,7 +3230,7 @@ void PinWorkspace(HWND explorerHwnd) {
         LeaveCriticalSection(&g_cs);
         DestroyIcon(icon);
         TriggerLimitFlash();
-        LOG_IMPORTANT(L"WORKSPACE PIN BLOCKED limit=%d: %s", cap, snapshot.id.c_str());
+        Wh_Log(L"WORKSPACE PIN BLOCKED limit=%d: %s", cap, snapshot.id.c_str());
         return;
     }
 
@@ -3311,7 +3265,7 @@ void PinWorkspace(HWND explorerHwnd) {
     if (g_overlayWnd && IsWindow(g_overlayWnd))
         InvalidateRect(g_overlayWnd, NULL, FALSE);
 
-    LOG_IMPORTANT(L"WORKSPACE PIN OK: %s folders=%d", snapshot.id.c_str(), (int)snapshot.folderPaths.size());
+    Wh_Log(L"WORKSPACE PIN OK: %s folders=%d", snapshot.id.c_str(), (int)snapshot.folderPaths.size());
 }
 
 // ============================================================
@@ -3406,7 +3360,7 @@ void UnpinAppByIndex(int i) {
         return;
     }
 
-    LOG_IMPORTANT(L"UNPIN index=%d id=%s",
+    Wh_Log(L"UNPIN index=%d id=%s",
               i,
               g_pinnedApps[i].type == PIN_WORKSPACE
                   ? g_pinnedApps[i].workspaceId.c_str()
@@ -3556,7 +3510,7 @@ static void LaunchWorkspace(const std::wstring& workspaceId) {
         for (const auto& folder : group.tabPaths) {
             DWORD attrs = GetFileAttributesW(folder.c_str());
             if (attrs == INVALID_FILE_ATTRIBUTES || !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
-                LOG_IMPORTANT(L"WORKSPACE SKIP missing folder: %s", folder.c_str());
+                Wh_Log(L"WORKSPACE SKIP missing folder: %s", folder.c_str());
                 continue;
             }
             validGroup.tabPaths.push_back(folder);
@@ -3566,7 +3520,7 @@ static void LaunchWorkspace(const std::wstring& workspaceId) {
             launched++;
         }
     }
-    LOG_IMPORTANT(L"WORKSPACE LAUNCH: %s restored=%d", workspaceId.c_str(), launched);
+    Wh_Log(L"WORKSPACE LAUNCH: %s restored=%d", workspaceId.c_str(), launched);
 }
 
 static DWORD WINAPI LaunchWorkspaceThread(LPVOID param) {
@@ -3702,7 +3656,7 @@ static std::vector<ExplorerTab> EnumerateExplorerTabs(HWND hwndFilter = NULL) {
         }
         shellWindows->Release();
     } else {
-        LOG_ERROR(L"EXPLORER COM: ShellWindows unavailable hr=0x%08X", (unsigned)hr);
+        Wh_Log(L"EXPLORER COM: ShellWindows unavailable hr=0x%08X", (unsigned)hr);
     }
     return tabs;
 }
@@ -3775,7 +3729,7 @@ static bool NavigateExplorerTab(IWebBrowserApp* app, const std::wstring& folder)
     HRESULT hr = app->Navigate(target, &empty, &empty, &empty, &empty);
     SysFreeString(target);
     if (FAILED(hr))
-        LOG_ERROR(L"EXPLORER RESTORE: Navigate failed hr=0x%08X folder=%s", (unsigned)hr, folder.c_str());
+        Wh_Log(L"EXPLORER RESTORE: Navigate failed hr=0x%08X folder=%s", (unsigned)hr, folder.c_str());
     return SUCCEEDED(hr);
 }
 
@@ -3866,18 +3820,18 @@ static bool InvokeExplorerNewTab(IUIAutomation* automation, HWND hwnd) {
                     hr = invoke->Invoke();
                     ok = SUCCEEDED(hr);
                     if (!ok)
-                        LOG_ERROR(L"EXPLORER TABS: Invoke New tab failed hr=0x%08X", (unsigned)hr);
+                        Wh_Log(L"EXPLORER TABS: Invoke New tab failed hr=0x%08X", (unsigned)hr);
                     invoke->Release();
                 } else {
-                    LOG_ERROR(L"EXPLORER TABS: New tab button has no InvokePattern hr=0x%08X", (unsigned)hr);
+                    Wh_Log(L"EXPLORER TABS: New tab button has no InvokePattern hr=0x%08X", (unsigned)hr);
                 }
                 newTab->Release();
             } else {
-                LOG_ERROR(L"EXPLORER TABS: New tab control not found hwnd=%p", hwnd);
+                Wh_Log(L"EXPLORER TABS: New tab control not found hwnd=%p", hwnd);
             }
             root->Release();
         } else {
-            LOG_ERROR(L"EXPLORER TABS: ElementFromHandle failed hr=0x%08X hwnd=%p", (unsigned)hr, hwnd);
+            Wh_Log(L"EXPLORER TABS: ElementFromHandle failed hr=0x%08X hwnd=%p", (unsigned)hr, hwnd);
         }
     }
     return ok;
@@ -3975,11 +3929,11 @@ static void RestoreExplorerWindowGroup(const WorkspaceSnapshot::WindowGroup& gro
 
     HRESULT hrInit = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     if (FAILED(hrInit) && hrInit != RPC_E_CHANGED_MODE) {
-        LOG_ERROR(L"EXPLORER RESTORE: CoInitializeEx failed hr=0x%08X", (unsigned)hrInit);
+        Wh_Log(L"EXPLORER RESTORE: CoInitializeEx failed hr=0x%08X", (unsigned)hrInit);
         return;
     }
 
-    LOG_IMPORTANT(L"EXPLORER RESTORE: begin tabs=%d active=%d",
+    Wh_Log(L"EXPLORER RESTORE: begin tabs=%d active=%d",
                   (int)group.tabPaths.size(), group.activeTab);
 
     std::vector<HWND> existingExplorerWindows;
@@ -4022,7 +3976,7 @@ static void RestoreExplorerWindowGroup(const WorkspaceSnapshot::WindowGroup& gro
                 if (IsIconic(existing)) ShowWindow(existing, SW_RESTORE);
                 FocusExplorerTabByFolder(existing, primaryFolder);
             }
-            LOG_IMPORTANT(L"EXPLORER RESTORE: focused already-open window folder=%s",
+            Wh_Log(L"EXPLORER RESTORE: focused already-open window folder=%s",
                           primaryFolder.c_str());
             if (SUCCEEDED(hrInit)) CoUninitialize();
             return;
@@ -4035,7 +3989,7 @@ static void RestoreExplorerWindowGroup(const WorkspaceSnapshot::WindowGroup& gro
     sei.lpParameters = explorerArgs.c_str();
     sei.nShow = SW_SHOWNORMAL;
     if (!ShellExecuteExW(&sei)) {
-        LOG_ERROR(L"EXPLORER RESTORE: ShellExecuteEx failed err=%lu folder=%s",
+        Wh_Log(L"EXPLORER RESTORE: ShellExecuteEx failed err=%lu folder=%s",
                   GetLastError(), group.tabPaths[0].c_str());
         if (SUCCEEDED(hrInit)) CoUninitialize();
         return;
@@ -4047,7 +4001,7 @@ static void RestoreExplorerWindowGroup(const WorkspaceSnapshot::WindowGroup& gro
                                                            4500, &hwnd);
     if (!first || !hwnd) {
         if (first) first->Release();
-        LOG_ERROR(L"EXPLORER RESTORE: first window attach timeout folder=%s", group.tabPaths[0].c_str());
+        Wh_Log(L"EXPLORER RESTORE: first window attach timeout folder=%s", group.tabPaths[0].c_str());
         if (SUCCEEDED(hrInit)) CoUninitialize();
         return;
     }
@@ -4064,19 +4018,19 @@ static void RestoreExplorerWindowGroup(const WorkspaceSnapshot::WindowGroup& gro
     HRESULT hrUia = CoCreateInstance(CLSID_CUIAutomation, NULL, CLSCTX_INPROC_SERVER,
                                      IID_IUIAutomation, (void**)&sharedAutomation);
     if (FAILED(hrUia) || !sharedAutomation)
-        LOG_ERROR(L"EXPLORER RESTORE: CUIAutomation unavailable hr=0x%08X", (unsigned)hrUia);
+        Wh_Log(L"EXPLORER RESTORE: CUIAutomation unavailable hr=0x%08X", (unsigned)hrUia);
 
     int restored = 1;
     for (size_t i = 1; i < group.tabPaths.size(); ++i) {
         if (!InvokeExplorerNewTab(sharedAutomation, hwnd)) {
-            LOG_ERROR(L"EXPLORER RESTORE: native tab creation failed index=%d folder=%s",
+            Wh_Log(L"EXPLORER RESTORE: native tab creation failed index=%d folder=%s",
                       (int)i, group.tabPaths[i].c_str());
             continue;
         }
 
         IWebBrowserApp* tab = WaitForNewExplorerTab(hwnd, knownFolders, 2500);
         if (!tab) {
-            LOG_ERROR(L"EXPLORER RESTORE: new tab COM attach timeout index=%d folder=%s",
+            Wh_Log(L"EXPLORER RESTORE: new tab COM attach timeout index=%d folder=%s",
                       (int)i, group.tabPaths[i].c_str());
             continue;
         }
@@ -4096,7 +4050,7 @@ static void RestoreExplorerWindowGroup(const WorkspaceSnapshot::WindowGroup& gro
     else if (hwnd && IsWindow(hwnd))
         ForceForegroundWindow(hwnd);
 
-    LOG_IMPORTANT(L"EXPLORER RESTORE: complete restored=%d requested=%d hwnd=%p",
+    Wh_Log(L"EXPLORER RESTORE: complete restored=%d requested=%d hwnd=%p",
                   restored, (int)group.tabPaths.size(), hwnd);
     if (SUCCEEDED(hrInit)) CoUninitialize();
 }
@@ -4116,7 +4070,7 @@ static void UpdateWorkspaceSnapshotByIndex(int idx) {
         DragTraceLog(L"WORKSPACE UPDATE REJECT: no Explorer folders", workspaceId.c_str());
         return;
     }
-    LOG_IMPORTANT(L"WORKSPACE UPDATE CAPTURE OK: %s windows=%d folders=%d",
+    Wh_Log(L"WORKSPACE UPDATE CAPTURE OK: %s windows=%d folders=%d",
                   workspaceId.c_str(), (int)snapshot.windows.size(),
                   (int)snapshot.folderPaths.size());
     snapshot.id = workspaceId;
@@ -4557,7 +4511,7 @@ static void ValidateAndCleanPinnedList() {
         if (invalid) {
             if (g_pinnedApps[i].icon) DestroyIcon(g_pinnedApps[i].icon);
             g_pinnedApps.erase(g_pinnedApps.begin() + i);
-            LOG_IMPORTANT(L"VALIDATE: removed invalid entry at index %d", i);
+            Wh_Log(L"VALIDATE: removed invalid entry at index %d", i);
         }
     }
     LeaveCriticalSection(&g_cs);
@@ -4609,12 +4563,12 @@ void LoadPinnedApps() {
                     if (CountPinsByType(PIN_WORKSPACE) >= workspaceCap) continue;
                     WorkspaceSnapshot snapshot;
                     if (!LoadWorkspaceSnapshot(workspaceId, snapshot)) {
-                        LOG_IMPORTANT(L"LOAD SKIP (workspace missing): %s", workspaceId.c_str());
+                        Wh_Log(L"LOAD SKIP (workspace missing): %s", workspaceId.c_str());
                         continue;
                     }
                     HICON icon = LoadFolderIcon(snapshot.folderPaths[0]);
                     if (!icon) {
-                        LOG_IMPORTANT(L"LOAD SKIP (workspace no icon): %s", workspaceId.c_str());
+                        Wh_Log(L"LOAD SKIP (workspace no icon): %s", workspaceId.c_str());
                         continue;
                     }
                     PinnedApp app;
@@ -4626,7 +4580,7 @@ void LoadPinnedApps() {
                     app.isNew       = false;
                     app.velocityX   = 0.f;
                     g_pinnedApps.push_back(app);
-                    DEBUG_LOG(L"LOAD WORKSPACE OK: %s", workspaceId.c_str());
+                    Wh_Log(L"LOAD WORKSPACE OK: %s", workspaceId.c_str());
                     continue;
                 }
 
@@ -4635,7 +4589,7 @@ void LoadPinnedApps() {
 
                 HICON icon = LoadAppIconStrict(exePath);
                 if (!icon) {
-                    DEBUG_LOG(L"LOAD SKIP (no icon): %s", exePath.c_str());
+                    Wh_Log(L"LOAD SKIP (no icon): %s", exePath.c_str());
                     continue;
                 }
 
@@ -4649,7 +4603,7 @@ void LoadPinnedApps() {
                 app.hoverScale  = 1.0f;
                 app.hoverShiftX = 0.f;
                 g_pinnedApps.push_back(app);
-                DEBUG_LOG(L"LOAD OK: %s", exePath.c_str());
+                Wh_Log(L"LOAD OK: %s", exePath.c_str());
             }
         }
     }
@@ -4664,7 +4618,7 @@ void LoadPinnedApps() {
         g_pinnedApps[i].hoverScale  = 1.0f;
         g_pinnedApps[i].hoverShiftX = 0.f;
     }
-    DEBUG_LOG(L"LOAD DONE: %d apps", total);
+    Wh_Log(L"LOAD DONE: %d apps", total);
 }
 
 // ============================================================
@@ -5654,7 +5608,7 @@ static void DrawTetherRope(float srcX, float srcY, float tipX, float tipY,
     int cw = right - left, ch = bottom - top;   // content extent (tiny-guard only)
     if (cw < 2 || ch < 2) { if (g_tetherWnd) ShowWindow(g_tetherWnd, SW_HIDE); return; }
     if (!EnsureTetherSurface()) {
-        DEBUG_LOG(L"TETHER-DBG EnsureTetherSurface FAILED cw=%d ch=%d wnd=%p", cw, ch, (void*)g_tetherWnd);
+        Wh_Log(L"TETHER-DBG EnsureTetherSurface FAILED cw=%d ch=%d wnd=%p", cw, ch, (void*)g_tetherWnd);
         return;
     }
 
@@ -5886,7 +5840,7 @@ static void UpdateTetherWindow(POINT cursorPt) {
     // Silent unless "Verbose debug logging" is enabled.
     static bool s_prevInDrag = false;
     if (inDrag != s_prevInDrag) {
-        DEBUG_LOG(L"TETHER-DBG inDrag=%d state=%d fromDock=%d idx=%d threadsOn=%d dropZone=%d",
+        Wh_Log(L"TETHER-DBG inDrag=%d state=%d fromDock=%d idx=%d threadsOn=%d dropZone=%d",
                   (int)inDrag, (int)g_dragState, (int)g_dragFromDock,
                   g_dragFromDockIdx, (int)ENABLE_ICON_THREADS, (int)g_dropZoneActive);
         s_prevInDrag = inDrag;
@@ -6135,14 +6089,6 @@ static void UpdateTetherWindow(POINT cursorPt) {
     // Intact (or retracting) rope: one thin, flowing-gradient thread from the
     // dock anchor to the cursor. The shared renderer handles surface, colour,
     // stroke and present; alpha comes from g_tetherBreakFade (so retract fades).
-    // Diagnostic (guarded, throttled ~4/sec): confirms the live-rope draw is
-    // reached and shows the endpoints. Silent unless "Verbose debug logging" is
-    // enabled -- this used to spam the terminal ~4x/sec for the whole drag.
-    if (g_debugLogging) {
-      static DWORD s_t = 0; DWORD nowt = GetTickCount();
-      if (nowt - s_t > 250) { s_t = nowt;
-        DEBUG_LOG(L"TETHER-DBG live-draw src=(%.0f,%.0f) tip=(%.0f,%.0f) dist=%.0f fade=%.2f",
-                  srcX, srcY, tipX, tipY, dist, g_tetherBreakFade); } }
     // Advance + present the VERLET rope. Rest length = straight distance plus a
     // little slack (grows as the rope goes slack, ~none when taut) so the
     // surplus length sags into an organic arc under gravity while a hard pull
@@ -6678,7 +6624,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             static DWORD s_lastPaintErr = 0;
             DWORD now = GetTickCount();
             if (now - s_lastPaintErr > 5000) {
-                DEBUG_LOG(L"PAINT: early exit  --  dock width <= 0");
+                Wh_Log(L"PAINT: early exit  --  dock width <= 0");
                 s_lastPaintErr = now;
             }
             LeaveCriticalSection(&g_cs);
@@ -7287,7 +7233,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         UnregisterHotKey(hwnd, HOTKEY_PIN_ID);
         if (g_hotkeyKey != 0 && g_hotkeyMods != 0)
             RegisterHotKey(hwnd, HOTKEY_PIN_ID, g_hotkeyMods, g_hotkeyKey);
-        DEBUG_LOG(L"HOTKEY: re-registered live mods:0x%X key:0x%X", g_hotkeyMods, g_hotkeyKey);
+        Wh_Log(L"HOTKEY: re-registered live mods:0x%X key:0x%X", g_hotkeyMods, g_hotkeyKey);
         return 0;
 
     case WM_HOTKEY:
@@ -7481,7 +7427,7 @@ static bool CreateInputOwnerWindow() {
         NULL, NULL, wc.hInstance, NULL);
 
     if (!g_inputWnd) {
-        LOG_ERROR(L"INPUT: CreateWindow failed err=%lu", GetLastError());
+        Wh_Log(L"INPUT: CreateWindow failed err=%lu", GetLastError());
         return false;
     }
     SetLayeredWindowAttributes(g_inputWnd, 0, 1, LWA_ALPHA);
@@ -7508,7 +7454,7 @@ static bool CreateOverlayWindow() {
         NULL, NULL, wc.hInstance, NULL);
 
     if (!g_overlayWnd) {
-        LOG_ERROR(L"OVERLAY: CreateWindow failed err=%lu", GetLastError());
+        Wh_Log(L"OVERLAY: CreateWindow failed err=%lu", GetLastError());
         return false;
     }
 
@@ -7528,7 +7474,7 @@ static bool CreateOverlayWindow() {
     if (g_hotkeyKey != 0 && g_hotkeyMods != 0)
         RegisterHotKey(g_overlayWnd, HOTKEY_PIN_ID, g_hotkeyMods, g_hotkeyKey);
 
-    DEBUG_LOG(L"OVERLAY: created hwnd=%p hotkey=mods:0x%X key:0x%X",
+    Wh_Log(L"OVERLAY: created hwnd=%p hotkey=mods:0x%X key:0x%X",
               g_overlayWnd, g_hotkeyMods, g_hotkeyKey);
     return true;
 }
@@ -7549,7 +7495,7 @@ static bool CreateGhostWindow() {
         NULL, NULL, gw.hInstance, NULL);
 
     if (!g_ghostWnd) {
-        LOG_ERROR(L"GHOST: CreateWindow failed err=%lu", GetLastError());
+        Wh_Log(L"GHOST: CreateWindow failed err=%lu", GetLastError());
         return false;
     }
     ShowWindow(g_ghostWnd, SW_HIDE);
@@ -7638,9 +7584,18 @@ DWORD WINAPI WorkerThread(LPVOID) {
             QpStartupOwnership own = ProbeStartupOwnership();
             if (own == QP_STARTUP_OWN) {
                 g_dockOwnershipDecided = true;
-                DEBUG_LOG(L"OWNERSHIP: taskbar resolved to this process -- dock activated");
+                Wh_Log(L"OWNERSHIP: taskbar resolved to this process -- dock activated");
             } else if (own == QP_STARTUP_DISOWN) {
-                LOG_IMPORTANT(L"OWNERSHIP: another explorer.exe owns the taskbar -- dock stays idle");
+                Wh_Log(L"OWNERSHIP: another explorer.exe owns the taskbar -- dock stays idle");
+                // FIX (Issue 3 -- DISOWN leaves live window + hotkey): a
+                // non-owner explorer.exe must not keep the two windows parked at
+                // (0,0) NOR keep the global Ctrl+Alt+P hotkey registered -- a
+                // WM_HOTKEY there would run PinApp -> SavePinnedApps and clobber
+                // the REAL dock's stored list. Post WM_QUIT to the UI thread so
+                // it destroys its windows and unregisters the hotkey/classes on
+                // the creating thread (the same teardown Wh_ModUninit uses),
+                // then park until teardown.
+                if (g_uiThreadId) PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
                 WaitForSingleObject(g_exitEvent, INFINITE);
                 return 0;
             } else {
@@ -7686,7 +7641,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // on the normal geometry poll above, which re-enables the dock if room
         // reappears -- the watchdog is only for the genuine zero-width boot race.
         if (!g_layoutUnsupported && g_dockLocalW == 0 && (int)(now - bootWatchdogStart) > 100) {
-            DEBUG_LOG(L"WATCHDOG: forcing geometry refresh");
+            Wh_Log(L"WATCHDOG: forcing geometry refresh");
             RefreshTaskbarCache();
             if (g_dockLocalW > 0) {
                 RepositionOverlay();
@@ -7752,7 +7707,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
                 }
                 if (g_tapCountL >= KEY_TAP_THRESHOLD) {
                     g_iconsLocked = !g_iconsLocked;
-                    LOG_IMPORTANT(L"ICON LOCK: %s", g_iconsLocked ? L"LOCKED" : L"UNLOCKED");
+                    Wh_Log(L"ICON LOCK: %s", g_iconsLocked ? L"LOCKED" : L"UNLOCKED");
                     TriggerLockGlow();   // brief gold confirmation flash on lock & unlock
                     g_tapCountL = 0; g_tapStartL = 0;
                 }
@@ -7793,7 +7748,23 @@ DWORD WINAPI WorkerThread(LPVOID) {
         // Do not process any drag logic when the layout is unsupported (dock
         // hidden): g_cachedDockRect describes a stale/invalid rect that would
         // accept drops onto a region with no dock visible.
-        if (g_layoutUnsupported) { lastLDown = lDown; continue; }
+        //
+        // FIX (Issue 2 -- unsupported-layout busy loop): every OTHER early
+        // `continue` in this loop first parks on g_exitEvent (the 8/16/50 ms
+        // adaptive sleeps live BELOW this point), so a bare `continue` here
+        // spins the worker at 100 % of a core (GetCursorPos / GetTickCount /
+        // IsWindow / GetAsyncKeyState every iteration + EnumWindows every
+        // 500 ms) on precisely the harmless layouts the README describes
+        // (every Windows 10 machine, left-aligned Windows 11). It also left a
+        // timeBeginPeriod(1) active from before the layout flipped. Release the
+        // high-res timer and wait on g_exitEvent (so a disable/reload tears
+        // down instantly) before looping.
+        if (g_layoutUnsupported) {
+            lastLDown = lDown;
+            SetHighResTimer(false);
+            WaitForSingleObject(g_exitEvent, 50);
+            continue;
+        }
 
         // IDLE / CANCELLED -> PRESS (mouse down)
         if ((g_dragState == DRAG_IDLE || g_dragState == DRAG_CANCELLED) &&
@@ -8766,7 +8737,7 @@ static void UpdateAutoHideState() {
     bool nowHide = (state & ABS_AUTOHIDE) != 0;
     if (nowHide != g_taskbarAutoHide) {
         g_taskbarAutoHide = nowHide;
-        DEBUG_LOG(L"TASKBAR: auto-hide %s", nowHide ? L"ON" : L"OFF");
+        Wh_Log(L"TASKBAR: auto-hide %s", nowHide ? L"ON" : L"OFF");
         RepositionOverlay();  // immediately apply show/hide decision
     }
 }
@@ -8961,18 +8932,25 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
             g_positionInitialized = true;
         }
 
-        // Force the overlay visible and in position before the worker thread starts.
-        if (g_inputWnd && IsWindow(g_inputWnd)) {
-            ShowWindow(g_inputWnd, SW_SHOWNOACTIVATE);
-            SetWindowPos(g_inputWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        }
-        if (g_overlayWnd && IsWindow(g_overlayWnd)) {
-            ShowWindow(g_overlayWnd, SW_SHOWNOACTIVATE);
-            SetWindowPos(g_overlayWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-            InvalidateRect(g_overlayWnd, NULL, FALSE);
-        }
+        // FIX (Issue 3 -- "show first, decide later"): do NOT show either
+        // window from the UI thread. Previously this force-showed both windows
+        // at (0,0) 200x48 unconditionally, before ownership was resolved and
+        // before a valid dock geometry existed. On Windows 10 / left-aligned
+        // Windows 11 the UNSUPPORTED branch of RefreshTaskbarCache had already
+        // run in Wh_ModInit (its SW_HIDE calls were no-ops -- no window existed
+        // yet), and RepositionOverlay bails on g_layoutUnsupported without
+        // moving/hiding, so the 1/255-alpha HTCLIENT input window stayed parked
+        // in the top-left corner permanently, swallowing clicks and popping the
+        // context menu on right-click. On a cold start it flashed a mini dock
+        // in the top-left until Shell_TrayWnd appeared, and after a DISOWN it
+        // left a live window + registered hotkey in a non-owner process.
+        //
+        // Ownership of visibility now belongs SOLELY to the worker: once it
+        // resolves QP_STARTUP_OWN and RefreshTaskbarCache has produced a valid
+        // QP_LAYOUT_OK geometry (g_dockLocalW > 0), its RepositionOverlay call
+        // shows the windows in the correct place. Until then they stay hidden.
+        // We still let RepositionOverlay run here to seat the *position* state,
+        // but it will not show anything (guarded on ownership/geometry below).
         RepositionOverlay();
     }
 
@@ -9038,7 +9016,6 @@ static void LoadSettings() {
     DOCK_GAP_FROM_START  = Wh_GetIntSetting(L"dockGapFromStart",    6);
     // Auto-hide sync: default OFF  --  dock stays visible even if taskbar auto-hides
     ENABLE_AUTOHIDE_SYNC = Wh_GetIntSetting(L"autoHideSync", 0) != 0;
-    g_debugLogging       = Wh_GetIntSetting(L"debugLogging", 0) != 0;
     // Hotkey: 0 modifiers or 0 key = disabled. Clamp modifiers to valid MOD_* flags.
     g_hotkeyMods = LoadHotkeyModifiersSetting();
     g_hotkeyKey  = LoadHotkeyKeySetting();
@@ -9057,9 +9034,39 @@ static void LoadSettings() {
     DOCK_GAP_FROM_START = std::max(0, std::min(40,  DOCK_GAP_FROM_START));
 }
 
+// FIX (Issue 3): the README states this mod supports Windows 11 only. On
+// Windows 10 the "Start at tbr.left" heuristic makes EVERY machine resolve to
+// QP_LAYOUT_UNSUPPORTED, so the mod can never draw a dock there -- yet it still
+// spun up two threads and two windows. Detect the OS build with RtlGetVersion
+// (the Win32 GetVersionEx is manifest-shimmed and lies on unmanifested hosts;
+// RtlGetVersion reports the true build) and bail before creating anything on a
+// platform the mod cannot serve. Windows 11 is build >= 22000.
+static bool QpIsWindows11OrGreater() {
+    typedef LONG (WINAPI *RtlGetVersion_t)(PRTL_OSVERSIONINFOW);
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (!ntdll) return true;  // can't tell -- don't block init
+    RtlGetVersion_t pRtlGetVersion =
+        (RtlGetVersion_t)GetProcAddress(ntdll, "RtlGetVersion");
+    if (!pRtlGetVersion) return true;  // can't tell -- don't block init
+    RTL_OSVERSIONINFOW vi = {};
+    vi.dwOSVersionInfoSize = sizeof(vi);
+    if (pRtlGetVersion(&vi) != 0) return true;  // STATUS_SUCCESS == 0
+    return (vi.dwMajorVersion > 10) ||
+           (vi.dwMajorVersion == 10 && vi.dwBuildNumber >= 22000);
+}
+
 BOOL Wh_ModInit() {
     // Read and clamp all user settings (shared with Wh_ModSettingsChanged).
     LoadSettings();
+
+    // FIX (Issue 3): Windows 11 only. On older builds the mod can never produce
+    // a supported layout, so return FALSE immediately -- creating NO resources
+    // (Wh_ModUninit has nothing to tear down) rather than idling two threads and
+    // two hidden windows on a platform we can't serve.
+    if (!QpIsWindows11OrGreater()) {
+        Wh_Log(L"INIT: unsupported OS (Windows 11 / build >= 22000 required) -- dock disabled");
+        return FALSE;
+    }
 
     // SINGLE-INSTANCE GATE: this mod is injected into EVERY explorer.exe. Only
     // the process that owns the real taskbar (Shell_TrayWnd) may build the dock;
@@ -9134,7 +9141,7 @@ BOOL Wh_ModInit() {
 
     if (ENABLE_AUTOHIDE_SYNC) UpdateAutoHideState();  // only when user enables sync
 
-    LOG_IMPORTANT(L"INIT: v2.5.1 OK. state=%d pinned=%d reorder=%d explorerWorkspaces=%d delay=%d hotkey=0x%X+0x%X autohide=%d",
+    Wh_Log(L"INIT: v2.5.1 OK. state=%d pinned=%d reorder=%d explorerWorkspaces=%d delay=%d hotkey=0x%X+0x%X autohide=%d",
               g_systemState, (int)g_pinnedApps.size(),
               (int)ENABLE_REORDER,
               (int)ENABLE_EXPLORER_WORKSPACE_PINS,
@@ -9352,7 +9359,7 @@ void Wh_ModSettingsChanged() {
         PostMessageW(g_overlayWnd, WM_QPD_REREGISTER_HOTKEY, 0, 0);
     }
 
-    LOG_IMPORTANT(L"SETTINGS CHANGED: maxPins=%d iconSz=%d spacing=%d reorder=%d explorerWorkspaces=%d",
+    Wh_Log(L"SETTINGS CHANGED: maxPins=%d iconSz=%d spacing=%d reorder=%d explorerWorkspaces=%d",
               MAX_PINNED_APPS, BASE_ICON_SIZE, BASE_ICON_SPACING,
               (int)ENABLE_REORDER,
               (int)ENABLE_EXPLORER_WORKSPACE_PINS);
