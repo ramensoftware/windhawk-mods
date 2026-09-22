@@ -18,6 +18,7 @@
 Adds customizable, app-style keyboard shortcuts to Windows File Explorer with parameter substitution, built-in shell commands, and custom token expansion.
 
 > **Input Protection:** All custom shortcuts are automatically suppressed while renaming files, typing into the Address/Breadcrumb bar, typing into the Search box, or while focus is actively inside dialogs (such as Properties, Delete/Replace confirmations). When focus returns to the main File Explorer window, shortcuts resume immediately.
+
 > **Windows 10 Ribbon Note:** Default shortcuts using `Alt` (such as `Alt+H` or `Alt+C`) take precedence over Windows 10 Explorer ribbon access keys. You can remap or disable these bindings in the mod settings if you rely on ribbon mnemonics.
 ---
 
@@ -125,7 +126,7 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - mode: "batch"
       $name: "Launch Mode"
       $options:
-        - "batch": "batch: Run once with all selected items"
+        - batch: "batch: Run once with all selected items"
         - loop_files: "loop_files: Run once per selected file"
         - loop_folders: "loop_folders: Run once per selected folder"
   - - name: "Open with Notepad"
@@ -192,7 +193,7 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - args: ""
     - mode: "batch"
   $name: "Custom Shortcuts"
-  $description: "List of customizable shortcuts. Supported keys: A-Z, 0-9, F1-F12, Backspace, Delete, Insert, Home, End, PageUp/PgUp, PageDown/PgDn, Space, Enter, and Tab. Modifiers (Ctrl, Shift, or Alt) are required for all keys except F1-F12."
+  $description: "List of customizable shortcuts. Supported keys: A-Z, 0-9, F1-F12, Backspace/Back, Delete/Del, Insert/Ins, Home, End, PageUp/PgUp, PageDown/PgDn, Space, Enter/Return, and Tab. Modifiers (Ctrl, Shift, or Alt) are required for all keys except F1-F12."
 */
 // ==/WindhawkModSettings==
 
@@ -1087,22 +1088,22 @@ void Wh_ModUninit() {
         threadsToJoin.swap(g_threads);
     }
 
-    // Dismiss any modal dialogs (such as emptyRecycleBin) so unload never stalls
     for (HANDLE h : threadsToJoin) {
-    DWORD tid = GetThreadId(h);
-    int attempts = 0;
-    while (WaitForSingleObject(h, 100) == WAIT_TIMEOUT && attempts < 30) {
-        EnumThreadWindows(tid, [](HWND hWnd, LPARAM) -> BOOL {
-            if (IsWindowVisible(hWnd)) {
-                PostMessageW(hWnd, WM_CLOSE, 0, 0);
+        DWORD tid = GetThreadId(h);
+        int rounds = 0;
+        while (WaitForSingleObject(h, 100) == WAIT_TIMEOUT) {
+            EnumThreadWindows(tid, [](HWND hWnd, LPARAM) -> BOOL {
+                if (IsWindowVisible(hWnd)) {
+                    PostMessageW(hWnd, WM_CLOSE, 0, 0);
+                }
+                return TRUE;
+            }, 0);
+
+            // After a few attempts, escalate to WM_QUIT to unwind any stubborn modal dialogs
+            if (++rounds > 10) {
+                PostThreadMessageW(tid, WM_QUIT, 0, 0);
             }
-            return TRUE;
-        }, 0);
-        attempts++;
+        }
+        CloseHandle(h);
     }
-    if (attempts >= 30) {
-        Wh_Log(L"Worker thread did not terminate in time during unload.");
-    }
-    CloseHandle(h);
-}
 }
