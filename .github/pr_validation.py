@@ -1605,6 +1605,49 @@ def test_run():
         print(f'Got {warnings} warnings')
 
 
+def validate_pr_changelog(pr_body: str) -> int:
+    """Mod updates must describe the changes in the PR description."""
+    markers_re = re.compile(
+        r'<!--\s*changelog:start\s*-->(.*?)<!--\s*changelog:end\s*-->',
+        re.DOTALL | re.IGNORECASE,
+    )
+
+    # The sample items of the pull request template, which are to be replaced
+    # with the actual changes.
+    placeholder_item_re = re.compile(
+        r'^[ \t]*\*[ \t]*Changelog item \d+\.\.\.[ \t]*$', re.MULTILINE
+    )
+
+    template_hint = (
+        ' See the pull request template'
+        ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1).'
+    )
+
+    matches = markers_re.findall(pr_body)
+    if len(matches) != 1:
+        return add_warning(
+            Path('.github/pull_request_template.md'),
+            1,
+            'Mod updates must have a changelog in the PR description, between a single'
+            ' pair of the "<!-- changelog:start -->" and "<!-- changelog:end -->"'
+            f' markers, found {len(matches)} such pairs.' + template_hint,
+        )
+
+    changelog = placeholder_item_re.sub('', matches[0]).strip()
+    if changelog == '':
+        return add_warning(
+            Path('.github/pull_request_template.md'),
+            1,
+            'The changelog between the "<!-- changelog:start -->" and'
+            ' "<!-- changelog:end -->" markers in the PR description is empty,'
+            ' please describe the changes of this mod update.'
+            + template_hint,
+        )
+
+    print(f'Changelog:\n{changelog}')
+    return 0
+
+
 def main():
     if len(sys.argv) > 1:
         test_run()
@@ -1634,18 +1677,22 @@ def main():
             f'{added_count=} {modified_count=} {all_count=}',
         )
 
-    if added_count != 0:
-        pr_body = os.environ.get('PR_BODY', '')
-        if '## Mod authorship' not in pr_body:
-            warnings += add_warning(
-                Path('.github/pull_request_template.md'),
-                1,
-                'New mod submissions must keep the "## Mod authorship" section from the'
-                ' pull request template'
-                ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
-                ' in the PR description, so reviewers know how the mod was authored.'
-                ' Please restore that section and fill it in.',
-            )
+    # The PR body is sent with CRLF line endings.
+    pr_body = os.environ.get('PR_BODY', '').replace('\r\n', '\n')
+
+    if added_count != 0 and '## Mod authorship' not in pr_body:
+        warnings += add_warning(
+            Path('.github/pull_request_template.md'),
+            1,
+            'New mod submissions must keep the "## Mod authorship" section from the'
+            ' pull request template'
+            ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
+            ' in the PR description, so reviewers know how the mod was authored.'
+            ' Please restore that section and fill it in.',
+        )
+
+    if modified_count != 0:
+        warnings += validate_pr_changelog(pr_body)
 
     for path in paths:
         print(f'Checking {path=}')
