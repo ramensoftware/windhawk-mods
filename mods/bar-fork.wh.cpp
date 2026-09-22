@@ -3,10 +3,16 @@
 // @name XP Top Ultimate Customizable Dock Bar - Fork
 // @version 0.1
 // @author serg82rus14
-// @description XP Top Ultimate Customizable Dock Bar — Удобная верхняя панель в стиле классических док-панелей для Windows
+// @github https://github.com/serg8269-cloud
+// @description Удобная верхняя панель
 // @compilerOptions -luser32 -lshell32 -lgdi32 -lshlwapi -lcomdlg32
 // @include explorer.exe
 // ==/WindhawkMod==
+
+// ==WindhawkModReadme==
+# XP Top Ultimate Customizable Dock Bar
+Удобная верхняя панель задач для Windows в стиле классических док-панелей с гибкой настройкой.
+// ==/WindhawkModReadme==
 
 #define UNICODE
 #define WIN32_LEAN_AND_MEAN
