@@ -3,7 +3,7 @@
 // @name                Tourne'Table [Audio Visualizer]
 // @description         A real-time audio visualizer for the Windows desktop. Advanced settings without sacrificing resource efficiency. Near-headless rendering with CPU optimization for audio capture.
 // @description:ru-RU   Аудиовизуализатор реального времени для рабочего стола Windows. Расширенные настройки без ущерба для экономии ресурсов. Практически безинтерфейсный (near-headless) поток рендеринга с оптимизацией процессора для захвата звука.
-// @version             1.2.0
+// @version             1.3.0
 // @author              USER-TOURNE
 // @github              https://github.com/USER-TOURNE
 // @donateUrl           https://ko-fi.com/tourne
@@ -171,6 +171,23 @@ The built-in **Tourne** color mode is drawn from these.
 **Gradient Color 1 / 2**: Start and end colors for the gradient modes.
 
 **Sensitivity**: How hard the bars react. Too low and quiet music barely moves them; too high and everything slams to max. Range 0-300. Turn it down for bass-heavy tracks, up for quiet recordings.
+
+**Input Gain (dB)**: A fixed level trim on the captured audio, applied before everything else. Range -24 to +24, default 0.
+
+> **Why this exists.** Loopback capture sees the mix *after* each app's own volume slider but *before* the Windows master slider. So if you keep Spotify at 40% and the system at 80%, the visualizer only ever sees that 40%, and turning the system up does not help it. Input Gain is the control that does. It is also the only setting that scales the **Oscilloscope** waveform directly, which otherwise has no level control of its own. Auto Gain scales the trace too when it is on, and the trace clips flat rather than running off the panel.
+>
+> **It moves the idle thresholds with it.** Pause When Silent and Auto-Hide When Idle both key off how far the bars are moving, so raising Input Gain lowers the level that counts as silence, and lowering it raises that level. Sensitivity has always behaved the same way for the same reason. If you push Input Gain a long way up, expect the mod to consider quieter things "playing".
+
+**Auto Gain**: Adapts the level continuously so quiet sources still fill the bars, instead of retuning Sensitivity per app or per track. Off by default.
+
+It only ever boosts, never cuts, so loud material behaves exactly as it does with this off. Through silence it holds its last value rather than winding up, which means the noise floor is never lifted and **idle shutdown still works normally**. The idle test reads the un-boosted level against the same threshold it always used, so turning Auto Gain on neither extends nor shortens how long the mod stays awake.
+
+Two things it does affect, worth knowing before you go hunting for them:
+
+- Because it normalizes the loudest band to a fixed target, **Sensitivity stops doing much for quiet material** while it is on. That is inherent to how a levelling gain works, not a bug.
+- On the **Oscilloscope**, a lower Sensitivity produces a *larger* trace, since a smaller measured peak asks for a bigger boost.
+
+**Auto Gain Max Boost (dB)**: The ceiling on that lift. Range 0-24, default 12. Lower it if quiet passages are being flattened more than you want, raise it if a very quiet source still will not fill the bars.
 
 **EQ Preset**: Which frequencies get emphasized *visually*. Doesn't touch your actual audio.
 `Default` no adjustment · `Bass` boosts lows · `Rock` boosts mids and highs · `Pop` heavy on highs · `Jazz` warmer, gentler highs · `Electronic` boosts bass and treble, scoops the middle.
@@ -463,6 +480,15 @@ look at, you can throw something in the hat. Entirely optional, genuinely apprec
         - exponential: Exponential (Soft)
         - knee: Knee (Balanced)
         - power: Power (Headroom)
+    - inputGain: 0
+      $name: Input Gain (dB)
+      $description: A fixed level adjustment applied to the captured audio before anything else. Range -24 to +24, where 0 leaves the signal exactly as captured. Loopback capture sees each app's own volume slider but not the Windows master slider, so a music app sitting at 40% reads as quiet no matter how loud the system sounds. This is the control for that. Unlike Sensitivity it also scales the Oscilloscope waveform
+    - autoGain: false
+      $name: Auto Gain
+      $description: Continuously adapts the level so quiet sources still fill the bars, without retuning Sensitivity per app or per track. Boost only, so loud material behaves exactly as it does with this off. Held steady through silence, which means the noise floor is never lifted and idle shutdown still works normally
+    - autoGainMaxBoost: 12
+      $name: Auto Gain Max Boost (dB)
+      $description: The ceiling on how far Auto Gain may lift a quiet signal. Range 0 to 24. Lower it if quiet passages are getting flattened more than you want, raise it if a very quiet source still will not fill the bars. Only used when Auto Gain is on
     - smoothing: 0
       $name: Motion Smoothing
       $description: Slows down how quickly bars rise and fall toward the target level, at the cost of a bit of lag. 0 is the original snappy response; higher values trade responsiveness for a steadier, easier-to-read motion -- helpful when bars are small on the desktop and fast jitter is hard to track
@@ -862,6 +888,7 @@ using Microsoft::WRL::ComPtr;
 #define TIMER_ID_MSG_WALLPAPER_REFRESH 3
 #define TIMER_ID_MSG_FULLSCREEN_WATCH 4
 #define TIMER_ID_MSG_SAVE_POSITION 5
+#define TIMER_ID_MSG_FONT_RECHECK 6
 
 #define WM_APP_CLEANUP (WM_APP + 1)
 #define WM_APP_SETTINGS_CHANGED (WM_APP + 2)
@@ -915,6 +942,9 @@ struct Settings {
     BYTE grad2A = 255, grad2R = 0, grad2G = 180, grad2B = 255;
     int sensitivity = 150;
     VizSensitivityCurve sensitivityCurve = VizSensitivityCurve::Knee;
+    float inputGainDb = 0.0f;
+    bool autoGain = false;
+    float autoGainMaxDb = 12.0f;
     int smoothing = 0;
     VizEQ eq = VizEQ::Default;
 
@@ -1464,6 +1494,19 @@ std::wstring ReadIconPathSetting(PCWSTR key, PCWSTR group, PCWSTR name) {
     return path;
 }
 
+// A font that really is installed can still enumerate as missing right after a
+// cold boot: mods start before the font service has finished registering
+// everything, so the check runs against an incomplete list and warns about a
+// font that works perfectly the moment anything draws with it.
+//
+// So a failed check does not report straight away. It arms a one-second retry
+// on the message window and only reports if the font is still missing once the
+// system has had time to settle. A genuinely wrong name still gets flagged,
+// just ten seconds later than it used to.
+static bool g_fontCheckPending = false;
+static int g_fontCheckAttempts = 0;
+static constexpr int FONT_CHECK_MAX_ATTEMPTS = 10;
+
 // Checks a font family name is actually installed. A missing font falls back to
 // whatever DirectWrite substitutes, which is silently not what was asked for.
 bool IsFontInstalled(const std::wstring& family) {
@@ -1655,8 +1698,30 @@ bool IsFullscreenOrGameActive() {
 // each being judged on its own -- two windows covering opposite halves read as
 // 100%, which is what you see on screen. GetRegionData hands back a set of
 // non-overlapping rectangles, so summing their areas double-counts nothing.
-int ComputeRectCoveragePercent(const RECT& target) {
-    if (target.right <= target.left || target.bottom <= target.top) return 0;
+int ComputeRectCoveragePercent(const RECT& targetIn) {
+    if (targetIn.right <= targetIn.left || targetIn.bottom <= targetIn.top) return 0;
+
+    // Judge only the part that is actually on a screen.
+    //
+    // Area hanging off an edge can never intersect a window rect, so leaving it
+    // in the denominator permanently caps the result below 100%. At the default
+    // "100% covered" threshold that makes Pause When Covered unreachable for any
+    // visualizer positioned partly off-screen, which is a common placement along
+    // the bottom edge, and the feature simply appears to do nothing.
+    RECT screen;
+    screen.left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    screen.top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    screen.right = screen.left + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    screen.bottom = screen.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    RECT target;
+    if (!IntersectRect(&target, &targetIn, &screen)) {
+        // Nothing of it is on screen at all. Reported as uncovered rather than
+        // fully covered, staying with this function's existing bias: a wrong
+        // answer that keeps drawing is a far smaller problem than one that makes
+        // the visualizer vanish.
+        return 0;
+    }
 
     HRGN coveredRgn = CreateRectRgn(0, 0, 0, 0);
     if (!coveredRgn) return 0;
@@ -2808,6 +2873,45 @@ void VizCaptureThreadProc() {
     static constexpr float GRAVITY[VIZ_NUM_BANDS] = {0.018f, 0.020f, 0.022f, 0.025f,
                                                      0.030f, 0.036f, 0.042f};
 
+    // Auto Gain state, owned entirely by this thread.
+    //
+    // Feed-forward, not feedback: the loudest band of each analysed block is
+    // measured BEFORE any boost is applied, so the gain is derived from the
+    // block's own level rather than from its own output, and cannot chase
+    // itself.
+    //
+    // What that peak is NOT is the signal as captured. It is read from
+    // rawBand[], which is already through sliderGain and the EQ multipliers, so
+    // both thresholds below are levels on the drawn bars, not on the input.
+    // They therefore move with Sensitivity and the EQ Preset, the same way the
+    // idle test they mirror always has.
+    //
+    // Boost only. The sensitivity curves already handle hot signal, so this is
+    // never allowed below 1.0 and cannot make an existing tuning worse at the
+    // loud end.
+    float agcPeakEnv = 0.f;
+    float agcGain = 1.f;
+    static constexpr float AGC_TARGET = 0.85f;    // where the loudest band should land
+    static constexpr float AGC_ATTACK = 0.35f;    // envelope rise: fast, so peaks aren't missed
+    static constexpr float AGC_RELEASE = 0.012f;  // envelope fall: slow, so quiet bars don't pump
+    static constexpr float AGC_GLIDE = 0.04f;     // how fast the applied gain chases the target
+
+    // Two floors, two jobs, deliberately not the same number.
+    //
+    // AGC_FLOOR is anti-windup for the tracker alone: under it the envelope
+    // stops moving, so a noise floor can never wind the gain up to its ceiling
+    // and there is no overshoot when audio returns.
+    //
+    // AGC_IDLE_AUDIBLE gates the idle-shutdown timer, and has to be the same
+    // number that test compares against. Below the knee mag == rawGained, so
+    // "un-boosted peak over 0.03" is what re-armed the timer before Auto Gain
+    // existed. Gating on the lower floor instead would let anything in
+    // [AGC_FLOOR, 0.03] hold the render loop awake once the boost carried it
+    // over the line, which is quiet-but-not-silent audio keeping the mod out
+    // of its idle path for as long as it plays.
+    static constexpr float AGC_FLOOR = 0.010f;
+    static constexpr float AGC_IDLE_AUDIBLE = 0.030f;
+
     int currentFftSize = 0;
     auto ValidFftSize = [](int n) -> int {
         return (n == 1024 || n == 2048 || n == 4096 || n == 8192) ? n : 1024;
@@ -2879,6 +2983,17 @@ void VizCaptureThreadProc() {
             continue;
         }
 
+        // Input Gain folded into the mono mixdown. Applying it here rather than
+        // further down means it reaches the Oscilloscope waveform too, which is
+        // read straight out of this ring buffer and so has never had a level
+        // control of its own. It also replaces the per-frame divide by channel
+        // count with a single multiply, so the feature costs slightly less than
+        // what the mixdown was already doing.
+        float inputGainLin = (g_settings.inputGainDb == 0.0f)
+                                 ? 1.0f
+                                 : powf(10.f, g_settings.inputGainDb / 20.f);
+        float monoScale = inputGainLin / (float)((channels > 0) ? channels : 1);
+
         while (packetSize > 0) {
             BYTE* pData = nullptr;
             UINT32 numFrames = 0;
@@ -2896,7 +3011,7 @@ void VizCaptureThreadProc() {
                     for (UINT32 f = 0; f < numFrames; f++) {
                         float mono = 0.f;
                         for (UINT32 c = 0; c < channels; c++) mono += src[f * channels + c];
-                        mono /= (float)channels;
+                        mono *= monoScale;
                         ringBuf[ringHead] = mono;
                         ringHead = (ringHead + 1) % RING_CAP;
                         if (ringCount < RING_CAP) ringCount++;
@@ -2907,7 +3022,7 @@ void VizCaptureThreadProc() {
                         float mono = 0.f;
                         for (UINT32 c = 0; c < channels; c++)
                             mono += src[f * channels + c] / 32768.f;
-                        mono /= (float)channels;
+                        mono *= monoScale;
                         ringBuf[ringHead] = mono;
                         ringHead = (ringHead + 1) % RING_CAP;
                         if (ringCount < RING_CAP) ringCount++;
@@ -2933,7 +3048,19 @@ void VizCaptureThreadProc() {
                 float waveSnap[VIZ_WAVE_SAMPLES];
                 for (int w = 0; w < VIZ_WAVE_SAMPLES; w++) {
                     int idx = (readStart + w * wstep) % RING_CAP;
-                    waveSnap[w] = ringBuf[idx];
+                    // agcGain is exactly 1.0 unless Auto Gain is on, so this is a
+                    // no-op multiply by default, and it only runs at all when the
+                    // Oscilloscope shape is selected. It carries the previous
+                    // block's gain, one block of lag, which at these sizes is
+                    // around 10 ms and not visible.
+                    //
+                    // Clamped because nothing downstream does it. The bars are
+                    // held at or under 1.0 by the sensitivity curve, but the
+                    // trace is drawn straight as center + sample * ampScale, so
+                    // an over-driven sample would be plotted off the panel with
+                    // no upper bound. Clipping flat is what a real scope does
+                    // with a signal it cannot fit.
+                    waveSnap[w] = std::clamp(ringBuf[idx] * agcGain, -1.0f, 1.0f);
                 }
                 PublishWaveform(waveSnap);
             }
@@ -2953,7 +3080,11 @@ void VizCaptureThreadProc() {
             static constexpr float BAND_SENSITIVITY[VIZ_NUM_BANDS] = {
                 0.30f, 0.22f, 0.12f, 0.06f, 0.030f, 0.018f, 0.010f};
 
-            float maxMag = 0.f;
+            // Pass one: the band levels as captured, with no auto boost applied.
+            // VIZ_NUM_BANDS is 7, so holding them costs a stack array and lets the
+            // gain be chosen from the whole block rather than band by band.
+            float rawBand[VIZ_NUM_BANDS];
+            float blockPeak = 0.f;
             for (int b = 0; b < VIZ_NUM_BANDS; b++) {
                 int bStart = g_logBinStart[b];
                 int bEnd = g_logBinStart[b + 1];
@@ -2971,7 +3102,38 @@ void VizCaptureThreadProc() {
                                                          : eq.high;
                 float rawGained = (rms / (currentFftSize * 0.5f)) / BAND_SENSITIVITY[b] *
                                    sliderGain * eqM;
-                rawGained = std::max(0.f, rawGained);
+                rawBand[b] = std::max(0.f, rawGained);
+                blockPeak = std::max(blockPeak, rawBand[b]);
+            }
+
+            // Auto Gain. blockPeak is the un-boosted level, so the silence test is
+            // honest regardless of where the gain currently sits. Through silence
+            // the envelope and the gain are both frozen rather than decayed: that
+            // stops the noise floor being lifted while nothing is playing, and it
+            // stops the loud overshoot that a decayed gain would produce the
+            // instant music comes back.
+            bool blockAudible = (blockPeak >= AGC_FLOOR);
+            bool blockIdleAudible = (blockPeak >= AGC_IDLE_AUDIBLE);
+            if (g_settings.autoGain) {
+                if (blockAudible) {
+                    float k = (blockPeak > agcPeakEnv) ? AGC_ATTACK : AGC_RELEASE;
+                    agcPeakEnv += (blockPeak - agcPeakEnv) * k;
+
+                    float maxBoost = powf(10.f, g_settings.autoGainMaxDb / 20.f);
+                    float want = (agcPeakEnv > 1e-6f) ? (AGC_TARGET / agcPeakEnv) : maxBoost;
+                    want = std::clamp(want, 1.f, maxBoost);
+                    agcGain += (want - agcGain) * AGC_GLIDE;
+                }
+            } else {
+                agcPeakEnv = 0.f;
+                agcGain = 1.f;
+            }
+
+            // Pass two: shaping and envelope, unchanged apart from the gain factor,
+            // which is exactly 1.0 whenever Auto Gain is off.
+            float maxMag = 0.f;
+            for (int b = 0; b < VIZ_NUM_BANDS; b++) {
+                float rawGained = rawBand[b] * agcGain;
 
                 float mag;
                 switch (g_settings.sensitivityCurve) {
@@ -2997,7 +3159,15 @@ void VizCaptureThreadProc() {
             }
             PublishBands(bandEnv);
 
-            if (maxMag > 0.03f) {
+            // Idle shutdown is judged on the un-boosted level as well as the drawn
+            // one, against the same 0.03 the drawn test uses. Without the second
+            // clause, Auto Gain would carry anything it could lift over 0.03 into
+            // "audible" and hold the render loop awake, which is the whole power
+            // story gone. Because both clauses compare against the same number,
+            // this is numerically the original test: Auto Gain neither extends
+            // nor shortens how long the mod stays awake. With Auto Gain off it
+            // short-circuits to the original test outright.
+            if (maxMag > 0.03f && (!g_settings.autoGain || blockIdleAudible)) {
                 g_lastAudibleTickMs.store(GetTickCount64(), std::memory_order_relaxed);
             }
 
@@ -3304,54 +3474,15 @@ float EffectivePeakFreqOffsetY() {
            (float)g_pfNudgeY.load(std::memory_order_relaxed);
 }
 
-// Up to and including v1.1.0 these placements lived in a file of our own under
-// %LOCALAPPDATA%. That does not work on portable Windhawk and it left state
-// behind after an uninstall, so they now go through Wh_SetStringValue /
-// Wh_GetStringValue, which are per-mod and are removed with the mod.
+// Runtime placements go through Wh_SetStringValue / Wh_GetStringValue, which
+// are per-mod, work on portable Windhawk, and are removed along with the mod.
 //
-// This reads the old file once, carries its contents over, and deletes it
-// along with the directory, so an upgrade keeps your layout and leaves nothing
-// behind. It can be dropped in a later version. It runs from
-// LoadPositionOverride at init only, never from an input hook.
-static bool MigrateLegacyOverrideFile(WCHAR* out, size_t outChars) {
-    WCHAR local[MAX_PATH];
-    DWORD n = GetEnvironmentVariable(L"LOCALAPPDATA", local, MAX_PATH);
-    if (n == 0 || n >= MAX_PATH) return false;
-
-    std::wstring dir = std::wstring(local) + L"\\TourneTable";
-    std::wstring path = dir + L"\\position_override.txt";
-
-    HANDLE h = CreateFile(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-                          FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return false;
-
-    char narrow[128] = {};
-    DWORD read = 0;
-    BOOL ok = ReadFile(h, narrow, sizeof(narrow) - 1, &read, nullptr);
-    CloseHandle(h);
-
-    // Remove the file either way: if it could not be read it is of no further
-    // use, and leaving it behind is the thing this change exists to stop.
-    DeleteFile(path.c_str());
-    RemoveDirectory(dir.c_str());  // only succeeds if nothing else is in there
-
-    if (!ok || read == 0) return false;
-
-    // The payload was written as plain ASCII digits, spaces, dots and minus
-    // signs, so widening byte by byte is exact here.
-    size_t i = 0;
-    for (; i < read && i + 1 < outChars; i++) out[i] = (WCHAR)(unsigned char)narrow[i];
-    out[i] = L'\0';
-
-    Wh_SetStringValue(L"positionOverride", out);
-    return i > 0;
-}
-
+// v1.2.0 also carried a one-shot import of a file the pre-catalog builds kept
+// under %LOCALAPPDATA%. Nothing in the catalog ever wrote that file, so it has
+// been removed here as agreed during the 1.2.0 review.
 void LoadPositionOverride() {
     WCHAR buf[192] = {};
     Wh_GetStringValue(L"positionOverride", buf, ARRAYSIZE(buf));
-
-    if (!buf[0] && !MigrateLegacyOverrideFile(buf, ARRAYSIZE(buf))) return;
     if (!buf[0]) return;
 
     // Two floats is the original format; the four trailing ints carrying the
@@ -3408,9 +3539,16 @@ void PersistOverrideState() {
     if (len > 0) Wh_SetStringValue(L"positionOverride", buf);
 }
 
+void RequestPositionOverrideSave();  // defined with the keyboard-nudge helpers
+
+// Both callers reach this from a low-level input hook: Ctrl+Alt+Home through
+// ResetMoveTarget, and the double-click-in-place path in DragMouseHookProc.
+// Everything in a WH_KEYBOARD_LL / WH_MOUSE_LL callback blocks all system input
+// until it returns, so the write goes through the same deferred save the nudge
+// paths already use rather than calling Wh_SetStringValue inline.
 void ClearPositionOverride() {
     g_dragOverrideActive.store(false, std::memory_order_relaxed);
-    PersistOverrideState();
+    RequestPositionOverrideSave();
 }
 
 UINT DragButtonDownMsg() {
@@ -5624,6 +5762,35 @@ LRESULT CALLBACK MessageWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             } else if (wParam == TIMER_ID_MSG_SAVE_POSITION) {
                 KillTimer(hWnd, TIMER_ID_MSG_SAVE_POSITION);
                 PersistOverrideState();
+            } else if (wParam == TIMER_ID_MSG_FONT_RECHECK) {
+                // Re-run the font lookup that failed during settings load. A
+                // cold boot resolves this within a few seconds; a name that is
+                // actually wrong never will, and gets reported once the
+                // attempts run out.
+                if (!g_fontCheckPending || !g_settings.nowPlayingEnabled) {
+                    g_fontCheckPending = false;
+                    KillTimer(hWnd, TIMER_ID_MSG_FONT_RECHECK);
+                } else if (IsFontInstalled(g_settings.nowPlayingFont)) {
+                    Wh_Log(L"Now Playing Font resolved after %d s, no issue to report",
+                           g_fontCheckAttempts + 1);
+                    g_fontCheckPending = false;
+                    KillTimer(hWnd, TIMER_ID_MSG_FONT_RECHECK);
+                } else if (++g_fontCheckAttempts >= FONT_CHECK_MAX_ATTEMPTS) {
+                    g_fontCheckPending = false;
+                    KillTimer(hWnd, TIMER_ID_MSG_FONT_RECHECK);
+                    ReportSettingIssue(
+                        L"Appearance", L"Now Playing Font", g_settings.nowPlayingFont.c_str(),
+                        L"the name of a font installed on this PC, exactly as Windows spells it",
+                        L"whatever Windows substitutes (usually Segoe UI)");
+                    // ReportSettingIssue only queues the line. LoadSettings
+                    // normally flushes at its end, but this report happens long
+                    // after that has returned, so without flushing here the
+                    // warning would sit in the vector until the next settings
+                    // change cleared it unseen. Safe from this thread: the flush
+                    // honours showSettingsErrors and puts the dialog on a thread
+                    // of its own.
+                    FlushSettingsIssues();
+                }
             } else if (wParam == TIMER_ID_MSG_FULLSCREEN_WATCH) {
                 // The media strip is a plain layered window living alongside
                 // whatever else is topmost, and it's the one piece of this mod
@@ -5817,6 +5984,11 @@ void CreateMessageWindow() {
                                   nullptr, hInstance, nullptr);
     if (g_messageWnd) {
         SetTimer(g_messageWnd, TIMER_ID_MSG_FULLSCREEN_WATCH, 1000, nullptr);
+        // Settings are loaded before this window exists on the init path, so a
+        // font check that already failed has nowhere to arm its retry until now.
+        if (g_fontCheckPending) {
+            SetTimer(g_messageWnd, TIMER_ID_MSG_FONT_RECHECK, 1000, nullptr);
+        }
     }
 }
 
@@ -5884,6 +6056,12 @@ void LoadSettings() {
                                  : (wcscmp(sensCurve, L"power") == 0)      ? VizSensitivityCurve::Power
                                                                            : VizSensitivityCurve::Knee;
     Wh_FreeStringSetting(sensCurve);
+
+    g_settings.inputGainDb =
+        (float)std::clamp(Wh_GetIntSetting(L"appearance.inputGain"), -24, 24);
+    g_settings.autoGain = Wh_GetIntSetting(L"appearance.autoGain") != 0;
+    g_settings.autoGainMaxDb =
+        (float)std::clamp(Wh_GetIntSetting(L"appearance.autoGainMaxBoost"), 0, 24);
 
     g_settings.smoothing = std::clamp(Wh_GetIntSetting(L"appearance.smoothing"), 0, 100);
 
@@ -6066,10 +6244,17 @@ void LoadSettings() {
     g_settings.nowPlayingFont = (nowPlayingFont && *nowPlayingFont) ? nowPlayingFont : L"Segoe UI";
     // Only worth checking when the text is actually going to be drawn -- an
     // unused font name being wrong isn't something to interrupt anyone over.
+    //
+    // A failure here is not reported yet: on a cold boot the font service may
+    // not have registered everything, so this arms the retry instead and the
+    // warning only happens if it is still missing once things have settled.
     if (g_settings.nowPlayingEnabled && !IsFontInstalled(g_settings.nowPlayingFont)) {
-        ReportSettingIssue(L"Appearance", L"Now Playing Font", g_settings.nowPlayingFont.c_str(),
-                           L"the name of a font installed on this PC, exactly as Windows spells it",
-                           L"whatever Windows substitutes (usually Segoe UI)");
+        g_fontCheckPending = true;
+        g_fontCheckAttempts = 0;
+        if (g_messageWnd) SetTimer(g_messageWnd, TIMER_ID_MSG_FONT_RECHECK, 1000, nullptr);
+    } else {
+        g_fontCheckPending = false;
+        if (g_messageWnd) KillTimer(g_messageWnd, TIMER_ID_MSG_FONT_RECHECK);
     }
     Wh_FreeStringSetting(nowPlayingFont);
     g_settings.nowPlayingFontSize = std::max(6, Wh_GetIntSetting(L"appearance.nowPlayingFontSize"));

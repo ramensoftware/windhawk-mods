@@ -5,11 +5,13 @@ PURPOSE:     Verifies the mod information in the modified mods.
 COPYRIGHT:   Copyright 2023 Mark Jansen <mark.jansen@reactos.org>
 '''
 
+import http.client
 import json
 import math
 import os
 import re
 import sys
+import time
 import unicodedata
 import urllib.error
 import urllib.parse
@@ -225,18 +227,50 @@ def get_mod_file_metadata(
     return properties, warnings
 
 
+FETCH_ATTEMPTS = 3
+
+
+class FetchError(Exception):
+    """A fetch failed even after retries, most likely due to a transient network
+    problem rather than anything in the mod being validated."""
+
+
+def fetch_url(url: str) -> bytes:
+    """Fetch a URL, retrying connection errors and 5xx responses. 4xx responses
+    are raised as HTTPError right away so callers can treat 404 as "not found"."""
+    last_error: Optional[Exception] = None
+    for attempt in range(1, FETCH_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(url) as response:
+                return response.read()
+        except urllib.error.HTTPError as e:
+            if e.code < 500:
+                raise
+            last_error = e
+        except (OSError, http.client.HTTPException) as e:
+            last_error = e
+
+        if attempt < FETCH_ATTEMPTS:
+            print(f'Fetching {url} failed ({last_error!r}), retrying...')
+            time.sleep(2)
+
+    raise FetchError(
+        f'Failed to fetch {url} after {FETCH_ATTEMPTS} attempts ({last_error!r}).'
+        ' This is most likely a temporary network error unrelated to the mod'
+        ' itself, re-run the workflow to try again.'
+    )
+
+
 @cache
 def get_mod_author_data():
     url = 'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mod_author_data.json'
-    response = urllib.request.urlopen(url).read()
-    return json.loads(response)
+    return json.loads(fetch_url(url))
 
 
 @cache
 def get_valid_license_identifiers_lowercase():
     url = 'https://spdx.org/licenses/licenses.json'
-    response = urllib.request.urlopen(url).read()
-    data = json.loads(response)
+    data = json.loads(fetch_url(url))
     return {license['licenseId'].lower() for license in data['licenses']}
 
 
@@ -249,8 +283,7 @@ def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
     """Fetch existing mod metadata from mods.windhawk.net, or None if mod doesn't exist."""
     try:
         url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}.wh.cpp'
-        response = urllib.request.urlopen(url)
-        content = response.read().decode('utf-8')
+        content = fetch_url(url).decode('utf-8')
 
         # Use existing robust metadata parser (no warnings needed for existing mods)
         properties, _ = get_mod_file_metadata(StringIO(content), warn_callback=None)
@@ -274,8 +307,7 @@ def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
     """Fetch list of existing versions for a mod, or None if mod doesn't exist."""
     try:
         url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}/versions.json'
-        response = urllib.request.urlopen(url)
-        data = json.loads(response.read())
+        data = json.loads(fetch_url(url))
         return [item['version'] for item in data]
     except urllib.error.HTTPError as e:
         if e.code == 404:
@@ -1282,8 +1314,7 @@ def get_all_mod_names() -> dict[str, str]:
 @cache
 def get_existing_windows_file_names():
     url = 'https://winbindex.m417z.com/data/filenames.json'
-    response = urllib.request.urlopen(url).read()
-    return json.loads(response)
+    return json.loads(fetch_url(url))
 
 
 def is_existing_windows_file_name(name: str):
@@ -1574,6 +1605,49 @@ def test_run():
         print(f'Got {warnings} warnings')
 
 
+def validate_pr_changelog(pr_body: str) -> int:
+    """Mod updates must describe the changes in the PR description."""
+    markers_re = re.compile(
+        r'<!--\s*changelog:start\s*-->(.*?)<!--\s*changelog:end\s*-->',
+        re.DOTALL | re.IGNORECASE,
+    )
+
+    # The sample items of the pull request template, which are to be replaced
+    # with the actual changes.
+    placeholder_item_re = re.compile(
+        r'^[ \t]*\*[ \t]*Changelog item \d+\.\.\.[ \t]*$', re.MULTILINE
+    )
+
+    template_hint = (
+        ' See the pull request template'
+        ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1).'
+    )
+
+    matches = markers_re.findall(pr_body)
+    if len(matches) != 1:
+        return add_warning(
+            Path('.github/pull_request_template.md'),
+            1,
+            'Mod updates must have a changelog in the PR description, between a single'
+            ' pair of the "<!-- changelog:start -->" and "<!-- changelog:end -->"'
+            f' markers, found {len(matches)} such pairs.' + template_hint,
+        )
+
+    changelog = placeholder_item_re.sub('', matches[0]).strip()
+    if changelog == '':
+        return add_warning(
+            Path('.github/pull_request_template.md'),
+            1,
+            'The changelog between the "<!-- changelog:start -->" and'
+            ' "<!-- changelog:end -->" markers in the PR description is empty,'
+            ' please describe the changes of this mod update.'
+            + template_hint,
+        )
+
+    print(f'Changelog:\n{changelog}')
+    return 0
+
+
 def main():
     if len(sys.argv) > 1:
         test_run()
@@ -1603,18 +1677,22 @@ def main():
             f'{added_count=} {modified_count=} {all_count=}',
         )
 
-    if added_count != 0:
-        pr_body = os.environ.get('PR_BODY', '')
-        if '## Mod authorship' not in pr_body:
-            warnings += add_warning(
-                Path('.github/pull_request_template.md'),
-                1,
-                'New mod submissions must keep the "## Mod authorship" section from the'
-                ' pull request template'
-                ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
-                ' in the PR description, so reviewers know how the mod was authored.'
-                ' Please restore that section and fill it in.',
-            )
+    # The PR body is sent with CRLF line endings.
+    pr_body = os.environ.get('PR_BODY', '').replace('\r\n', '\n')
+
+    if added_count != 0 and '## Mod authorship' not in pr_body:
+        warnings += add_warning(
+            Path('.github/pull_request_template.md'),
+            1,
+            'New mod submissions must keep the "## Mod authorship" section from the'
+            ' pull request template'
+            ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
+            ' in the PR description, so reviewers know how the mod was authored.'
+            ' Please restore that section and fill it in.',
+        )
+
+    if modified_count != 0:
+        warnings += validate_pr_changelog(pr_body)
 
     for path in paths:
         print(f'Checking {path=}')
@@ -1637,4 +1715,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except FetchError as e:
+        print(f'::error::{e}')
+        sys.exit(1)
