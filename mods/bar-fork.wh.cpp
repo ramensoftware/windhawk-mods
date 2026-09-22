@@ -4,12 +4,18 @@
 // @version 0.1
 // @author serg82rus14
 // @github https://github.com/serg8269-cloud
-// @description Удобная верхняя панель
+// @description Удобная верхняя панель задач для Windows в стиле классических док-панелей с гибкой настройкой.
 // @compilerOptions -luser32 -lshell32 -lgdi32 -lshlwapi -lcomdlg32
 // @include explorer.exe
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+# XP Top Ultimate Customizable Dock Bar
+Удобная верхняя панель задач для Windows в стиле классических док-панелей с гибкой настройкой.
+// ==/WindhawkModReadme==
+
 #define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 
 #include <windows.h>
 #include <shellapi.h>
