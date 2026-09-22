@@ -1,3 +1,7 @@
+## 1.4.3 ([Sep 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6300d15608cf4ff49c749bced382b1ab27cc9340/mods/on-screen-indicator-position.wh.cpp))
+
+* Bug reports and feature requests now go to the mod's own issues page on GitHub.
+
 ## 1.4.2 ([Sep 13, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6a06dbbff13cacd1cfd4bb530d53ca643b42a019/mods/on-screen-indicator-position.wh.cpp))
 
 * Give the "Desktop N" popup that appears on virtual desktop change its own position, separate from other text indicators.

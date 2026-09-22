@@ -968,7 +968,7 @@
         ],
         "ratingUsers": 10,
         "reviews": 0,
-        "updated": 1790005367000,
+        "updated": 1790082443000,
         "users": 121
       },
       "metadata": {
@@ -983,7 +983,7 @@
         ],
         "license": "MIT",
         "name": "Better Volume Mixer",
-        "version": "1.2"
+        "version": "1.4.2"
       }
     },
     "block-smb-quick-access": {
@@ -10955,7 +10955,7 @@
         ],
         "ratingUsers": 12,
         "reviews": 0,
-        "updated": 1789323499000,
+        "updated": 1790082463000,
         "users": 188
       },
       "metadata": {
@@ -10970,7 +10970,7 @@
           "explorer.exe"
         ],
         "name": "On-Screen Indicator Position",
-        "version": "1.4.2"
+        "version": "1.4.3"
       }
     },
     "one-hair": {
@@ -11263,7 +11263,7 @@
         ],
         "ratingUsers": 2,
         "reviews": 0,
-        "updated": 1789985071000,
+        "updated": 1790082414000,
         "users": 20
       },
       "metadata": {
@@ -11279,7 +11279,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Per-monitor brightness in Quick Settings",
-        "version": "2.0"
+        "version": "2.1"
       }
     },
     "per-monitor-scale-switcher": {
@@ -13176,7 +13176,7 @@
         ],
         "ratingUsers": 10,
         "reviews": 0,
-        "updated": 1789984977000,
+        "updated": 1790082454000,
         "users": 137
       },
       "metadata": {
@@ -13189,7 +13189,7 @@
         ],
         "license": "GPL-3.0",
         "name": "SnapSentry",
-        "version": "0.21.1"
+        "version": "0.21.2"
       }
     },
     "spoof-light-dark-theme": {

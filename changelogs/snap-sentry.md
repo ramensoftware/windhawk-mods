@@ -1,3 +1,7 @@
+## 0.21.2 ([Sep 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/b69a191a8b6059d3f3a929a4e4e7526c9bc06f45/mods/snap-sentry.wh.cpp))
+
+* Bug reports and feature requests now go to the SnapSentry issues page on GitHub.
+
 ## 0.21.1 ([Sep 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e79dd48287abe987ba9e3869db2ca45983891469/mods/snap-sentry.wh.cpp))
 
 * Added an optional setting to remove duplicate screenshots. When the same image is captured again, the extra copy is moved to the Recycle Bin so the folder does not fill up with identical shots. It is off by default.

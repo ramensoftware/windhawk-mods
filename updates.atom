@@ -2,12 +2,72 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-22T12:03:25.000Z</updated>
+    <updated>2026-09-22T13:07:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[On-Screen Indicator Position 1.4.3]]></title>
+        <id>https://windhawk.net/mods/on-screen-indicator-position#6300d15608cf4ff49c749bced382b1ab27cc9340</id>
+        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
+        <updated>2026-09-22T13:07:43.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Bug reports and feature requests now go to the mod's own issues page on GitHub.</li>
+</ul>]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[SnapSentry 0.21.2]]></title>
+        <id>https://windhawk.net/mods/snap-sentry#b69a191a8b6059d3f3a929a4e4e7526c9bc06f45</id>
+        <link href="https://windhawk.net/mods/snap-sentry"/>
+        <updated>2026-09-22T13:07:34.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Bug reports and feature requests now go to the SnapSentry issues page on GitHub.</li>
+</ul>]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Better Volume Mixer 1.4.2]]></title>
+        <id>https://windhawk.net/mods/better-volume-mixer#6a81d207121712655cca0a18e37be0f3bd2377bb</id>
+        <link href="https://windhawk.net/mods/better-volume-mixer"/>
+        <updated>2026-09-22T13:07:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added middle-click to mute</li>
+<li>Added exact volume entry</li>
+<li>Added keyboard controls</li>
+<li>Added custom app names and default volumes</li>
+<li>Added option to hide apps by name</li>
+<li>Improved UI</li>
+</ul>]]></content>
+        <author>
+            <name>0Allu</name>
+            <uri>https://github.com/0Allu</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Per-monitor brightness in Quick Settings 2.1]]></title>
+        <id>https://windhawk.net/mods/per-monitor-brightness#325e75600e4ed1367e8d118969097e64fbc3ef72</id>
+        <link href="https://windhawk.net/mods/per-monitor-brightness"/>
+        <updated>2026-09-22T13:06:54.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Configurable Slider Placement</strong>: Added an option to place brightness sliders inside the Quick Settings card (above or below native Windows sliders) instead of below the footer, matching native flyout dimensions, margins, and icon alignment.</li>
+<li><strong>Hide Unsupported Displays</strong>: Added an optional setting to hide monitors that do not support brightness adjustment (DDC/CI).</li>
+<li><strong>Fixed Phantom Percentage</strong>: Unsupported monitors no longer display a placeholder "50%" text above the "Brightness control not supported" status.</li>
+<li><strong>Improved Layout Cleanup</strong>: Refined visual tree handling to ensure smooth enable/disable transitions with zero leftover gaps or layout shifts.</li>
+</ul>]]></content>
+        <author>
+            <name>bardelyne</name>
+            <uri>https://github.com/bardelyne</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MuteAlert - Microphone Activity Taskbar Widget 0.9.13]]></title>
         <id>https://windhawk.net/mods/mutealert#2bf015383d0f7ea4d5365120ae08c9e6359ca882</id>
@@ -783,329 +843,6 @@ Windhawk's Inclusion List.</p>]]></content>
         <author>
             <name>VitalS</name>
             <uri>https://github.com/VitalSkib</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Power Action Countdown 1.2]]></title>
-        <id>https://windhawk.net/mods/power-action-countdown#33fb034056848ebcbd106d07dddf1b8aaf4278a5</id>
-        <link href="https://windhawk.net/mods/power-action-countdown"/>
-        <updated>2026-09-20T19:00:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="poweractioncountdown">Power action countdown</h1>
-<p>Shows an individually configurable countdown before Windows shuts down,
-restarts, enters sleep, or enters hibernation. A value of <code>0</code> disables the
-countdown for the corresponding action and executes it immediately. Values
-above 30 seconds are limited to 30 seconds.</p>
-<p>The countdown is cancelled by:</p>
-<ul>
-<li>any keyboard key</li>
-<li>a mouse button</li>
-<li>the mouse wheel</li>
-<li>a touchscreen press on the overlay</li>
-</ul>
-<p>Moving the mouse alone does not cancel the countdown. The cancelling input is
-consumed and isn't forwarded to the application underneath the overlay.</p>
-<p>The countdown is displayed on the primary monitor. Keyboard and mouse-button
-input on other monitors still cancels it.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://i.imgur.com/GpcwW3m.png" alt="Power action countdown" /></p>
-<h2 id="scopeandlimitations">Scope and limitations</h2>
-<p>The mod targets power actions initiated through the Windows shell. It is loaded
-into:</p>
-<ul>
-<li><code>explorer.exe</code> for classic shell power paths</li>
-<li><code>RuntimeBroker.exe</code> because current Windows 11 builds can delegate Start-menu
-power actions to a runtime broker</li>
-</ul>
-<p>Power actions initiated by <code>shutdown.exe</code>, Task Manager, the Ctrl+Alt+Delete
-screen, the sign-in/lock screen, or arbitrary third-party applications aren't
-covered unless they ultimately call a hooked API from one of these processes.</p>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>Enable mod logging in Windhawk's <strong>Advanced</strong> tab. When an action is detected,
-the log states which Windows API was intercepted. The exact API used by Windows
-can differ between builds.</p>]]></content>
-        <author>
-            <name>Nerdworld</name>
-            <uri>https://github.com/nerdworldDE</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Teams Multi-Instance 1.0]]></title>
-        <id>https://windhawk.net/mods/teams-multi-instance#0737efa406ff03b13579de25c758a86837cc625a</id>
-        <link href="https://windhawk.net/mods/teams-multi-instance"/>
-        <updated>2026-09-20T18:51:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="teamsmultiinstance">Teams Multi-Instance</h1>
-<p>The new Microsoft Teams desktop app only allows one instance per Windows
-session — launching it again just activates the existing window. Teams
-enforces this with two named mutexes, <code>Teams-Tfw-instance</code> and
-<code>Teams-Tfw-server</code>. This mod appends the process ID to those names so each
-launch believes it is the first one, letting you run e.g. your own tenant and
-a client tenant side by side in two full Teams windows.</p>
-<h2 id="usage">Usage</h2>
-<ol>
-<li>Enable the mod.</li>
-<li>Quit Teams completely (tray icon → Quit) and start it again, so the first
-instance is launched with the mod active.</li>
-<li>Start Teams again. Every additional launch opens a new independent
-instance. Sign in to a different account/tenant in each one.</li>
-</ol>
-<p>Each instance gets its own tray icon, with the process ID in the tooltip
-(e.g. <code>Microsoft Teams [20680]</code>) so they can be told apart. Additional icons
-usually land in the tray overflow (the <code>^</code> arrow). Quit each instance from
-its own tray icon or from inside its window — closing a window only
-minimises it.</p>
-<p><strong>Restart Teams after enabling, disabling, or changing the settings of the
-mod.</strong> The mod decides once, when a Teams process starts, whether and how to
-rewrite names, and keeps that decision — and the settings in effect at the
-time — for the life of the process. A Teams instance that was already
-running when the mod was enabled is left untouched; an instance started with
-the mod active keeps its salt across mod updates and Windhawk restarts; and
-settings changes only apply to Teams processes started afterwards.</p>
-<h2 id="howitworks">How it works</h2>
-<p>Hooks <code>NtCreateMutant</code> / <code>NtOpenMutant</code> in ntdll and appends <code>_&lt;pid&gt;</code> to
-object names matching the configured patterns. Only mutexes are hooked —
-sections and events are deliberately left alone, since those fire on the
-DLL-loader path and hooking them destabilises the process.</p>
-<p>Each <code>ms-teams.exe</code> process uses its own PID as the salt. Only the top-level
-Teams process creates or opens the <code>Teams-Tfw-*</code> objects; child
-<code>ms-teams.exe</code> processes never touch them, so they need no shared salt.</p>
-<p>Teams registers its tray icon with a fixed GUID, and Windows allows only one
-icon per GUID, so a second instance would get no icon at all. The mod hooks
-<code>Shell_NotifyIconW</code> in salted processes, drops the GUID so the icon is
-identified by its window instead, and appends the PID to the tooltip.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li><strong>All instances share the same Teams profile</strong>
-(<code>%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache</code>, including the
-WebView2 user-data folder). Two Teams processes writing it concurrently is
-exactly what the single-instance lock exists to prevent. This can corrupt
-the profile, which means signing in again and rebuilding the cache. Avoid
-signing in/out or changing settings in more than one instance, and use at
-your own risk.</li>
-<li>Notification clicks and <code>teams://</code> links are routed by Windows activation
-and may land in a different instance than the one you expect.</li>
-<li>Helpers that are not <code>ms-teams.exe</code> (the Teams Meeting Add-in in Outlook,
-the updater) are not hooked and cannot reach a salted instance's objects;
-meeting-join from Outlook may target the wrong instance or none.</li>
-<li>Not supported by Microsoft.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>Turn on <strong>Log only</strong>, then quit and restart Teams. The Windhawk log lists
-every named mutex the new Teams process creates or opens without modifying
-any of them (the interesting objects are created during startup, so a running
-instance shows nothing useful). If a future Teams build renames the
-single-instance objects, add the new name to <strong>Object name patterns</strong>, turn
-Log only off, and restart Teams again.</p>]]></content>
-        <author>
-            <name>Sam Mahdi</name>
-            <uri>https://github.com/TSA3000</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Vista/7 Logoff Screen Restorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/win7-logoff-screen-restorer#ee795749e75b9d66f8f383434cb09d0320e6c931</id>
-        <link href="https://windhawk.net/mods/win7-logoff-screen-restorer"/>
-        <updated>2026-09-20T18:51:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowsvista7logoffscreenrestorer">Windows Vista/7 Logoff Screen Restorer</h1>
-<p>This mod shows a Windows Vista/7-style full-screen confirmation (dimmed
-desktop, a list of your open programs, and "Force log off"/"Cancel" buttons)
-right before a log off, shut down or restart started from Explorer, whenever
-programs are still open.</p>
-<p>The files on the system are not modified. A program that refuses to close, for example because of
-unsaved work, is not force-closed, so Windows may still show its own "app is
-preventing shutdown" screen afterwards in rare cases.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/win7logoff.PNG" alt="Windows 7 Logoff" /></p>
-<p><img src="https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/winvistalogoff.PNG" alt="Windows Vista Logoff" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>The mod shows every open program in a scrollable list, with icons just like Windows Vista/7 did. Programs that have stopped responding are marked "not responding" and listed first.</li>
-<li>If nothing is open, the screen doesn't show up at all and the system goes straight to shutdown.</li>
-<li>The mod includes two skins to choose in the settings: <strong>Windows 7</strong> (blue Aero) or <strong>Windows Vista</strong> (red button) and the changes apply instantly.</li>
-<li>The mod is translated into 21 languages, matched automatically the system language (or pick one manually in settings).</li>
-</ul>
-<p>The mod has been tested on Windows 10 21H2, Windows 11 24H2, and Windows 11 25H2.</p>
-<hr />
-<h2 id="tryitwithoutloggingoff">Try it without logging off</h2>
-<p>To try the mod without logging off, you can enable a preview shortcut in the mod's settings (<code>previewHotkey</code>) and press it any time to preview the screen. The preview shortcut is off by default. <code>Win+L</code> can't be used as a shortcut — Windows reserves it for locking the PC.</p>
-<hr />
-<h2 id="requirements">Requirements</h2>
-<ul>
-<li>Windows 10 or Windows 11 (64 bit)</li>
-</ul>
-<hr />
-<h2 id="safetynotes">Safety Notes</h2>
-<ul>
-<li>If the screen is ever left open too long, the mod closes it automatically after 60 seconds and lets the logoff/shutdown continue and it never forces programs to close on its own and never destroys unsaved work.</li>
-<li>The mod only shows a visual screen and it doesn't touch any system files or settings, and doesn't write anything to the registry.</li>
-<li>Turning the mod off from Windhawk removes it completely.</li>
-</ul>
-<hr />
-<h2 id="relationtowin7bsdr">Relation to win7-bsdr</h2>
-<p>Unlike <code>win7-bsdr</code>, which hooks <code>LogonUI.exe</code> and <code>winlogon.exe</code>, this mod runs entirely inside <code>explorer.exe</code>: no <code>LogonUI.exe</code> setup it is essentially a confirmation on every shell-initiated shutdown.</p>
-<hr />
-<h2 id="credits">Credits</h2>
-<ul>
-<li>Cips — testing on Windows 11 25H2</li>
-</ul>
-<hr />
-<p>For any suggestions or problems it is recommended to contact the author of this modification.</p>]]></content>
-        <author>
-            <name>babamohammed</name>
-            <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinDraw - Screen Inking & Annotation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windraw#eb97283dd3ce0d81657dc64ba8611f528fcee120</id>
-        <link href="https://windhawk.net/mods/windraw"/>
-        <updated>2026-09-20T18:22:04.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windrawscreeninkingannotation">WinDraw - Screen Inking &amp; Annotation</h1>
-<p>A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite running as a dedicated, high-performance tool process powered by <strong>Direct2D</strong>, <strong>DirectWrite</strong>, and <strong>Windows Imaging Component (WIC)</strong>.</p>
-<p><img src="https://raw.githubusercontent.com/ZainYoussef/WinDraw/main/assets/Screenshot1.png" alt="WinDraw Inking & Annotation" /></p>
-<p><img src="https://raw.githubusercontent.com/ZainYoussef/WinDraw/main/assets/Screenshot2.png" alt="WinDraw Radial Quick Menu & Shapes Flyout" /></p>
-<h3 id="completefeatureset">Complete Feature Set:</h3>
-<ol>
-<li><strong>Instant Activation & Dismissal</strong>:</li>
-</ol>
-<ul>
-<li>Press <strong><code>Ctrl + Alt + G</code></strong> (customizable) anywhere in Windows to begin annotating immediately.</li>
-<li>Press <strong><code>ESC</code></strong> or click the <strong><code>✕</code></strong> Exit button to dismiss the overlay.</li>
-<li>Ink strokes survive dismissal so you can re-open WinDraw without losing your work. Press <strong><code>C</code></strong> (Clear All) whenever you want a completely fresh canvas.</li>
-</ul>
-<ol>
-<li><strong>Hardware-Accelerated Inking & Brushes</strong>:</li>
-</ol>
-<ul>
-<li>144Hz+ butter-smooth Direct2D drawing with quadratic Bézier curve interpolation.</li>
-<li><strong>Pen Mode</strong> (<code>F</code> key): Solid color inking with subpixel accuracy.</li>
-<li><strong>Highlighter Mode</strong> (<code>H</code> key): Translucent alpha-blended highlighting.</li>
-<li>Mouse wheel or <strong><code>[</code></strong> / <strong><code>]</code></strong> keys dynamically resize brush thickness with a real-time 1:1 circular indicator dot showing active color and zoom level.</li>
-</ul>
-<ol>
-<li><strong>Shapes & Geometry</strong>:</li>
-</ol>
-<ul>
-<li><strong>Freehand</strong> (<code>F</code> key)</li>
-<li><strong>Straight Line</strong> (<code>L</code> key)</li>
-<li><strong>Arrow</strong> (<code>A</code> key) with automatically oriented sharp arrowheads</li>
-<li><strong>Rectangle / Box</strong> (<code>R</code> key)</li>
-<li><strong>Ellipse / Circle</strong> (<code>O</code> key)</li>
-<li><strong>Triangle</strong> (<code>T</code> key)</li>
-<li>Hold <strong><code>Shift</code></strong> while drawing to snap lines to 45° increments or constrain rectangles and ellipses to perfect squares and circles.</li>
-<li>Floating <strong>Shapes Flyout Modal</strong> for visual selection.</li>
-</ul>
-<ol>
-<li><strong>Custom Color & Opacity Studio</strong>:</li>
-</ol>
-<ul>
-<li>Click the <strong><code>+</code></strong> slot in the toolbar or press <strong><code>5</code></strong> to open the full-fledged <strong>Color Studio</strong>.</li>
-<li>Interactive 2D Saturation-Value picker and continuous 360° Hue spectrum slider.</li>
-<li>Live <strong>Opacity / Alpha</strong> slider (5% to 100%).</li>
-<li>One-click <strong>Eyedropper</strong> tool to sample any pixel color directly from your desktop.</li>
-<li>Hex code display with <strong>Copy to Clipboard</strong> button.</li>
-<li>Stores and displays your <strong>Last 5 Recent Colors</strong> palette across sessions.</li>
-</ul>
-<ol>
-<li><strong>Circular Radial Quick Menu</strong>:</li>
-</ol>
-<ul>
-<li><strong>Quick Right-Click Tap</strong>: Opens a sleek circular radial menu centered at your cursor with an orbital color ring, quick tools, and smooth sector hover animations.</li>
-<li><strong>Layer 2 Satellite Fan</strong>: Hover over the top Recent Colors hub to smoothly fan out your latest 5 custom colors in an orbital satellite arc.</li>
-<li><strong>Hold & Move Right Mouse Button</strong>: Instant stroke-level eraser with circular radius indicator.</li>
-</ul>
-<ol>
-<li><strong>Collapsible Floating Toolbar & Status Pill</strong>:</li>
-</ol>
-<ul>
-<li>Windows 11 Fluent dark acrylic styling with specular highlights and subtle group dividers.</li>
-<li>Drag the toolbar anywhere on your multi-monitor desktop.</li>
-<li><strong>Minimize Button (<code>B</code> key)</strong>: Collapses the full bar into an ultra-compact status pill showing active ink color and grip handle.</li>
-<li>Click the pill in-place to expand it, or drag the pill to park it anywhere on screen.</li>
-</ul>
-<ol>
-<li><strong>Vanishing Neon Laser Pointer (<code>D</code> key)</strong>:</li>
-</ol>
-<ul>
-<li>High-visibility neon glowing laser pointer bead with multi-tier glow aura.</li>
-<li>Temporary fading laser trails that dissolve smoothly after a configurable duration (200ms to 5000ms).</li>
-<li>Scroll wheel while in Laser mode instantly adjusts trail persistence.</li>
-</ul>
-<ol>
-<li><strong>Interactive Grid System (<code>G</code> key)</strong>:</li>
-</ol>
-<ul>
-<li>Dot Grid and Graph Lines Grid overlays.</li>
-<li>Flyout modal allows switching styles and toggling density between Fine, Medium, and Coarse.</li>
-<li>Press <strong><code>Shift + G</code></strong> to cycle grid density (Fine → Medium → Coarse) directly from the keyboard.</li>
-</ul>
-<ol>
-<li><strong>Region Snipping & Full Screenshots</strong>:</li>
-</ol>
-<ul>
-<li><strong>Region Snip</strong> (<code>S</code> key): Click and drag a selection rectangle to crop and copy/save a specific screen region.</li>
-<li><strong>Full Snapshot</strong> (<code>Ctrl + S</code>): Captures the full annotated screen to the Windows clipboard (<code>CF_DIBV5</code> / <code>CF_DIB</code> / <code>CF_BITMAP</code>) and auto-saves to <code>%USERPROFILE%\Pictures\WinDraw\</code>.</li>
-</ul>
-<ol>
-<li><p><strong>Pan & Zoom Canvas Navigation</strong>:</p>
-<ul>
-<li><strong>Pan Mode</strong> (<code>P</code> key): Click and drag to reposition drawings across large canvases.</li>
-<li><strong>Canvas Zoom</strong>: While holding Pan or using the mouse wheel, smoothly zoom in and out (15% to 800%) centered on the cursor.</li>
-<li><strong>Reset View</strong>: Press <strong><code>0</code></strong> (while in Pan mode) or <strong><code>Ctrl + 0</code></strong> (any mode) to reset zoom to 100% and pan offset to (0, 0).</li></ul></li>
-<li><p><strong>Pointer / Click-Through Mode (<code>M</code> key)</strong>:</p>
-<ul>
-<li>Allows interacting with underlying Windows applications and games while keeping your drawings overlaid.</li></ul></li>
-<li><p><strong>Ink History & Visibility</strong>:</p>
-<ul>
-<li><strong>Undo</strong> (<code>Ctrl + Z</code>) and <strong>Redo</strong> (<code>Ctrl + Y</code>).</li>
-<li><strong>Clear All</strong> (<code>C</code> key) with full undo support.</li>
-<li><strong>Hide/Show Ink</strong> (<code>V</code> key): Temporarily toggles drawing visibility without clearing strokes.</li></ul></li>
-<li><p><strong>Customizable Cursor Style & Size</strong>:</p>
-<ul>
-<li><strong>Crosshair Style</strong>: Displays a crisp, dual-contrast precision crosshair with configurable arm size (8px to 32px) and an active color/eraser center indicator across Pen, Highlighter, and Eraser.</li>
-<li><strong>Live Brush Style</strong>: Displays the exact footprint and diameter of your active brush, highlighter, or eraser with real-time color fill and dual-contrast outline.</li></ul></li>
-<li><p><strong>Temporary Whiteboard & Blackboard Mode (<code>K</code> or <code>Alt + B</code>)</strong>:</p>
-<ul>
-<li><strong>Multi-Monitor Display Targeting</strong>: Left-click the Whiteboard button on the toolbar to open a Fluent modal flyout where you can choose backdrop styles (<code>Transparent</code>, <code>Whiteboard</code>, <code>Blackboard</code>) and target displays (<code>Active Screen (Follows Cursor)</code>, <code>Primary Screen</code>, specific monitor <code>Screen 1</code>, <code>Screen 2</code>, or <code>All Screens</code>).</li>
-<li><strong>Live Reference Screen</strong>: On multi-monitor setups, isolate your whiteboard/blackboard to a single monitor while keeping your other monitors 100% transparent live desktop for reference documents, IDEs, or communication apps.</li>
-<li><strong>Ephemeral Mode</strong>: Automatically resets backdrop on <code>ESC</code> while keeping your ink strokes intact.</li>
-<li><strong>Full Snapshot & Snip Support</strong>: Captures solid background and all ink strokes when taking snapshots (<code>Ctrl + S</code>) or snips (<code>S</code> key).</li>
-<li><strong>Smart Contextual Grids</strong>: Automatically adapts grid line colors (dark charcoal on white paper, vibrant cyan on dark slate).</li></ul></li>
-</ol>
-<hr />
-<h3 id="keyboardshortcutsreference">Keyboard Shortcuts Reference:</h3>
-<p>| Shortcut | Action |
-|---|---|
-| <strong>Ctrl + Alt + G</strong> | Activate / Open WinDraw Overlay (Customizable) |
-| <strong>ESC</strong> | Dismiss / Close WinDraw Overlay (Preserves Ink) |
-| <strong>F</strong> | Freehand Pen Tool |
-| <strong>H</strong> | Highlighter Tool |
-| <strong>D</strong> | Vanishing Neon Laser Pointer |
-| <strong>E</strong> | Eraser Tool (or hold Right Mouse Button) |
-| <strong>L</strong> | Straight Line Shape |
-| <strong>A</strong> | Arrow Shape |
-| <strong>R</strong> | Rectangle Shape |
-| <strong>O</strong> | Ellipse / Circle Shape |
-| <strong>T</strong> | Triangle Shape |
-| <strong>P</strong> | Pan Canvas Mode |
-| <strong>M</strong> | Pointer (Click-Through) Mode |
-| <strong>K</strong> / <strong>Alt + B</strong> | Cycle Canvas Backdrop (Transparent → Whiteboard → Blackboard) |
-| <strong>G</strong> | Toggle Grid Flyout / Cycle Grid Style |
-| <strong>Shift + G</strong> | Cycle Grid Density (Fine → Medium → Coarse) |
-| <strong>B</strong> | Collapse / Expand Toolbar Pill |
-| <strong>Ctrl + Shift + B</strong> | Reset Toolbar Position to Primary Screen Center |
-| <strong>V</strong> | Toggle Ink Visibility (Show/Hide) |
-| <strong>C</strong> | Clear All Drawings |
-| <strong>Ctrl + Z</strong> | Undo last stroke |
-| <strong>Ctrl + Y</strong> | Redo last undone stroke |
-| <strong>S</strong> | Region Snipping Tool (Crop &amp; Copy to Clipboard) |
-| <strong>Ctrl + S</strong> | Take Full Screen Snapshot &amp; Copy to Clipboard |
-| <strong>[</strong> / <strong>]</strong> | Decrease / Increase Brush Size (or Laser Trail) |
-| <strong>0</strong> / <strong>Ctrl + 0</strong> | Reset Canvas Zoom &amp; Pan (<code>0</code> in Pan mode, <code>Ctrl + 0</code> anytime) |
-| <strong>1 - 4</strong> | Select Preset Colors (Crimson Red, Tangelo Orange, Amber Gold, Sun Yellow) |
-| <strong>5</strong> | Open Custom Color &amp; Opacity Studio |</p>]]></content>
-        <author>
-            <name>ZainYousef</name>
-            <uri>https://github.com/ZainYoussef</uri>
         </author>
     </entry>
 </feed>
