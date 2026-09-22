@@ -6181,6 +6181,37 @@
         "version": "1.0.0"
       }
     },
+    "explorer-tags": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790088903000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790088903000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "buedgik",
+        "compilerOptions": "-lole32 -luuid -lshell32 -lshlwapi -lcomctl32 -lgdi32 -lgdiplus -ladvapi32",
+        "description": "Colored tags panel at the bottom of File Explorer's navigation pane, plus a Tags submenu in the file context menu",
+        "github": "https://github.com/buedgik",
+        "homepage": "https://github.com/buedgik/explorer-tags",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer Tags",
+        "version": "0.7.1"
+      }
+    },
     "explorer-taskbar-overlay-icon": {
       "details": {
         "defaultSorting": 672,
@@ -19068,7 +19099,7 @@
           12592
         ],
         "ratingUsers": 14984,
-        "reviews": 1,
+        "reviews": 2,
         "updated": 1789258767000,
         "users": 927077
       },

@@ -2,12 +2,88 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-22T13:07:43.000Z</updated>
+    <updated>2026-09-22T14:55:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Tags 0.7.1]]></title>
+        <id>https://windhawk.net/mods/explorer-tags#5ed44affb201b349874dd33bc5276b47bda4320d</id>
+        <link href="https://windhawk.net/mods/explorer-tags"/>
+        <updated>2026-09-22T14:55:03.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorertags">Explorer Tags</h1>
+<p>Adds a <strong>Tags</strong> panel at the bottom of File Explorer's navigation pane, below
+"This PC" and "Network", and a <strong>Tags ▸</strong> submenu to the file context menu.</p>
+<p>Windows' own tags only work for file types with a property handler, so <code>.txt</code>,
+<code>.zip</code>, <code>.rar</code> and folders can't be tagged. These work for anything.</p>
+<p><img src="https://raw.githubusercontent.com/buedgik/explorer-tags/main/docs/panel.png" alt="The Tags panel at the bottom of the navigation pane" /></p>
+<p><img src="https://raw.githubusercontent.com/buedgik/explorer-tags/main/docs/menu.png" alt="The Tags submenu in the file context menu" /></p>
+<ul>
+<li><strong>Tag something:</strong> drag files or folders onto the tag.</li>
+<li><strong>See a tag's files:</strong> click it. The tab opens the tag's folder, with a
+shortcut for each file. Middle-click, or right-click ▸ "Open in new window",
+opens it in a window of its own.</li>
+<li><strong>Remove a tag:</strong> delete the shortcut inside the tag's folder. The original
+file is untouched.</li>
+<li><strong>Collapse the panel:</strong> click the "Tags" title.</li>
+<li><strong>Right-click menu:</strong> on selected files, a <strong>Tags ▸</strong> submenu appears, with
+one entry per tag. Checked means all selected items have it; picking it
+removes it from all of them. Unchecked adds it to all of them. "Remove all tags" appears
+when at least one already has tags. Works in the classic menu (for example
+with the "Classic context menu" mod); the new Windows 11 menu isn't
+changed.</li>
+</ul>
+<p>Tags are defined in the mod settings (name and color).</p>
+<h2 id="howfilesaretracked">How files are tracked</h2>
+<p>Each tagged file is recorded by its NTFS ID. If you rename it or move it
+within the same drive, the tag follows it and the shortcut is fixed. If it's
+overwritten by an editor (which changes the ID), it's recognized by path.
+Copied to another drive, the copy doesn't carry the tag.</p>
+<p>If you rename a tag in the settings, the old tag stops appearing; putting the
+old name back brings it back.</p>
+<p>The record of what is tagged is the mod's own bookkeeping, so it lives in the
+storage Windhawk keeps for the mod, in a folder per user. It stays outside the
+tags folder: deleting or moving the tags folder doesn't lose anything, the
+shortcuts are recreated.</p>
+<p>It works the other way round too: the shortcuts are enough to rebuild the
+record. A shortcut in a tag's folder that the record doesn't know about is
+taken in, so losing the record — uninstalling the mod takes its storage with
+it — costs nothing while the tag folders are there, and you can tag a file
+by putting a shortcut to it in a tag's folder yourself. A tag whose name is
+no longer in the settings can't be rebuilt: put the name back and its files
+come back with it.</p>
+<h2 id="worthknowing">Worth knowing</h2>
+<ul>
+<li><strong>Don't put the tags folder in a synced location</strong> (OneDrive, Dropbox, a
+network share). A shortcut that is missing while the folder syncs looks
+exactly like a shortcut you deleted, and the tag goes with it. For the same
+reason, keep it somewhere quiet: the whole folder tree is watched, so a busy
+folder means constant rechecking.</li>
+<li><strong>What is in the tag folders is what is tagged.</strong> Deleting a shortcut
+removes the tag; renaming one keeps it; moving one into another tag's
+folder moves the tag; restoring one from the Recycle Bin brings the tag
+back. A shortcut that points at nothing is left alone, never deleted.</li>
+<li><strong>A tagged file in the Recycle Bin keeps its tags.</strong> Its shortcut stays,
+pointing where the file used to be, so restoring the file makes it work
+again. Emptying the bin is what finally removes the tag.</li>
+<li><strong>The tags folder and the record stay after the mod is disabled</strong>, and so do
+your shortcuts. A tag's folder appears the first time you tag something with
+it, or the first time you click it in the panel; the record folder appears
+with the first tag.</li>
+<li><strong>Changing the tags folder in the settings leaves the old one behind.</strong> The
+shortcuts are rebuilt under the new folder; the old folders aren't deleted,
+in case something else lives there.</li>
+<li><strong>The desktop and file dialogs are left alone.</strong> The panel and the submenu
+are for Explorer windows; right-clicking a file on the desktop shows the
+usual menu, without Tags.</li>
+</ul>]]></content>
+        <author>
+            <name>buedgik</name>
+            <uri>https://github.com/buedgik</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[On-Screen Indicator Position 1.4.3]]></title>
         <id>https://windhawk.net/mods/on-screen-indicator-position#6300d15608cf4ff49c749bced382b1ab27cc9340</id>
@@ -809,40 +885,6 @@ option in Win32 UI Modernizer; using both for this effect is redundant.</li>
         <author>
             <name>Hùng</name>
             <uri>https://github.com/NoMorePlz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Visual Tweaks Dark 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-visual-tweaks-dark#0e6b56702ef4219f8b01cfce98cd8a4f7d4adcfb</id>
-        <link href="https://windhawk.net/mods/explorer-visual-tweaks-dark"/>
-        <updated>2026-09-20T19:00:54.000Z</updated>
-        <content type="html"><![CDATA[<p>This mod fixes visual inconsistencies in Windows Explorer and related windows,
-primarily in the standard dark theme. It brings the Preview Pane, plain-text
-preview, drive progress indicators, item selection, and Navigation Pane focus
-states to a consistent appearance, and allows their colors and rounding to be
-customized.
-The selection and progress renderers aren't tied to a particular theme.
-Their default colors are tuned for the standard dark theme, but can be changed
-to suit another theme. The Preview Pane correction is intentionally inactive
-in the standard light app mode, where the original color mismatch doesn't
-exist.
-Selection styling applies to Explorer and Explorer-based Open/Save dialogs.
-Drive progress rendering replaces only the PROGRESS part/state pairs used by
-Explorer. Preview Pane fixes cover Explorer, Open/Save dialog hosts, and
-prevhost.exe.
-Selection and Progress settings apply immediately.</p>
-<h3 id="screenshots">Screenshots</h3>
-<p><img src="https://raw.githubusercontent.com/VitalSkib/files/refs/heads/main/explorer-visual-tweaks-dark-thispc.png" alt="Explorer selections and drive progress" />
-<img src="https://raw.githubusercontent.com/VitalSkib/files/refs/heads/main/explorer-visual-tweaks-dark-text.png" alt="Preview Pane and plain-text preview" />
-<strong>Important:</strong> Preview Pane tweaks require restarting File Explorer and any
-included host applications for changed values and colors to apply correctly.
-A restart is also required after disabling the mod to fully restore the
-default Preview Pane appearance.
-To style an Explorer-based Open/Save dialog, add its host application to
-Windhawk's Inclusion List.</p>]]></content>
-        <author>
-            <name>VitalS</name>
-            <uri>https://github.com/VitalSkib</uri>
         </author>
     </entry>
 </feed>
