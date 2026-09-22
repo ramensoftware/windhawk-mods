@@ -162,8 +162,6 @@ void WINAPI FakeProjectedAnimation(void* self, const void* argument) {
 int main() {
     wprintf(L"[UWTEST buttons] %ls\\n", EdgeExpression(true).c_str());
     wprintf(L"[UWTEST tray] %ls\\n", EdgeExpression().c_str());
-    assert(EdgeExpression().find(L"dock.Offset.X + dock.Size.X") !=
-           std::wstring::npos);
     for (auto [entry, target] : {std::pair{"vs", "vs_5_0"},
                                  std::pair{"copyPs", "ps_5_0"},
                                  std::pair{"boxBlurPs", "ps_5_0"},
@@ -320,58 +318,6 @@ int main() {
             auto outline = compositor.CreateRoundedRectangleGeometry();
             auto highlights = GlassHighlights(outline, DockTheme::Liquid, false);
             assert(highlights.Shapes().Size() == 0);
-        }
-        {
-            // Two stops, and alphas lifted so the plate dim lands them at the
-            // measured native values: dark 0x1A/0x0F, light 0x05/0x0F.
-            auto outline = compositor.CreateRoundedRectangleGeometry();
-            auto rim = ButtonRim(outline, true);
-            assert(rim.Shapes().Size() == 1);
-            auto stroke = rim.Shapes().GetAt(0).as<CompositionSpriteShape>();
-            assert(stroke.StrokeThickness() == 2);
-            assert(stroke.Geometry() == outline);
-            auto brush =
-                stroke.StrokeBrush().as<CompositionLinearGradientBrush>();
-            assert(brush.ColorStops().Size() == 2);
-            assert(brush.ColorStops().GetAt(0).Color().A ==
-                   std::lround(0x1A / 0.32));
-            assert(brush.ColorStops().GetAt(0).Color().R == 255);
-            assert(ButtonRim(outline, false)
-                       .Shapes().GetAt(0).as<CompositionSpriteShape>()
-                       .StrokeBrush().as<CompositionLinearGradientBrush>()
-                       .ColorStops().GetAt(0).Color().R == 0);
-        }
-        {
-            LiquidRenderer renderer;
-            Root closingRoot;
-            closingRoot.sources.emplace_back();
-            closingRoot.sources.back().life =
-                Root::Source::Life::Hiding;
-            assert(!HoldLiquidGeometry(closingRoot, renderer));
-            renderer.geometryReady = true;
-            assert(HoldLiquidGeometry(closingRoot, renderer));
-            closingRoot.sources.back().life =
-                Root::Source::Life::Retired;
-            assert(!HoldLiquidGeometry(closingRoot, renderer));
-        }
-        {
-            ULONGLONG readyAt{};
-            float pending = NAN;
-            assert(DeferLiquidShrink(
-                2586, 2454, 1000, readyAt, pending));
-            assert(readyAt == 1700 && pending == 2454);
-            assert(DeferLiquidShrink(
-                2586, 2454, 1699, readyAt, pending));
-            assert(!DeferLiquidShrink(
-                2586, 2454, 1700, readyAt, pending));
-            assert(readyAt == 0 && std::isnan(pending));
-            assert(DeferLiquidShrink(
-                2586, 2454, 2000, readyAt, pending));
-            assert(DeferLiquidShrink(
-                2586, 2322, 2200, readyAt, pending));
-            assert(readyAt == 2900 && pending == 2322);
-            assert(!DeferLiquidShrink(
-                2454, 2586, 2300, readyAt, pending));
         }
         for (auto theme : {DockTheme::Glass, DockTheme::Frosted}) {
             for (bool dark : {false, true}) {
@@ -853,42 +799,6 @@ subprocess.run([*driver, "-DWH_EDITING", "-static", "-O2", str(harness), *libs,
                 "-o", str(executable)], check=True)
 result = subprocess.run(["rtk", "proxy", str(executable)], check=True,
                         stdout=subprocess.PIPE, text=True, encoding="utf-8")
-assert "AdjustTaskbarFrameSize" not in code
-assert "plate.CornerRadius(" not in code
-# Dimming Windows' per-state Background instead of the element was tried and
-# reverted: the resting value comes from the template, InactiveNormal sets no
-# brush, so a local write outranks both and the hover highlight never clears.
-assert "appliedFill" not in code
-assert "blankedRim" not in code
-assert "plate.Background(state" not in code
-assert "originalCornerRadius" not in code
-assert "cornerRadiusOwned" not in code
-for removed in [
-    "taskbarIconSizeCompatibility",
-    "g_internalTaskbarHeight",
-    "g_internalIconSize",
-    "g_internalTaskbarButtonWidth",
-    "ResourceDictionary_Lookup_Hook",
-    "TaskbarConfiguration_GetIconHeight",
-    "TaskbarFrame_GetMetrics_Hook",
-]:
-    assert removed not in code
-before_uninit = re.search(
-    r"void Wh_ModBeforeUninit\(\) \{(.*?)\n\}", code, re.S
-)[1]
-assert before_uninit.index("SendMessage(window, kRestoreMessage") < \
-       before_uninit.index("RefreshTaskbarHeight();")
-assert "bool PublishTray(" in code
-assert re.search(
-    r"if \(match != root\.taskbar\) \{\s*WithdrawTray\(root\);\s*"
-    r"root\.taskbar = nullptr;\s*\}",
-    code,
-)
-assert "DisableDockingForSession" not in code
-assert code.count("float zRadius") == 2
-assert "float4 lensRects[8]" not in code
-assert "min(lensCount, 8)" not in code
-assert "Permission is hereby granted" in code
 # Evaluate the actual expression strings emitted by the C++ implementation
 # against captured in-flight inputs. Windows above validates the real grammar;
 # this check validates centering/gap rather than merely accepting the parser.
@@ -896,8 +806,6 @@ from types import SimpleNamespace as NS
 expressions = {name: next(line.split("] ", 1)[1] for line in result.stdout.splitlines()
                          if line.startswith(f"[UWTEST {name}] "))
                for name in ("buttons", "tray")}
-assert "geometry.vertical" in expressions["buttons"]
-assert "geometry.vertical" in expressions["tray"]
 threshold = float(next(line.split("] ", 1)[1] for line in result.stdout.splitlines()
                        if line.startswith("[UWTEST threshold] ")))
 

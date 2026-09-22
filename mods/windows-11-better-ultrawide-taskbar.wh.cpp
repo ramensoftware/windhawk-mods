@@ -2,7 +2,7 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.83
+// @version         2.84
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
@@ -240,7 +240,6 @@ constexpr UINT kQueryTrayMessage = WM_APP + 44;
 constexpr UINT kPrepareLiquidMessage = WM_APP + 45;
 constexpr UINT kRefreshItemStatesMessage = WM_APP + 46;
 constexpr UINT_PTR kLiquidTimerId = 45;
-constexpr DWORD kLiquidShrinkDelay = 700;
 // A transient measurement fails a handful of consecutive layout passes at most;
 // an unsupported build fails every one. Tune down if a broken tree costs too many
 // tree walks, up if a slow startup transition needs longer to settle.
@@ -863,19 +862,20 @@ struct OwnedDock {
     std::shared_ptr<LiquidRenderer> liquid;
     ElementTheme materialTheme{};
     bool materialBlocked{};
-    ULONGLONG liquidShrinkReadyAt{};
-    float liquidShrinkTarget{NAN};
     ULONGLONG liquidRetryAt{};
     unsigned liquidFailures{};
 };
 struct Root {
     struct StatePlate {
         Controls::Border element{nullptr};
-        double originalOpacity{};
+        winrt::Windows::Foundation::IInspectable originalOpacity{nullptr};
         double appliedOpacity{};
         bool opacityOwned{};
-        bool opacityWasLocal{};
+        bool opacityBlocked{};
         ShapeVisual rim{nullptr};
+        ElementTheme rimTheme{};
+        bool rimThemeReady{};
+        bool rimDimmed{};
         Visual visual{nullptr};
         CompositionGeometricClip clip{nullptr};
         CompositionRoundedRectangleGeometry clipGeometry{nullptr};
@@ -884,6 +884,7 @@ struct Root {
     };
     FrameworkElement frame{nullptr};
     winrt::event_token layoutToken{};
+    bool subscribed{};
     OwnedTranslation buttonsTranslation;
     OwnedTranslation trayTranslation;
     OwnedDock dock;
@@ -899,6 +900,8 @@ struct Root {
         Visual visual{nullptr};
         enum class Life { Active, Hiding, Retired } life{};
         bool requestingAttention{};
+        bool included{};
+        Controls::Border plate{nullptr};
     };
     std::vector<Source> sources;
     std::vector<StatePlate> statePlates;
@@ -910,6 +913,9 @@ struct Root {
     CompositionPropertySet metrics{nullptr};
     double nativeRightOverhang{NAN};
     double hostWidth{};
+    Measurements measurements{};
+    bool measurementsReady{};
+    bool retired{};
 };
 std::vector<Root> g_roots;  // Confined to the one observed taskbar UI thread.
 
@@ -921,9 +927,15 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         float halfSize[2]{};
         float radius{};
         LiquidSettings optics;
+        // Clip bounds, tint, native corner radii, native bounds, and the
+        // remaining shape parameters are parallel arrays indexed by lensCount.
+        // Both rounded rectangles are retained because the visible plate is
+        // their intersection, not another rounded rectangle.
         float lensRects[kMaxButtonLenses][4]{};
         float lensTints[kMaxButtonLenses][4]{};
         float lensRadii[kMaxButtonLenses][4]{};
+        float lensNativeRects[kMaxButtonLenses][4]{};
+        float lensShapeParams[kMaxButtonLenses][4]{};
         uint32_t lensCount{};
         float lensRefraction{};
         float alertTintOpacity{};
@@ -931,10 +943,10 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
     };
     static_assert(sizeof(LensConstants) % 16 == 0);
     // Pins the cbuffer arithmetic the HLSL side relies on: a 64-byte header,
-    // three float4 arrays, then four trailing scalars. Adding a member without
+    // five float4 arrays, then four trailing scalars. Adding a member without
     // accounting for it here would silently shift every lens the shader reads.
     static_assert(sizeof(LensConstants) ==
-                  64 + 3 * 16 * kMaxButtonLenses + 16);
+                  64 + 5 * 16 * kMaxButtonLenses + 16);
 
     struct CopyConstants {
         float offset[2]{};
@@ -958,6 +970,13 @@ struct LiquidRenderer : std::enable_shared_from_this<LiquidRenderer> {
         winrt::event_token frameToken{};
         winrt::com_ptr<ID3D11Texture2D> latest;
         winrt::com_ptr<ID3D11ShaderResourceView> latestView;
+        decltype(item.Size()) poolSize{};
+        decltype(item.Size()) contentSize{};
+        decltype(item.Size()) textureSize{};
+        std::chrono::steady_clock::time_point lastFrame{};
+        bool needsFullCopy{true};
+        std::atomic<bool> active{};
+        std::mutex callbackMutex;
     };
 
     static constexpr size_t kMaxAppSources = 7;
@@ -982,6 +1001,8 @@ cbuffer Lens : register(b0) {
     float4 lensRects[BUTTON_LENS_CAP];
     float4 lensTints[BUTTON_LENS_CAP];
     float4 lensRadii[BUTTON_LENS_CAP];
+    float4 lensNativeRects[BUTTON_LENS_CAP];
+    float4 lensShapeParams[BUTTON_LENS_CAP];
     uint lensCount;
     float lensRefraction;
     float alertTintOpacity;
@@ -1041,19 +1062,49 @@ float roundedDistance(float2 p) {
 float opticalDistance(float2 p) {
     return opticalDistanceFor(p, halfSize, radius);
 }
+float cornerValue(float2 p, float4 values) {
+    return p.x < 0
+        ? (p.y < 0 ? values.x : values.w)
+        : (p.y < 0 ? values.y : values.z);
+}
 float roundedDistanceForCorners(float2 p, float2 size, float4 radii) {
-    float cornerRadius = p.x < 0
-        ? (p.y < 0 ? radii.x : radii.w)
-        : (p.y < 0 ? radii.y : radii.z);
+    float cornerRadius = cornerValue(p, radii);
     return roundedDistanceFor(
         p, size, min(cornerRadius, min(size.x, size.y)));
 }
 float opticalDistanceForCorners(float2 p, float2 size, float4 radii) {
-    float cornerRadius = p.x < 0
-        ? (p.y < 0 ? radii.x : radii.w)
-        : (p.y < 0 ? radii.y : radii.z);
+    float cornerRadius = cornerValue(p, radii);
     return opticalDistanceFor(
         p, size, min(cornerRadius, min(size.x, size.y)));
+}
+// Signed-distance approximation for an axis-aligned rounded rectangle whose
+// corners may be elliptical. Its zero contour is exact; the radial conversion
+// keeps distances in pixels so antialiasing and bevel depth remain stable.
+float ellipticalDistanceForCorners(float2 p, float2 size, float4 radiiX,
+                                   float4 radiiY) {
+    float2 cornerRadius = min(float2(cornerValue(p, radiiX),
+                                    cornerValue(p, radiiY)), size);
+    float2 outer = abs(p) - size;
+    float2 corner = outer + cornerRadius;
+    if (cornerRadius.x > 0 && cornerRadius.y > 0 &&
+        corner.x > 0 && corner.y > 0) {
+        float normalized = length(corner / cornerRadius);
+        return (normalized - 1) * length(corner) / max(normalized, 0.0001);
+    }
+    return length(max(outer, 0)) + min(max(outer.x, outer.y), 0);
+}
+float intersectedDistance(float2 pixel, float4 nativeRect,
+                          float4 nativeRadiiX, float nativeYOverX,
+                          float4 clipRect, float2 clipRadius) {
+    float nativeDistance = ellipticalDistanceForCorners(
+        pixel - nativeRect.xy, nativeRect.zw, nativeRadiiX,
+        nativeRadiiX * nativeYOverX);
+    float4 clipRadiiX = clipRadius.x;
+    float4 clipRadiiY = clipRadius.y;
+    float clipDistance = ellipticalDistanceForCorners(
+        pixel - clipRect.xy, clipRect.zw, clipRadiiX, clipRadiiY);
+    // Intersection SDF: the furthest outside (or least inside) constituent wins.
+    return max(nativeDistance, clipDistance);
 }
 float bevelHeightFor(float inside, float depthRadius) {
     if (inside <= 0) return 0;
@@ -1096,6 +1147,45 @@ Glass glassAt(float2 p, float2 halfExtent, float4 radii, float depthRadius,
               refractionAmount * shiftGain;
     g.shift += -p / max(halfExtent, 1) * refractionAmount * radialGain * g.depth;
     g.edge = smoothstep(min(halfExtent.x, halfExtent.y) * edgeGain, 0, g.inside);
+    return g;
+}
+// A button surface is the intersection of the native Border and the inset clip
+// installed by PrepareStatePlate. Coverage and every normal sample use the same
+// two shapes in output-pixel coordinates.
+Glass glassAtIntersection(float2 pixel, float4 nativeRect,
+                          float4 nativeRadiiX, float nativeYOverX,
+                          float4 clipRect, float2 clipRadius,
+                          float depthRadius, float refractionAmount,
+                          float shiftGain, float radialGain, float edgeGain) {
+    Glass g;
+    g.distance = intersectedDistance(pixel, nativeRect, nativeRadiiX,
+                                     nativeYOverX, clipRect, clipRadius);
+    g.inside = -g.distance;
+    float e = 2;
+    // Coverage and all finite-difference samples use this same intersected
+    // field, so smoothing cannot move the max() seam or invent inset coverage.
+    float opticalInside = g.inside;
+    float lensZ = min(depthRadius, min(clipRect.z, clipRect.w));
+    float hCenter = bevelHeightFor(opticalInside, lensZ);
+    float2 gradient = float2(
+        bevelHeightFor(-intersectedDistance(pixel + float2(e, 0), nativeRect,
+            nativeRadiiX, nativeYOverX, clipRect, clipRadius), lensZ) -
+        bevelHeightFor(-intersectedDistance(pixel - float2(e, 0), nativeRect,
+            nativeRadiiX, nativeYOverX, clipRect, clipRadius), lensZ),
+        bevelHeightFor(-intersectedDistance(pixel + float2(0, e), nativeRect,
+            nativeRadiiX, nativeYOverX, clipRect, clipRadius), lensZ) -
+        bevelHeightFor(-intersectedDistance(pixel - float2(0, e), nativeRect,
+            nativeRadiiX, nativeYOverX, clipRect, clipRadius), lensZ)) /
+        (2 * e);
+    g.normal = normalize(float3(-gradient, 1));
+    g.depth = smoothstep(0, max(lensZ, 0.5), opticalInside);
+    float refractivePower = 1 - 1 / 1.5;
+    float normalizedThickness = hCenter / max(lensZ, 0.5);
+    g.shift = gradient * refractivePower * (2 + normalizedThickness * 0.5) *
+              refractionAmount * shiftGain;
+    float2 p = pixel - clipRect.xy;
+    g.shift += -p / max(clipRect.zw, 1) * refractionAmount * radialGain * g.depth;
+    g.edge = smoothstep(min(clipRect.z, clipRect.w) * edgeGain, 0, g.inside);
     return g;
 }
 // Refracted, chromatically split and optionally blurred backdrop for one surface.
@@ -1148,13 +1238,17 @@ float4 ps(VertexOutput input) : SV_Target {
     float coverage = 0;
     float3 buttonColor = 0;
     for (uint i = 0; i < min(lensCount, BUTTON_LENS_CAP); ++i) {
-        float4 rect = lensRects[i];
-        float2 itemPoint = pixel - rect.xy;
-        float4 itemRadii = lensRadii[i];
-        if (roundedDistanceForCorners(itemPoint, rect.zw, itemRadii) > 0.5)
-            continue;
-        Glass item = glassAt(itemPoint, rect.zw, itemRadii, zRadius * 0.65,
-                             lensRefraction, 18, 3, 0.45);
+        float4 clipRect = lensRects[i];
+        float4 nativeRect = lensNativeRects[i];
+        float4 shapeParams = lensShapeParams[i];
+        float distance = intersectedDistance(
+            pixel, nativeRect, lensRadii[i], shapeParams.x,
+            clipRect, shapeParams.yz);
+        if (distance > 0.5) continue;
+        Glass item = glassAtIntersection(
+            pixel, nativeRect, lensRadii[i], shapeParams.x,
+            clipRect, shapeParams.yz, zRadius * 0.65,
+            lensRefraction, 18, 3, 0.45);
         float itemMask = 1 - smoothstep(-1.5, 0.5, item.distance);
         if (itemMask <= 0) continue;
         buttonColor = refractedBackdrop(pixel, item);
@@ -1162,7 +1256,8 @@ float4 ps(VertexOutput input) : SV_Target {
         buttonColor = lerp(buttonColor, lensTints[i].rgb,
                            alertTintOpacity * lensTints[i].a);
         float itemFresnel;
-        buttonColor += glassLighting(item, itemPoint, rect.zw, itemFresnel);
+        float2 itemPoint = pixel - clipRect.xy;
+        buttonColor += glassLighting(item, itemPoint, clipRect.zw, itemFresnel);
         buttonColor = lerp(buttonColor, 1, itemFresnel * 0.2);
         coverage = itemMask * lensBlend;
         break;
@@ -1193,6 +1288,39 @@ float4 ps(VertexOutput input) : SV_Target {
 
     std::mutex mutex;
     bool running{};
+    struct ShaderBytecode {
+        winrt::com_ptr<ID3DBlob> vertex;
+        winrt::com_ptr<ID3DBlob> pixel;
+        winrt::com_ptr<ID3DBlob> copy;
+        winrt::com_ptr<ID3DBlob> blur;
+    };
+
+    static ShaderBytecode const& GetShaderBytecode() {
+        static std::mutex cacheMutex;
+        static ShaderBytecode cache;
+        std::lock_guard lock(cacheMutex);
+        if (cache.vertex && cache.pixel && cache.copy && cache.blur)
+            return cache;
+        auto compile = [](const char* entry, const char* target) {
+            winrt::com_ptr<ID3DBlob> code;
+            D3D_SHADER_MACRO macros[]{
+                {"BUTTON_LENS_CAP", UW_STRINGIZE(UW_BUTTON_LENS_CAP)},
+                {nullptr, nullptr}};
+            winrt::check_hresult(D3DCompile(
+                kShader, sizeof(kShader) - 1, "liquid-glass", macros,
+                nullptr, entry, target, D3DCOMPILE_ENABLE_STRICTNESS, 0,
+                code.put(), nullptr));
+            return code;
+        };
+        ShaderBytecode compiled;
+        compiled.vertex = compile("vs", "vs_5_0");
+        compiled.pixel = compile("ps", "ps_5_0");
+        compiled.copy = compile("copyPs", "ps_5_0");
+        compiled.blur = compile("boxBlurPs", "ps_5_0");
+        cache = std::move(compiled);
+        return cache;
+    }
+
     bool geometryReady{};
     HWND taskbar{};
     RECT taskbarRect{};
@@ -1201,9 +1329,16 @@ float4 ps(VertexOutput input) : SV_Target {
     UINT blurWidth{};
     UINT blurHeight{};
     bool pendingPresent{};
+    bool presentTimerArmed{};
     LensConstants lens{};
     HRESULT failure{S_OK};
     std::chrono::steady_clock::time_point lastPresent{};
+    std::chrono::steady_clock::time_point presentDeadline{};
+    PTP_TIMER presentTimer{};
+    struct PresentTimerContext {
+        LiquidRenderer* renderer{};
+    };
+    PresentTimerContext* presentTimerContext{};
     std::vector<std::shared_ptr<Source>> sources;
 
     winrt::com_ptr<ID3D11Device> device;
@@ -1212,6 +1347,8 @@ float4 ps(VertexOutput input) : SV_Target {
     winrt::com_ptr<IDXGISwapChain1> swapChain;
     winrt::com_ptr<ID3D11Texture2D> composite;
     winrt::com_ptr<ID3D11RenderTargetView> compositeTarget;
+    winrt::com_ptr<ID3D11Texture2D> backBuffer;
+    winrt::com_ptr<ID3D11RenderTargetView> backTarget;
     winrt::com_ptr<ID3D11ShaderResourceView> compositeView;
     winrt::com_ptr<ID3D11Texture2D> blurTextures[2];
     winrt::com_ptr<ID3D11RenderTargetView> blurTargets[2];
@@ -1257,33 +1394,18 @@ float4 ps(VertexOutput input) : SV_Target {
             winrt::check_hresult(adapter->GetParent(
                 __uuidof(IDXGIFactory2), factory.put_void()));
 
-            auto compile = [](const char* entry, const char* target) {
-                winrt::com_ptr<ID3DBlob> code;
-                D3D_SHADER_MACRO macros[]{
-                    {"BUTTON_LENS_CAP",
-                     UW_STRINGIZE(UW_BUTTON_LENS_CAP)},
-                    {nullptr, nullptr}};
-                winrt::check_hresult(D3DCompile(
-                    kShader, sizeof(kShader) - 1, "liquid-glass", macros,
-                    nullptr, entry, target, D3DCOMPILE_ENABLE_STRICTNESS, 0,
-                    code.put(), nullptr));
-                return code;
-            };
-            auto vertexCode = compile("vs", "vs_5_0");
-            auto pixelCode = compile("ps", "ps_5_0");
-            auto copyCode = compile("copyPs", "ps_5_0");
-            auto blurCode = compile("boxBlurPs", "ps_5_0");
+            auto const& code = GetShaderBytecode();
             winrt::check_hresult(device->CreateVertexShader(
-                vertexCode->GetBufferPointer(), vertexCode->GetBufferSize(),
+                code.vertex->GetBufferPointer(), code.vertex->GetBufferSize(),
                 nullptr, vertexShader.put()));
             winrt::check_hresult(device->CreatePixelShader(
-                pixelCode->GetBufferPointer(), pixelCode->GetBufferSize(),
+                code.pixel->GetBufferPointer(), code.pixel->GetBufferSize(),
                 nullptr, pixelShader.put()));
             winrt::check_hresult(device->CreatePixelShader(
-                copyCode->GetBufferPointer(), copyCode->GetBufferSize(),
+                code.copy->GetBufferPointer(), code.copy->GetBufferSize(),
                 nullptr, copyPixelShader.put()));
             winrt::check_hresult(device->CreatePixelShader(
-                blurCode->GetBufferPointer(), blurCode->GetBufferSize(),
+                code.blur->GetBufferPointer(), code.blur->GetBufferSize(),
                 nullptr, boxBlurPixelShader.put()));
             D3D11_BUFFER_DESC constantDescription{};
             constantDescription.ByteWidth = sizeof(LensConstants);
@@ -1347,6 +1469,23 @@ float4 ps(VertexOutput input) : SV_Target {
             visualRoot.RelativeSizeAdjustment({1, 1});
             visualRoot.Children().InsertAtBottom(pixels);
             if (!ResizeLocked(pixelWidth, pixelHeight)) return false;
+            presentTimerContext = new PresentTimerContext{this};
+            presentTimer = CreateThreadpoolTimer(
+                [](PTP_CALLBACK_INSTANCE, void* raw, PTP_TIMER) {
+                    ActiveScope active;
+                    auto renderer =
+                        static_cast<PresentTimerContext*>(raw)->renderer;
+                    std::lock_guard lock(renderer->mutex);
+                    renderer->presentTimerArmed = false;
+                    if (renderer->running && !FAILED(renderer->failure) &&
+                        renderer->geometryReady && renderer->pendingPresent)
+                        renderer->SchedulePresentLocked();
+                }, presentTimerContext, nullptr);
+            if (!presentTimer) {
+                delete presentTimerContext;
+                presentTimerContext = nullptr;
+                winrt::throw_last_error();
+            }
             running = true;
             Wh_Log(L"[UWLIQUID] renderer initialized taskbar=%p size=%ux%u feature=%x",
                    taskbar, width, height, unsigned(selected));
@@ -1361,6 +1500,10 @@ float4 ps(VertexOutput input) : SV_Target {
     bool ResizeLocked(UINT pixelWidth, UINT pixelHeight) {
         if (!pixelWidth || !pixelHeight) return false;
         if (width == pixelWidth && height == pixelHeight && composite) return true;
+        ID3D11RenderTargetView* noTarget{};
+        context->OMSetRenderTargets(1, &noTarget, nullptr);
+        backTarget = nullptr;
+        backBuffer = nullptr;
         compositeView = nullptr;
         compositeTarget = nullptr;
         composite = nullptr;
@@ -1372,6 +1515,7 @@ float4 ps(VertexOutput input) : SV_Target {
             blurTextures[i] = nullptr;
         }
         if (width && height) {
+            context->Flush();
             HRESULT hr = swapChain->ResizeBuffers(
                 2, pixelWidth, pixelHeight, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
             if (FAILED(hr)) return false;
@@ -1386,24 +1530,38 @@ float4 ps(VertexOutput input) : SV_Target {
         description.Usage = D3D11_USAGE_DEFAULT;
         description.BindFlags = D3D11_BIND_RENDER_TARGET |
                                 D3D11_BIND_SHADER_RESOURCE;
+        winrt::com_ptr<ID3D11Texture2D> newComposite;
+        winrt::com_ptr<ID3D11RenderTargetView> newCompositeTarget;
+        winrt::com_ptr<ID3D11ShaderResourceView> newCompositeView;
         if (FAILED(device->CreateTexture2D(
-                &description, nullptr, composite.put())) ||
+                &description, nullptr, newComposite.put())) ||
             FAILED(device->CreateRenderTargetView(
-                composite.get(), nullptr, compositeTarget.put())) ||
+                newComposite.get(), nullptr, newCompositeTarget.put())) ||
             FAILED(device->CreateShaderResourceView(
-                composite.get(), nullptr, compositeView.put()))) return false;
-        // Blur at half resolution: the same box radii cover twice the backdrop
-        // distance while each pass shades one quarter as many pixels.
+                newComposite.get(), nullptr, newCompositeView.put())))
+            return false;
         description.Width = std::max(1u, pixelWidth / 2);
         description.Height = std::max(1u, pixelHeight / 2);
+        winrt::com_ptr<ID3D11Texture2D> newBlurTextures[2];
+        winrt::com_ptr<ID3D11RenderTargetView> newBlurTargets[2];
+        winrt::com_ptr<ID3D11ShaderResourceView> newBlurViews[2];
         for (int i = 0; i < 2; ++i) {
             if (FAILED(device->CreateTexture2D(
-                    &description, nullptr, blurTextures[i].put())) ||
+                    &description, nullptr, newBlurTextures[i].put())) ||
                 FAILED(device->CreateRenderTargetView(
-                    blurTextures[i].get(), nullptr, blurTargets[i].put())) ||
+                    newBlurTextures[i].get(), nullptr,
+                    newBlurTargets[i].put())) ||
                 FAILED(device->CreateShaderResourceView(
-                    blurTextures[i].get(), nullptr, blurViews[i].put())))
+                    newBlurTextures[i].get(), nullptr, newBlurViews[i].put())))
                 return false;
+        }
+        composite = std::move(newComposite);
+        compositeTarget = std::move(newCompositeTarget);
+        compositeView = std::move(newCompositeView);
+        for (int i = 0; i < 2; ++i) {
+            blurTextures[i] = std::move(newBlurTextures[i]);
+            blurTargets[i] = std::move(newBlurTargets[i]);
+            blurViews[i] = std::move(newBlurViews[i]);
         }
         blurWidth = description.Width;
         blurHeight = description.Height;
@@ -1414,10 +1572,11 @@ float4 ps(VertexOutput input) : SV_Target {
 
     // imageSize is filled in by RenderLocked, so the caller's copy always
     // differs from the stored one; compare everything else.
-    static bool SameLensInput(LensConstants a, LensConstants b) {
-        a.imageSize[0] = b.imageSize[0] = 0;
-        a.imageSize[1] = b.imageSize[1] = 0;
-        return memcmp(&a, &b, sizeof(a)) == 0;
+    static bool SameLensInput(LensConstants const& a, LensConstants const& b) {
+        constexpr size_t offset = sizeof(a.imageSize);
+        return memcmp(reinterpret_cast<char const*>(&a) + offset,
+                      reinterpret_cast<char const*>(&b) + offset,
+                      sizeof(a) - offset) == 0;
     }
 
     bool UpdateGeometry(RECT const& taskbarBounds, UINT pixelWidth,
@@ -1432,34 +1591,43 @@ float4 ps(VertexOutput input) : SV_Target {
         taskbarRect = taskbarBounds;
         lens = newLens;
         geometryReady = true;
-        if (changed || pendingPresent) PresentLocked();
+        if (changed || pendingPresent) SchedulePresentLocked();
         return true;
     }
 
-    // Capture frames are change-driven, so a geometry-only change (dock resize,
-    // a new attention lens) reaches the swap chain only if we present it. One
-    // present per refresh interval: 14ms would let this outrun a 60Hz compositor
-    // and block the taskbar UI thread on buffer release. A throttled present is
-    // owed, never dropped - the next UpdateGeometry or timer tick drains it.
-    void PresentLocked() {
+    void ArmPresentTimerLocked(std::chrono::steady_clock::time_point deadline) {
+        if (!presentTimer ||
+            (presentTimerArmed && deadline >= presentDeadline)) return;
+        presentDeadline = deadline;
+        auto delay = std::max(deadline - std::chrono::steady_clock::now(),
+                              std::chrono::steady_clock::duration::zero());
+        auto ticks = std::chrono::duration_cast<std::chrono::nanoseconds>(delay)
+                         .count() / 100;
+        LARGE_INTEGER due{};
+        due.QuadPart = -std::max<int64_t>(1, ticks);
+        FILETIME dueTime{due.LowPart, static_cast<DWORD>(due.HighPart)};
+        SetThreadpoolTimer(presentTimer, &dueTime, 0, 0);
+        presentTimerArmed = true;
+    }
+
+    // Every producer enters this gate. A throttled final update owns a timer
+    // wake-up and therefore never depends on capture or discovery polling.
+    void SchedulePresentLocked() {
+        pendingPresent = true;
+        if (!running || FAILED(failure) || !geometryReady) return;
+        constexpr auto interval = std::chrono::milliseconds(17);
         auto now = std::chrono::steady_clock::now();
-        if (now - lastPresent < std::chrono::milliseconds(17)) {
-            pendingPresent = true;
-            return;
+        auto deadline = lastPresent + interval;
+        if (lastPresent.time_since_epoch().count() == 0 || now >= deadline) {
+            if (presentTimerArmed) {
+                SetThreadpoolTimer(presentTimer, nullptr, 0, 0);
+                presentTimerArmed = false;
+            }
+            RenderLocked();
+            lastPresent = std::chrono::steady_clock::now();
+        } else {
+            ArmPresentTimerLocked(deadline);
         }
-        RenderLocked();
-        lastPresent = now;
-    }
-
-    void FlushPendingPresent() {
-        std::lock_guard lock(mutex);
-        if (running && !FAILED(failure) && geometryReady && pendingPresent)
-            PresentLocked();
-    }
-
-    float CurrentHalfWidth() {
-        std::lock_guard lock(mutex);
-        return geometryReady ? lens.halfSize[0] : NAN;
     }
 
     HRESULT Failure() {
@@ -1521,31 +1689,39 @@ float4 ps(VertexOutput input) : SV_Target {
             source->rect = rect;
             source->item = capture::GraphicsCaptureItem{
                 rawItem, winrt::take_ownership_from_abi};
-            auto size = source->item.Size();
-            if (size.Width <= 0 || size.Height <= 0) return nullptr;
+            source->poolSize = source->item.Size();
+            if (source->poolSize.Width <= 0 || source->poolSize.Height <= 0)
+                return nullptr;
             source->pool =
                 capture::Direct3D11CaptureFramePool::CreateFreeThreaded(
                     graphicsDevice,
                     directx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
-                    2, size);
-            std::weak_ptr<LiquidRenderer> weak = shared_from_this();
+                    2, source->poolSize);
+            source->session = source->pool.CreateCaptureSession(source->item);
+            if (auto cadence = source->session.try_as<capture::IGraphicsCaptureSession5>())
+                cadence.MinUpdateInterval(std::chrono::milliseconds(17));
+            std::weak_ptr<LiquidRenderer> weakRenderer = shared_from_this();
+            std::weak_ptr<Source> weakSource = source;
             source->frameToken = source->pool.FrameArrived(
-                [weak, window](capture::Direct3D11CaptureFramePool const& sender,
-                               winrt::Windows::Foundation::IInspectable const&) {
+                [weakRenderer, weakSource](
+                    capture::Direct3D11CaptureFramePool const& sender,
+                    winrt::Windows::Foundation::IInspectable const&) {
                     ActiveScope active;
                     if (g_stopping) return;
-                    if (auto renderer = weak.lock())
-                        renderer->OnFrame(window, sender);
+                    auto source = weakSource.lock();
+                    auto renderer = weakRenderer.lock();
+                    if (!source || !renderer) return;
+                    {
+                        std::lock_guard callbackLock(source->callbackMutex);
+                        if (!source->active.load(std::memory_order_acquire)) return;
+                        renderer->OnFrame(source, sender);
+                    }
                 });
-            source->session = source->pool.CreateCaptureSession(source->item);
             try { source->session.IsBorderRequired(false); } catch (...) {}
             try { source->session.IsCursorCaptureEnabled(false); } catch (...) {}
-            source->session.StartCapture();
-            Wh_Log(L"[UWLIQUID] capture started hwnd=%p size=%dx%d",
-                   window, size.Width, size.Height);
             return source;
         } catch (...) {
-            Wh_Log(L"[UWLIQUID] capture start failed hwnd=%p hr=%08X", window,
+            Wh_Log(L"[UWLIQUID] capture prepare failed hwnd=%p hr=%08X", window,
                    winrt::to_hresult().value);
             return nullptr;
         }
@@ -1553,56 +1729,128 @@ float4 ps(VertexOutput input) : SV_Target {
 
     static void CloseSource(std::shared_ptr<Source> const& source) {
         if (!source) return;
+        source->active.store(false, std::memory_order_release);
+        // Drain an in-flight copy, but do not hold this lock while WinRT closes
+        // the pool: a queued callback must be able to enter and observe inactive.
+        { std::lock_guard callbackLock(source->callbackMutex); }
+        // A source may be closed twice (explicit teardown, then scene
+        // removal); WinRT closing an already-closed pool is not safe to repeat.
+        auto session = std::exchange(source->session, nullptr);
+        auto pool = std::exchange(source->pool, nullptr);
         try {
-            if (source->pool) source->pool.FrameArrived(source->frameToken);
+            if (pool) pool.FrameArrived(source->frameToken);
         } catch (...) {}
-        try { if (source->session) source->session.Close(); } catch (...) {}
-        try { if (source->pool) source->pool.Close(); } catch (...) {}
+        try { if (session) session.Close(); } catch (...) {}
+        try { if (pool) pool.Close(); } catch (...) {}
     }
 
-    void UpdateSources() {
-        auto candidates = CandidateWindows();
-        std::vector<std::shared_ptr<Source>> current;
+    bool StartSource(std::shared_ptr<Source> const& source) {
+        try {
+            source->session.StartCapture();
+            Wh_Log(L"[UWLIQUID] capture started hwnd=%p size=%dx%d",
+                   source->window, source->poolSize.Width,
+                   source->poolSize.Height);
+            return true;
+        } catch (...) {
+            Wh_Log(L"[UWLIQUID] capture start failed hwnd=%p hr=%08X",
+                   source->window, winrt::to_hresult().value);
+            return false;
+        }
+    }
+
+    void UpdateSources() { UpdateSources(CandidateWindows()); }
+
+    void UpdateSources(
+        std::vector<std::pair<HWND, RECT>> const& candidates) {
+        std::vector<std::shared_ptr<Source>> current, stale;
         {
             std::lock_guard lock(mutex);
             if (!running) return;
             current = sources;
+            // A frame can report a grown ContentSize on a surface still sized
+            // for the old pool; Recreate only helps if another frame follows.
+            // A static window sends none, so recycle the session instead.
+            auto now = std::chrono::steady_clock::now();
+            for (auto const& source : sources)
+                if (source->latest &&
+                    (source->textureSize.Width != source->contentSize.Width ||
+                     source->textureSize.Height != source->contentSize.Height) &&
+                    now - source->lastFrame > std::chrono::milliseconds(100))
+                    stale.push_back(source);
         }
         std::vector<std::shared_ptr<Source>> next;
+        std::vector<std::shared_ptr<Source>> added;
+        std::vector<RECT> nextRects;
         for (auto const& [window, rect] : candidates) {
             auto found = std::find_if(current.begin(), current.end(),
                 [&](auto const& source) { return source->window == window; });
-            if (found != current.end()) {
-                {
-                    std::lock_guard lock(mutex);
-                    (*found)->rect = rect;
-                }
+            if (found != current.end() &&
+                std::find(stale.begin(), stale.end(), *found) == stale.end()) {
                 next.push_back(*found);
+                nextRects.push_back(rect);
             } else if (auto source = CreateSource(window, rect)) {
-                next.push_back(std::move(source));
+                next.push_back(source);
+                nextRects.push_back(rect);
+                added.push_back(std::move(source));
             }
         }
+
         std::vector<std::shared_ptr<Source>> removed;
+        bool committed{};
         {
             std::lock_guard lock(mutex);
-            if (!running) {
-                removed = std::move(next);
-            } else {
+            if (running && sources == current) {
+                bool changed = sources.size() != next.size();
+                for (size_t i = 0; i < next.size(); ++i) {
+                    if (i >= sources.size() || sources[i] != next[i] ||
+                        !EqualRect(&next[i]->rect, &nextRects[i]))
+                        changed = true;
+                    next[i]->rect = nextRects[i];
+                }
                 for (auto const& source : sources)
                     if (std::find(next.begin(), next.end(), source) == next.end())
                         removed.push_back(source);
-                sources = std::move(next);
+                sources = next;
+                for (auto const& source : added)
+                    source->active.store(true, std::memory_order_release);
+                if (changed) SchedulePresentLocked();
+                committed = true;
             }
         }
+        if (!committed) {
+            for (auto const& source : added) CloseSource(source);
+            return;
+        }
         for (auto const& source : removed) CloseSource(source);
+        for (auto const& source : added) {
+            if (StartSource(source)) continue;
+            source->active.store(false, std::memory_order_release);
+            {
+                std::lock_guard lock(mutex);
+                auto found = std::find(sources.begin(), sources.end(), source);
+                if (found != sources.end()) {
+                    sources.erase(found);
+                    SchedulePresentLocked();
+                }
+            }
+            CloseSource(source);
+        }
     }
 
-    void OnFrame(HWND window,
+    void OnFrame(std::shared_ptr<Source> const& source,
                  capture::Direct3D11CaptureFramePool const& sender) {
         capture::Direct3D11CaptureFrame frame{nullptr};
+        decltype(source->poolSize) recreateSize{};
+        bool recreatePool{};
+        struct FrameCloser {
+            capture::Direct3D11CaptureFrame& frame;
+            ~FrameCloser() { try { if (frame) frame.Close(); } catch (...) {} }
+        } frameCloser{frame};
         try {
             frame = sender.TryGetNextFrame();
             if (!frame) return;
+            auto contentSize = frame.ContentSize();
+            if (contentSize.Width <= 0 || contentSize.Height <= 0) return;
             auto frameSurface = frame.Surface();
             winrt::com_ptr<IDirect3DDxgiInterfaceAccess> access;
             winrt::check_hresult(
@@ -1612,53 +1860,118 @@ float4 ps(VertexOutput input) : SV_Target {
             winrt::com_ptr<ID3D11Texture2D> texture;
             winrt::check_hresult(access->GetInterface(
                 __uuidof(ID3D11Texture2D), texture.put_void()));
-            D3D11_TEXTURE2D_DESC description{};
-            texture->GetDesc(&description);
+            D3D11_TEXTURE2D_DESC captured{};
+            texture->GetDesc(&captured);
+            UINT validWidth = std::min<UINT>(contentSize.Width, captured.Width);
+            UINT validHeight = std::min<UINT>(contentSize.Height, captured.Height);
+            if (!validWidth || !validHeight) return;
+
             RECT currentRect{};
-            GetWindowRect(window, &currentRect);
+            bool haveRect = GetWindowRect(source->window, &currentRect);
             std::lock_guard lock(mutex);
-            if (!running) return;
-            auto found = std::find_if(sources.begin(), sources.end(),
-                [&](auto const& source) { return source->window == window; });
-            if (found == sources.end()) return;
-            auto& source = **found;
-            D3D11_TEXTURE2D_DESC latestDescription{};
-            if (source.latest) source.latest->GetDesc(&latestDescription);
-            if (!source.latest || latestDescription.Width != description.Width ||
-                latestDescription.Height != description.Height ||
-                latestDescription.Format != description.Format) {
-                source.latestView = nullptr;
-                description.Usage = D3D11_USAGE_DEFAULT;
-                description.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-                description.CPUAccessFlags = 0;
-                description.MiscFlags = 0;
-                description.MipLevels = 1;
-                description.ArraySize = 1;
+            if (!running ||
+                !source->active.load(std::memory_order_acquire) ||
+                std::find(sources.begin(), sources.end(), source) == sources.end())
+                return;
+
+            D3D11_TEXTURE2D_DESC latest{};
+            if (source->latest) source->latest->GetDesc(&latest);
+            if (!source->latest || !source->latestView ||
+                latest.Width != validWidth || latest.Height != validHeight ||
+                latest.Format != captured.Format) {
+                D3D11_TEXTURE2D_DESC owned = captured;
+                owned.Width = validWidth;
+                owned.Height = validHeight;
+                owned.Usage = D3D11_USAGE_DEFAULT;
+                owned.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+                owned.CPUAccessFlags = 0;
+                owned.MiscFlags = 0;
+                owned.MipLevels = 1;
+                owned.ArraySize = 1;
+                winrt::com_ptr<ID3D11Texture2D> newTexture;
+                winrt::com_ptr<ID3D11ShaderResourceView> newView;
                 winrt::check_hresult(device->CreateTexture2D(
-                    &description, nullptr, source.latest.put()));
+                    &owned, nullptr, newTexture.put()));
                 winrt::check_hresult(device->CreateShaderResourceView(
-                    source.latest.get(), nullptr, source.latestView.put()));
+                    newTexture.get(), nullptr, newView.put()));
+                source->latest = std::move(newTexture);
+                source->latestView = std::move(newView);
+                source->needsFullCopy = true;
             }
-            context->CopyResource(source.latest.get(), texture.get());
-            source.rect = currentRect;
-            auto now = std::chrono::steady_clock::now();
-            if (now - lastPresent >= std::chrono::milliseconds(14)) {
-                RenderLocked();
-                lastPresent = now;
+            bool copied = false;
+            bool resized = source->contentSize.Width != contentSize.Width ||
+                           source->contentSize.Height != contentSize.Height;
+            auto dirty = frame.try_as<capture::IDirect3D11CaptureFrame2>();
+            if (!source->needsFullCopy && !resized && dirty &&
+                dirty.DirtyRegionMode() ==
+                    capture::GraphicsCaptureDirtyRegionMode::ReportOnly) {
+                // Keep a complete snapshot, but update only changed pixels.
+                // Cropping to today's taskbar strip would lose content exposed
+                // by moving an otherwise static window without another frame.
+                for (auto const& region : dirty.DirtyRegions()) {
+                    LONG left = std::clamp<LONG>(region.X, 0, validWidth);
+                    LONG top = std::clamp<LONG>(region.Y, 0, validHeight);
+                    LONG right = static_cast<LONG>(std::clamp<int64_t>(
+                        int64_t(region.X) + region.Width, 0, validWidth));
+                    LONG bottom = static_cast<LONG>(std::clamp<int64_t>(
+                        int64_t(region.Y) + region.Height, 0, validHeight));
+                    if (left >= right || top >= bottom) continue;
+                    D3D11_BOX box{static_cast<UINT>(left), static_cast<UINT>(top), 0,
+                                 static_cast<UINT>(right), static_cast<UINT>(bottom), 1};
+                    context->CopySubresourceRegion(
+                        source->latest.get(), 0, left, top, 0, texture.get(), 0, &box);
+                    copied = true;
+                }
             } else {
-                pendingPresent = true;
+                D3D11_BOX box{0, 0, 0, validWidth, validHeight, 1};
+                context->CopySubresourceRegion(
+                    source->latest.get(), 0, 0, 0, 0, texture.get(), 0, &box);
+                copied = true;
             }
+            source->needsFullCopy = false;
+            source->contentSize = contentSize;
+            source->textureSize = {static_cast<int32_t>(validWidth),
+                                   static_cast<int32_t>(validHeight)};
+            source->lastFrame = std::chrono::steady_clock::now();
+            bool moved = haveRect && !EqualRect(&source->rect, &currentRect);
+            if (haveRect) source->rect = currentRect;
+            if (source->poolSize.Width != contentSize.Width ||
+                source->poolSize.Height != contentSize.Height) {
+                recreateSize = contentSize;
+                recreatePool = true;
+            }
+            if (copied || moved) SchedulePresentLocked();
         } catch (...) {
             HRESULT error = winrt::to_hresult().value;
             HRESULT removed = device ? device->GetDeviceRemovedReason() : S_OK;
-            if (FAILED(removed)) {
+            {
                 std::lock_guard lock(mutex);
-                failure = removed;
+                source->needsFullCopy = true;
+                if (FAILED(removed)) failure = removed;
             }
             Wh_Log(L"[UWLIQUID] frame failed hwnd=%p hr=%08X removed=%08X",
-                   window, error, removed);
+                   source ? source->window : nullptr, error, removed);
         }
-        try { if (frame) frame.Close(); } catch (...) {}
+        try {
+            if (frame) {
+                frame.Close();
+                frame = nullptr;
+            }
+        } catch (...) {}
+        if (recreatePool && source->active.load(std::memory_order_acquire)) {
+            try {
+                source->pool.Recreate(
+                    graphicsDevice,
+                    directx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
+                    2, recreateSize);
+                std::lock_guard lock(mutex);
+                if (source->active.load(std::memory_order_acquire))
+                    source->poolSize = recreateSize;
+            } catch (...) {
+                Wh_Log(L"[UWLIQUID] capture resize failed hwnd=%p hr=%08X",
+                       source->window, winrt::to_hresult().value);
+            }
+        }
     }
 
     void RenderLocked() {
@@ -1683,21 +1996,29 @@ float4 ps(VertexOutput input) : SV_Target {
         context->PSSetConstantBuffers(1, 1, &copyConstantBuffer);
         for (auto iterator = sources.rbegin(); iterator != sources.rend(); ++iterator) {
             auto const& source = **iterator;
-            if (!source.latestView) continue;
-            RECT intersection{};
-            if (!IntersectRect(&intersection, &source.rect, &taskbarRect)) continue;
+            if (!source.latestView || source.contentSize.Width <= 0 ||
+                source.contentSize.Height <= 0) continue;
             int sourceWidth = source.rect.right - source.rect.left;
             int sourceHeight = source.rect.bottom - source.rect.top;
             if (sourceWidth <= 0 || sourceHeight <= 0) continue;
+            RECT validRect = source.rect;
+            validRect.right = validRect.left + MulDiv(
+                sourceWidth, source.textureSize.Width, source.contentSize.Width);
+            validRect.bottom = validRect.top + MulDiv(
+                sourceHeight, source.textureSize.Height, source.contentSize.Height);
+            RECT intersection{};
+            if (!IntersectRect(&intersection, &validRect, &taskbarRect)) continue;
+            // A growing item can exceed its old pool for one frame. Clip the
+            // unavailable area instead of stretching the valid subrectangle.
+            float inverseWidth = float(source.contentSize.Width) /
+                                 (sourceWidth * float(source.textureSize.Width));
+            float inverseHeight = float(source.contentSize.Height) /
+                                  (sourceHeight * float(source.textureSize.Height));
             CopyConstants copy{};
-            copy.offset[0] = float(intersection.left - source.rect.left) /
-                             sourceWidth;
-            copy.offset[1] = float(intersection.top - source.rect.top) /
-                             sourceHeight;
-            copy.scale[0] = float(intersection.right - intersection.left) /
-                            sourceWidth;
-            copy.scale[1] = float(intersection.bottom - intersection.top) /
-                            sourceHeight;
+            copy.offset[0] = (intersection.left - source.rect.left) * inverseWidth;
+            copy.offset[1] = (intersection.top - source.rect.top) * inverseHeight;
+            copy.scale[0] = (intersection.right - intersection.left) * inverseWidth;
+            copy.scale[1] = (intersection.bottom - intersection.top) * inverseHeight;
             context->UpdateSubresource(
                 copyConstants.get(), 0, nullptr, &copy, 0, 0);
             D3D11_VIEWPORT sourceViewport{
@@ -1748,19 +2069,21 @@ float4 ps(VertexOutput input) : SV_Target {
             blurredView = blurViews[1].get();
         }
 
-        winrt::com_ptr<ID3D11Texture2D> backBuffer;
-        HRESULT hr = swapChain->GetBuffer(
-            0, __uuidof(ID3D11Texture2D), backBuffer.put_void());
-        if (FAILED(hr)) {
-            failure = hr;
-            return;
-        }
-        winrt::com_ptr<ID3D11RenderTargetView> backTarget;
-        hr = device->CreateRenderTargetView(
-            backBuffer.get(), nullptr, backTarget.put());
-        if (FAILED(hr)) {
-            failure = hr;
-            return;
+        HRESULT hr = S_OK;
+        if (!backBuffer || !backTarget) {
+            winrt::com_ptr<ID3D11Texture2D> newBackBuffer;
+            winrt::com_ptr<ID3D11RenderTargetView> newBackTarget;
+            hr = swapChain->GetBuffer(
+                0, __uuidof(ID3D11Texture2D), newBackBuffer.put_void());
+            if (SUCCEEDED(hr))
+                hr = device->CreateRenderTargetView(
+                    newBackBuffer.get(), nullptr, newBackTarget.put());
+            if (FAILED(hr)) {
+                failure = hr;
+                return;
+            }
+            backBuffer = std::move(newBackBuffer);
+            backTarget = std::move(newBackTarget);
         }
         context->ClearRenderTargetView(backTarget.get(), clear);
         lens.imageSize[0] = static_cast<float>(width);
@@ -1788,42 +2111,169 @@ float4 ps(VertexOutput input) : SV_Target {
 
     void Stop() {
         std::vector<std::shared_ptr<Source>> oldSources;
+        PTP_TIMER timer{};
+        PresentTimerContext* timerContext{};
         {
             std::lock_guard lock(mutex);
-            if (!running && sources.empty()) return;
+            if (!running && sources.empty() && !presentTimer) return;
             running = false;
+            pendingPresent = false;
+            presentTimerArmed = false;
             oldSources = std::move(sources);
+            timer = presentTimer;
+            presentTimer = nullptr;
+            timerContext = presentTimerContext;
+            presentTimerContext = nullptr;
+        }
+        if (timer) {
+            SetThreadpoolTimer(timer, nullptr, 0, 0);
+            WaitForThreadpoolTimerCallbacks(timer, TRUE);
+            CloseThreadpoolTimer(timer);
+            delete timerContext;
         }
         for (auto const& source : oldSources) CloseSource(source);
     }
 };
 
-bool HoldLiquidGeometry(Root const& root, LiquidRenderer const& renderer) {
-    return renderer.geometryReady &&
-           std::any_of(root.sources.begin(), root.sources.end(),
-                       [](auto const& source) {
-                           return source.life == Root::Source::Life::Hiding;
-                       });
+void PrepareLiquid(Root& root, Measurements const& measurements);
+
+struct LiquidMotionBatch {
+    CompositionScopedBatch batch{nullptr};
+    winrt::event_token completed{};
+};
+std::vector<LiquidMotionBatch> g_liquidMotionBatches;  // Owner thread only.
+winrt::event_token g_liquidRenderingToken{};
+bool g_liquidRenderingSubscribed{};
+unsigned g_liquidFinalFrames{};
+
+void StopLiquidRendering() noexcept {
+    if (!g_liquidRenderingSubscribed) return;
+    try {
+        Media::CompositionTarget::Rendering(g_liquidRenderingToken);
+    } catch (...) {
+        Wh_Log(L"[UWLIQUID] rendering unsubscribe failed hr=%08X",
+               winrt::to_hresult().value);
+    }
+    g_liquidRenderingSubscribed = false;
 }
 
-bool DeferLiquidShrink(float currentHalfWidth, float nextHalfWidth,
-                       ULONGLONG now, ULONGLONG& readyAt,
-                       float& pendingTarget) {
-    if (!std::isfinite(currentHalfWidth) ||
-        nextHalfWidth >= currentHalfWidth - 0.25f) {
-        readyAt = 0;
-        pendingTarget = NAN;
-        return false;
+void StopLiquidMotionTracking() noexcept {
+    StopLiquidRendering();
+    for (auto& motion : g_liquidMotionBatches) {
+        try { motion.batch.Completed(motion.completed); }
+        catch (...) {}
     }
-    if (!std::isfinite(pendingTarget) ||
-        std::abs(pendingTarget - nextHalfWidth) > 0.25f) {
-        pendingTarget = nextHalfWidth;
-        readyAt = now + kLiquidShrinkDelay;
+    g_liquidMotionBatches.clear();
+    g_liquidFinalFrames = 0;
+}
+
+void OnLiquidRendering() noexcept {
+    ActiveScope active;
+    if (g_stopping || GetCurrentThreadId() != g_ownerThread || g_busy) return;
+    g_busy = true;
+    struct Unbusy { ~Unbusy() { g_busy = false; } } unbusy;
+    bool needed = false;
+    try {
+        for (auto& root : g_roots) {
+            if (root.retired || !root.measurementsReady || !root.dock.liquid)
+                continue;
+            needed = true;
+            // Sample only optical geometry, never rediscover/rearrange the tree.
+            PrepareLiquid(root, root.measurements);
+        }
+        if (g_liquidMotionBatches.empty()) {
+            if (g_liquidFinalFrames) --g_liquidFinalFrames;
+            else needed = false;
+        }
+        if (!needed) StopLiquidRendering();
+    } catch (...) {
+        Wh_Log(L"[UWLIQUID] motion sample failed hr=%08X",
+               winrt::to_hresult().value);
+        StopLiquidRendering();
     }
-    if (now < readyAt) return true;
-    readyAt = 0;
-    pendingTarget = NAN;
-    return false;
+}
+
+CompositionScopedBatch BeginLiquidMotionBatch(const void* projectedAnimation) noexcept {
+    if (g_stopping || g_theme != DockTheme::Liquid ||
+        GetCurrentThreadId() != g_ownerThread ||
+        std::none_of(g_roots.begin(), g_roots.end(), [](auto const& root) {
+            return !root.retired && root.measurementsReady;
+        }))
+        return nullptr;
+    CompositionScopedBatch batch{nullptr};
+    winrt::event_token token{};
+    try {
+        void* abi{};
+        if (!ReadLocal(projectedAnimation, abi) || !abi) return nullptr;
+        winrt::Windows::Foundation::IInspectable animation{nullptr};
+        winrt::copy_from_abi(animation, abi);
+        auto finite = [](CompositionAnimation const& value) {
+            auto keyframes = value.try_as<KeyFrameAnimation>();
+            return keyframes &&
+                   keyframes.IterationBehavior() == AnimationIterationBehavior::Count;
+        };
+        Compositor compositor{nullptr};
+        if (auto group = animation.try_as<CompositionAnimationGroup>()) {
+            bool any = false;
+            for (auto const& member : group) {
+                if (!finite(member)) return nullptr;
+                any = true;
+            }
+            if (!any) return nullptr;
+            compositor = group.Compositor();
+        } else if (auto single = animation.try_as<CompositionAnimation>();
+                   single && finite(single)) {
+            compositor = single.Compositor();
+        } else {
+            return nullptr;  // An expression/infinite animation never completes.
+        }
+        batch = compositor.CreateScopedBatch(CompositionBatchTypes::Animation);
+        token = batch.Completed([](auto const& sender, auto const&) noexcept {
+            ActiveScope active;
+            if (g_stopping || GetCurrentThreadId() != g_ownerThread) return;
+            try {
+                auto completed = sender.template as<CompositionScopedBatch>();
+                auto found = std::find_if(
+                    g_liquidMotionBatches.begin(), g_liquidMotionBatches.end(),
+                    [&](auto const& motion) { return motion.batch == completed; });
+                if (found != g_liquidMotionBatches.end()) {
+                    found->batch.Completed(found->completed);
+                    g_liquidMotionBatches.erase(found);
+                }
+                g_liquidFinalFrames = 2;
+            } catch (...) {
+                Wh_Log(L"[UWLIQUID] motion completion failed hr=%08X",
+                       winrt::to_hresult().value);
+            }
+        });
+        g_liquidMotionBatches.push_back({batch, token});
+        if (!g_liquidRenderingSubscribed) {
+            g_liquidRenderingToken = Media::CompositionTarget::Rendering(
+                [](auto const&, auto const&) { OnLiquidRendering(); });
+            g_liquidRenderingSubscribed = true;
+        }
+        return batch;
+    } catch (...) {
+        if (batch) {
+            try { batch.Completed(token); } catch (...) {}
+            std::erase_if(g_liquidMotionBatches,
+                          [&](auto const& motion) { return motion.batch == batch; });
+            try { batch.End(); } catch (...) {}
+        }
+        Wh_Log(L"[UWLIQUID] motion observation unavailable hr=%08X",
+               winrt::to_hresult().value);
+        return nullptr;
+    }
+}
+
+void EndLiquidMotionBatch(CompositionScopedBatch const& batch) noexcept {
+    if (!batch) return;
+    try { batch.End(); }
+    catch (...) {
+        StopLiquidMotionTracking();
+        Wh_Log(L"[UWLIQUID] motion batch end failed hr=%08X",
+               winrt::to_hresult().value);
+    }
 }
 
 #undef UW_STRINGIZE
@@ -1870,6 +2320,11 @@ void WINAPI StartAnimation_Hook(void* projectedElement, const void* animation) {
     {
         MotionEvent(abi, Root::Source::Life::Active);
     }
+    auto batch = BeginLiquidMotionBatch(animation);
+    struct EndBatch {
+        CompositionScopedBatch const& batch;
+        ~EndBatch() { EndLiquidMotionBatch(batch); }
+    } endBatch{batch};
     StartAnimation_Original(projectedElement, animation);
 }
 
@@ -1906,6 +2361,7 @@ void WINAPI UpdateVisualStates_Hook(void* self) {
 }
 
 FrameworkElement Child(FrameworkElement parent, const wchar_t* name, bool byClass = false);
+void RetireRoot(Root& root);
 
 void WithdrawTray(Root& root) {
     if (root.taskbar && GetProp(root.taskbar, kTrayDispatcher) == g_dispatch)
@@ -1918,48 +2374,98 @@ void WithdrawTray(Root& root) {
     root.publishedShift = nullptr;
 }
 
-bool PublishTray(Root& root, double host, double shift) {
-    // ponytail: UWP lacks WinUI's ContentIslandEnvironment HWND accessor. Match
-    // one native taskbar by owner thread, full width and raster scale; equal-size
-    // candidates or multiple XAML roots for that HWND must remain unpublished.
+bool ResolveTaskbar(Root& root, double host) {
+    // UWP lacks WinUI's ContentIslandEnvironment HWND accessor. Match one
+    // native taskbar by owner thread, full width and raster scale, once per
+    // refresh; publication below reuses this association.
     double scale = root.frame.XamlRoot().RasterizationScale();
     HWND match{}, window{};
-    for (int i = 0; i < 4096 && (window = FindWindowEx(nullptr, window, nullptr, nullptr)); ++i) {
-        if ((!ClassIs(window, L"Shell_TrayWnd") && !ClassIs(window, L"Shell_SecondaryTrayWnd")) ||
-            GetWindowThreadProcessId(window, nullptr) != g_ownerThread) continue;
+    for (int i = 0; i < 4096 &&
+                    (window = FindWindowEx(nullptr, window, nullptr, nullptr));
+         ++i) {
+        if ((!ClassIs(window, L"Shell_TrayWnd") &&
+             !ClassIs(window, L"Shell_SecondaryTrayWnd")) ||
+            GetWindowThreadProcessId(window, nullptr) != g_ownerThread)
+            continue;
         RECT rect{};
-        if (!GetWindowRect(window, &rect) || std::abs(GetDpiForWindow(window) / 96.0 - scale) > 0.01 ||
-            std::abs(rect.right - rect.left - host * scale) > 2) continue;
-        if (match) { match = nullptr; break; }
-        match = window;
-    }
-    for (auto& other : g_roots) {
-        if (&other != &root && other.taskbar && other.taskbar == match) {
-            WithdrawTray(other);
+        if (!GetWindowRect(window, &rect) ||
+            std::abs(GetDpiForWindow(window) / 96.0 - scale) > 0.01 ||
+            std::abs(rect.right - rect.left - host * scale) > 2)
+            continue;
+        if (match) {
             match = nullptr;
             break;
         }
+        match = window;
+    }
+    for (auto& other : g_roots) {
+        if (&other == &root || other.retired || !other.taskbar ||
+            other.taskbar != match)
+            continue;
+        bool attached = false;
+        bool sameXamlRoot = false;
+        try {
+            attached = other.frame &&
+                       Media::VisualTreeHelper::GetParent(other.frame) != nullptr;
+            sameXamlRoot = other.frame &&
+                           other.frame.XamlRoot() == root.frame.XamlRoot();
+        } catch (...) {
+        }
+        if (!attached || sameXamlRoot)
+            RetireRoot(other);
+        else
+            match = nullptr;
+        break;
     }
     if (match != root.taskbar) {
         WithdrawTray(root);
         root.taskbar = nullptr;
     }
-    if (!match || !std::isfinite(scale * shift) || std::abs(scale * shift) > INT_MAX) {
-        WithdrawTray(root);
-        root.taskbar = nullptr;
-        if (!root.mappingReported) Wh_Log(L"[UWPANEL] no unambiguous taskbar mapping frame=%p host=%.3f scale=%.3f",
-                                          winrt::get_abi(root.frame), host, scale);
+    if (!match) {
+        if (!root.mappingReported)
+            Wh_Log(L"[UWPANEL] no unambiguous taskbar mapping frame=%p host=%.3f scale=%.3f",
+                   winrt::get_abi(root.frame), host, scale);
         root.mappingReported = true;
         return false;
     }
     root.mappingReported = false;
     root.taskbar = match;
+    return true;
+}
+
+Controls::Border SourcePlate(
+    FrameworkElement const& button,
+    std::vector<Root::StatePlate> const& states) {
+    for (auto const& state : states) {
+        if (!state.element || state.element.Name() != L"BackgroundElement")
+            continue;
+        auto node = state.element.try_as<FrameworkElement>();
+        for (unsigned depth = 0; node && depth < 16; ++depth) {
+            if (node == button) return state.element;
+            node = Media::VisualTreeHelper::GetParent(node)
+                       .try_as<FrameworkElement>();
+        }
+    }
+    return nullptr;
+}
+
+bool PublishTray(Root& root, double shift) {
+    if (!root.taskbar) return false;
+    double scale = root.frame.XamlRoot().RasterizationScale();
+    if (!std::isfinite(scale * shift) || std::abs(scale * shift) > INT_MAX) {
+        WithdrawTray(root);
+        root.taskbar = nullptr;
+        return false;
+    }
     HANDLE value = EncodeShift(static_cast<int>(std::lround(scale * shift)));
-    if (value == root.publishedShift && GetProp(match, kTrayShift) == value &&
-        (!root.follower || GetProp(match, kTrayDispatcher) == g_dispatch))
+    if (value == root.publishedShift &&
+        GetProp(root.taskbar, kTrayShift) == value &&
+        (!root.follower ||
+         GetProp(root.taskbar, kTrayDispatcher) == g_dispatch))
         return true;
-    if (SetProp(match, kTrayShift, value)) {
-        if (root.follower && !SetProp(match, kTrayDispatcher, g_dispatch)) {
+    if (SetProp(root.taskbar, kTrayShift, value)) {
+        if (root.follower &&
+            !SetProp(root.taskbar, kTrayDispatcher, g_dispatch)) {
             root.publishedShift = value;
             WithdrawTray(root);
             root.taskbar = nullptr;
@@ -1967,13 +2473,15 @@ bool PublishTray(Root& root, double host, double shift) {
         }
         root.publishedShift = value;
         return true;
-    } else {
-        WithdrawTray(root);
-        root.taskbar = nullptr;
-        Wh_Log(L"[UWPANEL] publication failed taskbar=%p error=%lu", match, GetLastError());
-        return false;
     }
+    HWND failed = root.taskbar;
+    WithdrawTray(root);
+    root.taskbar = nullptr;
+    Wh_Log(L"[UWPANEL] publication failed taskbar=%p error=%lu", failed,
+           GetLastError());
+    return false;
 }
+
 
 FrameworkElement Child(FrameworkElement parent, const wchar_t* name,
                        bool byClass) {
@@ -2033,6 +2541,26 @@ bool HasAttentionState(FrameworkElement const& element, unsigned depth = 4) {
     return false;
 }
 
+void RestorePlateOpacity(Root::StatePlate& state) {
+    if (!state.opacityOwned || !state.element) return;
+    try {
+        if (std::abs(state.element.Opacity() - state.appliedOpacity) < 0.001) {
+            if (state.originalOpacity == DependencyProperty::UnsetValue())
+                state.element.ClearValue(UIElement::OpacityProperty());
+            else
+                state.element.SetValue(UIElement::OpacityProperty(),
+                                       state.originalOpacity);
+        } else {
+            Wh_Log(L"[UWITEM] state plate opacity ownership lost");
+        }
+    } catch (...) {
+        Wh_Log(L"[UWITEM] state plate opacity restore failed hr=%08X",
+               winrt::to_hresult().value);
+    }
+    state.opacityOwned = false;
+    state.originalOpacity = nullptr;
+}
+
 void RestoreStatePlate(Root::StatePlate& state) {
     if (!state.element) return;
     try {
@@ -2040,9 +2568,6 @@ void RestoreStatePlate(Root::StatePlate& state) {
             state.stretch && state.element.RenderTransform() == state.stretch;
         bool clipMatch =
             state.clip && state.visual && state.visual.Clip() == state.clip;
-        bool opacityMatch =
-            state.opacityOwned &&
-            std::abs(state.element.Opacity() - state.appliedOpacity) < 0.001;
         if (state.stretch) {
             if (transformMatch) {
                 state.element.ClearValue(UIElement::RenderTransformProperty());
@@ -2064,19 +2589,15 @@ void RestoreStatePlate(Root::StatePlate& state) {
             else
                 Wh_Log(L"[UWITEM] state plate rim ownership lost");
         }
-        if (opacityMatch) {
-            if (state.opacityWasLocal)
-                state.element.Opacity(state.originalOpacity);
-            else
-                state.element.ClearValue(UIElement::OpacityProperty());
-        }
     } catch (...) {
         Wh_Log(L"[UWITEM] state plate restore failed hr=%08X",
                winrt::to_hresult().value);
     }
-    state.opacityOwned = false;
-    state.opacityWasLocal = false;
+    RestorePlateOpacity(state);
+    state.opacityBlocked = false;
     state.rim = nullptr;
+    state.rimThemeReady = false;
+    state.rimDimmed = false;
     state.visual = nullptr;
     state.clip = nullptr;
     state.clipGeometry = nullptr;
@@ -2093,20 +2614,16 @@ void BlockStatePlate(Root::StatePlate& state) {
     state.blocked = true;
 }
 
-// Replicates the native rim, measured off a live taskbar: a gradient band that is
-// black along the bottom edge in light theme and white along the top in dark. The
-// native brush spans an absolute 3 DIP, but only the two horizontal edges of a
-// 1-DIP stroke ever sample it, so a relative top-to-bottom ramp carries the same
-// cue. Alphas are divided by the plate dim so the result lands at native strength
-// after the element opacity multiplies it.
+// Replicates the native rim, measured off a live taskbar. Alpha compensation
+// applies only when this mod actually owns the plate's dimming multiplier.
 ShapeVisual ButtonRim(CompositionRoundedRectangleGeometry const& outline,
-                      bool dark) {
+                      bool dark, double dimScale) {
     auto compositor = outline.Compositor();
     auto visual = compositor.CreateShapeVisual();
     visual.RelativeSizeAdjustment({1, 1});
-    auto lift = [](unsigned alpha) {
+    auto lift = [dimScale](unsigned alpha) {
         return static_cast<uint8_t>(std::min<unsigned>(
-            255, static_cast<unsigned>(std::lround(alpha / kPlateDimScale))));
+            255, static_cast<unsigned>(std::lround(alpha / dimScale))));
     };
     using Color = winrt::Windows::UI::Color;
     auto gradient = compositor.CreateLinearGradientBrush();
@@ -2131,24 +2648,29 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         auto parent = Media::VisualTreeHelper::GetParent(plate)
                           .try_as<FrameworkElement>();
         if (!parent) return;
-        // Dim the whole element. Mirroring Windows' per-state Background instead
-        // was tried and reverted: the resting value comes from the template and
-        // InactiveNormal sets no brush, so a local write outranks both and the
-        // hover highlight never goes away.
-        if (!state.opacityOwned) {
-            state.originalOpacity = plate.Opacity();
-            // A template or visual-state value must be handed back by clearing
-            // ours, not by pinning the number we happened to read.
-            state.opacityWasLocal =
-                plate.ReadLocalValue(UIElement::OpacityProperty()) !=
-                DependencyProperty::UnsetValue();
-            state.appliedOpacity =
-                g_theme == DockTheme::Native
-                    ? state.originalOpacity
-                    : state.originalOpacity * kPlateDimScale;
-            state.opacityOwned = true;
+        // Native keeps the dependency property entirely untouched. For dimmed
+        // themes, do not replace a local value/binding, and relinquish ownership
+        // permanently if another writer changes the value we installed.
+        bool dim = g_theme != DockTheme::Native;
+        if (!dim) {
+            RestorePlateOpacity(state);
+        } else if (state.opacityOwned &&
+                   std::abs(plate.Opacity() - state.appliedOpacity) >= 0.001) {
+            state.opacityOwned = false;
+            state.opacityBlocked = true;
+            state.originalOpacity = nullptr;
+            Wh_Log(L"[UWITEM] external opacity retained");
+        } else if (!state.opacityOwned && !state.opacityBlocked) {
+            auto local = plate.ReadLocalValue(UIElement::OpacityProperty());
+            if (local != DependencyProperty::UnsetValue()) {
+                state.opacityBlocked = true;
+            } else {
+                state.originalOpacity = local;
+                state.appliedOpacity = plate.Opacity() * kPlateDimScale;
+                plate.Opacity(state.appliedOpacity);
+                state.opacityOwned = true;
+            }
         }
-        plate.Opacity(state.appliedOpacity);
         if (!state.clip && plate.Clip()) return;
         if (state.clip) {
             auto currentClip =
@@ -2219,11 +2741,33 @@ void PrepareStatePlate(Root& root, Root::StatePlate& state,
         // Only the fill plate. BackgroundBorder carries the same native gradient on
         // its own control, and a control holding both would otherwise get two
         // stacked rims. Never take a child visual someone else is using.
-        if (g_keepButtonRim && !state.rim &&
+        ElementTheme rimTheme = plate.ActualTheme();
+        bool rimDimmed = state.opacityOwned;
+        if (state.rim && state.rimThemeReady &&
+            (state.rimTheme != rimTheme || state.rimDimmed != rimDimmed)) {
+            if (Hosting::ElementCompositionPreview::GetElementChildVisual(plate) ==
+                state.rim) {
+                Hosting::ElementCompositionPreview::SetElementChildVisual(plate,
+                                                                           nullptr);
+                state.rim = nullptr;
+                state.rimThemeReady = false;
+            } else {
+                // Another owner replaced our child visual. Forget our visual,
+                // but never overwrite the external one on this plate.
+                state.rim = nullptr;
+                state.rimThemeReady = false;
+                state.blocked = true;
+            }
+        }
+        if (g_keepButtonRim && !state.blocked && !state.rim &&
             plate.Name() == L"BackgroundElement" &&
             !Hosting::ElementCompositionPreview::GetElementChildVisual(plate)) {
             state.rim = ButtonRim(state.clipGeometry,
-                                  plate.ActualTheme() == ElementTheme::Dark);
+                                  rimTheme == ElementTheme::Dark,
+                                  rimDimmed ? kPlateDimScale : 1.0);
+            state.rimTheme = rimTheme;
+            state.rimThemeReady = true;
+            state.rimDimmed = rimDimmed;
             Hosting::ElementCompositionPreview::SetElementChildVisual(
                 plate, state.rim);
         }
@@ -2358,8 +2902,6 @@ void RestoreGlass(OwnedDock& dock) {
     } catch (...) { Wh_Log(L"[UWGLASS] highlight detach failed hr=%08X", winrt::to_hresult().value); }
     if (dock.liquid) dock.liquid->Stop();
     dock.liquid.reset();
-    dock.liquidShrinkReadyAt = 0;
-    dock.liquidShrinkTarget = NAN;
     dock.highlights = nullptr;
     dock.attachedVisual = nullptr;
     dock.material = nullptr;
@@ -2480,8 +3022,6 @@ void PrepareGlass(OwnedDock& dock) {
 }
 
 void StopLiquid(OwnedDock& dock) {
-    dock.liquidShrinkReadyAt = 0;
-    dock.liquidShrinkTarget = NAN;
     if (!dock.liquid) return;
     try {
         if (Hosting::ElementCompositionPreview::GetElementChildVisual(
@@ -2502,9 +3042,8 @@ DWORD LiquidRetryDelay(unsigned failures) {
     return 1000u << std::min(failures, 5u);
 }
 
-// SetTimer on a live id restarts the elapsed time, so re-arming from every layout
-// pass starved the poll that drives UpdateSources, the failure check and the
-// deferred present. Arm once and leave it running.
+// Source discovery/recovery is deliberately slower than presentation. Re-arming
+// an existing id restarts it, so keep this timer independent of layout refreshes.
 void ArmLiquidTimer() {
     if (g_liquidTimerArmed || !g_dispatch) return;
     if (SetTimer(g_dispatch, kLiquidTimerId, 250, nullptr))
@@ -2520,76 +3059,88 @@ void ScheduleLiquidRetry(OwnedDock& dock, HRESULT error) {
 }
 
 void AddButtonLenses(Root& root, LiquidRenderer::LensConstants& lens,
-                        double scale) {
+                     double scale) {
     size_t dropped = 0;
     for (auto const& source : root.sources) {
-        auto element = source.element.get();
-        if (!element) continue;
-        // Attention always earns a lens. Every other button only when the
-        // per-button layer is switched on.
+        // included is the shared eligibility/lifecycle decision. Keep the
+        // explicit retirement guard so stale cached inclusion can never emit a
+        // lens while a source waits for parking or reuse.
+        if (!source.included || source.life == Root::Source::Life::Retired)
+            continue;
         if (!source.requestingAttention && !g_buttonLiquidLayer) continue;
+        auto plate = source.plate;
+        if (!plate) continue;
         if (lens.lensCount == kMaxButtonLenses) {
             ++dropped;
             continue;
         }
-        std::vector<Controls::Border> plates;
-        CollectStatePlates(element, plates, 4);
-        auto plate = std::find_if(plates.begin(), plates.end(),
-                                  [](auto const& candidate) {
-                                      return candidate.Name() ==
-                                             L"BackgroundElement";
-                                  });
-        if (plate == plates.end()) continue;
-        // The plate spans the whole taskbar row; what is visible is the region
-        // PrepareStatePlate clipped it to, which is already computed and already
-        // accounts for the button padding. Transforming that rect carries any
-        // stretch with it, since TransformToVisual includes the RenderTransform.
         auto owned = std::find_if(
             root.statePlates.begin(), root.statePlates.end(),
-            [&](auto const& candidate) { return candidate.element == *plate; });
+            [&](auto const& candidate) { return candidate.element == plate; });
         if (owned == root.statePlates.end() || !owned->clipGeometry) continue;
+
+        // Express both the native Border and our inset clip in the dock's
+        // coordinate space. TransformToVisual carries the optional vertical
+        // stretch; separate native and clip bounds retain inset corners exactly.
+        auto transform = plate.TransformToVisual(root.dock.background);
+        auto nativeTopLeft = transform.TransformPoint({0, 0});
+        auto nativeBottomRight = transform.TransformPoint(
+            {static_cast<float>(plate.ActualWidth()),
+             static_cast<float>(plate.ActualHeight())});
         auto offset = owned->clipGeometry.Offset();
         auto extent = owned->clipGeometry.Size();
-        auto transform = plate->TransformToVisual(root.dock.background);
-        auto topLeft = transform.TransformPoint({offset.x, offset.y});
-        auto bottomRight = transform.TransformPoint(
+        auto clipTopLeft = transform.TransformPoint({offset.x, offset.y});
+        auto clipBottomRight = transform.TransformPoint(
             {offset.x + extent.x, offset.y + extent.y});
-        double width = bottomRight.X - topLeft.X;
-        double height = bottomRight.Y - topLeft.Y;
-        if (!std::isfinite(topLeft.X) || !std::isfinite(topLeft.Y) ||
-            width <= 2 || height <= 2)
+        double nativeWidth = nativeBottomRight.X - nativeTopLeft.X;
+        double nativeHeight = nativeBottomRight.Y - nativeTopLeft.Y;
+        double clipWidth = clipBottomRight.X - clipTopLeft.X;
+        double clipHeight = clipBottomRight.Y - clipTopLeft.Y;
+        double xScale = nativeWidth / plate.ActualWidth();
+        double yScale = nativeHeight / plate.ActualHeight();
+        if (!std::isfinite(nativeTopLeft.X) ||
+            !std::isfinite(nativeTopLeft.Y) ||
+            !std::isfinite(clipTopLeft.X) ||
+            !std::isfinite(clipTopLeft.Y) ||
+            !std::isfinite(xScale) || !std::isfinite(yScale) ||
+            nativeWidth <= 2 || nativeHeight <= 2 ||
+            clipWidth <= 2 || clipHeight <= 2 || xScale <= 0 || yScale <= 0)
             continue;
+
         auto index = lens.lensCount++;
-        lens.lensRects[index][0] = static_cast<float>(
-            (topLeft.X + width / 2) * scale);
-        lens.lensRects[index][1] = static_cast<float>(
-            (topLeft.Y + height / 2) * scale);
-        lens.lensRects[index][2] = static_cast<float>(width * scale / 2);
-        lens.lensRects[index][3] = static_cast<float>(height * scale / 2);
+        auto storeRect = [&](float (&target)[4], auto topLeft, double width,
+                             double height) {
+            target[0] = static_cast<float>((topLeft.X + width / 2) * scale);
+            target[1] = static_cast<float>((topLeft.Y + height / 2) * scale);
+            target[2] = static_cast<float>(width * scale / 2);
+            target[3] = static_cast<float>(height * scale / 2);
+        };
+        storeRect(lens.lensRects[index], clipTopLeft, clipWidth, clipHeight);
+        storeRect(lens.lensNativeRects[index], nativeTopLeft,
+                  nativeWidth, nativeHeight);
 
         winrt::Windows::UI::Color tint{255, 232, 72, 68};
-        if (auto brush = plate->Background().try_as<Media::SolidColorBrush>())
+        if (auto brush = plate.Background().try_as<Media::SolidColorBrush>())
             tint = brush.Color();
         lens.lensTints[index][0] = tint.R / 255.0f;
         lens.lensTints[index][1] = tint.G / 255.0f;
         lens.lensTints[index][2] = tint.B / 255.0f;
-        // The fourth component selects the alert tint, so a plain button lens
-        // refracts without being coloured.
         lens.lensTints[index][3] =
             source.requestingAttention ? 1.0f : 0.0f;
-        // The visible plate is its own rounded rect intersected with our clip, and
-        // a clip can only take area away, so the larger radius wins per corner. The
-        // lens tracked the native radius alone and so under-rounded whenever
-        // buttonCornerRadius exceeded it, which is the default.
-        double clipRadius =
-            std::min({g_buttonCornerRadius, width / 2, height / 2});
-        auto corners = plate->CornerRadius();
+
+        auto corners = plate.CornerRadius();
         for (auto [slot, corner] : {std::pair{0, corners.TopLeft},
                                     std::pair{1, corners.TopRight},
                                     std::pair{2, corners.BottomRight},
                                     std::pair{3, corners.BottomLeft}})
-            lens.lensRadii[index][slot] = static_cast<float>(
-                std::max(corner, clipRadius) * scale);
+            lens.lensRadii[index][slot] =
+                static_cast<float>(corner * xScale * scale);
+        auto clipRadius = owned->clipGeometry.CornerRadius();
+        lens.lensShapeParams[index][0] = static_cast<float>(yScale / xScale);
+        lens.lensShapeParams[index][1] =
+            static_cast<float>(clipRadius.x * xScale * scale);
+        lens.lensShapeParams[index][2] =
+            static_cast<float>(clipRadius.y * yScale * scale);
     }
     if (dropped)
         Wh_Log(L"[UWLIQUID] %zu button lenses past the %zu cap", dropped,
@@ -2613,7 +3164,6 @@ void PrepareLiquid(Root& root, Measurements const& m) {
         StopLiquid(dock);
         return;
     }
-    if (dock.liquid && HoldLiquidGeometry(root, *dock.liquid)) return;
     if (dock.liquidRetryAt && GetTickCount64() < dock.liquidRetryAt) return;
     // Startup discovery arrives through SendMessage/WH_CALLWNDPROC. WinRT
     // rejects compositor setup from that input-synchronous call (8001010D).
@@ -2645,10 +3195,21 @@ void PrepareLiquid(Root& root, Measurements const& m) {
                 dock.background, dock.attachedVisual);
             created = true;
         }
-        double dockLeft = (m.host - m.buttonsWidth - kGap - m.trayWidth) / 2 -
-                          kDockPadding - m.backgroundOrigin;
-        double dockWidth =
-            m.buttonsWidth + kGap + m.trayWidth + 2 * kDockPadding;
+        auto anchor = std::find_if(root.sources.begin(), root.sources.end(),
+            [&](auto const& source) { return source.identity == root.anchorIdentity; });
+        auto anchorElement =
+            anchor != root.sources.end() ? anchor->element.get() : nullptr;
+        if (!anchorElement)
+            throw winrt::hresult_error(E_PENDING, L"Optical anchor unavailable");
+        // Includes native child motion and our compositor-driven parent
+        // translation: the same anchor/prefix drives the dock expression.
+        double dockLeft = anchorElement.TransformToVisual(dock.background)
+                              .TransformPoint({0, 0}).X -
+                          root.anchorPrefix - kDockPadding;
+        double dockWidth = 2 * (m.host / 2 - m.backgroundOrigin - dockLeft);
+        if (!std::isfinite(dockLeft) || !std::isfinite(dockWidth) ||
+            dockWidth <= 0)
+            throw winrt::hresult_error(E_PENDING, L"Optical bounds unavailable");
         auto insets = m.insets;
         double dockHeight = m.visibleDockHeight();
         LiquidRenderer::LensConstants lens{};
@@ -2663,11 +3224,6 @@ void PrepareLiquid(Root& root, Measurements const& m) {
         lens.optics = g_liquidSettings;
         lens.optics.zRadius *= static_cast<float>(scale);
         AddButtonLenses(root, lens, scale);
-        if (DeferLiquidShrink(
-                dock.liquid->CurrentHalfWidth(), lens.halfSize[0],
-                GetTickCount64(), dock.liquidShrinkReadyAt,
-                dock.liquidShrinkTarget))
-            return;
         if (!dock.liquid->UpdateGeometry(
                 taskbarRect, pixelWidth, pixelHeight, lens))
             throw winrt::hresult_error(E_FAIL, L"Liquid renderer unavailable");
@@ -2783,12 +3339,13 @@ void StopFollower(Root& root) {
 void UpdateFollower(Root& root, FrameworkElement const& repeater,
                     Measurements const& m) {
     int count = Media::VisualTreeHelper::GetChildrenCount(repeater);
-    // ponytail: bound the experiment to 64 realized children; larger trees fall
-    // back to native geometry instead of producing an unbounded expression.
-    if (count > 64) throw winrt::hresult_error(E_BOUNDS);
     std::erase_if(root.sources, [](auto& source) {
-        return !source.element.get();
+        if (!source.element.get()) return true;
+        source.included = false;
+        source.plate = nullptr;
+        return false;
     });
+    if (count > 64) throw winrt::hresult_error(E_BOUNDS);
     std::vector<uintptr_t> seen, selected;
     bool acquired = false;
     uintptr_t anchorIdentity{};
@@ -2814,13 +3371,18 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
             // same Visual for startup too; never request
             // a handout for the tray, repeater, icon or label facade targets.
             auto visual = Hosting::ElementCompositionPreview::GetElementVisual(child);
-            root.sources.push_back({identity, winrt::make_weak(child), visual, Root::Source::Life::Active});
+            root.sources.push_back({identity, winrt::make_weak(child), visual,
+                                    Root::Source::Life::Active});
             acquired = true;
             source = root.sources.end() - 1;
             source->requestingAttention =
                 g_theme == DockTheme::Liquid && HasAttentionState(child);
         }
-        if (IncludeSource(eligible, source->life)) selected.push_back(identity);
+        source->included = IncludeSource(eligible, source->life);
+        if (source->included) {
+            selected.push_back(identity);
+            source->plate = SourcePlate(child, root.statePlates);
+        }
         if (eligible && source->life == Root::Source::Life::Active &&
             (!anchorIdentity || slot.X < anchorX)) {
             anchorIdentity = identity;
@@ -2932,10 +3494,33 @@ void RestoreRoot(Root& root) {
     }
     try { Restore(root.dock); }
     catch (...) { Wh_Log(L"[UWDOCK] restoration-error"); }
+    root.measurementsReady = false;
+}
+
+void RetireRoot(Root& root) {
+    if (root.retired) return;
+    root.retired = true;
+    if (root.subscribed && root.frame) {
+        try {
+            root.frame.LayoutUpdated(root.layoutToken);
+        } catch (...) {
+            Wh_Log(L"[UWPOS] unsubscribe-error frame=%p",
+                   winrt::get_abi(root.frame));
+        }
+        root.subscribed = false;
+    }
+    RestoreRoot(root);
+    root.taskbar = nullptr;
+    root.frame = nullptr;
+}
+
+void ReapRetiredRoots() {
+    std::erase_if(g_roots, [](Root const& root) { return root.retired; });
 }
 
 // ---- The layout pass ----------------------------------------------------
 void Refresh(Root& root) {
+    if (root.retired) return;
     if (g_dockingDisabled || root.blocked) {
         RestoreRoot(root);
         return;
@@ -2947,8 +3532,20 @@ void Refresh(Root& root) {
     auto start = Child(repeater, L"LaunchListButton");
     auto tray = Child(parent, L"SystemTray.SystemTrayFrame", true);
     auto background = Child(grid, L"Taskbar.TaskbarBackground", true);
+    int realizedCount = repeater
+                            ? Media::VisualTreeHelper::GetChildrenCount(repeater)
+                            : 0;
     if (!parent || !repeater || !start || !tray || !background) {
-        if (!root.fallbackReported) Wh_Log(L"[UWPOS] native fallback: required tree element missing");
+        if (!root.fallbackReported)
+            Wh_Log(L"[UWPOS] native fallback: required tree element missing");
+        root.fallbackReported = true;
+        RestoreRoot(root);
+        return;
+    }
+    if (realizedCount > 64) {
+        if (!root.fallbackReported)
+            Wh_Log(L"[UWPOS] native fallback: realized child capacity=%d",
+                   realizedCount);
         root.fallbackReported = true;
         RestoreRoot(root);
         return;
@@ -3006,14 +3603,12 @@ void Refresh(Root& root) {
     }
     root.fallbackReported = false;
     root.hostWidth = host;
-    // The first publication resolves this XAML root to its native taskbar so
-    // the dock can choose the monitor-facing edge before creating its clip.
-    if (!PublishTray(root, host, target.trayX)) {
+    // Resolve the native owner once. All later publication in this refresh
+    // reuses this association and cannot disagree with the chosen insets.
+    if (!ResolveTaskbar(root, host) || !PublishTray(root, target.trayX)) {
         RestoreRoot(root);
         return;
     }
-    // PublishTray has resolved root.taskbar, so the orientation-dependent insets
-    // are settled here and every later stage reads this one copy.
     Measurements m{
         .host = host,
         .origin = origin,
@@ -3027,6 +3622,8 @@ void Refresh(Root& root) {
         .dockHeight = background.ActualHeight(),
         .insets = GetDockInsets(root.taskbar, background.ActualHeight()),
     };
+    root.measurements = m;
+    root.measurementsReady = true;
     if (!PrepareDock(root.dock, background, m.insets)) {
         root.blocked = true;
         Wh_Log(L"[UWDOCK] clip ownership/tree change; root left native");
@@ -3038,7 +3635,7 @@ void Refresh(Root& root) {
     PrepareGlass(root.dock);
     // Publication marks availability; popup hooks query current transformed
     // tray bounds on the owner thread instead of consuming this layout estimate.
-    if (!PublishTray(root, host, target.trayX)) {
+    if (!PublishTray(root, target.trayX)) {
         RestoreRoot(root);
         return;
     }
@@ -3062,15 +3659,19 @@ void OnLayout(winrt::weak_ref<FrameworkElement> const& weak) {
             root.refreshFailures = 0;
         } catch (...) {
             auto error = winrt::to_hresult();
-            // A native transition transform, an anchor that moved mid-flight and
-            // more than 64 realized children all clear on a later pass, so these
-            // retry. Ownership changes latch separately, above.
-            bool latch = ++root.refreshFailures >= kRefreshRetryLimit;
+            bool expected = error.value == E_BOUNDS ||
+                            error.value == E_PENDING ||
+                            error.value == E_NOTIMPL;
+            bool latch = !expected &&
+                         ++root.refreshFailures >= kRefreshRetryLimit;
+            if (expected) root.refreshFailures = 0;
             if (latch) root.blocked = true;
-            if (root.refreshFailures == 1 || latch)
-                Wh_Log(L"[UWPOS] refresh-error hr=%08X attempt=%u%s", error.value,
-                       root.refreshFailures,
-                       latch ? L"; root blocked, re-enable to retry" : L"; retrying");
+            if (expected || root.refreshFailures == 1 || latch)
+                Wh_Log(L"[UWPOS] refresh-error hr=%08X attempt=%u%s",
+                       error.value, root.refreshFailures,
+                       expected ? L"; retryable native state" :
+                       latch ? L"; root blocked, re-enable to retry" :
+                               L"; retrying");
             RestoreRoot(root);
         }
         break;
@@ -3129,6 +3730,14 @@ LRESULT QueryCurrentTray(HWND taskbar) {
 
 void DiscoverExisting(HWND taskbar);
 
+void RefreshWatchedFrames() {
+    std::vector<winrt::weak_ref<FrameworkElement>> frames;
+    frames.reserve(g_roots.size());
+    for (auto const& root : g_roots)
+        if (!root.retired && root.frame) frames.push_back(winrt::make_weak(root.frame));
+    for (auto const& frame : frames) OnLayout(frame);
+}
+
 LRESULT CALLBACK DispatchProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
     if (message == kQueryTrayMessage) return QueryCurrentTray(reinterpret_cast<HWND>(wp));
     if (message == kPrepareLiquidMessage) {
@@ -3137,14 +3746,14 @@ LRESULT CALLBACK DispatchProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
         if (g_stopping) return 0;
         g_preparingLiquid = true;
         struct Unprepare { ~Unprepare() { g_preparingLiquid = false; } } unprepare;
-        for (auto& root : g_roots) OnLayout(winrt::make_weak(root.frame));
+        RefreshWatchedFrames();
         return 0;
     }
     if (message == kRefreshItemStatesMessage) {
         g_itemStateRefreshPending = false;
         if (g_stopping) return 0;
         for (auto& root : g_roots) RefreshAttentionStates(root);
-        for (auto& root : g_roots) OnLayout(winrt::make_weak(root.frame));
+        RefreshWatchedFrames();
         return 0;
     }
     if (message == WM_TIMER && wp == kLiquidTimerId) {
@@ -3162,10 +3771,6 @@ LRESULT CALLBACK DispatchProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
                     ScheduleLiquidRetry(dock, failure);
                 } else {
                     dock.liquid->UpdateSources();
-                    dock.liquid->FlushPendingPresent();
-                    if (dock.liquidShrinkReadyAt &&
-                        now >= dock.liquidShrinkReadyAt)
-                        retries.push_back(winrt::make_weak(root.frame));
                 }
             } else if (dock.liquidRetryAt) {
                 active = true;
@@ -3185,15 +3790,12 @@ LRESULT CALLBACK DispatchProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
         g_itemStateRefreshPending = false;
         KillTimer(window, kLiquidTimerId);
         g_liquidTimerArmed = false;
+        StopLiquidMotionTracking();
         if (g_panelLocationHook) {
             UnhookWinEvent(g_panelLocationHook);
             g_panelLocationHook = nullptr;
         }
-        for (auto& root : g_roots) {
-            try { root.frame.LayoutUpdated(root.layoutToken); }
-            catch (...) { Wh_Log(L"[UWPOS] unsubscribe-error frame=%p", winrt::get_abi(root.frame)); }
-            RestoreRoot(root);
-        }
+        for (auto& root : g_roots) RetireRoot(root);
         g_roots.clear();
         DestroyWindow(window);
         g_dispatch = nullptr;
@@ -3210,7 +3812,8 @@ bool EnsureDispatcher() {
     if (g_ownerThread != current) return false;
     if (!g_dispatch) {
         g_dispatch = CreateWindowEx(0, kWindowClass, L"", 0, 0, 0, 0, 0,
-                                    HWND_MESSAGE, nullptr, GetModuleHandle(nullptr), nullptr);
+                                    HWND_MESSAGE, nullptr,
+                                    GetModuleHandle(nullptr), nullptr);
     }
     if (g_dispatch && !g_panelLocationHook) {
         g_panelLocationHook = SetWinEventHook(
@@ -3224,16 +3827,38 @@ bool EnsureDispatcher() {
 
 void WatchFrame(FrameworkElement frame) {
     if (!frame || !EnsureDispatcher()) return;
-    for (auto& root : g_roots) if (root.frame == frame) return;
+    for (auto& root : g_roots)
+        if (!root.retired && root.frame == frame) return;
     g_busy = true;
-    struct Unbusy { ~Unbusy() { g_busy = false; } } unbusy;
+    struct Unbusy {
+        ~Unbusy() { g_busy = false; }
+    } unbusy;
+    // Retirement only marks entries while references/iterations may exist.
+    // WatchFrame is the mutation boundary and reaps before appending.
+    for (auto& root : g_roots) {
+        if (root.retired || !root.frame) continue;
+        try {
+            if (!Media::VisualTreeHelper::GetParent(root.frame))
+                RetireRoot(root);
+        } catch (...) {
+            RetireRoot(root);
+        }
+    }
+    ReapRetiredRoots();
     Root root;
     root.frame = frame;
     auto weak = winrt::make_weak(frame);
-    root.layoutToken = frame.LayoutUpdated([weak](auto&&, auto&&) { OnLayout(weak); });
-    try { g_roots.push_back(root); }
-    catch (...) { frame.LayoutUpdated(root.layoutToken); throw; }
-    Wh_Log(L"[UWPOS] watching frame=%p thread=%lu", winrt::get_abi(frame), GetCurrentThreadId());
+    root.layoutToken =
+        frame.LayoutUpdated([weak](auto&&, auto&&) { OnLayout(weak); });
+    root.subscribed = true;
+    try {
+        g_roots.push_back(std::move(root));
+    } catch (...) {
+        frame.LayoutUpdated(root.layoutToken);
+        throw;
+    }
+    Wh_Log(L"[UWPOS] watching frame=%p thread=%lu", winrt::get_abi(frame),
+           GetCurrentThreadId());
 }
 
 void DiscoverExisting(HWND taskbar) {
@@ -3251,6 +3876,13 @@ void DiscoverExisting(HWND taskbar) {
         if (!frame) {
             Wh_Log(L"[UWPOS] startup root unavailable taskbar=%p; native layout retained", taskbar);
             return;
+        }
+        // The native HWND identifies replacement generations. Retire its old
+        // frame before the replacement publishes, without erasing during any
+        // active root traversal.
+        for (auto& root : g_roots) {
+            if (!root.retired && root.taskbar == taskbar && root.frame != frame)
+                RetireRoot(root);
         }
         WatchFrame(frame);
         // The existing root is already arranged. Use the same guarded Refresh
