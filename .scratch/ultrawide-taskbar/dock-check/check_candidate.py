@@ -12,6 +12,30 @@ source = folder / 'windows-11-better-ultrawide-taskbar.wh.cpp'
 source.write_bytes(production.read_bytes())
 code = source.read_text(encoding='utf-8')
 version = re.search(r'@version\s+(\S+)', code)[1]
+
+
+def function_body(signature):
+    start = code.index(signature)
+    opening = code.index('{', start)
+    depth = 1
+    for index in range(opening + 1, len(code)):
+        depth += (code[index] == '{') - (code[index] == '}')
+        if not depth:
+            return code[opening + 1:index]
+    raise AssertionError(f'unclosed function: {signature}')
+
+
+init_body = function_body('BOOL Wh_ModInit() {')
+late_load_body = function_body('HMODULE WINAPI LoadLibraryExW_Hook(')
+after_init_body = function_body('void Wh_ModAfterInit() {')
+hook_taskbar_body = function_body('bool TryHookTaskbarView(')
+assert 'LoadLibraryExW_Hook' in init_body
+assert 'TryHookTaskbarView' in late_load_body
+assert 'TryHookTaskbarView' in after_init_body
+assert 'HookTaskbarViewSymbols' in hook_taskbar_body
+assert 'Wh_ApplyHookOperations' in hook_taskbar_body
+print('PASS: Explorer startup waits for a late Taskbar.View.dll and applies hooks.')
+
 windhawk = Path("C:/Applications/Windhawk")
 compiler = windhawk / "Compiler"
 flags = (compiler / "compile_flags.txt").read_text().splitlines()
@@ -20,8 +44,8 @@ flags += ['-DWH_MOD_ID=L"windows-11-better-ultrawide-taskbar"',
           f'-DWH_MOD_VERSION=L"{version}"']
 driver = ["rtk", "proxy", str(compiler / "bin/clang++.exe"), *flags]
 libs = ["-lole32", "-loleaut32", "-lruntimeobject", "-ldwmapi",
-        "-lwindowsapp", "-ld3d11", "-ldxgi", "-ld3dcompiler", "-luser32",
-        "-lkernel32"]
+        "-lwindowsapp", "-ld3d11", "-ldxgi", "-ld3dcompiler", "-lgdi32",
+        "-luser32", "-lkernel32"]
 source = folder / "windows-11-better-ultrawide-taskbar.wh.cpp"
 subprocess.run([*driver, "-shared", "-O2", "-Wall", "-Wextra", "-Werror", str(source),
                 "-x", "none", str(windhawk / "Engine/1.7.3/64/windhawk.lib"), *libs,
@@ -595,6 +619,7 @@ int main() {
     Wh_ModAfterInit(); // Shell-host mode must not run Explorer discovery.
     assert(hostCalls == 2);
     g_explorer = true;
+    g_taskbarViewReady = true;
     Wh_ModAfterInit(); // Enumeration filters out other processes' real taskbars.
     assert(hostCalls == 3 && hostReleases == 6);
     // Secondary lookup must use its WorkerW child, distinct vtable and getter.

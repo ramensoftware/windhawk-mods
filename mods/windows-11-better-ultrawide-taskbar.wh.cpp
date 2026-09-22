@@ -2,14 +2,14 @@
 // @id              windows-11-better-ultrawide-taskbar
 // @name            Windows 11 Better Ultrawide Taskbar
 // @description     Centers taskbar buttons and the system tray in a rounded dock while preserving native button animations
-// @version         2.84
+// @version         2.95
 // @author          Molko
 // @github          https://github.com/roeseth
 // @include         explorer.exe
 // @include         ShellHost.exe
 // @include         ShellExperienceHost.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lwindowsapp -ld3d11 -ldxgi -ld3dcompiler -luser32 -lkernel32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lwindowsapp -ld3d11 -ldxgi -ld3dcompiler -lgdi32 -luser32 -lkernel32
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
@@ -60,6 +60,10 @@ outline. Liquid keeps the native fill transparent while capture or GPU setup
 is unavailable, and transient GPU failures are retried automatically. High
 contrast retains the Windows material. Changing the setting reloads the mod.
 
+**Font color override** can retain Windows' color, force light or dark text, or
+adapt each text element from its local composed background. Adaptive changes
+fade between colors. High contrast always retains Windows' colors.
+
 Task-button hover uses Windows' native animation as a translucent tint over
 the dock. An app requesting attention receives an additional inset refractive
 lens with the native alert color.
@@ -69,10 +73,9 @@ highlight. The dock's translucency fades the native one out, so the mod redraws 
 at matching strength; turn the border off for a flat highlight.
 
 Under the Liquid glass theme each task button can also become its own piece of
-liquid glass, carved out of the dock rather than layered over it: the dock is not
-drawn beneath a button, and the button refracts the backdrop directly with the same
-edge displacement, chromatic split, specular and fresnel as the dock itself. It is
-the same shader pass, not a second capture. Tray items share the dock lens.
+liquid glass inside the dock, carrying the same edge displacement, chromatic split,
+specular and fresnel as the dock itself. It is the same shader pass, not a second
+capture. Tray items share the dock lens.
 
 Liquid glass includes the reference site's Regular, Frosted, and Dark presets.
 Regular is the reference defaults with no backdrop blur; Frosted adds it, and
@@ -105,6 +108,14 @@ setting.
   - glass: Glass
   - frosted: Frosted glass
   - liquid: Liquid glass (refraction)
+- fontColor: default
+  $name: Font color override (default Windows)
+  $description: Keep Windows' taskbar text color, force light or dark text, or fade each text element to the higher-contrast color for its local composed background.
+  $options:
+  - default: Windows
+  - light: Light
+  - dark: Dark
+  - adaptive: Adaptive
 - cornerRadius: 12
   $name: Taskbar corner radius (DIP, default 12)
   $description: Rounded dock corner radius from 0 to 100.
@@ -120,7 +131,7 @@ setting.
     $description: Draws the raised gradient outline Windows puts on task button highlights, which the dock's translucency would otherwise fade out.
   - liquidLayer: false
     $name: Per-button liquid glass layer (default off)
-    $description: Carves every task button out of the dock as its own piece of liquid glass, sampling the backdrop directly with the same edge displacement, chromatic split, specular and fresnel as the dock. Liquid glass theme only.
+    $description: Renders every task button as its own piece of liquid glass inside the dock, with the same edge displacement, chromatic split, specular and fresnel as the dock. Liquid glass theme only.
   $name: Task and tray buttons
   $description: Appearance of the native task and tray button highlights.
 - edgeDistance: 4
@@ -182,6 +193,7 @@ setting.
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <dxgi1_2.h>
+#include <dxgi1_3.h>
 #include <dwmapi.h>
 #include <inspectable.h>
 #undef GetCurrentTime
@@ -193,8 +205,10 @@ setting.
 #include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
 #include <winrt/Windows.UI.Composition.h>
 #include <winrt/Windows.UI.Xaml.h>
+#include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.Media.Animation.h>
 #include <winrt/Windows.UI.Xaml.Hosting.h>
 #include <winrt/Windows.UI.Xaml.Shapes.h>
 
@@ -205,6 +219,7 @@ using namespace winrt::Windows::UI::Composition;
 namespace capture = winrt::Windows::Graphics::Capture;
 namespace directx = winrt::Windows::Graphics::DirectX;
 namespace direct3d11 = winrt::Windows::Graphics::DirectX::Direct3D11;
+namespace animation = winrt::Windows::UI::Xaml::Media::Animation;
 
 static constexpr GUID kIID_IGraphicsCaptureItemInterop{
     0x3628E81B, 0x3CAC, 0x4C60,
@@ -239,6 +254,7 @@ constexpr UINT kRestoreMessage = WM_APP + 43;
 constexpr UINT kQueryTrayMessage = WM_APP + 44;
 constexpr UINT kPrepareLiquidMessage = WM_APP + 45;
 constexpr UINT kRefreshItemStatesMessage = WM_APP + 46;
+constexpr UINT kForegroundSampleMessage = WM_APP + 47;
 constexpr UINT_PTR kLiquidTimerId = 45;
 // A transient measurement fails a handful of consecutive layout passes at most;
 // an unsupported build fails every one. Tune down if a broken tree costs too many
@@ -258,6 +274,8 @@ std::atomic<unsigned> g_active{};
 std::atomic<DWORD> g_ownerThread{};
 std::atomic<HWND> g_dispatch{};
 std::atomic<bool> g_dockingDisabled{};
+std::atomic<bool> g_taskbarViewHookStarted{};
+std::atomic<bool> g_taskbarViewReady{};
 ATOM g_windowClass{};
 bool g_busy{};  // Owner thread only.
 bool g_explorer{};
@@ -267,7 +285,9 @@ bool g_itemStateRefreshPending{};  // Owner thread only.
 bool g_liquidTimerArmed{};  // Owner thread only.
 UINT g_discoverMessage{};
 enum class DockTheme { Native, Glass, Frosted, Liquid };
+enum class FontColorMode { Default, Light, Dark, Adaptive };
 DockTheme g_theme{};
+FontColorMode g_fontColorMode{};
 double g_dockCornerRadius{12};
 double g_buttonCornerRadius{12};
 double g_buttonVerticalPadding{4};
@@ -419,6 +439,21 @@ DockTheme ParseTheme(std::wstring_view name) {
     if (name == L"frosted") return DockTheme::Frosted;
     if (name == L"liquid") return DockTheme::Liquid;
     return DockTheme::Native;
+}
+
+FontColorMode ParseFontColor(std::wstring_view name) {
+    if (name == L"light") return FontColorMode::Light;
+    if (name == L"dark") return FontColorMode::Dark;
+    if (name == L"adaptive") return FontColorMode::Adaptive;
+    return FontColorMode::Default;
+}
+
+bool PreferLightForeground(double luminance, bool previous, bool ready) {
+    constexpr double pivot = 0.179;  // Equal black/white WCAG contrast.
+    constexpr double hysteresis = 0.02;
+    if (!ready) return luminance < pivot;
+    return previous ? luminance < pivot + hysteresis
+                    : luminance < pivot - hysteresis;
 }
 
 using TaskbarConfiguration_GetFrameSize_t = double(WINAPI*)(int);
@@ -903,8 +938,21 @@ struct Root {
         bool included{};
         Controls::Border plate{nullptr};
     };
+    struct ForegroundState {
+        winrt::weak_ref<Controls::TextBlock> element;
+        uintptr_t identity{};
+        winrt::Windows::Foundation::IInspectable original{nullptr};
+        Media::SolidColorBrush brush{nullptr};
+        animation::Storyboard transition{nullptr};
+        bool owned{};
+        bool light{};
+        bool ready{};
+    };
     std::vector<Source> sources;
     std::vector<StatePlate> statePlates;
+    std::vector<ForegroundState> foregrounds;
+    ULONGLONG foregroundSampleAt{};
+    bool foregroundSamplePending{};
     std::vector<uintptr_t> expressionSources;
     ExpressionAnimation follower{nullptr};
     ExpressionAnimation buttonsFollower{nullptr};
@@ -1229,12 +1277,10 @@ float4 ps(VertexOutput input) : SV_Target {
     float4 original = backdrop.SampleLevel(linearClamp, pixel / imageSize, 0);
     if (original.a <= 0.001) return 0;
 
-    // Each button is a glass surface in its own right, carved out of the dock rather
-    // than layered over it: where a button covers a pixel the dock's glass is not
-    // shaded at all and the button refracts the backdrop itself, so the two
-    // materials' rim and specular never stack. Buttons do not overlap, so the first
-    // hit wins and the cheap distance rejects every other lens. The alert tint
-    // applies only to the lenses flagged for it in w.
+    // Each button is a glass surface over the shared dock. Buttons do not overlap,
+    // so the first hit wins and the cheap distance rejects every other lens. The
+    // dock remains beneath the lens so sampled button geometry can't expose the
+    // raw backdrop during native motion.
     float coverage = 0;
     float3 buttonColor = 0;
     for (uint i = 0; i < min(lensCount, BUTTON_LENS_CAP); ++i) {
@@ -1329,16 +1375,24 @@ float4 ps(VertexOutput input) : SV_Target {
     UINT blurWidth{};
     UINT blurHeight{};
     bool pendingPresent{};
-    bool presentTimerArmed{};
+    bool presentWorkPending{};
     LensConstants lens{};
+    LensConstants motionBase{};
+    LensConstants motionObserved{};
+    LensConstants motionVelocity{};
+    std::chrono::steady_clock::time_point motionSampleAt{};
+    std::chrono::steady_clock::time_point motionObservationAt{};
+    float motionSampleSeconds{1.0f / 60};
+    bool motionActive{};
+    bool motionObservationPending{};
     HRESULT failure{S_OK};
     std::chrono::steady_clock::time_point lastPresent{};
-    std::chrono::steady_clock::time_point presentDeadline{};
-    PTP_TIMER presentTimer{};
-    struct PresentTimerContext {
+    PTP_WORK presentWork{};
+    HANDLE frameLatencyWaitable{};
+    struct PresentWorkContext {
         LiquidRenderer* renderer{};
     };
-    PresentTimerContext* presentTimerContext{};
+    PresentWorkContext* presentWorkContext{};
     std::vector<std::shared_ptr<Source>> sources;
 
     winrt::com_ptr<ID3D11Device> device;
@@ -1447,8 +1501,16 @@ float4 ps(VertexOutput input) : SV_Target {
             swapDescription.Scaling = DXGI_SCALING_STRETCH;
             swapDescription.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
             swapDescription.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+            swapDescription.Flags =
+                DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
             winrt::check_hresult(factory->CreateSwapChainForComposition(
                 device.get(), &swapDescription, nullptr, swapChain.put()));
+            auto pacedSwapChain = swapChain.as<IDXGISwapChain2>();
+            winrt::check_hresult(pacedSwapChain->SetMaximumFrameLatency(1));
+            frameLatencyWaitable =
+                pacedSwapChain->GetFrameLatencyWaitableObject();
+            if (!frameLatencyWaitable)
+                throw winrt::hresult_error(E_FAIL);
             winrt::com_ptr<ICompositorInterop> compositorInterop;
             winrt::check_hresult(
                 reinterpret_cast<IUnknown*>(winrt::get_abi(compositor))
@@ -1469,21 +1531,43 @@ float4 ps(VertexOutput input) : SV_Target {
             visualRoot.RelativeSizeAdjustment({1, 1});
             visualRoot.Children().InsertAtBottom(pixels);
             if (!ResizeLocked(pixelWidth, pixelHeight)) return false;
-            presentTimerContext = new PresentTimerContext{this};
-            presentTimer = CreateThreadpoolTimer(
-                [](PTP_CALLBACK_INSTANCE, void* raw, PTP_TIMER) {
+            presentWorkContext = new PresentWorkContext{this};
+            presentWork = CreateThreadpoolWork(
+                [](PTP_CALLBACK_INSTANCE, void* raw, PTP_WORK) {
                     ActiveScope active;
                     auto renderer =
-                        static_cast<PresentTimerContext*>(raw)->renderer;
+                        static_cast<PresentWorkContext*>(raw)->renderer;
+                    HANDLE waitable{};
+                    {
+                        std::lock_guard lock(renderer->mutex);
+                        if (renderer->running && !FAILED(renderer->failure) &&
+                            renderer->geometryReady &&
+                            renderer->pendingPresent)
+                            waitable = renderer->frameLatencyWaitable;
+                    }
+                    DWORD waited = waitable
+                                       ? WaitForSingleObject(waitable, 100)
+                                       : WAIT_FAILED;
                     std::lock_guard lock(renderer->mutex);
-                    renderer->presentTimerArmed = false;
-                    if (renderer->running && !FAILED(renderer->failure) &&
-                        renderer->geometryReady && renderer->pendingPresent)
+                    if (!waitable || waited == WAIT_FAILED) {
+                        DWORD error = GetLastError();
+                        renderer->failure =
+                            error ? HRESULT_FROM_WIN32(error) : E_FAIL;
+                    } else if (renderer->running &&
+                               !FAILED(renderer->failure) &&
+                               renderer->geometryReady &&
+                               renderer->pendingPresent) {
+                        renderer->RenderLocked();
+                        renderer->lastPresent =
+                            std::chrono::steady_clock::now();
+                    }
+                    renderer->presentWorkPending = false;
+                    if (renderer->motionActive)
                         renderer->SchedulePresentLocked();
-                }, presentTimerContext, nullptr);
-            if (!presentTimer) {
-                delete presentTimerContext;
-                presentTimerContext = nullptr;
+                }, presentWorkContext, nullptr);
+            if (!presentWork) {
+                delete presentWorkContext;
+                presentWorkContext = nullptr;
                 winrt::throw_last_error();
             }
             running = true;
@@ -1517,7 +1601,8 @@ float4 ps(VertexOutput input) : SV_Target {
         if (width && height) {
             context->Flush();
             HRESULT hr = swapChain->ResizeBuffers(
-                2, pixelWidth, pixelHeight, DXGI_FORMAT_B8G8R8A8_UNORM, 0);
+                2, pixelWidth, pixelHeight, DXGI_FORMAT_B8G8R8A8_UNORM,
+                DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT);
             if (FAILED(hr)) return false;
         }
         D3D11_TEXTURE2D_DESC description{};
@@ -1579,15 +1664,196 @@ float4 ps(VertexOutput input) : SV_Target {
                       sizeof(a) - offset) == 0;
     }
 
+    static bool SameMotionGeometry(LensConstants const& a,
+                                   LensConstants const& b) {
+        if (a.lensCount != b.lensCount || a.radius != b.radius)
+            return false;
+        for (int axis = 0; axis < 2; ++axis)
+            if (a.center[axis] != b.center[axis] ||
+                a.halfSize[axis] != b.halfSize[axis])
+                return false;
+        for (uint32_t i = 0; i < a.lensCount; ++i) {
+            for (int component = 0; component < 4; ++component)
+                if (a.lensRects[i][component] != b.lensRects[i][component] ||
+                    a.lensRadii[i][component] != b.lensRadii[i][component] ||
+                    a.lensNativeRects[i][component] !=
+                        b.lensNativeRects[i][component])
+                    return false;
+            for (int component = 0; component < 3; ++component)
+                if (a.lensShapeParams[i][component] !=
+                    b.lensShapeParams[i][component])
+                    return false;
+        }
+        return true;
+    }
+
+    static void PredictMotionGeometry(LensConstants& output,
+                                      LensConstants const& base,
+                                      LensConstants const& velocity,
+                                      float seconds) {
+        auto predict = [seconds](float value, float speed) {
+            return value + speed * seconds;
+        };
+        output.radius = std::max(0.0f, predict(base.radius, velocity.radius));
+        for (int axis = 0; axis < 2; ++axis) {
+            output.center[axis] =
+                predict(base.center[axis], velocity.center[axis]);
+            output.halfSize[axis] = std::max(
+                1.0f, predict(base.halfSize[axis], velocity.halfSize[axis]));
+        }
+        for (uint32_t i = 0; i < output.lensCount; ++i) {
+            for (int component = 0; component < 4; ++component) {
+                output.lensRects[i][component] = predict(
+                    base.lensRects[i][component],
+                    velocity.lensRects[i][component]);
+                output.lensRadii[i][component] = std::max(
+                    0.0f, predict(base.lensRadii[i][component],
+                                  velocity.lensRadii[i][component]));
+                output.lensNativeRects[i][component] = predict(
+                    base.lensNativeRects[i][component],
+                    velocity.lensNativeRects[i][component]);
+            }
+            output.lensRects[i][2] = std::max(1.0f, output.lensRects[i][2]);
+            output.lensRects[i][3] = std::max(1.0f, output.lensRects[i][3]);
+            output.lensNativeRects[i][2] =
+                std::max(1.0f, output.lensNativeRects[i][2]);
+            output.lensNativeRects[i][3] =
+                std::max(1.0f, output.lensNativeRects[i][3]);
+            for (int component = 0; component < 3; ++component)
+                output.lensShapeParams[i][component] = predict(
+                    base.lensShapeParams[i][component],
+                    velocity.lensShapeParams[i][component]);
+            output.lensShapeParams[i][0] =
+                std::max(0.01f, output.lensShapeParams[i][0]);
+        }
+    }
+
+    LensConstants PredictedLensLocked(
+        std::chrono::steady_clock::time_point now) const {
+        LensConstants result = lens;
+        if (!motionActive || motionBase.lensCount != lens.lensCount ||
+            motionSampleAt.time_since_epoch().count() == 0)
+            return result;
+        float horizon = std::clamp(
+            motionSampleSeconds * 1.25f, 1.0f / 120, 0.025f);
+        float seconds = std::clamp(
+            std::chrono::duration<float>(now - motionSampleAt).count(),
+            0.0f, horizon);
+        PredictMotionGeometry(result, motionBase, motionVelocity, seconds);
+        return result;
+    }
+
+    void ObserveMotionLocked(
+        LensConstants const& newLens,
+        std::chrono::steady_clock::time_point now) {
+        float elapsed =
+            std::chrono::duration<float>(now - motionSampleAt).count();
+        if (motionBase.lensCount != newLens.lensCount || elapsed <= 0.001f ||
+            elapsed > 0.1f) {
+            motionBase = newLens;
+            motionVelocity = {};
+        } else {
+            auto current = PredictedLensLocked(now);
+            float sampleSeconds =
+                std::clamp(elapsed, 1.0f / 240, 1.0f / 30);
+            float correctionSeconds =
+                std::clamp(elapsed, 1.0f / 240, 0.02f);
+            auto previousVelocity = motionVelocity;
+            auto velocity = [sampleSeconds, correctionSeconds](
+                                float previous, float next, float displayed,
+                                float previousSpeed) {
+                float observed = (next - previous) / sampleSeconds;
+                float correction = (next - displayed) / correctionSeconds;
+                float correctionLimit =
+                    std::max(std::abs(observed), std::abs(previousSpeed) * 0.5f);
+                correction =
+                    std::clamp(correction, -correctionLimit, correctionLimit);
+                float result = observed + correction;
+                if (observed > 0) return std::max(0.0f, result);
+                if (observed < 0) return std::min(0.0f, result);
+                return result;
+            };
+            motionVelocity = {};
+            motionVelocity.lensCount = newLens.lensCount;
+            motionVelocity.radius =
+                velocity(motionObserved.radius, newLens.radius, current.radius,
+                         previousVelocity.radius);
+            for (int axis = 0; axis < 2; ++axis) {
+                motionVelocity.center[axis] =
+                    velocity(motionObserved.center[axis], newLens.center[axis],
+                             current.center[axis],
+                             previousVelocity.center[axis]);
+                motionVelocity.halfSize[axis] =
+                    velocity(motionObserved.halfSize[axis],
+                             newLens.halfSize[axis],
+                             current.halfSize[axis],
+                             previousVelocity.halfSize[axis]);
+            }
+            for (uint32_t i = 0; i < newLens.lensCount; ++i) {
+                for (int component = 0; component < 4; ++component) {
+                    motionVelocity.lensRects[i][component] = velocity(
+                        motionObserved.lensRects[i][component],
+                        newLens.lensRects[i][component],
+                        current.lensRects[i][component],
+                        previousVelocity.lensRects[i][component]);
+                    motionVelocity.lensRadii[i][component] = velocity(
+                        motionObserved.lensRadii[i][component],
+                        newLens.lensRadii[i][component],
+                        current.lensRadii[i][component],
+                        previousVelocity.lensRadii[i][component]);
+                    motionVelocity.lensNativeRects[i][component] = velocity(
+                        motionObserved.lensNativeRects[i][component],
+                        newLens.lensNativeRects[i][component],
+                        current.lensNativeRects[i][component],
+                        previousVelocity.lensNativeRects[i][component]);
+                }
+                for (int component = 0; component < 3; ++component)
+                    motionVelocity.lensShapeParams[i][component] = velocity(
+                        motionObserved.lensShapeParams[i][component],
+                        newLens.lensShapeParams[i][component],
+                        current.lensShapeParams[i][component],
+                        previousVelocity.lensShapeParams[i][component]);
+            }
+            motionBase = current;
+            motionBase.lensCount = newLens.lensCount;
+            motionSampleSeconds = sampleSeconds;
+        }
+        motionSampleAt = now;
+    }
+
+    void CommitMotionObservationLocked(
+        std::chrono::steady_clock::time_point now) {
+        if (!motionObservationPending ||
+            now - motionObservationAt < std::chrono::milliseconds(1))
+            return;
+        ObserveMotionLocked(lens, motionObservationAt);
+        motionObserved = lens;
+        motionObservationPending = false;
+    }
+
     bool UpdateGeometry(RECT const& taskbarBounds, UINT pixelWidth,
                         UINT pixelHeight, LensConstants const& newLens) {
         std::lock_guard lock(mutex);
         if (!running || FAILED(failure) ||
             !ResizeLocked(pixelWidth, pixelHeight))
             return false;
+        auto now = std::chrono::steady_clock::now();
         bool changed = !geometryReady ||
                        !EqualRect(&taskbarRect, &taskbarBounds) ||
                        !SameLensInput(lens, newLens);
+        bool motionChanged =
+            !geometryReady || !SameMotionGeometry(lens, newLens);
+        if (motionActive && motionChanged) {
+            if (geometryReady) {
+                motionObservationAt = now;
+                motionObservationPending = true;
+            } else {
+                motionBase = newLens;
+                motionObserved = newLens;
+                motionVelocity = {};
+                motionSampleAt = now;
+            }
+        }
         taskbarRect = taskbarBounds;
         lens = newLens;
         geometryReady = true;
@@ -1595,39 +1861,31 @@ float4 ps(VertexOutput input) : SV_Target {
         return true;
     }
 
-    void ArmPresentTimerLocked(std::chrono::steady_clock::time_point deadline) {
-        if (!presentTimer ||
-            (presentTimerArmed && deadline >= presentDeadline)) return;
-        presentDeadline = deadline;
-        auto delay = std::max(deadline - std::chrono::steady_clock::now(),
-                              std::chrono::steady_clock::duration::zero());
-        auto ticks = std::chrono::duration_cast<std::chrono::nanoseconds>(delay)
-                         .count() / 100;
-        LARGE_INTEGER due{};
-        due.QuadPart = -std::max<int64_t>(1, ticks);
-        FILETIME dueTime{due.LowPart, static_cast<DWORD>(due.HighPart)};
-        SetThreadpoolTimer(presentTimer, &dueTime, 0, 0);
-        presentTimerArmed = true;
+    void SetMotionActive(bool active) noexcept {
+        std::lock_guard lock(mutex);
+        if (motionActive == active) return;
+        motionActive = active;
+        motionVelocity = {};
+        motionSampleSeconds = 1.0f / 60;
+        motionSampleAt = active ? std::chrono::steady_clock::now()
+                                : std::chrono::steady_clock::time_point{};
+        motionObservationPending = false;
+        if (geometryReady) {
+            motionBase = lens;
+            motionObserved = lens;
+            SchedulePresentLocked();
+        }
     }
 
-    // Every producer enters this gate. A throttled final update owns a timer
-    // wake-up and therefore never depends on capture or discovery polling.
+    // Producers only mark the latest state dirty. One zero-delay worker owns
+    // presentation, so updates coalesce without imposing a refresh-rate cap.
     void SchedulePresentLocked() {
         pendingPresent = true;
-        if (!running || FAILED(failure) || !geometryReady) return;
-        constexpr auto interval = std::chrono::milliseconds(17);
-        auto now = std::chrono::steady_clock::now();
-        auto deadline = lastPresent + interval;
-        if (lastPresent.time_since_epoch().count() == 0 || now >= deadline) {
-            if (presentTimerArmed) {
-                SetThreadpoolTimer(presentTimer, nullptr, 0, 0);
-                presentTimerArmed = false;
-            }
-            RenderLocked();
-            lastPresent = std::chrono::steady_clock::now();
-        } else {
-            ArmPresentTimerLocked(deadline);
-        }
+        if (!running || FAILED(failure) || !geometryReady ||
+            !presentWork || presentWorkPending)
+            return;
+        presentWorkPending = true;
+        SubmitThreadpoolWork(presentWork);
     }
 
     HRESULT Failure() {
@@ -1698,8 +1956,6 @@ float4 ps(VertexOutput input) : SV_Target {
                     directx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
                     2, source->poolSize);
             source->session = source->pool.CreateCaptureSession(source->item);
-            if (auto cadence = source->session.try_as<capture::IGraphicsCaptureSession5>())
-                cadence.MinUpdateInterval(std::chrono::milliseconds(17));
             std::weak_ptr<LiquidRenderer> weakRenderer = shared_from_this();
             std::weak_ptr<Source> weakSource = source;
             source->frameToken = source->pool.FrameArrived(
@@ -1978,6 +2234,7 @@ float4 ps(VertexOutput input) : SV_Target {
         if (!running || !composite || !swapChain || width == 0 || height == 0)
             return;
         pendingPresent = false;
+        CommitMotionObservationLocked(std::chrono::steady_clock::now());
         float clear[]{0, 0, 0, 0};
         context->ClearRenderTargetView(compositeTarget.get(), clear);
         int taskbarWidth = taskbarRect.right - taskbarRect.left;
@@ -2086,9 +2343,12 @@ float4 ps(VertexOutput input) : SV_Target {
             backTarget = std::move(newBackTarget);
         }
         context->ClearRenderTargetView(backTarget.get(), clear);
-        lens.imageSize[0] = static_cast<float>(width);
-        lens.imageSize[1] = static_cast<float>(height);
-        context->UpdateSubresource(constants.get(), 0, nullptr, &lens, 0, 0);
+        auto presentLens = PredictedLensLocked(
+            std::chrono::steady_clock::now());
+        presentLens.imageSize[0] = static_cast<float>(width);
+        presentLens.imageSize[1] = static_cast<float>(height);
+        context->UpdateSubresource(
+            constants.get(), 0, nullptr, &presentLens, 0, 0);
         D3D11_VIEWPORT viewport{0, 0, static_cast<float>(width),
                                static_cast<float>(height), 0, 1};
         auto renderTarget = backTarget.get();
@@ -2111,26 +2371,32 @@ float4 ps(VertexOutput input) : SV_Target {
 
     void Stop() {
         std::vector<std::shared_ptr<Source>> oldSources;
-        PTP_TIMER timer{};
-        PresentTimerContext* timerContext{};
+        PTP_WORK work{};
+        PresentWorkContext* workContext{};
+        HANDLE waitable{};
         {
             std::lock_guard lock(mutex);
-            if (!running && sources.empty() && !presentTimer) return;
+            if (!running && sources.empty() && !presentWork &&
+                !frameLatencyWaitable)
+                return;
             running = false;
             pendingPresent = false;
-            presentTimerArmed = false;
+            presentWorkPending = false;
+            motionActive = false;
+            motionObservationPending = false;
             oldSources = std::move(sources);
-            timer = presentTimer;
-            presentTimer = nullptr;
-            timerContext = presentTimerContext;
-            presentTimerContext = nullptr;
+            work = presentWork;
+            presentWork = nullptr;
+            workContext = presentWorkContext;
+            presentWorkContext = nullptr;
+            waitable = std::exchange(frameLatencyWaitable, nullptr);
         }
-        if (timer) {
-            SetThreadpoolTimer(timer, nullptr, 0, 0);
-            WaitForThreadpoolTimerCallbacks(timer, TRUE);
-            CloseThreadpoolTimer(timer);
-            delete timerContext;
+        if (work) {
+            WaitForThreadpoolWorkCallbacks(work, TRUE);
+            CloseThreadpoolWork(work);
+            delete workContext;
         }
+        if (waitable) CloseHandle(waitable);
         for (auto const& source : oldSources) CloseSource(source);
     }
 };
@@ -2145,6 +2411,12 @@ std::vector<LiquidMotionBatch> g_liquidMotionBatches;  // Owner thread only.
 winrt::event_token g_liquidRenderingToken{};
 bool g_liquidRenderingSubscribed{};
 unsigned g_liquidFinalFrames{};
+
+void SetLiquidMotionActive(bool active) noexcept {
+    for (auto& root : g_roots)
+        if (!root.retired && root.dock.liquid)
+            root.dock.liquid->SetMotionActive(active);
+}
 
 void StopLiquidRendering() noexcept {
     if (!g_liquidRenderingSubscribed) return;
@@ -2165,6 +2437,7 @@ void StopLiquidMotionTracking() noexcept {
     }
     g_liquidMotionBatches.clear();
     g_liquidFinalFrames = 0;
+    SetLiquidMotionActive(false);
 }
 
 void OnLiquidRendering() noexcept {
@@ -2189,7 +2462,7 @@ void OnLiquidRendering() noexcept {
     } catch (...) {
         Wh_Log(L"[UWLIQUID] motion sample failed hr=%08X",
                winrt::to_hresult().value);
-        StopLiquidRendering();
+        StopLiquidMotionTracking();
     }
 }
 
@@ -2240,13 +2513,17 @@ CompositionScopedBatch BeginLiquidMotionBatch(const void* projectedAnimation) no
                     found->batch.Completed(found->completed);
                     g_liquidMotionBatches.erase(found);
                 }
-                g_liquidFinalFrames = 2;
+                if (g_liquidMotionBatches.empty()) {
+                    SetLiquidMotionActive(false);
+                    g_liquidFinalFrames = 2;
+                }
             } catch (...) {
                 Wh_Log(L"[UWLIQUID] motion completion failed hr=%08X",
                        winrt::to_hresult().value);
             }
         });
         g_liquidMotionBatches.push_back({batch, token});
+        SetLiquidMotionActive(true);
         if (!g_liquidRenderingSubscribed) {
             g_liquidRenderingToken = Media::CompositionTarget::Rendering(
                 [](auto const&, auto const&) { OnLiquidRendering(); });
@@ -2362,6 +2639,7 @@ void WINAPI UpdateVisualStates_Hook(void* self) {
 
 FrameworkElement Child(FrameworkElement parent, const wchar_t* name, bool byClass = false);
 void RetireRoot(Root& root);
+void StopLiquid(OwnedDock& dock);
 
 void WithdrawTray(Root& root) {
     if (root.taskbar && GetProp(root.taskbar, kTrayDispatcher) == g_dispatch)
@@ -2418,6 +2696,7 @@ bool ResolveTaskbar(Root& root, double host) {
         break;
     }
     if (match != root.taskbar) {
+        StopLiquid(root.dock);
         WithdrawTray(root);
         root.taskbar = nullptr;
     }
@@ -2515,6 +2794,21 @@ void CollectStatePlates(FrameworkElement const& parent,
                 result.push_back(border);
         }
         CollectStatePlates(child, result, depth - 1);
+    }
+}
+
+void CollectTextBlocks(FrameworkElement const& parent,
+                       std::vector<Controls::TextBlock>& result,
+                       unsigned depth = 32) {
+    if (!parent || !depth) return;
+    int count = Media::VisualTreeHelper::GetChildrenCount(parent);
+    for (int i = 0; i < count; ++i) {
+        auto child = Media::VisualTreeHelper::GetChild(parent, i)
+                         .try_as<FrameworkElement>();
+        if (!child) continue;
+        if (auto text = child.try_as<Controls::TextBlock>())
+            result.push_back(text);
+        CollectTextBlocks(child, result, depth - 1);
     }
 }
 
@@ -2945,12 +3239,17 @@ ShapeVisual GlassHighlights(CompositionRoundedRectangleGeometry const& outline,
     return visual;
 }
 
-void PrepareGlass(OwnedDock& dock) {
-    if (g_theme == DockTheme::Native || dock.materialBlocked) return;
+bool HighContrastActive() {
     HIGHCONTRAST contrast{};
     contrast.cbSize = sizeof(contrast);
-    if (!SystemParametersInfo(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) ||
-        (contrast.dwFlags & HCF_HIGHCONTRASTON)) {
+    return !SystemParametersInfo(
+               SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) ||
+           (contrast.dwFlags & HCF_HIGHCONTRASTON);
+}
+
+void PrepareGlass(OwnedDock& dock) {
+    if (g_theme == DockTheme::Native || dock.materialBlocked) return;
+    if (HighContrastActive()) {
         RestoreGlass(dock);
         return;
     }
@@ -3058,6 +3357,407 @@ void ScheduleLiquidRetry(OwnedDock& dock, HRESULT error) {
            error, delay);
 }
 
+double LinearColor(BYTE channel) {
+    double value = channel / 255.0;
+    return value <= 0.04045 ? value / 12.92
+                            : std::pow((value + 0.055) / 1.055, 2.4);
+}
+
+double PixelLuminance(uint32_t pixel) {
+    return 0.2126 * LinearColor((pixel >> 16) & 255) +
+           0.7152 * LinearColor((pixel >> 8) & 255) +
+           0.0722 * LinearColor(pixel & 255);
+}
+
+winrt::Windows::UI::Color ForegroundColor(bool light) {
+    BYTE channel = light ? 255 : 0;
+    return {255, channel, channel, channel};
+}
+
+struct ForegroundSampleRequest {
+    struct Item {
+        uintptr_t identity{};
+        RECT region{};
+    };
+    HWND taskbar{};
+    uintptr_t rootIdentity{};
+    RECT bounds{};
+    std::vector<Item> items;
+};
+
+struct ForegroundSampleResult {
+    struct Item {
+        uintptr_t identity{};
+        double luminance{};
+    };
+    HWND taskbar{};
+    uintptr_t rootIdentity{};
+    std::vector<Item> items;
+};
+
+bool SampleRegionLuminance(uint32_t const* pixels, int width, int height,
+                           RECT const& region, double& luminance) {
+    RECT clipped{};
+    RECT bounds{0, 0, width, height};
+    if (!pixels || !IntersectRect(&clipped, &region, &bounds)) return false;
+    int regionWidth = clipped.right - clipped.left;
+    int regionHeight = clipped.bottom - clipped.top;
+    if (regionWidth <= 1 || regionHeight <= 1) return false;
+    constexpr int points[][2]{
+        {0, 0}, {6, 0}, {0, 6}, {6, 6}, {0, 3},
+    };
+    std::vector<double> samples;
+    samples.reserve(ARRAYSIZE(points));
+    for (auto const& point : points) {
+        int x = clipped.left + point[0] * (regionWidth - 1) / 6;
+        int y = clipped.top + point[1] * (regionHeight - 1) / 6;
+        samples.push_back(PixelLuminance(pixels[y * width + x]));
+    }
+    auto middle = samples.begin() + samples.size() / 2;
+    std::nth_element(samples.begin(), middle, samples.end());
+    luminance = *middle;
+    return true;
+}
+
+bool ElementSampleRegion(Root const& root, Controls::TextBlock const& text,
+                         RECT const& taskbar, UINT dpi, RECT& region) {
+    try {
+        if (!root.frame || text.ActualWidth() <= 0 ||
+            text.ActualHeight() <= 0)
+            return false;
+        auto bounds = text.TransformToVisual(root.frame).TransformBounds(
+            {0, 0, static_cast<float>(text.ActualWidth()),
+             static_cast<float>(text.ActualHeight())});
+        double scale = dpi / 96.0;
+        constexpr double padding = 4;
+        RECT padded{
+            taskbar.left + static_cast<int>(
+                               std::lround((bounds.X - padding) * scale)),
+            taskbar.top + static_cast<int>(
+                              std::lround((bounds.Y - padding) * scale)),
+            taskbar.left + static_cast<int>(std::lround(
+                               (bounds.X + bounds.Width + padding) * scale)),
+            taskbar.top + static_cast<int>(std::lround(
+                              (bounds.Y + bounds.Height + padding) * scale)),
+        };
+        return IntersectRect(&region, &padded, &taskbar) &&
+               region.right - region.left > 1 &&
+               region.bottom - region.top > 1;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool CaptureForegroundSamples(ForegroundSampleRequest const& request,
+                              ForegroundSampleResult& result) {
+    int width = request.bounds.right - request.bounds.left;
+    int height = request.bounds.bottom - request.bounds.top;
+    if (width <= 1 || height <= 1) return false;
+    HDC screen = GetDC(nullptr);
+    if (!screen) return false;
+    HDC memory = CreateCompatibleDC(screen);
+    void* bits{};
+    HBITMAP bitmap{};
+    HGDIOBJ previous{};
+    bool captured{};
+    if (memory) {
+        BITMAPINFO info{};
+        info.bmiHeader.biSize = sizeof(info.bmiHeader);
+        info.bmiHeader.biWidth = width;
+        info.bmiHeader.biHeight = -height;
+        info.bmiHeader.biPlanes = 1;
+        info.bmiHeader.biBitCount = 32;
+        info.bmiHeader.biCompression = BI_RGB;
+        bitmap = CreateDIBSection(screen, &info, DIB_RGB_COLORS, &bits,
+                                  nullptr, 0);
+        if (bitmap) {
+            previous = SelectObject(memory, bitmap);
+            captured = previous && previous != HGDI_ERROR &&
+                       BitBlt(memory, 0, 0, width, height, screen,
+                              request.bounds.left, request.bounds.top,
+                              SRCCOPY | CAPTUREBLT);
+        }
+    }
+    result.taskbar = request.taskbar;
+    result.rootIdentity = request.rootIdentity;
+    result.items.clear();
+    if (captured) {
+        GdiFlush();
+        auto pixels = static_cast<uint32_t const*>(bits);
+        result.items.reserve(request.items.size());
+        for (auto const& item : request.items) {
+            double luminance{};
+            if (SampleRegionLuminance(pixels, width, height, item.region,
+                                      luminance))
+                result.items.push_back({item.identity, luminance});
+        }
+    }
+    if (previous && previous != HGDI_ERROR) SelectObject(memory, previous);
+    if (bitmap) DeleteObject(bitmap);
+    if (memory) DeleteDC(memory);
+    ReleaseDC(nullptr, screen);
+    return captured;
+}
+
+DWORD WINAPI ForegroundSampleWorker(void* raw) {
+    std::unique_ptr<ForegroundSampleRequest> request(
+        static_cast<ForegroundSampleRequest*>(raw));
+    try {
+        auto result = std::make_unique<ForegroundSampleResult>();
+        CaptureForegroundSamples(*request, *result);
+        HWND dispatch = g_dispatch;
+        if (!g_stopping && dispatch) {
+            auto rawResult = result.release();
+            if (PostMessage(dispatch, kForegroundSampleMessage, 0,
+                            reinterpret_cast<LPARAM>(rawResult)))
+                return 0;
+            delete rawResult;
+        }
+    } catch (...) {
+    }
+    --g_active;
+    return 0;
+}
+
+bool SetForegroundColor(Root::ForegroundState& state, bool light,
+                        bool fade) {
+    if (!state.brush || (state.ready && state.light == light)) return false;
+    auto target = ForegroundColor(light);
+    try {
+        auto from = state.brush.Color();
+        if (state.transition) {
+            state.transition.Stop();
+            state.transition = nullptr;
+        }
+        if (fade && state.ready) {
+            state.brush.Color(target);
+            animation::ColorAnimation color;
+            color.From(from);
+            color.To(target);
+            Duration duration;
+            duration.Type = DurationType::TimeSpan;
+            duration.TimeSpan = winrt::Windows::Foundation::TimeSpan(
+                std::chrono::milliseconds(180));
+            color.Duration(duration);
+            animation::Storyboard storyboard;
+            storyboard.Children().Append(color);
+            animation::Storyboard::SetTarget(color, state.brush);
+            animation::Storyboard::SetTargetProperty(color, L"Color");
+            state.transition = storyboard;
+            storyboard.Begin();
+        } else {
+            state.brush.Color(target);
+        }
+        state.light = light;
+        state.ready = true;
+        return true;
+    } catch (...) {
+        try {
+            state.brush.Color(target);
+            state.transition = nullptr;
+            state.light = light;
+            state.ready = true;
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+}
+
+void RestoreForegroundState(Root::ForegroundState& state) {
+    auto text = state.element.get();
+    if (!text || !state.owned) return;
+    try {
+        if (state.transition) state.transition.Stop();
+        auto local =
+            text.ReadLocalValue(Controls::TextBlock::ForegroundProperty())
+                .try_as<Media::Brush>();
+        if (local == state.brush) {
+            if (state.original == DependencyProperty::UnsetValue())
+                text.ClearValue(Controls::TextBlock::ForegroundProperty());
+            else
+                text.SetValue(Controls::TextBlock::ForegroundProperty(),
+                              state.original);
+        } else {
+            Wh_Log(L"[UWFONT] foreground ownership lost");
+        }
+    } catch (...) {
+        Wh_Log(L"[UWFONT] foreground restore failed hr=%08X",
+               winrt::to_hresult().value);
+    }
+    state.owned = false;
+    state.original = nullptr;
+    state.brush = nullptr;
+    state.transition = nullptr;
+}
+
+void RestoreForeground(Root& root) {
+    for (auto& state : root.foregrounds)
+        RestoreForegroundState(state);
+    root.foregrounds.clear();
+    root.foregroundSampleAt = 0;
+}
+
+void ApplyAdaptiveForeground(ForegroundSampleResult const& result) {
+    auto root = std::find_if(g_roots.begin(), g_roots.end(), [&](auto const& r) {
+        return !r.retired && r.taskbar == result.taskbar && r.frame &&
+               reinterpret_cast<uintptr_t>(winrt::get_abi(r.frame)) ==
+                   result.rootIdentity;
+    });
+    if (root == g_roots.end()) return;
+    root->foregroundSamplePending = false;
+    if (g_fontColorMode != FontColorMode::Adaptive ||
+        root->foregrounds.empty())
+        return;
+    size_t initialized{}, changed{}, lightCount{}, darkCount{};
+    for (auto const& sample : result.items) {
+        auto state = std::find_if(
+            root->foregrounds.begin(), root->foregrounds.end(),
+            [&](auto const& candidate) {
+                return candidate.identity == sample.identity;
+            });
+        if (state == root->foregrounds.end() || !state->owned) continue;
+        bool wasReady = state->ready;
+        bool light = PreferLightForeground(sample.luminance, state->light,
+                                           state->ready);
+        if (SetForegroundColor(*state, light, true)) {
+            if (wasReady)
+                ++changed;
+            else
+                ++initialized;
+        }
+        if (state->light)
+            ++lightCount;
+        else
+            ++darkCount;
+    }
+    if (initialized || changed)
+        Wh_Log(L"[UWFONT] adaptive initialized=%zu changed=%zu light=%zu dark=%zu",
+               initialized, changed, lightCount, darkCount);
+}
+
+void UpdateAdaptiveForeground(Root& root) {
+    if (g_fontColorMode != FontColorMode::Adaptive ||
+        root.foregrounds.empty() || root.foregroundSamplePending)
+        return;
+    ULONGLONG now = GetTickCount64();
+    if (now < root.foregroundSampleAt) return;
+    try {
+        RECT taskbar{};
+        UINT dpi = GetDpiForWindow(root.taskbar);
+        if (!root.taskbar || !dpi ||
+            !GetWindowRect(root.taskbar, &taskbar))
+            return;
+        auto request = std::make_unique<ForegroundSampleRequest>();
+        request->taskbar = root.taskbar;
+        request->rootIdentity =
+            reinterpret_cast<uintptr_t>(winrt::get_abi(root.frame));
+        request->bounds = taskbar;
+        request->items.reserve(root.foregrounds.size());
+        for (auto& state : root.foregrounds) {
+            auto text = state.element.get();
+            if (!text || !state.owned) continue;
+            RECT region{};
+            if (!ElementSampleRegion(root, text, taskbar, dpi, region))
+                continue;
+            OffsetRect(&region, -taskbar.left, -taskbar.top);
+            request->items.push_back({state.identity, region});
+        }
+        if (request->items.empty()) return;
+        root.foregroundSamplePending = true;
+        root.foregroundSampleAt = now + 500;
+        ++g_active;
+        auto rawRequest = request.release();
+        if (!QueueUserWorkItem(ForegroundSampleWorker, rawRequest,
+                               WT_EXECUTEDEFAULT)) {
+            delete rawRequest;
+            --g_active;
+            root.foregroundSamplePending = false;
+            root.foregroundSampleAt = 0;
+            return;
+        }
+    } catch (...) {
+        Wh_Log(L"[UWFONT] sample queue failed hr=%08X",
+               winrt::to_hresult().value);
+    }
+}
+
+void PrepareForeground(Root& root, FrameworkElement const& buttons,
+                       FrameworkElement const& tray) {
+    if (g_fontColorMode == FontColorMode::Default ||
+        HighContrastActive()) {
+        RestoreForeground(root);
+        return;
+    }
+    try {
+        std::vector<Controls::TextBlock> texts;
+        CollectTextBlocks(buttons, texts);
+        CollectTextBlocks(tray, texts);
+        std::erase_if(root.foregrounds, [&](auto& state) {
+            auto text = state.element.get();
+            if (!text) return true;
+            if (std::find(texts.begin(), texts.end(), text) != texts.end())
+                return false;
+            RestoreForegroundState(state);
+            return true;
+        });
+        for (auto const& text : texts) {
+            auto state = std::find_if(
+                root.foregrounds.begin(), root.foregrounds.end(),
+                [&](auto const& candidate) {
+                    return candidate.element.get() == text;
+                });
+            if (state != root.foregrounds.end()) {
+                if (state->owned &&
+                    text.ReadLocalValue(
+                            Controls::TextBlock::ForegroundProperty())
+                            .try_as<Media::Brush>() != state->brush) {
+                    if (state->transition) state->transition.Stop();
+                    state->owned = false;
+                    state->original = nullptr;
+                    state->brush = nullptr;
+                    state->transition = nullptr;
+                    Wh_Log(L"[UWFONT] external foreground retained");
+                } else if (state->owned &&
+                           g_fontColorMode != FontColorMode::Adaptive) {
+                    SetForegroundColor(
+                        *state, g_fontColorMode == FontColorMode::Light,
+                        false);
+                }
+                continue;
+            }
+            Root::ForegroundState next;
+            next.element = winrt::make_weak(text);
+            auto local =
+                text.ReadLocalValue(
+                    Controls::TextBlock::ForegroundProperty());
+            root.foregrounds.push_back(std::move(next));
+            auto& saved = root.foregrounds.back();
+            if (local == DependencyProperty::UnsetValue() ||
+                local.try_as<Media::Brush>()) {
+                saved.identity = CanonicalIdentity(text);
+                saved.original = local;
+                saved.light =
+                    g_fontColorMode == FontColorMode::Light ||
+                    (g_fontColorMode == FontColorMode::Adaptive &&
+                     root.frame.ActualTheme() != ElementTheme::Light);
+                saved.ready = g_fontColorMode != FontColorMode::Adaptive;
+                saved.brush =
+                    Media::SolidColorBrush(ForegroundColor(saved.light));
+                text.Foreground(saved.brush);
+                saved.owned = true;
+            }
+        }
+        if (g_fontColorMode == FontColorMode::Adaptive) {
+            UpdateAdaptiveForeground(root);
+            ArmLiquidTimer();
+        }
+    } catch (...) {
+        Wh_Log(L"[UWFONT] foreground unavailable hr=%08X",
+               winrt::to_hresult().value);
+    }
+}
+
 void AddButtonLenses(Root& root, LiquidRenderer::LensConstants& lens,
                      double scale) {
     size_t dropped = 0;
@@ -3147,9 +3847,7 @@ void AddButtonLenses(Root& root, LiquidRenderer::LensConstants& lens,
                kMaxButtonLenses);
     lens.lensRefraction = lens.optics.refraction * 0.78f;
     lens.alertTintOpacity = 0.22f;
-    // Carve the dock away under a button when the per-button layer is on. A lone
-    // attention lens keeps the layered blend it has always had.
-    lens.lensBlend = g_buttonLiquidLayer ? 1.0f : 0.72f;
+    lens.lensBlend = 0.72f;
 }
 
 void PrepareLiquid(Root& root, Measurements const& m) {
@@ -3188,8 +3886,9 @@ void PrepareLiquid(Root& root, Measurements const& m) {
             if (!renderer->Initialize(dock.visual.Compositor(), root.taskbar,
                                       pixelWidth, pixelHeight))
                 throw winrt::hresult_error(E_FAIL);
-            renderer->visualRoot.Children().InsertAtTop(dock.highlights);
             dock.liquid = std::move(renderer);
+            if (!g_liquidMotionBatches.empty())
+                dock.liquid->SetMotionActive(true);
             dock.attachedVisual = dock.liquid->visualRoot;
             Hosting::ElementCompositionPreview::SetElementChildVisual(
                 dock.background, dock.attachedVisual);
@@ -3485,6 +4184,8 @@ void UpdateFollower(Root& root, FrameworkElement const& repeater,
 
 void RestoreRoot(Root& root) {
     WithdrawTray(root);
+    try { RestoreForeground(root); }
+    catch (...) { Wh_Log(L"[UWFONT] restoration-error"); }
     try { StopFollower(root); }
     catch (...) { Wh_Log(L"[UWFOLLOW] stop failed hr=%08X", winrt::to_hresult().value); }
     // Attempt both even if one XAML object is already closed.
@@ -3640,6 +4341,7 @@ void Refresh(Root& root) {
         return;
     }
     PrepareLiquid(root, m);
+    PrepareForeground(root, repeater, tray);
 }
 
 void OnLayout(winrt::weak_ref<FrameworkElement> const& weak) {
@@ -3739,6 +4441,23 @@ void RefreshWatchedFrames() {
 }
 
 LRESULT CALLBACK DispatchProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
+    if (message == kForegroundSampleMessage) {
+        if (!lp) return 0;
+        std::unique_ptr<ForegroundSampleResult> result(
+            reinterpret_cast<ForegroundSampleResult*>(lp));
+        struct Complete {
+            ~Complete() { --g_active; }
+        } complete;
+        if (!g_stopping && result) {
+            try {
+                ApplyAdaptiveForeground(*result);
+            } catch (...) {
+                Wh_Log(L"[UWFONT] sample apply failed hr=%08X",
+                       winrt::to_hresult().value);
+            }
+        }
+        return 0;
+    }
     if (message == kQueryTrayMessage) return QueryCurrentTray(reinterpret_cast<HWND>(wp));
     if (message == kPrepareLiquidMessage) {
         g_liquidPreparePending = false;
@@ -3762,6 +4481,11 @@ LRESULT CALLBACK DispatchProc(HWND window, UINT message, WPARAM wp, LPARAM lp) {
         ULONGLONG now = GetTickCount64();
         for (auto& root : g_roots) {
             auto& dock = root.dock;
+            if (g_fontColorMode == FontColorMode::Adaptive &&
+                !root.foregrounds.empty() && root.measurementsReady) {
+                active = true;
+                UpdateAdaptiveForeground(root);
+            }
             if (dock.liquid) {
                 active = true;
                 HRESULT failure = dock.liquid->Failure();
@@ -3939,8 +4663,12 @@ int WINAPI Arrange_Hook(void* self, Size size, Size* result) {
 }
 
 bool ResolveStartupSymbols() {
-    HMODULE module = GetModuleHandle(L"taskbar.dll");
-    if (!module) return false;
+    HMODULE module = LoadLibraryEx(
+        L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!module) {
+        Wh_Log(L"[UWPOS] failed to load taskbar.dll error=%lu", GetLastError());
+        return false;
+    }
     WindhawkUtils::SYMBOL_HOOK symbols[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &g_taskBandVtable},
         {{LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"}, &g_secondaryTaskBandVtable},
@@ -3962,6 +4690,61 @@ bool ResolveStartupSymbols() {
     return g_discoverMessage != 0;
 }
 
+bool HookTaskbarViewSymbols(HMODULE module) {
+    WindhawkUtils::SYMBOL_HOOK hooks[] = {{
+        {LR"(public: static double __cdecl winrt::Taskbar::implementation::TaskbarConfiguration::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
+        &TaskbarConfiguration_GetFrameSize_Original,
+        TaskbarConfiguration_GetFrameSize_Hook,
+    }, {
+        {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::ArrangeOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
+        &Arrange_Original, Arrange_Hook,
+    }, {
+        {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarElementAnimator,struct winrt::Microsoft::UI::Xaml::Controls::IElementAnimatorOverrides>::StartHideAnimation(void *,unsigned int))"},
+        &HideAnimation_Original, HideAnimation_Hook,
+    }, {
+        {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IUIElement9<struct winrt::Windows::UI::Xaml::Controls::Image>::StartAnimation(struct winrt::Windows::UI::Composition::ICompositionAnimationBase const &)const )"},
+        &StartAnimation_Original, StartAnimation_Hook,
+    }, {
+        {LR"(public: __cdecl winrt::impl::consume_Microsoft_UI_Xaml_Controls_IElementAnimatorProtected<struct winrt::Taskbar::implementation::TaskbarElementAnimator>::OnHideAnimationCompleted(struct winrt::Windows::UI::Xaml::UIElement const &)const )"},
+        &HideCompleted_Original, HideCompleted_Hook,
+    }, {
+        {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
+        &UpdateVisualStates_Original, UpdateVisualStates_Hook,
+    }};
+    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks)))
+        return false;
+    Wh_Log(L"[UWPOS] initialized v" WH_MOD_VERSION
+           L"; screenshot-safe liquid glass, native animation follower, gap=12 theme=%d fontColor=%d heightMethod=automatic",
+           static_cast<int>(g_theme), static_cast<int>(g_fontColorMode));
+    return true;
+}
+
+bool TryHookTaskbarView(HMODULE module, bool apply) {
+    bool expected = false;
+    if (!module ||
+        !g_taskbarViewHookStarted.compare_exchange_strong(expected, true))
+        return false;
+    if (!HookTaskbarViewSymbols(module)) {
+        Wh_Log(L"[UWPOS] Taskbar.View.dll symbol hook failed");
+        return false;
+    }
+    if (apply) Wh_ApplyHookOperations();
+    g_taskbarViewReady = true;
+    return true;
+}
+
+void Wh_ModAfterInit();
+
+using LoadLibraryExW_t = decltype(&LoadLibraryExW);
+LoadLibraryExW_t LoadLibraryExW_Original;
+HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR path, HANDLE file, DWORD flags) {
+    HMODULE module = LoadLibraryExW_Original(path, file, flags);
+    if (module && GetModuleHandle(L"Taskbar.View.dll") == module &&
+        TryHookTaskbarView(module, true))
+        Wh_ModAfterInit();
+    return module;
+}
+
 // ---- Mod lifecycle ------------------------------------------------------
 BOOL Wh_ModInit() {
     g_dockCornerRadius = std::clamp(
@@ -3976,6 +4759,8 @@ BOOL Wh_ModInit() {
     g_buttonLiquidLayer = Wh_GetIntSetting(L"button.liquidLayer") != 0;
     auto theme = WindhawkUtils::StringSetting::make(L"theme");
     g_theme = ParseTheme(theme.get());
+    auto fontColor = WindhawkUtils::StringSetting::make(L"fontColor");
+    g_fontColorMode = ParseFontColor(fontColor.get());
     if (g_theme == DockTheme::Liquid) {
         auto percent = [](const wchar_t* name, int low, int high) {
             return std::clamp(Wh_GetIntSetting(name), low, high) / 100.0f;
@@ -4012,43 +4797,35 @@ BOOL Wh_ModInit() {
         Wh_Log(L"[UWPOS] centered native alignment required");
         return FALSE;
     }
-    auto module = GetModuleHandle(L"Taskbar.View.dll");
-    if (!module) return FALSE;
     if (!ResolveStartupSymbols()) return FALSE;
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {{
-        {LR"(public: static double __cdecl winrt::Taskbar::implementation::TaskbarConfiguration::GetFrameSize(enum winrt::WindowsUdk::UI::Shell::TaskbarSize))"},
-        &TaskbarConfiguration_GetFrameSize_Original,
-        TaskbarConfiguration_GetFrameSize_Hook,
-    }, {
-        {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarFrame,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::ArrangeOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
-        &Arrange_Original, Arrange_Hook,
-    }, {
-        {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarElementAnimator,struct winrt::Microsoft::UI::Xaml::Controls::IElementAnimatorOverrides>::StartHideAnimation(void *,unsigned int))"},
-        &HideAnimation_Original, HideAnimation_Hook,
-    }, {
-        {LR"(public: __cdecl winrt::impl::consume_Windows_UI_Xaml_IUIElement9<struct winrt::Windows::UI::Xaml::Controls::Image>::StartAnimation(struct winrt::Windows::UI::Composition::ICompositionAnimationBase const &)const )"},
-        &StartAnimation_Original, StartAnimation_Hook,
-    }, {
-        {LR"(public: __cdecl winrt::impl::consume_Microsoft_UI_Xaml_Controls_IElementAnimatorProtected<struct winrt::Taskbar::implementation::TaskbarElementAnimator>::OnHideAnimationCompleted(struct winrt::Windows::UI::Xaml::UIElement const &)const )"},
-        &HideCompleted_Original, HideCompleted_Hook,
-    }, {
-        {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
-        &UpdateVisualStates_Original, UpdateVisualStates_Hook,
-    }};
     WNDCLASS wc{};
     wc.lpfnWndProc = DispatchProc;
     wc.hInstance = GetModuleHandle(nullptr);
     wc.lpszClassName = kWindowClass;
     g_windowClass = RegisterClass(&wc);
     if (!g_windowClass) return FALSE;
-    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
-        UnregisterClass(kWindowClass, wc.hInstance);
-        g_windowClass = 0;
-        return FALSE;
+    if (HMODULE module = GetModuleHandle(L"Taskbar.View.dll")) {
+        if (!TryHookTaskbarView(module, false)) {
+            UnregisterClass(kWindowClass, wc.hInstance);
+            g_windowClass = 0;
+            return FALSE;
+        }
+    } else {
+        HMODULE kernelBase = GetModuleHandle(L"kernelbase.dll");
+        auto loadLibraryExW = kernelBase
+            ? reinterpret_cast<LoadLibraryExW_t>(
+                  GetProcAddress(kernelBase, "LoadLibraryExW"))
+            : nullptr;
+        if (!loadLibraryExW ||
+            !WindhawkUtils::SetFunctionHook(
+                loadLibraryExW, LoadLibraryExW_Hook,
+                &LoadLibraryExW_Original)) {
+            UnregisterClass(kWindowClass, wc.hInstance);
+            g_windowClass = 0;
+            return FALSE;
+        }
+        Wh_Log(L"[UWPOS] Taskbar.View.dll not loaded yet; waiting");
     }
-    Wh_Log(L"[UWPOS] initialized v" WH_MOD_VERSION
-           L"; screenshot-safe liquid glass, native animation follower, gap=12 theme=%d heightMethod=automatic",
-           static_cast<int>(g_theme));
     return TRUE;
 }
 
@@ -4063,6 +4840,11 @@ void RefreshTaskbarHeight() {
 
 void Wh_ModAfterInit() {
     if (!g_explorer || g_stopping) return;
+    if (!g_taskbarViewReady) {
+        HMODULE module = GetModuleHandle(L"Taskbar.View.dll");
+        if (module) TryHookTaskbarView(module, true);
+    }
+    if (!g_taskbarViewReady) return;
     for (auto name : {L"Shell_TrayWnd", L"Shell_SecondaryTrayWnd"}) {
         HWND window{};
         for (int i = 0; i < 16 && (window = FindWindowEx(nullptr, window, name, nullptr)); ++i) {

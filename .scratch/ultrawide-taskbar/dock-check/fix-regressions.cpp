@@ -82,6 +82,7 @@ struct XamlFixture {
     Controls::Grid host, background, buttons, tray;
     Controls::Grid button;
     Controls::Border plate;
+    Controls::TextBlock text;
     Root root;
     XamlFixture() {
         auto native = island.as<IDesktopWindowXamlSourceNative>();
@@ -102,6 +103,8 @@ struct XamlFixture {
         plate.CornerRadius({8, 8, 8, 8});
         button.Children().Append(plate);
         buttons.Children().Append(button);
+        text.Text(L"Foreground");
+        tray.Children().Append(text);
         host.Children().Append(background);
         host.Children().Append(buttons);
         host.Children().Append(tray);
@@ -132,6 +135,7 @@ struct XamlFixture {
         return brush.ColorStops().GetAt(0).Color().A * plate.Opacity();
     }
     ~XamlFixture() {
+        RestoreForeground(root);
         RestoreStatePlates(root);
         island.Content(nullptr);
         island.Close();
@@ -280,6 +284,88 @@ void PlateChecks() {
         "V02 retired button no longer tints the rendered backdrop");
 }
 
+void ForegroundChecks() {
+    XamlFixture fixture;
+    auto original = Media::SolidColorBrush(
+        winrt::Windows::UI::Color{255, 255, 0, 0});
+    fixture.text.Foreground(original);
+
+    g_fontColorMode = FontColorMode::Light;
+    PrepareForeground(fixture.root, fixture.buttons, fixture.tray);
+    auto color = fixture.text.Foreground()
+                     .as<Media::SolidColorBrush>()
+                     .Color();
+    Check(color.R == 255 && color.G == 255 && color.B == 255,
+          "font light mode applies white");
+
+    auto& fading = fixture.root.foregrounds.front();
+    bool fadeStarted =
+        SetForegroundColor(fading, false, true) && fading.transition;
+    Pump(70);
+    color = fixture.text.Foreground()
+                .as<Media::SolidColorBrush>()
+                .Color();
+    bool fadeIntermediate = color.R > 0 && color.R < 255;
+    Pump(160);
+    color = fixture.text.Foreground()
+                .as<Media::SolidColorBrush>()
+                .Color();
+    Check(fadeStarted && fadeIntermediate &&
+              color.R == 0 && color.G == 0 && color.B == 0,
+          "adaptive font fades each element to its new color");
+
+    g_fontColorMode = FontColorMode::Dark;
+    PrepareForeground(fixture.root, fixture.buttons, fixture.tray);
+    color = fixture.text.Foreground()
+                .as<Media::SolidColorBrush>()
+                .Color();
+    Check(color.R == 0 && color.G == 0 && color.B == 0,
+          "font dark mode applies black");
+
+    RestoreForeground(fixture.root);
+    Check(fixture.text.Foreground() == original,
+          "font override restores the original brush");
+
+    g_fontColorMode = FontColorMode::Light;
+    PrepareForeground(fixture.root, fixture.buttons, fixture.tray);
+    auto external = Media::SolidColorBrush(
+        winrt::Windows::UI::Color{255, 0, 0, 255});
+    fixture.text.Foreground(external);
+    RestoreForeground(fixture.root);
+    Check(fixture.text.Foreground() == external,
+          "font restoration preserves a later external writer");
+
+    Check(PreferLightForeground(0, false, false) &&
+              !PreferLightForeground(1, true, false),
+          "adaptive font chooses the higher-contrast endpoint");
+    Check(PreferLightForeground(0.18, true, true) &&
+              !PreferLightForeground(0.18, false, true),
+          "adaptive font hysteresis prevents threshold flicker");
+
+    Window sampleWindow(
+        L"Ultrawide adaptive foreground sample", 640, 96, 800, 80);
+    ForegroundSampleRequest request;
+    request.taskbar = sampleWindow.handle;
+    request.bounds = sampleWindow.Bounds();
+    request.items.push_back(
+        {1, {0, 0, request.bounds.right - request.bounds.left,
+             request.bounds.bottom - request.bounds.top}});
+    ForegroundSampleResult result;
+    sampleWindow.Show(RGB(0, 0, 0));
+    Pump(30);
+    bool sampledDark = CaptureForegroundSamples(request, result) &&
+                       result.items.size() == 1 &&
+                       result.items[0].luminance < 0.02;
+    sampleWindow.Show(RGB(255, 255, 255));
+    Pump(30);
+    bool sampledLight = CaptureForegroundSamples(request, result) &&
+                        result.items.size() == 1 &&
+                        result.items[0].luminance > 0.98;
+    Check(sampledDark && sampledLight,
+          "adaptive font samples the composed regional background");
+    g_fontColorMode = FontColorMode::Default;
+}
+
 void SchedulerChecks() {
     XamlFixture fixture;
     auto renderer = std::make_shared<LiquidRenderer>();
@@ -291,14 +377,91 @@ void SchedulerChecks() {
     RECT rect{80, 80, 720, 128};
     Check(renderer->UpdateGeometry(rect, 640, 48, lens), "renderer accepts initial geometry");
     Until([&] { std::lock_guard lock(renderer->mutex); return renderer->lastPresent.time_since_epoch().count() != 0; });
-    {
-        std::lock_guard lock(renderer->mutex);
-        renderer->lastPresent = std::chrono::steady_clock::now();
-    }
     lens.radius = 11;
-    Check(renderer->UpdateGeometry(rect, 640, 48, lens), "renderer accepts final throttled geometry");
+    Check(renderer->UpdateGeometry(rect, 640, 48, lens), "renderer accepts final queued geometry");
     Check(Until([&] { std::lock_guard lock(renderer->mutex); return !renderer->pendingPresent; }, 90),
         "C05 final geometry presents without a flush or another producer");
+    std::chrono::steady_clock::time_point observed;
+    {
+        std::lock_guard lock(renderer->mutex);
+        observed = renderer->lastPresent;
+    }
+    unsigned presents = 0;
+    auto cadenceStart = std::chrono::steady_clock::now();
+    auto nextFrame = cadenceStart;
+    for (unsigned i = 0; i < 120; ++i) {
+        lens.radius = i % 2 ? 11 : 10;
+        renderer->UpdateGeometry(rect, 640, 48, lens);
+        nextFrame += std::chrono::microseconds(4167);
+        while (std::chrono::steady_clock::now() < nextFrame)
+            YieldProcessor();
+        std::lock_guard lock(renderer->mutex);
+        if (renderer->lastPresent != observed) {
+            observed = renderer->lastPresent;
+            ++presents;
+        }
+    }
+    auto cadenceMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - cadenceStart).count();
+    auto cadenceHz = presents * 1000.0 / cadenceMs;
+    printf("SCHEDULER presents=%u elapsed=%lldms cadence=%.1fHz\n",
+           presents, static_cast<long long>(cadenceMs), cadenceHz);
+    Check(cadenceHz >= 235,
+        "scheduler permits 240 Hz geometry instead of capping near 60 Hz");
+
+    lens.center[0] = 3840;
+    lens.center[1] = 59.5f;
+    lens.halfSize[0] = 3000;
+    lens.halfSize[1] = 48;
+    lens.radius = 24;
+    lens.optics.blur = 0.4f;
+    lens.lensCount = 1;
+    lens.lensRects[0][1] = lens.lensNativeRects[0][1] = 59.5f;
+    lens.lensRects[0][2] = lens.lensNativeRects[0][2] = 22;
+    lens.lensRects[0][3] = lens.lensNativeRects[0][3] = 48;
+    lens.lensShapeParams[0][0] = 1;
+    RECT wideRect{0, 0, 7680, 119};
+    renderer->UpdateGeometry(wideRect, 7680, 119, lens);
+    Until([&] {
+        std::lock_guard lock(renderer->mutex);
+        return !renderer->pendingPresent;
+    });
+    {
+        std::lock_guard lock(renderer->mutex);
+        observed = renderer->lastPresent;
+    }
+    presents = 0;
+    unsigned skipped = 0, maxSkipped = 0;
+    cadenceStart = std::chrono::steady_clock::now();
+    nextFrame = cadenceStart;
+    renderer->SetMotionActive(true);
+    for (unsigned i = 0; i < 120; ++i) {
+        if (i % 4 == 0) {
+            lens.lensRects[0][0] = lens.lensNativeRects[0][0] =
+                1000 + i * 16.0f / 12;
+            renderer->UpdateGeometry(wideRect, 7680, 119, lens);
+        }
+        nextFrame += std::chrono::microseconds(4167);
+        while (std::chrono::steady_clock::now() < nextFrame)
+            YieldProcessor();
+        std::lock_guard lock(renderer->mutex);
+        if (renderer->lastPresent != observed) {
+            observed = renderer->lastPresent;
+            ++presents;
+            skipped = 0;
+        } else {
+            maxSkipped = std::max(maxSkipped, ++skipped);
+        }
+    }
+    cadenceMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - cadenceStart).count();
+    cadenceHz = presents * 1000.0 / cadenceMs;
+    printf("MOTION-LOAD presents=%u elapsed=%lldms cadence=%.1fHz maxSkipped=%u\n",
+           presents, static_cast<long long>(cadenceMs), cadenceHz, maxSkipped);
+    Check(cadenceHz >= 235 && maxSkipped <= 1,
+          "moving button glass fills 60 Hz geometry at 240 Hz under load");
+    renderer->SetMotionActive(false);
+
     Check(renderer->UpdateGeometry({80, 80, 848, 128}, 768, 48, lens),
         "E03 cached render views permit swap-chain resizing");
     renderer->Stop();
@@ -454,15 +617,102 @@ void MotionChecks() {
     g_roots.emplace_back();
     g_roots.back().frame = fixture.host;
     g_roots.back().measurementsReady = true;
+    std::vector<double> positions;
+    std::vector<double> visualPositions;
+    std::vector<double> propertyPositions;
+    positions.reserve(128);
+    visualPositions.reserve(128);
+    propertyPositions.reserve(128);
+    auto renderingToken = Media::CompositionTarget::Rendering(
+        [&](auto const&, auto const&) {
+            positions.push_back(
+                fixture.button.TransformToVisual(fixture.background)
+                    .TransformPoint({0, 0})
+                    .X);
+            visualPositions.push_back(fixture.button.Translation().x);
+            winrt::Windows::Foundation::Numerics::float3 translation{};
+            propertyPositions.push_back(
+                visual.Properties().TryGetVector3(L"Translation", translation) ==
+                        CompositionGetValueStatus::Succeeded
+                    ? translation.x
+                    : NAN);
+        });
     auto batch = BeginLiquidMotionBatch(&animation);
     fixture.button.StartAnimation(animation);
     EndLiquidMotionBatch(batch);
-    for (int i = 0; i < 6; ++i) {
-        Pump(65);
-        printf("MOTION t=%d xaml=%f visual=%f batches=%zu\n", (i + 1) * 65,
-            fixture.button.TransformToVisual(fixture.background).TransformPoint({0, 0}).X,
-            visual.Offset().x, g_liquidMotionBatches.size());
+    Pump(300);
+    Media::CompositionTarget::Rendering(renderingToken);
+    auto motionStats = [](std::vector<double> const& values) {
+        double previous = values.empty() ? 0 : values.front();
+        double maxStep = 0;
+        unsigned changedFrames = 0;
+        for (double current : values) {
+            double step = std::abs(current - previous);
+            if (step > 0.05) ++changedFrames;
+            maxStep = std::max(maxStep, step);
+            previous = current;
+        }
+        return std::pair{changedFrames, maxStep};
+    };
+    auto [changedFrames, maxStep] = motionStats(positions);
+    auto [visualChanged, visualMaxStep] = motionStats(visualPositions);
+    auto [propertyChanged, propertyMaxStep] = motionStats(propertyPositions);
+    printf("MOTION-GEOMETRY callbacks=%zu xaml=%u/%.3f visual=%u/%.3f property=%u/%.3f\n",
+           positions.size(), changedFrames, maxStep, visualChanged, visualMaxStep,
+           propertyChanged, propertyMaxStep);
+    Check(maxStep > 4 && visualChanged == 0 && propertyChanged == 0,
+          "XAML readback exposes stepped geometry, not live compositor motion");
+
+    LiquidRenderer prediction;
+    prediction.geometryReady = true;
+    prediction.motionActive = true;
+    auto start = std::chrono::steady_clock::time_point{
+        std::chrono::seconds(1)};
+    prediction.motionSampleAt = start;
+    prediction.lens.center[0] = 0;
+    prediction.motionBase = prediction.lens;
+    prediction.motionObserved = prediction.lens;
+    constexpr unsigned rawFrames = 24;       // 400 ms at 60 Hz.
+    constexpr unsigned compositorFrames = 98; // Includes the final 1 ms commit.
+    unsigned sample = 1;
+    double predictedPrevious = 0;
+    double predictedMaxStep = 0;
+    double predictedBacktrack = 0;
+    unsigned predictedChanged = 0;
+    unsigned predictedFrames = 0;
+    for (unsigned frameIndex = 0; frameIndex < compositorFrames;
+         ++frameIndex) {
+        auto frame =
+            start + std::chrono::microseconds(4167 * frameIndex);
+        while (sample <= rawFrames) {
+            auto sampleAt =
+                start + std::chrono::microseconds(16667 * sample);
+            if (sampleAt > frame) break;
+            prediction.lens.center[0] =
+                160.0f * sample / rawFrames;
+            prediction.motionObservationAt = sampleAt;
+            prediction.motionObservationPending = true;
+            ++sample;
+        }
+        prediction.CommitMotionObservationLocked(frame);
+        double current = prediction.PredictedLensLocked(frame).center[0];
+        double step = std::abs(current - predictedPrevious);
+        if (step > 0.05) ++predictedChanged;
+        predictedMaxStep = std::max(predictedMaxStep, step);
+        predictedBacktrack =
+            std::max(predictedBacktrack, predictedPrevious - current);
+        predictedPrevious = current;
+        ++predictedFrames;
     }
+    double rawStep = 160.0 / rawFrames;
+    printf("MOTION-PREDICTED frames=%u changed=%u rawStep=%.3f maxStep=%.3f backtrack=%.3f\n",
+           predictedFrames, predictedChanged, rawStep, predictedMaxStep,
+           predictedBacktrack);
+    Check(predictedFrames == compositorFrames &&
+              predictedChanged * 4 >= predictedFrames * 3 &&
+              predictedMaxStep * 2 <= rawStep + 0.1 &&
+              predictedBacktrack <= 0.05,
+          "glass predictor fills stepped geometry at 240 Hz without jumps");
     Check(Until([] { return g_liquidMotionBatches.empty(); }),
         "V04 finite native animation observation completes without a fixed timeout");
     fixture.button.StopAnimation(animation);
@@ -482,6 +732,8 @@ int main(int argc, char** argv) {
         DestroyWindow_Original = DestroyWindow;
         std::string_view mode = argc > 1 ? argv[1] : "all";
         if (mode == "all" || mode == "plates") regression::PlateChecks();
+        if (mode == "all" || mode == "foreground")
+            regression::ForegroundChecks();
         if (mode == "all" || mode == "scheduler") regression::SchedulerChecks();
 #ifndef UW_BASELINE
         if (mode == "all" || mode == "capture") regression::CaptureChecks();

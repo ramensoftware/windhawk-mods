@@ -10,7 +10,7 @@ subprocess.run(['rtk', 'proxy', str(compiler / 'bin/clang++.exe'), *flags,
                 '-O2', '-Wall', '-Wextra', '-Werror', '-static', str(folder / 'glass.check.cpp'),
                     '-lole32', '-loleaut32', '-lruntimeobject', '-ldwmapi',
                     '-lwindowsapp', '-ld3d11', '-ldxgi', '-ld3dcompiler',
-                    '-luser32', '-lkernel32',
+                    '-lgdi32', '-luser32', '-lkernel32',
                     '-o', str(executable)], check=True)
 manifest = b'''<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
 <assemblyIdentity name="Windhawk.Glass.Check" version="1.0.0.0" type="win32"/>
