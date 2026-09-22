@@ -10,8 +10,6 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-# XP Top Ultimate Customizable Dock Bar
-Удобная верхняя панель задач для Windows в стиле классических док-панелей с гибкой настройкой.
 // ==/WindhawkModReadme==
 
 #define WIN32_LEAN_AND_MEAN
