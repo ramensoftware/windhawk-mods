@@ -22,6 +22,8 @@ in different ways.
 
 It is the sister of **Premiere Pro Theme**: the two apps share Adobe's UI
 toolkit, `dvaui.dll`, so the same palettes land on After Effects the same way.
+The two mods are one codebase kept as two, so that each app has a palette and
+switches of its own in Windhawk; a fix to what they share goes into both.
 
 ## Screenshots
 
@@ -1860,19 +1862,22 @@ static void InstallHooks(HMODULE module, const HookSpec (&specs)[N],
     }
 }
 
+// A version exports one of the two names, so a function is only counted and
+// logged as absent when it has neither.
+static const char* ExportedName(HMODULE module, const ColorSymbol& sym) {
+    if (sym.before2026 && !GetProcAddress(module, sym.mangled)) {
+        return sym.before2026;
+    }
+
+    return sym.mangled;
+}
+
 static void InstallOneColorHook(HMODULE dvaui, size_t index, void* hook,
                                 void** original, HookCount& count) {
     const ColorSymbol& sym = kColorSymbols[index];
 
-    // A version exports one of the two names, so a function is only counted
-    // and logged as absent when it has neither.
-    const char* mangled = sym.mangled;
-
-    if (sym.before2026 && !GetProcAddress(dvaui, mangled)) {
-        mangled = sym.before2026;
-    }
-
-    InstallHook(dvaui, {mangled, hook, original, sym.label}, &count);
+    InstallHook(dvaui, {ExportedName(dvaui, sym), hook, original, sym.label},
+                &count);
 }
 
 template <size_t... I>
@@ -2119,20 +2124,21 @@ static void InstallBrushHooks(HMODULE dvaui, HookCount& count) {
     something else, and popup menus draw label colors through their own
     function.
 
-    All take pointers only, five at most with the fifth on the stack, so one
-    thunk forwarding five integer arguments carries each through unchanged.
+    All take pointers only, six at most with the last two on the stack, so one
+    thunk forwarding six integer arguments carries each through unchanged; a
+    function that takes fewer never reads what is left over.
 */
 using ContentDraw_t = void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t,
-                               uintptr_t);
+                               uintptr_t, uintptr_t);
 
 template <size_t I>
 struct ContentDrawHook {
     static inline ContentDraw_t original = nullptr;
 
     static void Hook(uintptr_t a, uintptr_t b, uintptr_t c, uintptr_t d,
-                     uintptr_t e) {
+                     uintptr_t e, uintptr_t f) {
         ContentScope scope(__builtin_frame_address(0));
-        original(a, b, c, d, e);
+        original(a, b, c, d, e, f);
     }
 };
 
@@ -2145,12 +2151,21 @@ static const ColorSymbol kContentDraws[] = {
     {"?DrawSwatch@BaseSwatchSkin@csnext@skins@dvaui@@MEBAXPEAVDrawbot@drawbot@"
      "4@AEBVDrawSwatchParameters@controls@4@@Z",
      L"BaseSwatchSkin::DrawSwatch"},
+
+    // After Effects 26.3 added a SkinSetProvider* to the popup swatches; the
+    // earlier name is the one without it.
     {"?DrawColorSwatch@V7PopupSkin@v7@skins@dvaui@@UEBAXPEAVDrawbot@drawbot@4@"
-     "PEBVThemeProvider@ui@4@AEBV?$RectT@M@geom@dvacore@@AEBVColorRGBA@64@@Z",
-     L"V7PopupSkin::DrawColorSwatch"},
+     "PEBVThemeProvider@ui@4@PEBVSkinSetProvider@84@AEBV?$RectT@M@geom@dvacore@@"
+     "AEBVColorRGBA@64@@Z",
+     L"V7PopupSkin::DrawColorSwatch",
+     "?DrawColorSwatch@V7PopupSkin@v7@skins@dvaui@@UEBAXPEAVDrawbot@drawbot@4@"
+     "PEBVThemeProvider@ui@4@AEBV?$RectT@M@geom@dvacore@@AEBVColorRGBA@64@@Z"},
     {"?DrawColorSwatch@V6PopupSkin@v6@skins@dvaui@@UEBAXPEAVDrawbot@drawbot@4@"
-     "PEBVThemeProvider@ui@4@AEBV?$RectT@M@geom@dvacore@@AEBVColorRGBA@64@@Z",
-     L"V6PopupSkin::DrawColorSwatch"},
+     "PEBVThemeProvider@ui@4@PEBVSkinSetProvider@84@AEBV?$RectT@M@geom@dvacore@@"
+     "AEBVColorRGBA@64@@Z",
+     L"V6PopupSkin::DrawColorSwatch",
+     "?DrawColorSwatch@V6PopupSkin@v6@skins@dvaui@@UEBAXPEAVDrawbot@drawbot@4@"
+     "PEBVThemeProvider@ui@4@AEBV?$RectT@M@geom@dvacore@@AEBVColorRGBA@64@@Z"},
 };
 
 constexpr size_t kContentDrawCount = ARRAYSIZE(kContentDraws);
@@ -2159,7 +2174,8 @@ static void InstallOneContentHook(HMODULE dvaui, size_t index, void* hook,
                                   void** original) {
     const ColorSymbol& sym = kContentDraws[index];
 
-    InstallHook(dvaui, {sym.mangled, hook, original, sym.label}, nullptr);
+    InstallHook(dvaui, {ExportedName(dvaui, sym), hook, original, sym.label},
+                nullptr);
 }
 
 template <size_t... I>
@@ -3092,11 +3108,22 @@ static bool CssPrecededBy(const char* text, size_t at, const char* word) {
     return at >= length && _strnicmp(text + at - length, word, length) == 0;
 }
 
-/*
-    Rewrites every color a stylesheet spells out, in place and at its own
-    length, and returns how many changed. A value taken from a variable, like
-    rgb(var(--x)), changes where the variable is defined.
-*/
+// rgb( or rgba( as a word of its own, not the end of a name like setRgb(.
+static bool CssColorFunctionAt(const char* text, size_t at) {
+    static const char* const kNames[] = {"rgb", "rgba"};
+
+    for (const char* name : kNames) {
+        size_t length = strlen(name);
+
+        if (CssPrecededBy(text, at, name) &&
+            !(at > length && IsCssWordChar(text[at - length - 1]))) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /*
     Whether a design token's key paints text rather than chrome.
 
@@ -3176,7 +3203,8 @@ static bool IsQuote(char c) {
     hex value is only taken under a key that paints chrome — a background, a
     border, an outline — which an icon never is. rgb() in a script is almost
     only ever stylesheet text or a theme's table, and is taken as it comes,
-    except in the token shape, which RecolorTokenTable has already done.
+    except in the token shape, which RecolorTokenTable has already done, and
+    at the end of a longer name: setRgb(18, 18, 18) is a call, not a color.
 */
 static size_t RecolorScriptCss(char* text, size_t size) {
     size_t changed = 0;
@@ -3196,7 +3224,7 @@ static size_t RecolorScriptCss(char* text, size_t size) {
             recolored =
                 RecolorCssTriplet(text, size, i + 1, CssValueIsChrome(text, i));
         } else if (text[i] == '(' && !CssPrecededBy(text, i, "-color\":\"rgb") &&
-                   (CssPrecededBy(text, i, "rgb") || CssPrecededBy(text, i, "rgba"))) {
+                   CssColorFunctionAt(text, i)) {
             recolored =
                 RecolorCssTriplet(text, size, i + 1, CssValueIsChrome(text, i));
         }
@@ -3213,6 +3241,11 @@ static size_t RecolorScript(char* text, size_t size) {
     return changed + RecolorScriptCss(text, size);
 }
 
+/*
+    Rewrites every color a stylesheet spells out, in place and at its own
+    length, and returns how many changed. A value taken from a variable, like
+    rgb(var(--x)), changes where the variable is defined.
+*/
 static size_t RecolorStylesheet(char* text, size_t size) {
     size_t changed = 0;
 
@@ -3239,8 +3272,7 @@ static size_t RecolorStylesheet(char* text, size_t size) {
         } else if (text[i] == ':' && CssPrecededBy(text, i, "-rgb")) {
             recolored =
                 RecolorCssTriplet(text, size, i + 1, CssValueIsChrome(text, i));
-        } else if (text[i] == '(' &&
-                   (CssPrecededBy(text, i, "rgb") || CssPrecededBy(text, i, "rgba"))) {
+        } else if (text[i] == '(' && CssColorFunctionAt(text, i)) {
             recolored =
                 RecolorCssTriplet(text, size, i + 1, CssValueIsChrome(text, i));
         }
