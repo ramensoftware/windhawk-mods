@@ -1,17 +1,38 @@
 // ==WindhawkMod==
-// @id bar-fork
-// @name XP Top Ultimate Customizable Dock Bar - Fork
-// @version 0.1
-// @author serg82rus14
-// @github https://github.com/serg8269-cloud
-// @description Удобная верхняя панель задач для Windows в стиле классических док-панелей с гибкой настройкой.
+// @id             bar-fork
+// @name           XP Top Ultimate Customizable Dock Bar - Fork
+// @version        0.1
+// @author         serg82rus14
+// @github         https://github.com/serg8269-cloud
+// @description    Удобная верхняя панель задач для Windows в стиле классических док-панелей с гибкой настройкой.
+// @include        explorer.exe
 // @compilerOptions -luser32 -lshell32 -lgdi32 -lshlwapi -lcomdlg32
-// @include explorer.exe
+// @license        GPL-3.0
 // ==/WindhawkMod==
 
-// ==WindhawkModReadme ==
+// ==WindhawkModReadme==
+/*
+# XP Top Ultimate Customizable Dock Bar
+
+Удобная верхняя панель задач для Windows в стиле классических док-панелей с гибкой настройкой.
+
+Этот мод форкает оригинальный проект и добавляет возможности кастомизации для панели задач, размещая её сверху рабочего стола.
+
+## Использование
+
+После установки мода через Windhawk, панель появится в верхней части экрана. Вы можете настроить её поведение через стандартные настройки Windhawk, если таковые предусмотрены.
+
+## Особенности
+
+- Стиль классической док-панели.
+- Размещение поверх всех окон.
+- Гибкая настройка элементов (в будущих версиях).
+*/
 // ==/WindhawkModReadme==
 
+#define _WIN32_WINNT 0x0A00 // Для поддержки современных функций Windows
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
