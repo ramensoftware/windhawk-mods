@@ -2,12 +2,109 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-22T16:22:32.000Z</updated>
+    <updated>2026-09-22T16:39:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Middle Click New Tab in Explorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-no-middle-click-new-tab#0c15586bc221bc0da3f5aaa26cc655ea24878d20</id>
+        <link href="https://windhawk.net/mods/explorer-no-middle-click-new-tab"/>
+        <updated>2026-09-22T16:39:07.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disablemiddleclicknewtabinexplorer">Disable Middle Click New Tab in Explorer</h1>
+<p>In Windows 11, middle-clicking a folder in File Explorer opens it in a new tab.
+This mod drops the middle button inside Explorer so nothing happens at all.</p>
+<p>Only File Explorer windows are affected. The desktop, the taskbar and every
+other application keep their normal middle-click behavior: the mod runs inside
+explorer.exe alone, and there it only drops clicks aimed at the file list or
+the folder tree.</p>
+<h2 id="scope">Scope</h2>
+<p>Each of the two surfaces has its own switch in the settings:</p>
+<ul>
+<li><strong>File list</strong> - the main pane with the files and folders.</li>
+<li><strong>Navigation pane</strong> - the folder tree on the left.</li>
+</ul>
+<h2 id="whyitworksthisway">Why it works this way</h2>
+<p>The middle-button messages are dropped on their way to the window procedure,
+by hooking <code>DispatchMessageW</code> and returning without calling the original.
+<code>PeekMessageW</code> is hooked as well, rewriting the same messages to <code>WM_NULL</code>,
+because Explorer runs inner modal loops - drag detection after a button press,
+for one - that pull messages straight out of the queue instead of going
+through the main pump.</p>
+<p><code>GetMessageW</code> is deliberately <em>not</em> hooked. It blocks until a message arrives,
+so a hook frame would sit on the stack of every idle message loop in
+explorer.exe for as long as it waits, and Windhawk could not unmap the mod
+while that is true - disabling or updating the mod would hang in the
+"unloading" state.</p>
+<h2 id="interactionwithothermods">Interaction with other mods</h2>
+<p>Because the clicks are dropped before the window procedure runs, other mods
+that act on the middle button in these two surfaces stop seeing it while this
+mod is enabled - <code>autoscroll-win32</code>, for example. Mods keyed off
+<code>WM_PARENTNOTIFY</code>, such as <code>click-on-empty-explorer</code>, still fire, since the
+system sends that notification when the message is queued rather than when it
+is delivered.</p>]]></content>
+        <author>
+            <name>luizgununes</name>
+            <uri>https://github.com/luizgununes</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Withered Foxy Jumpscare 1.0]]></title>
+        <id>https://windhawk.net/mods/withered-foxy-jumpscare#352025ef42578f1658857bf3f6d2b7c2c6db6b0b</id>
+        <link href="https://windhawk.net/mods/withered-foxy-jumpscare"/>
+        <updated>2026-09-22T16:38:23.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="witheredfoxyjumpscare">Withered Foxy Jumpscare</h1>
+<blockquote>
+  <p><strong>Warning:</strong> this mod is a prank by design. At a random moment it shows a
+  loud fullscreen jumpscare with sudden flashing images. It interrupts whatever
+  you are doing, and exclusive fullscreen games are minimized while it plays.
+  Don't use it if startle or flashing content is a problem for you.</p>
+</blockquote>
+<p>Every check interval (1 second by default) the mod rolls a die. With the
+default chance of <strong>1 in 100000</strong>, the jumpscare happens about once every 28
+hours of uptime.</p>
+<p>The jumpscare is drawn in a transparent always-on-top window on the monitor
+of the active window. Press <strong>Esc</strong> to close it early. With "Steal focus" off,
+the Esc key also reaches the app underneath.</p>
+<h2 id="files">Files</h2>
+<p>If "Image" or "Sound" is empty, the mod downloads the default file once and
+keeps it in the mod's own storage folder. Windhawk deletes that folder when
+the mod is removed. The default files are hosted in the
+<a href="https://github.com/Kismeria/WindHawk-Foxy-Jumpscare">WindHawk-Foxy-Jumpscare</a>
+repository.</p>
+<p>Turn off "Auto download" to never contact the network. In that case, set
+"Image" and "Sound" to your own files, otherwise the mod does nothing. If the
+download fails, turn "Auto download" off and on again to retry.</p>
+<p>You can use your own files instead:</p>
+<ul>
+<li><strong>Image</strong> - animated <code>.gif</code>, static <code>.png</code>, or a folder of <code>.png</code> frames
+(sorted by name). Turn off "Green screen" for images that already have
+transparency.</li>
+<li><strong>Sound</strong> - <code>.wav</code> or <code>.mp3</code>.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Windowed and borderless games: the jumpscare is drawn on top.</li>
+<li>Exclusive fullscreen games don't allow other windows on top. For them, keep
+"Steal focus" on: the game is minimized during the jumpscare and the mod
+tries to give focus back afterwards.</li>
+<li>While "Steal focus" is on, keys typed during the jumpscare are ignored.
+Mouse clicks pass through.</li>
+</ul>
+<h2 id="testing">Testing</h2>
+<ul>
+<li>Turn on "Test on save" and save the settings. It doesn't fire on Windhawk
+start.</li>
+<li>Or set a "Test hotkey", for example <code>Ctrl+Alt+F</code>.</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/Kismeria/WindHawk-Foxy-Jumpscare/8b94f89250a280ea926bd90cf3692d5175d14927/assets/preview.png" alt="Preview" /></p>]]></content>
+        <author>
+            <name>Kismeria</name>
+            <uri>https://github.com/Kismeria</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[System Tray Folders 1.0.0]]></title>
         <id>https://windhawk.net/mods/system-tray-folders#a1190b6c1b631a725f6d628189886d410b3760f6</id>
@@ -871,38 +968,6 @@ immediately.</li>
         <author>
             <name>zed712969-crypto</name>
             <uri>https://github.com/zed712969-crypto</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[PivotLink: Browser Router 1.1]]></title>
-        <id>https://windhawk.net/mods/pivotlink-browser-router#beada6729de84b91790c87ebf19c28274c163975</id>
-        <link href="https://windhawk.net/mods/pivotlink-browser-router"/>
-        <updated>2026-09-21T10:03:31.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added bypass method — press a secondary mouse button simultaneously with left-click to skip routing and let the OS default browser handle the link. Options: Mouse Back + Click (default), Mouse Forward + Click, Right + Left Click, Ctrl, or Disabled.</li>
-<li>Bypass uses cross-process shared memory (with AppContainer-accessible DACL) so it works reliably in sandboxed/UWP apps like WhatsApp and Microsoft Store.</li>
-</ul>]]></content>
-        <author>
-            <name>gauthumj</name>
-            <uri>https://github.com/gauthumj</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SnapSentry 0.21.1]]></title>
-        <id>https://windhawk.net/mods/snap-sentry#e79dd48287abe987ba9e3869db2ca45983891469</id>
-        <link href="https://windhawk.net/mods/snap-sentry"/>
-        <updated>2026-09-21T10:02:57.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an optional setting to remove duplicate screenshots. When the same image is captured again, the extra copy is moved to the Recycle Bin so the folder does not fill up with identical shots. It is off by default.</li>
-<li>Only exact, byte-for-byte duplicates taken during the current session are removed, and only while SnapSentry is set to copy the image itself. Files that were already in the folder are left alone.</li>
-<li>A removed duplicate always goes to the Recycle Bin so it can be restored, even when normal deletion is set to permanent. The earlier copy is kept, and SnapSentry confirms it is still there before removing anything.</li>
-<li>The log now records the outcome for each screenshot: copied, kept, recycled, skipped, or deleted.</li>
-<li>Screenshots are still copied to the clipboard when Windows cannot show a notification.</li>
-<li>Fixed a watched folder being ignored when its path had a stray space at the start or end.</li>
-</ul>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
         </author>
     </entry>
 </feed>

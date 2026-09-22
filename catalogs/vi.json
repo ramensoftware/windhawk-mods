@@ -5939,6 +5939,37 @@
         "version": "1.1"
       }
     },
+    "explorer-no-middle-click-new-tab": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790095147000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790095147000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "luizgununes",
+        "description": "Makes the middle mouse button do nothing in File Explorer, instead of opening folders in a new tab",
+        "github": "https://github.com/luizgununes",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Disable Middle Click New Tab in Explorer",
+        "version": "1.0.0"
+      }
+    },
     "explorer-no-min-size": {
       "details": {
         "defaultSorting": 1190,
@@ -19371,6 +19402,36 @@
         ],
         "name": "Winver Text Customizer",
         "version": "1.0.0"
+      }
+    },
+    "withered-foxy-jumpscare": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790095103000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790095103000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Kismeria",
+        "compilerOptions": "-lgdiplus -lwinmm -lgdi32 -luser32 -lshell32 -lshlwapi",
+        "description": "Randomly shows the FNAF 2 Withered Foxy jumpscare fullscreen on top of all apps. Downloads its default image and sound on first run",
+        "github": "https://github.com/Kismeria",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Withered Foxy Jumpscare",
+        "version": "1.0"
       }
     },
     "word-image-resize-anti-flip": {

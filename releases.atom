@@ -2,12 +2,109 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-22T16:22:32.000Z</updated>
+    <updated>2026-09-22T16:39:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Middle Click New Tab in Explorer 1.0.0]]></title>
+        <id>https://windhawk.net/mods/explorer-no-middle-click-new-tab#0c15586bc221bc0da3f5aaa26cc655ea24878d20</id>
+        <link href="https://windhawk.net/mods/explorer-no-middle-click-new-tab"/>
+        <updated>2026-09-22T16:39:07.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="disablemiddleclicknewtabinexplorer">Disable Middle Click New Tab in Explorer</h1>
+<p>In Windows 11, middle-clicking a folder in File Explorer opens it in a new tab.
+This mod drops the middle button inside Explorer so nothing happens at all.</p>
+<p>Only File Explorer windows are affected. The desktop, the taskbar and every
+other application keep their normal middle-click behavior: the mod runs inside
+explorer.exe alone, and there it only drops clicks aimed at the file list or
+the folder tree.</p>
+<h2 id="scope">Scope</h2>
+<p>Each of the two surfaces has its own switch in the settings:</p>
+<ul>
+<li><strong>File list</strong> - the main pane with the files and folders.</li>
+<li><strong>Navigation pane</strong> - the folder tree on the left.</li>
+</ul>
+<h2 id="whyitworksthisway">Why it works this way</h2>
+<p>The middle-button messages are dropped on their way to the window procedure,
+by hooking <code>DispatchMessageW</code> and returning without calling the original.
+<code>PeekMessageW</code> is hooked as well, rewriting the same messages to <code>WM_NULL</code>,
+because Explorer runs inner modal loops - drag detection after a button press,
+for one - that pull messages straight out of the queue instead of going
+through the main pump.</p>
+<p><code>GetMessageW</code> is deliberately <em>not</em> hooked. It blocks until a message arrives,
+so a hook frame would sit on the stack of every idle message loop in
+explorer.exe for as long as it waits, and Windhawk could not unmap the mod
+while that is true - disabling or updating the mod would hang in the
+"unloading" state.</p>
+<h2 id="interactionwithothermods">Interaction with other mods</h2>
+<p>Because the clicks are dropped before the window procedure runs, other mods
+that act on the middle button in these two surfaces stop seeing it while this
+mod is enabled - <code>autoscroll-win32</code>, for example. Mods keyed off
+<code>WM_PARENTNOTIFY</code>, such as <code>click-on-empty-explorer</code>, still fire, since the
+system sends that notification when the message is queued rather than when it
+is delivered.</p>]]></content>
+        <author>
+            <name>luizgununes</name>
+            <uri>https://github.com/luizgununes</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Withered Foxy Jumpscare 1.0]]></title>
+        <id>https://windhawk.net/mods/withered-foxy-jumpscare#352025ef42578f1658857bf3f6d2b7c2c6db6b0b</id>
+        <link href="https://windhawk.net/mods/withered-foxy-jumpscare"/>
+        <updated>2026-09-22T16:38:23.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="witheredfoxyjumpscare">Withered Foxy Jumpscare</h1>
+<blockquote>
+  <p><strong>Warning:</strong> this mod is a prank by design. At a random moment it shows a
+  loud fullscreen jumpscare with sudden flashing images. It interrupts whatever
+  you are doing, and exclusive fullscreen games are minimized while it plays.
+  Don't use it if startle or flashing content is a problem for you.</p>
+</blockquote>
+<p>Every check interval (1 second by default) the mod rolls a die. With the
+default chance of <strong>1 in 100000</strong>, the jumpscare happens about once every 28
+hours of uptime.</p>
+<p>The jumpscare is drawn in a transparent always-on-top window on the monitor
+of the active window. Press <strong>Esc</strong> to close it early. With "Steal focus" off,
+the Esc key also reaches the app underneath.</p>
+<h2 id="files">Files</h2>
+<p>If "Image" or "Sound" is empty, the mod downloads the default file once and
+keeps it in the mod's own storage folder. Windhawk deletes that folder when
+the mod is removed. The default files are hosted in the
+<a href="https://github.com/Kismeria/WindHawk-Foxy-Jumpscare">WindHawk-Foxy-Jumpscare</a>
+repository.</p>
+<p>Turn off "Auto download" to never contact the network. In that case, set
+"Image" and "Sound" to your own files, otherwise the mod does nothing. If the
+download fails, turn "Auto download" off and on again to retry.</p>
+<p>You can use your own files instead:</p>
+<ul>
+<li><strong>Image</strong> - animated <code>.gif</code>, static <code>.png</code>, or a folder of <code>.png</code> frames
+(sorted by name). Turn off "Green screen" for images that already have
+transparency.</li>
+<li><strong>Sound</strong> - <code>.wav</code> or <code>.mp3</code>.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Windowed and borderless games: the jumpscare is drawn on top.</li>
+<li>Exclusive fullscreen games don't allow other windows on top. For them, keep
+"Steal focus" on: the game is minimized during the jumpscare and the mod
+tries to give focus back afterwards.</li>
+<li>While "Steal focus" is on, keys typed during the jumpscare are ignored.
+Mouse clicks pass through.</li>
+</ul>
+<h2 id="testing">Testing</h2>
+<ul>
+<li>Turn on "Test on save" and save the settings. It doesn't fire on Windhawk
+start.</li>
+<li>Or set a "Test hotkey", for example <code>Ctrl+Alt+F</code>.</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/Kismeria/WindHawk-Foxy-Jumpscare/8b94f89250a280ea926bd90cf3692d5175d14927/assets/preview.png" alt="Preview" /></p>]]></content>
+        <author>
+            <name>Kismeria</name>
+            <uri>https://github.com/Kismeria</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[System Tray Folders 1.0.0]]></title>
         <id>https://windhawk.net/mods/system-tray-folders#a1190b6c1b631a725f6d628189886d410b3760f6</id>
@@ -1246,542 +1343,6 @@ volume icon while keeping Better Volume Mixer's icon visible.</p>]]></content>
         <author>
             <name>0Allu</name>
             <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Premiere Pro Theme 1.0.0]]></title>
-        <id>https://windhawk.net/mods/premiere-pro-theme#c2b85a85429190b8aa1e544da5a845d9abf8ed01</id>
-        <link href="https://windhawk.net/mods/premiere-pro-theme"/>
-        <updated>2026-09-19T17:17:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="premiereprotheme">Premiere Pro Theme</h1>
-<p>Recolors Premiere Pro far beyond what the Appearance brightness slider reaches,
-and does it consistently across the parts of the app that are painted in
-different ways.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p>The same project, palette by palette. First, Premiere without the mod:
-the Spectrum gray <code>#1D1D1D</code>, under the light title bar and menu bar that
-Windows gives it.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/stock.png" alt="Premiere Pro without the mod" /></p>
-<p><strong>Onyx</strong> — the default: near black, and neutral:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/onyx.png" alt="Onyx palette" /></p>
-<p><strong>Abyss</strong> — absolute black, for an OLED panel:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/abyss.png" alt="Abyss palette" /></p>
-<p><strong>Contrast</strong> — black panels with light dividers and pure white text:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/contrast.png" alt="Contrast palette" /></p>
-<p><strong>Premiere</strong> — the violet sampled from the app icon:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/premiere.png" alt="Premiere palette" /></p>
-<p><strong>Comfy</strong> — warm brown, low contrast for long sessions:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/comfy.png" alt="Comfy palette" /></p>
-<p><strong>Glitch</strong> — acid green with a magenta accent:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/glitch.png" alt="Glitch palette" /></p>
-<p><strong>Violet</strong> — a purple interface, not just a purple accent:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/violet.png" alt="Violet palette" /></p>
-<p><strong>Blossom</strong> — dark rose, pastel in its text and border:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/blossom.png" alt="Blossom palette" /></p>
-<p><strong>Ember</strong> — near black under a strong orange:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/ember.png" alt="Ember palette" /></p>
-<p><strong>Crimson</strong> — near black under a strong red:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/crimson.png" alt="Crimson palette" /></p>
-<p><strong>Amethyst</strong> — neutral panels, the purple only on the edges:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/amethyst.png" alt="Amethyst palette" /></p>
-<p><strong>Threshold</strong> — <code>#050505</code>, <code>#FFFFFF</code> and <code>#DC2626</code>:</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/premiere-pro-theme/main/images/threshold.png" alt="Threshold palette" /></p>
-<h2 id="palettes">Palettes</h2>
-<p>Neutral:</p>
-<p>| Level   | Onyx      | Abyss     | Graphite  | Contrast  |
-|---------|-----------|-----------|-----------|-----------|
-| Base    | <code>#050505</code> | <code>#000000</code> | <code>#0D0D0D</code> | <code>#000000</code> |
-| Panel   | <code>#090909</code> | <code>#040404</code> | <code>#141414</code> | <code>#060606</code> |
-| Surface | <code>#0E0E0E</code> | <code>#080808</code> | <code>#1A1A1A</code> | <code>#101010</code> |
-| Raised  | <code>#161616</code> | <code>#101010</code> | <code>#232323</code> | <code>#202020</code> |
-| Border  | <code>#242424</code> | <code>#1C1C1C</code> | <code>#303030</code> | <code>#4A4A4A</code> |</p>
-<p>Tinted:</p>
-<p>| Level   | Premiere  | Comfy     | Neon      | Glitch    |
-|---------|-----------|-----------|-----------|-----------|
-| Base    | <code>#06060F</code> | <code>#100C09</code> | <code>#080508</code> | <code>#060A02</code> |
-| Panel   | <code>#0C0C20</code> | <code>#181310</code> | <code>#0E0A0D</code> | <code>#0C1305</code> |
-| Surface | <code>#131333</code> | <code>#211A15</code> | <code>#1A0F18</code> | <code>#131D08</code> |
-| Raised  | <code>#1E1E4D</code> | <code>#2E241C</code> | <code>#2A1526</code> | <code>#1E2C0C</code> |
-| Border  | <code>#33337A</code> | <code>#453528</code> | <code>#4D213F</code> | <code>#3C5410</code> |
-| Text    | <code>#D2D2F7</code> | <code>#EDE0D0</code> | <code>#FAF5EF</code> | <code>#E9F7C0</code> |
-| Accent  | <code>#3A3A99</code> | <code>#5A4028</code> | <code>#5C1F47</code> | <code>#B8157A</code> |</p>
-<p>Vivid — the hue is in the ramp, so the panels themselves carry it:</p>
-<p>| Level     | Violet    | Blossom   | Ember     | Crimson   | Miku      |
-|-----------|-----------|-----------|-----------|-----------|-----------|
-| Base      | <code>#0A0414</code> | <code>#120A0E</code> | <code>#0C0703</code> | <code>#0D0405</code> | <code>#061014</code> |
-| Panel     | <code>#120827</code> | <code>#180D13</code> | <code>#140B04</code> | <code>#150609</code> | <code>#0A1920</code> |
-| Surface   | <code>#1C0C3B</code> | <code>#241320</code> | <code>#1F1206</code> | <code>#200A0E</code> | <code>#10262D</code> |
-| Raised    | <code>#2A1257</code> | <code>#341B2E</code> | <code>#2E1A08</code> | <code>#300F15</code> | <code>#173740</code> |
-| Border    | <code>#4B2088</code> | <code>#5A2C4A</code> | <code>#55300C</code> | <code>#591A24</code> | <code>#28515C</code> |
-| Text      | <code>#E2D4FA</code> | <code>#FBDCE8</code> | <code>#FBE3C8</code> | <code>#F7D9DD</code> | <code>#DDFBFF</code> |
-| Accent    | <code>#6D28D9</code> | <code>#864160</code> | <code>#944108</code> | <code>#B91C1C</code> | <code>#0E7478</code> |
-| Highlight | <code>#7737DC</code> | <code>#934869</code> | <code>#9F4608</code> | <code>#BB2222</code> | <code>#2B6A68</code> |</p>
-<p>Strong accent on near black — the panels stay neutral, and the color is only the
-edge, the accent and the highlight:</p>
-<p>| Level     | Amethyst  | Threshold |
-|-----------|-----------|-----------|
-| Base      | <code>#050507</code> | <code>#050505</code> |
-| Panel     | <code>#09090D</code> | <code>#0A0A0A</code> |
-| Surface   | <code>#0F0F16</code> | <code>#121212</code> |
-| Raised    | <code>#181823</code> | <code>#1C1C1C</code> |
-| Border    | <code>#33254F</code> | <code>#2B2B2B</code> |
-| Text      | <code>#E4DCF2</code> | <code>#FFFFFF</code> |
-| Accent    | <code>#6730C6</code> | <code>#DC2626</code> |
-| Highlight | <code>#7537DF</code> | <code>#BC2020</code> |</p>
-<p><strong>Premiere</strong> takes its violet from the app's icon; <strong>Neon</strong> and <strong>Glitch</strong> come
-from reference artwork, and <strong>Comfy</strong> is the lightest, for long sessions.
-<strong>Contrast</strong> keeps a <code>#4A4A4A</code> border so edges stay legible on black panels.
-<strong>Blossom</strong> is pastel in its text and border only: a pastel background would
-leave Premiere's own light text unreadable. <strong>Threshold</strong> is
-threshold-editor.com.br's <code>#050505</code>, <code>#FFFFFF</code> and <code>#DC2626</code>. <strong>Miku</strong> is the
-one palette that sets a band of its own, <code>#020F13</code> — darker than its own
-deepest step, and holding more of the teal than that step does, so the picture
-carries against it instead of against flat gray.</p>
-<p>The accent stays out of the ramp, which is interpolated, so it only shows on
-hovered menu items and system highlights; each one is at least 4.5:1 against
-its palette's text.</p>
-<p>Contrast and the palettes with a <strong>Highlight</strong> row give Premiere's blue — track
-targeting, the focused panel's border, the active tool, selections, links —
-their own hue, each blue at its own brightness, so white text on a blue button
-keeps its contrast. The row is the track-targeting shade; Contrast's is the gray
-<code>#606060</code>. <strong>Palette highlight</strong> in the settings keeps the blue on any palette.</p>
-<h2 id="customthemes">Custom themes</h2>
-<p><strong>Custom</strong> takes its colors from the <strong>Custom theme</strong> group in the settings,
-one field each:</p>
-<p>| Field                  |          | What it colors                                                |
-|------------------------|----------|---------------------------------------------------------------|
-| <strong>Base</strong>               | required | the darkest step: the deepest background                      |
-| <strong>Panel</strong>              | required | the second step, and the title bar and menu bar               |
-| <strong>Surface</strong>            | required | the middle step                                               |
-| <strong>Raised</strong>             | required | the fourth step                                               |
-| <strong>Border</strong>             | required | the lightest step: dividers and edges                         |
-| <strong>Text</strong>               | required | menu and title bar text                                       |
-| <strong>Accent</strong>             | optional | hovered menu items; the border when left empty                |
-| <strong>Disabled text</strong>      | optional | disabled menu items; halfway from text to panel when empty    |
-| <strong>Highlight</strong>          | optional | the hue Premiere's blue takes; the blue stays when left empty |
-| <strong>Monitor background</strong> | optional | the band around the picture; the panel tone when left empty   |</p>
-<p>Colors are <code>#RRGGBB</code>. The group starts as Onyx, with <strong>Highlight</strong> and
-<strong>Monitor background</strong> empty. A required field left empty or misspelled falls
-back to Onyx's color, named in the log, so the interface never ends up half
-themed.</p>
-<p>One thing to know before copying a value out of the palette tables above:
-<strong>Highlight</strong> there is the shade the hue produces, not the hue. Violet's row
-reads <code>#7737DC</code>, which is what its <code>#6D28D9</code> becomes at the brightness of
-Premiere's own blue — so a custom theme wanting Violet's highlight takes
-<code>#6D28D9</code>. Every other row in those tables is the value the field takes
-directly.</p>
-<p><strong>Monitor background</strong> is the one worth setting on purpose. Stock Premiere
-paints the band around the picture the same tone as its panels, which is what
-the built-in palettes do and why this is left empty by default — Miku is the
-exception. Give it a darker value than <strong>Panel</strong> and the picture stands out
-against it; give it a lighter one to judge a shot against a brighter
-surround.</p>
-<h3 id="sharingone">Sharing one</h3>
-<p>The <strong>Settings</strong> tab has a text mode next to the visual one, and what it holds
-is the settings as YAML — the palette, then <code>customTheme</code> as a block under it:</p>
-<pre><code class="yaml language-yaml">palette: custom
-customTheme:
-  base: '#050505'
-  panel: '#0A0A0A'
-  surface: '#121212'
-  raised: '#1C1C1C'
-  border: '#2B2B2B'
-  text: '#FFFFFF'
-  accent: '#DC2626'
-  disabledText: '#8A8A8A'
-  highlight: '#DC2626'
-  monitor: ''
-</code></pre>
-<p><strong>To use a theme someone sent you</strong>, paste it into that box over what is there
-and save. The colors need their quotes: a bare <code>#</code> starts a comment in YAML.</p>
-<p><strong>To copy your own out</strong>, put the palette on <strong>Custom</strong> and read the mod's log.
-It writes the theme as one line, in YAML's flow form, which that box reads the
-same as the block above:</p>
-<pre><code class="yaml language-yaml">{palette: custom, customTheme: {base: '#050505', panel: '#0A0A0A', ...}}
-</code></pre>
-<p>The theme is what travels, not the document around it. Saving that box replaces
-every setting it is given, so a whole document from someone else would bring
-their layer switches along with their colors; anything you leave out goes back
-to its default. The log writes only the palette and the colors for that reason,
-and writes them resolved — a field left empty travels as the color it became.</p>
-<p>Keep the five steps dark and in order. Premiere's own text is light and is not
-recolored, and the monitor band is recognized by working back along the ramp,
-which a ramp that doubles back on itself would confuse.</p>
-<h2 id="whatitchangesandwhatitleavesalone">What it changes, and what it leaves alone</h2>
-<p>Each layer has its own switch in the settings:</p>
-<ul>
-<li><strong>Premiere interface</strong> — the theme colors served by <code>dvaui.dll</code>, Adobe's UI
-toolkit: panels, timeline, monitors.</li>
-<li><strong>Direct fills</strong> — surfaces Premiere paints without asking the theme: most of
-the monitor and timeline chrome.</li>
-<li><strong>Monitor band</strong> — the band around the picture in the Source and Program
-monitors, which Premiere draws on the GPU. The only layer that hooks
-Direct3D, so it has a switch of its own, and it is off until you turn it on.</li>
-<li><strong>Window and system dialogs</strong> — dark title bar, border and native dialogs.</li>
-<li><strong>Menu bar and menus</strong> — the File / Edit / Clip bar and its dropdowns.</li>
-<li><strong>GDI surfaces</strong> — brushes, pens and text backgrounds created by Premiere's
-own modules.</li>
-<li><strong>UXP panels</strong> — the Text panel, Import, Export, Quick Export, Progress,
-Preset Manager and the Home screen, which Premiere draws from stylesheets and
-design tokens of their own. Off by default, because those panels only follow
-it across a restart.</li>
-<li><strong>Palette highlight</strong> — Premiere's blue, on the palettes that carry a
-highlight.</li>
-</ul>
-<p>Saturated colors — clips, labels, warnings, and Premiere's blue unless the
-palette carries a highlight — pass through, and so does anything above the
-<strong>brightness ceiling</strong>: text, icons, and the <code>#4B4B4B</code> of disabled text. The
-UXP stylesheets are the exception, and only for borders and fills: a
-stylesheet says which property a color belongs to, so an input's outline is
-recolored a little past the ceiling while the disabled text at the very same
-value is not.
-Content is left alone whatever its color: the color picker's swatches, markers,
-Essential Graphics, and the parameter colors of Effect Controls, Lumetri and the
-monitors.</p>
-<h2 id="ifsomethingbecomesunreadable">If something becomes unreadable</h2>
-<p>Lower the ceiling. Raising it darkens more, starting with disabled text — which
-is exactly what disappears first.</p>
-<p>Settings apply while Premiere is running. Some surfaces keep the previous
-palette until Premiere restarts, because Premiere copies those colors into
-caches of its own.</p>
-<p>If a Premiere update ever makes a panel misbehave with the mod on, switch off
-<strong>Premiere interface</strong>, <strong>Direct fills</strong> and <strong>GDI surfaces</strong> together and
-restart Premiere. With all three off when the mod loads, it does not hook
-Premiere's own modules at all — and <strong>Monitor band</strong> off means it does not
-touch Direct3D either, not even to watch for the device.</p>
-<h2 id="othermodsthatdarkenmenus">Other mods that darken menus</h2>
-<p>If your menu bar ignores the palette, another mod is painting it first: any mod
-that darkens Win32 menus globally answers the same <code>DefWindowProc</code> messages
-before this one, with its own fixed color. Add <code>Adobe Premiere Pro.exe</code> to that
-mod's process <strong>exclusion</strong> list and this one takes over.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<p><strong>UXP panels change on restart</strong>, which is why they are off by default.
-Premiere reads their files once, when a panel loads, and the mod recolors that
-read — a temporary copy, deleted as soon as it is closed; nothing on disk
-changes. So turning the switch on, a palette switch, and turning it back off or
-disabling the mod all show on those panels after Premiere restarts. Frame.io
-and Adobe Stock carry no Spectrum grays and keep their own look.</p>
-<p>A panel keeps its colors twice — in its stylesheet and in a table of design
-tokens in its own script, which beats any stylesheet rule — and the mod
-recolors both, which is what makes the search fields and inputs in those
-panels match the rest instead of staying a stock gray box. It costs a panel
-one extra read of its own script as it loads. The how, with the measurements,
-is in the <a href="https://github.com/CakeDev4k/premiere-pro-theme">repository readme</a>.</p>
-<p><strong>The band around the video is drawn on the GPU</strong>, outside every layer above,
-by <code>DisplaySurface.dll</code>. The mod recognizes those draws by the module they
-come from and by the color they carry, and gives them the theme's <strong>Monitor
-background</strong>, or its panel tone when that is left empty.</p>
-<p>What shows behind the picture is black, and stays black in every palette: it
-is what a clip with an alpha channel is composited onto and what the monitor
-shows over a gap in the timeline, which is why a transparent PNG still sits on
-black.</p>
-<p><strong>Monitor band</strong> is its own switch and it ships off, because this is the only
-layer that hooks Direct3D — and on entry points every D3D12 program in the
-process shares, not on anything of Adobe's — and the only one that writes into
-a command list it does not own. Turn it on once the rest of the theme looks
-right on your build, and it is the first thing to turn off if the monitors
-misbehave; the rest of the theme is unaffected either way.</p>
-<p>No restart is needed to see it change. With the switch already on as Premiere
-starts, the layer goes in from the device Premiere itself creates; turned on
-later, from a device of the mod's own, which is only safe once the monitors
-have drawn — by then Premiere has settled which graphics runtime it uses.</p>
-<p>Turning it off stops the recoloring at once, and the band is Premiere's own
-gray again from the next frame. What it does not do is take the hooks back
-out: once the layer has gone in, the command list entry points stay hooked
-until Premiere is restarted or the mod is disabled. That only matters if you
-are chasing a conflict with a GPU overlay or a capture tool — for that, turn
-the switch off and restart Premiere, or disable the mod.</p>
-<p>Two things about it are worth knowing. It answers to <strong>Strength</strong> but not to
-the <strong>brightness ceiling</strong>: the band is recognized by its own shape, and takes
-the <strong>Monitor background</strong> color directly rather than a stop on the ramp. And
-it leaves a monitor smaller than 400x300 alone, so a Source or Program panel
-squeezed very narrow keeps Premiere's own gray while the other one is themed.</p>
-<p>The black <em>inside</em> the sequence frame is the rendered picture, not chrome, and
-stays black in every palette.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>The mod looks up each color function by name at startup, installs the ones the
-running build exports, and logs the rest, so a version that moved or dropped a
-function loses that surface, not the mod. Measured against the installed
-builds:</p>
-<p>| Premiere | Color functions found | Drawing primitives |
-|----------|-----------------------|--------------------|
-| 2026     | 31 of 31              | 4 of 4             |
-| 2023     | 27 of 31              | 4 of 4             |</p>
-<p>The four missing on 2023 do not exist there under any name, and their surfaces
-fall back to the Spectrum family, which both have. The window frame, the menu
-bar, the native dialogs and the band around the picture do not depend on the
-Premiere version: the band is recognized by the module that draws it and the
-shape of the work, not by an address inside it. Native dark
-mode needs Windows 10 build 17763 or newer; below that the mod still themes the
-interface and paints the menus itself.</p>
-<h2 id="questionsbugsandpalettes">Questions, bugs and palettes</h2>
-<p>Bug reports and palette suggestions are welcome on
-<a href="https://discord.gg/m5kVMR8Vuu">Discord</a>, where a Premiere build and a
-screenshot are usually all it takes to work one out.</p>
-<h2 id="credits">Credits</h2>
-<p>The menu bar technique — the undocumented <code>WM_UAHDRAWMENU</code> messages and the
-<code>DarkMode::Menu</code> theme class — comes from
-<a href="https://github.com/adzm/win32-darkmode">win32-darkmode</a> by adzm, MIT licensed.
-This mod is MIT as well.</p>]]></content>
-        <author>
-            <name>Threshold Editor</name>
-            <uri>https://github.com/CakeDev4k</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Tourne'Table [Audio Visualizer] 1.2.0]]></title>
-        <id>https://windhawk.net/mods/tourne-table-desktop-audio-visualizer#9485e30106c141ddc8472442a43c1c740d7ce4b3</id>
-        <link href="https://windhawk.net/mods/tourne-table-desktop-audio-visualizer"/>
-        <updated>2026-09-18T00:46:29.000Z</updated>
-        <content type="html"><![CDATA[<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/BANNER/tourne-header.png" alt="Tourne'Table - a ghost in your desktop's shell" /></p>
-<h1 id="tournetableaudiovisualizer"><code>Tourne'Table</code> <strong>[Audio Visualizer]</strong></h1>
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/11.gif" alt="Tourne'Table Audio Visualizer" /></p>
-<p><em>The Oscilloscope shape running live audio: bottom-left placement, blurred panel, single-pixel border.</em></p>
-<blockquote>
-  <p><strong>A real-time audio visualizer that lives on your Windows desktop.</strong>
-  Built on the foundation of Salyts' Desktop Audio Visualizer, rebuilt around performance.</p>
-</blockquote>
-<p>Play music. Bars dance on your wallpaper. That's the whole idea.</p>
-<p>It listens to <strong>whatever your PC is already playing</strong> (Spotify, YouTube, a game, a call) and draws it behind your desktop icons. No virtual audio cable, no drivers, nothing to configure. It just picks up your system audio.</p>
-<p>It is built to be cheap to run. The render thread wakes only at the frame rate you ask for, the wallpaper blur is computed once instead of every frame, and the drawing surface is sized to the widget rather than the whole desktop, so at a 144 FPS target the visualizer costs about <strong>a third of one CPU core</strong> and <strong>one degree</strong> of CPU package temperature while it plays, and nothing at all while it doesn't.</p>
-<h2 id="aboutthisproject">ABOUT THIS PROJECT</h2>
-<p>Built with an emphasis on lower resource consumption, more efficient rendering, better frame pacing, expanded visualization options, dynamic album-art integration, native Windows media info, deeper customization, and power-conscious idle behavior.</p>
-<p>The goal is simple:</p>
-<blockquote>
-  <p><strong>Make the desktop move with the music, without making the CPU move mountains to do it.</strong></p>
-</blockquote>
-<h2 id="runsasitsownprocess">Runs as its own process</h2>
-<p>Tourne'Table doesn't live inside <code>explorer.exe</code>. It runs as its own dedicated process using Windhawk's tool-mod pattern, so you'll see it as its own entry in Task Manager, separate from the shell. Restarting <code>explorer.exe</code> doesn't kill it. It just reattaches behind the desktop icons once the shell is back. Requires a Windhawk build with tool-mod support (1.7.3+, including the 2.0 alpha line).</p>
-<hr />
-<h2 id="performanceataglance">◈ PERFORMANCE AT A GLANCE</h2>
-<p>Measured on an <strong>Intel Core Ultra 265KF</strong> (8 P-cores plus 12 E-cores), running a 120-bar oscilloscope at a 144 FPS target with background blur on, and with media controls, the peak-frequency readout, peak hold and beat flash all enabled.</p>
-<p>Every figure below is the <strong>change against an idle baseline</strong>, captured back to back in the same session with the same music playing in both, so what you are reading is the cost of the mod rather than whatever else the machine happened to be doing.</p>
-<p>| Metric | Cost of running it |
-|:--|--:|
-| Total CPU usage | <strong>+1.6 percentage points</strong> <em>(about 0.3 of one core)</em> |
-| Peak single-thread | <strong>+10.1 points</strong> |
-| CPU package power | <strong>+7.2 W</strong> |
-| CPU package temperature | <strong>+1.0 °C</strong> |</p>
-<p>Medians across 543 samples with it running and 384 without, at 1.25 s intervals. Medians rather than averages because both captures contained brief unrelated background spikes, and a median is not moved by them.</p>
-<p>When audio stops, rendering stops, not "slows down," <em>stops</em>.</p>
-<p>Full methodology, raw traces and caveats live in <a href="https://github.com/USER-TOURNE/TOURNE-TABLE">the project repo</a> rather than on this page.</p>
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/10.gif" alt="Tourne'Table Audio Visualizer" /></p>
-<p><em>Bottom-left placement against a dark wallpaper, with the Now Playing label sitting above the panel.</em></p>
-<hr />
-<h2 id="visualstyles">◆ VISUAL STYLES</h2>
-<h3 id="8shapes">8 Shapes</h3>
-<p>| Shape | What it does |
-|:--|:--|
-| <strong>Stereo</strong> | Classic equalizer bars. Low notes left, high notes right. |
-| <strong>Mountain</strong> | Peaks in the middle, tapers toward both edges. |
-| <strong>Mirror</strong> | The opposite, grows from the outside edges inward. |
-| <strong>Wave</strong> | Normal bars with a slow ripple rolling through them. |
-| <strong>Breathe</strong> | A gentle swell that rises with the music instead of jumping. |
-| <strong>Dots</strong> | Stacked dots instead of solid bars, old LED-meter look. |
-| <strong>Radial</strong> | Bars shoot outward from a center point, like a sunburst. |
-| <strong>Oscilloscope</strong> | A single line tracing the actual sound wave. |</p>
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/8.gif" alt="Oscilloscope closeup" /></p>
-<p><em>Closeup: the waveform drawn as one continuous line, with the Now Playing label and media buttons alongside.</em></p>
-<h3 id="9colormodes">9 Color Modes</h3>
-<p>| Mode | What it does |
-|:--|:--|
-| <strong>Solid</strong> | One flat color. |
-| <strong>Gradient</strong> | Fades between two colors across the bars. |
-| <strong>Reactive Gradient</strong> | Shifts toward the second color as things get <em>louder</em>. |
-| <strong>Windows Accent</strong> | Matches your Windows accent color, updating instantly. |
-| <strong>Album Art</strong> | Pulls the dominant color from the playing track's cover. |
-| <strong>Dynamic Album</strong> | Gradient between the cover art's two strongest colors. |
-| <strong>Acrylic</strong> | Grows more opaque the louder it gets, invisible in silence. |
-| <strong>Rainbow Cycle</strong> | Continuously cycling hue, adjustable speed. |
-| <strong>Tourne</strong> | Built-in teal → red gradient from my personal palette. |</p>
-<h3 id="plus">Plus</h3>
-<ul>
-<li><strong>2 orientations</strong>: bars grow vertically or horizontally</li>
-<li><strong>3 anchors</strong>: grow from the Bottom, the Top, or <strong>both directions from the Middle</strong></li>
-<li><strong>Peak Hold Caps</strong>: thin markers hang at each bar's recent peak and slowly fall <em>(classic hardware EQ)</em></li>
-<li><strong>Beat Flash</strong>: bars brighten on detected bass hits, on top of any color mode</li>
-<li><strong>Multiband Oscilloscope</strong>: the waveform tints toward whichever part of the spectrum is loudest</li>
-</ul>
-<hr />
-<h2 id="nowplayingdisplay">♪ NOW PLAYING DISPLAY</h2>
-<p>Shows the current <strong>artist and title</strong> above the visualizer, pulled from the same Windows media session that powers your volume popup. Works with Spotify, browsers, and most media players.</p>
-<p>Fades in on track change, fades out after a configurable delay. Custom color, font family and size.</p>
-<hr />
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/7.gif" alt="Oscilloscope closeup" /></p>
-<p><em>A narrower panel. The trace scales to whatever width the bar settings give it.</em></p>
-<h2 id="thepalette">◐ THE PALETTE</h2>
-<p>This project follows my personal theming palette: reflected in the repo screenshots. It can be changed to any hex / RGB / RGBA value you want.</p>
-<p>| Name | Hex | RGB |
-|:--|:--|:--|
-| Green | <code>#15ffa2</code> | <code>21, 255, 162</code> |
-| Red | <code>#ff8f8f</code> | <code>255, 143, 143</code> |
-| Pale Green | <code>#64aa89</code> | <code>100, 170, 137</code> |
-| Alt Pale Green | <code>#6ba6a0</code> | <code>107, 166, 160</code> |
-| Pale Red | <code>#a95d5d</code> | <code>169, 93, 93</code> |
-| Dark Teal <em>(background)</em> | <code>#121c21</code> | <code>18, 28, 33</code> |</p>
-<p>The built-in <strong>Tourne</strong> color mode is drawn from these.</p>
-<hr />
-<h1 id="everysettingexplained">✦ EVERY SETTING, EXPLAINED</h1>
-<p><strong>You don't need any of this to use the mod.</strong> The defaults work. This is for when you want to tweak something and you're wondering what a word means.</p>
-<h2 id="appearance">Appearance</h2>
-<p><strong>Shape</strong>: Which of the 8 styles above to draw.</p>
-<p><strong>Orientation</strong>: <em>Horizontal</em> = a row of bars growing up and down. <em>Vertical</em> = a column growing left and right.</p>
-<p><strong>Bar Count</strong>: How many bars. More = finer detail, wider visualizer. Range <strong>1-2048</strong> (enough to span a 4K or ultrawide screen).</p>
-<p><strong>Bar Width</strong>: How fat each bar is, in pixels.</p>
-<p><strong>Bar Gap</strong>: Space between bars, in pixels. Set to <code>0</code> and they touch.</p>
-<p><strong>Bar Max Size</strong>: How tall a bar gets at full volume. This is the overall height of the visualizer.</p>
-<p><strong>Bar Idle Size</strong>: How tall bars sit in silence. <code>0</code> makes them vanish completely; a few pixels leaves a thin resting line.</p>
-<p><strong>Bar Corner Radius</strong>: How rounded the bar corners are. One number rounds all four equally, or give four numbers separated by spaces for individual control: <code>top-left top-right bottom-right bottom-left</code>. Example: <code>5 5 0 0</code> rounds only the top.</p>
-<p><strong>Color Mode</strong>: Which of the 9 coloring styles above to use.</p>
-<p><strong>Color</strong>: The color used in Solid mode. Format is <code>#AARRGGBB</code> or <code>#RRGGBB</code>: that's <strong>A</strong>lpha (transparency), then <strong>R</strong>ed, <strong>G</strong>reen, <strong>B</strong>lue in hex. Lower the first two digits to make it see-through.</p>
-<p><strong>Gradient Color 1 / 2</strong>: Start and end colors for the gradient modes.</p>
-<p><strong>Sensitivity</strong>: How hard the bars react. Too low and quiet music barely moves them; too high and everything slams to max. Range 0-300. Turn it down for bass-heavy tracks, up for quiet recordings.</p>
-<p><strong>EQ Preset</strong>: Which frequencies get emphasized <em>visually</em>. Doesn't touch your actual audio.
-<code>Default</code> no adjustment · <code>Bass</code> boosts lows · <code>Rock</code> boosts mids and highs · <code>Pop</code> heavy on highs · <code>Jazz</code> warmer, gentler highs · <code>Electronic</code> boosts bass and treble, scoops the middle.</p>
-<p><strong>FFT Size</strong>: How finely sound gets analyzed. An FFT is the math that splits audio into separate frequencies: think of it as sorting sound into buckets by pitch. More buckets = finer detail, slightly more CPU.
-<code>1024</code> fastest, plenty for most · <code>2048</code> / <code>4096</code> noticeably crisper · <code>8192</code> maximum detail.</p>
-<blockquote>
-  <p><strong>Note. This is an admittedly 'beta' implementation for now.</strong> Everything up to <code>8192</code> runs near-flawlessly with almost no overhead, <em>with the caveat that you're using anything other than the Oscilloscope shape.</em></p>
-  <p><strong>One more note:</strong> the higher the FFT Size, the more accurate the Sensitivity slider becomes for your specific audio setup. The correlation generally runs: <strong>as FFT Size goes up, your Sensitivity will need to go up too.</strong> For now that means fine-tuning Sensitivity per EQ Preset <em>and</em> per FFT Size, for your particular placement, size and personal adjustments.</p>
-</blockquote>
-<p><strong>Frequency Scale</strong>: How the frequency range spreads across the bars. This matters more than it sounds.</p>
-<ul>
-<li><strong>Log</strong>: the natural-feeling default. Gives bass and treble roughly equal visual space, matching how humans hear pitch.</li>
-<li><strong>Linear</strong>: spreads by raw Hz. Since most musical energy lives low, this crams all the action into a sliver on the left and leaves the right mostly dead. Technically accurate, visually dull.</li>
-<li><strong>Mel</strong>: uses the <em>mel scale</em>, built from research on how people actually perceive pitch. Like Log, tuned to human hearing.</li>
-</ul>
-<p><strong>Peak Frequency Readout</strong>: Shows the loudest note as a live number, e.g. <code>1.2 kHz</code>.</p>
-<p><strong>Peak Readout Position</strong>: Where that number sits. Horizontal: Left / Center / Right. Vertical: Above / Top / Middle / Bottom / Below.</p>
-<blockquote>
-  <p><strong>Above</strong> and <strong>Below</strong> place it fully <em>outside</em> the bars so it never overlaps the visualization.</p>
-</blockquote>
-<p><strong>Multiband Oscilloscope Coloring</strong>: Only affects the Oscilloscope shape. The line tints toward whatever part of the spectrum is loudest: warm for bass, green for mids, blue for treble. Overrides Color Mode for that shape.</p>
-<p><strong>Anchor</strong>: Which edge bars grow from. <code>Bottom</code> rise upward <em>(classic)</em> · <code>Top</code> hang downward · <code>Middle</code> grow <strong>both directions</strong> from a center line.</p>
-<p><strong>Peak Hold Caps</strong>: Leaves a thin marker floating at each bar's recent peak, which slowly drifts down.</p>
-<p><strong>Beat Flash</strong> + <strong>Intensity</strong>: Flashes bars brighter on bass hits. Intensity controls how hard.</p>
-<p><strong>Rainbow Cycle Speed</strong>: How fast the rainbow rotates. Rainbow mode only.</p>
-<p><strong>Now Playing Text</strong>: Toggles the artist/title display.</p>
-<p><strong>Now Playing Color / Font / Font Size</strong>: Styling for that text. The font must be <strong>installed on your system</strong>: type the exact family name. Windows silently falls back to a default on a typo rather than erroring, so double-check spelling if nothing changes.</p>
-<blockquote>
-  <p>The Peak Frequency Readout shares these same font settings.</p>
-</blockquote>
-<p><strong>Now Playing Display Seconds</strong>: How long the text stays up after a track change before fading.</p>
-<h2 id="position">Position</h2>
-<p><strong>Horizontal Position</strong>: Left-to-right placement as a percentage. <code>0</code> hard left, <code>50</code> centered, <code>100</code> hard right.</p>
-<p><strong>Vertical Position</strong>: Top-to-bottom, same idea. <code>0</code> top, <code>100</code> bottom.</p>
-<p><strong>Monitor</strong>: Which screen to draw on. <code>1</code> is your first monitor.</p>
-<h2 id="background">Background</h2>
-<p><strong>Enabled</strong>: Draws a panel behind the bars. Turn off for bars floating directly on the wallpaper.</p>
-<p><strong>Color</strong>: Panel color in <code>#AARRGGBB</code>. The alpha controls transparency.</p>
-<p><strong>Padding</strong>: Breathing room between the bars and the panel edge.</p>
-<p><strong>Corner Radius</strong>: How rounded the panel corners are. Same one-or-four-value rules as bar radius.</p>
-<p><strong>Blur</strong>: Frosted-glass blur of your wallpaper behind the panel. <code>0</code> disables.</p>
-<blockquote>
-  <p>This used to be the single most expensive setting in the mod. It's now computed once and cached, so it's essentially free per frame.</p>
-</blockquote>
-<p><strong>Border Size / Border Color</strong>: A thin outline around the panel. <code>0</code> for none.</p>
-<h2 id="performance">Performance</h2>
-<p><strong>Target FPS</strong>: How many times per second it redraws. Higher = smoother, more CPU. Little point exceeding your monitor's refresh rate.</p>
-<p><strong>Pause On Fullscreen</strong>: Stops completely when a fullscreen app runs. Detects both true fullscreen <em>(games)</em> and borderless windows. Since the visualizer lives on the desktop it's invisible anyway. This just stops it burning power. Resumes automatically.</p>
-<p><strong>Pause When Silent (seconds)</strong>: After this long without audio, drops to a trickle instead of full speed. <code>0</code> disables.</p>
-<p><strong>Auto-Hide When Idle</strong> + <strong>Delay</strong>: Fades out entirely after prolonged silence. Once fully faded it <strong>stops rendering completely</strong>, not just invisible, genuinely doing nothing until audio returns.</p>
-<p><strong>Pause When Covered</strong>: Stops rendering <em>and</em> audio capture while fully hidden behind another window.</p>
-<blockquote>
-  <p><strong>Off by default.</strong> Reliably detecting "am I covered?" on Windows 11 is genuinely tricky: the shell is full of invisible windows that report themselves as visible. The check is deliberately conservative (only a fully-covering, real application window counts), but if the visualizer ever vanishes when it shouldn't, this is the switch to flip.</p>
-</blockquote>
-<hr />
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/4.gif" alt="Oscilloscope closeup" /></p>
-<p><em>The same shape in a warm colour: the Oscilloscope picks up Color Mode like every other shape.</em></p>
-<h1 id="wheretheefficiencycomesfrom">▲ WHERE THE EFFICIENCY COMES FROM</h1>
-<p>In rough order of measured impact.</p>
-<h3 id="1precisionframepacingthebiggestsinglewin">1. Precision frame pacing: the biggest single win</h3>
-<p>The obvious way to pace a desktop widget is <code>DwmFlush()</code>, which blocks until the monitor's next refresh. That wakes the render thread <strong>on every vertical blank, forever</strong> (60, 144, 240+ times a second) regardless of the target FPS, whether anything needs redrawing, or whether the visualizer is even visible.</p>
-<p>This barely registers as CPU% in Task Manager, because the thread is blocked, not spinning. But every wake-up drags a core out of deep idle. Do that continuously and the core never settles into its efficient sleep states, which reads as a small, permanent bump in package power and temperature. The classic "low usage, still runs warm" signature.</p>
-<blockquote>
-  <p><strong>Note:</strong> this becomes exponentially more noticeable on AMD architecture.</p>
-  <p><strong>Note:</strong> also exponentially more noticeable if you have <strong>C-States disabled</strong> in your BIOS or elsewhere. Shoutout to Process Lasso, Core Director, Park Control and HWiNFO64 for helping me work out why all my E-cores were sitting at 65-70 °C when they were supposed to be idle.</p>
-</blockquote>
-<p><strong>Instead:</strong> a high-resolution waitable timer firing only at the configured rate. Plain <code>Sleep()</code> isn't good enough. It's quantized to ~15.6 ms, which would turn a 60 FPS target into stuttery 30-40 FPS.</p>
-<h3 id="2prerenderedbackgroundblur">2. Pre-rendered background blur</h3>
-<p>A Gaussian blur is a full-image convolution: the most expensive thing Direct2D does in this scene. Recomputing it every frame is pure waste, because its input (your wallpaper) never changes.</p>
-<p><strong>Instead:</strong> it is computed exactly once into a cached bitmap, and each frame just copies that. The cache covers only the widget's bounding box, which is <strong>tens of KB of video memory rather than several MB</strong>. It re-bakes automatically if the widget moves or resizes.</p>
-<h3 id="3widgetsizedrendersurface">3. Widget-sized render surface</h3>
-<p>The visualizer occupies a thin strip, so a desktop-spanning render surface would clear and present millions of untouched pixels every frame, and park two full-desktop buffers in VRAM.</p>
-<p><strong>Instead:</strong> the surface is sized to the widget's bounding box, and the composition layer is offset to position it. That is roughly an order of magnitude less per-frame pixel work and VRAM.</p>
-<h3 id="4cachedgeometry">4. Cached geometry</h3>
-<p>Building the background panel and border means allocating a path geometry and constructing four lines and four arcs by hand. It is rebuilt only when size, padding, radii or border width actually change (in normal use, almost never) rather than every frame.</p>
-<h3 id="5cachedmonitorlookup">5. Cached monitor lookup</h3>
-<p><code>EnumDisplayMonitors()</code> is a real round-trip through the display driver stack. The monitor is resolved once and cached, refreshed on display change, instead of being looked up per frame.</p>
-<h3 id="6reducedframelatency">6. Reduced frame latency</h3>
-<p>DXGI queues up to three frames ahead by default. For a passive widget that's pure latency and power draw with no upside. Capped at <strong>1</strong>.</p>
-<h3 id="7genuineidleshutdown">7. Genuine idle shutdown</h3>
-<p><strong>Auto-Hide</strong> now stops rendering completely once faded: presents one blank frame, then exits the render path entirely. <strong>Pause When Covered</strong> stops rendering and capture while hidden, checked once per second rather than per frame.</p>
-<hr />
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/2.gif" alt="Tourne'Table Audio Visualizer" /></p>
-<p><em>The full-width strip in a red colour mode.</em></p>
-<h1 id="onthenumbers">▦ ON THE NUMBERS</h1>
-<p>The figures above come from HWiNFO64 sensor logging: two captures taken back to back in one session, one with the mod running and one with it disabled, with the same music playing throughout both so the only thing that changed was the mod itself. 543 samples running, 384 disabled, at 1.25 s intervals.</p>
-<p>The full write-up (raw tables, the method, run-to-run variance, and an honest account of where the measurements fall short) is in <a href="https://github.com/USER-TOURNE/TOURNE-TABLE">the project repo</a>. It does not belong on a catalog page, so it is not reproduced here.</p>
-<p>The caveats worth stating up front: <strong>HWiNFO measures the whole machine, not this process alone.</strong> A number quoted as the mod's cost therefore includes the work the mod causes elsewhere, in the compositor and the graphics driver, not only the time spent in its own threads. That makes it larger than a per-process trace would show, and it is the honest figure to quote, because it is what the machine actually pays. Both captures also contained short unrelated background spikes, which is why the numbers above are medians rather than averages.</p>
-<hr />
-<p><img src="https://raw.githubusercontent.com/USER-TOURNE/TOURNE-TABLE/main/GIF/3.gif" alt="Tourne'Table Audio Visualizer" /></p>
-<p><em>Near-silence: the trace flattens out. When audio stops entirely, the render loop stops with it.</em></p>
-<h2 id="credits">♥ CREDITS</h2>
-<p><strong><a href="https://github.com/USER-TOURNE">USER-TOURNE</a></strong>: Author and maintainer: performance work, new features, benchmarking and documentation.</p>
-<p><strong><a href="https://github.com/Salyts">Salyts</a></strong>: Original author of Desktop Audio Visualizer. This project exists because the foundation was good enough to be worth optimizing. Author of his own mod and repo; and a base for this one.</p>
-<p><strong><a href="https://github.com/GR0UD">GR0UD</a></strong>: Audio visualizer code the original was adapted from. Author of his own work; and the base for Salyts.</p>
-<h3 id="acoincidenceworthacknowledging">A coincidence worth acknowledging</h3>
-<p>While I was midway through my initial testing, <strong>NeiZ</strong> (author/maintainer, with <strong>SuperSmile123</strong> contributing) released <a href="https://github.com/ramensoftware/windhawk-mods/commit/e01d0d0dbd6204804235831fd7f68821e4614028">Desktop Audio Visualizer Plus</a> (<code>neiz-supersmile-audio-visualizer</code>). I had planned to publish my own commit that same night: holy coincidence.</p>
-<p>His release spurred another round of testing on my end, and I've since gone through roughly twelve more iterations. I didn't want to ship something that essentially achieved what I was already going for, especially if they'd figuratively led me out to pasture to put a bullet in me: aha.</p>
-<p>To be explicit about attribution: <strong>I did not borrow from or reference NeiZ or SuperSmile123's work at any point</strong>, other than benchmarking theirs for efficiency to decide whether continuing development was worth it. Thanks to them and their contributors regardless.</p>
-<hr />
-<h2 id="license">◘ LICENSE</h2>
-<p>Released under the <strong>MIT License</strong>.</p>
-<pre><code>MIT License
-
-Copyright (c) 2026 USER-TOURNE
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-</code></pre>
-<h3 id="inthespiritofthewtfpl">In the spirit of the WTFPL</h3>
-<blockquote>
-  <p><strong>0. You just do what the fuck you want to.</strong></p>
-  <p>Take it. Fork it. Gut it. Rewrite the parts I got wrong. Ship it. Sell it.
-  Learn something from it and never speak to me again.</p>
-  <p>The only thing MIT actually asks is that the copyright line rides along: 
-  keep the notice, and we're square.</p>
-  <p><em>(I went with MIT over the real WTFPL for one boring reason: this thing
-runs a DLL loaded by Windhawk, and MIT comes with a warranty disclaimer.
-The WTFPL does not. Same energy, fewer ways for my life to get complicated.)</em></p>
-</blockquote>
-<h3 id="thirdpartynotices">Third-party notices</h3>
-<p>This project builds on upstream work by <strong>Salyts</strong> and <strong>GR0UD</strong>. Their original
-code carries its own license terms: if you redistribute this, carry their notices
-along with mine.</p>
-<hr />
-<h2 id="support">❖ SUPPORT</h2>
-<p>If this saved you some degrees, some watts, or just made your desktop nicer to
-look at, you can throw something in the hat. Entirely optional, genuinely appreciated.</p>
-<p><strong><a href="https://ko-fi.com/tourne">ko-fi.com/tourne</a></strong></p>]]></content>
-        <author>
-            <name>USER-TOURNE</name>
-            <uri>https://github.com/USER-TOURNE</uri>
         </author>
     </entry>
 </feed>
