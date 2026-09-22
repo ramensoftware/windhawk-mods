@@ -3330,19 +3330,16 @@ std::vector<std::wstring> g_atlasChars;                // 图集词组列表 / a
 static void BuildCharAtlas() {
     Wh_Log(L"[CharAtlas] BuildCharAtlas called, dev=%p factory=%p fmt=%p", g_pD3DDevice, g_pD2DFactory, g_pTextFormat);
     // 重建文字格式（字号可能已变化）/ Recreate text format (font size may have changed)
-    {
-        static int s_lastFontSize = 0;
-        static wchar_t s_lastFontFamily[64] = L"";
-        if (g_pTextFormat) { g_pTextFormat->Release(); g_pTextFormat = nullptr; }
+    if (g_pTextFormat) { g_pTextFormat->Release(); g_pTextFormat = nullptr; }
+    if (g_dwFactory) {
         g_dwFactory->CreateTextFormat(L"Segoe UI Emoji", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
             (float)(g_textFontSize * 2.0f), L"en-us", &g_pTextFormat);
-        if (!g_pTextFormat) g_dwFactory->CreateTextFormat(L"Segoe UI Emoji", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+        if (!g_pTextFormat) g_dwFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
             (float)(g_textFontSize * 2.0f), L"en-us", &g_pTextFormat);
         if (g_pTextFormat) {
             g_pTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
             g_pTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         }
-        s_lastFontSize = g_textFontSize;
     }
     if (!g_pD3DDevice || !g_pD2DFactory || !g_pTextFormat) { Wh_Log(L"[CharAtlas] early return null deps"); return; }
     // 解析 text_content，按逗号/竖线分隔成多个内容 / Parse text_content, split by comma/pipe
@@ -3351,7 +3348,7 @@ static void BuildCharAtlas() {
     int bi = 0;
     for (int i = 0; g_textContent[i] != 0 && i < 255; i++) {
         wchar_t ch = g_textContent[i];
-        if (ch == L',' || ch == L'，' || ch == L'|' || ch == L'|') {
+        if (ch == L',' || ch == L'，' || ch == L'|' || ch == L'｜') {
             if (bi > 0) { buffer[bi] = 0; g_atlasChars.push_back(buffer); bi = 0; }
             continue;
         }
@@ -5432,7 +5429,7 @@ void LoadSettings() {
     PCWSTR pText = Wh_GetStringSetting(L"text_content");
     if (pText) { wcsncpy_s(g_textContent, pText, _TRUNCATE); Wh_FreeStringSetting(pText); }
     int tfsVal = Wh_GetIntSetting(L"text_font_size");
-    if (tfsVal < 10) tfsVal = 10; if (tfsVal > 100) tfsVal = 100;
+    if (tfsVal < 10) tfsVal = 10; if (tfsVal > 200) tfsVal = 200;
     g_textFontSize = tfsVal;
     g_charAtlasDirty = true;  // 文字设置变更，标记图集需重建 / text settings changed, mark atlas dirty
     // 物理可视化调试（独立开关）/ Physics visualization debug (independent toggles)
@@ -8564,6 +8561,7 @@ static void ReleaseAllRenderResources() {
     if (g_pHexagramGeom) { g_pHexagramGeom->Release(); g_pHexagramGeom = nullptr; }
     if (g_pHeartGeom) { g_pHeartGeom->Release(); g_pHeartGeom = nullptr; }
     if (g_pD2DFactory) { g_pD2DFactory->Release(); g_pD2DFactory = nullptr; }
+    if (g_dwFactory) { g_dwFactory->Release(); g_dwFactory = nullptr; }
     if (g_pDXGIDevice) { g_pDXGIDevice->Release(); g_pDXGIDevice = nullptr; }
     if (g_pD3DContext) { g_pD3DContext->Release(); g_pD3DContext = nullptr; }
     if (g_pD3DDevice) { g_pD3DDevice->Release(); g_pD3DDevice = nullptr; }
