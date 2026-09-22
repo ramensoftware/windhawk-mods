@@ -5510,16 +5510,11 @@ void RenderResults() try {
         total = g_totalMatches.load();
     }
 
-    if (files.empty() && appNames.empty()) {
+    if (files.empty() && appNames.empty() && g_ourBox && g_ourBox.Text().empty()) {
         g_currentAppRows.clear();
         g_currentFileRows.clear();
-        if (g_resultsList) {
-            try { g_resultsList.Children().Clear(); } catch (...) {}
-        }
-        if (g_ourBox && g_ourBox.Text().empty()) {
-            HideOverlayAnimated();
-        }
         g_selectedApp = -1;
+        HideOverlayAnimated();
         Wh_Log(L"render: nothing to show; menu restored");
         return;
     }
@@ -6561,7 +6556,7 @@ void SearchThreadMain() {
         std::wstring query;
         {
             std::unique_lock<std::mutex> lock(g_queryMutex);
-            g_queryWake.wait_for(lock, std::chrono::milliseconds(200), [] {
+            g_queryWake.wait(lock, [] {
                 return g_queryDirty.load() || g_searchQuit.load() || (g_launchRequest.load() >= 0) || g_appIndexNeedsRefresh.load();
             });
             if (g_searchQuit.load()) {
@@ -6596,12 +6591,15 @@ void SearchThreadMain() {
             if (shouldRebuild) {
                 lock.unlock();
                 g_lastAppIndexRebuildTick.store(GetTickCount64());
-                if (appIndex.Rebuild()) {
+                bool rebuilt = appIndex.Rebuild();
+                lock.lock();
+                if (rebuilt) {
                     lastHits.clear();
                     g_launchRequest.store(-1);
+                    last.clear();
+                    g_queryDirty.store(true);
                     Wh_Log(L"apps: dynamically refreshed (%zu apps)", appIndex.Count());
                 }
-                lock.lock();
             }
 
             if (!g_queryDirty.exchange(false)) {
@@ -7418,11 +7416,10 @@ void Wh_ModAfterInit() {
     StartAttachWatch();
 }
 
-BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+void Wh_ModSettingsChanged() {
     Wh_Log(L">");
     if (g_targetProcess != TargetProcess::StartMenu) {
-        *bReload = FALSE;
-        return TRUE;
+        return;
     }
     LoadSettings();
     RequestAppIndexRefresh();
@@ -7442,12 +7439,18 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
                 });
         } catch (...) {}
     }
-    *bReload = FALSE;
-    return TRUE;
 }
 
 void Wh_ModUninit() {
     Wh_Log(L">");
+
+    if (g_hCoreWindow) {
+        RemovePropW(g_hCoreWindow, L"WindhawkStartMenuWindow");
+    }
+    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (tray) {
+        RemovePropW(tray, L"WindhawkStartMenuHwnd");
+    }
 
     g_quit.store(true);
 
@@ -7527,13 +7530,6 @@ void Wh_ModUninit() {
             Wh_Log(L"uninit: off-thread teardown threw %08X",
                 static_cast<unsigned>(winrt::to_hresult()));
         }
-    }
-    if (g_hCoreWindow) {
-        RemovePropW(g_hCoreWindow, L"WindhawkStartMenuWindow");
-    }
-    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (tray) {
-        RemovePropW(tray, L"WindhawkStartMenuHwnd");
     }
     Wh_Log(L"uninit: returning");
 }
