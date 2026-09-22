@@ -1,3 +1,12 @@
+## 0.9.13 ([Sep 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2bf015383d0f7ea4d5365120ae08c9e6359ca882/mods/mutealert.wh.cpp))
+
+- make an observable SteelSeries mute state authoritative for the Windows input in full synchronization mode
+- apply explicit standard-HID unmute actions without requiring MuteAlert to own the Windows mute
+- keep call-app unmute transition-only to avoid changing a meeting during startup
+- expire queued unmute requests after five seconds
+
+Previously, a Windows mute that MuteAlert did not create prevented an observed physical headset unmute from taking effect. Users had to unmute Windows manually before headset synchronization began working. Full synchronization now follows the observable physical headset state as its source of truth.
+
 ## 0.9.10 ([Sep 17, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cfa9b1247d303811aded2063004f07525dc1345b/mods/mutealert.wh.cpp))
 
 - recover an unmuted Windows input at startup only when MuteAlert recorded that it applied the preceding headset-driven mute
