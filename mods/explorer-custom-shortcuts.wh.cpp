@@ -2,7 +2,7 @@
 // @id              explorer-custom-shortcuts
 // @name            Explorer Custom Shortcuts
 // @description     Adds app-style keyboard shortcuts to File Explorer with dynamic tokens, selection modes, and internal commands.
-// @version         1.0
+// @version         1.1.0
 // @author          ArvindSaini978
 // @github          https://github.com/ArvindSaini978
 // @include         explorer.exe
@@ -31,6 +31,7 @@ Instead of specifying an executable path, set **Executable Path** to one of the 
 * **`internal:emptyRecycleBin`**: Empties the Recycle Bin with confirmation dialog.
 * **`internal:toggleHiddenFiles`**: Toggles visibility of hidden files and folders with immediate view refresh. *(Note: Changes persistent system-wide Windows Explorer settings).*
 * **`internal:toggleFileExtensions`**: Toggles file name extensions on or off with immediate view refresh. *(Note: Changes persistent system-wide Windows Explorer settings).*
+* **`internal:openWith`**: Opens the native Windows "How do you want to open this file?" dialog for the selected file.
 * **`internal:folderOptions`**: Opens the native File Explorer Folder Options dialog.
 
 > **Persistent Settings Notice:** `internal:toggleHiddenFiles` and `internal:toggleFileExtensions` flip the native Windows Explorer shell settings directly (`SHGetSetSettings`). These changes affect all File Explorer surfaces globally and persist even if this mod is disabled or uninstalled.
@@ -118,10 +119,10 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - args: "-d \"%d\""
       $name: "Arguments / Tokens"
       $description: "Supported tokens: %f, %files, %folders, %1, %n, %c, %ext, %s, %d, %d_smart, %p."
-    - mode: "batch"
+    - mode: ""
       $name: "Launch Mode"
       $options:
-        - batch: "batch: Run once with all selected items"
+        - "": "batch: Run once with all selected items"
         - loop_files: "loop_files: Run once per selected file"
         - loop_folders: "loop_folders: Run once per selected folder"
   - - name: "Open with Notepad"
@@ -134,14 +135,14 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - args: "%1"
     - mode: "loop_files"
   - - name: "Toggle Hidden Files"
-    - enabled: false
+    - enabled: true
     - key: "H"
     - ctrl: true
     - shift: false
     - alt: false
     - path: "internal:toggleHiddenFiles"
     - args: ""
-    - mode: "batch"
+    - mode: ""
   - - name: "Open Recycle Bin"
     - enabled: true
     - key: "B"
@@ -150,7 +151,7 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - alt: false
     - path: "internal:openRecycleBin"
     - args: ""
-    - mode: "batch"
+    - mode: ""
   $name: "Custom Shortcuts"
   $description: "List of customizable shortcuts. Supported keys: A-Z, 0-9, F1-F12, Delete/Del, Space, Enter, and Tab. Modifiers (Ctrl, Shift, or Alt) are required for all keys except F1-F12."
 */
@@ -293,7 +294,7 @@ void LoadSettings() {
 
         WindhawkUtils::StringSetting modeStr = WindhawkUtils::StringSetting::make(L"shortcuts[%d].mode", i);
         sc.launchMode = modeStr.get();
-        if (sc.launchMode.empty()) sc.launchMode = L"batch";
+        if (sc.launchMode.empty() || sc.launchMode == L"batch") sc.launchMode = L"batch";
 
         bool isFunctionKey = (sc.vkCode >= VK_F1 && sc.vkCode <= VK_F12);
         bool hasModifier = (sc.ctrl || sc.shift || sc.alt);
@@ -628,6 +629,32 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND cap
         ss.fShowExtensions = !ss.fShowExtensions;
         SHGetSetSettings(&ss, SSF_SHOWEXTENSIONS, TRUE);
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+        return;
+    }
+
+    if (_wcsicmp(command.c_str(), L"internal:openWith") == 0) {
+        IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
+        if (!psv) return;
+
+        std::vector<std::wstring> allSelected = GetSelectedPaths(psv);
+        psv->Release();
+
+        if (allSelected.empty()) return;
+
+        std::wstring targetPath = allSelected[0];
+        DWORD attr = GetFileAttributesW(targetPath.c_str());
+
+        if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+            if (!hShell32) hShell32 = LoadLibraryW(L"shell32.dll");
+            if (hShell32) {
+                typedef void(WINAPI* OpenAs_RunDLL_t)(HWND, HINSTANCE, LPCWSTR, int);
+                auto pOpenAs = (OpenAs_RunDLL_t)GetProcAddress(hShell32, "OpenAs_RunDLLW");
+                if (pOpenAs) {
+                    pOpenAs(rootHwnd, nullptr, targetPath.c_str(), SW_SHOWNORMAL);
+                }
+            }
+        }
         return;
     }
 
