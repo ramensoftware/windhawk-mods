@@ -2190,6 +2190,10 @@ static float EvalExpression(float t, float d, float time) {
 
 // ===================== 全局状态 =====================
 HWND g_overlayHwnd = NULL;
+// 自定义消息：在 UI 线程显示/隐藏覆盖窗口（渲染线程通过 PostMessage 发送，避免跨线程窗口操作）
+// Custom messages: show/hide overlay on UI thread (render thread posts via PostMessage to avoid cross-thread window ops)
+constexpr UINT WM_APP_SHOW_OVERLAY = WM_USER + 101;
+constexpr UINT WM_APP_HIDE_OVERLAY = WM_USER + 102;
 HANDLE g_threadHandle = NULL;       // UI 线程句柄
 HANDLE g_readyEvent = NULL;         // 窗口创建完成事件
 HANDLE g_renderExitEvent = NULL;    // 渲染线程退出事件
@@ -6795,7 +6799,7 @@ static void RenderFrame() {
     if (isGameCached) {
         // 游戏中隐藏覆盖层窗口，避免全屏顶层窗口阻挡游戏的独立翻转/MPO / Hide overlay in game to avoid topmost window blocking independent flip/MPO
         if (!gameHidden) {
-            SetWindowPos(g_overlayHwnd, nullptr, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            PostMessageW(g_overlayHwnd, WM_APP_HIDE_OVERLAY, 0, 0);
             gameHidden = true;
             isWindowVisible = false;  // 同步窗口可见状态，避免退出游戏后窗口不显示 / Sync window visibility, avoid window not showing after exiting game
         }
@@ -8059,15 +8063,15 @@ static void RenderFrame() {
     if (isDrawing) {
         hideDelayCounter = 0;
         if (!isWindowVisible) {
-            // 用 SetWindowPos 显示（不激活）；点击穿透由 WM_NCHITTEST 返回 HTTRANSPARENT 实现
-            // Show with SetWindowPos (no activate); click-through via WM_NCHITTEST returning HTTRANSPARENT
-            SetWindowPos(g_overlayHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            // 通过 PostMessage 在 UI 线程显示窗口（不激活），点击穿透由 WM_NCHITTEST 返回 HTTRANSPARENT 实现
+            // Post to UI thread to show window (no activate); click-through via WM_NCHITTEST HTTRANSPARENT
+            PostMessageW(g_overlayHwnd, WM_APP_SHOW_OVERLAY, 0, 0);
             isWindowVisible = true;
         }
     } else if (!surfaceDirty) {
         hideDelayCounter++;
         if (hideDelayCounter >= 3 && isWindowVisible) {
-            SetWindowPos(g_overlayHwnd, nullptr, 0, 0, 0, 0, SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            PostMessageW(g_overlayHwnd, WM_APP_HIDE_OVERLAY, 0, 0);
             isWindowVisible = false;
         }
     } else {
@@ -8680,12 +8684,23 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         SetWindowPos(hwnd, HWND_TOPMOST, g_virtX, g_virtY, g_virtW, g_virtH, SWP_NOACTIVATE | SWP_NOZORDER);
         return 0;
     }
+    if (msg == WM_APP_SHOW_OVERLAY) {
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        return 0;
+    }
+    if (msg == WM_APP_HIDE_OVERLAY) {
+        ShowWindow(hwnd, SW_HIDE);
+        return 0;
+    }
     if (msg == WM_MOUSEACTIVATE) {
         // 阻止窗口被鼠标点击激活 / Prevent window activation on mouse click
-        return MA_NOACTIVATE;
+        return MA_NOACTIVATEANDEAT;
     }
     if (msg == WM_NCHITTEST) {
-        // DirectComposition 窗口需要显式返回 HTTRANSPARENT 才能鼠标穿透 / DirectComposition windows need explicit HTTRANSPARENT for mouse passthrough
+        // 无 WS_EX_LAYERED 的 DComp 窗口：显式返回 HTTRANSPARENT 让鼠标穿透到下方窗口
+        // DComp window without WS_EX_LAYERED: return HTTRANSPARENT to pass mouse through to window below
+        static bool s_loggedHitTest = false;
+        if (!s_loggedHitTest) { Wh_Log(L"WM_NCHITTEST called, returning HTTRANSPARENT"); s_loggedHitTest = true; }
         return HTTRANSPARENT;
     }
     return DefWindowProc(hwnd, msg, wParam, lParam);
