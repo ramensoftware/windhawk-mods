@@ -370,9 +370,9 @@ builds:
 
 The four missing on 2023 do not exist there under any name, and their surfaces
 fall back to the Spectrum family, which both have. The window frame, the menu
-bar, the native dialogs and the band around the picture do not depend on the
-Premiere version: the band is recognized by the module that draws it and the
-shape of the work, not by an address inside it. Native dark
+bar and the native dialogs do not depend on the Premiere version at all, and
+neither does the band around the picture depend on an address inside anyone's
+code: it is recognized by where the draw comes from and the shape of the work. Native dark
 mode needs Windows 10 build 17763 or newer; below that the mod still themes the
 interface and paints the menus itself.
 
