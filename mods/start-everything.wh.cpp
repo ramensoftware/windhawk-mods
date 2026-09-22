@@ -26,7 +26,7 @@ A high-performance, native replacement for Windows 11 Start Menu search powered 
 - Instant Everything Search: Sub-millisecond file querying directly through the voidtools Everything Win32 IPC interface. Instant results across millions of files without background indexing lag or disk thrashing.
 - Smart Apps and Settings Search: Fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, and Windows Settings URIs (ms-settings:) with high-resolution shell icons.
 - On-Demand Animated Palette: The Start Menu stays completely clean and uncluttered when idle. The search palette smoothly reveals with a 140ms ease-out animation the moment you type or click the top search trigger, and collapses on empty or Escape.
-- Complete SearchHost Disconnection: Prevents background Bing web queries, Edge WebView2 child processes, and indexing CPU spikes via process, database file, and COM interception (with direct SearchBoxViewModel interception on supported Windows 11 builds).
+- Complete SearchHost Disconnection: Prevents background Bing web queries, Edge WebView2 child processes, and indexing CPU spikes via process, database file, and COM interception (direct SearchUx.UI.dll CPU spike bypass targets Windows 11 23H2 build 22631 with safe signature fallback).
 - Inline Calculator: Type /c <expression> (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200, /c 2^10) to evaluate math expressions instantly. Press Enter to copy the result.
 - Configurable Unit Conversions: Type /c <number> [unit] to convert units using formulas configured in Mod Settings. Users can add, edit, or delete conversion items individually from the settings UI.
 - Network Interface Inspector: Type /ip to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
@@ -38,7 +38,7 @@ A high-performance, native replacement for Windows 11 Start Menu search powered 
 
 ## Requirements
 
-1. Windows 11 (versions 22H2, 23H2, 24H2, x86-64).
+1. Windows 11 (version 22H2+ x86-64).
 2. voidtools Everything (version 1.4 or 1.5a) running in the background.
 
 ## Recommended Setup: Hide Taskbar Search
@@ -552,7 +552,7 @@ class Client {
         wc.hInstance = GetCurrentModuleHandle();
         wc.lpszClassName = kReplyClass;
         atom_ = RegisterClassExW(&wc);
-        if (!atom_ && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        if (!atom_) {
             return false;
         }
         hwnd_ = CreateWindowExW(0, kReplyClass, L"", WS_POPUP, 0, 0, 0, 0,
@@ -579,7 +579,7 @@ class Client {
 
     bool Query(const std::wstring& text, DWORD maxResults,
                std::vector<Result>* out, DWORD* totalMatches,
-               DWORD timeoutMs = 300,
+               DWORD timeoutMs = 500,
                DWORD requestFlags = kDefaultRequestFlags,
                DWORD sortType = kSortNameAscending) {
         HWND everything = FindIpcWindow();
@@ -668,7 +668,7 @@ class Client {
         return SendMessageTimeoutW(everything, WM_COPYDATA,
                                    reinterpret_cast<WPARAM>(hwnd_),
                                    reinterpret_cast<LPARAM>(&cds),
-                                   SMTO_ABORTIFHUNG, 300,
+                                   SMTO_ABORTIFHUNG, 500,
                                    &result) != 0;
     }
 
@@ -1611,8 +1611,8 @@ inline std::wstring ExtractExeName(const std::wstring& path) {
         return L"control";
     }
     std::wstring lower = ToLower(path);
-    size_t exePos = lower.find(L".exe");
-    if (exePos != std::wstring::npos) {
+    size_t exePos = lower.rfind(L".exe");
+    if (exePos != std::wstring::npos && exePos > 0) {
         size_t start = lower.find_last_of(L"\\/._", exePos - 1);
         if (start == std::wstring::npos) {
             return lower.substr(0, exePos);
@@ -4492,7 +4492,7 @@ void InstallMessageHook() {
 }
 
 static bool g_subclassed = false;
-static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     // Unload, marshalled here from Windhawk's thread. This proc runs on the
     // thread that owns the window, which is the XAML thread, which is the one
     // thread allowed to touch any of it.
@@ -4661,9 +4661,8 @@ void CALLBACK AttachWatchProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
         !hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
         return;
     }
-    if (event == EVENT_OBJECT_UNCLOAKED) {
+    if (event == EVENT_OBJECT_UNCLOAKED && hwnd == GetOurCoreWindow()) {
         g_suppressRefocus.store(false);
-        TakeForeground(true);
         TriggerMenuOpenFocus();
     }
     // In-context, so this is the thread that raised the event. The filter is
@@ -4715,7 +4714,7 @@ void SubclassStartMenuWindow() {
             SetPropW(tray, L"WindhawkStartMenuHwnd", ours);
         }
         if (!g_subclassed) {
-            SetWindowSubclass(ours, StartMenuSubclassProc, 101, 0);
+            WindhawkUtils::SetWindowSubclassFromAnyThread(ours, StartMenuSubclassProc, 0);
             g_subclassed = true;
             Wh_Log(L"subclass: hooked CoreWindow HWND %p", ours);
         }
@@ -4738,7 +4737,10 @@ std::atomic<bool> g_queryDirty{false};
 void RequestAppIndexRefresh() {
     ULONGLONG now = GetTickCount64();
     if (now - g_lastAppIndexRebuildTick.load() >= 5000) {
-        g_appIndexNeedsRefresh.store(true);
+        {
+            std::lock_guard<std::mutex> lock(g_queryMutex);
+            g_appIndexNeedsRefresh.store(true);
+        }
         g_queryWake.notify_all();
     }
 }
@@ -4851,6 +4853,7 @@ static void WaitForTrackedLaunches() {
 // exactly what the broker could not promise when it ran elevated.
 void OpenResult(std::wstring path, bool asAdmin = false) {
     SpawnTrackedLaunch([path = std::move(path), asAdmin] {
+        HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         wchar_t userProfile[MAX_PATH] = {};
         if (!GetEnvironmentVariableW(L"USERPROFILE", userProfile, MAX_PATH) || !userProfile[0]) {
             PWSTR kf = nullptr;
@@ -4892,13 +4895,20 @@ void OpenResult(std::wstring path, bool asAdmin = false) {
         if (!ShellExecuteExW(&info)) {
             Wh_Log(L"open failed (%lu): %ls (admin=%d)", GetLastError(), path.c_str(), asAdmin ? 1 : 0);
         }
+        if (SUCCEEDED(comHr)) {
+            CoUninitialize();
+        }
     });
 }
 
 void OpenFileLocation(std::wstring path) {
     SpawnTrackedLaunch([path = std::move(path)] {
+        HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         std::wstring args = L"/select,\"" + path + L"\"";
         ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+        if (SUCCEEDED(comHr)) {
+            CoUninitialize();
+        }
     });
 }
 
@@ -5501,6 +5511,11 @@ void RenderResults() try {
     }
 
     if (files.empty() && appNames.empty()) {
+        g_currentAppRows.clear();
+        g_currentFileRows.clear();
+        if (g_resultsList) {
+            try { g_resultsList.Children().Clear(); } catch (...) {}
+        }
         if (g_ourBox && g_ourBox.Text().empty()) {
             HideOverlayAnimated();
         }
@@ -6580,8 +6595,10 @@ void SearchThreadMain() {
             bool shouldRebuild = g_appIndexNeedsRefresh.exchange(false);
             if (shouldRebuild) {
                 lock.unlock();
+                g_lastAppIndexRebuildTick.store(GetTickCount64());
                 if (appIndex.Rebuild()) {
-                    g_lastAppIndexRebuildTick.store(GetTickCount64());
+                    lastHits.clear();
+                    g_launchRequest.store(-1);
                     Wh_Log(L"apps: dynamically refreshed (%zu apps)", appIndex.Count());
                 }
                 lock.lock();
@@ -6611,6 +6628,8 @@ void SearchThreadMain() {
         last = query;
 
         if (query.empty()) {
+            lastHits.clear();
+            g_launchRequest.store(-1);
             {
                 std::lock_guard<std::mutex> lock(g_resultsMutex);
                 g_results.clear();
@@ -7220,55 +7239,73 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
 void TeardownStartMenuUi() {
     Wh_Log(L"teardown: enter (thread %lu)", GetCurrentThreadId());
     StopAttachWatch();
-        // The handlers are code in this DLL, and the box is in somebody else's
-    // tree; leaving either behind would be a crash on the next keystroke.
-    if (g_focusProbe) {
-        g_focusProbe.Stop();
-        g_focusProbe = nullptr;
+
+    // HWND-level cleanup MUST happen first so that off-thread unloads or XAML RPC
+    // exceptions cannot skip removing subclasses or window hooks.
+    if (g_subclassed) {
+        EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hwnd, &pid);
+            if (pid != GetCurrentProcessId()) return TRUE;
+            wchar_t cls[128] = {};
+            GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+            if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
+                WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, StartMenuSubclassProc);
+                return FALSE;
+            }
+            return TRUE;
+        }, 0);
+        g_subclassed = false;
+        Wh_Log(L"teardown: subclass removed");
     }
-    if (g_openFocus) {
-        g_openFocus.Stop();
-        g_openFocus = nullptr;
+
+    if (g_hGetMsgHook) {
+        UnhookWindowsHookEx(g_hGetMsgHook);
+        g_hGetMsgHook = nullptr;
+        Wh_Log(L"teardown: message hook removed");
     }
-    if (g_refocus) {
-        g_refocus.Stop();
-        g_refocus = nullptr;
-    }
-    Wh_Log(L"teardown: timers stopped");
-    if (g_appsList) {
-        try {
+
+    try {
+        if (g_focusProbe) {
+            g_focusProbe.Stop();
+            g_focusProbe = nullptr;
+        }
+        if (g_openFocus) {
+            g_openFocus.Stop();
+            g_openFocus = nullptr;
+        }
+        if (g_refocus) {
+            g_refocus.Stop();
+            g_refocus = nullptr;
+        }
+        if (g_revealAnim) {
+            g_revealAnim.Stop();
+            g_revealAnim = nullptr;
+        }
+        if (g_hideAnim) {
+            g_hideAnim.Stop();
+            g_hideAnim = nullptr;
+        }
+        Wh_Log(L"teardown: timers and animations stopped");
+    } catch (...) {}
+
+    try {
+        if (g_appsList) {
             g_appsList.Children().Clear();
-        } catch (...) {
+            g_appsList = nullptr;
         }
-        g_appsList = nullptr;
-    }
-    if (g_resultsList) {
-        try {
+        if (g_resultsList) {
             g_resultsList.Children().Clear();
-        } catch (...) {
+            g_resultsList = nullptr;
         }
-    }
-    if (g_resultsHost) {
-        try {
+        if (g_resultsHost) {
             g_resultsHost.Visibility(wux::Visibility::Collapsed);
-        } catch (...) {
         }
-    }
-    if (g_revealAnim) {
-        g_revealAnim.Stop();
-        g_revealAnim = nullptr;
-    }
-    if (g_hideAnim) {
-        g_hideAnim.Stop();
-        g_hideAnim = nullptr;
-    }
-    // Our own elements come out of the shell's panels first before dropping references.
-    for (auto element : {g_resultsHost ? g_resultsHost.try_as<wux::FrameworkElement>() : nullptr,
-                         g_ourBox ? g_ourBox.try_as<wux::FrameworkElement>() : nullptr}) {
-        if (!element) {
-            continue;
-        }
-        try {
+        for (auto element : {g_resultsHost ? g_resultsHost.try_as<wux::FrameworkElement>() : nullptr,
+                             g_ourBox ? g_ourBox.try_as<wux::FrameworkElement>() : nullptr}) {
+            if (!element) {
+                continue;
+            }
             auto parent = wuxm::VisualTreeHelper::GetParent(element);
             if (auto panel = parent ? parent.try_as<wuxc::Panel>() : nullptr) {
                 uint32_t index = 0;
@@ -7276,19 +7313,18 @@ void TeardownStartMenuUi() {
                     panel.Children().RemoveAt(index);
                 }
             }
-        } catch (...) {
         }
-    }
 
-    g_resultsTranslate = nullptr;
-    g_resultsList = nullptr;
-    g_resultsHost = nullptr;
-    g_ourBox = nullptr;
-    g_activeApps.clear();
-    g_appsHeaderHolder = nullptr;
-    g_filesHeaderHolder = nullptr;
-    RestoreShellElements();
-    Wh_Log(L"teardown: lists and host released");
+        g_resultsTranslate = nullptr;
+        g_resultsList = nullptr;
+        g_resultsHost = nullptr;
+        g_ourBox = nullptr;
+        g_activeApps.clear();
+        g_appsHeaderHolder = nullptr;
+        g_filesHeaderHolder = nullptr;
+        RestoreShellElements();
+        Wh_Log(L"teardown: lists and host released");
+    } catch (...) {}
 
     try {
         if (auto window = wux::Window::Current()) {
@@ -7309,34 +7345,12 @@ void TeardownStartMenuUi() {
         }
     } catch (...) {}
     g_coreEventsHooked = false;
-    Wh_Log(L"teardown: CoreWindow events revoked");
 
-    g_ourBoxChanged.revoke();
-    g_ourBoxLost.revoke();
-    g_ourBox = nullptr;
-    Wh_Log(L"teardown: box revoked");
-
-    if (g_subclassed) {
-        EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(hwnd, &pid);
-            if (pid != GetCurrentProcessId()) return TRUE;
-            wchar_t cls[128] = {};
-            GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-            if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
-                RemoveWindowSubclass(hwnd, StartMenuSubclassProc, 101);
-                return FALSE;
-            }
-            return TRUE;
-        }, 0);
-        g_subclassed = false;
-    }
-
-    Wh_Log(L"teardown: subclass removed");
-    if (g_hGetMsgHook) {
-        UnhookWindowsHookEx(g_hGetMsgHook);
-        g_hGetMsgHook = nullptr;
-    }
+    try {
+        g_ourBoxChanged.revoke();
+        g_ourBoxLost.revoke();
+        g_ourBox = nullptr;
+    } catch (...) {}
     Wh_Log(L"teardown: done");
 }
 
@@ -7513,6 +7527,13 @@ void Wh_ModUninit() {
             Wh_Log(L"uninit: off-thread teardown threw %08X",
                 static_cast<unsigned>(winrt::to_hresult()));
         }
+    }
+    if (g_hCoreWindow) {
+        RemovePropW(g_hCoreWindow, L"WindhawkStartMenuWindow");
+    }
+    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (tray) {
+        RemovePropW(tray, L"WindhawkStartMenuHwnd");
     }
     Wh_Log(L"uninit: returning");
 }
