@@ -16,17 +16,25 @@
 
 Restores classic, rectangular Windows Basic non-client caption buttons directly within Desktop Window Manager (`dwm.exe`) without relying on external theme engines like Basic Themer.
 
+## Screenshots
+![Before/After](https://i.imgur.com/Cf4R4Un.png)
+
+## Important: Process Inclusion List Required
+`dwm.exe` is on Windhawk's critical system process list. Because of this, **you must add `dwm.exe` to the process inclusion list** in Windhawk's Advanced settings, otherwise the mod will silently fail to inject and won't work.
+
+![Process Inclusion List](https://i.imgur.com/qjCYSSS.png)
+
 ## Features
 * Recreates proper Windows Basic caption button sizing, positioning, and 2px spacing.
 * Adjusts glyph offsets and opacity behavior dynamically.
-* Hooks directly into `uDWM.dll` top-level window layout functions[cite: 1].
+* Hooks directly into `uDWM.dll` top-level window layout functions.
 
 ## Compatibility
 * **Windows 10:** Confirmed working on **21H2** and older builds (such as **1903+**).
 * **Windows 11:** Not supported due to major non-client layout changes in DWM.
 
 ## How It Works
-The mod hooks into DWM's `CTopLevelWindow::UpdateNCAreaPositionsAndSizes` and `CTopLevelWindow::UpdateNCAreaButton` functions to override standard button positioning, enforcing rectangular Basic-style dimensions and glyph alignment directly at render time[cite: 1].
+The mod hooks into DWM's `CTopLevelWindow::UpdateNCAreaPositionsAndSizes` and `CTopLevelWindow::UpdateNCAreaButton` functions to override standard button positioning, enforcing rectangular Basic-style dimensions and glyph alignment directly at render time.
 */
 // ==/WindhawkModReadme==
 
