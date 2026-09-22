@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              agenda-in-calendar-view
 // @name            Agenda in Calendar View
-// @description     Show .ics events in the calendar view in the Notification Centre like in Windows 10
-// @version         1.0
+// @description     Show .ics events in the calendar of the Notification Centre, like in Windows 10
+// @version         1.1
 // @author          lonfro
 // @github          https://github.com/lonfro
 // @include         ShellExperienceHost.exe
@@ -14,7 +14,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Agenda in Calendar
+# Agenda in Calendar View
 ![Agenda in Calendar](https://i.imgur.com/lQhwoAL.png)
 ## Bring back the Windows 10 Agenda to Windows 11
 
@@ -33,12 +33,17 @@ The details shown include:
 - Location
 - Starting and ending time
 
+
 ## Additional features
 **Additional features include:**
 
 Keyboard navigation:
 
 - You can move backward by a day or forward by a day using the left and right arrow keys.
+
+Customising whether the calendar is shown inline or as a popup:
+
+![comparison](https://i.imgur.com/od3kcQS.png)
 
 Hiding the focus panel:
 
@@ -50,18 +55,14 @@ Setting a maximum height (before it starts scrolling):
 
 Checking events on other dates:
 
-![calendar](https://i.imgur.com/DM8tcj0.png)
+![calendar](https://i.imgur.com/q3Mxyqz.png)
 
 
 ## Notes
-- Compatible with Windows 11 (both ShellExperienceHost.exe and ShellHost.exe).
-- Supports recurring events (daily, weekly, monthly, yearly, including `BYDAY` ordinals such as "third Thursday" / `3TH` or "second Tuesday" / `2TU`, `BYMONTHDAY`, `WKST`, `EXDATE`, `RECURRENCE-ID`, and multi-day recurring events).
 - Events are refreshed every time the notification pane is opened.
     - If events can't be fetched (e.g. no internet connection), previously-fetched events are shown.
-    - Smart caching avoids redundant fetches within the configured minimum fetch interval.
-    - You can click the Refresh button in the calendar header at any time to force an immediate refresh.
+    - You can click the Refresh button in the calendar header at any time to force a refresh.
 - The mod resiliently accepts errors; if you have a problem, enable logging.
-- Injection logic has been ported from m417z's *Start Menu Styler*.
 - The creation of this mod was assisted by AI:
     - Sadly, I do not have experience with C++/Windhawk;
     - However, I do have experience with WinUI (as I have created several WinUI apps in C#);
@@ -76,9 +77,13 @@ Checking events on other dates:
     in PowerShell.
     This allows `ShellExperienceHost.exe` and `ShellHost.exe`, which host the calendar pane, to access your calendar file.
     *Note: `*S-1-15-2-1` grants read permissions to ALL APPLICATION PACKAGES (all UWP/packaged apps).*
-* **The bottom corners of the *Notifications* pane (immediately above the agenda) are not rounded!**
-  Set a maximum height for the Agenda in the mod settings to stop it from clipping the *Notifications* pane.
 
+
+* **When my list of events is long, and the inline calendar is expanded, it becomes too tall for the screen!**
+  - Set a maximum height for the agenda list in the mod settings.
+  - You can specify different maximum heights for when the inline calendar is expanded and when it is collapsed. This way, you can limit the height only when the calendar is expanded.
+  - If the calendar pane fits within the screen, but is touching the bottom (misaligned downwards), reduce the maximum height by incremental amounts until it shifts back upwards to the correct position.
+![fix](https://i.imgur.com/9zRoO6I.png)
 */
 // ==/WindhawkModReadme==
 
@@ -1521,6 +1526,8 @@ namespace {
     int64_t m_focusSessionVisibilityToken{0};
     [[clang::no_destroy]] wuxc::ScrollViewer m_hostScrollViewer{nullptr};
     [[clang::no_destroy]] winrt::Windows::Foundation::IInspectable m_originalCalendarContent{nullptr};
+    [[clang::no_destroy]] wux::FrameworkElement g_layoutUpdatedFe{nullptr};
+    winrt::event_token g_layoutUpdatedToken{};
     std::mutex g_pendingActionsMutex;
     [[clang::no_destroy]] std::vector<winrt::Windows::Foundation::IAsyncOperation<bool>> g_pendingDispatcherActions;
 
@@ -1533,15 +1540,6 @@ namespace {
     std::atomic<HANDLE> g_hStopEvent{nullptr};
     std::atomic<bool> g_workerForceFetch{false};
 }
-
-struct CoreWindowData {
-    wuc::CoreWindow coreWindow{nullptr};
-    winrt::event_token activatedToken{};
-    winrt::event_token visibilityChangedToken{};
-    wux::FrameworkElement layoutUpdatedFe{nullptr};
-    winrt::event_token layoutUpdatedToken{};
-};
-thread_local CoreWindowData t_coreWindowData;
 
 void UnregisterFocusSessionControl();
 void PopulateItemsControl(std::vector<CalendarEvent> const& events);
@@ -1558,13 +1556,18 @@ void UnregisterCoreWindowEvents();
 void RevokeLayoutUpdated();
 
 void RevokeLayoutUpdated() {
-    if (t_coreWindowData.layoutUpdatedFe && t_coreWindowData.layoutUpdatedToken.value != 0) {
+    if (g_layoutUpdatedFe && g_layoutUpdatedToken.value != 0) {
         try {
-            t_coreWindowData.layoutUpdatedFe.LayoutUpdated(t_coreWindowData.layoutUpdatedToken);
+            if (auto dispatcher = g_layoutUpdatedFe.Dispatcher()) {
+                if (!dispatcher.HasThreadAccess()) {
+                    return;
+                }
+            }
+            g_layoutUpdatedFe.LayoutUpdated(g_layoutUpdatedToken);
         } catch (...) {}
+        g_layoutUpdatedToken = {};
+        g_layoutUpdatedFe = nullptr;
     }
-    t_coreWindowData.layoutUpdatedToken = {};
-    t_coreWindowData.layoutUpdatedFe = nullptr;
 }
 
 void UnregisterFocusSessionControl() {
@@ -1589,6 +1592,7 @@ void RestoreCalendarContent() {
         return;
     }
 
+    RevokeLayoutUpdated();
     UnregisterFocusSessionControl();
 
     if (m_focusSessionControl) {
@@ -2126,6 +2130,10 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
             m_prevBtnToken = m_prevDayButton.Click([](wf::IInspectable const&, wux::RoutedEventArgs const&) { ChangeSelectedDay(-1); });
             m_prevDayAccel = wuxi::KeyboardAccelerator();
             m_prevDayAccel.Key(ws::VirtualKey::Left);
+            wuxc::ToolTipService::SetToolTip(
+                m_prevDayButton,
+                winrt::box_value(L"Previous day")
+            );
             m_prevDayAccel.IsEnabled(GetKeyboardShortcutsSetting());
             m_prevDayAccel.Invoked([](wuxi::KeyboardAccelerator const&, wuxi::KeyboardAcceleratorInvokedEventArgs const& args) {
                 if (!GetKeyboardShortcutsSetting()) return;
@@ -2149,6 +2157,10 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
             m_nextBtnToken = m_nextDayButton.Click([](wf::IInspectable const&, wux::RoutedEventArgs const&) { ChangeSelectedDay(1); });
             m_nextDayAccel = wuxi::KeyboardAccelerator();
             m_nextDayAccel.Key(ws::VirtualKey::Right);
+            wuxc::ToolTipService::SetToolTip(
+                m_nextDayButton,
+                winrt::box_value(L"Next day")
+            );
             m_nextDayAccel.IsEnabled(GetKeyboardShortcutsSetting());
             m_nextDayAccel.Invoked([](wuxi::KeyboardAccelerator const&, wuxi::KeyboardAcceleratorInvokedEventArgs const& args) {
                 if (!GetKeyboardShortcutsSetting()) return;
@@ -2169,6 +2181,7 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
             m_refreshButton.VerticalAlignment(wux::VerticalAlignment::Center);
             auto refreshIcon = wuxc::FontIcon(); refreshIcon.Glyph(L"\uE72C"); refreshIcon.FontSize(12);
             m_refreshButton.Content(refreshIcon);
+            wuxc::ToolTipService::SetToolTip(m_refreshButton, winrt::box_value(L"Refresh events"));
             m_refreshBtnToken = m_refreshButton.Click([](wf::IInspectable const&, wux::RoutedEventArgs const&) { TriggerBackgroundFetch(true); });
         }
 
@@ -2242,8 +2255,7 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
         host.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
         host.Content(m_rootGrid);
         RevokeLayoutUpdated();
-        g_lastOpenTick = GetTickCount64();
-        TriggerBackgroundFetch(GetMinFetchIntervalSetting() <= 0);
+        OnCalendarOpened();
     } catch (...) {}
 }
 
@@ -2422,30 +2434,28 @@ void OnCalendarOpened() {
         return;
     }
 
-    if (m_rootGrid) {
-        ULONGLONG currentTick = GetTickCount64();
-        if (currentTick - g_lastOpenTick < 500) {
-            return;
-        }
-        g_lastOpenTick = currentTick;
-
-        Wh_Log(
-            L"Calendar opened, resetting date picker to today and triggering "
-            L"background fetch");
-
-        ResetDatePickerToToday();
-
-        bool force = (GetMinFetchIntervalSetting() <= 0);
-        TriggerBackgroundFetch(force);
+    ULONGLONG currentTick = GetTickCount64();
+    if (m_rootGrid && currentTick - g_lastOpenTick < 500) {
+        return;
     }
+    g_lastOpenTick = currentTick;
+
+    Wh_Log(
+        L"Calendar opened, resetting date picker to today and triggering "
+        L"background fetch");
+
+    ResetDatePickerToToday();
+
+    bool force = (GetMinFetchIntervalSetting() <= 0);
+    TriggerBackgroundFetch(force);
 
     try {
         auto window = winrt::Windows::UI::Xaml::Window::Current();
         if (window && window.Content()) {
             if (auto fe = window.Content().try_as<winrt::Windows::UI::Xaml::FrameworkElement>()) {
-                if (!m_rootGrid && t_coreWindowData.layoutUpdatedToken.value == 0) {
-                    t_coreWindowData.layoutUpdatedFe = fe;
-                    t_coreWindowData.layoutUpdatedToken = fe.LayoutUpdated([](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
+                if (!m_rootGrid && g_layoutUpdatedToken.value == 0) {
+                    g_layoutUpdatedFe = fe;
+                    g_layoutUpdatedToken = fe.LayoutUpdated([](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
                         if (m_rootGrid) {
                             RevokeLayoutUpdated();
                             return;
@@ -2583,6 +2593,13 @@ bool RunFromWindowThread(HWND hWnd,
     return true;
 }
 
+struct CoreWindowData {
+    winrt::Windows::UI::Core::CoreWindow coreWindow{nullptr};
+    winrt::event_token activatedToken{};
+    winrt::event_token visibilityChangedToken{};
+};
+thread_local CoreWindowData t_coreWindowData;
+
 void RegisterCoreWindowEvents() {
     try {
         auto coreWindow = wuc::CoreWindow::GetForCurrentThread();
@@ -2623,7 +2640,6 @@ void RegisterCoreWindowEvents() {
 }
 
 void UnregisterCoreWindowEvents() {
-    RevokeLayoutUpdated();
     try {
         if (t_coreWindowData.coreWindow) {
             if (t_coreWindowData.activatedToken.value != 0) {
@@ -2836,6 +2852,7 @@ void Wh_ModUninit() {
         RunFromWindowThread(
             hCoreWnd,
             [](PVOID) {
+                RevokeLayoutUpdated();
                 UnregisterCoreWindowEvents();
                 RestoreCalendarContent();
             },
