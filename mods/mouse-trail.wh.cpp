@@ -8642,6 +8642,16 @@ static bool InitAllRenderResources() {
         g_pDCompDevice->CreateVisual(&g_pDCompVisual);
         if (g_pDCompTarget && g_pDCompVisual) g_pDCompTarget->SetRoot(g_pDCompVisual);
         Wh_Log(L"Recover: DComp device ready");
+        // WS_EX_NOREDIRECTIONBITMAP 下 DWM 可能不尊重创建时的 WS_EX_TRANSPARENT，DComp 就绪后动态重设确保点击穿透
+        // With WS_EX_NOREDIRECTIONBITMAP, DWM may not respect WS_EX_TRANSPARENT set at creation; re-apply after DComp is ready to ensure click-through
+        if (g_overlayHwnd) {
+            LONG_PTR exStyle = GetWindowLongPtrW(g_overlayHwnd, GWL_EXSTYLE);
+            if (!(exStyle & WS_EX_TRANSPARENT)) {
+                SetWindowLongPtrW(g_overlayHwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT);
+                SetWindowPos(g_overlayHwnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                Wh_Log(L"Recover: re-applied WS_EX_TRANSPARENT for click-through");
+            }
+        }
     }
 
     // ---- 交换链 ----
@@ -8677,6 +8687,10 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
         // 不用 SWP_SHOWWINDOW，避免空闲隐藏状态下被意外显示 / Don't use SWP_SHOWWINDOW to avoid accidental show in idle-hidden state
         SetWindowPos(hwnd, HWND_TOPMOST, g_virtX, g_virtY, g_virtW, g_virtH, SWP_NOACTIVATE | SWP_NOZORDER);
         return 0;
+    }
+    if (msg == WM_MOUSEACTIVATE) {
+        // 阻止窗口被鼠标点击激活 / Prevent window activation on mouse click
+        return MA_NOACTIVATE;
     }
     if (msg == WM_NCHITTEST) {
         // DirectComposition 窗口需要显式返回 HTTRANSPARENT 才能鼠标穿透 / DirectComposition windows need explicit HTTRANSPARENT for mouse passthrough
