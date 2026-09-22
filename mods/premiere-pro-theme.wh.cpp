@@ -1796,34 +1796,29 @@ static void ForgetRecentProduced() {
     }
 }
 
-/*
-    DIAGNOSTIC BUILD ONLY. Which layer, if any, ever sees the gray Premiere
-    paints its panels with — #1D1D1D, and its neighbors, since a build may
-    have moved a step. Capped, so a paint loop cannot flood the log.
-*/
-volatile LONG g_probeLines = 0;
-
-static void ProbeGray(const wchar_t* where, const DvaColorRGBA* color) {
-    if (!color || color->r != color->g || color->g != color->b ||
-        color->r < 0.09f || color->r > 0.15f) {
-        return;
-    }
-
-    if (InterlockedIncrement(&g_probeLines) > 80) {
-        return;
-    }
-
-    Wh_Log(L"PROBE %s saw gray %d", where,
-           static_cast<int>(color->r * 255.0f + 0.5f));
-}
-
 static const DvaColorRGBA* ConvertColorRef(const DvaColorRGBA* original) {
     // Read before the settings are, so a change in between is caught as stale.
     LONG generation = g_generation;
 
-    ProbeGray(L"theme", original);
+    /*
+        A slot found by RTTI need not be the method it was measured to be: the
+        length test catches a virtual added or removed, not one replaced at the
+        same count. What another method returns is a bool, an int or an
+        HRESULT, and reading sixteen bytes from it would fault inside Premiere
+        — the one failure this design is otherwise careful never to produce.
 
-    if (!original || !CurrentSettings().dvauiHook || IsOurSlot(original)) {
+        A color is a pointer into Premiere's own data, so anything in the first
+        page or misaligned for a float is not one and goes back untouched. That
+        covers null as well. Two instructions on the path that found its
+        function by name, where the value is always a color.
+    */
+    auto address = reinterpret_cast<uintptr_t>(original);
+
+    if (address < 0x10000 || (address & (alignof(DvaColorRGBA) - 1)) != 0) {
+        return original;
+    }
+
+    if (!CurrentSettings().dvauiHook || IsOurSlot(original)) {
         return original;
     }
 
@@ -2257,8 +2252,6 @@ static bool ConvertForPaint(const DvaColorRGBA* in, DvaColorRGBA* out) {
 void* NewBrush_Hook(void* self, const DvaColorRGBA* color) {
     DvaColorRGBA converted{};
 
-    ProbeGray(L"brush", color);
-
     if (ConvertForPaint(color, &converted)) {
         return NewBrush_Original(self, &converted);
     }
@@ -2291,8 +2284,6 @@ SurfaceFillRect_t SurfaceFillRect_Original = nullptr;
 
 void SurfaceFillRect_Hook(void* self, const DvaColorRGBA* color, const void* rect) {
     DvaColorRGBA converted{};
-
-    ProbeGray(L"fillrect", color);
 
     if (ConvertForPaint(color, &converted)) {
         SurfaceFillRect_Original(self, &converted, rect);
@@ -3096,14 +3087,24 @@ static bool ImageHasClass(HMODULE module, const char* className) {
     landed if it did. Only recorded — see PublishStaticDisplaySurface for why
     the answer is not acted on until the interface is up.
 
-    Asked once, from Wh_ModInit, and only when DisplaySurface.dll is not
-    mapped: the executable's image is complete before any of Premiere's own
-    code runs, so "no such class" is final the first time. A build that has
-    the module never gets here, and pays a single atomic load for the
-    question.
+    Asked once, and only when DisplaySurface.dll is not mapped: the
+    executable's image is complete before any of Premiere's own code runs, so
+    "no such class" is final the first time. A build that has the module never
+    gets past the first line.
+
+    Nothing but the band layer reads what this records, and that layer ships
+    off, so it is asked only while the switch is on — a walk of the
+    executable's writable sections is not a cost to put on a default startup.
+    Both entry points ask: Wh_ModInit for a switch already on, and
+    Wh_ModSettingsChanged for one turned on later, where the latch is what
+    keeps a run of settings changes from scanning again.
 */
+volatile LONG g_staticDisplaySurfaceProbed = FALSE;
+
 static void ProbeStaticDisplaySurface() {
-    if (g_displaySurfaceEnd.load(std::memory_order_acquire)) {
+    if (g_displaySurfaceEnd.load(std::memory_order_acquire) ||
+        !CurrentSettings().monitorBand ||
+        !Claim(&g_staticDisplaySurfaceProbed)) {
         return;
     }
 
@@ -3387,6 +3388,15 @@ static bool InstallStaticToolkitHooks() {
     InstallStaticContentHooks(executable, count,
                               std::make_index_sequence<kContentDrawCount>{});
 
+    if (count.installed == 0) {
+        /*
+            Nothing went in, so the latch goes back: a dvaui arriving later
+            must still be able to take it, and Wh_ModUninit reads it to decide
+            whether to say the interface layer was never installed.
+        */
+        InterlockedExchange(&g_dvauiHooked, FALSE);
+    }
+
     Wh_Log(L"this Premiere has no module for its toolkit: it is linked into "
            L"the executable, where %d of %d virtual entry points were found "
            L"through RTTI in %u ms. The color functions that are not virtual "
@@ -3530,6 +3540,11 @@ static void ReportNoColorModule() {
     dvaui.dll is. A module carrying most of the color surface is part of
     Premiere's UI and stays mapped while that UI is up; the hooks would point
     into unmapped memory if one ever did not.
+
+    It says dvaui is not loaded, not that this Premiere has none. One of the
+    two callers reaches here from the loader hook, where a null
+    GetModuleHandleW may only mean dvaui has not been mapped yet — see
+    SearchForColorModule, which is careful about the same distinction.
 */
 static void ReportColorModule(HMODULE module) {
     wchar_t path[MAX_PATH]{};
@@ -3540,7 +3555,7 @@ static void ReportColorModule(HMODULE module) {
         name = slash ? slash + 1 : path;
     }
 
-    Wh_Log(L"this Premiere has no dvaui.dll; the color functions were found in "
+    Wh_Log(L"dvaui.dll is not loaded; the color functions were found in "
            L"%s, and the interface layer goes in there",
            name);
 }
@@ -6237,13 +6252,6 @@ SetBkColor_t SetBkColor_Original = nullptr;
 HBRUSH WINAPI CreateSolidBrush_Hook(COLORREF color) {
     const Settings& s = CurrentSettings();
 
-    {   // DIAGNOSTIC BUILD ONLY
-        DvaColorRGBA probe = GdiToDva(color);
-        ProbeGray(IsAdobeUICaller(__builtin_return_address(0)) ? L"gdi (adobe)"
-                                                              : L"gdi (other)",
-                  &probe);
-    }
-
     if (ShouldConvertGdi(s, color, __builtin_return_address(0))) {
         color = ConvertGdiColor(s, color);
     }
@@ -8000,6 +8008,25 @@ void Wh_ModSettingsChanged() {
     bool registered = HookLoadedModules(nullptr, true);
 
     registered = HookD3D12CreateDevice() || registered;
+
+    /*
+        And on a build with no DisplaySurface.dll, where the executable stands
+        in for it, the range has to be published here too. Its other two
+        publishers cannot do it: a window create wants the layer already
+        installed, which it is not while the switch is off, and Wh_ModAfterInit
+        ran before any window existed. Without this the two halves wait on each
+        other — nothing publishes, so nothing installs, so nothing publishes —
+        and the band keeps Premiere's gray for the session with nothing logged.
+
+        A settings change is the user in Windhawk's own window, so Premiere is
+        up and its device is made; the framed window is what says so.
+    */
+    ProbeStaticDisplaySurface();
+
+    if (HasFramedWindow()) {
+        PublishStaticDisplaySurface();
+    }
+
     registered = InstallMonitorBandFromProbe() || registered;
 
     if (registered && !Wh_ApplyHookOperations()) {
