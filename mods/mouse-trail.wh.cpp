@@ -3427,6 +3427,7 @@ static void BuildCharAtlas() {
     g_pD2DDC->BeginDraw();
     g_pD2DDC->Clear(D2D1::ColorF(0, 0, 0, 0));
 
+    if (!g_pSolidOuterBrush) { Wh_Log(L"[CharAtlas] g_pSolidOuterBrush null, abort"); pBmp->Release(); pSurface->Release(); return; }
     g_pSolidOuterBrush->SetColor(D2D1::ColorF(1, 1, 1, 1));
     g_pSolidOuterBrush->SetOpacity(1.0f);
 
@@ -8090,9 +8091,9 @@ static void RenderFrame() {
             {
                 ID3D11Texture2D *pBackBuffer = nullptr;
                 ID3D11RenderTargetView *pSwapRTV = nullptr;
-                g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&pBackBuffer);
+                HRESULT hrBuf = g_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&pBackBuffer);
 
-                if (g_msaaSamples > 1 && g_pMSAATexture && g_pSSAAResolveTexture) {
+                if (SUCCEEDED(hrBuf) && g_msaaSamples > 1 && g_pMSAATexture && g_pSSAAResolveTexture) {
                     // MSAA resolve 到非 MSAA 纹理 / MSAA resolve to non-MSAA texture
                     g_pD3DContext->ResolveSubresource(g_pSSAAResolveTexture, 0, g_pMSAATexture, 0, g_swapChainFormat);
                 }
@@ -8100,6 +8101,7 @@ static void RenderFrame() {
                 if ((g_msaaSamples > 1 && g_pSSAAResolveSRV) || (g_ssaaScale > 1 && g_pSSAASRV)) {
                     // SSAA/MSAA 降采样 blit 到交换链后台缓冲 / Downsample blit to swap chain back buffer
                     g_pD3DDevice->CreateRenderTargetView(pBackBuffer, nullptr, &pSwapRTV);
+                    if (!pSwapRTV) { if (pBackBuffer) pBackBuffer->Release(); pBackBuffer = nullptr; goto present_skip_blit; }
                     ID3D11ShaderResourceView *pBlitSRV = (g_msaaSamples > 1) ? g_pSSAAResolveSRV : g_pSSAASRV;
 
                     // 保存当前状态 / Save current state
@@ -8161,6 +8163,7 @@ static void RenderFrame() {
                 }
                 if (pBackBuffer) pBackBuffer->Release();
             }
+            present_skip_blit:
             // 物理可视化调试：用 D2D1 叠加绘制速度/受力向量、漩涡、引力源等（在 blit 之后，避免被清掉）/ Physics debug overlay AFTER blit
             if (g_debugVelocity || g_debugForce || g_debugVortex || g_debugGravity || g_debugCollision || g_debugSpring) {
                 g_pD2DDC->SetTarget(g_pD2DTargetBitmap);
