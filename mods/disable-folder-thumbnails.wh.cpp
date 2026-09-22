@@ -38,7 +38,6 @@ using GetThumbnail_t = HRESULT(STDMETHODCALLTYPE*)(
 );
 
 static GetThumbnail_t g_originalGetThumbnail = nullptr;
-static bool g_hookInitialized = false;
 
 static bool IsPlainFilesystemFolder(IShellItem* item)
 {
@@ -174,9 +173,6 @@ static HRESULT STDMETHODCALLTYPE GetThumbnail_Hook(
 
 static bool InitializeHook()
 {
-    if (g_hookInitialized) {
-        return true;
-    }
 
     HRESULT initHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     bool mustUninitialize = SUCCEEDED(initHr);
@@ -251,10 +247,6 @@ static bool InitializeHook()
         CoUninitialize();
     }
 
-    if (hooked) {
-        g_hookInitialized = true;
-    }
-
     return hooked;
 }
 
@@ -262,13 +254,4 @@ BOOL Wh_ModInit()
 {
     Wh_Log(L"Initializing folder-thumbnail suppression");
     return InitializeHook() ? TRUE : FALSE;
-}
-
-void Wh_ModAfterInit()
-{
-    // Повторная попытка инициализации хука после полной загрузки процесса
-    if (!g_hookInitialized) {
-        Wh_Log(L"Retrying hook initialization after process init");
-        InitializeHook();
-    }
 }
