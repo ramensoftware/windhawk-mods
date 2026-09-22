@@ -13599,6 +13599,39 @@
         "version": "2.0.0"
       }
     },
+    "system-tray-folders": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790094152000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790094152000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Ris Peng",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
+        "description": "Group icons in the Windows 11 \"Show hidden icons\" tray flyout into folders",
+        "github": "https://github.com/RisPNG",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "System Tray Folders",
+        "version": "1.0.0"
+      }
+    },
     "task-manager-tail": {
       "details": {
         "defaultSorting": 3350,

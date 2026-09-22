@@ -2,12 +2,68 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-22T14:55:03.000Z</updated>
+    <updated>2026-09-22T16:22:32.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[System Tray Folders 1.0.0]]></title>
+        <id>https://windhawk.net/mods/system-tray-folders#a1190b6c1b631a725f6d628189886d410b3760f6</id>
+        <link href="https://windhawk.net/mods/system-tray-folders"/>
+        <updated>2026-09-22T16:22:32.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="systemtrayfolders">System Tray Folders</h1>
+<p>Adds folders to the Windows 11 tray overflow flyout (the "^" / "Show hidden
+icons" popup). Each folder appears as a tile in the icon grid with a preview of
+the icons inside. Clicking it shows the folder's icons in place, with a back
+tile to return.</p>
+<p><img src="https://raw.githubusercontent.com/RisPNG/windhawk-mods/assets/system-tray-folders/without-mod.png" alt="Without the mod" /><br />
+<em>Without the mod</em></p>
+<p><img src="https://raw.githubusercontent.com/RisPNG/windhawk-mods/assets/system-tray-folders/folders.png" alt="Folders" /><br />
+<em>With folders</em></p>
+<p><img src="https://raw.githubusercontent.com/RisPNG/windhawk-mods/assets/system-tray-folders/inside-folder.png" alt="Inside a folder" /><br />
+<em>Inside a folder</em></p>
+<p>Icons inside a folder are the real tray icons, so clicking, right clicking and
+tooltips keep working. Dragging icons between the taskbar and the flyout and
+reordering them work as usual, and an icon dragged back into the flyout returns
+to its folder. Which folder an icon belongs to comes from the settings, not
+from dragging.</p>
+<h2 id="choosingicons">Choosing icons</h2>
+<p>Each pattern is compared (case insensitive) with three names of every icon:</p>
+<ul>
+<li><strong>App name</strong>: the program name Windows keeps for the icon, usually the
+executable's description or file name, e.g. <code>RazerAppEngine</code>,
+<code>Docker Desktop</code> or <code>PowerToys.Runner</code>. It doesn't change, so it's the most
+reliable choice.</li>
+<li><strong>Tooltip</strong>: the text you see when hovering the icon, e.g. <code>NVIDIA Settings</code>.
+Some apps change it or leave it empty. A changed tooltip is picked up the
+next time the flyout opens.</li>
+<li><strong>Accessible name</strong>: a name Windows keeps for the icon for accessibility
+tools. It's usually the same as one of the other two names.</li>
+</ul>
+<p>A few icons aren't image icons; they have no tooltip or accessible name, so
+only their app name can match.</p>
+<p>A pattern without wildcards must match the whole name. Use <code>*</code> for any text
+and <code>?</code> for a single character, e.g. <code>Razer*</code> or <code>*Graphics Command Center</code>.</p>
+<p>An icon goes into the first folder with a matching pattern. Icons that match
+nothing stay in the main grid. Until a folder has icons (or <strong>Show empty
+folders</strong> is on), the mod unloads itself and leaves the flyout alone.</p>
+<p>An empty row in the <strong>Folders</strong> or <strong>Icons</strong> list is skipped, but two empty rows
+in a row end the list.</p>
+<p>To see the exact names of your icons, set <strong>Debug logging</strong> to <strong>Mod logs</strong> in
+the mod's <strong>Advanced</strong> tab, open the tray overflow once, then click <strong>Show log
+output</strong>.
+Each icon is listed as <code>Icon: app="..." tooltip="..." name="..." folder=N</code>,
+where <code>N</code> is the folder it went into, counting from 0, or -1 for none.</p>
+<p>Windows 11 only. Tested on build 26300, where the tray is hosted in
+<code>SystemTray.dll</code>. Older builds that host it in <code>Taskbar.View.dll</code> may work, but
+haven't been tested.</p>]]></content>
+        <author>
+            <name>Ris Peng</name>
+            <uri>https://github.com/RisPNG</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Tags 0.7.1]]></title>
         <id>https://windhawk.net/mods/explorer-tags#5ed44affb201b349874dd33bc5276b47bda4320d</id>
@@ -847,44 +903,6 @@ immediately.</li>
         <author>
             <name>mario0318</name>
             <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer Focus Border Remover 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-hide-focus-border#2fbe603edfe78de8a03f7ec29458e68203a30862</id>
-        <link href="https://windhawk.net/mods/explorer-hide-focus-border"/>
-        <updated>2026-09-21T10:02:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fileexplorerfocusborderremover">File Explorer Focus Border Remover</h1>
-<p>Removes the white rectangular focus border around selected files, folders and
-drives in Windows 11 File Explorer while keeping the normal selection and hover
-highlights intact.</p>
-<p>This is different from <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/no-focus-rectangle.wh.cpp">No Focus Rectangle</a>:
-that mod suppresses the classic dotted <code>DrawFocusRect</code>, while this mod targets
-the themed focus border used by the modern File Explorer item view.</p>
-<h2 id="beforeafter">Before / After</h2>
-<p><img src="https://raw.githubusercontent.com/NoMorePlz/windhawk-mods/cbf6be5c3a729079aff4d7cd44011f5189ed771f/assets/explorer-hide-focus-border-before-after-v2.png" alt="Before and after" /></p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Designed for Windows 11 File Explorer.</li>
-<li>The effect is applied at draw time, so it takes effect without restarting
-Explorer when the mod is enabled.</li>
-<li>The implementation relies on an undocumented File Explorer theme detail:
-<code>ItemsView</code>, part 3, state 1 is used for the focus border on current Windows
-builds. A future Windows update may change this.</li>
-<li>On the tested Windows 11 build, <code>GetThemeClass</code> resolved the File Explorer
-item view to the full class name <code>ItemsView</code> in both the tested light/dark
-scenarios, so the implementation matches that class name exactly.</li>
-<li>The mod is scoped to <code>explorer.exe</code>; common Open/Save dialogs hosted by other
-applications are not affected.</li>
-<li>Older Windows versions are untested.</li>
-<li>The intended targets include regular File Explorer items and
-<strong>This PC > Devices and drives</strong>.</li>
-<li>The same focus-border effect can also be changed by the <strong>Rounded Selection</strong>
-option in Win32 UI Modernizer; using both for this effect is redundant.</li>
-</ul>]]></content>
-        <author>
-            <name>Hùng</name>
-            <uri>https://github.com/NoMorePlz</uri>
         </author>
     </entry>
 </feed>
