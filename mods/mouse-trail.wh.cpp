@@ -629,6 +629,24 @@ Windhawk 高度可定制鼠标拖尾特效模组。基于原生 D3D11 + DirectCo
   $description:zh-CN: 双层光晕（外晕+内辉），发光更柔和自然。
   $description:zh-TW: 雙層光暈（外暈+內輝），發光更柔和自然。
   $description:ja-JP: 二重ハロー（外側+内側）でより柔らかいグロー。
+- enable_trail_stroke: true
+  $name: Trail Stroke
+  $name:zh-CN: 拖尾描边
+  $name:zh-TW: 拖尾描邊
+  $name:ja-JP: トレイルストローク
+  $description: Outline along the trail edges. Shares stroke color/alpha with particle stroke.
+  $description:zh-CN: 沿拖尾边缘的描边轮廓。描边颜色/透明度与粒子描边共用。
+  $description:zh-TW: 沿拖尾邊緣的描邊輪廓。描邊顏色/透明度與粒子描邊共用。
+  $description:ja-JP: トレイル縁のストローク。色/透明度は粒子ストロークと共用。
+- trail_stroke_width: 12
+  $name: Trail Stroke Width
+  $name:zh-CN: 拖尾描边宽度
+  $name:zh-TW: 拖尾描邊寬度
+  $name:ja-JP: トレイルストローク幅
+  $description: Stroke thickness as percentage of trail half-width (0-50).
+  $description:zh-CN: 描边粗细，占拖尾半宽百分比（0-50）。
+  $description:zh-TW: 描邊粗細，佔拖尾半寬百分比（0-50）。
+  $description:ja-JP: ストローク太さ（トレイル半幅に対する%、0-50）。
 - edge_softness: 50
   $name: Edge Softness
   $name:zh-CN: 边缘柔和度
@@ -859,6 +877,42 @@ Windhawk 高度可定制鼠标拖尾特效模组。基于原生 D3D11 + DirectCo
   $description:zh-CN: 粒子发光范围和亮度（0-100）。
   $description:zh-TW: 粒子發光範圍和亮度（0-100）。
   $description:ja-JP: パーティクルグローの大きさと明るさ（0-100）。
+- enable_particle_stroke: true
+  $name: Particle Stroke
+  $name:zh-CN: 粒子描边
+  $name:zh-TW: 粒子描邊
+  $name:ja-JP: パーティクルストローク
+  $description: Outline around text particles, layered with glow for clarity on light backgrounds.
+  $description:zh-CN: 文字粒子外圈描边，与发光叠加，浅色背景下保持清晰轮廓。
+  $description:zh-TW: 文字粒子外圈描邊，與發光疊加，淺色背景下保持清晰輪廓。
+  $description:ja-JP: テキスト粒子の外枠ストローク。グローと重ねて明るい背景でも輪郭を明瞭に。
+- particle_stroke_width: 3
+  $name: Stroke Width
+  $name:zh-CN: 描边宽度
+  $name:zh-TW: 描邊寬度
+  $name:ja-JP: ストローク幅
+  $description: Stroke thickness in atlas pixels (0-10).
+  $description:zh-CN: 描边粗细，图集像素单位（0-10）。
+  $description:zh-TW: 描邊粗細，圖集像素單位（0-10）。
+  $description:ja-JP: ストローク太さ（アトラスピクセル、0-10）。
+- particle_stroke_alpha: 80
+  $name: Stroke Alpha
+  $name:zh-CN: 描边透明度
+  $name:zh-TW: 描邊透明度
+  $name:ja-JP: ストローク透明度
+  $description: Stroke opacity (0-100).
+  $description:zh-CN: 描边不透明度（0-100）。
+  $description:zh-TW: 描邊不透明度（0-100）。
+  $description:ja-JP: ストローク不透明度（0-100）。
+- particle_stroke_color: auto
+  $name: Stroke Color
+  $name:zh-CN: 描边颜色
+  $name:zh-TW: 描邊顏色
+  $name:ja-JP: ストローク色
+  $description: auto = darkened particle color, or a hex RGB like 101010.
+  $description:zh-CN: auto 表示粒子主色变暗；或填写十六进制 RGB，如 101010。
+  $description:zh-TW: auto 表示粒子主色變暗；或填寫十六進位 RGB，如 101010。
+  $description:ja-JP: auto は粒子色を暗くした色、または 101010 のような Hex RGB。
 - particle_interval: 50
   $name: Particle Interval
   $name:zh-CN: 粒子释放间隔
@@ -2379,11 +2433,19 @@ int g_dotChainSize = 100;         // 圆点链大小倍数（百分比）
 int g_particleSizeMultiplier = 100; // 粒子大小倍数（百分比）
 bool g_enableParticleGlow = true;   // 粒子发光开关
 int g_particleGlowIntensity = 40;   // 粒子发光强度（0-100）
+// 粒子描边参数（文字字符模式，与发光叠加）/ Particle stroke params (text-char mode, layered with glow)
+bool g_enableParticleStroke = true;              // 描边开关 / stroke toggle
+int g_particleStrokeWidth = 3;                   // 描边宽度（图集像素，0-10）/ stroke width (atlas px, 0-10)
+int g_particleStrokeAlpha = 80;                  // 描边透明度（0-100）/ stroke alpha (0-100)
+int g_particleStrokeColorMode = 0;               // 0=auto(主色变暗) 1=custom / 0=auto(darkened fill) 1=custom
+D2D1_COLOR_F g_particleStrokeColor = {0.10f, 0.10f, 0.12f, 1.0f}; // 自定义描边颜色 / custom stroke color
 int g_functionPreset = 0;
 char g_customFunction[256] = "sin(d * 0.15) * 8";
 int g_waveAmplitude = 8, g_waveFrequency = 15;
 bool g_enableGlow = true;
 int g_glowIntensity = 40;
+bool g_enableTrailStroke = true;   // 拖尾描边开关 / trail stroke toggle
+int g_trailStrokeWidth = 12;       // 拖尾描边宽度（占拖尾半宽百分比 0-50）/ trail stroke width (% of half-width, 0-50)
 int g_edgeSoftness = 50;  // 拖尾边缘柔和度（0=硬边，100=极柔和）
 int g_aaMode = 1;  // 抗锯齿模式 0=off 1=smooth 2=crisp 3=extra / AA mode: 0=off 1=smooth 2=crisp 3=extra
 int g_colorMode = 0;
@@ -3078,6 +3140,18 @@ cbuffer ConstantBuffer : register(b0) {
     float _pad2;
     float aaMode;
     float textAspect;
+    float strokeStepU;
+    float strokeStepV;
+    float strokeEnabled;
+    float strokeAlphaMul;
+    float strokeColorMode;
+    float strokeColorR;
+    float strokeColorG;
+    float strokeColorB;
+    float strokeColorMul;
+    float strokeWidthPx;
+    float trailStrokeEnabled;
+    float trailStrokeHalf;
 };
 
 struct PS_INPUT {
@@ -3098,15 +3172,15 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
     } else if (aaMode < 1.5) {
         // smooth：默认平滑 / smooth: default
         float inner = 1.0 - edgeSoftness * 0.5;
-        edgeFade = smoothstep(1.0, inner, absV);
+        edgeFade = 1.0 - smoothstep(inner, 1.0, absV);
     } else if (aaMode < 2.5) {
         // crisp：锐利窄边 / crisp: narrow sharp edge
         float inner = 1.0 - edgeSoftness * 0.15;
-        edgeFade = smoothstep(1.0, inner, absV);
+        edgeFade = 1.0 - smoothstep(inner, 1.0, absV);
     } else {
         // extra：超宽柔和边 / extra: wide soft edge
         float inner = 1.0 - edgeSoftness * 0.8;
-        edgeFade = smoothstep(1.0, inner, absV);
+        edgeFade = 1.0 - smoothstep(inner, 1.0, absV);
     }
     // Early discard: 完全在边缘外的像素直接丢弃 / Early discard: skip pixels fully outside edge
     if (edgeFade <= 0.001) discard;
@@ -3141,6 +3215,14 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
         float3 darkResult = lerp(rgb, float3(1,1,1), -bgDelta * 0.5);
         rgb = lerp(darkResult, brightResult, isBright);
     }
+    // 拖尾描边：边缘环带（|v| 接近 1）用描边色，与主体平滑叠加 / Trail stroke: edge band near |v|=1 uses stroke color, layered with body
+    if (trailStrokeEnabled > 0.5) {
+        float half = trailStrokeHalf;
+        float strokeEdge = 0.05;
+        float strokeBand = smoothstep(1.0 - half - strokeEdge, 1.0 - half + strokeEdge, absV);
+        float3 strokeRgb = (strokeColorMode > 0.5) ? float3(strokeColorR, strokeColorG, strokeColorB) : rgb * strokeColorMul;
+        rgb = lerp(rgb, strokeRgb, strokeBand * strokeAlphaMul);
+    }
     // 输出非预乘alpha：混合状态SRC_ALPHA/INV_SRC_ALPHA会自动完成预乘 / Output non-premultiplied alpha: SRC_ALPHA blend auto-premultiplies
     float alpha = gradColor.a * edgeFade;
     return float4(rgb, alpha);
@@ -3164,6 +3246,16 @@ cbuffer ConstantBuffer : register(b0) {
     float atlasCols;
     float aaMode;
     float textAspect;
+    float strokeStepU;      // 文字描边采样步长U（图集UV空间）/ Text stroke sample step U (atlas UV space)
+    float strokeStepV;      // 文字描边采样步长V / Text stroke sample step V
+    float strokeEnabled;    // 描边开关（0/1）/ stroke enabled
+    float strokeAlphaMul;   // 描边透明度（0~1）/ stroke alpha
+    float strokeColorMode;  // 0=auto(主色变暗) 1=custom / 0=auto(darkened fill) 1=custom
+    float strokeColorR;     // 自定义描边颜色R / custom stroke color R
+    float strokeColorG;     // 自定义描边颜色G / custom stroke color G
+    float strokeColorB;     // 自定义描边颜色B / custom stroke color B
+    float strokeColorMul;   // auto模式描边变暗系数（0~1）/ auto-mode stroke darkening factor
+    float strokeWidthPx;    // SDF形状描边单侧厚度（屏幕像素）/ SDF shape stroke one-side thickness (screen px)
 };
 
 struct VS_INPUT {
@@ -3174,6 +3266,8 @@ struct VS_INPUT {
     float instanceShape : TEXCOORD3;
     float instanceRot : TEXCOORD4;
     float instanceCharIdx : TEXCOORD5;
+    float instanceCosRot : TEXCOORD6;
+    float instanceSinRot : TEXCOORD7;
 };
 
 struct VS_OUTPUT {
@@ -3194,9 +3288,9 @@ VS_OUTPUT VSMain(VS_INPUT input) {
     // 文字粒子：按宽高比拉伸 X，避免长句被压缩成正方形 / Text particles: stretch X by aspect ratio to avoid squishing
     float textScaleX = (input.instanceShape > 9.5) ? textAspect : 1.0;
     float2 stretchedPos = float2(input.quadPos.x * textScaleX, input.quadPos.y);
-    // 自旋转：只旋转顶点位置，不旋转uv（同时旋转会抵消）/ Self-rotation: rotate vertices only, not uv
-    float cosR = cos(input.instanceRot);
-    float sinR = sin(input.instanceRot);
+    // 自旋转：只旋转顶点位置，不旋转uv，cos/sin由CPU预计算 / Self-rotation: rotate vertices only, cos/sin precomputed on CPU
+    float cosR = input.instanceCosRot;
+    float sinR = input.instanceSinRot;
     float2 rotatedPos = float2(
         stretchedPos.x * cosR - stretchedPos.y * sinR,
         stretchedPos.x * sinR + stretchedPos.y * cosR
@@ -3233,6 +3327,16 @@ cbuffer ConstantBuffer : register(b0) {
     float atlasCols;
     float aaMode;
     float textAspect;
+    float strokeStepU;      // 文字描边采样步长U（图集UV空间）/ Text stroke sample step U (atlas UV space)
+    float strokeStepV;      // 文字描边采样步长V / Text stroke sample step V
+    float strokeEnabled;    // 描边开关（0/1）/ stroke enabled
+    float strokeAlphaMul;   // 描边透明度（0~1）/ stroke alpha
+    float strokeColorMode;  // 0=auto(主色变暗) 1=custom / 0=auto(darkened fill) 1=custom
+    float strokeColorR;     // 自定义描边颜色R / custom stroke color R
+    float strokeColorG;     // 自定义描边颜色G / custom stroke color G
+    float strokeColorB;     // 自定义描边颜色B / custom stroke color B
+    float strokeColorMul;   // auto模式描边变暗系数（0~1）/ auto-mode stroke darkening factor
+    float strokeWidthPx;    // SDF形状描边单侧厚度（屏幕像素）/ SDF shape stroke one-side thickness (screen px)
 };
 
 Texture2D charAtlasTex : register(t0);
@@ -3250,37 +3354,43 @@ struct PS_INPUT {
 
 // 形状SDF：接收预计算的p和r，避免重复计算 / Shape SDF: takes precomputed p and r to avoid recomputation
 float shapeSDF(float2 p, float r, float shapeType) {
-    // 圆形快速路径：最常用形状，跳过atan2和分支 / Circle fast path: most common shape, skip atan2 and branches
+    // 圆形快速路径：最常用形状，跳过atan2 / Circle fast path: most common shape, skip atan2
     if (shapeType < 0.5) {
         return 0.5 - r;
     }
+    // 心形(3)/菱形(4)/三角形(5)不需要atan2，先判断以避免无谓的三角函数 / heart/diamond/triangle need no atan2
+    if (shapeType > 2.5 && shapeType < 5.5) {
+        if (shapeType < 3.5) {
+            // 心形：提取hx2/hy2避免重复乘法 / Heart: hoist hx2/hy2 to avoid repeated multiplies
+            float2 hp = p * 2.0;
+            hp.y = -hp.y;
+            float hx2 = hp.x * hp.x;
+            float hy2 = hp.y * hp.y;
+            float t = hx2 + hy2 - 1.0;
+            float heart = t * t * t - hx2 * hy2 * hp.y;
+            return -heart * 0.12;
+        } else if (shapeType < 4.5) {
+            return 0.5 - (abs(p.x) + abs(p.y));                    // diamond / 菱形
+        } else {
+            // 等边三角形（顶点在上），提取ty=1-tp.y / Equilateral triangle (point up), hoist ty
+            float2 tp = p * 2.0;
+            tp.y = -tp.y;
+            float ty = 1.0 - tp.y;
+            return min(tp.y + 0.5, min(ty - 1.732 * tp.x, ty + 1.732 * tp.x)) * 0.35;
+        }
+    }
+    // 星形(1)/六角星(2)/花形(6)/五边形(7)/六边形(8)需要atan2 / star/hexagram/flower/pentagon/hexagon need atan2
     float a = atan2(p.y, p.x);
     if (shapeType < 1.5) {
         return 0.5 * (0.4 + 0.6 * abs(cos(a * 2.5))) - r;          // star / 星形
     } else if (shapeType < 2.5) {
         return 0.5 * (0.5 + 0.5 * abs(cos(a * 3.0))) - r;          // hexagram / 六角星
-    } else if (shapeType < 3.5) {
-        // 心形：复用p*2，用x*x*x替代pow避免负数底数UB / Heart: reuse p*2, use x*x*x instead of pow
-        float2 hp = p * 2.0;
-        hp.y = -hp.y;
-        float t = hp.x*hp.x + hp.y*hp.y - 1.0;
-        float heart = t * t * t - hp.x*hp.x * hp.y*hp.y*hp.y;
-        return -heart * 0.12;
-    } else if (shapeType < 4.5) {
-        return 0.5 - (abs(p.x) + abs(p.y));                        // diamond / 菱形
-    } else if (shapeType < 5.5) {
-        // 等边三角形（顶点在上）/ Equilateral triangle (point up)
-        float2 tp = p * 2.0;
-        tp.y = -tp.y;
-        return min(tp.y + 0.5, min(1.0 - tp.y - 1.732 * tp.x, 1.0 - tp.y + 1.732 * tp.x)) * 0.35;
     } else if (shapeType < 6.5) {
         return 0.5 * (0.6 + 0.4 * cos(a * 5.0)) - r;               // flower / 花形
     } else if (shapeType < 7.5) {
-        // 五边形：预计算PI常量 / Pentagon: precomputed PI constants
         float pentR = 0.425 / cos(fmod(a + 3.14159, 1.25664) - 0.62832);
         return pentR - r;                                          // pentagon / 五边形
     } else {
-        // 六边形：预计算PI常量 / Hexagon: precomputed PI constants
         float hexR = 0.435 / cos(fmod(a + 3.14159, 1.04720) - 0.52360);
         return hexR - r;                                           // hexagon / 六边形
     }
@@ -3296,15 +3406,39 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
         float2 cellUV = input.uv;
         float2 atlasUV = float2((col + cellUV.x) / atlasCols, (row + cellUV.y) / atlasRows);
         float4 tex = charAtlasTex.Sample(charAtlasSampler, atlasUV);
+        // 文字描边：采样8邻域最大alpha（膨胀字形），减去中心alpha得到轮廓环，与发光叠加 / Text stroke: 8-neighbor max alpha (dilated glyph) minus center = outline ring, layered with glow
+        if (strokeEnabled > 0.5) {
+            float aMax = tex.a;
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2( strokeStepU, 0.0)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(-strokeStepU, 0.0)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(0.0,  strokeStepV)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(0.0, -strokeStepV)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2( strokeStepU,  strokeStepV)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(-strokeStepU,  strokeStepV)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2( strokeStepU, -strokeStepV)).a);
+            aMax = max(aMax, charAtlasTex.Sample(charAtlasSampler, atlasUV + float2(-strokeStepU, -strokeStepV)).a);
+            float outline = saturate(aMax - tex.a);   // 轮廓环，仅字形边缘附近非零 / outline ring, nonzero only near glyph edge
+            // 描边颜色：auto=主色变暗，custom=自定义RGB / stroke color: auto=darkened fill, custom=RGB
+            float3 strokeRgb = (strokeColorMode > 0.5)
+                ? float3(strokeColorR, strokeColorG, strokeColorB)
+                : input.color.rgb * strokeColorMul;
+            float strokeA = outline * strokeAlphaMul;               // 描边环透明度 / outline ring alpha
+            float total = max(tex.a, strokeA);
+            if (total <= 0.001) discard;
+            float fillRatio = tex.a / max(total, 0.0001);           // 填充占比，字形内部≈1，边缘环≈0 / fill fraction
+            float3 rgb = lerp(strokeRgb, input.color.rgb, fillRatio);
+            return float4(rgb, input.color.a * total);
+        }
         if (tex.a <= 0.01) discard;
         float3 rgb = input.color.rgb;
         float alpha = input.color.a * tex.a;
         return float4(rgb, alpha);
     }
     float2 p = input.uv - 0.5;
-    float r = length(p);
-    // Early discard: 最大形状半径约0.5+边缘余量，超出直接跳过SDF计算 / Early discard: skip SDF for pixels outside max shape radius + margin
-    if (r > 0.62) discard;
+    float r2 = dot(p, p);
+    // Early discard: 用半径平方比较，外部像素省去sqrt / Early discard: compare r^2 to skip sqrt for outside pixels
+    if (r2 > 0.3844) discard;  // 0.62^2
+    float r = sqrt(r2);
     // SDF软边缘抗锯齿，边缘宽度随aaMode和粒子大小自适应 / SDF soft-edge AA, width adapts to aaMode and particle size
     float sdf = shapeSDF(p, r, input.shape);
     float edge;
@@ -3322,7 +3456,16 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
         edge = clamp(0.05 * (input.size / 12.0), 0.02, 0.12);
     }
     float mask = smoothstep(-edge, edge, sdf);
-    if (mask <= 0.001) discard;
+    // 描边轮廓环（|sdf| 环带，形状边缘），非文字形状同样生效 / stroke outline ring (|sdf| band) for non-text shapes
+    float outline = 0.0;
+    if (strokeEnabled > 0.5) {
+        float sdfHalf = strokeWidthPx / (input.size * 2.0 + 0.001);   // 单侧半宽（SDF 单位）/ one-side half width (SDF units)
+        float strokeEdge = max(edge, 0.004);
+        outline = 1.0 - smoothstep(sdfHalf - strokeEdge, sdfHalf + strokeEdge, abs(sdf));
+    }
+    float strokeA = outline * strokeAlphaMul;
+    float total = max(mask, strokeA);
+    if (total <= 0.001) discard;
     // 合并径向光照 + 2.5D深度光照 / Merged radial + 2.5D depth lighting
     float radialLight = max(1.0 - r * 0.3, 0.6) * (1.0 + input.depth * 0.25);
     float3 rgb = input.color.rgb * radialLight;
@@ -3335,8 +3478,14 @@ float4 PSMain(PS_INPUT input) : SV_TARGET {
         float3 darkResult = lerp(rgb, float3(1,1,1), -bgDelta * 0.5);
         rgb = lerp(darkResult, brightResult, isBright);
     }
+    // 描边合成：边缘环带用描边色，内部用填充色 / stroke compositing: outline ring uses stroke color, interior uses fill
+    if (strokeEnabled > 0.5) {
+        float3 strokeRgb = (strokeColorMode > 0.5) ? float3(strokeColorR, strokeColorG, strokeColorB) : rgb * strokeColorMul;
+        float fillRatio = mask / max(total, 0.0001);
+        rgb = lerp(strokeRgb, rgb, fillRatio);
+    }
     // 输出非预乘alpha：混合状态SRC_ALPHA/INV_SRC_ALPHA自动完成预乘 / Output non-premultiplied alpha: SRC_ALPHA blend auto-premultiplies
-    float alpha = input.color.a * mask;
+    float alpha = input.color.a * total;
     return float4(rgb, alpha);
 }
 )";
@@ -3377,6 +3526,8 @@ struct ParticleInstance {
     float shapeType;  // 0=circle,1=star,2=hexagram,3=heart,4=diamond,5=triangle,6=flower,7=pentagon,8=hexagon (与HLSL shapeSDF一致 / matches HLSL shapeSDF)
     float rotation;   // 旋转角度（弧度）/ Rotation (radians)
     float charIndex;  // 字符图集索引 / char atlas index
+    float cosRot;     // 预计算旋转余弦 / precomputed cos(rotation)
+    float sinRot;     // 预计算旋转正弦 / precomputed sin(rotation)
 };
 
 // ---- 原生渲染资源 ----
@@ -3675,14 +3826,16 @@ static bool InitNativeRendering() {
             {"TEXCOORD", 3, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
             {"TEXCOORD", 4, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
             {"TEXCOORD", 5, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            {"TEXCOORD", 6, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
+            {"TEXCOORD", 7, DXGI_FORMAT_R32_FLOAT, 1, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_INSTANCE_DATA, 1},
         };
-        if (FAILED(g_pD3DDevice->CreateInputLayout(particleLayout, 7, pvsBlob->GetBufferPointer(),
+        if (FAILED(g_pD3DDevice->CreateInputLayout(particleLayout, 9, pvsBlob->GetBufferPointer(),
                                                    pvsBlob->GetBufferSize(), &g_pParticleLayout)))
             break;
 
         // 常量缓冲（包含屏幕尺寸、透视、渐变停止点）/ Constant buffer (screen size, perspective, gradient stops)
         D3D11_BUFFER_DESC cbDesc = {};
-        cbDesc.ByteWidth = 320;  // 对齐到 16 字节 / Aligned to 16 bytes
+        cbDesc.ByteWidth = 368;  // 对齐到 16 字节 / Aligned to 16 bytes
         cbDesc.Usage = D3D11_USAGE_DYNAMIC;
         cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -3836,6 +3989,24 @@ static void UpdateConstantBuffer(int width, int height, const GradData* cols = n
         data[74] = (float)(g_charAtlasCols > 0 ? g_charAtlasCols : 16);
         data[75] = (float)g_aaMode;
         data[76] = g_textAspectRatio;
+        // 文字描边采样步长（图集UV空间）与颜色/透明度/开关 / Text stroke sample step (atlas UV) and color/alpha/toggle
+        {
+            float atlasWpx = (float)((g_charAtlasCols > 0 ? g_charAtlasCols : 16) * (g_charAtlasCellW > 0 ? g_charAtlasCellW : 64));
+            float atlasHpx = (float)((g_charAtlasRows > 0 ? g_charAtlasRows : 16) * (g_charAtlasCellH > 0 ? g_charAtlasCellH : 64));
+            float sw = (float)(g_particleStrokeWidth > 0 ? g_particleStrokeWidth : 0);
+            data[77] = sw / atlasWpx;                                       // strokeStepU
+            data[78] = sw / atlasHpx;                                       // strokeStepV
+            data[79] = (g_enableParticleStroke && sw > 0.0f) ? 1.0f : 0.0f; // strokeEnabled
+            data[80] = g_particleStrokeAlpha / 100.0f;                      // strokeAlphaMul
+            data[81] = (float)g_particleStrokeColorMode;                    // strokeColorMode
+            data[82] = g_particleStrokeColor.r;                             // strokeColorR
+            data[83] = g_particleStrokeColor.g;                             // strokeColorG
+            data[84] = g_particleStrokeColor.b;                             // strokeColorB
+            data[85] = 0.30f;                                               // strokeColorMul（auto模式变暗系数）/ auto-mode darkening
+            data[86] = g_particleStrokeWidth * 0.5f;                        // strokeWidthPx（SDF形状描边单侧屏幕像素，图集px→屏幕px约÷2）/ one-side screen px
+            data[87] = g_enableTrailStroke ? 1.0f : 0.0f;                   // trailStrokeEnabled
+            data[88] = (float)(g_trailStrokeWidth > 0 ? g_trailStrokeWidth : 0) / 100.0f; // trailStrokeHalf（v 空间比例）
+        }
         g_pD3DContext->Unmap(g_pConstantBuffer, 0);
     }
 }
@@ -3900,16 +4071,26 @@ static void NativeRenderParticles(int screenW, int screenH) {
             baseSize = p.size * 2.0f * sizeMul * sizeScale * musicSizeBoost;
         }
 
-        // 发光层 / Glow layer
+        float cosR = cosf(p.rotation), sinR = sinf(p.rotation);  // 预计算旋转三角函数，VS直接使用 / precompute trig for VS
+        // 发光层 / Glow layer（文字字符模式用柔和发光与描边叠加，避免浅色背景刺眼）/ text-char uses soft glow layered with stroke
         if (g_enableParticleGlow && glowCount < MAX_PER_LAYER) {
             ParticleInstance& gl = instances[glowCount++];
             gl.x = p.x; gl.y = p.y; gl.z = p.z;
-            gl.r = pc.r * glowColorMul; gl.g = pc.g * glowColorMul; gl.b = pc.b * glowColorMul;
-            gl.a = lifeAlpha * 0.8f * glowAlpha;
-            gl.size = baseSize * glowSize;
+            float glowSizeUse = glowSize, glowAlphaUse = glowAlpha, glowMulUse = glowColorMul;
+            if (p.shapeType == 10) {
+                // 文字粒子：收敛尺寸、降低亮度增益，与描边平滑叠加 / text: tighter size, softer brightness for smooth stroke layering
+                glowSizeUse = 1.25f + gi * 0.35f;
+                glowAlphaUse = 0.10f + gi * 0.12f;
+                glowMulUse = 1.0f;
+            }
+            gl.r = pc.r * glowMulUse; gl.g = pc.g * glowMulUse; gl.b = pc.b * glowMulUse;
+            gl.a = lifeAlpha * 0.8f * glowAlphaUse;
+            gl.size = baseSize * glowSizeUse;
             gl.shapeType = (float)p.shapeType;
             gl.rotation = p.rotation;
             gl.charIndex = p.charIndex;
+            gl.cosRot = cosR;
+            gl.sinRot = sinR;
         }
         // 正常层 / Normal layer
         if (normalCount < MAX_PER_LAYER) {
@@ -3921,6 +4102,8 @@ static void NativeRenderParticles(int screenW, int screenH) {
             nm.shapeType = (float)p.shapeType;
             nm.rotation = p.rotation;
             nm.charIndex = p.charIndex;
+            nm.cosRot = cosR;
+            nm.sinRot = sinR;
         }
     }
     g_pD3DContext->Unmap(g_pParticleInstanceBuf, 0);
@@ -5868,6 +6051,25 @@ void LoadSettings() {
     if (g_particleSizeMultiplier > 300) g_particleSizeMultiplier = 300;
     if (g_particleGlowIntensity < 0) g_particleGlowIntensity = 0;
     if (g_particleGlowIntensity > 100) g_particleGlowIntensity = 100;
+    g_enableParticleStroke = Wh_GetIntSetting(L"enable_particle_stroke") != 0;
+    g_particleStrokeWidth = Wh_GetIntSetting(L"particle_stroke_width");
+    g_particleStrokeAlpha = Wh_GetIntSetting(L"particle_stroke_alpha");
+    if (g_particleStrokeWidth < 0) g_particleStrokeWidth = 0;
+    if (g_particleStrokeWidth > 10) g_particleStrokeWidth = 10;
+    if (g_particleStrokeAlpha < 0) g_particleStrokeAlpha = 0;
+    if (g_particleStrokeAlpha > 100) g_particleStrokeAlpha = 100;
+    {
+        PCWSTR psc = Wh_GetStringSetting(L"particle_stroke_color");
+        if (psc) {
+            if (wcscmp(psc, L"auto") == 0) {
+                g_particleStrokeColorMode = 0;
+            } else {
+                g_particleStrokeColorMode = 1;
+                g_particleStrokeColor = ParseHexColor(psc, D2D1::ColorF(0.10f, 0.10f, 0.12f, 1.0f));
+            }
+            Wh_FreeStringSetting(psc);
+        }
+    }
     if (g_waveAmplitude < 1)
         g_waveAmplitude = 1;
     if (g_waveAmplitude > 40)
@@ -5880,6 +6082,10 @@ void LoadSettings() {
         g_glowIntensity = 0;
     if (g_glowIntensity > 100)
         g_glowIntensity = 100;
+    g_enableTrailStroke = Wh_GetIntSetting(L"enable_trail_stroke") != 0;
+    g_trailStrokeWidth = Wh_GetIntSetting(L"trail_stroke_width");
+    if (g_trailStrokeWidth < 0) g_trailStrokeWidth = 0;
+    if (g_trailStrokeWidth > 50) g_trailStrokeWidth = 50;
     if (g_edgeSoftness < 0) g_edgeSoftness = 0;
     if (g_edgeSoftness > 100) g_edgeSoftness = 100;
     if (g_particleDensity < 1)
