@@ -18,7 +18,7 @@
 Adds customizable, app-style keyboard shortcuts to Windows File Explorer with parameter substitution, built-in shell commands, and custom token expansion.
 
 > **Input Protection:** All custom shortcuts are automatically suppressed while renaming files, typing into the Address/Breadcrumb bar, typing into the Search box, or while focus is actively inside dialogs (such as Properties, Delete/Replace confirmations). When focus returns to the main File Explorer window, shortcuts resume immediately.
-
+> **Windows 10 Ribbon Note:** Default shortcuts using `Alt` (such as `Alt+H` or `Alt+C`) take precedence over Windows 10 Explorer ribbon access keys. You can remap or disable these bindings in the mod settings if you rely on ribbon mnemonics.
 ---
 
 ### Internal Explorer Commands
@@ -33,9 +33,9 @@ Instead of specifying an executable path, set **Executable Path** to one of the 
 * **`internal:toggleHiddenFiles`**: Toggles visibility of hidden files and folders with immediate view refresh. *(Note: Changes persistent system-wide Windows Explorer settings).*
 * **`internal:toggleFileExtensions`**: Toggles file name extensions on or off with immediate view refresh. *(Note: Changes persistent system-wide Windows Explorer settings).*
 * **`internal:openWith`**: Opens the native Windows "How do you want to open this file?" dialog for the selected file.
-* **`internal:copyPath`**: Copies the absolute path(s) of selected item(s) without quotes, separated by newlines.
-* **`internal:copyName`**: Copies the file name(s) with extension without quotes, separated by newlines.
 * **`internal:folderOptions`**: Opens the native File Explorer Folder Options dialog.
+* **`internal:copyName`**: Copies the file name(s) with extension without quotes, separated by newlines.
+* **`internal:copyPath`**: Copies the absolute path(s) of selected item(s) without quotes, separated by newlines. *(Note: Disabled by default to prevent colliding with Windows 11's native Ctrl+Shift+C "Copy as path"; applies only to physical file-system items, not virtual shell folders like This PC or Recycle Bin).*
 
 > **Persistent Settings Notice:** `internal:toggleHiddenFiles` and `internal:toggleFileExtensions` flip the native Windows Explorer shell settings directly (`SHGetSetSettings`). These changes affect all File Explorer surfaces globally and persist even if this mod is disabled or uninstalled.
 
@@ -109,7 +109,7 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - enabled: true
       $name: "Enabled"
     - key: "T"
-      $name: "Key (A-Z, 0-9, F1-F12, Backspace, Delete, Insert, Home, End, PageUp, PageDown, Space, Enter, Tab)"
+      $name: "Key (A-Z, 0-9, F1-F12, Backspace/Back, Delete/Del, Insert/Ins, Home, End, PageUp/PgUp, PageDown/PgDn, Space, Enter/Return, Tab)"
     - ctrl: true
       $name: "Require Ctrl"
     - shift: false
@@ -122,10 +122,10 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - args: "-d \"%d\""
       $name: "Arguments / Tokens"
       $description: "Supported tokens: %f, %files, %folders, %1, %n, %c, %ext, %s, %d, %d_smart, %p."
-    - mode: ""
+    - mode: "batch"
       $name: "Launch Mode"
       $options:
-        - "": "batch: Run once with all selected items"
+        - "batch": "batch: Run once with all selected items"
         - loop_files: "loop_files: Run once per selected file"
         - loop_folders: "loop_folders: Run once per selected folder"
   - - name: "Open with Notepad"
@@ -138,32 +138,23 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - args: "%1"
     - mode: "loop_files"
   - - name: "Toggle Hidden Files"
-    - enabled: true
+    - enabled: false
     - key: "H"
     - ctrl: true
     - shift: false
     - alt: false
     - path: "internal:toggleHiddenFiles"
     - args: ""
-    - mode: ""
+    - mode: "batch"
   - - name: "Toggle File Extensions"
-    - enabled: true
+    - enabled: false
     - key: "E"
     - ctrl: true
     - shift: false
     - alt: true
     - path: "internal:toggleFileExtensions"
     - args: ""
-    - mode: ""
-  - - name: "Open With"
-    - enabled: true
-    - key: "H"
-    - ctrl: false
-    - shift: false
-    - alt: true
-    - path: "internal:openWith"
-    - args: ""
-    - mode: ""
+    - mode: "batch"
   - - name: "Open Recycle Bin"
     - enabled: true
     - key: "B"
@@ -172,16 +163,16 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - alt: false
     - path: "internal:openRecycleBin"
     - args: ""
-    - mode: ""
+    - mode: "batch"
   - - name: "Copy File Path"
-    - enabled: true
+    - enabled: false
     - key: "C"
     - ctrl: true
     - shift: true
     - alt: false
     - path: "internal:copyPath"
     - args: ""
-    - mode: ""
+    - mode: "batch"
   - - name: "Copy File Name"
     - enabled: true
     - key: "C"
@@ -190,7 +181,7 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - alt: true
     - path: "internal:copyName"
     - args: ""
-    - mode: ""
+    - mode: "batch"
   - - name: "Open With"
     - enabled: true
     - key: "H"
@@ -199,7 +190,7 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - alt: true
     - path: "internal:openWith"
     - args: ""
-    - mode: ""
+    - mode: "batch"
   $name: "Custom Shortcuts"
   $description: "List of customizable shortcuts. Supported keys: A-Z, 0-9, F1-F12, Backspace, Delete, Insert, Home, End, PageUp/PgUp, PageDown/PgDn, Space, Enter, and Tab. Modifiers (Ctrl, Shift, or Alt) are required for all keys except F1-F12."
 */
@@ -208,7 +199,6 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
 #include <windows.h>
 #include <initguid.h>
 #include <shlobj.h>
-#include <shobjidl.h>
 #include <exdisp.h>
 #include <shlguid.h>
 #include <shlwapi.h>
@@ -357,7 +347,7 @@ void LoadSettings() {
 
         WindhawkUtils::StringSetting modeStr = WindhawkUtils::StringSetting::make(L"shortcuts[%d].mode", i);
         sc.launchMode = modeStr.get();
-        if (sc.launchMode.empty() || sc.launchMode == L"batch") sc.launchMode = L"batch";
+        if (sc.launchMode.empty()) sc.launchMode = L"batch";
 
         bool isFunctionKey = (sc.vkCode >= VK_F1 && sc.vkCode <= VK_F12);
         bool hasModifier = (sc.ctrl || sc.shift || sc.alt);
@@ -671,38 +661,44 @@ void ExecuteApp(const std::wstring& cmd, const std::wstring& params, const std::
     }
 }
 
-bool SetClipboardTextHelper(HWND hWnd, const std::wstring& text) {
+bool SetClipboardTextHelper(const std::wstring& text) {
+    size_t bytes = (text.size() + 1) * sizeof(WCHAR);
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (!hMem) return false;
+
+    void* pMem = GlobalLock(hMem);
+    if (!pMem) {
+        GlobalFree(hMem);
+        return false;
+    }
+    memcpy(pMem, text.c_str(), bytes);
+    GlobalUnlock(hMem);
+
     bool opened = false;
     for (int i = 0; i < 5; ++i) {
-        if (OpenClipboard(hWnd)) {
+        if (OpenClipboard(nullptr)) { // Use nullptr instead of rootHwnd
             opened = true;
             break;
         }
         Sleep(20);
     }
-    if (!opened) return false;
+
+    if (!opened) {
+        GlobalFree(hMem);
+        return false;
+    }
 
     EmptyClipboard();
-
-    size_t bytes = (text.size() + 1) * sizeof(WCHAR);
-    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes);
-    if (hMem) {
-        void* pMem = GlobalLock(hMem);
-        if (pMem) {
-            memcpy(pMem, text.c_str(), bytes);
-            GlobalUnlock(hMem);
-            SetClipboardData(CF_UNICODETEXT, hMem);
-        } else {
-            GlobalFree(hMem);
-        }
+    if (!SetClipboardData(CF_UNICODETEXT, hMem)) {
+        GlobalFree(hMem);
+        CloseClipboard();
+        return false;
     }
+
     CloseClipboard();
     return true;
 }
 
-#ifndef SBSP_PARENT_FOLDER
-#define SBSP_PARENT_FOLDER 0x0002
-#endif
 
 void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND capturedFocus) {
     if (_wcsicmp(command.c_str(), L"internal:folderOptions") == 0) {
@@ -743,7 +739,7 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND cap
             text += p;
         }
 
-        SetClipboardTextHelper(rootHwnd, text);
+        SetClipboardTextHelper(text);
         return;
     }
 
@@ -763,7 +759,7 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND cap
             text += (name ? name : L"");
         }
 
-        SetClipboardTextHelper(rootHwnd, text);
+        SetClipboardTextHelper(text);
         return;
     }
 
@@ -774,22 +770,23 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND cap
         std::vector<std::wstring> allSelected = GetSelectedPaths(psv);
         psv->Release();
 
-        if (allSelected.empty()) return;
+        if (allSelected.empty()) {
+            Wh_Log(L"internal:openWith: No items selected.");
+            return;
+        }
 
         std::wstring targetPath = allSelected[0];
         DWORD attr = GetFileAttributesW(targetPath.c_str());
 
-        if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
-            HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-            if (!hShell32) hShell32 = LoadLibraryW(L"shell32.dll");
-            if (hShell32) {
-                typedef void(WINAPI* OpenAs_RunDLL_t)(HWND, HINSTANCE, LPCWSTR, int);
-                auto pOpenAs = (OpenAs_RunDLL_t)GetProcAddress(hShell32, "OpenAs_RunDLLW");
-                if (pOpenAs) {
-                    pOpenAs(rootHwnd, nullptr, targetPath.c_str(), SW_SHOWNORMAL);
-                }
-            }
+        if (attr == INVALID_FILE_ATTRIBUTES || (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            Wh_Log(L"internal:openWith: Selected item is a directory or inaccessible.");
+            return;
         }
+
+        OPENASINFO oai = {};
+        oai.pcszFile = targetPath.c_str();
+        oai.oaifInFlags = OAIF_EXEC | OAIF_ALLOW_REGISTRATION;
+        SHOpenWithDialog(nullptr, &oai); // Pass nullptr to avoid disabling the caller window
         return;
     }
 
@@ -911,52 +908,22 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND cap
         psv->Release();
         return;
     }
-    //
+    
     if (_wcsicmp(command.c_str(), L"internal:openParentFolder") == 0) {
-        IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
-        if (!psv) return;
+    IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
+    if (!psv) return;
 
-        IServiceProvider* psp = nullptr;
-        if (SUCCEEDED(psv->QueryInterface(IID_PPV_ARGS(&psp))) && psp) {
-            IShellBrowser* psb = nullptr;
-            if (SUCCEEDED(psp->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&psb))) && psb) {
-                // Method 1: Get the parent PIDL via IPersistFolder2
-                bool navigated = false;
-                IFolderView* pfv = nullptr;
-                if (SUCCEEDED(psv->QueryInterface(IID_PPV_ARGS(&pfv))) && pfv) {
-                    IPersistFolder2* ppf2 = nullptr;
-                    if (SUCCEEDED(pfv->GetFolder(IID_PPV_ARGS(&ppf2))) && ppf2) {
-                        PIDLIST_ABSOLUTE pidlCurrent = nullptr;
-                        if (SUCCEEDED(ppf2->GetCurFolder(&pidlCurrent)) && pidlCurrent) {
-                            PIDLIST_ABSOLUTE pidlParent = ILClone(pidlCurrent);
-                            if (pidlParent) {
-                                if (ILRemoveLastID(pidlParent)) {
-                                    HRESULT hr = psb->BrowseObject(pidlParent, SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
-                                    if (SUCCEEDED(hr)) navigated = true;
-                                }
-                                ILFree(pidlParent);
-                            }
-                            CoTaskMemFree(pidlCurrent);
-                        }
-                        ppf2->Release();
-                    }
-                    pfv->Release();
-                }
-
-                // Method 2: Fallback to Shell command message if BrowseObject fails
-                if (!navigated) {
-                    HWND hBrowserWnd = nullptr;
-                    if (SUCCEEDED(psb->GetWindow(&hBrowserWnd)) && hBrowserWnd) {
-                        SendMessageW(hBrowserWnd, WM_COMMAND, 41061, 0);
-                    }
-                }
-
-                psb->Release();
-            }
-            psp->Release();
+    IServiceProvider* psp = nullptr;
+    if (SUCCEEDED(psv->QueryInterface(IID_PPV_ARGS(&psp))) && psp) {
+        IShellBrowser* psb = nullptr;
+        if (SUCCEEDED(psp->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&psb))) && psb) {
+            psb->BrowseObject(nullptr, SBSP_SAMEBROWSER | SBSP_PARENT);
+            psb->Release();
         }
-        psv->Release();
-        return;
+        psp->Release();
+    }
+    psv->Release();
+    return;
     }
 
     Wh_Log(L"Unknown internal command: %s", command.c_str());
@@ -1122,15 +1089,20 @@ void Wh_ModUninit() {
 
     // Dismiss any modal dialogs (such as emptyRecycleBin) so unload never stalls
     for (HANDLE h : threadsToJoin) {
-        DWORD tid = GetThreadId(h);
-        while (WaitForSingleObject(h, 100) == WAIT_TIMEOUT) {
-            EnumThreadWindows(tid, [](HWND hWnd, LPARAM) -> BOOL {
-                if (IsWindowVisible(hWnd)) {
-                    PostMessageW(hWnd, WM_CLOSE, 0, 0);
-                }
-                return TRUE;
-            }, 0);
-        }
-        CloseHandle(h);
+    DWORD tid = GetThreadId(h);
+    int attempts = 0;
+    while (WaitForSingleObject(h, 100) == WAIT_TIMEOUT && attempts < 30) {
+        EnumThreadWindows(tid, [](HWND hWnd, LPARAM) -> BOOL {
+            if (IsWindowVisible(hWnd)) {
+                PostMessageW(hWnd, WM_CLOSE, 0, 0);
+            }
+            return TRUE;
+        }, 0);
+        attempts++;
     }
+    if (attempts >= 30) {
+        Wh_Log(L"Worker thread did not terminate in time during unload.");
+    }
+    CloseHandle(h);
+}
 }
