@@ -2,7 +2,7 @@
 // @id              explorer-custom-shortcuts
 // @name            Explorer Custom Shortcuts
 // @description     Adds app-style keyboard shortcuts to File Explorer with dynamic tokens, selection modes, and internal commands.
-// @version         1.1.0
+// @version         1.2.0
 // @author          ArvindSaini978
 // @github          https://github.com/ArvindSaini978
 // @include         explorer.exe
@@ -32,6 +32,8 @@ Instead of specifying an executable path, set **Executable Path** to one of the 
 * **`internal:toggleHiddenFiles`**: Toggles visibility of hidden files and folders with immediate view refresh. *(Note: Changes persistent system-wide Windows Explorer settings).*
 * **`internal:toggleFileExtensions`**: Toggles file name extensions on or off with immediate view refresh. *(Note: Changes persistent system-wide Windows Explorer settings).*
 * **`internal:openWith`**: Opens the native Windows "How do you want to open this file?" dialog for the selected file.
+* **`internal:copyPath`**: Copies the absolute path(s) of selected item(s) without quotes, separated by newlines.
+* **`internal:copyName`**: Copies the file name(s) with extension without quotes, separated by newlines.
 * **`internal:folderOptions`**: Opens the native File Explorer Folder Options dialog.
 
 > **Persistent Settings Notice:** `internal:toggleHiddenFiles` and `internal:toggleFileExtensions` flip the native Windows Explorer shell settings directly (`SHGetSetSettings`). These changes affect all File Explorer surfaces globally and persist even if this mod is disabled or uninstalled.
@@ -143,6 +145,24 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - path: "internal:toggleHiddenFiles"
     - args: ""
     - mode: ""
+  - - name: "Toggle File Extensions"
+    - enabled: true
+    - key: "E"
+    - ctrl: true
+    - shift: false
+    - alt: true
+    - path: "internal:toggleFileExtensions"
+    - args: ""
+    - mode: ""
+  - - name: "Open With"
+    - enabled: true
+    - key: "H"
+    - ctrl: false
+    - shift: false
+    - alt: true
+    - path: "internal:openWith"
+    - args: ""
+    - mode: ""
   - - name: "Open Recycle Bin"
     - enabled: true
     - key: "B"
@@ -150,6 +170,33 @@ Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window
     - shift: true
     - alt: false
     - path: "internal:openRecycleBin"
+    - args: ""
+    - mode: ""
+  - - name: "Copy File Path"
+    - enabled: true
+    - key: "C"
+    - ctrl: true
+    - shift: true
+    - alt: false
+    - path: "internal:copyPath"
+    - args: ""
+    - mode: ""
+  - - name: "Copy File Name"
+    - enabled: true
+    - key: "C"
+    - ctrl: false
+    - shift: false
+    - alt: true
+    - path: "internal:copyName"
+    - args: ""
+    - mode: ""
+  - - name: "Open With"
+    - enabled: true
+    - key: "H"
+    - ctrl: false
+    - shift: false
+    - alt: true
+    - path: "internal:openWith"
     - args: ""
     - mode: ""
   $name: "Custom Shortcuts"
@@ -608,6 +655,35 @@ void ExecuteApp(const std::wstring& cmd, const std::wstring& params, const std::
     }
 }
 
+bool SetClipboardTextHelper(HWND hWnd, const std::wstring& text) {
+    bool opened = false;
+    for (int i = 0; i < 5; ++i) {
+        if (OpenClipboard(hWnd)) {
+            opened = true;
+            break;
+        }
+        Sleep(20);
+    }
+    if (!opened) return false;
+
+    EmptyClipboard();
+
+    size_t bytes = (text.size() + 1) * sizeof(WCHAR);
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (hMem) {
+        void* pMem = GlobalLock(hMem);
+        if (pMem) {
+            memcpy(pMem, text.c_str(), bytes);
+            GlobalUnlock(hMem);
+            SetClipboardData(CF_UNICODETEXT, hMem);
+        } else {
+            GlobalFree(hMem);
+        }
+    }
+    CloseClipboard();
+    return true;
+}
+
 void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND capturedFocus) {
     if (_wcsicmp(command.c_str(), L"internal:folderOptions") == 0) {
         ExecuteApp(L"rundll32.exe", L"shell32.dll,Options_RunDLL 0", L"");
@@ -629,6 +705,45 @@ void ExecuteInternalCommand(const std::wstring& command, HWND rootHwnd, HWND cap
         ss.fShowExtensions = !ss.fShowExtensions;
         SHGetSetSettings(&ss, SSF_SHOWEXTENSIONS, TRUE);
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+        return;
+    }
+
+    if (_wcsicmp(command.c_str(), L"internal:copyPath") == 0) {
+        IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
+        if (!psv) return;
+
+        std::vector<std::wstring> allSelected = GetSelectedPaths(psv);
+        psv->Release();
+
+        if (allSelected.empty()) return;
+
+        std::wstring text;
+        for (const auto& p : allSelected) {
+            if (!text.empty()) text += L"\r\n";
+            text += p;
+        }
+
+        SetClipboardTextHelper(rootHwnd, text);
+        return;
+    }
+
+    if (_wcsicmp(command.c_str(), L"internal:copyName") == 0) {
+        IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
+        if (!psv) return;
+
+        std::vector<std::wstring> allSelected = GetSelectedPaths(psv);
+        psv->Release();
+
+        if (allSelected.empty()) return;
+
+        std::wstring text;
+        for (const auto& p : allSelected) {
+            if (!text.empty()) text += L"\r\n";
+            PCWSTR name = PathFindFileNameW(p.c_str());
+            text += (name ? name : L"");
+        }
+
+        SetClipboardTextHelper(rootHwnd, text);
         return;
     }
 
