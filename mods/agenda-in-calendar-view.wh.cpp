@@ -1526,8 +1526,6 @@ namespace {
     int64_t m_focusSessionVisibilityToken{0};
     [[clang::no_destroy]] wuxc::ScrollViewer m_hostScrollViewer{nullptr};
     [[clang::no_destroy]] winrt::Windows::Foundation::IInspectable m_originalCalendarContent{nullptr};
-    [[clang::no_destroy]] wux::FrameworkElement g_layoutUpdatedFe{nullptr};
-    winrt::event_token g_layoutUpdatedToken{};
     std::mutex g_pendingActionsMutex;
     [[clang::no_destroy]] std::vector<winrt::Windows::Foundation::IAsyncOperation<bool>> g_pendingDispatcherActions;
 
@@ -1540,6 +1538,15 @@ namespace {
     std::atomic<HANDLE> g_hStopEvent{nullptr};
     std::atomic<bool> g_workerForceFetch{false};
 }
+
+struct CoreWindowData {
+    wuc::CoreWindow coreWindow{nullptr};
+    winrt::event_token activatedToken{};
+    winrt::event_token visibilityChangedToken{};
+    wux::FrameworkElement layoutUpdatedFe{nullptr};
+    winrt::event_token layoutUpdatedToken{};
+};
+thread_local CoreWindowData t_coreWindowData;
 
 void UnregisterFocusSessionControl();
 void PopulateItemsControl(std::vector<CalendarEvent> const& events);
@@ -1556,18 +1563,13 @@ void UnregisterCoreWindowEvents();
 void RevokeLayoutUpdated();
 
 void RevokeLayoutUpdated() {
-    if (g_layoutUpdatedFe && g_layoutUpdatedToken.value != 0) {
+    if (t_coreWindowData.layoutUpdatedFe && t_coreWindowData.layoutUpdatedToken.value != 0) {
         try {
-            if (auto dispatcher = g_layoutUpdatedFe.Dispatcher()) {
-                if (!dispatcher.HasThreadAccess()) {
-                    return;
-                }
-            }
-            g_layoutUpdatedFe.LayoutUpdated(g_layoutUpdatedToken);
+            t_coreWindowData.layoutUpdatedFe.LayoutUpdated(t_coreWindowData.layoutUpdatedToken);
         } catch (...) {}
-        g_layoutUpdatedToken = {};
-        g_layoutUpdatedFe = nullptr;
     }
+    t_coreWindowData.layoutUpdatedToken = {};
+    t_coreWindowData.layoutUpdatedFe = nullptr;
 }
 
 void UnregisterFocusSessionControl() {
@@ -2453,9 +2455,9 @@ void OnCalendarOpened() {
         auto window = winrt::Windows::UI::Xaml::Window::Current();
         if (window && window.Content()) {
             if (auto fe = window.Content().try_as<winrt::Windows::UI::Xaml::FrameworkElement>()) {
-                if (!m_rootGrid && g_layoutUpdatedToken.value == 0) {
-                    g_layoutUpdatedFe = fe;
-                    g_layoutUpdatedToken = fe.LayoutUpdated([](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
+                if (!m_rootGrid && t_coreWindowData.layoutUpdatedToken.value == 0) {
+                    t_coreWindowData.layoutUpdatedFe = fe;
+                    t_coreWindowData.layoutUpdatedToken = fe.LayoutUpdated([](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&) {
                         if (m_rootGrid) {
                             RevokeLayoutUpdated();
                             return;
@@ -2593,13 +2595,6 @@ bool RunFromWindowThread(HWND hWnd,
     return true;
 }
 
-struct CoreWindowData {
-    winrt::Windows::UI::Core::CoreWindow coreWindow{nullptr};
-    winrt::event_token activatedToken{};
-    winrt::event_token visibilityChangedToken{};
-};
-thread_local CoreWindowData t_coreWindowData;
-
 void RegisterCoreWindowEvents() {
     try {
         auto coreWindow = wuc::CoreWindow::GetForCurrentThread();
@@ -2640,6 +2635,7 @@ void RegisterCoreWindowEvents() {
 }
 
 void UnregisterCoreWindowEvents() {
+    RevokeLayoutUpdated();
     try {
         if (t_coreWindowData.coreWindow) {
             if (t_coreWindowData.activatedToken.value != 0) {
