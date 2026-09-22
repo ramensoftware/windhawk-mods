@@ -2,7 +2,7 @@
 // @id              start-everything
 // @name            Everything & Power Tools in the Start Menu
 // @description     Native Everything search inside the Start menu, complete SearchHost disconnection, and seamless focus management.
-// @version         0.2
+// @version         0.3
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @include         StartMenuExperienceHost.exe
