@@ -8701,7 +8701,7 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     int sx = g_virtX, sy = g_virtY;
     int sw = g_virtW, sh = g_virtH;
     g_overlayHwnd = CreateWindowEx(
-        WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, CN,
+        WS_EX_TRANSPARENT | WS_EX_NOREDIRECTIONBITMAP | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, CN,
         L"MouseTrailOverlay", WS_POPUP, sx, sy, sw, sh, NULL, NULL, hi, NULL);
     if (!g_overlayHwnd) {
         Wh_Log(L"OverlayThread: CreateWindowEx failed: %d", GetLastError());
@@ -8709,8 +8709,6 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
         CoUninitialize();
         return 0;
     }
-    // 分层窗口整体不透明（per-pixel alpha 由 DirectComposition 处理）/ Layered window fully opaque (per-pixel alpha handled by DirectComposition)
-    SetLayeredWindowAttributes(g_overlayHwnd, 0, 255, LWA_ALPHA);
     // 屏幕捕获排除在 LoadSettings 中根据颜色模式动态设置 / Screen capture exclusion dynamically set in LoadSettings based on color mode
     Wh_Log(L"OverlayThread: window created (%dx%d at %d,%d), initially hidden", sw, sh, sx, sy);
     // 不立即 ShowWindow，等渲染线程首次有内容绘制时再显示，避免渲染失败时全屏透明窗口残留 / Don't ShowWindow immediately, wait until render thread first draws content, avoids fullscreen transparent window residue on render failure
