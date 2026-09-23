@@ -2,7 +2,7 @@
 // @id              taskbar-disk-space-label
 // @name            Taskbar Disk Space Label
 // @description     A simple disk space label integrated into the Windows taskbar
-// @version         1.49
+// @version         0.50
 // @author          allelimo
 // @github          https://github.com/allelimo
 // @include         explorer.exe
@@ -588,21 +588,28 @@ static std::wstring FormatSpace(int spacefree,
 
 
 void LoadSettings() {
-    g_settings.mysettings_diskLetter = Wh_GetStringSetting(L"diskLetter");
+    //g_settings.mysettings_diskLetter = Wh_GetStringSetting(L"diskLetter");
     g_settings.mysettings_fontSize = Wh_GetIntSetting(L"fontSize");
     g_settings.mysettings_diskLetter = WindhawkUtils::StringSetting::make(L"diskLetter").get(); //147
-    //g_settings.userFreeSpace =  Wh_GetIntSetting(L"userFreeSpace");  //147
+    g_settings.userFreeSpace =  Wh_GetIntSetting(L"userFreeSpace");  //147
 
 }
 
 static void RefreshDiskSpaceLabel(void*) {
-    LoadSettings();
+    //LoadSettings();
     if (g_labelText) {
         GetDiskInfo();
         g_labelText.Text(FormatSpace(myspacefree, myspacetot)); //147
         g_labelText.FontSize(g_settings.mysettings_fontSize);
     }
 }
+
+
+static void ReloadSettingsAndRefresh(void*) {
+    LoadSettings();
+    RefreshDiskSpaceLabel(nullptr);
+}
+
 
 // -----------------------------------------------------------------------------
 // Add/remove taskbar label
@@ -872,6 +879,7 @@ static void* WINAPI IconView_IconView_Hook(void* pThis) {
         return result;
     }
 
+    try {
     FrameworkElement iconView = nullptr;
 
     reinterpret_cast<IUnknown**>(pThis)[1]->QueryInterface(
@@ -898,6 +906,10 @@ static void* WINAPI IconView_IconView_Hook(void* pThis) {
                               g_labelInjected.store(false);
                               ApplyDiskSpaceLabelIfAvailable();
                           });
+    } catch (...) {
+        Wh_Log(L"IconView hook failed: %08X",
+            static_cast<unsigned>(winrt::to_hresult()));        
+    }
 
     return result;
 }
@@ -1067,6 +1079,6 @@ void Wh_ModSettingsChanged() {
         taskbar = FindCurrentProcessTaskbarWnd();
     }
     if (taskbar) {
-        RunFromWindowThread(taskbar, RefreshDiskSpaceLabel, nullptr);
+        RunFromWindowThread(taskbar, ReloadSettingsAndRefresh, nullptr);
     }
 }
