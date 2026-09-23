@@ -2274,11 +2274,34 @@ inline bool CreateDesktopShortcut(const std::wstring& targetPath, const std::wst
     }
     if (baseName.empty()) baseName = L"Shortcut";
 
-    std::wstring shortcutFile = desktop + L"\\" + baseName + L".lnk";
+    // A unique name, because neither write path below asks before replacing
+    // what is already on the desktop: CopyFileW's third argument is
+    // bFailIfExists, and IPersistFile::Save always overwrites. An installer's
+    // own "Google Chrome.lnk" may carry a profile argument, a custom icon or a
+    // hotkey, and replacing it with a bare link to the exe loses all of that
+    // with no prompt and no way back.
+    //
+    // PathYetAnotherMakeUniqueName yields "Name.lnk", then "Name (2).lnk", and
+    // so on -- the same convention Explorer's own "Create shortcut" uses.
+    // The trailing backslash is load-bearing. Without one this treats the last
+    // component as a file name and resolves against the *parent*, so passing
+    // "C:\Users\me\Desktop" quietly writes to "C:\Users\me". SHGetKnownFolderPath
+    // returns the path without it, so it has to be added here.
+    std::wstring spec = baseName + L".lnk";
+    std::wstring desktopDir = desktop + L"\\";
+    WCHAR unique[MAX_PATH];
+    if (!PathYetAnotherMakeUniqueName(unique, desktopDir.c_str(), nullptr,
+                                      spec.c_str())) {
+        Wh_Log(L"No unique shortcut name for %s", spec.c_str());
+        return false;
+    }
+    std::wstring shortcutFile = unique;
 
     if (targetPath.size() > 4 && _wcsicmp(targetPath.c_str() + targetPath.size() - 4, L".lnk") == 0) {
         if (GetFileAttributesW(targetPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
-            if (CopyFileW(targetPath.c_str(), shortcutFile.c_str(), FALSE)) {
+            // Fail rather than overwrite. The name was unique a moment ago, so
+            // this only fires if something else got there in between.
+            if (CopyFileW(targetPath.c_str(), shortcutFile.c_str(), TRUE)) {
                 return true;
             }
         }
@@ -2288,7 +2311,16 @@ inline bool CreateDesktopShortcut(const std::wstring& targetPath, const std::wst
     hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLinkW, reinterpret_cast<void**>(&psl));
     if (FAILED(hr) || !psl) return false;
 
-    psl->SetPath(targetPath.c_str());
+    // Logged rather than fatal. SetPath is documented for file-system paths,
+    // and UWP entries come through here as "shell:AppsFolder\<AUMID>", so a
+    // failure here is exactly the case worth seeing in a log -- but refusing
+    // outright would stop creating links that may be working today, which is
+    // not something to change without testing it.
+    hr = psl->SetPath(targetPath.c_str());
+    if (FAILED(hr)) {
+        Wh_Log(L"SetPath(%s) failed: %08X", targetPath.c_str(),
+               static_cast<unsigned>(hr));
+    }
 
     size_t lastSlash = targetPath.find_last_of(L"\\/");
     if (lastSlash != std::wstring::npos && !targetPath.starts_with(L"shell:")) {
