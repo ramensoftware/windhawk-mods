@@ -2,7 +2,7 @@
 // @id              taskbar-disk-space-label
 // @name            Taskbar Disk Space Label
 // @description     A simple disk space label integrated into the Windows taskbar
-// @version         0.52
+// @version         0.53
 // @author          allelimo
 // @github          https://github.com/allelimo
 // @include         explorer.exe
@@ -48,7 +48,7 @@ Windows 11 only.
   $description: Select for the current user available free space, unselect for the total free space.  
 - showUnit: true
   $name: Show unit 
-  $description: Show the unit (Gb) for the disk space.
+  $description: Show the unit (GB) for the disk space.
 */
 // ==/WindhawkModSettings==
 
@@ -57,6 +57,8 @@ Windows 11 only.
 #endif
 
 #include <atomic>
+#include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <list>
@@ -85,11 +87,9 @@ static std::atomic<HWND> g_taskbarWnd{nullptr};
 static std::atomic_bool g_labelInjected{false};
 static std::atomic_bool g_systemTrayModuleHooked{false};
 
-[[clang::no_destroy]] static ColumnDefinition g_labelColumn{nullptr};  // g_labelColumn
+[[clang::no_destroy]] static ColumnDefinition g_labelColumn{nullptr};
 [[clang::no_destroy]] static std::list<FrameworkElement::Loaded_revoker>
     g_loadedRevokers;
-
-static HINSTANCE g_modInstance = nullptr;
 
 static std::atomic_bool g_unloading{false};
 static HANDLE g_retryThread = nullptr;
@@ -487,7 +487,7 @@ static std::wstring GetDiskRootPath() {
 static void GetDiskInfo() {
     ULARGE_INTEGER freeAvailable, totalBytes, totalFree;
 
-    // Call GetDiskFreeSpaceExA for the selected drive
+    
     if (GetDiskFreeSpaceExW(GetDiskRootPath().c_str(), &freeAvailable,
                             &totalBytes, &totalFree)) {
 
@@ -510,6 +510,7 @@ static void GetDiskInfo() {
 // -----------------------------------------------------------------------------
 // Format space information to be displayed on the taskbar label
 // -----------------------------------------------------------------------------
+
 static std::wstring FormatSpace(int spacefree,
                                 int spacetot) {
     
@@ -521,14 +522,14 @@ static std::wstring FormatSpace(int spacefree,
     }
 
     if (g_settings.showUnit)
-        return label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot) + L" Gb";
+        return label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot) + L" GB";
     else
         return label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot);
 }
 
 
 static void LoadSettings() {
-    //g_settings.mysettings_diskLetter = Wh_GetStringSetting(L"diskLetter");
+    
     g_settings.mysettings_fontSize = Wh_GetIntSetting(L"fontSize");
     g_settings.mysettings_diskLetter = WindhawkUtils::StringSetting::make(L"diskLetter").get();
     g_settings.userFreeSpace =  Wh_GetIntSetting(L"userFreeSpace");
@@ -541,7 +542,7 @@ static void LoadSettings() {
 
 
 static void RefreshDiskSpaceLabel(void*) {
-    //LoadSettings();
+    
     if (g_labelText) {
         GetDiskInfo();
         g_labelText.Text(FormatSpace(myspacefree, myspacetot));
@@ -604,11 +605,8 @@ static void AddDiskSpaceLabel(void* param) {
         g_labelInjected.store(true);
         return;
     }
-
-    //g_labelText = nullptr;
-    //g_labelColumn = nullptr;
+     
     ReleaseOwnedXaml();
-
     
     g_labelText = TextBlock();
 
@@ -642,7 +640,7 @@ static void AddDiskSpaceLabel(void* param) {
             return;
         }
 
-    auto columns = trayGrid.ColumnDefinitions(); //allelimo check
+        auto columns = trayGrid.ColumnDefinitions(); 
 
         g_labelColumn = ColumnDefinition();
 
@@ -660,13 +658,13 @@ static void AddDiskSpaceLabel(void* param) {
             Grid::SetColumn(child, Grid::GetColumn(child) + 1);
         }
 
-        Grid::SetColumn(g_labelText, 0); //allelimo check
+        Grid::SetColumn(g_labelText, 0);
 
 
         children.InsertAt(0, g_labelText);
     }
 
-    // In AddDiskSpaceLabel, after the TextBlock is inserted:
+    
     g_refreshTimer = DispatcherTimer();
     g_refreshTimer.Interval(std::chrono::seconds(60));
     g_refreshTickToken = g_refreshTimer.Tick(
@@ -680,57 +678,6 @@ static void AddDiskSpaceLabel(void* param) {
 }
 
 static void RemoveDiskSpaceLabel(void*) {
-    // if (g_labelText) {
-    //     auto parentElement =
-    //         VisualTreeHelper::GetParent(g_labelText).try_as<FrameworkElement>();
-
-    //     auto parent = parentElement.try_as<Panel>();
-
-    //     if (parent) {
-    //         auto children = parent.Children();
-
-    //         uint32_t index = 0;
-
-    //         if (children.IndexOf(g_labelText, index)) {
-    //             children.RemoveAt(index);
-    //         }
-
-    //         auto parentGrid = parentElement.try_as<Grid>();
-
-    //         if (parentGrid && g_labelColumn) {   //allelimo check
-    //             auto columns = parentGrid.ColumnDefinitions();
-
-    //             uint32_t columnIndex = 0;
-    //             if (columns.IndexOf(g_labelColumn, columnIndex)) {
-    //                 for (uint32_t i = 0; i < children.Size(); i++) {
-    //                     auto child =
-    //                         children.GetAt(i).try_as<FrameworkElement>();
-
-    //                     if (!child) {
-    //                         continue;
-    //                     }
-
-    //                     int currentColumn = Grid::GetColumn(child);
-
-    //                     if (currentColumn > static_cast<int>(columnIndex)) {
-    //                         Grid::SetColumn(child, currentColumn - 1);
-    //                     }
-    //                 }
-
-    //                 columns.RemoveAt(columnIndex);
-    //             }
-    //         }
-
-
-    //     }
-    // }
-
-    // // In RemoveDiskSpaceLabel, before g_diskText is released:
-    // if (g_refreshTimer) {
-    //     g_refreshTimer.Stop();
-    //     g_refreshTimer.Tick(g_refreshTickToken);
-    //     g_refreshTimer = nullptr;
-    // }
 
     ReleaseOwnedXaml();
     g_loadedRevokers.clear();
@@ -755,18 +702,6 @@ static void ApplyDiskSpaceLabelIfAvailable() {
     }
 }
 
-// static DWORD WINAPI RetryThreadProc(LPVOID) {
-//     for (int i = 0; i < 5 && !g_unloading.load(); i++) {
-//         if (g_labelInjected.load() || g_unloading.load()) {
-//             break;
-//         }
-
-//         Wh_Log(L"Taskbar injection retry %d", i + 1);
-//         ApplyDiskSpaceLabelIfAvailable();
-//     }
-
-//     return 0;
-// }
 
 // -----------------------------------------------------------------------------
 // System tray rebuild hook
@@ -895,24 +830,7 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
     return module;
 }
 
-static DWORD PumpWaitForThread(HANDLE thread) {
-    if (!thread) {
-        return WAIT_OBJECT_0;
-    }
 
-    DWORD result;
-    do {
-        result = MsgWaitForMultipleObjects(1, &thread, FALSE, INFINITE,
-                                           QS_SENDMESSAGE);
-
-        if (result == WAIT_OBJECT_0 + 1) {
-            MSG message;
-            PeekMessageW(&message, nullptr, 0, 0, PM_NOREMOVE);
-        }
-    } while (result == WAIT_OBJECT_0 + 1);
-
-    return result;
-}
 
 // -----------------------------------------------------------------------------
 // Windhawk
@@ -922,19 +840,6 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Taskbar Disk Space Label loading");
 
     g_unloading.store(false);
-
-    HMODULE module = nullptr;
-
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                            reinterpret_cast<LPCWSTR>(&g_modInstance),
-                            &module)) {
-        Wh_Log(L"ERROR: Could not resolve mod module handle");
-
-        return FALSE;
-    }
-
-    g_modInstance = reinterpret_cast<HINSTANCE>(module);
 
     if (!HookTaskbarDllSymbols()) {
         Wh_Log(L"ERROR: Failed to resolve taskbar.dll symbols");
@@ -972,12 +877,8 @@ void Wh_ModAfterInit() {
 
     ApplyDiskSpaceLabelIfAvailable();
 
-    // if (g_retryStopEvent) {
-    // g_retryThread =
-    //     CreateThread(nullptr, 0, RetryThreadProc, nullptr, 0, nullptr);
-    //}
 }
-//}
+
 
 void Wh_ModBeforeUninit() {
     g_unloading.store(true);
@@ -985,12 +886,6 @@ void Wh_ModBeforeUninit() {
 
 void Wh_ModUninit() {
     g_unloading.store(true);
-
-    if (g_retryThread) {
-        PumpWaitForThread(g_retryThread);
-        CloseHandle(g_retryThread);
-        g_retryThread = nullptr;
-    }
 
     bool removed = false;
 
@@ -1011,7 +906,7 @@ void Wh_ModUninit() {
     }
 
     if (!removed && g_labelInjected.load()) {
-        Wh_Log(L"ERROR: Could not remove timer XAML objects before unload");
+        Wh_Log(L"ERROR: Could not remove label XAML objects before unload");
     }
 
     Wh_Log(L"Taskbar Disk Space Label unloaded");
