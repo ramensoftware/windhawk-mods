@@ -2,11 +2,11 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.113
+// @version         0.114
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
-// @architecture    x86-64
+// @architecture    amd64
 // @compilerOptions -lwevtapi
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
@@ -40,7 +40,7 @@ initialize instead of using unverified addresses.
 
 ## Known Issues
 
-* ARM64 isn't supported yet; the mod safely refuses to initialize on ARM64 systems.
+* ARM64 isn't supported yet.
 * If DWM stops servicing its scene thread while the mod is being disabled or updated,
   a transformed window can remain deformed until DWM recreates its visual.
   Try minimizing and restoring or reopening the affected window to recover.
@@ -128,16 +128,6 @@ the combined mod is not offered under GPLv2.
 #include <vector>
 
 #include <windhawk_utils.h>
-
-#if defined(_M_ARM64)
-
-BOOL Wh_ModInit()
-{
-    Wh_Log(L"ARM64 isn't supported");
-    return FALSE;
-}
-
-#else
 
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
@@ -2599,78 +2589,58 @@ static bool InitializeDwmHooks()
     }
     // Exact PDB candidates; the selected core is validated below.
     WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
-        {{L"public: bool __cdecl CWindowData::IsGhostWindow(struct HWND__ * *)const ",
-          L"?IsGhostWindow@CWindowData@@QEBA_NPEAPEAUHWND__@@@Z"},
+        {{L"public: bool __cdecl CWindowData::IsGhostWindow(struct HWND__ * *)const "},
          &g_isGhostWindowOriginal,
          nullptr,
          true},
-        {{L"public: void __cdecl CWindowList::OnPositionChange(class CWindowData *,bool)",
-          L"?OnPositionChange@CWindowList@@QEAAXPEAVCWindowData@@_N@Z"},
+        {{L"public: void __cdecl CWindowList::OnPositionChange(class CWindowData *,bool)"},
          &g_onPositionChangeOriginal,
          OnPositionChangeHook,
          true},
         {{L"public: class CWindowData * __cdecl "
-           L"CWindowList::FindWindowDataByHwnd(struct HWND__ *)",
-          L"?FindWindowDataByHwnd@CWindowList@@QEAAPEAVCWindowData@@PEAUHWND__@@@Z"},
+           L"CWindowList::FindWindowDataByHwnd(struct HWND__ *)"},
          &g_findWindowDataByHwnd,
          nullptr,
          true},
         {{L"public: long __cdecl CWindowList::GetSyncedWindowData("
-           L"struct IDwmWindow *,bool,class CWindowData * *)",
-          L"?GetSyncedWindowData@CWindowList@@"
-           L"QEAAJPEAUIDwmWindow@@_NPEAPEAVCWindowData@@@Z"},
+           L"struct IDwmWindow *,bool,class CWindowData * *)"},
          &g_getSyncedWindowDataLong,
          nullptr,
          true},
         {{L"public: void __cdecl CWindowList::GetSyncedWindowData("
-           L"struct IDwmWindow *,bool,class CWindowData * *)",
-          L"?GetSyncedWindowData@CWindowList@@"
-           L"QEAAXPEAUIDwmWindow@@_NPEAPEAVCWindowData@@@Z"},
+           L"struct IDwmWindow *,bool,class CWindowData * *)"},
          &g_getSyncedWindowDataVoid,
          nullptr,
          true},
         {{L"public: virtual long __cdecl CWindowList::WindowTransitionChange("
            L"struct IDwmWindow *,enum DWMTRANSITION_TARGET,struct tagRECT const &,"
            L"struct tagRECT const &,struct tagRECT const &,struct tagRECT const &,"
-           L"struct tagRECT const &)",
-          L"?WindowTransitionChange@CWindowList@@"
-           L"UEAAJPEAUIDwmWindow@@W4DWMTRANSITION_TARGET@@"
-           L"AEBUtagRECT@@2222@Z"},
+           L"struct tagRECT const &)"},
          &g_windowTransitionChangeOriginal,
          WindowTransitionChangeHook,
          true},
-        {{L"private: void __cdecl CWindowList::CheckForMaximizedChange(class CWindowData *)",
-          L"?CheckForMaximizedChange@CWindowList@@AEAAXPEAVCWindowData@@@Z"},
+        {{L"private: void __cdecl CWindowList::CheckForMaximizedChange(class CWindowData *)"},
          &g_checkForMaximizedChangeOriginal,
          CheckForMaximizedChangeHook,
          true},
         {{L"public: long __cdecl CTopLevelWindow3D::"
            L"StartAnimationForMaximizeSnapTransition("
-           L"enum CTopLevelWindow3D::WindowAnimationType,struct tagRECT const &)",
-          L"?StartAnimationForMaximizeSnapTransition@"
-           L"CTopLevelWindow3D@@QEAAJW4WindowAnimationType@1@"
-           L"AEBUtagRECT@@@Z"},
+           L"enum CTopLevelWindow3D::WindowAnimationType,struct tagRECT const &)"},
          &g_startAnimationForMaximizeSnapTransitionOriginal,
          StartAnimationForMaximizeSnapTransitionHook,
          true},
         {{L"public: long __cdecl CTopLevelWindow3D::StartAnimation("
-           L"enum CTopLevelWindow3D::WindowAnimationType)",
-          L"?StartAnimation@CTopLevelWindow3D@@"
-           L"QEAAJW4WindowAnimationType@1@@Z"},
+           L"enum CTopLevelWindow3D::WindowAnimationType)"},
          &g_topLevelWindow3DStartAnimationOriginal,
          TopLevelWindow3DStartAnimationHook,
          true},
         {{L"public: class CVisualProxy * __cdecl "
-           L"CTopLevelWindow::GetCanvasRootVisualProxy(void)",
-          L"?GetCanvasRootVisualProxy@CTopLevelWindow@@"
-           L"QEAAPEAVCVisualProxy@@XZ"},
+           L"CTopLevelWindow::GetCanvasRootVisualProxy(void)"},
          &g_getCanvasRootVisualProxy,
          nullptr,
          true},
         {{L"public: class CVisual * __cdecl "
-           L"CTopLevelWindow::GetRootVisualNoAddRef(enum TLWRootVisualType)",
-          L"?GetRootVisualNoAddRef@CTopLevelWindow@@"
-           L"QEAAPEAVCVisual@@W4TLWRootVisualType@@@Z"},
+           L"CTopLevelWindow::GetRootVisualNoAddRef(enum TLWRootVisualType)"},
          &g_topLevelWindowGetRootVisual,
          nullptr,
          true},
@@ -2683,121 +2653,96 @@ static bool InitializeDwmHooks()
         {{L"public: class CWindowData * __cdecl "
            L"CTopLevelWindow::GetWindowData(void)const",
           L"public: class CWindowData * __cdecl "
-           L"CTopLevelWindow::GetWindowData(void)const ",
-          L"?GetWindowData@CTopLevelWindow@@QEBAPEAVCWindowData@@XZ"},
+           L"CTopLevelWindow::GetWindowData(void)const "},
          &g_topLevelWindowGetWindowData,
          nullptr,
          true},
         {{L"public: long __cdecl CMatrixTransformProxy::Update("
-           L"struct _MilMatrix3x2D const &)",
-          L"?Update@CMatrixTransformProxy@@"
-           L"QEAAJAEBU_MilMatrix3x2D@@@Z"},
+           L"struct _MilMatrix3x2D const &)"},
          &g_cMatrixTransformProxyUpdate,
          nullptr,
          true},
         {{L"public: long __cdecl CMatrixTransformProxy::Update("
-           L"struct D2D_MATRIX_3X2_F const &)",
-          L"?Update@CMatrixTransformProxy@@"
-           L"QEAAJAEBUD2D_MATRIX_3X2_F@@@Z"},
+           L"struct D2D_MATRIX_3X2_F const &)"},
          &g_cMatrixTransformProxyUpdateFloat,
          nullptr,
          true},
         {{L"public: long __cdecl CVisualProxy::SetTransform("
-           L"class CBaseTransformProxy *)",
-          L"?SetTransform@CVisualProxy@@QEAAJPEAVCBaseTransformProxy@@@Z"},
+           L"class CBaseTransformProxy *)"},
          &g_cVisualProxySetTransform,
          nullptr,
          true},
         {{L"protected: long __cdecl CCompositor::CreateProxy<"
-           L"class CMatrixTransformProxy>(class CMatrixTransformProxy * *)",
-          L"??$CreateProxy@VCMatrixTransformProxy@@@CCompositor@@"
-           L"IEAAJPEAPEAVCMatrixTransformProxy@@@Z"},
+           L"class CMatrixTransformProxy>(class CMatrixTransformProxy * *)"},
          &g_createMatrixTransformProxy,
          nullptr,
          true},
-        {{L"public: unsigned long __cdecl CBaseObject::Release(void)",
-          L"?Release@CBaseObject@@QEAAKXZ"},
+        {{L"public: unsigned long __cdecl CBaseObject::Release(void)"},
          &g_cBaseObjectRelease,
          nullptr,
          true},
         {{L"private: static class CDesktopManager * "
-           L"CDesktopManager::s_pDesktopManagerInstance",
-          L"?s_pDesktopManagerInstance@CDesktopManager@@0PEAV1@EA"},
+           L"CDesktopManager::s_pDesktopManagerInstance"},
          &g_desktopManagerInstanceAddress,
          nullptr,
          true},
-        {{L"private: long __cdecl CDesktopManager::Initialize(struct IUnknown *)",
-          L"?Initialize@CDesktopManager@@AEAAJPEAUIUnknown@@@Z"},
+        {{L"private: long __cdecl CDesktopManager::Initialize(struct IUnknown *)"},
          &g_desktopManagerInitializeFunction,
          nullptr,
          true},
-        {{L"public: static long __cdecl CCompositor::Create(class CCompositor * *)",
-          L"?Create@CCompositor@@SAJPEAPEAV1@@Z"},
+        {{L"public: static long __cdecl CCompositor::Create(class CCompositor * *)"},
          &g_cCompositorCreateFunction,
          nullptr,
          true},
         {{L"private: static void __cdecl "
-           L"CDesktopManager::HandleThreadMessage(unsigned int,unsigned __int64,__int64)",
-          L"?HandleThreadMessage@CDesktopManager@@CAXI_K_J@Z"},
+           L"CDesktopManager::HandleThreadMessage(unsigned int,unsigned __int64,__int64)"},
          &g_desktopManagerHandleThreadMessageOriginal,
          DesktopManagerHandleThreadMessageHook,
          true},
-        {{L"public: long __cdecl CDesktopManager::PostStartAnimations(void)",
-           L"?PostStartAnimations@CDesktopManager@@QEAAJXZ"},
+        {{L"public: long __cdecl CDesktopManager::PostStartAnimations(void)"},
          &g_desktopManagerPostStartAnimations,
          nullptr,
          true},
-        {{L"private: __cdecl CTopLevelWindow::CTopLevelWindow(class CWindowData *,bool)",
-           L"??0CTopLevelWindow@@AEAA@PEAVCWindowData@@_N@Z"},
+        {{L"private: __cdecl CTopLevelWindow::CTopLevelWindow(class CWindowData *,bool)"},
          &g_topLevelWindowConstructorFunction,
          nullptr,
          true},
         {{L"protected: virtual __cdecl CTopLevelWindow::~CTopLevelWindow(void)",
           L"public: virtual __cdecl CTopLevelWindow::~CTopLevelWindow(void)",
-          L"private: virtual __cdecl CTopLevelWindow::~CTopLevelWindow(void)",
-          L"??1CTopLevelWindow@@EEAA@XZ"},
+          L"private: virtual __cdecl CTopLevelWindow::~CTopLevelWindow(void)"},
          &g_topLevelWindowDestructorOriginal,
          TopLevelWindowDestructorHook,
          true},
-        {{L"public: void __cdecl CTopLevelWindow3D::SetWindowData(class CWindowData *)",
-          L"?SetWindowData@CTopLevelWindow3D@@"
-           L"QEAAXPEAVCWindowData@@@Z"},
+        {{L"public: void __cdecl CTopLevelWindow3D::SetWindowData(class CWindowData *)"},
          &g_topLevelWindow3DSetWindowDataOriginal,
          TopLevelWindow3DSetWindowDataHook,
          true},
-        {{L"public: __cdecl CWindowData::~CWindowData(void)",
-          L"??1CWindowData@@QEAA@XZ"},
+        {{L"public: __cdecl CWindowData::~CWindowData(void)"},
          &g_windowDataDestructorOriginal,
          WindowDataDestructorHook,
          true},
-        {{L"private: long __cdecl CWindowList::EnsureTopLevelWindow(class CWindowData *)",
-          L"?EnsureTopLevelWindow@CWindowList@@"
-           L"AEAAJPEAVCWindowData@@@Z"},
+        {{L"private: long __cdecl CWindowList::EnsureTopLevelWindow(class CWindowData *)"},
          &g_ensureTopLevelWindowOriginal,
          EnsureTopLevelWindowHook,
          true},
         {{L"protected: virtual __cdecl CTopLevelWindow3D::~CTopLevelWindow3D(void)",
-          L"public: virtual __cdecl CTopLevelWindow3D::~CTopLevelWindow3D(void)",
-          L"??1CTopLevelWindow3D@@MEAA@XZ"},
+          L"public: virtual __cdecl CTopLevelWindow3D::~CTopLevelWindow3D(void)"},
          &g_topLevelWindow3DDestructorOriginal,
          TopLevelWindow3DDestructorHook,
          true},
-        {{L"public: long __cdecl CWindowList::ForceUpdateScene(void)",
-          L"?ForceUpdateScene@CWindowList@@QEAAJXZ"},
+        {{L"public: long __cdecl CWindowList::ForceUpdateScene(void)"},
          &g_windowListForceUpdateSceneOriginal,
          ForceUpdateSceneHook,
          true},
-        {{L"public: virtual long __cdecl CWindowList::UpdateScene(void)",
-          L"?UpdateScene@CWindowList@@UEAAJXZ"},
+        {{L"public: virtual long __cdecl CWindowList::UpdateScene(void)"},
          &g_windowListUpdateSceneOriginal,
          UpdateSceneHook,
          true},
-        {{L"private: void __cdecl CDesktopManager::AdvanceTimelines(double)",
-          L"?AdvanceTimelines@CDesktopManager@@AEAAXN@Z"},
+        {{L"private: void __cdecl CDesktopManager::AdvanceTimelines(double)"},
          &g_desktopManagerAdvanceTimelinesOriginal,
          AdvanceTimelinesHook,
          true},
-        {{L"const CTopLevelWindow::`vftable'", L"??_7CTopLevelWindow@@6B@"},
+        {{L"const CTopLevelWindow::`vftable'"},
          &g_topLevelWindowVtableSymbol,
          nullptr,
          true},
@@ -2805,22 +2750,20 @@ static bool InitializeDwmHooks()
          &g_topLevelWindow3DVtableSymbol,
          nullptr,
          true},
-        {{L"const CDesktopManager::`vftable'", L"??_7CDesktopManager@@6B@"},
+        {{L"const CDesktopManager::`vftable'"},
          &g_desktopManagerVtableSymbol,
          nullptr,
          true},
-        {{L"const CWindowList::`vftable'", L"??_7CWindowList@@6B@"},
+        {{L"const CWindowList::`vftable'"},
          &g_windowListVtableSymbol,
          nullptr,
          true},
         // Offset-0 base on both compositor layouts; CBaseObject is at +8.
-        // HookSymbols uses undecorated names by default. Do not reuse the old
-        // decorated-only lookup: its missing-symbol result may already be cached.
         {{L"const CCompositor::`vftable'{for `Windows::UI::Composition::IInteropCompositorPartnerCallback'}"},
          &g_compositorVtableSymbol,
          nullptr,
          true},
-        {{L"const CVisualProxy::`vftable'", L"??_7CVisualProxy@@6B@"},
+        {{L"const CVisualProxy::`vftable'"},
          &g_visualProxyVtableSymbol,
          nullptr,
          true},
@@ -2828,7 +2771,7 @@ static bool InitializeDwmHooks()
          &g_redirectVisualProxyVtableSymbol, nullptr, true},
         {{L"const CContainerVisualProxy::`vftable'"},
          &g_containerVisualProxyVtableSymbol, nullptr, true},
-        {{L"const CMatrixTransformProxy::`vftable'", L"??_7CMatrixTransformProxy@@6B@"},
+        {{L"const CMatrixTransformProxy::`vftable'"},
          &g_matrixTransformProxyVtableSymbol,
          nullptr,
          true}};
@@ -3180,14 +3123,10 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
         }
         else
         {
-            // Lazy initialization is needed for already-open/desktop-restored
-            // windows, but never force a hidden, minimized or cloaked visual.
-            if (!ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D) &&
-                CanInitializeMissingWindowVisual(hwnd) &&
-                g_ensureTopLevelWindowOriginal(windowList, windowData) >= 0)
-            {
-                ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D);
-            }
+            // Observe DWM's published visual. Calling EnsureTopLevelWindow here can
+            // re-enter visual creation for an already-open Chromium window and
+            // stall DWM; the native hook refreshes the mapping when DWM creates it.
+            ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D);
             if (topLevelWindow)
             {
                 topLevelVisualProxy = GetTopLevelVisualProxy(topLevelWindow,
@@ -3342,12 +3281,9 @@ static void BackfillExistingDwmWindowMappings()
         }
         void* topLevelWindow = nullptr;
         void* topLevelWindow3D = nullptr;
+        // Backfill is discovery-only. Let DWM create missing visuals through its
+        // normal lifecycle so existing Chromium windows can't re-enter creation.
         bool mapped = ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D);
-        // As in binding, initialize only verified window data on its scene owner.
-        if (!mapped && g_ensureTopLevelWindowOriginal(windowList, windowData) >= 0)
-        {
-            mapped = ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D);
-        }
         if (mapped)
         {
             g_existingWindowBackfillMapped.fetch_add(1, std::memory_order_relaxed);
@@ -7409,4 +7345,3 @@ void Wh_ModBeforeUninit()
     UninitializeDpiSupport();
 }
 
-#endif
