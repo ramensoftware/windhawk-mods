@@ -157,8 +157,8 @@ and make sure that `LogonUI.exe` is in the list.
 - resDllPath: ""
   $name: (Advanced) AuthUX.dll/winsrv.dll path
   $name:ko-KR: (고급) AuthUX.dll/winsrv.dll 경로
-  $description: Path to your copy of winsrv.dll from Windows Vista/7 or AuthUX.dll build with BSDR. Hardcoded resources will be used instead if this is not set or missing.
-  $description:ko-KR: Windows Vista/7의 winsrv.dll 혹은 BSDR이 포함된 AuthUX.dll 빌드의 경로를 입력하세요. 비워두거나 파일을 찾을 수 없으면 하드코딩된 리소스가 대신 사용됩니다.
+  $description: Path to your copy of winsrv.dll from Windows Vista/7 or AuthUX.dll build with BSDR. Dialog style must be set to Custom for this setting to take effect.
+  $description:ko-KR: Windows Vista/7의 winsrv.dll 혹은 BSDR이 포함된 AuthUX.dll 빌드의 경로를 입력하세요. 대화 상자 스타일이 Custom일 때만 이 설정이 적용됩니다.
 - noSafetyChecks: false
   $name: (Advanced) Skip safety checks before restoring the classic logoff sequence
   $name:ko-KR: (고급) 고전 로그오프 절차를 복원하기 전 안전 검사 생략
@@ -946,11 +946,11 @@ static constexpr LangSet RES_STRINGS_7[] = {
         .BLOCKINGAPP_RESTART = L"Ce programme vous empêche de redémarrer Windows.",
         .WAITINGFOR = L"(En attente)",
         .BLOCKING_BGAPPS = L"Attente de la fermeture des programmes en arrière-plan.",
-        .WARNING_SHUTDOWN = L"Si vous forcez l’arrêt, vous risquez de perdre les données non enregistrées.\nVoulez-vous vraiment forcer l’arrêt ?",
-        .WARNING_LOGOFF = L"Si vous forcez la déconnexion, vous risquez de perdre les données non enregistrées.\nVoulez-vous vraiment forcer la déconnexion ?",
-        .WARNING_RESTART = L"Si vous forcez le redémarrage, vous risquez de perdre les données non enregistrées.\nVoulez-vous vraiment forcer le redémarrage ?",
-        .BLOCKING_APPCOUNT_MULTI = L"Encore %d programmes doivent se fermer :",
-        .BLOCKING_APPCOUNT_SINGLE = L"Encore 1 programme doit se fermer :",
+        .WARNING_SHUTDOWN = L"Si vous forcez l’arrêt, vous risquez de perdre les données non enregistrées.\nVoulez-vous vraiment forcer l’arrêt\u00A0?",
+        .WARNING_LOGOFF = L"Si vous forcez la déconnexion, vous risquez de perdre les données non enregistrées.\nVoulez-vous vraiment forcer la déconnexion\u00A0?",
+        .WARNING_RESTART = L"Si vous forcez le redémarrage, vous risquez de perdre les données non enregistrées.\nVoulez-vous vraiment forcer le redémarrage\u00A0?",
+        .BLOCKING_APPCOUNT_MULTI = L"Encore %d programmes doivent se fermer\u00A0:",
+        .BLOCKING_APPCOUNT_SINGLE = L"Encore 1 programme doit se fermer\u00A0:",
         .spForceButton = R(75, 191, 110, 13),
     },
     {
@@ -1659,7 +1659,7 @@ static constexpr LangSet RES_STRINGS_VISTA[] = {
     },
     {
         .LANG_ID = L"fr-FR",
-        .DLG_TITLE = L"Ces programmes sont en cours d’exécution :",
+        .DLG_TITLE = L"Ces programmes sont en cours d’exécution\u00A0:",
         .BTN_CANCEL = L"Annuler",
         .DESC_SHUTDOWN = L"Pour fermer ces programmes et éteindre votre ordinateur,\ncliquez sur Arrêter maintenant.\nVous risquez de perdre les données non enregistrées.",
         .BTN_SHUTDOWN = L"A&rrêter maintenant",
@@ -7434,7 +7434,9 @@ void CustomBSDR::LoadVariantSetting() {
 
                     for (const auto& langSet : (isUsingVistaRes ? RES_STRINGS_VISTA : RES_STRINGS_7)) {
                         // pt-BR and zh-CN is intentionally preferred here
-                        if (langSet.LANG_ID[0] == resolved[0] && langSet.LANG_ID[1] == resolved[1]) {
+                        if (wcslen(resolved) >= 2 &&
+                            langSet.LANG_ID[0] == resolved[0] && langSet.LANG_ID[1] == resolved[1] &&
+                            (resolved[2] == L'-' || resolved[2] == L'\0')) {
                             currentLangSet = &langSet;
                             langCode = langSet.LANG_ID;
                             return;
@@ -8248,9 +8250,8 @@ BOOL Wh_ModSettingsChanged(BOOL* bReload) {
 
     CustomBSDR::modernScrolling.store(Wh_GetIntSetting(L"modernScrolling"));
 
-    // resDllPath: only used by LogonUI during shutdown sequence which is unlikely timing for a settings change
-    // and reloading already loaded resources/dialog etc. is tedious so just ignore it
-    // Ditto for disableAsyncLogoff: the dialog has already shown in one desktop (which can't be changed on runtime),
+    // disableAsyncLogoff: only used by LogonUI during shutdown sequence which is unlikely timing for a settings change
+    // also the dialog has already shown in one desktop (which can't be changed on runtime),
     // and there's no point of reloading the mod (for updating some hooks) only to force close(cancel) the dialog
     // Note: LogonUI just exits when idle. It isn't even running most of the time;
     // it's more likely to be not running when the user changes the mod settings from the WH UI
