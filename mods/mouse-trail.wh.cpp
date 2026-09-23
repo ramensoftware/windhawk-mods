@@ -7112,8 +7112,7 @@ static void HotkeyRegisterAll() {
     // failure is logged.
     const int ids[3] = { kHotkeyIdToggle, kHotkeyIdTrail, kHotkeyIdParticles };
     for (int i = 0; i < 3; i++) {
-        SetLastError(0);
-    // (hotkey unregister failure logging removed)
+        UnregisterHotKey(g_overlayHwnd, ids[i]);
     }
     UINT mods = HotkeyModFlags();
     int vks[3] = { g_hotkeyToggleVK, g_hotkeyTrailVK, g_hotkeyParticlesVK };
@@ -11678,26 +11677,12 @@ void WINAPI EntryPoint_Hook() {
     ExitThread(0);
 }
 BOOL Wh_ModInit() {
+    // Deny load in session 0, as it's not necessary, and may cause issues.
     DWORD sessionId = 0;
     BOOL gotSession = ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
     if (gotSession && sessionId == 0) {
         return FALSE;
     }
-
-    wchar_t exeName[MAX_PATH] = L"";
-    {
-        WCHAR fullPath[MAX_PATH];
-        DWORD n = GetModuleFileNameW(nullptr, fullPath, ARRAYSIZE(fullPath));
-        if (n == 0 || n >= ARRAYSIZE(fullPath)) {
-            return FALSE;
-        }
-        const wchar_t* base = fullPath;
-        for (const wchar_t* p = fullPath; *p; p++) {
-            if (*p == L'\\' || *p == L'/') base = p + 1;
-        }
-        wcsncpy_s(exeName, ARRAYSIZE(exeName), base, _TRUNCATE);
-    }
-    bool isWindhawkSelf = (wcscmp(exeName, L"windhawk.exe") == 0);
 
     bool isExcluded = false;
     bool isToolModProcess = false;
@@ -11705,15 +11690,14 @@ BOOL Wh_ModInit() {
     int argc;
     LPWSTR *argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
     }
-    if (isWindhawkSelf) {
-        for (int i = 1; i < argc; i++) {
-            if (wcscmp(argv[i], L"-service") == 0 || wcscmp(argv[i], L"-service-start") == 0 ||
-                wcscmp(argv[i], L"-service-stop") == 0) {
-                isExcluded = true;
-                break;
-            }
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 || wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
         }
     }
     for (int i = 1; i < argc - 1; i++) {
@@ -11732,9 +11716,11 @@ BOOL Wh_ModInit() {
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
         }
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running");
             ExitProcess(1);
         }
         if (!WhTool_ModInit()) {
