@@ -10691,6 +10691,15 @@ DWORD WINAPI KeyboardThreadProc(void*) {
 HHOOK g_mouseHook = nullptr;
 HANDLE g_mouseThread = nullptr;
 DWORD g_mouseThreadId = 0;
+
+// Wakes the mouse thread so it re-evaluates whether the wake hook is needed.
+// Posted whenever the island parks or unparks, so the hook is installed and
+// removed in step with that rather than on the thread's backstop timeout.
+inline void NotifyMouseThreadParkedChanged() {
+    if (g_mouseThreadId != 0) {
+        PostThreadMessageW(g_mouseThreadId, WM_NULL, 0, 0);
+    }
+}
 std::atomic<int64_t> g_lastMouseWakeCheckMs = 0;
 
 LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
@@ -10713,14 +10722,17 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
-// The wake-on-hover hook only matters while the island is parked, and it can
-// only park when an auto-hide mode is on. A system-wide WH_MOUSE_LL routes every
-// mouse event on the desktop through this thread, so leaving one installed for
-// users who never enabled auto-hide -- the default, AutoHideIdleSeconds is '0'
-// -- makes the whole desktop's input depend on this process keeping up.
+// A system-wide WH_MOUSE_LL routes every mouse event on the desktop through this
+// thread, so it is only installed while it can actually do something: the hook's
+// whole job is to notice a hover over a *parked* island.
+//
+// Gating on the settings instead was not enough. UnhideOnHover and
+// AutoHideFullscreen both default to true, so every user on defaults still got
+// the hook from startup -- the exact case the gate was added to avoid. Tying it
+// to the parked state means it exists only while the island is actually hidden.
 static bool MouseWakeHookWanted() {
     return g_settings.unhideOnHover &&
-           (g_settings.autoHideIdleSeconds != 0 || g_settings.autoHideFullscreen);
+           g_autoHiddenParked.load(std::memory_order_relaxed);
 }
 
 DWORD WINAPI MouseThreadProc(void*) {
@@ -10752,9 +10764,12 @@ DWORD WINAPI MouseThreadProc(void*) {
             break;
         }
 
-        // Waiting on the stop event keeps shutdown prompt; the timeout is what
-        // lets a settings change be noticed.
-        MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, 200, QS_ALLINPUT);
+        // Blocks until the stop event fires, a message arrives, or the timeout.
+        // The render thread posts a WM_NULL when it parks or unparks, so the hook
+        // is reconciled immediately rather than up to a tick later; the timeout
+        // is only a backstop in case a transition is ever missed. This is a timed
+        // wait, not a spin, so an idle mouse thread costs nothing.
+        MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, 1000, QS_ALLINPUT);
     }
 
     if (g_mouseHook) {
@@ -11510,6 +11525,18 @@ DWORD WINAPI RenderThreadProc(void*) {
             MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE, QS_ALLINPUT);
             nextFrameTarget = std::chrono::steady_clock::now();
             continue;
+        }
+
+        // Sits ahead of the parked branch below on purpose: that branch can block
+        // for up to 1.5s, and the mouse thread needs to hear about a transition
+        // before that, not after.
+        {
+            static bool prevParkedForHook = false;
+            const bool parkedNow = g_autoHiddenParked.load(std::memory_order_relaxed);
+            if (parkedNow != prevParkedForHook) {
+                prevParkedForHook = parkedNow;
+                NotifyMouseThreadParkedChanged();
+            }
         }
 
         if (g_autoHiddenParked.load()) {
