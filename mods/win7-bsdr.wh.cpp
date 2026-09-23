@@ -314,7 +314,7 @@ struct DLGTEMPLATEEX_HEADER {
     WORD      weight;
     BYTE      italic;
     BYTE      charset;
-    WCHAR     typeface[FontLength]; // L"Segoe UI" (9), L"맑은 고딕" (6), L"微軟正黑體" (6), L"メイリオ" (5), or L"微软雅黑" (5)
+    WCHAR     typeface[FontLength]; // L"Segoe UI" (9), L"맑은 고딕" (6), L"微軟正黑體" (6), L"游ゴシック" (6), L"メイリオ" (5), or L"微软雅黑" (5)
 };
 
 struct DLGTEMPLATEEX {
@@ -4677,7 +4677,7 @@ static constexpr unsigned char RES_BSDR_BTN_ICON_LOGOFF_RESTART[] = {
     0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00
 };
 alignas(BITMAPINFOHEADER)
-static constexpr unsigned char RES_BSDR_BTN_BTN_ICON_SHUTDOWN[] = {
+static constexpr unsigned char RES_BSDR_BTN_ICON_SHUTDOWN[] = {
     0x28, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x01, 0x00, 0x20, 0x00, 
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC4, 0x0E, 0x00, 0x00, 0xC4, 0x0E, 0x00, 0x00, 
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x27, 0x7F, 0x00, 0x00, 0x27, 0x7F, 0x00, 0x01, 
@@ -5151,7 +5151,7 @@ HBITMAP CustomBSDR::LoadAlphaBitmap(UINT resourceId, bool forceHardcoded) {
                 pResourceData = RES_BSDR_BTN_ICON_LOGOFF_RESTART;
                 break;
             case IDB_BSDR_BTN_ICON_SHUTDOWN:
-                pResourceData = RES_BSDR_BTN_BTN_ICON_SHUTDOWN;
+                pResourceData = RES_BSDR_BTN_ICON_SHUTDOWN;
                 break;
             default:
                 Wh_Log(L"Unknown image resource ID: %d", resourceId);
@@ -6684,7 +6684,7 @@ LRESULT CALLBACK CustomBSDR::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPA
                     if (foundMeiryo) {
                         dlgTemplateCopy.dlgTemplateHeaderFL5 = RES_DIALOG_HEADER_JP;
                         dlgTemplateCopy.dlgTemplateHeaderFL5.cDlgItems = 8;
-                        dlgTemplateCopy.dlgTemplateHeaderFL5.pointsize = 9; // real difference from original mui; ditto for below pointsize writes
+                        dlgTemplateCopy.dlgTemplateHeaderFL5.pointsize = 9; // real difference from original mui; ditto for below pointsize changes
                     } else {
                         // Fallback to Yu Gothic if Meiryo is not installed (it only comes with Japanese language pack or supplemental fonts on Win10+)
                         // Otherwise ugly fallback font appears, which even ignores the size changes from CreateFontIndirect
@@ -7344,6 +7344,8 @@ void CustomBSDR::GetString(UINT uID, LPWSTR lpBuffer, int cchBufferMax, bool for
                 str = currentLangSet->BLOCKING_APPCOUNT_SINGLE;
                 break;
         }
+        if (!str)
+            str = L"Error: Missing string!";
         wcsncpy_s(lpBuffer, cchBufferMax, str, _TRUNCATE);
     }
 }
@@ -8081,8 +8083,6 @@ BOOL Wh_ModInit() {
         Wh_Log(L"AuthUX installed, skipping LogonUI hooks...");
         return FALSE;
     }
-
-    CustomBSDR::LoadVariantSetting();
 
     if (Wh_GetIntSetting(L"disableAsyncLogoff")) {
         HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
