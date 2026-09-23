@@ -2334,6 +2334,7 @@ Windhawk 高度可定制鼠标拖尾特效模组。基于原生 D3D11 + DirectCo
   $description:zh-TW: 與同一組合鍵同時按下以開關粒子。按鍵名稱同上。留空=關閉。
   $description:ja-JP: 同じ修飾キーと同時押しでパーティクルを切り替えます。キー名は上と同じ。空=無効。
 */
+// ==/WindhawkModSettings==
 #include <windows.h>
 #include <d2d1_1.h>
 #include <dwrite.h>
