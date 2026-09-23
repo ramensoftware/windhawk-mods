@@ -7434,9 +7434,7 @@ void CustomBSDR::LoadVariantSetting() {
 
                     for (const auto& langSet : (isUsingVistaRes ? RES_STRINGS_VISTA : RES_STRINGS_7)) {
                         // pt-BR and zh-CN is intentionally preferred here
-                        if (wcslen(resolved) >= 2 &&
-                            langSet.LANG_ID[0] == resolved[0] && langSet.LANG_ID[1] == resolved[1] &&
-                            (resolved[2] == L'-' || resolved[2] == L'\0')) {
+                        if (langSet.LANG_ID[0] == resolved[0] && langSet.LANG_ID[1] == resolved[1] && (resolved[2] == L'-' || resolved[2] == L'\0')) {
                             currentLangSet = &langSet;
                             langCode = langSet.LANG_ID;
                             return;
