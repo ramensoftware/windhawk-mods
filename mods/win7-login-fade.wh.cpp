@@ -28,16 +28,16 @@
 * The gamma-based fade types will not work with Microsoft Basic Display Adapter, VMware SVGA 3D, and some other display drivers that do not support gamma adjustment. It's also not compatible with NVIDIA driver's reference color mode.
 * To use the `Gamma (Reimplemented)` mode (which is the default), **you'll need to set the `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange` registry value to `0x100`** (DWORD, 256 in decimal) to allow brightness values below the normal level, which is required for the fade effect to work naturally.
 * To add fade effects to sleep and hibernation initiated by the idle timer or power button, enable the "Enable enhanced sleep/hibernate interception" option. This option has limited compatibility compared to the rest of the mod, and is only tested on Windows 10 LTSC 2021 (22H2) and 11 25H2. It may work on 21H2 and later versions; however, this mode is unlikely to work on Windows 10 1903 and earlier versions, unfortunately.
-* Rest of the features are tested to work on Windows 8.1, 10 LTSC 2021 (21H2, 22H2), 11 23H2, 24H2, and 25H2
+* The rest of the features have been tested on Windows 8.1, 10 LTSC 2021 (21H2, 22H2), 11 23H2, 24H2, and 25H2. This mod will not work on Windows 7.
 ## Presets
-* Windows Vista/7 (mod defaults)
+* Windows Vista/7 Style (mod defaults)
   * Logon fade type: Gamma (Reimplemented)
   * Logon fade duration: 1000 ms
   * Logoff fade type: Gamma (Reimplemented)
   * Logoff fade duration: 1000 ms
   * Sleep fade enabled: true
   * Sleep fade duration: 500 ms
-* Windows 8/8.1/10 1507-1809
+* Windows 8/8.1/10 1507-1809 Style
   * Logon fade type: DWM (Original)
   * Logon fade duration: (ignored in this mode)
   * Logoff fade type: Gamma (Reimplemented)
@@ -119,7 +119,6 @@
 #include <windhawk_utils.h>
 #include <atomic>
 #include <sddl.h>
-#include <versionhelpers.h>
 
 #ifdef _WIN64
 #define ENABLE_WINLOGON_HOOKS
