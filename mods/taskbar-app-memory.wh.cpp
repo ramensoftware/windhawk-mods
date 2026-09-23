@@ -2,7 +2,7 @@
 // @id              taskbar-app-memory
 // @name            Taskbar App Memory
 // @description     Apps you choose go back to their place on the taskbar when they reopen, instead of to the end
-// @version         0.2.1
+// @version         0.2.2
 // @author          buedgik
 // @github          https://github.com/buedgik
 // @homepage        https://github.com/buedgik/taskbar-app-memory
@@ -87,26 +87,24 @@ with Taskbar Icon Separators is one such change).
   back; the ticked ones come back in the remembered order.
 - **With the Taskbar Grouping mod**, which can give each window a button of its
   own, a ticked app's first button goes back to its place, and the buttons of
-  its other windows go where Taskbar Grouping's settings say. Their places aren't
-  remembered: an app that sat right next to another app's extra-window buttons
-  can come back on their far side, and dropping an app between another app and
-  that app's extra windows isn't kept. When the first window closes, Taskbar
-  Grouping passes its identity on to another of the app's windows, and that
-  window's button becomes the app's place.
-- **The list is the file `order.txt`**, in
-  `%ProgramData%\Windhawk\Engine\ModsWritable\mod-storage\`, then the mod's
-  folder (`taskbar-app-memory`, or `local@taskbar-app-memory` for a mod
-  compiled in Windhawk's editor), then a folder named after your
-  account's SID (`whoami /user` shows it). It's read when the mod starts and
-  rewritten while it runs: to reset or edit it, disable the mod, delete or
-  edit the file, then enable the mod again. Its first line is
-  `taskbar-app-memory v2`, and each line after it is one app, in
+  its other windows go where Taskbar Grouping's settings say. Their places
+  aren't remembered: an app that sat right next to another app's extra-window
+  buttons can come back on their far side, and dropping an app between another
+  app and that app's extra windows isn't kept. When the first window closes,
+  Taskbar Grouping passes its identity on to another of the app's windows, and
+  that window's button becomes the app's place.
+- **The list is the file `order.txt`**, in the mod's storage folder, in a
+  folder named after your account's SID. With Windhawk's logging on, the mod
+  writes its exact path to the log when it starts ("Order file: ..."). It's
+  read when the mod starts and rewritten while it runs: to reset or edit it,
+  disable the mod, delete or edit the file, then enable the mod again. Its
+  first line is `taskbar-app-memory v1`, and each line after it is one app, in
   order, with tabs between: the day it was last seen, `r` if it's ticked or
-  `-` if not, its App ID, and its name. A file the mod can't
-  read is moved aside as `order.txt.<date>-<time>.bad`; one it can only read
-  in part is copied there, then rewritten with the lines it could read.
-  Uninstalling the mod deletes the folder. Past 256 apps, the ones not seen
-  for the longest time are forgotten, ticked ones last.
+  `-` if not, its App ID, and its name. A file the mod can't read is moved
+  aside as `order.txt.<date>-<time>.bad`; one it can only read in part is
+  copied there, then rewritten with the lines it could read. Uninstalling the
+  mod deletes the folder. Past 256 apps, the ones not seen for the longest
+  time are forgotten, ticked ones last.
 - **If the submenu doesn't appear** (the mod's log says "No menu"), choose
   All apps in the settings, or, with the mod disabled, change the `-` to `r`
   on the app's line in `order.txt`.
@@ -209,6 +207,8 @@ constexpr DWORD kTaskGroupPinned = 1;
 
 // _CreateTBGroup gets the CTaskListWnd itself, and IsOnPrimaryTaskband wants
 // its ITaskListUI part, which is found by its vtable (0x28 bytes in, on 26100).
+bool IsReadable(const void* p, size_t size);
+
 void* TaskListUIOf(void* taskList) {
     static std::atomic<int> knownSlot{-1};
     if (!taskList) {
@@ -218,6 +218,11 @@ void* TaskListUIOf(void* taskList) {
     int slot = knownSlot;
     if (slot >= 0 && slots[slot] == CTaskListWnd_ITaskListUI_vftable) {
         return &slots[slot];
+    }
+    // The object is 0x2C8 bytes on 26100, more than the 64 slots looked at;
+    // checked all the same, in case a later build makes it smaller.
+    if (!IsReadable(taskList, 64 * sizeof(void*))) {
+        return nullptr;
     }
     for (int i = 0; i < 64; i++) {
         if (slots[i] == CTaskListWnd_ITaskListUI_vftable) {
@@ -805,12 +810,10 @@ int PlaceFor(const Buttons& buttons, const std::wstring& key) {
 // A text file per user in the mod's storage folder (the storage is shared by
 // all the accounts on the computer), one app per line, the order being the
 // order of the lines:
-//   v2: <day last seen> TAB <r if marked, - if not> TAB <app key> TAB <name>
-//   v1: <day last seen> TAB <app key>  (read, never written)
+//   <day last seen> TAB <r if marked, - if not> TAB <app key> TAB <name>
 
 constexpr char kFileHeader[] = "taskbar-app-memory v";
-constexpr char kOldFileHeader[] = "taskbar-remember-positions v";
-constexpr unsigned kFileVersion = 2;
+constexpr unsigned kFileVersion = 1;
 constexpr size_t kMaxTitleLength = 256;
 
 std::string ToUtf8(const std::wstring& text) {
@@ -944,11 +947,9 @@ LoadResult LoadOrderFile(std::vector<Entry>& order) {
     }
 
     // Edited by hand, it may have gained a byte order mark, blank lines, and
-    // spaces at the ends of lines; in a v1 file, spaces in place of the tab
-    // too. A v2 file needs its tabs.
+    // spaces at the ends of lines.
     size_t position = data.compare(0, 3, "\xEF\xBB\xBF") == 0 ? 3 : 0;
     bool header = true;
-    unsigned long version = 0;
     bool lost = false;
     DWORD today = Today();
     std::unordered_set<std::wstring> seen;
@@ -968,69 +969,41 @@ LoadResult LoadOrderFile(std::vector<Entry>& order) {
         line = line.substr(first, last - first + 1);
         if (header) {
             size_t prefix = sizeof(kFileHeader) - 1;
-            // The mod's name before it was renamed, for a list copied over
-            // from then.
-            if (line.compare(0, sizeof(kOldFileHeader) - 1, kOldFileHeader) ==
-                0) {
-                prefix = sizeof(kOldFileHeader) - 1;
-            } else if (line.compare(0, prefix, kFileHeader) != 0) {
-                return LoadResult::BadFormat;
-            }
-            if (line.size() == prefix ||
+            if (line.compare(0, prefix, kFileHeader) != 0 ||
+                line.size() == prefix ||
                 line.find_first_not_of("0123456789", prefix) !=
                     std::string::npos) {
                 return LoadResult::BadFormat;
             }
-            version = strtoul(line.c_str() + prefix, nullptr, 10);
-            if (version > kFileVersion) {
-                return LoadResult::Newer;
-            }
-            if (version < 1) {
-                return LoadResult::BadFormat;
+            unsigned long version = strtoul(line.c_str() + prefix, nullptr, 10);
+            if (version != kFileVersion) {
+                return version > kFileVersion ? LoadResult::Newer
+                                              : LoadResult::BadFormat;
             }
             header = false;
             continue;
         }
-        // <day the app was last seen>, then (v2) whether it's marked, then its
-        // key, then (v2) its name.
+        // <day the app was last seen>, whether it's marked, its key and its
+        // name, separated by tabs only: keys and names have spaces of their
+        // own.
         size_t digits = line.find_first_not_of("0123456789");
-        if (digits == 0 || digits == std::string::npos ||
-            (line[digits] != '\t' && line[digits] != ' ')) {
+        size_t flag = digits + 1;
+        size_t keyStart = flag + 2;
+        if (digits == 0 || digits == std::string::npos || line[digits] != '\t' ||
+            line.size() <= keyStart ||
+            (line[flag] != 'r' && line[flag] != '-') || line[flag + 1] != '\t') {
             lost = true;
             continue;
         }
         unsigned long lastSeen = strtoul(line.c_str(), nullptr, 10);
-        std::string keyText;
-        std::string titleText;
-        bool remember = false;
-        if (version == 1) {
-            // Spaces are taken for the tab too: a v1 line has nothing else
-            // after the key.
-            size_t keyStart = line.find_first_not_of(" \t", digits);
-            if (keyStart == std::string::npos) {
-                lost = true;
-                continue;
-            }
-            keyText = line.substr(keyStart);
-        } else {
-            // Tabs only: keys and names have spaces of their own.
-            size_t flag = digits + 1;
-            size_t keyStart = flag + 2;
-            if (line[digits] != '\t' || line.size() <= keyStart ||
-                (line[flag] != 'r' && line[flag] != '-') ||
-                line[flag + 1] != '\t') {
-                lost = true;
-                continue;
-            }
-            remember = line[flag] == 'r';
-            size_t keyEnd = line.find('\t', keyStart);
-            keyText = line.substr(keyStart, keyEnd == std::string::npos
-                                                ? std::string::npos
-                                                : keyEnd - keyStart);
-            if (keyEnd != std::string::npos) {
-                titleText = line.substr(keyEnd + 1);
-            }
-        }
+        bool remember = line[flag] == 'r';
+        size_t keyEnd = line.find('\t', keyStart);
+        std::string keyText =
+            line.substr(keyStart, keyEnd == std::string::npos
+                                      ? std::string::npos
+                                      : keyEnd - keyStart);
+        std::string titleText =
+            keyEnd == std::string::npos ? "" : line.substr(keyEnd + 1);
         // Put through the same rules as a key read from the taskbar, so a
         // line edited by hand can't hold a key the taskbar would never match.
         std::wstring key = KeyFromAppId(FromUtf8(keyText).c_str());
@@ -1844,14 +1817,16 @@ void __cdecl ContextMenus_ShowTaskbarSettingsContextMenu_Hook(
     t_taskbarMenuDepth--;
 }
 
-// Taskbar.View.dll is loaded with the taskbar, usually after the mod.
+// Taskbar.View.dll is loaded with the taskbar, usually after the mod. On builds
+// where the taskbar's XAML is in ExplorerExtensions.dll, that's the module.
 std::atomic<bool> g_taskbarViewHooked;
+std::atomic<int> g_taskbarViewAttempts;
 
 bool HookTaskbarView(HMODULE module) {
     if (g_taskbarViewHooked.exchange(true)) {
         return false;
     }
-    // Taskbar.View.dll
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(void __cdecl winrt::Taskbar::implementation::ContextMenus::ShowTaskbarSettingsContextMenu(struct winrt::Windows::UI::Xaml::FrameworkElement const &,struct winrt::WindowsUdk::UI::Shell::TaskbarSettings const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &,unsigned __int64))"},
@@ -1867,6 +1842,11 @@ bool HookTaskbarView(HMODULE module) {
     if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks,
                                     ARRAYSIZE(taskbarViewHooks))) {
         Wh_Log(L"No menu: Taskbar.View.dll's symbols weren't found");
+        // A failed symbol download can succeed later: a few more tries, when
+        // the module is loaded again or at Wh_ModAfterInit.
+        if (++g_taskbarViewAttempts < 3) {
+            g_taskbarViewHooked = false;
+        }
         return false;
     }
     return true;
@@ -1933,9 +1913,8 @@ void RunOnTaskbarThread(void (*callback)()) {
 // ---------------------------------------------------------------------------
 
 void LoadSettings() {
-    PCWSTR remember = Wh_GetStringSetting(L"remember");
-    g_rememberAll = remember && wcscmp(remember, L"all") == 0;
-    Wh_FreeStringSetting(remember);
+    auto remember = WindhawkUtils::StringSetting::make(L"remember");
+    g_rememberAll = wcscmp(remember, L"all") == 0;
 }
 
 void LoadOrder() {
