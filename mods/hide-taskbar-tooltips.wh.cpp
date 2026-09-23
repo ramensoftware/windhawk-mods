@@ -21,6 +21,14 @@ Suppresses native Windows 11 taskbar hover tooltips, including:
 - Taskbar app icon tooltips and labels on hover
 - System tray status icons tooltips (Network, Volume, Battery, Clock)
 
+## Preview
+
+**Before** (native Windows 11 tooltip on hover):  
+![Before](https://i.imgur.com/dLAXEzl.png)
+
+**After** (tooltip suppressed):  
+![After](https://i.imgur.com/tISQj2F.png)
+
 ## Note
 
 Restarting Explorer is recommended after installing or enabling the mod for changes to take full effect across all existing taskbar elements.
