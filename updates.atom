@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-23T20:02:51.000Z</updated>
+    <updated>2026-09-23T20:53:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Agenda in Calendar View 1.1]]></title>
+        <id>https://windhawk.net/mods/agenda-in-calendar-view#f92c8ef2d4379c880aaf84e639ab4b24e53f69ef</id>
+        <link href="https://windhawk.net/mods/agenda-in-calendar-view"/>
+        <updated>2026-09-23T20:53:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Update README with new/updated features</li>
+<li>Add tooltips to buttons</li>
+</ul>]]></content>
+        <author>
+            <name>lonfro</name>
+            <uri>https://github.com/lonfro</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MacOS Minimize Animation 3.1.5]]></title>
         <id>https://windhawk.net/mods/macos-minimize-animation#5f0fbbaa99e8ed035da6eb58ba701ac7b143e1bc</id>
@@ -963,114 +977,6 @@ Set a maximum height for the Agenda in the mod settings to stop it from clipping
         <author>
             <name>0Allu</name>
             <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Move Conflicts Quietly 1.0]]></title>
-        <id>https://windhawk.net/mods/move-quietly#3df241edf7d65e00297638c7069d89a3988e1c8c</id>
-        <link href="https://windhawk.net/mods/move-quietly"/>
-        <updated>2026-09-21T15:42:38.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="moveconflictsquietly">Move Conflicts Quietly</h1>
-<p>Move Conflicts Quietly removes the repetitive filename-conflict decision from
-Windows File Explorer copy and move operations.</p>
-<p>When an incoming item has the same name as an item that already exists in the
-destination, the mod keeps both by giving the incoming item the next free
-<code>name (n).ext</code> style name instead of showing the <strong>Replace or skip files</strong>
-prompt.</p>
-<p>For example, a collision such as:</p>
-<pre><code>report.txt
-</code></pre>
-<p>will normally produce a unique name similar to:</p>
-<pre><code>report (2).txt
-</code></pre>
-<p>Further collisions take the next free number: <code>report (3).txt</code>, and so on. An
-incoming <code>report (2).txt</code> that collides becomes <code>report (3).txt</code>, not
-<code>report (2) (2).txt</code>.</p>
-<h2 id="whatitaffects">What it affects</h2>
-<p>The mod targets File Explorer (<code>explorer.exe</code>) and applies automatic
-rename-on-collision behavior to copy and move operations performed through the
-Windows <code>IFileOperation</code> interface, including common Explorer operations such
-as copy/paste, cut/paste, and drag-and-drop moves.</p>
-<p>The mod does <strong>not</strong> intentionally suppress unrelated error or security UI.
-Permission errors, UAC/elevation prompts, disk errors, and other exceptional
-conditions are still handled by Windows normally.</p>
-<h2 id="howitworks">How it works</h2>
-<p>Explorer uses the Windows Shell <code>IFileOperation</code> COM interface for many file
-operations. This mod hooks the copy and move entry points. For every queued
-item it resolves the destination path, checks whether the name is already
-taken (on disk, or by another item queued in the same operation), and if so
-passes an explicit <code>name (n).ext</code> name to the Shell.</p>
-<p>As a safety net it also adds <code>FOF_RENAMEONCOLLISION</code> and
-<code>FOFX_PRESERVEFILEEXTENSIONS</code> to the operation, so that even when the mod
-cannot pick a name itself (a non-file-system destination, or a name that is
-taken between the check and the copy) the Shell still keeps both instead of
-prompting. In that fallback case the Shell chooses the name, which is its
-usual <code>name - Copy.ext</code> pattern.</p>
-<p>The flags are decided once, just before the operation runs, so that the whole
-queue is known. Existing operation flags are retained; if the caller did not
-set any, the documented <code>IFileOperation</code> defaults are used.</p>
-<h2 id="bypassingthemodforoneoperation">Bypassing the mod for one operation</h2>
-<p>Hold <strong>Shift</strong> (configurable) while dropping, or while clicking Paste in the
-context menu or the command bar, and the mod leaves that operation entirely to
-Explorer, prompt and all.</p>
-<p>Be aware that Shift is also Explorer's "force a move" drag modifier. If you
-habitually hold Shift while dragging, every such drop bypasses the mod — set
-the option to <strong>Disabled</strong> or the Windows key instead. Ctrl and Alt are worse
-choices: Ctrl is held during every Ctrl+V paste (so the mod would never act on
-a keyboard paste) and forces a copy on drop; Alt turns a drop into a shortcut.</p>
-<p>A held key cannot work with <strong>Ctrl+V</strong>: adding any modifier makes it a
-different shortcut that Explorer does not treat as Paste (and Win+Ctrl+V is
-taken by Windows). For keyboard pastes, set the <strong>lock</strong> option instead: while
-Caps Lock or Scroll Lock is on, the mod stands aside.</p>
-<h2 id="importantbehaviorandlimitations">Important behavior and limitations</h2>
-<ul>
-<li>Copying an item into its own folder is not renamed by the mod; Explorer's
-own naming applies (normally <code>name - Copy.ext</code>).</li>
-<li>Items that are not file-system objects (for example dragged out of a zip
-folder or a phone) fall back to the Shell's own collision naming.</li>
-<li>When a folder with the same name already exists in the destination, the
-default is to merge into it and apply the same keep-both renaming to any
-conflicting files inside. To do that the mod queues the folder's contents
-item by item, so Undo covers the individual items rather than the folder as
-a whole, and a merged move leaves the (now empty) source folder tree to be
-removed after the operation completes. The setting can instead hand merges
-to Explorer unchanged (conflicts inside prompt as usual) or keep both
-folders side by side as <code>Folder (2)</code>.</li>
-<li>Operations whose caller has already chosen a collision policy (for example
-"replace all" or "keep newer") before queueing items are left untouched.</li>
-<li>After a merged <strong>move</strong>, the emptied source folders are removed directly
-(not via the Recycle Bin, and not covered by Undo). Only empty folders are
-ever removed. Folders that are junctions or symbolic links are never merged;
-they are handed to Explorer unchanged.</li>
-<li>Merging a large folder resolves names for every item up front, before the
-progress dialog appears, and the dialog then lists the individual items.</li>
-<li>The hooks apply to every <code>IFileOperation</code> copy or move inside <code>explorer.exe</code>,
-which includes third-party shell extensions hosted there.</li>
-<li>This version targets 64-bit File Explorer.</li>
-<li>Rename-only and delete operations are not intentionally modified.</li>
-</ul>
-<h2 id="testing">Testing</h2>
-<p>Before relying on the mod with important data, test it with disposable files
-and folders. Useful cases include:</p>
-<ol>
-<li>Copy one file into a folder that already contains a file with the same name.</li>
-<li>Repeat the copy several times and verify that every copy is preserved.</li>
-<li>Test cut/paste and drag-and-drop moves with a destination conflict.</li>
-<li>Test a multi-file copy containing several conflicts.</li>
-<li>Test a same-name folder collision so you understand the folder behavior on
-your Windows version.</li>
-<li>For a folder merge, include a hidden file and a hidden+system file (for
-example <code>desktop.ini</code>) in the source and verify they arrive.</li>
-</ol>
-<h2 id="sourceandissues">Source and issues</h2>
-<p>Source code and issue tracking:
-https://github.com/JohhannasReyn/move-quietly</p>
-<p>If you find a copy or move path that still displays Explorer's conflict chooser,
-please include your Windows version, the exact operation used, and the Windhawk
-log output in the issue report.</p>]]></content>
-        <author>
-            <name>Johhannas Reyn</name>
-            <uri>https://github.com/JohhannasReyn</uri>
         </author>
     </entry>
 </feed>

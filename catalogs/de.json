@@ -332,7 +332,7 @@
         ],
         "ratingUsers": 1,
         "reviews": 0,
-        "updated": 1790005388000,
+        "updated": 1790196788000,
         "users": 32
       },
       "metadata": {
@@ -341,7 +341,7 @@
         ],
         "author": "lonfro",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
-        "description": "Show .ics events in the calendar view in the Notification Centre like in Windows 10",
+        "description": "Show .ics events in the calendar of the Notification Centre, like in Windows 10",
         "github": "https://github.com/lonfro",
         "include": [
           "ShellExperienceHost.exe",
@@ -349,7 +349,7 @@
         ],
         "license": "GPL-3.0-only",
         "name": "Agenda in Calendar View",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "alt-drag": {
