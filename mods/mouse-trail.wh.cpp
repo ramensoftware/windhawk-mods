@@ -27,8 +27,6 @@
 // @github          https://github.com/MCheng404
 // @license         MIT
 // @include         windhawk.exe
-// @include         wallpaper64.exe
-// @include         dwm.exe
 // @compilerOptions -ld2d1 -ld3d11 -ldxgi -ldcomp -ldwmapi -lole32 -lgdi32 -lshell32 -ld3dcompiler -lavrt -lksuser -ldwrite
 // ==/WindhawkMod==
 // ==WindhawkModReadme==
@@ -168,29 +166,6 @@ Examples: `sin(d * 0.15) * 8`, `sin(d * 0.25) * exp(0 - t * 2.5) * 10`.
 
 Hex RGB, e.g. `FF0000`=red, `00FF00`=green, `0000FF`=blue, `FFD700`=gold.
 
-### Process Host
-
-* **What it does:** chooses which process runs the overlay. `windhawk.exe` (default) uses Windhawk's own dedicated tool-mod process and is the **safest choice** — leave it as it is unless you have a specific reason.
-* **The hard prerequisite, the engine must be inside the target process:** `wallpaper64.exe` and `dwm.exe` are already listed in this mod's include patterns, but that alone is not enough. Windhawk must have injected its **engine** into that process. If the engine is not there the mod is never loaded and the overlay **silently falls back to `windhawk.exe`**, visually identical, so the switch appears to do nothing. `%TEMP%\mouse-trail.log` prints an `InjectCheck` line stating the verdict.
-* **How to get the engine into a process:** Windhawk > Settings > Advanced settings > More advanced settings > add the executable to the **process inclusion list**, then restart that application so the engine can be injected at its startup. This list **overrides the excluded-by-default lists**.
-* **Why `wallpaper64.exe` needs this:** Windhawk excludes, by default, the whole "well-known games" list, which contains `*\steamapps\common\*` (every Steam app) and `?:\Program Files\Steam\*`. Wallpaper Engine is a Steam app, so it is excluded out of the box and no mod can be loaded there until you add it to the process inclusion list (you may also need the "inject into games" toggle).
-* **Custom host:** additionally requires adding the same executable name to **this mod's** include list in its advanced settings (only the built-in candidates can be shipped), and reloading the mod.
-* **Pick a long-lived process:** the overlay stops when its host process exits. Prefer a process that stays running for a long time or can relaunch itself (e.g. `explorer.exe`, `wallpaper64.exe`).
-* **Warning:** `dwm.exe` is on Windhawk's **predefined critical-process exclusion list** and is the desktop compositor. Do not select it.
-
-### Troubleshooting
-
-* **Diagnostics log (temporary):** hotkey and process-host diagnostics are written unconditionally to `%TEMP%\mouse-trail.log`. Every process appends to the same file and each line is prefixed with time, PID and exe name, so you can see which process actually rendered. Filter for `Hotkey`, `InjectCheck` or `Wh_ModInit` - do NOT read Windhawk's engine log, it prints four lines per setting read and drowns everything.
-* **Source changes need a recompile, not a reload:** changing settings in Windhawk only restarts the mod process and reuses the **already compiled** DLL, so edits to this source file do nothing until Windhawk compiles it again. Force a recompile by saving the mod in the editor or by toggling the mod off and on (disabling deletes the compiled DLL, so enabling rebuilds it). Verify with the DLL timestamp under `%ProgramData%\Windhawk\Engine\Mods\{32,64}\local@mouse-trail_*.dll` - it must be newer than the .wh.cpp file.
-* **Removing it:** delete the `调试日志` module (search for `DbgLogW`) and every `DbgLogW(...)` call site; there is no setting behind it.
-
-### Credits
-
-Developed by [MCheng404](https://github.com/MCheng404).
-Original overlay/smear architecture inspired by [TheatriChris](https://github.com/TheatriChris)'s cursor-motion-blur mod (MIT licensed).
-
----
-
 # 鼠标拖尾
 
 Windhawk 高度可定制鼠标拖尾特效模组。基于原生 D3D11 + DirectComposition 硬件加速，包含 23 种颜色模式、10 种拖尾渲染风格、9 种粒子形状、完整牛顿粒子物理系统（质量、引力、碰撞、电磁力、湍流、流体耦合）、向心力漩涡轨道捕获、音乐响应音频物理、2.5D 深度效果、点击特效和文字/Emoji 粒子。独立 Tool Mod 进程运行——闲置零 CPU，激活时全硬件加速。
@@ -317,28 +292,6 @@ Windhawk 高度可定制鼠标拖尾特效模组。基于原生 D3D11 + DirectCo
 ### 颜色格式
 
 自定义颜色使用十六进制 RGB，例如：`FF0000`=红，`00FF00`=绿，`0000FF`=蓝，`FFD700`=金。
-
-### 进程载体
-
-* **作用：** 选择由哪个进程运行覆盖层。`windhawk.exe`（默认）使用 Windhawk 自带的专用 Tool Mod 进程，是**最安全的选择**——没有特殊需求请保持默认。
-* **硬性前提，引擎必须已注入目标进程：** `wallpaper64.exe` 与 `dwm.exe` 已经写在本模组的包含列表里，但**只有这个还不够**——Windhawk 必须已经把它的**引擎**注入到那个进程里。引擎不在里面，模组就永远不会被加载，覆盖层会**静默退回 `windhawk.exe`**，画面完全一样，于是「切换看起来没反应」。`%TEMP%\mouse-trail.log` 里 `InjectCheck` 开头的行会直接写明结论。
-* **如何让引擎进入某个进程：** Windhawk → 设置 → 高级设置 → 更多高级设置 → 把该可执行文件加入**进程包含列表**，然后重启那个程序，让引擎能在它启动时注入。该列表**会覆盖默认排除列表**。
-* **`wallpaper64.exe` 为什么需要这一步：** Windhawk 默认排除整个「已知游戏」列表，其中包含 `*\steamapps\common\*`（所有 Steam 应用）与 `?:\Program Files\Steam\*`。Wallpaper Engine 是 Steam 应用，所以开箱即被排除，任何模组都加载不进去——必须把它加入进程包含列表（可能还需要打开「注入到游戏」开关）。
-* **自定义载体：** 还需额外在**本模组**的高级设置包含列表里加入同名可执行文件（内置候选之外的名字没法预置），然后重新加载模组。
-* **请选择长期存活的进程：** 宿主进程退出后覆盖层即停止。建议选择长时间运行或能自我拉起的进程（例如 `explorer.exe`、`wallpaper64.exe`）。
-* **警告：** `dwm.exe` 在 Windhawk 预定义的**关键系统进程排除列表**里，而且它是桌面合成器。不要选它。
-
-### 故障排查
-
-* **诊断日志（临时）：** 热键与进程载体的诊断信息会无条件写入 `%TEMP%\mouse-trail.log`。所有进程追加同一文件，每行带时间、PID 与进程名，因此能直接看出究竟哪个进程在渲染。过滤 `Hotkey` / `InjectCheck` / `Wh_ModInit` 即可——**不要看 Windhawk 的引擎日志**，它每读一个设置刷四行，什么都被淹没。
-* **改源码必须重新编译，不是重新加载：** 在 Windhawk 里改设置只会重启模组进程并复用**已编译**的 DLL，所以对源码的修改在 Windhawk 重新编译之前完全不生效。强制重新编译的方法：在编辑器里保存模组，或者把模组**禁用再启用**（禁用会删掉编译产物，启用时必然重建）。可用 `%ProgramData%\Windhawk\Engine\Mods\{32,64}\local@mouse-trail_*.dll` 的时间戳核对——必须比 .wh.cpp 文件新。
-* **删除方式：** 搜 `DbgLogW`，删掉日志模块本体以及所有 `DbgLogW(...)` 调用点即可；背后没有设置项。
-
-### 致谢
-
-开发者 [MCheng404](https://github.com/MCheng404)。
-原始覆盖层/拖尾架构灵感来自 [TheatriChris](https://github.com/TheatriChris) 的 cursor-motion-blur mod（MIT 许可证）。
-*/
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
@@ -2380,47 +2333,7 @@ Windhawk 高度可定制鼠标拖尾特效模组。基于原生 D3D11 + DirectCo
   $description:zh-CN: 与同一组合键同时按下以开关粒子。按键名称同上。留空=关闭。
   $description:zh-TW: 與同一組合鍵同時按下以開關粒子。按鍵名稱同上。留空=關閉。
   $description:ja-JP: 同じ修飾キーと同時押しでパーティクルを切り替えます。キー名は上と同じ。空=無効。
-# ===== 进程载体 =====
-- process_host: windhawk
-  $name: Process Host
-  $name:zh-CN: 进程载体
-  $name:zh-TW: 處理序載體
-  $name:ja-JP: プロセスホスト
-  $description: Which process runs the overlay. windhawk.exe (default) is the dedicated tool-mod process and the safest choice. Changing this needs a mod reload. The other hosts only work if Windhawk's ENGINE is loaded inside that process - when it is not, the overlay silently falls back to windhawk.exe and looks identical, which is why a switch can appear to do nothing. To get the engine into a process, add it to Windhawk's Process inclusion list (Settings > Advanced settings > More advanced settings) and then restart that application. Check %TEMP% for mouse-trail.log and look for an InjectCheck line that states this explicitly. dwm.exe is on Windhawk's predefined critical-process exclusion list and is not recommended.
-  $description:zh-CN: 由哪个进程运行覆盖层。windhawk.exe（默认）是专用 Tool Mod 进程，最安全。改完需要重新加载模组。其它载体只有在 Windhawk 引擎已注入该进程时才有效——若引擎不在里面，覆盖层会静默退回 windhawk.exe，画面完全一样，这就是「切换看起来没反应」的原因。要让引擎进入某个进程，请在 Windhawk 的「高级设置 → 更多高级设置」里把该 exe 加入「进程包含列表」，然后重启那个程序。可在 %TEMP%\mouse-trail.log 里找 InjectCheck 开头的行，它会直接写明结论。dwm.exe 在 Windhawk 预定义的关键系统进程排除列表中，不建议使用。
-  $description:zh-TW: 由哪個處理序執行覆蓋層。windhawk.exe（預設）是專用 Tool Mod 處理序，最安全。改完需要重新載入模組。其它載體只有在 Windhawk 引擎已注入該處理序時才有效——若引擎不在裡面，覆蓋層會靜默退回 windhawk.exe，畫面完全一樣，這就是「切換看起來沒反應」的原因。要讓引擎進入某個處理序，請在 Windhawk 的「進階設定 → 更多進階設定」裡把該 exe 加入「處理序包含清單」，然後重新啟動那個程式。可在 %TEMP%\mouse-trail.log 裡找 InjectCheck 開頭的行。dwm.exe 在 Windhawk 預定義的關鍵系統處理序排除清單中，不建議使用。
-  $description:ja-JP: オーバーレイを実行するプロセス。windhawk.exe（既定）が専用ツールModプロセスで最も安全。変更後はModの再読み込みが必要。他のホストは Windhawk エンジンがそのプロセスに読み込まれている場合のみ動作します。エンジンがない場合は windhawk.exe へ静かにフォールバックし見た目は同じになるため「切り替えが効かない」ように見えます。エンジンを入れるには Windhawk の「詳細設定 → さらに詳細な設定」でプロセス包含リストに exe を追加し、そのアプリを再起動してください。%TEMP%\mouse-trail.log の InjectCheck 行に結論が出ます。dwm.exe は Windhawk の重要システムプロセス除外リストにあり非推奨です。
-  $options:
-  - windhawk: windhawk.exe (Default)
-  - wallpaper64: wallpaper64.exe
-  - dwm: dwm.exe
-  - custom: Custom Process
-  $options:zh-CN:
-  - windhawk: windhawk.exe（默认）
-  - wallpaper64: wallpaper64.exe
-  - dwm: dwm.exe
-  - custom: 自定义进程
-  $options:zh-TW:
-  - windhawk: windhawk.exe（預設）
-  - wallpaper64: wallpaper64.exe
-  - dwm: dwm.exe
-  - custom: 自訂處理序
-  $options:ja-JP:
-  - windhawk: windhawk.exe（既定）
-  - wallpaper64: wallpaper64.exe
-  - dwm: dwm.exe
-  - custom: カスタムプロセス
-- custom_host_process: ''
-  $name: Custom Host Process
-  $name:zh-CN: 自定义进程载体
-  $name:zh-TW: 自訂處理序載體
-  $name:ja-JP: カスタムホストプロセス
-  $description: "Executable name (with .exe) used when Process Host is Custom, e.g. explorer.exe. NOTE - you must open this mod's advanced settings in Windhawk and add the same name to the include list, otherwise the mod is never loaded into that process and rendering silently falls back to windhawk.exe. Prefer processes that run for a long time or relaunch themselves. Empty = fall back to windhawk.exe."
-  $description:zh-CN: 当「进程载体」选择自定义时使用的可执行文件名（含 .exe），例如 explorer.exe。注意——必须先在 Windhawk 打开本模组的高级设置，把同名条目加入包含列表，否则模组不会被加载进该进程，渲染会自动退回 windhawk.exe。建议选择长时间运行或能自我拉起的进程。留空=退回 windhawk.exe。
-  $description:zh-TW: 當「處理序載體」選擇自訂時使用的可執行檔名（含 .exe），例如 explorer.exe。注意——必須先在 Windhawk 開啟本模組的進階設定，把同名項目加入包含清單，否則模組不會被載入該處理序，渲染會自動退回 windhawk.exe。建議選擇長時間執行或能自我拉起的處理序。留空=退回 windhawk.exe。
-  $description:ja-JP: 「プロセスホスト」でカスタムを選んだ際の実行ファイル名（.exe 含む）。例：explorer.exe。注意——Windhawk の詳細設定で本Modのインクルードリストに同名を追加しないと読み込まれず、windhawk.exe に自動フォールバックします。長時間稼働するプロセスを推奨。空=windhawk.exe。
 */
-// ==/WindhawkModSettings==
 #include <windows.h>
 #include <d2d1_1.h>
 #include <dwrite.h>
@@ -2434,7 +2347,6 @@ Windhawk 高度可定制鼠标拖尾特效模组。基于原生 D3D11 + DirectCo
 #include <d3dcompiler.h>
 #include <math.h>
 #include <shellapi.h>
-#include <tlhelp32.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -3231,11 +3143,6 @@ wchar_t g_hotkeyParticlesKey[32] = L"";   // 粒子开关按键 / particle key t
 int g_hotkeyToggleVK = 0;            // 解析后的虚拟键码（0=未配置）/ resolved VK (0 = unbound)
 int g_hotkeyTrailVK = 0;
 int g_hotkeyParticlesVK = 0;
-// ----- 进程载体 / process host
-int g_processHost = 0;               // 0=windhawk 1=wallpaper64 2=dwm 3=custom
-wchar_t g_customHostProcess[64] = L"";  // 自定义载体可执行文件名 / custom host exe name
-bool g_isHostProcess = false;        // 运行时：本进程被选为渲染载体 / runtime: this process is the chosen host
-HANDLE g_overlayOwnerMutex = nullptr;  // 跨进程单一渲染者仲裁互斥体 / cross-process single-renderer mutex
 bool g_enableBezierSmooth = true;     // 贝塞尔曲线平滑
 bool g_enableMotionBlur = false;      // 运动模糊
 int g_motionBlurStrength = 3;         // 运动模糊强度（叠加帧数）
@@ -7047,209 +6954,7 @@ static void WStrToUTF8(PCWSTR wstr, char *out, int outSize) {
 // ===== 调试日志辅助函数前向声明（定义在下方「设置加载」之前）=====
 // ===== Forward declarations for the debug-log helpers (defined just above LoadSettings) =====
 // 默认参数写在这里，定义处不再重复 / default arguments live here, not in the definitions
-static std::wstring DbgNum(unsigned v, int pad = 0, unsigned base = 10);
-static std::wstring DbgHex(unsigned v);
-static const wchar_t* DbgB(bool b);
-static std::wstring DbgLogPath();
-static void DbgLogW(const std::wstring& msg);
 
-// ===================== 进程载体：轻量设置读取与目标名解析 =====================
-// Process host: lightweight settings read and target-name resolution
-// 说明：这些函数只读取 process_host / custom_host_process 两项设置，绝不调用 LoadSettings()，
-// 因此可以安全地在 Wh_ModInit() 阶段使用（LoadSettings 有副作用，例如启动音乐捕获线程）。
-// Note: these read only process_host / custom_host_process and never call LoadSettings(), so they are safe
-// to use from Wh_ModInit() (LoadSettings has side effects such as starting the music capture thread).
-
-// 轻量读取 process_host，返回 0=windhawk 1=wallpaper64 2=dwm 3=custom / lightweight read of process_host
-static int HostReadProcessHost() {
-    int v = 0;
-    PCWSTR s = Wh_GetStringSetting(L"process_host");
-    if (s) {
-        if (wcscmp(s, L"wallpaper64") == 0) v = 1;
-        else if (wcscmp(s, L"dwm") == 0) v = 2;
-        else if (wcscmp(s, L"custom") == 0) v = 3;
-        else v = 0;  // windhawk
-        Wh_FreeStringSetting(s);
-    }
-    return v;
-}
-
-// 轻量读取 custom_host_process / lightweight read of custom_host_process
-static void HostReadCustomName(wchar_t* out, size_t cchOut) {
-    if (!out || cchOut == 0) return;
-    out[0] = 0;
-    PCWSTR s = Wh_GetStringSetting(L"custom_host_process");
-    if (s) {
-        wcsncpy_s(out, cchOut, s, _TRUNCATE);
-        Wh_FreeStringSetting(s);
-    }
-}
-
-// 规范化可执行文件名：去首尾空白 -> 只保留文件名 -> 补 .exe -> 转小写
-// Normalize an executable name: trim -> keep base name only -> append .exe -> lowercase
-static void HostNormalizeExeName(const wchar_t* in, wchar_t* out, size_t cchOut) {
-    if (!out || cchOut == 0) return;
-    out[0] = 0;
-    if (!in) return;
-    const wchar_t* s = in;
-    while (*s == L' ' || *s == L'\t' || *s == L'\r' || *s == L'\n') s++;
-    size_t n = wcslen(s);
-    while (n > 0 && (s[n - 1] == L' ' || s[n - 1] == L'\t' || s[n - 1] == L'\r' || s[n - 1] == L'\n')) n--;
-    if (n == 0) return;
-    // 用户可能粘贴完整路径，只取文件名 / the user may paste a full path, keep the base name only
-    size_t last = (size_t)-1;
-    for (size_t i = 0; i < n; i++) {
-        if (s[i] == L'\\' || s[i] == L'/') last = i;
-    }
-    if (last != (size_t)-1) {
-        s += last + 1;
-        n -= last + 1;
-    }
-    if (n == 0) return;
-    if (n > cchOut - 1) n = cchOut - 1;
-    for (size_t i = 0; i < n; i++) {
-        wchar_t c = s[i];
-        if (c >= L'A' && c <= L'Z') c = (wchar_t)(c - L'A' + L'a');  // 小写化 / lowercase
-        out[i] = c;
-    }
-    out[n] = 0;
-    // 保证以 .exe 结尾（用户可能只填了 explorer）/ guarantee the .exe suffix (the user may type "explorer")
-    size_t len = wcslen(out);
-    if (len < 4 || out[len - 4] != L'.' || out[len - 3] != L'e' || out[len - 2] != L'x' || out[len - 1] != L'e') {
-        if (len + 4 <= cchOut - 1) {
-            out[len] = L'.';
-            out[len + 1] = L'e';
-            out[len + 2] = L'x';
-            out[len + 3] = L'e';
-            out[len + 4] = 0;
-        }
-    }
-}
-
-// 解析目标载体可执行文件基名（不含路径、保证以 .exe 结尾、已小写）
-// 0 -> windhawk.exe 1 -> wallpaper64.exe 2 -> dwm.exe 3 -> 自定义名（为空则 windhawk.exe）
-// Resolve the target host executable base name (no path, guaranteed .exe suffix, lowercased)
-// 0 -> windhawk.exe, 1 -> wallpaper64.exe, 2 -> dwm.exe, 3 -> custom name (falls back to windhawk.exe when empty)
-static void HostGetTargetName(wchar_t* out, size_t cchOut) {
-    if (!out || cchOut == 0) return;
-    out[0] = 0;
-    // 诊断：记录 Windhawk 实际交付的原始文本，用于区分「设置根本没传进来」和「传进来了但解析不认」
-    // Diagnostics: log the raw text Windhawk actually delivered, so "the setting never arrived" can be told
-    // apart from "it arrived but was not recognized"
-    {
-        PCWSTR rh = Wh_GetStringSetting(L"process_host");
-        PCWSTR rc = Wh_GetStringSetting(L"custom_host_process");
-        int parsed = HostReadProcessHost();
-        DbgLogW(std::wstring(L"HostGetTargetName: raw process_host=\"") + (rh ? rh : L"<null>") +
-                L"\" -> parsed=" + DbgNum((unsigned)parsed) + L" | raw custom_host_process=\"" +
-                (rc ? rc : L"<null>") + L"\"");
-        if (rh) Wh_FreeStringSetting(rh);
-        if (rc) Wh_FreeStringSetting(rc);
-    }
-    wchar_t raw[128] = L"";
-    switch (HostReadProcessHost()) {
-        case 1:
-            wcsncpy_s(raw, L"wallpaper64.exe", _TRUNCATE);
-            break;
-        case 2:
-            wcsncpy_s(raw, L"dwm.exe", _TRUNCATE);
-            break;
-        case 3:
-            HostReadCustomName(raw, ARRAYSIZE(raw));
-            if (raw[0] == 0) wcsncpy_s(raw, L"windhawk.exe", _TRUNCATE);
-            break;
-        default:
-            wcsncpy_s(raw, L"windhawk.exe", _TRUNCATE);
-            break;
-    }
-    HostNormalizeExeName(raw, out, cchOut);
-    // 规范化后为空（例如只填了空格）也退回默认载体 / if normalization yields nothing, fall back to the default
-    if (out[0] == 0) wcsncpy_s(out, cchOut, L"windhawk.exe", _TRUNCATE);
-}
-
-// ===================== 调试日志（v3.4.2.2，临时）/ Debug log (v3.4.2.2, temporary) =====================
-// 【调试完成后删除】删掉本模块 + 全部 DbgLogW(...) 调用即可，不依赖任何设置项，常开。
-// [REMOVE AFTER DEBUGGING] Delete this module plus every DbgLogW(...) call site. Always on, no setting.
-//
-// 为什么不直接用 Wh_Log：热键与进程载体的故障往往发生在「别的进程」里——如果覆盖层跑在
-// wallpaper64.exe / dwm.exe 内，它们的 Wh_Log 不会出现在本模组的日志面板里，等于什么都看不到。
-// 因此所有进程统一追加同一个日志文件，行首带 时间 / PID / 进程名，一眼就能分辨日志来自哪个载体。
-// Why not Wh_Log directly: hotkey and process-host failures usually happen in *other* processes. When the
-// overlay runs inside wallpaper64.exe / dwm.exe their Wh_Log output is not visible in this mod's log panel,
-// so every process appends to one fixed file prefixed with time / PID / exe name.
-// 日志文件：%TEMP%\mouse-trail.log（超过 4MB 自动截断）/ log file: %TEMP%\mouse-trail.log (truncated past 4 MB)
-static CRITICAL_SECTION g_dbgLogCS;     // 渲染线程与 UI 线程都会写 / both the render and UI threads write
-static bool g_dbgLogCSReady = false;
-static std::wstring g_dbgLogPrefix;     // 行首前缀，惰性构建一次 / cached line prefix
-static bool g_dbgLogTruncChecked = false;
-
-static std::wstring DbgNum(unsigned v, int pad, unsigned base) {
-    const wchar_t* digits = L"0123456789ABCDEF";
-    std::wstring s;
-    if (v == 0) s = L"0";
-    while (v) { s = std::wstring(1, digits[v % base]) + s; v /= base; }
-    while ((int)s.size() < pad) s = L"0" + s;
-    return s;
-}
-static std::wstring DbgHex(unsigned v) { return L"0x" + DbgNum(v, 0, 16); }
-// 布尔转 "1"/"0"，日志里比 true/false 短 / bool to "1"/"0", shorter than true/false in logs
-static const wchar_t* DbgB(bool b) { return b ? L"1" : L"0"; }
-// 日志文件完整路径，用于在日志里打印出来（省得用户找不到）/ full log path, printed into the log itself
-static std::wstring DbgLogPath() {
-    wchar_t tmp[MAX_PATH] = L"";
-    DWORD tn = GetTempPathW(ARRAYSIZE(tmp), tmp);
-    return std::wstring(tmp, tn) + L"mouse-trail.log";
-}
-
-static void DbgLogW(const std::wstring& msg) {
-    if (!g_dbgLogCSReady) { InitializeCriticalSection(&g_dbgLogCS); g_dbgLogCSReady = true; }
-    EnterCriticalSection(&g_dbgLogCS);
-
-    if (g_dbgLogPrefix.empty()) {
-        wchar_t exe[MAX_PATH] = L"?";
-        GetModuleFileNameW(nullptr, exe, ARRAYSIZE(exe));
-        const wchar_t* base = exe;
-        for (const wchar_t* p = exe; *p; p++)
-            if (*p == L'\\' || *p == L'/') base = p + 1;
-        g_dbgLogPrefix = L"[" + std::wstring(base) + L":" + DbgNum((unsigned)GetCurrentProcessId()) + L"] ";
-    }
-    SYSTEMTIME st;
-    GetLocalTime(&st);
-    std::wstring line = L"[" + DbgNum(st.wHour, 2) + L":" + DbgNum(st.wMinute, 2) + L":" +
-                        DbgNum(st.wSecond, 2) + L"." + DbgNum(st.wMilliseconds, 3) + L"] " +
-                        g_dbgLogPrefix + msg + L"\r\n";
-
-    wchar_t tmp[MAX_PATH] = L"";
-    DWORD tn = GetTempPathW(ARRAYSIZE(tmp), tmp);
-    if (tn > 0) {
-        std::wstring full = DbgLogPath();
-        HANDLE h = CreateFileW(full.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                               OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (h != INVALID_HANDLE_VALUE) {
-            // 每个进程只做一次大小检查，超限则截断，避免日志无限增长
-            // Check the size once per process and truncate when oversized, so the log cannot grow forever
-            if (!g_dbgLogTruncChecked) {
-                g_dbgLogTruncChecked = true;
-                LARGE_INTEGER sz; sz.QuadPart = 0;
-                if (GetFileSizeEx(h, &sz) && sz.QuadPart > (4 * 1024 * 1024)) {
-                    CloseHandle(h);
-                    h = CreateFileW(full.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
-                                    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-                    if (h == INVALID_HANDLE_VALUE) { LeaveCriticalSection(&g_dbgLogCS); return; }
-                }
-            }
-            SetFilePointer(h, 0, nullptr, FILE_END);
-            char utf8[1024];
-            WStrToUTF8(line.c_str(), utf8, (int)sizeof(utf8));
-            DWORD wrote = 0;
-            WriteFile(h, utf8, (DWORD)strlen(utf8), &wrote, nullptr);
-            CloseHandle(h);
-        }
-    }
-    LeaveCriticalSection(&g_dbgLogCS);
-    // 同时镜像到 Windhawk 日志面板，便于当前进程内直接查看 / mirror to the Windhawk log panel as well
-    Wh_Log(L"[MT] %s", msg.c_str());
-}
 
 // ===================== 设置加载 =====================
 // ===== v3.4.2.2 派生状态钩子 / v3.4.2.2 derived-state hooks =====
@@ -7357,23 +7062,18 @@ static std::atomic<DWORD> g_hotkeyLastAction[3] = { {0}, {0}, {0} };
 static bool HotkeyTryAct(int idx, const wchar_t* via) {
     DWORD nowT = GetTickCount();
     if (nowT - g_hotkeyLastAction[idx].load() < 250) {
-        DbgLogW(std::wstring(L"Hotkey: action for ") + (idx == 0 ? L"toggle" : (idx == 1 ? L"trail" : L"particles")) +
-                L" debounced (another channel just fired) via " + via);
         return false;
     }
     g_hotkeyLastAction[idx].store(nowT);
     if (idx == 0) {
         bool v = !g_effectsVisible.load();
         g_effectsVisible.store(v);
-        DbgLogW(std::wstring(L"Hotkey: >>> effects ") + (v ? L"SHOWN" : L"HIDDEN") + L" (via " + via + L")");
     } else if (idx == 1) {
         bool v = !g_trailVisible.load();
         g_trailVisible.store(v);
-        DbgLogW(std::wstring(L"Hotkey: >>> trail ") + (v ? L"ON" : L"OFF") + L" (via " + via + L")");
     } else {
         bool v = !g_particlesVisible.load();
         g_particlesVisible.store(v);
-        DbgLogW(std::wstring(L"Hotkey: >>> particles ") + (v ? L"ON" : L"OFF") + L" (via " + via + L")");
     }
     return true;
 }
@@ -7411,12 +7111,7 @@ static void HotkeyRegisterAll() {
     const int ids[3] = { kHotkeyIdToggle, kHotkeyIdTrail, kHotkeyIdParticles };
     for (int i = 0; i < 3; i++) {
         SetLastError(0);
-        if (!UnregisterHotKey(g_overlayHwnd, ids[i])) {
-            DWORD e = GetLastError();
-            if (e != ERROR_HOTKEY_NOT_REGISTERED)
-                DbgLogW(std::wstring(L"HotkeyReg: UnregisterHotKey(") + DbgHex((unsigned)ids[i]) + L") failed err=" +
-                        DbgHex(e));
-        }
+    // (hotkey unregister failure logging removed)
     }
     UINT mods = HotkeyModFlags();
     int vks[3] = { g_hotkeyToggleVK, g_hotkeyTrailVK, g_hotkeyParticlesVK };
@@ -7429,27 +7124,14 @@ static void HotkeyRegisterAll() {
             // Critical safety constraint: registering a bare key with RegisterHotKey steals that key from EVERY
             // application (the foreground program stops receiving it). Bare-key hotkeys therefore stay on the
             // polling channel only and are never registered with the OS.
-            DbgLogW(std::wstring(L"HotkeyReg: ") + names[i] + L" vk=" + DbgHex((unsigned)vks[i]) +
-                    L" is a BARE key (modifier = none) - NOT registering it with the OS because that would steal "
-                    L"the key from every application; the polling channel handles it");
             continue;
         }
         if (!HotkeyVKIsRegisterable(vks[i])) {
-            DbgLogW(std::wstring(L"HotkeyReg: ") + names[i] + L" vk=" + DbgHex((unsigned)vks[i]) +
-                    L" is a media/browser key - RegisterHotKey cannot register it, the polling channel covers it");
             continue;
         }
         SetLastError(0);
         if (RegisterHotKey(g_overlayHwnd, ids[i], mods, (UINT)vks[i])) {
             g_hotkeyOSOwned[i].store(true);
-            DbgLogW(std::wstring(L"HotkeyReg: ") + names[i] + L" REGISTERED (mods=" + DbgHex(mods) + L" vk=" +
-                    DbgHex((unsigned)vks[i]) + L") - the OS delivers WM_HOTKEY; polling for this key is now "
-                    L"log-only to avoid a double toggle");
-        } else {
-            DWORD err = GetLastError();
-            DbgLogW(std::wstring(L"HotkeyReg: ") + names[i] + L" FAILED (mods=" + DbgHex(mods) + L" vk=" +
-                    DbgHex((unsigned)vks[i]) + L" err=" + DbgHex(err) +
-                    L") - another program already owns this combination; the polling channel still acts");
         }
     }
 }
@@ -7476,7 +7158,7 @@ static void HotkeyRequestReregister() {
         return;
     }
     if (!PostMessageW(g_overlayHwnd, WM_APP_REHOTKEY, 0, 0))
-        DbgLogW(L"HotkeyReg: PostMessage(WM_APP_REHOTKEY) failed err=" + DbgHex(GetLastError()));
+        return;
 }
 
 static void HotkeyOnSettingsLoaded() {
@@ -7488,9 +7170,6 @@ static void HotkeyOnSettingsLoaded() {
         PCWSTR r_tog = Wh_GetStringSetting(L"hotkey_toggle_key");
         PCWSTR r_tra = Wh_GetStringSetting(L"hotkey_trail_key");
         PCWSTR r_par = Wh_GetStringSetting(L"hotkey_particles_key");
-        DbgLogW(std::wstring(L"Hotkey: RAW settings from Windhawk: modifier=\"") + (r_mod ? r_mod : L"<null>") +
-                L"\" toggle=\"" + (r_tog ? r_tog : L"<null>") + L"\" trail=\"" + (r_tra ? r_tra : L"<null>") +
-                L"\" particles=\"" + (r_par ? r_par : L"<null>") + L"\"");
         if (r_mod) Wh_FreeStringSetting(r_mod);
         if (r_tog) Wh_FreeStringSetting(r_tog);
         if (r_tra) Wh_FreeStringSetting(r_tra);
@@ -7510,17 +7189,8 @@ static void HotkeyOnSettingsLoaded() {
 
     // 每次都记录（LoadSettings 调用频率很低，不节流，避免漏掉关键信息）
     // Always log (LoadSettings is called rarely, so no throttling to avoid losing information)
-    DbgLogW(std::wstring(L"Hotkey: parsed. modifier=") + DbgNum((unsigned)g_hotkeyModifier) + L" [" +
-            kComboName[combo] + L"]");
-    DbgLogW(L"Hotkey:   toggle=\"" + std::wstring(g_hotkeyToggleKey) + L"\" -> " + DbgHex((unsigned)g_hotkeyToggleVK) +
-            L"   trail=\"" + std::wstring(g_hotkeyTrailKey) + L"\" -> " + DbgHex((unsigned)g_hotkeyTrailVK) +
-            L"   particles=\"" + std::wstring(g_hotkeyParticlesKey) + L"\" -> " + DbgHex((unsigned)g_hotkeyParticlesVK));
     if (!g_hotkeyToggleVK && !g_hotkeyTrailVK && !g_hotkeyParticlesVK) {
-        DbgLogW(L"Hotkey: *** NO HOTKEY BOUND *** - fill hotkey_toggle_key / hotkey_trail_key / hotkey_particles_key "
-                L"with a key name (single char a-z 0-9, F1-F24, or space/enter/esc/media_play/vol_up/...)");
     } else {
-        DbgLogW(L"Hotkey: active. The key must be pressed together with the combo above; required modifiers must be "
-                L"DOWN and the others UP.");
     }
     // 重新注册系统热键；窗口已存在时会转交给 UI 线程执行（线程亲和性要求），窗口未建时由
     // OverlayThreadProc 建窗后直接注册。
@@ -7530,26 +7200,7 @@ static void HotkeyOnSettingsLoaded() {
 }
 // 前向声明：诊断函数定义在文件末尾的进程载体模块里，这里提前声明
 // Forward declaration: the diagnostic helpers are defined in the process-host module near the end of the file
-static bool HostIsProcessRunning(const wchar_t* exeName);
-static void HostLogTargetInjectionState(const wchar_t* exeName);
 
-static void HostOnSettingsLoaded() {
-    // 由进程载体模块填充 / filled in by the process-host module
-    // 重新读取两项设置并重算目标载体名（LoadSettings 中另有独立读取，这里只保证派生名一致）
-    // Re-read the two settings and recompute the resolved target name (LoadSettings reads them separately as
-    // well; this only keeps the derived name in sync).
-    g_processHost = HostReadProcessHost();
-    HostReadCustomName(g_customHostProcess, ARRAYSIZE(g_customHostProcess));
-    wchar_t target[64];
-    HostGetTargetName(target, ARRAYSIZE(target));
-    // 记录解析结果；注意进程载体是启动时读取的，改了设置要重新加载模组才生效
-    // Log the resolution; note the process host is read at startup, so a settings change needs a mod reload
-    DbgLogW(std::wstring(L"HostOnSettingsLoaded: process_host=") + DbgNum((unsigned)g_processHost) +
-            L" custom=\"" + std::wstring(g_customHostProcess) + L"\" -> target=\"" + target + L"\" running=" +
-            DbgB(HostIsProcessRunning(target)) +
-            L" (NOTE: changing the process host requires reloading the mod - it is read in Wh_ModInit)");
-    HostLogTargetInjectionState(target);
-}
 
 void LoadSettings() {
     g_triggerVelocity = (float)Wh_GetIntSetting(L"trigger_velocity");
@@ -8072,22 +7723,6 @@ void LoadSettings() {
         if (s) { wcsncpy_s(g_hotkeyParticlesKey, s, _TRUNCATE); Wh_FreeStringSetting(s); }
         else g_hotkeyParticlesKey[0] = 0;
     }
-    // 进程载体 / process host
-    {
-        PCWSTR s = Wh_GetStringSetting(L"process_host");
-        if (s) {
-            if (wcscmp(s, L"wallpaper64") == 0) g_processHost = 1;
-            else if (wcscmp(s, L"dwm") == 0) g_processHost = 2;
-            else if (wcscmp(s, L"custom") == 0) g_processHost = 3;
-            else g_processHost = 0;  // windhawk
-            Wh_FreeStringSetting(s);
-        }
-    }
-    {
-        PCWSTR s = Wh_GetStringSetting(L"custom_host_process");
-        if (s) { wcsncpy_s(g_customHostProcess, s, _TRUNCATE); Wh_FreeStringSetting(s); }
-        else g_customHostProcess[0] = 0;
-    }
     g_enableBezierSmooth = Wh_GetIntSetting(L"enable_bezier_smooth") != 0;
     g_enableMotionBlur = Wh_GetIntSetting(L"enable_motion_blur") != 0;
     g_motionBlurStrength = Wh_GetIntSetting(L"motion_blur_strength");
@@ -8327,7 +7962,6 @@ void LoadSettings() {
     // 必须放在这里：上面才是热键与进程载体设置的读取点，提前调用会拿到旧值
     // Must be here: the hotkey and process-host settings are read above, calling earlier would use stale values
     HotkeyOnSettingsLoaded();
-    HostOnSettingsLoaded();
 }
 
 // ===================== 游戏检测 / Game Detection =====================
@@ -9982,11 +9616,6 @@ static void PollHotkeys() {
     static bool s_pollStarted = false;
     if (!s_pollStarted) {
         s_pollStarted = true;
-        DbgLogW(std::wstring(L"PollHotkeys: first poll reached. anyBound=") + (anyBound ? L"YES" : L"NO") +
-                L" modifier=" + DbgNum((unsigned)g_hotkeyModifier) +
-                L" vk=" + DbgHex((unsigned)vks[0]) + L"/" + DbgHex((unsigned)vks[1]) + L"/" + DbgHex((unsigned)vks[2]) +
-                L" raw=\"" + std::wstring(g_hotkeyToggleKey) + L"|" + std::wstring(g_hotkeyTrailKey) + L"|" +
-                std::wstring(g_hotkeyParticlesKey) + L"\"");
     }
     if (!anyBound) {
         // 每 10 秒重记一次：如果用户改了设置但工具进程没收到新值，这里会一直为空，据此可定位
@@ -9996,9 +9625,6 @@ static void PollHotkeys() {
         DWORD now = GetTickCount();
         if (now - s_lastUnboundLog > 10000) {
             s_lastUnboundLog = now;
-            DbgLogW(std::wstring(L"PollHotkeys: still no hotkey bound. raw=\"" + std::wstring(g_hotkeyToggleKey) +
-                    L"|" + std::wstring(g_hotkeyTrailKey) + L"|" + std::wstring(g_hotkeyParticlesKey) +
-                    L"\" modifier=" + DbgNum((unsigned)g_hotkeyModifier)));
         }
         return;
     }
@@ -10033,10 +9659,6 @@ static void PollHotkeys() {
                     (downNow[0] ? 8u : 0u) | (downNow[1] ? 16u : 0u) | (downNow[2] ? 32u : 0u);
     if (mask != s_prevMask) {
         if (s_prevMask != 0xFFFFFFFFu) {  // 跳过首次（全是 0，没意义）/ skip the first all-zero sample
-            DbgLogW(std::wstring(L"Hotkey: state alt=") + DbgB(altDown) + L" ctrl=" + DbgB(ctrlDown) +
-                    L" shift=" + DbgB(shiftDown) + L" | key(toggle)=" + DbgB(downNow[0]) +
-                    L" key(trail)=" + DbgB(downNow[1]) + L" key(particles)=" + DbgB(downNow[2]) +
-                    L" | modMatch=" + DbgB(modOK));
         }
         s_prevMask = mask;
     }
@@ -10048,9 +9670,6 @@ static void PollHotkeys() {
     DWORD nowTick = GetTickCount();
     if (nowTick - s_lastHeartbeat >= 30000) {
         s_lastHeartbeat = nowTick;
-        DbgLogW(std::wstring(L"Hotkey: heartbeat (polling alive) alt=") + DbgB(altDown) + L" ctrl=" + DbgB(ctrlDown) +
-                L" shift=" + DbgB(shiftDown) + L" key(toggle)=" + DbgB(downNow[0]) + L" modMatch=" + DbgB(modOK) +
-                L" osChannelOwnsToggle=" + DbgB(g_hotkeyOSOwned[0].load()));
     }
 
     // 一行缓存上一帧的修饰键状态：快速轻点时修饰键可能已先松开，允许「本帧或上一帧」匹配即可靠检测
@@ -10075,10 +9694,6 @@ static void PollHotkeys() {
         s_prevDown[i] = downNow[i];
         bool pressed = edge || freshBit[i];
         if (!pressed) continue;
-        DbgLogW(std::wstring(L"Hotkey: PRESS ") + kNames[i] + L" vk=" + DbgHex((unsigned)vks[i]) +
-                (edge ? L" (edge)" : L" (transition-bit)") +
-                (comboOK ? L" combo=MATCH" : L" combo=NO-MATCH") +
-                (g_hotkeyOSOwned[i].load() ? L" [OS channel owns this key, polling will not act]" : L""));
         if (!comboOK) continue;
         // 该键已注册给系统通道时，轮询只记录不动作，避免一次按键被切换两次（=看起来没反应）
         // When the OS channel owns this key polling only logs, so one press cannot be toggled twice (which would
@@ -11691,7 +11306,6 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
     if (msg == WM_HOTKEY) {
         // 系统热键通道：由系统直接投递，与轮询时序无关 / System hotkey channel: delivered by the OS, timing independent
         int id = (int)wParam;
-        DbgLogW(L"OverlayWndProc: WM_HOTKEY received, id=" + DbgHex((unsigned)id));
         HotkeyHandleId(id);
         return 0;
     }
@@ -11723,7 +11337,6 @@ static LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
     }
     if (msg == WM_APP_REHOTKEY) {
         // 设置变更导致热键配置变化：在窗口所属线程重新注册 / hotkey config changed: re-register on the owning thread
-        DbgLogW(L"OverlayWndProc: WM_APP_REHOTKEY -> re-registering hotkeys on the UI thread");
         HotkeyRegisterAll();
         return 0;
     }
@@ -11774,7 +11387,6 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, CN,
         L"MouseTrailOverlay", WS_POPUP, sx, sy, sw, sh, NULL, NULL, hi, NULL);
     if (!g_overlayHwnd) {
-        DbgLogW(L"OverlayThread: CreateWindowEx FAILED " + DbgHex(GetLastError()) + L" -> no overlay window");
         if (g_readyEvent) SetEvent(g_readyEvent);
         CoUninitialize();
         return 0;
@@ -11785,8 +11397,6 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     // DComp visual tree is composited independently by DWM, colored trail unaffected; after sleep DComp loss, fallback surface is also transparent (no black screen)
     SetLayeredWindowAttributes(g_overlayHwnd, RGB(0, 0, 0), 255, LWA_COLORKEY);
     // 屏幕捕获排除在 LoadSettings 中根据颜色模式动态设置 / Screen capture exclusion dynamically set in LoadSettings based on color mode
-    DbgLogW(L"OverlayThread: window created " + DbgNum((unsigned)sw) + L"x" + DbgNum((unsigned)sh) + L" at " +
-            DbgNum((unsigned)sx) + L"," + DbgNum((unsigned)sy) + L" (initially hidden)");
     // v3.4.2.2 DPI：窗口就绪后立即确定光标所在显示器的 DPI 比例 / v3.4.2.2 DPI: resolve the cursor monitor DPI scale once the window exists
     UpdateMonitorDpiScale();
     Wh_Log(L"[DPI] overlay start: scale=%.3f mode=%d scaleText=%d", g_monitorDpiScale, g_dpiScaleMode,
@@ -11810,11 +11420,9 @@ DWORD WINAPI OverlayThreadProc(LPVOID) {
     g_renderExitEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     g_renderThread = CreateThread(NULL, 0, RenderThreadProc, NULL, 0, NULL);
     if (!g_renderThread) {
-        DbgLogW(L"OverlayThread: CreateRenderThread FAILED " + DbgHex(GetLastError()) + L" -> hotkeys will not poll");
     }
 
     // ---- 消息循环（纯 UI 线程，不做渲染）----
-    DbgLogW(L"OverlayThread: entering message loop");
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
@@ -12013,462 +11621,19 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
     return 0;
 }
 
-// ===================== 进程载体：跨进程单一渲染者仲裁 =====================
-// ===================== Process host: cross-process single-renderer arbitration =====================
-// 命名互斥体在同一会话（session）内跨进程可见，正是我们需要的作用域；不同会话互不干扰。
-// A named mutex is visible across processes within the same session - exactly the scope we want; different
-// sessions never interfere.
 
-static std::atomic<bool> g_overlayStarted{false};  // 防止同进程重复启动覆盖层 / guard against double start in one process
 
-// 尝试取得覆盖层所有权。成功（OBJECT_0）或互斥体被遗弃（ABANDONED，表示持有它的线程/进程已退出）都算成功。
-// 注意：互斥体是"线程"所有物——若持有所在的线程退出，互斥体会被遗弃，这一点在设计兜底接管时已假定。
-// Try to claim overlay ownership. Both a fresh acquisition (OBJECT_0) and an abandoned mutex (ABANDONED,
-// meaning the owning thread/process exited) count as success. Note a mutex is owned by a *thread*: if the
-// owning thread exits the mutex becomes abandoned - this is assumed by the fallback takeover design.
-// 退化：无法创建互斥体时直接返回 true（不仲裁，直接渲染）。互斥体句柄只创建一次，避免轮询期间句柄泄漏。
-// Degrade: if the mutex cannot be created, return true (no arbitration, render directly). The handle is created
-// only once so that polling does not leak handles.
-// 大小写不敏感的文件名比较（自己实现，避免依赖 _wcsicmp 的头文件差异）
-// Case-insensitive file-name compare (hand-rolled to avoid _wcsicmp header differences)
-static bool HostNameEq(const wchar_t* a, const wchar_t* b) {
-    for (;; a++, b++) {
-        wchar_t ca = *a, cb = *b;
-        if (ca >= L'A' && ca <= L'Z') ca = (wchar_t)(ca - L'A' + L'a');
-        if (cb >= L'A' && cb <= L'Z') cb = (wchar_t)(cb - L'A' + L'a');
-        if (ca != cb) return false;
-        if (!ca) return true;
-    }
-}
-
-// 诊断用：目标载体进程当前是否在运行？没在运行就不可能被注入，只会落到兜底路径。
-// Diagnostic: is the target host process running right now? If not it cannot be injected and only the
-// fallback path can run - this single line often explains "process host switching did nothing".
-static bool HostIsProcessRunning(const wchar_t* exeName) {
-    bool found = false;
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE) return false;
-    PROCESSENTRY32W pe;
-    memset(&pe, 0, sizeof(pe));
-    pe.dwSize = sizeof(pe);
-    if (Process32FirstW(snap, &pe)) {
-        do {
-            if (HostNameEq(pe.szExeFile, exeName)) { found = true; break; }
-        } while (Process32NextW(snap, &pe));
-    }
-    CloseHandle(snap);
-    return found;
-}
-
-// 诊断：目标载体进程里有没有 Windhawk 引擎？引擎不在里面，模组永远不可能被加载到该进程，
-// 这是「换了进程载体看起来没反应」最常见的原因（此时兜底会让 windhawk.exe 继续渲染，视觉上毫无差别）。
-// Diagnostic: is the Windhawk engine loaded inside the target host process? Without the engine the mod can never
-// be loaded there - the most common reason a process-host switch appears to do nothing (the fallback keeps
-// rendering from windhawk.exe, which looks exactly the same).
-// 诊断：直接读取 Windhawk 引擎的进程过滤配置。这是回答「为什么模组没被注入到那个进程」最直接的依据，
-// 而且不受调用者位数限制（32 位宿主读注册表没问题，但枚举不了 64 位进程的模块）。
-// Diagnostic: read Windhawk's engine process-filter config directly. This is the most direct answer to
-// "why was the mod not injected into that process", and it works regardless of the caller's bitness
-// (a 32-bit host can read the registry but cannot enumerate a 64-bit process's modules).
-static void HostLogEngineProcessFilters() {
-    HKEY hk = nullptr;
-    // 必须带 KEY_WOW64_64KEY：Windhawk 的工具子进程可能是 32 位（日志里的 "Windhawk v1.7.3 x86"），
-    // 而 32 位进程访问 HKLM\SOFTWARE\Windhawk 会被重定向到 HKLM\SOFTWARE\WOW6432Node\Windhawk，
-    // 那里只有安装器键、没有 Engine 子键，于是 RegOpenKeyEx 直接失败（实测确认）。
-    // KEY_WOW64_64KEY is mandatory here: Windhawk's tool child may be 32-bit ("Windhawk v1.7.3 x86" in the log),
-    // and a 32-bit process accessing HKLM\SOFTWARE\Windhawk is redirected to
-    // HKLM\SOFTWARE\WOW6432Node\Windhawk, which holds only installer keys and no Engine subkey, so
-    // RegOpenKeyEx fails outright (verified on the machine).
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Windhawk\\Engine\\Settings", 0,
-                      KEY_READ | KEY_WOW64_64KEY, &hk) != ERROR_SUCCESS) {
-        // 读不到也没关系：不确定能不能读到是常态（权限/沙箱/重定向都可能），不要因此下任何结论。
-        // 真正确定的判据是「本进程的日志里有没有目标进程名的那一行」。
-        // Failing to read is fine and is no basis for any conclusion (permissions, sandboxing and redirection can
-        // all block it). The definitive check is whether our own log contains a line from the target process.
-        DbgLogW(L"InjectCheck: engine filter config not readable from here (this is not an error). The definitive "
-                L"answer is in THIS log file: if the target process was injected, it wrote its own "
-                L"\"Wh_ModInit: entered\" line - search for its exe name, e.g. \"[wallpaper64.exe:\". "
-                L"If that line never appears, Windhawk did not load the mod there.");
-        return;
-    }
-    static const wchar_t* kNames[] = { L"Include", L"Exclude", L"InjectIntoGames",
-                                       L"InjectIntoCriticalProcesses", L"InjectIntoIncompatiblePrograms" };
-    for (int i = 0; i < 5; i++) {
-        DWORD type = 0, cb = 0;
-        if (RegQueryValueExW(hk, kNames[i], nullptr, &type, nullptr, &cb) != ERROR_SUCCESS) continue;
-        if (type == REG_SZ && cb > 0 && cb < 8192) {
-            std::wstring buf(cb / sizeof(wchar_t) + 1, L'\0');
-            if (RegQueryValueExW(hk, kNames[i], nullptr, nullptr, (LPBYTE)&buf[0], &cb) == ERROR_SUCCESS) {
-                while (!buf.empty() && buf.back() == L'\0') buf.pop_back();
-                DbgLogW(std::wstring(L"InjectCheck: engine ") + kNames[i] + L" = \"" + buf + L"\"");
-            }
-        } else if (type == REG_DWORD) {
-            DWORD v = 0;
-            cb = sizeof(v);
-            if (RegQueryValueExW(hk, kNames[i], nullptr, nullptr, (LPBYTE)&v, &cb) == ERROR_SUCCESS)
-                DbgLogW(std::wstring(L"InjectCheck: engine ") + kNames[i] + L" = " + DbgNum(v));
-        }
-    }
-    RegCloseKey(hk);
-    DbgLogW(L"InjectCheck: engine Exclude is a list of processes Windhawk NEVER touches. If your target appears "
-            L"there, remove it (or add it to Include) in Windhawk Settings > Advanced settings > More advanced "
-            L"settings. InjectIntoGames/InjectIntoIncompatiblePrograms = 0 blocks games and known-incompatible apps.");
-}
-
-static void HostLogTargetInjectionState(const wchar_t* exeName) {
-    // 位数：Windhawk 的工具子进程可能是 32 位（日志里的 "Windhawk v1.7.3 x86"），
-    // 而 wallpaper64.exe 是 64 位 —— 32 位进程枚举 64 位目标模块必然失败（ERROR_PARTIAL_COPY 0x12B）。
-    // Bitness: Windhawk's tool child may be 32-bit ("Windhawk v1.7.3 x86" in the log) while wallpaper64.exe is
-    // 64-bit - a 32-bit process can never enumerate a 64-bit target's modules (ERROR_PARTIAL_COPY 0x12B).
-    BOOL selfWow = FALSE;
-    IsWow64Process(GetCurrentProcess(), &selfWow);
-
-    DWORD pid = 0;
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap != INVALID_HANDLE_VALUE) {
-        PROCESSENTRY32W pe;
-        memset(&pe, 0, sizeof(pe));
-        pe.dwSize = sizeof(pe);
-        if (Process32FirstW(snap, &pe)) {
-            do {
-                if (HostNameEq(pe.szExeFile, exeName)) { pid = pe.th32ProcessID; break; }
-            } while (Process32NextW(snap, &pe));
-        }
-        CloseHandle(snap);
-    }
-    if (pid == 0) {
-        DbgLogW(std::wstring(L"InjectCheck: target \"") + exeName +
-                L"\" is NOT running -> it cannot host the overlay; the windhawk.exe fallback will render");
-        return;
-    }
-    if (HostNameEq(exeName, L"windhawk.exe")) {
-        DbgLogW(std::wstring(L"InjectCheck: target \"") + exeName + L"\" pid=" + DbgNum(pid) +
-                L" (the Windhawk host itself, no engine check needed)");
-        return;
-    }
-    // 目标位数：从 32 位调用者查询 64 位进程时 IsWow64Process 会给出 FALSE，据此可判断目标为 64 位
-    // Target bitness: querying a 64-bit process from a 32-bit caller yields FALSE for IsWow64Process
-    BOOL tgtWow = FALSE;
-    bool tgtWowOk = false;
-    HANDLE hp = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (hp) {
-        tgtWowOk = IsWow64Process(hp, &tgtWow) != 0;
-        CloseHandle(hp);
-    }
-    bool targetIs64 = tgtWowOk && (tgtWow == FALSE);
-    DbgLogW(std::wstring(L"InjectCheck: \"") + exeName + L"\" pid=" + DbgNum(pid) +
-            L" thisProcess32bit=" + DbgB(selfWow != FALSE) + L" targetIs64bit=" + DbgB(targetIs64) +
-            L" (module enumeration is impossible when this=32bit and target=64bit)");
-
-    if (selfWow && targetIs64) {
-        // 无法从 32 位宿主检查 64 位目标 —— 直接给结论，不要误报成"受保护进程"
-        // Cannot check a 64-bit target from a 32-bit host - state the real reason instead of blaming a
-        // protected process
-        DbgLogW(std::wstring(L"InjectCheck: CANNOT verify whether the engine is inside \"") + exeName +
-                L"\" from this 32-bit host (module enumeration of a 64-bit process is impossible). "
-                L"THIS IS NOT A FAULT - it is a limitation. The definitive check needs no tools at all: this log "
-                L"file records one \"Wh_ModInit: entered\" line per injected process. If \"[" + exeName +
-                L":\" never appears in %TEMP%\\mouse-trail.log, Windhawk did not load the mod into that process. "
-                L"Most common cause: the process is on one of Windhawk's default exclusion lists (Steam/games paths, "
-                L"critical system processes) - or it was already running before the engine could inject. "
-                L"Add it to the process inclusion list and restart it.");
-        HostLogEngineProcessFilters();
-        return;
-    }
-
-    bool engine = false;
-    bool snapshotOk = false;
-    HANDLE ms = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
-    if (ms == INVALID_HANDLE_VALUE) {
-        DbgLogW(std::wstring(L"InjectCheck: cannot enumerate modules of \"") + exeName + L"\" pid=" + DbgNum(pid) +
-                L" (err=" + DbgHex(GetLastError()) + L")");
-        HostLogEngineProcessFilters();
-        return;
-    }
-    MODULEENTRY32W me;
-    memset(&me, 0, sizeof(me));
-    me.dwSize = sizeof(me);
-    if (Module32FirstW(ms, &me)) {
-        snapshotOk = true;
-        do {
-            // 1.7.3 的引擎是 windhawk.dll；2.0 的宿主是 windhawk-mod*.exe / 引擎同名变体
-            // The 1.7.3 engine is windhawk.dll; 2.0 hosts are windhawk-mod*.exe / similarly named engine variants
-            if (HostNameEq(me.szModule, L"windhawk.dll") || HostNameEq(me.szModule, L"windhawk-mod.dll") ||
-                HostNameEq(me.szModule, L"windhawk-mod.exe") || HostNameEq(me.szModule, L"windhawk-mod-uiaccess.exe") ||
-                HostNameEq(me.szModule, L"windhawk-mod-elevated.exe")) {
-                engine = true;
-                break;
-            }
-        } while (Module32NextW(ms, &me));
-    }
-    CloseHandle(ms);
-    if (!snapshotOk) {
-        DbgLogW(std::wstring(L"InjectCheck: module list of \"") + exeName + L"\" pid=" + DbgNum(pid) +
-                L" unreadable (err=" + DbgHex(GetLastError()) + L")");
-        HostLogEngineProcessFilters();
-        return;
-    }
-    if (engine) {
-        DbgLogW(std::wstring(L"InjectCheck: Windhawk engine IS loaded in \"") + exeName + L"\" pid=" + DbgNum(pid) +
-                L" -> the mod should be able to run there (check that the exe matches the selected host)");
-    } else {
-        DbgLogW(std::wstring(L"InjectCheck: Windhawk engine is NOT loaded in \"") + exeName + L"\" pid=" + DbgNum(pid) +
-                L" -> THE MOD CANNOT BE LOADED THERE. Excluded processes are unaffected by Windhawk no matter which "
-                L"mods are installed (official wiki). Known default exclusions that hit common hosts: "
-                L"\"*\\steamapps\\common\\*\" (any Steam app, e.g. Wallpaper Engine) and the whole \"Well-known "
-                L"games\" list; dwm.exe is on the critical-system-process list. FIX: Windhawk > Settings > Advanced "
-                L"settings > More advanced settings > add this exe to the PROCESS INCLUSION list (that overrides the "
-                L"excluded-by-default lists). If the app is a Steam app you may also need to enable injecting into "
-                L"games. Then RESTART that application - the engine can only be injected at process start.");
-        HostLogEngineProcessFilters();
-    }
-}
-
-static bool TryClaimOverlayOwnership(DWORD waitMs) {
-    if (!g_overlayOwnerMutex) {
-        g_overlayOwnerMutex = CreateMutexW(nullptr, FALSE, L"mouse-trail_overlay_owner");
-        if (!g_overlayOwnerMutex) {
-            DbgLogW(L"Ownership: CreateMutexW failed " + DbgHex(GetLastError()) + L", rendering without arbitration");
-            return true;  // 退化：无法仲裁时直接渲染 / degrade: render directly
-        }
-    }
-    DWORD r = WaitForSingleObject(g_overlayOwnerMutex, waitMs);
-    bool ok = (r == WAIT_OBJECT_0 || r == WAIT_ABANDONED);
-    DbgLogW(std::wstring(L"Ownership: claim wait=") + DbgNum(waitMs) + L"ms result=" +
-            (r == WAIT_OBJECT_0 ? L"ACQUIRED" : (r == WAIT_ABANDONED ? L"ACQUIRED(abandoned)" : L"HELD-BY-OTHER")) +
-            L" -> " + (ok ? L"ok" : L"no"));
-    return ok;
-}
-
-// 只探测（不长期占有）：互斥体当前是否被其它进程持有？探测成功会立即释放。
-// Probe only (never keep it): is the mutex currently held by another process? A successful probe is released
-// immediately. 返回 true 表示"被其它进程持有" / returns true when another process owns it.
-static bool IsOverlayOwnedByOther() {
-    if (!g_overlayOwnerMutex) {
-        g_overlayOwnerMutex = CreateMutexW(nullptr, FALSE, L"mouse-trail_overlay_owner");
-        if (!g_overlayOwnerMutex) return false;  // 无法仲裁：视作无人持有 / cannot arbitrate: treat as unowned
-    }
-    DWORD r = WaitForSingleObject(g_overlayOwnerMutex, 0);
-    if (r == WAIT_TIMEOUT) return true;  // 有人持有 / someone owns it
-    if (r == WAIT_OBJECT_0 || r == WAIT_ABANDONED) {
-        ReleaseMutex(g_overlayOwnerMutex);  // 归还，仅用于探测 / give it back, this was a probe only
-        return false;
-    }
-    return false;
-}
-
-// ---------------------------------------------------------------------------
-// 宿主就位标志 / Host-present flag
-// 命名互斥体是「谁先抢到谁渲染」，这在模组重载时会出问题：重载会卸载目标进程里的 DLL，
-// 持有所有权的线程随之消失、互斥体被遗弃，于是兜底子进程抢到并**永远占着**——用户设了载体却看不到效果。
-// 因此引入一个显式的「宿主已就位」命名事件：
-//   * 宿主进程创建并长期持有它；
-//   * 兜底子进程只做 Open+Close 探测（不持句柄，这样宿主退出后事件对象会真正消失），
-//     一旦发现宿主就位就**释放所有权并退出自身**，把渲染权让给宿主。
-// 最终语义是确定的：宿主活着且可用 -> 宿主渲染；宿主不在 -> 兜底渲染。
-// A named mutex is first-come-first-served, which breaks on mod reload: reloading unloads the DLL in the target
-// process, the owning thread disappears, the mutex is abandoned and the fallback child grabs it and keeps it
-// forever - the user picks a host and sees no effect. So an explicit "host is ready" named event is introduced:
-//   * the host process creates it and keeps it for its lifetime;
-//   * the fallback child only probes it with Open+Close (never holds a handle, so the event object really
-//     disappears when the host exits) and, once it sees the host, releases ownership and exits, handing the
-//     renderer role over.
-// The resulting semantics are deterministic: host alive and capable -> the host renders; otherwise -> the
-// fallback renders.
-// ---------------------------------------------------------------------------
-static const wchar_t* kHostReadyEventName = L"mouse-trail_host_ready";
-static HANDLE g_hostReadyEvent = nullptr;  // 仅宿主使用 / host only
-
-static bool HostIsReadyEventPresent() {
-    HANDLE h = OpenEventW(SYNCHRONIZE, FALSE, kHostReadyEventName);
-    if (!h) return false;
-    CloseHandle(h);  // 只探测，绝不持有；否则宿主退出后事件对象仍会存在 / probe only, never hold
-    return true;
-}
-
-static void HostCreateReadyEvent() {
-    if (g_hostReadyEvent) return;
-    g_hostReadyEvent = CreateEventW(nullptr, TRUE, FALSE, kHostReadyEventName);
-    if (g_hostReadyEvent)
-        DbgLogW(std::wstring(L"HostReady: event \"") + kHostReadyEventName + L"\" created");
-    else
-        DbgLogW(std::wstring(L"HostReady: event creation FAILED err=") + DbgHex(GetLastError()));
-}
-
-// 释放所有权（宿主进程卸载时调用）/ Release ownership (called when the host process unloads)
-static void ReleaseOverlayOwnership() {
-    if (g_overlayOwnerMutex) {
-        ReleaseMutex(g_overlayOwnerMutex);
-        CloseHandle(g_overlayOwnerMutex);
-        g_overlayOwnerMutex = nullptr;
-    }
-}
-
-// 真正的启动：LoadSettings + 就绪事件 + 覆盖层线程。由 WhTool_ModInit 与宿主进程入口共用，
-// 保持旧 WhTool_ModInit 的外部行为完全一致。
-// The actual start: LoadSettings + ready event + overlay thread. Shared by WhTool_ModInit and the host-process
-// entry point; keeps the old WhTool_ModInit external behaviour identical.
-static BOOL StartOverlay() {
-    if (g_overlayStarted.exchange(true)) {
-        DbgLogW(L"StartOverlay: already started in this process, ignoring");
-        return TRUE;
-    }
-    DbgLogW(L"StartOverlay: starting (LoadSettings + overlay thread)");
+BOOL WhTool_ModInit() {
     LoadSettings();
     g_readyEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     g_threadHandle = CreateThread(NULL, 0, OverlayThreadProc, NULL, 0, NULL);
     if (!g_threadHandle) {
-        DbgLogW(L"StartOverlay: CreateThread failed " + DbgHex(GetLastError()));
         if (g_readyEvent) { CloseHandle(g_readyEvent); g_readyEvent = NULL; }
-        g_overlayStarted.store(false);
         return FALSE;
-    }
-    DbgLogW(L"StartOverlay: overlay thread created, this process is now the renderer");
-    return TRUE;
-}
-
-// 兜底监督线程（只在 Tool Mod 子进程里跑）/ Fallback supervisor thread (runs in the Tool Mod child only)
-//   * 前 2.5s 让位窗口：只观察「宿主就位事件」和互斥体，不抢占；
-//   * 窗口结束且宿主仍未就位 -> 由持有线程取得所有权并渲染（安全兜底：即使选中的宿主从未被加载，
-//     例如用户忘了加进程包含列表，拖尾依然出现）；
-//   * 此后持续监控：一旦宿主就位（它可能晚于本进程被注入），就让出渲染权并退出自身 ——
-//     进程退出会连带释放互斥体，从而保证宿主能拿到所有权，且不会出现两个覆盖层。
-//   * the first 2.5 s is a yield window: observe the host-ready event and the mutex, never preempt;
-//   * when the window ends with no host -> the keeper thread claims ownership and renders (the safe fallback:
-//     even if the selected host was never loaded - e.g. the user forgot the process inclusion list - the trail
-//     still appears);
-//   * afterwards it keeps monitoring: as soon as a host appears (it may be injected later than this process),
-//     the child releases the renderer role and exits - process exit releases the mutex, which guarantees the host
-//     can claim it and that two overlays never coexist.
-// 前向声明：监督线程在本函数之前定义，而所有权仲裁函数在其后
-// Forward declaration: the supervisor is defined before the ownership arbitration helper
-static bool StartWithOwnershipArbitration(DWORD waitMs);
-
-static DWORD WINAPI HostFallbackSupervisorProc(LPVOID) {
-    const DWORD kYieldMs = 2500;
-    DWORD startTick = GetTickCount();
-    DWORD lastClaimTry = startTick;
-    bool rendering = false;
-    DbgLogW(L"Fallback: supervisor started, yielding to the selected host for ~2.5s");
-    for (;;) {
-        Sleep(200);
-        bool hostReady = HostIsReadyEventPresent();
-        if (hostReady) {
-            if (rendering) {
-                DbgLogW(L"Fallback: the selected host is ready -> releasing the overlay and exiting so the host "
-                        L"renders alone (process exit releases the ownership mutex)");
-                ExitProcess(0);
-            }
-            continue;  // 宿主在，继续待命 / host is there, keep standing by
-        }
-        if (!rendering && GetTickCount() - startTick >= kYieldMs &&
-            GetTickCount() - lastClaimTry >= 1000) {
-            lastClaimTry = GetTickCount();
-            if (StartWithOwnershipArbitration(2000)) {
-                DbgLogW(L"Fallback: no host present after 2.5s -> the windhawk.exe child renders (safe fallback)");
-                rendering = true;
-            }
-            // 抢占失败（别人持有）时继续循环，约 1s 后重试 / on failure keep looping and retry ~1s later
-        }
-    }
-    return 0;
-}
-// 互斥体是「线程所有物」：取得所有权的线程一旦退出，互斥体会被标记为遗弃(abandoned)，
-// 兜底子进程就会误判"宿主已死"并接管，最终出现两个覆盖层（双拖尾）。
-// 在注入型宿主进程里，调用 Wh_ModAfterInit 的是 Windhawk 的加载线程，返回后很可能就结束了，
-// 所以所有权必须固定在一个专用的长生命周期线程上。
-// A mutex is owned by a *thread*: if the acquiring thread exits, the mutex becomes abandoned and the fallback
-// child would wrongly conclude "the host died" and take over -> two overlays (double trail). In an injected host
-// process Wh_ModAfterInit runs on Windhawk's loader thread, which is likely to exit right after returning, so
-// ownership is pinned to a dedicated long-lived thread.
-// ---------------------------------------------------------------------------
-static HANDLE g_ownerKeeperEvent = nullptr;            // 判定完成事件 / claim-decided event
-static std::atomic<int> g_ownerKeeperResult{0};        // 0=未定 1=已取得并启动 2=他人持有 / 0=unknown 1=claimed 2=owned by other
-
-static DWORD WINAPI OverlayOwnerKeeperProc(LPVOID) {
-    int res = 2;
-    DbgLogW(L"Keeper: thread started, trying to claim ownership");
-    if (TryClaimOverlayOwnership(0)) {
-        StartOverlay();          // 由本线程启动，避免调用线程退出后所有权被遗弃 / start from this thread so ownership is never abandoned
-        // 注意：「宿主就位」事件**绝不能**在这里创建——本线程是通用的所有权持有线程，兜底子进程
-        // 抢到所有权时也会走到这里。若在此立旗，子进程会看到自己的旗然后自行退出，无限乒乓、无人渲染
-        // （v3.4.2.2 实测踩到）。事件只由真正的宿主进程在 Wh_ModAfterInit 里创建。
-        // NOTE: the host-ready event must NOT be created here - this thread is the generic ownership holder and
-        // the fallback child also runs it when it wins. Raising the flag here makes the child see its own flag and
-        // exit, ping-ponging forever with nobody rendering (hit in practice in v3.4.2.2). Only the genuine host
-        // process creates it, in Wh_ModAfterInit.
-        res = 1;
-    } else {
-        DbgLogW(L"Keeper: overlay is owned by another process, this process stays idle");
-    }
-    g_ownerKeeperResult.store(res);
-    if (g_ownerKeeperEvent) SetEvent(g_ownerKeeperEvent);
-    if (res != 1) return 0;      // 未取得所有权：无需长期持有 / nothing to hold
-    for (;;) Sleep(60000);       // 长期持有所有权直到进程结束 / hold for the rest of the process lifetime
-    return 0;
-}
-
-// 在专用线程上取得所有权并启动覆盖层；waitMs 仅用于等待判定结果。
-// Claim ownership and start the overlay on a dedicated thread; waitMs only bounds the decision wait.
-static bool StartWithOwnershipArbitration(DWORD waitMs) {
-    if (!g_ownerKeeperEvent)
-        g_ownerKeeperEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_ownerKeeperEvent) {
-        // 退化：无法创建事件时在本线程判定 / degrade: decide on this thread
-        DbgLogW(L"Ownership: CreateEvent failed " + DbgHex(GetLastError()) + L", claiming on this thread");
-        if (TryClaimOverlayOwnership(0)) { StartOverlay(); return true; }
-        return false;
-    }
-    ResetEvent(g_ownerKeeperEvent);
-    g_ownerKeeperResult.store(0);
-    HANDLE h = CreateThread(nullptr, 0, OverlayOwnerKeeperProc, nullptr, 0, nullptr);
-    if (!h) {
-        DbgLogW(L"Ownership: keeper thread creation failed " + DbgHex(GetLastError()) + L", claiming on this thread");
-        if (TryClaimOverlayOwnership(0)) { StartOverlay(); return true; }
-        return false;
-    }
-    CloseHandle(h);  // 不等待该线程（成功时它会一直持有）/ do not join it (on success it holds forever)
-    if (WaitForSingleObject(g_ownerKeeperEvent, waitMs) != WAIT_OBJECT_0) {
-        DbgLogW(L"Ownership: decision timed out after " + DbgNum(waitMs) + L"ms");
-        return false;  // 判定超时：保守返回 false，调用方可稍后重试 / timed out: return false conservatively, caller may retry
-    }
-    bool won = (g_ownerKeeperResult.load() == 1);
-    DbgLogW(std::wstring(L"Ownership: decision = ") + (won ? L"THIS PROCESS RENDERS" : L"someone else renders"));
-    return won;
-}
-
-BOOL WhTool_ModInit() {
-    wchar_t target[64];
-    HostGetTargetName(target, ARRAYSIZE(target));
-    DbgLogW(std::wstring(L"WhTool_ModInit: tool-mod child process. selected target=\"") + target + L"\"" +
-            (HostIsProcessRunning(target) ? L" (target process IS running)" : L" (target process is NOT running)"));
-    if (wcscmp(target, L"windhawk.exe") == 0) {
-        // 默认载体：与旧行为完全一致——立即取得所有权并渲染，无额外线程、无延迟
-        // Default host: identical to the old behaviour - claim immediately and render, no extra thread, no delay
-        DbgLogW(L"WhTool_ModInit: default host -> render directly, no arbitration delay");
-        TryClaimOverlayOwnership(0);
-        return StartOverlay();
-    }
-    // 目标为其它进程：子进程作为兜底。先启动监督线程后立即返回（不阻塞 WhTool_ModInit、不创建覆盖层窗口）。
-    // Target is another process: the child is the fallback. Start the supervisor thread and return promptly
-    // (never block WhTool_ModInit, never create the overlay window here).
-    DbgLogW(L"WhTool_ModInit: non-default host selected -> starting the fallback supervisor thread");
-    HostLogTargetInjectionState(target);
-    HANDLE hSupervisor = CreateThread(NULL, 0, HostFallbackSupervisorProc, NULL, 0, NULL);
-    if (hSupervisor) {
-        CloseHandle(hSupervisor);  // 不等待该线程，关闭句柄即可 / do not join it, just close the handle
-    } else {
-        // 线程创建失败时退化为立即渲染，保证总有拖尾（同样经由持有线程，避免所有权被遗弃）
-        // Degrade to immediate rendering so something always shows (also via the holder thread, so the ownership
-        // is never abandoned).
-        DbgLogW(L"WhTool_ModInit: supervisor thread failed " + DbgHex(GetLastError()) + L", claiming directly");
-        StartWithOwnershipArbitration(1000);
     }
     return TRUE;
 }
 void WhTool_ModUninit() {
-    // 音乐捕获不在此（控制线程）停止：其COM对象由渲染线程创建，统一在 RenderThreadProc 退出时
-    // 于同一渲染线程调用 MusicStopCapture 释放，避免跨线程释放 STA 对象。
     if (g_threadHandle) {
         if (g_readyEvent)
             WaitForSingleObject(g_readyEvent, INFINITE);
@@ -12488,7 +11653,6 @@ void WhTool_ModUninit() {
     }
 }
 void WhTool_ModSettingsChanged() {
-    // 设置变更标记，由渲染线程消费（避免 UI 线程与渲染线程竞争）/ Settings change flag, consumed by render thread (avoids UI/render thread race)
     g_settingsDirty.store(true);
 }
 
@@ -12514,35 +11678,22 @@ void WINAPI EntryPoint_Hook() {
 BOOL Wh_ModInit() {
     DWORD sessionId = 0;
     BOOL gotSession = ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
-    // 最先记录一行：日志带进程名，因此这一步能直接回答「Windhawk 到底把模组注入到了哪些进程」
-    // Log the very first line: lines carry the exe name, so this directly answers
-    // "which processes did Windhawk inject the mod into"
-    DbgLogW(std::wstring(L"Wh_ModInit: entered. session=") + DbgNum((unsigned)sessionId) +
-            L" gotSession=" + DbgB(gotSession != 0) + L" log=\"" + DbgLogPath() + L"\"");
-    DbgLogW(std::wstring(L"Wh_ModInit: cmdline=\"") + std::wstring(GetCommandLineW()) + L"\"");
     if (gotSession && sessionId == 0) {
-        DbgLogW(L"Wh_ModInit: session 0 -> return FALSE");
         return FALSE;
     }
-    // ---- 先取当前进程名：后面的所有判断都要用，而且必须早于参数解析 ----
-    // ---- Resolve the current exe name first: everything below needs it, and it must precede argument parsing ----
+
     wchar_t exeName[MAX_PATH] = L"";
     {
         WCHAR fullPath[MAX_PATH];
         DWORD n = GetModuleFileNameW(nullptr, fullPath, ARRAYSIZE(fullPath));
         if (n == 0 || n >= ARRAYSIZE(fullPath)) {
-            DbgLogW(L"Wh_ModInit: GetModuleFileNameW failed -> return FALSE");
             return FALSE;
         }
         const wchar_t* base = fullPath;
         for (const wchar_t* p = fullPath; *p; p++) {
-            if (*p == L'\\' || *p == L'/') base = p + 1;  // 去掉目录，仅保留基名 / strip the directory, keep the base name
+            if (*p == L'\\' || *p == L'/') base = p + 1;
         }
         wcsncpy_s(exeName, ARRAYSIZE(exeName), base, _TRUNCATE);
-        for (size_t i = 0; exeName[i]; i++) {
-            wchar_t c = exeName[i];
-            if (c >= L'A' && c <= L'Z') exeName[i] = (wchar_t)(c - L'A' + L'a');  // 小写化 / lowercase
-        }
     }
     bool isWindhawkSelf = (wcscmp(exeName, L"windhawk.exe") == 0);
 
@@ -12552,19 +11703,8 @@ BOOL Wh_ModInit() {
     int argc;
     LPWSTR *argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
-        DbgLogW(L"Wh_ModInit: CommandLineToArgvW failed -> return FALSE");
         return FALSE;
     }
-    // -service / -service-start / -service-stop 是 windhawk.exe **自己**的参数，必须排除，否则会给
-    // Windhawk 的服务进程/托盘进程装上模组。但这段判断**只能用在 windhawk.exe 上**：
-    // 别的程序也会带 -service（Wallpaper Engine 的启动命令行就是
-    // `wallpaper64.exe -safe -silent -service`），早期版本把它通用化，导致宿主进程被误判成
-    // Windhawk 服务进程、直接 return FALSE（实测踩到，模组明明已注入却什么都没做）。
-    // -service / -service-start / -service-stop are windhawk.exe's OWN arguments and must be excluded, otherwise
-    // the mod would load into Windhawk's service/tray processes. This check must apply to windhawk.exe ONLY:
-    // other programs carry -service too (Wallpaper Engine launches `wallpaper64.exe -safe -silent -service`) and
-    // treating it generically made the host process bail out with return FALSE - the mod WAS injected and then
-    // did nothing (hit this in practice).
     if (isWindhawkSelf) {
         for (int i = 1; i < argc; i++) {
             if (wcscmp(argv[i], L"-service") == 0 || wcscmp(argv[i], L"-service-start") == 0 ||
@@ -12584,22 +11724,15 @@ BOOL Wh_ModInit() {
         }
     }
     LocalFree(argv);
-    DbgLogW(std::wstring(L"Wh_ModInit: flags exe=\"") + exeName + L"\" isWindhawkSelf=" + DbgB(isWindhawkSelf) +
-            L" toolMod=" + DbgB(isToolModProcess) + L" currentToolMod=" + DbgB(isCurrentToolModProcess) +
-            L" excluded=" + DbgB(isExcluded));
     if (isExcluded) {
-        DbgLogW(L"Wh_ModInit: windhawk.exe -service argument -> return FALSE");
         return FALSE;
     }
     if (isCurrentToolModProcess) {
-        DbgLogW(L"Wh_ModInit: this is the tool-mod child for our mod id");
         g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
-            DbgLogW(L"Wh_ModInit: CreateMutex failed -> ExitProcess(1)");
             ExitProcess(1);
         }
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            DbgLogW(L"Wh_ModInit: tool mod already running -> ExitProcess(1)");
             ExitProcess(1);
         }
         if (!WhTool_ModInit()) {
@@ -12615,90 +11748,20 @@ BOOL Wh_ModInit() {
     if (isToolModProcess) {
         return FALSE;
     }
-    // ---- 进程载体决策 / process-host decision ----
-    // 关键修复：只有真正的 Windhawk 宿主进程才可以充当启动器并拉起 windhawk.exe -tool-mod 子进程。
-    // 其它被注入的进程（wallpaper64.exe / dwm.exe 等）绝不拉起子进程，否则每个被注入进程都会多出一个
-    // windhawk.exe 子进程，对 dwm.exe 尤其危险。
-    // Critical fix: only the real Windhawk host process may act as a launcher that spawns the
-    // `windhawk.exe -tool-mod` child. Other injected processes (wallpaper64.exe / dwm.exe ...) must never spawn
-    // a child, otherwise every injected process would spawn an extra windhawk.exe child - dangerous for dwm.exe.
-    // exeName 已在函数开头解析（参数解析之前），这里直接复用，避免两处逻辑分叉
-    // exeName was already resolved at the top of this function (before argument parsing); reuse it here so the
-    // two code paths cannot diverge.
-    wchar_t hostTarget[64];
-    HostGetTargetName(hostTarget, ARRAYSIZE(hostTarget));
-    // 决策前的关键诊断：本进程是谁、目标载体是谁、目标进程是否在运行
-    // Key diagnostics before the decision: who am I, who is the target, is the target process running
-    DbgLogW(std::wstring(L"Wh_ModInit: DECIDE exe=\"") + exeName + L"\" target=\"" + hostTarget + L"\" targetRunning=" +
-            DbgB(HostIsProcessRunning(hostTarget)) +
-            L" (raw settings are logged by HostGetTargetName just above; the g_processHost global is not loaded yet "
-            L"at this point, so do not trust it here)");
-    if (wcscmp(exeName, L"windhawk.exe") == 0) {
-        // Windhawk 宿主进程：始终充当启动器。即使选择了别的载体，子进程仍作为缺省/兜底渲染者而必须存在。
-        // Windhawk host process: always the launcher. Even when another host is selected, the child must exist
-        // as the default/fallback renderer.
-        if (wcscmp(hostTarget, L"windhawk.exe") == 0)
-            DbgLogW(L"Wh_ModInit: -> LAUNCHER (default host; the tool-mod child renders)");
-        else
-            DbgLogW(std::wstring(L"Wh_ModInit: -> LAUNCHER (host=\"") + hostTarget +
-                    L"\" selected; the windhawk.exe child stays alive as the fallback renderer)");
-        g_isToolModProcessLauncher = true;
-        return TRUE;
-    }
-    if (wcscmp(exeName, hostTarget) == 0) {
-        // 本进程就是被选中的载体：在这里渲染，绝不拉起子进程
-        // This process is the chosen host: render here, never spawn a child
-        g_isHostProcess = true;
-        DbgLogW(std::wstring(L"Wh_ModInit: -> SELECTED HOST, will render in-process (exe=\"") + exeName + L"\")");
-        return TRUE;
-    }
-    // 被注入但与载体无关：什么都不做 / injected but irrelevant: do nothing at all
-    DbgLogW(std::wstring(L"Wh_ModInit: -> IGNORED. \"") + exeName + L"\" is neither windhawk.exe nor the selected host \"" +
-            hostTarget + L"\". If you expected this process to render, it is not the selected host; if you expected "
-            L"the selected host to be injected, Windhawk did not load the mod into it (check the include list in the "
-            L"mod's advanced settings and that the process was running).");
-    return FALSE;
+    g_isToolModProcessLauncher = true;
+    return TRUE;
 }
 void Wh_ModAfterInit() {
-    DbgLogW(std::wstring(L"Wh_ModAfterInit: entered. isHostProcess=") + DbgB(g_isHostProcess) +
-            L" isLauncher=" + DbgB(g_isToolModProcessLauncher));
-    if (g_isHostProcess) {
-        // 本进程是被选中的载体：先立起「宿主就位」事件（兜底子进程看到后会让位并退出），
-        // 然后在专用持有线程上取得所有权并在此进程内渲染，绝不拉起子进程。
-        // This process is the selected host: raise the host-ready event first (the fallback child yields and exits
-        // when it sees it), then claim ownership on the dedicated holder thread and render in-process, never spawn
-        // a child.
-        HostCreateReadyEvent();
-        // 抢所有权必须带重试：此刻互斥体可能仍被（旧版或竞态中的）兜底子进程持有；子进程看到本事件后
-        // 会在 200ms 内退出并释放互斥体，重试即可拿到。只抢一次的话，一旦先手被占，宿主就永久 idle。
-        // Claiming must retry: the mutex may still be held by a (stale or racing) fallback child at this moment.
-        // The child exits within 200 ms of seeing the event and releases the mutex, so a retry succeeds. With a
-        // single attempt the host would stay idle forever whenever it lost the first race.
-        int attempts = 0;
-        while (!StartWithOwnershipArbitration(1000)) {
-            attempts++;
-            DbgLogW(L"Wh_ModAfterInit: host claim attempt " + DbgNum((unsigned)attempts) +
-                    L" failed, retrying in 700ms (the fallback child should exit and free the mutex)");
-            Sleep(700);
-        }
-        DbgLogW(L"Wh_ModAfterInit: host process claimed the overlay after " + DbgNum((unsigned)attempts + 1) +
-                L" attempt(s)");
-        return;
-    }
     if (!g_isToolModProcessLauncher) {
-        DbgLogW(L"Wh_ModAfterInit: neither host nor launcher -> nothing to do");
         return;
     }
     WCHAR currentProcessPath[MAX_PATH];
     switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
-            DbgLogW(L"Wh_ModAfterInit: GetModuleFileName failed");
             return;
     }
-    DbgLogW(std::wstring(L"Wh_ModAfterInit: launching the tool-mod child from \"") + currentProcessPath + L"\"");
-    WCHAR
-    commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
@@ -12733,11 +11796,6 @@ void Wh_ModAfterInit() {
     CloseHandle(pi.hThread);
 }
 void Wh_ModSettingsChanged() {
-    // 注入模式（wallpaper64/dwm/custom 等非 windhawk 载体）的设置变更回调（Windhawk 标准回调名）。
-    // 工具模组模式（windhawk.exe -tool-mod）由引擎直接调用 WhTool_ModSettingsChanged。
-    // launcher 进程（windhawk.exe 父进程）不渲染，直接忽略，由子进程处理。
-    // Settings-change callback for injected mode (non-windhawk hosts) - standard Windhawk callback name.
-    // Tool-mod mode uses WhTool_ModSettingsChanged directly. The launcher process doesn't render, so ignore it.
     if (g_isToolModProcessLauncher) {
         return;
     }
@@ -12745,17 +11803,6 @@ void Wh_ModSettingsChanged() {
 }
 void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
-        return;
-    }
-    if (g_isHostProcess) {
-        // 宿主进程（wallpaper64.exe / dwm.exe 等）：按与 Tool Mod 相同的方式停止覆盖层，并释放所有权。
-        // 注意：这里绝不能调用 ExitProcess —— 那会连带杀掉宿主进程（尤其是 dwm.exe，会直接毁掉桌面）。
-        // Host process (wallpaper64.exe / dwm.exe ...): stop the overlay exactly like the tool mod does, then
-        // release ownership. Never call ExitProcess here - that would kill the host process itself (for dwm.exe
-        // it would take down the desktop).
-        WhTool_ModUninit();
-        if (g_hostReadyEvent) { CloseHandle(g_hostReadyEvent); g_hostReadyEvent = nullptr; }  // 先降下「宿主就位」事件，让兜底逻辑回到互斥体判定 / drop the host-ready event first so the fallback falls back to mutex semantics
-        ReleaseOverlayOwnership();
         return;
     }
     WhTool_ModUninit();
