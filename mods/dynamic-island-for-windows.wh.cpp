@@ -532,6 +532,12 @@ constexpr wchar_t kWindowClass[] = L"Windhawk.DynamicIslandForWindows";
 constexpr UINT WM_APP_LAYOUT_CHANGED = WM_APP + 0x442;
 constexpr UINT WM_APP_NEW_EVENT = WM_APP + 0x443;
 constexpr UINT WM_APP_MOUSE_WAKE = WM_APP + 0x446;
+// RegisterHotKey cannot associate a hot key with a window created by another
+// thread, and the same applies to tearing one down. LoadSettings runs on
+// Windhawk's settings thread while the overlay window belongs to the render
+// thread, so hotkey and backdrop changes are posted across and applied there.
+constexpr UINT WM_APP_APPLY_HOTKEY = WM_APP + 0x447;
+constexpr UINT WM_APP_APPLY_BACKDROP = WM_APP + 0x448;
 constexpr int ID_HIDE_SHOW_HOTKEY = 1;
 constexpr float kRenderPadX = 28.0f;
 constexpr float kRenderPadY = 22.0f;
@@ -2206,10 +2212,10 @@ void LoadSettings() {
             L"Themes.PillBgColor", {kThemePalettes[0].bg, L"#0D0D0F"},
             ColorFromHex(p.bg, D2D1::ColorF(0.031f, 0.031f, 0.039f, 1.0f)));
         target.textPrimaryColor = resolveColor(
-            L"Themes.TextPrimaryColor", {L"#FFFFFF"},
+            L"Themes.TextPrimaryColor", {L"#FFFFFF", L"#F7F7F7"},
             ColorFromHex(p.fg, D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f)));
         target.textSecondaryColor = resolveColor(
-            L"Themes.TextSecondaryColor", {kThemePalettes[0].sec, L"#B0B0B8"},
+            L"Themes.TextSecondaryColor", {kThemePalettes[0].sec, L"#B0B0B8", L"#888888"},
             ColorFromHex(p.sec, D2D1::ColorF(0.608f, 0.608f, 0.647f, 1.0f)));
         target.contourBorderColor = resolveColor(
             L"Themes.ContourBorderHex", {kThemePalettes[0].border, L"#333338"},
@@ -2229,7 +2235,8 @@ void LoadSettings() {
                 case 1:  migrated = 1; break;                  // Fluent        -> Graphite
                 case 2:  migrated = 2; break;                  // Midnight Blue -> Slate
                 case 3:  migrated = 6; break;                  // Deep Purple   -> Plum
-                default: migrated = kCustomThemeIndex; break;   // 4/5/6 were all Custom
+                case 4:  migrated = 1; break;                  // Fluent Design -> Graphite
+                default: migrated = kCustomThemeIndex; break;   // out of range meant Custom
             }
             Wh_SetIntValue(kThemeValueName, migrated);
         }
@@ -2353,13 +2360,19 @@ void LoadSettings() {
     // RenderThreadProc does the initial registration itself right after
     // CreateWindowExW. Every later call (e.g. from WhTool_ModSettingsChanged)
     // re-registers live so hotkey edits apply without a mod restart.
+    // Posted, not called: UnregisterHotKey / RegisterHotKey fail with
+    // ERROR_WINDOW_OF_OTHER_THREAD from this thread, which left the old
+    // combination registered, the new one never registered, and the bookkeeping
+    // flag claiming otherwise -- so switching the hotkey off never released it.
     if (hotkeySettingChanged) {
-        ApplyHideShowHotkey();
+        if (g_hwnd) {
+            PostMessageW(g_hwnd, WM_APP_APPLY_HOTKEY, 0, 0);
+        }
     }
     // Same story for the backdrop: no-ops before the window exists, and applies
     // live afterwards so switching blur/acrylic needs no mod restart.
     if (backdropChanged && g_hwnd) {
-        ApplyBackdropMaterial(g_hwnd);
+        PostMessageW(g_hwnd, WM_APP_APPLY_BACKDROP, 0, 0);
     }
 }
 
@@ -10700,16 +10713,50 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
+// The wake-on-hover hook only matters while the island is parked, and it can
+// only park when an auto-hide mode is on. A system-wide WH_MOUSE_LL routes every
+// mouse event on the desktop through this thread, so leaving one installed for
+// users who never enabled auto-hide -- the default, AutoHideIdleSeconds is '0'
+// -- makes the whole desktop's input depend on this process keeping up.
+static bool MouseWakeHookWanted() {
+    return g_settings.unhideOnHover &&
+           (g_settings.autoHideIdleSeconds != 0 || g_settings.autoHideFullscreen);
+}
+
 DWORD WINAPI MouseThreadProc(void*) {
-    while (!g_hwnd) {
-        Sleep(10);
+    while (!g_hwnd && WaitForSingleObject(g_stopEvent, 10) == WAIT_TIMEOUT) {
     }
-    g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
-    MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+
+    bool quit = false;
+    while (!quit && WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
+        const bool wanted = MouseWakeHookWanted();
+        if (wanted && !g_mouseHook) {
+            g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, LowLevelMouseProc, nullptr, 0);
+        } else if (!wanted && g_mouseHook) {
+            UnhookWindowsHookEx(g_mouseHook);
+            g_mouseHook = nullptr;
+        }
+
+        // A low-level hook is delivered through the installing thread's message
+        // queue, so this has to keep pumping while the hook is up.
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                quit = true;
+                break;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        if (quit) {
+            break;
+        }
+
+        // Waiting on the stop event keeps shutdown prompt; the timeout is what
+        // lets a settings change be noticed.
+        MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, 200, QS_ALLINPUT);
     }
+
     if (g_mouseHook) {
         UnhookWindowsHookEx(g_mouseHook);
         g_mouseHook = nullptr;
@@ -10809,6 +10856,21 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
             RemoveClipboardFormatListener(hwnd);
             DeregisterShellHookWindow(hwnd);
             return 0;
+
+        // Both of these touch the window from the thread that owns it, the only
+        // thread allowed to bind a hot key to it or reshape it.
+        case WM_APP_APPLY_HOTKEY:
+            ApplyHideShowHotkey();
+            return 0;
+
+        case WM_APP_APPLY_BACKDROP: {
+            ApplyBackdropMaterial(hwnd);
+            RECT rc{};
+            if (GetWindowRect(hwnd, &rc)) {
+                ApplyBackdropRegion(hwnd, rc.right - rc.left, rc.bottom - rc.top);
+            }
+            return 0;
+        }
 
         case WM_APP_MOUSE_WAKE:
             // No-op payload — its only job is to wake MsgWaitForMultipleObjects
