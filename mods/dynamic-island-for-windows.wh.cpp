@@ -60,7 +60,7 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
 - **File Tray:** Enable the File Tray module, then drag files onto the island. It jumps to the shelf to confirm the drop. Click a row to open that file; right-click the island to clear the shelf.
 - **Right-Click Menu:** Right-click the island to access Theme presets, Transparency settings, and to pin the island open.
 - **Windhawk Settings:** Visit the Mod Settings tab to change the island's Position, Size Scale, Refresh Rate (Target FPS), Animation Style (Smooth/Default/Bouncy/Snappy), Animation Speed, and toggle specific modules. You can also perfectly align the island using the `Offset X` and `Offset Y` settings, and select exactly which monitor the island should appear on (including a "Follow Mouse" mode!).
-- **Notifications:** Two things are required, and the module stays silent if either is missing. First, add `explorer.exe` to the process inclusion list in the Advanced tab of the mod settings and restart the mod. Second, Windows itself must allow apps to read notifications: turn on **Settings → Privacy & security → Notifications → "Let apps access your notifications"**. Without that permission Windows denies the listener and no notification will ever reach the island. If notifications still don't appear, check the mod's log in Windhawk for a "permission not granted" line.
+- **Notifications:** Windows must allow apps to read notifications: turn on **Settings > Privacy & security > Notifications > "Let apps access your notifications"**. Without that permission Windows denies the listener and the module stays silent. Nothing needs to be added to the process inclusion list; the island runs in its own process and reads notifications from there.
 - **Quick Hide/Show:** Right-click the island and choose "Hide Island" to collapse it completely — CPU usage drops to ~0% while hidden since the mod fully parks its render thread. Bring it back instantly with the configurable hotkey (default **Ctrl+Alt+D**, changeable in the **Shortcuts** settings tab). Because a hidden island can't be right-clicked, the hotkey is the *only* way back once hidden — if you turn the hotkey off while hidden, re-enable it (or disable the mod) from Windhawk's settings.
 
 ---
@@ -1630,42 +1630,7 @@ std::wstring GetStringSettingWithFallback(PCWSTR primary, PCWSTR fallback, PCWST
     return L"";
 }
 
-int GetIntSettingWithFallback(PCWSTR primary, PCWSTR fallback, PCWSTR fallback2, int defVal) {
-    PCWSTR p = Wh_GetStringSetting(primary);
-    if (p && *p) {
-        Wh_FreeStringSetting(p);
-        return Wh_GetIntSetting(primary);
-    }
-    if (p) {
-        Wh_FreeStringSetting(p);
-    }
 
-    PCWSTR f = Wh_GetStringSetting(fallback);
-    if (f && *f) {
-        Wh_FreeStringSetting(f);
-        return Wh_GetIntSetting(fallback);
-    }
-    if (f) {
-        Wh_FreeStringSetting(f);
-    }
-
-    if (fallback2) {
-        PCWSTR f2 = Wh_GetStringSetting(fallback2);
-        if (f2 && *f2) {
-            Wh_FreeStringSetting(f2);
-            return Wh_GetIntSetting(fallback2);
-        }
-        if (f2) {
-            Wh_FreeStringSetting(f2);
-        }
-    }
-
-    return defVal;
-}
-
-int GetIntSettingWithFallback(PCWSTR primary, PCWSTR fallback, int defVal = 0) {
-    return GetIntSettingWithFallback(primary, fallback, nullptr, defVal);
-}
 
 D2D1_COLOR_F ColorFromHex(std::wstring text, D2D1_COLOR_F fallback) {
     // Trim surrounding whitespace: a stray space used to make the whole value
@@ -2061,8 +2026,8 @@ void LoadSettings() {
 
     next.bluetoothIndicator = Wh_GetIntSetting(L"Modules.BluetoothIndicator") != 0;
     next.bluetoothShowBattery = Wh_GetIntSetting(L"Modules.BluetoothShowBattery") != 0;
-    next.doNotDisturbIndicator = GetIntSettingWithFallback(L"Modules.DoNotDisturbIndicator", nullptr, 1) != 0;
-    next.notificationRespectDnD = GetIntSettingWithFallback(L"Modules.NotificationRespectDnD", nullptr, 1) != 0;
+    next.doNotDisturbIndicator = Wh_GetIntSetting(L"Modules.DoNotDisturbIndicator") != 0;
+    next.notificationRespectDnD = Wh_GetIntSetting(L"Modules.NotificationRespectDnD") != 0;
 
     // ── Premium material / redesign ──────────────────────────────────────────
     {
@@ -2075,21 +2040,21 @@ void LoadSettings() {
             next.backdropMaterial = BackdropMaterial::None;
         }
     }
-    next.backdropTint = Clamp(GetIntSettingWithFallback(L"Themes.BackdropTint", nullptr, 55) / 100.0f, 0.0f, 1.0f);
-    next.backdropFillAlpha = Clamp(GetIntSettingWithFallback(L"Themes.BackdropFillOpacity", nullptr, 45) / 100.0f, 0.0f, 1.0f);
+    next.backdropTint = Clamp(Wh_GetIntSetting(L"Themes.BackdropTint") / 100.0f, 0.0f, 1.0f);
+    next.backdropFillAlpha = Clamp(Wh_GetIntSetting(L"Themes.BackdropFillOpacity") / 100.0f, 0.0f, 1.0f);
 
-    next.materialDepth = GetIntSettingWithFallback(L"Themes.MaterialDepth", nullptr, 1) != 0;
-    next.dropShadow = GetIntSettingWithFallback(L"Themes.DropShadow", nullptr, 1) != 0;
-    next.accentBloom = Clamp(GetIntSettingWithFallback(L"Themes.AccentBloom", nullptr, 100) / 100.0f, 0.0f, 2.0f);
-    next.textScale = Clamp(GetIntSettingWithFallback(L"Themes.TextScale", nullptr, 100) / 100.0f, 0.7f, 1.6f);
+    next.materialDepth = Wh_GetIntSetting(L"Themes.MaterialDepth") != 0;
+    next.dropShadow = Wh_GetIntSetting(L"Themes.DropShadow") != 0;
+    next.accentBloom = Clamp(Wh_GetIntSetting(L"Themes.AccentBloom") / 100.0f, 0.0f, 2.0f);
+    next.textScale = Clamp(Wh_GetIntSetting(L"Themes.TextScale") / 100.0f, 0.7f, 1.6f);
 
     // ── Clock / date presentation (#61) ──────────────────────────────────────
-    next.showSeconds = GetIntSettingWithFallback(L"Modules.ShowSeconds", nullptr, 0) != 0;
+    next.showSeconds = Wh_GetIntSetting(L"Modules.ShowSeconds") != 0;
     const std::wstring clockMode = GetStringSettingCopy(L"Modules.ClockFormat");
     next.clockFollowSystem = clockMode.empty() || EqualsNoCase(clockMode, L"system");
     next.use24HourClock = EqualsNoCase(clockMode, L"24h");
     next.dateFormat = GetStringSettingCopy(L"Modules.DateFormat");
-    next.dateFirst = GetIntSettingWithFallback(L"Modules.DateFirst", nullptr, 0) != 0;
+    next.dateFirst = Wh_GetIntSetting(L"Modules.DateFirst") != 0;
 
     // ── Localization (#35) ───────────────────────────────────────────────────
     {
@@ -2104,8 +2069,8 @@ void LoadSettings() {
     }
 
     // ── File tray (#33) ──────────────────────────────────────────────────────
-    next.fileTrayModule = GetIntSettingWithFallback(L"Modules.FileTrayModule", nullptr, 0) != 0;
-    next.fileTrayMaxItems = ClampInt(GetIntSettingWithFallback(L"Modules.FileTrayMaxItems", nullptr, 10), 1, 25);
+    next.fileTrayModule = Wh_GetIntSetting(L"Modules.FileTrayModule") != 0;
+    next.fileTrayMaxItems = ClampInt(Wh_GetIntSetting(L"Modules.FileTrayMaxItems"), 1, 25);
 
     // ── Media auto-expand exclusions (#62) ───────────────────────────────────
     next.mediaExpandBlocklist.clear();
@@ -2134,12 +2099,12 @@ void LoadSettings() {
     }
 
     // ── Game overlay options (#25) ───────────────────────────────────────────
-    next.gameOverlayShowFps = GetIntSettingWithFallback(L"Modules.GameOverlayShowFps", nullptr, 1) != 0;
-    next.gameOverlayShowCpu = GetIntSettingWithFallback(L"Modules.GameOverlayShowCpu", nullptr, 1) != 0;
-    next.gameOverlayShowGpu = GetIntSettingWithFallback(L"Modules.GameOverlayShowGpu", nullptr, 1) != 0;
-    next.gameOverlayShowRam = GetIntSettingWithFallback(L"Modules.GameOverlayShowRam", nullptr, 1) != 0;
-    next.gameOverlayShowDisk = GetIntSettingWithFallback(L"Modules.GameOverlayShowDisk", nullptr, 1) != 0;
-    next.gameOverlayCompact = GetIntSettingWithFallback(L"Modules.GameOverlayCompact", nullptr, 0) != 0;
+    next.gameOverlayShowFps = Wh_GetIntSetting(L"Modules.GameOverlayShowFps") != 0;
+    next.gameOverlayShowCpu = Wh_GetIntSetting(L"Modules.GameOverlayShowCpu") != 0;
+    next.gameOverlayShowGpu = Wh_GetIntSetting(L"Modules.GameOverlayShowGpu") != 0;
+    next.gameOverlayShowRam = Wh_GetIntSetting(L"Modules.GameOverlayShowRam") != 0;
+    next.gameOverlayShowDisk = Wh_GetIntSetting(L"Modules.GameOverlayShowDisk") != 0;
+    next.gameOverlayCompact = Wh_GetIntSetting(L"Modules.GameOverlayCompact") != 0;
     next.tintOpacity = Clamp(Wh_GetIntSetting(L"Themes.TintIntensity") / 100.0f, 0.0f, 1.0f);
     const int settingOpacity = Wh_GetIntSetting(L"Themes.PillOpacity");
     const int localOpacity = Wh_GetIntValue(L"PillOpacityOverride", -1);
@@ -2149,18 +2114,18 @@ void LoadSettings() {
     next.showMetricText = Wh_GetIntSetting(L"Modules.ShowMetricText") != 0;
     next.weather = Wh_GetIntSetting(L"Modules.Weather") != 0;
     next.weatherCity = GetStringSettingWithFallback(L"Modules.WeatherCity", L"Weather.WeatherCity", L"CalendarWeather.WeatherCity");
-    next.weatherFahrenheit = GetIntSettingWithFallback(L"Modules.WeatherFahrenheit", L"Weather.WeatherFahrenheit", L"CalendarWeather.WeatherFahrenheit", 0) != 0;
+    next.weatherFahrenheit = Wh_GetIntSetting(L"Modules.WeatherFahrenheit") != 0;
     const std::wstring hideSec = GetStringSettingWithFallback(L"Behavior.AutoHideIdleSeconds", L"Appearance.AutoHideIdleSeconds");
     next.autoHideIdleSeconds = hideSec.empty() ? 0 : _wtoi(hideSec.c_str());
-    next.unhideOnHover = GetIntSettingWithFallback(L"Behavior.UnhideOnHover", L"Appearance.UnhideOnHover", 1) != 0;
-    next.alwaysOnTop = GetIntSettingWithFallback(L"Behavior.AlwaysOnTop", L"Appearance.AlwaysOnTop", 1) != 0;
+    next.unhideOnHover = Wh_GetIntSetting(L"Behavior.UnhideOnHover") != 0;
+    next.alwaysOnTop = Wh_GetIntSetting(L"Behavior.AlwaysOnTop") != 0;
     const int localExpandOnHover = Wh_GetIntValue(L"ExpandOnHoverOverride", -1);
-    next.expandOnHover = localExpandOnHover >= 0 ? (localExpandOnHover != 0) : (GetIntSettingWithFallback(L"Behavior.ExpandOnHover", L"Appearance.ExpandOnHover", 1) != 0);
+    next.expandOnHover = localExpandOnHover >= 0 ? (localExpandOnHover != 0) : (Wh_GetIntSetting(L"Behavior.ExpandOnHover") != 0);
     next.autoDpiScale = Wh_GetIntSetting(L"Appearance.AutoDpiScale") != 0;
     next.offsetX = Wh_GetIntSetting(L"Appearance.OffsetX");
     next.offsetY = Wh_GetIntSetting(L"Appearance.OffsetY");
-    next.separateExpandedOffsetY = GetIntSettingWithFallback(L"Appearance.SeparateExpandedOffsetY", nullptr, 0) != 0;
-    next.offsetYExpanded = GetIntSettingWithFallback(L"Appearance.OffsetYExpanded", nullptr, 0);
+    next.separateExpandedOffsetY = Wh_GetIntSetting(L"Appearance.SeparateExpandedOffsetY") != 0;
+    next.offsetYExpanded = Wh_GetIntSetting(L"Appearance.OffsetYExpanded");
 
     std::wstring mon = GetStringSettingCopy(L"Appearance.TargetMonitor");
     if (mon == L"primary") next.targetMonitor = 0;
@@ -2309,7 +2274,7 @@ void LoadSettings() {
     }
 
     next.borderMergedMode = Wh_GetIntSetting(L"Appearance.BorderMergedMode") != 0;
-    next.autoHideFullscreen = GetIntSettingWithFallback(L"Behavior.AutoHideFullscreen", L"Appearance.AutoHideFullscreen", 1) != 0;
+    next.autoHideFullscreen = Wh_GetIntSetting(L"Behavior.AutoHideFullscreen") != 0;
     next.hardwareMonitorModule = Wh_GetIntSetting(L"Modules.HardwareMonitorModule") != 0;
     const std::wstring borderModeStr = GetStringSettingCopy(L"Themes.ContourBorderMode");
     if (EqualsNoCase(borderModeStr, L"borderless")) {
@@ -2322,10 +2287,10 @@ void LoadSettings() {
         next.contourBorderMode = ContourBorderMode::Default;
         next.contourBorderEnabled = true;
     } else {
-        next.contourBorderEnabled = GetIntSettingWithFallback(L"Themes.ContourBorderEnabled", nullptr, 1) != 0;
+        next.contourBorderEnabled = true;  // no such setting; the mode dropdown drives this
         next.contourBorderMode = next.contourBorderEnabled ? ContourBorderMode::Default : ContourBorderMode::Borderless;
     }
-    next.clockAccentGlow = GetIntSettingWithFallback(L"Themes.ClockAccentGlow", L"Appearance.ClockAccentGlow", nullptr, 1) != 0;
+    next.clockAccentGlow = Wh_GetIntSetting(L"Themes.ClockAccentGlow") != 0;
     bool settingsChangedWhileHidden = (g_autoHiddenParked.load() || g_manuallyHidden.load());
     bool unhideRequested = (next.autoHideIdleSeconds == 0) ||
                            (next.unhideOnHover && !g_settings.unhideOnHover);
@@ -2350,10 +2315,10 @@ void LoadSettings() {
     }
 
     // Privacy Indicators: unified reading with complete fallback to legacy keys
-    next.privacyDots = GetIntSettingWithFallback(L"Indicators.PrivacyDots", L"Indicators.PrivacyDotsEnabled", L"Modules.PrivacyDots", 1) != 0;
-    next.privacyDotsMic = GetIntSettingWithFallback(L"Indicators.PrivacyDotsMic", L"Modules.PrivacyDotsMic", nullptr, 1) != 0;
-    next.privacyDotsCam = GetIntSettingWithFallback(L"Indicators.PrivacyDotsCam", L"Modules.PrivacyDotsCam", nullptr, 1) != 0;
-    next.privacyDotsPulse = GetIntSettingWithFallback(L"Indicators.PrivacyDotsPulse", L"Indicators.PrivacyDotPulsing", L"Modules.PrivacyDotsPulse", 1) != 0;
+    next.privacyDots = Wh_GetIntSetting(L"Indicators.PrivacyDots") != 0;
+    next.privacyDotsMic = Wh_GetIntSetting(L"Indicators.PrivacyDotsMic") != 0;
+    next.privacyDotsCam = Wh_GetIntSetting(L"Indicators.PrivacyDotsCam") != 0;
+    next.privacyDotsPulse = true;  // no such setting; pulsing is always on
 
     std::wstring micHexStr = GetStringSettingWithFallback(L"Indicators.PrivacyDotsMicHex", L"Indicators.MicDotHex", L"Modules.PrivacyDotsMicHex");
     next.privacyDotsMicHex = ColorFromHex(micHexStr, D2D1::ColorF(1.0f, 0.584f, 0.0f, 1.0f));
@@ -4014,7 +3979,7 @@ DWORD WINAPI NotificationThreadProc(void*) {
     bool accessLogged = false;
 
     // The Windows Notification Service (WNS) and UWP subsystem take time to initialize on boot.
-    // If explorer.exe is injected too early, instantiating UserNotificationListener::Current()
+    // If this runs too early, instantiating UserNotificationListener::Current()
     // can permanently bind to an uninitialized COM proxy, permanently breaking notifications for the process.
     // To prevent this, we enforce a strict 30-second delay from process creation before touching the API.
     FILETIME creationTime, exitTime, kernelTime, userTime;
@@ -4046,7 +4011,7 @@ DWORD WINAPI NotificationThreadProc(void*) {
                     if (access == UserNotificationListenerAccessStatus::Denied) {
                         // Actionable: this is a Windows privacy switch, not a
                         // mod setting, and it is the usual reason the module
-                        // stays silent even with explorer.exe injected.
+                        // stays silent when everything else is configured.
                         Wh_Log(L"Notification listener permission DENIED by Windows. "
                                L"Enable Settings > Privacy & security > Notifications > "
                                L"\"Let apps access your notifications\", then restart the mod. "
@@ -6320,7 +6285,7 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
     }
     const int activeExpandOnHover = Wh_GetIntValue(L"ExpandOnHoverOverride", -1) >= 0
                           ? Wh_GetIntValue(L"ExpandOnHoverOverride", 0)
-                          : (GetIntSettingWithFallback(L"Behavior.ExpandOnHover", L"Appearance.ExpandOnHover", 1) != 0);
+                          : (Wh_GetIntSetting(L"Behavior.ExpandOnHover") != 0);
     AppendMenuW(menu, MF_STRING, 11, activeExpandOnHover ? L"Expand on Click" : L"Expand on Hover");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, 4, L"Transparency 100%");
@@ -6433,7 +6398,7 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
         case 11: {
             const int activeExpandOnHover = Wh_GetIntValue(L"ExpandOnHoverOverride", -1) >= 0
                                   ? Wh_GetIntValue(L"ExpandOnHoverOverride", 0)
-                                  : (GetIntSettingWithFallback(L"Behavior.ExpandOnHover", L"Appearance.ExpandOnHover", 1) != 0);
+                                  : (Wh_GetIntSetting(L"Behavior.ExpandOnHover") != 0);
             Wh_SetIntValue(L"ExpandOnHoverOverride", activeExpandOnHover ? 0 : 1);
             LoadSettings();
             g_layoutDirty = true;
