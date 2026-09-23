@@ -3044,17 +3044,24 @@ void DiscardMessage(MSG* msg) {
     msg->lParam = 0;
 }
 
-// Until the pointer leaves the drag threshold the loop only holds the
-// capture; past it, the thread is flagged as moving or sizing.
 // A thread which watched for a loop that never came, and then retrieved no
 // message to notice it, is left watching. A drag starting on it now says the
 // watch is over, whatever the thread did meanwhile.
 void DropStaleWatch();
 
+// Until the pointer leaves the drag threshold the loop only holds the
+// capture; past it, the thread is flagged as moving or sizing.
 bool IsLoopActive() {
     GUITHREADINFO info{.cbSize = sizeof(info)};
     if (!g_loopWnd || !GetGUIThreadInfo(GetCurrentThreadId(), &info)) {
         return false;
+    }
+
+    // A watched loop is the system's own, which flags the thread: the capture
+    // alone is just as likely a drag of the program's own, e.g. a text
+    // selection in a program which draws its whole window itself.
+    if (g_loopFromWatch) {
+        return (info.flags & GUI_INMOVESIZE) != 0;
     }
 
     return (info.flags & GUI_INMOVESIZE) || info.hwndCapture == g_loopWnd;
@@ -3300,6 +3307,9 @@ void OnLoopWatch(MSG* msg) {
     g_loopWatch = true;
     g_loopWatchTime = GetTickCount64();
     g_loopFromWatch = true;
+    // The main part may have been replaced since the last drag here, see
+    // OnPrepareRequest.
+    g_mainWnd = nullptr;
     g_loopPaced = false;
     g_loopMoves = 0;
     g_loopBehind = 0;
