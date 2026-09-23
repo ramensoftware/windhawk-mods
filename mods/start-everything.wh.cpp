@@ -1999,6 +1999,11 @@ class Index {
                 }
 
                 PopulateAppAliases(a);
+                if (a.nameLower == L"settings" || a.nameLower == L"windows settings" ||
+                    a.targetPathLower.find(L"immersivecontrolpanel") != std::wstring::npos ||
+                    a.exeNameLower == L"systemsettings") {
+                    a.isSetting = true;
+                }
                 fresh.push_back(std::move(a));
             }
             item->Release();
@@ -2233,6 +2238,9 @@ inline bool CopyOrCutFileToClipboard(const std::wstring& filePath, bool isCut) {
 
 inline bool CreateDesktopShortcut(const std::wstring& targetPath, const std::wstring& preferredName = L"") {
     if (targetPath.empty()) return false;
+    if (targetPath.starts_with(L"ms-settings:") || targetPath.find(L"immersivecontrolpanel") != std::wstring::npos) {
+        return false;
+    }
 
     PWSTR desktopFolder = nullptr;
     HRESULT hr = SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr, &desktopFolder);
@@ -3868,6 +3876,7 @@ struct AppCardUI {
     std::wstring openPath;
     wuxc::Button button{nullptr};
     bool canRunAsAdmin = true;
+    bool isSetting = false;
 };
 [[clang::no_destroy]] std::vector<AppCardUI> g_activeApps;
 [[clang::no_destroy]] wuxc::Border g_appsHeaderHolder{nullptr};
@@ -4826,6 +4835,7 @@ struct Row {
     int appIndex = -1;       // apps: which entry of the index to launch
     std::vector<BYTE> icon;  // BGRA, kIconSize square, or empty
     bool canRunAsAdmin = true;
+    bool isSetting = false;
     std::wstring copyText;   // text to copy to clipboard on activation
     std::wstring customGlyph; // Segoe Fluent glyph override (e.g. \uE1D0, \uE701, \uE88E)
 };
@@ -5841,6 +5851,22 @@ void RenderResults() try {
             flyout.Items().Append(copyItem);
         } else {
             bool isWebItem = item.openPath.starts_with(L"http:") || item.openPath.starts_with(L"https:");
+            auto toLowerStr = [](std::wstring s) {
+                for (auto& c : s) c = static_cast<wchar_t>(towlower(c));
+                return s;
+            };
+            std::wstring lowerTitle = toLowerStr(item.title);
+            std::wstring lowerPath = toLowerStr(item.openPath);
+            std::wstring lowerSub = toLowerStr(item.subtitle);
+
+            bool isSettingItem = item.isSetting ||
+                                 lowerTitle == L"settings" ||
+                                 lowerTitle == L"windows settings" ||
+                                 lowerPath.starts_with(L"ms-settings:") ||
+                                 lowerPath.find(L"immersivecontrolpanel") != std::wstring::npos ||
+                                 lowerPath.find(L"systemsettings.exe") != std::wstring::npos ||
+                                 lowerSub.starts_with(L"settings");
+
             wuxc::MenuFlyoutItem openItem;
             openItem.Text(isWebItem ? L"Search in browser" : L"Open");
             wuxc::FontIcon openIcon;
@@ -5856,122 +5882,122 @@ void RenderResults() try {
             });
             flyout.Items().Append(openItem);
 
-        if (item.canRunAsAdmin && !isWebItem) {
-            wuxc::MenuFlyoutItem adminItem;
-            adminItem.Text(L"Run as administrator");
-            wuxc::FontIcon adminIcon;
-            adminIcon.Glyph(L"\uE7EF");
-            adminItem.Icon(adminIcon);
-            adminItem.Click([btn = button](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                for (size_t i = 0; i < g_activeApps.size(); ++i) {
-                    if (g_activeApps[i].button == btn) {
-                        LaunchSelectedApp(static_cast<int>(i), true);
-                        return;
+            if (item.canRunAsAdmin && !isWebItem && !isSettingItem) {
+                wuxc::MenuFlyoutItem adminItem;
+                adminItem.Text(L"Run as administrator");
+                wuxc::FontIcon adminIcon;
+                adminIcon.Glyph(L"\uE7EF");
+                adminItem.Icon(adminIcon);
+                adminItem.Click([btn = button](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    for (size_t i = 0; i < g_activeApps.size(); ++i) {
+                        if (g_activeApps[i].button == btn) {
+                            LaunchSelectedApp(static_cast<int>(i), true);
+                            return;
+                        }
                     }
-                }
-            });
-            flyout.Items().Append(adminItem);
-        }
-
-        if (isWebItem) {
-            std::wstring webUrl = item.openPath;
-            wuxc::MenuFlyoutItem copyUrlItem;
-            copyUrlItem.Text(L"Copy search link");
-            wuxc::FontIcon copyIcon;
-            copyIcon.Glyph(L"\uE8C8");
-            copyUrlItem.Icon(copyIcon);
-            copyUrlItem.Click([webUrl](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                DismissStartMenu();
-                CopyTextToClipboard(webUrl);
-            });
-            flyout.Items().Append(copyUrlItem);
-        } else if (!item.openPath.empty()) {
-            std::wstring locTarget = item.openPath;
-            std::wstring appTitle = item.title;
-            bool isFile = (GetFileAttributesW(locTarget.c_str()) != INVALID_FILE_ATTRIBUTES);
-
-            if (isFile) {
-                wuxc::MenuFlyoutSeparator sep1;
-                flyout.Items().Append(sep1);
-
-                wuxc::MenuFlyoutItem cutItem;
-                cutItem.Text(L"Cut");
-                wuxc::FontIcon cutIcon;
-                cutIcon.Glyph(L"\uE8C6");
-                cutItem.Icon(cutIcon);
-                cutItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    DismissStartMenu();
-                    tools::CopyOrCutFileToClipboard(locTarget, true /* isCut */);
                 });
-                flyout.Items().Append(cutItem);
+                flyout.Items().Append(adminItem);
+            }
 
-                wuxc::MenuFlyoutItem copyItem;
-                copyItem.Text(L"Copy");
+            if (isWebItem) {
+                std::wstring webUrl = item.openPath;
+                wuxc::MenuFlyoutItem copyUrlItem;
+                copyUrlItem.Text(L"Copy search link");
                 wuxc::FontIcon copyIcon;
                 copyIcon.Glyph(L"\uE8C8");
-                copyItem.Icon(copyIcon);
-                copyItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                copyUrlItem.Icon(copyIcon);
+                copyUrlItem.Click([webUrl](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     DismissStartMenu();
-                    tools::CopyOrCutFileToClipboard(locTarget, false /* isCut */);
+                    CopyTextToClipboard(webUrl);
                 });
-                flyout.Items().Append(copyItem);
+                flyout.Items().Append(copyUrlItem);
+            } else if (!isSettingItem && !item.openPath.empty()) {
+                std::wstring locTarget = item.openPath;
+                std::wstring appTitle = item.title;
+                bool isFile = (GetFileAttributesW(locTarget.c_str()) != INVALID_FILE_ATTRIBUTES);
 
-                wuxc::MenuFlyoutItem copyPathItem;
-                copyPathItem.Text(L"Copy path");
-                wuxc::FontIcon copyPathIcon;
-                copyPathIcon.Glyph(L"\uE71B");
-                copyPathItem.Icon(copyPathIcon);
-                copyPathItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    DismissStartMenu();
-                    tools::CopyTextToClipboard(locTarget);
-                });
-                flyout.Items().Append(copyPathItem);
+                if (isFile) {
+                    wuxc::MenuFlyoutSeparator sep1;
+                    flyout.Items().Append(sep1);
 
-                wuxc::MenuFlyoutSeparator sep2;
-                flyout.Items().Append(sep2);
+                    wuxc::MenuFlyoutItem cutItem;
+                    cutItem.Text(L"Cut");
+                    wuxc::FontIcon cutIcon;
+                    cutIcon.Glyph(L"\uE8C6");
+                    cutItem.Icon(cutIcon);
+                    cutItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        DismissStartMenu();
+                        tools::CopyOrCutFileToClipboard(locTarget, true /* isCut */);
+                    });
+                    flyout.Items().Append(cutItem);
 
-                wuxc::MenuFlyoutItem locItem;
-                locItem.Text(L"Open file location");
-                wuxc::FontIcon locIcon;
-                locIcon.Glyph(L"\uE838");
-                locItem.Icon(locIcon);
-                locItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    DismissStartMenu();
-                    OpenFileLocation(locTarget);
-                });
-                flyout.Items().Append(locItem);
+                    wuxc::MenuFlyoutItem copyItem;
+                    copyItem.Text(L"Copy");
+                    wuxc::FontIcon copyIcon;
+                    copyIcon.Glyph(L"\uE8C8");
+                    copyItem.Icon(copyIcon);
+                    copyItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        DismissStartMenu();
+                        tools::CopyOrCutFileToClipboard(locTarget, false /* isCut */);
+                    });
+                    flyout.Items().Append(copyItem);
 
-                wuxc::MenuFlyoutItem shortcutItem;
-                shortcutItem.Text(L"Create desktop shortcut");
-                wuxc::FontIcon shortcutIcon;
-                shortcutIcon.Glyph(L"\uE7C5");
-                shortcutItem.Icon(shortcutIcon);
-                shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    DismissStartMenu();
-                    tools::CreateDesktopShortcut(locTarget, appTitle);
-                });
-                flyout.Items().Append(shortcutItem);
-            } else if (!locTarget.starts_with(L"ms-settings:") && !locTarget.starts_with(L"http:") && !locTarget.starts_with(L"https:")) {
-                wuxc::MenuFlyoutSeparator sep1;
-                flyout.Items().Append(sep1);
+                    wuxc::MenuFlyoutItem copyPathItem;
+                    copyPathItem.Text(L"Copy path");
+                    wuxc::FontIcon copyPathIcon;
+                    copyPathIcon.Glyph(L"\uE71B");
+                    copyPathItem.Icon(copyPathIcon);
+                    copyPathItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        DismissStartMenu();
+                        tools::CopyTextToClipboard(locTarget);
+                    });
+                    flyout.Items().Append(copyPathItem);
 
-                wuxc::MenuFlyoutItem shortcutItem;
-                shortcutItem.Text(L"Create desktop shortcut");
-                wuxc::FontIcon shortcutIcon;
-                shortcutIcon.Glyph(L"\uE7C5");
-                shortcutItem.Icon(shortcutIcon);
-                shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    DismissStartMenu();
-                    tools::CreateDesktopShortcut(L"shell:AppsFolder\\" + locTarget, appTitle);
-                });
-                flyout.Items().Append(shortcutItem);
+                    wuxc::MenuFlyoutSeparator sep2;
+                    flyout.Items().Append(sep2);
+
+                    wuxc::MenuFlyoutItem locItem;
+                    locItem.Text(L"Open file location");
+                    wuxc::FontIcon locIcon;
+                    locIcon.Glyph(L"\uE838");
+                    locItem.Icon(locIcon);
+                    locItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        DismissStartMenu();
+                        OpenFileLocation(locTarget);
+                    });
+                    flyout.Items().Append(locItem);
+
+                    wuxc::MenuFlyoutItem shortcutItem;
+                    shortcutItem.Text(L"Create desktop shortcut");
+                    wuxc::FontIcon shortcutIcon;
+                    shortcutIcon.Glyph(L"\uE7C5");
+                    shortcutItem.Icon(shortcutIcon);
+                    shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        DismissStartMenu();
+                        tools::CreateDesktopShortcut(locTarget, appTitle);
+                    });
+                    flyout.Items().Append(shortcutItem);
+                } else if (!locTarget.starts_with(L"ms-settings:") && !locTarget.starts_with(L"http:") && !locTarget.starts_with(L"https:")) {
+                    wuxc::MenuFlyoutSeparator sep1;
+                    flyout.Items().Append(sep1);
+
+                    wuxc::MenuFlyoutItem shortcutItem;
+                    shortcutItem.Text(L"Create desktop shortcut");
+                    wuxc::FontIcon shortcutIcon;
+                    shortcutIcon.Glyph(L"\uE7C5");
+                    shortcutItem.Icon(shortcutIcon);
+                    shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        DismissStartMenu();
+                        tools::CreateDesktopShortcut(L"shell:AppsFolder\\" + locTarget, appTitle);
+                    });
+                    flyout.Items().Append(shortcutItem);
+                }
             }
-        }
         }
 
         button.ContextFlyout(flyout);
 
-        return AppCardUI{item.appIndex, item.title, item.openPath, button, item.canRunAsAdmin};
+        return AppCardUI{item.appIndex, item.title, item.openPath, button, item.canRunAsAdmin, item.isSetting};
     };
 
     auto makeAppEmptyCard = []() -> wuxc::Border {
@@ -6067,6 +6093,7 @@ void RenderResults() try {
             if (existingIdx >= 0) {
                 g_activeApps[existingIdx].appIndex = want.appIndex;
                 g_activeApps[existingIdx].canRunAsAdmin = want.canRunAsAdmin;
+                g_activeApps[existingIdx].isSetting = want.isSetting;
 
                 if (static_cast<size_t>(existingIdx) != targetIdx) {
                     auto card = g_activeApps[existingIdx];
@@ -6994,8 +7021,17 @@ void SearchThreadMain() {
                 }
                 Row row;
                 row.title = m.app->name;
+                bool isSettingItem = m.app->isSetting ||
+                                     m.app->targetPath.starts_with(L"ms-settings:") ||
+                                     m.app->targetPathLower.starts_with(L"ms-settings:") ||
+                                     m.app->nameLower == L"settings" ||
+                                     m.app->nameLower == L"windows settings" ||
+                                     m.app->targetPathLower.find(L"immersivecontrolpanel") != std::wstring::npos ||
+                                     m.app->exeNameLower == L"systemsettings";
+                row.isSetting = isSettingItem;
+
                 bool canAdmin = true;
-                if (m.app->isSetting || m.app->targetPath.starts_with(L"ms-settings:")) {
+                if (isSettingItem) {
                     if (!m.app->area.empty()) {
                         row.subtitle = L"Settings \u2022 " + m.app->area;
                     } else {
@@ -7007,10 +7043,7 @@ void SearchThreadMain() {
                     canAdmin = true;
                 } else if (!m.app->exeNameLower.empty()) {
                     row.subtitle = m.app->exeNameLower + L".exe";
-                    if (m.app->name == L"Settings" || m.app->nameLower == L"settings" ||
-                        m.app->targetPath.find(L"immersivecontrolpanel") != std::wstring::npos) {
-                        canAdmin = false;
-                    }
+                    canAdmin = true;
                 } else {
                     row.subtitle = L"Application";
                 }
