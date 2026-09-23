@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.6.2
+// @version         1.6.3
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -1049,12 +1049,13 @@ void LookUpVolumeIconView(FrameworkElement const& textIconContent) {
             winrt::Windows::Foundation::IInspectable const&,
             winrt::Windows::Foundation::IInspectable const&) {
             const bool wasEmptyLocal = wasEmpty;
+            auto textIconContentWeakLocal = textIconContentWeak;
             if (g_autoRevokerList) {
                 g_autoRevokerList->erase(autoRevokerIt);
             }
 
-            SafeXamlCall([wasEmptyLocal, textIconContentWeak] {
-                if (auto textIconContent = textIconContentWeak.get()) {
+            SafeXamlCall([wasEmptyLocal, textIconContentWeakLocal] {
+                if (auto textIconContent = textIconContentWeakLocal.get()) {
                     SetupVolumeLayout(textIconContent);
                 }
                 ApplyVolumeIconViewsWidth();
