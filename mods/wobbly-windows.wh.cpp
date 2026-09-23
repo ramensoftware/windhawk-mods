@@ -2,7 +2,7 @@
 // @id              wobbly-windows
 // @name            Wobbly Windows
 // @description     The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!
-// @version         0.114
+// @version         0.115
 // @author          lalimatyus
 // @github          https://github.com/lalimatyus
 // @include         dwm.exe
@@ -2363,9 +2363,9 @@ static void __cdecl TopLevelWindow3DDestructorHook(void* pThis)
     g_topLevelWindow3DDestructorOriginal(pThis);
 }
 
-static void DropAnimationSlotsForStoppedSceneThread()
+static void ResetAnimationSlotsForSceneOwnerChange()
 {
-    // Only called after the old owner stopped; its scene-only pins cannot return.
+    // Scene-only proxy pins must never cross an owner-thread change.
     unsigned int droppedSlots = 0;
     unsigned int retainedProxies = 0;
     AcquireSRWLockExclusive(&g_animationSlotsLock);
@@ -2426,6 +2426,7 @@ static bool RegisterDwmSceneThread(SceneThreadRegistration registration)
         ULONGLONG now = GetTickCount64();
         ULONGLONG lastTimeline =
             g_lastNativeTimelineTimestamp.load(std::memory_order_acquire);
+        bool previousOwnerUnconfirmed = lastTimeline == 0;
         bool previousOwnerStale =
             lastTimeline && now - lastTimeline >= DWM_SCENE_OWNER_STALE_MS;
         bool previousOwnerStopped = false;
@@ -2439,12 +2440,14 @@ static bool RegisterDwmSceneThread(SceneThreadRegistration registration)
         {
             previousOwnerStopped = GetLastError() == ERROR_INVALID_PARAMETER;
         }
-        if ((previousOwnerStopped || previousOwnerStale) &&
+        // A bootstrap wake can run on a different DWM message thread. The first
+        // native timeline callback is authoritative even while that thread lives.
+        if ((previousOwnerUnconfirmed || previousOwnerStopped || previousOwnerStale) &&
             g_dwmSceneThreadId.compare_exchange_strong(ownerThreadId, currentThreadId,
                                                        std::memory_order_acq_rel,
                                                        std::memory_order_acquire))
         {
-            DropAnimationSlotsForStoppedSceneThread();
+            ResetAnimationSlotsForSceneOwnerChange();
             ClearAllDwmWindowMappings();
             g_dwmThreadMismatchLogged.store(false, std::memory_order_release);
             g_desktopManager.store(nullptr, std::memory_order_release);
@@ -3123,10 +3126,14 @@ static void BindPendingAnimationSlotTransforms(bool validateCurrentVisuals)
         }
         else
         {
-            // Observe DWM's published visual. Calling EnsureTopLevelWindow here can
-            // re-enter visual creation for an already-open Chromium window and
-            // stall DWM; the native hook refreshes the mapping when DWM creates it.
-            ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D);
+            // Lazy initialization is needed for already-open/desktop-restored
+            // windows, but never force a hidden, minimized or cloaked visual.
+            if (!ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D) &&
+                CanInitializeMissingWindowVisual(hwnd) &&
+                g_ensureTopLevelWindowOriginal(windowList, windowData) >= 0)
+            {
+                ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D);
+            }
             if (topLevelWindow)
             {
                 topLevelVisualProxy = GetTopLevelVisualProxy(topLevelWindow,
@@ -3281,9 +3288,12 @@ static void BackfillExistingDwmWindowMappings()
         }
         void* topLevelWindow = nullptr;
         void* topLevelWindow3D = nullptr;
-        // Backfill is discovery-only. Let DWM create missing visuals through its
-        // normal lifecycle so existing Chromium windows can't re-enter creation.
         bool mapped = ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D);
+        // As in binding, initialize only verified window data on its scene owner.
+        if (!mapped && g_ensureTopLevelWindowOriginal(windowList, windowData) >= 0)
+        {
+            mapped = ResolveDwmWindowObjects(windowData, &topLevelWindow, &topLevelWindow3D);
+        }
         if (mapped)
         {
             g_existingWindowBackfillMapped.fetch_add(1, std::memory_order_relaxed);
