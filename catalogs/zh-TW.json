@@ -9187,7 +9187,7 @@
         ],
         "ratingUsers": 849,
         "reviews": 0,
-        "updated": 1787158236000,
+        "updated": 1790193771000,
         "users": 58085
       },
       "metadata": {
@@ -9200,7 +9200,7 @@
         ],
         "license": "MIT",
         "name": "MacOS Minimize Animation",
-        "version": "3.1.4"
+        "version": "3.1.5"
       }
     },
     "magic-mouse": {
@@ -14088,6 +14088,44 @@
         "version": "1.2.0"
       }
     },
+    "taskbar-brightness-and-opacity-tuner": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790193764000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790193764000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "lzxujun",
+        "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject",
+        "description": "分别调整任务栏背景与图标文字的不透明度，并可调暗任务栏背景，定制出简洁漂亮的任务栏，也更护眼、更适合 OLED 显示器",
+        "github": "https://github.com/lzxujun",
+        "homepage": "https://github.com/lzxujun",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "任务栏亮度和透明度调节器",
+        "version": "1.13.0"
+      },
+      "metadataEnglish": {
+        "description": "Adjust the opacity of the taskbar background and of the icons and text, and dim the taskbar background, for a clean, beautiful taskbar which is easier on the eyes and on OLED displays",
+        "name": "Taskbar brightness and opacity tuner"
+      }
+    },
     "taskbar-button-click": {
       "details": {
         "defaultSorting": 562160,
@@ -17105,6 +17143,41 @@
         "version": "1.4"
       }
     },
+    "vector-screen-holder": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790193760000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790193760000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "akilluminati47",
+        "compilerOptions": "-ld2d1 -ldwrite -ladvapi32 -luser32 -lshell32",
+        "description": "用生成式线条艺术填满所选显示器，并在运行期间防止电脑进入闲置状态",
+        "github": "https://github.com/akilluminati47",
+        "homepage": "https://vector.akilluminati47.pages.dev/",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "矢量屏幕守护",
+        "version": "1.6.1"
+      },
+      "metadataEnglish": {
+        "description": "Fills a display you choose with generative line art and keeps the PC from idling while it runs",
+        "name": "Vector Screen Holder"
+      }
+    },
     "version-spoof": {
       "details": {
         "defaultSorting": 2680,
@@ -17151,7 +17224,7 @@
         ],
         "ratingUsers": 32,
         "reviews": 0,
-        "updated": 1779186648000,
+        "updated": 1790193767000,
         "users": 573
       },
       "metadata": {
@@ -17160,10 +17233,12 @@
         "description": "Switch virtual desktops, move windows between desktops, and pin windows with customizable hotkeys",
         "github": "https://github.com/u2x1",
         "include": [
-          "windhawk.exe"
+          "windhawk.exe",
+          "windhawk-mod.exe",
+          "windhawk-mod-uiaccess.exe"
         ],
         "name": "Virtual Desktop Helper",
-        "version": "2.4.2"
+        "version": "2.5.0"
       }
     },
     "virtual-desktop-hotkey-cycle": {

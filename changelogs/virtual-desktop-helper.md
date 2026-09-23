@@ -1,3 +1,14 @@
+## 2.5.0 ([Sep 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/dc9cd28419f63d2d86396bcb845cf8e307186d5e/mods/virtual-desktop-helper.wh.cpp))
+
+* Per-key disable: Leaving PrevDesktopKey, NextDesktopKey, LastDesktopKey, or PinKey blank now disables only that hotkey instead of falling back to the default key. Invalid key values are logged and disabled.
+* Named key handling: Tab, Space, and Enter are parsed explicitly, and unsupported multi-character key names are rejected instead of being interpreted as their first character.
+* Last-used desktop: Renamed from "last visited desktop"; SwitchToLastDesktop now repairs stale tracking against the actual virtual desktop manager state and ignores targets that are already the current desktop.
+* Desktop tracking: Foreground-window tracking now treats the virtual desktop manager as authoritative, avoiding incorrect state when a foreground event briefly refers to a window from the previous desktop during a transition.
+* Z-order fix: After moving a window to another desktop, it is raised to the front of the normal non-topmost Z-order band without temporarily making it always-on-top.
+* Hotkey lifecycle: Settings changes are applied on the existing hotkey thread through its message window instead of restarting the thread.
+* No key-repeat switching: Hotkeys are registered with MOD_NOREPEAT, preventing a held key from queueing repeated desktop operations.
+* UIAccess support: Adds the normal Windhawk 2.0 host and UIAccess host in addition to windhawk.exe, allowing the appropriate Windhawk 2.0 host to be used while retaining compatibility with the current stable tool-mod implementation.
+
 ## 2.4.2 ([May 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3940166c632f8dd5293d1ef4bf3138376d8cc904/mods/virtual-desktop-helper.wh.cpp))
 
 * Align tool-mod launcher with wiki recommendations

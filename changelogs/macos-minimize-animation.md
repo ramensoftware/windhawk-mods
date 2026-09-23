@@ -1,3 +1,9 @@
+## 3.1.5 ([Sep 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5f0fbbaa99e8ed035da6eb58ba701ac7b143e1bc/mods/macos-minimize-animation.wh.cpp))
+
+`D2D1_RENDER_TARGET_TYPE_DEFAULT` on a DC render target resolves to the software rasterizer, so the whole genie mesh is CPU-rendered and read back every frame (reported ~15-19 ms/frame on an Iris Xe despite a working hardware path).
+
+Request `D2D1_RENDER_TARGET_TYPE_HARDWARE` explicitly and fall back to the previous behavior if creation fails, so nothing regresses on machines lacking hardware D2D.
+
 ## 3.1.4 ([Aug 19, 2026](https://github.com/ramensoftware/windhawk-mods/blob/02968945ed250989ea59e62463c5d91fa40a7e96/mods/macos-minimize-animation.wh.cpp))
 
 The classic genie style always funneled to the bottom of the monitor (\dockY = mon.bottom\), so with a taskbar pinned to the top the animation still appeared from the bottom. The modern (Direct2D) engine already handles a top taskbar by reading the taskbar window rect.

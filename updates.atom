@@ -2,12 +2,358 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-22T16:39:07.000Z</updated>
+    <updated>2026-09-23T20:02:51.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MacOS Minimize Animation 3.1.5]]></title>
+        <id>https://windhawk.net/mods/macos-minimize-animation#5f0fbbaa99e8ed035da6eb58ba701ac7b143e1bc</id>
+        <link href="https://windhawk.net/mods/macos-minimize-animation"/>
+        <updated>2026-09-23T20:02:51.000Z</updated>
+        <content type="html"><![CDATA[<p><code>D2D1_RENDER_TARGET_TYPE_DEFAULT</code> on a DC render target resolves to the software rasterizer, so the whole genie mesh is CPU-rendered and read back every frame (reported ~15-19 ms/frame on an Iris Xe despite a working hardware path).</p>
+<p>Request <code>D2D1_RENDER_TARGET_TYPE_HARDWARE</code> explicitly and fall back to the previous behavior if creation fails, so nothing regresses on machines lacking hardware D2D.</p>]]></content>
+        <author>
+            <name>Abdullah Masood</name>
+            <uri>https://github.com/Abdullah-Masood-05</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Virtual Desktop Helper 2.5.0]]></title>
+        <id>https://windhawk.net/mods/virtual-desktop-helper#dc9cd28419f63d2d86396bcb845cf8e307186d5e</id>
+        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
+        <updated>2026-09-23T20:02:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Per-key disable: Leaving PrevDesktopKey, NextDesktopKey, LastDesktopKey, or PinKey blank now disables only that hotkey instead of falling back to the default key. Invalid key values are logged and disabled.</li>
+<li>Named key handling: Tab, Space, and Enter are parsed explicitly, and unsupported multi-character key names are rejected instead of being interpreted as their first character.</li>
+<li>Last-used desktop: Renamed from "last visited desktop"; SwitchToLastDesktop now repairs stale tracking against the actual virtual desktop manager state and ignores targets that are already the current desktop.</li>
+<li>Desktop tracking: Foreground-window tracking now treats the virtual desktop manager as authoritative, avoiding incorrect state when a foreground event briefly refers to a window from the previous desktop during a transition.</li>
+<li>Z-order fix: After moving a window to another desktop, it is raised to the front of the normal non-topmost Z-order band without temporarily making it always-on-top.</li>
+<li>Hotkey lifecycle: Settings changes are applied on the existing hotkey thread through its message window instead of restarting the thread.</li>
+<li>No key-repeat switching: Hotkeys are registered with MOD_NOREPEAT, preventing a held key from queueing repeated desktop operations.</li>
+<li>UIAccess support: Adds the normal Windhawk 2.0 host and UIAccess host in addition to windhawk.exe, allowing the appropriate Windhawk 2.0 host to be used while retaining compatibility with the current stable tool-mod implementation.</li>
+</ul>]]></content>
+        <author>
+            <name>u2x1</name>
+            <uri>https://github.com/u2x1</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar brightness and opacity tuner 1.13.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-brightness-and-opacity-tuner#b2a584ca279e3cf93bcbc2ea78a2cef240441cdb</id>
+        <link href="https://windhawk.net/mods/taskbar-brightness-and-opacity-tuner"/>
+        <updated>2026-09-23T20:02:44.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarbrightnessandopacitytuner">Taskbar brightness and opacity tuner</h1>
+<blockquote>
+  <p><strong>English:</strong> Adjust the opacity of the taskbar background and of its icons
+  and text, and dim the taskbar background, to build a clean, beautiful
+  taskbar that fits your desktop — and a taskbar which blends into it is also
+  easier on the eyes and lighter on OLED displays.</p>
+  <p><strong>中文：</strong> 调整任务栏背景与图标文字的不透明度，并可调暗任务栏背景，定制出
+  简洁漂亮的任务栏——与桌面融为一体的任务栏，也更护眼、更适合 OLED 显示器。</p>
+</blockquote>
+<p>The taskbar is adjusted in two independent layers, each displayed on a simple
+0-100 scale:</p>
+<ul>
+<li><strong>Taskbar background</strong> - the material behind the icons. 0 means fully
+transparent, 100 means unchanged.</li>
+<li><strong>Icons and text</strong> - buttons, labels and the system tray. 0 means fully
+transparent, 100 means unchanged.</li>
+</ul>
+<p>The taskbar background can additionally be dimmed on a 0-100 brightness
+scale: 0 means fully dimmed to black, 100 means unchanged. Dimming darkens
+exactly what the taskbar background itself shows, never an overlay painted
+on top of it - a low, dark taskbar is easier on the eyes at night and
+reduces OLED burn-in. The mod only dims, never brightens.</p>
+<p>Additionally:</p>
+<ul>
+<li><strong>Show the taskbar top line</strong> - shows or hides the thin line at the top
+edge of the taskbar.</li>
+<li>The small gray rounded drag handle at the top center of the taskbar is
+part of Windows itself (on the default, locked taskbar Windows renders it
+permanently). Since v1.12.0 the mod no longer touches it at all, so it only
+shows up when Windows itself shows it - it is never affected by the icon
+and text opacity.</li>
+</ul>
+<h2 id="screenshots">Screenshots</h2>
+<p><strong>Task buttons area, transparency unchanged:</strong></p>
+<p><img src="https://i.imgur.com/L37dzXL.png" alt="Taskbar task button area when transparency has not been modified" /></p>
+<p><strong>Task buttons area, transparency set to 35%:</strong></p>
+<p><img src="https://i.imgur.com/QHkfKZJ.png" alt="Taskbar task button area when transparency is set to 35%" /></p>
+<p><strong>Task buttons area, transparency state:</strong></p>
+<p><img src="https://i.imgur.com/DrMjBOY.png" alt="Taskbar task button area transparency state" /></p>
+<p><strong>System tray area, transparency state:</strong></p>
+<p><img src="https://i.imgur.com/ACFLOFC.png" alt="Taskbar system tray area transparency state" /></p>
+<h2 id="howitworks">How it works</h2>
+<p>The two layers are XAML elements of the taskbar visual tree, and their
+opacity is adjusted exactly, with no visual tricks: the background blends
+into whatever is behind the taskbar, and the icons and text blend into the
+background.</p>
+<p>The background dimming is exact as well, in one of three ways: with
+transparency effects on, the taskbar fill is an acrylic brush and the color
+it shows - including the accent color when "Show accent color on Start and
+taskbar" is enabled - is dimmed by scaling the RGB channels of the brush's
+tint while the alpha is kept, so the material behind the taskbar stays
+untouched. When the fill is a plain solid color, the color itself is dimmed
+the same way. Otherwise the fill of the background rectangle is replaced with
+a brush which renders the live backdrop filtered by a color matrix effect, so
+what gets darker is the real content behind the taskbar - not an overlay
+painted on top of it.</p>
+<p>The icons and text layer is found by walking the taskbar visual tree: every
+subtree which contains neither the background nor a flyout host is adjusted
+as a unit. This covers all icon areas (the Start, search and Task View
+buttons, the task buttons and the system tray) on every Windows build,
+without depending on the class names of the individual containers.</p>
+<h2 id="comparedwithothermods">Compared with other mods</h2>
+<ul>
+<li><strong>Windows 11 Taskbar Styler</strong> can restyle the top line, the drag grip and
+the background (and much more), but it takes style rules. This mod is a
+zero-configuration dial instead: two 0-100 values cover the whole taskbar
+at once, no rules to write.</li>
+<li><strong>Taskbar Background Helper</strong> and <strong>Dynamic Taskbar Transparency</strong> adjust
+the background only (blur/acrylic/color, or per-shell-state opacity). This
+mod adjusts the background opacity and dimming as well, but additionally
+the icons and text as a whole layer.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Windows 11 only (the mod relies on the XAML taskbar visual tree).</li>
+<li>If nothing seems to happen, make sure at least one setting differs from
+its default.</li>
+<li>The background layer is the same XAML element which background mods such as
+<strong>Windows 11 Taskbar Styler</strong> or <strong>Taskbar Background Helper</strong> adjust. Two
+mods fighting over the same element can overwrite each other's result, so
+adjust the taskbar background with only one of them at a time.</li>
+</ul>]]></content>
+        <author>
+            <name>lzxujun</name>
+            <uri>https://github.com/lzxujun</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Vector Screen Holder 1.6.1]]></title>
+        <id>https://windhawk.net/mods/vector-screen-holder#626f8d9337bdf82bf02e798ae15a07934173763a</id>
+        <link href="https://windhawk.net/mods/vector-screen-holder"/>
+        <updated>2026-09-23T20:02:40.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="vectorscreenholder">Vector Screen Holder</h1>
+<p>Fills a display with generative line art and holds the screen awake for as long
+as it runs. <strong>It runs on your primary display, on any single display you name,
+on all of them at once, or on all but the one you work on.</strong></p>
+<p>Every frame is drawn as strokes through Direct2D on the GPU. There are no
+images, no video file and no fixed resolution, so the artwork is generated for
+whatever size the display you choose actually is: a 1080p monitor and a 4K
+portrait panel each get correctly proportioned art.</p>
+<p>Uploading a dataset, rendering out a model, updating a shelf of games,
+seeding torrents overnight, a long build or backup, a download that will take
+an hour, or a run of AI agents grinding through a queue. Anything where the
+machine has to stay awake and stay signed in, but a black screen tells you
+nothing. Start the Screen Holder, put it on whichever display you can spare,
+and go to lunch. The work keeps running, the screen stays awake, and you can
+still see progress at a glance from across the room.</p>
+<p><img src="https://raw.githubusercontent.com/akilluminati47/vector-screen-holder/main/assets/typing.gif" alt="The overlay running on a portrait monitor while a note is typed in Notepad" /></p>
+<p>Above: a note being written on the side monitor while the art keeps running
+underneath it. The overlay is below the window, not over it.</p>
+<h2 id="controls">Controls</h2>
+<p>| Input | What it does |
+| --- | --- |
+| <strong>Esc</strong> | Close the overlay (focus it first, or see below) |
+| <strong>Left click</strong> | Cycle to the next enabled style |
+| <strong>Right click</strong> | Step the amount: how much information is on screen |
+| <strong>Mouse wheel</strong> | Adjust the current style's parameter |
+| <strong>Space</strong> | Step to the next palette |
+| <strong>Ctrl+Alt+H</strong> | Toggle the overlay on and off (configurable below) |</p>
+<p><img src="https://raw.githubusercontent.com/akilluminati47/vector-screen-holder/main/assets/readout.gif" alt="The readout naming the style, the wheel value, the amount notch and the palette" /></p>
+<p>Above: the mouse wheel taking vigor from 0 to 100 across a single growth cycle.</p>
+<p>The overlay opens clean, with no labels and no chrome, nothing on screen but
+the art. Adjusting anything raises one line along the bottom naming the style,
+its parameter value, the amount notch and the palette, which fades after about
+two seconds. That line is the only text the mod draws, and only your own input
+raises it: the rotation timer changes style in silence.</p>
+<p>That line is set in a pixel font carried inside the mod, so there is nothing to
+install and it looks identical on every machine. The wording is translated into
+sixteen languages and follows your Windows display language, unless you pick
+one in the settings.</p>
+<p>The font carries the Latin, Greek and Cyrillic alphabets. Scripts it does not
+carry, Chinese, Japanese, Korean, Arabic, Hebrew and the rest, are drawn in
+your own system interface font, size matched so the line still reads as a
+single typeface. Either way the size is worked out by measuring against your
+display before anything is drawn, so the line never wraps and never runs past
+the edge. The font is published on its own as
+<a href="https://github.com/akilluminati47/fusion-pixel-font/releases/tag/vsh-subset-2026.09.01">a TrueType release</a>
+if you want it elsewhere.</p>
+<p>Every control except the hotkey needs the overlay focused. Click it once and it
+takes them, without ever coming to the front. That first click, the one that
+moves focus, only raises the readout: it confirms the click landed and the
+overlay is listening, without changing what is on screen. Clicks after that
+cycle the style as usual.</p>
+<p><strong>Ctrl+Alt+H works from anywhere</strong>, so you can always close the overlay even
+when something else has focus.</p>
+<p>If you turn on <strong>Click through to the desktop</strong>, none of the controls above
+apply: every click goes to the desktop instead, which is the point of it, and
+the overlay never takes focus, so it never sees a key either. It runs on what
+you set in the settings. The hotkey still shows and hides it, and <strong>Global
+Esc</strong> still closes it if you have that on.</p>
+<p><strong>Start active</strong> brings the overlay up as soon as the mod loads. Windhawk loads
+its mods when you sign in, so that means it is waiting on your chosen display
+after every reboot, not just the time you ticked the box.</p>
+<p>The mod also listens on a named event, <code>Local\WindhawkVectorScreenHolderToggle</code>,
+in the per-session namespace, so an ordinary Windows shortcut can toggle the
+overlay without opening Windhawk at all. Save this as
+<code>toggle-screen-holder.vbs</code> and make a shortcut to it:</p>
+<pre><code class="vbs language-vbs">CreateObject("WScript.Shell").Run "powershell -nop -w hidden -c ""[Threading.EventWaitHandle]::OpenExisting('Local\WindhawkVectorScreenHolderToggle').Set()""", 0, False
+</code></pre>
+<p>The mod has to be <strong>enabled in Windhawk</strong> for that to do anything, because
+the event only exists while the mod is loaded. The overlay itself does not
+have to be on screen.</p>
+<p>If you would rather <strong>Esc</strong> reached the overlay from any application, turn on
+<strong>Global Esc</strong> in the settings. It is off by default because Esc is a heavily
+used key, and a reflexive press meant for a dialog or a search box in another
+window would end the session and release the keep-awake with nothing on screen
+to say it had happened. Esc is the only key watched that way, and it is never
+swallowed, so the application you are in still receives it.</p>
+<p>The overlay sits above your wallpaper but <em>below</em> your windows: anything you
+open covers it normally, and it never steals focus by itself or appears in
+Alt+Tab.</p>
+<p>It does cover the desktop icons on the display it runs on, and by default a
+click there goes to the overlay rather than the desktop. Turn on <strong>Click
+through to the desktop</strong> and every click passes to the desktop instead, so the
+icons keep working with the artwork drawn over them. The overlay is then shown
+and hidden by the toggle hotkey rather than by clicking it, which is the trade
+that setting makes.</p>
+<p>Drawing <em>behind</em> the icons rather than over them is possible, and two mods in
+this catalog do it, but only by injecting into <code>explorer.exe</code> and rendering
+into the window between the wallpaper and the icon view. This mod is built not
+to load into another process at all, so that route is closed to it by design.</p>
+<p>The <strong>Display</strong> setting defaults to your primary screen, which is the right
+choice on a single monitor machine. On more than one, point it at whichever
+display you are not working on, or pick <strong>All but the primary display</strong> and it
+covers every screen except that one, which is usually what a desk with side
+monitors wants. Either way the overlay only goes for good when you press Esc
+or toggle it off.</p>
+<h2 id="color">Color</h2>
+<p>Seven palettes: aurora, ember, ocean, neon, forest, mono, and custom, which
+takes its colors from the two custom settings. <strong>Space</strong> steps to the next one
+while the overlay has focus. The one you land on is remembered, so you can
+pick a palette by eye instead of by name. Changing the palette in
+the settings overrides whatever you stepped to, so the setting is never a dead
+control.</p>
+<p><strong>Hue shift</strong> rotates the whole palette by a fixed number of degrees. It is a
+dial across the color wheel rather than a switch: 180 of its 359 degrees lands
+on the opposite side and reads as a flip of the palette you picked, and values
+between shift it part of the way there. <strong>Leave it at 0, the default</strong>, to get
+each palette exactly as it was designed; reach for it when you want a variation
+without writing a custom palette.</p>
+<p>Turn on the <strong>automatic color ramp</strong> and the hue rotates continuously from
+whatever the hue shift is set to. Turning the ramp back off returns the colors
+to that value, rather than leaving them wherever the rotation happened to
+stop.</p>
+<p>One thing to expect when you step the palette mid-composition: flow field,
+growth and harmonograph build up into a buffer, so the new palette takes the
+background and everything drawn from that moment on, while the strokes already
+laid down keep the colors they were drawn in until the next scene begins.
+Contours redraw every frame, so they change over wholesale.</p>
+<h2 id="thefourstyles">The four styles</h2>
+<p>Each has its own <strong>parameter</strong> (the wheel) and its own <strong>amount</strong> (right click).
+The parameter changes the character of the art; the amount changes how much of
+it there is. Amount has five notches: minimal, sparse, balanced, dense, maximal.</p>
+<p>| Style | Parameter (wheel) | Amount (right click) |
+| --- | --- | --- |
+| <strong>Flow field</strong> | turbulence of the underlying field | how tightly ribbons pack: a few broad ones through to many fine ones |
+| <strong>Contours</strong> | relief (how rough the terrain is) | number of contour levels, 6 through 46 |
+| <strong>Differential growth</strong> | vigor (how hard the colony pushes outward) | number of colonies, 1 through 6 |
+| <strong>Harmonograph</strong> | tempo (how fast the figure is drawn) | number of overlaid figures, 1 through 6 |</p>
+<p>On flow field and growth the wheel is a pace control as well as a character
+one: turning turbulence or vigor up draws the piece as much as five times
+faster on its way to the same kind of result. Harmonograph's tempo is only
+speed, and contours is paced by the clock alone.</p>
+<p><img src="https://raw.githubusercontent.com/akilluminati47/vector-screen-holder/main/assets/styles.png" alt="The four styles: flow field, contours, differential growth, harmonograph" /></p>
+<p>Left to right: flow field, contours, differential growth, harmonograph.</p>
+<p>All four draw themselves in progressively. Contours and growth keep moving
+once the picture is full, holding it a while before fading out; flow field and
+harmonograph are one-shot, and begin to fade the moment they finish. Either
+way a new piece follows.</p>
+<p>The wheel reaches flow field a little differently from the other three. Each
+ribbon traces its whole path at the moment it spawns, so a turn of the wheel
+steers the ribbons drawn from then on and leaves the ones already on screen as
+they were drawn. The other three answer the wheel immediately.</p>
+<h2 id="keepingthepcawake">Keeping the PC awake</h2>
+<p>While the overlay is up the mod calls <code>SetThreadExecutionState</code> with
+<code>ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED</code>, which is the
+supported way to tell Windows the display and system should stay on. The flags
+are cleared the moment you close it.</p>
+<p>It does <strong>not</strong> fake keystrokes or mouse movement. Some corporate presence
+tools (Teams, Slack) track real input rather than display state and will still
+mark you away.</p>
+<p>The overlay is an ordinary window, so it belongs to the virtual desktop it was
+opened on. Switch desktops and it goes with the rest of them; the screen is
+still held awake, you just will not see the art until you switch back. Windows
+offers no supported way to pin a window across desktops.</p>
+<p>For the same reason it will not hold a managed workstation open. Suppressing
+the screen saver also suppresses the lock that rides on it, which covers the
+consumer default, but a machine-inactivity policy measures real input idle
+time and will lock on schedule regardless.</p>
+<h2 id="whatitcosts">What it costs</h2>
+<p>The overlay is real work on the GPU and the CPU, and the whole point is to run
+it <em>while</em> something else is busy, so it is worth being plain about the price.</p>
+<p>Measured, rather than guessed at: on a 1440x2560 portrait display driven at
+<strong>180</strong> frames per second, which is three times the default, differential
+growth at the <em>balanced</em> amount costs about <strong>0.88 of one core</strong>, and stepping
+it to <em>maximal</em> takes that to about <strong>0.95</strong>. On a sixteen core machine that
+is under 6% of the whole CPU. At the default 60 the same work comes to roughly
+a third of those figures.</p>
+<p>The default is 60 on purpose rather than something lower. How smoothly the
+art moves is most of the first impression, and the default amount is
+<em>balanced</em> rather than maximal, so nobody lands on the expensive end by
+accident. <strong>Frames per second</strong> is yours to set anywhere from 10 to 240.</p>
+<p>Contours is the heaviest of the four, because it re-marches the field and
+rebuilds every contour level on every frame, where flow field, growth and
+harmonograph draw themselves in and then idle on the finished picture. If you
+want the mod further out of the way of a long job:</p>
+<ul>
+<li>drop <strong>Frames per second</strong>. The artwork is paced against the clock rather
+than the frame count, so a lower rate stays smooth instead of becoming
+choppy.</li>
+<li>step the <strong>amount</strong> down a notch or two with right click.</li>
+<li>prefer flow field or harmonograph over contours.</li>
+</ul>
+<p>Nothing is simulated at all while the overlay is genuinely occluded. That is
+narrower than it sounds: with desktop composition on, which is always on these
+days, an ordinary maximized window over the overlay is still composited and
+does not count. What does count is the workstation locked, or a fullscreen
+exclusive window on that display.</p>
+<p>On more than one display the overlays are presented without waiting on vsync,
+so they do not divide a single refresh between them. The cost is some tearing
+in the artwork, which single display users do not get.</p>
+<h2 id="sourceandcredits">Source and credits</h2>
+<p>The mod lives at
+<a href="https://github.com/akilluminati47/vector-screen-holder">github.com/akilluminati47/vector-screen-holder</a>,
+along with the browser prototype the four algorithms were developed in before
+the Direct2D port. There is a short showcase of all four styles at
+<a href="https://vector.akilluminati47.pages.dev/">vector.akilluminati47.pages.dev</a>.</p>
+<p>Originally created by <a href="https://akilluminati47.github.io/akilluminati47/"><strong>akilluminati47</strong></a>,
+developed with the help of the AI pair-programmers Claude and Big-Pickle
+(opencode).</p>
+<p>None of the four techniques is original to this mod. They are well-trodden
+generative art, and these are the implementations and write-ups each scene was
+built from:</p>
+<p>| Style | Drawn after |
+| --- | --- |
+| <strong>Flow field</strong> | <a href="https://github.com/moistkitteh/Flowfield_Generative_Art">moistkitteh/Flowfield<em>Generative</em>Art</a>, itself after Tyler Hobbs' <em>Fidenza</em> |
+| <strong>Contours</strong> | <a href="https://github.com/arthurxavierx/contour-lines">arthurxavierx/contour-lines</a> by Arthur Xavier |
+| <strong>Differential growth</strong> | <a href="https://github.com/inconvergent/differential-line">inconvergent/differential-line</a> by inconvergent |
+| <strong>Harmonograph</strong> | <a href="https://paulbourke.net/geometry/harmonograph/">Paul Bourke's harmonograph notes</a> |</p>
+<p>The readout is set in <a href="https://github.com/TakWolf/fusion-pixel-font">Fusion Pixel Font</a>
+by <a href="https://takwolf.com">TakWolf</a>, used under the SIL Open Font License 1.1.
+The 717 glyph subset the mod carries, and the script that cuts it, are
+published at
+<a href="https://github.com/akilluminati47/fusion-pixel-font/releases/tag/vsh-subset-2026.09.01">akilluminati47/fusion-pixel-font</a>.</p>]]></content>
+        <author>
+            <name>akilluminati47</name>
+            <uri>https://github.com/akilluminati47</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable Middle Click New Tab in Explorer 1.0.0]]></title>
         <id>https://windhawk.net/mods/explorer-no-middle-click-new-tab#0c15586bc221bc0da3f5aaa26cc655ea24878d20</id>
@@ -725,249 +1071,6 @@ log output in the issue report.</p>]]></content>
         <author>
             <name>Johhannas Reyn</name>
             <uri>https://github.com/JohhannasReyn</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Shadows Tuner 0.6.4]]></title>
-        <id>https://windhawk.net/mods/native-shadow-tuner#5ba5889e229443d62d6b13a03419c11dcbd6e01c</id>
-        <link href="https://windhawk.net/mods/native-shadow-tuner"/>
-        <updated>2026-09-21T15:42:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowsshadowstuner">Windows Shadows Tuner</h1>
-<p>Customize native Windows window shadows: make them lighter or more pronounced,
-and adjust their size and blur.</p>
-<h2 id="examples">Examples</h2>
-<p><strong>Shadow intensity and size comparison</strong></p>
-<p><img src="https://i.imgur.com/epfTlMZ.png" alt="Windows Shadows TUNER comparison" /></p>
-<h2 id="setup">Setup</h2>
-<p><code>dwm.exe</code> is a critical system process and Windhawk doesn't inject mods into it
-by default. Open Windhawk Settings, go to <strong>Advanced settings</strong>, then
-<strong>More advanced settings</strong>, and add <code>dwm.exe</code> to the process inclusion list.</p>
-<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Windhawk advanced settings" /></p>
-<h2 id="controls">Controls</h2>
-<ul>
-<li><strong>Intensity</strong>: controls the opacity of the native shadow. The default value is
-180%. Set it to 100% to restore the original Windows intensity, 50% for a
-lighter shadow, or 0% to make it invisible.</li>
-<li><strong>Size and blur</strong>: controls the shadow spread and blur. The default value is
-150%. Set it to 100% to restore the original Windows size.</li>
-</ul>
-<p>When both controls are set to 100%, the mod doesn't install any hooks because
-the requested appearance is identical to the original Windows appearance.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks a single uDWM function, <code>CWindowBorder::GetShadowParameters</code>,
-and scales the radius and alpha values it produces. To apply changes to windows
-that are already open and restore the original shadows when the mod is disabled,
-the mod briefly toggles the system drop-shadow setting off and on in memory so
-DWM rebuilds every window's shadow. The user profile isn't modified and no
-settings-change message is broadcast. Shadows can blink for a fraction of a
-second when the mod is loaded, unloaded, or its settings are changed. The mod
-creates no overlay windows and stores no persistent state.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>Tested on Windows 11 25H2 build 26200.9445.</p>
-<p>Windows 11 24H2 (build 26100.x): the uDWM symbol resolves, but the current
-version hasn't been visually confirmed there yet. If you're on 24H2, please
-report whether the shadows change.</p>
-<p>Other Windows builds haven't been tested. If the required uDWM symbol can't
-be resolved, the mod logs the error and doesn't load.</p>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Custom Shortcuts 1.0]]></title>
-        <id>https://windhawk.net/mods/explorer-custom-shortcuts#3c1bddd5acf554972350bb9186c823c6a65126fb</id>
-        <link href="https://windhawk.net/mods/explorer-custom-shortcuts"/>
-        <updated>2026-09-21T15:42:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorercustomshortcuts">Explorer Custom Shortcuts</h1>
-<p>Adds customizable, app-style keyboard shortcuts to Windows File Explorer with parameter substitution, built-in shell commands, and custom token expansion.</p>
-<blockquote>
-  <p><strong>Input Protection:</strong> All custom shortcuts are automatically suppressed while renaming files, typing into the Address/Breadcrumb bar, typing into the Search box, or while focus is actively inside dialogs (such as Properties, Delete/Replace confirmations). When focus returns to the main File Explorer window, shortcuts resume immediately.</p>
-</blockquote>
-<hr />
-<h3 id="internalexplorercommands">Internal Explorer Commands</h3>
-<p>Instead of specifying an executable path, set <strong>Executable Path</strong> to one of the following <code>internal:</code> keywords:</p>
-<ul>
-<li><strong><code>internal:newTextFile</code></strong>: Creates a <code>New Text Document.txt</code> in the active folder and automatically selects/focuses it without UI freezes.</li>
-<li><strong><code>internal:newFolder</code></strong>: Creates a <code>New Folder</code> in the active folder and enters inline rename mode immediately.</li>
-<li><strong><code>internal:openRecycleBin</code></strong>: Navigates to the Recycle Bin in the current active tab.</li>
-<li><strong><code>internal:emptyRecycleBin</code></strong>: Empties the Recycle Bin with confirmation dialog.</li>
-<li><strong><code>internal:toggleHiddenFiles</code></strong>: Toggles visibility of hidden files and folders with immediate view refresh. <em>(Note: Changes persistent system-wide Windows Explorer settings).</em></li>
-<li><strong><code>internal:toggleFileExtensions</code></strong>: Toggles file name extensions on or off with immediate view refresh. <em>(Note: Changes persistent system-wide Windows Explorer settings).</em></li>
-<li><strong><code>internal:folderOptions</code></strong>: Opens the native File Explorer Folder Options dialog.</li>
-</ul>
-<blockquote>
-  <p><strong>Persistent Settings Notice:</strong> <code>internal:toggleHiddenFiles</code> and <code>internal:toggleFileExtensions</code> flip the native Windows Explorer shell settings directly (<code>SHGetSetSettings</code>). These changes affect all File Explorer surfaces globally and persist even if this mod is disabled or uninstalled.</p>
-</blockquote>
-<hr />
-<h3 id="availabletokensforargumentsexamples">Available Tokens for Arguments &amp; Examples</h3>
-<ul>
-<li><strong><code>%f</code></strong> — All selected items as space-separated quoted paths (<code>"C:\a.txt" "C:\b.png"</code>).</li>
-<li><strong><code>%files</code></strong> — Selected regular files only (skips selected folders).</li>
-<li><strong><code>%folders</code></strong> — Selected folders only (skips selected regular files).</li>
-<li><strong><code>%1</code></strong> — Quoted path of the first selected file or directory (<code>"C:\a.txt"</code>).</li>
-<li><strong><code>%n</code></strong> — File or folder names only without absolute directory paths (<code>"a.txt"</code>).</li>
-<li><strong><code>%c</code></strong> — Total number of selected items as an integer (<code>3</code>). In loop modes, this resolves to <code>1</code>.</li>
-<li><strong><code>%ext</code></strong> — File extension of the first selected item (<code>.png</code>).</li>
-<li><strong><code>%s</code></strong> — Space-separated paths with <strong>smart-quoting</strong> (automatically adds double-quotes only to paths containing spaces).</li>
-<li><strong><code>%d</code></strong> — Active directory open in the current tab (<code>C:\Users\Name\Documents</code>). Virtual folders like <em>This PC</em> or <em>Recycle Bin</em> resolve to an empty string.</li>
-<li><strong><code>%d_smart</code></strong> — Selected folder if one is highlighted; otherwise falls back to the current active directory.</li>
-<li><strong><code>%p</code></strong> — Parent directory path of the active tab.</li>
-</ul>
-<blockquote>
-  <p><strong>Shell Interpreter Security Notice:</strong> Path tokens are quoted according to standard Windows CRT command-line (<code>argv</code>) rules. If arguments are passed to script interpreters (e.g. <code>cmd.exe /c</code> or <code>powershell.exe -Command</code>), parameters may be re-parsed by that interpreter. Use native binary arguments or pass paths directly to target programs.</p>
-</blockquote>
-<hr />
-<h3 id="launchmodesusecases">Launch Modes &amp; Use Cases</h3>
-<ul>
-<li><strong><code>batch</code></strong> (Default): Executes the application exactly once and passes the resolved command-line arguments.</li>
-<li><em>Use Case:</em> Code editors (opening a directory), Media players (queuing files), or bulk tools like PowerRename.</li>
-<li><strong><code>loop_files</code></strong>: Executes the application once per selected file.</li>
-<li><em>Use Case:</em> Single-file image editors, batch converters, or per-file processing scripts.</li>
-<li><strong><code>loop_folders</code></strong>: Executes the application once per selected folder.</li>
-<li><em>Use Case:</em> Batch archiving folders individually or folder-specific terminal operations.</li>
-</ul>
-<hr />
-<h3 id="presetideasexternalappexamples">Preset Ideas &amp; External App Examples</h3>
-<p>You can add your own shortcuts using these templates in the settings:</p>
-<ul>
-<li><strong>Open Windows Terminal Here</strong></li>
-<li>Path: <code>wt.exe</code> | Args: <code>-d "%d"</code> | Mode: <code>batch</code></li>
-<li><strong>Open with Notepad</strong></li>
-<li>Path: <code>notepad.exe</code> | Args: <code>%1</code> | Mode: <code>loop_files</code></li>
-<li><strong>PowerToys PowerRename</strong> (Bulk rename selected items)</li>
-<li>Path: <code>C:\Program Files\PowerToys\WinUI3Apps\PowerToys.PowerRename.exe</code> | Args: <code>%f</code> | Mode: <code>batch</code></li>
-<li><strong>Search with Everything</strong> (Search current active directory)</li>
-<li>Path: <code>C:\Program Files\Everything\Everything.exe</code> | Args: <code>"%d"</code> | Mode: <code>batch</code></li>
-<li><strong>Open in VS Code</strong></li>
-<li>Path: <code>code</code> | Args: <code>"%d_smart"</code> | Mode: <code>batch</code></li>
-<li><strong>Queue in VLC Media Player</strong></li>
-<li>Path: <code>vlc.exe</code> | Args: <code>%f</code> | Mode: <code>batch</code></li>
-</ul>
-<hr />
-<h3 id="comparisonwithexistingmods">Comparison with Existing Mods</h3>
-<p>While related mods exist in the Windhawk repository, <strong>Explorer Custom Shortcuts</strong> provides a distinct, keyboard-first workflow engine:</p>
-<ul>
-<li><strong><code>explorer-command-bar</code></strong>: Adds visual custom toolbar buttons exclusively to the modern Windows 11 command bar. In contrast, this mod provides a pure, zero-UI, low-latency keyboard shortcut accelerator engine operating across both classic and tabbed Explorer windows. It introduces specialized batch looping capabilities (<code>loop_files</code>, <code>loop_folders</code>), rich token expansions (<code>%n</code>, <code>%ext</code>, <code>%c</code>, <code>%files</code>, <code>%folders</code>), and context-aware suppression during inline edits.</li>
-<li><strong><code>keyboard-shortcut-actions</code></strong>: A general-purpose desktop/window hotkey dispatcher without Explorer context awareness. This mod parses active Explorer tab navigation, item selections, and folder paths directly into CLI parameters.</li>
-<li><strong><code>toggle-hidden-files</code> / <code>explorer-ctrln-newfile</code> / <code>explorer-ctrlq-new-folder</code></strong>: Single-purpose mods; here, internal shell actions are optional presets within a single hotkey table, allowing users to bind them to whatever key combinations they prefer without installing multiple separate hooks.</li>
-</ul>
-<h3 id="attributionacknowledgments">Attribution &amp; Acknowledgments</h3>
-<p>Process execution concepts (<code>ResolveCommandPath</code>, <code>ExecuteApp</code>) and shell window inspection adapt techniques from <code>explorer-command-bar</code> (DanRotaru, MIT). Settings toggling follows patterns established in <code>toggle-hidden-files</code> (Asteski).</p>]]></content>
-        <author>
-            <name>ArvindSaini978</name>
-            <uri>https://github.com/ArvindSaini978</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Per-monitor brightness in Quick Settings 2.0]]></title>
-        <id>https://windhawk.net/mods/per-monitor-brightness#1e9a228c451f2d5ceabd8b412c07fa726a4d583b</id>
-        <link href="https://windhawk.net/mods/per-monitor-brightness"/>
-        <updated>2026-09-21T10:04:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="permonitorbrightnessinquicksettings">Per-monitor brightness in Quick Settings</h1>
-<p>Windows gives you exactly one brightness slider no matter how many monitors you
-have, and on a desktop it gives you none at all. This mod adds a labelled slider
-for every connected display, right in the Quick Settings panel, each showing its
-current level and carrying the shell's own animated brightness icon.</p>
-<p><img src="https://raw.githubusercontent.com/bardelyne/per-monitor-brightness/main/screenshot.png" alt="Per-monitor brightness sliders in Quick Settings" /></p>
-<h2 id="howeachdisplayisdriven">How each display is driven</h2>
-<ul>
-<li><strong>External monitors</strong> use <strong>DDC/CI</strong> (VCP code <code>0x10</code>), the I2C side-channel
-in the video cable that the monitor's own on-screen menu uses. Most monitors
-made in the last decade support it; some budget panels and some USB-C docks
-do not.</li>
-<li><strong>Laptop internal panels</strong> use <strong>WMI</strong>, the same path the stock slider takes.</li>
-</ul>
-<p>A display that answers neither is listed as uncontrollable rather than being
-silently dropped.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>One titled slider per display, showing the live percentage.</li>
-<li>Sliders ordered left to right to match how the monitors sit on your desk.</li>
-<li>Displays identified by EDID device path, so the right slider follows the right
-monitor across hotplug, reordering and reboots.</li>
-<li>Each slider snaps to what its monitor can actually represent. Panels do not
-all use a 0-100 scale -- a Samsung G32 reports 0-50 -- so offering 1% steps
-would just mean several slider positions that write the same value.</li>
-<li>Function keys move the sliders live, and can optionally drive external
-monitors too, which they cannot do on their own.</li>
-<li>Monitors plugged in or unplugged are picked up immediately.</li>
-<li>Values are re-read whenever the panel opens, so changes made elsewhere show up.</li>
-<li>The stock brightness slider can be hidden, since it duplicates the built-in
-panel's row.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><p><strong>Hide the built-in brightness slider</strong> -- on by default; the stock slider
-only controls the internal panel, which already has its own row here.</p></li>
-<li><p><strong>Laptop brightness keys control every monitor</strong> -- <code>off</code> by default.
-<code>relative</code> shifts other monitors by the same amount, preserving their offset;
-<code>match</code> sets them all to the same percentage.</p>
-<p>It is off by default because Windows raises the same event for a brightness
-key, for the power plan's AC/battery levels, and for idle dimming, with no
-way to tell them apart -- so unplugging the charger or walking away would
-also write to every external monitor. Unlike everything else this mod does,
-that write survives turning the setting off: the monitor stores the value
-itself.</p></li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<p>Requires a Windows 11 build where the Control Center is hosted by
-<code>ShellHost.exe</code> -- developed and tested on 25H2 (build 26200).</p>
-<p>Earlier builds host it in <code>ShellExperienceHost.exe</code> and are <strong>not supported</strong>.
-That process is not included, but the reason has changed and is now only that
-it is untested. The original objection -- that a second XAML host would start a
-second brightness engine, doubling the WMI connection, the DDC/CI probe and the
-response to every brightness keypress -- no longer applies: the engine starts
-only where <code>ControlCenter.dll</code> is loaded, so a process that never hosts the
-Control Center never starts one.</p>
-<p>What remains unverified is whether the hooked symbol and the <code>L1Grid</code> layout
-this mod depends on are the same on those builds. Without one to test on, the
-include stays off.</p>
-<h2 id="notesandlimitations">Notes and limitations</h2>
-<ul>
-<li>A DDC/CI write takes roughly 50-60 ms, and the bus saturates while dragging.
-All hardware access happens on a background thread and repeated values
-collapse into a single write, so dragging never stalls the shell -- but an
-external monitor will visibly step rather than fade. The internal panel is
-around ten times faster and looks smooth.</li>
-<li>DDC/CI has no notification channel: a monitor only ever answers what the host
-asks it. Brightness changed using the monitor's own buttons therefore cannot
-be detected, and only shows up the next time the panel is opened.</li>
-<li>Not every monitor implements DDC/CI correctly. A display that does not answer
-at all is listed as uncontrollable and gets no slider; one that answers but
-misbehaves shows up as writes reporting <code>ok=0</code>. Either way, turn on logging
-for this mod in Windhawk (the mod's <strong>Advanced</strong> settings -&gt; <strong>Logging</strong>) to
-see which.</li>
-<li>A monitor that was asleep, switched to another input, or behind a dock that
-was still enumerating when you signed in will fail that first check through
-no fault of its own. It is retried rather than written off for the session:
-opening the panel again re-probes it, backing off from 30 seconds to at most
-16 minutes between attempts, and unplugging and replugging it starts over
-immediately.</li>
-</ul>]]></content>
-        <author>
-            <name>bardelyne</name>
-            <uri>https://github.com/bardelyne</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Icons Transparency 1.0.0]]></title>
-        <id>https://windhawk.net/mods/desktop-icons-transparency#bc6a3d1b64ba1cb348c263d8c8e75a74bf3dde71</id>
-        <link href="https://windhawk.net/mods/desktop-icons-transparency"/>
-        <updated>2026-09-21T10:04:12.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopiconstransparency">Desktop Icons Transparency</h1>
-<p>A lightweight mod that adjusts the opacity (alpha channel) of Windows desktop icons, including their text labels and drop shadows.</p>
-<p>Unlike <strong>Transparent Desktop Icons with Spotlight</strong>, this mod applies a fixed opacity directly at draw time using native alpha blending — without creating DirectComposition overlays, duplicate wallpaper layers, or spotlight hover effects.</p>
-<h3 id="features">Features</h3>
-<ul>
-<li>Synchronously fades icon images, labels, and text shadows.</li>
-<li>Does not darken wallpaper or cause black background artifacts.</li>
-<li>Scoped strictly to desktop repainting: does not affect taskbar, tooltips, context menus, Explorer folder windows, or icon renaming.</li>
-<li>Zero CPU and RAM overhead in idle.</li>
-</ul>]]></content>
-        <author>
-            <name>zed712969-crypto</name>
-            <uri>https://github.com/zed712969-crypto</uri>
         </author>
     </entry>
 </feed>

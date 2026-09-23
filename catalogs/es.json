@@ -9196,7 +9196,7 @@
         ],
         "ratingUsers": 849,
         "reviews": 0,
-        "updated": 1787158236000,
+        "updated": 1790193771000,
         "users": 58085
       },
       "metadata": {
@@ -9209,7 +9209,7 @@
         ],
         "license": "MIT",
         "name": "MacOS Minimize Animation",
-        "version": "3.1.4"
+        "version": "3.1.5"
       }
     },
     "magic-mouse": {
@@ -14086,6 +14086,40 @@
         "version": "1.2.0"
       }
     },
+    "taskbar-brightness-and-opacity-tuner": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790193764000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790193764000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "lzxujun",
+        "compilerOptions": "-lcomctl32 -lole32 -loleaut32 -lruntimeobject",
+        "description": "Adjust the opacity of the taskbar background and of the icons and text, and dim the taskbar background, for a clean, beautiful taskbar which is easier on the eyes and on OLED displays",
+        "github": "https://github.com/lzxujun",
+        "homepage": "https://github.com/lzxujun",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Taskbar brightness and opacity tuner",
+        "version": "1.13.0"
+      }
+    },
     "taskbar-button-click": {
       "details": {
         "defaultSorting": 562160,
@@ -17083,6 +17117,41 @@
         "version": "1.4"
       }
     },
+    "vector-screen-holder": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790193760000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790193760000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "akilluminati47",
+        "compilerOptions": "-ld2d1 -ldwrite -ladvapi32 -luser32 -lshell32",
+        "description": "Llena la pantalla que elijas con arte lineal generativo y evita que el PC entre en reposo mientras se ejecuta",
+        "github": "https://github.com/akilluminati47",
+        "homepage": "https://vector.akilluminati47.pages.dev/",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Mantenedor de pantalla vectorial",
+        "version": "1.6.1"
+      },
+      "metadataEnglish": {
+        "description": "Fills a display you choose with generative line art and keeps the PC from idling while it runs",
+        "name": "Vector Screen Holder"
+      }
+    },
     "version-spoof": {
       "details": {
         "defaultSorting": 2680,
@@ -17129,7 +17198,7 @@
         ],
         "ratingUsers": 32,
         "reviews": 0,
-        "updated": 1779186648000,
+        "updated": 1790193767000,
         "users": 573
       },
       "metadata": {
@@ -17138,10 +17207,12 @@
         "description": "Switch virtual desktops, move windows between desktops, and pin windows with customizable hotkeys",
         "github": "https://github.com/u2x1",
         "include": [
-          "windhawk.exe"
+          "windhawk.exe",
+          "windhawk-mod.exe",
+          "windhawk-mod-uiaccess.exe"
         ],
         "name": "Virtual Desktop Helper",
-        "version": "2.4.2"
+        "version": "2.5.0"
       }
     },
     "virtual-desktop-hotkey-cycle": {
