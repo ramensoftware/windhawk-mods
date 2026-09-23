@@ -150,7 +150,6 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
   - useSystemAccentColor: false
     $name: Use system's accent color for the normal progress color
     $name:ro: Folosește culoarea de accent a sistemului pentru culoarea normală a progresului
-    #! $hideIf: {rendering.renderingMode: winuiLike}
 
   - renderBarBorder: true
     $name: Render bar border
@@ -485,11 +484,11 @@ static bool AreAppsUsingDarkTheme() {
 }
 
 
-static bool IsExpectedCallerModule(HMODULE expectedModule) {
+[[clang::noinline]] bool IsExpectedCallerModule(HMODULE expectedModule) {
     HMODULE callerModule = nullptr;
 
-    void* frames[4];
-    WORD count = CaptureStackBackTrace(3, ARRAYSIZE(frames), frames, nullptr);
+    void* frames[6];
+    WORD count = CaptureStackBackTrace(1, ARRAYSIZE(frames), frames, nullptr);
     
     for (WORD i = 0; i < count; i++) {
         GetModuleHandleEx(
