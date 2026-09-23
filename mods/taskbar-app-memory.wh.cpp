@@ -1851,6 +1851,7 @@ bool HookTaskbarView(HMODULE module) {
     if (g_taskbarViewHooked.exchange(true)) {
         return false;
     }
+    // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
         {
             {LR"(void __cdecl winrt::Taskbar::implementation::ContextMenus::ShowTaskbarSettingsContextMenu(struct winrt::Windows::UI::Xaml::FrameworkElement const &,struct winrt::WindowsUdk::UI::Shell::TaskbarSettings const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &,unsigned __int64))"},
