@@ -321,6 +321,40 @@
         "version": "1.0.2"
       }
     },
+    "after-effects-theme": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790201086000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790201086000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Threshold Editor",
+        "compilerOptions": "-ldwmapi -lgdi32",
+        "description": "Recolors the Adobe After Effects interface — panels, Timeline, viewers, window frame and menu bar — with a choice of very dark palettes.",
+        "github": "https://github.com/CakeDev4k",
+        "include": [
+          "AfterFX.exe",
+          "AfterFX (Beta).exe"
+        ],
+        "license": "MIT",
+        "name": "After Effects Theme",
+        "version": "1.0.0"
+      }
+    },
     "agenda-in-calendar-view": {
       "details": {
         "defaultSorting": 320,
