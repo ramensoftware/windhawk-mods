@@ -1852,7 +1852,7 @@ bool HookTaskbarView(HMODULE module) {
         return false;
     }
     // Taskbar.View.dll
-    WindhawkUtils::SYMBOL_HOOK taskbarViewDllHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(void __cdecl winrt::Taskbar::implementation::ContextMenus::ShowTaskbarSettingsContextMenu(struct winrt::Windows::UI::Xaml::FrameworkElement const &,struct winrt::WindowsUdk::UI::Shell::TaskbarSettings const &,struct winrt::Windows::UI::Xaml::Input::ContextRequestedEventArgs const &,unsigned __int64))"},
             &ContextMenus_ShowTaskbarSettingsContextMenu_Original,
@@ -1864,8 +1864,8 @@ bool HookTaskbarView(HMODULE module) {
             MenuFlyoutItemBaseVector_Append_Hook,
         },
     };
-    if (!WindhawkUtils::HookSymbols(module, taskbarViewDllHooks,
-                                    ARRAYSIZE(taskbarViewDllHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks,
+                                    ARRAYSIZE(taskbarViewHooks))) {
         Wh_Log(L"No menu: Taskbar.View.dll's symbols weren't found");
         return false;
     }
