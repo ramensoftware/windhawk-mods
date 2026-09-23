@@ -292,6 +292,7 @@ Windhawk 高度可定制鼠标拖尾特效模组。基于原生 D3D11 + DirectCo
 ### 颜色格式
 
 自定义颜色使用十六进制 RGB，例如：`FF0000`=红，`00FF00`=绿，`0000FF`=蓝，`FFD700`=金。
+*/
 // ==/WindhawkModReadme==
 // ==WindhawkModSettings==
 /*
