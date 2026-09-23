@@ -2,12 +2,12 @@
 // @id              taskbar-disk-space-label
 // @name            Taskbar Disk Space Label
 // @description     A simple disk space label integrated into the Windows taskbar
-// @version         0.50
+// @version         0.52
 // @author          allelimo
 // @github          https://github.com/allelimo
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lgdi32 -lversion
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -19,12 +19,13 @@
 A lightweight free/available disk space label integrated directly into the
 Windows 11 taskbar. This is kind of a "remix" of the Taskbar Countdown Timer
 module by Richi (https://github.com/richilp) 
+The label is showed on primary taskbar only, taskbars on secondary monitors don't show it.
 Windows 11 only.
 
 ## Features
 
 - Choose the disk to be checked via module settings (default to C)
-- Chose the font size
+- Choose the font size
 - Choose between user available free space or total free available space
 
 ## Screenshot
@@ -44,7 +45,10 @@ Windows 11 only.
   $description: Font size of the disk label. [Default 14]
 - userFreeSpace: false
   $name: Current user available space
-  $description: Select fot the current user available free space, unselect for the total free space.  
+  $description: Select for the current user available free space, unselect for the total free space.  
+- showUnit: true
+  $name: Show unit 
+  $description: Show the unit (Gb) for the disk space.
 */
 // ==/WindhawkModSettings==
 
@@ -52,19 +56,14 @@ Windows 11 only.
 #undef GetCurrentTime
 #endif
 
-// #include <algorithm>
 #include <atomic>
-// #include <chrono>
 #include <cstdint>
-#include <cstdlib>
 #include <functional>
 #include <list>
-// #include <memory>
-#include <dwmapi.h>
 #include <windhawk_utils.h>
 #include <cwchar>
 #include <string>
-
+#include <cwctype>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
@@ -95,14 +94,14 @@ static HINSTANCE g_modInstance = nullptr;
 static std::atomic_bool g_unloading{false};
 static HANDLE g_retryThread = nullptr;
 
-int myspacefree = 10;
-int myspacetot = 100;
+static int myspacefree = 10;
+static int myspacetot = 100;
 
 struct {
-    //LPCWSTR mysettings_diskLetter;  //147
-    std::wstring mysettings_diskLetter; // 147
+    std::wstring mysettings_diskLetter;
     int mysettings_fontSize;
     bool userFreeSpace;
+    bool showUnit;
 } g_settings;
 
 static void ApplyDiskSpaceLabelIfAvailable();
@@ -332,12 +331,6 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
 }
 
 
-
-
-
-
-
-
 // -----------------------------------------------------------------------------
 // Execute code on taskbar XAML thread
 // -----------------------------------------------------------------------------
@@ -354,7 +347,6 @@ static void RunGuarded(RunFromWindowThreadProc_t proc, void* param) {
                static_cast<unsigned>(winrt::to_hresult()));
     }
 }
-
 
 
 static bool RunFromWindowThread(HWND hWnd,
@@ -375,7 +367,7 @@ static bool RunFromWindowThread(HWND hWnd,
     }
 
     if (threadId == GetCurrentThreadId()) {
-        RunGuarded(proc, procParam); //149
+        RunGuarded(proc, procParam);
         return true;
     }
 
@@ -464,14 +456,11 @@ static void ReleaseOwnedXaml() {
             }
         }
 
-    g_labelColumn = nullptr;
-    g_labelText = nullptr;
-}
+        g_labelColumn = nullptr;
+        g_labelText = nullptr;
+    }
 }
 
-// Then pass GetDiskRootPath().c_str() to GetDiskFreeSpaceExW,
-// show root.substr(0, 2) (C:) in the label, and handle the empty/failed case
-// explicitly (e.g. show C: n/a) rather than 00/00.
 
 // Accepts "C", "C:" or "C:\" and returns "C:\" (empty if unset).
 static std::wstring GetDiskRootPath() {
@@ -486,34 +475,19 @@ static std::wstring GetDiskRootPath() {
         root += L'\\';
     }
 
-    std::transform(root.begin(), root.end(), root.begin(), ::toupper);
+    std::transform(root.begin(), root.end(), root.begin(), ::towupper);
 
     return root;
 }
 
-static std::wstring GetDiskLabel() {
-    std::wstring root = g_settings.mysettings_diskLetter;
-    if (root.empty()) {
-        return root;
-    }
-    if (root.size() == 1) {
-        root += L':';
-    }
-
-    std::transform(root.begin(), root.end(), root.begin(), ::toupper);
-
-    return root;
-}
 
 // -----------------------------------------------------------------------------
 // Get disk information: available free space, total space, total free space
 // -----------------------------------------------------------------------------
-void GetDiskInfo() {
+static void GetDiskInfo() {
     ULARGE_INTEGER freeAvailable, totalBytes, totalFree;
 
     // Call GetDiskFreeSpaceExA for the selected drive
-    // if (GetDiskFreeSpaceExW(g_settings.mysettings_diskLetter, &freeAvailable,
-    // &totalBytes, &totalFree)) {
     if (GetDiskFreeSpaceExW(GetDiskRootPath().c_str(), &freeAvailable,
                             &totalBytes, &totalFree)) {
 
@@ -532,43 +506,6 @@ void GetDiskInfo() {
     }
 }
 
-// // -----------------------------------------------------------------------------
-// // Format space information to be displayed on the taskbar label
-// // -----------------------------------------------------------------------------
-// static std::wstring FormatSpace(int spacefree,
-//                                 int spacetot,
-//                                 LPCWSTR diskletter) {
-    
-//     std::wstring str = GetDiskLabel().c_str();
-
-//     //std::wstring str = GetDiskRootPath().c_str();
-//     //str.substr(0, 2);
-//     diskletter = str.c_str();
-
-//     wchar_t text[64]{};
-
-//     if (spacefree == 0 && spacetot == 0) {
-//         swprintf_s(text, L"%s n/a",
-//                    // diskletter,
-//                    // GetDiskLabel().c_str(),
-//                    diskletter);
-//     }
-
-//     // std::wstring str(diskletter);
-//     // str.pop_back();
-//     // LPCWSTR trimmed = str.c_str();
-
-//     // show root.substr(0, 2) (C:) in the label,
-
-//     else {
-//         swprintf_s(text, L"%s %02d/%02d",
-//                    // diskletter,
-//                    // GetDiskLabel().c_str(),
-//                    diskletter, spacefree, spacetot);
-//     }
-
-//     return text;
-// }
 
 // -----------------------------------------------------------------------------
 // Format space information to be displayed on the taskbar label
@@ -580,27 +517,36 @@ static std::wstring FormatSpace(int spacefree,
     
     if (spacefree == 0 && spacetot == 0) {
 
-        return label + L"n/a";
+        return label + L" n/a";
     }
+
+    if (g_settings.showUnit)
+        return label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot) + L" Gb";
+    else
         return label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot);
 }
 
 
-
-void LoadSettings() {
+static void LoadSettings() {
     //g_settings.mysettings_diskLetter = Wh_GetStringSetting(L"diskLetter");
     g_settings.mysettings_fontSize = Wh_GetIntSetting(L"fontSize");
-    g_settings.mysettings_diskLetter = WindhawkUtils::StringSetting::make(L"diskLetter").get(); //147
-    g_settings.userFreeSpace =  Wh_GetIntSetting(L"userFreeSpace");  //147
+    g_settings.mysettings_diskLetter = WindhawkUtils::StringSetting::make(L"diskLetter").get();
+    g_settings.userFreeSpace =  Wh_GetIntSetting(L"userFreeSpace");
+    g_settings.showUnit = Wh_GetIntSetting(L"showUnit");
+
+    if (g_settings.mysettings_fontSize <= 0)
+        g_settings.mysettings_fontSize = 14;
 
 }
+
 
 static void RefreshDiskSpaceLabel(void*) {
     //LoadSettings();
     if (g_labelText) {
         GetDiskInfo();
-        g_labelText.Text(FormatSpace(myspacefree, myspacetot)); //147
+        g_labelText.Text(FormatSpace(myspacefree, myspacetot));
         g_labelText.FontSize(g_settings.mysettings_fontSize);
+     
     }
 }
 
@@ -673,7 +619,7 @@ static void AddDiskSpaceLabel(void* param) {
 
     // format the info to be displayed
     g_labelText.Text(
-        FormatSpace(myspacefree, myspacetot));  //148
+        FormatSpace(myspacefree, myspacetot));
 
     g_labelText.VerticalAlignment(VerticalAlignment::Center);
     g_labelText.Padding(Thickness{4, 0, 4, 0});
@@ -730,66 +676,64 @@ static void AddDiskSpaceLabel(void* param) {
     g_taskbarWnd.store(taskbar);
     g_labelInjected.store(true);
 
-    Wh_Log(L"Label added to taskbar");
+    Wh_Log(L"Label added to taskbar"); 
 }
 
 static void RemoveDiskSpaceLabel(void*) {
-    if (g_labelText) {
-        auto parentElement =
-            VisualTreeHelper::GetParent(g_labelText).try_as<FrameworkElement>();
+    // if (g_labelText) {
+    //     auto parentElement =
+    //         VisualTreeHelper::GetParent(g_labelText).try_as<FrameworkElement>();
 
-        auto parent = parentElement.try_as<Panel>();
+    //     auto parent = parentElement.try_as<Panel>();
 
-        if (parent) {
-            auto children = parent.Children();
+    //     if (parent) {
+    //         auto children = parent.Children();
 
-            uint32_t index = 0;
+    //         uint32_t index = 0;
 
-            if (children.IndexOf(g_labelText, index)) {
-                children.RemoveAt(index);
-            }
+    //         if (children.IndexOf(g_labelText, index)) {
+    //             children.RemoveAt(index);
+    //         }
 
-            auto parentGrid = parentElement.try_as<Grid>();
+    //         auto parentGrid = parentElement.try_as<Grid>();
 
-            if (parentGrid && g_labelColumn) {   //allelimo check
-                auto columns = parentGrid.ColumnDefinitions();
+    //         if (parentGrid && g_labelColumn) {   //allelimo check
+    //             auto columns = parentGrid.ColumnDefinitions();
 
-                uint32_t columnIndex = 0;
-                if (columns.IndexOf(g_labelColumn, columnIndex)) {
-                    for (uint32_t i = 0; i < children.Size(); i++) {
-                        auto child =
-                            children.GetAt(i).try_as<FrameworkElement>();
+    //             uint32_t columnIndex = 0;
+    //             if (columns.IndexOf(g_labelColumn, columnIndex)) {
+    //                 for (uint32_t i = 0; i < children.Size(); i++) {
+    //                     auto child =
+    //                         children.GetAt(i).try_as<FrameworkElement>();
 
-                        if (!child) {
-                            continue;
-                        }
+    //                     if (!child) {
+    //                         continue;
+    //                     }
 
-                        int currentColumn = Grid::GetColumn(child);
+    //                     int currentColumn = Grid::GetColumn(child);
 
-                        if (currentColumn > static_cast<int>(columnIndex)) {
-                            Grid::SetColumn(child, currentColumn - 1);
-                        }
-                    }
+    //                     if (currentColumn > static_cast<int>(columnIndex)) {
+    //                         Grid::SetColumn(child, currentColumn - 1);
+    //                     }
+    //                 }
 
-                    columns.RemoveAt(columnIndex);
-                }
-            }
+    //                 columns.RemoveAt(columnIndex);
+    //             }
+    //         }
 
 
-        }
-    }
+    //     }
+    // }
 
-    // In RemoveDiskSpaceLabel, before g_diskText is released:
-    if (g_refreshTimer) {
-        g_refreshTimer.Stop();
-        g_refreshTimer.Tick(g_refreshTickToken);
-        g_refreshTimer = nullptr;
-    }
+    // // In RemoveDiskSpaceLabel, before g_diskText is released:
+    // if (g_refreshTimer) {
+    //     g_refreshTimer.Stop();
+    //     g_refreshTimer.Tick(g_refreshTickToken);
+    //     g_refreshTimer = nullptr;
+    // }
 
     ReleaseOwnedXaml();
     g_loadedRevokers.clear();
-    //g_labelColumn = nullptr;
-    //g_labelText = nullptr;
     g_labelInjected.store(false);
 }
 
@@ -811,18 +755,18 @@ static void ApplyDiskSpaceLabelIfAvailable() {
     }
 }
 
-static DWORD WINAPI RetryThreadProc(LPVOID) {
-    for (int i = 0; i < 5 && !g_unloading.load(); i++) {
-        if (g_labelInjected.load() || g_unloading.load()) {
-            break;
-        }
+// static DWORD WINAPI RetryThreadProc(LPVOID) {
+//     for (int i = 0; i < 5 && !g_unloading.load(); i++) {
+//         if (g_labelInjected.load() || g_unloading.load()) {
+//             break;
+//         }
 
-        Wh_Log(L"Taskbar injection retry %d", i + 1);
-        ApplyDiskSpaceLabelIfAvailable();
-    }
+//         Wh_Log(L"Taskbar injection retry %d", i + 1);
+//         ApplyDiskSpaceLabelIfAvailable();
+//     }
 
-    return 0;
-}
+//     return 0;
+// }
 
 // -----------------------------------------------------------------------------
 // System tray rebuild hook
@@ -880,32 +824,32 @@ static void* WINAPI IconView_IconView_Hook(void* pThis) {
     }
 
     try {
-    FrameworkElement iconView = nullptr;
+        FrameworkElement iconView = nullptr;
 
-    reinterpret_cast<IUnknown**>(pThis)[1]->QueryInterface(
-        winrt::guid_of<FrameworkElement>(), winrt::put_abi(iconView));
+        reinterpret_cast<IUnknown**>(pThis)[1]->QueryInterface(
+            winrt::guid_of<FrameworkElement>(), winrt::put_abi(iconView));
 
-    if (!iconView) {
-        return result;
-    }
+        if (!iconView) {
+            return result;
+        }
 
-    g_loadedRevokers.emplace_back();
-    auto it = std::prev(g_loadedRevokers.end());
+        g_loadedRevokers.emplace_back();
+        auto it = std::prev(g_loadedRevokers.end());
 
-    *it = iconView.Loaded(winrt::auto_revoke_t{},
-                          [it](winrt::Windows::Foundation::IInspectable const&,
-                               RoutedEventArgs const&) {
-                              g_loadedRevokers.erase(it);
+        *it = iconView.Loaded(winrt::auto_revoke_t{},
+                        [it](winrt::Windows::Foundation::IInspectable const&,
+                        RoutedEventArgs const&) {
+                            g_loadedRevokers.erase(it);
 
-                              if (g_unloading.load()) {
-                                  return;
-                              }
+                            if (g_unloading.load()) {
+                                return;
+                            }
 
-                              // A new IconView means the tray may have rebuilt
-                              // its XAML tree.
-                              g_labelInjected.store(false);
-                              ApplyDiskSpaceLabelIfAvailable();
-                          });
+                            // A new IconView means the tray may have rebuilt
+                            // its XAML tree.
+                            g_labelInjected.store(false);
+                            ApplyDiskSpaceLabelIfAvailable();
+                        });
     } catch (...) {
         Wh_Log(L"IconView hook failed: %08X",
             static_cast<unsigned>(winrt::to_hresult()));        
@@ -1029,8 +973,8 @@ void Wh_ModAfterInit() {
     ApplyDiskSpaceLabelIfAvailable();
 
     // if (g_retryStopEvent) {
-    g_retryThread =
-        CreateThread(nullptr, 0, RetryThreadProc, nullptr, 0, nullptr);
+    // g_retryThread =
+    //     CreateThread(nullptr, 0, RetryThreadProc, nullptr, 0, nullptr);
     //}
 }
 //}
@@ -1075,9 +1019,11 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     HWND taskbar = g_taskbarWnd.load();
+
     if (!taskbar || !IsWindow(taskbar)) {
         taskbar = FindCurrentProcessTaskbarWnd();
     }
+    
     if (taskbar) {
         RunFromWindowThread(taskbar, ReloadSettingsAndRefresh, nullptr);
     }
