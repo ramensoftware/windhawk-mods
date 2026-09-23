@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.21.1
+// @version         0.21.2
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -12,6 +12,9 @@
 
 // Source code is published under the GNU General Public License v3.0.
 // https://github.com/mario0318/SnapSentry
+//
+// For bug reports and feature requests, please open an issue here:
+// https://github.com/mario0318/SnapSentry/issues
 
 // ==WindhawkModReadme==
 /*
@@ -93,6 +96,11 @@ deleted screenshot goes to the Recycle Bin so it can be restored; if you turn th
 off, deletion is permanent. Deleting a screenshot does not remove copies already
 stored in clipboard history, cloud sync, backups, or other programs. Duplicate
 detection keeps only short-lived hashes, not image data.
+
+## Issues
+
+Bugs and feature requests go on the [SnapSentry issues
+page](https://github.com/mario0318/SnapSentry/issues).
 */
 // ==/WindhawkModReadme==
 

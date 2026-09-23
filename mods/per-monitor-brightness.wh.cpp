@@ -2,7 +2,7 @@
 // @id              per-monitor-brightness
 // @name            Per-monitor brightness in Quick Settings
 // @description     Adds a titled brightness slider for every connected monitor to the Windows 11 Quick Settings panel
-// @version         2.0
+// @version         2.1
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @include         ShellHost.exe
@@ -56,9 +56,22 @@ silently dropped.
 - Values are re-read whenever the panel opens, so changes made elsewhere show up.
 - The stock brightness slider can be hidden, since it duplicates the built-in
   panel's row.
+- The sliders sit with the Windows ones by default, and can be moved above them
+  or down to the bottom of the flyout.
+- Displays that cannot be controlled can be hidden.
 
 ## Settings
 
+- **Where to put the sliders** -- below the Windows sliders by default, which
+  puts the panel on the same card as the volume and stock brightness rows and
+  above the settings button. `aboveSliders` puts it first in that card;
+  `bottom` puts it under the settings button, outside the card, which is where
+  versions before 2.1 always put it.
+- **Hide displays that cannot be controlled** -- off by default. A display
+  answering neither DDC/CI nor WMI is normally still listed, labelled
+  "Brightness control not supported", so that a monitor missing from the panel
+  is never a mystery. Turn this on to leave them out; they are still checked,
+  so one that starts answering appears on its own.
 - **Hide the built-in brightness slider** -- on by default; the stock slider
   only controls the internal panel, which already has its own row here.
 - **Laptop brightness keys control every monitor** -- `off` by default.
@@ -121,6 +134,29 @@ include stays off.
     The stock slider only controls the internal laptop panel, which this mod
     already gives its own labelled slider, so leaving both on shows the same
     display twice. Turn this off to keep the original slider as well.
+- panelPosition: belowSliders
+  $name: Where to put the sliders
+  $description: >-
+    Where the brightness panel sits in the Quick Settings flyout.
+
+    "Below the Windows sliders" is the default and looks the most built-in:
+    the panel joins the card that holds the volume and stock brightness rows,
+    above the settings button. "At the bottom" is where earlier versions put
+    it, under the settings button and outside that card.
+  $options:
+  - aboveSliders: Above the Windows sliders
+  - belowSliders: Below the Windows sliders
+  - bottom: At the bottom, under the settings button
+- hideUnsupported: false
+  $name: Hide displays that cannot be controlled
+  $description: >-
+    A display that answers neither DDC/CI nor WMI is normally still listed,
+    with "Brightness control not supported" where its slider would be, so that
+    a missing monitor is never a mystery.
+
+    Turn this on to leave those out entirely. They are still checked: one that
+    starts answering -- a monitor that was asleep or on another input when you
+    signed in -- appears on its own.
 - followInternalBrightness: "off"
   $name: Laptop brightness keys control every monitor
   $description: >-
@@ -1636,9 +1672,100 @@ struct Injection {
     // against the live list on every refresh so a panel that missed its
     // structural rebuild can notice and redo itself.
     std::vector<std::wstring> builtFor;
+
+    // Taking a row in the middle of somebody else's Grid means renumbering
+    // their children, so every change is recorded with the value it replaced.
+    // Grid.Row is an attached property on the child, not a link to a
+    // RowDefinition, so inserting a row does not move anything by itself --
+    // and removing ours later does not move anything back either.
+    struct MovedChild {
+        winrt::weak_ref<wux::FrameworkElement> element;
+        int originalRow = 0;
+    };
+    std::vector<MovedChild> movedChildren;
+
+    // The card behind the toggles and the native sliders. Widened to cover our
+    // row so the panel sits on it rather than below it.
+    winrt::weak_ref<wux::FrameworkElement> cardBorder;
+    int originalCardRowSpan = 0;
 };
 
+// Where the panel goes. Declared up here because the row layout depends on
+// it: only one of the positions is drawn to match the shell's own rows.
+//
+// L1Grid holds the toggles in row 0, the native sliders in row 1 and the
+// footer in row 2, and the card behind the first two is a Border spanning
+// rows 0-1 -- so "with the native sliders" means taking a row inside that
+// span and pushing what follows down, while "at the bottom" means a row after
+// everything and outside the card.
+enum class PanelPosition {
+    AboveSliders,
+    BelowSliders,
+    Bottom,
+};
+PanelPosition g_panelPosition = PanelPosition::BelowSliders;
+
+// Where the shell puts the parts of a slider row, so ours can go in the same
+// places.
+//
+// Measured rather than hardcoded, because these are somebody else's layout
+// constants and the only thing keeping them true is that nobody has changed
+// them. The defaults are what 26200 reports and are used when the native rows
+// cannot be measured -- which is normal, not exceptional: the rows are
+// virtualized, and injection happens early enough that they are often not
+// realized yet.
+struct SliderMetrics {
+    double iconLeft = 22;
+    double sliderLeft = 56;
+    double sliderRight = 300;
+    double groupWidth = 358;
+    double rowHeight = 40;
+
+    // What to leave below the panel when it sits directly on top of the
+    // native group, which is usually negative.
+    //
+    // The group carries its own top padding -- 12 on the GridView, 4 on the
+    // item, 2 to the slider inside it -- and that padding exists to separate
+    // the group from whatever is above. When the panel is what is above, it
+    // is paid twice, and 12px of native row spacing becomes 26. The panel
+    // gives the difference back.
+    double gapAbove = -6;
+
+    // And what to leave above it when it sits directly below the group.
+    //
+    // Same arithmetic mirrored: the group's bottom padding sits between the
+    // last native track and us, so the panel gives back whatever that padding
+    // already provides.
+    double gapBelow = -2;
+};
+
+// Only the position that butts up against the native rows is drawn to match
+// them. Below them and at the bottom the panel keeps its own proportions --
+// the one at the bottom is outside the card entirely, where matching a row it
+// is nowhere near would be imitation for its own sake.
+bool UseNativeMetrics() {
+    // Both positions inside the card are drawn to the shell's own row. Only
+    // the one at the bottom keeps the panel's own proportions -- it is outside
+    // the card entirely, where matching a row it is nowhere near would be
+    // imitation for its own sake.
+    return g_panelPosition != PanelPosition::Bottom;
+}
+
+// The panel's own look, for every other position: what it had before there
+// was anything to line up with.
+inline constexpr double kOwnMargin = 16;
+inline constexpr double kOwnIconGap = 12;
+
+// XAML thread only, like everything else that touches the tree.
+SliderMetrics g_metrics;
+
 bool g_hideStockBrightness = true;
+
+// A display that answers nothing is listed by default, because a monitor that
+// is simply missing from the panel is a worse puzzle than one labelled
+// unsupported.
+bool g_hideUnsupported = false;
+
 
 // The stock brightness row we collapsed and the group we shrank to close the
 // gap. Kept outside Injection because the sliders are virtualized: the row may
@@ -1819,6 +1946,29 @@ wux::DependencyObject FindDescendantByName(wux::DependencyObject const& root,
     return nullptr;
 }
 
+// FindDescendant by exact label cannot find either of the elements the
+// layout has to be measured from: the shell's slider is
+// `ControlCenter.AsyncSlider`, not a `Windows.UI.Xaml.Controls.Slider`, and
+// its icon carries a name on one row and not on the next.
+wux::DependencyObject FindDescendantByClassSubstring(
+    wux::DependencyObject const& root, std::wstring_view needle, int maxDepth) {
+    if (maxDepth < 0) {
+        return nullptr;
+    }
+    if (ElementLabel(root).find(needle) != std::wstring::npos) {
+        return root;
+    }
+    int count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < count; ++i) {
+        if (auto found = FindDescendantByClassSubstring(
+                wuxm::VisualTreeHelper::GetChild(root, i), needle,
+                maxDepth - 1)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
 wux::DependencyObject FindAncestorOfClass(wux::DependencyObject const& start,
                                           std::wstring_view className,
                                           int maxUp) {
@@ -1941,6 +2091,16 @@ void TryCaptureBrightnessSource(wux::FrameworkElement const& l1Grid) {
 
 // Either the shell's real AnimatedIcon, or the Segoe Fluent brightness glyph
 // when the Lottie could not be borrowed or cannot be driven by level.
+// Both icon variants are built to this, and the row arithmetic uses the
+// constant rather than reading Width() back off the element.
+//
+// The fallback glyph had no Width at all, so Width() returned NaN -- XAML's
+// spelling of Auto -- and the icon-to-track gap computed from it was NaN,
+// which then went into a Thickness. That is not a rare path: it is what every
+// desktop gets, since with no internal panel there is no brightness Lottie to
+// borrow.
+inline constexpr double kIconSize = 20;
+
 wux::FrameworkElement MakeBrightnessIcon() {
     if (g_brightnessSource) {
         try {
@@ -1970,8 +2130,8 @@ wux::FrameworkElement MakeBrightnessIcon() {
                 if (SUCCEEDED(instance->QueryInterface(
                         winrt::guid_of<wux::FrameworkElement>(),
                         winrt::put_abi(element)))) {
-                    element.Width(20);
-                    element.Height(20);
+                    element.Width(kIconSize);
+                    element.Height(kIconSize);
                     return element;
                 }
             }
@@ -1984,6 +2144,8 @@ wux::FrameworkElement MakeBrightnessIcon() {
     wuxc::FontIcon font;
     font.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
     font.Glyph(L"");  // Brightness
+    font.Width(kIconSize);
+    font.Height(kIconSize);
     return font;
 }
 
@@ -2034,18 +2196,38 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
     std::vector<brightness::Display> displays = g_engine->GetDisplays();
     Wh_Log(L"Building panel for %zu display(s)", displays.size());
 
+    // Every display the panel considered, whether or not it got a row. Keyed
+    // on this rather than on what was drawn, so that a monitor arriving or
+    // leaving is still detected as a structural change when the ones on screen
+    // happen to be unchanged.
     injection.builtFor.clear();
     injection.builtFor.reserve(displays.size());
     for (const brightness::Display& d : displays) {
         injection.builtFor.push_back(d.stableId);
     }
 
+    // A panel with nothing in it still carries its margin, which inside the
+    // card is a blank strip under the sliders. That happens before the first
+    // enumeration -- the early-inject path injects on purpose before the
+    // displays are known -- and permanently when hideUnsupported hides every
+    // one of them.
+    panel.Visibility(wux::Visibility::Collapsed);
+
     for (const brightness::Display& d : displays) {
+        const bool controllable = d.transport != brightness::Transport::None;
+        if (!controllable && g_hideUnsupported) {
+            continue;
+        }
+
         std::wstring displayName = d.name;
-        // One fallback for both halves of the row. Showing a thumb at 50%
-        // while the title omits the percentage reads as a bug; agreeing on 50
-        // is at least self-consistent, and the first refresh corrects it.
-        const int shownPercent = d.percent < 0 ? 50 : d.percent;
+        // The 50 is a placeholder for a value not read *yet*, and only a
+        // controllable display has one coming -- the first refresh replaces
+        // it. An uncontrollable one has no value and never will, so showing
+        // it "50%" directly above "Brightness control not supported" invents a
+        // reading that does not exist. FormatRowTitle omits the percentage
+        // when given a negative, which is exactly this case.
+        const int shownPercent =
+            controllable ? (d.percent < 0 ? 50 : d.percent) : -1;
         wuxc::TextBlock title;
         title.Text(FormatRowTitle(displayName, shownPercent));
         title.FontSize(12);
@@ -2053,7 +2235,7 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
         title.Opacity(0.85);
         panel.Children().Append(title);
 
-        if (d.transport == brightness::Transport::None) {
+        if (!controllable) {
             // Say so rather than showing a slider that does nothing.
             wuxc::TextBlock note;
             note.Text(L"Brightness control not supported");
@@ -2077,7 +2259,14 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
 
         wux::FrameworkElement icon = MakeBrightnessIcon();
         icon.VerticalAlignment(wux::VerticalAlignment::Center);
-        icon.Margin(wux::ThicknessHelper::FromLengths(0, 0, 12, 0));
+        // The gap the shell leaves between its icon and its track, derived
+        // rather than guessed: the panel already starts at the icon's left
+        // edge, so what is left over after the icon is the gap.
+        const double iconGap =
+            UseNativeMetrics()
+                ? g_metrics.sliderLeft - g_metrics.iconLeft - kIconSize
+                : kOwnIconGap;
+        icon.Margin(wux::ThicknessHelper::FromLengths(0, 0, iconGap, 0));
         wuxc::Grid::SetColumn(icon, 0);
         sliderRow.Children().Append(icon);
 
@@ -2087,6 +2276,12 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
         slider.Value(shownPercent);
         slider.IsThumbToolTipEnabled(true);
         slider.VerticalAlignment(wux::VerticalAlignment::Center);
+        if (UseNativeMetrics()) {
+            // Matched to the shell's row so the track sits at the same height
+            // and the hit target is the same size. The default template is
+            // shorter, which reads as a thinner control next to the real ones.
+            slider.Height(g_metrics.rowHeight);
+        }
         wuxc::Grid::SetColumn(slider, 1);
 
         SetIconLevel(icon, slider.Value());
@@ -2133,13 +2328,33 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
                                       winrt::make_weak(icon),
                                       winrt::make_weak(title)});
     }
+
+    if (panel.Children().Size() > 0) {
+        panel.Visibility(wux::Visibility::Visible);
+    }
 }
 
 wuxc::StackPanel BuildSliderPanel(Injection& injection) {
     wuxc::StackPanel panel;
     panel.Name(L"WindhawkPerMonitorBrightness");
     panel.Orientation(wuxc::Orientation::Vertical);
-    panel.Margin(wux::ThicknessHelper::FromLengths(16, 4, 16, 8));
+    if (UseNativeMetrics()) {
+        // Left and right come from the native row so the icon column and the
+        // far end of the track line up with it; the panel used to be 6px left
+        // of the icons and 42px past the end of the sliders.
+        //
+        // The seam goes on whichever edge touches the group, and the other
+        // edge gets a plain gap -- these rows carry titles, so they are a
+        // group of their own rather than more of the same list.
+        const bool above = g_panelPosition == PanelPosition::AboveSliders;
+        panel.Margin(wux::ThicknessHelper::FromLengths(
+            g_metrics.iconLeft, above ? 8 : g_metrics.gapBelow,
+            g_metrics.groupWidth - g_metrics.sliderRight,
+            above ? g_metrics.gapAbove : 8));
+    } else {
+        panel.Margin(
+            wux::ThicknessHelper::FromLengths(kOwnMargin, 4, kOwnMargin, 8));
+    }
     PopulateSliderPanel(panel, injection);
     return panel;
 }
@@ -2278,11 +2493,245 @@ void ReArmStockSliderHide() {
     }
 }
 
-// The Control Center's L1Grid is a Grid whose row layout is not documented and
-// has changed across builds. Appending a row is only safe when it already
-// declares RowDefinitions; otherwise every existing child implicitly lives in
-// row 0 and adding a definition would re-flow the whole panel. In that case we
-// log the structure and leave the UI untouched.
+// Which row of L1Grid the panel should take, and what has to move for it.
+//
+// Rows are chosen by reading the grid rather than by hardcoding indices: the
+// layout below is what 26200 has, and a build that reorders it should degrade
+// to "at the bottom" rather than land the panel somewhere absurd.
+//
+//   [0] Border                      row=0 span=2   the card
+//   [1] ContentControl#TogglesGroup row=0
+//   [2] ContentControl#SlidersGroup row=1
+//   [3] Grid#FooterGrid             row=2          outside the card
+//
+// Returns the row for the panel. Anything at or below it is pushed down one,
+// recorded in `injection` so teardown can put it back.
+int PlacePanelRow(wuxc::Grid const& grid, Injection& injection) {
+    const int appendedRow = static_cast<int>(grid.RowDefinitions().Size()) - 1;
+
+    if (g_panelPosition == PanelPosition::Bottom) {
+        return appendedRow;  // after everything; nothing else moves
+    }
+
+    // The native sliders are the anchor. Without them there is nothing to be
+    // above or below, which is the case on a build that renamed the group.
+    wux::FrameworkElement sliders{nullptr};
+    for (uint32_t i = 0; i < grid.Children().Size(); ++i) {
+        auto fe = grid.Children().GetAt(i).try_as<wux::FrameworkElement>();
+        if (fe && ElementLabel(fe) ==
+                      L"Windows.UI.Xaml.Controls.ContentControl#SlidersGroup") {
+            sliders = fe;
+            break;
+        }
+    }
+    if (!sliders) {
+        Wh_Log(L"SlidersGroup not among L1Grid's children; placing the panel "
+               L"at the bottom instead");
+        return appendedRow;
+    }
+
+    const int slidersRow = wuxc::Grid::GetRow(sliders);
+    const int wantedRow = (g_panelPosition == PanelPosition::AboveSliders)
+                              ? slidersRow
+                              : slidersRow + 1;
+
+    // Everything from the wanted row down moves one row further down. Our own
+    // panel is not in the tree yet, so this cannot catch it.
+    for (uint32_t i = 0; i < grid.Children().Size(); ++i) {
+        auto fe = grid.Children().GetAt(i).try_as<wux::FrameworkElement>();
+        if (!fe) {
+            continue;
+        }
+        const int row = wuxc::Grid::GetRow(fe);
+        const int span = wuxc::Grid::GetRowSpan(fe);
+
+        if (row >= wantedRow) {
+            injection.movedChildren.push_back({winrt::make_weak(fe), row});
+            wuxc::Grid::SetRow(fe, row + 1);
+            continue;
+        }
+
+        // The card is whatever spans the sliders row. Widening it by one is
+        // what puts the panel inside it rather than underneath it.
+        //
+        // The test is against the sliders row, not the row being taken. Asking
+        // whether the card crosses the *new* row is only true when the new row
+        // is above the sliders: for "below", the new row sits immediately
+        // after the card's last row, 0 + 2 > 2 is false, and the default
+        // position quietly landed outside the card -- which is the very look
+        // the issue was about. The sliders row is inside the card by
+        // definition, on both sides of it.
+        if (span > 1 && row + span > slidersRow && !injection.cardBorder.get()) {
+            // Widened to a computed span, not by adding one.
+            //
+            // Adding one is not idempotent, and the thing it is not idempotent
+            // across is mod reloads, not injections. InjectInto returns early
+            // on a grid that already holds the panel, so this runs once per
+            // view -- and the measurements agree: the card was seen at span 5
+            // while the footer had moved exactly one row, which three runs of
+            // this function could not produce.
+            //
+            // What outlives a reload is the view. It is built on first use and
+            // kept (see g_injecting), so installing a new build leaves the
+            // same Border in place, and each instance stretched it again from
+            // wherever the last one left it. A fresh ShellHost with a single
+            // injection reports span 3, which is the value below.
+            //
+            // The span the card wants is fixed: from its own row through the
+            // lowest row it has to cover, which is our panel for "below" and
+            // the sliders in their new position for "above". Computing it
+            // means an instance inheriting a stretched card settles on the
+            // right value instead of adding to it.
+            const int lastCovered =
+                (g_panelPosition == PanelPosition::AboveSliders) ? slidersRow + 1
+                                                                 : wantedRow;
+            const int wantedSpan = lastCovered - row + 1;
+            if (span < wantedSpan) {
+                injection.cardBorder = winrt::make_weak(fe);
+                injection.originalCardRowSpan = span;
+                wuxc::Grid::SetRowSpan(fe, wantedSpan);
+            } else if (span > wantedSpan) {
+                // Left stretched by an instance whose unload could not reach
+                // the XAML thread. Recorded but not changed: shrinking someone
+                // else's leftover to a value this instance never measured
+                // would be guessing, and it is visible here if it ever
+                // matters.
+                Wh_Log(L"Card arrived at span %d, wider than the %d this "
+                       L"layout needs; leaving it alone",
+                       span, wantedSpan);
+            }
+        }
+    }
+
+    int cardSpanNow = 0;
+    if (auto card = injection.cardBorder.get()) {
+        cardSpanNow = wuxc::Grid::GetRowSpan(card);
+    }
+    Wh_Log(L"Panel takes row %d (sliders were row %d); moved %zu child(ren) "
+           L"down, card span %d -> %d",
+           wantedRow, slidersRow, injection.movedChildren.size(),
+           injection.originalCardRowSpan, cardSpanNow);
+    return wantedRow;
+}
+
+
+// How far the lowest realized native track sits above the bottom of the
+// group. The first row gives the top inset; only the last row gives this one,
+// and which row that is depends on how many the shell drew.
+double LowestSliderBottom(wux::DependencyObject const& node,
+                          wux::FrameworkElement const& origin, int maxDepth) {
+    double lowest = 0;
+    if (maxDepth < 0) {
+        return lowest;
+    }
+    if (ElementLabel(node).find(L"AsyncSlider") != std::wstring::npos) {
+        if (auto fe = node.try_as<wux::FrameworkElement>()) {
+            if (fe.ActualHeight() > 0) {
+                auto point = fe.TransformToVisual(origin).TransformPoint({0, 0});
+                lowest = point.Y + fe.ActualHeight();
+            }
+        }
+    }
+    int count = wuxm::VisualTreeHelper::GetChildrenCount(node);
+    for (int i = 0; i < count; ++i) {
+        lowest = std::max(lowest,
+                          LowestSliderBottom(wuxm::VisualTreeHelper::GetChild(node, i),
+                                             origin, maxDepth - 1));
+    }
+    return lowest;
+}
+
+// The first realized native slider, and the icon sharing its row.
+void MeasureNativeSliderMetrics(wux::FrameworkElement const& l1Grid) try {
+    auto group = FindDescendant(
+        l1Grid, L"Windows.UI.Xaml.Controls.ContentControl#SlidersGroup", 6);
+    if (!group) {
+        return;
+    }
+    auto groupFe = group.try_as<wux::FrameworkElement>();
+    if (!groupFe || groupFe.ActualWidth() <= 0) {
+        return;
+    }
+
+    // Any slider row will do. The brightness one is the obvious candidate and
+    // the wrong choice: it is absent on a desktop, and this mod hides it by
+    // default on a laptop, so the volume row is usually the only one left.
+    auto slider = FindDescendantByClassSubstring(group, L"AsyncSlider", 30);
+    if (!slider) {
+        return;
+    }
+    auto sliderFe = slider.try_as<wux::FrameworkElement>();
+    if (!sliderFe || sliderFe.ActualWidth() <= 0) {
+        return;
+    }
+
+    auto row = FindAncestorOfClass(
+        slider, L"Windows.UI.Xaml.Controls.GridViewItem", 24);
+    auto icon = row ? FindDescendantByClassSubstring(row, L"AnimatedIcon", 24)
+                    : nullptr;
+
+    SliderMetrics measured;
+    measured.groupWidth = groupFe.ActualWidth();
+
+    auto point = sliderFe.TransformToVisual(l1Grid).TransformPoint({0, 0});
+    measured.sliderLeft = point.X;
+    measured.sliderRight = point.X + sliderFe.ActualWidth();
+    measured.rowHeight = sliderFe.ActualHeight();
+
+    if (auto iconFe = icon ? icon.try_as<wux::FrameworkElement>() : nullptr) {
+        measured.iconLeft =
+            iconFe.TransformToVisual(l1Grid).TransformPoint({0, 0}).X;
+    } else {
+        // Keep the gap the default describes rather than inventing one.
+        measured.iconLeft = measured.sliderLeft - 34;
+    }
+
+    // What the panel has to give back so that the seam between it and the
+    // group looks like one more row boundary. Both halves come off the same
+    // row: how far the first slider sits below the top of the group, and how
+    // far two native sliders sit apart, which is twice the item's margin plus
+    // twice the slider's inset within it.
+    if (auto rowFe = row ? row.try_as<wux::FrameworkElement>() : nullptr) {
+        const double groupTop =
+            groupFe.TransformToVisual(l1Grid).TransformPoint({0, 0}).Y;
+        const double rowTop =
+            rowFe.TransformToVisual(l1Grid).TransformPoint({0, 0}).Y;
+        const double sliderInset = point.Y - rowTop;
+        const double nativeRowGap = 2 * (rowFe.Margin().Top + sliderInset);
+        measured.gapAbove = nativeRowGap - (point.Y - groupTop);
+
+        const double groupBottom = groupTop + groupFe.ActualHeight();
+        // Same depth as the search that found the slider in the first place.
+        // At 12 a tree any deeper would silently keep the default seam while
+        // every other metric was measured, which is the sort of half-measured
+        // result that is worse than either.
+        const double lowest = LowestSliderBottom(group, l1Grid, 30);
+        if (lowest > 0 && groupBottom > lowest) {
+            measured.gapBelow = nativeRowGap - (groupBottom - lowest);
+        }
+    }
+
+    // A row that measures as nonsense is worse than the defaults.
+    if (measured.sliderRight <= measured.sliderLeft ||
+        measured.iconLeft < 0 || measured.iconLeft >= measured.sliderLeft ||
+        measured.sliderRight > measured.groupWidth || measured.rowHeight < 16) {
+        Wh_Log(L"Native slider metrics look wrong (icon %.0f slider %.0f..%.0f "
+               L"of %.0f, h %.0f); keeping the defaults",
+               measured.iconLeft, measured.sliderLeft, measured.sliderRight,
+               measured.groupWidth, measured.rowHeight);
+        return;
+    }
+
+    g_metrics = measured;
+    Wh_Log(L"Native slider row: icon at %.0f, slider %.0f..%.0f of %.0f, "
+           L"height %.0f, seams %.0f/%.0f",
+           g_metrics.iconLeft, g_metrics.sliderLeft, g_metrics.sliderRight,
+           g_metrics.groupWidth, g_metrics.rowHeight, g_metrics.gapAbove,
+           g_metrics.gapBelow);
+} catch (...) {
+    Wh_Log(L"Measuring the native slider row threw: %08X", winrt::to_hresult());
+}
+
 bool InjectInto(wux::FrameworkElement const& l1Grid) {
     auto grid = l1Grid.try_as<wuxc::Grid>();
     if (!grid) {
@@ -2306,10 +2755,15 @@ bool InjectInto(wux::FrameworkElement const& l1Grid) {
     Wh_Log(L"L1Grid has %u RowDefinition(s), %u child(ren)", rowCount,
            grid.Children().Size());
 
+    // L1Grid's row layout is not documented and has changed across builds.
+    // Appending a row is only safe when the grid already declares
+    // RowDefinitions; otherwise every existing child implicitly lives in row 0
+    // and adding a definition would re-flow the whole panel.
     if (rowCount == 0) {
         // Either the grid genuinely has no rows (in which case appending one
         // would re-flow every existing child out of row 0), or it is not built
-        // yet and a later retry will succeed.
+        // yet and a later retry will succeed. Either way, log the structure
+        // and leave the UI untouched.
         if (!g_dumpedTree.exchange(true)) {
             Wh_Log(L"L1Grid declares no rows; refusing to re-flow it. "
                    L"Tree follows:");
@@ -2322,14 +2776,22 @@ bool InjectInto(wux::FrameworkElement const& l1Grid) {
     // to be read while the stock row is still visible.
     TryCaptureBrightnessSource(l1Grid);
 
+    // Likewise before building: the rows are laid out from these.
+    MeasureNativeSliderMetrics(l1Grid);
+
     Injection injection;
     wuxc::StackPanel panel = BuildSliderPanel(injection);
 
     wuxc::RowDefinition row;
     row.Height(wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
+    // Appended, never inserted. RowDefinitions are positional, so inserting
+    // one in the middle would silently renumber every row below it while the
+    // children's Grid.Row values stayed put -- the same renumbering, done
+    // invisibly and in the wrong direction. Appending adds capacity at the
+    // end and leaves the arithmetic to PlacePanelRow, which records it.
     grid.RowDefinitions().Append(row);
 
-    wuxc::Grid::SetRow(panel, static_cast<int>(grid.RowDefinitions().Size()) - 1);
+    wuxc::Grid::SetRow(panel, PlacePanelRow(grid, injection));
     grid.Children().Append(panel);
 
     injection.grid = winrt::make_weak(grid);
@@ -2429,6 +2891,21 @@ void RemoveInjections() {
                 if (grid.Children().IndexOf(panel, index)) {
                     grid.Children().RemoveAt(index);
                 }
+            }
+
+            // Put the shell's own children back on their original rows before
+            // the appended RowDefinition goes. The other order leaves a child
+            // addressing a row that no longer exists, which XAML resolves by
+            // clamping it into the last row -- the footer lands on top of the
+            // sliders, and it looks like the mod broke the flyout on the way
+            // out.
+            for (Injection::MovedChild& moved : injection.movedChildren) {
+                if (auto element = moved.element.get()) {
+                    wuxc::Grid::SetRow(element, moved.originalRow);
+                }
+            }
+            if (auto card = injection.cardBorder.get()) {
+                wuxc::Grid::SetRowSpan(card, injection.originalCardRowSpan);
             }
 
             // Remove the row we appended, but only that one -- match by
@@ -3408,6 +3885,20 @@ void RecheckControlCenterModule() {
 
 void LoadSettings() {
     g_hideStockBrightness = Wh_GetIntSetting(L"hideStockBrightness") != 0;
+    g_hideUnsupported = Wh_GetIntSetting(L"hideUnsupported") != 0;
+
+    // No truthiness test: StringSetting converts through operator PCWSTR(),
+    // and Wh_GetStringSetting returns L"" rather than NULL, so the check that
+    // used to wrap this was always taken.
+    g_panelPosition = PanelPosition::BelowSliders;
+    WindhawkUtils::StringSetting position =
+        WindhawkUtils::StringSetting::make(L"panelPosition");
+    std::wstring_view positionValue{position.get()};
+    if (positionValue == L"aboveSliders") {
+        g_panelPosition = PanelPosition::AboveSliders;
+    } else if (positionValue == L"bottom") {
+        g_panelPosition = PanelPosition::Bottom;
+    }
 
     // Wh_GetStringSetting returns L"" rather than NULL on failure, so a
     // pointer check would be meaningless; the RAII wrapper also removes the
@@ -3428,8 +3919,11 @@ void LoadSettings() {
         g_engine->SetFollowMode(followMode);
     }
 
-    Wh_Log(L"hideStockBrightness=%d followInternalBrightness=%d",
-           g_hideStockBrightness ? 1 : 0, static_cast<int>(followMode));
+    Wh_Log(L"hideStockBrightness=%d followInternalBrightness=%d "
+           L"panelPosition=%s hideUnsupported=%d",
+           g_hideStockBrightness ? 1 : 0, static_cast<int>(followMode),
+           positionValue.empty() ? L"belowSliders" : position.get(),
+           g_hideUnsupported ? 1 : 0);
 }
 
 BOOL Wh_ModInit() {
@@ -3465,13 +3959,21 @@ void Wh_ModAfterInit() {
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
-    bool previouslyHidden = g_hideStockBrightness;
+    const bool previouslyHidden = g_hideStockBrightness;
+    const bool previouslyHidUnsupported = g_hideUnsupported;
+    const PanelPosition previousPosition = g_panelPosition;
     LoadSettings();
 
     // Follow mode is engine state and takes effect at once.
-    // Hiding the stock slider changes what was injected into somebody else's
-    // visual tree, so only that one needs a reload to rebuild it.
-    *bReload = (g_hideStockBrightness != previouslyHidden);
+    //
+    // The other three changed what was put into somebody else's visual tree,
+    // and each needs that undone and redone rather than patched: hiding the
+    // stock slider touches an element we do not own, the position moved the
+    // shell's own children between rows, and hiding unsupported displays
+    // changes which rows exist at all.
+    *bReload = (g_hideStockBrightness != previouslyHidden) ||
+               (g_hideUnsupported != previouslyHidUnsupported) ||
+               (g_panelPosition != previousPosition);
     return TRUE;
 }
 
