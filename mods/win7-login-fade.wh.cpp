@@ -30,14 +30,14 @@
 * To add fade effects to sleep and hibernation initiated by the idle timer or power button, enable the "Enable enhanced sleep/hibernate interception" option. This option has limited compatibility compared to the rest of the mod, and is only tested on Windows 10 LTSC 2021 (22H2) and 11 25H2. It may work on 21H2 and later versions; however, this mode is unlikely to work on Windows 10 1903 and earlier versions, unfortunately.
 * The rest of the features have been tested on Windows 8.1, 10 LTSC 2021 (21H2, 22H2), 11 23H2, 24H2, and 25H2. This mod will not work on Windows 7.
 ## Presets
-* Windows Vista/7 Style (mod defaults)
+* Windows Vista/7 style (mod defaults)
   * Logon fade type: Gamma (Reimplemented)
   * Logon fade duration: 1000 ms
   * Logoff fade type: Gamma (Reimplemented)
   * Logoff fade duration: 1000 ms
   * Sleep fade enabled: true
   * Sleep fade duration: 500 ms
-* Windows 8/8.1/10 1507-1809 Style
+* Windows 8/8.1/10 1507-1809 style
   * Logon fade type: DWM (Original)
   * Logon fade duration: (ignored in this mode)
   * Logoff fade type: Gamma (Reimplemented)
