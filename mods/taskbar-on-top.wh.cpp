@@ -2,7 +2,7 @@
 // @id              taskbar-on-top
 // @name            Taskbar on top for Windows 11
 // @description     Moves the Windows 11 taskbar to the top of the screen
-// @version         1.1.7
+// @version         1.1.8
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -129,6 +129,9 @@ std::atomic<int> g_hookCallCounter;
 bool g_inCTaskListThumbnailWnd_DisplayUI;
 bool g_inCTaskListThumbnailWnd_LayoutThumbnails;
 bool g_inOverflowFlyoutModel_Show;
+thread_local bool g_inMenuFlyout_ShowAt;
+constexpr WCHAR kMenuFlyoutPopupPropName[] =
+    L"MenuFlyoutPopup_Windhawk_" WH_MOD_ID;
 int g_lastTaskbarAlignment;
 
 std::atomic<DWORD> g_UpdateFlyoutPosition_threadId;
@@ -193,7 +196,7 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     return (VS_FIXEDFILEINFO*)pFixedFileInfo;
 }
 
-bool IsVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
+bool IsMainModuleVersionAtLeast(WORD major, WORD minor, WORD build, WORD qfe) {
     static VS_FIXEDFILEINFO* fixedFileInfo =
         GetModuleVersionInfo(nullptr, nullptr);
     if (!fixedFileInfo) {
@@ -508,7 +511,7 @@ void TaskbarWndProcPreProcess(HWND hWnd,
             // the icons are aligned to left, not centered. The drawback is that
             // the jump list animations won't be correct in this case.
             if (g_lastTaskbarAlignment == 1 &&
-                !IsVersionAtLeast(10, 0, 26100, 0)) {
+                !IsMainModuleVersionAtLeast(10, 0, 26100, 0)) {
                 break;
             }
 
@@ -736,9 +739,11 @@ HRESULT WINAPI CTaskListWnd_ComputeJumpViewPosition_Hook(
     };
     GetMonitorInfo(monitor, &monitorInfo);
 
-    // Place at the bottom of the monitor, will reposition later in
+    // Place at the center of the monitor, will reposition later in
     // SetWindowPos.
-    point->Y = monitorInfo.rcWork.bottom - 1;
+    int centerY = monitorInfo.rcWork.top +
+                  (monitorInfo.rcWork.bottom - monitorInfo.rcWork.top) / 2;
+    point->Y = centerY;
 
     return ret;
 }
@@ -1229,7 +1234,11 @@ MenuFlyout_ShowAt_Hook(void* pThis,
     Wh_Log(L">");
 
     auto original = [=]() {
-        return MenuFlyout_ShowAt_Original(pThis, placementTarget, showOptions);
+        g_inMenuFlyout_ShowAt = true;
+        void* ret =
+            MenuFlyout_ShowAt_Original(pThis, placementTarget, showOptions);
+        g_inMenuFlyout_ShowAt = false;
+        return ret;
     };
 
     if (!showOptions) {
@@ -1271,7 +1280,7 @@ MenuFlyout_ShowAt_Hook(void* pThis,
         }
     }
 
-    return MenuFlyout_ShowAt_Original(pThis, placementTarget, showOptions);
+    return original();
 }
 
 bool HandleSystemTrayContextMenu(FrameworkElement element) {
@@ -1323,6 +1332,40 @@ void WINAPI DateTimeIconContent_ShowContextMenu_Hook(void* pThis) {
     if (!element || !HandleSystemTrayContextMenu(element)) {
         DateTimeIconContent_ShowContextMenu_Original(pThis);
     }
+}
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original;
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
+                                 LPCWSTR lpClassName,
+                                 LPCWSTR lpWindowName,
+                                 DWORD dwStyle,
+                                 int X,
+                                 int Y,
+                                 int nWidth,
+                                 int nHeight,
+                                 HWND hWndParent,
+                                 HMENU hMenu,
+                                 HINSTANCE hInstance,
+                                 PVOID lpParam) {
+    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
+                                         dwStyle, X, Y, nWidth, nHeight,
+                                         hWndParent, hMenu, hInstance, lpParam);
+    if (!hWnd || !g_inMenuFlyout_ShowAt) {
+        return hWnd;
+    }
+
+    // XAML creates the windowed popup of a menu flyout during ShowAt, but
+    // positions it later, so mark it here for SetWindowPos_Hook.
+    WCHAR szClassName[64];
+    if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) &&
+        _wcsicmp(szClassName, L"Xaml_WindowedPopupClass") == 0) {
+        Wh_Log(L"Menu flyout popup window created: %08X",
+               (DWORD)(ULONG_PTR)hWnd);
+        SetProp(hWnd, kMenuFlyoutPopupPropName, (HANDLE)1);
+    }
+
+    return hWnd;
 }
 
 using SetWindowPos_t = decltype(&SetWindowPos);
@@ -1382,7 +1425,8 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
         }
     } else if (_wcsicmp(szClassName, L"TopLevelWindowForOverflowXamlIsland") ==
                    0 ||
-               _wcsicmp(szClassName, L"Xaml_WindowedPopupClass") == 0) {
+               (_wcsicmp(szClassName, L"Xaml_WindowedPopupClass") == 0 &&
+                !GetProp(hWnd, kMenuFlyoutPopupPropName))) {
         if (uFlags & (SWP_NOMOVE | SWP_NOSIZE)) {
             return original();
         }
@@ -1868,13 +1912,13 @@ bool RunFromWindowThread(HWND hWnd,
 
 namespace StartMenuUI {
 
-bool g_applyStylePending;
 bool g_inApplyStyle;
 bool g_startMenuAnimationAdjusted;
 winrt::weak_ref<DependencyObject> g_startSizingFrameWeakRef;
 int64_t g_canvasTopPropertyChangedToken;
 int64_t g_canvasLeftPropertyChangedToken;
-winrt::event_token g_layoutUpdatedToken;
+winrt::weak_ref<DependencyObject> g_frameRootWeakRef;
+int64_t g_verticalAlignmentPropertyChangedToken;
 winrt::event_token g_visibilityChangedToken;
 
 HWND GetCoreWnd() {
@@ -2064,6 +2108,25 @@ void ApplyStyleRedesignedStartMenu(FrameworkElement content,
     }
 
     frameRoot.Margin(margin);
+
+    if (!g_unloading && !g_frameRootWeakRef.get()) {
+        auto frameRootDo = frameRoot.as<DependencyObject>();
+
+        g_frameRootWeakRef = frameRootDo;
+
+        g_verticalAlignmentPropertyChangedToken =
+            frameRootDo.RegisterPropertyChangedCallback(
+                FrameworkElement::VerticalAlignmentProperty(),
+                [](DependencyObject sender, DependencyProperty property) {
+                    auto alignment =
+                        sender.as<FrameworkElement>().VerticalAlignment();
+                    Wh_Log(L"FrameRoot VerticalAlignment changed to %d",
+                           static_cast<int>(alignment));
+                    if (!g_inApplyStyle) {
+                        ApplyStyle();
+                    }
+                });
+    }
 }
 
 void ApplyStyle() {
@@ -2094,7 +2157,7 @@ void ApplyStyle() {
 }
 
 void Init() {
-    if (g_layoutUpdatedToken) {
+    if (g_visibilityChangedToken) {
         return;
     }
 
@@ -2103,29 +2166,11 @@ void Init() {
         return;
     }
 
-    if (!g_visibilityChangedToken) {
-        g_visibilityChangedToken = window.VisibilityChanged(
-            [](winrt::Windows::Foundation::IInspectable const& sender,
-               winrt::Windows::UI::Core::VisibilityChangedEventArgs const&
-                   args) {
-                Wh_Log(L"Window visibility changed: %d", args.Visible());
-                if (args.Visible()) {
-                    g_applyStylePending = true;
-                }
-            });
-    }
-
-    auto contentUI = window.Content();
-    if (!contentUI) {
-        return;
-    }
-
-    auto content = contentUI.as<FrameworkElement>();
-    g_layoutUpdatedToken = content.LayoutUpdated(
-        [](winrt::Windows::Foundation::IInspectable const&,
-           winrt::Windows::Foundation::IInspectable const&) {
-            if (g_applyStylePending) {
-                g_applyStylePending = false;
+    g_visibilityChangedToken = window.VisibilityChanged(
+        [](winrt::Windows::Foundation::IInspectable const& sender,
+           winrt::Windows::UI::Core::VisibilityChangedEventArgs const& args) {
+            Wh_Log(L"Window visibility changed: %d", args.Visible());
+            if (args.Visible()) {
                 ApplyStyle();
             }
         });
@@ -2134,7 +2179,7 @@ void Init() {
 }
 
 void Uninit() {
-    if (!g_layoutUpdatedToken) {
+    if (!g_visibilityChangedToken) {
         return;
     }
 
@@ -2143,19 +2188,8 @@ void Uninit() {
         return;
     }
 
-    if (g_visibilityChangedToken) {
-        window.VisibilityChanged(g_visibilityChangedToken);
-        g_visibilityChangedToken = {};
-    }
-
-    auto contentUI = window.Content();
-    if (!contentUI) {
-        return;
-    }
-
-    auto content = contentUI.as<FrameworkElement>();
-    content.LayoutUpdated(g_layoutUpdatedToken);
-    g_layoutUpdatedToken = {};
+    window.VisibilityChanged(g_visibilityChangedToken);
+    g_visibilityChangedToken = {};
 
     auto startSizingFrameDo = g_startSizingFrameWeakRef.get();
     if (startSizingFrameDo) {
@@ -2175,6 +2209,18 @@ void Uninit() {
     }
 
     g_startSizingFrameWeakRef = nullptr;
+
+    auto frameRootDo = g_frameRootWeakRef.get();
+    if (frameRootDo) {
+        if (g_verticalAlignmentPropertyChangedToken) {
+            frameRootDo.UnregisterPropertyChangedCallback(
+                FrameworkElement::VerticalAlignmentProperty(),
+                g_verticalAlignmentPropertyChangedToken);
+            g_verticalAlignmentPropertyChangedToken = 0;
+        }
+    }
+
+    g_frameRootWeakRef = nullptr;
 
     ApplyStyle();
 }
@@ -2656,6 +2702,9 @@ BOOL Wh_ModInit() {
     if (!HookTaskbarDllSymbols()) {
         return FALSE;
     }
+
+    WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                   &CreateWindowExW_Original);
 
     WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPos_Hook,
                                    &SetWindowPos_Original);
