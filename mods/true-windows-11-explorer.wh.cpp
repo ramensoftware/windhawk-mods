@@ -3,12 +3,12 @@
 // @name            True Windows 11 Explorer
 // @description     Completely replaces the Windows 11 File Explorer interface with one built from scratch that works instantly, unlike the stock one. Customizable.
 // @description:ru-RU Мод полностью заменяет интерфейс проводника Windows 11 на созданный мною с нуля, который работает мгновенно, в отличие от стандартного. С возможностью кастомизации.
-// @version         1.28
+// @version         1.36
 // @author          Yevhenii
 // @github          https://github.com/Leshugan
 // @license         MIT
 // @include         explorer.exe
-// @compilerOptions -lgdi32 -lole32 -lshell32 -luuid -ld2d1 -ldwrite -ldwmapi -lmsimg32 -lshlwapi -luxtheme
+// @compilerOptions -lgdi32 -lole32 -lshell32 -luuid -ld2d1 -ldwrite -ldwmapi -lmsimg32 -lshlwapi -luxtheme -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -83,6 +83,11 @@
   $name: Tabs
   $name:ru-RU: Вкладки
 - address:
+  - upButton: true
+    $name: Up button
+    $name:ru-RU: Кнопка «Вверх»
+    $description: Turn off to hide the Up button (Alt+Up Arrow still works); the address bar becomes wider.
+    $description:ru-RU: Выключите — кнопки «Вверх» не будет (Alt+Стрелка вверх по-прежнему работает), адресная строка станет шире.
   - navGap: 8
     $name: Gap between Back / Forward / Up / Refresh
     $name:ru-RU: Промежуток между кнопками «Назад / Вперёд / Вверх / Обновить»
@@ -245,6 +250,7 @@ License: MIT — forks and modifications are welcome.
 // ==/WindhawkModReadme==
 
 #include <windows.h>
+#include <windhawk_utils.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <shobjidl.h>
@@ -275,11 +281,11 @@ License: MIT — forks and modifications are welcome.
 
 // ---------------- общее ----------------
 static SRWLOCK g_lock = SRWLOCK_INIT;
-static HANDLE g_stop, g_thread;
+static HANDLE g_thread;
 static HINSTANCE g_inst;
 static const wchar_t* STRIP_CLASS = L"EIT_Strip";
 static const wchar_t* TIP_CLASS = L"EIT_Tip";
-static const wchar_t* PROP_OLD = L"EIT_OldProc";
+static const wchar_t* PROP_OLD = L"EIT_OldProc";   // метка «окно Проводника под модом»
 static const wchar_t* PROP_STRIP = L"EIT_Strip";
 static const wchar_t* PROP_TOPBAR = L"EIT_TopBar";
 static const wchar_t* TOPBAR_CLASS = L"EIT_TopBar";
@@ -293,7 +299,7 @@ static bool g_lastLight = true;
 // ---------------- настройки мода (из Windhawk) ----------------
 static bool g_ru = false;   // язык интерфейса Windows — русский (иначе надписи мода по-английски)
 static inline const wchar_t* TR(const wchar_t* ru, const wchar_t* en) { return g_ru ? ru : en; }
-static struct { int tabWidth = 248; bool dynamicTabs = false; int navGap = 8; bool snap = true; int closeBtn = 0; bool everything = false; bool tabScroll = false; bool remember = false; bool anim = false; bool search = true; int newTab = 0; bool debug = false; bool tabs = true; bool tabIcons = true; std::wstring newTabPath; int fieldH = 32; double navH = 49.333, stripH = 46.667; bool toolbar = true; bool tabMenu = true; bool navNoIndent = false, navNoPins = false; } g_cfg;   // closeBtn: 0 — все, 1 — выбранная/под указателем, 2 — нет
+static struct { int tabWidth = 248; bool dynamicTabs = false; int navGap = 8; bool snap = true; int closeBtn = 0; bool everything = false; bool tabScroll = false; bool remember = false; bool anim = false; bool search = true; int newTab = 0; bool debug = false; bool tabs = true; bool tabIcons = true; std::wstring newTabPath; int fieldH = 32; double navH = 49.333, stripH = 46.667; bool toolbar = true; bool tabMenu = true; bool navNoIndent = false, navNoPins = false; bool upButton = true; } g_cfg;   // closeBtn: 0 — все, 1 — выбранная/под указателем, 2 — нет
 static void LoadSettings() {
     auto str = [](const wchar_t* k) { std::wstring r; if (const wchar_t* v = Wh_GetStringSetting(k)) { r = v; Wh_FreeStringSetting(v); } return r; };
     int w = Wh_GetIntSetting(L"tabs.width"); g_cfg.tabWidth = w >= 60 && w <= 800 ? w : 248;
@@ -317,6 +323,7 @@ static void LoadSettings() {
     }
     int g = Wh_GetIntSetting(L"address.navGap"); g_cfg.navGap = g >= 0 && g <= 64 ? g : 8;
     g_cfg.search = Wh_GetIntSetting(L"address.search") != 0;
+    g_cfg.upButton = Wh_GetIntSetting(L"address.upButton") != 0;
     auto num = [&](const wchar_t* k, int def, int lo, int hi) { int v = _wtoi(str(k).c_str()); return v <= 0 ? def : v < lo ? lo : v > hi ? hi : v; };   // ниже наименьшего — наименьшее
     int nh = num(L"address.areaHeight", 49, 36, 60); g_cfg.navH = nh == 49 ? 49.333 : nh;
     int fh = num(L"address.height", 32, 24, 44);
@@ -1197,6 +1204,11 @@ struct Place { int top = 0, h = 0, left = 0, rmargin = 0; bool classic = false; 
 // быстрый вид (Windows 10): у окна есть строка «Назад/адрес/поиск» Windows 10, а нового верха нет
 static bool IsClassicTop(HWND top) { return FindWindowExW(top, nullptr, L"WorkerW", nullptr) != nullptr; }
 static HWND ShellTabOf(HWND top) { return FindWindowExW(top, nullptr, L"ShellTabWindowClass", nullptr); }
+// без ленты Проводник показывает над списком файлов старую полосу кнопок Windows 7 («Упорядочить», «Новая папка»…).
+// Её высоту мод замеряет (на сколько список файлов ниже верха своей вкладки) и поднимает вкладку на эту высоту —
+// полоса уходит под наш верх и панель кнопок, а список начинается ровно там же, где и раньше
+static const wchar_t* PROP_CMDH = L"EIT_CmdH";   // высота этой полосы в пикселях (+1)
+static int CmdBarH(HWND top) { INT_PTR v = (INT_PTR)GetPropW(top, PROP_CMDH); return v > 0 ? (int)v - 1 : 0; }
 
 static Place GetPlace(HWND top) {
     UINT dpi = DpiOf(top);
@@ -1206,7 +1218,7 @@ static Place GetPlace(HWND top) {
         RECT r = {};
         if (st) { GetWindowRect(st, &r); MapWindowPoints(nullptr, top, (POINT*)&r, 2); }
         int h = (int)lround(StripHFor(top) * dpi / 96.0);
-        c.top = (st ? r.top : (int)lround(TopTotalFor(top) * dpi / 96.0)) - h;
+        c.top = (st ? r.top + CmdBarH(top) : (int)lround(TopTotalFor(top) * dpi / 96.0)) - h;   // над списком файлов (вкладка поднята на высоту старой полосы)
         c.h = h;
         c.left = c.rmargin = 0;   // во всю ширину — без полосок фона окна по краям
         return c;
@@ -2762,7 +2774,7 @@ struct TopBarState {
     int prevHover = T_NONE; float animT = 1.f;                           // плавная подсветка
     std::wstring dbg;                                                    // что мод видит в окне (настройка «Отладка»)
     EvHook navHook; int startTries = 0;                                  // подписка на открытие папок
-    DWORD quietUntil = 0, frozeAt = 0; PIDLIST_ABSOLUTE navBack = nullptr;            // служебный переход «выше и обратно» — не в историю вкладки
+    DWORD quietUntil = 0, frozeAt = 0; PIDLIST_ABSOLUTE navBack = nullptr; bool locked = false;            // служебный переход «выше и обратно» — не в историю вкладки
     HDC memDC = nullptr; HBITMAP memBmp = nullptr; HGDIOBJ memOld = nullptr; void* memBits = nullptr; int memW = 0, memH = 0;   // готовая картинка верха
     ID2D1DCRenderTarget* rt = nullptr;                                   // «холст» для неё
     bool animating = false; double animLast = 0;                         // идут кадры анимации
@@ -2830,6 +2842,17 @@ static std::wstring PidlText(PCIDLIST_ABSOLUTE p) {
     if (SUCCEEDED(SHGetNameFromIDList(p, SIGDN_DESKTOPABSOLUTEPARSING, &nm)) && nm) { r = nm; CoTaskMemFree(nm); }
     return r;
 }
+static std::wstring ChildDebug(HWND top) {   // отладка: что лежит прямо внутри окна Проводника (вид, видно ли, где по высоте)
+    std::wstring r = TR(L" · части окна:", L" · window parts:");
+    int n = 0;
+    for (HWND c = GetWindow(top, GW_CHILD); c && n < 14; c = GetWindow(c, GW_HWNDNEXT), ++n) {
+        wchar_t cls[48] = {}; GetClassNameW(c, cls, 48);
+        RECT rc; GetWindowRect(c, &rc); MapWindowPoints(nullptr, top, (POINT*)&rc, 2);
+        wchar_t b[100]; swprintf(b, 100, L" %ls%ls %d-%d", cls, IsWindowVisible(c) ? L"" : TR(L"(скрыто)", L"(hidden)"), (int)rc.top, (int)rc.bottom);
+        r += b;
+    }
+    return r;
+}
 static std::wstring NavDebug(HWND top) {   // область навигации для отладки
     HWND tv = FindChild(top, L"SysTreeView32", true);
     if (!tv) return TR(L" · дерево слева: не найдено", L" · navigation tree: not found");
@@ -2851,7 +2874,7 @@ static std::wstring DebugText(HWND top, PCIDLIST_ABSOLUTE cur, bool cpanel) {
                COLORREF c = fromView ? ss->viewBg : ListBg(l); wchar_t b[80];
                swprintf(b, 80, TR(L" · фон панели: %u,%u,%u (%ls)", L" · bar background: %u,%u,%u (%ls)"), GetRValue(c), GetGValue(c), GetBValue(c),
                         fromView ? TR(L"у списка файлов", L"from file list") : g_listBgTheme[l ? 1 : 0] ? TR(L"из темы", L"from theme") : TR(L"запасной", L"fallback"));
-               return std::wstring(b); }() + NavDebug(top);
+               return std::wstring(b); }() + NavDebug(top) + ChildDebug(top);
 }
 static bool ShowsControlPanel(HWND top, PCIDLIST_ABSOLUTE cur) {
     PIDLIST_ABSOLUTE bp = BrowserPidl(top);
@@ -3352,11 +3375,12 @@ static std::vector<TEl> TopLayout(HWND bar, TopBarState* st, bool natural = fals
     double pitch = 32 + g_cfg.navGap;   // у Windows шаг 48 (кнопка 32 + промежуток 16)
     v.push_back({T_BACK, R(11.333, NavC() - bs / 2 + ny, 32, bs)});
     v.push_back({T_FWD, R(11.333 + pitch, NavC() - bs / 2 + ny, 32, bs)});
-    v.push_back({T_UP, R(11.333 + pitch * 2, NavC() - bs / 2 + ny, 32, bs)});
-    v.push_back({T_REFRESH, R(11.333 + pitch * 3, NavC() - bs / 2 + ny, 32, bs)});
+    int slot = 2;   // «Вверх» — по настройке; без неё «Обновить» встаёт на его место
+    if (g_cfg.upButton) v.push_back({T_UP, R(11.333 + pitch * slot++, NavC() - bs / 2 + ny, 32, bs)});
+    v.push_back({T_REFRESH, R(11.333 + pitch * slot, NavC() - bs / 2 + ny, 32, bs)});
     double sx = g_cfg.search ? W - 11.333 - 166 : W - 11.333 + 8;   // без поиска адресная строка — до правого края
     if (g_cfg.search) v.push_back({T_SEARCH, R(sx, fy - 0.667 + ny, 166, FH + 0.667)});
-    double ax = 11.333 + pitch * 3 + 32 + 14, aw = sx - 8 - ax; if (aw < 60) aw = 60;   // у Windows адрес в 14 после «Обновить»
+    double ax = 11.333 + pitch * slot + 32 + 14, aw = sx - 8 - ax; if (aw < 60) aw = 60;   // у Windows адрес в 14 после «Обновить»
     v.push_back({T_ADDR, R(ax, fy + ny, aw, FH)});
     // хлебные крошки внутри адресной строки: значок, стрелочка, затем «папка ›» … (не влезающие первые — пропускаем)
     v.push_back({T_ROOTCHEV, R(ax + 38, cy + ny, 26.667, ch)});
@@ -3922,7 +3946,6 @@ struct SearchWin {
 };
 static const wchar_t* SW_CLASS = L"EIT_SearchWin";
 static SearchWin* g_sw = nullptr;
-static const wchar_t* PROP_SWEDITOLD = L"EIT_SwEditOld";
 
 // разметка в точках: поле 12..48, вкладки 58..92, заголовки 100..128, список с 128, строка 32
 static int SwListTop(UINT dpi) { return P(128, dpi); }
@@ -4090,8 +4113,7 @@ static void SwSetCat(int c) {
     SwQuery();
 }
 
-LRESULT CALLBACK SwEditProc(HWND h, UINT m, WPARAM w, LPARAM l) {
-    WNDPROC old = (WNDPROC)GetPropW(h, PROP_SWEDITOLD);
+LRESULT CALLBACK SwEditProc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     if (m == WM_KEYDOWN && g_sw && g_sw->h) {
         UINT dpi = DpiOf(g_sw->h);
         int n = (int)g_sw->items.size(), vis = SwVisible(g_sw->h, dpi), step = 0;
@@ -4107,7 +4129,7 @@ LRESULT CALLBACK SwEditProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (w == VK_TAB) { bool back = GetKeyState(VK_SHIFT) < 0; SwSetCat((g_sw->cat + (back ? EV_NCAT - 1 : 1)) % EV_NCAT); return 0; }
     }
     if (m == WM_CHAR && (w == VK_RETURN || w == VK_ESCAPE || w == VK_TAB)) return 0;   // без системного «бип»
-    return old ? CallWindowProcW(old, h, m, w, l) : DefWindowProcW(h, m, w, l);
+    return DefSubclassProc(h, m, w, l);
 }
 
 LRESULT CALLBACK SwProc(HWND h, UINT m, WPARAM w, LPARAM l) {
@@ -4217,8 +4239,7 @@ static void SwShow(HWND owner, const std::wstring& text, int cat, const std::wst
         g_sw->font = CreateFontW(-P(14, dpi), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
         g_sw->edit = CreateWindowExW(0, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, 0, 0, 0, 0, g_sw->h, nullptr, g_inst, nullptr);
         SendMessageW(g_sw->edit, WM_SETFONT, (WPARAM)g_sw->font, TRUE);
-        SetPropW(g_sw->edit, PROP_SWEDITOLD, (HANDLE)GetWindowLongPtrW(g_sw->edit, GWLP_WNDPROC));
-        SetWindowLongPtrW(g_sw->edit, GWLP_WNDPROC, (LONG_PTR)SwEditProc);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(g_sw->edit, SwEditProc, 0);
         SwLayoutEdit(g_sw->h);
         ShowWindow(g_sw->h, SW_SHOWNORMAL);
     }
@@ -4260,11 +4281,9 @@ static void AddSearchHist(const std::wstring& q) {
     if (g_searchHist.size() > 30) g_searchHist.resize(30);
 }
 
-static const wchar_t* PROP_EDITOLD = L"EIT_EditOld";
 static void EndEdit(HWND bar, TopBarState* st, bool apply);
 static void EvHide();
-LRESULT CALLBACK FieldEditProc(HWND h, UINT m, WPARAM w, LPARAM l) {
-    WNDPROC old = (WNDPROC)GetPropW(h, PROP_EDITOLD);
+LRESULT CALLBACK FieldEditProc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     HWND bar = GetParent(h);
     TopBarState* st = (TopBarState*)GetWindowLongPtrW(bar, GWLP_USERDATA);
     if (m == WM_KEYDOWN && st) {
@@ -4289,8 +4308,8 @@ LRESULT CALLBACK FieldEditProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (w == VK_ESCAPE) { EndEdit(bar, st, false); return 0; }
     }
     if (m == WM_CHAR && (w == VK_RETURN || w == VK_ESCAPE)) return 0;   // без системного «бип»
-    if (m == WM_KILLFOCUS && st && st->edit == h) { LRESULT r = CallWindowProcW(old, h, m, w, l); PostMessageW(bar, WM_APP + 1, 0, 0); return r; }
-    return old ? CallWindowProcW(old, h, m, w, l) : DefWindowProcW(h, m, w, l);
+    if (m == WM_KILLFOCUS && st && st->edit == h) { LRESULT r = DefSubclassProc(h, m, w, l); PostMessageW(bar, WM_APP + 1, 0, 0); return r; }
+    return DefSubclassProc(h, m, w, l);
 }
 
 static void BeginEdit(HWND bar, TopBarState* st, int kind) {
@@ -4314,8 +4333,7 @@ static void BeginEdit(HWND bar, TopBarState* st, int kind) {
     }
     SetLayeredWindowAttributes(st->edit, 0, 255, LWA_ALPHA);   // поле ввода — непрозрачное поверх «Слюды»
     SendMessageW(st->edit, WM_SETFONT, (WPARAM)st->editFont, TRUE);
-    SetPropW(st->edit, PROP_EDITOLD, (HANDLE)GetWindowLongPtrW(st->edit, GWLP_WNDPROC));
-    SetWindowLongPtrW(st->edit, GWLP_WNDPROC, (LONG_PTR)FieldEditProc);
+    WindhawkUtils::SetWindowSubclassFromAnyThread(st->edit, FieldEditProc, 0);
     if (kind == T_ADDR)   // подсказки пути — встроенные в Windows, как у её адресной строки
         SHAutoComplete(st->edit, SHACF_FILESYSTEM | SHACF_AUTOSUGGEST_FORCE_ON | SHACF_AUTOAPPEND_FORCE_OFF);
     else if (kind == T_SEARCH && !g_cfg.everything && !g_searchHist.empty()) {   // поиск Windows: прошлые запросы
@@ -4370,14 +4388,13 @@ static void EndEdit(HWND bar, TopBarState* st, bool apply) {
 // ---------- область навигации (дерево папок слева) ----------
 static const wchar_t* PROP_TVINDENT = L"EIT_TvIndent";   // исходный отступ дерева (+1), чтобы вернуть
 static const wchar_t* PROP_TVROOT = L"EIT_TvRoot";       // мы убирали место под стрелочки верхнего уровня
-static const wchar_t* PROP_NAVOLD = L"EIT_NavOld";       // исходный обработчик дерева
+static const wchar_t* PROP_NAVOLD = L"EIT_NavOld";       // метка «дерево под модом»
 // Булавки у закреплённых папок. Отладка показала, как Windows их рисует: полупрозрачной картинкой у правого края строки,
 // а перед названием вырезает это место из области рисования (поэтому конец названия пропадал).
 // Пока дерево рисуется, мод пропускает эту картинку и не даёт вырезать место — название идёт до края
 static thread_local HWND t_navPaint = nullptr;   // дерево, которое сейчас рисуется в этом потоке
 static thread_local int t_navRight = 0, t_navFull = 0;   // где начинается место булавки и правый край дерева (пиксели)
-LRESULT CALLBACK NavTreeProc(HWND h, UINT m, WPARAM w, LPARAM l) {
-    WNDPROC old = (WNDPROC)GetPropW(h, PROP_NAVOLD);
+LRESULT CALLBACK NavTreeProc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {
     if (m == WM_PAINT && g_cfg.navNoIndent) {   // Windows могла вернуть свой отступ — поставить наш снова
         if ((int)SendMessageW(h, TVM_GETINDENT, 0, 0) > 1 && !GetPropW(h, L"EIT_TvBusy")) { SetPropW(h, L"EIT_TvBusy", (HANDLE)1); SendMessageW(h, TVM_SETINDENT, 0, 0); RemovePropW(h, L"EIT_TvBusy"); }
         LONG stl = GetWindowLongW(h, GWL_STYLE);
@@ -4387,11 +4404,11 @@ LRESULT CALLBACK NavTreeProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         RECT cr; GetClientRect(h, &cr);
         HWND prev = t_navPaint; int prevR = t_navRight, prevF = t_navFull;
         t_navPaint = h; t_navRight = cr.right - MulDiv(34, DpiOf(h), 96); t_navFull = cr.right;
-        LRESULT r = old ? CallWindowProcW(old, h, m, w, l) : DefWindowProcW(h, m, w, l);
+        LRESULT r = DefSubclassProc(h, m, w, l);
         t_navPaint = prev; t_navRight = prevR; t_navFull = prevF;
         return r;
     }
-    return old ? CallWindowProcW(old, h, m, w, l) : DefWindowProcW(h, m, w, l);
+    return DefSubclassProc(h, m, w, l);
 }
 static bool InPinSpot(int x, int w) {   // узкое — в месте булавки (последние 34 точки строки); совсем узкое дерево не трогаем — там значки папок
     if (!t_navPaint) return false;
@@ -4442,17 +4459,28 @@ static void NavTreeApply(HWND top, bool restoreOnly = false) {
     bool hooked = GetPropW(tv, PROP_NAVOLD) != nullptr;
     bool want = !restoreOnly && (g_cfg.navNoPins || g_cfg.navNoIndent);
     if (want && !hooked) {
-        SetPropW(tv, PROP_NAVOLD, (HANDLE)GetWindowLongPtrW(tv, GWLP_WNDPROC));
-        SetWindowLongPtrW(tv, GWLP_WNDPROC, (LONG_PTR)NavTreeProc);
+        SetPropW(tv, PROP_NAVOLD, (HANDLE)1);   // метка: дерево под модом
+        WindhawkUtils::SetWindowSubclassFromAnyThread(tv, NavTreeProc, 0);
         InvalidateRect(tv, nullptr, TRUE);
-    } else if (!want && hooked && (WNDPROC)GetWindowLongPtrW(tv, GWLP_WNDPROC) == NavTreeProc) {
-        SetWindowLongPtrW(tv, GWLP_WNDPROC, (LONG_PTR)GetPropW(tv, PROP_NAVOLD));
+    } else if (!want && hooked) {
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(tv, NavTreeProc);
         RemovePropW(tv, PROP_NAVOLD);
         InvalidateRect(tv, nullptr, TRUE);
     }
 }
 
 static void RelayoutTop(HWND h);
+static void MeasureCmdBar(HWND top, bool cpanel) {   // замер старой полосы кнопок; изменилась — окно раскладывается заново
+    HWND tab = ShellTabOf(top);
+    HWND dv = tab && !cpanel ? FindChild(tab, L"SHELLDLL_DefView", true) : nullptr;
+    if (!dv && !cpanel) return;   // список файлов ещё не появился — ждём (прежний замер остаётся)
+    int off = 0;   // в панели управления полосы нет — ничего не поднимаем
+    if (dv) { RECT tr, dr; GetWindowRect(tab, &tr); GetWindowRect(dv, &dr); off = dr.top - tr.top; }
+    if (off < 0 || off > MulDiv(90, DpiOf(top), 96)) off = 0;   // что-то другое — не трогаем
+    if (off == CmdBarH(top)) return;
+    if (off) SetPropW(top, PROP_CMDH, (HANDLE)(INT_PTR)(off + 1)); else RemovePropW(top, PROP_CMDH);
+    RelayoutTop(top);
+}
 LRESULT CALLBACK TopBarProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     TopBarState* st = (TopBarState*)GetWindowLongPtrW(h, GWLP_USERDATA);
     switch (m) {
@@ -4480,7 +4508,7 @@ LRESULT CALLBACK TopBarProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                 if (back || GetTickCount() - st->frozeAt > 1500) {   // вернулись (или на всякий случай — не дольше 1,5 с)
                     KillTimer(h, 8);
                     if (st->navBack) { ILFree(st->navBack); st->navBack = nullptr; }
-                    LockWindowUpdate(nullptr);
+                    if (st->locked) { LockWindowUpdate(nullptr); st->locked = false; }   // «размораживаем» только своё — чужую заморозку не трогаем
                     if (top) RedrawWindow(top, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW | RDW_FRAME);
                 }
                 return 0;
@@ -4534,6 +4562,7 @@ LRESULT CALLBACK TopBarProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                         if (cp != st->cpanel) SetTimer(h, 10, 150, nullptr);   // ещё не уверены — перепроверить через миг
                     } else st->cpTicks = 0;
                 }
+                if (top) MeasureCmdBar(top, st->cpanel);   // старая полоса кнопок Windows 7 — под наш верх (в панели управления её нет)
                 if (g_cfg.debug && top) {
                     std::wstring d = DebugText(top, st->cur, st->cpanel);
                     if (d != st->dbg) { st->dbg = d; InvalidateRect(h, nullptr, FALSE); }
@@ -4874,7 +4903,7 @@ LRESULT CALLBACK TopBarProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                 if (st->navBack) ILFree(st->navBack);
                 st->navBack = ILCloneFull(st->cur);
                 st->quietUntil = GetTickCount() + 2000;
-                LockWindowUpdate(top);   // окно «замирает» на экране — перехода туда-обратно не видно
+                st->locked = LockWindowUpdate(top) != FALSE;   // окно «замирает» на экране — перехода туда-обратно не видно (если «заморозить» можно: одновременно — только одно окно в системе)
                 st->frozeAt = GetTickCount();
                 sb->BrowseObject(up, SBSP_ABSOLUTE | SBSP_SAMEBROWSER | SBSP_WRITENOHISTORY);
                 ILFree(up);
@@ -4977,7 +5006,8 @@ LRESULT CALLBACK TopBarProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         case WM_DESTROY:
             if (st && st->animating && g_animBusy > 0) g_animBusy--;   // окно закрыли посреди анимации
             if (st) Unhook(st->navHook);
-            if (st && st->navBack) { ILFree(st->navBack); st->navBack = nullptr; LockWindowUpdate(nullptr); }
+            if (st && st->navBack) { ILFree(st->navBack); st->navBack = nullptr; }
+            if (st && st->locked) { LockWindowUpdate(nullptr); st->locked = false; }
             if (st) {   // картинка и «холст» верха
                 if (st->rt) st->rt->Release();
                 if (st->memDC) { SelectObject(st->memDC, st->memOld); if (st->memBmp) DeleteObject(st->memBmp); DeleteDC(st->memDC); }
@@ -5197,9 +5227,7 @@ static void HookKeysForThisThread() {
     ReleaseSRWLockExclusive(&g_kbLock);
 }
 
-LRESULT CALLBACK TopProc(HWND h, UINT m, WPARAM w, LPARAM l) {
-    WNDPROC old = (WNDPROC)GetPropW(h, PROP_OLD);
-    if (!old) return DefWindowProcW(h, m, w, l);
+LRESULT CALLBACK TopProc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR) {   // встроен в окно Проводника способом Windhawk (в очередь с другими модами)
     if (m == g_msgCreate) {
         if (!GetPropW(h, PROP_STRIP)) {
             // отдельное окошко, привязанное к окну Проводника: оно всегда лежит над ним,
@@ -5239,7 +5267,7 @@ LRESULT CALLBACK TopProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     }
     if (m == WM_SHOWWINDOW && w && GetPropW(h, PROP_DROP)) {   // окно из вытащенной вкладки: вкладка — под указателем
         RemovePropW(h, PROP_DROP);
-        LRESULT r = CallWindowProcW(old, h, m, w, l);
+        LRESULT r = DefSubclassProc(h, m, w, l);
         UINT dpi = DpiOf(h);
         SetWindowPos(h, nullptr, g_drop.pt.x - MulDiv(120, dpi, 96), g_drop.pt.y - MulDiv(24, dpi, 96), 0, 0, SWP_NOSIZE | SWP_NOZORDER);
         return r;
@@ -5254,7 +5282,7 @@ LRESULT CALLBACK TopProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (m == WM_NCCALCSIZE && w) {   // внутренняя часть окна — от самого верха: там наш верх вместо заголовка Windows 10
             NCCALCSIZE_PARAMS* pp = (NCCALCSIZE_PARAMS*)l;
             int oldTop = pp->rgrc[0].top;
-            LRESULT r = CallWindowProcW(old, h, m, w, l);
+            LRESULT r = DefSubclassProc(h, m, w, l);
             pp->rgrc[0].top = oldTop;
             if (IsZoomed(h)) {   // развёрнутое окно чуть выходит за экран — не прячем верх за край
                 UINT dpi = DpiOf(h);
@@ -5292,7 +5320,8 @@ LRESULT CALLBACK TopProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         RemovePropW(h, PROP_INACTIVE);
         RemovePropW(h, PROP_DROP);
         RemovePropW(h, PROP_FRESH);
-        SetWindowLongPtrW(h, GWLP_WNDPROC, (LONG_PTR)old);
+        RemovePropW(h, PROP_CMDH);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, TopProc);
         RemovePropW(h, PROP_OLD);
         if (GetPropW(h, PROP_OWNFRAME)) {
             RemovePropW(h, PROP_OWNFRAME);
@@ -5300,9 +5329,9 @@ LRESULT CALLBACK TopProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             if (m == g_msgDestroy) SetWindowPos(h, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         }
         if (m == g_msgDestroy) return 0;
-        return CallWindowProcW(old, h, m, w, l);
+        return DefSubclassProc(h, m, w, l);
     }
-    LRESULT r = CallWindowProcW(old, h, m, w, l);
+    LRESULT r = DefSubclassProc(h, m, w, l);
     if (m == WM_SIZE || m == WM_MOVE || m == WM_DPICHANGED || m == WM_WINDOWPOSCHANGED || m == WM_SHOWWINDOW)
         PlaceStrip(h);
     if (m == WM_ACTIVATE || m == WM_NCACTIVATE) { HWND tb = (HWND)GetPropW(h, PROP_TOPBAR); if (tb) InvalidateRect(tb, nullptr, FALSE); }
@@ -5315,8 +5344,8 @@ static BOOL CALLBACK TopCb(HWND h, LPARAM) {
     wchar_t cls[64];
     if (!GetClassNameW(h, cls, 64) || wcscmp(cls, L"CabinetWClass") != 0) return TRUE;
     if (!GetPropW(h, PROP_OLD)) {
-        SetPropW(h, PROP_OLD, (HANDLE)GetWindowLongPtrW(h, GWLP_WNDPROC));
-        SetWindowLongPtrW(h, GWLP_WNDPROC, (LONG_PTR)TopProc);
+        SetPropW(h, PROP_OLD, (HANDLE)1);   // метка: окно уже под модом
+        WindhawkUtils::SetWindowSubclassFromAnyThread(h, TopProc, 0);
         PostMessageW(h, g_msgCreate, 0, 0);
     }
     return TRUE;
@@ -5327,21 +5356,25 @@ static BOOL CALLBACK TopCb(HWND h, LPARAM) {
 // Проводник просит у системы часть {6480100b-…}; отвечаем «такой нет» — и окно открывается в быстром виде
 // (тот же приём, что у мода «Classic Explorer navigation bar» автора Windhawk). Только в памяти, в систему ничего не пишется.
 static const CLSID CLSID_XamlIslandViewAdapter = {0x6480100b, 0x5a83, 0x4d1e, {0x9f, 0x69, 0x8a, 0xe5, 0xa8, 0x8e, 0x9a, 0x33}};
+// лента Windows 10 (её раньше отключал OldNewExplorer): у мода свой верх — ленту Проводнику тоже не даём создать,
+// иначе она рисует свою строку с заголовком и значками прямо поверх окна
+static const CLSID CLSID_RibbonFw = {0x926749fa, 0x2615, 0x4987, {0x88, 0x45, 0xc3, 0x3e, 0x65, 0xf2, 0xb9, 0x57}};
+static bool Blocked(REFCLSID c) { return IsEqualCLSID(c, CLSID_XamlIslandViewAdapter) || IsEqualCLSID(c, CLSID_RibbonFw); }
 
 using CoCI_t = HRESULT (WINAPI*)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID*);
 static CoCI_t CoCI_orig, CoCI2_orig;
 HRESULT WINAPI CoCI_hook(REFCLSID c, LPUNKNOWN o, DWORD ctx, REFIID iid, LPVOID* pv) {
-    if (IsEqualCLSID(c, CLSID_XamlIslandViewAdapter)) { if (pv) *pv = nullptr; return REGDB_E_CLASSNOTREG; }
+    if (Blocked(c)) { if (pv) *pv = nullptr; return REGDB_E_CLASSNOTREG; }
     return CoCI_orig(c, o, ctx, iid, pv);
 }
 HRESULT WINAPI CoCI2_hook(REFCLSID c, LPUNKNOWN o, DWORD ctx, REFIID iid, LPVOID* pv) {
-    if (IsEqualCLSID(c, CLSID_XamlIslandViewAdapter)) { if (pv) *pv = nullptr; return REGDB_E_CLASSNOTREG; }
+    if (Blocked(c)) { if (pv) *pv = nullptr; return REGDB_E_CLASSNOTREG; }
     return CoCI2_orig(c, o, ctx, iid, pv);
 }
 using CoCIEx_t = HRESULT (WINAPI*)(REFCLSID, IUnknown*, DWORD, COSERVERINFO*, DWORD, MULTI_QI*);
 static CoCIEx_t CoCIEx_orig;
 HRESULT WINAPI CoCIEx_hook(REFCLSID c, IUnknown* o, DWORD ctx, COSERVERINFO* si, DWORD n, MULTI_QI* r) {
-    if (IsEqualCLSID(c, CLSID_XamlIslandViewAdapter)) {
+    if (Blocked(c)) {
         for (DWORD i = 0; i < n; ++i) { r[i].pItf = nullptr; r[i].hr = REGDB_E_CLASSNOTREG; }
         return REGDB_E_CLASSNOTREG;
     }
@@ -5350,7 +5383,7 @@ HRESULT WINAPI CoCIEx_hook(REFCLSID c, IUnknown* o, DWORD ctx, COSERVERINFO* si,
 using CoGCO_t = HRESULT (WINAPI*)(REFCLSID, DWORD, LPVOID, REFIID, LPVOID*);
 static CoGCO_t CoGCO_orig;
 HRESULT WINAPI CoGCO_hook(REFCLSID c, DWORD ctx, LPVOID info, REFIID iid, LPVOID* pv) {
-    if (IsEqualCLSID(c, CLSID_XamlIslandViewAdapter)) { if (pv) *pv = nullptr; return REGDB_E_CLASSNOTREG; }
+    if (Blocked(c)) { if (pv) *pv = nullptr; return REGDB_E_CLASSNOTREG; }
     return CoGCO_orig(c, ctx, info, iid, pv);
 }
 
@@ -5378,24 +5411,24 @@ static int WantTop(HWND h) {   // сколько сверху должен на�
     HWND par = GetParent(h);
     if (!par || !GetClassNameW(par, cls, 32) || wcscmp(cls, L"CabinetWClass") != 0 || !IsClassicTop(par)) return 0;
     UINT dpi = DpiOf(par);
-    return (int)lround(TopTotalFor(par) * dpi / 96.0);
+    return (int)lround(TopTotalFor(par) * dpi / 96.0) - CmdBarH(par);   // старая полоса кнопок — под нашим верхом
 }
 using SWP_t = BOOL (WINAPI*)(HWND, HWND, int, int, int, int, UINT);
 static SWP_t SWP_orig;
 BOOL WINAPI SWP_hook(HWND h, HWND after, int x, int y, int cx, int cy, UINT f) {
-    if (!(f & SWP_NOMOVE)) { int t = WantTop(h); if (t && y < t) { if (!(f & SWP_NOSIZE)) cy -= t - y; y = t; } }
+    if (!(f & SWP_NOMOVE)) { int t = WantTop(h); if (t && y != t) { if (!(f & SWP_NOSIZE)) cy -= t - y; y = t; } }   // список файлов — ровно под нашим верхом (и не ниже: без пустой полосы)
     return SWP_orig(h, after, x, y, cx, cy, f);
 }
 using DWP_t = HDWP (WINAPI*)(HDWP, HWND, HWND, int, int, int, int, UINT);
 static DWP_t DWP_orig;
 HDWP WINAPI DWP_hook(HDWP d, HWND h, HWND after, int x, int y, int cx, int cy, UINT f) {
-    if (!(f & SWP_NOMOVE)) { int t = WantTop(h); if (t && y < t) { if (!(f & SWP_NOSIZE)) cy -= t - y; y = t; } }
+    if (!(f & SWP_NOMOVE)) { int t = WantTop(h); if (t && y != t) { if (!(f & SWP_NOSIZE)) cy -= t - y; y = t; } }
     return DWP_orig(d, h, after, x, y, cx, cy, f);
 }
 using MW_t = BOOL (WINAPI*)(HWND, int, int, int, int, BOOL);
 static MW_t MW_orig;
 BOOL WINAPI MW_hook(HWND h, int x, int y, int cx, int cy, BOOL rp) {
-    int t = WantTop(h); if (t && y < t) { cy -= t - y; y = t; }
+    int t = WantTop(h); if (t && y != t) { cy -= t - y; y = t; }
     return MW_orig(h, x, y, cx, cy, rp);
 }
 
@@ -5403,7 +5436,7 @@ BOOL WINAPI MW_hook(HWND h, int x, int y, int cx, int cy, BOOL rp) {
 // окно Проводника подхватываем в момент его создания — наши строки готовы ещё до того, как окно появится на экране
 using CWEx_t = HWND (WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
 static CWEx_t CWEx_orig;
-LRESULT CALLBACK TopProc(HWND h, UINT m, WPARAM w, LPARAM l);
+LRESULT CALLBACK TopProc(HWND h, UINT m, WPARAM w, LPARAM l, DWORD_PTR);
 HWND WINAPI CWEx_hook(DWORD ex, LPCWSTR cls, LPCWSTR name, DWORD style, int x, int y, int cx, int cy, HWND parent, HMENU menu, HINSTANCE inst, LPVOID param) {
     HWND h = CWEx_orig(ex, cls, name, style, x, y, cx, cy, parent, menu, inst, param);
     if (h && !parent) {
@@ -5411,8 +5444,8 @@ HWND WINAPI CWEx_hook(DWORD ex, LPCWSTR cls, LPCWSTR name, DWORD style, int x, i
         if (GetClassNameW(h, c, 64) && wcscmp(c, L"CabinetWClass") == 0 && !GetPropW(h, PROP_OLD)) {
             if (g_drop.until && GetTickCount() < g_drop.until) { SetPropW(h, PROP_DROP, (HANDLE)1); g_drop.until = 0; }
             else SetPropW(h, PROP_FRESH, (HANDLE)1);   // окно из вытащенной вкладки — без запомненных вкладок
-            SetPropW(h, PROP_OLD, (HANDLE)GetWindowLongPtrW(h, GWLP_WNDPROC));
-            SetWindowLongPtrW(h, GWLP_WNDPROC, (LONG_PTR)TopProc);
+            SetPropW(h, PROP_OLD, (HANDLE)1);   // метка: окно уже под модом
+            WindhawkUtils::SetWindowSubclassFromAnyThread(h, TopProc, 0);
             SendMessageW(h, g_msgCreate, 0, 0);
         }
     }
@@ -5476,7 +5509,6 @@ BOOL Wh_ModInit() {
         HookFn(GetModuleHandleW(L"gdi32.dll"), "ExcludeClipRect", (void*)ECR_hook, &ECR_orig);
         HookFn(GetModuleHandleW(L"gdi32.dll"), "IntersectClipRect", (void*)ICR_hook, &ICR_orig);
     }
-    g_stop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_thread = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
     return TRUE;
 }
@@ -5490,9 +5522,7 @@ static BOOL CALLBACK UnhookCb(HWND h, LPARAM) {
 void Wh_ModUninit() {
     g_frameStop = 1;   // потоки кадров — выйти до выгрузки мода
     for (int i = 0; i < 100 && g_frameThreads > 0; ++i) Sleep(10);
-    if (g_stop) SetEvent(g_stop);
     if (g_thread) { WaitForSingleObject(g_thread, 5000); CloseHandle(g_thread); }
-    if (g_stop) CloseHandle(g_stop);
     AcquireSRWLockExclusive(&g_kbLock);
     for (auto& e : g_kbHooks) UnhookWindowsHookEx(e.second);
     g_kbHooks.clear();
