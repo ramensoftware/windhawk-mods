@@ -2,12 +2,197 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-23T20:02:44.000Z</updated>
+    <updated>2026-09-23T21:03:45.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Icon Group Centering 1.3.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-group-centering#b007498a784503d418f532185b861bb684c5437a</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-group-centering"/>
+        <updated>2026-09-23T21:03:45.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbaricongroupcentering">Taskbar Icon Group Centering</h1>
+<p>Center the taskbar icons after a chosen position as one group, relative to the
+whole taskbar. There is no line, dot or shape anywhere: the mod only measures
+the buttons and writes the margins that move the group, and it adds no element
+of its own to the taskbar.</p>
+<h2 id="preview">Preview</h2>
+<p><img src="https://raw.githubusercontent.com/Suioio/taskbar-separators-dynamic-centering/main/preview.png" alt="Taskbar Icon Group Centering preview" /></p>
+<p><img src="https://raw.githubusercontent.com/Suioio/taskbar-separators-dynamic-centering/main/dynamic-centering.gif" alt="The icon group after the chosen position re-centers as apps open and close" /></p>
+<h2 id="whatitdoes">What it does</h2>
+<ul>
+<li>The icons after <strong>Icon group position</strong> form a single group that is centered
+relative to the entire taskbar, including the system tray.</li>
+<li>The group is clamped so it cannot run into the tray: when centering would
+push it under the tray, the gap is reduced instead.</li>
+<li><strong>Stop centering when the icon count after the position reaches</strong> stops
+centering once that many icons are after the position, which restores the
+normal left-aligned layout. The default 0 never stops.</li>
+<li>The mod only adds its own delta on top of the button margins that already
+exist, and hands back exactly the value it still owns when centering stops,
+so margins written by Windows or by another mod are never overwritten.</li>
+</ul>
+<h2 id="whenitapplies">When it applies</h2>
+<p>Only while the taskbar is <strong>left-aligned</strong>, <strong>horizontal</strong> and <strong>not mirrored
+(right-to-left)</strong>. On a centered taskbar Windows centers the whole row itself
+and this mod has nothing to add: the gap it computes there comes out as zero,
+so no margin is written. If no getter has produced a value and the stored one
+cannot be read either, the mod assumes left and does the same work with the same
+zero result instead of going quiet. Nothing is applied on a
+vertical or mirrored taskbar, and the mod never writes the taskbar alignment or
+any other Windows setting.</p>
+<p>To use it, switch the taskbar to <strong>Left</strong> alignment in Windows' taskbar
+settings. Whether the taskbar is left-aligned is the value the shell's own
+alignment getter returns, which this mod hooks, and which is seeded once from
+the stored setting when the mod is loaded after the shell has already read it -
+so switching the alignment is picked up in both directions on the fly, without
+a mod reload. Because that getter sits above the stored value, the mod follows
+the alignment <strong>the shell itself reads</strong>. The one seed covers the case where
+the shell has already read it before the mod was loaded. There is no polling
+and no thread of its own: the layout is watched through an event the shell
+already raises, a switch to the alignment is followed inside a bounded settling
+window instead of being polled for, and where the getter could not be hooked
+the stored value is re-read at most once per second.</p>
+<h2 id="differencesfromtheneighbouringmods">Differences from the neighbouring mods</h2>
+<ul>
+<li><strong>taskbar-separators</strong> groups icons by <em>drawing separators</em> between them.
+This mod draws nothing at all; it only moves the icons after the position.</li>
+<li><strong>taskbar-split</strong> inserts flexible space between the running and the pinned
+group. This mod centers a single group whose position you pick.</li>
+<li><strong>taskbar-centered-start-split-icons</strong> splits the buttons into two groups
+around a <strong>centered Start button</strong>. This mod never touches the Start button,
+and the position is a plain setting rather than a consequence of Start.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<p>| Setting | Default | Meaning |
+| --- | --- | --- |
+| Icon group position | 2 | 1-based position counted from the first application button (the Start button is not counted). The icons <em>after</em> this position are the centered group. |
+| Stop centering when the icon count after the position reaches | 0 | Stop centering once this many usable application buttons are after the position, which restores the normal left-aligned layout. The default 0 never stops. |</p>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 11, horizontal taskbar, x86-64</li>
+<li>Compatible with Windows 11 Taskbar Styler in normal configurations</li>
+<li>Taskbar labels, and uncombined or otherwise variable-width taskbar buttons</li>
+<li>Mixed multi-monitor layouts with different button modes on each taskbar</li>
+<li>The mod adds no element to the taskbar at all: it only writes button margins,
+and unload hands every tracked margin back, so nothing of the mod is left
+behind</li>
+<li>Layered margin mods: any mod that rewrites taskbar button margins by reading
+the current value and adding its own gap on top compounds with this one - both
+ledgers keep adding to each other without bound, so do not run two of those at
+once. A mod that writes an <strong>absolute</strong> margin is fine: this mod re-bases on
+top of whatever it finds. Taskbar Separators is the layering kind; its default
+Divider gap is 0, in which case it writes no button margins and the two
+coexist, but raise that gap and the two should not be enabled together.</li>
+</ul>
+<h2 id="uninstall">Uninstall</h2>
+<p>Disabling or removing the mod stops centering and hands back the button margins
+it applied. The taskbar alignment is never written, so there is nothing to
+restore.</p>
+<h2 id="licenseandattribution">License and attribution</h2>
+<p>Licensed under the GNU General Public License v3.0.</p>
+<p>This mod is extracted from <strong>Taskbar Separators Dynamic Centering</strong>, which is a
+fork of <strong>Taskbar Separators</strong> by digART; the original mod and its copyright
+belong to digART. The centering geometry in this mod is kept from that fork.</p>
+<p>Taskbar hook and UI-thread infrastructure includes code and patterns adapted
+from Windhawk mods by Michael Maltsev (m417z), including Taskbar Labels for
+Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Closing a pinned-release icon that sits exactly on the split — the last icon of
+the left group or the first icon of the centered group — removes a button the
+mod is measuring, so the spacing can look one layout pass stale for a few tens
+of milliseconds before it settles. The split is anchored on that button itself
+rather than on its position in the realized list, so a button appearing or
+disappearing anywhere else no longer moves it, and the anchor is relearned only
+once the boundary button has really been gone for a quarter of a second.</li>
+<li>While an icon is being dragged, Explorer draws the dragged icon as a floating
+copy that follows the cursor. Holding it inside the spacing makes the spacing
+look like two halves with the icon in between. The margins the mod writes are
+unaffected: the spacing returns as soon as the icon is dropped.</li>
+<li>The taskbar hooks rely on Windows component symbols, vtable slots and a
+machine-code pattern. A Windows update that changes them can stop the mod from
+working; a symbol that fails to resolve and every failed reconciliation are
+logged. The alignment is read from the two getters Windows has served it
+from and from the stored value; a build that removes or changes all three
+stops the mod from centering.</li>
+<li>If unload cannot detach its event handlers from the taskbar thread, those
+handlers stay registered and applied margins may not be handed back; the mod
+log records it. This limitation is shared with the mod it was derived from.</li>
+</ul>
+<h2 id="">中文说明</h2>
+<p>把任务栏中<strong>指定位置之后</strong>的图标作为一组，相对<strong>整条任务栏</strong>（含系统托盘）
+居中。画面里没有任何线条或方块：本模组只测量按钮并写入移动该组所需的边距，
+不向任务栏添加任何元素。</p>
+<h3 id="-1">功能</h3>
+<ul>
+<li><strong>图标组位置</strong>之后的图标构成一个整体，相对整条任务栏居中。</li>
+<li>该组会被钳制，不会压到系统托盘：居中会把组推入托盘时，间距会被减小。</li>
+<li><strong>位置之后的图标数量达到该值时停止居中</strong>：达到设定值后停止居中，恢复正常的
+左对齐排布。默认 0 表示永不停止。</li>
+<li>本模组只在已有按钮边距之上叠加自己的增量，并在停止居中时只归还自己仍然持有的
+那个值，因此不会覆盖 Windows 或其它模组写入的边距。</li>
+</ul>
+<h3 id="-2">生效条件</h3>
+<p>只在任务栏<strong>左对齐</strong>、<strong>水平</strong>且<strong>非镜像（从右到左）</strong>时生效。任务栏居中时整排按钮
+由系统居中，本模组保持不生效；垂直任务栏与镜像任务栏上也不生效。模组从不写入任务栏
+对齐设置或任何其它 Windows 设置。</p>
+<p>请在 Windows 的任务栏设置里把对齐方式改为<strong>左对齐</strong>。是否左对齐取的是系统自身的
+对齐 getter 返回值（本模组挂钩了它），并在模组晚于系统首次读取才启用时用存储的设置值
+播种一次——因此切换对齐会被实时识别，<strong>双向</strong>响应，无需重新加载模组。由于该 getter
+位于存储值之上，本模组跟随的是“shell 自己读到的对齐”。那次播种用于覆盖“shell
+在本模组加载之前就已经读过该值”的情形。模组不轮询、也
+不保留自己的线程：布局只
+通过 shell 本就会触发的事件观察，切换对齐在有界的沉降窗口内跟随而不是靠轮询；没有
+getter 产生过值时，存储值至多每秒回读一次；若连存储值也读不到，模组按左对齐处理：此时在真居中的任务栏上算出的间隙为 0，不会写入任何边距，只是仍会做同样的计算，而不是保持沉默。</p>
+<h3 id="-3">与相邻模组的区别</h3>
+<ul>
+<li><strong>taskbar-separators</strong>：用<strong>画分隔线</strong>的方式把图标分组；本模组什么都不画，
+只移动指定位置之后的图标。</li>
+<li><strong>taskbar-split</strong>：在“运行中”和“固定”两组之间插入弹性空白；本模组居中单个
+由你指定位置的组。</li>
+<li><strong>taskbar-centered-start-split-icons</strong>：围绕<strong>居中的开始按钮</strong>把按钮分成两组；
+本模组完全不涉及开始按钮，位置只是一个普通设置项。</li>
+</ul>
+<h3 id="-4">设置项</h3>
+<p>| 设置项 | 默认 | 说明 |
+| --- | --- | --- |
+| 图标组位置 | 2 | 从第一个应用按钮算起的 1 基位置（不含开始按钮）；该位置<strong>之后</strong>的图标构成居中的那一组。 |
+| 位置之后的图标数量达到该值时停止居中 | 0 | 该位置之后的可用应用按钮数量达到该值时停止居中，恢复正常左对齐排布。默认 0 表示永不停止。 |</p>
+<h3 id="-5">兼容性</h3>
+<ul>
+<li>Windows 11、水平任务栏、x86-64</li>
+<li>正常情况下与 Windows 11 Taskbar Styler 兼容</li>
+<li>任务栏标签，以及不合并或其它可变宽度的任务栏按钮</li>
+<li>多显示器下每条任务栏按钮模式不同的混合布局</li>
+<li>模组不向任务栏添加任何元素，只写入按钮边距；卸载时会归还全部被跟踪的边距，
+不留下模组的任何痕迹</li>
+<li>叠加式边距模组：任何“先读当前值、再把自己的间隙加上去”的模组都会与本模组互相累积，两套账本会无上限地叠加，因此不要同时启用两个这类模组。写<strong>绝对值</strong>边距的模组没有问题——本模组会自动在其之上重设基准。Taskbar Separators 属于叠加式：它的 Divider gap 默认为 0（此时不写按钮边距，可共存）；若把该值调大于 0，请勿同时启用两个模组。</li>
+</ul>
+<h3 id="-6">卸载</h3>
+<p>停用或移除模组会停止居中并归还它写入的按钮边距。任务栏对齐设置从未被写入，
+因此没有需要恢复的内容。</p>
+<h3 id="-7">许可与署名</h3>
+<p>以 GNU General Public License v3.0 发布。</p>
+<p>本模组抽取自 <strong>Taskbar Separators Dynamic Centering</strong>，后者是 digART 的
+<strong>Taskbar Separators</strong> 的分叉；原模组及其版权归 digART 所有。本模组中的居中几何
+代码取自该分叉。</p>
+<p>任务栏挂钩与 UI 线程基础设施包含改编自 Michael Maltsev（m417z）模组的代码与模式，
+包括 Taskbar Labels for Windows 11、Taskbar Multirow 与 Windows 11 Taskbar Styler。</p>
+<h3 id="-8">已知限制</h3>
+<ul>
+<li>关闭正好位于分割点上的“未固定”图标（左组最后一个、或居中组第一个）时，被移除的正是模组正在测量的按钮，间距可能有一个布局帧的陈旧感（几十毫秒）后自行恢复正常。分割点锚定在该按钮<strong>本身</strong>、而不是它在“已实现列表”中的位置，因此其它位置出现或消失按钮都不会再让它移位；只有边界按钮确实消失约四分之一秒后才会重新锚定。</li>
+<li>拖动图标时，Explorer 会把被拖图标做成跟随光标的浮动副本；把它停在空隙中间时，视觉上会像“空隙被劈成两半、中间夹着图标”。模组写入的间距并未改变，放下图标即恢复。</li>
+<li>任务栏挂钩依赖 Windows 组件的符号、虚表槽位与一段机器码特征；Windows 更新若改变它们，模组可能失效，届时模组日志会记录重排失败。对齐值会同时从 Windows 曾提供的两个 getter 与存储值读取；若某个版本把这三者都改掉或去掉，模组就不再居中。</li>
+<li>若卸载时无法从任务栏线程注销事件处理器，这些处理器会保留、已应用的边距可能未归还；模组日志会记录。这一限制与其来源模组相同。</li>
+</ul>]]></content>
+        <author>
+            <name>Suioio</name>
+            <uri>https://github.com/Suioio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar brightness and opacity tuner 1.13.0]]></title>
         <id>https://windhawk.net/mods/taskbar-brightness-and-opacity-tuner#b2a584ca279e3cf93bcbc2ea78a2cef240441cdb</id>
@@ -1394,160 +1579,6 @@ preventing shutdown" screen afterwards in rare cases.</p>
         <author>
             <name>babamohammed</name>
             <uri>https://github.com/babamohammed2022</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinDraw - Screen Inking & Annotation 1.0.0]]></title>
-        <id>https://windhawk.net/mods/windraw#eb97283dd3ce0d81657dc64ba8611f528fcee120</id>
-        <link href="https://windhawk.net/mods/windraw"/>
-        <updated>2026-09-20T18:22:04.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windrawscreeninkingannotation">WinDraw - Screen Inking &amp; Annotation</h1>
-<p>A complete, zero-bloat, hardware-accelerated screen annotation and drawing suite running as a dedicated, high-performance tool process powered by <strong>Direct2D</strong>, <strong>DirectWrite</strong>, and <strong>Windows Imaging Component (WIC)</strong>.</p>
-<p><img src="https://raw.githubusercontent.com/ZainYoussef/WinDraw/main/assets/Screenshot1.png" alt="WinDraw Inking & Annotation" /></p>
-<p><img src="https://raw.githubusercontent.com/ZainYoussef/WinDraw/main/assets/Screenshot2.png" alt="WinDraw Radial Quick Menu & Shapes Flyout" /></p>
-<h3 id="completefeatureset">Complete Feature Set:</h3>
-<ol>
-<li><strong>Instant Activation & Dismissal</strong>:</li>
-</ol>
-<ul>
-<li>Press <strong><code>Ctrl + Alt + G</code></strong> (customizable) anywhere in Windows to begin annotating immediately.</li>
-<li>Press <strong><code>ESC</code></strong> or click the <strong><code>✕</code></strong> Exit button to dismiss the overlay.</li>
-<li>Ink strokes survive dismissal so you can re-open WinDraw without losing your work. Press <strong><code>C</code></strong> (Clear All) whenever you want a completely fresh canvas.</li>
-</ul>
-<ol>
-<li><strong>Hardware-Accelerated Inking & Brushes</strong>:</li>
-</ol>
-<ul>
-<li>144Hz+ butter-smooth Direct2D drawing with quadratic Bézier curve interpolation.</li>
-<li><strong>Pen Mode</strong> (<code>F</code> key): Solid color inking with subpixel accuracy.</li>
-<li><strong>Highlighter Mode</strong> (<code>H</code> key): Translucent alpha-blended highlighting.</li>
-<li>Mouse wheel or <strong><code>[</code></strong> / <strong><code>]</code></strong> keys dynamically resize brush thickness with a real-time 1:1 circular indicator dot showing active color and zoom level.</li>
-</ul>
-<ol>
-<li><strong>Shapes & Geometry</strong>:</li>
-</ol>
-<ul>
-<li><strong>Freehand</strong> (<code>F</code> key)</li>
-<li><strong>Straight Line</strong> (<code>L</code> key)</li>
-<li><strong>Arrow</strong> (<code>A</code> key) with automatically oriented sharp arrowheads</li>
-<li><strong>Rectangle / Box</strong> (<code>R</code> key)</li>
-<li><strong>Ellipse / Circle</strong> (<code>O</code> key)</li>
-<li><strong>Triangle</strong> (<code>T</code> key)</li>
-<li>Hold <strong><code>Shift</code></strong> while drawing to snap lines to 45° increments or constrain rectangles and ellipses to perfect squares and circles.</li>
-<li>Floating <strong>Shapes Flyout Modal</strong> for visual selection.</li>
-</ul>
-<ol>
-<li><strong>Custom Color & Opacity Studio</strong>:</li>
-</ol>
-<ul>
-<li>Click the <strong><code>+</code></strong> slot in the toolbar or press <strong><code>5</code></strong> to open the full-fledged <strong>Color Studio</strong>.</li>
-<li>Interactive 2D Saturation-Value picker and continuous 360° Hue spectrum slider.</li>
-<li>Live <strong>Opacity / Alpha</strong> slider (5% to 100%).</li>
-<li>One-click <strong>Eyedropper</strong> tool to sample any pixel color directly from your desktop.</li>
-<li>Hex code display with <strong>Copy to Clipboard</strong> button.</li>
-<li>Stores and displays your <strong>Last 5 Recent Colors</strong> palette across sessions.</li>
-</ul>
-<ol>
-<li><strong>Circular Radial Quick Menu</strong>:</li>
-</ol>
-<ul>
-<li><strong>Quick Right-Click Tap</strong>: Opens a sleek circular radial menu centered at your cursor with an orbital color ring, quick tools, and smooth sector hover animations.</li>
-<li><strong>Layer 2 Satellite Fan</strong>: Hover over the top Recent Colors hub to smoothly fan out your latest 5 custom colors in an orbital satellite arc.</li>
-<li><strong>Hold & Move Right Mouse Button</strong>: Instant stroke-level eraser with circular radius indicator.</li>
-</ul>
-<ol>
-<li><strong>Collapsible Floating Toolbar & Status Pill</strong>:</li>
-</ol>
-<ul>
-<li>Windows 11 Fluent dark acrylic styling with specular highlights and subtle group dividers.</li>
-<li>Drag the toolbar anywhere on your multi-monitor desktop.</li>
-<li><strong>Minimize Button (<code>B</code> key)</strong>: Collapses the full bar into an ultra-compact status pill showing active ink color and grip handle.</li>
-<li>Click the pill in-place to expand it, or drag the pill to park it anywhere on screen.</li>
-</ul>
-<ol>
-<li><strong>Vanishing Neon Laser Pointer (<code>D</code> key)</strong>:</li>
-</ol>
-<ul>
-<li>High-visibility neon glowing laser pointer bead with multi-tier glow aura.</li>
-<li>Temporary fading laser trails that dissolve smoothly after a configurable duration (200ms to 5000ms).</li>
-<li>Scroll wheel while in Laser mode instantly adjusts trail persistence.</li>
-</ul>
-<ol>
-<li><strong>Interactive Grid System (<code>G</code> key)</strong>:</li>
-</ol>
-<ul>
-<li>Dot Grid and Graph Lines Grid overlays.</li>
-<li>Flyout modal allows switching styles and toggling density between Fine, Medium, and Coarse.</li>
-<li>Press <strong><code>Shift + G</code></strong> to cycle grid density (Fine → Medium → Coarse) directly from the keyboard.</li>
-</ul>
-<ol>
-<li><strong>Region Snipping & Full Screenshots</strong>:</li>
-</ol>
-<ul>
-<li><strong>Region Snip</strong> (<code>S</code> key): Click and drag a selection rectangle to crop and copy/save a specific screen region.</li>
-<li><strong>Full Snapshot</strong> (<code>Ctrl + S</code>): Captures the full annotated screen to the Windows clipboard (<code>CF_DIBV5</code> / <code>CF_DIB</code> / <code>CF_BITMAP</code>) and auto-saves to <code>%USERPROFILE%\Pictures\WinDraw\</code>.</li>
-</ul>
-<ol>
-<li><p><strong>Pan & Zoom Canvas Navigation</strong>:</p>
-<ul>
-<li><strong>Pan Mode</strong> (<code>P</code> key): Click and drag to reposition drawings across large canvases.</li>
-<li><strong>Canvas Zoom</strong>: While holding Pan or using the mouse wheel, smoothly zoom in and out (15% to 800%) centered on the cursor.</li>
-<li><strong>Reset View</strong>: Press <strong><code>0</code></strong> (while in Pan mode) or <strong><code>Ctrl + 0</code></strong> (any mode) to reset zoom to 100% and pan offset to (0, 0).</li></ul></li>
-<li><p><strong>Pointer / Click-Through Mode (<code>M</code> key)</strong>:</p>
-<ul>
-<li>Allows interacting with underlying Windows applications and games while keeping your drawings overlaid.</li></ul></li>
-<li><p><strong>Ink History & Visibility</strong>:</p>
-<ul>
-<li><strong>Undo</strong> (<code>Ctrl + Z</code>) and <strong>Redo</strong> (<code>Ctrl + Y</code>).</li>
-<li><strong>Clear All</strong> (<code>C</code> key) with full undo support.</li>
-<li><strong>Hide/Show Ink</strong> (<code>V</code> key): Temporarily toggles drawing visibility without clearing strokes.</li></ul></li>
-<li><p><strong>Customizable Cursor Style & Size</strong>:</p>
-<ul>
-<li><strong>Crosshair Style</strong>: Displays a crisp, dual-contrast precision crosshair with configurable arm size (8px to 32px) and an active color/eraser center indicator across Pen, Highlighter, and Eraser.</li>
-<li><strong>Live Brush Style</strong>: Displays the exact footprint and diameter of your active brush, highlighter, or eraser with real-time color fill and dual-contrast outline.</li></ul></li>
-<li><p><strong>Temporary Whiteboard & Blackboard Mode (<code>K</code> or <code>Alt + B</code>)</strong>:</p>
-<ul>
-<li><strong>Multi-Monitor Display Targeting</strong>: Left-click the Whiteboard button on the toolbar to open a Fluent modal flyout where you can choose backdrop styles (<code>Transparent</code>, <code>Whiteboard</code>, <code>Blackboard</code>) and target displays (<code>Active Screen (Follows Cursor)</code>, <code>Primary Screen</code>, specific monitor <code>Screen 1</code>, <code>Screen 2</code>, or <code>All Screens</code>).</li>
-<li><strong>Live Reference Screen</strong>: On multi-monitor setups, isolate your whiteboard/blackboard to a single monitor while keeping your other monitors 100% transparent live desktop for reference documents, IDEs, or communication apps.</li>
-<li><strong>Ephemeral Mode</strong>: Automatically resets backdrop on <code>ESC</code> while keeping your ink strokes intact.</li>
-<li><strong>Full Snapshot & Snip Support</strong>: Captures solid background and all ink strokes when taking snapshots (<code>Ctrl + S</code>) or snips (<code>S</code> key).</li>
-<li><strong>Smart Contextual Grids</strong>: Automatically adapts grid line colors (dark charcoal on white paper, vibrant cyan on dark slate).</li></ul></li>
-</ol>
-<hr />
-<h3 id="keyboardshortcutsreference">Keyboard Shortcuts Reference:</h3>
-<p>| Shortcut | Action |
-|---|---|
-| <strong>Ctrl + Alt + G</strong> | Activate / Open WinDraw Overlay (Customizable) |
-| <strong>ESC</strong> | Dismiss / Close WinDraw Overlay (Preserves Ink) |
-| <strong>F</strong> | Freehand Pen Tool |
-| <strong>H</strong> | Highlighter Tool |
-| <strong>D</strong> | Vanishing Neon Laser Pointer |
-| <strong>E</strong> | Eraser Tool (or hold Right Mouse Button) |
-| <strong>L</strong> | Straight Line Shape |
-| <strong>A</strong> | Arrow Shape |
-| <strong>R</strong> | Rectangle Shape |
-| <strong>O</strong> | Ellipse / Circle Shape |
-| <strong>T</strong> | Triangle Shape |
-| <strong>P</strong> | Pan Canvas Mode |
-| <strong>M</strong> | Pointer (Click-Through) Mode |
-| <strong>K</strong> / <strong>Alt + B</strong> | Cycle Canvas Backdrop (Transparent → Whiteboard → Blackboard) |
-| <strong>G</strong> | Toggle Grid Flyout / Cycle Grid Style |
-| <strong>Shift + G</strong> | Cycle Grid Density (Fine → Medium → Coarse) |
-| <strong>B</strong> | Collapse / Expand Toolbar Pill |
-| <strong>Ctrl + Shift + B</strong> | Reset Toolbar Position to Primary Screen Center |
-| <strong>V</strong> | Toggle Ink Visibility (Show/Hide) |
-| <strong>C</strong> | Clear All Drawings |
-| <strong>Ctrl + Z</strong> | Undo last stroke |
-| <strong>Ctrl + Y</strong> | Redo last undone stroke |
-| <strong>S</strong> | Region Snipping Tool (Crop &amp; Copy to Clipboard) |
-| <strong>Ctrl + S</strong> | Take Full Screen Snapshot &amp; Copy to Clipboard |
-| <strong>[</strong> / <strong>]</strong> | Decrease / Increase Brush Size (or Laser Trail) |
-| <strong>0</strong> / <strong>Ctrl + 0</strong> | Reset Canvas Zoom &amp; Pan (<code>0</code> in Pan mode, <code>Ctrl + 0</code> anytime) |
-| <strong>1 - 4</strong> | Select Preset Colors (Crimson Red, Tangelo Orange, Amber Gold, Sun Yellow) |
-| <strong>5</strong> | Open Custom Color &amp; Opacity Studio |</p>]]></content>
-        <author>
-            <name>ZainYousef</name>
-            <uri>https://github.com/ZainYoussef</uri>
         </author>
     </entry>
 </feed>

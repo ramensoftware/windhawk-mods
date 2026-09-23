@@ -4200,7 +4200,7 @@
         ],
         "ratingUsers": 3,
         "reviews": 0,
-        "updated": 1789132952000,
+        "updated": 1790197433000,
         "users": 54
       },
       "metadata": {
@@ -4212,7 +4212,7 @@
           "*"
         ],
         "name": "Disable Folder Thumbnails",
-        "version": "1.0"
+        "version": "1.1"
       }
     },
     "disable-immersive-context-menus": {
@@ -11677,7 +11677,7 @@
         ],
         "ratingUsers": 5,
         "reviews": 0,
-        "updated": 1789838225000,
+        "updated": 1790197429000,
         "users": 66
       },
       "metadata": {
@@ -11694,7 +11694,7 @@
         ],
         "license": "MIT",
         "name": "Premiere Pro Theme",
-        "version": "1.0.0"
+        "version": "1.0.1"
       }
     },
     "prevent-focus-stealing": {
@@ -14800,6 +14800,39 @@
         "name": "Taskbar hung windows rearrangement fix",
         "twitter": "https://twitter.com/m417z",
         "version": "1.0"
+      }
+    },
+    "taskbar-icon-group-centering": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790197425000,
+        "rating": 0,
+        "ratingBreakdown": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790197425000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Suioio",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -ladvapi32",
+        "description": "Center the taskbar icons after a chosen position as one group relative to the whole taskbar. Requires the taskbar to be set to Left alignment.",
+        "github": "https://github.com/Suioio",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Taskbar Icon Group Centering",
+        "version": "1.3.2"
       }
     },
     "taskbar-icon-separators": {

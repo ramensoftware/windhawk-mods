@@ -2,12 +2,228 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-23T20:53:08.000Z</updated>
+    <updated>2026-09-23T21:03:53.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable Folder Thumbnails 1.1]]></title>
+        <id>https://windhawk.net/mods/disable-folder-thumbnails#15c9d272aa92e51f4b345ac3b32df401971a891f</id>
+        <link href="https://windhawk.net/mods/disable-folder-thumbnails"/>
+        <updated>2026-09-23T21:03:53.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>fix work in elevated file dialogs</li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Premiere Pro Theme 1.0.1]]></title>
+        <id>https://windhawk.net/mods/premiere-pro-theme#da37018fd20a8b772aa5c5cc9e533aed6f2925f3</id>
+        <link href="https://windhawk.net/mods/premiere-pro-theme"/>
+        <updated>2026-09-23T21:03:49.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Premiere Pro 26.3 and later are themed again. Those versions no longer ship the module the mod used to hook, so panels, the timeline and the rest of the interface kept Premiere's own gray while only the window frame, the menu bar and the native dialogs followed the palette.</li>
+<li>The band around the picture in the Source and Program monitors takes the theme's <strong>Monitor background</strong> on those versions too. As before, <strong>Monitor band</strong> is its own switch and ships off.</li>
+<li>Custom theme colors copied from a color picker work now. A picker writes them as <code>#RRGGBBAA</code>, and a color in that form was refused — so a theme picked rather than typed fell back to Onyx one color at a time, and looked like it had changed nothing.</li>
+<li>Sharing a theme no longer needs the palette set to <strong>Custom</strong> first. The mod's log writes the ready-to-paste line for whichever palette is in force, so a built-in palette comes out as the custom theme that reproduces it — which is where a theme of your own starts.</li>
+<li>The <strong>Menu bar and menus</strong> description no longer promises palette-colored dropdown menus on Windows 11. They are dark there, from the app mode, rather than colored by the palette, and a menu taller than the screen keeps light scroll buttons. Both were measured on build 26200.</li>
+<li>A Premiere the mod cannot theme now says so in the log, instead of looking exactly like one it can.</li>
+</ul>]]></content>
+        <author>
+            <name>Threshold Editor</name>
+            <uri>https://github.com/CakeDev4k</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Icon Group Centering 1.3.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-icon-group-centering#b007498a784503d418f532185b861bb684c5437a</id>
+        <link href="https://windhawk.net/mods/taskbar-icon-group-centering"/>
+        <updated>2026-09-23T21:03:45.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbaricongroupcentering">Taskbar Icon Group Centering</h1>
+<p>Center the taskbar icons after a chosen position as one group, relative to the
+whole taskbar. There is no line, dot or shape anywhere: the mod only measures
+the buttons and writes the margins that move the group, and it adds no element
+of its own to the taskbar.</p>
+<h2 id="preview">Preview</h2>
+<p><img src="https://raw.githubusercontent.com/Suioio/taskbar-separators-dynamic-centering/main/preview.png" alt="Taskbar Icon Group Centering preview" /></p>
+<p><img src="https://raw.githubusercontent.com/Suioio/taskbar-separators-dynamic-centering/main/dynamic-centering.gif" alt="The icon group after the chosen position re-centers as apps open and close" /></p>
+<h2 id="whatitdoes">What it does</h2>
+<ul>
+<li>The icons after <strong>Icon group position</strong> form a single group that is centered
+relative to the entire taskbar, including the system tray.</li>
+<li>The group is clamped so it cannot run into the tray: when centering would
+push it under the tray, the gap is reduced instead.</li>
+<li><strong>Stop centering when the icon count after the position reaches</strong> stops
+centering once that many icons are after the position, which restores the
+normal left-aligned layout. The default 0 never stops.</li>
+<li>The mod only adds its own delta on top of the button margins that already
+exist, and hands back exactly the value it still owns when centering stops,
+so margins written by Windows or by another mod are never overwritten.</li>
+</ul>
+<h2 id="whenitapplies">When it applies</h2>
+<p>Only while the taskbar is <strong>left-aligned</strong>, <strong>horizontal</strong> and <strong>not mirrored
+(right-to-left)</strong>. On a centered taskbar Windows centers the whole row itself
+and this mod has nothing to add: the gap it computes there comes out as zero,
+so no margin is written. If no getter has produced a value and the stored one
+cannot be read either, the mod assumes left and does the same work with the same
+zero result instead of going quiet. Nothing is applied on a
+vertical or mirrored taskbar, and the mod never writes the taskbar alignment or
+any other Windows setting.</p>
+<p>To use it, switch the taskbar to <strong>Left</strong> alignment in Windows' taskbar
+settings. Whether the taskbar is left-aligned is the value the shell's own
+alignment getter returns, which this mod hooks, and which is seeded once from
+the stored setting when the mod is loaded after the shell has already read it -
+so switching the alignment is picked up in both directions on the fly, without
+a mod reload. Because that getter sits above the stored value, the mod follows
+the alignment <strong>the shell itself reads</strong>. The one seed covers the case where
+the shell has already read it before the mod was loaded. There is no polling
+and no thread of its own: the layout is watched through an event the shell
+already raises, a switch to the alignment is followed inside a bounded settling
+window instead of being polled for, and where the getter could not be hooked
+the stored value is re-read at most once per second.</p>
+<h2 id="differencesfromtheneighbouringmods">Differences from the neighbouring mods</h2>
+<ul>
+<li><strong>taskbar-separators</strong> groups icons by <em>drawing separators</em> between them.
+This mod draws nothing at all; it only moves the icons after the position.</li>
+<li><strong>taskbar-split</strong> inserts flexible space between the running and the pinned
+group. This mod centers a single group whose position you pick.</li>
+<li><strong>taskbar-centered-start-split-icons</strong> splits the buttons into two groups
+around a <strong>centered Start button</strong>. This mod never touches the Start button,
+and the position is a plain setting rather than a consequence of Start.</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<p>| Setting | Default | Meaning |
+| --- | --- | --- |
+| Icon group position | 2 | 1-based position counted from the first application button (the Start button is not counted). The icons <em>after</em> this position are the centered group. |
+| Stop centering when the icon count after the position reaches | 0 | Stop centering once this many usable application buttons are after the position, which restores the normal left-aligned layout. The default 0 never stops. |</p>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Windows 11, horizontal taskbar, x86-64</li>
+<li>Compatible with Windows 11 Taskbar Styler in normal configurations</li>
+<li>Taskbar labels, and uncombined or otherwise variable-width taskbar buttons</li>
+<li>Mixed multi-monitor layouts with different button modes on each taskbar</li>
+<li>The mod adds no element to the taskbar at all: it only writes button margins,
+and unload hands every tracked margin back, so nothing of the mod is left
+behind</li>
+<li>Layered margin mods: any mod that rewrites taskbar button margins by reading
+the current value and adding its own gap on top compounds with this one - both
+ledgers keep adding to each other without bound, so do not run two of those at
+once. A mod that writes an <strong>absolute</strong> margin is fine: this mod re-bases on
+top of whatever it finds. Taskbar Separators is the layering kind; its default
+Divider gap is 0, in which case it writes no button margins and the two
+coexist, but raise that gap and the two should not be enabled together.</li>
+</ul>
+<h2 id="uninstall">Uninstall</h2>
+<p>Disabling or removing the mod stops centering and hands back the button margins
+it applied. The taskbar alignment is never written, so there is nothing to
+restore.</p>
+<h2 id="licenseandattribution">License and attribution</h2>
+<p>Licensed under the GNU General Public License v3.0.</p>
+<p>This mod is extracted from <strong>Taskbar Separators Dynamic Centering</strong>, which is a
+fork of <strong>Taskbar Separators</strong> by digART; the original mod and its copyright
+belong to digART. The centering geometry in this mod is kept from that fork.</p>
+<p>Taskbar hook and UI-thread infrastructure includes code and patterns adapted
+from Windhawk mods by Michael Maltsev (m417z), including Taskbar Labels for
+Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>Closing a pinned-release icon that sits exactly on the split — the last icon of
+the left group or the first icon of the centered group — removes a button the
+mod is measuring, so the spacing can look one layout pass stale for a few tens
+of milliseconds before it settles. The split is anchored on that button itself
+rather than on its position in the realized list, so a button appearing or
+disappearing anywhere else no longer moves it, and the anchor is relearned only
+once the boundary button has really been gone for a quarter of a second.</li>
+<li>While an icon is being dragged, Explorer draws the dragged icon as a floating
+copy that follows the cursor. Holding it inside the spacing makes the spacing
+look like two halves with the icon in between. The margins the mod writes are
+unaffected: the spacing returns as soon as the icon is dropped.</li>
+<li>The taskbar hooks rely on Windows component symbols, vtable slots and a
+machine-code pattern. A Windows update that changes them can stop the mod from
+working; a symbol that fails to resolve and every failed reconciliation are
+logged. The alignment is read from the two getters Windows has served it
+from and from the stored value; a build that removes or changes all three
+stops the mod from centering.</li>
+<li>If unload cannot detach its event handlers from the taskbar thread, those
+handlers stay registered and applied margins may not be handed back; the mod
+log records it. This limitation is shared with the mod it was derived from.</li>
+</ul>
+<h2 id="">中文说明</h2>
+<p>把任务栏中<strong>指定位置之后</strong>的图标作为一组，相对<strong>整条任务栏</strong>（含系统托盘）
+居中。画面里没有任何线条或方块：本模组只测量按钮并写入移动该组所需的边距，
+不向任务栏添加任何元素。</p>
+<h3 id="-1">功能</h3>
+<ul>
+<li><strong>图标组位置</strong>之后的图标构成一个整体，相对整条任务栏居中。</li>
+<li>该组会被钳制，不会压到系统托盘：居中会把组推入托盘时，间距会被减小。</li>
+<li><strong>位置之后的图标数量达到该值时停止居中</strong>：达到设定值后停止居中，恢复正常的
+左对齐排布。默认 0 表示永不停止。</li>
+<li>本模组只在已有按钮边距之上叠加自己的增量，并在停止居中时只归还自己仍然持有的
+那个值，因此不会覆盖 Windows 或其它模组写入的边距。</li>
+</ul>
+<h3 id="-2">生效条件</h3>
+<p>只在任务栏<strong>左对齐</strong>、<strong>水平</strong>且<strong>非镜像（从右到左）</strong>时生效。任务栏居中时整排按钮
+由系统居中，本模组保持不生效；垂直任务栏与镜像任务栏上也不生效。模组从不写入任务栏
+对齐设置或任何其它 Windows 设置。</p>
+<p>请在 Windows 的任务栏设置里把对齐方式改为<strong>左对齐</strong>。是否左对齐取的是系统自身的
+对齐 getter 返回值（本模组挂钩了它），并在模组晚于系统首次读取才启用时用存储的设置值
+播种一次——因此切换对齐会被实时识别，<strong>双向</strong>响应，无需重新加载模组。由于该 getter
+位于存储值之上，本模组跟随的是“shell 自己读到的对齐”。那次播种用于覆盖“shell
+在本模组加载之前就已经读过该值”的情形。模组不轮询、也
+不保留自己的线程：布局只
+通过 shell 本就会触发的事件观察，切换对齐在有界的沉降窗口内跟随而不是靠轮询；没有
+getter 产生过值时，存储值至多每秒回读一次；若连存储值也读不到，模组按左对齐处理：此时在真居中的任务栏上算出的间隙为 0，不会写入任何边距，只是仍会做同样的计算，而不是保持沉默。</p>
+<h3 id="-3">与相邻模组的区别</h3>
+<ul>
+<li><strong>taskbar-separators</strong>：用<strong>画分隔线</strong>的方式把图标分组；本模组什么都不画，
+只移动指定位置之后的图标。</li>
+<li><strong>taskbar-split</strong>：在“运行中”和“固定”两组之间插入弹性空白；本模组居中单个
+由你指定位置的组。</li>
+<li><strong>taskbar-centered-start-split-icons</strong>：围绕<strong>居中的开始按钮</strong>把按钮分成两组；
+本模组完全不涉及开始按钮，位置只是一个普通设置项。</li>
+</ul>
+<h3 id="-4">设置项</h3>
+<p>| 设置项 | 默认 | 说明 |
+| --- | --- | --- |
+| 图标组位置 | 2 | 从第一个应用按钮算起的 1 基位置（不含开始按钮）；该位置<strong>之后</strong>的图标构成居中的那一组。 |
+| 位置之后的图标数量达到该值时停止居中 | 0 | 该位置之后的可用应用按钮数量达到该值时停止居中，恢复正常左对齐排布。默认 0 表示永不停止。 |</p>
+<h3 id="-5">兼容性</h3>
+<ul>
+<li>Windows 11、水平任务栏、x86-64</li>
+<li>正常情况下与 Windows 11 Taskbar Styler 兼容</li>
+<li>任务栏标签，以及不合并或其它可变宽度的任务栏按钮</li>
+<li>多显示器下每条任务栏按钮模式不同的混合布局</li>
+<li>模组不向任务栏添加任何元素，只写入按钮边距；卸载时会归还全部被跟踪的边距，
+不留下模组的任何痕迹</li>
+<li>叠加式边距模组：任何“先读当前值、再把自己的间隙加上去”的模组都会与本模组互相累积，两套账本会无上限地叠加，因此不要同时启用两个这类模组。写<strong>绝对值</strong>边距的模组没有问题——本模组会自动在其之上重设基准。Taskbar Separators 属于叠加式：它的 Divider gap 默认为 0（此时不写按钮边距，可共存）；若把该值调大于 0，请勿同时启用两个模组。</li>
+</ul>
+<h3 id="-6">卸载</h3>
+<p>停用或移除模组会停止居中并归还它写入的按钮边距。任务栏对齐设置从未被写入，
+因此没有需要恢复的内容。</p>
+<h3 id="-7">许可与署名</h3>
+<p>以 GNU General Public License v3.0 发布。</p>
+<p>本模组抽取自 <strong>Taskbar Separators Dynamic Centering</strong>，后者是 digART 的
+<strong>Taskbar Separators</strong> 的分叉；原模组及其版权归 digART 所有。本模组中的居中几何
+代码取自该分叉。</p>
+<p>任务栏挂钩与 UI 线程基础设施包含改编自 Michael Maltsev（m417z）模组的代码与模式，
+包括 Taskbar Labels for Windows 11、Taskbar Multirow 与 Windows 11 Taskbar Styler。</p>
+<h3 id="-8">已知限制</h3>
+<ul>
+<li>关闭正好位于分割点上的“未固定”图标（左组最后一个、或居中组第一个）时，被移除的正是模组正在测量的按钮，间距可能有一个布局帧的陈旧感（几十毫秒）后自行恢复正常。分割点锚定在该按钮<strong>本身</strong>、而不是它在“已实现列表”中的位置，因此其它位置出现或消失按钮都不会再让它移位；只有边界按钮确实消失约四分之一秒后才会重新锚定。</li>
+<li>拖动图标时，Explorer 会把被拖图标做成跟随光标的浮动副本；把它停在空隙中间时，视觉上会像“空隙被劈成两半、中间夹着图标”。模组写入的间距并未改变，放下图标即恢复。</li>
+<li>任务栏挂钩依赖 Windows 组件的符号、虚表槽位与一段机器码特征；Windows 更新若改变它们，模组可能失效，届时模组日志会记录重排失败。对齐值会同时从 Windows 曾提供的两个 getter 与存储值读取；若某个版本把这三者都改掉或去掉，模组就不再居中。</li>
+<li>若卸载时无法从任务栏线程注销事件处理器，这些处理器会保留、已应用的边距可能未归还；模组日志会记录。这一限制与其来源模组相同。</li>
+</ul>]]></content>
+        <author>
+            <name>Suioio</name>
+            <uri>https://github.com/Suioio</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Agenda in Calendar View 1.1]]></title>
         <id>https://windhawk.net/mods/agenda-in-calendar-view#f92c8ef2d4379c880aaf84e639ab4b24e53f69ef</id>
@@ -789,194 +1005,6 @@ itself runs. Both mods are under the GPL v3.</p>]]></content>
         <author>
             <name>Armaninyow</name>
             <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Separate System Tray Icons 1.0.0]]></title>
-        <id>https://windhawk.net/mods/separate-system-tray-icons#953bdd63123ce7146fb52a71e53e8261369f7a92</id>
-        <link href="https://windhawk.net/mods/separate-system-tray-icons"/>
-        <updated>2026-09-21T15:43:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="separatesystemtrayicons">Separate System Tray Icons</h1>
-<p>Replaces the grouped Windows 11 system tray button with separate sound,
-Bluetooth, network, Control Center, and battery buttons. The original grouped
-button is hidden while the mod is active and restored when it is unloaded.</p>
-<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/e02d89d70dfb0ad3815b806e3eb2a49e56cb86b8/img/separate-system-tray-icons/separate-system-tray-icons.gif" alt="Demonstration" /></p>
-<p>This mod injects real XAML <code>FontIcon</code> elements into the Windows 11 taskbar tray.
-That means icons are drawn as XAML text/vector glyphs instead of rasterized HICON bitmaps.</p>
-<p>Buttons:</p>
-<ul>
-<li>Bluetooth -&gt; Bluetooth flyout</li>
-<li>Network -&gt; Network flyout</li>
-<li>Sound -&gt; Control Center, sound output picker or volume mixer</li>
-<li>Control Center -&gt; Control Center or a custom action</li>
-<li>Battery -&gt; Control Center or a custom action</li>
-</ul>
-<p>Use <strong>Toggle buttons visibility</strong> to choose which buttons appear. Drag items in
-<strong>Button order</strong> to arrange the buttons, including Battery. Removing an entry
-hides that button; adding it back shows it when its visibility toggle is enabled. The battery
-button appears only when Windows reports a battery.</p>
-<p>Sound supports mouse-wheel volume adjustment (unmuting first) and middle-click
-muting. <strong>Volume scroll step</strong> selects Windows' default step or 1, 5, or 10
-percentage points per wheel notch.</p>
-<p>Partial movements from smooth-scrolling mice accumulate into full wheel notches;
-horizontal scrolling does not change volume. Reach the buttons through Windows'
-taskbar keyboard navigation, then use Enter or Space to activate, or Shift+F10
-or the Menu key to open a context menu. Buttons expose their current tooltip
-information as accessible names and use system keyboard-focus visuals.</p>
-<p>Sound can show currently playing media in its tooltip and use an output-device
-glyph. Muted audio uses the standard mute glyph. Bluetooth can show connected
-devices and their battery percentages (when reported by Windows) in its tooltip
-and change appearance when switched off. Network can
-show Wi-Fi signal strength and open a custom URL for <strong>Perform speed test</strong>.</p>
-<h2 id="actionformats">Action formats</h2>
-<p>The custom-action prefix scheme and action-format documentation are adapted from
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/ultimate-custom-tray.wh.cpp">Ultimate Custom Tray</a>
-by <a href="https://github.com/Salyts">Salyts</a>, licensed under MIT.</p>
-<p>Select <strong>Custom action</strong> for <strong>Control Center action</strong> or <strong>Battery click action</strong>, then
-enter an action in that group's <strong>Custom action</strong> field.</p>
-<p>| Prefix | Example | Description |
-|--------|---------|-------------|
-| <code>" "</code> | <code>"C:\Program Files\app.exe"</code> | Opens a file or folder by absolute path. |
-| <code>~</code> | <code>~Downloads</code> | Opens a folder or file by name. |
-| <code>cmd:</code> | <code>cmd:control</code> | Runs a command through <code>cmd.exe</code>. |
-| <code>ps:</code> / <code>powershell:</code> | <code>ps:shutdown /r /f /t 0</code> | Runs through <code>powershell.exe</code>. |
-| <code>key:</code> / <code>hotkey:</code> | <code>key:Ctrl+Shift+Esc</code> | Simulates a keyboard shortcut with virtual key presses. |
-| <code>web:</code> | <code>web:https://windhawk.net/</code> | Opens a URL in the default browser. |
-| <code>ms-settings:</code> | <code>ms-settings:bluetooth</code> | Opens a Windows Settings page. |</p>
-<p>For shortcut actions, use <code>Modifier+Modifier+Key</code>.
-Supported modifiers: <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code>, <code>Win</code>.
-Examples: <code>key:Ctrl+Alt+D</code>, <code>hotkey:Win+R</code>, <code>key:0x7B</code> (F12 by VK code).</p>
-<h2 id="taskbarstylertargets">Taskbar Styler targets</h2>
-<p>Status changes use Windows notifications where available, with a 60-second
-fallback refresh. The Wi-Fi connecting animation updates every 500 ms while
-Windows reports an active connection attempt.
-This version currently manages the primary taskbar; separate-monitor taskbars
-are not supported by the current implementation.</p>
-<p>The injected buttons normally use <code>SystemTray.OmniButton</code>. If a fallback is
-needed, the mod logs the actual control class; the button names stay the same.</p>
-<p>| Target | Description |
-| --- | --- |
-| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlBluetooth</code> | Bluetooth button and its native template/hit target. |
-| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlNetwork</code> | Network button. |
-| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlSound</code> | Sound button, including wheel and middle-click handling. |
-| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlControlCenter</code> | Separate Control Center button; the original grouped button is always hidden. |
-| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlBattery</code> | Separate battery button, including its highlight and click handling. |
-| <code>TextBlock#SeparateTrayBatteryPercentage</code> | Battery percentage text. |
-| <code>Grid#SeparateTrayIconLayers</code> | Glyph host; battery uses natural dimensions, other buttons use a 16-by-16 host. |
-| <code>FontIcon#SeparateTrayIconPrimary</code> | Main status or output-device glyph. |
-| <code>FontIcon#SeparateTrayIconUnderlay</code> | Theme-aware grey underlying glyph, where applicable. |
-| <code>FontIcon#SeparateTrayIconOverlay</code> | Additional status layer, including Bluetooth's unavailable indicator and battery charge-level fill. |
-| <code>MenuFlyoutPresenter#SeparateTrayContextMenuPresenter</code> | WinUI context menu presenter, named when the menu opens. |</p>
-<p>The layer names are shared across buttons. An unqualified layer selector affects
-all matching buttons. For example:</p>
-<pre><code class="yaml language-yaml">controlStyles:
-  - target: FontIcon#SeparateTrayIconPrimary
-    styles:
-      - FontSize=16
-</code></pre>
-<h3 id="hoverhighlightsandgeneratedtemplates">Hover highlights and generated templates</h3>
-<p>The native button template contains <code>Border#BackgroundBorder</code> on the supported
-taskbar build. This is the existing hover-highlight element. Use the visual-tree
-paths in the mod logs to target it beneath a particular button. Template
-intermediate elements can vary between Windows builds: Taskbar Styler's <code>&gt;</code>
-requires a direct parent/child relationship, so do not assume the border or
-glyph host is a direct child of the button.</p>
-<h3 id="stylinglimitations">Styling limitations</h3>
-<p>The mod refreshes glyphs, foreground colors, visibility, overlay font sizes,
-and button dimensions as state changes. Styles for those properties can be
-overwritten by the next update. Stable names provide selectors, but external
-stylers may not observe every dynamically created element. In particular, the
-menu presenter receives its name after creation.</p>
-<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
-<p>In case if battery won't show properly on your system, System Battery (<em>Sysbatt.ttf</em>)
-font needs to be installed manually. It's part of <em>Windows.UI.ControlCenter</em>
-package, but is not actually installed by default. The missing font is stored in:</p>
-<pre><code>C:\Windows\SystemResources\Windows.UI.ControlCenter\Assets
-</code></pre>
-<p>In order to install the font, right-click the <em>Sysbatt.ttf</em> file, and choose <em>Install</em>
-from the context menu.</p>]]></content>
-        <author>
-            <name>Asteski</name>
-            <uri>https://github.com/Asteski</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Agenda in Calendar View 1.0]]></title>
-        <id>https://windhawk.net/mods/agenda-in-calendar-view#ef7c936660e01bd724df1a422cb3d4dc73f3fd0a</id>
-        <link href="https://windhawk.net/mods/agenda-in-calendar-view"/>
-        <updated>2026-09-21T15:43:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="agendaincalendar">Agenda in Calendar</h1>
-<p><img src="https://i.imgur.com/lQhwoAL.png" alt="Agenda in Calendar" /></p>
-<h2 id="bringbackthewindows10agendatowindows11">Bring back the Windows 10 Agenda to Windows 11</h2>
-<p>This mod brings the Windows 10-style agenda to Windows 11, allowing you to
-quickly and conveniently view your events from the Notification Centre.</p>
-<p>It supports <code>.ics</code> files from both local and remote locations.</p>
-<h2 id="details">Details</h2>
-<p><img src="https://i.imgur.com/EkWnp1c.png" alt="event" /></p>
-<p>The details shown include:</p>
-<ul>
-<li>Event name</li>
-<li>Event description</li>
-<li>Location</li>
-<li>Starting and ending time</li>
-</ul>
-<h2 id="additionalfeatures">Additional features</h2>
-<p><strong>Additional features include:</strong></p>
-<p>Keyboard navigation:</p>
-<ul>
-<li>You can move backward by a day or forward by a day using the left and right arrow keys.</li>
-</ul>
-<p>Hiding the focus panel:</p>
-<p><img src="https://i.imgur.com/xurxfJ9.png" alt="comparison" /></p>
-<p>Setting a maximum height (before it starts scrolling):</p>
-<p><img src="https://i.imgur.com/c9i40PA.png" alt="scrollViewer" /></p>
-<p>Checking events on other dates:</p>
-<p><img src="https://i.imgur.com/DM8tcj0.png" alt="calendar" /></p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Compatible with Windows 11 (both ShellExperienceHost.exe and ShellHost.exe).</li>
-<li>Supports recurring events (daily, weekly, monthly, yearly, including <code>BYDAY</code> ordinals such as "third Thursday" / <code>3TH</code> or "second Tuesday" / <code>2TU</code>, <code>BYMONTHDAY</code>, <code>WKST</code>, <code>EXDATE</code>, <code>RECURRENCE-ID</code>, and multi-day recurring events).</li>
-<li>Events are refreshed every time the notification pane is opened.<ul>
-<li>If events can't be fetched (e.g. no internet connection), previously-fetched events are shown.</li>
-<li>Smart caching avoids redundant fetches within the configured minimum fetch interval.</li>
-<li>You can click the Refresh button in the calendar header at any time to force an immediate refresh.</li></ul></li>
-<li>The mod resiliently accepts errors; if you have a problem, enable logging.</li>
-<li>Injection logic has been ported from m417z's <em>Start Menu Styler</em>.</li>
-<li>The creation of this mod was assisted by AI:<ul>
-<li>Sadly, I do not have experience with C++/Windhawk;</li>
-<li>However, I do have experience with WinUI (as I have created several WinUI apps in C#);</li>
-<li>As a result, the controls used <em>(inc. CalendarDatePicker, Border, Grid, TextBlock)</em> were manually structured, but the underlying implementation was generated using AI.</li></ul></li>
-</ul>
-<h2 id="faq">FAQ</h2>
-<ul>
-<li><strong>My local <code>.ics</code> file does not work!</strong></li>
-<li>First try going to its Properties in File Explorer, and ticking "Unblock".</li>
-<li>If that doesn't work, grant read permissions on your file to AppContainers by running:
-<code>icacls "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"</code>
-in PowerShell.
-This allows <code>ShellExperienceHost.exe</code> and <code>ShellHost.exe</code>, which host the calendar pane, to access your calendar file.
-<em>Note: <code>*S-1-15-2-1</code> grants read permissions to ALL APPLICATION PACKAGES (all UWP/packaged apps).</em></li>
-<li><strong>The bottom corners of the <em>Notifications</em> pane (immediately above the agenda) are not rounded!</strong>
-Set a maximum height for the Agenda in the mod settings to stop it from clipping the <em>Notifications</em> pane.</li>
-</ul>]]></content>
-        <author>
-            <name>lonfro</name>
-            <uri>https://github.com/lonfro</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better Volume Mixer 1.2]]></title>
-        <id>https://windhawk.net/mods/better-volume-mixer#bba90ef6f0dc76ff9dc38614b83adafbc84ca4df</id>
-        <link href="https://windhawk.net/mods/better-volume-mixer"/>
-        <updated>2026-09-21T15:42:47.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a dropdown selection for audio output devices</li>
-<li>Added compact mode</li>
-<li>Improved user interface visuals</li>
-</ul>]]></content>
-        <author>
-            <name>0Allu</name>
-            <uri>https://github.com/0Allu</uri>
         </author>
     </entry>
 </feed>
