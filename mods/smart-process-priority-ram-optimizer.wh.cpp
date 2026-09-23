@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         3.2.0
+// @version         3.2.1
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -467,7 +467,7 @@ static ModSettings GetSettingsSnapshot() {
 static std::atomic<bool> g_workerRunning{false};
 static HANDLE g_stopEvent = nullptr;
 static HANDLE g_wakeEvent = nullptr;
-static std::optional<std::thread> g_workerThread;
+[[clang::no_destroy]] static std::optional<std::thread> g_workerThread;
 
 static std::atomic<bool> g_hookThreadRunning{false};
 static HANDLE g_hookThreadHandle = nullptr;
@@ -580,7 +580,8 @@ static DWORD g_sessionCleanupPasses = 0;
 static DWORD g_sessionProcessesTrimmedTotal = 0;
 static std::atomic<DWORD> g_sessionBoostTransitions{0};
 static std::atomic<DWORD> g_sessionThrottleTransitions{0};
-static std::chrono::steady_clock::time_point g_lastResumeTime{};
+static std::atomic<ULONGLONG> g_lastResumeTick{0};
+static std::atomic<bool> g_resetSamplesRequested{false};
 
 // ---------------------------------------------------------------------------
 // Precision Telemetry & Categorized Diagnostic Logging
@@ -1154,10 +1155,12 @@ struct ProcessSnapshotEntry {
     std::wstring name;
 };
 
+static std::mutex g_processSnapshotCacheMutex;
 static std::chrono::steady_clock::time_point g_processSnapshotCacheTime{};
 static std::vector<ProcessSnapshotEntry> g_processSnapshotCache;
 
 static std::vector<ProcessSnapshotEntry> CaptureProcessSnapshotCached() {
+    std::lock_guard<std::mutex> lock(g_processSnapshotCacheMutex);
     auto now = std::chrono::steady_clock::now();
     if (g_processSnapshotCacheTime.time_since_epoch().count() != 0 &&
         std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -1271,12 +1274,11 @@ static void SetProcessEcoQoS(HANDLE hProcess, bool enableThrottling) {
 }
 
 // Restore: hand power management control cleanly back to the OS scheduler.
-// ControlMask specifies which flags to modify; StateMask = 0 clears throttling.
+// Setting ControlMask = 0 and StateMask = 0 lets Windows manage power throttling.
 static void ResetProcessEcoQoS(HANDLE hProcess) {
     PROCESS_POWER_THROTTLING_STATE state{};
     state.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
-    state.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED |
-                        PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
+    state.ControlMask = 0;
     state.StateMask = 0;
     SetProcessInformation(
         hProcess, (PROCESS_INFORMATION_CLASS)ProcessPowerThrottlingInfoClass,
@@ -1381,7 +1383,18 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
     pidsToBoost.push_back(newForegroundPid);
     std::unordered_set<DWORD> visited;
     visited.insert(newForegroundPid);
-    CollectDescendants(newForegroundPid, childrenOf, pidsToBoost, visited);
+
+    auto itRootName = nameByPid.find(newForegroundPid);
+    std::wstring rootName = (itRootName != nameByPid.end()) ? itRootName->second : L"";
+    bool isShellOrLauncher = (rootName == L"explorer.exe" ||
+                              rootName == L"cmd.exe" ||
+                              rootName == L"powershell.exe" ||
+                              rootName == L"pwsh.exe" ||
+                              rootName == L"windowsterminal.exe");
+
+    if (!isShellOrLauncher) {
+        CollectDescendants(newForegroundPid, childrenOf, pidsToBoost, visited);
+    }
 
     DWORD targetPriority =
         (settings.foregroundPriorityLevel == ForegroundPrioritySetting::High)
@@ -1447,8 +1460,6 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
             origMemoryPriority = GetProcessMemoryPriorityHint(hProc);
         }
 
-        // Anti-EcoQoS Lock: Prevent Windows 11 power throttling from restricting active foreground app
-        ResetProcessEcoQoS(hProc);
         // Ensure active foreground process family always has normal memory priority
         SetProcessMemoryPriorityHint(hProc, 5 /* MEMORY_PRIORITY_NORMAL */);
 
@@ -2701,12 +2712,6 @@ TryTrimProcess(DWORD pid, const SystemActionArbiter& arbiter,
         return result;
     }
 
-    // Modern OS-Native Memory Prioritization (Windows 8+):
-    // Apply MEMORY_PRIORITY_VERY_LOW to background candidate apps so the OS balance set
-    // manager naturally reclaims their physical pages first under memory pressure, without
-    // forcing immediate disk page-outs when physical RAM is plentiful.
-    SetProcessMemoryPriorityHint(hProc, 1 /* MEMORY_PRIORITY_VERY_LOW */);
-
     PROCESS_MEMORY_COUNTERS_EX pmc;
     ZeroMemory(&pmc, sizeof(pmc));
     pmc.cb = sizeof(pmc);
@@ -3075,32 +3080,13 @@ static void HandleForegroundChanged(HWND hwnd) {
         return;
 
     if (pid != g_currentBoostedPid.load(std::memory_order_relaxed)) {
+        RecordFocusSwitch(pid);
+
         ModSettings settings = GetSettingsSnapshot();
-
-        // Transaction 1: Sub-millisecond direct boost in the hook thread (< 1ms after focus)
-        if (settings.enableProBalance) {
-            DWORD targetClass =
-                (settings.foregroundPriorityLevel == ForegroundPrioritySetting::High)
-                    ? HIGH_PRIORITY_CLASS
-                    : ABOVE_NORMAL_PRIORITY_CLASS;
-            HANDLE hProc = OpenProcess(
-                PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION,
-                FALSE, pid);
-            if (hProc) {
-                DWORD currentClass = GetPriorityClass(hProc);
-                if (currentClass != 0 &&
-                    PriorityClassToRank(currentClass) < PriorityClassToRank(targetClass)) {
-                    SetPriorityClass(hProc, targetClass);
-                }
-                CloseHandle(hProc);
-            }
-            RecordFocusSwitch(pid);
-        }
-
         MaybeRequestGameSweep(pid, hwnd, settings);
 
-        // Transaction 2: Awaken watchdog worker thread to complete full WTA pipeline
-        // (descendant process tree, I/O priority, P-cores, and immediate background throttling)
+        // Wake up watchdog worker thread immediately to perform the foreground boost
+        // with complete state tracking, child tree resolution and background throttling.
         if (g_wakeEvent) {
             SetEvent(g_wakeEvent);
         }
@@ -3130,7 +3116,8 @@ static LRESULT CALLBACK PowerWndProc(HWND hwnd, UINT uMsg, WPARAM wParam,
             RestoreAllThrottledProcesses();
         } else if (wParam == PBT_APMRESUMEAUTOMATIC ||
                    wParam == PBT_APMRESUMESUSPEND) {
-            g_lastResumeTime = std::chrono::steady_clock::now();
+            g_lastResumeTick.store(GetTickCount64(), std::memory_order_release);
+            g_resetSamplesRequested.store(true, std::memory_order_release);
             LogEvent(LogCategory::Power, LogDetailLevel::Minimal,
                      L"System resumed from sleep/suspend. Resetting aging timers, clearing stale CPU/IO metrics, and engaging 30s warm-up grace period...");
             auto now = std::chrono::steady_clock::now();
@@ -3140,12 +3127,6 @@ static LRESULT CALLBACK PowerWndProc(HWND hwnd, UINT uMsg, WPARAM wParam,
                     entry.second = now;
                 }
                 g_focusSwitchHistory.clear();
-            }
-            {
-                std::lock_guard<std::mutex> lock(g_priorityMutex);
-                g_cpuSamples.clear();
-                g_ioSamples.clear();
-                g_aiCpuSamples.clear();
             }
             g_systemSuspended.store(false);
             HWND hFg = GetForegroundWindow();
@@ -3290,18 +3271,22 @@ static void MemoryOptimizerWorker() {
                                  /*hogsOnly=*/false, /*forceHardTrim=*/true);
         }
 
+        if (g_resetSamplesRequested.exchange(false, std::memory_order_acq_rel)) {
+            g_cpuSamples.clear();
+            g_ioSamples.clear();
+            g_aiCpuSamples.clear();
+        }
+
         DWORD fgPid = GetForegroundProcessId();
         if (fgPid != 0) {
             UpdateForegroundBoost(fgPid, settings);
         }
 
-        auto now = std::chrono::steady_clock::now();
         bool recentlyResumed = false;
-        if (g_lastResumeTime != std::chrono::steady_clock::time_point{}) {
-            auto secSinceResume =
-                std::chrono::duration_cast<std::chrono::seconds>(now - g_lastResumeTime)
-                    .count();
-            if (secSinceResume < 30) {
+        ULONGLONG resumeTick = g_lastResumeTick.load(std::memory_order_acquire);
+        if (resumeTick != 0) {
+            ULONGLONG nowTick = GetTickCount64();
+            if (nowTick >= resumeTick && (nowTick - resumeTick) < 30000) {
                 recentlyResumed = true;
             }
         }
@@ -3616,7 +3601,7 @@ static void LoadSettings() {
 BOOL WhTool_ModInit() {
     LogEvent(
         LogCategory::Boot, LogDetailLevel::Minimal,
-        L"Initializing Smart Process Priority & RAM Optimizer v3.2.0 (Dedicated Tool Process)...");
+        L"Initializing Smart Process Priority & RAM Optimizer v3.2.1 (Dedicated Tool Process)...");
 
     // Initialize Per-Monitor V2 DPI awareness dynamically so window coordinates across
     // multi-monitor configurations with mixed DPI scaling factors (e.g. 4K 150% + 1440p 100%)
@@ -3730,19 +3715,6 @@ void WhTool_ModSettingsChanged() {
     }
 }
 
-static HANDLE g_parentProcessHandle = nullptr;
-static HANDLE g_parentWaitHandle = nullptr;
-static HANDLE g_hChildJob = nullptr;
-
-static void CALLBACK ParentProcessTerminatedCallback(PVOID lpParameter,
-                                                     BOOLEAN TimerOrWaitFired) {
-    // Parent windhawk.exe process terminated or crashed; terminate child to
-    // prevent orphaned background execution.
-    (void)lpParameter;
-    (void)TimerOrWaitFired;
-    ExitProcess(0);
-}
-
 void WhTool_ModUninit() {
     LogEvent(LogCategory::Shutdown, LogDetailLevel::Minimal,
              L"Deinitializing mod engine...");
@@ -3798,14 +3770,6 @@ void WhTool_ModUninit() {
         CloseHandle(g_hookThreadReadyEvent);
         g_hookThreadReadyEvent = nullptr;
     }
-    if (g_parentWaitHandle) {
-        UnregisterWait(g_parentWaitHandle);
-        g_parentWaitHandle = nullptr;
-    }
-    if (g_parentProcessHandle) {
-        CloseHandle(g_parentProcessHandle);
-        g_parentProcessHandle = nullptr;
-    }
 
     {
         double sessionGb = g_sessionBytesReclaimed / (1024.0 * 1024.0 * 1024.0);
@@ -3817,7 +3781,7 @@ void WhTool_ModUninit() {
             immuneCount = g_accessDeniedImmunitySet.size();
         }
         Wh_Log(L"[SmartOptimizer::Shutdown] ========================================");
-        Wh_Log(L"[SmartOptimizer::Shutdown] Smart Process Priority & RAM Optimizer v3.2.0");
+        Wh_Log(L"[SmartOptimizer::Shutdown] Smart Process Priority & RAM Optimizer v3.2.1");
         Wh_Log(L"[SmartOptimizer::Shutdown] Session Summary Report:");
         Wh_Log(L"[SmartOptimizer::Shutdown]   • Total Uptime: %s", uptime.c_str());
         Wh_Log(L"[SmartOptimizer::Shutdown]   • Total RAM Reclaimed: %.2f GB across %u passes (%u process trimmings)",
@@ -3857,10 +3821,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    bool isExcluded = false;
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
-    DWORD parentPid = 0;
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
@@ -3872,8 +3834,8 @@ BOOL Wh_ModInit() {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
             wcscmp(argv[i], L"-service-stop") == 0) {
-            isExcluded = true;
-            break;
+            LocalFree(argv);
+            return FALSE;
         }
     }
 
@@ -3883,16 +3845,11 @@ BOOL Wh_ModInit() {
             if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
                 isCurrentToolModProcess = true;
             }
-        } else if (wcscmp(argv[i], L"-parent-pid") == 0) {
-            parentPid = wcstoul(argv[i + 1], nullptr, 10);
+            break;
         }
     }
 
-    LocalFree(static_cast<HLOCAL>(argv));
-
-    if (isExcluded) {
-        return FALSE;
-    }
+    LocalFree(argv);
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
@@ -3905,16 +3862,6 @@ BOOL Wh_ModInit() {
         if (GetLastError() == ERROR_ALREADY_EXISTS) {
             Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
             ExitProcess(1);
-        }
-
-        if (parentPid != 0) {
-            g_parentProcessHandle = OpenProcess(SYNCHRONIZE, FALSE, parentPid);
-            if (g_parentProcessHandle) {
-                RegisterWaitForSingleObject(
-                    &g_parentWaitHandle, g_parentProcessHandle,
-                    ParentProcessTerminatedCallback, nullptr, INFINITE,
-                    WT_EXECUTEONLYONCE);
-            }
         }
 
         if (!WhTool_ModInit()) {
@@ -3953,9 +3900,9 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    WCHAR commandLine[MAX_PATH + 128];
-    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\" -parent-pid %lu",
-               currentProcessPath, WH_MOD_ID, GetCurrentProcessId());
+    WCHAR commandLine[MAX_PATH + 64];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
 
     HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
@@ -3992,16 +3939,6 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    HANDLE hJob = CreateJobObject(nullptr, nullptr);
-    if (hJob) {
-        JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli{};
-        jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli,
-                                sizeof(jeli));
-        AssignProcessToJobObject(hJob, pi.hProcess);
-        g_hChildJob = hJob;
-    }
-
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
@@ -4016,10 +3953,6 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModUninit() {
     if (g_isToolModProcessLauncher) {
-        if (g_hChildJob) {
-            CloseHandle(g_hChildJob);
-            g_hChildJob = nullptr;
-        }
         return;
     }
 
