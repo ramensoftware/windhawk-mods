@@ -2,12 +2,12 @@
 // @id              taskbar-disk-space-label
 // @name            Taskbar Disk Space Label
 // @description     A simple disk space label integrated into the Windows taskbar
-// @version         1.43
+// @version         1.49
 // @author          allelimo
 // @github          https://github.com/allelimo
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lgdi32
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject -ldwmapi -lgdi32 -lversion
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -18,19 +18,18 @@
 
 A lightweight free/available disk space label integrated directly into the
 Windows 11 taskbar. This is kind of a "remix" of the Taskbar Countdown Timer
-module by Richi (https://github.com/richilp) Everything that works ok is by
-Richi, bad parts are mine. I've just removed things that does not seem necessary
-and chganged the button into a label, but I'm not really shure about what I did,
-I'm still trying to learn. In fact, the module does not apply the setting change
-without a manual restart, but I don't know how to do it.
+module by Richi (https://github.com/richilp) 
+Windows 11 only.
 
 ## Features
 
-- Choose the disk to be checked via module settings
+- Choose the disk to be checked via module settings (default to C)
+- Chose the font size
+- Choose between user available free space or total free available space
 
 ## Screenshot
 
-not yet...
+![Screenshot](https://i.imgur.com/wJkUDHF.png)
 
 */
 // ==/WindhawkModReadme==
@@ -40,6 +39,12 @@ not yet...
 - diskLetter: "C"
   $name: Disk
   $description: Drive letter, e.g. C
+- fontSize: 14
+  $name: Font size
+  $description: Font size of the disk label. [Default 14]
+- userFreeSpace: false
+  $name: Current user available space
+  $description: Select fot the current user available free space, unselect for the total free space.  
 */
 // ==/WindhawkModSettings==
 
@@ -94,7 +99,10 @@ int myspacefree = 10;
 int myspacetot = 100;
 
 struct {
-    LPCWSTR mysettings_diskLetter;
+    //LPCWSTR mysettings_diskLetter;  //147
+    std::wstring mysettings_diskLetter; // 147
+    int mysettings_fontSize;
+    bool userFreeSpace;
 } g_settings;
 
 static void ApplyDiskSpaceLabelIfAvailable();
@@ -323,11 +331,31 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     return result;
 }
 
+
+
+
+
+
+
+
 // -----------------------------------------------------------------------------
 // Execute code on taskbar XAML thread
 // -----------------------------------------------------------------------------
 
 using RunFromWindowThreadProc_t = void (*)(void*);
+
+
+// fix from claude 149
+static void RunGuarded(RunFromWindowThreadProc_t proc, void* param) {
+    try {
+        proc(param);
+    } catch (...) {
+        Wh_Log(L"Taskbar XAML work failed: %08X",
+               static_cast<unsigned>(winrt::to_hresult()));
+    }
+}
+
+
 
 static bool RunFromWindowThread(HWND hWnd,
                                 RunFromWindowThreadProc_t proc,
@@ -347,7 +375,7 @@ static bool RunFromWindowThread(HWND hWnd,
     }
 
     if (threadId == GetCurrentThreadId()) {
-        proc(procParam);
+        RunGuarded(proc, procParam); //149
         return true;
     }
 
@@ -361,7 +389,7 @@ static bool RunFromWindowThread(HWND hWnd,
                 if (cwp->message == message) {
                     auto* param = reinterpret_cast<Param*>(cwp->lParam);
 
-                    param->proc(param->procParam);
+                    RunGuarded(param->proc, param->procParam);
                 }
             }
 
@@ -380,6 +408,65 @@ static bool RunFromWindowThread(HWND hWnd,
     UnhookWindowsHookEx(hook);
 
     return true;
+}
+
+
+// Runs on the taskbar thread. Stops the timer, detaches the label and its
+// column from whatever tree they are in, and drops the references.
+static void ReleaseOwnedXaml() {
+    if (g_refreshTimer) {
+        g_refreshTimer.Stop();
+        g_refreshTimer.Tick(g_refreshTickToken);
+        g_refreshTimer = nullptr;
+    }
+
+
+
+   if (g_labelText) {
+        auto parentElement =
+            VisualTreeHelper::GetParent(g_labelText).try_as<FrameworkElement>();
+
+        auto parent = parentElement.try_as<Panel>();
+
+        if (parent) {
+            auto children = parent.Children();
+
+            uint32_t index = 0;
+
+            if (children.IndexOf(g_labelText, index)) {
+                children.RemoveAt(index);
+            }
+
+            auto parentGrid = parentElement.try_as<Grid>();
+
+            if (parentGrid && g_labelColumn) {   //allelimo check
+                auto columns = parentGrid.ColumnDefinitions();
+
+                uint32_t columnIndex = 0;
+                if (columns.IndexOf(g_labelColumn, columnIndex)) {
+                    for (uint32_t i = 0; i < children.Size(); i++) {
+                        auto child =
+                            children.GetAt(i).try_as<FrameworkElement>();
+
+                        if (!child) {
+                            continue;
+                        }
+
+                        int currentColumn = Grid::GetColumn(child);
+
+                        if (currentColumn > static_cast<int>(columnIndex)) {
+                            Grid::SetColumn(child, currentColumn - 1);
+                        }
+                    }
+
+                    columns.RemoveAt(columnIndex);
+                }
+            }
+        }
+
+    g_labelColumn = nullptr;
+    g_labelText = nullptr;
+}
 }
 
 // Then pass GetDiskRootPath().c_str() to GetDiskFreeSpaceExW,
@@ -429,7 +516,14 @@ void GetDiskInfo() {
     // &totalBytes, &totalFree)) {
     if (GetDiskFreeSpaceExW(GetDiskRootPath().c_str(), &freeAvailable,
                             &totalBytes, &totalFree)) {
-        myspacefree = totalFree.QuadPart / (1024 * 1024 * 1024);
+
+        if(g_settings.userFreeSpace){
+            myspacefree = freeAvailable.QuadPart / (1024 * 1024 * 1024);
+        }
+        else{
+            myspacefree = totalFree.QuadPart / (1024 * 1024 * 1024);
+        }                                
+    
         myspacetot = totalBytes.QuadPart / (1024 * 1024 * 1024);
 
     } else {
@@ -438,56 +532,75 @@ void GetDiskInfo() {
     }
 }
 
+// // -----------------------------------------------------------------------------
+// // Format space information to be displayed on the taskbar label
+// // -----------------------------------------------------------------------------
+// static std::wstring FormatSpace(int spacefree,
+//                                 int spacetot,
+//                                 LPCWSTR diskletter) {
+    
+//     std::wstring str = GetDiskLabel().c_str();
+
+//     //std::wstring str = GetDiskRootPath().c_str();
+//     //str.substr(0, 2);
+//     diskletter = str.c_str();
+
+//     wchar_t text[64]{};
+
+//     if (spacefree == 0 && spacetot == 0) {
+//         swprintf_s(text, L"%s n/a",
+//                    // diskletter,
+//                    // GetDiskLabel().c_str(),
+//                    diskletter);
+//     }
+
+//     // std::wstring str(diskletter);
+//     // str.pop_back();
+//     // LPCWSTR trimmed = str.c_str();
+
+//     // show root.substr(0, 2) (C:) in the label,
+
+//     else {
+//         swprintf_s(text, L"%s %02d/%02d",
+//                    // diskletter,
+//                    // GetDiskLabel().c_str(),
+//                    diskletter, spacefree, spacetot);
+//     }
+
+//     return text;
+// }
+
 // -----------------------------------------------------------------------------
 // Format space information to be displayed on the taskbar label
 // -----------------------------------------------------------------------------
 static std::wstring FormatSpace(int spacefree,
-                                int spacetot,
-                                LPCWSTR diskletter) {
+                                int spacetot) {
     
-    std::wstring str = GetDiskLabel().c_str();
-
-    //std::wstring str = GetDiskRootPath().c_str();
-    //str.substr(0, 2);
-    diskletter = str.c_str();
-
-    wchar_t text[64]{};
-
+    std::wstring label = GetDiskRootPath().substr(0, 2);
+    
     if (spacefree == 0 && spacetot == 0) {
-        swprintf_s(text, L"%s n/a",
-                   // diskletter,
-                   // GetDiskLabel().c_str(),
-                   diskletter);
+
+        return label + L"n/a";
     }
-
-    // std::wstring str(diskletter);
-    // str.pop_back();
-    // LPCWSTR trimmed = str.c_str();
-
-    // show root.substr(0, 2) (C:) in the label,
-
-    else {
-        swprintf_s(text, L"%s %02d/%02d",
-                   // diskletter,
-                   // GetDiskLabel().c_str(),
-                   diskletter, spacefree, spacetot);
-    }
-
-    return text;
+        return label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot);
 }
+
+
 
 void LoadSettings() {
     g_settings.mysettings_diskLetter = Wh_GetStringSetting(L"diskLetter");
-    // g_settings.mysettings_diskLetter =
-    // WindhawkUtils::StringSetting(L"diskLetter");
+    g_settings.mysettings_fontSize = Wh_GetIntSetting(L"fontSize");
+    g_settings.mysettings_diskLetter = WindhawkUtils::StringSetting::make(L"diskLetter").get(); //147
+    //g_settings.userFreeSpace =  Wh_GetIntSetting(L"userFreeSpace");  //147
+
 }
 
 static void RefreshDiskSpaceLabel(void*) {
     LoadSettings();
     if (g_labelText) {
         GetDiskInfo();
-        g_labelText.Text(FormatSpace(myspacefree, myspacetot,
-                                     g_settings.mysettings_diskLetter));
+        g_labelText.Text(FormatSpace(myspacefree, myspacetot)); //147
+        g_labelText.FontSize(g_settings.mysettings_fontSize);
     }
 }
 
@@ -539,8 +652,10 @@ static void AddDiskSpaceLabel(void* param) {
         return;
     }
 
-    g_labelText = nullptr;
-    g_labelColumn = nullptr;
+    //g_labelText = nullptr;
+    //g_labelColumn = nullptr;
+    ReleaseOwnedXaml();
+
     
     g_labelText = TextBlock();
 
@@ -551,12 +666,11 @@ static void AddDiskSpaceLabel(void* param) {
 
     // format the info to be displayed
     g_labelText.Text(
-        FormatSpace(myspacefree, myspacetot, g_settings.mysettings_diskLetter));
+        FormatSpace(myspacefree, myspacetot));  //148
 
     g_labelText.VerticalAlignment(VerticalAlignment::Center);
     g_labelText.Padding(Thickness{4, 0, 4, 0});
-    g_labelText.FontSize(14); //maybe make this configurable
-    //g_labelText.FontFamily(L"Segoe UI Variable Display");
+    g_labelText.FontSize(g_settings.mysettings_fontSize); 
 
     auto children = panel.Children();
 
@@ -571,6 +685,7 @@ static void AddDiskSpaceLabel(void* param) {
             Wh_Log(L"ERROR: Unsupported SystemTrayFrameGrid layout class: %s",
                    trayClass.c_str());
 
+            ReleaseOwnedXaml();
             return;
         }
 
@@ -664,9 +779,10 @@ static void RemoveDiskSpaceLabel(void*) {
         g_refreshTimer = nullptr;
     }
 
+    ReleaseOwnedXaml();
     g_loadedRevokers.clear();
-    g_labelColumn = nullptr;
-    g_labelText = nullptr;
+    //g_labelColumn = nullptr;
+    //g_labelText = nullptr;
     g_labelInjected.store(false);
 }
 
@@ -713,13 +829,37 @@ using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 
 static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
 
+
+static VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE module) {
+    HRSRC resource =
+        FindResourceW(module, MAKEINTRESOURCEW(VS_VERSION_INFO), RT_VERSION);
+    if (!resource) {
+        return nullptr;
+    }
+    HGLOBAL loaded = LoadResource(module, resource);
+    void* data = loaded ? LockResource(loaded) : nullptr;
+    void* fixedInfo = nullptr;
+    UINT fixedInfoSize = 0;
+    if (!data || !VerQueryValueW(data, L"\\", &fixedInfo, &fixedInfoSize) ||
+        !fixedInfoSize) {
+        return nullptr;
+    }
+    return static_cast<VS_FIXEDFILEINFO*>(fixedInfo);
+}
+
 static HMODULE GetSystemTrayModuleHandle() {
     if (HMODULE module = GetModuleHandleW(L"SystemTray.dll")) {
         return module;
     }
 
     if (HMODULE module = GetModuleHandleW(L"Taskbar.View.dll")) {
-        return module;
+         // Taskbar.View.dll 2604+ no longer contains the SystemTray symbols;
+        // those builds load SystemTray.dll instead.
+        VS_FIXEDFILEINFO* fixedInfo = GetModuleVersionInfo(module);
+        WORD major = fixedInfo ? HIWORD(fixedInfo->dwFileVersionMS) : 0;
+        if (major && major < 2604) {
+            return module;
+        }
     }
 
     return GetModuleHandleW(L"ExplorerExtensions.dll");
