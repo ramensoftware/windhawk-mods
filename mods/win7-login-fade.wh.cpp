@@ -2,7 +2,7 @@
 // @id              win7-login-fade
 // @name            Logon & Sleep Fade Restorer
 // @description     Bring back the old logon screen and sleep fade effect
-// @version         1.4
+// @version         1.5
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -28,6 +28,7 @@
 * The gamma-based fade types will not work with Microsoft Basic Display Adapter, VMware SVGA 3D, and some other display drivers that do not support gamma adjustment. It's also not compatible with NVIDIA driver's reference color mode.
 * To use the `Gamma (Reimplemented)` mode (which is the default), **you'll need to set the `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ICM\GdiIcmGammaRange` registry value to `0x100`** (DWORD, 256 in decimal) to allow brightness values below the normal level, which is required for the fade effect to work naturally.
 * To add fade effects to sleep and hibernation initiated by the idle timer or power button, enable the "Enable enhanced sleep/hibernate interception" option. This option has limited compatibility compared to the rest of the mod, and is only tested on Windows 10 LTSC 2021 (22H2) and 11 25H2. It may work on 21H2 and later versions; however, this mode is unlikely to work on Windows 10 1903 and earlier versions, unfortunately.
+* Rest of the features are tested to work on Windows 8.1, 10 LTSC 2021 (21H2, 22H2), 11 23H2, 24H2, and 25H2
 ## Presets
 * Windows Vista/7 (mod defaults)
   * Logon fade type: Gamma (Reimplemented)
@@ -47,7 +48,6 @@
 * The logon fade animation may look broken on early boot when using the auto-login feature.
 * Turning off the monitor with the power button action (or sleeping on Modern Standby devices) will not trigger the sleep fade effect, as it is handled internally by the kernel without notifying a user-mode component before initiating the action.
   * Monitor off initiated by the idle timer can have fade added as usual.
-* Only `Gamma (Kernel)` and `DWM (Original)` logon/logoff fade types are supported on Windows 8 for now, to avoid critical issues that I have observed. Early Windows 10 versions have not been thoroughly tested, so it is recommended to avoid `None` and `Gamma (Reimplemented)` modes on those versions as a precaution, until I can confirm their stability.
 * The monitor off fade effect in the Windows 10+ lock screen may have a brief flash at the end of the fade when turning off the monitor.
 * On 32-bit systems, only the monitor off and sleep/hibernation fades are supported, as this mod was never tested on 32-bit Windows systems.
 ## Miscellaneous
@@ -361,13 +361,18 @@ typedef __int64 __fastcall (*SwitchDesktopWithFade_t)(HDESK hDesktop, DWORD dura
 SwitchDesktopWithFade_t SwitchDesktopWithFade_original;
 __int64 __fastcall SwitchDesktopWithFade_hook(HDESK hDesktop, DWORD duration, DWORD flags) {
     Wh_Log(L"SwitchDesktopWithFade, duration=%d, flags=%d", duration, flags);
+    // A zero duration is a plain SwitchDesktop call, which can reach this hook too under some configurations
+    // (Windhawk 2.0 alpha 6+, or old Windows versions like 8.x), since both share the same underlying function.
+    if (duration == 0) {
+        return SwitchDesktopWithFade_original(hDesktop, duration, flags);
+    }
     bool isLogonUnlock = duration == 1000 && flags != 0;
     int durationToUse = isLogonUnlock ? g_settings.logonDuration : g_settings.logoffDuration;
     if (isLogonUnlock) {
         switch (g_settings.logonType) {
             case Gamma: // Gamma (Reimplemented)
                 if (!BeginFade()) {
-                    return SwitchDesktop(hDesktop);
+                    return SwitchDesktopWithFade_original(hDesktop, 0, 0);
                 }
                 // Do the fade in this hook function
                 break;
@@ -379,25 +384,25 @@ __int64 __fastcall SwitchDesktopWithFade_hook(HDESK hDesktop, DWORD duration, DW
                 return SwitchDesktopWithFade_original(hDesktop, duration, flags);
             case None: // None
             default:
-                return SwitchDesktop(hDesktop);
+                return SwitchDesktopWithFade_original(hDesktop, 0, 0);
         }
     } else {
         switch (g_settings.logoffType) {
             case Gamma:
                 if (!BeginFade()) {
-                    return SwitchDesktop(hDesktop);
+                    return SwitchDesktopWithFade_original(hDesktop, 0, 0);
                 }
                 break;
             case Kernel:
                 return SwitchDesktopWithFade_original(hDesktop, duration, 0);
             case None:
             default:
-                return SwitchDesktop(hDesktop);
+                return SwitchDesktopWithFade_original(hDesktop, 0, 0);
         }
     }
     if (durationToUse <= 0) {
         EndFade();
-        return SwitchDesktop(hDesktop);
+        return SwitchDesktopWithFade_original(hDesktop, 0, 0);
     }
 
     int refreshRate = GetDeviceRefreshRate();
@@ -405,11 +410,11 @@ __int64 __fastcall SwitchDesktopWithFade_hook(HDESK hDesktop, DWORD duration, DW
     MONITOR_INFO* monitors = NULL;
     if (!GetMonitorsInfo(&monitors, &monitorCount)) {
         EndFade();
-        return SwitchDesktop(hDesktop);
+        return SwitchDesktopWithFade_original(hDesktop, 0, 0);
     }
 
     FadeDesktop(refreshRate, durationToUse / 2, true, monitors, monitorCount);
-    BOOL result = SwitchDesktop(hDesktop);
+    __int64 result = SwitchDesktopWithFade_original(hDesktop, 0, 0);
     FadeDesktop(refreshRate, durationToUse / 2, false, monitors, monitorCount);
 
     for (int i = 0; i < monitorCount; i++) {
@@ -864,16 +869,10 @@ inline int ClampInt(int value, int min, int max) {
 }
 
 void LoadSettings() {
-    bool isWin10 = IsWindows10OrGreater();
-
     LPCWSTR logonTypeStr = Wh_GetStringSetting(L"type");
     FadeType logonType = FadeTypeStringToEnum(logonTypeStr);
     Wh_FreeStringSetting(logonTypeStr);
-    if (!isWin10 && logonType < Kernel) {
-        // On my Win8 machine, somehow calling SwitchDesktop causes weird behavior like repeated SwitchDesktopWithFade calls or winlogon crashes
-        // So only allow modes that call SwitchDesktopWithFade_original for now
-        logonType = Kernel;
-    }
+
     int logonDuration = Wh_GetIntSetting(L"duration");
     logonDuration = ClampInt(logonDuration, 0, 10000);
     if (logonDuration == 0) {
@@ -883,9 +882,7 @@ void LoadSettings() {
     LPCWSTR logoffTypeStr = Wh_GetStringSetting(L"logoffType");
     FadeType logoffType = FadeTypeStringToEnum(logoffTypeStr);
     Wh_FreeStringSetting(logoffTypeStr);
-    if (!isWin10 && logoffType < Kernel) {
-        logoffType = Kernel;
-    }
+
     int logoffDuration = Wh_GetIntSetting(L"logoffDuration");
     logoffDuration = ClampInt(logoffDuration, 0, 10000);
     if (logoffDuration == 0) {
