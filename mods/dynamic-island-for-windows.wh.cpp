@@ -493,6 +493,7 @@ We love community contributions! To ensure high-quality updates, please follow t
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -1160,6 +1161,28 @@ struct SpringValue {
 };
 
 Settings g_settings;
+
+// Guards every access to g_settings. LoadSettings() replaces the whole struct
+// from Windhawk's settings thread *and* from the tray context menu (which runs
+// on the render thread), while the render, weather and media threads read it
+// concurrently. Settings holds std::wstring / std::vector members, so an
+// unsynchronised assignment can free a buffer a reader is still walking -- not
+// a stale-value glitch but a genuine use-after-free.
+//
+// This is a strict LEAF lock: never acquire another mutex while holding it.
+// That keeps it deadlock-free even where a caller already owns g_stateMutex
+// (see WeatherThreadProc), because no path can ever take the two in the
+// opposite order.
+std::mutex g_settingsMutex;
+
+// Returns a private copy of the current settings. Callers then read from the
+// copy for the rest of the frame, which also means a settings change landing
+// mid-frame can't tear a single render across two configurations.
+Settings GetSettingsCopy() {
+    std::lock_guard lock(g_settingsMutex);
+    return g_settings;
+}
+
 std::mutex g_stateMutex;
 SharedState g_state;
 std::atomic<uint64_t> g_artGenerationCounter = 0;
@@ -2341,15 +2364,26 @@ void LoadSettings() {
 
     Wh_SetIntValue(L"PinnedExpanded", 0);
 
-    bool cityChanged = next.weatherCity != g_settings.weatherCity;
-    const bool hotkeySettingChanged =
-        next.hideShowHotkeyEnabled != g_settings.hideShowHotkeyEnabled ||
-        next.hideShowModifiers != g_settings.hideShowModifiers ||
-        next.hideShowVk != g_settings.hideShowVk;
-    const bool backdropChanged =
-        next.backdropMaterial != g_settings.backdropMaterial ||
-        std::fabs(next.backdropTint - g_settings.backdropTint) > 0.001f;
-    g_settings = next;
+    // Compare-then-publish under one lock so the change flags describe exactly
+    // the transition we are about to commit. Two LoadSettings() calls can run
+    // concurrently (settings thread vs. tray menu on the render thread); without
+    // this, both could read the same "old" values and each decide a hotkey
+    // re-registration was needed, or neither would.
+    bool cityChanged = false;
+    bool hotkeySettingChanged = false;
+    bool backdropChanged = false;
+    {
+        std::lock_guard lock(g_settingsMutex);
+        cityChanged = next.weatherCity != g_settings.weatherCity;
+        hotkeySettingChanged =
+            next.hideShowHotkeyEnabled != g_settings.hideShowHotkeyEnabled ||
+            next.hideShowModifiers != g_settings.hideShowModifiers ||
+            next.hideShowVk != g_settings.hideShowVk;
+        backdropChanged =
+            next.backdropMaterial != g_settings.backdropMaterial ||
+            std::fabs(next.backdropTint - g_settings.backdropTint) > 0.001f;
+        g_settings = std::move(next);
+    }
     g_layoutDirty = true;
     if (cityChanged && g_settingsChangedEvent) {
         SetEvent(g_settingsChangedEvent);
@@ -3302,15 +3336,26 @@ bool WindowLooksLikeMediaSource(HWND hwnd, const std::wstring& sourceLower) {
 // against the friendly source name, the raw AUMID and the title, so a single
 // entry like "tiktok" catches both the desktop app and a browser tab. The
 // collapsed pill still updates -- only the expansion is suppressed.
-bool MediaExpandBlocked(const MediaSnapshot& media, const Settings& settings) {
-    if (settings.mediaExpandBlocklist.empty()) {
-        return false;
+//
+// Reads the blocklist under g_settingsMutex rather than taking a Settings
+// reference: the caller is the render loop, and walking a std::vector<std::wstring>
+// that LoadSettings() may be reassigning is a use-after-free, not just a stale
+// read. The haystack is built outside the lock because that part allocates.
+bool MediaExpandBlocked(const MediaSnapshot& media) {
+    {
+        // Fast path for the overwhelmingly common empty-blocklist case: one
+        // uncontended lock, no allocation, no string work.
+        std::lock_guard lock(g_settingsMutex);
+        if (g_settings.mediaExpandBlocklist.empty()) {
+            return false;
+        }
     }
 
     const std::wstring haystack = ToLowerCopy(
         media.sourceName + L"\n" + media.sourceAppUserModelId + L"\n" + media.title);
 
-    for (const std::wstring& needle : settings.mediaExpandBlocklist) {
+    std::lock_guard lock(g_settingsMutex);
+    for (const std::wstring& needle : g_settings.mediaExpandBlocklist) {
         if (!needle.empty() && haystack.find(needle) != std::wstring::npos) {
             return true;
         }
@@ -4808,7 +4853,10 @@ DWORD WINAPI WeatherThreadProc(void*) {
         bool isFahrenheit = false;
         bool weatherEnabled = true;
         {
-            std::lock_guard lock(g_stateMutex);
+            // g_settingsMutex, not g_stateMutex: all three values below live in
+            // g_settings, so the old g_stateMutex here guarded nothing and left
+            // the weatherCity string copy racing against LoadSettings().
+            std::lock_guard lock(g_settingsMutex);
             weatherEnabled = g_settings.weather;
             cityOverride = g_settings.weatherCity;
             isFahrenheit = g_settings.weatherFahrenheit;
@@ -6540,7 +6588,9 @@ class Renderer {
             return false;
         }
 
-        EnsureTextFormats(g_settings.sizeScale, g_settings.fontFamily, g_settings.textScale);
+        const Settings initialSettings = GetSettingsCopy();
+        EnsureTextFormats(initialSettings.sizeScale, initialSettings.fontFamily,
+                          initialSettings.textScale);
 
         return CreateBackingBitmap(520, 140);
     }
@@ -7102,7 +7152,7 @@ class Renderer {
 
         switch (activity.kind) {
             case IslandKind::Media:
-                DrawMedia(state, unscaledRect, now);
+                DrawMedia(state, unscaledRect, settings, now);
                 break;
             case IslandKind::Clipboard:
                 DrawClipboard(state, unscaledRect);
@@ -9040,13 +9090,18 @@ class Renderer {
         return std::min(contentHeight * 0.5f, 44.0f);
     }
 
-    void DrawMedia(const SharedState& state, D2D1_RECT_F rect, double now) {
+    // Takes settings by reference from Render()'s private copy rather than
+    // reaching for g_settings. The dashboards it delegates to read std::wstring
+    // members (DrawCalendarDashboard -> settings.dateFormat), which would
+    // otherwise race with LoadSettings() replacing the struct mid-frame.
+    void DrawMedia(const SharedState& state, D2D1_RECT_F rect, const Settings& settings,
+                   double now) {
         const float height = rect.bottom - rect.top;
 
         PublishContentGeometry(rect);
 
         const float radius = ContentIslandRadius(height);
-        ComPtr<ID2D1Geometry> mask = CreateIslandMaskGeometry(rect, radius, g_settings.notchStyle);
+        ComPtr<ID2D1Geometry> mask = CreateIslandMaskGeometry(rect, radius, settings.notchStyle);
         ComPtr<ID2D1Layer> layer;
         target_->CreateLayer(&layer);
 
@@ -9061,12 +9116,14 @@ class Renderer {
             std::vector<int> activeTabs;
             activeTabs.push_back(0); // Media
             activeTabs.push_back(1); // Calendar
-            if (g_settings.weather) activeTabs.push_back(2);
-            if (g_settings.hardwareMonitorModule) activeTabs.push_back(3);
-            if (g_settings.fileTrayModule) activeTabs.push_back(4);
+            if (settings.weather) activeTabs.push_back(2);
+            if (settings.hardwareMonitorModule) activeTabs.push_back(3);
+            if (settings.fileTrayModule) activeTabs.push_back(4);
 
+            // Same settings object as the list above, so the index can't be
+            // normalised against a tab set that no longer matches.
             int maxTabs = static_cast<int>(activeTabs.size());
-            int tabIdx = NormalizedTabIndex(g_settings);
+            int tabIdx = NormalizedTabIndex(settings);
             if (tabIdx >= maxTabs) tabIdx = maxTabs - 1;
             int activeTabId = activeTabs[tabIdx];
 
@@ -9227,7 +9284,7 @@ class Renderer {
                                   now);
             } else if (activeTabId == 1) {
                 SYSTEMTIME local = {}; GetLocalTime(&local);
-                DrawCalendarDashboard(state, rect, g_settings, now, 1.0f, local);
+                DrawCalendarDashboard(state, rect, settings, now, 1.0f, local);
             } else if (activeTabId == 2) {
                 bool hasWeather = state.weather.hasData && (now - state.weather.lastUpdated < 3600.0);
                 std::wstring wIcon = L"🌡️"; std::wstring wText = Loc(L"Loading...");
@@ -9235,11 +9292,11 @@ class Renderer {
                     wText = state.weather.weatherDesc;
                     GetWeatherIconAndText(state.weather.weatherCode, wIcon, wText);
                 }
-                DrawWeatherDashboard(state, rect, g_settings, now, 1.0f, hasWeather, wIcon, wText);
+                DrawWeatherDashboard(state, rect, settings, now, 1.0f, hasWeather, wIcon, wText);
             } else if (activeTabId == 3) {
-                DrawHardwareMonitorDashboard(state, rect, g_settings, 1.0f);
+                DrawHardwareMonitorDashboard(state, rect, settings, 1.0f);
             } else if (activeTabId == 4) {
-                DrawFileTrayDashboard(state, rect, g_settings, 1.0f);
+                DrawFileTrayDashboard(state, rect, settings, 1.0f);
             }
 
             // Pagination dots (Vertical on the right edge)
@@ -11700,7 +11757,7 @@ DWORD WINAPI RenderThreadProc(void*) {
             needsRender = true;
         }
         const bool recentTrackChange = g_settings.mediaAutoExpand &&
-                                       !MediaExpandBlocked(snapshot.media, g_settings) &&
+                                       !MediaExpandBlocked(snapshot.media) &&
                                        primary.kind == IslandKind::Media &&
                                        snapshot.media.playing &&
                                        !snapshot.media.title.empty() &&
@@ -12046,9 +12103,9 @@ DWORD WINAPI RenderThreadProc(void*) {
         if (needsRender) {
             // When Ctrl+hover click-through is active, reduce pill opacity so the
             // island becomes visually see-through to match the pass-through behavior.
-            Settings renderSettings = g_settings;
+            Settings renderSettings = GetSettingsCopy();
             if (ctrlHoverCT) {
-                renderSettings.pillOpacity = Clamp(g_settings.pillOpacity * 0.35f, 0.15f, 0.45f);
+                renderSettings.pillOpacity = Clamp(renderSettings.pillOpacity * 0.35f, 0.15f, 0.45f);
             } else if (renderSettings.themePreset == ThemePreset::Graphite && Wh_GetIntValue(L"PillOpacityOverride", -1) < 0) {
                 const bool isExpanded = isHoverExpanded || pinned || isTransientAlert || (widthSpring.value > 260.0f);
                 renderSettings.pillOpacity = isExpanded ? 0.98f : 0.88f;
