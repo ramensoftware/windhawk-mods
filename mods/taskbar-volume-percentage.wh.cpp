@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.6.1
+// @version         1.6.2
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -111,6 +111,7 @@ level, updated in real time.
 #include <atomic>
 #include <cmath>
 #include <list>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -166,6 +167,7 @@ std::atomic<bool> g_systemTrayModuleHooked;
 // there, and the mod callbacks marshal to it.
 
 // Volume state, from the UpdateVolume hook.
+std::mutex g_volumeStateMutex;
 bool g_hasVolumeState;
 float g_volumeLevel;
 bool g_isMuted;
@@ -1028,8 +1030,6 @@ void LookUpVolumeIconView(FrameworkElement const& textIconContent) {
     bool wasEmpty =
         !g_trackedVolumeContents || g_trackedVolumeContents->empty();
 
-    SetupVolumeLayout(textIconContent);
-
     g_volumeTextChanged = false;
 
     RememberVolumeIconView(iconView);
@@ -1044,7 +1044,8 @@ void LookUpVolumeIconView(FrameworkElement const& textIconContent) {
 
     *autoRevokerIt = iconView.LayoutUpdated(
         winrt::auto_revoke_t{},
-        [autoRevokerIt, wasEmpty](
+        [autoRevokerIt, wasEmpty,
+         textIconContentWeak = winrt::make_weak(textIconContent)](
             winrt::Windows::Foundation::IInspectable const&,
             winrt::Windows::Foundation::IInspectable const&) {
             const bool wasEmptyLocal = wasEmpty;
@@ -1052,7 +1053,10 @@ void LookUpVolumeIconView(FrameworkElement const& textIconContent) {
                 g_autoRevokerList->erase(autoRevokerIt);
             }
 
-            SafeXamlCall([wasEmptyLocal] {
+            SafeXamlCall([wasEmptyLocal, textIconContentWeak] {
+                if (auto textIconContent = textIconContentWeak.get()) {
+                    SetupVolumeLayout(textIconContent);
+                }
                 ApplyVolumeIconViewsWidth();
                 if (wasEmptyLocal && IsDualBoxStyle()) {
                     RefreshVolumeIcons();
@@ -1096,16 +1100,20 @@ void WINAPI VolumeSystemTrayIconDataModel_UpdateVolume_Hook(
     float volumeLevel,
     bool isMuted,
     winrt::hstring* spatialSoundName) {
-    Wh_Log(L"> volume=%.2f muted=%d", volumeLevel, isMuted);
+    Wh_Log(L"> tid=%u volume=%.2f muted=%d", GetCurrentThreadId(), volumeLevel,
+           isMuted);
 
-    g_volumeLevel = volumeLevel;
-    g_isMuted = isMuted;
-    g_hasVolumeState = true;
+    {
+        std::lock_guard<std::mutex> lock(g_volumeStateMutex);
+        g_volumeLevel = volumeLevel;
+        g_isMuted = isMuted;
+        g_hasVolumeState = true;
 
-    if (spatialSoundName) {
-        g_spatialSoundName = *spatialSoundName;
-    } else {
-        g_spatialSoundName.clear();
+        if (spatialSoundName) {
+            g_spatialSoundName = *spatialSoundName;
+        } else {
+            g_spatialSoundName.clear();
+        }
     }
 
     VolumeSystemTrayIconDataModel_UpdateVolume_Original(
@@ -1180,7 +1188,7 @@ void WINAPI TextIconContentViewModel_UpdateStyles_Hook(void* pThis,
         return;
     }
 
-    Wh_Log(L"> Volume view model %p", pThis);
+    Wh_Log(L"> tid=%u Volume view model %p", GetCurrentThreadId(), pThis);
 
     SafeXamlCall([pThis] {
         g_volumeText = FormatVolumeText(g_volumeLevel, g_isMuted);
@@ -1190,15 +1198,18 @@ void WINAPI TextIconContentViewModel_UpdateStyles_Hook(void* pThis,
             if (!g_trackedVolumeContents || g_trackedVolumeContents->empty()) {
                 winrt::hstring triggerText{g_volumeText};
                 TextIconContentViewModel_BaseText_Original(pThis, &triggerText);
+                (void)winrt::detach_abi(triggerText);
                 return;
             }
         } else {
             winrt::hstring baseText{g_volumeText};
             TextIconContentViewModel_BaseText_Original(pThis, &baseText);
+            (void)winrt::detach_abi(baseText);
 
             // The volume bars outline drawn behind the glyph.
             winrt::hstring underlayText;
             TextIconContentViewModel_UnderlayText_Original(pThis, &underlayText);
+            (void)winrt::detach_abi(underlayText);
         }
 
         UpdateAllVolumeLayouts();
@@ -1245,8 +1256,17 @@ int WINAPI TextIconContent_MeasureOverride_Hook(
 // models, the same path a real volume change takes. With the mod unloading,
 // that restores the Windows glyph.
 void RefreshVolumeIcons() {
-    if (!g_hasVolumeState) {
-        return;
+    float volumeLevel;
+    bool isMuted;
+    winrt::hstring spatialSoundName;
+    {
+        std::lock_guard<std::mutex> lock(g_volumeStateMutex);
+        if (!g_hasVolumeState) {
+            return;
+        }
+        volumeLevel = g_volumeLevel;
+        isMuted = g_isMuted;
+        spatialSoundName = g_spatialSoundName;
     }
 
     PruneVolumeDataModels();
@@ -1261,9 +1281,10 @@ void RefreshVolumeIcons() {
     }
 
     for (const auto& [strong, pThis] : targets) {
-        winrt::hstring spatialSoundName = g_spatialSoundName;
+        winrt::hstring soundNameCopy{spatialSoundName};
         VolumeSystemTrayIconDataModel_UpdateVolume_Original(
-            pThis, g_volumeLevel, g_isMuted, &spatialSoundName);
+            pThis, volumeLevel, isMuted, &soundNameCopy);
+        (void)winrt::detach_abi(soundNameCopy);
     }
 }
 
@@ -1520,16 +1541,9 @@ void Wh_ModBeforeUninit() {
     }
 
     if (!cleanedUp) {
-        Wh_Log(L"Failed to reach taskbar thread during uninit; executing fallback revoker reset");
-        if (g_autoRevokerList) {
-            g_autoRevokerList.reset();
-        }
-        if (g_trackedVolumeContents) {
-            g_trackedVolumeContents.reset();
-        }
-        if (g_volumeIconViews) {
-            g_volumeIconViews.reset();
-        }
+        Wh_Log(
+            L"Taskbar thread unreachable during uninit; skipping UI-affine "
+            L"revoker reset to prevent RPC_E_WRONG_THREAD");
     }
 }
 
