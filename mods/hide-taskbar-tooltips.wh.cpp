@@ -2,7 +2,7 @@
 // @id              hide-taskbar-tooltips
 // @name            Hide Taskbar Tooltips
 // @description     Suppresses native Windows 11 XAML hover tooltips in Explorer (taskbar buttons, system tray icons, and clock).
-// @version         1.0.3
+// @version         1.0.4
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
