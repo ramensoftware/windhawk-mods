@@ -30,7 +30,7 @@ A high-performance, native replacement for Windows 11 Start Menu search powered 
 - Inline Calculator: Type /c <expression> (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200, /c 2^10) to evaluate math expressions instantly. Press Enter to copy the result.
 - Configurable Unit Conversions: Type /c <number> [unit] to convert units using formulas configured in Mod Settings. Users can add, edit, or delete conversion items individually from the settings UI.
 - Network Interface Inspector: Type /ip to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
-- Full Right-Click Context Menu: Right-click any file or folder to Open, Run as Administrator, Cut (native shell file move), Copy (native shell file duplicate), Copy path, or Open file location.
+- Full Right-Click Context Menu: Right-click any file, folder, or application to Open, Run as Administrator, Create desktop shortcut, Cut (native shell file move), Copy (native shell file duplicate), Copy path, or Open file location.
 - Explicit Web Search: Trigger web searches on demand using the '?' prefix (e.g. '?query'). Includes customizable keyword shortcuts such as '?yt' (YouTube), '?gh' (GitHub), '?w' (Wikipedia), and '?r' (Reddit).
 - Start Menu Styler Compatibility: Automatically syncs background styles (Tinted Glass, Acrylic, custom theme colors) in real time without restarting the mod.
 - Robust Win32 Key Listener: Combines a WH_GETMESSAGE UI thread hook, HWND subclassing, and XAML CoreWindow handling to ensure zero dropped keystrokes.
@@ -55,7 +55,7 @@ All searches will now seamlessly route through the native Start Menu (Windows Ke
 - Enter: Launch the selected application, copy calculation/conversion/IP result, or open item.
 - Ctrl + Enter: Run the selected application or file as Administrator (triggers UAC).
 - Escape: Clear the current query and smoothly collapse the search palette back to pinned apps.
-- Right-Click: Context menu with Open, Run as Administrator, Cut, Copy, Copy path, and Open file location.
+- Right-Click: Context menu with Open, Run as Administrator, Create desktop shortcut, Cut, Copy, Copy path, and Open file location.
 
 ## Command Reference
 
@@ -2229,6 +2229,75 @@ inline bool CopyOrCutFileToClipboard(const std::wstring& filePath, bool isCut) {
 
     CloseClipboard();
     return true;
+}
+
+inline bool CreateDesktopShortcut(const std::wstring& targetPath, const std::wstring& preferredName = L"") {
+    if (targetPath.empty()) return false;
+
+    PWSTR desktopFolder = nullptr;
+    HRESULT hr = SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr, &desktopFolder);
+    if (FAILED(hr) || !desktopFolder) return false;
+
+    std::wstring desktop = desktopFolder;
+    CoTaskMemFree(desktopFolder);
+
+    std::wstring baseName = preferredName;
+    if (baseName.empty()) {
+        size_t slash = targetPath.find_last_of(L"\\/");
+        baseName = (slash != std::wstring::npos) ? targetPath.substr(slash + 1) : targetPath;
+        if (baseName.size() > 4 && _wcsicmp(baseName.c_str() + baseName.size() - 4, L".lnk") == 0) {
+            baseName.resize(baseName.size() - 4);
+        } else if (baseName.size() > 4 && _wcsicmp(baseName.c_str() + baseName.size() - 4, L".exe") == 0) {
+            baseName.resize(baseName.size() - 4);
+        }
+    }
+
+    for (wchar_t& ch : baseName) {
+        if (wcschr(L"\\/:*?\"<>|", ch)) {
+            ch = L'_';
+        }
+    }
+    while (!baseName.empty() && (baseName.back() == L' ' || baseName.back() == L'.')) {
+        baseName.pop_back();
+    }
+    size_t first = baseName.find_first_not_of(L' ');
+    if (first != std::wstring::npos && first > 0) {
+        baseName = baseName.substr(first);
+    }
+    if (baseName.empty()) baseName = L"Shortcut";
+
+    std::wstring shortcutFile = desktop + L"\\" + baseName + L".lnk";
+
+    if (targetPath.size() > 4 && _wcsicmp(targetPath.c_str() + targetPath.size() - 4, L".lnk") == 0) {
+        if (GetFileAttributesW(targetPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            if (CopyFileW(targetPath.c_str(), shortcutFile.c_str(), FALSE)) {
+                return true;
+            }
+        }
+    }
+
+    IShellLinkW* psl = nullptr;
+    hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLinkW, reinterpret_cast<void**>(&psl));
+    if (FAILED(hr) || !psl) return false;
+
+    psl->SetPath(targetPath.c_str());
+
+    size_t lastSlash = targetPath.find_last_of(L"\\/");
+    if (lastSlash != std::wstring::npos && !targetPath.starts_with(L"shell:")) {
+        std::wstring dir = targetPath.substr(0, lastSlash);
+        psl->SetWorkingDirectory(dir.c_str());
+    }
+
+    IPersistFile* ppf = nullptr;
+    hr = psl->QueryInterface(IID_IPersistFile, reinterpret_cast<void**>(&ppf));
+    bool success = false;
+    if (SUCCEEDED(hr) && ppf) {
+        hr = ppf->Save(shortcutFile.c_str(), TRUE);
+        success = SUCCEEDED(hr);
+        ppf->Release();
+    }
+    psl->Release();
+    return success;
 }
 
 // ---------------------------------------------------------------------------
@@ -5816,58 +5885,87 @@ void RenderResults() try {
                 CopyTextToClipboard(webUrl);
             });
             flyout.Items().Append(copyUrlItem);
-        } else if (!item.openPath.empty() && GetFileAttributesW(item.openPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        } else if (!item.openPath.empty()) {
             std::wstring locTarget = item.openPath;
+            std::wstring appTitle = item.title;
+            bool isFile = (GetFileAttributesW(locTarget.c_str()) != INVALID_FILE_ATTRIBUTES);
 
-            wuxc::MenuFlyoutSeparator sep1;
-            flyout.Items().Append(sep1);
+            if (isFile) {
+                wuxc::MenuFlyoutSeparator sep1;
+                flyout.Items().Append(sep1);
 
-            wuxc::MenuFlyoutItem cutItem;
-            cutItem.Text(L"Cut");
-            wuxc::FontIcon cutIcon;
-            cutIcon.Glyph(L"\uE8C6");
-            cutItem.Icon(cutIcon);
-            cutItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                DismissStartMenu();
-                tools::CopyOrCutFileToClipboard(locTarget, true /* isCut */);
-            });
-            flyout.Items().Append(cutItem);
+                wuxc::MenuFlyoutItem cutItem;
+                cutItem.Text(L"Cut");
+                wuxc::FontIcon cutIcon;
+                cutIcon.Glyph(L"\uE8C6");
+                cutItem.Icon(cutIcon);
+                cutItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    DismissStartMenu();
+                    tools::CopyOrCutFileToClipboard(locTarget, true /* isCut */);
+                });
+                flyout.Items().Append(cutItem);
 
-            wuxc::MenuFlyoutItem copyItem;
-            copyItem.Text(L"Copy");
-            wuxc::FontIcon copyIcon;
-            copyIcon.Glyph(L"\uE8C8");
-            copyItem.Icon(copyIcon);
-            copyItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                DismissStartMenu();
-                tools::CopyOrCutFileToClipboard(locTarget, false /* isCut */);
-            });
-            flyout.Items().Append(copyItem);
+                wuxc::MenuFlyoutItem copyItem;
+                copyItem.Text(L"Copy");
+                wuxc::FontIcon copyIcon;
+                copyIcon.Glyph(L"\uE8C8");
+                copyItem.Icon(copyIcon);
+                copyItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    DismissStartMenu();
+                    tools::CopyOrCutFileToClipboard(locTarget, false /* isCut */);
+                });
+                flyout.Items().Append(copyItem);
 
-            wuxc::MenuFlyoutItem copyPathItem;
-            copyPathItem.Text(L"Copy path");
-            wuxc::FontIcon copyPathIcon;
-            copyPathIcon.Glyph(L"\uE71B");
-            copyPathItem.Icon(copyPathIcon);
-            copyPathItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                DismissStartMenu();
-                tools::CopyTextToClipboard(locTarget);
-            });
-            flyout.Items().Append(copyPathItem);
+                wuxc::MenuFlyoutItem copyPathItem;
+                copyPathItem.Text(L"Copy path");
+                wuxc::FontIcon copyPathIcon;
+                copyPathIcon.Glyph(L"\uE71B");
+                copyPathItem.Icon(copyPathIcon);
+                copyPathItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    DismissStartMenu();
+                    tools::CopyTextToClipboard(locTarget);
+                });
+                flyout.Items().Append(copyPathItem);
 
-            wuxc::MenuFlyoutSeparator sep2;
-            flyout.Items().Append(sep2);
+                wuxc::MenuFlyoutSeparator sep2;
+                flyout.Items().Append(sep2);
 
-            wuxc::MenuFlyoutItem locItem;
-            locItem.Text(L"Open file location");
-            wuxc::FontIcon locIcon;
-            locIcon.Glyph(L"\uE838");
-            locItem.Icon(locIcon);
-            locItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                DismissStartMenu();
-                OpenFileLocation(locTarget);
-            });
-            flyout.Items().Append(locItem);
+                wuxc::MenuFlyoutItem locItem;
+                locItem.Text(L"Open file location");
+                wuxc::FontIcon locIcon;
+                locIcon.Glyph(L"\uE838");
+                locItem.Icon(locIcon);
+                locItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    DismissStartMenu();
+                    OpenFileLocation(locTarget);
+                });
+                flyout.Items().Append(locItem);
+
+                wuxc::MenuFlyoutItem shortcutItem;
+                shortcutItem.Text(L"Create desktop shortcut");
+                wuxc::FontIcon shortcutIcon;
+                shortcutIcon.Glyph(L"\uE7C5");
+                shortcutItem.Icon(shortcutIcon);
+                shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    DismissStartMenu();
+                    tools::CreateDesktopShortcut(locTarget, appTitle);
+                });
+                flyout.Items().Append(shortcutItem);
+            } else if (!locTarget.starts_with(L"ms-settings:") && !locTarget.starts_with(L"http:") && !locTarget.starts_with(L"https:")) {
+                wuxc::MenuFlyoutSeparator sep1;
+                flyout.Items().Append(sep1);
+
+                wuxc::MenuFlyoutItem shortcutItem;
+                shortcutItem.Text(L"Create desktop shortcut");
+                wuxc::FontIcon shortcutIcon;
+                shortcutIcon.Glyph(L"\uE7C5");
+                shortcutItem.Icon(shortcutIcon);
+                shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    DismissStartMenu();
+                    tools::CreateDesktopShortcut(L"shell:AppsFolder\\" + locTarget, appTitle);
+                });
+                flyout.Items().Append(shortcutItem);
+            }
         }
         }
 
@@ -6167,6 +6265,17 @@ void RenderResults() try {
                 OpenFileLocation(target);
             });
             flyout.Items().Append(locItem);
+
+            wuxc::MenuFlyoutItem shortcutItem;
+            shortcutItem.Text(L"Create desktop shortcut");
+            wuxc::FontIcon shortcutIcon;
+            shortcutIcon.Glyph(L"\uE7C5");
+            shortcutItem.Icon(shortcutIcon);
+            shortcutItem.Click([target, title = item.title](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                DismissStartMenu();
+                tools::CreateDesktopShortcut(target, title);
+            });
+            flyout.Items().Append(shortcutItem);
 
             button.ContextFlyout(flyout);
         }
