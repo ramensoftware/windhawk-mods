@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-23T22:04:46.000Z</updated>
+    <updated>2026-09-23T22:29:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.11]]></title>
+        <id>https://windhawk.net/mods/taskbar-grouping#eae5841a485e04316a4a06dccb7da5f1d86a7b5d</id>
+        <link href="https://windhawk.net/mods/taskbar-grouping"/>
+        <updated>2026-09-23T22:29:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added an option for defining a list of per-app exceptions for the "Use window icons" option.</li>
+<li>Improved the compatibility of the "Place ungrouped items together" option with virtual desktops.</li>
+<li>Fixed item reordering when the first running item replaces the pinned item or when the last running item is closed and replaced with a pinned item. The issue could happen if there are other running instances in another monitor or virtual desktop.</li>
+<li>Fixed compatibility with the latest Windows 11 update.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[After Effects Theme 1.0.0]]></title>
         <id>https://windhawk.net/mods/after-effects-theme#d577b0225340f06c1c6f6cee8676feb4b520c701</id>
@@ -1200,25 +1216,6 @@ itself runs. Both mods are under the GPL v3.</p>]]></content>
         <author>
             <name>rodrigothomazi</name>
             <uri>https://github.com/RodrigoThomazi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Visual Tweaks Dark 1.0.1]]></title>
-        <id>https://windhawk.net/mods/explorer-visual-tweaks-dark#5185fb6ac35cff1f84cb447f83e649f9ce17cf0f</id>
-        <link href="https://windhawk.net/mods/explorer-visual-tweaks-dark"/>
-        <updated>2026-09-21T18:00:20.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Adds independent switches for file list selection, Navigation Pane customization, and progress indicators, alongside the existing Preview Pane switch.</li>
-<li>Organizes settings into named groups, with clearly labeled shared selection appearance settings.</li>
-<li>Disabled Selection and Progress blocks pass drawing calls through unchanged, without custom rendering or selection-state suppression.</li>
-<li>Applies Selection switches independently of graphics resource creation, so resource creation failures cannot prevent disabling a block.</li>
-<li>Adds guidance on disabling overlapping features when combining mods.</li>
-</ul>
-<p>Preview Pane changes still require restarting Explorer and affected host applications.</p>
-<p>Settings now use grouped keys. Previously customized values need to be reapplied after updating.</p>]]></content>
-        <author>
-            <name>VitalS</name>
-            <uri>https://github.com/VitalSkib</uri>
         </author>
     </entry>
 </feed>

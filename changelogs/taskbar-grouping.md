@@ -1,3 +1,10 @@
+## 1.3.11 ([Sep 23, 2026](https://github.com/ramensoftware/windhawk-mods/blob/eae5841a485e04316a4a06dccb7da5f1d86a7b5d/mods/taskbar-grouping.wh.cpp))
+
+* Added an option for defining a list of per-app exceptions for the "Use window icons" option.
+* Improved the compatibility of the "Place ungrouped items together" option with virtual desktops.
+* Fixed item reordering when the first running item replaces the pinned item or when the last running item is closed and replaced with a pinned item. The issue could happen if there are other running instances in another monitor or virtual desktop.
+* Fixed compatibility with the latest Windows 11 update.
+
 ## 1.3.10 ([Aug 22, 2025](https://github.com/ramensoftware/windhawk-mods/blob/33da2cbc03614b05db6da7fbcaf009ca7060e2e6/mods/taskbar-grouping.wh.cpp))
 
 * The "Place ungrouped items together" option can now be applied only for non-pinned items.
