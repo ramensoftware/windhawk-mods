@@ -12732,12 +12732,12 @@ void Wh_ModAfterInit() {
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 }
-void Wh_OnSettingChanged() {
-    // 注入模式（wallpaper64/dwm/custom 等非 windhawk 载体）的设置变更回调。
+void Wh_ModSettingsChanged() {
+    // 注入模式（wallpaper64/dwm/custom 等非 windhawk 载体）的设置变更回调（Windhawk 标准回调名）。
     // 工具模组模式（windhawk.exe -tool-mod）由引擎直接调用 WhTool_ModSettingsChanged。
     // launcher 进程（windhawk.exe 父进程）不渲染，直接忽略，由子进程处理。
-    // Settings-change callback for injected mode (non-windhawk hosts). Tool-mod mode uses
-    // WhTool_ModSettingsChanged directly. The launcher process doesn't render, so ignore it.
+    // Settings-change callback for injected mode (non-windhawk hosts) - standard Windhawk callback name.
+    // Tool-mod mode uses WhTool_ModSettingsChanged directly. The launcher process doesn't render, so ignore it.
     if (g_isToolModProcessLauncher) {
         return;
     }
