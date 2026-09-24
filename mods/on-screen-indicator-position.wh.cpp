@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, and optionally skip the slide out animation
-// @version         1.4.2
+// @version         1.4.3
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -13,7 +13,7 @@
 // Source code is published under The GNU General Public License v3.0.
 //
 // For bug reports and feature requests, please open an issue here:
-// https://github.com/ramensoftware/windhawk-mods/issues
+// https://github.com/mario0318/on-screen-indicator-position/issues
 
 // ==WindhawkModReadme==
 /*
@@ -107,6 +107,11 @@ open location](https://windhawk.net/mods/volume-control-open-location) and
 [Taskbar primary on secondary
 monitor](https://windhawk.net/mods/taskbar-primary-on-secondary-monitor), which
 both target the same function and work out the origin handling.
+
+## Issues
+
+Bugs and feature requests go on the [issues
+page](https://github.com/mario0318/on-screen-indicator-position/issues).
 */
 // ==/WindhawkModReadme==
 
