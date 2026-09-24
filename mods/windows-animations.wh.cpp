@@ -641,6 +641,8 @@ static constexpr PCWSTR kPropCloseBypass = L"windows-animations.CloseBypass";
 static constexpr PCWSTR kPropClosed = L"windows-animations.Closed";
 static constexpr PCWSTR kPropTrayHideCloak =
     L"windows-animations.TrayHideCloakV1";
+static constexpr PCWSTR kPropTrayHideShowHandoff =
+    L"windows-animations.TrayHideShowHandoffV1";
 static constexpr PCWSTR kPropTransientTauriShowTick =
     L"windows-animations.TransientTauriShowTickV1";
 static constexpr PCWSTR kPropMinRestorePair =
@@ -2219,6 +2221,7 @@ static void CleanupWindowData(HWND hWnd) {
     ClearMinRestorePair(hWnd);
     ClearMaximizedRestoreGuard(hWnd);
     RemovePropW(hWnd, kPropTrayHideCloak);
+    RemovePropW(hWnd, kPropTrayHideShowHandoff);
     RemovePropW(hWnd, kPropTransientTauriShowTick);
     RemovePropW(hWnd, kPropShowDesktopNativeMinimize);
     RemovePropW(hWnd, kPropClassicShowDesktopOwnerDispatch);
@@ -3155,8 +3158,12 @@ static bool NeedsLocalWinEventThread() {
     const bool needShowDesktopRestoreObserver =
         g_showDesktopTopWindowOnly.load(std::memory_order_relaxed) &&
         g_restoreAnimation.load(std::memory_order_relaxed);
+    const bool needTrayHideVisibilityObserver =
+        g_closeAnimation.load(std::memory_order_relaxed) &&
+        g_hideAsClose.load(std::memory_order_relaxed);
     return g_switchAnimation.load(std::memory_order_relaxed) ||
-           needTaskbarObserver || needShowDesktopRestoreObserver;
+           needTaskbarObserver || needShowDesktopRestoreObserver ||
+           needTrayHideVisibilityObserver;
 }
 
 void EnsureWinEventThreadStarted() {
@@ -3287,6 +3294,10 @@ static ULONG_PTR ReadTrayHideCloakToken(HWND hWnd) {
 static ULONG_PTR RetainTrayHideCloak(HWND hWnd) {
     if (!hWnd || !IsWindow(hWnd)) return 0;
 
+    // A retained cloak must have an actual-state observer even when this
+    // process had no qualifying window when the mod finished initializing.
+    EnsureWinEventThreadStarted();
+
     ULONG_PTR serial =
         g_NextTrayHideCloakToken.fetch_add(1, std::memory_order_relaxed) + 1;
     ULONG_PTR token =
@@ -3296,15 +3307,63 @@ static ULONG_PTR RetainTrayHideCloak(HWND hWnd) {
         static_cast<ULONG_PTR>(GetTickCount());
     if (!token) token = 1;
 
-    std::lock_guard<std::mutex> lock(g_TrayHideCloakMutex);
-    const BOOL cloak = TRUE;
-    if (FAILED(DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak,
-                                     sizeof(cloak))) ||
-        !SetPropW(hWnd, kPropTrayHideCloak,
-                  reinterpret_cast<HANDLE>(token))) {
+    bool becameVisible = false;
+    {
+        std::lock_guard<std::mutex> lock(g_TrayHideCloakMutex);
+        if (!IsWindow(hWnd) || IsWindowVisible(hWnd)) return 0;
+
+        RemovePropW(hWnd, kPropTrayHideShowHandoff);
+        const BOOL cloak = TRUE;
+        if (FAILED(DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak,
+                                         sizeof(cloak)))) {
+            return 0;
+        }
+        if (!SetPropW(hWnd, kPropTrayHideCloak,
+                      reinterpret_cast<HANDLE>(token))) {
+            const BOOL uncloak = FALSE;
+            DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &uncloak,
+                                  sizeof(uncloak));
+            return 0;
+        }
+
+        // The app can race the animation thread after FinishClose observes
+        // the native hide. Never publish a retained cloak on an HWND which
+        // has already become visible again. Visibility observers cover a show
+        // which lands immediately after this final check.
+        becameVisible = IsWindowVisible(hWnd) != FALSE;
+        if (becameVisible) {
+            RemovePropW(hWnd, kPropTrayHideCloak);
+            const BOOL uncloak = FALSE;
+            DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &uncloak,
+                                  sizeof(uncloak));
+        }
+    }
+    if (becameVisible) {
+        UpdateDwmTransitions(hWnd, TRUE);
+        ArmTransientTauriShowHideGuard(hWnd);
         return 0;
     }
     return token;
+}
+
+static bool BeginTrayHideShowHandoff(HWND hWnd, ULONG_PTR token) {
+    if (!hWnd || !token) return false;
+    std::lock_guard<std::mutex> lock(g_TrayHideCloakMutex);
+    if (reinterpret_cast<ULONG_PTR>(
+            GetPropW(hWnd, kPropTrayHideCloak)) != token) {
+        return false;
+    }
+    return SetPropW(hWnd, kPropTrayHideShowHandoff,
+                    reinterpret_cast<HANDLE>(token)) != FALSE;
+}
+
+static void EndTrayHideShowHandoffIfCurrent(HWND hWnd, ULONG_PTR token) {
+    if (!hWnd || !token) return;
+    std::lock_guard<std::mutex> lock(g_TrayHideCloakMutex);
+    if (reinterpret_cast<ULONG_PTR>(
+            GetPropW(hWnd, kPropTrayHideShowHandoff)) == token) {
+        RemovePropW(hWnd, kPropTrayHideShowHandoff);
+    }
 }
 
 static bool TransferTrayHideCloakToLaunch(HWND hWnd, ULONG_PTR token) {
@@ -3316,6 +3375,10 @@ static bool TransferTrayHideCloakToLaunch(HWND hWnd, ULONG_PTR token) {
             return false;
         }
         RemovePropW(hWnd, kPropTrayHideCloak);
+        if (reinterpret_cast<ULONG_PTR>(
+                GetPropW(hWnd, kPropTrayHideShowHandoff)) == token) {
+            RemovePropW(hWnd, kPropTrayHideShowHandoff);
+        }
     }
     return true;
 }
@@ -3326,6 +3389,13 @@ static bool ReleaseTrayHideCloakIfCurrent(HWND hWnd, ULONG_PTR token) {
         std::lock_guard<std::mutex> lock(g_TrayHideCloakMutex);
         if (reinterpret_cast<ULONG_PTR>(
                 GetPropW(hWnd, kPropTrayHideCloak)) != token) {
+            return false;
+        }
+        // A hooked show can intentionally transfer the retained cloak to a
+        // launch animation after the native visibility change. The generic
+        // state observers must not release it in the middle of that handoff.
+        if (reinterpret_cast<ULONG_PTR>(
+                GetPropW(hWnd, kPropTrayHideShowHandoff)) == token) {
             return false;
         }
         // The native show has restored WS_VISIBLE while the stale surface is
@@ -3344,6 +3414,12 @@ static bool ReleaseTrayHideCloakIfCurrent(HWND hWnd, ULONG_PTR token) {
         ArmTransientTauriShowHideGuard(hWnd);
     }
     return true;
+}
+
+static bool ReleaseVisibleTrayHideCloak(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd) || !IsWindowVisible(hWnd)) return false;
+    const ULONG_PTR token = ReadTrayHideCloakToken(hWnd);
+    return token && ReleaseTrayHideCloakIfCurrent(hWnd, token);
 }
 
 struct TrayHideCloakReleaseData {
@@ -4657,6 +4733,25 @@ void CALLBACK MinimizeEndVisibilityEventProc(HWINEVENTHOOK, DWORD event,
     ReassertPreparedShowDesktopRestoreCloak(hWnd);
 }
 
+void CALLBACK TrayHideVisibilityEventProc(HWINEVENTHOOK, DWORD event,
+                                          HWND hWnd, LONG idObject,
+                                          LONG idChild, DWORD, DWORD) {
+    if (event != EVENT_OBJECT_SHOW || !hWnd || idObject != OBJID_WINDOW ||
+        idChild != CHILDID_SELF ||
+        g_unloading.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    DWORD windowProcessId = 0;
+    GetWindowThreadProcessId(hWnd, &windowProcessId);
+    if (windowProcessId != GetCurrentProcessId()) return;
+
+    // Observe the resulting HWND state rather than relying on a particular
+    // exported show API. This also covers DefWindowProc restores,
+    // DeferWindowPos/EndDeferWindowPos, AnimateWindow and late async shows.
+    ReleaseVisibleTrayHideCloak(hWnd);
+}
+
 static bool IsTaskbarEventWindow(HWND hWnd) {
     for (HWND current = hWnd; current; current = GetParent(current)) {
         WCHAR className[64]{};
@@ -4782,6 +4877,10 @@ DWORD WINAPI WinEventHookThread(LPVOID) {
         EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZEEND, nullptr,
         MinimizeEndVisibilityEventProc, GetCurrentProcessId(), 0,
         WINEVENT_OUTOFCONTEXT);
+    HWINEVENTHOOK trayHideVisibilityHook = SetWinEventHook(
+        EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr,
+        TrayHideVisibilityEventProc, GetCurrentProcessId(), 0,
+        WINEVENT_OUTOFCONTEXT);
 
     const bool observeTaskbar = explorerProcess;
     const DWORD explorerPid = observeTaskbar ? GetCurrentProcessId() : 0;
@@ -4838,7 +4937,8 @@ DWORD WINAPI WinEventHookThread(LPVOID) {
         }
     }
 
-    if (!hook && !minimizeEndHook && !observeTaskbar) {
+    if (!hook && !minimizeEndHook && !trayHideVisibilityHook &&
+        !observeTaskbar) {
         endpointContext.publish = false;
         EnumWindows(UpdateShowDesktopCloakEndpointEnumProc,
                     reinterpret_cast<LPARAM>(&endpointContext));
@@ -4898,6 +4998,7 @@ DWORD WINAPI WinEventHookThread(LPVOID) {
         UnhookWinEvent(oldHook);
     }
     if (minimizeEndHook) UnhookWinEvent(minimizeEndHook);
+    if (trayHideVisibilityHook) UnhookWinEvent(trayHideVisibilityHook);
     removeTaskbarHooks();
     endpointContext.publish = false;
     EnumWindows(UpdateShowDesktopCloakEndpointEnumProc,
@@ -10115,8 +10216,8 @@ public:
                 // surface after DWMWA_CLOAK is removed, producing a blank,
                 // non-interactive window even though WS_VISIBLE is clear.
                 // Keep only this mod-owned cloak until the next native show;
-                // the show hooks below transfer or release it after the real
-                // window has become visible again.
+                // the show hooks and actual-state observers below transfer or
+                // release it after the real window becomes visible again.
                 retainedTrayHideCloak =
                     RetainTrayHideCloak(data->hRealWnd);
             }
@@ -13438,11 +13539,11 @@ static bool PrepareLaunchAnim(HWND hWnd, int nCmdShow, LONG_PTR* origExOut,
     }
     if (IsWindowVisible(hWnd) || IsIconic(hWnd)) return false;
     if (!IsLaunchWindow(hWnd)) return false;
-    const BOOL alphaOnlyCompatibility =
-        RequiresMozillaAlphaOnlyLaunchConcealment(hWnd);
     LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     if (exStyle & WS_EX_LAYERED) return false;
     { std::lock_guard<std::mutex> lock(g_StateMutex); if (!g_LaunchSeen.insert(hWnd).second) return false; }
+    const BOOL alphaOnlyCompatibility =
+        RequiresMozillaAlphaOnlyLaunchConcealment(hWnd);
     UpdateDwmTransitions(hWnd, FALSE);
     *origExOut = exStyle;
     if (snapshotTokenOut) *snapshotTokenOut = 0;
@@ -13576,6 +13677,13 @@ static BOOL ShowPersistentlyCloakedTrayWindow(
     NativeShow&& nativeShow) {
     const ULONG_PTR trayHideCloakToken = ReadTrayHideCloakToken(hWnd);
     if (!trayHideCloakToken) return nativeShow();
+    if (!BeginTrayHideShowHandoff(hWnd, trayHideCloakToken)) {
+        // Property publication failure must favor a visible real window over
+        // retaining a cloak which no observer can safely coordinate.
+        EndTrayHideShowHandoffIfCurrent(hWnd, trayHideCloakToken);
+        ReleaseTrayHideCloakIfCurrent(hWnd, trayHideCloakToken);
+        return nativeShow();
+    }
 
     LONG_PTR originalStyle = 0;
     ULONG_PTR launchSnapshotToken = 0;
@@ -13607,6 +13715,8 @@ static BOOL ShowPersistentlyCloakedTrayWindow(
         AbortPreparedTrayHideLaunch(hWnd, originalStyle);
     }
 
+    EndTrayHideShowHandoffIfCurrent(hWnd, trayHideCloakToken);
+
     if (IsWindowVisible(hWnd)) {
         ReleaseTrayHideCloakIfCurrent(hWnd, trayHideCloakToken);
     } else if (asynchronousSubmission && result) {
@@ -13628,19 +13738,19 @@ static bool IsOurWindow(HWND hWnd) {
 struct TransientTauriShowScope {
     HWND hWnd = nullptr;
     bool track = false;
-    bool wasVisible = false;
 
     TransientTauriShowScope(HWND target, bool showRequested) : hWnd(target) {
         const DWORD savedError = GetLastError();
         track = showRequested && IsOurWindow(target) &&
+                !IsWindowVisible(target) &&
+                GetAncestor(target, GA_ROOT) == target &&
                 NeedsPersistentTrayHideCloak(target);
-        wasVisible = track && IsWindowVisible(target);
         SetLastError(savedError);
     }
 
     ~TransientTauriShowScope() {
         const DWORD savedError = GetLastError();
-        if (track && !wasVisible && IsWindow(hWnd) && IsWindowVisible(hWnd)) {
+        if (track && IsWindow(hWnd) && IsWindowVisible(hWnd)) {
             ArmTransientTauriShowHideGuard(hWnd);
         }
         SetLastError(savedError);
@@ -14037,11 +14147,21 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     const bool classicShowDesktopOwnerDispatchMessage =
         g_classicShowDesktopOwnerDispatchMessage &&
         msg == g_classicShowDesktopOwnerDispatchMessage;
+    const bool trayHideVisibilityMessage =
+        msg == WM_WINDOWPOSCHANGED && lParam &&
+        (reinterpret_cast<const WINDOWPOS*>(lParam)->flags & SWP_SHOWWINDOW);
     if (msg != WM_DESTROY && msg != WM_CLOSE && msg != WM_SYSCOMMAND &&
-        !classicShowDesktopOwnerDispatchMessage) {
+        !classicShowDesktopOwnerDispatchMessage &&
+        !trayHideVisibilityMessage) {
         return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
     }
     if (!IsOurWindow(hWnd)) return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
+    if (trayHideVisibilityMessage) {
+        const LRESULT result =
+            DefWindowProcW_Original(hWnd, msg, wParam, lParam);
+        ReleaseVisibleTrayHideCloak(hWnd);
+        return result;
+    }
     if (classicShowDesktopOwnerDispatchMessage) {
         if (!wParam && lParam == kClassicShowDesktopOwnerProbe) {
             const bool probePending = GetPropW(
@@ -14715,6 +14835,7 @@ static BOOL CALLBACK ClearPersistentAnimationPropertiesOnUninit(
         kPropCloseBypass,
         kPropClosed,
         kPropTrayHideCloak,
+        kPropTrayHideShowHandoff,
         kPropTransientTauriShowTick,
         kPropMinRestorePair,
         kPropMaximizedRestoreGuard,
