@@ -15,14 +15,15 @@
 /*
 # Quick Explorer Switcher
 
-![Showcase](https://i.imgur.com/3E1dyV3.jpeg)
 When a program shows an **Open**, **Save As** or **Select Folder** dialog, this
-mod adds the folders currently open in File Explorer (up to 3) to the bottom of
+mod adds the folders currently open in File Explorer (up to 3) to the top of
 the dialog's navigation pane, most recently used first. One click and you're
 there.
 
 Optionally, the dialog can open directly in the most recently used File
 Explorer folder.
+
+![Showcase](https://i.imgur.com/3E1dyV3.jpeg)
 
 ## Details
 
@@ -352,6 +353,23 @@ static bool CaptureShowFromObject(IUnknown* unknown) {
     void* showFunction = (*reinterpret_cast<void***>(dialog))[3];
     dialog->Release();
 
+    // Only hook the real in-process implementation. If the object was created
+    // from an MTA thread, COM returns a proxy whose slot 3 is a generic
+    // stubless-proxy thunk shared by every marshaled interface in the process;
+    // hooking it would redirect unrelated COM calls and crash the process.
+    // The same check rejects any other wrapper or shim object.
+    HMODULE comdlg32 = GetModuleHandleW(L"comdlg32.dll");
+    HMODULE owner = nullptr;
+    if (!comdlg32 ||
+        !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCWSTR)showFunction, &owner) ||
+        owner != comdlg32) {
+        Wh_Log(L"IFileDialog::Show at %p is not in comdlg32.dll, skipping",
+               showFunction);
+        return false;
+    }
+
     bool hooked = false;
 
     AcquireSRWLockExclusive(&g_showLock);
@@ -450,6 +468,12 @@ static void EnsureShowHooked() {
     }
 
     HRESULT hrInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (hrInit == RPC_E_CHANGED_MODE) {
+        // MTA thread: CoCreateInstance would return a proxy, never the real
+        // object, so there is nothing to hook from here. Try again on the
+        // next call from an STA thread.
+        return;
+    }
 
     bool anyHooked = false;
     const CLSID* clsids[] = {&CLSID_FileOpenDialog, &CLSID_FileSaveDialog};
