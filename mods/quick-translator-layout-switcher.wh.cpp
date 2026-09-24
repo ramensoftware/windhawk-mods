@@ -19,7 +19,7 @@ A lightweight Windows utility that bridges communication between English and Rus
 
 ## Screenshot
 
-![HUD Tooltip Preview](https://imgur.com/a/MWnpLgr)
+![HUD Tooltip Preview](https://i.imgur.com/MWnpLgr.png)
 
 ## Features
 
