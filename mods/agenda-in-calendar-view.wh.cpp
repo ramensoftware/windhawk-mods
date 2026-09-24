@@ -186,6 +186,7 @@ Checking events on other dates:
 
 
 
+#include <winrt/Windows.ApplicationModel.DataTransfer.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.System.h>
@@ -206,6 +207,7 @@ Checking events on other dates:
 
 namespace wf = winrt::Windows::Foundation;
 namespace ws = winrt::Windows::System;
+namespace wadt = winrt::Windows::ApplicationModel::DataTransfer;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 namespace wuxi = winrt::Windows::UI::Xaml::Input;
@@ -224,26 +226,11 @@ inline void NormalizeSystemTime(SYSTEMTIME& st) {
 
 inline void CopyTextToClipboard(const std::wstring& text) {
     if (text.empty()) return;
-    for (int retry = 0; retry < 5; ++retry) {
-        if (OpenClipboard(nullptr)) {
-            EmptyClipboard();
-            size_t bytes = (text.length() + 1) * sizeof(wchar_t);
-            HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, bytes);
-            if (hGlobal) {
-                void* pMem = GlobalLock(hGlobal);
-                if (pMem) {
-                    memcpy(pMem, text.c_str(), bytes);
-                    GlobalUnlock(hGlobal);
-                    SetClipboardData(CF_UNICODETEXT, hGlobal);
-                } else {
-                    GlobalFree(hGlobal);
-                }
-            }
-            CloseClipboard();
-            break;
-        }
-        Sleep(10);
-    }
+    try {
+        wadt::DataPackage package;
+        package.SetText(text);
+        wadt::Clipboard::SetContent(package);
+    } catch (...) {}
 }
 
 inline SYSTEMTIME ShiftLocalDate(const SYSTEMTIME& stLocal, int deltaDays) {
@@ -1357,11 +1344,11 @@ std::vector<CalendarEvent> ParseIcs(const std::wstring& icsContent) {
                     ch = L' ';
             }
         } else if (key == L"URL") {
-            currentEvent.url = valPart;
-            while (!currentEvent.url.empty() && (currentEvent.url.front() == L' ' || currentEvent.url.front() == L'\t'))
-                currentEvent.url.erase(currentEvent.url.begin());
-            while (!currentEvent.url.empty() && (currentEvent.url.back() == L' ' || currentEvent.url.back() == L'\t' || currentEvent.url.back() == L'\r' || currentEvent.url.back() == L'\n'))
-                currentEvent.url.pop_back();
+            std::wstring u = TrimW(valPart);
+            if (_wcsnicmp(u.c_str(), L"http://", 7) == 0 ||
+                _wcsnicmp(u.c_str(), L"https://", 8) == 0) {
+                currentEvent.url = u;
+            }
         } else if (key == L"X-MICROSOFT-CDO-ALLDAYEVENT" ||
                    key == L"X-MICROSOFT-MSNCALENDAR-ALL-DAY-EVENT") {
             if (_wcsicmp(valPart.c_str(), L"TRUE") == 0 || valPart == L"1") {
@@ -2064,15 +2051,6 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
     if (!m_itemsControl) return;
     m_itemsControl.Items().Clear();
 
-    auto suppressIBeam = [](wuxc::TextBlock const& tb) {
-        tb.PointerEntered([](wf::IInspectable const&, wuxi::PointerRoutedEventArgs const&) {
-            SetCursor(LoadCursorW(nullptr, IDC_ARROW));
-        });
-        tb.PointerMoved([](wf::IInspectable const&, wuxi::PointerRoutedEventArgs const&) {
-            SetCursor(LoadCursorW(nullptr, IDC_ARROW));
-        });
-    };
-
     if (events.empty()) {
         auto border = wuxc::Border();
         border.Margin(wux::Thickness{0, 2, 0, 4});
@@ -2097,7 +2075,6 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
         tb.TextWrapping(wux::TextWrapping::Wrap);
         tb.HorizontalAlignment(wux::HorizontalAlignment::Center);
         tb.IsTextSelectionEnabled(true);
-        suppressIBeam(tb);
         border.Child(tb);
         m_itemsControl.Items().Append(border);
         return;
@@ -2140,7 +2117,6 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
         startTimeTb.Margin(wux::Thickness{0, 0, 8, 0});
         startTimeTb.VerticalAlignment(wux::VerticalAlignment::Center);
         startTimeTb.IsTextSelectionEnabled(true);
-        suppressIBeam(startTimeTb);
         wuxc::Grid::SetRow(startTimeTb, 0);
         wuxc::Grid::SetColumn(startTimeTb, 0);
         eventGrid.Children().Append(startTimeTb);
@@ -2151,7 +2127,6 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
         nameTb.TextWrapping(wux::TextWrapping::Wrap);
         nameTb.VerticalAlignment(wux::VerticalAlignment::Center);
         nameTb.IsTextSelectionEnabled(true);
-        suppressIBeam(nameTb);
         wuxc::Grid::SetRow(nameTb, 0);
         wuxc::Grid::SetColumn(nameTb, 1);
         eventGrid.Children().Append(nameTb);
@@ -2160,7 +2135,6 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
         endTimeTb.Margin(wux::Thickness{0, 0, 8, 0});
         endTimeTb.VerticalAlignment(wux::VerticalAlignment::Center);
         endTimeTb.IsTextSelectionEnabled(true);
-        suppressIBeam(endTimeTb);
         wuxc::Grid::SetRow(endTimeTb, 1);
         wuxc::Grid::SetColumn(endTimeTb, 0);
         eventGrid.Children().Append(endTimeTb);
@@ -2209,12 +2183,6 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
             try {
                 linkBtn.NavigateUri(winrt::Windows::Foundation::Uri{url});
             } catch (...) {}
-            linkBtn.Click([url](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                try {
-                    winrt::Windows::Foundation::Uri uri{url};
-                    winrt::Windows::System::Launcher::LaunchUriAsync(uri);
-                } catch (...) {}
-            });
 
             wuxc::ToolTipService::SetToolTip(linkBtn, winrt::box_value(winrt::hstring(url)));
 
@@ -2240,7 +2208,6 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
             detailsTb.TextWrapping(wux::TextWrapping::Wrap);
             detailsTb.VerticalAlignment(wux::VerticalAlignment::Center);
             detailsTb.IsTextSelectionEnabled(true);
-            suppressIBeam(detailsTb);
             wuxc::Grid::SetRow(detailsTb, 1);
             wuxc::Grid::SetColumn(detailsTb, 1);
             eventGrid.Children().Append(detailsTb);
@@ -3262,18 +3229,6 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
     return hWnd;
 }
 
-using SetCursor_t = HCURSOR(WINAPI*)(HCURSOR hCursor);
-SetCursor_t SetCursor_Original = nullptr;
-
-HCURSOR WINAPI SetCursor_Hook(HCURSOR hCursor) {
-    static HCURSOR s_hIBeam = LoadCursorW(nullptr, IDC_IBEAM);
-    static HCURSOR s_hArrow = LoadCursorW(nullptr, IDC_ARROW);
-    if (hCursor && s_hIBeam && hCursor == s_hIBeam) {
-        hCursor = s_hArrow;
-    }
-    return SetCursor_Original(hCursor);
-}
-
 std::vector<HWND> GetCoreWnds() {
     struct ENUM_WINDOWS_PARAM {
         std::vector<HWND>* hWnds;
@@ -3332,13 +3287,6 @@ BOOL Wh_ModInit() {
             WindhawkUtils::SetFunctionHook(pCreateWindowInBandEx,
                                            CreateWindowInBandEx_Hook,
                                            &CreateWindowInBandEx_Original);
-        }
-
-        auto pSetCursor = (SetCursor_t)GetProcAddress(user32Module, "SetCursor");
-        if (pSetCursor) {
-            WindhawkUtils::SetFunctionHook(pSetCursor,
-                                           SetCursor_Hook,
-                                           &SetCursor_Original);
         }
     }
 
