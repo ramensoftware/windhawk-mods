@@ -2,7 +2,7 @@
 // @id              shell-flyout-positions
 // @name            Shell Flyout Positions
 // @description     Customize the position of the Notification Center, Action Center, and Start menu on Windows 11
-// @version         1.3
+// @version         1.4
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -68,7 +68,8 @@ shift options allow fine-tuning in both directions.
     - right: Right
     - center: Center
     - left: Left
-    - tray: Aligned to tray area
+    - tray: Tray area
+    - trayLeft: Tray area mirrored
   - horizontalShift: 0
     $name: Horizontal shift
     $description: >-
@@ -87,7 +88,8 @@ shift options allow fine-tuning in both directions.
     - right: Right
     - center: Center
     - left: Left
-    - tray: Aligned to tray area
+    - tray: Tray area
+    - trayLeft: Tray area mirrored
   - horizontalShift: 0
     $name: Horizontal shift
     $description: >-
@@ -162,6 +164,7 @@ enum class TrayHorizontalAlignment {
     center,
     left,
     tray,
+    trayLeft,
 };
 
 struct TrayElementSettings {
@@ -761,6 +764,15 @@ int CalculateAlignedX(
                 x = rcWork.right - width;
             }
             break;
+        
+        case TrayHorizontalAlignment::trayLeft:
+            if (showDesktopButtonBounds) {
+                x = rcWork.right - showDesktopButtonBounds->right;
+            } else {
+                // Fallback to left alignment if bounds not available.
+                x = rcWork.left;
+            }
+            break;
     }
 
     return x + MulDiv(settings.horizontalShift, monitorDpi, 96);
@@ -771,7 +783,7 @@ int CalculateAlignedXForMonitor(HMONITOR monitor,
                                 int width,
                                 const TrayElementSettings& settings) {
     std::optional<RECT> showDesktopButtonBounds;
-    if (settings.horizontalAlignment == TrayHorizontalAlignment::tray) {
+    if (settings.horizontalAlignment == TrayHorizontalAlignment::tray || settings.horizontalAlignment == TrayHorizontalAlignment::trayLeft) {
         HWND hTaskbarWnd = GetTaskbarForMonitor(monitor);
         if (hTaskbarWnd) {
             showDesktopButtonBounds = GetShowDesktopButtonBounds(hTaskbarWnd);
@@ -1938,6 +1950,9 @@ void LoadSettings() {
     } else if (wcscmp(notificationCenterHorizontalAlignment, L"tray") == 0) {
         g_settings.notificationCenter.horizontalAlignment =
             TrayHorizontalAlignment::tray;
+    } else if (wcscmp(notificationCenterHorizontalAlignment, L"trayLeft") == 0) {
+        g_settings.notificationCenter.horizontalAlignment =
+            TrayHorizontalAlignment::trayLeft;
     }
     Wh_FreeStringSetting(notificationCenterHorizontalAlignment);
 
@@ -1965,6 +1980,9 @@ void LoadSettings() {
         } else if (wcscmp(actionCenterHorizontalAlignment, L"tray") == 0) {
             g_settings.actionCenter.horizontalAlignment =
                 TrayHorizontalAlignment::tray;
+        } else if (wcscmp(actionCenterHorizontalAlignment, L"trayLeft") == 0) {
+            g_settings.actionCenter.horizontalAlignment =
+                TrayHorizontalAlignment::trayLeft;
         }
 
         g_settings.actionCenter.horizontalShift =
