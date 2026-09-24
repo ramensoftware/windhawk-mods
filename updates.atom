@@ -2,12 +2,80 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-24T21:02:28.000Z</updated>
+    <updated>2026-09-24T22:03:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Three Finger Drag 1.1.0]]></title>
+        <id>https://windhawk.net/mods/three-finger-drag#14b59f8f635fae78114073adf62be79cf4dddbea</id>
+        <link href="https://windhawk.net/mods/three-finger-drag"/>
+        <updated>2026-09-24T22:03:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed windows falling behind the cursor with native move in programs slow to move them, such as WhatsApp and Task Manager, and replaying the drag in slow motion after the fingers stopped</li>
+<li>Native move starts sooner: the window is asked to get ready during the first part of the motion, and the cursor keeps following the fingers meanwhile</li>
+<li>macOS drag mode is paced the same way when the press lands on a title bar</li>
+<li>A click of your own can't start a drag: only the mod's own press is taken</li>
+<li>More detail in the log for bug reports</li>
+</ul>]]></content>
+        <author>
+            <name>rodrigothomazi</name>
+            <uri>https://github.com/RodrigoThomazi</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Percentage Indicator 1.6.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-percentage#d716eb9c201b51aaa77af303bfd64272e4ea2ab5</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-percentage"/>
+        <updated>2026-09-24T22:03:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarvolumepercentageindicator">Taskbar Volume Percentage Indicator</h1>
+<p>Replaces the Windows 11 system tray volume icon with the current master volume
+level, updated in real time.</p>
+<p><img src="https://i.imgur.com/vjwali8.png" alt="Taskbar Volume Percentage Preview 1" />
+<img src="https://i.imgur.com/XEf8m50.png" alt="Taskbar Volume Percentage Preview 2" />
+<img src="https://i.imgur.com/27iyViO.png" alt="Taskbar Volume Percentage Preview 3" />
+<img src="https://i.imgur.com/1alQd1j.png" alt="Taskbar Volume Percentage Preview 4" /></p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Display style</strong>: Format of the volume indicator in the taskbar:</li>
+<li>Percentage (<code>50%</code>)</li>
+<li>Number only (<code>50</code>)</li>
+<li>Prefix and percentage (<code>50% Vol</code> or <code>Vol 50%</code>, with custom prefix)</li>
+<li>Icon and percentage (<code>50% 🔊</code> or <code>🔊 50%</code>)</li>
+<li>Native icon and percentage</li>
+<li>Native icon and number</li>
+<li><strong>Element position</strong>: Placement of the icon or prefix relative to the volume text for styles that include both:</li>
+<li>On the right (default)</li>
+<li>On the left</li>
+<li><strong>Custom prefix</strong>: Text prefix used with the "Prefix and percentage" style (default: <code>Vol</code>).</li>
+<li><strong>Mute display style</strong>: Style of the mute indicator when audio is muted:</li>
+<li>MUT</li>
+<li>Mute</li>
+<li>0%</li>
+<li>Cross symbol (<code>✕</code>)</li>
+<li>Mute emoji (<code>🔇</code>)</li>
+<li>Native mute icon</li>
+<li>Custom text</li>
+<li><strong>Custom mute text</strong>: Text used when the "Custom text" mute style is selected (default: <code>Mute</code>).</li>
+<li><strong>Container width</strong>: Width in device-independent pixels (DIPs) of the volume container to prevent adjacent icons from shifting when digit count changes (<code>0</code> for dynamic auto-calculation, <code>-1</code> for Windows default).</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Only Windows 11 is supported.</li>
+<li>If the mod is enabled while Explorer is already running, the text appears
+after the next volume change.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>Inspired by the taskbar visual customization concepts from <a href="https://github.com/m417z">m417z</a> and <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-tray-system-icon-tweaks.wh.cpp">taskbar-tray-system-icon-tweaks</a>.</li>
+</ul>]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Logon & Sleep Fade Restorer 1.5]]></title>
         <id>https://windhawk.net/mods/win7-login-fade#83a455e97dbd8810c9bd0f441cfa3f61ae3830bf</id>
@@ -1237,37 +1305,6 @@ usual menu, without Tags.</li>
         <author>
             <name>mario0318</name>
             <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[SnapSentry 0.21.2]]></title>
-        <id>https://windhawk.net/mods/snap-sentry#b69a191a8b6059d3f3a929a4e4e7526c9bc06f45</id>
-        <link href="https://windhawk.net/mods/snap-sentry"/>
-        <updated>2026-09-22T13:07:34.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Bug reports and feature requests now go to the SnapSentry issues page on GitHub.</li>
-</ul>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Better Volume Mixer 1.4.2]]></title>
-        <id>https://windhawk.net/mods/better-volume-mixer#6a81d207121712655cca0a18e37be0f3bd2377bb</id>
-        <link href="https://windhawk.net/mods/better-volume-mixer"/>
-        <updated>2026-09-22T13:07:23.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added middle-click to mute</li>
-<li>Added exact volume entry</li>
-<li>Added keyboard controls</li>
-<li>Added custom app names and default volumes</li>
-<li>Added option to hide apps by name</li>
-<li>Improved UI</li>
-</ul>]]></content>
-        <author>
-            <name>0Allu</name>
-            <uri>https://github.com/0Allu</uri>
         </author>
     </entry>
 </feed>

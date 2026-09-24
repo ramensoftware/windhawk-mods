@@ -2,12 +2,63 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-24T20:01:27.000Z</updated>
+    <updated>2026-09-24T22:03:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Percentage Indicator 1.6.3]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-percentage#d716eb9c201b51aaa77af303bfd64272e4ea2ab5</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-percentage"/>
+        <updated>2026-09-24T22:03:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarvolumepercentageindicator">Taskbar Volume Percentage Indicator</h1>
+<p>Replaces the Windows 11 system tray volume icon with the current master volume
+level, updated in real time.</p>
+<p><img src="https://i.imgur.com/vjwali8.png" alt="Taskbar Volume Percentage Preview 1" />
+<img src="https://i.imgur.com/XEf8m50.png" alt="Taskbar Volume Percentage Preview 2" />
+<img src="https://i.imgur.com/27iyViO.png" alt="Taskbar Volume Percentage Preview 3" />
+<img src="https://i.imgur.com/1alQd1j.png" alt="Taskbar Volume Percentage Preview 4" /></p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Display style</strong>: Format of the volume indicator in the taskbar:</li>
+<li>Percentage (<code>50%</code>)</li>
+<li>Number only (<code>50</code>)</li>
+<li>Prefix and percentage (<code>50% Vol</code> or <code>Vol 50%</code>, with custom prefix)</li>
+<li>Icon and percentage (<code>50% 🔊</code> or <code>🔊 50%</code>)</li>
+<li>Native icon and percentage</li>
+<li>Native icon and number</li>
+<li><strong>Element position</strong>: Placement of the icon or prefix relative to the volume text for styles that include both:</li>
+<li>On the right (default)</li>
+<li>On the left</li>
+<li><strong>Custom prefix</strong>: Text prefix used with the "Prefix and percentage" style (default: <code>Vol</code>).</li>
+<li><strong>Mute display style</strong>: Style of the mute indicator when audio is muted:</li>
+<li>MUT</li>
+<li>Mute</li>
+<li>0%</li>
+<li>Cross symbol (<code>✕</code>)</li>
+<li>Mute emoji (<code>🔇</code>)</li>
+<li>Native mute icon</li>
+<li>Custom text</li>
+<li><strong>Custom mute text</strong>: Text used when the "Custom text" mute style is selected (default: <code>Mute</code>).</li>
+<li><strong>Container width</strong>: Width in device-independent pixels (DIPs) of the volume container to prevent adjacent icons from shifting when digit count changes (<code>0</code> for dynamic auto-calculation, <code>-1</code> for Windows default).</li>
+</ul>
+<h2 id="compatibility">Compatibility</h2>
+<ul>
+<li>Only Windows 11 is supported.</li>
+<li>If the mod is enabled while Explorer is already running, the text appears
+after the next volume change.</li>
+</ul>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>Inspired by the taskbar visual customization concepts from <a href="https://github.com/m417z">m417z</a> and <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-tray-system-icon-tweaks.wh.cpp">taskbar-tray-system-icon-tweaks</a>.</li>
+</ul>]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Parallax Wallpaper 0.9.0]]></title>
         <id>https://windhawk.net/mods/parallax-wallpaper#0f940ba13bb4cfbc285f2b5acdf4e2cacac112e7</id>
@@ -1778,49 +1829,6 @@ Windhawk's Inclusion List.</p>]]></content>
         <author>
             <name>VitalS</name>
             <uri>https://github.com/VitalSkib</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Power Action Countdown 1.2]]></title>
-        <id>https://windhawk.net/mods/power-action-countdown#33fb034056848ebcbd106d07dddf1b8aaf4278a5</id>
-        <link href="https://windhawk.net/mods/power-action-countdown"/>
-        <updated>2026-09-20T19:00:24.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="poweractioncountdown">Power action countdown</h1>
-<p>Shows an individually configurable countdown before Windows shuts down,
-restarts, enters sleep, or enters hibernation. A value of <code>0</code> disables the
-countdown for the corresponding action and executes it immediately. Values
-above 30 seconds are limited to 30 seconds.</p>
-<p>The countdown is cancelled by:</p>
-<ul>
-<li>any keyboard key</li>
-<li>a mouse button</li>
-<li>the mouse wheel</li>
-<li>a touchscreen press on the overlay</li>
-</ul>
-<p>Moving the mouse alone does not cancel the countdown. The cancelling input is
-consumed and isn't forwarded to the application underneath the overlay.</p>
-<p>The countdown is displayed on the primary monitor. Keyboard and mouse-button
-input on other monitors still cancels it.</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://i.imgur.com/GpcwW3m.png" alt="Power action countdown" /></p>
-<h2 id="scopeandlimitations">Scope and limitations</h2>
-<p>The mod targets power actions initiated through the Windows shell. It is loaded
-into:</p>
-<ul>
-<li><code>explorer.exe</code> for classic shell power paths</li>
-<li><code>RuntimeBroker.exe</code> because current Windows 11 builds can delegate Start-menu
-power actions to a runtime broker</li>
-</ul>
-<p>Power actions initiated by <code>shutdown.exe</code>, Task Manager, the Ctrl+Alt+Delete
-screen, the sign-in/lock screen, or arbitrary third-party applications aren't
-covered unless they ultimately call a hooked API from one of these processes.</p>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>Enable mod logging in Windhawk's <strong>Advanced</strong> tab. When an action is detected,
-the log states which Windows API was intercepted. The exact API used by Windows
-can differ between builds.</p>]]></content>
-        <author>
-            <name>Nerdworld</name>
-            <uri>https://github.com/nerdworldDE</uri>
         </author>
     </entry>
 </feed>

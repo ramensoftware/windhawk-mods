@@ -13008,6 +13008,33 @@
         "version": "1.1.4"
       }
     },
+    "taskbar-volume-percentage": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790287417000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790287417000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "gilnett",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
+        "description": "Shows the master volume percentage in the Windows 11 system tray volume icon",
+        "github": "https://github.com/gilnett",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Taskbar Volume Percentage Indicator",
+        "version": "1.6.3"
+      }
+    },
     "taskbar-wheel-cycle": {
       "details": {
         "defaultSorting": 52270,
@@ -13260,7 +13287,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 5],
         "ratingUsers": 5,
         "reviews": 0,
-        "updated": 1790013628000,
+        "updated": 1790287420000,
         "users": 43
       },
       "metadata": {
@@ -13272,7 +13299,7 @@
           "*"
         ],
         "name": "Three Finger Drag",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "tiling-helper": {
