@@ -23,7 +23,7 @@ In order for the tweak to collect your statistics, you need to use your API, so 
 2. Click **New OAuth Application** - come up with any name **(Example: Taskbar)**, **"Application callback URL"** is optional.
 3. Copy the generated `Client ID` & `Client Secret`.
 4. Go back to Windhawk, open the **Settings** tab and paste the copied data by cell with your nickname.
-_(you can use your old nickname "XATCYHE MIKU, XATCYHE_MIKU, antoshika")_
+_(you can use your previous nickname "XATCYHE MIKU, XATCYHE_MIKU, antoshika")_
 
 ## ⚠️ Problems:
 * **"✎ check 'Settings'"**: You didn't fill in the required fields in the settings.
