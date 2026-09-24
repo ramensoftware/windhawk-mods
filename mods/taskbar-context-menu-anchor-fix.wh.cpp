@@ -93,6 +93,9 @@ bool IsTaskbarWindow(HWND hWnd) {
            _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0;
 }
 
+constexpr WCHAR kContentBridgeClassName[] =
+    L"Windows.UI.Composition.DesktopWindowContentBridge";
+
 // Adjusts the flyout show options so that the menu opens centered on the
 // click, just above the taskbar. Returns false if the menu should be left
 // untouched.
@@ -146,9 +149,8 @@ bool AdjustShowOptions(DependencyObject* placementTarget,
     // The XAML island's origin on screen. XAML coordinates relative to the
     // root are relative to this window.
     POINT islandOrigin{};
-    HWND hBridgeWnd = FindWindowEx(
-        hTaskbarWnd, nullptr,
-        L"Windows.UI.Composition.DesktopWindowContentBridge", nullptr);
+    HWND hBridgeWnd =
+        FindWindowEx(hTaskbarWnd, nullptr, kContentBridgeClassName, nullptr);
     RECT bridgeRc{};
     if (hBridgeWnd && GetWindowRect(hBridgeWnd, &bridgeRc)) {
         islandOrigin = {bridgeRc.left, bridgeRc.top};
