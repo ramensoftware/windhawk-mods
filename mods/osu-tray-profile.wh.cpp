@@ -27,9 +27,10 @@ _(you can use your previous nickname "XATCYHE MIKU, XATCYHE_MIKU, antoshika")_
 
 ## ⚠️ Problems:
 * **"✎ check 'Settings'"**: You didn't fill in the required fields in the settings.
+* **"⛔ Net Error"**: The widget cannot connect to the internet.
 * **"⛔ API Error" / "⛔ User Error"**: Invalid Client ID, Client Secret or Username. Make sure that you have copied them completely and without spaces at the end.
 * **"⛔ Rate Limited"**: The osu! API has temporarily limited your requests (or Cloudflare challenged the connection). The widget will automatically wait 60 seconds and recover on its own.
-* **"⛔ HTTP [code]"**: A specific network or server error occurred (e.g. HTTP 404 - if the user is completely missing or HTTP 500/502 - for server issues).
+* **"⛔ HTTP [code]"**: A specific network or server error occurred (e.g. HTTP 404 - if the user is completely missing or HTTP - 500/502 for server issues).
 ---
 *🥬 Im here: 💙 [hatsunemiku39.ru](http://hatsunemiku39.ru) // 🟣 [osu!profile](https://osu.ppy.sh/users/18815482) // 📶 [Discord](https://discord.gg/3jBQs9buYe)*
 */
@@ -67,6 +68,8 @@ _(you can use your previous nickname "XATCYHE MIKU, XATCYHE_MIKU, antoshika")_
 #include <atomic>
 #include <vector>
 #include <optional>
+#include <cctype>
+#include <cstdio>
 
 using namespace Gdiplus;
 
@@ -88,6 +91,15 @@ std::wstring g_displayName = L"Loading...";
 std::wstring g_displayStats = L"";
 std::wstring g_avatarPath = L"";
 int g_consecutiveErrors = 0;
+int g_lastDpi = 96;
+
+int GetTaskbarDpi() {
+    HWND trayWnd = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (trayWnd) {
+        return GetDpiForWindow(trayWnd);
+    }
+    return 96;
+}
 
 void LoadSettings() {
     AcquireSRWLockExclusive(&g_statsLock);
@@ -106,6 +118,8 @@ void LoadSettings() {
 
     g_updateInterval = Wh_GetIntSetting(L"update.interval");
     if (g_updateInterval < 5) g_updateInterval = 5;
+
+    g_accessToken.clear();
     
     ReleaseSRWLockExclusive(&g_statsLock);
 }
@@ -275,14 +289,15 @@ void FetchOsuStats() {
             g_consecutiveErrors++;
             if (statusCode == 429) {
                 g_displayName = L"⛔ Rate Limited";
-            } else if (statusCode != 0) {
-                g_displayName = L"⛔ HTTP " + std::to_wstring(statusCode);
+            } else if (statusCode == 0) {
+                g_displayName = L"⛔ Net Error";
             } else {
-                g_displayName = L"⛔ API Error";
+                g_displayName = L"⛔ HTTP " + std::to_wstring(statusCode);
             }
             g_displayStats = L"";
             g_avatarPath = L"";
             ReleaseSRWLockExclusive(&g_statsLock);
+            Wh_Log(L"Auth fetch failed: HTTP %lu, Response: %hs", statusCode, response.c_str());
             return;
         }
 
@@ -311,6 +326,7 @@ void FetchOsuStats() {
             AcquireSRWLockExclusive(&g_statsLock);
             g_accessToken = ""; 
             ReleaseSRWLockExclusive(&g_statsLock);
+            g_forceUpdate = true;
             return;
         }
 
@@ -335,14 +351,15 @@ void FetchOsuStats() {
         g_consecutiveErrors++;
         if (userStatusCode == 429) {
             g_displayName = L"⛔ Rate Limited";
-        } else if (userStatusCode != 0) {
-            g_displayName = L"⛔ HTTP " + std::to_wstring(userStatusCode);
+        } else if (userStatusCode == 0) {
+            g_displayName = L"⛔ Net Error";
         } else {
-            g_displayName = L"⛔ User Error";
+            g_displayName = L"⛔ HTTP " + std::to_wstring(userStatusCode);
         }
         g_displayStats = L"";
         g_avatarPath = L"";
         ReleaseSRWLockExclusive(&g_statsLock);
+        Wh_Log(L"User fetch failed: HTTP %lu, Response: %hs", userStatusCode, userResponse.c_str());
         return;
     }
 
@@ -386,16 +403,7 @@ void DrawOverlay(HWND hwnd) {
     bool hasError = (g_consecutiveErrors > 0);
     ReleaseSRWLockShared(&g_statsLock);
 
-    int dpi = 96;
-    HWND trayWnd = FindWindowW(L"Shell_TrayWnd", NULL);
-    if (trayWnd) {
-        using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
-        HMODULE hUser32 = GetModuleHandle(L"user32.dll");
-        if (hUser32) {
-            GetDpiForWindow_t pGetDpiForWindow = (GetDpiForWindow_t)GetProcAddress(hUser32, "GetDpiForWindow");
-            if (pGetDpiForWindow) dpi = pGetDpiForWindow(trayWnd);
-        }
-    }
+    int dpi = GetTaskbarDpi();
     
     int scaledWidth = MulDiv(200, dpi, 96);
     int scaledHeight = MulDiv(50, dpi, 96);
@@ -420,18 +428,26 @@ void DrawOverlay(HWND hwnd) {
         graphics.SetSmoothingMode(SmoothingModeAntiAlias);
         graphics.SetTextRenderingHint(TextRenderingHintAntiAlias);
         graphics.Clear(Color(0, 0, 0, 0)); 
-        graphics.ScaleTransform((float)dpi / 96.0f, (float)dpi / 96.0f);
+        
+        int s14 = MulDiv(14, dpi, 96);
+        int s12_f = MulDiv(12, dpi, 96);
+        int s32 = MulDiv(32, dpi, 96);
+        int s9 = MulDiv(9, dpi, 96);
+        int s12 = MulDiv(12, dpi, 96);
+        int s50 = MulDiv(50, dpi, 96);
+        int s6 = MulDiv(6, dpi, 96);
+        int s24 = MulDiv(24, dpi, 96);
 
         FontFamily fontFamily(L"Segoe UI");
-        Font fontName(&fontFamily, 14, FontStyleBold, UnitPixel);
-        Font fontStats(&fontFamily, 12, FontStyleRegular, UnitPixel);
+        Font fontName(&fontFamily, s14, FontStyleBold, UnitPixel);
+        Font fontStats(&fontFamily, s12_f, FontStyleRegular, UnitPixel);
         SolidBrush textBrush(Color(255, 255, 255, 255));
 
         if (avPath.empty()) {
             StringFormat format;
             format.SetAlignment(StringAlignmentCenter);
             format.SetLineAlignment(StringAlignmentCenter);
-            RectF rect(0, 0, 200, 50);
+            RectF rect(0, 0, scaledWidth, scaledHeight);
 
             if (g_isUpdating && !hasError) {
                 graphics.DrawString(L"uno momento...", -1, &fontName, rect, &format, &textBrush);
@@ -441,29 +457,28 @@ void DrawOverlay(HWND hwnd) {
         } else {
             Image image(avPath.c_str());
             if (image.GetLastStatus() == Ok) {
-                Bitmap resized(32, 32, &graphics);
+                Bitmap resized(s32, s32, &graphics);
                 Graphics gResize(&resized);
                 gResize.SetInterpolationMode(InterpolationModeHighQualityBicubic);
                 gResize.Clear(Color(0, 0, 0, 0));
-                gResize.DrawImage(&image, 0, 0, 32, 32);
+                gResize.DrawImage(&image, 0, 0, s32, s32);
 
                 TextureBrush tBrush(&resized);
-                Matrix mat(1.0f, 0.0f, 0.0f, 1.0f, 9.0f, 9.0f);
+                Matrix mat(1.0f, 0.0f, 0.0f, 1.0f, (float)s9, (float)s9);
                 tBrush.SetTransform(&mat);
 
                 GraphicsPath path;
-                int x = 9, y = 9, w = 32, h = 32, d = 12;
-                path.AddArc(x, y, d, d, 180, 90);
-                path.AddArc(x + w - d, y, d, d, 270, 90);
-                path.AddArc(x + w - d, y + h - d, d, d, 0, 90);
-                path.AddArc(x, y + h - d, d, d, 90, 90);
+                path.AddArc(s9, s9, s12, s12, 180, 90);
+                path.AddArc(s9 + s32 - s12, s9, s12, s12, 270, 90);
+                path.AddArc(s9 + s32 - s12, s9 + s32 - s12, s12, s12, 0, 90);
+                path.AddArc(s9, s9 + s32 - s12, s12, s12, 90, 90);
                 path.CloseFigure();
 
                 graphics.FillPath(&tBrush, &path);
             }
 
-            graphics.DrawString(name.c_str(), -1, &fontName, PointF(50, 6), &textBrush);
-            graphics.DrawString(stats.c_str(), -1, &fontStats, PointF(50, 24), &textBrush);
+            graphics.DrawString(name.c_str(), -1, &fontName, PointF(s50, s6), &textBrush);
+            graphics.DrawString(stats.c_str(), -1, &fontStats, PointF(s50, s24), &textBrush);
         }
     }
 
@@ -523,15 +538,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         case WM_TIMER: {
             if (wParam == 1) {
-                int dpi = 96;
-                HWND trayWnd = FindWindowW(L"Shell_TrayWnd", NULL);
-                if (trayWnd) {
-                    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
-                    HMODULE hUser32 = GetModuleHandle(L"user32.dll");
-                    if (hUser32) {
-                        GetDpiForWindow_t pGetDpiForWindow = (GetDpiForWindow_t)GetProcAddress(hUser32, "GetDpiForWindow");
-                        if (pGetDpiForWindow) dpi = pGetDpiForWindow(trayWnd);
-                    }
+                int dpi = GetTaskbarDpi();
+                if (dpi != g_lastDpi) {
+                    g_lastDpi = dpi;
+                    g_needsRedraw = true;
                 }
 
                 int width = MulDiv(200, dpi, 96);
@@ -541,6 +551,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 HWND insertAfter = NULL;
                 UINT flags = SWP_NOACTIVATE | SWP_SHOWWINDOW;
 
+                HWND trayWnd = FindWindowW(L"Shell_TrayWnd", NULL);
                 if (trayWnd) {
                     HWND trayNotifyWnd = FindWindowExW(trayWnd, NULL, L"TrayNotifyWnd", NULL);
                     RECT rect;
@@ -599,6 +610,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 }
 
 void UiThreadFunc() {
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    
     ULONG_PTR gdiplusToken;
     GdiplusStartupInput gdiplusStartupInput;
     GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
@@ -667,6 +680,7 @@ void WhTool_ModSettingsChanged() {
     g_forceUpdate = true;
 }
 
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
