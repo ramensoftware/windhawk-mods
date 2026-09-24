@@ -5,7 +5,7 @@
 // @version         1.0
 // @author          zed712969-crypto
 // @github          https://github.com/zed712969-crypto
-// @include         windhawk.exe
+// @include         explorer.exe
 // @compilerOptions -lwinhttp -lgdi32
 // ==/WindhawkMod==
 
@@ -13,56 +13,59 @@
 /*
 # Selection Layout Switcher & Translator
 
-A lightweight Windows tool that bridges communication between English and Russian speakers. Eliminates mistyped keyboard layout errors and allows instant two-way translation without breaking workflow.
+A lightweight Windows utility that bridges communication between English and Russian speakers. Eliminates mistyped keyboard layout errors and allows instant two-way translation without breaking workflow.
 
-> **Privacy Notice**: This mod optionally connects to Google Translate (`translate.googleapis.com`) to perform translations. Selected text is transmitted over HTTPS only when translation is manually triggered. This feature is strictly **opt-in** and disabled by default.
+> **Privacy Notice**: This mod connects to Google Translate (`translate.googleapis.com`) over HTTPS to perform translations. Selected text is transmitted only when a translation hotkey is triggered. This feature can be toggled in settings.
+
+## Screenshot
+
+![HUD Tooltip Preview](https://imgur.com/a/MWnpLgr)
 
 ## Features
 
-- **Layout Correction (`Pause`)**: Fixes mistyped text (`ghbdtn` -> `привет` or vice versa) with full punctuation mapping and automatically updates the active system input layout.
-- **In-Place Translation (`Ctrl + Alt + T`)**: Replaces selected text directly inside any editable input field using HTTPS POST requests. Supports multi-line paragraphs up to 4000+ characters.
-- **Floating HUD Tooltip (`Ctrl + Alt + Q`)**: Translates read-only incoming messages (Discord, Telegram, web pages, games) in a sleek DPI-aware dark tooltip positioned near your cursor.
+- **Layout Correction (`Ctrl + Shift + Space`)**: Fixes mistyped text (`ghbdtn` -> `привет` or vice versa) with full punctuation mapping and automatically updates the active system input layout.
+- **In-Place Translation (`Alt + T`)**: Replaces selected text directly inside any editable input field using HTTPS POST requests. Supports multi-line paragraphs up to 4000+ characters.
+- **Floating HUD Tooltip (`Alt + Q`)**: Translates read-only incoming messages (Discord, Telegram, web pages, games) in a sleek DPI-aware dark tooltip positioned near your cursor.
 - **Smart Auto-Dismiss**: The tooltip remains visible until you click anywhere, scroll the mouse wheel, or press navigation keys (Esc / Arrows).
-- **Clipboard Preservation**: Automatically restores previous clipboard contents after performing operations.
+- **Clipboard Preservation**: Automatically restores previous text clipboard contents after performing operations.
 
 ## Default Hotkeys
 
-- `Pause` - Switch mistyped layout (US <-> RU)
-- `Ctrl + Alt + T` - In-place translation (Requires enabling online translation in Settings)
-- `Ctrl + Alt + Q` - Floating HUD Tooltip translation (Requires enabling online translation in Settings)
+- `Ctrl + Shift + Space` - Switch mistyped layout (US <-> RU)
+- `Alt + T` - In-place translation
+- `Alt + Q` - Floating HUD Tooltip translation
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- enable_translation: false
+- enable_translation: true
   $name: "Enable Online Translation"
-  $description: "Allow sending selected text to Google Translate over HTTPS for translation features. Disabled by default for privacy."
-- hotkey_layout: "Pause"
+  $description: "Allow sending selected text to Google Translate over HTTPS for translation features."
+- hotkey_layout: "Ctrl + Shift + Space"
   $name: "Layout Correction Hotkey"
-  $description: "Switch mistyped layout (default: Pause). Supports Shift, Ctrl, Alt, Pause, Insert, F1-F12, letters, digits."
-- hotkey_translate: "Ctrl + Alt + T"
+  $description: "Switch mistyped layout (default: Ctrl + Shift + Space). Supports Ctrl, Shift, Alt, Space, Insert, letters, digits."
+- hotkey_translate: "Alt + T"
   $name: "In-Place Translate Hotkey"
-  $description: "Translate selected text inline (default: Ctrl + Alt + T)."
-- hotkey_tooltip: "Ctrl + Alt + Q"
+  $description: "Translate selected text inline (default: Alt + T)."
+- hotkey_tooltip: "Alt + Q"
   $name: "HUD Tooltip Translate Hotkey"
-  $description: "Translate selected text in a floating tooltip (default: Ctrl + Alt + Q)."
+  $description: "Translate selected text in a floating tooltip (default: Alt + Q)."
 - anim_duration: 150
   $name: "Animation Duration (ms)"
   $description: "Fade animation speed in ms (0 to disable)."
 */
 // ==/WindhawkModSettings==
 
-#ifndef WINDHAWK_TOOL_LAUNCHER
-
 #include <windows.h>
 #include <winhttp.h>
 #include <string>
-#include <vector>
 #include <unordered_map>
 #include <cwctype>
+#include <cwchar>
 #include <memory>
 #include <atomic>
+#include <windhawk_utils.h>
 
 #define WM_SHOW_TOOLTIP (WM_USER + 101)
 #define WM_HIDE_TOOLTIP (WM_USER + 102)
@@ -70,6 +73,7 @@ A lightweight Windows tool that bridges communication between English and Russia
 
 #define TIMER_ANIM 2
 
+static HANDLE g_hSingleInstanceMutex = NULL;
 HHOOK g_keyboardHook = NULL;
 HHOOK g_mouseHook = NULL;
 HANDLE g_hMainThread = NULL;
@@ -91,7 +95,7 @@ AnimState g_animState = STATE_HIDDEN;
 DWORD g_animStartTime = 0;
 int g_targetX = 0, g_targetY = 0, g_winW = 0, g_winH = 0;
 
-bool g_bEnableTranslation = false;
+bool g_bEnableTranslation = true;
 int g_animDuration = 150;
 
 struct HotkeyConfig {
@@ -213,17 +217,9 @@ void ParseHotkey(const std::wstring& str, HotkeyConfig& cfg, bool defCtrl, bool 
 void LoadSettings() {
     g_bEnableTranslation = Wh_GetIntSetting(L"enable_translation") != 0;
 
-    PCWSTR sLayout = Wh_GetStringSetting(L"hotkey_layout");
-    ParseHotkey(sLayout ? sLayout : L"", g_hkLayout, false, false, false, VK_PAUSE);
-    if (sLayout) Wh_FreeStringSetting(sLayout);
-
-    PCWSTR sTranslate = Wh_GetStringSetting(L"hotkey_translate");
-    ParseHotkey(sTranslate ? sTranslate : L"", g_hkTranslate, true, false, true, 'T');
-    if (sTranslate) Wh_FreeStringSetting(sTranslate);
-
-    PCWSTR sTooltip = Wh_GetStringSetting(L"hotkey_tooltip");
-    ParseHotkey(sTooltip ? sTooltip : L"", g_hkTooltip, true, false, true, 'Q');
-    if (sTooltip) Wh_FreeStringSetting(sTooltip);
+    ParseHotkey(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"hotkey_layout")).get(), g_hkLayout, true, true, false, VK_SPACE);
+    ParseHotkey(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"hotkey_translate")).get(), g_hkTranslate, false, false, true, 'T');
+    ParseHotkey(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"hotkey_tooltip")).get(), g_hkTooltip, false, false, true, 'Q');
 
     g_animDuration = Wh_GetIntSetting(L"anim_duration");
     if (g_animDuration < 0) g_animDuration = 150;
@@ -400,7 +396,7 @@ std::wstring ParseGoogleTranslateResponse(const std::string& json) {
 std::wstring FetchTranslationWinHttp(const std::wstring& text, bool toRussian) {
     if (g_bStopRequested) return L"";
 
-    HINTERNET hSession = WinHttpOpen(L"Windhawk-Translator-Tool/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET hSession = WinHttpOpen(L"Windhawk-Translator/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession) return L"";
 
     WinHttpSetTimeouts(hSession, 3000, 3000, 4000, 4000);
@@ -447,17 +443,8 @@ std::wstring FetchTranslationWinHttp(const std::wstring& text, bool toRussian) {
     return ParseGoogleTranslateResponse(response);
 }
 
-std::wstring GetTranslationForSelection() {
-    std::wstring backupClipboard = GetClipboardText();
-
-    if (!ForceCopy()) {
-        return L"";
-    }
-
-    std::wstring originalText = GetClipboardText();
-    if (originalText.empty()) {
-        return L"";
-    }
+std::wstring FetchTranslationForText(const std::wstring& originalText) {
+    if (originalText.empty()) return L"";
 
     int cyrillicCount = 0;
     int latinCount = 0;
@@ -470,18 +457,21 @@ std::wstring GetTranslationForSelection() {
     }
     bool toRussian = (latinCount >= cyrillicCount);
 
-    std::wstring translated = FetchTranslationWinHttp(originalText, toRussian);
-
-    if (!backupClipboard.empty()) {
-        SetClipboardText(backupClipboard);
-    }
-
-    return translated;
+    return FetchTranslationWinHttp(originalText, toRussian);
 }
 
 DWORD WINAPI TranslationWorker(LPVOID) {
-    std::wstring translated = GetTranslationForSelection();
+    std::wstring backupClipboard = GetClipboardText();
+
+    if (!ForceCopy()) {
+        return 0;
+    }
+
+    std::wstring originalText = GetClipboardText();
+    std::wstring translated = FetchTranslationForText(originalText);
+
     if (translated.empty() || g_bStopRequested) {
+        if (!backupClipboard.empty()) SetClipboardText(backupClipboard);
         if (!g_bStopRequested) MessageBeep(MB_ICONHAND);
         return 0;
     }
@@ -489,11 +479,27 @@ DWORD WINAPI TranslationWorker(LPVOID) {
     SetClipboardText(translated);
     Sleep(40);
     ForcePaste();
+
+    Sleep(250);
+    if (!backupClipboard.empty() && !g_bStopRequested) {
+        SetClipboardText(backupClipboard);
+    }
     return 0;
 }
 
 DWORD WINAPI TooltipWorker(LPVOID) {
-    std::wstring translated = GetTranslationForSelection();
+    std::wstring backupClipboard = GetClipboardText();
+
+    if (!ForceCopy()) {
+        return 0;
+    }
+
+    std::wstring originalText = GetClipboardText();
+    if (!backupClipboard.empty()) {
+        SetClipboardText(backupClipboard);
+    }
+
+    std::wstring translated = FetchTranslationForText(originalText);
     if (translated.empty() || g_bStopRequested) {
         if (!g_bStopRequested) MessageBeep(MB_ICONHAND);
         return 0;
@@ -557,14 +563,16 @@ DWORD WINAPI LayoutWorker(LPVOID) {
         PostMessage(hwnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)targetLayout);
     }
 
-    Sleep(50);
-    if (!backupClipboard.empty()) {
+    Sleep(250);
+    if (!backupClipboard.empty() && !g_bStopRequested) {
         SetClipboardText(backupClipboard);
     }
     return 0;
 }
 
 void StartWorker(LPTHREAD_START_ROUTINE pfn) {
+    if (g_bStopRequested) return;
+
     if (g_hWorkerThread) {
         if (WaitForSingleObject(g_hWorkerThread, 0) == WAIT_TIMEOUT) {
             return;
@@ -577,11 +585,8 @@ void StartWorker(LPTHREAD_START_ROUTINE pfn) {
 
 void UpdateDpiFont(HWND hwnd) {
     UINT dpi = 96;
-    HMODULE hUser = GetModuleHandleW(L"user32.dll");
-    typedef UINT (WINAPI *pfn_GetDpiForWindow)(HWND);
-    auto fnGetDpiForWindow = (pfn_GetDpiForWindow)GetProcAddress(hUser, "GetDpiForWindow");
-    if (fnGetDpiForWindow && hwnd) {
-        dpi = fnGetDpiForWindow(hwnd);
+    if (hwnd) {
+        dpi = GetDpiForWindow(hwnd);
     }
     if (dpi == 0) dpi = 96;
 
@@ -781,7 +786,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
         bool shiftDown = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
         bool ctrlDown  = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-        bool altDown   = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+        bool altDown   = ((pKey->flags & LLKHF_ALTDOWN) != 0) || ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
 
         if (g_bEnableTranslation && MatchHotkey(g_hkTooltip, pKey->vkCode, ctrlDown, shiftDown, altDown)) {
             StartWorker(TooltipWorker);
@@ -875,7 +880,16 @@ DWORD WINAPI MainThread(LPVOID) {
     return 0;
 }
 
-BOOL WhTool_ModInit() {
+BOOL Wh_ModInit() {
+    g_hSingleInstanceMutex = CreateMutexW(NULL, FALSE, L"Local\\Windhawk_QuickTranslator_SingleInstance");
+    if (!g_hSingleInstanceMutex || GetLastError() == ERROR_ALREADY_EXISTS) {
+        if (g_hSingleInstanceMutex) {
+            CloseHandle(g_hSingleInstanceMutex);
+            g_hSingleInstanceMutex = NULL;
+        }
+        return FALSE;
+    }
+
     InitMaps();
     LoadSettings();
     g_bStopRequested = false;
@@ -883,20 +897,14 @@ BOOL WhTool_ModInit() {
     return g_hMainThread != NULL;
 }
 
-void WhTool_ModSettingsChanged() {
+void Wh_ModSettingsChanged() {
     if (g_mainThreadId) {
         PostThreadMessage(g_mainThreadId, WM_APP_SETTINGS_CHANGED, 0, 0);
     }
 }
 
-void WhTool_ModUninit() {
+void Wh_ModUninit() {
     g_bStopRequested = true;
-
-    if (g_hWorkerThread) {
-        WaitForSingleObject(g_hWorkerThread, INFINITE);
-        CloseHandle(g_hWorkerThread);
-        g_hWorkerThread = NULL;
-    }
 
     if (g_mainThreadId) {
         PostThreadMessage(g_mainThreadId, WM_QUIT, 0, 0);
@@ -906,22 +914,15 @@ void WhTool_ModUninit() {
             g_hMainThread = NULL;
         }
     }
+
+    if (g_hWorkerThread) {
+        WaitForSingleObject(g_hWorkerThread, INFINITE);
+        CloseHandle(g_hWorkerThread);
+        g_hWorkerThread = NULL;
+    }
+
+    if (g_hSingleInstanceMutex) {
+        CloseHandle(g_hSingleInstanceMutex);
+        g_hSingleInstanceMutex = NULL;
+    }
 }
-
-#else // WINDHAWK_TOOL_LAUNCHER
-
-#include <windhawk_utils.h>
-
-BOOL Wh_ModInit() {
-    return WindhawkUtils::ToolLauncher::Init();
-}
-
-void Wh_ModUninit() {
-    WindhawkUtils::ToolLauncher::Uninit();
-}
-
-void Wh_ModSettingsChanged() {
-    WindhawkUtils::ToolLauncher::SettingsChanged();
-}
-
-#endif // WINDHAWK_TOOL_LAUNCHER
