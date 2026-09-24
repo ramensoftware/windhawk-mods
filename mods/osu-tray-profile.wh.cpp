@@ -28,9 +28,8 @@ _(you can use your previous nickname "XATCYHE MIKU, XATCYHE_MIKU, antoshika")_
 ## ⚠️ Problems:
 * **"✎ check 'Settings'"**: You didn't fill in the required fields in the settings.
 * **"⛔ Net Error"**: The widget cannot connect to the internet.
-* **"⛔ API Error" / "⛔ User Error"**: Invalid Client ID, Client Secret or Username. Make sure that you have copied them completely and without spaces at the end.
 * **"⛔ Rate Limited"**: The osu! API has temporarily limited your requests (or Cloudflare challenged the connection). The widget will automatically wait 60 seconds and recover on its own.
-* **"⛔ HTTP [code]"**: A specific network or server error occurred (e.g. HTTP 404 - if the user is completely missing or HTTP - 500/502 for server issues).
+* **"⛔ HTTP [code]"**: A specific network or server error occurred.
 ---
 *🥬 Im here: 💙 [hatsunemiku39.ru](http://hatsunemiku39.ru) // 🟣 [osu!profile](https://osu.ppy.sh/users/18815482) // 📶 [Discord](https://discord.gg/3jBQs9buYe)*
 */
@@ -96,7 +95,8 @@ int g_lastDpi = 96;
 int GetTaskbarDpi() {
     HWND trayWnd = FindWindowW(L"Shell_TrayWnd", NULL);
     if (trayWnd) {
-        return GetDpiForWindow(trayWnd);
+        UINT dpi = GetDpiForWindow(trayWnd);
+        return dpi ? dpi : 96;
     }
     return 96;
 }
@@ -323,10 +323,20 @@ void FetchOsuStats() {
             WinHttpCloseHandle(hRequestUser);
             WinHttpCloseHandle(hConnect);
             WinHttpCloseHandle(hSession);
+            
             AcquireSRWLockExclusive(&g_statsLock);
-            g_accessToken = ""; 
+            g_accessToken.clear();
+            if (cachedToken.empty()) {
+                g_consecutiveErrors++;
+                g_displayName = L"⛔ HTTP 401";
+                g_displayStats = L"";
+                g_avatarPath = L"";
+            }
             ReleaseSRWLockExclusive(&g_statsLock);
-            g_forceUpdate = true;
+            
+            if (!cachedToken.empty()) {
+                g_forceUpdate = true;
+            }
             return;
         }
 
@@ -680,7 +690,6 @@ void WhTool_ModSettingsChanged() {
     g_forceUpdate = true;
 }
 
-// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
 
