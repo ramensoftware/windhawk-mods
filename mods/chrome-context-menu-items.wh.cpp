@@ -160,7 +160,7 @@
   - itemBackgroundColor: "#404040"
     $name: Menu item background color (HEX)
     $description: Enter six HEX digits with or without #. Colors standard item backgrounds (including hover/selection) in the enabled menu families and their submenus. Rows without a painted background show the group color. Text and icons retain Chrome's colors. Invalid values use Chrome's color. Close and reopen menus after changing settings.
-  - transparency: true
+  - transparency: false
     $name: Enable menu background transparency
     $description: Makes the menu group background translucent while keeping text and icons solid. Applies to the enabled menu families and their submenus. Close and reopen menus after changing settings.
   - backgroundOpacity: "99"
@@ -414,8 +414,6 @@ Designed for 64-bit Chrome on Windows.
   menu) and keyboard shortcut labels, without disabling the shortcuts.
 - **Tabs and toolbar** - tab title font size, hidden tab close buttons, tab
   icon-to-title spacing and extension button width.
-- **No 5 GB download on every update** - hook addresses are prepared once per
-  Chrome build and saved (see [How it works](#how-it-works)).
 
 ## Screenshots
 
@@ -436,7 +434,8 @@ Grouping extension commands into one Extensions submenu:
 Out of the box the mod:
 
 * Styles all menu families with an item corner radius of 8, group padding of 4,
-  top / bottom spacing of 6, 99% background opacity and a `#3b3b3b` group border.
+  top / bottom spacing of 6 and a `#3b3b3b` group border. Background
+  transparency is off.
 * Hides Ask Gemini, Print, Cast, Save page as, Open in reading mode, Search with
   Google Lens, Send to your devices, Create QR Code, both Translate entries, Open
   link in split view and Search image with Google Lens. *View page source* and
@@ -456,18 +455,29 @@ The mod hooks Chrome's own menu code in `chrome.dll`: the page context menu
 shared Views menu classes to change fonts, spacing, colors and borders. Tab and
 toolbar tweaks hook Chrome's tab and toolbar views.
 
-These functions aren't exported, so their addresses normally come from Chrome's
-debug symbols - a download of several gigabytes which changes with every Chrome
-update. Instead, the mod first looks for the current build in its built-in
-address table and in the addresses it saved earlier. Only when the build is new
-does it fall back to the symbols, then saves the result, so each Chrome build is
-prepared at most once. Saved addresses are tied to the exact `chrome.dll` build
-and validated before any hook is installed.
+These functions aren't exported, so their addresses come from Chrome's debug
+symbols, which Windhawk downloads from Chromium's symbol server. The download is
+several gigabytes and happens once for each new Chrome build; Windhawk caches
+the result, so later launches of the same build start right away. Every hook is
+matched by its full decorated name, so if Chrome changes a function's signature,
+that feature is simply unavailable instead of being hooked with the wrong
+arguments.
+
+If preparing a new build takes longer than 5 seconds, Chrome starts without the
+mod's changes and a tray icon reports the progress. Restart Chrome once it says
+setup is complete.
 
 ### Notes
 
-Close and reopen menus after changing settings. Close open menus before updating
-or disabling the mod.
+* Close and reopen menus after changing settings. Open menus are closed when the
+  mod is disabled or updated.
+* If the mod is disabled while the debug symbols for a new Chrome build are
+  still downloading, Windhawk waits for the download to finish before unloading
+  the mod, which can take several minutes.
+* The tab, extension button and menu font / spacing / corner radius options
+  overlap with Chrome Native UI Tweaks. If you use both mods, configure each of
+  those options in one mod only and leave it at Chrome default in the other.
+* Thanks to Dron007, this mod started from it.
 */
 // ==/WindhawkModReadme==
 // clang-format on
@@ -486,7 +496,6 @@ or disabling the mod.
 #include <cwchar>
 #include <memory>
 #include <mutex>
-#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -495,6 +504,8 @@ or disabling the mod.
 
 static constexpr PCWSTR kChromeSymbolServer = L"https://chromium-browser-symsrv.commondatastorage.googleapis.com";
 static constexpr DWORD kChromeStartupWaitMs = 5000;
+// How long the setup tray icon stays after reporting the result.
+static constexpr DWORD kSetupNotificationLingerMs = 60000;
 static constexpr wchar_t kChromeWidgetWindowClassPrefix[] = L"Chrome_WidgetWin_";
 
 static constexpr int kChromeDefaultTabPreTitlePadding = 8;
@@ -579,8 +590,16 @@ using MenuControllerRunFn = void (*)(void*, void*, void*, void*, const void*,
 using ShowContextMenuForViewFn = void (*)(void*, void*, const void*, int);
 using ToolkitDelegateRunMenuAtFn = void (*)(void*, void*, const void*, int);
 using AppMenuCtorFn = void (*)(void*, void*, void*, int, void*);
-using AppMenuRunMenuButtonFn = void (*)(void*, void*);
-using AppMenuRunMenuWidgetFn = void (*)(void*, void*, const void*);
+// AppMenu::RunMenu(MenuButtonController*, ui::mojom::MenuSourceType) and
+// AppMenu::RunMenu(Widget*, const gfx::Rect&, ui::mojom::MenuSourceType).
+using AppMenuRunMenuButtonFn = void (*)(void*, void*, int);
+using AppMenuRunMenuWidgetFn = void (*)(void*, void*, const void*, int);
+// static views::MenuController* views::MenuController::GetActiveInstance()
+using MenuControllerGetActiveInstanceFn = void* (*)();
+// views::MenuController::Cancel(ExitType)
+using MenuControllerCancelFn = void (*)(void*, int);
+// views::MenuController::ExitType::kAll: close every open menu level.
+static constexpr int kMenuControllerExitAll = 1;
 using BookmarkContextMenuCtorFn = void (*)(void*, void*, void*, void*, int,
                                            const void*, bool, bool);
 using BookmarkContextMenuRunMenuAtFn = void (*)(void*, const void*, int);
@@ -590,12 +609,21 @@ using BookmarkMenuControllerRunMenuAtFn = void (*)(void*, void*);
 using TabStripControllerShowContextMenuForTabFn = void (*)(void*, void*,
                                                            const void*, int);
 
-// ui/native_theme/native_theme.h: NativeTheme::MenuItemExtraParams.
+// ui/native_theme/native_theme.h: NativeTheme::MenuItemExtraParams. Chrome
+// 153's PaintMenuItemBackground reads only corner_radius at offset 4.
 struct MenuItemExtraParamsOpaque {
   bool isSelected;
   int cornerRadius;
 };
 static_assert(sizeof(MenuItemExtraParamsOpaque) == 8);
+
+// The adjusted copy passed back to Chrome. The zeroed tail means a field added
+// after corner_radius in a later build reads as its default instead of stack
+// garbage.
+struct MenuItemExtraParamsCopy {
+  MenuItemExtraParamsOpaque params;
+  unsigned char tail[56] = {};
+};
 
 struct GfxInsetsOpaque {
   int top, left, bottom, right;
@@ -746,7 +774,7 @@ static SimpleMenuModelInsertSeparatorAtFn g_SimpleMenuModelInsertSeparatorAt;
 static SimpleMenuModelGetItemCountFn g_SimpleMenuModelGetItemCount;
 static SimpleMenuModelGetTypeAtFn g_SimpleMenuModelGetTypeAt;
 static SimpleMenuModelIsVisibleAtFn g_SimpleMenuModelIsVisibleAt;
-static SimpleMenuModelGetLabelAtFn g_SimpleMenuModelGetLabelAtOriginal;
+static SimpleMenuModelGetLabelAtFn g_SimpleMenuModelGetLabelAt;
 static SimpleMenuModelGetSubmenuModelAtFn g_SimpleMenuModelGetSubmenuModelAtOriginal;
 static AddMenuItemFromModelAtFn g_AddMenuItemFromModelAtOriginal;
 static MenuItemViewDtorFn g_MenuItemViewDtorOriginal;
@@ -801,6 +829,8 @@ static bool MenuStylingEnabled() {
 }
 
 static MenuControllerRunFn g_MenuControllerRunOriginal;
+static MenuControllerGetActiveInstanceFn g_MenuControllerGetActiveInstance;
+static MenuControllerCancelFn g_MenuControllerCancel;
 static ToolkitDelegateInitFn g_ToolkitDelegateInitOriginal;
 static ToolkitDelegateRunMenuAtFn g_ToolkitDelegateRunMenuAtOriginal;
 static AppMenuCtorFn g_AppMenuCtorOriginal;
@@ -825,9 +855,13 @@ static std::mutex g_pageMenuIconMutex;
 static std::unordered_set<void*> g_pageMenuRootModels;
 static std::unordered_set<void*> g_mainPageMenuItemViews;
 static std::unordered_set<const void*> g_pageLabelModels;
-static std::unordered_map<const void*, std::unordered_set<size_t>> g_hiddenLabelIndices;
+// Total size of the three page-menu sets above, so the SimpleMenuModel and
+// MenuItemView hooks, which run for every Chrome menu, can skip the lock while
+// no page menu is tracked. Updated under g_pageMenuIconMutex.
+static std::atomic<size_t> g_pageMenuTrackedCount = 0;
 static std::mutex g_hiddenLabelPatternsMutex;
-static std::vector<std::wstring> g_hiddenLabelPatterns;
+static std::shared_ptr<const std::vector<std::wstring>> g_hiddenLabelPatterns =
+    std::make_shared<const std::vector<std::wstring>>();
 static thread_local bool g_buildingMainPageMenuItem = false;
 static std::atomic_bool g_hideMenuShortcutLabels = false;
 static PaintMenuItemBackgroundFn g_PaintMenuItemBackgroundOriginal;
@@ -1057,9 +1091,19 @@ static std::atomic_bool g_customMenuItemsReady = false;
 static std::mutex g_customLabelMutex;
 static std::unordered_map<std::wstring, OpaqueObjectStorage*> g_customLabels;
 
+// Chrome's unsized operator delete, used to free std::u16string buffers that
+// Chrome allocated for strings it returned by value.
+static void (*g_ChromeOperatorDelete)(void*);
+static std::atomic_bool g_chromeU16StringLayoutValid = false;
+
 static std::mutex g_customLaunchMutex;
 static std::vector<HANDLE> g_customLaunchThreads;
 static bool g_customLaunchDisabled = false;
+
+// The submenu entries this mod adds for the Extensions and Custom groups.
+static bool IsGroupCommandId(int commandId) {
+  return commandId == kExtensionsGroupCommandId || commandId == kCustomItemsGroupCommandId;
+}
 
 static bool IsCustomMenuCommandId(int commandId) {
   return commandId >= kCustomMenuCommandIdFirst &&
@@ -1071,11 +1115,13 @@ static bool IsCustomMenuCommandId(int commandId) {
 // byte and, for short strings, the length in that byte's low 7 bits. Confirm
 // the object Chrome just built matches that before letting Chrome copy it: a
 // bad size field would turn into an enormous allocation and abort the browser.
-static bool IsValidChromeU16String(const unsigned char* object, size_t expectedLength) {
-  constexpr size_t kU16StringSize = 24;
-  constexpr size_t kShortCapacity = 10;
+static constexpr size_t kChromeU16StringSize = 24;
+static constexpr size_t kChromeU16StringShortCapacity = 10;
 
-  const unsigned char lastByte = object[kU16StringSize - 1];
+static bool IsValidChromeU16String(const unsigned char* object, size_t expectedLength) {
+  constexpr size_t kShortCapacity = kChromeU16StringShortCapacity;
+
+  const unsigned char lastByte = object[kChromeU16StringSize - 1];
 
   if (!(lastByte & 0x80)) {
     return lastByte == expectedLength && expectedLength <= kShortCapacity;
@@ -1087,6 +1133,51 @@ static bool IsValidChromeU16String(const unsigned char* object, size_t expectedL
   memcpy(&size, object + sizeof(data), sizeof(size));
 
   return data && size == expectedLength && expectedLength > kShortCapacity;
+}
+
+// Copies a std::u16string that Chrome returned by value, then releases it:
+// libc++'s inlined destructor only frees the heap buffer of a long string, so
+// do the same with Chrome's operator delete. Only call this after
+// ValidateChromeU16StringLayout succeeded.
+static bool TakeChromeU16String(unsigned char* object, std::wstring& text) {
+  static_assert(sizeof(wchar_t) == sizeof(char16_t));
+  constexpr size_t kMaxLength = 65536;
+  const unsigned char lastByte = object[kChromeU16StringSize - 1];
+  if (!(lastByte & 0x80)) {
+    if (lastByte > kChromeU16StringShortCapacity) return false;
+    text.assign(reinterpret_cast<const wchar_t*>(object), lastByte);
+    return true;
+  }
+  wchar_t* data = nullptr;
+  size_t length = 0;
+  memcpy(&data, object, sizeof(data));
+  memcpy(&length, object + sizeof(data), sizeof(length));
+  if (!data) return false;
+  const bool valid = length > kChromeU16StringShortCapacity && length <= kMaxLength;
+  if (valid) text.assign(data, length);
+  g_ChromeOperatorDelete(data);
+  return valid;
+}
+
+// Checks once that the std::u16string objects Chrome returns have the libc++
+// layout this mod reads and frees, using a short and a long sample. Label
+// hiding stays off if they don't; a mismatched sample is leaked, not freed.
+static void ValidateChromeU16StringLayout() {
+  bool valid = g_WideToUTF16 && g_ChromeOperatorDelete;
+  static constexpr PCWSTR kSamples[] = {L"Menu", L"Chrome Context Menu Items"};
+  for (PCWSTR sample : kSamples) {
+    if (!valid) break;
+    OpaqueObjectStorage storage;
+    PrepareOpaqueObjectStorage(storage);
+    const size_t length = wcslen(sample);
+    const ChromeWideStringPieceOpaque piece{sample, length};
+    g_WideToUTF16(storage.data, &piece);
+    std::wstring text;
+    valid = IsOpaqueObjectGuardIntact(storage) && IsValidChromeU16String(storage.data, length) &&
+            TakeChromeU16String(storage.data, text) && text == sample;
+  }
+  g_chromeU16StringLayoutValid.store(valid, std::memory_order_release);
+  Wh_Log(L"Chrome string layout: %ls", valid ? L"verified" : L"unexpected (label hiding off)");
 }
 
 // Returns a Chrome-owned std::u16string holding |text|, or nullptr.
@@ -1448,7 +1539,7 @@ static void LoadCustomMenuItems() {
   const auto hiddenLabels = ReadHiddenCustomItemLabels();
   {
     std::lock_guard<std::mutex> lock(g_hiddenLabelPatternsMutex);
-    g_hiddenLabelPatterns = hiddenLabels;
+    g_hiddenLabelPatterns = std::make_shared<const std::vector<std::wstring>>(hiddenLabels);
   }
 
   for (int i = 0; i < kMaxCustomMenuItems; ++i) {
@@ -1743,14 +1834,15 @@ static void AppMenuCtorHook(void* self, void* browser, void* model, int runFlags
   g_AppMenuCtorOriginal(self, browser, model, runFlags, callback);
 }
 
-static void AppMenuRunMenuButtonHook(void* self, void* button) {
+static void AppMenuRunMenuButtonHook(void* self, void* button, int sourceType) {
   SetPendingMenuScope(kMenuScopeApp);
-  g_AppMenuRunMenuButtonOriginal(self, button);
+  g_AppMenuRunMenuButtonOriginal(self, button, sourceType);
 }
 
-static void AppMenuRunMenuWidgetHook(void* self, void* widget, const void* bounds) {
+static void AppMenuRunMenuWidgetHook(void* self, void* widget, const void* bounds,
+                                     int sourceType) {
   SetPendingMenuScope(kMenuScopeApp);
-  g_AppMenuRunMenuWidgetOriginal(self, widget, bounds);
+  g_AppMenuRunMenuWidgetOriginal(self, widget, bounds, sourceType);
 }
 
 static void ShowContextMenuForTabHook(void* self, void* tab, const void* point,
@@ -1860,7 +1952,7 @@ static FontListOpaque* MenuItemGetFontListHook(const void* self, FontListOpaque*
 }
 
 static bool ContextMenuIsCommandIdVisibleHook(const void* self, int commandId) {
-  if ((commandId == kExtensionsGroupCommandId || commandId == kCustomItemsGroupCommandId)) return true;
+  if (IsGroupCommandId(commandId)) return true;
   if (IsCustomMenuCommandId(commandId)) return true;
 
   for (const auto& item : g_contextMenuVisibility) {
@@ -1870,6 +1962,68 @@ static bool ContextMenuIsCommandIdVisibleHook(const void* self, int commandId) {
   }
 
   return g_ContextMenuIsCommandIdVisibleOriginal(self, commandId);
+}
+
+static bool PageLabelFilteringReady() {
+  return g_SimpleMenuModelGetLabelAt && g_SimpleMenuModelIsVisibleAt &&
+         g_SimpleMenuModelGetSubmenuModelAtOriginal && g_SimpleMenuModelDtor &&
+         g_ToolkitDelegateInitOriginal && g_ChromeOperatorDelete &&
+         g_chromeU16StringLayoutValid.load(std::memory_order_acquire);
+}
+
+// Call with g_pageMenuIconMutex held.
+static void UpdatePageMenuTrackedCount() {
+  g_pageMenuTrackedCount.store(g_pageMenuRootModels.size() + g_mainPageMenuItemViews.size() +
+                                   g_pageLabelModels.size(),
+                               std::memory_order_relaxed);
+}
+
+static bool IsPageLabelModel(const void* model) {
+  if (!g_pageMenuTrackedCount.load(std::memory_order_relaxed)) return false;
+  std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
+  return g_pageLabelModels.contains(model);
+}
+
+// Chrome's label for one entry, read through SimpleMenuModel::GetLabelAt.
+// ValidateChromeU16StringLayout confirmed the string layout at setup.
+static bool GetPageMenuLabel(const void* model, size_t index, std::wstring& label) {
+  alignas(8) unsigned char object[kChromeU16StringSize] = {};
+  g_SimpleMenuModelGetLabelAt(model, object, index);
+  return TakeChromeU16String(object, label);
+}
+
+// Visibility as the page menu shows it: Chrome's own state plus the "Hide
+// items by label" rules. Custom item placement counts entries with this too,
+// so an entry hidden by label doesn't take a numbered position.
+static bool IsPageMenuEntryVisible(const void* model, size_t index) {
+  if (!g_SimpleMenuModelIsVisibleAt(model, index)) return false;
+  if (!IsPageLabelModel(model)) return true;
+
+  std::shared_ptr<const std::vector<std::wstring>> patterns;
+  {
+    std::lock_guard<std::mutex> lock(g_hiddenLabelPatternsMutex);
+    patterns = g_hiddenLabelPatterns;
+  }
+  if (patterns->empty()) return true;
+
+  std::wstring label;
+  return !GetPageMenuLabel(model, index, label) || !ShouldHideCustomItemLabel(label, *patterns);
+}
+
+static bool SimpleMenuModelIsVisibleAtHook(const void* self, size_t index) {
+  return IsPageMenuEntryVisible(self, index);
+}
+
+static void* SimpleMenuModelGetSubmenuModelAtHook(const void* self, size_t index) {
+  void* submenu = g_SimpleMenuModelGetSubmenuModelAtOriginal(self, index);
+  if (submenu && g_pageMenuTrackedCount.load(std::memory_order_relaxed)) {
+    std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
+    if (g_pageLabelModels.contains(self)) {
+      g_pageLabelModels.insert(submenu);
+      UpdatePageMenuTrackedCount();
+    }
+  }
+  return submenu;
 }
 
 static bool CustomMenuPositioningReady() {
@@ -1946,7 +2100,7 @@ static void ExtensionMatcherDtorHook(void* self) {
     {
       std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
       g_pageLabelModels.erase(storage->data);
-      g_hiddenLabelIndices.erase(storage->data);
+      UpdatePageMenuTrackedCount();
     }
     g_SimpleMenuModelDtor(storage->data);
   }
@@ -1975,7 +2129,7 @@ static void AppendExtensionGroupPlacement(void* rootModel,
   bool visible = false;
   for (size_t i = 0; i < count; ++i) {
     if (g_SimpleMenuModelGetTypeAt(model, i) != kMenuModelTypeSeparator &&
-        g_SimpleMenuModelIsVisibleAt(model, i)) {
+        IsPageMenuEntryVisible(model, i)) {
       visible = true;
       break;
     }
@@ -2016,7 +2170,7 @@ static size_t FindCustomMenuInsertionIndex(void* model, int order) {
     if (entriesAfter == 0) return count;
     for (size_t index = count; index > 0; --index) {
       if (g_SimpleMenuModelGetTypeAt(model, index - 1) != kMenuModelTypeSeparator &&
-          g_SimpleMenuModelIsVisibleAt(model, index - 1) && --entriesAfter == 0) {
+          IsPageMenuEntryVisible(model, index - 1) && --entriesAfter == 0) {
         return index - 1;
       }
     }
@@ -2025,80 +2179,12 @@ static size_t FindCustomMenuInsertionIndex(void* model, int order) {
   size_t position = 1;
   for (size_t index = 0; index < count; ++index) {
     if (g_SimpleMenuModelGetTypeAt(model, index) == kMenuModelTypeSeparator ||
-        !g_SimpleMenuModelIsVisibleAt(model, index)) {
+        !IsPageMenuEntryVisible(model, index)) {
       continue;
     }
     if (position++ == static_cast<size_t>(order)) return index;
   }
   return count;
-}
-
-static bool PageLabelFilteringReady() {
-  return g_SimpleMenuModelGetLabelAtOriginal && g_SimpleMenuModelIsVisibleAt &&
-         g_SimpleMenuModelGetSubmenuModelAtOriginal && g_SimpleMenuModelDtor &&
-         g_ToolkitDelegateInitOriginal;
-}
-
-// Observe the string Chrome has already created for its caller. The caller
-// retains ownership and destroys it normally; no cross-allocator frees or
-// persistent native string copies are needed. Same libc++ layout as the
-// validated custom-item labels above.
-static bool ReadChromeMenuLabel(const void* object, std::wstring& label) {
-  static_assert(sizeof(wchar_t) == sizeof(char16_t));
-  const auto* bytes = static_cast<const unsigned char*>(object);
-  const bool isLong = (bytes[23] & 0x80) != 0;
-  size_t length = bytes[23];
-  const wchar_t* data = reinterpret_cast<const wchar_t*>(bytes);
-  if (isLong) {
-    memcpy(&data, bytes, sizeof(data));
-    memcpy(&length, bytes + sizeof(data), sizeof(length));
-  }
-  if (length > 65536 || !IsValidChromeU16String(bytes, length)) return false;
-  label.assign(data, length);
-  return true;
-}
-
-static void* SimpleMenuModelGetLabelAtHook(const void* self, void* result, size_t index) {
-  void* originalResult = g_SimpleMenuModelGetLabelAtOriginal(self, result, index);
-  {
-    std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
-    if (!g_pageLabelModels.contains(self)) return originalResult;
-  }
-  std::vector<std::wstring> patterns;
-  {
-    std::lock_guard<std::mutex> lock(g_hiddenLabelPatternsMutex);
-    patterns = g_hiddenLabelPatterns;
-  }
-  std::wstring label;
-  const bool hidden = !patterns.empty() && originalResult &&
-      ReadChromeMenuLabel(originalResult, label) && ShouldHideCustomItemLabel(label, patterns);
-  {
-    std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
-    if (hidden) {
-      g_hiddenLabelIndices[self].insert(index);
-    } else if (auto it = g_hiddenLabelIndices.find(self); it != g_hiddenLabelIndices.end()) {
-      it->second.erase(index);
-    }
-  }
-  return originalResult;
-}
-
-static bool SimpleMenuModelIsVisibleAtHook(const void* self, size_t index) {
-  {
-    std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
-    auto it = g_hiddenLabelIndices.find(self);
-    if (it != g_hiddenLabelIndices.end() && it->second.contains(index)) return false;
-  }
-  return g_SimpleMenuModelIsVisibleAt(self, index);
-}
-
-static void* SimpleMenuModelGetSubmenuModelAtHook(const void* self, size_t index) {
-  void* submenu = g_SimpleMenuModelGetSubmenuModelAtOriginal(self, index);
-  if (submenu) {
-    std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
-    if (g_pageLabelModels.contains(self)) g_pageLabelModels.insert(submenu);
-  }
-  return submenu;
 }
 
 static bool MainPageMenuIconTrackingReady() {
@@ -2114,10 +2200,11 @@ static void* SimpleMenuModelCtorHook(void* self, void* delegate) {
 }
 
 static void ForgetPageMenuModel(void* model) {
+  if (!g_pageMenuTrackedCount.load(std::memory_order_relaxed)) return;
   std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
   g_pageMenuRootModels.erase(model);
   g_pageLabelModels.erase(model);
-  g_hiddenLabelIndices.erase(model);
+  UpdatePageMenuTrackedCount();
 }
 
 static void SimpleMenuModelDtorHook(void* self) {
@@ -2140,9 +2227,10 @@ static void SimpleMenuModelDtorHook(void* self) {
 }
 
 static void MenuItemViewDtorHook(void* self) {
-  {
+  if (g_pageMenuTrackedCount.load(std::memory_order_relaxed)) {
     std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
     g_mainPageMenuItemViews.erase(self);
+    UpdatePageMenuTrackedCount();
   }
   g_MenuItemViewDtorOriginal(self);
 }
@@ -2150,7 +2238,7 @@ static void MenuItemViewDtorHook(void* self) {
 static void* AddMenuItemFromModelAtHook(void* model, size_t modelIndex,
                                        void* menu, size_t menuIndex, int commandId) {
   bool topLevel = false;
-  {
+  if (g_pageMenuTrackedCount.load(std::memory_order_relaxed)) {
     std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
     topLevel = g_pageMenuRootModels.contains(model);
   }
@@ -2163,6 +2251,7 @@ static void* AddMenuItemFromModelAtHook(void* model, size_t modelIndex,
   if (topLevel && item) {
     std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
     g_mainPageMenuItemViews.insert(item);
+    UpdatePageMenuTrackedCount();
   }
   return item;
 }
@@ -2170,6 +2259,7 @@ static void* AddMenuItemFromModelAtHook(void* model, size_t modelIndex,
 static bool ShouldHideMainPageMenuIcon(void* item) {
   if (!g_hideMainPageMenuIcons.load(std::memory_order_relaxed)) return false;
   if (g_buildingMainPageMenuItem) return true;
+  if (!g_pageMenuTrackedCount.load(std::memory_order_relaxed)) return false;
   std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
   return g_mainPageMenuItemViews.contains(item);
 }
@@ -2229,7 +2319,7 @@ static void GroupCustomMenuItems(void* rootModel, std::vector<CustomMenuItem>& i
   }
   {
     std::lock_guard<std::mutex> lock(g_hiddenLabelPatternsMutex);
-    if (ShouldHideCustomItemLabel(settings.label, g_hiddenLabelPatterns)) {
+    if (ShouldHideCustomItemLabel(settings.label, *g_hiddenLabelPatterns)) {
       items.clear();
       return;
     }
@@ -2282,7 +2372,10 @@ static void GroupCustomMenuItems(void* rootModel, std::vector<CustomMenuItem>& i
   }
   {
     std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
-    if (g_pageLabelModels.contains(rootModel)) g_pageLabelModels.insert(submenu);
+    if (g_pageLabelModels.contains(rootModel)) {
+      g_pageLabelModels.insert(submenu);
+      UpdatePageMenuTrackedCount();
+    }
   }
   CustomMenuItem group{};
   group.commandId = kCustomItemsGroupCommandId;
@@ -2300,10 +2393,12 @@ static void ToolkitDelegateInitHook(void* self, void* menuModel) {
   if (menuModel && PageLabelFilteringReady()) {
     std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
     g_pageLabelModels.insert(menuModel);
+    UpdatePageMenuTrackedCount();
   }
   if (menuModel && MainPageMenuIconTrackingReady()) {
     std::lock_guard<std::mutex> lock(g_pageMenuIconMutex);
     g_pageMenuRootModels.insert(menuModel);
+    UpdatePageMenuTrackedCount();
   }
   if (menuModel) {
     std::vector<CustomMenuItem> items;
@@ -2323,7 +2418,7 @@ static void ToolkitDelegateInitHook(void* self, void* menuModel) {
 }
 
 static void ContextMenuExecuteCommandHook(void* self, int commandId, int eventFlags) {
-  if ((commandId == kExtensionsGroupCommandId || commandId == kCustomItemsGroupCommandId)) return;
+  if (IsGroupCommandId(commandId)) return;
   // Custom IDs never reach Chrome's own dispatch, which would treat them as
   // unknown commands.
   if (IsCustomMenuCommandId(commandId)) {
@@ -2335,14 +2430,14 @@ static void ContextMenuExecuteCommandHook(void* self, int commandId, int eventFl
 }
 
 static bool ContextMenuIsCommandIdEnabledHook(const void* self, int commandId) {
-  if ((commandId == kExtensionsGroupCommandId || commandId == kCustomItemsGroupCommandId)) return true;
+  if (IsGroupCommandId(commandId)) return true;
   if (IsCustomMenuCommandId(commandId)) return true;
 
   return g_ContextMenuIsCommandIdEnabledOriginal(self, commandId);
 }
 
 static bool ContextMenuIsCommandIdCheckedHook(const void* self, int commandId) {
-  if ((commandId == kExtensionsGroupCommandId || commandId == kCustomItemsGroupCommandId)) return false;
+  if (IsGroupCommandId(commandId)) return false;
   if (IsCustomMenuCommandId(commandId)) return false;
 
   return g_ContextMenuIsCommandIdCheckedOriginal(self, commandId);
@@ -2422,8 +2517,14 @@ static void PaintMenuItemBackgroundHook(
     return;
   }
   int radius = g_menuCornerRadius.load(std::memory_order_relaxed);
-  auto adjusted = *params;
-  if (radius >= 0) adjusted.cornerRadius = radius;
+  // Leave the parameters untouched if they don't look like the expected
+  // {bool, int} layout.
+  unsigned char selected;
+  memcpy(&selected, params, sizeof(selected));
+  const bool expectedLayout = selected <= 1 && params->cornerRadius >= 0 &&
+                              params->cornerRadius <= 64;
+  MenuItemExtraParamsCopy adjusted{*params};
+  if (radius >= 0 && expectedLayout) adjusted.params.cornerRadius = radius;
   const auto previousProvider = g_menuItemPaintColorProvider;
   const uint32_t previousColor = g_menuItemPaintColor;
   g_menuItemPaintColorProvider = colorProvider;
@@ -2431,7 +2532,8 @@ static void PaintMenuItemBackgroundHook(
       ? g_menuItemBackgroundColor.load(std::memory_order_relaxed) : 0;
   // This canvas is cc::PaintCanvas, not gfx::Canvas. Keep Chrome's original
   // painting path and override only its scoped background-color lookup.
-  g_PaintMenuItemBackgroundOriginal(self, canvas, colorProvider, state, rect, &adjusted);
+  g_PaintMenuItemBackgroundOriginal(self, canvas, colorProvider, state, rect,
+                                    expectedLayout ? &adjusted.params : params);
   g_menuItemPaintColor = previousColor;
   g_menuItemPaintColorProvider = previousProvider;
 }
@@ -2919,6 +3021,50 @@ static HWND FindWindowForThread(DWORD threadId) {
 }
 
 // -----------------------------------------------------------------------------
+// Close open menus on unload
+// -----------------------------------------------------------------------------
+
+static void WINAPI CancelActiveMenuOnCurrentThread(void*) {
+  void* controller = g_MenuControllerGetActiveInstance();
+  if (!controller) return;
+  g_MenuControllerCancel(controller, kMenuControllerExitAll);
+  Wh_Log(L"Closed an open Chrome menu on UI thread %lu", GetCurrentThreadId());
+}
+
+// Once the hooks are removed, clicking one of this mod's entries in a menu that
+// is still open would send Chrome a command ID it doesn't know. Close any open
+// menu first, on the UI thread that runs it.
+static void CloseActiveChromeMenus() {
+  if (!g_MenuControllerGetActiveInstance || !g_MenuControllerCancel) return;
+
+  std::vector<std::pair<DWORD, HWND>> threads;
+  EnumWindows(
+      [](HWND hwnd, LPARAM lParam) -> BOOL {
+        auto* threads = reinterpret_cast<std::vector<std::pair<DWORD, HWND>>*>(lParam);
+        DWORD processId = 0;
+        const DWORD threadId = GetWindowThreadProcessId(hwnd, &processId);
+        if (processId != GetCurrentProcessId()) return TRUE;
+
+        wchar_t className[128] = {};
+        if (!GetClassNameW(hwnd, className, ARRAYSIZE(className)) ||
+            wcsncmp(className, kChromeWidgetWindowClassPrefix,
+                    ARRAYSIZE(kChromeWidgetWindowClassPrefix) - 1) != 0) {
+          return TRUE;
+        }
+
+        const bool known = std::any_of(threads->begin(), threads->end(),
+                                       [threadId](const auto& entry) { return entry.first == threadId; });
+        if (!known) threads->push_back({threadId, hwnd});
+        return TRUE;
+      },
+      reinterpret_cast<LPARAM>(&threads));
+
+  for (const auto& [threadId, hwnd] : threads) {
+    RunFromWindowThread(hwnd, CancelActiveMenuOnCurrentThread, nullptr);
+  }
+}
+
+// -----------------------------------------------------------------------------
 // Live tab update
 // -----------------------------------------------------------------------------
 
@@ -3153,249 +3299,8 @@ static void ApplyWidthToExistingExtensionButtons() {
 }
 
 // -----------------------------------------------------------------------------
-// Exact-build address maps. Resolve functions only when no verified map exists.
+// Chrome hooks
 // -----------------------------------------------------------------------------
-
-static uint64_t AddressMapHash(uint64_t hash, uint64_t value) {
-  for (int i = 0; i < 8; i++, value >>= 8) {
-    hash = (hash ^ (value & 0xff)) * 1099511628211ULL;
-  }
-  return hash;
-}
-
-static constexpr uint64_t kAddressMapHashSeed = 14695981039346656037ULL;
-
-// Keep real target addresses separate from Windhawk's trampoline pointers.
-// The fallback resolves all targets without installing hooks; both paths then
-// validate the complete result and use the same hook installation code.
-struct ChromeHook {
-  void* address = nullptr;
-  void** original;
-  void* replacement;
-  bool optional;
-  uint64_t schema = kAddressMapHashSeed;
-  WindhawkUtils::SYMBOL_HOOK chromeDllHook;
-
-  template <typename Prototype>
-  ChromeHook(std::initializer_list<std::wstring_view> names,
-             Prototype** originalFunction,
-             std::type_identity_t<Prototype*> hookFunction,
-             bool isOptional)
-      : original(reinterpret_cast<void**>(originalFunction)),
-        replacement(reinterpret_cast<void*>(hookFunction)),
-        optional(isOptional),
-        chromeDllHook(names, &address, nullptr, isOptional) {
-    for (auto name : names) {
-      schema = AddressMapHash(schema, name.size());
-      for (wchar_t c : name) schema = AddressMapHash(schema, c);
-    }
-    schema = AddressMapHash(schema, optional);
-    schema = AddressMapHash(schema, replacement != nullptr);
-  }
-  ChromeHook(const ChromeHook&) = delete;
-  ChromeHook& operator=(const ChromeHook&) = delete;
-};
-
-struct ChromeImageIdentity {
-  const BYTE* base;
-  const IMAGE_NT_HEADERS64* nt;
-  std::wstring key;
-
-  bool Contains(DWORD rva, size_t size) const {
-    return rva < nt->OptionalHeader.SizeOfImage &&
-           size <= nt->OptionalHeader.SizeOfImage - rva;
-  }
-
-  bool IsCode(DWORD rva) const {
-    if (!Contains(rva, 1)) return false;
-    const auto* sections = IMAGE_FIRST_SECTION(nt);
-    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; i++) {
-      const auto& s = sections[i];
-      if ((s.Characteristics & IMAGE_SCN_MEM_EXECUTE) &&
-          rva >= s.VirtualAddress && rva - s.VirtualAddress < s.Misc.VirtualSize) {
-        return true;
-      }
-    }
-    return false;
-  }
-};
-
-static bool GetChromeImageIdentity(HMODULE module, ChromeImageIdentity& image) {
-  image.base = reinterpret_cast<const BYTE*>(module);
-  const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(image.base);
-  if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0) return false;
-  image.nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(image.base + dos->e_lfanew);
-  if (image.nt->Signature != IMAGE_NT_SIGNATURE ||
-      image.nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 ||
-      image.nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
-      image.nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_DEBUG) return false;
-
-  const auto& debug = image.nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG];
-  if (!debug.VirtualAddress || !image.Contains(debug.VirtualAddress, debug.Size)) return false;
-  for (size_t offset = 0; offset + sizeof(IMAGE_DEBUG_DIRECTORY) <= debug.Size;
-       offset += sizeof(IMAGE_DEBUG_DIRECTORY)) {
-    IMAGE_DEBUG_DIRECTORY entry;
-    memcpy(&entry, image.base + debug.VirtualAddress + offset, sizeof(entry));
-    if (entry.Type != IMAGE_DEBUG_TYPE_CODEVIEW || entry.SizeOfData < 24 ||
-        !image.Contains(entry.AddressOfRawData, entry.SizeOfData)) continue;
-    const BYTE* cv = image.base + entry.AddressOfRawData;
-    if (memcmp(cv, "RSDS", 4) != 0) continue;
-
-    // Raw build GUID, age, PE timestamp and image size. Never identify a
-    // build by Chrome's marketing version or timestamp alone.
-    wchar_t guid[33];
-    for (int i = 0; i < 16; i++) swprintf_s(guid + i * 2, 33 - i * 2, L"%02X", cv[4 + i]);
-    DWORD age;
-    memcpy(&age, cv + 20, sizeof(age));
-    wchar_t suffix[64];
-    swprintf_s(suffix, L"-%08X-%08X-%08X", age,
-               image.nt->FileHeader.TimeDateStamp, image.nt->OptionalHeader.SizeOfImage);
-    image.key = std::wstring(guid) + suffix;
-    return true;
-  }
-  return false;
-}
-
-// Precomputed addresses for supported Chrome builds. The fingerprint must
-// match the current hook list before any entry can be used.
-static constexpr PCWSTR kBundledChromeAddressMaps[] = {
-    // Chrome 153.0.8010.53 x64; RSDS 919c3f00-37ec-14a0-4c4c-44205044422e age 1.
-    L"CCMI1 003F9C91EC37A0144C4C44205044422E-00000001-6AAB63C8-1225E000 26e6d54cbfc37a29 55 c81540 c5f0e0 a5e4c90 b592470 9866150 0 0 d4bad60 d4afbf0 929bfd0 c4c2e30 928f0a0 9b4ffc0 9a35fd0 0 9a3d960 0 9a43850 9eb6c00 9eb5a80 9eb69c0 b592520 9eb6c50 2ee2f90 c409c0 a9382b0 a938570 9a34c0 33d5ef0 c40c80 2ee3190 a938fd0 9ead650 8f732e0 8f733e0 2ee2f00 35efb0 c52080 24770e0 a938670 1b9ad80 c52ce0 5866430 45aafd0 a5f0a30 a5e2cf0 a5e3c40 addba10 49af320 b7daee0 33d2220 2ed72b0 33d23d0 3cf20d0 b7dac60 5862260 563eb0 0 a5f0c10 a5f09c0 c673cd0 c673d00 0 5cd8020 2ed71b0 33d2300 b7dad00 33d2c90 33d2ce0 2ed7e70 405ae0 279cd20 2e57b00 279de00 2e573f0 51d6500 400c0e0 245210 4125170 987ef20 987fab0 9880230 987f420 0 2f4a5b0 71f5c8e825d7587d",
-};
-static constexpr PCWSTR kChromeAddressMapStorage = L"chrome-address-map-v1";
-
-static uint64_t ChromeHookSchema(const ChromeHook* hooks, size_t count) {
-  uint64_t schema = AddressMapHash(kAddressMapHashSeed, count);
-  for (size_t i = 0; i < count; i++) schema = AddressMapHash(schema, hooks[i].schema);
-  return schema;
-}
-
-static uint64_t AddressMapChecksum(std::wstring_view text) {
-  uint64_t hash = kAddressMapHashSeed;
-  for (wchar_t c : text) hash = AddressMapHash(hash, c);
-  return hash;
-}
-
-static bool ReadChromeAddressMap(std::wstring_view record,
-                                 const ChromeImageIdentity& image,
-                                 ChromeHook* hooks, size_t count) {
-  const size_t checksumOffset = record.rfind(L' ');
-  if (checksumOffset == std::wstring_view::npos) return false;
-  std::wistringstream input{std::wstring(record)};
-  std::wstring format, identity;
-  uint64_t schema = 0, mapCount = 0;
-  if (!(input >> format >> identity >> std::hex >> schema >> mapCount) ||
-      format != L"CCMI1" || identity != image.key ||
-      schema != ChromeHookSchema(hooks, count) || mapCount != count) return false;
-
-  std::vector<DWORD> offsets(count);
-  for (size_t i = 0; i < count; i++) {
-    uint64_t rva;
-    if (!(input >> rva) || rva > MAXDWORD ||
-        (rva ? !image.IsCode(static_cast<DWORD>(rva)) : !hooks[i].optional)) return false;
-    offsets[i] = static_cast<DWORD>(rva);
-  }
-  uint64_t checksum;
-  if (!(input >> checksum) ||
-      checksum != AddressMapChecksum(record.substr(0, checksumOffset))) return false;
-  input >> std::ws;
-  if (!input.eof()) return false;
-
-  // Commit only after every field and offset has passed validation.
-  for (size_t i = 0; i < count; i++) {
-    hooks[i].address = offsets[i] ? const_cast<BYTE*>(image.base) + offsets[i] : nullptr;
-  }
-  return true;
-}
-
-static std::wstring MakeChromeAddressMap(const ChromeImageIdentity& image,
-                                       const ChromeHook* hooks, size_t count) {
-  std::wostringstream output;
-  output << L"CCMI1 " << image.key << L' ' << std::hex << ChromeHookSchema(hooks, count)
-         << L' ' << count;
-  for (size_t i = 0; i < count; i++) {
-    const uintptr_t address = reinterpret_cast<uintptr_t>(hooks[i].address);
-    const uintptr_t base = reinterpret_cast<uintptr_t>(image.base);
-    if (address && (address < base || address - base > MAXDWORD ||
-                    !image.IsCode(static_cast<DWORD>(address - base)))) return {};
-    if (!address && !hooks[i].optional) return {};
-    output << L' ' << (address ? address - base : 0);
-  }
-  const std::wstring body = output.str();
-  output << L' ' << AddressMapChecksum(body);
-  return output.str();
-}
-
-static bool ResolveChromeAddresses(HMODULE module, ChromeHook* hooks, size_t count) {
-  ChromeImageIdentity image{};
-  const bool hasIdentity = GetChromeImageIdentity(module, image);
-  bool found = false;
-  if (hasIdentity) {
-    for (auto record : kBundledChromeAddressMaps) {
-      if (ReadChromeAddressMap(record, image, hooks, count)) {
-        Wh_Log(L"Using built-in Chrome configuration (%ls)", image.key.c_str());
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
-      // Bounded read; truncated, corrupt, old-build and old-schema maps miss.
-      wchar_t record[16384];
-      const size_t length = Wh_GetStringValue(kChromeAddressMapStorage, record, ARRAYSIZE(record));
-      if (length && length < ARRAYSIZE(record) &&
-          ReadChromeAddressMap(std::wstring_view(record, length), image, hooks, count)) {
-        Wh_Log(L"Using saved Chrome configuration (%ls)", image.key.c_str());
-        found = true;
-      }
-    }
-  }
-  if (!found) {
-    Wh_Log(L"Preparing this Chrome build");
-    WH_HOOK_SYMBOLS_OPTIONS options = {};
-    options.optionsSize = sizeof(options);
-    options.symbolServer = kChromeSymbolServer;
-    // chrome.dll.pdb is several GB and served by Chromium's symbol server, not
-    // Windhawk's online cache; skipping undecoration keeps this one-time pass
-    // fast. Lookups list the decorated public name first and, where needed, the
-    // private function name, which the PDB already stores undecorated.
-    options.noUndecoratedSymbols = TRUE;
-    std::vector<WindhawkUtils::SYMBOL_HOOK> lookups;
-    lookups.reserve(count);
-    for (size_t i = 0; i < count; i++) lookups.push_back(std::move(hooks[i].chromeDllHook));
-    if (!WindhawkUtils::HookSymbols(module, lookups.data(), lookups.size(), &options)) return false;
-    if (hasIdentity) {
-      const std::wstring record = MakeChromeAddressMap(image, hooks, count);
-      if (record.empty()) {
-        Wh_Log(L"ERROR: Resolved Chrome addresses failed image validation");
-        return false;
-      }
-      if (!Wh_SetStringValue(kChromeAddressMapStorage, record.c_str())) {
-        Wh_Log(L"Could not save Chrome preparation data; setup still succeeded");
-      }
-    }
-  }
-
-  // A slow fallback prepares the next launch only, preserving the existing
-  // startup policy. Do not queue hooks after the startup window was abandoned.
-  if (g_hookActivationAbandoned.load(std::memory_order_acquire)) return true;
-  std::vector<void*> installed;
-  for (size_t i = 0; i < count; i++) {
-    auto& hook = hooks[i];
-    if (!hook.address) continue;  // A verified unavailable optional function.
-    if (hook.replacement) {
-      if (!Wh_SetFunctionHook(hook.address, hook.replacement, hook.original)) {
-        Wh_Log(L"ERROR: Failed to register Chrome hook %zu; cancelling registered hooks", i);
-        for (void* address : installed) Wh_RemoveFunctionHook(address);
-        for (size_t j = 0; j < count; j++) *hooks[j].original = nullptr;
-        return false;  // Never retry resolution after a partially queued install.
-      }
-      installed.push_back(hook.address);
-    } else {
-      *hook.original = hook.address;
-    }
-  }
-  return true;
-}
 
 static bool InstallChromeHooks(HMODULE chromeDll) {
   wchar_t path[32768] = {};
@@ -3404,24 +3309,42 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
     Wh_Log(L"Preparing Chrome hooks for: %ls", path);
   }
 
-  ChromeHook chromeDllHooks[] = {
+  // Every hook is optional: a function missing from a future Chrome build
+  // disables only the feature that needs it.
+  //
+  // Functions with parameters are matched by their decorated name only, so a
+  // signature change leaves the feature unavailable instead of hooking it with
+  // the wrong prototype. A few parameterless methods and destructors have no
+  // public symbol in chrome.dll.pdb, only a private function record named
+  // without a signature; those are matched by that name.
+  WindhawkUtils::SYMBOL_HOOK chromeDllHooks[] = {
+
+      // -----------------------------------------------------------------------
+      // Tab title font
+      // -----------------------------------------------------------------------
 
       {{LR"(?GetFont@TypographyProvider@views@@QEBAAEBVFontList@gfx@@HH@Z)"},
        &g_TypographyGetFontOriginal,
        TypographyGetFontHook,
-       false},
+       true},
 
-      {{LR"(?SetFontList@Label@views@@UEAAXAEBVFontList@gfx@@@Z)"}, &g_LabelSetFontList, nullptr, false},
+      {{LR"(?SetFontList@Label@views@@UEAAXAEBVFontList@gfx@@@Z)"}, &g_LabelSetFontList, nullptr, true},
 
       // -----------------------------------------------------------------------
-      // Context Menus: OPTIONAL
+      // Context Menus
       // -----------------------------------------------------------------------
 
-      // Menu scope: OPTIONAL. Without these, every menu counts as "other".
+      // Menu scope. Without these, every menu counts as "other".
 
-      {{LR"(?Run@MenuController@views@@QEAAXPEAVWidget@2@PEAVMenuButtonController@2@PEAVMenuItemView@2@AEBVRect@gfx@@W4MenuAnchorPosition@2@W4MenuSourceType@mojom@ui@@W4MenuType@12@_NPEAVWindow@aura@@@Z)",
-        L"views::MenuController::Run"},
+      {{LR"(?Run@MenuController@views@@QEAAXPEAVWidget@2@PEAVMenuButtonController@2@PEAVMenuItemView@2@AEBVRect@gfx@@W4MenuAnchorPosition@2@W4MenuSourceType@mojom@ui@@W4MenuType@12@_NPEAVWindow@aura@@@Z)"},
        &g_MenuControllerRunOriginal, MenuControllerRunHook, true},
+
+      // Used on unload to close a menu that still shows this mod's entries.
+      {{LR"(?GetActiveInstance@MenuController@views@@SAPEAV12@XZ)"},
+       &g_MenuControllerGetActiveInstance, nullptr, true},
+
+      {{LR"(?Cancel@MenuController@views@@QEAAXW4ExitType@12@@Z)"},
+       &g_MenuControllerCancel, nullptr, true},
 
       {{LR"(?RunMenuAt@ToolkitDelegateViews@@QEAAXPEAVWidget@views@@AEBVPoint@gfx@@W4MenuSourceType@mojom@ui@@@Z)"},
        &g_ToolkitDelegateRunMenuAtOriginal, ToolkitDelegateRunMenuAtHook, true},
@@ -3429,10 +3352,10 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
       {{LR"(??0AppMenu@@QEAA@PEAVBrowser@@PEAVMenuModel@ui@@HV?$RepeatingCallback@$$A6AXXZ@base@@@Z)"},
        &g_AppMenuCtorOriginal, AppMenuCtorHook, true},
 
-      {{LR"(?RunMenu@AppMenu@@QEAAXPEAVMenuButtonController@views@@@Z)"},
+      {{LR"(?RunMenu@AppMenu@@QEAAXPEAVMenuButtonController@views@@W4MenuSourceType@mojom@ui@@@Z)"},
        &g_AppMenuRunMenuButtonOriginal, AppMenuRunMenuButtonHook, true},
 
-      {{LR"(?RunMenu@AppMenu@@QEAAXPEAVWidget@views@@AEBVRect@gfx@@@Z)"},
+      {{LR"(?RunMenu@AppMenu@@QEAAXPEAVWidget@views@@AEBVRect@gfx@@W4MenuSourceType@mojom@ui@@@Z)"},
        &g_AppMenuRunMenuWidgetOriginal, AppMenuRunMenuWidgetHook, true},
 
       {{LR"(?ShowContextMenuForTab@BrowserTabStripController@@UEAAXPEAVTab@@AEBVPoint@gfx@@W4MenuSourceType@mojom@ui@@@Z)"},
@@ -3456,27 +3379,29 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
       {{LR"(?ShowContextMenuForViewImpl@BookmarkBarView@@UEAAXPEAVView@views@@AEBVPoint@gfx@@W4MenuSourceType@mojom@ui@@@Z)"},
        &g_BookmarkBarContextMenuOriginal, BookmarkBarContextMenuHook, true},
 
-      {{LR"(??0BookmarkContextMenu@@QEAA@PEAVWidget@views@@PEAVBrowser@@PEAVProfile@@W4BookmarkLaunchLocation@@AEBV?$vector@V?$raw_ptr@$$CBVBookmarkNode@bookmarks@@$00@base@@V?$allocator@V?$raw_ptr@$$CBVBookmarkNode@bookmarks@@$00@base@@@__Cr@std@@@__Cr@std@@_N5@Z)"},
+      // Chrome 153 takes BrowserWindowInterface*, earlier builds Browser*; both
+      // are a single pointer, so the prototype is the same.
+      {{LR"(??0BookmarkContextMenu@@QEAA@PEAVWidget@views@@PEAVBrowserWindowInterface@@PEAVProfile@@W4BookmarkLaunchLocation@@AEBV?$vector@V?$raw_ptr@$$CBVBookmarkNode@bookmarks@@$00@base@@V?$allocator@V?$raw_ptr@$$CBVBookmarkNode@bookmarks@@$00@base@@@__Cr@std@@@__Cr@std@@_N5@Z)",
+        LR"(??0BookmarkContextMenu@@QEAA@PEAVWidget@views@@PEAVBrowser@@PEAVProfile@@W4BookmarkLaunchLocation@@AEBV?$vector@V?$raw_ptr@$$CBVBookmarkNode@bookmarks@@$00@base@@V?$allocator@V?$raw_ptr@$$CBVBookmarkNode@bookmarks@@$00@base@@@__Cr@std@@@__Cr@std@@_N5@Z)"},
        &g_BookmarkContextMenuCtorOriginal, BookmarkContextMenuCtorHook, true},
 
       {{LR"(?RunMenuAt@BookmarkContextMenu@@QEAAXAEBVPoint@gfx@@W4MenuSourceType@mojom@ui@@@Z)"},
        &g_BookmarkContextMenuRunMenuAtOriginal, BookmarkContextMenuRunMenuAtHook, true},
 
-      {{LR"(??0BookmarkMenuController@@QEAA@PEAVBrowser@@PEAVWidget@views@@AEBUBookmarkParentFolder@@_K_N@Z)"},
+      {{LR"(??0BookmarkMenuController@@QEAA@PEAVBrowserWindowInterface@@PEAVWidget@views@@AEBUBookmarkParentFolder@@_K_N@Z)",
+        LR"(??0BookmarkMenuController@@QEAA@PEAVBrowser@@PEAVWidget@views@@AEBUBookmarkParentFolder@@_K_N@Z)"},
        &g_BookmarkMenuControllerCtorOriginal, BookmarkMenuControllerCtorHook, true},
 
       {{LR"(?RunMenuAt@BookmarkMenuController@@QEAAXPEAVBookmarkBarView@@@Z)"},
        &g_BookmarkMenuControllerRunMenuAtOriginal, BookmarkMenuControllerRunMenuAtHook, true},
 
-      {{LR"(?IsCommandIdVisible@RenderViewContextMenu@@UEBA_NH@Z)",
-        L"RenderViewContextMenu::IsCommandIdVisible"},
+      // Page context menu: hiding, custom items and grouping.
+
+      {{LR"(?IsCommandIdVisible@RenderViewContextMenu@@UEBA_NH@Z)"},
        &g_ContextMenuIsCommandIdVisibleOriginal,
        ContextMenuIsCommandIdVisibleHook,
        true},
 
-      // Custom context menu items: OPTIONAL. Several spellings are listed for
-      // the functions whose signature or access specifier has moved between
-      // Chrome releases; the first match wins.
       {{LR"(?IsCommandIdEnabled@RenderViewContextMenu@@UEBA_NH@Z)"},
        &g_ContextMenuIsCommandIdEnabledOriginal,
        ContextMenuIsCommandIdEnabledHook,
@@ -3487,6 +3412,8 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
        ContextMenuIsCommandIdCheckedHook,
        true},
 
+      // The access specifier has changed between releases; the mangled
+      // signature is otherwise identical.
       {{LR"(?Init@ToolkitDelegateViews@@MEAAXPEAVSimpleMenuModel@ui@@@Z)",
         LR"(?Init@ToolkitDelegateViews@@UEAAXPEAVSimpleMenuModel@ui@@@Z)"},
        &g_ToolkitDelegateInitOriginal,
@@ -3520,13 +3447,17 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
        &g_SimpleMenuModelIsVisibleAt, SimpleMenuModelIsVisibleAtHook, true},
 
       {{LR"(?GetLabelAt@SimpleMenuModel@ui@@UEBA?AV?$basic_string@_SU?$char_traits@_S@__Cr@std@@V?$allocator@_S@23@@__Cr@std@@_K@Z)"},
-       &g_SimpleMenuModelGetLabelAtOriginal, SimpleMenuModelGetLabelAtHook, true},
+       &g_SimpleMenuModelGetLabelAt, nullptr, true},
 
       {{LR"(?GetSubmenuModelAt@SimpleMenuModel@ui@@UEBAPEAVMenuModel@2@_K@Z)"},
        &g_SimpleMenuModelGetSubmenuModelAtOriginal, SimpleMenuModelGetSubmenuModelAtHook, true},
 
-      // Native extension grouping. Keep optional so unsupported Chrome builds
-      // retain their normal extension menus instead of losing commands.
+      // Frees the heap buffer of a std::u16string that Chrome returned by
+      // value, the same way Chrome's inlined string destructor does.
+      {{LR"(??3@YAXPEAX@Z)"}, &g_ChromeOperatorDelete, nullptr, true},
+
+      // Native extension grouping. Unsupported Chrome builds retain their
+      // normal extension menus instead of losing commands.
       {{LR"(??0RenderViewContextMenu@@QEAA@AEAVRenderFrameHost@content@@AEBUContextMenuParams@2@_N2@Z)"},
        &g_PageContextMenuCtorOriginal, PageContextMenuCtorHook, true},
 
@@ -3559,40 +3490,41 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
         LR"(?WideToUTF16@base@@YA?AV?$basic_string@_SU?$char_traits@_S@__Cr@std@@V?$allocator@_S@23@@__Cr@std@@V?$basic_string_view@_WU?$char_traits@_W@__Cr@std@@@__Cr@std@@@Z)"},
        &g_WideToUTF16, nullptr, true},
 
+      // Menu appearance.
+
       {{LR"(?SetIcon@MenuItemView@views@@QEAAXAEBVImageModel@ui@@@Z)"},
        &g_MenuItemSetIconOriginal, MenuItemSetIconHook, true},
 
       {{LR"(??0ImageModel@ui@@QEAA@XZ)"}, &g_EmptyImageModelCtor, nullptr, true},
       {{LR"(??1ImageModel@ui@@QEAA@XZ)"}, &g_EmptyImageModelDtor, nullptr, true},
 
-      {{LR"(?ShouldShowAcceleratorText@MenuConfig@views@@QEBA_NPEBVMenuItemView@2@PEAV?$basic_string@_SU?$char_traits@_S@__Cr@std@@V?$allocator@_S@23@@__Cr@std@@@Z)",
-        L"views::MenuConfig::ShouldShowAcceleratorText"},
+      {{LR"(?ShouldShowAcceleratorText@MenuConfig@views@@QEBA_NPEBVMenuItemView@2@PEAV?$basic_string@_SU?$char_traits@_S@__Cr@std@@V?$allocator@_S@23@@__Cr@std@@@Z)"},
        &g_MenuShouldShowAcceleratorTextOriginal, MenuShouldShowAcceleratorTextHook, true},
 
-      {{L"views::MenuItemView::GetFontList",
-        LR"(?GetFontList@MenuItemView@views@@QEBA?BVFontList@gfx@@XZ)"},
+      // Parameterless const getters without a public symbol.
+      {{L"views::MenuItemView::GetFontList"},
        &g_MenuItemGetFontListOriginal,
        MenuItemGetFontListHook,
        true},
 
-      {{L"views::MenuItemView::GetVerticalMargin",
-        LR"(?GetVerticalMargin@MenuItemView@views@@QEBAHXZ)"},
+      {{L"views::MenuItemView::GetVerticalMargin"},
        &g_MenuItemGetVerticalMarginOriginal,
        MenuItemGetVerticalMarginHook,
        true},
 
-      {{L"ui::NativeTheme::PaintMenuItemBackground"},
+      {{LR"(?PaintMenuItemBackground@NativeTheme@ui@@MEBAXPEAVPaintCanvas@cc@@PEBVColorProvider@2@W4State@12@AEBVRect@gfx@@AEBUMenuItemExtraParams@12@@Z)"},
        &g_PaintMenuItemBackgroundOriginal,
        PaintMenuItemBackgroundHook,
        true},
 
-      {{LR"(?GetColor@ColorProvider@ui@@QEBAIH@Z)", L"ui::ColorProvider::GetColor"},
+      {{LR"(?GetColor@ColorProvider@ui@@QEBAIH@Z)"},
        &g_ColorProviderGetColorOriginal,
        ColorProviderGetColorHook,
        true},
 
-      {{LR"(?OnPaintBackground@MenuScrollViewContainer@views@@MEAAXPEAVCanvas@gfx@@@Z)",
-        L"views::MenuScrollViewContainer::OnPaintBackground"},
+      // Public virtual in Chrome 153, protected in earlier builds.
+      {{LR"(?OnPaintBackground@MenuScrollViewContainer@views@@UEAAXPEAVCanvas@gfx@@@Z)",
+        LR"(?OnPaintBackground@MenuScrollViewContainer@views@@MEAAXPEAVCanvas@gfx@@@Z)"},
        &g_MenuContainerPaintBackgroundOriginal,
        MenuContainerPaintBackgroundHook,
        true},
@@ -3616,25 +3548,22 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
 
       // Resolve the base implementation directly (not virtual dispatch back
       // into MenuContainerGetInsetsHook) to retain the native bubble frame.
-      {{LR"(?GetInsets@View@views@@UEBA?AVInsets@gfx@@XZ)",
-        L"views::View::GetInsets"},
+      {{LR"(?GetInsets@View@views@@UEBA?AVInsets@gfx@@XZ)"},
        &g_ViewGetInsets,
        nullptr,
        true},
 
-      {{LR"(?HasBubbleBorder@MenuScrollViewContainer@views@@QEBA_NXZ)",
-        L"views::MenuScrollViewContainer::HasBubbleBorder"},
+      {{LR"(?HasBubbleBorder@MenuScrollViewContainer@views@@QEBA_NXZ)"},
        &g_MenuContainerHasBubbleBorder,
        nullptr,
        true},
 
       {{LR"(?GetLocalBounds@View@views@@QEBA?AVRect@gfx@@XZ)"},
        &g_ViewGetLocalBounds, nullptr, true},
-      {{LR"(?OnPaintBorder@View@views@@MEAAXPEAVCanvas@gfx@@@Z)",
-        L"views::View::OnPaintBorder"},
+      {{LR"(?OnPaintBorder@View@views@@MEAAXPEAVCanvas@gfx@@@Z)"},
        &g_ViewOnPaintBorderOriginal, ViewOnPaintBorderHook, true},
-      {{LR"(?GetCornerRadius@MenuScrollViewContainer@views@@AEBAHXZ)",
-        L"views::MenuScrollViewContainer::GetCornerRadius"},
+      // Inlined in optimized builds; the MenuConfig radius is used instead.
+      {{LR"(?GetCornerRadius@MenuScrollViewContainer@views@@AEBAHXZ)"},
        &g_MenuContainerGetCornerRadius, nullptr, true},
       {{LR"(?instance@MenuConfig@views@@SAAEBU12@XZ)"},
        &g_MenuConfigInstance, nullptr, true},
@@ -3642,8 +3571,7 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
        &g_MenuConfigCornerRadius, nullptr, true},
       {{LR"(??0RoundRectPainter@views@@QEAA@IH@Z)"},
        &g_RoundRectPainterCtor, nullptr, true},
-      {{LR"(?Paint@RoundRectPainter@views@@UEAAXPEAVCanvas@gfx@@AEBVSize@4@@Z)",
-        L"views::RoundRectPainter::Paint"},
+      {{LR"(?Paint@RoundRectPainter@views@@UEAAXPEAVCanvas@gfx@@AEBVSize@4@@Z)"},
        &g_RoundRectPainterPaint, nullptr, true},
       {{LR"(??1RoundRectPainter@views@@UEAA@XZ)"},
        &g_RoundRectPainterDtor, nullptr, true},
@@ -3654,8 +3582,7 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
       {{LR"(?Translate@Canvas@gfx@@QEAAXAEBVVector2d@2@@Z)"},
        &g_CanvasTranslate, nullptr, true},
 
-      {{LR"(?GetInsets@MenuScrollViewContainer@views@@UEBA?AVInsets@gfx@@XZ)",
-        L"views::MenuScrollViewContainer::GetInsets"},
+      {{LR"(?GetInsets@MenuScrollViewContainer@views@@UEBA?AVInsets@gfx@@XZ)"},
        &g_MenuContainerGetInsetsOriginal,
        MenuContainerGetInsetsHook,
        true},
@@ -3678,46 +3605,48 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
        true},
 
       // -----------------------------------------------------------------------
-      // Tabs / Views: OPTIONAL
+      // Tabs / Views
       // -----------------------------------------------------------------------
 
-      {{L"TabTitle::TabTitle", LR"(??0TabTitle@@QEAA@XZ)"}, &g_TabTitleCtorOriginal, TabTitleCtorHook, true},
+      {{LR"(??0TabTitle@@QEAA@XZ)"}, &g_TabTitleCtorOriginal, TabTitleCtorHook, true},
 
-      {{L"TabTitle::~TabTitle", LR"(??1TabTitle@@UEAA@XZ)"}, &g_TabTitleDtorOriginal, TabTitleDtorHook, true},
+      // Destructors without a public symbol.
+      {{L"TabTitle::~TabTitle"}, &g_TabTitleDtorOriginal, TabTitleDtorHook, true},
 
-      {{LR"(??0TabCloseButton@@QEAA@VPressedCallback@Button@views@@V?$RepeatingCallback@$$A6AXPEAVView@views@@AEBVMouseEvent@ui@@@Z@base@@@Z)",
-        L"TabCloseButton::TabCloseButton"},
+      {{LR"(??0TabCloseButton@@QEAA@VPressedCallback@Button@views@@V?$RepeatingCallback@$$A6AXPEAVView@views@@AEBVMouseEvent@ui@@@Z@base@@@Z)"},
        &g_TabCloseButtonCtorOriginal,
        TabCloseButtonCtorHook,
        true},
 
-      {{L"TabCloseButton::~TabCloseButton", LR"(??1TabCloseButton@@UEAA@XZ)"},
+      {{L"TabCloseButton::~TabCloseButton"},
        &g_TabCloseButtonDtorOriginal,
        TabCloseButtonDtorHook,
        true},
 
-      {{L"views::View::SetVisible", LR"(?SetVisible@View@views@@QEAAX_N@Z)"},
+      // Virtual in Chrome 153, non-virtual in earlier builds.
+      {{LR"(?SetVisible@View@views@@UEAAX_N@Z)", LR"(?SetVisible@View@views@@QEAAX_N@Z)"},
        &g_ViewSetVisibleOriginal,
        ViewSetVisibleHook,
        true},
 
-      {{L"views::View::InvalidateLayout", LR"(?InvalidateLayout@View@views@@QEAAX_N@Z)"},
+      {{LR"(?InvalidateLayout@View@views@@QEAAX_N@Z)"},
        &g_ViewInvalidateLayout,
        nullptr,
        true},
 
-      {{LR"(?PreferredSizeChanged@View@views@@UEAAXXZ)", L"views::View::PreferredSizeChanged"},
+      // Protected in Chrome 153, public in earlier builds.
+      {{LR"(?PreferredSizeChanged@View@views@@MEAAXXZ)", LR"(?PreferredSizeChanged@View@views@@UEAAXXZ)"},
        &g_ViewPreferredSizeChanged,
        nullptr,
        true},
 
-      {{LR"(?GetLayoutConstant@@YAHW4LayoutConstant@@@Z)", L"GetLayoutConstant"},
+      {{LR"(?GetLayoutConstant@@YAHW4LayoutConstant@@@Z)"},
        &g_GetLayoutConstantOriginal,
        GetLayoutConstantHook,
        true},
 
       // -----------------------------------------------------------------------
-      // Extension toolbar: OPTIONAL
+      // Extension toolbar
       // -----------------------------------------------------------------------
 
       {{LR"(??0ToolbarActionView@@QEAA@PEAVToolbarActionViewModel@@PEAVDelegate@0@@Z)"},
@@ -3725,8 +3654,7 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
        ToolbarActionViewCtorHook,
        true},
 
-      {{LR"(?CalculatePreferredSize@ToolbarActionView@@EEBA?AVSize@gfx@@AEBVSizeBounds@views@@@Z)",
-        L"ToolbarActionView::CalculatePreferredSize"},
+      {{LR"(?CalculatePreferredSize@ToolbarActionView@@EEBA?AVSize@gfx@@AEBVSizeBounds@views@@@Z)"},
        &g_ToolbarActionViewCalculatePreferredSizeOriginal,
        ToolbarActionViewCalculatePreferredSizeHook,
        true},
@@ -3736,12 +3664,13 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
        ToolbarActionViewDeletingDtorHook,
        true},
 
-      {{LR"(?UpdateState@ToolbarActionView@@QEAAXXZ)", L"ToolbarActionView::UpdateState"},
+      {{LR"(?UpdateState@ToolbarActionView@@QEAAXXZ)"},
        &g_ToolbarActionViewUpdateState,
        nullptr,
        true},
 
-      {{LR"(??0ExtensionsToolbarDesktop@@QEAA@PEAVBrowser@@W4DisplayMode@0@@Z)"},
+      {{LR"(??0ExtensionsToolbarDesktop@@QEAA@PEAVBrowserWindowInterface@@W4DisplayMode@0@@Z)",
+        LR"(??0ExtensionsToolbarDesktop@@QEAA@PEAVBrowser@@W4DisplayMode@0@@Z)"},
        &g_ExtensionsToolbarDesktopCtorOriginal,
        ExtensionsToolbarDesktopCtorHook,
        true},
@@ -3752,11 +3681,21 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
        true},
   };
 
-  if (!ResolveChromeAddresses(chromeDll, chromeDllHooks, ARRAYSIZE(chromeDllHooks))) {
-    Wh_Log(L"ERROR: Failed to prepare required Chrome addresses/hooks");
+  WH_HOOK_SYMBOLS_OPTIONS options = {};
+  options.optionsSize = sizeof(options);
+  options.symbolServer = kChromeSymbolServer;
+  // chrome.dll.pdb is several GB and served by Chromium's symbol server, not
+  // Windhawk's online cache. Skipping undecoration keeps the one-time pass per
+  // Chrome build fast; HookSymbols caches the result locally for later runs.
+  options.noUndecoratedSymbols = TRUE;
+
+  if (!WindhawkUtils::HookSymbols(chromeDll, chromeDllHooks, ARRAYSIZE(chromeDllHooks), &options)) {
+    Wh_Log(L"ERROR: Failed to resolve Chrome functions");
 
     return false;
   }
+
+  ValidateChromeU16StringLayout();
 
   Wh_Log(L"Menu icon hiding: %ls",
          g_MenuItemSetIconOriginal && g_EmptyImageModelCtor && g_EmptyImageModelDtor
@@ -3771,6 +3710,8 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
          g_MenuControllerRunOriginal
              ? L"ready"
              : L"unavailable (appearance applies to every menu)");
+  Wh_Log(L"Close open menus on unload: %ls",
+         g_MenuControllerGetActiveInstance && g_MenuControllerCancel ? L"ready" : L"unavailable");
   Wh_Log(L"Menu scope owners: page=%ls app=%ls tab=%ls bookmarks=%ls",
          g_ToolkitDelegateRunMenuAtOriginal ? L"ready" : L"missing",
          g_AppMenuCtorOriginal ? L"ready" : L"missing",
@@ -3806,7 +3747,8 @@ static bool InstallChromeHooks(HMODULE chromeDll) {
          !!g_SimpleMenuModelAddSeparator, !!g_WideToUTF16);
 
   bool tabFontReady =
-      g_TabTitleCtorOriginal && g_TabTitleDtorOriginal && g_LabelSetFontList &&
+      g_TypographyGetFontOriginal && g_TabTitleCtorOriginal && g_TabTitleDtorOriginal &&
+      g_LabelSetFontList &&
       g_FontListCopyCtor && g_FontListGetFontSize && g_FontListDeriveWithSizeDelta &&
       g_FontListDtor;
 
@@ -3917,10 +3859,19 @@ static void ShowSetupNotification(NOTIFYICONDATAW& notifyIcon,
   }
 }
 
-static DWORD WaitForHandlesWithMessageLoop(const HANDLE* handles, DWORD handleCount) {
+static DWORD WaitForHandlesWithMessageLoop(const HANDLE* handles, DWORD handleCount,
+                                           DWORD timeoutMs = INFINITE) {
+  const ULONGLONG startedAt = GetTickCount64();
   for (;;) {
+    DWORD remaining = INFINITE;
+    if (timeoutMs != INFINITE) {
+      const ULONGLONG elapsed = GetTickCount64() - startedAt;
+      if (elapsed >= timeoutMs) return WAIT_TIMEOUT;
+      remaining = static_cast<DWORD>(timeoutMs - elapsed);
+    }
+
     DWORD waitResult = MsgWaitForMultipleObjectsEx(
-        handleCount, handles, INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        handleCount, handles, remaining, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
 
     if (waitResult >= WAIT_OBJECT_0 && waitResult < WAIT_OBJECT_0 + handleCount) {
       return waitResult;
@@ -4008,12 +3959,15 @@ static DWORD WINAPI SetupNotificationThreadProc(void*) {
           NIIF_ERROR);
     }
 
-    // Keep pumping this top-level window while the status icon remains alive,
-    // so system broadcasts can't block on an unresponsive notification thread.
+    // Leave the result visible for a while, then remove the icon. Keep pumping
+    // this top-level window meanwhile, so system broadcasts can't block on an
+    // unresponsive notification thread.
     HANDLE stopHandles[] = {g_setupNotificationStopEvent};
-    waitResult = WaitForHandlesWithMessageLoop(stopHandles, ARRAYSIZE(stopHandles));
+    waitResult = WaitForHandlesWithMessageLoop(stopHandles, ARRAYSIZE(stopHandles),
+                                               kSetupNotificationLingerMs);
 
-    if (waitResult != WAIT_OBJECT_0 && waitResult != WAIT_ABANDONED) {
+    if (waitResult != WAIT_OBJECT_0 && waitResult != WAIT_ABANDONED &&
+        waitResult != WAIT_TIMEOUT) {
       Wh_Log(L"Setup notification stop wait failed: %lu", GetLastError());
     }
   } else if (waitResult != WAIT_OBJECT_0 + 1 && waitResult != WAIT_ABANDONED) {
@@ -4329,6 +4283,10 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModBeforeUninit() {
+  // While the hooks are still active, so the menu closes with Chrome's state
+  // and this mod's entries consistent.
+  if (g_hooksActivated.load(std::memory_order_acquire)) CloseActiveChromeMenus();
+
   {
     std::lock_guard<std::mutex> lock(g_customGroupsMutex);
     g_customGroupTrackingEnabled = false;
@@ -4344,7 +4302,7 @@ void Wh_ModBeforeUninit() {
     g_pageMenuRootModels.clear();
     g_mainPageMenuItemViews.clear();
     g_pageLabelModels.clear();
-    g_hiddenLabelIndices.clear();
+    UpdatePageMenuTrackedCount();
   }
   g_groupExtensions.store(false);
   {
