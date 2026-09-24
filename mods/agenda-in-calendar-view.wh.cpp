@@ -2,7 +2,7 @@
 // @id              agenda-in-calendar-view
 // @name            Agenda in Calendar View
 // @description     Show .ics events in the calendar of the Notification Centre, like in Windows 10
-// @version         1.1
+// @version         1.2
 // @author          lonfro
 // @github          https://github.com/lonfro
 // @include         ShellExperienceHost.exe
