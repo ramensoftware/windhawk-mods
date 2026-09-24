@@ -783,7 +783,8 @@ int CalculateAlignedXForMonitor(HMONITOR monitor,
                                 int width,
                                 const TrayElementSettings& settings) {
     std::optional<RECT> showDesktopButtonBounds;
-    if (settings.horizontalAlignment == TrayHorizontalAlignment::tray || settings.horizontalAlignment == TrayHorizontalAlignment::trayMirror) {
+    if (settings.horizontalAlignment == TrayHorizontalAlignment::tray ||
+        settings.horizontalAlignment == TrayHorizontalAlignment::trayMirror) {
         HWND hTaskbarWnd = GetTaskbarForMonitor(monitor);
         if (hTaskbarWnd) {
             showDesktopButtonBounds = GetShowDesktopButtonBounds(hTaskbarWnd);
