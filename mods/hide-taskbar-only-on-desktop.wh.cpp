@@ -2,7 +2,7 @@
 // @id              hide-taskbar-only-on-desktop
 // @name            Hide Taskbar Only on Desktop
 // @description     Hides selected taskbars on desktop-only displays with per-display hover, keyboard, shell, and fullscreen handling
-// @version         7.7.0
+// @version         7.8.0
 // @author          Sahil Dashoni
 // @github          https://github.com/Sahil-Dashoni
 // @include         windhawk.exe
@@ -13,7 +13,7 @@
 /*
 # Hide Taskbar Only on Desktop
 
-Hides selected bottom-docked taskbars when their display has no visible non-shell application. A detected borderless fullscreen window also makes that display desktop-only. Each display is evaluated independently.
+This mod hides selected bottom-docked taskbars when their display has no relevant visible application. A detected fullscreen window can also keep that display in the desktop-only state. Each display is evaluated independently.
 
 ## Demo
 
@@ -25,29 +25,49 @@ Hides selected bottom-docked taskbars when their display has no visible non-shel
 
 ![Single Display](https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/single-display.gif)
 
-## Features
+## Default Behavior
 
-- Per-display desktop-only hiding for selected taskbars
-- Independent bottom-edge hover reveal with configurable dismissal delay
-- Keyboard taskbar navigation, including Win+T / Win+B-style focus
-- Start, Windows Search, shell surfaces, and taskbar-owned popups handled separately from application detection
-- Per-display fullscreen detection, including foreground browser/video child surfaces
-- Recovery after taskbar recreation and unexpected tool-process termination
-- Optional stable monitor-interface mapping for fixed display slots
+By default:
 
-## Settings
+- Desktop-only hiding is enabled for all connected displays.
+- Bottom-edge hover reveal is enabled for all connected displays.
+- The extra hover margin is **8 px** at 100% scaling.
+- The hover dismissal delay is **700 ms**.
+- No stable monitor mappings are configured.
+- Windows' native taskbar auto-hide is not enabled or changed by this mod.
 
-**Extra hover margin (px)** adds to the taskbar-height-based bottom-edge reveal zone and is scaled for the display DPI.
+## How It Works
 
-**Auto-hide delay after hover (ms)** controls how long a hover- or click-revealed taskbar remains visible after the cursor leaves the bottom-edge area. Desktop-only hiding itself is not delayed by this setting.
+For each selected display, the mod scans visible, non-minimized, non-cloaked windows and excludes Windows shell/taskbar infrastructure from normal application detection.
 
-**Reveal taskbar on bottom-edge hover** selects the displays where bottom-edge hover can reveal the taskbar.
+A display is treated as desktop-only when no relevant application is present. A detected fullscreen window is also tracked separately for that display. Windows that intersect more than one display can affect each display they intersect; maximized windows are assigned to the monitor Windows reports for that window.
 
-**Taskbars to hide on desktop** selects the displays whose bottom-docked taskbars participate in desktop-only hiding.
+The following interactions can temporarily keep a taskbar visible or change the normal desktop-only state:
 
-**Stable monitor interface names** lets you pin a display slot to a specific physical monitor using the Windows monitor interface name returned by `EnumDisplayDevicesW` with `EDD_GET_DEVICE_INTERFACE_NAME`. Pinned monitors stay in their configured display slots; unpinned monitors fill the remaining slots in current logical order. If multiple mappings target the same slot or physical monitor, the last matching mapping wins.
+- Start and Windows Search
+- Recognized Windows shell surfaces and taskbar popups
+- Keyboard-driven taskbar focus
+- Bottom-edge hover reveal
+- Minimize transitions
+- Detected fullscreen transitions
 
-To obtain the interface names on Windows, use the PowerShell snippet below and copy the value shown after **Interface :** into the corresponding mapping.
+Taskbars are hidden by changing their layered-window alpha and adding `WS_EX_TRANSPARENT`. The mod does not enable Windows' native auto-hide mode, so it does not intentionally change the normal desktop work area.
+
+## Per-Display Configuration
+
+The mod supports up to **16 fixed logical display slots**.
+
+`Taskbars to hide on desktop` selects which display slots participate in desktop-only hiding.
+
+`Reveal taskbar on bottom-edge hover` selects which display slots can be revealed by moving the cursor into the configured bottom-edge zone.
+
+`Stable monitor interface names` can pin a display slot to a physical monitor using the interface name returned by `EnumDisplayDevicesW` with `EDD_GET_DEVICE_INTERFACE_NAME`.
+
+Pinned monitors keep their configured slots. Unpinned monitors fill the remaining slots in the current logical monitor order. A disconnected mapped monitor keeps its mapping but does not occupy that slot until it is detected again. When duplicate mappings target the same slot or monitor, the last matching mapping wins.
+
+## Finding Monitor Interface Names
+
+Run this in PowerShell and copy the value shown after **Interface :** into the corresponding mapping:
 
 ```powershell
 Add-Type @'
@@ -78,34 +98,58 @@ for ($i = 1; $i -le 16; $i++) {
 }
 ```
 
-The mod supports up to 16 fixed logical display slots. Pinned monitors stay in their selected slots, while unpinned monitors fill the remaining slots in current logical order.
+## Hover Reveal
 
-## Difference from `taskbar-fade`
+For bottom-docked taskbars, the reveal zone follows the taskbar's current height and display DPI, plus the configured extra margin.
 
-This mod uses the taskbar window's layered transparency and click-through state, but its hiding decision is different: each display is independently classified as desktop-only, then hover, keyboard, Start/Search, shell surfaces, popups, and fullscreen state can affect whether that display's taskbar is shown.
+When the cursor enters that zone on a selected display, the mod can reveal its taskbar. After the cursor leaves, the taskbar is normally hidden again after the configured delay, unless supported shell popup activity is still keeping the hover session alive.
 
-The two mods should not be used on the same taskbar because both modify taskbar transparency/style state.
+Cursor tracking runs in a dedicated sampling thread. It samples every 50 ms while hover tracking is active and normally backs off to 250 ms when it is not needed.
 
-## Implementation
+## Fullscreen
 
-The state logic runs in a dedicated Windhawk tool process. Taskbars are hidden with layered-window transparency and `WS_EX_TRANSPARENT`; Windows' native taskbar auto-hide is not used, so the normal desktop work area is left unchanged.
+Fullscreen detection is geometry-based. A visible application window that matches monitor bounds can be treated as fullscreen. A borderless foreground window matching the current monitor work area can also be treated as fullscreen.
 
-Fullscreen ownership is tracked per display. Foreground transitions, move/size completion, owner-location changes, and short validation timers update fullscreen state; a 5-second safety refresh covers changes that do not produce a handled event. Browser/video fullscreen child surfaces are checked only while their foreground top-level window is eligible, and a short exit guard prevents stale renderer windows from immediately recreating fullscreen ownership.
+Fullscreen ownership is tracked independently for each display. Foreground fullscreen windows and eligible foreground child surfaces, such as browser/video rendering surfaces, can establish the fullscreen owner.
 
-Taskbar focus is classified as keyboard activation only when the focus is on the taskbar, the taskbar is actually foreground, and the transition is not caused by mouse interaction, minimize activity, or recent shell-close activity.
+A short exit guard prevents stale child surfaces from immediately recreating fullscreen ownership after a fullscreen root exits.
+
+Fullscreen detection is heuristic and can classify some borderless monitor-sized applications as fullscreen.
+
+While fullscreen is detected on a display, bottom-edge hover does not reveal that display's taskbar. Start, Search, and keyboard-driven taskbar focus remain available through their supported paths.
+
+## Shell and Taskbar Interaction
+
+Recognized shell surfaces are excluded from normal application detection where appropriate. This includes Start, Search, recognized shell classes, taskbar popups, and several Windows task-switching surfaces.
+
+Taskbar focus is treated as keyboard activation only when focus is on a tracked taskbar, that taskbar is actually foreground, and the transition is not identified as mouse activation, minimize activity, or a recent shell-close transition.
+
+The mod does not use `ShowWindow` to hide the taskbar.
+
+## Taskbar State and Recovery
+
+When hiding a taskbar, the mod records its relevant extended style and layered-window attributes when available, then applies the hidden state. Taskbars hidden by the mod are marked with a window property so the mod can recognize its own ownership later.
+
+When restoring a taskbar, the mod removes only the style state it owns and restores the recorded layered attributes when they are available. If the original layered attributes could not be read, restoration falls back to a fully visible alpha state.
+
+Taskbars are rediscovered when Explorer recreates them or the display topology changes. The dedicated tool process also scans for taskbars carrying the ownership marker when it starts, allowing recovery after an unexpected previous-process termination.
+
+## Native Auto-Hide
+
+This mod does not enable or replace Windows' native taskbar auto-hide.
+
+When native auto-hide is already enabled, the mod does not apply its own desktop-only hiding to that taskbar.
 
 ## Limitations
 
-- **Recovery:** If the dedicated tool process terminates unexpectedly while a taskbar is hidden, the next tool-process startup attempts ownership recovery. Restarting Windows Explorer also recreates the taskbar and clears the hidden state.
-- Hiding and hover reveal apply only to bottom-docked taskbars.
-- A hidden taskbar remains part of the normal work area and is click-through.
-- If a taskbar's monitor cannot be resolved during a refresh, the taskbar is left visible.
-- Taskbar buttons and tray notifications are not visible while the taskbar is transparent.
-- Native Windows taskbar auto-hide remains separate; when it is enabled, this mod skips desktop-only hiding.
-- Other taskbar transparency/style mods can conflict when they modify the same taskbar window.
-- Fullscreen detection is geometry-based. Visible non-shell windows matching monitor bounds, or a borderless foreground window matching current work-area bounds, can be classified as fullscreen.
-- During detected fullscreen, bottom-edge hover does not reveal the taskbar on that display. Keyboard taskbar navigation and Start/Search can still reveal it.
-- Shell window classes and process names used for classification can change between Windows releases.
+- Desktop-only hiding and hover reveal apply only to bottom-docked taskbars.
+- Display configuration is limited to 16 fixed logical display slots.
+- A hidden taskbar remains part of the normal Windows work area.
+- A taskbar hidden by the mod is click-through, so its buttons and tray notifications are not visible while hidden.
+- Other software that changes the same taskbar transparency or extended-style state can conflict with this mod.
+- Shell window classes and shell process names can change between Windows releases.
+- Fullscreen detection is heuristic and geometry-based rather than application-aware.
+- The mod uses a 5-second safety refresh in addition to its handled Windows events.
 */
 // ==/WindhawkModReadme==
 
@@ -267,7 +311,6 @@ HWINEVENTHOOK g_fullscreenLocationHooks[kMaxMonitorNumbers] = {};
 HWND g_recentFullscreenExitRoot = nullptr;
 ULONGLONG g_recentFullscreenExitUntilTick = 0;
 constexpr ULONGLONG kFullscreenExitChildScanSuppressMs = 1500;
-HWINEVENTHOOK g_shellSurfaceHook = nullptr;
 HWINEVENTHOOK g_taskbarFocusHook = nullptr;
 HWINEVENTHOOK g_objectHook = nullptr;
 HWINEVENTHOOK g_cloakHook = nullptr;
@@ -530,6 +573,7 @@ bool g_lastForegroundWasShellSurface = false;
 bool g_searchSurfaceVisible = false;
 HWND g_searchSurfaceWindow = nullptr;
 HMONITOR g_searchSurfaceMonitor = nullptr;
+DWORD g_searchHostProcessId = 0;
 // Track Start independently from generic XAML visibility. Start visibility is
 // driven by the StartMenuExperienceHost foreground transition, not transient
 // object show/hide notifications from its internal windows.
@@ -951,7 +995,36 @@ struct ScanContext {
     const MonitorList* monitors;
     WindowScanResult* result;
     ShellProcessKindCache* processCache;
+    HWND foreground;
+    bool foregroundIsApplication;
+    bool foregroundOnMonitor[kMaxMonitorNumbers];
 };
+
+void MarkWindowOnMonitors(
+    HWND hwnd, const MonitorList& monitors, bool* onMonitor) {
+    if (!hwnd || !onMonitor) return;
+    RECT rect = {};
+    if (!GetWindowRect(hwnd, &rect)) return;
+
+    WINDOWPLACEMENT placement = {};
+    placement.length = sizeof(placement);
+    if (GetWindowPlacement(hwnd, &placement) &&
+        placement.showCmd == SW_SHOWMAXIMIZED) {
+        const HMONITOR windowMonitor =
+            MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        for (size_t i = 0; i < monitors.count; ++i) {
+            onMonitor[i] = monitors.entries[i].monitor == windowMonitor;
+        }
+        return;
+    }
+
+    for (size_t i = 0; i < monitors.count; ++i) {
+        RECT intersection = {};
+        if (IntersectRect(&intersection, &rect, &monitors.entries[i].rect)) {
+            onMonitor[i] = true;
+        }
+    }
+}
 
 bool IsFullscreenGeometryForMonitor(HWND hwnd, const MonitorEntry& monitorEntry) {
     if (!hwnd || !IsWindow(hwnd)) return false;
@@ -1026,6 +1099,11 @@ int FindFullscreenOwnerIndex(HMONITOR monitor) {
 bool IsFullscreenOwnerOnSameMonitor(HWND hwnd, HMONITOR monitor) {
     if (!hwnd || !IsWindow(hwnd) || !monitor) return false;
     return MonitorFromWindow( hwnd, MONITOR_DEFAULTTONEAREST ) == monitor;
+}
+
+bool IsFullscreenOwnerForForeground(HWND owner, HWND foreground) {
+    if (!owner || !foreground) return false;
+    return owner == foreground || GetAncestor(owner, GA_ROOT) == foreground;
 }
 
 void ClearFullscreenOwnerAtIndex(size_t index);
@@ -1127,7 +1205,7 @@ void ValidateFullscreenOwnerForMonitor(
         return;
     }
     HWND foreground = GetForegroundWindow();
-    if (foreground != owner) {
+    if (!IsFullscreenOwnerForForeground(owner, foreground)) {
         // Fullscreen ownership is sticky per display. Once an owner has
         // been established, do not destructively revalidate it while focus
         // is elsewhere. During cross-display focus changes Windows may
@@ -1184,14 +1262,51 @@ void ClearFullscreenOwnerForForegroundApplication(
     DWORD pid = 0;
     if ( !hwnd || GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0 ) return;
     GetWindowThreadProcessId(hwnd, &pid);
-    if (!IsApplicationWindowCandidate( hwnd, className, GetShellProcessKindCached(processCache, pid) )) return;
-    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    const int ownerIndex = FindFullscreenOwnerIndex(monitor);
-    if (ownerIndex < 0 || g_fullscreenOwners[ownerIndex].hwnd == hwnd) {
-        ValidateFullscreenOwnerForMonitor( monitor, monitors, processCache );
-        return;
+    const ShellProcessKind processKind =
+        GetShellProcessKindCached(processCache, pid);
+
+    // The normal candidate filter excludes some active dialogs/tool windows
+    // that are still meaningful foreground application UI. Use the same broad
+    // foreground fallback as the main scan so a background fullscreen owner
+    // cannot keep a taskbar hidden behind such a window.
+    bool foregroundIsApplication =
+        IsApplicationWindowCandidate(hwnd, className, processKind);
+    if (!foregroundIsApplication) {
+        if (!IsWindowVisible(hwnd) || IsIconic(hwnd) ||
+            IsDesktopInfrastructureWindow(hwnd, className) ||
+            IsShellChromeClass(className) ||
+            IsShellSurfaceWindow(hwnd, className, processKind) ||
+            IsTaskbarPopupClass(className) || IsTaskbarWindow(hwnd) ||
+            IsWindowCloaked(hwnd)) {
+            return;
+        }
+        foregroundIsApplication = true;
     }
-    ClearFullscreenOwnerAtIndex(static_cast<size_t>(ownerIndex));
+    if (!foregroundIsApplication) return;
+
+    bool foregroundOnMonitor[kMaxMonitorNumbers] = {};
+    MarkWindowOnMonitors(hwnd, monitors, foregroundOnMonitor);
+
+    for (size_t i = 0; i < kMaxMonitorNumbers; ++i) {
+        if (!g_fullscreenOwners[i].monitor ||
+            !g_fullscreenOwners[i].hwnd) {
+            continue;
+        }
+
+        const int monitorIndex =
+            FindMonitorIndex(monitors, g_fullscreenOwners[i].monitor);
+        if (monitorIndex < 0 || !foregroundOnMonitor[monitorIndex]) {
+            continue;
+        }
+
+        if (IsFullscreenOwnerForForeground(
+                g_fullscreenOwners[i].hwnd, hwnd)) {
+            ValidateFullscreenOwnerForMonitor(
+                g_fullscreenOwners[i].monitor, monitors, processCache);
+        } else {
+            ClearFullscreenOwnerAtIndex(i);
+        }
+    }
 }
 
 void NoteForegroundFullscreenWindow( const MonitorList& monitors, HWND hwnd, ShellProcessKindCache& processCache ) {
@@ -1239,17 +1354,20 @@ BOOL CALLBACK ScanWindowsWithMonitorsProc(HWND hwnd, LPARAM lParam) {
 
     if (!IsApplicationWindowCandidate( hwnd, className, processKind )) return TRUE;
 
-    // Inspect every visible application window for fullscreen geometry. Some
-    // browser/media fullscreen modes use a separate top-level window, so relying
-    // only on the current foreground HWND can miss the transition.
-    const HWND foreground = GetForegroundWindow();
+    // Inspect visible application windows for fullscreen geometry. A background
+    // fullscreen window must not keep the taskbar hidden when another application
+    // is active on that same display.
     for (size_t i = 0; i < context->monitors->count; ++i) {
+        if (context->foregroundIsApplication && context->foreground != hwnd &&
+            context->foregroundOnMonitor[i]) {
+            continue;
+        }
         if (IsFullscreenWindowForMonitor(
                 hwnd,
                 context->monitors->entries[i],
                 processKind)) {
             context->result->fullscreenOnMonitor[i] = true;
-            if (foreground == hwnd) {
+            if (context->foreground == hwnd) {
                 SetFullscreenOwner(
                     context->monitors->entries[i].monitor,
                     hwnd);
@@ -1257,27 +1375,8 @@ BOOL CALLBACK ScanWindowsWithMonitorsProc(HWND hwnd, LPARAM lParam) {
         }
     }
 
-    RECT rect = {};
-    if ( !GetWindowRect(hwnd, &rect) || rect.right <= rect.left || rect.bottom <= rect.top ) return TRUE;
-    WINDOWPLACEMENT placement = {};
-    placement.length = sizeof(placement);
-    if ( GetWindowPlacement(hwnd, &placement) && placement.showCmd == SW_SHOWMAXIMIZED ) {
-        HMONITOR windowMonitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        for ( size_t i = 0; i < context->monitors->count; ++i ) {
-            if ( context->monitors->entries[i].monitor == windowMonitor ) {
-                context->result->applicationOnMonitor[i] = true;
-                return TRUE;
-            }
-        }
-        return TRUE;
-    }
-    for ( size_t i = 0; i < context->monitors->count; ++i ) {
-        RECT intersection = {};
-        if (IntersectRect(&intersection, &rect,
-                          &context->monitors->entries[i].rect)) {
-            context->result->applicationOnMonitor[i] = true;
-        }
-    }
+    MarkWindowOnMonitors(
+        hwnd, *context->monitors, context->result->applicationOnMonitor);
     return TRUE;
 }
 
@@ -1285,7 +1384,6 @@ struct FullscreenChildScanContext {
     HMONITOR monitors[kMaxMonitorNumbers];
     RECT monitorRects[kMaxMonitorNumbers];
     size_t count;
-    HWND root;
     WindowScanResult* result;
 };
 
@@ -1378,7 +1476,6 @@ void ScanForegroundChildWindowsForFullscreen(
     }
 
     context.count = childMonitorCount;
-    context.root = foreground;
     context.result = &result;
 
     if (context.count != 0) {
@@ -1398,8 +1495,24 @@ void ScanWindowsOnce(const MonitorList& monitors, WindowScanResult& result) {
             HasFullscreenOwnerOnMonitor(monitors.entries[i].monitor);
     }
     ScanContext context = {
-        &monitors, &result, &processCache
+        &monitors, &result, &processCache, nullptr, false, {}
     };
+    context.foreground = GetForegroundWindow();
+    if (context.foreground) {
+        WCHAR foregroundClassName[256] = {};
+        if (GetClassNameW(context.foreground, foregroundClassName,
+                          ARRAYSIZE(foregroundClassName)) != 0) {
+            DWORD foregroundPid = 0;
+            GetWindowThreadProcessId(context.foreground, &foregroundPid);
+            context.foregroundIsApplication = IsApplicationWindowCandidate(
+                context.foreground, foregroundClassName,
+                GetShellProcessKindCached(processCache, foregroundPid));
+            if (context.foregroundIsApplication) {
+                MarkWindowOnMonitors(
+                    context.foreground, monitors, context.foregroundOnMonitor);
+            }
+        }
+    }
     EnumWindows(ScanWindowsWithMonitorsProc, reinterpret_cast<LPARAM>(&context));
     HWND foreground = GetForegroundWindow();
 
@@ -1655,9 +1768,7 @@ void UpdateCursorHoverSnapshot() {
         if (snapshotCount >= kMaxTaskbars) break;
         const TaskbarMonitorState& state = g_taskbarStates[i];
         if (!ShouldRevealOnHover(state) || !state.desktopOnly ||
-            !ShouldHideTaskbar(state) ||
-            !IsBottomDockedTaskbar(state.hwnd, state.monitor) ||
-            HasFullscreenOwnerOnMonitor(state.monitor)) {
+            !ShouldHideTaskbar(state) || HasFullscreenOwnerOnMonitor(state.monitor)) {
             continue;
         }
         CursorHoverSnapshot& snapshot = snapshots[snapshotCount++];
@@ -1953,19 +2064,6 @@ void SafeUnhookWinEvent(HWINEVENTHOOK& hook) {
     }
 }
 
-void InstallShellSurfaceHook() {
-    SafeUnhookWinEvent(g_shellSurfaceHook);
-    HWND shellWindow = GetShellWindow();
-    if (!shellWindow) return;
-    DWORD processId = 0;
-    GetWindowThreadProcessId(shellWindow, &processId);
-    if (!processId) return;
-    g_shellSurfaceHook = SetWinEventHook(
-        EVENT_OBJECT_SHOW, EVENT_OBJECT_HIDE, nullptr, WinEventProc,
-        processId, 0, WINEVENT_OUTOFCONTEXT);
-    if (!g_shellSurfaceHook) Wh_Log(L"Failed to install shell surface WinEvent hook");
-}
-
 void InstallShellObjectHooks() {
     SafeUnhookWinEvent(g_objectHook);
     SafeUnhookWinEvent(g_cloakHook);
@@ -2106,12 +2204,10 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         // only when the taskbar root is actually the foreground window. This
         // keeps desktop context-menu/focus changes from pinning the taskbar
         // visible while preserving Win+T/Win+B style keyboard navigation.
-        const bool fgIsRoot = GetForegroundWindow() == root;
-        const bool minSupp = IsMinimizeInProgress() || IsRecentMinimizeTaskbarFocusSuppressed();
-        const bool shellSupp = IsRecentShellCloseTaskbarFocusSuppressed();
-        const bool mouseAct = IsTaskbarMouseActivated(root);
-        if (!fgIsRoot) return;
-        if (minSupp || shellSupp || mouseAct) return;
+        if (GetForegroundWindow() != root) return;
+        if (IsMinimizeInProgress() || IsRecentMinimizeTaskbarFocusSuppressed() ||
+            IsRecentShellCloseTaskbarFocusSuppressed() ||
+            IsTaskbarMouseActivated(root)) return;
         for (size_t i = 0; i < g_taskbarStateCount; ++i) {
             if (g_taskbarStates[i].hwnd == root) {
                 g_taskbarForegroundKeyboardActivated = true;
@@ -2158,61 +2254,9 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         event == EVENT_OBJECT_CLOAKED ||
         event == EVENT_OBJECT_UNCLOAKED ||
         event == EVENT_OBJECT_DESTROY) {
-        // SearchHost.exe is outside Explorer, so these global object/cloak hooks
-        // can observe Search's lifetime.
-        if (hwnd == g_searchSurfaceWindow && event == EVENT_OBJECT_DESTROY) {
-            g_searchSurfaceVisible = false;
-            g_searchSurfaceWindow = nullptr;
-            g_searchSurfaceMonitor = nullptr;
-            PostRefresh();
-            return;
-        }
-
-        WCHAR className[256] = {};
-        if (!hwnd || GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0) return;
-
-        if (wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0) {
-            DWORD processId = 0;
-            GetWindowThreadProcessId(hwnd, &processId);
-            ShellProcessKindCache processCache = {};
-            const ShellProcessKind processKind =
-                GetShellProcessKindCached(processCache, processId);
-
-            if (processKind == ShellProcessKind::SearchHost) {
-                if (event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_UNCLOAKED) {
-                    g_searchSurfaceVisible = true;
-                    g_searchSurfaceWindow = hwnd;
-                    g_searchSurfaceMonitor =
-                        MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-                    g_shellCloseFocusIgnoreUntilTick = 0;
-                } else {
-                    g_searchSurfaceVisible = false;
-                    g_searchSurfaceWindow = nullptr;
-                    g_searchSurfaceMonitor = nullptr;
-                    // Search can return focus to Shell_TrayWnd immediately
-                    // after closing. Do not mistake that transition for
-                    // keyboard taskbar navigation; it is the shell-close
-                    // transition itself.
-                    g_shellCloseFocusIgnoreUntilTick =
-                        GetTickCount64() + 600;
-                    g_taskbarForegroundKeyboardActivated = false;
-                    g_taskbarForegroundAfterShell = true;
-                }
-                PostRefresh();
-                return;
-            }
-        }
-
-        // Start is normally driven by its foreground transition, but the exact
-        // Start surface also gives us an earlier close signal. Use that signal
-        // only for the window we previously recorded as Start's foreground
-        // surface; ignore the other transient windows owned by the process.
-        DWORD shellEventPid = 0;
-        GetWindowThreadProcessId(hwnd, &shellEventPid);
-        if (GetShellProcessKind(shellEventPid) != ShellProcessKind::StartHost) {
-            return;
-        }
-
+        // Start: only the exact surface recorded from the foreground transition
+        // matters. Do this before any process lookup because the HWND was already
+        // verified as StartMenuExperienceHost.exe when it was recorded.
         if (hwnd == g_startSurfaceWindow &&
             (event == EVENT_OBJECT_HIDE || event == EVENT_OBJECT_DESTROY)) {
             const HMONITOR startMonitor = g_startSurfaceMonitor;
@@ -2229,7 +2273,82 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
             CancelHoverExpireTimer();
             HideTaskbarsForStartClose(startMonitor);
             PostRefresh();
+            return;
         }
+
+        if (hwnd == g_searchSurfaceWindow &&
+            (event == EVENT_OBJECT_HIDE || event == EVENT_OBJECT_DESTROY ||
+             event == EVENT_OBJECT_CLOAKED)) {
+            g_searchSurfaceVisible = false;
+            g_searchSurfaceWindow = nullptr;
+            g_searchSurfaceMonitor = nullptr;
+            g_searchHostProcessId = 0;
+            // Search can return focus to Shell_TrayWnd immediately after closing.
+            g_shellCloseFocusIgnoreUntilTick = GetTickCount64() + 600;
+            g_taskbarForegroundKeyboardActivated = false;
+            g_taskbarForegroundAfterShell = true;
+            PostRefresh();
+            return;
+        }
+
+        if (!hwnd || GetAncestor(hwnd, GA_ROOT) != hwnd) return;
+
+        WCHAR className[256] = {};
+        if (GetClassNameW(hwnd, className, ARRAYSIZE(className)) == 0) return;
+
+        // SearchHost.exe is outside Explorer. CoreWindow is top-level, so after
+        // the child-window filter this is the only global class we need to
+        // inspect for Search state. Keep the known PID so normal events do not
+        // open a new process handle.
+        if (wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0) {
+            DWORD processId = 0;
+            GetWindowThreadProcessId(hwnd, &processId);
+            if (g_searchHostProcessId) {
+                if (processId != g_searchHostProcessId) return;
+            } else if (event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_UNCLOAKED) {
+                if (GetShellProcessKind(processId) != ShellProcessKind::SearchHost) return;
+                g_searchHostProcessId = processId;
+            } else {
+                return;
+            }
+
+            if (event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_UNCLOAKED) {
+                g_searchSurfaceVisible = true;
+                g_searchSurfaceWindow = hwnd;
+                g_searchSurfaceMonitor =
+                    MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+                g_shellCloseFocusIgnoreUntilTick = 0;
+            } else if (hwnd == g_searchSurfaceWindow) {
+                g_searchSurfaceVisible = false;
+                g_searchSurfaceWindow = nullptr;
+                g_searchSurfaceMonitor = nullptr;
+                g_searchHostProcessId = 0;
+                // Search can return focus to Shell_TrayWnd immediately
+                // after closing. Do not mistake that transition for
+                // keyboard taskbar navigation; it is the shell-close
+                // transition itself.
+                g_shellCloseFocusIgnoreUntilTick = GetTickCount64() + 600;
+                g_taskbarForegroundKeyboardActivated = false;
+                g_taskbarForegroundAfterShell = true;
+            } else {
+                return;
+            }
+            PostRefresh();
+            return;
+        }
+
+        // Avoid process inspection for tool windows and obvious shell chrome.
+        // Other top-level window changes are coalesced into the normal state scan,
+        // which closes the background-application transition gap without adding
+        // another per-window process lookup.
+        LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        if ((exStyle & WS_EX_TOOLWINDOW) ||
+            IsDesktopInfrastructureWindow(hwnd, className) ||
+            IsShellChromeClass(className) ||
+            IsTaskbarPopupClass(className) || IsTaskbarWindow(hwnd)) {
+            return;
+        }
+        PostRefresh();
         return;
     }
     if (event == EVENT_SYSTEM_FOREGROUND) {
@@ -2238,9 +2357,21 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
 
         DWORD foregroundPid = 0;
         if (hwnd) GetWindowThreadProcessId(hwnd, &foregroundPid);
+        ShellProcessKind foregroundProcessKind = ShellProcessKind::None;
+        if (hwnd) foregroundProcessKind = GetShellProcessKind(foregroundPid);
         const bool foregroundIsStartSurface =
-            hwnd && GetShellProcessKind(foregroundPid) == ShellProcessKind::StartHost;
+            hwnd && foregroundProcessKind == ShellProcessKind::StartHost;
+        if (hwnd && foregroundProcessKind == ShellProcessKind::SearchHost &&
+            wcscmp(foregroundClassName, L"Windows.UI.Core.CoreWindow") == 0) {
+            g_searchHostProcessId = foregroundPid;
+            g_searchSurfaceVisible = true;
+            g_searchSurfaceWindow = hwnd;
+            g_searchSurfaceMonitor =
+                MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            g_shellCloseFocusIgnoreUntilTick = 0;
+        }
         bool startJustClosed = false;
+        bool startCloseForegroundIsApplication = false;
         HMONITOR startCloseMonitor = nullptr;
         if (foregroundIsStartSurface) {
             g_startCloseHoverSuppressed = false;
@@ -2267,6 +2398,12 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
             g_hoverDeadline = 0;
             CancelHoverExpireTimer();
             startJustClosed = true;
+            if (hwnd && foregroundClassName[0] != L'\0') {
+                ShellProcessKindCache processCache = {};
+                startCloseForegroundIsApplication = IsApplicationWindowCandidate(
+                    hwnd, foregroundClassName,
+                    GetShellProcessKindCached(processCache, foregroundPid));
+            }
         }
 
         const bool postMinimizeTaskbarForeground =
@@ -2286,26 +2423,25 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
                 // Hide immediately without performing a full window scan first.
                 // The close event already cleared Start's reveal state, and the
                 // following queued refresh performs the authoritative recheck.
-                HideTaskbarsForStartClose(startCloseMonitor);
+                if (!startCloseForegroundIsApplication) {
+                    HideTaskbarsForStartClose(startCloseMonitor);
+                }
                 PostRefresh();
                 return;
             }
             g_taskbarForegroundAfterShell = false;
             g_taskbarForegroundKeyboardActivated = false;
-            DWORD pid = 0;
-            if (hwnd) GetWindowThreadProcessId(hwnd, &pid);
-            ShellProcessKindCache processCache = {};
             g_lastForegroundWasShellSurface =
                 hwnd && foregroundClassName[0] &&
                 IsShellSurfaceWindow(
-                    hwnd, foregroundClassName,
-                    GetShellProcessKindCached(processCache, pid));
+                    hwnd, foregroundClassName, foregroundProcessKind);
             const HMONITOR foregroundMonitor = hwnd
                     ? MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
                     : nullptr;
             const int fullscreenOwnerIndex = FindFullscreenOwnerIndex(foregroundMonitor);
             if (g_workerMessageWindow && fullscreenOwnerIndex >= 0 &&
-                g_fullscreenOwners[fullscreenOwnerIndex].hwnd == hwnd) {
+                IsFullscreenOwnerForForeground(
+                    g_fullscreenOwners[fullscreenOwnerIndex].hwnd, hwnd)) {
                 g_fullscreenValidationAttempt = 0;
                 if (!SetTimer(g_workerMessageWindow, kFullscreenValidationTimerId, 16,
                               nullptr)) {
@@ -2447,7 +2583,8 @@ LRESULT CALLBACK WorkerMessageWindowProc(HWND hwnd, UINT message, WPARAM wParam,
             : nullptr;
         const int index = FindFullscreenOwnerIndex(monitor);
         const bool ownerStillFullscreen =
-            index >= 0 && g_fullscreenOwners[index].hwnd == foreground &&
+            index >= 0 &&
+            IsFullscreenOwnerForForeground(g_fullscreenOwners[index].hwnd, foreground) &&
             HasFullscreenOwnerOnMonitor(monitor);
         static constexpr UINT kValidationDelaysMs[] = {16, 64};
         if (ownerStillFullscreen && g_fullscreenValidationAttempt < ARRAYSIZE(kValidationDelaysMs)) {
@@ -2466,7 +2603,6 @@ LRESULT CALLBACK WorkerMessageWindowProc(HWND hwnd, UINT message, WPARAM wParam,
     if (message == g_taskbarCreatedMessage || message == WM_DISPLAYCHANGE ||
         message == WM_SETTINGCHANGE || message == WM_THEMECHANGED) {
         if (message == g_taskbarCreatedMessage) {
-            InstallShellSurfaceHook();
             InstallShellObjectHooks();
             InstallTaskbarFocusHook();
             RefreshNativeAutoHideState();
@@ -2541,7 +2677,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
         EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZEEND, nullptr,
         WinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     if (!g_moveHook) Wh_Log(L"Failed to install move/size WinEvent hook");
-    InstallShellSurfaceHook();
     InstallShellObjectHooks();
     InstallTaskbarFocusHook();
     UpdateTaskbarState();
@@ -2582,7 +2717,6 @@ DWORD WINAPI WorkerThread(LPVOID) {
     SafeUnhookWinEvent(g_minimizeHook);
     SafeUnhookWinEvent(g_moveHook);
     for (size_t i = 0; i < kMaxMonitorNumbers; ++i) SafeUnhookWinEvent(g_fullscreenLocationHooks[i]);
-    SafeUnhookWinEvent(g_shellSurfaceHook);
     SafeUnhookWinEvent(g_objectHook);
     SafeUnhookWinEvent(g_cloakHook);
     SafeUnhookWinEvent(g_taskbarFocusHook);
