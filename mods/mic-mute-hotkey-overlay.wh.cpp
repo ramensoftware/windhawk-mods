@@ -122,12 +122,14 @@ Binds a global hotkey to toggle mute on your default (or all) microphones, with 
     The floating icon is hidden while the mic is active and shown for as
     long as the mic is muted. Overrides "Always show overlay" and the
     auto-hide delay while the mic is active.
-- modToggleHotkey: "Ctrl+Alt+Shift+M"
+- modToggleHotkey: ""
   $name: Hotkey to turn the whole mod on/off
   $description: >-
-    Same format as the main hotkey. While the mod is off, the mute hotkey is
-    released and the overlay/border are hidden. Leave empty to disable this
-    hotkey. At least one modifier is required.
+    Optional, empty (disabled) by default. Same format as the main hotkey,
+    e.g. "Ctrl+Alt+Shift+M"; at least one modifier is required and it must
+    differ from the main hotkey. While the mod is off, the mute hotkey is
+    released and the overlay/border are hidden. A system beep plays on every
+    on/off toggle.
 - redBorderMode: false
   $name: Red screen border instead of the mute icon
   $description: >-
@@ -147,7 +149,8 @@ Binds a global hotkey to toggle mute on your default (or all) microphones, with 
   $name: Mute/unmute all microphones
   $description: >-
     The hotkey toggles every active capture device at once instead of only
-    the default one.
+    the default one. Note that unmuting also unmutes every active capture
+    device, including ones you may have muted on purpose.
 */
 // ==/WindhawkModSettings==
 
@@ -160,6 +163,7 @@ Binds a global hotkey to toggle mute on your default (or all) microphones, with 
 #include <cmath>
 #include <cwchar>
 #include <cwctype>
+#include <windhawk_utils.h>
 
 using namespace Gdiplus;
 
@@ -387,17 +391,17 @@ void LoadSettings() {
     g_settings.muteAllMicrophones =
         Wh_GetIntSetting(L"muteAllMicrophones") != 0;
 
-    PCWSTR toggleStr = Wh_GetStringSetting(L"modToggleHotkey");
-    wcsncpy(g_settings.toggleRaw, toggleStr,
+    WindhawkUtils::StringSetting toggleStr(
+        Wh_GetStringSetting(L"modToggleHotkey"));
+    wcsncpy(g_settings.toggleRaw, toggleStr.get(),
             ARRAYSIZE(g_settings.toggleRaw) - 1);
     g_settings.toggleRaw[ARRAYSIZE(g_settings.toggleRaw) - 1] = L'\0';
     g_settings.toggleModifiers = 0;
     g_settings.toggleVK = 0;
-    if (toggleStr[0] != L'\0') {
-        ParseHotkeyString(toggleStr, &g_settings.toggleModifiers,
+    if (toggleStr.get()[0] != L'\0') {
+        ParseHotkeyString(toggleStr.get(), &g_settings.toggleModifiers,
                            &g_settings.toggleVK);
     }
-    Wh_FreeStringSetting(toggleStr);
 
     if (g_settings.redBorderThickness < 1) g_settings.redBorderThickness = 1;
     if (g_settings.redBorderThickness > 64)
@@ -744,16 +748,12 @@ constexpr UINT ANIM_MS = 33;  // ~30 fps
 constexpr UINT_PTR kHotkeyId = 1;
 constexpr UINT_PTR kToggleHotkeyId = 2;
 
-// Cached render target: recreated only when the overlay's pixel size
-// changes (e.g. a settings change or a DPI/monitor change), not on every
-// animation frame — avoids ~30 GDI object create/destroy pairs per second
-// while the overlay is up.
 constexpr int kMaxAuxMonitors = 16;
 
-// One cached render target per overlay window (slot 0 = main overlay,
+// Cached render targets, one per overlay window (slot 0 = main overlay,
 // slots 1..N = copies on other monitors). Each is recreated only when its
-// pixel size changes, so monitors with different DPI don't thrash a shared
-// buffer every frame.
+// pixel size changes (settings/DPI/monitor change), not on every animation
+// frame, and monitors with different DPI don't thrash a shared buffer.
 struct RenderTarget {
     HDC dc;
     HBITMAP bmp;
@@ -918,6 +918,7 @@ HWND g_borderWnds[kMaxAuxMonitors * 4] = {};
 int g_borderCount = 0;
 bool g_borderShown = false;
 
+HMONITOR g_auxMainMon = nullptr;  // main overlay monitor at last rebuild
 HBRUSH g_borderBrush = nullptr;
 bool g_auxClassesRegistered = false;
 
@@ -985,10 +986,8 @@ void ReleaseAuxClasses() {
     if (!g_auxClassesRegistered) return;
     UnregisterClass(kExtraClassName, GetCurrentModuleHandle());
     UnregisterClass(kBorderClassName, GetCurrentModuleHandle());
-    if (g_borderBrush) {
-        DeleteObject(g_borderBrush);
-        g_borderBrush = nullptr;
-    }
+    // The class owns hbrBackground and frees it in UnregisterClass.
+    g_borderBrush = nullptr;
     g_auxClassesRegistered = false;
 }
 
@@ -1116,12 +1115,13 @@ void RebuildAuxWindows() {
     DestroyExtras();
     DestroyBorders();
 
-    if (!g_settings.allMonitors && !g_settings.redBorderMode) return;
-    if (!EnsureAuxClasses()) return;
-
     RECT mainRc;
     ComputeOverlayRect(&mainRc);
     HMONITOR mainMon = MonitorFromRect(&mainRc, MONITOR_DEFAULTTONEAREST);
+    g_auxMainMon = mainMon;
+
+    if (!g_settings.allMonitors && !g_settings.redBorderMode) return;
+    if (!EnsureAuxClasses()) return;
 
     if (g_settings.allMonitors) {
         EnumDisplayMonitors(nullptr, nullptr, ExtraMonitorProc,
@@ -1246,6 +1246,13 @@ void RegisterGlobalHotkey(HWND hwnd) {
             Wh_Log(
                 L"Mod on/off hotkey not registered: could not parse a valid "
                 L"hotkey from '%s'",
+                g_settings.toggleRaw);
+        } else if (g_modEnabled &&
+                   g_settings.toggleModifiers == g_settings.hotkeyModifiers &&
+                   g_settings.toggleVK == g_settings.hotkeyVK) {
+            Wh_Log(
+                L"Mod on/off hotkey not registered: '%s' is the same combo "
+                L"as the mute hotkey",
                 g_settings.toggleRaw);
         } else if (!RegisterHotKey(hwnd, kToggleHotkeyId,
                                     g_settings.toggleModifiers | MOD_NOREPEAT,
@@ -1395,9 +1402,12 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
                 GetWindowRect(hwnd, &wr);
                 g_manualPos = {wr.left, wr.top};
                 g_manualPosition = true;
-                // The main overlay may now sit on another monitor, so the
-                // "other monitors" set / single-monitor border change.
-                RebuildAuxWindows();
+                // Rebuild only if the main overlay landed on another
+                // monitor (changes the "other monitors" set / border).
+                if (MonitorFromRect(&wr, MONITOR_DEFAULTTONEAREST) !=
+                    g_auxMainMon) {
+                    RebuildAuxWindows();
+                }
                 // Resume owning the position for subsequent frames now
                 // that the move loop has released it.
                 RenderCurrentState(hwnd, g_micMuted ? 0.0f : GetMicPeak());
