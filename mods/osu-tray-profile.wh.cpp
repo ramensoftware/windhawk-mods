@@ -27,7 +27,9 @@ _(you can use your previous nickname "XATCYHE MIKU, XATCYHE_MIKU, antoshika")_
 
 ## ⚠️ Problems:
 * **"✎ check 'Settings'"**: You didn't fill in the required fields in the settings.
-* **"⛔ error"**: Invalid Client ID or Client Secret. Make sure that you have copied them completely and without spaces at the end.
+* **"⛔ API Error" / "⛔ User Error"**: Invalid Client ID, Client Secret or Username. Make sure that you have copied them completely and without spaces at the end.
+* **"⛔ Rate Limited"**: The osu! API has temporarily limited your requests (or Cloudflare challenged the connection). The widget will automatically wait 60 seconds and recover on its own.
+* **"⛔ HTTP [code]"**: A specific network or server error occurred (e.g. HTTP 404 - if the user is completely missing or HTTP 500/502 - for server issues).
 ---
 *🥬 Im here: 💙 [hatsunemiku39.ru](http://hatsunemiku39.ru) // 🟣 [osu!profile](https://osu.ppy.sh/users/18815482) // 📶 [Discord](https://discord.gg/3jBQs9buYe)*
 */
@@ -64,19 +66,18 @@ _(you can use your previous nickname "XATCYHE MIKU, XATCYHE_MIKU, antoshika")_
 #include <string>
 #include <atomic>
 #include <vector>
-
-#pragma comment(lib, "gdiplus.lib")
-#pragma comment(lib, "urlmon.lib")
+#include <optional>
 
 using namespace Gdiplus;
 
 std::wstring g_clientId = L"";
 std::wstring g_clientSecret = L"";
 std::wstring g_username = L"";
+std::string g_accessToken = "";
 int g_updateInterval = 300;
 
-std::thread g_uiThread;
-std::thread g_netThread;
+[[clang::no_destroy]] std::optional<std::thread> g_uiThread;
+[[clang::no_destroy]] std::optional<std::thread> g_netThread;
 std::atomic<bool> g_running{ false };
 std::atomic<bool> g_forceUpdate{ false };
 std::atomic<bool> g_needsRedraw{ true };
@@ -89,20 +90,24 @@ std::wstring g_avatarPath = L"";
 int g_consecutiveErrors = 0;
 
 void LoadSettings() {
+    AcquireSRWLockExclusive(&g_statsLock);
+    
     PCWSTR clientIdStr = Wh_GetStringSetting(L"api.client_id");
-    g_clientId = clientIdStr ? clientIdStr : L"";
+    g_clientId = clientIdStr;
     Wh_FreeStringSetting(clientIdStr);
 
     PCWSTR clientSecretStr = Wh_GetStringSetting(L"api.client_secret");
-    g_clientSecret = clientSecretStr ? clientSecretStr : L"";
+    g_clientSecret = clientSecretStr;
     Wh_FreeStringSetting(clientSecretStr);
 
     PCWSTR usernameStr = Wh_GetStringSetting(L"api.username");
-    g_username = usernameStr ? usernameStr : L"";
+    g_username = usernameStr;
     Wh_FreeStringSetting(usernameStr);
 
     g_updateInterval = Wh_GetIntSetting(L"update.interval");
     if (g_updateInterval < 5) g_updateInterval = 5;
+    
+    ReleaseSRWLockExclusive(&g_statsLock);
 }
 
 std::string WStringToString(const std::wstring& wstr) {
@@ -119,6 +124,21 @@ std::wstring StringToWString(const std::string& str) {
     std::wstring wstrTo(size_needed, 0);
     MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
     return wstrTo;
+}
+
+std::wstring EncodeUsername(const std::wstring& username) {
+    std::string utf8 = WStringToString(username);
+    std::string encoded;
+    for (unsigned char c : utf8) {
+        if (isalnum(c) || c == '-' || c == '_' || c == '.') {
+            encoded += c;
+        } else {
+            char buf[5];
+            sprintf_s(buf, "%%%02X", c);
+            encoded += buf;
+        }
+    }
+    return StringToWString(encoded);
 }
 
 std::string FormatWithDots(std::string num) {
@@ -173,7 +193,14 @@ std::string ParseJsonNumber(const std::string& json, const std::string& key) {
 }
 
 void FetchOsuStats() {
-    if (g_clientId.empty() || g_clientSecret.empty() || g_username.empty()) {
+    AcquireSRWLockShared(&g_statsLock);
+    std::wstring clientId = g_clientId;
+    std::wstring clientSecret = g_clientSecret;
+    std::wstring username = g_username;
+    std::string cachedToken = g_accessToken;
+    ReleaseSRWLockShared(&g_statsLock);
+
+    if (clientId.empty() || clientSecret.empty() || username.empty()) {
         AcquireSRWLockExclusive(&g_statsLock);
         g_consecutiveErrors = 1;
         g_displayName = L"✎ check \"Settings\"";
@@ -196,97 +223,97 @@ void FetchOsuStats() {
         if (proxyConfig.lpszProxyBypass) GlobalFree(proxyConfig.lpszProxyBypass);
     }
 
-    if (!hSession) {
-        hSession = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    }
-
-    if (!hSession) {
-        hSession = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-    }
-
+    if (!hSession) hSession = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hSession) hSession = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession) return;
 
     WinHttpSetTimeouts(hSession, 10000, 10000, 10000, 10000);
-
     DWORD secureProtocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
     WinHttpSetOption(hSession, WINHTTP_OPTION_SECURE_PROTOCOLS, &secureProtocols, sizeof(secureProtocols));
 
     HINTERNET hConnect = WinHttpConnect(hSession, L"osu.ppy.sh", INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (!hConnect) { WinHttpCloseHandle(hSession); return; }
 
+    std::string token = cachedToken;
     LPCWSTR acceptTypes[] = { L"application/json", NULL };
-    HINTERNET hRequestAuth = WinHttpOpenRequest(hConnect, L"POST", L"/oauth/token", NULL, WINHTTP_NO_REFERER, acceptTypes, WINHTTP_FLAG_SECURE);
-    
-    std::wstring contentType = L"Content-Type: application/x-www-form-urlencoded\r\n";
-    std::wstring postDataW = L"client_id=" + g_clientId + L"&client_secret=" + g_clientSecret + L"&grant_type=client_credentials&scope=public";
-    std::string postData = WStringToString(postDataW);
-
-    BOOL bResults = WinHttpSendRequest(hRequestAuth, contentType.c_str(), (DWORD)-1, (LPVOID)postData.c_str(), (DWORD)postData.length(), (DWORD)postData.length(), 0);
-    
-    std::string token = "";
-    std::string response = "";
-    DWORD dwError = 0;
-
-    if (bResults && WinHttpReceiveResponse(hRequestAuth, NULL)) {
-        DWORD dwSize = 0;
-        DWORD dwDownloaded = 0;
-        do {
-            WinHttpQueryDataAvailable(hRequestAuth, &dwSize);
-            if (dwSize == 0) break;
-            char* pszOutBuffer = new char[dwSize + 1];
-            if (WinHttpReadData(hRequestAuth, (LPVOID)pszOutBuffer, dwSize, &dwDownloaded)) {
-                pszOutBuffer[dwDownloaded] = '\0';
-                response += pszOutBuffer;
-            }
-            delete[] pszOutBuffer;
-        } while (dwSize > 0);
-
-        token = ParseJsonString(response, "access_token");
-    } else {
-        dwError = GetLastError();
-    }
-    WinHttpCloseHandle(hRequestAuth);
 
     if (token.empty()) {
-        WinHttpCloseHandle(hConnect);
-        WinHttpCloseHandle(hSession);
-        AcquireSRWLockExclusive(&g_statsLock);
-        
-        g_consecutiveErrors++;
-        if (dwError != 0) {
-            if (g_consecutiveErrors <= 4) {
-                g_displayName = L"Loading...";
-            } else {
-                g_displayName = L"⛔ Net Error: " + std::to_wstring(dwError);
-            }
-            Wh_Log(L"Network Error: %lu", dwError);
-        } else {
-            g_displayName = L"⛔ API Error";
-            Wh_Log(L"API Auth Failed. Server Response: %hs", response.c_str());
-        }
-        
-        g_displayStats = L"";
-        g_avatarPath = L"";
-        ReleaseSRWLockExclusive(&g_statsLock);
-        return;
-    }
+        HINTERNET hRequestAuth = WinHttpOpenRequest(hConnect, L"POST", L"/oauth/token", NULL, WINHTTP_NO_REFERER, acceptTypes, WINHTTP_FLAG_SECURE);
+        std::wstring contentType = L"Content-Type: application/x-www-form-urlencoded\r\n";
+        std::wstring postDataW = L"client_id=" + clientId + L"&client_secret=" + clientSecret + L"&grant_type=client_credentials&scope=public";
+        std::string postData = WStringToString(postDataW);
 
-    std::wstring safeUsername = g_username;
-    size_t spacePos = 0;
-    while ((spacePos = safeUsername.find(L" ", spacePos)) != std::wstring::npos) {
-        safeUsername.replace(spacePos, 1, L"%20");
-        spacePos += 3;
+        BOOL bResults = WinHttpSendRequest(hRequestAuth, contentType.c_str(), (DWORD)-1, (LPVOID)postData.c_str(), (DWORD)postData.length(), (DWORD)postData.length(), 0);
+        
+        std::string response = "";
+        DWORD statusCode = 0;
+        DWORD dwSize = sizeof(statusCode);
+
+        if (bResults && WinHttpReceiveResponse(hRequestAuth, NULL)) {
+            WinHttpQueryHeaders(hRequestAuth, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &statusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
+            
+            DWORD dwDownloaded = 0;
+            do {
+                WinHttpQueryDataAvailable(hRequestAuth, &dwSize);
+                if (dwSize == 0) break;
+                char* pszOutBuffer = new char[dwSize + 1];
+                if (WinHttpReadData(hRequestAuth, (LPVOID)pszOutBuffer, dwSize, &dwDownloaded)) {
+                    pszOutBuffer[dwDownloaded] = '\0';
+                    response += pszOutBuffer;
+                }
+                delete[] pszOutBuffer;
+            } while (dwSize > 0);
+
+            token = ParseJsonString(response, "access_token");
+        }
+        WinHttpCloseHandle(hRequestAuth);
+
+        if (token.empty()) {
+            WinHttpCloseHandle(hConnect);
+            WinHttpCloseHandle(hSession);
+            AcquireSRWLockExclusive(&g_statsLock);
+            g_consecutiveErrors++;
+            if (statusCode == 429) {
+                g_displayName = L"⛔ Rate Limited";
+            } else if (statusCode != 0) {
+                g_displayName = L"⛔ HTTP " + std::to_wstring(statusCode);
+            } else {
+                g_displayName = L"⛔ API Error";
+            }
+            g_displayStats = L"";
+            g_avatarPath = L"";
+            ReleaseSRWLockExclusive(&g_statsLock);
+            return;
+        }
+
+        AcquireSRWLockExclusive(&g_statsLock);
+        g_accessToken = token;
+        ReleaseSRWLockExclusive(&g_statsLock);
     }
     
-    std::wstring userPath = L"/api/v2/users/" + safeUsername;
+    std::wstring userPath = L"/api/v2/users/@" + EncodeUsername(username);
     HINTERNET hRequestUser = WinHttpOpenRequest(hConnect, L"GET", userPath.c_str(), NULL, WINHTTP_NO_REFERER, acceptTypes, WINHTTP_FLAG_SECURE);
     
     std::wstring authHeader = L"Authorization: Bearer " + StringToWString(token) + L"\r\n";
-    bResults = WinHttpSendRequest(hRequestUser, authHeader.c_str(), (DWORD)-1, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
+    BOOL bResults = WinHttpSendRequest(hRequestUser, authHeader.c_str(), (DWORD)-1, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
 
     std::string userResponse;
+    DWORD userStatusCode = 0;
+    DWORD dwSize = sizeof(userStatusCode);
+
     if (bResults && WinHttpReceiveResponse(hRequestUser, NULL)) {
-        DWORD dwSize = 0;
+        WinHttpQueryHeaders(hRequestUser, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &userStatusCode, &dwSize, WINHTTP_NO_HEADER_INDEX);
+        
+        if (userStatusCode == 401) {
+            WinHttpCloseHandle(hRequestUser);
+            WinHttpCloseHandle(hConnect);
+            WinHttpCloseHandle(hSession);
+            AcquireSRWLockExclusive(&g_statsLock);
+            g_accessToken = ""; 
+            ReleaseSRWLockExclusive(&g_statsLock);
+            return;
+        }
+
         DWORD dwDownloaded = 0;
         do {
             WinHttpQueryDataAvailable(hRequestUser, &dwSize);
@@ -303,26 +330,24 @@ void FetchOsuStats() {
     WinHttpCloseHandle(hConnect);
     WinHttpCloseHandle(hSession);
 
-    if (userResponse.empty() || userResponse.find("\"error\"") != std::string::npos || userResponse.find("\"authentication\"") != std::string::npos) {
-        Wh_Log(L"User Fetch Failed. Server Response: %hs", userResponse.c_str());
+    if (userResponse.empty() || userStatusCode != 200) {
         AcquireSRWLockExclusive(&g_statsLock);
-        
         g_consecutiveErrors++;
-
-        if (g_consecutiveErrors <= 4) {
-            g_displayName = L"Loading...";
+        if (userStatusCode == 429) {
+            g_displayName = L"⛔ Rate Limited";
+        } else if (userStatusCode != 0) {
+            g_displayName = L"⛔ HTTP " + std::to_wstring(userStatusCode);
         } else {
             g_displayName = L"⛔ User Error";
         }
-        
         g_displayStats = L"";
         g_avatarPath = L"";
         ReleaseSRWLockExclusive(&g_statsLock);
         return;
     }
 
-    std::string username = ParseJsonString(userResponse, "username");
-    if (username.empty()) username = "Unknown";
+    std::string parsedUsername = ParseJsonString(userResponse, "username");
+    if (parsedUsername.empty()) parsedUsername = "Unknown";
     
     std::string pp = ParseJsonNumber(userResponse, "pp");
     std::string rank = ParseJsonNumber(userResponse, "global_rank");
@@ -346,8 +371,9 @@ void FetchOsuStats() {
 
     AcquireSRWLockExclusive(&g_statsLock);
     g_consecutiveErrors = 0;
-    g_displayName = StringToWString(username);
-    g_displayStats = L"PP: " + StringToWString(pp) + L"pp // #" + StringToWString(FormatWithDots(rank));
+    g_displayName = StringToWString(parsedUsername);
+    std::wstring displayRank = (rank == "0") ? L"-" : StringToWString(FormatWithDots(rank));
+    g_displayStats = L"PP: " + StringToWString(pp) + L"pp // #" + displayRank;
     g_avatarPath = localAvatarPath;
     ReleaseSRWLockExclusive(&g_statsLock);
 }
@@ -357,15 +383,30 @@ void DrawOverlay(HWND hwnd) {
     std::wstring name = g_displayName;
     std::wstring stats = g_isUpdating ? L"uno momento..." : g_displayStats;
     std::wstring avPath = g_avatarPath;
+    bool hasError = (g_consecutiveErrors > 0);
     ReleaseSRWLockShared(&g_statsLock);
+
+    int dpi = 96;
+    HWND trayWnd = FindWindowW(L"Shell_TrayWnd", NULL);
+    if (trayWnd) {
+        using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+        HMODULE hUser32 = GetModuleHandle(L"user32.dll");
+        if (hUser32) {
+            GetDpiForWindow_t pGetDpiForWindow = (GetDpiForWindow_t)GetProcAddress(hUser32, "GetDpiForWindow");
+            if (pGetDpiForWindow) dpi = pGetDpiForWindow(trayWnd);
+        }
+    }
+    
+    int scaledWidth = MulDiv(200, dpi, 96);
+    int scaledHeight = MulDiv(50, dpi, 96);
 
     HDC hdcScreen = GetDC(NULL);
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
 
     BITMAPINFO bmi = {0};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = 200;
-    bmi.bmiHeader.biHeight = -50; 
+    bmi.bmiHeader.biWidth = scaledWidth;
+    bmi.bmiHeader.biHeight = -scaledHeight; 
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
@@ -379,6 +420,7 @@ void DrawOverlay(HWND hwnd) {
         graphics.SetSmoothingMode(SmoothingModeAntiAlias);
         graphics.SetTextRenderingHint(TextRenderingHintAntiAlias);
         graphics.Clear(Color(0, 0, 0, 0)); 
+        graphics.ScaleTransform((float)dpi / 96.0f, (float)dpi / 96.0f);
 
         FontFamily fontFamily(L"Segoe UI");
         Font fontName(&fontFamily, 14, FontStyleBold, UnitPixel);
@@ -391,7 +433,7 @@ void DrawOverlay(HWND hwnd) {
             format.SetLineAlignment(StringAlignmentCenter);
             RectF rect(0, 0, 200, 50);
 
-            if (g_isUpdating && g_consecutiveErrors == 0) {
+            if (g_isUpdating && !hasError) {
                 graphics.DrawString(L"uno momento...", -1, &fontName, rect, &format, &textBrush);
             } else {
                 graphics.DrawString(name.c_str(), -1, &fontName, rect, &format, &textBrush);
@@ -426,7 +468,7 @@ void DrawOverlay(HWND hwnd) {
     }
 
     POINT ptSrc = {0, 0};
-    SIZE size = {200, 50};
+    SIZE size = {scaledWidth, scaledHeight};
     BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
     UpdateLayeredWindow(hwnd, hdcScreen, NULL, &size, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
 
@@ -464,13 +506,12 @@ void NetThreadFunc() {
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_LBUTTONDOWN: {
-            if (!g_username.empty()) {
-                std::wstring safeUsername = g_username;
-                size_t spacePos = 0;
-                while ((spacePos = safeUsername.find(L" ", spacePos)) != std::wstring::npos) {
-                    safeUsername.replace(spacePos, 1, L"%20");
-                    spacePos += 3;
-                }
+            AcquireSRWLockShared(&g_statsLock);
+            std::wstring username = g_username;
+            ReleaseSRWLockShared(&g_statsLock);
+
+            if (!username.empty()) {
+                std::wstring safeUsername = EncodeUsername(username);
                 std::wstring url = L"https://osu.ppy.sh/users/" + safeUsername;
                 ShellExecuteW(NULL, L"open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
             }
@@ -482,14 +523,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         case WM_TIMER: {
             if (wParam == 1) {
-                int width = 200;
-                int height = 50;
+                int dpi = 96;
+                HWND trayWnd = FindWindowW(L"Shell_TrayWnd", NULL);
+                if (trayWnd) {
+                    using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+                    HMODULE hUser32 = GetModuleHandle(L"user32.dll");
+                    if (hUser32) {
+                        GetDpiForWindow_t pGetDpiForWindow = (GetDpiForWindow_t)GetProcAddress(hUser32, "GetDpiForWindow");
+                        if (pGetDpiForWindow) dpi = pGetDpiForWindow(trayWnd);
+                    }
+                }
+
+                int width = MulDiv(200, dpi, 96);
+                int height = MulDiv(50, dpi, 96);
                 int x = 0, y = 0;
                 bool posFound = false;
                 HWND insertAfter = NULL;
                 UINT flags = SWP_NOACTIVATE | SWP_SHOWWINDOW;
 
-                HWND trayWnd = FindWindowW(L"Shell_TrayWnd", NULL);
                 if (trayWnd) {
                     HWND trayNotifyWnd = FindWindowExW(trayWnd, NULL, L"TrayNotifyWnd", NULL);
                     RECT rect;
@@ -498,7 +549,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         y = rect.top + ((rect.bottom - rect.top) - height) / 2;
                         posFound = true;
                     } else if (GetWindowRect(trayWnd, &rect)) {
-                        x = rect.right - width - 250;
+                        x = rect.right - width - MulDiv(250, dpi, 96);
                         y = rect.top + ((rect.bottom - rect.top) - height) / 2;
                         posFound = true;
                     }
@@ -568,7 +619,7 @@ void UiThreadFunc() {
             NULL, NULL, wc.hInstance, NULL
         );
 
-        SetTimer(g_overlayHwnd, 1, 100, NULL);
+        SetTimer(g_overlayHwnd, 1, 500, NULL);
 
         MSG msg;
         while (GetMessage(&msg, NULL, 0, 0)) {
@@ -588,8 +639,8 @@ BOOL WhTool_ModInit() {
     LoadSettings(); 
     
     g_running = true;
-    g_uiThread = std::thread(UiThreadFunc);
-    g_netThread = std::thread(NetThreadFunc);
+    g_uiThread.emplace(UiThreadFunc);
+    g_netThread.emplace(NetThreadFunc);
     
     return TRUE;
 }
@@ -601,8 +652,14 @@ void WhTool_ModUninit() {
         PostMessage(g_overlayHwnd, WM_QUIT, 0, 0);
     }
 
-    if (g_uiThread.joinable()) g_uiThread.join();
-    if (g_netThread.joinable()) g_netThread.join();
+    if (g_uiThread && g_uiThread->joinable()) {
+        g_uiThread->join();
+        g_uiThread.reset();
+    }
+    if (g_netThread && g_netThread->joinable()) {
+        g_netThread->join();
+        g_netThread.reset();
+    }
 }
 
 void WhTool_ModSettingsChanged() {
