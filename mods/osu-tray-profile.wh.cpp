@@ -2,7 +2,7 @@
 // @id              osu-tray-profile
 // @name            osu!Profile in Taskbar
 // @description     Displays PP, rank, and avatar from rhythm game osu! (standard mode) next to the system tray
-// @version         3.9.2
+// @version         3.9.3
 // @author          antoshika
 // @github          https://github.com/Antoshika
 // @include         windhawk.exe
@@ -37,21 +37,21 @@ _(you can use your old nickname "XATCYHE MIKU, XATCYHE_MIKU, antoshika")_
 /*
 - api:
   - client_id: ""
-    $name: Client ID
-    $description: Enter the ID of the application created in your osu account settings!
+    $name: "Client ID"
+    $description: "Enter the ID of the application created in your osu account settings!"
   - client_secret: ""
-    $name: Client Secret
-    $description: Enter your application's secret key
+    $name: "Client Secret"
+    $description: "Enter your application's secret key"
   - username: ""
-    $name: Nickname
-    $description: Your nickname from osu!
-  $name: osu! API
-  $description: You need to create an OAuth application in your osu profile settings!
+    $name: "Nickname"
+    $description: "Your nickname from osu!"
+  $name: "osu! API"
+  $description: "You need to create an OAuth application in your osu profile settings!"
 - update:
   - interval: 300
-    $name: Update time (in seconds)
-    $description: Frequency of statistics updates (recommended 300 sec = 5 min)
-  $name: Latency
+    $name: "Update time (in seconds)"
+    $description: "Frequency of statistics updates (recommended 300 sec = 5 min)"
+  $name: "Latency"
 */
 // ==/WindhawkModSettings==
 
@@ -131,6 +131,47 @@ std::string FormatWithDots(std::string num) {
     return num;
 }
 
+std::string ParseJsonString(const std::string& json, const std::string& key) {
+    size_t keyPos = json.find("\"" + key + "\"");
+    if (keyPos == std::string::npos) return "";
+    size_t colonPos = json.find(":", keyPos);
+    if (colonPos == std::string::npos) return "";
+    
+    size_t endOfValue = json.find_first_of(",}", colonPos);
+    if (endOfValue == std::string::npos) endOfValue = json.length();
+
+    size_t quoteStart = json.find("\"", colonPos);
+    if (quoteStart == std::string::npos || quoteStart > endOfValue) return "";
+    
+    size_t quoteEnd = json.find("\"", quoteStart + 1);
+    if (quoteEnd == std::string::npos) return "";
+    
+    return json.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+}
+
+std::string ParseJsonNumber(const std::string& json, const std::string& key) {
+    size_t keyPos = json.find("\"" + key + "\"");
+    if (keyPos == std::string::npos) return "0";
+    size_t colonPos = json.find(":", keyPos);
+    if (colonPos == std::string::npos) return "0";
+
+    size_t endOfValue = json.find_first_of(",}", colonPos);
+    if (endOfValue == std::string::npos) endOfValue = json.length();
+
+    size_t start = json.find_first_of("0123456789-", colonPos);
+    if (start == std::string::npos || start > endOfValue) return "0";
+
+    size_t end = json.find_first_not_of("0123456789.", start);
+    if (end == std::string::npos || end > endOfValue) end = endOfValue;
+
+    std::string num = json.substr(start, end - start);
+    size_t dotPos = num.find(".");
+    if (dotPos != std::string::npos) {
+        num = num.substr(0, dotPos);
+    }
+    return num;
+}
+
 void FetchOsuStats() {
     if (g_clientId.empty() || g_clientSecret.empty() || g_username.empty()) {
         AcquireSRWLockExclusive(&g_statsLock);
@@ -144,7 +185,7 @@ void FetchOsuStats() {
 
     HINTERNET hSession = NULL;
     WINHTTP_CURRENT_USER_IE_PROXY_CONFIG proxyConfig = {0};
-    LPCWSTR userAgent = L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    LPCWSTR userAgent = L"osu-tray-profile/3.9.3";
 
     if (WinHttpGetIEProxyConfigForCurrentUser(&proxyConfig)) {
         if (proxyConfig.lpszProxy) {
@@ -173,7 +214,8 @@ void FetchOsuStats() {
     HINTERNET hConnect = WinHttpConnect(hSession, L"osu.ppy.sh", INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (!hConnect) { WinHttpCloseHandle(hSession); return; }
 
-    HINTERNET hRequestAuth = WinHttpOpenRequest(hConnect, L"POST", L"/oauth/token", NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+    LPCWSTR acceptTypes[] = { L"application/json", NULL };
+    HINTERNET hRequestAuth = WinHttpOpenRequest(hConnect, L"POST", L"/oauth/token", NULL, WINHTTP_NO_REFERER, acceptTypes, WINHTTP_FLAG_SECURE);
     
     std::wstring contentType = L"Content-Type: application/x-www-form-urlencoded\r\n";
     std::wstring postDataW = L"client_id=" + g_clientId + L"&client_secret=" + g_clientSecret + L"&grant_type=client_credentials&scope=public";
@@ -199,12 +241,7 @@ void FetchOsuStats() {
             delete[] pszOutBuffer;
         } while (dwSize > 0);
 
-        size_t tokenPos = response.find("\"access_token\":\"");
-        if (tokenPos != std::string::npos) {
-            tokenPos += 16;
-            size_t tokenEnd = response.find("\"", tokenPos);
-            token = response.substr(tokenPos, tokenEnd - tokenPos);
-        }
+        token = ParseJsonString(response, "access_token");
     } else {
         dwError = GetLastError();
     }
@@ -234,8 +271,15 @@ void FetchOsuStats() {
         return;
     }
 
-    std::wstring userPath = L"/api/v2/users/" + g_username;
-    HINTERNET hRequestUser = WinHttpOpenRequest(hConnect, L"GET", userPath.c_str(), NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+    std::wstring safeUsername = g_username;
+    size_t spacePos = 0;
+    while ((spacePos = safeUsername.find(L" ", spacePos)) != std::wstring::npos) {
+        safeUsername.replace(spacePos, 1, L"%20");
+        spacePos += 3;
+    }
+    
+    std::wstring userPath = L"/api/v2/users/" + safeUsername;
+    HINTERNET hRequestUser = WinHttpOpenRequest(hConnect, L"GET", userPath.c_str(), NULL, WINHTTP_NO_REFERER, acceptTypes, WINHTTP_FLAG_SECURE);
     
     std::wstring authHeader = L"Authorization: Bearer " + StringToWString(token) + L"\r\n";
     bResults = WinHttpSendRequest(hRequestUser, authHeader.c_str(), (DWORD)-1, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
@@ -277,43 +321,17 @@ void FetchOsuStats() {
         return;
     }
 
-    std::string pp = "0", rank = "0", username = "Unknown", avatarUrl = "";
+    std::string username = ParseJsonString(userResponse, "username");
+    if (username.empty()) username = "Unknown";
     
-    size_t unPos = userResponse.find("\"username\":\"");
-    if (unPos != std::string::npos) {
-        unPos += 12;
-        size_t unEnd = userResponse.find("\"", unPos);
-        username = userResponse.substr(unPos, unEnd - unPos);
-    }
-
-    size_t ppPos = userResponse.find("\"pp\":");
-    if (ppPos != std::string::npos) {
-        ppPos += 5;
-        size_t ppEnd = userResponse.find(",", ppPos);
-        pp = userResponse.substr(ppPos, ppEnd - ppPos);
-        size_t dotPos = pp.find(".");
-        if (dotPos != std::string::npos) {
-            pp = pp.substr(0, dotPos);
-        }
-    }
-
-    size_t rankPos = userResponse.find("\"global_rank\":");
-    if (rankPos != std::string::npos) {
-        rankPos += 14;
-        size_t rankEnd = userResponse.find(",", rankPos);
-        rank = userResponse.substr(rankPos, rankEnd - rankPos);
-    }
-
-    size_t avPos = userResponse.find("\"avatar_url\":\"");
-    if (avPos != std::string::npos) {
-        avPos += 14;
-        size_t avEnd = userResponse.find("\"", avPos);
-        avatarUrl = userResponse.substr(avPos, avEnd - avPos);
-        size_t pos = 0;
-        while ((pos = avatarUrl.find("\\/", pos)) != std::string::npos) {
-            avatarUrl.replace(pos, 2, "/");
-            pos += 1;
-        }
+    std::string pp = ParseJsonNumber(userResponse, "pp");
+    std::string rank = ParseJsonNumber(userResponse, "global_rank");
+    std::string avatarUrl = ParseJsonString(userResponse, "avatar_url");
+    
+    size_t pos = 0;
+    while ((pos = avatarUrl.find("\\/", pos)) != std::string::npos) {
+        avatarUrl.replace(pos, 2, "/");
+        pos += 1;
     }
 
     wchar_t tempPath[MAX_PATH];
@@ -429,7 +447,7 @@ void NetThreadFunc() {
 
         g_isUpdating = false;
         g_needsRedraw = true;
-        int currentInterval = hasError ? 15 : g_updateInterval;
+        int currentInterval = hasError ? 60 : g_updateInterval;
 
         for(int i = 0; i < currentInterval && g_running; i++) {
             if (g_forceUpdate) {
@@ -445,7 +463,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_LBUTTONDOWN: {
             if (!g_username.empty()) {
-                std::wstring url = L"https://osu.ppy.sh/users/" + g_username;
+                std::wstring safeUsername = g_username;
+                size_t spacePos = 0;
+                while ((spacePos = safeUsername.find(L" ", spacePos)) != std::wstring::npos) {
+                    safeUsername.replace(spacePos, 1, L"%20");
+                    spacePos += 3;
+                }
+                std::wstring url = L"https://osu.ppy.sh/users/" + safeUsername;
                 ShellExecuteW(NULL, L"open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
             }
             return 0;
