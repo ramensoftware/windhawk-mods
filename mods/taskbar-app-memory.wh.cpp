@@ -20,6 +20,8 @@ On the Windows 11 taskbar, an app that isn't pinned loses its place when you
 close it: open it again and its button goes to the end. With this mod, the
 apps you choose go back where they were.
 
+![The Remember positions submenu](https://raw.githubusercontent.com/buedgik/taskbar-app-memory/main/screenshot.png)
+
 - **Choose the apps**: right-click an empty part of the taskbar, open
   **Remember positions** (Lembrar posições on a Portuguese Windows), and tick
   the apps whose place should be kept. It lists the open apps that aren't
@@ -1841,7 +1843,7 @@ bool HookTaskbarView(HMODULE module) {
     };
     if (!WindhawkUtils::HookSymbols(module, taskbarViewHooks,
                                     ARRAYSIZE(taskbarViewHooks))) {
-        Wh_Log(L"No menu: Taskbar.View.dll's symbols weren't found");
+        Wh_Log(L"No menu: the taskbar view module's symbols weren't found");
         // A failed symbol download can succeed later: a few more tries, when
         // the module is loaded again or at Wh_ModAfterInit.
         if (++g_taskbarViewAttempts < 3) {
@@ -2018,7 +2020,7 @@ BOOL Wh_ModInit() {
         if (!loadLibraryExW ||
             !WindhawkUtils::SetFunctionHook(loadLibraryExW, LoadLibraryExW_Hook,
                                             &LoadLibraryExW_Original)) {
-            Wh_Log(L"No menu: couldn't watch for Taskbar.View.dll");
+            Wh_Log(L"No menu: couldn't watch for the taskbar view module");
         }
     }
 
