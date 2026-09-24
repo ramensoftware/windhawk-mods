@@ -1,110 +1,86 @@
 // ==WindhawkMod==
 // @id              quick-translator-layout-switcher
-// @name            Quick Translator & Layout Switcher
-// @description     Fix mistyped keyboard layout, translate text in-place, or view translations in a floating HUD tooltip.
+// @name            Selection Layout Switcher & Translator
+// @description     Fast layout corrector, in-place translator, and floating HUD tooltip.
 // @version         1.0
 // @author          zed712969-crypto
 // @github          https://github.com/zed712969-crypto
-// @include         explorer.exe
+// @include         windhawk.exe
+// @compilerOptions -lwinhttp -lgdi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-# Quick Translator & Layout Switcher
+# Selection Layout Switcher & Translator
 
-A lightweight utility for Windows that bridges communication between English and Russian speakers. Eliminates mistyped keyboard layout errors and allows instant two-way translation without breaking workflow.
+A lightweight Windows tool that bridges communication between English and Russian speakers. Eliminates mistyped keyboard layout errors and allows instant two-way translation without breaking workflow.
+
+> **Privacy Notice**: This mod optionally connects to Google Translate (`translate.googleapis.com`) to perform translations. Selected text is transmitted over HTTPS only when translation is manually triggered. This feature is strictly **opt-in** and disabled by default.
 
 ## Features
 
-- **Layout Correction (`Shift + ~`)**: Fixes mistyped text (`ghbdtn` -> `привет` or vice versa) with full ANSI punctuation mapping and automatically updates the active system input layout.
-- **In-Place Translation (`Ctrl + ~`)**: Replaces selected text directly inside any editable input field (chats, editors, forms) using background HTTPS POST requests. Supports multi-line paragraphs up to 4000+ characters.
-- **Floating HUD Tooltip (`Alt + ~`)**: Translates read-only incoming messages (Discord, Telegram, web pages, games) in a sleek dark tooltip positioned near your cursor. Stays on screen until explicitly dismissed.
-- **Manual Dismiss On Interaction**: The tooltip remains visible until you click anywhere, scroll the mouse wheel, or press navigation keys (Esc / Arrows).
-- **Fully Customizable**: Change any hotkey or adjust animation speed anytime in the Windhawk Settings tab without recompiling.
+- **Layout Correction (`Pause`)**: Fixes mistyped text (`ghbdtn` -> `привет` or vice versa) with full punctuation mapping and automatically updates the active system input layout.
+- **In-Place Translation (`Ctrl + Alt + T`)**: Replaces selected text directly inside any editable input field using HTTPS POST requests. Supports multi-line paragraphs up to 4000+ characters.
+- **Floating HUD Tooltip (`Ctrl + Alt + Q`)**: Translates read-only incoming messages (Discord, Telegram, web pages, games) in a sleek DPI-aware dark tooltip positioned near your cursor.
+- **Smart Auto-Dismiss**: The tooltip remains visible until you click anywhere, scroll the mouse wheel, or press navigation keys (Esc / Arrows).
+- **Clipboard Preservation**: Automatically restores previous clipboard contents after performing operations.
 
-## Advantages Over Standalone Translators
+## Default Hotkeys
 
-- **Zero Overhead**: Injected into `explorer.exe` using native `winhttp.dll` and `gdi32.dll`. No heavy Electron apps, background browsers, or RAM hogs.
-- **No Focus Loss**: The HUD tooltip uses non-activating windows (`WS_EX_NOACTIVATE`), preserving active text caret and window state.
-- **No Window Switching**: Never Alt+Tab away from your game or conversation just to translate text.
+- `Pause` - Switch mistyped layout (US <-> RU)
+- `Ctrl + Alt + T` - In-place translation (Requires enabling online translation in Settings)
+- `Ctrl + Alt + Q` - Floating HUD Tooltip translation (Requires enabling online translation in Settings)
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- hotkey_layout: "Shift + ~"
-  $name: "Layout Correction"
-  $description: "Switch mistyped layout (default Shift + ~)"
-- hotkey_translate: "Ctrl + ~"
-  $name: "In-Place Translate"
-  $description: "Translate selected text inline (default Ctrl + ~)"
-- hotkey_tooltip: "Alt + ~"
-  $name: "HUD Tooltip Translate"
-  $description: "Translate selected text in a floating tooltip (default Alt + ~)"
+- enable_translation: false
+  $name: "Enable Online Translation"
+  $description: "Allow sending selected text to Google Translate over HTTPS for translation features. Disabled by default for privacy."
+- hotkey_layout: "Pause"
+  $name: "Layout Correction Hotkey"
+  $description: "Switch mistyped layout (default: Pause). Supports Shift, Ctrl, Alt, Pause, Insert, F1-F12, letters, digits."
+- hotkey_translate: "Ctrl + Alt + T"
+  $name: "In-Place Translate Hotkey"
+  $description: "Translate selected text inline (default: Ctrl + Alt + T)."
+- hotkey_tooltip: "Ctrl + Alt + Q"
+  $name: "HUD Tooltip Translate Hotkey"
+  $description: "Translate selected text in a floating tooltip (default: Ctrl + Alt + Q)."
 - anim_duration: 150
   $name: "Animation Duration (ms)"
-  $description: "Fade animation speed in ms (0 to disable)"
+  $description: "Fade animation speed in ms (0 to disable)."
 */
 // ==/WindhawkModSettings==
 
+#ifndef WINDHAWK_TOOL_LAUNCHER
+
 #include <windows.h>
+#include <winhttp.h>
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <cwctype>
-#include <cstdlib>
+#include <memory>
+#include <atomic>
 
 #define WM_SHOW_TOOLTIP (WM_USER + 101)
 #define WM_HIDE_TOOLTIP (WM_USER + 102)
+#define WM_APP_SETTINGS_CHANGED (WM_USER + 103)
 
 #define TIMER_ANIM 2
-
-#ifndef WS_EX_LAYERED
-#define WS_EX_LAYERED 0x00080000
-#endif
-
-#ifndef LWA_ALPHA
-#define LWA_ALPHA 0x00000002
-#endif
-
-typedef LPVOID HINTERNET;
-typedef HINTERNET(WINAPI* pfn_WinHttpOpen)(LPCWSTR, DWORD, LPCWSTR, LPCWSTR, DWORD);
-typedef HINTERNET(WINAPI* pfn_WinHttpConnect)(HINTERNET, LPCWSTR, WORD, DWORD);
-typedef HINTERNET(WINAPI* pfn_WinHttpOpenRequest)(HINTERNET, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR*, DWORD);
-typedef BOOL(WINAPI* pfn_WinHttpSendRequest)(HINTERNET, LPCWSTR, DWORD, LPVOID, DWORD, DWORD, DWORD_PTR);
-typedef BOOL(WINAPI* pfn_WinHttpReceiveResponse)(HINTERNET, LPVOID);
-typedef BOOL(WINAPI* pfn_WinHttpReadData)(HINTERNET, LPVOID, DWORD, LPDWORD);
-typedef BOOL(WINAPI* pfn_WinHttpCloseHandle)(HINTERNET);
-
-typedef BOOL(WINAPI* pfn_SetLayeredWindowAttributes)(HWND, COLORREF, BYTE, DWORD);
-typedef HGDIOBJ(WINAPI* pfn_SelectObject)(HDC, HGDIOBJ);
-typedef HBRUSH(WINAPI* pfn_CreateSolidBrush)(COLORREF);
-typedef BOOL(WINAPI* pfn_DeleteObject)(HGDIOBJ);
-typedef HPEN(WINAPI* pfn_CreatePen)(int, int, COLORREF);
-typedef HGDIOBJ(WINAPI* pfn_GetStockObject)(int);
-typedef BOOL(WINAPI* pfn_Rectangle)(HDC, int, int, int, int);
-typedef int(WINAPI* pfn_SetBkMode)(HDC, int);
-typedef COLORREF(WINAPI* pfn_SetTextColor)(HDC, COLORREF);
-typedef HFONT(WINAPI* pfn_CreateFontW)(int, int, int, int, int, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, LPCWSTR);
-
-pfn_SetLayeredWindowAttributes g_pSetLayeredWindowAttributes = NULL;
-pfn_SelectObject     g_pSelectObject = NULL;
-pfn_CreateSolidBrush g_pCreateSolidBrush = NULL;
-pfn_DeleteObject     g_pDeleteObject = NULL;
-pfn_CreatePen        g_pCreatePen = NULL;
-pfn_GetStockObject   g_pGetStockObject = NULL;
-pfn_Rectangle        g_pRectangle = NULL;
-pfn_SetBkMode        g_pSetBkMode = NULL;
-pfn_SetTextColor     g_pSetTextColor = NULL;
-pfn_CreateFontW      g_pCreateFontW = NULL;
 
 HHOOK g_keyboardHook = NULL;
 HHOOK g_mouseHook = NULL;
 HANDLE g_hMainThread = NULL;
 DWORD g_mainThreadId = 0;
 
+HANDLE g_hWorkerThread = NULL;
+std::atomic<bool> g_bStopRequested{ false };
+
 HWND g_hTooltipWnd = NULL;
 HFONT g_hTooltipFont = NULL;
+UINT g_tooltipDpi = 96;
 std::wstring g_tooltipText = L"";
 
 std::unordered_map<wchar_t, wchar_t> g_toRuMap;
@@ -114,6 +90,8 @@ enum AnimState { STATE_HIDDEN, STATE_FADE_IN, STATE_VISIBLE, STATE_FADE_OUT };
 AnimState g_animState = STATE_HIDDEN;
 DWORD g_animStartTime = 0;
 int g_targetX = 0, g_targetY = 0, g_winW = 0, g_winH = 0;
+
+bool g_bEnableTranslation = false;
 int g_animDuration = 150;
 
 struct HotkeyConfig {
@@ -149,26 +127,6 @@ void InitMaps() {
     AddMapping(L'$', L';');
     AddMapping(L'^', L':');
     AddMapping(L'&', L'?');
-}
-
-void InitLibraries() {
-    HMODULE hUser = GetModuleHandleA("user32.dll");
-    if (hUser) {
-        g_pSetLayeredWindowAttributes = (pfn_SetLayeredWindowAttributes)GetProcAddress(hUser, "SetLayeredWindowAttributes");
-    }
-
-    HMODULE hGdi = LoadLibraryA("gdi32.dll");
-    if (!hGdi) return;
-
-    g_pSelectObject     = (pfn_SelectObject)GetProcAddress(hGdi, "SelectObject");
-    g_pCreateSolidBrush = (pfn_CreateSolidBrush)GetProcAddress(hGdi, "CreateSolidBrush");
-    g_pDeleteObject     = (pfn_DeleteObject)GetProcAddress(hGdi, "DeleteObject");
-    g_pCreatePen        = (pfn_CreatePen)GetProcAddress(hGdi, "CreatePen");
-    g_pGetStockObject   = (pfn_GetStockObject)GetProcAddress(hGdi, "GetStockObject");
-    g_pRectangle        = (pfn_Rectangle)GetProcAddress(hGdi, "Rectangle");
-    g_pSetBkMode        = (pfn_SetBkMode)GetProcAddress(hGdi, "SetBkMode");
-    g_pSetTextColor     = (pfn_SetTextColor)GetProcAddress(hGdi, "SetTextColor");
-    g_pCreateFontW      = (pfn_CreateFontW)GetProcAddress(hGdi, "CreateFontW");
 }
 
 std::wstring ToLowerStr(const std::wstring& s) {
@@ -207,10 +165,26 @@ void ParseHotkey(const std::wstring& str, HotkeyConfig& cfg, bool defCtrl, bool 
                 cfg.shift = true;
             } else if (lower == L"alt") {
                 cfg.alt = true;
+            } else if (lower == L"pause" || lower == L"break") {
+                cfg.vk = VK_PAUSE;
+            } else if (lower == L"insert") {
+                cfg.vk = VK_INSERT;
+            } else if (lower == L"delete") {
+                cfg.vk = VK_DELETE;
+            } else if (lower == L"home") {
+                cfg.vk = VK_HOME;
+            } else if (lower == L"end") {
+                cfg.vk = VK_END;
+            } else if (lower == L"pageup" || lower == L"prior") {
+                cfg.vk = VK_PRIOR;
+            } else if (lower == L"pagedown" || lower == L"next") {
+                cfg.vk = VK_NEXT;
+            } else if (lower == L"scrolllock" || lower == L"scroll") {
+                cfg.vk = VK_SCROLL;
             } else if (lower == L"~" || lower == L"`" || lower == L"tilde") {
                 cfg.vk = VK_OEM_3;
             } else if (lower.length() >= 2 && lower[0] == L'f' && iswdigit(lower[1])) {
-                int fnum = _wtoi(lower.c_str() + 1);
+                int fnum = (int)std::wcstol(lower.c_str() + 1, nullptr, 10);
                 if (fnum >= 1 && fnum <= 24) cfg.vk = VK_F1 + (fnum - 1);
             } else if (lower == L"tab") {
                 cfg.vk = VK_TAB;
@@ -237,24 +211,22 @@ void ParseHotkey(const std::wstring& str, HotkeyConfig& cfg, bool defCtrl, bool 
 }
 
 void LoadSettings() {
+    g_bEnableTranslation = Wh_GetIntSetting(L"enable_translation") != 0;
+
     PCWSTR sLayout = Wh_GetStringSetting(L"hotkey_layout");
-    ParseHotkey(sLayout ? sLayout : L"", g_hkLayout, false, true, false, VK_OEM_3);
+    ParseHotkey(sLayout ? sLayout : L"", g_hkLayout, false, false, false, VK_PAUSE);
     if (sLayout) Wh_FreeStringSetting(sLayout);
 
     PCWSTR sTranslate = Wh_GetStringSetting(L"hotkey_translate");
-    ParseHotkey(sTranslate ? sTranslate : L"", g_hkTranslate, true, false, false, VK_OEM_3);
+    ParseHotkey(sTranslate ? sTranslate : L"", g_hkTranslate, true, false, true, 'T');
     if (sTranslate) Wh_FreeStringSetting(sTranslate);
 
     PCWSTR sTooltip = Wh_GetStringSetting(L"hotkey_tooltip");
-    ParseHotkey(sTooltip ? sTooltip : L"", g_hkTooltip, false, false, true, VK_OEM_3);
+    ParseHotkey(sTooltip ? sTooltip : L"", g_hkTooltip, true, false, true, 'Q');
     if (sTooltip) Wh_FreeStringSetting(sTooltip);
 
     g_animDuration = Wh_GetIntSetting(L"anim_duration");
     if (g_animDuration < 0) g_animDuration = 150;
-}
-
-void Wh_ModSettingsChanged() {
-    LoadSettings();
 }
 
 void SendKey(WORD vk, bool keyUp) {
@@ -275,8 +247,10 @@ void WaitForModifiersUp() {
     }
 }
 
-void ForceCopy() {
+bool ForceCopy() {
     WaitForModifiersUp();
+    DWORD seqBefore = GetClipboardSequenceNumber();
+
     SendKey(VK_CONTROL, true);
     SendKey(VK_SHIFT, true);
     SendKey(VK_MENU, true);
@@ -286,6 +260,12 @@ void ForceCopy() {
     SendKey('C', false);
     SendKey('C', true);
     SendKey(VK_CONTROL, true);
+
+    for (int i = 0; i < 20; ++i) {
+        if (GetClipboardSequenceNumber() != seqBefore) return true;
+        Sleep(15);
+    }
+    return false;
 }
 
 void ForcePaste() {
@@ -316,7 +296,7 @@ std::wstring GetClipboardText() {
             CloseClipboard();
             if (!text.empty()) break;
         }
-        Sleep(25);
+        Sleep(20);
     }
     return text;
 }
@@ -334,7 +314,7 @@ void SetClipboardText(const std::wstring& text) {
             CloseClipboard();
             break;
         }
-        Sleep(25);
+        Sleep(20);
     }
 }
 
@@ -418,33 +398,16 @@ std::wstring ParseGoogleTranslateResponse(const std::string& json) {
 }
 
 std::wstring FetchTranslationWinHttp(const std::wstring& text, bool toRussian) {
-    HMODULE hWinHttp = LoadLibraryA("winhttp.dll");
-    if (!hWinHttp) return L"";
+    if (g_bStopRequested) return L"";
 
-    auto fnWinHttpOpen = (pfn_WinHttpOpen)GetProcAddress(hWinHttp, "WinHttpOpen");
-    auto fnWinHttpConnect = (pfn_WinHttpConnect)GetProcAddress(hWinHttp, "WinHttpConnect");
-    auto fnWinHttpOpenRequest = (pfn_WinHttpOpenRequest)GetProcAddress(hWinHttp, "WinHttpOpenRequest");
-    auto fnWinHttpSendRequest = (pfn_WinHttpSendRequest)GetProcAddress(hWinHttp, "WinHttpSendRequest");
-    auto fnWinHttpReceiveResponse = (pfn_WinHttpReceiveResponse)GetProcAddress(hWinHttp, "WinHttpReceiveResponse");
-    auto fnWinHttpReadData = (pfn_WinHttpReadData)GetProcAddress(hWinHttp, "WinHttpReadData");
-    auto fnWinHttpCloseHandle = (pfn_WinHttpCloseHandle)GetProcAddress(hWinHttp, "WinHttpCloseHandle");
+    HINTERNET hSession = WinHttpOpen(L"Windhawk-Translator-Tool/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hSession) return L"";
 
-    if (!fnWinHttpOpen || !fnWinHttpConnect || !fnWinHttpOpenRequest ||
-        !fnWinHttpSendRequest || !fnWinHttpReceiveResponse || !fnWinHttpReadData || !fnWinHttpCloseHandle) {
-        FreeLibrary(hWinHttp);
-        return L"";
-    }
+    WinHttpSetTimeouts(hSession, 3000, 3000, 4000, 4000);
 
-    HINTERNET hSession = fnWinHttpOpen(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64)", 0, NULL, NULL, 0);
-    if (!hSession) {
-        FreeLibrary(hWinHttp);
-        return L"";
-    }
-
-    HINTERNET hConnect = fnWinHttpConnect(hSession, L"translate.googleapis.com", 443, 0);
+    HINTERNET hConnect = WinHttpConnect(hSession, L"translate.googleapis.com", INTERNET_DEFAULT_HTTPS_PORT, 0);
     if (!hConnect) {
-        fnWinHttpCloseHandle(hSession);
-        FreeLibrary(hWinHttp);
+        WinHttpCloseHandle(hSession);
         return L"";
     }
 
@@ -452,11 +415,10 @@ std::wstring FetchTranslationWinHttp(const std::wstring& text, bool toRussian) {
                         std::wstring(toRussian ? L"ru" : L"en") +
                         L"&dt=t&dj=1";
 
-    HINTERNET hRequest = fnWinHttpOpenRequest(hConnect, L"POST", path.c_str(), NULL, NULL, NULL, 0x00800000);
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"POST", path.c_str(), NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
     if (!hRequest) {
-        fnWinHttpCloseHandle(hConnect);
-        fnWinHttpCloseHandle(hSession);
-        FreeLibrary(hWinHttp);
+        WinHttpCloseHandle(hConnect);
+        WinHttpCloseHandle(hSession);
         return L"";
     }
 
@@ -464,34 +426,37 @@ std::wstring FetchTranslationWinHttp(const std::wstring& text, bool toRussian) {
     std::wstring headers = L"Content-Type: application/x-www-form-urlencoded; charset=UTF-8\r\n";
 
     std::string response;
-    if (fnWinHttpSendRequest(hRequest, headers.c_str(), (DWORD)headers.length(), 
-                            (LPVOID)postBody.c_str(), (DWORD)postBody.length(), (DWORD)postBody.length(), 0) &&
-        fnWinHttpReceiveResponse(hRequest, NULL)) {
+    if (WinHttpSendRequest(hRequest, headers.c_str(), (DWORD)headers.length(), 
+                           (LPVOID)postBody.c_str(), (DWORD)postBody.length(), (DWORD)postBody.length(), 0) &&
+        WinHttpReceiveResponse(hRequest, NULL)) {
         
         char buffer[4096];
         DWORD bytesRead = 0;
-        while (fnWinHttpReadData(hRequest, buffer, sizeof(buffer) - 1, &bytesRead) && bytesRead > 0) {
+        while (WinHttpReadData(hRequest, buffer, sizeof(buffer) - 1, &bytesRead) && bytesRead > 0) {
+            if (g_bStopRequested) break;
             buffer[bytesRead] = '\0';
             response.append(buffer, bytesRead);
         }
     }
 
-    fnWinHttpCloseHandle(hRequest);
-    fnWinHttpCloseHandle(hConnect);
-    fnWinHttpCloseHandle(hSession);
-    FreeLibrary(hWinHttp);
+    WinHttpCloseHandle(hRequest);
+    WinHttpCloseHandle(hConnect);
+    WinHttpCloseHandle(hSession);
 
+    if (g_bStopRequested) return L"";
     return ParseGoogleTranslateResponse(response);
 }
 
-DWORD WINAPI TranslationWorker(LPVOID) {
-    ForceCopy();
-    Sleep(90);
+std::wstring GetTranslationForSelection() {
+    std::wstring backupClipboard = GetClipboardText();
+
+    if (!ForceCopy()) {
+        return L"";
+    }
 
     std::wstring originalText = GetClipboardText();
     if (originalText.empty()) {
-        MessageBeep(MB_ICONHAND);
-        return 0;
+        return L"";
     }
 
     int cyrillicCount = 0;
@@ -506,48 +471,39 @@ DWORD WINAPI TranslationWorker(LPVOID) {
     bool toRussian = (latinCount >= cyrillicCount);
 
     std::wstring translated = FetchTranslationWinHttp(originalText, toRussian);
-    if (translated.empty()) {
-        MessageBeep(MB_ICONHAND);
+
+    if (!backupClipboard.empty()) {
+        SetClipboardText(backupClipboard);
+    }
+
+    return translated;
+}
+
+DWORD WINAPI TranslationWorker(LPVOID) {
+    std::wstring translated = GetTranslationForSelection();
+    if (translated.empty() || g_bStopRequested) {
+        if (!g_bStopRequested) MessageBeep(MB_ICONHAND);
         return 0;
     }
 
     SetClipboardText(translated);
-    Sleep(50);
-
+    Sleep(40);
     ForcePaste();
     return 0;
 }
 
 DWORD WINAPI TooltipWorker(LPVOID) {
-    ForceCopy();
-    Sleep(90);
-
-    std::wstring originalText = GetClipboardText();
-    if (originalText.empty()) {
-        MessageBeep(MB_ICONHAND);
+    std::wstring translated = GetTranslationForSelection();
+    if (translated.empty() || g_bStopRequested) {
+        if (!g_bStopRequested) MessageBeep(MB_ICONHAND);
         return 0;
     }
 
-    int cyrillicCount = 0;
-    int latinCount = 0;
-    for (wchar_t c : originalText) {
-        if ((c >= 0x0400 && c <= 0x04FF) || c == L'ё' || c == L'Ё') {
-            cyrillicCount++;
-        } else if ((c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z')) {
-            latinCount++;
-        }
-    }
-    bool toRussian = (latinCount >= cyrillicCount);
-
-    std::wstring translated = FetchTranslationWinHttp(originalText, toRussian);
-    if (translated.empty()) {
-        MessageBeep(MB_ICONHAND);
-        return 0;
-    }
-
-    g_tooltipText = translated;
     if (g_hTooltipWnd) {
-        PostMessage(g_hTooltipWnd, WM_SHOW_TOOLTIP, 0, 0);
+        auto* pText = new std::wstring(std::move(translated));
+        if (!PostMessage(g_hTooltipWnd, WM_SHOW_TOOLTIP, 0, (LPARAM)pText)) {
+            delete pText;
+        }
     }
     return 0;
 }
@@ -574,19 +530,24 @@ std::wstring ConvertLayout(const std::wstring& input, bool& outWasEnglish) {
 }
 
 DWORD WINAPI LayoutWorker(LPVOID) {
-    ForceCopy();
-    Sleep(80);
+    std::wstring backupClipboard = GetClipboardText();
+
+    if (!ForceCopy()) {
+        return 0;
+    }
 
     std::wstring originalText = GetClipboardText();
     if (originalText.empty()) return 0;
 
     bool wasEnglish = false;
     std::wstring convertedText = ConvertLayout(originalText, wasEnglish);
-    if (convertedText == originalText) return 0;
+    if (convertedText == originalText) {
+        if (!backupClipboard.empty()) SetClipboardText(backupClipboard);
+        return 0;
+    }
 
     SetClipboardText(convertedText);
     Sleep(40);
-
     ForcePaste();
 
     HWND hwnd = GetForegroundWindow();
@@ -595,13 +556,47 @@ DWORD WINAPI LayoutWorker(LPVOID) {
                                       : LoadKeyboardLayoutW(L"00000409", KLF_ACTIVATE);
         PostMessage(hwnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)targetLayout);
     }
+
+    Sleep(50);
+    if (!backupClipboard.empty()) {
+        SetClipboardText(backupClipboard);
+    }
     return 0;
 }
 
-void SetWindowAlpha(HWND hwnd, BYTE alpha) {
-    if (g_pSetLayeredWindowAttributes) {
-        g_pSetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
+void StartWorker(LPTHREAD_START_ROUTINE pfn) {
+    if (g_hWorkerThread) {
+        if (WaitForSingleObject(g_hWorkerThread, 0) == WAIT_TIMEOUT) {
+            return;
+        }
+        CloseHandle(g_hWorkerThread);
+        g_hWorkerThread = NULL;
     }
+    g_hWorkerThread = CreateThread(NULL, 0, pfn, NULL, 0, NULL);
+}
+
+void UpdateDpiFont(HWND hwnd) {
+    UINT dpi = 96;
+    HMODULE hUser = GetModuleHandleW(L"user32.dll");
+    typedef UINT (WINAPI *pfn_GetDpiForWindow)(HWND);
+    auto fnGetDpiForWindow = (pfn_GetDpiForWindow)GetProcAddress(hUser, "GetDpiForWindow");
+    if (fnGetDpiForWindow && hwnd) {
+        dpi = fnGetDpiForWindow(hwnd);
+    }
+    if (dpi == 0) dpi = 96;
+
+    if (g_hTooltipFont && g_tooltipDpi == dpi) return;
+    g_tooltipDpi = dpi;
+
+    if (g_hTooltipFont) {
+        DeleteObject(g_hTooltipFont);
+        g_hTooltipFont = NULL;
+    }
+
+    int fontHeight = MulDiv(-16, (int)g_tooltipDpi, 96);
+    g_hTooltipFont = CreateFontW(fontHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
 }
 
 void TriggerFadeOut(HWND hwnd) {
@@ -621,23 +616,32 @@ void TriggerFadeOut(HWND hwnd) {
 LRESULT CALLBACK TooltipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_SHOW_TOOLTIP: {
-            HDC hdc = GetDC(hwnd);
-            if (g_pSelectObject && g_hTooltipFont) {
-                g_pSelectObject(hdc, g_hTooltipFont);
+            std::unique_ptr<std::wstring> pIncomingText((std::wstring*)lParam);
+            if (pIncomingText) {
+                g_tooltipText = std::move(*pIncomingText);
             }
-            RECT rc = { 0, 0, 440, 0 };
+
+            UpdateDpiFont(hwnd);
+
+            HDC hdc = GetDC(hwnd);
+            SelectObject(hdc, g_hTooltipFont);
+            int maxTextWidth = MulDiv(440, (int)g_tooltipDpi, 96);
+            RECT rc = { 0, 0, maxTextWidth, 0 };
             DrawTextW(hdc, g_tooltipText.c_str(), -1, &rc, DT_CALCRECT | DT_WORDBREAK);
             ReleaseDC(hwnd, hdc);
 
-            int padX = 14, padY = 12;
+            int padX = MulDiv(14, (int)g_tooltipDpi, 96);
+            int padY = MulDiv(12, (int)g_tooltipDpi, 96);
+            int minW = MulDiv(140, (int)g_tooltipDpi, 96);
+
             g_winW = (rc.right - rc.left) + padX * 2;
             g_winH = (rc.bottom - rc.top) + padY * 2;
-            if (g_winW < 140) g_winW = 140;
+            if (g_winW < minW) g_winW = minW;
 
             POINT pt;
             GetCursorPos(&pt);
-            g_targetX = pt.x + 14;
-            g_targetY = pt.y + 18;
+            g_targetX = pt.x + MulDiv(14, (int)g_tooltipDpi, 96);
+            g_targetY = pt.y + MulDiv(18, (int)g_tooltipDpi, 96);
 
             HMONITOR hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
             MONITORINFO mi = { sizeof(mi) };
@@ -651,13 +655,14 @@ LRESULT CALLBACK TooltipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             KillTimer(hwnd, TIMER_ANIM);
 
             if (g_animDuration <= 0) {
-                SetWindowAlpha(hwnd, 255);
+                SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
                 SetWindowPos(hwnd, HWND_TOPMOST, g_targetX, g_targetY, g_winW, g_winH, SWP_SHOWWINDOW | SWP_NOACTIVATE);
                 InvalidateRect(hwnd, NULL, TRUE);
                 g_animState = STATE_VISIBLE;
             } else {
-                SetWindowAlpha(hwnd, 0);
-                SetWindowPos(hwnd, HWND_TOPMOST, g_targetX, g_targetY + 8, g_winW, g_winH, SWP_SHOWWINDOW | SWP_NOACTIVATE);
+                SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
+                int offsetAnim = MulDiv(8, (int)g_tooltipDpi, 96);
+                SetWindowPos(hwnd, HWND_TOPMOST, g_targetX, g_targetY + offsetAnim, g_winW, g_winH, SWP_SHOWWINDOW | SWP_NOACTIVATE);
                 InvalidateRect(hwnd, NULL, TRUE);
                 g_animState = STATE_FADE_IN;
                 g_animStartTime = GetTickCount();
@@ -681,20 +686,21 @@ LRESULT CALLBACK TooltipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 if (g_animState == STATE_FADE_IN) {
                     float ease = t * (2.0f - t);
                     BYTE alpha = (BYTE)(255 * ease);
-                    int curY = g_targetY + (int)(8 * (1.0f - ease));
+                    int offsetAnim = MulDiv(8, (int)g_tooltipDpi, 96);
+                    int curY = g_targetY + (int)(offsetAnim * (1.0f - ease));
 
-                    SetWindowAlpha(hwnd, alpha);
+                    SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
                     SetWindowPos(hwnd, NULL, g_targetX, curY, g_winW, g_winH, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 
                     if (t >= 1.0f) {
                         KillTimer(hwnd, TIMER_ANIM);
-                        SetWindowAlpha(hwnd, 255);
+                        SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
                         SetWindowPos(hwnd, NULL, g_targetX, g_targetY, g_winW, g_winH, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
                         g_animState = STATE_VISIBLE;
                     }
                 } else if (g_animState == STATE_FADE_OUT) {
                     BYTE alpha = (BYTE)(255 * (1.0f - t));
-                    SetWindowAlpha(hwnd, alpha);
+                    SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
 
                     if (t >= 1.0f) {
                         KillTimer(hwnd, TIMER_ANIM);
@@ -714,31 +720,30 @@ LRESULT CALLBACK TooltipWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
             RECT rcClient;
             GetClientRect(hwnd, &rcClient);
 
-            if (g_pCreateSolidBrush && g_pDeleteObject) {
-                HBRUSH bgBrush = g_pCreateSolidBrush(RGB(30, 30, 34));
-                FillRect(hdc, &rcClient, bgBrush);
-                g_pDeleteObject(bgBrush);
-            }
+            HBRUSH bgBrush = CreateSolidBrush(RGB(30, 30, 34));
+            FillRect(hdc, &rcClient, bgBrush);
+            DeleteObject(bgBrush);
 
-            if (g_pCreatePen && g_pSelectObject && g_pGetStockObject && g_pRectangle && g_pDeleteObject) {
-                HPEN borderPen = g_pCreatePen(PS_SOLID, 1, RGB(62, 62, 72));
-                HPEN oldPen = (HPEN)g_pSelectObject(hdc, borderPen);
-                HBRUSH oldBrush = (HBRUSH)g_pSelectObject(hdc, g_pGetStockObject(NULL_BRUSH));
-                g_pRectangle(hdc, rcClient.left, rcClient.top, rcClient.right, rcClient.bottom);
-                g_pSelectObject(hdc, oldBrush);
-                g_pSelectObject(hdc, oldPen);
-                g_pDeleteObject(borderPen);
-            }
+            HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(62, 62, 72));
+            HPEN oldPen = (HPEN)SelectObject(hdc, borderPen);
+            HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+            Rectangle(hdc, rcClient.left, rcClient.top, rcClient.right, rcClient.bottom);
+            SelectObject(hdc, oldBrush);
+            SelectObject(hdc, oldPen);
+            DeleteObject(borderPen);
 
-            if (g_pSetBkMode) g_pSetBkMode(hdc, TRANSPARENT);
-            if (g_pSetTextColor) g_pSetTextColor(hdc, RGB(240, 240, 245));
-            if (g_pSelectObject && g_hTooltipFont) g_pSelectObject(hdc, g_hTooltipFont);
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(240, 240, 245));
+            SelectObject(hdc, g_hTooltipFont);
+
+            int padX = MulDiv(14, (int)g_tooltipDpi, 96);
+            int padY = MulDiv(12, (int)g_tooltipDpi, 96);
 
             RECT rcText = rcClient;
-            rcText.left += 14;
-            rcText.top += 12;
-            rcText.right -= 14;
-            rcText.bottom -= 12;
+            rcText.left += padX;
+            rcText.top += padY;
+            rcText.right -= padX;
+            rcText.bottom -= padY;
 
             DrawTextW(hdc, g_tooltipText.c_str(), -1, &rcText, DT_WORDBREAK | DT_LEFT);
 
@@ -778,21 +783,18 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         bool ctrlDown  = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
         bool altDown   = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
 
-        if (MatchHotkey(g_hkTooltip, pKey->vkCode, ctrlDown, shiftDown, altDown)) {
-            HANDLE h = CreateThread(NULL, 0, TooltipWorker, NULL, 0, NULL);
-            if (h) CloseHandle(h);
+        if (g_bEnableTranslation && MatchHotkey(g_hkTooltip, pKey->vkCode, ctrlDown, shiftDown, altDown)) {
+            StartWorker(TooltipWorker);
             return 1;
         }
 
-        if (MatchHotkey(g_hkTranslate, pKey->vkCode, ctrlDown, shiftDown, altDown)) {
-            HANDLE h = CreateThread(NULL, 0, TranslationWorker, NULL, 0, NULL);
-            if (h) CloseHandle(h);
+        if (g_bEnableTranslation && MatchHotkey(g_hkTranslate, pKey->vkCode, ctrlDown, shiftDown, altDown)) {
+            StartWorker(TranslationWorker);
             return 1;
         }
 
         if (MatchHotkey(g_hkLayout, pKey->vkCode, ctrlDown, shiftDown, altDown)) {
-            HANDLE h = CreateThread(NULL, 0, LayoutWorker, NULL, 0, NULL);
-            if (h) CloseHandle(h);
+            StartWorker(LayoutWorker);
             return 1;
         }
     }
@@ -817,18 +819,16 @@ LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 }
 
 DWORD WINAPI MainThread(LPVOID) {
+    HINSTANCE hInst = NULL;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&TooltipWndProc, &hInst);
+
     WNDCLASSEXW wc = { sizeof(wc) };
     wc.lpfnWndProc = TooltipWndProc;
-    wc.hInstance = GetModuleHandle(NULL);
+    wc.hInstance = hInst ? hInst : GetModuleHandle(NULL);
     wc.lpszClassName = L"WindhawkTranslatorTooltip";
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     RegisterClassExW(&wc);
-
-    if (g_pCreateFontW) {
-        g_hTooltipFont = g_pCreateFontW(-16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
-    }
 
     g_hTooltipWnd = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
@@ -838,13 +838,19 @@ DWORD WINAPI MainThread(LPVOID) {
         NULL, NULL, wc.hInstance, NULL
     );
 
-    g_keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandle(NULL), 0);
-    g_mouseHook    = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, GetModuleHandle(NULL), 0);
+    UpdateDpiFont(g_hTooltipWnd);
+
+    g_keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, wc.hInstance, 0);
+    g_mouseHook    = SetWindowsHookEx(WH_MOUSE_LL, LowLevelMouseProc, wc.hInstance, 0);
 
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        if (msg.message == WM_APP_SETTINGS_CHANGED) {
+            LoadSettings();
+        } else {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
     }
 
     if (g_mouseHook) {
@@ -860,30 +866,62 @@ DWORD WINAPI MainThread(LPVOID) {
         DestroyWindow(g_hTooltipWnd);
         g_hTooltipWnd = NULL;
     }
-    if (g_hTooltipFont && g_pDeleteObject) {
-        g_pDeleteObject(g_hTooltipFont);
+    if (g_hTooltipFont) {
+        DeleteObject(g_hTooltipFont);
         g_hTooltipFont = NULL;
     }
-    UnregisterClassW(L"WindhawkTranslatorTooltip", GetModuleHandle(NULL));
+    UnregisterClassW(L"WindhawkTranslatorTooltip", wc.hInstance);
 
     return 0;
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     InitMaps();
-    InitLibraries();
     LoadSettings();
+    g_bStopRequested = false;
     g_hMainThread = CreateThread(NULL, 0, MainThread, NULL, 0, &g_mainThreadId);
     return g_hMainThread != NULL;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModSettingsChanged() {
+    if (g_mainThreadId) {
+        PostThreadMessage(g_mainThreadId, WM_APP_SETTINGS_CHANGED, 0, 0);
+    }
+}
+
+void WhTool_ModUninit() {
+    g_bStopRequested = true;
+
+    if (g_hWorkerThread) {
+        WaitForSingleObject(g_hWorkerThread, INFINITE);
+        CloseHandle(g_hWorkerThread);
+        g_hWorkerThread = NULL;
+    }
+
     if (g_mainThreadId) {
         PostThreadMessage(g_mainThreadId, WM_QUIT, 0, 0);
         if (g_hMainThread) {
-            WaitForSingleObject(g_hMainThread, 1000);
+            WaitForSingleObject(g_hMainThread, INFINITE);
             CloseHandle(g_hMainThread);
             g_hMainThread = NULL;
         }
     }
 }
+
+#else // WINDHAWK_TOOL_LAUNCHER
+
+#include <windhawk_utils.h>
+
+BOOL Wh_ModInit() {
+    return WindhawkUtils::ToolLauncher::Init();
+}
+
+void Wh_ModUninit() {
+    WindhawkUtils::ToolLauncher::Uninit();
+}
+
+void Wh_ModSettingsChanged() {
+    WindhawkUtils::ToolLauncher::SettingsChanged();
+}
+
+#endif // WINDHAWK_TOOL_LAUNCHER
