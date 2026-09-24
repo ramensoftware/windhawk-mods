@@ -2,12 +2,148 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-23T22:04:46.000Z</updated>
+    <updated>2026-09-24T20:01:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Parallax Wallpaper 0.9.0]]></title>
+        <id>https://windhawk.net/mods/parallax-wallpaper#0f940ba13bb4cfbc285f2b5acdf4e2cacac112e7</id>
+        <link href="https://windhawk.net/mods/parallax-wallpaper"/>
+        <updated>2026-09-24T20:01:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="parallaxwallpaper">Parallax Wallpaper</h1>
+<p>Adds subtle depth to your desktop by moving the wallpaper in response to the
+mouse. Desktop icons stay in place. Each monitor uses its own Windows wallpaper
+or an optional local image.</p>
+<p>The mod runs in its own background process rather than inside Explorer, so a
+graphics driver problem cannot take the shell down with it.
+<img src="https://i.imgur.com/jW1oE6J.gif" alt="Parallax Wallpaper demo" /></p>
+<h2 id="motionpresets">Motion presets</h2>
+<p>| Preset | Character | Horizontal / vertical travel | Approx. settling time | Dead zone |
+|---|---|---|---|---|
+| Elegance | Subtle and restrained | 14 / 8 px | 750 ms | 3% |
+| Silk | Soft and floating | 22 / 12 px | 1050 ms | 4% |
+| Depth | More noticeable, with a quicker response | 32 / 18 px | 850 ms | 2% |
+| Cinema | Broad and slow | 42 / 24 px | 1350 ms | 5% |</p>
+<p>Travel is the maximum distance in each direction. Settling time is approximately
+how long the critically damped motion takes to reach 95% of a suddenly changed
+target from rest. Actual motion depends on the cursor trajectory.</p>
+<p>Start with <strong>Elegance</strong>, <strong>Floating dead zone = -1</strong>, manual customization off,
+<strong>Subpixel motion</strong> on, <strong>HDR color management</strong> on, and <strong>Frame rate limit = 0</strong>
+(automatic).</p>
+<h3 id="floatingdeadzone">Floating dead zone</h3>
+<p>Small pointer adjustments do not change the animation target. The tolerance
+follows the last accepted target instead of applying only at the screen center.
+Once the pointer crosses the boundary, the target moves continuously, without a
+position jump. Motion that has already started still settles gently.</p>
+<ul>
+<li><code>-1</code> uses each preset's dead zone.</li>
+<li><code>0</code> disables the dead zone while retaining smooth acceleration and deceleration.</li>
+<li><code>3</code> gives a radius equivalent to 3% of the screen width horizontally and 3% of
+its height vertically. Larger values provide more separation from the cursor.</li>
+</ul>
+<p>Manual travel and settling-time values apply only when manual customization is
+on.</p>
+<h2 id="optionalperspective">Optional perspective</h2>
+<p>Enable <strong>Enable perspective</strong> with <strong>Subpixel motion</strong> on to tilt the wallpaper
+as a flat panel following the pointer. Start with 2 degrees on both axes,
+intensity 100%, and automatic edge compensation on. Perspective is off by
+default.</p>
+<p>Horizontal and vertical tilt range from 0 to 8 degrees. Intensity (0 to 200%)
+controls perspective foreshortening; zero keeps an orthographic tilt.
+Automatic compensation applies a constant zoom, computed once for the largest
+tilt, so the screen stays covered without the image visibly zooming in and out
+during motion. It crops a little more of the image. Disabling it may reveal
+black edges.</p>
+<p>Tilt shares the current motion preset's settling time, dead zone, direction,
+fullscreen pause and independent-monitor behavior. It also works when travel
+is set to zero. Per-monitor perspective can inherit global values, be disabled,
+or use custom values independently of the monitor's motion preset.</p>
+<p>Perspective is rendered with a Direct3D 11 / Direct2D effect pipeline, using
+high-quality cubic sampling to avoid moving line patterns; on low-end GPUs,
+lowering the frame rate limit reduces its cost. If the
+pipeline is unavailable, the monitor falls back to the standard movement
+without perspective. Disabling Subpixel motion also disables perspective. This
+is a flat-image illusion, not a depth map or separate moving image layers.</p>
+<h2 id="multiplemonitors">Multiple monitors</h2>
+<p>With <strong>Independent monitors</strong> enabled, only the monitor under the pointer receives
+new targets. Other monitors finish their existing movement and then stop. When
+disabled, all monitors follow the pointer's relative position on the active
+monitor. Images remain separate; this is not a continuous panoramic wallpaper.</p>
+<p>Display connections, disconnections, resolution changes, HDR changes,
+wallpaper changes and Explorer restarts are detected automatically. Rebuilding the layout resets the
+motion to the center.</p>
+<h3 id="permonitorrules">Per-monitor rules</h3>
+<p>Add entries under <strong>Per-monitor rules</strong> using <code>DISPLAY1</code>, <code>DISPLAY2</code>, etc., or the
+full hardware path from the mod log. These names do not necessarily match the
+numbers shown by Windows' Identify button. DISPLAY names can change when devices
+are reconnected; a full hardware path provides a more stable match.</p>
+<p>To find the identifiers, enable mod logging in Windhawk's Advanced tab, open the
+log output, and save the settings. Each monitor is logged with its DISPLAY name,
+rectangle, HDR state and <code>id</code>. Copy the complete <code>id</code> for an exact,
+case-insensitive match. Logging can then be disabled.</p>
+<p>The first matching rule wins. Fill entries consecutively: an empty monitor field
+ends the list. Up to 32 rules are supported. A rule can inherit the global motion
+settings and direction, choose another preset, use manual motion values, disable
+the effect, or choose a local image. A blank image path uses that monitor's
+Windows wallpaper. Image paths may contain environment variables such as
+<code>%USERPROFILE%</code>. Image overrides do not change Windows' saved wallpaper settings.</p>
+<h2 id="hdrcolormanagement">HDR color management</h2>
+<p>When Windows HDR ("Use HDR") is turned on for a monitor, this option renders the
+wallpaper through a native wide-gamut (scRGB, FP16) swap chain: the image is
+explicitly tagged as sRGB, converted with Direct2D's color-management effect,
+and scaled to the <strong>SDR content brightness</strong> chosen in Windows' HDR settings.
+The result matches how Windows presents other SDR content on that monitor, and
+follows the brightness slider when it changes. Source images remain ordinary
+SDR files; this does not add high-dynamic-range highlights.</p>
+<p>Monitors without HDR, including SDR monitors that only use Windows' automatic
+color management, keep the standard rendering path. The option requires
+<strong>Subpixel motion</strong>. If the HDR or perspective pipeline fails on a monitor, that
+monitor continues with standard rendering. Failures are retried with increasing
+intervals and written to the mod log with the HRESULT. GPU resets (driver
+updates, remote desktop sessions) are recovered automatically.</p>
+<h2 id="performanceandcompatibility">Performance and compatibility</h2>
+<p>Images are decoded and resized once on a background thread and reused, so
+loading a large image does not interrupt the animation. EXIF orientation is
+honored. Supported formats are those GDI+ decodes (JPEG, PNG, BMP, GIF, TIFF);
+other formats are reported once in the log and the monitor keeps Windows' own
+wallpaper.</p>
+<p>Rendering uses Direct3D 11, Direct2D and DirectComposition, which works on
+both desktop layouts. Without a usable GPU driver, Direct3D's software renderer
+(WARP) is used. If rendering fails on a monitor, that monitor shows the regular
+Windows wallpaper and rendering is retried with increasing intervals. With
+<strong>Subpixel motion</strong> off, the image moves in whole-pixel steps; this also turns
+off perspective and HDR color management.</p>
+<p>Automatic frame rate follows the highest detected display refresh rate, capped
+at 240 Hz. This is a requested rate, not a guarantee of FPS or hardware frame
+synchronization; Windows' compositor controls presentation. A high-resolution
+waitable timer is used without changing the global timer resolution. When motion
+settles, identical frames are not redrawn and pointer polling drops to at most
+30 Hz, or 10 Hz while every monitor is paused. Memory usage grows with the total
+display resolution.</p>
+<p>The fullscreen pause checks the foreground application every 250 ms and pauses
+only the monitors it completely covers. It does not inspect every background
+window. Desktop attachment supports the classic WorkerW layout and the layered
+Windows 11 layout. This undocumented Explorer mechanism can change in Windows
+updates; unrecognized layouts are left untouched.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Intended for Windows 10 and Windows 11.</li>
+<li>Images use aspect-preserving <strong>Fill</strong> cropping with extra space for movement.
+Fit, Center, Tile, and continuous Span are not implemented.</li>
+<li>Transitions between images are not included.</li>
+<li>Perspective and HDR color management are designed for a Direct3D 11-capable
+GPU; on the software renderer they work but cost noticeably more CPU.</li>
+<li>Solid-color desktops without an image remain unchanged.</li>
+<li>Do not combine this mod with another animated-wallpaper application.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[After Effects Theme 1.0.0]]></title>
         <id>https://windhawk.net/mods/after-effects-theme#d577b0225340f06c1c6f6cee8676feb4b520c701</id>
@@ -1685,78 +1821,6 @@ can differ between builds.</p>]]></content>
         <author>
             <name>Nerdworld</name>
             <uri>https://github.com/nerdworldDE</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Teams Multi-Instance 1.0]]></title>
-        <id>https://windhawk.net/mods/teams-multi-instance#0737efa406ff03b13579de25c758a86837cc625a</id>
-        <link href="https://windhawk.net/mods/teams-multi-instance"/>
-        <updated>2026-09-20T18:51:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="teamsmultiinstance">Teams Multi-Instance</h1>
-<p>The new Microsoft Teams desktop app only allows one instance per Windows
-session — launching it again just activates the existing window. Teams
-enforces this with two named mutexes, <code>Teams-Tfw-instance</code> and
-<code>Teams-Tfw-server</code>. This mod appends the process ID to those names so each
-launch believes it is the first one, letting you run e.g. your own tenant and
-a client tenant side by side in two full Teams windows.</p>
-<h2 id="usage">Usage</h2>
-<ol>
-<li>Enable the mod.</li>
-<li>Quit Teams completely (tray icon → Quit) and start it again, so the first
-instance is launched with the mod active.</li>
-<li>Start Teams again. Every additional launch opens a new independent
-instance. Sign in to a different account/tenant in each one.</li>
-</ol>
-<p>Each instance gets its own tray icon, with the process ID in the tooltip
-(e.g. <code>Microsoft Teams [20680]</code>) so they can be told apart. Additional icons
-usually land in the tray overflow (the <code>^</code> arrow). Quit each instance from
-its own tray icon or from inside its window — closing a window only
-minimises it.</p>
-<p><strong>Restart Teams after enabling, disabling, or changing the settings of the
-mod.</strong> The mod decides once, when a Teams process starts, whether and how to
-rewrite names, and keeps that decision — and the settings in effect at the
-time — for the life of the process. A Teams instance that was already
-running when the mod was enabled is left untouched; an instance started with
-the mod active keeps its salt across mod updates and Windhawk restarts; and
-settings changes only apply to Teams processes started afterwards.</p>
-<h2 id="howitworks">How it works</h2>
-<p>Hooks <code>NtCreateMutant</code> / <code>NtOpenMutant</code> in ntdll and appends <code>_&lt;pid&gt;</code> to
-object names matching the configured patterns. Only mutexes are hooked —
-sections and events are deliberately left alone, since those fire on the
-DLL-loader path and hooking them destabilises the process.</p>
-<p>Each <code>ms-teams.exe</code> process uses its own PID as the salt. Only the top-level
-Teams process creates or opens the <code>Teams-Tfw-*</code> objects; child
-<code>ms-teams.exe</code> processes never touch them, so they need no shared salt.</p>
-<p>Teams registers its tray icon with a fixed GUID, and Windows allows only one
-icon per GUID, so a second instance would get no icon at all. The mod hooks
-<code>Shell_NotifyIconW</code> in salted processes, drops the GUID so the icon is
-identified by its window instead, and appends the PID to the tooltip.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li><strong>All instances share the same Teams profile</strong>
-(<code>%LOCALAPPDATA%\Packages\MSTeams_8wekyb3d8bbwe\LocalCache</code>, including the
-WebView2 user-data folder). Two Teams processes writing it concurrently is
-exactly what the single-instance lock exists to prevent. This can corrupt
-the profile, which means signing in again and rebuilding the cache. Avoid
-signing in/out or changing settings in more than one instance, and use at
-your own risk.</li>
-<li>Notification clicks and <code>teams://</code> links are routed by Windows activation
-and may land in a different instance than the one you expect.</li>
-<li>Helpers that are not <code>ms-teams.exe</code> (the Teams Meeting Add-in in Outlook,
-the updater) are not hooked and cannot reach a salted instance's objects;
-meeting-join from Outlook may target the wrong instance or none.</li>
-<li>Not supported by Microsoft.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<p>Turn on <strong>Log only</strong>, then quit and restart Teams. The Windhawk log lists
-every named mutex the new Teams process creates or opens without modifying
-any of them (the interesting objects are created during startup, so a running
-instance shows nothing useful). If a future Teams build renames the
-single-instance objects, add the new name to <strong>Object name patterns</strong>, turn
-Log only off, and restart Teams again.</p>]]></content>
-        <author>
-            <name>Sam Mahdi</name>
-            <uri>https://github.com/TSA3000</uri>
         </author>
     </entry>
 </feed>

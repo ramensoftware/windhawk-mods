@@ -9011,6 +9011,30 @@
         "version": "3.9.2"
       }
     },
+    "parallax-wallpaper": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790280087000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790280087000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "HaVeN80",
+        "compilerOptions": "-lgdi32 -lgdiplus -lole32 -luuid -ldwmapi -ld2d1 -ld3d11 -ldxgi -ldcomp -lshell32",
+        "description": "Smooth mouse-reactive wallpaper with optional perspective, four motion presets, independent multi-monitor support, and HDR-aware rendering",
+        "github": "https://github.com/haven80",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Parallax Wallpaper",
+        "version": "0.9.0"
+      }
+    },
     "passkey-popup-blocker": {
       "details": {
         "defaultSorting": 8880,

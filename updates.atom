@@ -2,12 +2,148 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-23T22:29:37.000Z</updated>
+    <updated>2026-09-24T20:01:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Parallax Wallpaper 0.9.0]]></title>
+        <id>https://windhawk.net/mods/parallax-wallpaper#0f940ba13bb4cfbc285f2b5acdf4e2cacac112e7</id>
+        <link href="https://windhawk.net/mods/parallax-wallpaper"/>
+        <updated>2026-09-24T20:01:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="parallaxwallpaper">Parallax Wallpaper</h1>
+<p>Adds subtle depth to your desktop by moving the wallpaper in response to the
+mouse. Desktop icons stay in place. Each monitor uses its own Windows wallpaper
+or an optional local image.</p>
+<p>The mod runs in its own background process rather than inside Explorer, so a
+graphics driver problem cannot take the shell down with it.
+<img src="https://i.imgur.com/jW1oE6J.gif" alt="Parallax Wallpaper demo" /></p>
+<h2 id="motionpresets">Motion presets</h2>
+<p>| Preset | Character | Horizontal / vertical travel | Approx. settling time | Dead zone |
+|---|---|---|---|---|
+| Elegance | Subtle and restrained | 14 / 8 px | 750 ms | 3% |
+| Silk | Soft and floating | 22 / 12 px | 1050 ms | 4% |
+| Depth | More noticeable, with a quicker response | 32 / 18 px | 850 ms | 2% |
+| Cinema | Broad and slow | 42 / 24 px | 1350 ms | 5% |</p>
+<p>Travel is the maximum distance in each direction. Settling time is approximately
+how long the critically damped motion takes to reach 95% of a suddenly changed
+target from rest. Actual motion depends on the cursor trajectory.</p>
+<p>Start with <strong>Elegance</strong>, <strong>Floating dead zone = -1</strong>, manual customization off,
+<strong>Subpixel motion</strong> on, <strong>HDR color management</strong> on, and <strong>Frame rate limit = 0</strong>
+(automatic).</p>
+<h3 id="floatingdeadzone">Floating dead zone</h3>
+<p>Small pointer adjustments do not change the animation target. The tolerance
+follows the last accepted target instead of applying only at the screen center.
+Once the pointer crosses the boundary, the target moves continuously, without a
+position jump. Motion that has already started still settles gently.</p>
+<ul>
+<li><code>-1</code> uses each preset's dead zone.</li>
+<li><code>0</code> disables the dead zone while retaining smooth acceleration and deceleration.</li>
+<li><code>3</code> gives a radius equivalent to 3% of the screen width horizontally and 3% of
+its height vertically. Larger values provide more separation from the cursor.</li>
+</ul>
+<p>Manual travel and settling-time values apply only when manual customization is
+on.</p>
+<h2 id="optionalperspective">Optional perspective</h2>
+<p>Enable <strong>Enable perspective</strong> with <strong>Subpixel motion</strong> on to tilt the wallpaper
+as a flat panel following the pointer. Start with 2 degrees on both axes,
+intensity 100%, and automatic edge compensation on. Perspective is off by
+default.</p>
+<p>Horizontal and vertical tilt range from 0 to 8 degrees. Intensity (0 to 200%)
+controls perspective foreshortening; zero keeps an orthographic tilt.
+Automatic compensation applies a constant zoom, computed once for the largest
+tilt, so the screen stays covered without the image visibly zooming in and out
+during motion. It crops a little more of the image. Disabling it may reveal
+black edges.</p>
+<p>Tilt shares the current motion preset's settling time, dead zone, direction,
+fullscreen pause and independent-monitor behavior. It also works when travel
+is set to zero. Per-monitor perspective can inherit global values, be disabled,
+or use custom values independently of the monitor's motion preset.</p>
+<p>Perspective is rendered with a Direct3D 11 / Direct2D effect pipeline, using
+high-quality cubic sampling to avoid moving line patterns; on low-end GPUs,
+lowering the frame rate limit reduces its cost. If the
+pipeline is unavailable, the monitor falls back to the standard movement
+without perspective. Disabling Subpixel motion also disables perspective. This
+is a flat-image illusion, not a depth map or separate moving image layers.</p>
+<h2 id="multiplemonitors">Multiple monitors</h2>
+<p>With <strong>Independent monitors</strong> enabled, only the monitor under the pointer receives
+new targets. Other monitors finish their existing movement and then stop. When
+disabled, all monitors follow the pointer's relative position on the active
+monitor. Images remain separate; this is not a continuous panoramic wallpaper.</p>
+<p>Display connections, disconnections, resolution changes, HDR changes,
+wallpaper changes and Explorer restarts are detected automatically. Rebuilding the layout resets the
+motion to the center.</p>
+<h3 id="permonitorrules">Per-monitor rules</h3>
+<p>Add entries under <strong>Per-monitor rules</strong> using <code>DISPLAY1</code>, <code>DISPLAY2</code>, etc., or the
+full hardware path from the mod log. These names do not necessarily match the
+numbers shown by Windows' Identify button. DISPLAY names can change when devices
+are reconnected; a full hardware path provides a more stable match.</p>
+<p>To find the identifiers, enable mod logging in Windhawk's Advanced tab, open the
+log output, and save the settings. Each monitor is logged with its DISPLAY name,
+rectangle, HDR state and <code>id</code>. Copy the complete <code>id</code> for an exact,
+case-insensitive match. Logging can then be disabled.</p>
+<p>The first matching rule wins. Fill entries consecutively: an empty monitor field
+ends the list. Up to 32 rules are supported. A rule can inherit the global motion
+settings and direction, choose another preset, use manual motion values, disable
+the effect, or choose a local image. A blank image path uses that monitor's
+Windows wallpaper. Image paths may contain environment variables such as
+<code>%USERPROFILE%</code>. Image overrides do not change Windows' saved wallpaper settings.</p>
+<h2 id="hdrcolormanagement">HDR color management</h2>
+<p>When Windows HDR ("Use HDR") is turned on for a monitor, this option renders the
+wallpaper through a native wide-gamut (scRGB, FP16) swap chain: the image is
+explicitly tagged as sRGB, converted with Direct2D's color-management effect,
+and scaled to the <strong>SDR content brightness</strong> chosen in Windows' HDR settings.
+The result matches how Windows presents other SDR content on that monitor, and
+follows the brightness slider when it changes. Source images remain ordinary
+SDR files; this does not add high-dynamic-range highlights.</p>
+<p>Monitors without HDR, including SDR monitors that only use Windows' automatic
+color management, keep the standard rendering path. The option requires
+<strong>Subpixel motion</strong>. If the HDR or perspective pipeline fails on a monitor, that
+monitor continues with standard rendering. Failures are retried with increasing
+intervals and written to the mod log with the HRESULT. GPU resets (driver
+updates, remote desktop sessions) are recovered automatically.</p>
+<h2 id="performanceandcompatibility">Performance and compatibility</h2>
+<p>Images are decoded and resized once on a background thread and reused, so
+loading a large image does not interrupt the animation. EXIF orientation is
+honored. Supported formats are those GDI+ decodes (JPEG, PNG, BMP, GIF, TIFF);
+other formats are reported once in the log and the monitor keeps Windows' own
+wallpaper.</p>
+<p>Rendering uses Direct3D 11, Direct2D and DirectComposition, which works on
+both desktop layouts. Without a usable GPU driver, Direct3D's software renderer
+(WARP) is used. If rendering fails on a monitor, that monitor shows the regular
+Windows wallpaper and rendering is retried with increasing intervals. With
+<strong>Subpixel motion</strong> off, the image moves in whole-pixel steps; this also turns
+off perspective and HDR color management.</p>
+<p>Automatic frame rate follows the highest detected display refresh rate, capped
+at 240 Hz. This is a requested rate, not a guarantee of FPS or hardware frame
+synchronization; Windows' compositor controls presentation. A high-resolution
+waitable timer is used without changing the global timer resolution. When motion
+settles, identical frames are not redrawn and pointer polling drops to at most
+30 Hz, or 10 Hz while every monitor is paused. Memory usage grows with the total
+display resolution.</p>
+<p>The fullscreen pause checks the foreground application every 250 ms and pauses
+only the monitors it completely covers. It does not inspect every background
+window. Desktop attachment supports the classic WorkerW layout and the layered
+Windows 11 layout. This undocumented Explorer mechanism can change in Windows
+updates; unrecognized layouts are left untouched.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Intended for Windows 10 and Windows 11.</li>
+<li>Images use aspect-preserving <strong>Fill</strong> cropping with extra space for movement.
+Fit, Center, Tile, and continuous Span are not implemented.</li>
+<li>Transitions between images are not included.</li>
+<li>Perspective and HDR color management are designed for a Direct3D 11-capable
+GPU; on the software renderer they work but cost noticeably more CPU.</li>
+<li>Solid-color desktops without an image remain unchanged.</li>
+<li>Do not combine this mod with another animated-wallpaper application.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.11]]></title>
         <id>https://windhawk.net/mods/taskbar-grouping#eae5841a485e04316a4a06dccb7da5f1d86a7b5d</id>
@@ -1136,86 +1272,6 @@ usual menu, without Tags.</li>
         <author>
             <name>Nikolay</name>
             <uri>https://github.com/Nikolay1243</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Three Finger Drag 1.0.0]]></title>
-        <id>https://windhawk.net/mods/three-finger-drag#3be36182336cc873fa1e06bee5386bb4aa6de93a</id>
-        <link href="https://windhawk.net/mods/three-finger-drag"/>
-        <updated>2026-09-21T18:00:28.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="threefingerdrag">Three Finger Drag</h1>
-<p>Drag three fingers on a precision touchpad to move the window under the cursor,
-grabbing it from anywhere, not just the title bar. Lift your fingers to drop
-it. Inspired by three finger drag on macOS.</p>
-<p><img src="https://raw.githubusercontent.com/RodrigoThomazi/three-finger-drag-assets/main/windows_snap.gif" alt="Moving a window with three fingers and snapping it at the side of the screen" /></p>
-<p>Windows moves the window itself, so holding <strong>Shift</strong> hands the drag to
-PowerToys FancyZones, the way a title bar drag does:</p>
-<p><img src="https://raw.githubusercontent.com/RodrigoThomazi/three-finger-drag-assets/main/fancyzones_snap.gif" alt="Holding Shift while dragging, so that FancyZones takes the window" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Moves the windows of all programs, including programs running as
-administrator. The mod runs in a process of its own, and loads a small
-helper into programs running as administrator, which Windows doesn't let
-other programs move.</li>
-<li>Native move: windows are moved by Windows itself, the way a title bar drag
-moves them, so Snap Layouts, Aero Snap and PowerToys FancyZones work as
-usual. Programs the mod doesn't run in are moved by the mod instead.</li>
-<li>Snapping of its own, when native move is off or unavailable: drop a window
-with the cursor at the top edge of the screen to maximize it, at a side to
-fill half of the screen, or at a corner to fill a quarter. A preview shows
-where the window will go.</li>
-<li>A maximized or snapped window goes back to its previous size as you drag it,
-keeping the spot you grabbed under the cursor, the way a title bar drag does.</li>
-<li>Acceleration: faster finger movements take the cursor farther.</li>
-<li>Between monitors, the cursor stops at the shared edge for a moment, so that
-a window can be snapped there too.</li>
-<li>Press <strong>Esc</strong> while dragging to put the window back where it was.</li>
-<li>Optional: resize a window by grabbing it near one of its edges or corners.</li>
-<li>Optional: macOS drag mode, where the fingers hold the left mouse button
-instead, to select text, drag files or move a window by its title bar.</li>
-<li>Lifting and putting your fingers back within a configurable delay keeps
-dragging the same window.</li>
-</ul>
-<h2 id="windowstouchpadgestures">Windows touchpad gestures</h2>
-<p>Windows has its own three and four finger swipes (switch apps, show the desktop,
-switch desktops). While they're on, Windows responds to the same swipe as the
-mod. Programs can't change these settings: only the Settings app applies them
-right away.</p>
-<p>With <strong>Number of fingers</strong> set to <strong>Automatic</strong> (the default), the mod reads
-your touchpad settings and picks the gesture that's free:</p>
-<ul>
-<li>three fingers if the Windows three-finger swipes are off,</li>
-<li>otherwise four fingers if the Windows four-finger swipes are off.</li>
-</ul>
-<p>If both are on, the mod uses three fingers and, the first time you drag, shows
-a notice with a shortcut to the touchpad settings. The macOS setup works well:
-set <strong>Three-finger gestures → Swipes</strong> to <strong>Nothing</strong>, and give the four-finger
-swipes the actions you used with three.</p>
-<p>Swipes have to be off in all four directions: Windows picks a swipe by the
-direction the fingers start moving in, which a drag can start in too. Taps are
-free, so the three-finger tap can keep any action.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>Requires a precision touchpad.</li>
-<li>The touchpad is read in a dedicated process of the mod's own. Programs
-running as administrator get a helper, and with native move on the mod also
-loads into the other programs, where it only hooks message retrieval and
-stays idle until a drag.</li>
-<li>What works while a program running as administrator is in the foreground
-depends on Windhawk's own level. Running Windhawk as administrator, as it
-asks to be, leaves nothing out. Otherwise such a program's helper moves the
-cursor and its windows, but the window isn't brought to the front, Esc
-doesn't cancel a direct move, and macOS drag mode can't click. A helper only
-ever moves its program's windows, moves the cursor and presses the button on
-the mod's own overlay, so that it can't be used to control the program.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>Native move follows the approach <a href="https://windhawk.net/mods/alt-drag">AltDrag</a>
-takes: hooks on message retrieval turn a press into the move loop Windows
-itself runs. Both mods are under the GPL v3.</p>]]></content>
-        <author>
-            <name>rodrigothomazi</name>
-            <uri>https://github.com/RodrigoThomazi</uri>
         </author>
     </entry>
 </feed>
