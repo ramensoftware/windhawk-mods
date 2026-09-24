@@ -2,7 +2,7 @@
 // @id              taskbar-disk-space-label
 // @name            Taskbar Disk Space Label
 // @description     A simple disk space label integrated into the Windows taskbar
-// @version         0.54
+// @version         0.56
 // @author          allelimo
 // @github          https://github.com/allelimo
 // @include         explorer.exe
@@ -30,7 +30,7 @@ Windows 11 only.
 
 ## Screenshot
 
-![Screenshot](https://i.imgur.com/wJkUDHF.png)
+![Screenshot](https://i.imgur.com/Nwuevwf.png)
 
 */
 // ==/WindhawkModReadme==
@@ -49,9 +49,12 @@ Windows 11 only.
 - updateInterval: 60
   $name: Update interval
   $description: Update interval time in seconds. [Default 60]
-- fontSize: 14
+- fontSize: 12
   $name: Font size
-  $description: Font size of the disk label. [Default 14]  
+  $description: Font size of the disk label. [Default 12]  
+- labelInfoText: "Free Space"
+  $name: Label description text
+  $description: Description on the first line of the label. [Default "Free Space"] 
 */
 // ==/WindhawkModSettings==
 
@@ -91,22 +94,17 @@ static std::atomic_bool g_labelInjected{false};
 static std::atomic_bool g_systemTrayModuleHooked{false};
 
 [[clang::no_destroy]] static ColumnDefinition g_labelColumn{nullptr};
-[[clang::no_destroy]] static std::list<FrameworkElement::Loaded_revoker>
+[[clang::no_destroy]] static std::optional<std::list<FrameworkElement::Loaded_revoker>>
     g_loadedRevokers;
 
-// tried this fix but it crashed windhawk 
-// see also lines 704 and 792/793/798, the compiler asked me to replace "." with "->"
-// [[clang::no_destroy]] static std::optional<std::list<FrameworkElement::Loaded_revoker>>
-//      g_loadedRevokers;
-
 static std::atomic_bool g_unloading{false};
-static HANDLE g_retryThread = nullptr;
 
 static int myspacefree = 10;
 static int myspacetot = 100;
 
 struct {
     std::wstring diskLetter;
+    std::wstring labelInfoText;
     int fontSize;
     int updateInterval;
     bool userFreeSpace;
@@ -526,16 +524,16 @@ static std::wstring FormatSpace(int spacefree,
                                 int spacetot) {
     
     std::wstring label = GetDiskRootPath().substr(0, 2);
-    
+        
     if (spacefree == 0 && spacetot == 0) {
 
-        return label + L" n/a";
+        return g_settings.labelInfoText + L"\n" +label + L" n/a";
     }
 
     if (g_settings.showUnit)
-        return label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot) + L" GB";
+        return g_settings.labelInfoText + L"\n" + label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot) + L" GB";
     else
-        return label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot);
+        return g_settings.labelInfoText + L"\n" + label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot);
 }
 
 
@@ -547,6 +545,7 @@ static void LoadSettings() {
     
     g_settings.fontSize = Wh_GetIntSetting(L"fontSize");
     g_settings.diskLetter = WindhawkUtils::StringSetting::make(L"diskLetter").get();
+    g_settings.labelInfoText = WindhawkUtils::StringSetting::make(L"labelInfoText").get();
     g_settings.userFreeSpace =  Wh_GetIntSetting(L"userFreeSpace");
     g_settings.showUnit = Wh_GetIntSetting(L"showUnit");
     g_settings.updateInterval = Wh_GetIntSetting(L"updateInterval");
@@ -555,8 +554,10 @@ static void LoadSettings() {
         g_settings.fontSize = 14;
 
     if (g_settings.updateInterval <= 0)
-        g_settings.updateInterval = 64;
+        g_settings.updateInterval = 60;
 
+    if (g_settings.labelInfoText.empty())
+        g_settings.labelInfoText = L"Free Space";
 
 }
 
@@ -574,6 +575,9 @@ static void RefreshDiskSpaceLabel(void*) {
 
 static void ReloadSettingsAndRefresh(void*) {
     LoadSettings();
+    if (g_refreshTimer) {
+        g_refreshTimer.Interval(std::chrono::seconds(g_settings.updateInterval));
+    }    
     RefreshDiskSpaceLabel(nullptr);
 }
 
@@ -683,7 +687,6 @@ static void AddDiskSpaceLabel(void* param) {
 
         children.InsertAt(0, g_labelText);
     }
-
     
     g_refreshTimer = DispatcherTimer();
     g_refreshTimer.Interval(std::chrono::seconds(g_settings.updateInterval));
@@ -700,7 +703,7 @@ static void AddDiskSpaceLabel(void* param) {
 static void RemoveDiskSpaceLabel(void*) {
 
     ReleaseOwnedXaml();
-     g_loadedRevokers.clear();
+    g_loadedRevokers.reset();
     // g_loadedRevokers.reset();
     g_labelInjected.store(false);
 }
@@ -789,13 +792,13 @@ static void* WINAPI IconView_IconView_Hook(void* pThis) {
             return result;
         }
 
-        g_loadedRevokers.emplace_back();
-        auto it = std::prev(g_loadedRevokers.end());
+        g_loadedRevokers->emplace_back();
+        auto it = std::prev(g_loadedRevokers->end());
 
         *it = iconView.Loaded(winrt::auto_revoke_t{},
                         [it](winrt::Windows::Foundation::IInspectable const&,
                         RoutedEventArgs const&) {
-                            g_loadedRevokers.erase(it);
+                            g_loadedRevokers->erase(it);
 
                             if (g_unloading.load()) {
                                 return;
@@ -868,6 +871,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Taskbar Disk Space Label loading");
 
     g_unloading.store(false);
+    g_loadedRevokers.emplace();
 
     if (!HookTaskbarDllSymbols()) {
         Wh_Log(L"ERROR: Failed to resolve taskbar.dll symbols");
