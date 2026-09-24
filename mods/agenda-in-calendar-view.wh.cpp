@@ -20,7 +20,7 @@
 
 This mod brings the Windows 10-style agenda to Windows 11, allowing you to quickly and conveniently view your events from the Notification Centre.
 
-It supports `.ics` files from both local and remote locations. You can add multiple `.ics` files if needed.
+It supports `.ics` files from both local and remote locations, including Google Calendar and Outlook.
 
 ## Details
 ![event](https://i.imgur.com/EkWnp1c.png)
@@ -73,19 +73,36 @@ Checking events on other dates:
 
 
 ## FAQ
-* **My local `.ics` file does not work!**
-  - First try going to its Properties in File Explorer, and ticking "Unblock".
-  - If that doesn't work, grant read permissions on your file to AppContainers by running:
-    `icacls "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"`
-    in PowerShell.
-    This allows `ShellExperienceHost.exe` and `ShellHost.exe`, which host the calendar pane, to access your calendar file.
-    *Note: `*S-1-15-2-1` grants read permissions to ALL APPLICATION PACKAGES (all UWP/packaged apps).*
+**How do I sync my Google Calendar?**
+* Follow [this](https://support.google.com/calendar/answer/37648?hl=en#zippy=%2Cget-your-calendar-view-only:~:text=Get%20your%20calendar,other%20calendar%20application.) guide to get a remote `.ics` link to your calendar.
 
+**How do I sync my Outlook Calendar?**
 
-* **When my list of events is long, and the inline calendar is expanded, it becomes too tall for the screen!**
-  - Set a maximum height for the agenda list in the mod settings.
-  - You can specify different maximum heights for when the inline calendar is expanded and when it is collapsed. This way, you can limit the height only when the calendar is expanded.
-  - If the calendar pane fits within the screen, but is touching the bottom (misaligned downwards), reduce the maximum height by incremental amounts until it shifts back upwards to the correct position.
+* Warning: this may be restricted/hidden on accounts managed by an organisation!
+
+1) Go to Outlook Calendar
+2) Open Settings
+3) Click "Shared calendars" in the second column
+4) Publish your calendar under the "Publish a calendar" section
+5) Copy the `.ics` link to this mod's settings
+
+**My local `.ics` file does not work!**
+- First try going to its Properties in File Explorer, and ticking "Unblock".
+- If that doesn't work, grant read permissions on your file to AppContainers by running:
+
+  `icacls "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"`
+
+  in PowerShell.
+
+  This allows `ShellExperienceHost.exe` and `ShellHost.exe`, which host the calendar pane, to access your calendar file.
+
+   *Note: `*S-1-15-2-1` grants read permissions to ALL APPLICATION PACKAGES (all UWP/packaged apps).*
+
+**When my list of events is long, and the inline calendar is expanded, it becomes too tall for the screen!**
+- Set a maximum height for the agenda list in the mod settings.
+- You can specify different maximum heights for when the inline calendar is expanded and when it is collapsed. This way, you can limit the height only when the calendar is expanded.
+- If the calendar pane fits within the screen, but is touching the bottom (misaligned downwards), reduce the maximum height by incremental amounts until it shifts back upwards to the correct position.
+
 ![fix](https://i.imgur.com/9zRoO6I.png)
 */
 // ==/WindhawkModReadme==
