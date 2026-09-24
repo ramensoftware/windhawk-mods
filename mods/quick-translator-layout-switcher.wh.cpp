@@ -4,6 +4,7 @@
 // @description     Fix mistyped keyboard layout, translate text in-place, or view translations in a floating HUD tooltip.
 // @version         1.0
 // @author          zed712969-crypto
+// @github          https://github.com/zed712969-crypto
 // @include         explorer.exe
 // ==/WindhawkMod==
 
