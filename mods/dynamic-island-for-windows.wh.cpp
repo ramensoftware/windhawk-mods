@@ -605,6 +605,44 @@ namespace FileTrayLayout {
     }
 }
 
+// Layout for the collapsed idle strip (the clock, and optionally a weather
+// reading beside it).
+//
+// This width used to be a bare constant in ActivityForKind -- 96px, or 170px
+// with weather -- which was wrong in both directions. A short "9:41" left over
+// half the pill as dead air, while "10:41:32 PM" with seconds in 12-hour mode
+// overran the 84px text box and got clipped by the content mask. The weather
+// variant then split the pill 50/50 at its centre no matter how wide the two
+// strings actually were.
+//
+// The strip is now measured and sized to its real content. As with
+// GameOverlayLayout, the sizer (the render loop) and the painter
+// (DrawIdleDashboard) both read these constants so they cannot drift apart.
+namespace IdleStripLayout {
+    constexpr float kPadX = 14.0f;         // inner padding at each end
+    constexpr float kSlotGap = 9.0f;       // clock <-> divider <-> weather
+    constexpr float kDividerWidth = 1.0f;
+    constexpr float kDividerInsetY = 9.0f;
+
+    // Room reserved on the right for the mic/camera dot. DrawPrivacyDots anchors
+    // it at rect.right - 20 with a 4px radius, so 18px clears it without letting
+    // the text slide under it. Previously this was stolen from the text box while
+    // the pill stayed 96px, so the clock just re-centred into a narrower slot.
+    constexpr float kPrivacyReserve = 18.0f;
+
+    constexpr float kHeight = 36.0f;
+
+    // The stadium cap is kHeight/2 at each end, so anything below ~2x the height
+    // stops reading as a pill. The ceiling keeps a long localized string from
+    // turning the island into a bar.
+    constexpr float kMinWidth = 72.0f;
+    constexpr float kMaxWidth = 280.0f;
+
+    // Measured widths are rounded up to this so sub-pixel text metrics can't
+    // resize the layered window every frame.
+    constexpr float kWidthQuantum = 2.0f;
+}
+
 // Layout for the game overlay strip. The size the island animates to is decided
 // in the render loop, while the contents are painted by DrawGameOverlay. Those
 // two kept their own copies of the card width, padding and height, so widening a
@@ -6559,6 +6597,35 @@ struct MarqueeLayoutCache {
     DWRITE_TEXT_METRICS metrics{};
 };
 
+// Measured geometry of the collapsed idle strip, produced by
+// Renderer::MeasureIdleStrip. The render loop uses totalWidth to size the
+// island; DrawIdleDashboard uses the per-slot widths to place the clock, divider
+// and weather reading inside it.
+struct IdleStripMetrics {
+    float clockWidth = 0.0f;
+    float weatherWidth = 0.0f;
+    bool hasWeather = false;
+    bool hasPrivacy = false;
+    float totalWidth = IdleStripLayout::kMinWidth;
+};
+
+// Substitutes '0' for every decimal digit before measuring.
+//
+// Proportional faces give '1' a visibly narrower advance than '0', so measuring
+// the live clock would change the pill's width as the time changed -- with
+// seconds enabled that is a layered-window resize and reposition every second,
+// and a visible twitch. Normalising to the widest digit makes the width stable
+// for a given digit count, and since '0' is never narrower than the digit it
+// replaces, the real string is guaranteed to fit the box we reserve.
+std::wstring WidestDigitForm(std::wstring text) {
+    for (wchar_t& c : text) {
+        if (c >= L'0' && c <= L'9') {
+            c = L'0';
+        }
+    }
+    return text;
+}
+
 class Renderer {
    public:
     bool Initialize(HWND hwnd) {
@@ -6730,7 +6797,105 @@ class Renderer {
         }
     }
 
+    // Measures the collapsed idle strip so the render loop can size the island to
+    // the text it is actually about to paint, instead of the old fixed 96/170px.
+    // DrawIdleDashboard calls this too and lays the slots out from the same
+    // numbers, so the pill can never be sized for a clock width the painter is
+    // not using.
+    IdleStripMetrics MeasureIdleStrip(const SharedState& state, const Settings& settings,
+                                      double now) {
+        // Idempotent and cheap when nothing changed, but necessary here: textScale
+        // drives the idle font size, so measuring before the formats are rebuilt
+        // would size the pill for the previous Text size setting.
+        EnsureTextFormats(settings.sizeScale, settings.fontFamily, settings.textScale);
+
+        IdleStripMetrics metrics;
+        IDWriteTextFormat* fmt = idleTextFormat_ ? idleTextFormat_.Get() : smallTextFormat_.Get();
+
+        SYSTEMTIME local = {};
+        GetLocalTime(&local);
+        const std::wstring clock = FormatIslandTime(local, settings.clockFollowSystem,
+                                                    settings.use24HourClock, settings.showSeconds);
+        metrics.clockWidth =
+            MeasureTextWidthCached(WidestDigitForm(clock), fmt, idleClockWidthCache_);
+
+        metrics.hasWeather = settings.weather;
+        if (metrics.hasWeather) {
+            // Mirrors the label DrawIdleDashboard builds, including the no-data
+            // placeholder, so the reserved slot matches what gets drawn.
+            const bool hasData = state.weather.hasData && (now - state.weather.lastUpdated < 3600.0);
+            wchar_t label[32] = {};
+            if (hasData) {
+                std::wstring icon = L"\U0001F321\uFE0F";
+                std::wstring desc = state.weather.weatherDesc;
+                GetWeatherIconAndText(state.weather.weatherCode, icon, desc);
+                swprintf_s(label, L"%s %.0f\x00B0", icon.c_str(), state.weather.temperature);
+            } else {
+                wcscpy_s(label, ARRAYSIZE(label), L"\U0001F321\uFE0F --\x00B0");
+            }
+            metrics.weatherWidth =
+                MeasureTextWidthCached(WidestDigitForm(label), fmt, idleWeatherWidthCache_);
+        }
+
+        metrics.hasPrivacy =
+            (state.system.micActive && settings.privacyDots && settings.privacyDotsMic) ||
+            (state.system.cameraActive && settings.privacyDots && settings.privacyDotsCam);
+
+        float total = IdleStripLayout::kPadX * 2.0f + metrics.clockWidth;
+        if (metrics.hasWeather) {
+            total += IdleStripLayout::kSlotGap * 2.0f + IdleStripLayout::kDividerWidth +
+                     metrics.weatherWidth;
+        }
+        if (metrics.hasPrivacy) {
+            total += IdleStripLayout::kPrivacyReserve;
+        }
+
+        total = std::ceil(total / IdleStripLayout::kWidthQuantum) * IdleStripLayout::kWidthQuantum;
+        metrics.totalWidth = Clamp(total, IdleStripLayout::kMinWidth, IdleStripLayout::kMaxWidth);
+        return metrics;
+    }
+
    private:
+    // Keyed on the string alone. EnsureTextFormats invalidates both caches
+    // whenever it rebuilds the formats, so a cached width can never outlive the
+    // font size it was measured at -- comparing the IDWriteTextFormat pointer
+    // would not be enough, since a rebuilt format can land on the freed address.
+    struct TextWidthCache {
+        std::wstring key;
+        float width = 0.0f;
+        bool valid = false;
+    };
+    TextWidthCache idleClockWidthCache_;
+    TextWidthCache idleWeatherWidthCache_;
+
+    float MeasureTextWidthCached(const std::wstring& text, IDWriteTextFormat* fmt,
+                                 TextWidthCache& cache) {
+        if (cache.valid && cache.key == text) {
+            return cache.width;
+        }
+
+        float width = 0.0f;
+        if (fmt && dwriteFactory_ && !text.empty()) {
+            ComPtr<IDWriteTextLayout> layout;
+            // Effectively unbounded wrap width: the idle formats are NO_WRAP, and
+            // we want the natural advance, not a wrapped block.
+            if (SUCCEEDED(dwriteFactory_->CreateTextLayout(
+                    text.c_str(), static_cast<UINT32>(text.size()), fmt,
+                    4096.0f, IdleStripLayout::kHeight, &layout)) &&
+                layout) {
+                DWRITE_TEXT_METRICS tm = {};
+                if (SUCCEEDED(layout->GetMetrics(&tm))) {
+                    width = std::max(tm.width, tm.widthIncludingTrailingWhitespace);
+                }
+            }
+        }
+
+        cache.key = text;
+        cache.width = width;
+        cache.valid = true;
+        return width;
+    }
+
     bool CreateBackingBitmap(int width, int height) {
         if (oldBitmap_) {
             SelectObject(memDc_, oldBitmap_);
@@ -6783,6 +6948,11 @@ class Renderer {
         }
         lastTextScale_ = textScale;
         const float ts = Clamp(textScale, 0.7f, 1.6f);
+
+        // Every format below is about to be recreated at a new size, so any
+        // width measured against the old ones is stale.
+        idleClockWidthCache_.valid = false;
+        idleWeatherWidthCache_.valid = false;
 
         textFormat_ = nullptr;
         smallTextFormat_ = nullptr;
@@ -8764,50 +8934,72 @@ class Renderer {
                                    dashFadeLayer.Get());
             }
 
-            // Collapsed Mode (Apple Dynamic Island Status Bar — centered slots)
-            const float centerX = (rect.left + rect.right) * 0.5f;
+            // Collapsed Mode (Apple Dynamic Island status bar).
+            //
+            // Slots are placed from the same measurements that sized the pill, so
+            // the clock gets exactly the room it needs and the divider sits between
+            // the two strings instead of at an arbitrary geometric centre. The old
+            // version split the pill 50/50 at centerX and padded both ends by 6px,
+            // which is what produced the dead air on short strings (#5086).
+            const IdleStripMetrics idleMetrics = MeasureIdleStrip(state, settings, now);
+            IDWriteTextFormat* idleFmt =
+                idleTextFormat_ ? idleTextFormat_.Get() : smallTextFormat_.Get();
 
-            // Adjust right padding if privacy indicators (mic/camera) are active
-            float rightPadding = 6.0f * scale;
-            if (state.system.micActive || state.system.cameraActive) {
-                rightPadding = 24.0f * scale;
+            // The dot is anchored to the right edge by DrawPrivacyDots, so reserve
+            // its lane rather than shrinking the text box out from under the clock.
+            const float privacyReserve =
+                idleMetrics.hasPrivacy ? IdleStripLayout::kPrivacyReserve * scale : 0.0f;
+            const float innerLeft = rect.left + IdleStripLayout::kPadX * scale;
+            const float innerRight =
+                rect.right - IdleStripLayout::kPadX * scale - privacyReserve;
+
+            float blockWidth = idleMetrics.clockWidth;
+            if (idleMetrics.hasWeather) {
+                blockWidth += (IdleStripLayout::kSlotGap * 2.0f +
+                               IdleStripLayout::kDividerWidth) * scale +
+                              idleMetrics.weatherWidth;
             }
 
-            if (!settings.weather) {
-                D2D1_RECT_F timeRect = D2D1::RectF(rect.left + 6.0f * scale, rect.top,
-                                                   rect.right - rightPadding, rect.bottom);
-                textBrush_->SetOpacity(0.96f);
-                target_->DrawTextW(timeBuf, static_cast<UINT32>(wcslen(timeBuf)),
-                                   idleTextFormat_ ? idleTextFormat_.Get() : smallTextFormat_.Get(),
-                                   timeRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
-            } else {
-                // 1. Time Display (Left Slot)
-                D2D1_RECT_F timeRect = D2D1::RectF(rect.left + 6.0f * scale, rect.top,
-                                                   centerX - 3.0f * scale, rect.bottom);
-                textBrush_->SetOpacity(0.96f);
-                target_->DrawTextW(timeBuf, static_cast<UINT32>(wcslen(timeBuf)),
-                                   idleTextFormat_ ? idleTextFormat_.Get() : smallTextFormat_.Get(),
-                                   timeRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+            // Centre the block in whatever room the pill currently has. Mid-spring
+            // the rect is wider or narrower than the natural width, and clamping
+            // the slack at zero stops the slots from inverting when it is narrower.
+            const float slack = std::max(0.0f, (innerRight - innerLeft) - blockWidth);
+            float slotX = innerLeft + slack * 0.5f;
 
-                // 2. Vertical Divider Line (Center)
+            // Each slot is exactly its measured width, and the measurement used the
+            // widest-digit form, so the live string is centred inside a box it is
+            // guaranteed to fit rather than drifting as the digits change.
+            textBrush_->SetOpacity(0.96f);
+            const D2D1_RECT_F timeRect =
+                D2D1::RectF(slotX, rect.top, slotX + idleMetrics.clockWidth, rect.bottom);
+            target_->DrawTextW(timeBuf, static_cast<UINT32>(wcslen(timeBuf)), idleFmt,
+                               timeRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_NONE);
+            slotX += idleMetrics.clockWidth;
+
+            if (idleMetrics.hasWeather) {
+                slotX += IdleStripLayout::kSlotGap * scale;
+
                 ComPtr<ID2D1SolidColorBrush> divider;
-                target_->CreateSolidColorBrush(WithAlpha(material_.hairline, material_.hairline.a * settingsOpacity_), &divider);
-                const float divTop = rect.top + 9.0f * scale;
-                const float divBottom = rect.bottom - 9.0f * scale;
-                target_->FillRoundedRectangle(
-                    D2D1::RoundedRect(D2D1::RectF(centerX - 0.5f * scale, divTop,
-                                                   centerX + 0.5f * scale, divBottom),
-                                      0.5f * scale, 0.5f * scale), divider.Get());
+                target_->CreateSolidColorBrush(
+                    WithAlpha(material_.hairline, material_.hairline.a * settingsOpacity_),
+                    &divider);
+                if (divider) {
+                    const float divW = IdleStripLayout::kDividerWidth * scale;
+                    const float divTop = rect.top + IdleStripLayout::kDividerInsetY * scale;
+                    const float divBottom = rect.bottom - IdleStripLayout::kDividerInsetY * scale;
+                    target_->FillRoundedRectangle(
+                        D2D1::RoundedRect(D2D1::RectF(slotX, divTop, slotX + divW, divBottom),
+                                          divW * 0.5f, divW * 0.5f), divider.Get());
+                }
+                slotX += (IdleStripLayout::kDividerWidth + IdleStripLayout::kSlotGap) * scale;
 
-                // 3. Weather Display (Right Slot)
                 wchar_t weatherLabel[32] = {};
                 if (hasWeather) swprintf_s(weatherLabel, L"%s %.0f\x00B0", wIcon.c_str(), state.weather.temperature);
-                else wcscpy_s(weatherLabel, ARRAYSIZE(weatherLabel), L"🌡️ --\x00B0");
+                else wcscpy_s(weatherLabel, ARRAYSIZE(weatherLabel), L"\U0001F321\uFE0F --\x00B0");
 
-                D2D1_RECT_F wRect = D2D1::RectF(centerX + 3.0f * scale, rect.top,
-                                                rect.right - rightPadding, rect.bottom);
-                target_->DrawTextW(weatherLabel, static_cast<UINT32>(wcslen(weatherLabel)),
-                                   idleTextFormat_ ? idleTextFormat_.Get() : smallTextFormat_.Get(),
+                const D2D1_RECT_F wRect =
+                    D2D1::RectF(slotX, rect.top, slotX + idleMetrics.weatherWidth, rect.bottom);
+                target_->DrawTextW(weatherLabel, static_cast<UINT32>(wcslen(weatherLabel)), idleFmt,
                                    wRect, textBrush_.Get(), D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
             }
             textBrush_->SetOpacity(1.0f);
@@ -10635,8 +10827,13 @@ Activity ActivityForKind(IslandKind kind, const Settings& settings, const Shared
                 activity.width = 0.0f;
                 activity.height = 0.0f;
             } else {
+                // Seed only. The real collapsed width is measured from the clock
+                // and weather strings by Renderer::MeasureIdleStrip and applied in
+                // the render loop -- this function has no DWrite access. A fixed
+                // width here was the whole bug behind #5086: dead air around a
+                // short "9:41", and clipping on "10:41:32 PM".
                 activity.width = settings.weather ? 170.0f : 96.0f;
-                activity.height = 36.0f;
+                activity.height = IdleStripLayout::kHeight;
             }
             break;
     }
@@ -11862,6 +12059,14 @@ DWORD WINAPI RenderThreadProc(void*) {
             if (!isFullscreen && (pinned || isHoverExpanded)) {
                 primary.width = MediaLayout::kExpandedWidth * g_settings.sizeScale;
                 primary.height = MediaLayout::kExpandedHeight * g_settings.sizeScale;
+            } else if (primary.width > 0.0f) {
+                // Collapsed: size the strip to the text it will actually render
+                // (#5086). ActivityForKind's 96/170px was wrong both ways -- dead
+                // air around a short "9:41", and clipping on "10:41:32 PM".
+                // The > 0 guard preserves ActivityForKind's fully-hidden case.
+                primary.width =
+                    renderer.MeasureIdleStrip(snapshot, g_settings, now).totalWidth *
+                    g_settings.sizeScale;
             }
         }
         if (!isFullscreen && primary.kind == IslandKind::Idle &&
