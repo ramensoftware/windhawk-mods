@@ -15,11 +15,42 @@
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
-/*...*/
+/*
+# BlackWindows
+
+Solid black backgrounds (#000000) for supported classic Windows interfaces,
+without blur, acrylic, or transparency.
+
+Based on Translucent Windows by Undisputed00x. Adapted by mvdvicenze
+with AI assistance.
+
+## Features
+
+- Black backgrounds for supported classic controls and window surfaces.
+- Optional black native title bars with readable text.
+- Optional black classic popup menus.
+
+The default process list includes Explorer, Control Panel, rundll32,
+dllhost, and Microsoft Management Console. Coverage depends on the
+application and Windows version; not every control supports customization.
+Modern Start, Settings, and taskbar surfaces require their respective Styler mods.
+
+## Usage
+
+Disable the original Translucent Windows mod before enabling BlackWindows.
+Use the settings below to enable or disable title bar and popup menu changes.
+*/
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
-/*...*/
+/*
+- BlackTitleBars: true
+  $name: Black native title bars
+  $description: Use black native title bars with white title text where supported.
+- BlackPopupMenus: true
+  $name: Black classic popup menus
+  $description: Apply black backgrounds to supported classic popup menus.
+*/
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
