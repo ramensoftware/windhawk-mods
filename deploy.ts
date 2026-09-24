@@ -138,6 +138,13 @@ function JSONstringifyOrder(obj: any, space: number) {
     return JSON.stringify(obj, Array.from(allKeys).sort(), space);
 }
 
+// Puts arrays of plain numbers in formatted JSON on a single line. Can't match
+// inside strings, since JSON strings can't contain raw newlines.
+function JSONcompactNumberArrays(json: string) {
+    return json.replace(/\[\s*(-?[\d.eE+-]+(?:,\s*-?[\d.eE+-]+)*)\s*\]/g,
+        (_match, items: string) => '[' + items.split(/,\s*/).join(', ') + ']');
+}
+
 function gitExec(args: string[]) {
     const result = child_process.spawnSync('git', args, { encoding: 'utf8' });
     if (result.status !== 0) {
@@ -731,7 +738,7 @@ async function generateModCatalogs(cache: GitCache) {
     writeModReviews(reviewsByMod);
 
     const englishCatalogEnriched = enrichCatalog(englishCatalog, enrichment, reviewsByMod, modTimes, cache);
-    fs.writeFileSync('catalog.json', JSONstringifyOrder(englishCatalogEnriched, 2));
+    fs.writeFileSync('catalog.json', JSONcompactNumberArrays(JSONstringifyOrder(englishCatalogEnriched, 2)));
 
     const catalogsDir = 'catalogs';
     if (!fs.existsSync(catalogsDir)) {
@@ -769,7 +776,7 @@ async function generateModCatalogs(cache: GitCache) {
             }
         }
 
-        fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONstringifyOrder(catalogEnriched, 2));
+        fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONcompactNumberArrays(JSONstringifyOrder(catalogEnriched, 2)));
     }
 }
 
