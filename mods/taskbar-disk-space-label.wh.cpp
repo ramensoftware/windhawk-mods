@@ -2,7 +2,7 @@
 // @id              taskbar-disk-space-label
 // @name            Taskbar Disk Space Label
 // @description     A simple disk space label integrated into the Windows taskbar
-// @version         0.56
+// @version         0.57
 // @author          allelimo
 // @github          https://github.com/allelimo
 // @include         explorer.exe
@@ -25,8 +25,11 @@ Windows 11 only.
 ## Features
 
 - Choose the disk to be checked via module settings (default to C)
-- Choose the font size
-- Choose between user available free space or total free available space
+- Choose the font size (Default to 12)
+- Choose between user available free space or total free available space (Default to total free space)
+- Choose the update interval (default to 60 seconds)
+- Choose the description text on the first line of the label (default to "Free Space")
+- Leave the description text empty to have a single-line label with no info text
 
 ## Screenshot
 
@@ -53,7 +56,7 @@ Windows 11 only.
   $name: Font size
   $description: Font size of the disk label. [Default 12]  
 - labelInfoText: "Free Space"
-  $name: Label description text
+  $name: Label description text. Leave empty to have a single-line label with no info text
   $description: Description on the first line of the label. [Default "Free Space"] 
 */
 // ==/WindhawkModSettings==
@@ -72,6 +75,7 @@ Windows 11 only.
 #include <cwchar>
 #include <string>
 #include <cwctype>
+#include <optional>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
@@ -527,13 +531,32 @@ static std::wstring FormatSpace(int spacefree,
         
     if (spacefree == 0 && spacetot == 0) {
 
-        return g_settings.labelInfoText + L"\n" +label + L" n/a";
+        if (g_settings.labelInfoText.empty()) {
+            return label + L" n/a";
+        } else {
+            return g_settings.labelInfoText + L"\n" + label + L" n/a";
+        }
     }
 
-    if (g_settings.showUnit)
-        return g_settings.labelInfoText + L"\n" + label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot) + L" GB";
-    else
-        return g_settings.labelInfoText + L"\n" + label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot);
+    if (g_settings.showUnit) {
+
+        if (g_settings.labelInfoText.empty()) {
+            return label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot) + L" GB";
+
+        } else {
+            return g_settings.labelInfoText + L"\n" + label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot) + L" GB";
+        }  
+
+    } else {
+
+        if (g_settings.labelInfoText.empty()) {
+            return label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot);
+
+        } else {
+            return g_settings.labelInfoText + L"\n" + label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot);
+        }
+
+    }
 }
 
 
@@ -551,13 +574,13 @@ static void LoadSettings() {
     g_settings.updateInterval = Wh_GetIntSetting(L"updateInterval");
 
     if (g_settings.fontSize <= 0)
-        g_settings.fontSize = 14;
+        g_settings.fontSize = 12;
 
     if (g_settings.updateInterval <= 0)
         g_settings.updateInterval = 60;
 
-    if (g_settings.labelInfoText.empty())
-        g_settings.labelInfoText = L"Free Space";
+    // if (g_settings.labelInfoText.empty())
+    //     g_settings.labelInfoText = L"Free Space";
 
 }
 
@@ -704,7 +727,6 @@ static void RemoveDiskSpaceLabel(void*) {
 
     ReleaseOwnedXaml();
     g_loadedRevokers.reset();
-    // g_loadedRevokers.reset();
     g_labelInjected.store(false);
 }
 
@@ -953,5 +975,9 @@ void Wh_ModSettingsChanged() {
     
     if (taskbar) {
         RunFromWindowThread(taskbar, ReloadSettingsAndRefresh, nullptr);
+    }
+
+    if (!g_labelInjected.load()) {
+        ApplyDiskSpaceLabelIfAvailable();
     }
 }
