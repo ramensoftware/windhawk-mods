@@ -91,8 +91,13 @@ static std::atomic_bool g_labelInjected{false};
 static std::atomic_bool g_systemTrayModuleHooked{false};
 
 [[clang::no_destroy]] static ColumnDefinition g_labelColumn{nullptr};
-[[clang::no_destroy]] static std::optional<std::list<FrameworkElement::Loaded_revoker>>
-     g_loadedRevokers;
+[[clang::no_destroy]] static std::list<FrameworkElement::Loaded_revoker>
+    g_loadedRevokers;
+
+// tried this fix but it crashed windhawk 
+// see also lines 704 and 792/793/798, the compiler asked me to replace "." with "->"
+// [[clang::no_destroy]] static std::optional<std::list<FrameworkElement::Loaded_revoker>>
+//      g_loadedRevokers;
 
 static std::atomic_bool g_unloading{false};
 static HANDLE g_retryThread = nullptr;
@@ -695,7 +700,8 @@ static void AddDiskSpaceLabel(void* param) {
 static void RemoveDiskSpaceLabel(void*) {
 
     ReleaseOwnedXaml();
-    g_loadedRevokers.reset();
+     g_loadedRevokers.clear();
+    // g_loadedRevokers.reset();
     g_labelInjected.store(false);
 }
 
@@ -783,13 +789,13 @@ static void* WINAPI IconView_IconView_Hook(void* pThis) {
             return result;
         }
 
-        g_loadedRevokers->emplace_back();
-        auto it = std::prev(g_loadedRevokers->end());
+        g_loadedRevokers.emplace_back();
+        auto it = std::prev(g_loadedRevokers.end());
 
         *it = iconView.Loaded(winrt::auto_revoke_t{},
                         [it](winrt::Windows::Foundation::IInspectable const&,
                         RoutedEventArgs const&) {
-                            g_loadedRevokers->erase(it);
+                            g_loadedRevokers.erase(it);
 
                             if (g_unloading.load()) {
                                 return;
