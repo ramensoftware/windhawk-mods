@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              win7-legacy-applet-restorer
-// @name            Windows 7 Legacy Applet Restorer
-// @description     This mod restores a series of classic Control Panel applets on Windows 10 and Windows 11
-// @version         3.0.0
+// @name            Windows Vista/7 Legacy Applet Restorer
+// @description     This mod restores a series of classic Control Panel applets on Windows 10 and Windows 11 including optional additions
+// @version         3.2.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
@@ -24,12 +24,33 @@ This mod restores a selection of classic Control Panel applets and task links in
 * BitLocker Drive Encryption
 * Tablet PC Settings
 * Text to Speech
+* iSCSI Initiator
+* Game Controllers (joy.cpl)
+* Offline Files (cscui.dll)
 
 This mod aims to restore a series of Control Panel applets in a secure way, using reversible in-memory patches rather than permanently modifying system files, to reproduce a result nearly identical to the original Windows 7 (or Windows Vista/8/8.1) counterpart.
+
+The Offline Files entry is a best-effort restoration: it opens the classic Offline Files dialog (cscui.dll) as on Windows Vista/7, but on Windows 11 the dialog may show fewer tabs than the original, and the feature is not usable on Home editions.
 
 The mod also provides the ability to suppress obsolete or non-functional Control Panel items on Windows 10/11, such as "Company Settings Sync", Windows To Go, Infrared, and Work Folders, when the corresponding settings are enabled.
 
 The optional "Restore Classic Task Links" setting restores the localized, classic task links for these sections in Category View.
+
+The optional "In-place Personalization navigation" setting keeps "Desktop Background" and "Window Color" inside the classic Control Panel window instead of opening the modern Settings app without modifying system files.
+
+## Appearance Links on the Control Panel Home Page
+
+The "Restore Category Appearance Links" setting restores the three classic links that Windows 7 showed under **Appearance and Personalization** on the Control Panel home page, and that Windows 10 and 11 leave empty:
+
+* **Change the theme** - this link opens the classic Personalization page.
+* **Change desktop background** - this link opens the Desktop Background page of that same Personalization page.
+* **Adjust screen resolution** - this link opens the classic Screen Resolution page when it is available, and the Settings display page otherwise.
+
+This mod restores three links that Microsoft removed from Windows. They show up where they should, in all the same languages, and you can search for them from the Control Panel. If they ever appear twice, just toggle the 'Use the original Microsoft identifiers' setting to fix it.
+
+"Adjust screen resolution" also picks its destination on its own, best target first: the classic **Screen Resolution** page when that applet is available (for example while the "Classic Display Control Panel Restorer" mod is active), the Display item otherwise, and the Settings app as a last resort, so the link never dead-ends.
+
+The check is an ordinary registry read, so there is no coupling between the two mods, and it is not done only once at startup: since Windhawk gives no ordering guarantee between mods, the target is re-checked right before Control Panel rebuilds its item list, and the task links are regenerated only when the answer actually changed. In practice this means enabling or disabling the Display mod is picked up on the next visit to Control Panel, without a thread, a timer or a restart.
 
 ## Screenshot of the Restored Applets
 
@@ -38,6 +59,14 @@ The optional "Restore Classic Task Links" setting restores the localized, classi
 ## Screenshot of HomeGroup and Network Connections with Task Links
 
 ![screenshot](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/legacyappet.png)
+
+## Screenshot of the sample restored Colors applet
+
+![Color Applet](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/colorapplet.PNG)
+
+## Screenshot of the enhanced Control Panel homepage 
+
+![restoredmainpage](https://raw.githubusercontent.com/babamohammed2022/babamohammed2022/main/restoredmainpage.PNG)
 
 ## Notes
 
@@ -53,7 +82,7 @@ Additionally, the mod includes the **"Unhide legacy applets"** option (enabled b
 
 **The virtual entries stay as a fallback**. They are not deleted, only hidden, and they come back if the real applet is missing, not found, or not listed. This setting can never remove anything from Control Panel. In the normal case (mod enabled at logon/Explorer startup) at worst the virtual entry is used instead. If the mod is enabled or its settings are changed while Explorer is already running, shell32's Control Panel item list may have been built before the patch takes effect; the mod keeps re-asking the shell until it confirms the real applet, but until it does you may briefly see a duplicate entry (both the real applet and the virtual twin) rather than a fallback.
 
-The setting only decides **which entry Control Panel lists**. Where an item opens when you click it is left to Windows (on Windows 10 the unhidden applets open in the classic Control Panel normally). To keep items on their classic pages on every build, use **[Settings to Control Panel](https://windhawk.net/mods/settings-to-control-panel)**.
+The setting only decides **which entry Control Panel lists**. Where an item opens when clicked, it is left to Windows (on Windows 10 the unhidden applets open in the classic Control Panel normally). To keep items on their classic pages on every build, use **[Settings to Control Panel](https://windhawk.net/mods/settings-to-control-panel)**.
 
 **⚠️ This mod should not be enabled together with "Restore the classic Personalization and other CPLs" (restore-classic-cpls) by Anixx.** Both mods inject identical CLSIDs into Control Panel, which may result in conflicts.
 
@@ -102,6 +131,18 @@ Credits to AdministratoX for the improvements and for restoring Text to Speech i
   $name: Printers and Faxes
   $description: This setting adds the "Printers and Faxes" icon to Control Panel
 
+- enableIscsiInitiator: true
+  $name: iSCSI Initiator
+  $description: This setting adds the "iSCSI Initiator" icon to Control Panel (under System and Security). Unlike Printers and Faxes or Network Connections, Windows 11 no longer keeps this CLSID registered at all on many builds, so this is a self-built virtual entry (name/icon from iscsicpl.exe) that launches iscsicpl.exe directly. Only added if iscsicpl.exe is actually present (e.g. not on ARM builds).
+
+- enableGameControllers: true
+  $name: Game Controllers
+  $description: This setting adds the "Game Controllers" icon to Control Panel (under Hardware and Sound). Windows still ships the classic joy.cpl applet (joystick/gamepad test and calibration) but no longer lists it in Control Panel, so this is a self-built virtual entry whose name and description come from joy.cpl, whose classic gamepad icon is embedded in the mod (joy.cpl no longer exposes a usable icon resource on Windows 10/11), and which launches joy.cpl. Only added if joy.cpl is actually present.
+
+- enableOfflineFiles: true
+  $name: Offline Files
+  $description: This setting adds the classic "Offline Files" icon to Control Panel (under Network and Internet). Windows 10/11 still ships cscui.dll (the Offline Files dialog) but no longer lists it in Control Panel, so this is a self-built virtual entry whose name and description are hardcoded in the mod (English and a set of other languages, so nothing depends on the MUI files), whose classic folder icon is embedded in the mod, and which opens the dialog through rundll32 (the most backward-compatible launcher). Best-effort, so on Windows 11 the dialog may show fewer tabs than on Windows Vista/7, and the feature is not usable on Home editions. Only added if cscui.dll is actually present.
+
 - enableHomeGroup: false
   $name: HomeGroup
   $description: This setting adds the HomeGroup entry when Windows still registers its legacy CLSID (page only, HomeGroup networking functionality was removed in Windows 10 1803 and later). On Windows 11, the "Windows 11 HomeGroup Page Restorer" mod is recommended instead.
@@ -138,6 +179,10 @@ Credits to AdministratoX for the improvements and for restoring Text to Speech i
   $name: Restore Category Appearance Links
   $description: This setting restores the classic links "Change the theme", "Change desktop background", and "Adjust screen resolution" beneath the Appearance and Personalization category on the main Control Panel home page.
 
+- useOriginalHomeTaskGuids: true
+  $name: Use the original Microsoft identifiers for the home page links
+  $description: The Appearance and Personalization category of the Control Panel home page still asks shell32 for three task links that Microsoft stopped shipping, which is why that category is the only empty one. With this setting on, the three restored links reuse exactly those three identifiers and slot back into their original Windows 7 position and order. Turn it off only in the unlikely case the links appear twice.
+
 - suppressCompanySync: true
   $name: Suppress the "Company Settings Sync" broken icon
   $description: This setting removes the non-functional {98F2AB62-0E29-4E4C-8EE7-B542E66740B1} icon from Control Panel
@@ -162,13 +207,9 @@ Credits to AdministratoX for the improvements and for restoring Text to Speech i
   $name: Restore Windows 7 Category Task Links
   $description: This setting restores classic task links under all Control Panel categories (System and Security, Programs, User Accounts, Clock/Language/Region, Ease of Access) as they appeared in Windows 7
 
-# HIDDEN SETTING - deliberately not shown in the settings UI. The feature it
-# controls is not working on the tested builds and sleeps, fully commented,
-# in the source ("THE SLEEPING NAVIGATION" section). Kept here, commented, so
-# that re-arming the feature one day is an "uncomment", never a "rewrite".
-#- inlinePersonalizationNavigation: true
-#  $name: In-place Personalization navigation
-#  $description: This setting patches the Personalization applet itself (themecpl.dll.mun) so its "Desktop Background" and "Window Color" links navigate within the same applet window instead of opening a separate Settings window. Reversed automatically when the mod is disabled.
+- inlinePersonalizationNavigation: false
+  $name: In-place Personalization navigation
+  $description: This setting keeps "Desktop Background" and "Window Color" inside the same Control Panel window instead of opening the Settings app. If you already use the "Settings to Control Panel" mod, ms-settings:personalization-background/colors are already redirected to these same classic pages there; the difference here is navigating to them in place, without closing and reopening the Control Panel window. Off by default, since it has not been confirmed to work on every tested build; it is recommended to close and reopen the applet after changing this setting.
 */
 // ==/WindhawkModSettings==
 
@@ -226,6 +267,9 @@ struct Settings {
     std::atomic<bool> enableNotificationIcons;
     std::atomic<bool> enableNetworkConnections;
     std::atomic<bool> enablePrintersAndFaxes;
+    std::atomic<bool> enableIscsiInitiator;
+    std::atomic<bool> enableGameControllers;
+    std::atomic<bool> enableOfflineFiles;
     std::atomic<bool> enableHomeGroup;
     // Tri-state (AppletMode): the user can override the automatic detection in
     // both directions, because "does Control Panel already show this applet?"
@@ -261,19 +305,21 @@ struct Settings {
     // disappear from Control Panel: the fallback is always there.
     std::atomic<bool> unhideLegacyApplets;
     std::atomic<bool> enableCategoryAppearanceLinks;
+    // See the useOriginalHomeTaskGuids setting: chooses the identifiers used
+    // by the three Appearance links of the Control Panel home page.
+    std::atomic<bool> useOriginalHomeTaskGuids;
     std::atomic<bool> suppressCompanySync;
     std::atomic<bool> suppressWindowsToGo;
     std::atomic<bool> suppressInfrared;
     std::atomic<bool> suppressWorkFolders;
     std::atomic<bool> restoreClassicTaskLinks;
     std::atomic<bool> restoreWin7CategoryTaskLinks;
-    // (sleeping feature - see THE SLEEPING NAVIGATION) Serves a patched copy
-    // of themecpl.dll.mun's markup resource so its Desktop Background /
-    // Window Color NavigateButtons carry a navigationtargetrelative
-    // attribute and navigate in-place inside the same PersonalizationHubStyle
-    // hub. The original shellexecute command is kept in the patched markup,
-    // but only as a fallback. Kept commented until a future implementation.
-    // std::atomic<bool> inlinePersonalizationNavigation;
+    // Rewrites the Personalization applet markup at parse time so Desktop
+    // Background / Window Color NavigateButtons carry a
+    // navigationtargetrelative attribute and switch pages inside the same
+    // PersonalizationHubStyle hub. The Settings shellexecute command is
+    // replaced, not kept as a fallback.
+    std::atomic<bool> inlinePersonalizationNavigation;
 } g_settings;
 
 static std::atomic<bool> g_homeGroupUsable{ false };
@@ -347,6 +393,27 @@ static std::atomic<bool> g_speechClsidRegistered{ false };
 static std::atomic<bool> g_speechAutoDetected{ false };
 static std::atomic<bool> g_injectSpeechApplet{ false };
 static std::atomic<int> g_prevSpeechMode{ -1 };
+// True when iscsicpl.exe was found in System32 at init - the iSCSI Initiator
+// virtual entry is only built when this holds, so ARM builds (or any edition
+// missing the binary) never get a dead icon. Unlike BitLocker/TabletPC/
+// Speech there is no CLSID-based Auto/Always/Never detection here: the real
+// CLSID isn't reliably registered at all (see kIscsiInitiatorGuid), so file
+// presence is the only signal available.
+static std::atomic<bool> g_iscsiInitiatorExeExists{ false };
+// True when joy.cpl (the classic Game Controllers applet) was found in
+// System32 at init. Same "file presence is the only signal" approach as the
+// iSCSI entry above: its legacy Control Panel CLSID ({259EF4B1-...}) is not
+// kept registered/activatable on current Windows 11 builds (launching
+// shell:::{259EF4B1-...} does nothing), but joy.cpl itself still ships and
+// opens normally, so the virtual entry launches joy.cpl directly.
+static std::atomic<bool> g_joyCplExists{ false };
+// True when cscui.dll (the Offline Files dialog) was found at init, in System32
+// or, as a second path, in SysWOW64. The virtual Offline Files entry launches
+// it through rundll32.
+static std::atomic<bool> g_offlineFilesDllExists{ false };
+// Path to the decoded embedded gamepad .ico lives next to its decoder
+// (EnsureJoyControllerIconFile, defined before InitDisplayNames) as
+// g_joyIconFilePath; it is filled in Wh_ModInit before InitDisplayNames runs.
 // Index into kLegacyUnhideMonikers / g_monikerPatched (declared here so
 // VirtualTwinSuppressed can use it; kLegacyUnhideMonikers itself is
 // declared later, near the rest of the unhide feature, but a static_assert
@@ -499,14 +566,143 @@ static HANDLE g_lazyDetectionStopEvent = nullptr;
 
 bool ResolveAppletInjection(AppletMode mode, bool autoDetected, bool clsidRegistered, const wchar_t* logName);
 void InvalidateClassicTaskLinksFile();
+// Re-probes where the home page "Adjust screen resolution" link should go.
+void RefreshHomeResolutionTarget();
+// True when the classic 5-task Personalization block is emitted, in which
+// case it already carries the three Appearance links of the home page and the
+// separate block must not repeat the same application id.
+static bool ClassicPersonalizationBlockCoversHomeLinks();
 bool EnsureClassicTaskLinksFile();
 void RunLazyVirtualAppletDetection();
 void ConfirmUnhiddenAppletsVisible();
 void RequestLazyVirtualAppletDetection();
+// Defined further below (near GetNamespaceClsids), but used inside
+// EnsureClassicTaskLinksFile()'s task-block assembly above its definition.
+static bool VirtualAppletPresent(const std::wstring& guid);
+
+// ---------------------------------------------------------------------------
+// Appearance links of the Control Panel home page
+//
+// The Category view home page does not invent its own links: it reads them
+// from the XML resource (type "XML", id 21) of shell32.dll, which on 1903 and
+// later physically lives in shell32.dll.mun. On every build from Windows 10
+// 1507 to Windows 11 24H2 that resource still contains
+//
+//     <category id="1">
+//       <sh:task idref="{B3206921-D53A-40D9-BA1A-BEA526A644A5}" />   theme
+//       <sh:task idref="{4A66B844-A291-4136-B5AC-1B48B3CAD99F}" />   background
+//       <sh:task idref="{F3321994-6E7E-4D9E-ABDC-768477BCF916}" />   resolution
+//     </category>
+//
+// but Microsoft deleted the three matching <sh:task> definitions, so those
+// references are dangling and Appearance and Personalization ends up being the
+// only category with no links. Reusing the same three identifiers for the
+// links this mod supplies puts them back into their original slot instead of
+// appending new ones somewhere else.
+// ---------------------------------------------------------------------------
+
+static const char kHomeTaskGuidTheme[]      = "{B3206921-D53A-40D9-BA1A-BEA526A644A5}";
+static const char kHomeTaskGuidBackground[] = "{4A66B844-A291-4136-B5AC-1B48B3CAD99F}";
+static const char kHomeTaskGuidResolution[] = "{F3321994-6E7E-4D9E-ABDC-768477BCF916}";
+
+// Previously used identifiers, kept as an opt-out.
+static const char kHomeTaskGuidThemeLegacy[]      = "{D4F4A001-0D35-4CB6-A21F-BC1661200001}";
+static const char kHomeTaskGuidBackgroundLegacy[] = "{D4F4A002-0D35-4CB6-A21F-BC1661200002}";
+static const char kHomeTaskGuidResolutionLegacy[] = "{D4F4A006-0D35-4CB6-A21F-BC1661200006}";
+
+static bool RegistryKeyExists(HKEY root, const wchar_t* subKey) {
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(root, subKey, 0, KEY_READ, &key) != ERROR_SUCCESS) return false;
+    if (key) RegCloseKey(key);
+    return true;
+}
+
+// True when the Windows 7 style Display applet {C555438B-...} is reachable,
+// which is the case while the "Classic Display Control Panel Restorer" mod is
+// active. That mod serves its registration in memory exactly like this one
+// does for its own applets, so an ordinary registry read sees it and no direct
+// coupling between the two mods is needed.
+static bool ClassicDisplayPageAvailable() {
+    static const wchar_t kNamespaceKey[] =
+        L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\ControlPanel\\NameSpace\\"
+        L"{C555438B-3C23-4769-A71F-B6D3D9B6053A}";
+    if (RegistryKeyExists(HKEY_LOCAL_MACHINE, kNamespaceKey)) return true;
+    if (RegistryKeyExists(HKEY_CURRENT_USER, kNamespaceKey)) return true;
+    return RegistryKeyExists(
+        HKEY_CLASSES_ROOT,
+        L"CLSID\\{C555438B-3C23-4769-A71F-B6D3D9B6053A}\\Shell\\Open\\Command");
+}
+
+// Where "Adjust screen resolution" points to, best target first:
+//   1. the classic Screen Resolution page, when that applet is available;
+//   2. the Display item this mod already works with, when it is registered;
+//   3. the Settings app, so the link can never dead-end.
+static std::string ProbeHomeResolutionCommand() {
+    if (ClassicDisplayPageAvailable())
+        return "explorer.exe shell:::{C555438B-3C23-4769-A71F-B6D3D9B6053A}\\Settings";
+    if (RegistryKeyExists(HKEY_CLASSES_ROOT,
+                          L"CLSID\\{C55584F4-7C7F-44F2-9A6D-913076F34C6A}"))
+        return "explorer.exe shell:::{C55584F4-7C7F-44f2-9A6D-913076F34C6A}";
+    return "explorer.exe ms-settings:display";
+}
+
+// Anti-conflict handoff.
+//
+// The answer above can change while Explorer is already running: the classic
+// Display applet only becomes reachable once the mod that provides it has
+// initialised, and Windhawk gives no ordering guarantee between mods. Probing
+// once at startup would therefore bake a stale target into the generated task
+// file. Instead the probe is repeated, throttled, right before Control Panel
+// rebuilds its item list (the moment Explorer enumerates the Control Panel
+// namespace), and the task file is invalidated only when the answer actually
+// changed, so the regeneration cost is paid once per real change and never in
+// a loop. There is no thread, no timer and no direct call into the other mod.
+static std::mutex g_homeResolutionMutex;
+static std::string g_homeResolutionCommand;
+static std::atomic<ULONGLONG> g_homeResolutionLastTick{0};
+static const ULONGLONG kHomeResolutionThrottleMs = 2000;
+
+// Cached target used while the task-list XML is generated.
+static std::string GetHomeResolutionCommand() {
+    {
+        std::lock_guard<std::mutex> lock(g_homeResolutionMutex);
+        if (!g_homeResolutionCommand.empty()) return g_homeResolutionCommand;
+    }
+    std::string probed = ProbeHomeResolutionCommand();
+    std::lock_guard<std::mutex> lock(g_homeResolutionMutex);
+    if (g_homeResolutionCommand.empty()) g_homeResolutionCommand = probed;
+    return g_homeResolutionCommand;
+}
+
+// Re-probes and, only on a real change, drops the cached task file so the next
+// lookup regenerates it with the new target.
+void RefreshHomeResolutionTarget() {
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG last = g_homeResolutionLastTick.load(std::memory_order_relaxed);
+    if (last != 0 && now - last < kHomeResolutionThrottleMs) return;
+    g_homeResolutionLastTick.store(now, std::memory_order_relaxed);
+
+    std::string probed = ProbeHomeResolutionCommand();
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lock(g_homeResolutionMutex);
+        if (g_homeResolutionCommand != probed) {
+            g_homeResolutionCommand = probed;
+            changed = true;
+        }
+    }
+    if (!changed) return;
+
+    Wh_Log(L"Screen resolution link target changed, task links will be regenerated");
+    InvalidateClassicTaskLinksFile();
+}
 
 // Forward declaration
 bool EnsureClassicTaskLinksFile();
 std::wstring g_classicTaskLinksFilePath;
+// Embedded Game Controllers icon -> temp .ico file: the decoder function
+// EnsureJoyControllerIconFile() and g_joyIconFilePath are defined near the
+// task-links section (before InitDisplayNames). Warmed up in Wh_ModInit.
 
 // Forward declarations (defined further below; KeyTracker::Track needs them)
 std::wstring ToLower(const std::wstring& str);
@@ -673,6 +869,37 @@ static const std::wstring kPersonalizationGuid     = L"{580722ff-16a7-44c1-bf74-
 static const std::wstring kNotificationIconsGuid   = L"{05d7b0f4-2121-4eff-bf6b-ed3f69b894d9}";
 static const std::wstring kNetworkConnectionsGuid  = L"{7007acc7-3202-11d1-aad2-00805fc1270e}";
 static const std::wstring kPrintersAndFaxesGuid    = L"{2227a280-3aea-1069-a2de-08002b30309d}";
+// Real canonical CLSID (module: iscsicpl.dll,-5001, canonical name
+// Microsoft.iSCSIInitiator). Confirmed still absent from HKCR\CLSID on
+// current Windows 11 24H2 (unlike Network Connections/Printers/HomeGroup,
+// which really are still registered, just hidden from Category View) - so
+// this GUID is used only as an opportunistic registry lookup (in case some
+// edition/build still has it) and is never injected directly; see
+// kIscsiInitiatorVirtualGuid below for the entry that's actually shown.
+static const std::wstring kIscsiInitiatorGuid      = L"{a304259d-52b8-4526-8b1a-a1d6cecc8243}";
+// Own, made-up CLSID for the *virtual* iSCSI Initiator entry (same technique
+// as kBitLockerVirtualGuid/kSpeechVirtualGuid): name/icon come from
+// iscsicpl.exe directly (registry fallback almost never applies here) and
+// the command launches iscsicpl.exe directly, since there is no real,
+// registered CLSID to re-launch through "explorer shell:::{realGuid}".
+static const std::wstring kIscsiInitiatorVirtualGuid = L"{7d3f5a92-8c1b-4e6a-9f2d-3b8a6c7e1d54}";
+// Legacy, canonical Game Controllers CLSID. On current Windows 11 builds it
+// is no longer registered in HKCR\CLSID and shell:::{259EF4B1-...} does not
+// launch anything, so it is used only as an opportunistic registry lookup (in
+// case some build still has it) and never injected directly; the entry that
+// is actually shown is kGameControllersVirtualGuid below.
+static const std::wstring kGameControllersGuid  = L"{259ef4b1-e6c9-4176-b574-481532c9bce8}";
+// Own, made-up CLSID for the *virtual* Game Controllers entry (same technique
+// as the iSCSI virtual entry): name/icon/description come straight from
+// joy.cpl's own resources (localized by Windows for every UI language) and the
+// open command launches joy.cpl directly.
+static const std::wstring kGameControllersVirtualGuid = L"{b1e6c4a9-3d27-4f58-a9c6-2d71f4a8e063}";
+// Own, made-up CLSID for the *virtual* Offline Files entry. There is no real
+// registered CLSID for the applet (the dialog lives in cscui.dll and is opened
+// through rundll32 shell32.dll,Control_RunDLL cscui.dll,N), so this GUID is
+// also passed as the "real" GUID to AddVirtualApplet: it is never registered
+// in HKCR, so the registry lookup simply fails and the hardcoded name is used.
+static const std::wstring kOfflineFilesVirtualGuid = L"{91a8a4be-b5b5-4f7d-91cf-9a5608f6b665}";
 static const std::wstring kHomeGroupGuid           = L"{67ca7650-96e6-4fdd-bb43-a8e774f73a57}";
 static const std::wstring kDisplayGuid             = L"{c55584f4-7c7f-44f2-9a6d-913076f34c6a}"; // Also used as RealDisplayGuid
 static const std::wstring kRealPersonalizationGuid = L"{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}";
@@ -1296,7 +1523,8 @@ bool AddVirtualApplet(const std::wstring& virtualGuid, const std::wstring& realG
                       const std::wstring& fallbackIcon = L"",
                       const std::wstring& fallbackInfoTip = L"",
                       std::atomic<bool>* realPresent = nullptr,
-                      size_t monikerIndex = kLegacyUnhideMonikerCount) {
+                      size_t monikerIndex = kLegacyUnhideMonikerCount,
+                      const std::wstring& openCommandOverride = L"") {
     std::wstring name, icon;
     bool gotFromRegistry = ReadRealClsidNameAndIcon(realGuid, name, icon);
     if (!gotFromRegistry || name.empty()) {
@@ -1348,7 +1576,9 @@ bool AddVirtualApplet(const std::wstring& virtualGuid, const std::wstring& realG
     applet.displayName = name;
     applet.iconValue = icon;
     applet.infoTip = infoTipResolved.empty() ? fallbackInfoTip : infoTipResolved;
-    applet.openCommand = L"explorer.exe shell:::" + realGuid;
+    applet.openCommand = openCommandOverride.empty()
+        ? (L"explorer.exe shell:::" + realGuid)
+        : openCommandOverride;
     applet.category = category;
     applet.enabledSetting = enabledSetting;
     applet.realPresent = realPresent;
@@ -1391,12 +1621,800 @@ bool ContainsRelevantKeywordInsensitive(const std::wstring& path) {
 // (re)generating the file.
 static std::mutex g_taskLinksMutex;
 
+// ===========================================================================
+// Embedded Game Controllers icon
+// ===========================================================================
+// joy.cpl does not expose a usable DefaultIcon resource for a synthetic CLSID
+// on Windows 10/11 (the resource id is absent/wrong), so the classic gamepad
+// icon ships inside the mod as a base64-encoded, multi-size .ico (48/32/16).
+// It is decoded once to a temp file; the virtual Game Controllers entry's
+// DefaultIcon points at that file. Name and InfoTip still come from joy.cpl's
+// own (correct) string resources; only the icon is custom.
+static const char* kJoyControllerIconBase64[] = {
+    "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"
+    "/6X4L659CNMn/fGQAAAAAElFTkSuQmCC"
+};
+
+static std::wstring g_joyIconFilePath;
+
+// Minimal standard-alphabet base64 decoder. The embedded data is produced at
+// build time and never takes user input; any non-alphabet character is
+// skipped, so the newlines between the string chunks are harmless.
+static std::vector<unsigned char> Base64Decode(const std::string& input) {
+    auto valueOf = [](char c) -> int {
+        if (c >= 'A' && c <= 'Z') return c - 'A';
+        if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+        if (c >= '0' && c <= '9') return c - '0' + 52;
+        if (c == '+') return 62;
+        if (c == '/') return 63;
+        return -1;
+    };
+    std::vector<unsigned char> out;
+    int acc = 0, bits = 0;
+    for (char c : input) {
+        if (c == '=') break;
+        const int v = valueOf(c);
+        if (v < 0) continue;
+        acc = (acc << 6) | v;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            out.push_back(static_cast<unsigned char>((acc >> bits) & 0xFF));
+        }
+    }
+    return out;
+}
+
+// Returns the mod's dedicated storage directory (created if needed), with a
+// trailing backslash, or an empty string on failure. Files written here are
+// not subject to Storage Sense / Disk Cleanup and are removed by Windhawk
+// when the mod itself is removed, unlike files dropped in %TEMP%.
+static std::wstring ModStorageDir() {
+    wchar_t path[MAX_PATH * 2] = {};
+    const size_t len = Wh_GetModStoragePath(path, ARRAYSIZE(path));
+    if (!len || len >= ARRAYSIZE(path)) return L"";
+    CreateDirectoryW(path, nullptr);  // no-op if it already exists
+    return std::wstring(path) + L"\\";
+}
+
+// Decodes the embedded icon to a stable .ico file in the mod's storage
+// folder (created once) and returns its path, or an empty string on
+// failure. Reuses the task-links mutex; re-creates the file if a previous
+// cleanup removed it. Skips the decode/write entirely if the file is
+// already present, since a fresh process only has an empty in-memory cache,
+// not a missing file.
+std::wstring EnsureJoyControllerIconFile() {
+    std::lock_guard<std::mutex> lock(g_taskLinksMutex);
+    if (!g_joyIconFilePath.empty() &&
+        GetFileAttributesW(g_joyIconFilePath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        return g_joyIconFilePath;
+    }
+    g_joyIconFilePath.clear();
+
+    const std::wstring dir = ModStorageDir();
+    if (dir.empty()) return L"";
+    const std::wstring path = dir + L"WindhawkGameControllers.ico";
+
+    if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        // Already written by this or another process; no need to
+        // re-decode and rewrite it.
+        g_joyIconFilePath = path;
+        return g_joyIconFilePath;
+    }
+
+    std::string b64;
+    for (const char* part : kJoyControllerIconBase64) b64 += part;
+    std::vector<unsigned char> bytes = Base64Decode(b64);
+    if (bytes.empty()) {
+        Wh_Log(L"Game Controllers icon: base64 decode produced no bytes");
+        return L"";
+    }
+
+    const std::wstring tmp = path + L".tmp." + std::to_wstring(GetCurrentProcessId());
+    {
+        std::ofstream f(tmp.c_str(), std::ios::binary | std::ios::trunc);
+        if (!f) return L"";
+        f.write(reinterpret_cast<const char*>(bytes.data()),
+                static_cast<std::streamsize>(bytes.size()));
+    }
+    if (!MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+        DeleteFileW(tmp.c_str());
+        Wh_Log(L"Game Controllers icon: failed to write the .ico file");
+        return L"";
+    }
+    g_joyIconFilePath = path;
+    Wh_Log(L"Game Controllers icon written (bytes: %llu)", (unsigned long long)bytes.size());
+    return g_joyIconFilePath;
+}
+
+// ===========================================================================
+// Offline Files: embedded icon + hardcoded texts
+// ===========================================================================
+// Same approach as the Game Controllers icon above: a base64-encoded,
+// multi-size .ico (16/24/32/48, PNG entries) decoded once to a temp file that
+// the virtual entry's DefaultIcon points at.
+static const char* kOfflineFilesIconBase64[] = {
+    "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"
+};
+
+static std::wstring g_offlineFilesIconFilePath;
+
+// Location of the cscui.dll found at init and the command that opens its
+// dialog. Written once by ResolveOfflineFilesTarget() in Wh_ModInit (before
+// any hook can run) and only read afterwards.
+static std::wstring g_offlineFilesDllPath;
+// Launch command WITHOUT the tab index (it ends with the comma before it);
+// BuildOfflineFilesCommand() appends the index: 0 General, 1 Disk Usage,
+// 2 Encryption, 3 Network, as in Windows Vista/7.
+static std::wstring g_offlineFilesLaunchBase;
+
+// RAII guard for a temp file: the file is deleted when the guard goes out of
+// scope (early return, failed rename, thrown exception) unless Release() was
+// called after the file reached its final destination.
+class ScopedTempFile {
+public:
+    explicit ScopedTempFile(std::wstring path) : path_(std::move(path)) {}
+    ScopedTempFile(const ScopedTempFile&) = delete;
+    ScopedTempFile& operator=(const ScopedTempFile&) = delete;
+    ~ScopedTempFile() { if (!path_.empty()) DeleteFileW(path_.c_str()); }
+    void Release() { path_.clear(); }
+private:
+    std::wstring path_;
+};
+
+// try/catch guarded: this is also reached from the registry hooks, so no C++
+// exception (e.g. std::bad_alloc) may unwind into Explorer.
+std::wstring EnsureOfflineFilesIconFile() {
+    try {
+        std::lock_guard<std::mutex> lock(g_taskLinksMutex);
+        if (!g_offlineFilesIconFilePath.empty() &&
+            GetFileAttributesW(g_offlineFilesIconFilePath.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            return g_offlineFilesIconFilePath;
+        }
+        g_offlineFilesIconFilePath.clear();
+
+        const std::wstring dir = ModStorageDir();
+        if (dir.empty()) return L"";
+        const std::wstring path = dir + L"WindhawkOfflineFiles.ico";
+
+        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            // Already written by this or another process; no need to
+            // re-decode and rewrite it.
+            g_offlineFilesIconFilePath = path;
+            return g_offlineFilesIconFilePath;
+        }
+
+        std::string b64;
+        for (const char* part : kOfflineFilesIconBase64) b64 += part;
+        std::vector<unsigned char> bytes = Base64Decode(b64);
+        if (bytes.empty()) {
+            Wh_Log(L"Offline Files icon: base64 decode produced no bytes");
+            return L"";
+        }
+
+        const std::wstring tmp = path + L".tmp." + std::to_wstring(GetCurrentProcessId());
+
+        ScopedTempFile tmpGuard(tmp);
+        bool written = false;
+        {
+            std::ofstream f(tmp.c_str(), std::ios::binary | std::ios::trunc);
+            if (f) {
+                f.write(reinterpret_cast<const char*>(bytes.data()),
+                        static_cast<std::streamsize>(bytes.size()));
+                f.close();
+                written = !f.fail();
+            }
+        }
+        if (!written) {
+            Wh_Log(L"Offline Files icon: failed to write the .ico file");
+            return L"";
+        }
+        if (!MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+            Wh_Log(L"Offline Files icon: failed to move the .ico file into place");
+            return L"";
+        }
+        tmpGuard.Release();
+        g_offlineFilesIconFilePath = path;
+        Wh_Log(L"Offline Files icon written (bytes: %llu)", (unsigned long long)bytes.size());
+        return g_offlineFilesIconFilePath;
+    } catch (...) {
+        Wh_Log(L"Offline Files icon: exception while writing the icon file");
+        return L"";
+    }
+}
+
+static bool IsRegularFile(const std::wstring& path) {
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    return attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+// Locates cscui.dll and builds the command that opens its dialog. Two
+// candidate locations, tried in order:
+//  1. System32: the normal case. The dialog is opened with the bare module
+//     name, the form that works unchanged from Windows Vista to Windows 11.
+//  2. SysWOW64: the 32-bit copy shipped on 64-bit Windows, opened with the
+//     32-bit rundll32.exe from the same folder so the bitness matches. Only a
+//     safety net in case the System32 copy is missing.
+// Returns false (and leaves both globals empty) when neither is usable.
+static bool ResolveOfflineFilesTarget() {
+    g_offlineFilesDllPath.clear();
+    g_offlineFilesLaunchBase.clear();
+    try {
+        wchar_t dir[MAX_PATH] = {};
+        UINT length = GetSystemDirectoryW(dir, MAX_PATH);
+        if (length > 0 && length < MAX_PATH) {
+            const std::wstring dll = std::wstring(dir) + L"\\cscui.dll";
+            if (IsRegularFile(dll)) {
+                g_offlineFilesDllPath = dll;
+                g_offlineFilesLaunchBase =
+                    L"rundll32.exe shell32.dll,Control_RunDLL cscui.dll,";
+                return true;
+            }
+        }
+        wchar_t wowDir[MAX_PATH] = {};
+        length = GetSystemWow64DirectoryW(wowDir, MAX_PATH);
+        if (length > 0 && length < MAX_PATH) {
+            const std::wstring base(wowDir);
+            const std::wstring dll = base + L"\\cscui.dll";
+            const std::wstring exe = base + L"\\rundll32.exe";
+            if (IsRegularFile(dll) && IsRegularFile(exe)) {
+                g_offlineFilesDllPath = dll;
+                g_offlineFilesLaunchBase =
+                    L"\"" + exe + L"\" shell32.dll,Control_RunDLL " + dll + L",";
+                return true;
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"Offline Files: exception while locating cscui.dll");
+        g_offlineFilesDllPath.clear();
+        g_offlineFilesLaunchBase.clear();
+    }
+    return false;
+}
+
+// Command that opens the Offline Files dialog on a given tab (see above).
+static std::wstring BuildOfflineFilesCommand(int tabIndex) {
+    return g_offlineFilesLaunchBase + std::to_wstring(tabIndex);
+}
+
+// Minimal XML escaping for text placed inside the task-links file.
+static std::string XmlEscapeUtf8(const std::string& text) {
+    std::string out;
+    out.reserve(text.size());
+    for (char c : text) {
+        switch (c) {
+            case '&': out += "&amp;"; break;
+            case '<': out += "&lt;"; break;
+            case '>': out += "&gt;"; break;
+            default:  out += c; break;
+        }
+    }
+    return out;
+}
+
+// Name/description of the Offline Files applet, hardcoded so the entry does
+// not depend on cscui.dll.mui.
+//  - The Italian texts are strings 45 and 7019 of cscui.dll.mui.
+//  - Every other row is a plain translation written for this mod (not
+//    extracted from Windows), covering the same languages as the rest of the
+//    mod. English is the fallback and must stay first.
+//  - A UI language without a row is resolved from cscui.dll's own string
+//    resources through SHLoadIndirectString, like the joy.cpl entry does, and
+//    falls back to English if that fails.
+// Locale matching is a prefix match, so more specific rows come first.
+struct OfflineFilesTexts {
+    const wchar_t* locale;
+    const wchar_t* name;
+    const wchar_t* infoTip;
+    const wchar_t* linkEncrypt;   // task link: "Encrypt your offline files"
+    const wchar_t* linkDisk;      // task link: "Manage disk space used by your offline files"
+};
+static const OfflineFilesTexts kOfflineFilesTexts[] = {
+    { L"en", L"Offline Files", L"Sync files between your computer and network folders.",
+      L"Encrypt your offline files", L"Manage disk space used by your offline files" },
+    { L"it", L"File offline", L"Sincronizza i file tra il computer in uso e le cartelle di rete.",
+      L"Crittografa i file offline", L"Gestisci lo spazio su disco utilizzato dai file offline" },
+    { L"es", L"Archivos sin conexión", L"Sincroniza archivos entre el equipo y las carpetas de red.",
+      L"Cifrar los archivos sin conexión", L"Administrar el espacio en disco que usan los archivos sin conexión" },
+    { L"fr", L"Fichiers hors connexion", L"Synchronisez les fichiers entre votre ordinateur et les dossiers réseau.",
+      L"Chiffrer vos fichiers hors connexion", L"Gérer l’espace disque utilisé par vos fichiers hors connexion" },
+    { L"de", L"Offlinedateien", L"Synchronisiert Dateien zwischen dem Computer und Netzwerkordnern.",
+      L"Offlinedateien verschlüsseln", L"Speicherplatz für Offlinedateien verwalten" },
+    { L"pt-PT", L"Ficheiros Offline", L"Sincronize ficheiros entre o computador e as pastas de rede.",
+      L"Encriptar os ficheiros offline", L"Gerir o espaço em disco utilizado pelos ficheiros offline" },
+    { L"pt", L"Arquivos Offline", L"Sincronize arquivos entre o computador e as pastas de rede.",
+      L"Criptografar os arquivos offline", L"Gerenciar o espaço em disco usado pelos arquivos offline" },
+    { L"nl", L"Offlinebestanden", L"Synchroniseer bestanden tussen de computer en netwerkmappen.",
+      L"Offlinebestanden versleutelen", L"Schijfruimte beheren die door offlinebestanden wordt gebruikt" },
+    { L"pl", L"Pliki offline", L"Synchronizuj pliki między komputerem a folderami sieciowymi.",
+      L"Szyfruj pliki offline", L"Zarządzaj miejscem na dysku używanym przez pliki offline" },
+    { L"ru", L"Автономные файлы", L"Синхронизация файлов между компьютером и сетевыми папками.",
+      L"Шифрование автономных файлов", L"Управление дисковым пространством, используемым автономными файлами" },
+    { L"uk", L"Автономні файли", L"Синхронізація файлів між комп’ютером і мережевими папками.",
+      L"Шифрування автономних файлів", L"Керування дисковим простором, що використовується автономними файлами" },
+    { L"tr", L"Çevrimdışı Dosyalar", L"Dosyaları bilgisayar ile ağ klasörleri arasında eşitleyin.",
+      L"Çevrimdışı dosyalarınızı şifreleyin", L"Çevrimdışı dosyaların kullandığı disk alanını yönetin" },
+    { L"ar", L"الملفات دون اتصال", L"مزامنة الملفات بين الكمبيوتر ومجلدات الشبكة.",
+      L"تشفير الملفات دون اتصال", L"إدارة مساحة القرص التي تستخدمها الملفات دون اتصال" },
+    { L"he", L"קבצים לא מקוונים", L"סנכרון קבצים בין המחשב לתיקיות רשת.",
+      L"הצפן את הקבצים הלא מקוונים", L"נהל את שטח הדיסק שבו משתמשים הקבצים הלא מקוונים" },
+    { L"ja", L"オフライン ファイル", L"コンピューターとネットワーク フォルダーの間でファイルを同期します。",
+      L"オフライン ファイルを暗号化する", L"オフライン ファイルが使用するディスク領域を管理する" },
+    { L"ko", L"오프라인 파일", L"컴퓨터와 네트워크 폴더 간에 파일을 동기화합니다.",
+      L"오프라인 파일 암호화", L"오프라인 파일이 사용하는 디스크 공간 관리" },
+    { L"zh-CN", L"脱机文件", L"在计算机和网络文件夹之间同步文件。",
+      L"加密脱机文件", L"管理脱机文件使用的磁盘空间" },
+    { L"zh-TW", L"離線檔案", L"在電腦與網路資料夾之間同步檔案。",
+      L"加密離線檔案", L"管理離線檔案使用的磁碟空間" },
+    { L"zh-HK", L"離線檔案", L"在電腦與網路資料夾之間同步檔案。",
+      L"加密離線檔案", L"管理離線檔案使用的磁碟空間" },
+    { L"cs", L"Soubory offline", L"Synchronizace souborů mezi počítačem a síťovými složkami.",
+      L"Šifrovat soubory offline", L"Spravovat místo na disku používané soubory offline" },
+    { L"da", L"Offlinefiler", L"Synkroniser filer mellem computeren og netværksmapper.",
+      L"Krypter dine offlinefiler", L"Administrer diskplads brugt af offlinefiler" },
+    { L"fi", L"Offline-tiedostot", L"Synkronoi tiedostot tietokoneen ja verkkokansioiden välillä.",
+      L"Salaa offline-tiedostot", L"Hallitse offline-tiedostojen käyttämää levytilaa" },
+    { L"el", L"Αρχεία χωρίς σύνδεση", L"Συγχρονισμός αρχείων μεταξύ του υπολογιστή και των φακέλων δικτύου.",
+      L"Κρυπτογράφηση των αρχείων χωρίς σύνδεση", L"Διαχείριση του χώρου στο δίσκο που χρησιμοποιείται από τα αρχεία χωρίς σύνδεση" },
+    { L"hu", L"Offline fájlok", L"Fájlok szinkronizálása a számítógép és a hálózati mappák között.",
+      L"Offline fájlok titkosítása", L"Az offline fájlok által használt lemezterület kezelése" },
+    { L"nb", L"Frakoblede filer", L"Synkroniser filer mellom datamaskinen og nettverksmapper.",
+      L"Krypter de frakoblede filene", L"Administrer diskplassen som brukes av frakoblede filer" },
+    { L"ro", L"Fișiere offline", L"Sincronizați fișierele între computer și folderele de rețea.",
+      L"Criptați fișierele offline", L"Gestionați spațiul pe disc utilizat de fișierele offline" },
+    { L"sv", L"Offlinefiler", L"Synkronisera filer mellan datorn och nätverksmappar.",
+      L"Kryptera offlinefiler", L"Hantera diskutrymme som används av offlinefiler" },
+    { L"vi", L"Tệp ngoại tuyến", L"Đồng bộ hóa tệp giữa máy tính và các thư mục mạng.",
+      L"Mã hóa tệp ngoại tuyến", L"Quản lý dung lượng đĩa được tệp ngoại tuyến sử dụng" },
+    { L"id", L"File Offline", L"Sinkronkan file antara komputer dan folder jaringan.",
+      L"Enkripsi file offline", L"Kelola ruang disk yang digunakan oleh file offline" },
+    { L"th", L"ไฟล์ออฟไลน์", L"ซิงค์ไฟล์ระหว่างคอมพิวเตอร์และโฟลเดอร์เครือข่าย",
+      L"เข้ารหัสไฟล์ออฟไลน์", L"จัดการพื้นที่ดิสก์ที่ไฟล์ออฟไลน์ใช้" },
+    { L"hi", L"ऑफ़लाइन फ़ाइलें", L"कंप्यूटर और नेटवर्क फ़ोल्डरों के बीच फ़ाइलें सिंक करें।",
+      L"ऑफ़लाइन फ़ाइलें एन्क्रिप्ट करें", L"ऑफ़लाइन फ़ाइलों द्वारा उपयोग किए जाने वाले डिस्क स्थान को प्रबंधित करें" },
+};
+
+// String ids of the applet name and description in cscui.dll's string table.
+static const int kOfflineFilesNameStringId = 45;
+static const int kOfflineFilesTipStringId  = 7019;
+
+struct OfflineFilesStrings {
+    std::wstring name;
+    std::wstring infoTip;
+};
+
+// Sanity check for a string resolved from the MUI: a wrong id must not put a
+// format string or a multi-line message on the Control Panel.
+static bool IsPlausibleOfflineFilesString(const std::wstring& text, size_t maxLength) {
+    return !text.empty() && text.size() <= maxLength &&
+           text.find_first_of(L"%\n<") == std::wstring::npos;
+}
+
+// Row of kOfflineFilesTexts for the current UI language, or nullptr when the
+// language has no row (or the lookup failed).
+static const OfflineFilesTexts* FindOfflineFilesTexts() {
+    try {
+        wchar_t localeName[LOCALE_NAME_MAX_LENGTH] = {};
+        if (!LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT),
+                              localeName, LOCALE_NAME_MAX_LENGTH, 0)) {
+            wcscpy_s(localeName, L"en-US");
+        }
+        for (const auto& candidate : kOfflineFilesTexts) {
+            const size_t prefixLength = wcslen(candidate.locale);
+            if (_wcsnicmp(localeName, candidate.locale, prefixLength) == 0 &&
+                (localeName[prefixLength] == L'\0' || localeName[prefixLength] == L'-')) {
+                return &candidate;
+            }
+        }
+    } catch (...) {
+        Wh_Log(L"Offline Files: exception while matching the UI language");
+    }
+    return nullptr;
+}
+
+// The two classic Windows Vista task links shown under the Offline Files
+// entry. Always hardcoded; a language without a row gets English.
+static void GetOfflineFilesLinkLabels(std::wstring& encryptLabel, std::wstring& diskLabel) {
+    const OfflineFilesTexts* row = FindOfflineFilesTexts();
+    if (!row) row = &kOfflineFilesTexts[0];
+    encryptLabel = row->linkEncrypt;
+    diskLabel = row->linkDisk;
+}
+
+static OfflineFilesStrings GetOfflineFilesStrings() {
+    OfflineFilesStrings result{ kOfflineFilesTexts[0].name, kOfflineFilesTexts[0].infoTip };
+    try {
+        const OfflineFilesTexts* chosen = FindOfflineFilesTexts();
+        if (chosen && chosen->infoTip[0] != L'\0') {
+            result.name = chosen->name;
+            result.infoTip = chosen->infoTip;
+            return result;
+        }
+
+        const std::wstring module = g_offlineFilesDllPath.empty()
+            ? std::wstring(L"%SystemRoot%\\System32\\cscui.dll")
+            : g_offlineFilesDllPath;
+        const std::wstring prefix = L"@" + module + L",-";
+        const std::wstring name = ResolveIndirectString(prefix + std::to_wstring(kOfflineFilesNameStringId));
+        if (IsPlausibleOfflineFilesString(name, 64)) {
+            const std::wstring tip = ResolveIndirectString(prefix + std::to_wstring(kOfflineFilesTipStringId));
+            result.name = name;
+            result.infoTip = IsPlausibleOfflineFilesString(tip, 300) ? tip : std::wstring();
+            return result;
+        }
+        if (chosen) {
+            result.name = chosen->name;
+            result.infoTip.clear();
+        }
+    } catch (...) {
+        Wh_Log(L"Offline Files: exception while resolving the texts; using English");
+        result = { kOfflineFilesTexts[0].name, kOfflineFilesTexts[0].infoTip };
+    }
+    return result;
+}
+
 // Thread-safe accessor for readers (TryProvideValue and friends) that just
 // want the current path without regenerating anything.
 std::wstring GetClassicTaskLinksFilePath() {
     std::lock_guard<std::mutex> lock(g_taskLinksMutex);
     return g_classicTaskLinksFilePath;
 }
+
+// UTF-16 -> UTF-8 conversion (the task-links XML is written as UTF-8). Used by
+// the hardcoded, recreated task-link labels below.
+static std::string WideToUtf8(const std::wstring& w) {
+    if (w.empty()) return {};
+    int len = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), nullptr, 0, nullptr, nullptr);
+    if (len <= 0) return {};
+    std::string s((size_t)len, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), s.data(), len, nullptr, nullptr);
+    return s;
+}
+
+// Hardcoded, localized labels for the recreated iSCSI Initiator / Game
+// Controllers classic task links. Unlike the other task links (whose label is
+// pulled from the real applet's resources), these two entries are fully
+// self-built virtual applets, so there is no Windows resource to take the
+// label from - it is recreated here in each UI language. English is the
+// fallback for any locale without a dedicated row.
+struct RecreatedLinkLabels {
+    const wchar_t* locale;
+    const wchar_t* iscsiConfigure;
+    const wchar_t* gameConfigure;
+};
+static const RecreatedLinkLabels kRecreatedLinkLabels[] = {
+    { L"en",     L"Configure iSCSI initiator",            L"Configure game controllers" },
+    { L"it",     L"Configura inizializzatore iSCSI",      L"Configura controller di gioco" },
+    { L"es",     L"Configurar iniciador iSCSI",           L"Configurar controladores de juego" },
+    { L"fr",     L"Configurer l'initiateur iSCSI",        L"Configurer les manettes de jeu" },
+    { L"de",     L"iSCSI-Initiator konfigurieren",        L"Gamecontroller konfigurieren" },
+    { L"pt-BR",  L"Configurar iniciador iSCSI",           L"Configurar controles de jogo" },
+    { L"pt-PT",  L"Configurar iniciador iSCSI",           L"Configurar comandos de jogo" },
+    { L"nl",     L"iSCSI-initiator configureren",         L"Gamecontrollers configureren" },
+    { L"pl",     L"Konfiguruj inicjator iSCSI",           L"Skonfiguruj kontrolery gier" },
+    { L"ru",     L"Настроить инициатор iSCSI",            L"Настроить игровые контроллеры" },
+    { L"uk",     L"Налаштувати ініціатор iSCSI",          L"Налаштувати ігрові контролери" },
+    { L"tr",     L"iSCSI başlatıcısını yapılandırın",     L"Oyun kumandalarını yapılandırın" },
+    { L"cs",     L"Konfigurovat iniciátor iSCSI",         L"Konfigurovat herní ovladače" },
+    { L"da",     L"Konfigurer iSCSI-initiator",           L"Konfigurer spilcontrollere" },
+    { L"fi",     L"Määritä iSCSI-aloittaja",              L"Määritä peliohjaimet" },
+    { L"el",     L"Ρύθμιση εκκινητή iSCSI",               L"Ρύθμιση χειριστηρίων παιχνιδιών" },
+    { L"hu",     L"iSCSI-kezdeményező konfigurálása",     L"Játékvezérlők konfigurálása" },
+    { L"nb",     L"Konfigurer iSCSI-initiator",           L"Konfigurer spillkontrollere" },
+    { L"ro",     L"Configurare inițiator iSCSI",          L"Configurare controlere de joc" },
+    { L"sv",     L"Konfigurera iSCSI-initierare",         L"Konfigurera spelkontroller" },
+    { L"ja",     L"iSCSI イニシエーターを構成する",        L"ゲーム コントローラーを構成する" },
+    { L"ko",     L"iSCSI 초기자 구성",                    L"게임 컨트롤러 구성" },
+    { L"zh-CN",  L"配置 iSCSI 发起程序",                   L"配置游戏控制器" },
+    { L"zh-TW",  L"設定 iSCSI 啟動器",                    L"設定遊戲控制器" },
+};
+
+// Returns the localized, hardcoded label for the iSCSI (iscsi == true) or Game
+// Controllers (iscsi == false) task link, falling back to English.
+std::string RecreatedLinkLabel(bool iscsi) {
+    wchar_t localeName[LOCALE_NAME_MAX_LENGTH] = {};
+    if (!LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT),
+                          localeName, LOCALE_NAME_MAX_LENGTH, 0)) {
+        wcscpy_s(localeName, L"en-US");
+    }
+    const RecreatedLinkLabels* chosen = &kRecreatedLinkLabels[0]; // English fallback
+    for (const auto& candidate : kRecreatedLinkLabels) {
+        const size_t prefixLength = wcslen(candidate.locale);
+        if (_wcsnicmp(localeName, candidate.locale, prefixLength) == 0 &&
+            (localeName[prefixLength] == L'\0' || localeName[prefixLength] == L'-')) {
+            chosen = &candidate;
+            break;
+        }
+    }
+    return WideToUtf8(iscsi ? chosen->iscsiConfigure : chosen->gameConfigure);
+}
+
 
 // Creates a self-contained task list used by Control Panel to display the
 // classic task links below the Personalization item.
@@ -1411,12 +2429,10 @@ bool EnsureClassicTaskLinksFile() {
         g_classicTaskLinksFilePath.clear();
     }
 
-    wchar_t tempPath[MAX_PATH] = {};
-    DWORD length = GetTempPathW(MAX_PATH, tempPath);
-    if (!length || length >= MAX_PATH) return false;
+    const std::wstring dir = ModStorageDir();
+    if (dir.empty()) return false;
 
-    g_classicTaskLinksFilePath = std::wstring(tempPath) +
-                                L"WindhawkClassicPersonalizationTasks.xml";
+    g_classicTaskLinksFilePath = dir + L"WindhawkClassicPersonalizationTasks.xml";
 
     struct TaskLinkTexts {
         const wchar_t* locale;
@@ -1469,7 +2485,7 @@ bool EnsureClassicTaskLinksFile() {
     // Review corrections can be made one row at a time without altering logic.
      static const TaskLinkTexts kTaskLinkTexts[] = {
         { L"en", "Change the theme", "Change desktop background", "Change window glass colors", "Change sound effects", "Change screen saver", "Turn system icons on or off", "Restore default icon behaviors", "View network status and tasks", "Connect to a network", "View network computers and devices", "Add a wireless device to the network", "Add a printer", "Set up default printers", "Change printer settings", "View devices and printers", "Choose homegroup and sharing options", "Share printers", "Adjust screen resolution", "Review your computer's status", "Back up your computer", "Find and fix problems", "Check firewall status", "Uninstall a program", "Turn Windows features on or off", "Change account picture", "Add or remove user accounts", "Set up parental controls for any user", "Change the date and time", "Change input methods", "Let Windows suggest settings for you", "Change home page", "Manage browser add-ons", "Delete browsing history and cookies", "Manage BitLocker", "Calibrate the screen for pen or touch input", "Pen and touch settings", "Configure text to speech", "View basic information about your computer", "Review your computer's status", "Review your computer's performance" },
-        { L"it", "Cambia tema", "Cambia sfondo del desktop", "Cambia colore delle finestre", "Cambia effetti sonori", "Cambia salvaschermo", "Attiva o disattiva le icone di sistema", "Ripristina comportamento icone predefinito", "Visualizza stato e attività della rete", "Connetti a una rete", "Visualizza computer e dispositivi di rete", "Aggiungi un dispositivo wireless alla rete", "Aggiungi una stampante", "Configura stampanti predefinite", "Modifica impostazioni stampante", "Visualizza dispositivi e stampanti", "Scegli gruppo home e opzioni di condivisione", "Condividi stampanti", "Regola risoluzione schermo", "Controlla stato del computer", "Esegui backup del computer", "Trova e correggi problemi", "Verifica stato firewall", "Disinstalla un programma", "Attiva o disattiva funzionalità di Windows", "Cambia immagine account", "Aggiungi o rimuovi account utente", "Configura controllo parentale", "Cambia data e ora", "Cambia metodo di input", "Consenti a Windows di suggerire le impostazioni", "Cambia home page", "Gestisci componenti aggiuntivi del browser", "Elimina cronologia e cookie", "Gestisci BitLocker", "Calibra lo schermo per l'input penna o tocco", "Impostazioni penna e tocco", "Configura sintesi vocale", "Visualizza informazioni di base sul computer", "Controlla lo stato del computer", "Controlla le prestazioni del computer" },
+        { L"it", "Cambia tema", "Cambia lo sfondo del desktop", "Cambia colore delle finestre", "Cambia effetti sonori", "Cambia salvaschermo", "Attiva o disattiva le icone di sistema", "Ripristina comportamento icone predefinito", "Visualizza stato e attività della rete", "Connetti a una rete", "Visualizza computer e dispositivi di rete", "Aggiungi un dispositivo wireless alla rete", "Aggiungi una stampante", "Configura stampanti predefinite", "Modifica impostazioni stampante", "Visualizza dispositivi e stampanti", "Scegli gruppo home e opzioni di condivisione", "Condividi stampanti", "Modifica risoluzione dello schermo", "Controlla stato del computer", "Esegui backup del computer", "Trova e correggi problemi", "Verifica stato firewall", "Disinstalla un programma", "Attiva o disattiva funzionalità di Windows", "Cambia immagine account", "Aggiungi o rimuovi account utente", "Configura controllo parentale", "Cambia data e ora", "Cambia metodo di input", "Consenti a Windows di suggerire le impostazioni", "Cambia home page", "Gestisci componenti aggiuntivi del browser", "Elimina cronologia e cookie", "Gestisci BitLocker", "Calibra lo schermo per l'input penna o tocco", "Impostazioni penna e tocco", "Configura sintesi vocale", "Visualizza informazioni di base sul computer", "Controlla lo stato del computer", "Controlla le prestazioni del computer" },
         { L"es", "Cambiar tema", "Cambiar fondo de escritorio", "Cambiar color de las ventanas", "Cambiar efectos de sonido", "Cambiar protector de pantalla", "Activar o desactivar iconos del sistema", "Restaurar comportamiento predeterminado de iconos", "Ver estado y tareas de red", "Conectarse a una red", "Ver equipos y dispositivos de red", "Agregar un dispositivo inalámbrico a la red", "Agregar una impresora", "Configurar impresoras predeterminadas", "Cambiar configuración de impresora", "Ver dispositivos e impresoras", "Elegir grupo en el hogar y opciones de uso compartido", "Compartir impresoras", "Ajustar resolución de pantalla", "Revisar estado del equipo", "Hacer copia de seguridad del equipo", "Encontrar y solucionar problemas", "Comprobar estado del firewall", "Desinstalar un programa", "Activar o desactivar características de Windows", "Cambiar imagen de cuenta", "Agregar o quitar cuentas de usuario", "Configurar control parental", "Cambiar fecha y hora", "Cambiar métodos de entrada", "Permitir que Windows sugiera configuraciones", "Cambiar página principal", "Administrar complementos del navegador", "Eliminar historial de exploración y cookies", "Administrar BitLocker", "Calibrar la pantalla para la entrada de lápiz o táctil", "Configuración de lápiz y entrada táctil", "Configurar texto a voz", "Ver información básica sobre el equipo", "Revisar el estado del equipo", "Revisar el rendimiento del equipo" },
         { L"fr", "Changer le thème", "Changer l'arrière-plan du bureau", "Changer les couleurs des vitres", "Changer les effets sonores", "Changer l'économiseur d'écran", "Activer ou désactiver les icônes du système", "Restaurer les comportements des icônes par défaut", "Afficher l'état et les tâches du réseau", "Connectez-vous à un réseau", "Afficher les ordinateurs et les appareils du réseau", "Ajouter un appareil sans fil au réseau", "Ajouter une imprimante", "Configurer les imprimantes par défaut", "Modifier les paramètres de l'imprimante", "Afficher les appareils et les imprimantes", "Choisissez le groupe résidentiel et les options de partage", "Partager des imprimantes", "Ajuster la résolution de l'écran", "Vérifiez l'état de votre ordinateur", "Sauvegardez votre ordinateur", "Rechercher et résoudre les problèmes", "Vérifier l'état du pare-feu", "Désinstaller un programme", "Activer ou désactiver des fonctionnalités Windows", "Changer la photo du compte", "Ajouter ou supprimer des comptes d'utilisateurs", "Configurer le contrôle parental pour n'importe quel utilisateur", "Changer la date et l'heure", "Changer les méthodes de saisie", "Laissez Windows vous suggérer des paramètres", "Modifier la page d'accueil", "Gérer les modules complémentaires du navigateur", "Supprimer l'historique de navigation et les cookies", "Gérer BitLocker", "Calibrer l'écran pour la saisie au stylet ou tactile", "Paramètres du stylet et de l'entrée tactile", "Configurer la synthèse vocale", "Afficher les informations de base sur l'ordinateur", "Vérifier l'état de votre ordinateur", "Vérifier les performances de votre ordinateur" },
         { L"de", "Design ändern", "Desktop-Hintergrund ändern", "Fensterfarbe ändern", "Soundeffekte ändern", "Bildschirmschoner ändern", "Systemsymbole ein- oder ausschalten", "Standardverhalten von Symbolen wiederherstellen", "Netzwerkstatus und -aufgaben anzeigen", "Mit einem Netzwerk verbinden", "Netzwerkcomputer und -geräte anzeigen", "Drahtloses Gerät zum Netzwerk hinzufügen", "Drucker hinzufügen", "Standarddrucker einrichten", "Druckereinstellungen ändern", "Geräte und Drucker anzeigen", "Heimnetzgruppen- und Freigabeoptionen auswählen", "Drucker freigeben", "Bildschirmauflösung anpassen", "Computerstatus überprüfen", "Computer sichern", "Probleme suchen und beheben", "Firewall-Status überprüfen", "Programm deinstallieren", "Windows-Funktionen aktivieren oder deaktivieren", "Kontobild ändern", "Benutzerkonten hinzufügen oder entfernen", "Kindersicherung für beliebige Benutzer einrichten", "Datum und Uhrzeit ändern", "Eingabemethoden ändern", "Windows-Einstellungen vorschlagen lassen", "Startseite ändern", "Browser-Add-Ons verwalten", "Browserverlauf und Cookies löschen", "BitLocker verwalten", "Bildschirm für Stift- oder Toucheingabe kalibrieren", "Stift- und Berührungseinstellungen", "Spracherkennung einrichten", "Grundlegende Informationen zum Computer anzeigen", "Computerstatus überprüfen", "Computerleistung überprüfen" },
@@ -1518,15 +2534,11 @@ bool EnsureClassicTaskLinksFile() {
 
 
     static const char kClassicTaskLinks[] = R"xml(  <application id="{PERSONALIZATION_TASKS_APP_ID}">
-    <sh:task id="{D4F4A001-0D35-4CB6-A21F-BC1661200001}"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name="Microsoft.Personalization"/></sh:task>
-    <sh:task id="{D4F4A002-0D35-4CB6-A21F-BC1661200002}"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageWallpaper</sh:command></sh:task>
-    <sh:task id="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"><sh:name>{COLORS}</sh:name><sh:keywords>window;color;glass;colorization</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageColorization</sh:command></sh:task>
+{APPEARANCE_TASKS_BLOCK}    <sh:task id="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"><sh:name>{COLORS}</sh:name><sh:keywords>window;color;glass;colorization</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\pageColorization</sh:command></sh:task>
     <sh:task id="{D4F4A004-0D35-4CB6-A21F-BC1661200004}"><sh:name>{SOUNDS}</sh:name><sh:keywords>sound;audio;effects</sh:keywords><sh:command>rundll32.exe shell32.dll,Control_RunDLL mmsys.cpl,,2</sh:command></sh:task>
     <sh:task id="{D4F4A005-0D35-4CB6-A21F-BC1661200005}"><sh:name>{SCREENSAVER}</sh:name><sh:keywords>screen saver;screensaver</sh:keywords><sh:command>rundll32.exe shell32.dll,Control_RunDLL desk.cpl,,@screensaver</sh:command></sh:task>
     <category id="1">
-       <sh:task idref="{D4F4A001-0D35-4CB6-A21F-BC1661200001}"/>
-       <sh:task idref="{D4F4A002-0D35-4CB6-A21F-BC1661200002}"/>
-       <sh:task idref="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"/>
+{APPEARANCE_TASK_REFS_BLOCK}       <sh:task idref="{D4F4A003-0D35-4CB6-A21F-BC1661200003}"/>
        <sh:task idref="{D4F4A004-0D35-4CB6-A21F-BC1661200004}"/>
        <sh:task idref="{D4F4A005-0D35-4CB6-A21F-BC1661200005}"/>
     </category>
@@ -1580,8 +2592,37 @@ bool EnsureClassicTaskLinksFile() {
         }
     };
     
+    // The three Appearance links (theme / background / resolution) are gated
+    // on enableCategoryAppearanceLinks wherever they might be emitted, not
+    // just in the standalone DISPLAY_APPLICATION_BLOCK below: kClassicTaskLinks
+    // used to include them unconditionally, which meant turning the setting
+    // off had no effect in the default configuration (restoreClassicTaskLinks
+    // on). The resolution link itself is additionally dropped whenever
+    // GetHomeResolutionCommand() comes back empty, which happens precisely
+    // when the Classic Display Control Panel Restorer is active and already
+    // contributes its own "Adjust resolution" link to the same category.
+    const std::string homeResolutionCommand = GetHomeResolutionCommand();
+    std::string appearanceTasksBlock; // <- This part has been kept as it is as removing the link would make the mod less accurate. I've tried to add a check but it's essentially useless as I have not experienced any duplicate entries (I've tested on Windows 10 21H2 and Windows 11 24H2 and a Windows 11 25H2 has confirmed this)
+    std::string appearanceTaskRefsBlock;
+    if (g_settings.enableCategoryAppearanceLinks.load()) {
+        appearanceTasksBlock =
+            "    <sh:task id=\"{TASK_THEME_ID}\"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name=\"Microsoft.Personalization\"/></sh:task>\n"
+            "    <sh:task id=\"{TASK_BG_ID}\"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\\pageWallpaper</sh:command></sh:task>\n";
+        appearanceTaskRefsBlock =
+            "       <sh:task idref=\"{TASK_THEME_ID}\"/>\n"
+            "       <sh:task idref=\"{TASK_BG_ID}\"/>\n";
+        if (!homeResolutionCommand.empty()) {
+            appearanceTasksBlock +=
+                "    <sh:task id=\"{TASK_RES_ID}\"><sh:name>{ADJUSTRESOLUTION}</sh:name><sh:keywords>resolution;screen;display;monitor</sh:keywords><sh:command>{RESOLUTION_COMMAND}</sh:command></sh:task>\n";
+            appearanceTaskRefsBlock +=
+                "       <sh:task idref=\"{TASK_RES_ID}\"/>\n";
+        }
+    }
+
     replaceAll("{CLASSIC_TASK_LINKS_BLOCK}",
                g_settings.restoreClassicTaskLinks.load() ? kClassicTaskLinks : "");
+    replaceAll("{APPEARANCE_TASKS_BLOCK}", appearanceTasksBlock.c_str());
+    replaceAll("{APPEARANCE_TASK_REFS_BLOCK}", appearanceTaskRefsBlock.c_str());
     // The five classic Personalization task links attach to the REAL
     // Personalization applet while the unhide feature unhides it (the virtual
     // twin is then suppressed, see VirtualTwinSuppressed), and to the
@@ -1741,29 +2782,93 @@ bool EnsureClassicTaskLinksFile() {
                 "<sh:task idref=\"{D4F4A012-0D35-4CB6-A21F-BC1661200012}\"/></category>\n"
                 "  </application>\n";
         }
+        // iSCSI Initiator (self-built virtual entry): a single classic link
+        // that simply opens the same screen. The label is a hardcoded,
+        // localized recreation (RecreatedLinkLabel); English is the fallback.
+        if (VirtualAppletPresent(kIscsiInitiatorVirtualGuid)) {
+            const std::string iscsiLabel = RecreatedLinkLabel(true);
+            virtualTaskBlock +=
+                "  <!-- iSCSI Initiator (System and Security, Category 5) -->\n"
+                "  <application id=\"{7d3f5a92-8c1b-4e6a-9f2d-3b8a6c7e1d54}\">\n"
+                "    <sh:task id=\"{D4F4A040-0D35-4CB6-A21F-BC1661200040}\">"
+                "<sh:name>" + iscsiLabel + "</sh:name>"
+                "<sh:keywords>iscsi;initiator;storage;target</sh:keywords>"
+                "<sh:command>iscsicpl.exe</sh:command></sh:task>\n"
+                "    <category id=\"5\"><sh:task idref=\"{D4F4A040-0D35-4CB6-A21F-BC1661200040}\"/></category>\n"
+                "  </application>\n";
+        }
+        // Game Controllers (self-built virtual entry): a single classic
+        // link that simply opens joy.cpl. Label is the hardcoded recreation.
+        if (VirtualAppletPresent(kGameControllersVirtualGuid)) {
+            const std::string gameLabel = RecreatedLinkLabel(false);
+            virtualTaskBlock +=
+                "  <!-- Game Controllers (Hardware and Sound, Category 2) -->\n"
+                "  <application id=\"{b1e6c4a9-3d27-4f58-a9c6-2d71f4a8e063}\">\n"
+                "    <sh:task id=\"{D4F4A041-0D35-4CB6-A21F-BC1661200041}\">"
+                "<sh:name>" + gameLabel + "</sh:name>"
+                "<sh:keywords>game;controller;joystick;gamepad</sh:keywords>"
+                "<sh:command>control.exe joy.cpl</sh:command></sh:task>\n"
+                "    <category id=\"2\"><sh:task idref=\"{D4F4A041-0D35-4CB6-A21F-BC1661200041}\"/></category>\n"
+                "  </application>\n";
+        }
+        // Offline Files (self-built virtual entry): the two classic Windows
+        // Vista links shown under the icon ("Encrypt your offline files" and
+        // "Manage disk space used by your offline files"). Labels are hardcoded
+        // in every supported language; each link opens the same dialog as the
+        // icon, on the matching tab (2 Encryption, 1 Disk Usage), through the
+        // same rundll32 command.
+        if (VirtualAppletPresent(kOfflineFilesVirtualGuid)) {
+            try {
+                std::wstring encryptLabel, diskLabel;
+                GetOfflineFilesLinkLabels(encryptLabel, diskLabel);
+                const std::string appId = NarrowAscii(ToLower(kOfflineFilesVirtualGuid));
+                std::string block;
+                block += "  <!-- Offline Files (Network and Internet, Category 3) -->\n";
+                block += "  <application id=\"" + appId + "\">\n";
+                block += "    <sh:task id=\"{D4F4A042-0D35-4CB6-A21F-BC1661200042}\">"
+                         "<sh:name>" + XmlEscapeUtf8(WideToUtf8(encryptLabel)) + "</sh:name>"
+                         "<sh:keywords>offline;files;encrypt;encryption</sh:keywords>"
+                         "<sh:command>" + XmlEscapeUtf8(WideToUtf8(BuildOfflineFilesCommand(2))) +
+                         "</sh:command></sh:task>\n";
+                block += "    <sh:task id=\"{D4F4A043-0D35-4CB6-A21F-BC1661200043}\">"
+                         "<sh:name>" + XmlEscapeUtf8(WideToUtf8(diskLabel)) + "</sh:name>"
+                         "<sh:keywords>offline;files;disk space;cache</sh:keywords>"
+                         "<sh:command>" + XmlEscapeUtf8(WideToUtf8(BuildOfflineFilesCommand(1))) +
+                         "</sh:command></sh:task>\n";
+                block += "    <category id=\"3\"><sh:task idref=\"{D4F4A042-0D35-4CB6-A21F-BC1661200042}\"/>"
+                         "<sh:task idref=\"{D4F4A043-0D35-4CB6-A21F-BC1661200043}\"/></category>\n";
+                block += "  </application>\n";
+                virtualTaskBlock += block;
+            } catch (...) {
+                Wh_Log(L"Offline Files: exception while building the task links; skipped");
+            }
+        }
     }
     replaceAll("{VIRTUAL_APPLET_TASKS_BLOCK}", virtualTaskBlock.c_str());
 
     if (g_settings.enableCategoryAppearanceLinks.load()) {
-        std::string displayBlock =
-            "  <application id=\"{c55584f4-7c7f-44f2-9a6d-913076f34c6a}\">\n"
-            "    <sh:task id=\"{D4F4A006-0D35-4CB6-A21F-BC1661200006}\"><sh:name>{ADJUSTRESOLUTION}</sh:name><sh:keywords>resolution;screen;display;monitor</sh:keywords><sh:command>explorer.exe shell:::{C55584F4-7C7F-44f2-9A6D-913076F34C6A}</sh:command></sh:task>\n"
-            "    <category id=\"1\">\n"
-            "       <sh:task idref=\"{D4F4A006-0D35-4CB6-A21F-BC1661200006}\"/>\n"
-            "    </category>\n"
-            "  </application>\n";
-        // The theme/background links also attach to the REAL Personalization
-        // applet. While the unhide feature unhides it, the 5-task
-        // Personalization block already covers it, so skip this second block
-        // to avoid a duplicate application id in the XML.
-        if (!VirtualTwinSuppressed(g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization)) {
-            displayBlock +=
-            "  <application id=\"{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}\">\n"
-            "    <sh:task id=\"{D4F4A001-0D35-4CB6-A21F-BC1661200001}\"><sh:name>{THEME}</sh:name><sh:keywords>theme;personalization</sh:keywords><sh:controlpanel name=\"Microsoft.Personalization\"/></sh:task>\n"
-            "    <sh:task id=\"{D4F4A002-0D35-4CB6-A21F-BC1661200002}\"><sh:name>{BACKGROUND}</sh:name><sh:keywords>desktop;background;wallpaper</sh:keywords><sh:command>explorer shell:::{ED834ED6-4B5A-4bfe-8F11-A626DCB6A921}\\pageWallpaper</sh:command></sh:task>\n"
-            "    <category id=\"1\">\n"
-            "       <sh:task idref=\"{D4F4A001-0D35-4CB6-A21F-BC1661200001}\"/>\n"
-            "       <sh:task idref=\"{D4F4A002-0D35-4CB6-A21F-BC1661200002}\"/>\n"
+        // The three Appearance links of the Control Panel home page all hang
+        // off the Personalization applet, the same way the other classic task
+        // links do, because that is the applet Control Panel really
+        // enumerates in category 1. An <application> block bound to a CLSID
+        // the shell never enumerates is simply never read, which is why
+        // "Adjust screen resolution" used to be missing while the other two
+        // showed up.
+        //
+        // When the classic 5-task Personalization block is emitted it already
+        // carries these three links, so this block is only needed when that
+        // one is not there; emitting both would put the same application id
+        // in the XML twice.
+        std::string displayBlock;
+        if (!ClassicPersonalizationBlockCoversHomeLinks()) {
+            // Reuses the same appearanceTasksBlock/appearanceTaskRefsBlock
+            // built above, so this standalone block and kClassicTaskLinks can
+            // never disagree about which of the three links are present.
+            displayBlock =
+            "  <application id=\"{PERSONALIZATION_TASKS_APP_ID}\">\n" +
+            appearanceTasksBlock +
+            "    <category id=\"1\">\n" +
+            appearanceTaskRefsBlock +
             "    </category>\n"
             "  </application>";
         }
@@ -1771,6 +2876,28 @@ bool EnsureClassicTaskLinksFile() {
     } else {
         replaceAll("{DISPLAY_APPLICATION_BLOCK}", "");
     }
+
+    // The Appearance-links block is assembled after the first
+    // {PERSONALIZATION_TASKS_APP_ID} pass, so resolve the token again here.
+    // replaceAll rescans the whole document, which makes this a no-op when
+    // that block was not emitted.
+    replaceAll("{PERSONALIZATION_TASKS_APP_ID}",
+        VirtualTwinSuppressed(g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization)
+            ? NarrowAscii(ToLower(kRealPersonalizationGuid)).c_str()
+            : NarrowAscii(ToLower(kPersonalizationGuid)).c_str());
+
+    // Identifiers and target of the three Appearance links of the home page.
+    const bool originalHomeGuids = g_settings.useOriginalHomeTaskGuids.load();
+    replaceAll("{TASK_THEME_ID}",
+               originalHomeGuids ? kHomeTaskGuidTheme : kHomeTaskGuidThemeLegacy);
+    replaceAll("{TASK_BG_ID}",
+               originalHomeGuids ? kHomeTaskGuidBackground : kHomeTaskGuidBackgroundLegacy);
+    replaceAll("{TASK_RES_ID}",
+               originalHomeGuids ? kHomeTaskGuidResolution : kHomeTaskGuidResolutionLegacy);
+    // homeResolutionCommand was already computed above, before the
+    // appearance-links blocks were built, so both agree on whether the
+    // resolution link is present at all.
+    replaceAll("{RESOLUTION_COMMAND}", homeResolutionCommand.c_str());
 
     replaceAll("{THEME}", texts->theme);
     replaceAll("{BACKGROUND}", texts->desktopBackground);
@@ -1918,6 +3045,9 @@ void LoadSettings() {
     g_settings.enableNotificationIcons.store(Wh_GetIntSetting(L"enableNotificationIcons"));
     g_settings.enableNetworkConnections.store(Wh_GetIntSetting(L"enableNetworkConnections"));
     g_settings.enablePrintersAndFaxes.store(Wh_GetIntSetting(L"enablePrintersAndFaxes"));
+    g_settings.enableIscsiInitiator.store(Wh_GetIntSetting(L"enableIscsiInitiator"));
+    g_settings.enableGameControllers.store(Wh_GetIntSetting(L"enableGameControllers"));
+    g_settings.enableOfflineFiles.store(Wh_GetIntSetting(L"enableOfflineFiles"));
     g_settings.enableHomeGroup.store(Wh_GetIntSetting(L"enableHomeGroup"));
     g_settings.bitLockerMode.store((int)ReadAppletMode(L"bitLockerMode"));
     g_settings.tabletPcMode.store((int)ReadAppletMode(L"tabletPcMode"));
@@ -1935,13 +3065,14 @@ void LoadSettings() {
         (AppletMode)g_settings.speechMode.load(), g_speechAutoDetected.load(),
         g_speechClsidRegistered.load(), L"Text to Speech"));
     g_settings.enableCategoryAppearanceLinks.store(Wh_GetIntSetting(L"enableCategoryAppearanceLinks"));
+    g_settings.useOriginalHomeTaskGuids.store(Wh_GetIntSetting(L"useOriginalHomeTaskGuids"));
     g_settings.suppressCompanySync.store(Wh_GetIntSetting(L"suppressCompanySync"));
     g_settings.suppressWindowsToGo.store(Wh_GetIntSetting(L"suppressWindowsToGo"));
     g_settings.suppressInfrared.store(Wh_GetIntSetting(L"suppressInfrared"));
     g_settings.suppressWorkFolders.store(Wh_GetIntSetting(L"suppressWorkFolders"));
     g_settings.restoreClassicTaskLinks.store(Wh_GetIntSetting(L"restoreClassicTaskLinks"));
     g_settings.restoreWin7CategoryTaskLinks.store(Wh_GetIntSetting(L"restoreWin7CategoryTaskLinks"));
-    // (sleeping feature) g_settings.inlinePersonalizationNavigation.store(Wh_GetIntSetting(L"inlinePersonalizationNavigation"));
+    g_settings.inlinePersonalizationNavigation.store(Wh_GetIntSetting(L"inlinePersonalizationNavigation"));
 }
 
 void InitDisplayNames() {
@@ -2050,6 +3181,89 @@ void InitDisplayNames() {
                               &g_speechClsidRegistered, kLegacyUnhideMonikerSpeech))
             Wh_Log(L"Could not read Text to Speech's real name/icon from the registry "
                    L"(no resource fallback); virtual entry not created");
+    }
+    if (g_iscsiInitiatorExeExists.load() && IsListedInControlPanelNameSpace(kIscsiInitiatorGuid)) {
+        Wh_Log(L"iSCSI Initiator: already listed in the Control Panel namespace; "
+               L"virtual entry not created to avoid a duplicate");
+    } else if (g_iscsiInitiatorExeExists.load()) {
+        // No real, registered CLSID to copy from or re-launch through on
+        // current Windows 11 builds (confirmed absent from HKCR\CLSID), so
+        // this always falls to the resource fallback: name/icon come
+        // straight from iscsicpl.exe itself (icon index 0, whatever
+        // Explorer already shows for that binary - safer than guessing an
+        // internal string-table resource id we haven't verified), and the
+        // open command launches iscsicpl.exe directly instead of the usual
+        // "explorer shell:::{realGuid}". Note that ReadRealClsidNameAndIcon
+        // succeeding on kIscsiInitiatorGuid is itself a signal the real
+        // applet may be present, but the namespace check above is the
+        // authoritative "is it already listed?" guard, same as BitLocker /
+        // Tablet PC / Text to Speech use.
+        if (!AddVirtualApplet(kIscsiInitiatorVirtualGuid, kIscsiInitiatorGuid, kCategorySystemSecurity,
+                              &g_settings.enableIscsiInitiator,
+                              L"@%SystemRoot%\\System32\\iscsicpl.dll,-5001",
+                              L"%SystemRoot%\\System32\\iscsicpl.exe,0",
+                              // InfoTip (string resource 5002): "Connect to remote
+                              // iSCSI targets and configure connection settings."
+                              // Resolved straight from iscsicpl.dll, so Windows
+                              // localizes it for every installed UI language.
+                              L"@%SystemRoot%\\System32\\iscsicpl.dll,-5002",
+                              nullptr, kLegacyUnhideMonikerCount,
+                              L"iscsicpl.exe"))
+            Wh_Log(L"Could not read iSCSI Initiator's name/icon; virtual entry not created");
+    }
+    if (g_joyCplExists.load() && IsListedInControlPanelNameSpace(kGameControllersGuid)) {
+        Wh_Log(L"Game Controllers: already listed in the Control Panel namespace; "
+               L"virtual entry not created to avoid a duplicate");
+    } else if (g_joyCplExists.load()) {
+        // Game Controllers: its legacy Control Panel CLSID ({259EF4B1-...}) is
+        // no longer registered/activatable on current Windows 11 builds
+        // (shell:::{259EF4B1-...} does nothing), but joy.cpl itself still ships
+        // and opens. Name (string 1076) and description/InfoTip (string 1099)
+        // are taken straight from joy.cpl, so Windows localizes them for every
+        // UI language - no hardcoded translation table for those. joy.cpl does
+        // NOT expose a usable DefaultIcon resource on Windows 10/11 (the
+        // resource id is absent/wrong), so the classic gamepad icon is embedded
+        // in the mod (base64 .ico) and used as the icon; g_joyIconFilePath is
+        // decoded in Wh_ModInit. The open command launches joy.cpl through
+        // control.exe (same direct-binary pattern as the iSCSI entry). As with
+        // iSCSI above, the namespace check guards against builds where the
+        // real applet is still registered and listed.
+        const std::wstring joyIcon = g_joyIconFilePath.empty()
+            ? std::wstring(L"%SystemRoot%\\System32\\joy.cpl,1")
+            : g_joyIconFilePath;
+        if (!AddVirtualApplet(kGameControllersVirtualGuid, kGameControllersGuid, kCategoryHardware,
+                              &g_settings.enableGameControllers,
+                              L"@%SystemRoot%\\System32\\joy.cpl,-1076",
+                              joyIcon,
+                              L"@%SystemRoot%\\System32\\joy.cpl,-1099",
+                              nullptr, kLegacyUnhideMonikerCount,
+                              L"control.exe joy.cpl"))
+            Wh_Log(L"Could not read Game Controllers' name/icon; virtual entry not created");
+    }
+    if (g_offlineFilesDllExists.load()) {
+        // Offline Files: no real CLSID exists for the applet, so the entry is
+        // fully self-built. English/Italian texts are hardcoded, the other
+        // languages come from cscui.dll's own resources (see
+        // GetOfflineFilesStrings), the icon is embedded, and the dialog is
+        // opened through rundll32 (works unchanged from Windows Vista to
+        // Windows 11; control.exe cannot be used because cscui.dll is not a
+        // .cpl). Category: Network and Internet, as in Windows Vista.
+        try {
+            const OfflineFilesStrings ofTexts = GetOfflineFilesStrings();
+            const std::wstring ofIcon = g_offlineFilesIconFilePath.empty()
+                ? g_offlineFilesDllPath + L",0"
+                : g_offlineFilesIconFilePath;
+            if (!AddVirtualApplet(kOfflineFilesVirtualGuid, kOfflineFilesVirtualGuid, kCategoryNetwork,
+                                  &g_settings.enableOfflineFiles,
+                                  ofTexts.name,
+                                  ofIcon,
+                                  ofTexts.infoTip,
+                                  nullptr, kLegacyUnhideMonikerCount,
+                                  BuildOfflineFilesCommand(0)))
+                Wh_Log(L"Could not create the Offline Files virtual entry");
+        } catch (...) {
+            Wh_Log(L"Offline Files: exception while creating the virtual entry; skipped");
+        }
     }
     Wh_Log(L"Virtual applets registered: %zu", g_virtualApplets.size());
 }
@@ -2175,26 +3389,21 @@ ClassifyResult ClassifyPath(const std::wstring& path) {
     // RealCplTaskUrl any more loosely than that would make TryProvideValue
     // hand Explorer XML with no matching block, leaving the real applet with
     // no task links at all instead of falling through to its stock ones.
-    if (EndsWith(lower, g_displayClsidSuffix) &&
-        g_settings.enableCategoryAppearanceLinks.load()) {
-        // The Display sub-block in DISPLAY_APPLICATION_BLOCK is emitted
-        // unconditionally whenever enableCategoryAppearanceLinks is on.
-        return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, kCategoryAppearance };
-    }
     if (EndsWith(lower, g_realPersonalizationClsidSuffix)) {
         const bool personalizationRealShown = VirtualTwinSuppressed(
             g_realPersonalizationRegistered, kLegacyUnhideMonikerPersonalization);
-        // The real Personalization CLSID gets an <application> block from
-        // one of two places, never both (see the comment above the
-        // Display block's personalization sub-block, which exists to avoid
-        // a duplicate application id): the classic 5-task Personalization
-        // block once the virtual twin is suppressed, or the Display block's
-        // theme/background sub-block while it is not.
+        // The real Personalization CLSID gets an <application> block from one
+        // of two places, never both (emitting both would repeat the same
+        // application id): the classic 5-task Personalization block, or the
+        // Appearance-links block that stands in for it when the classic task
+        // links are turned off. Either way the block only carries the real
+        // CLSID once the virtual twin is suppressed.
         const bool hasClassicBlock =
             g_settings.restoreClassicTaskLinks.load() && personalizationRealShown;
-        const bool hasDisplayBlock =
-            g_settings.enableCategoryAppearanceLinks.load() && !personalizationRealShown;
-        if (hasClassicBlock || hasDisplayBlock) {
+        const bool hasAppearanceBlock =
+            g_settings.enableCategoryAppearanceLinks.load() &&
+            !g_settings.restoreClassicTaskLinks.load() && personalizationRealShown;
+        if (hasClassicBlock || hasAppearanceBlock) {
             return { VNode::ClsidRoot, ItemKind::RealCplTaskUrl, kCategoryAppearance };
         }
     }
@@ -2446,10 +3655,29 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
                 }
             }
         } else if (cr.node == VNode::DefaultIcon) {
-            if (valueName.empty() && !a.iconValue.empty()) {
-                if (lpType) *lpType = REG_SZ;
-                outStatus = ProvideStringValue(lpData, lpcbData, a.iconValue);
-                return true;
+            if (valueName.empty()) {
+                // The Game Controllers icon is a temp file that can be deleted
+                // out from under a.iconValue by CleanupTempFiles() running in
+                // another process (icon path is a fixed, shared name used by
+                // both explorer.exe and control.exe; a late Wh_ModUninit from
+                // one process can delete the file another process already
+                // recreated). a.iconValue only captures the path once, at
+                // Wh_ModInit, so re-ensure the file lazily right here, the
+                // same way GetOrCreateClassicTaskLinksFilePath() already does
+                // for the task-links XML, instead of trusting a stale path.
+                std::wstring iconPath = a.iconValue;
+                if (a.guidLower == kGameControllersVirtualGuid) {
+                    std::wstring ensured = EnsureJoyControllerIconFile();
+                    if (!ensured.empty()) iconPath = ensured;
+                } else if (a.guidLower == kOfflineFilesVirtualGuid) {
+                    std::wstring ensured = EnsureOfflineFilesIconFile();
+                    if (!ensured.empty()) iconPath = ensured;
+                }
+                if (!iconPath.empty()) {
+                    if (lpType) *lpType = REG_SZ;
+                    outStatus = ProvideStringValue(lpData, lpcbData, iconPath);
+                    return true;
+                }
             }
         } else if (cr.node == VNode::OpenCommand) {
             if (valueName.empty()) {
@@ -2471,7 +3699,8 @@ bool TryProvideValue(const std::wstring& path, const std::wstring& valueName,
 // namespace item whose CLSID lookup falls through to the real registry and
 // fails - a nameless/iconless Control Panel entry. Check that the applet was
 // actually built before advertising it.
-static bool VirtualAppletPresent(const std::wstring& guidLower) {
+static bool VirtualAppletPresent(const std::wstring& guid) {
+    const std::wstring guidLower = ToLower(guid);
     for (const auto& a : g_virtualApplets)
         if (a.guidLower == guidLower && a.enabledSetting && a.enabledSetting->load() &&
             !(a.realPresent && VirtualTwinSuppressed(*a.realPresent, a.monikerIndex))) return true;
@@ -2495,6 +3724,12 @@ std::vector<std::wstring> GetNamespaceClsids() {
         result.push_back(kTabletPcVirtualGuid);
     if (g_injectSpeechApplet.load() && VirtualAppletPresent(kSpeechVirtualGuid))
         result.push_back(kSpeechVirtualGuid);
+    if (VirtualAppletPresent(kIscsiInitiatorVirtualGuid))
+        result.push_back(kIscsiInitiatorVirtualGuid);
+    if (VirtualAppletPresent(kGameControllersVirtualGuid))
+        result.push_back(kGameControllersVirtualGuid);
+    if (VirtualAppletPresent(kOfflineFilesVirtualGuid))
+        result.push_back(kOfflineFilesVirtualGuid);
     return result;
 }
 
@@ -2708,6 +3943,10 @@ LSTATUS WINAPI RegEnumKeyExWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, LPDWOR
                                          lpClass, lpcchClass, lpftLastWriteTime);
         }
 
+        // Control Panel is about to rebuild its item list: this is the right
+        // moment to re-check where the screen resolution link should point.
+        RefreshHomeResolutionTarget();
+
         // Real entries are enumerated first; the injected virtual CLSIDs are
         // appended only once the real entries are exhausted, so callers that
         // size a loop from RegQueryInfoKeyW's real subkey count (which we do
@@ -2798,6 +4037,9 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cc
         if (!IsNameSpaceParentKey(path))
             return RegEnumKeyWOriginal(hKey, dwIndex, lpName, cchName);
 
+        // See RegEnumKeyExWHook: re-check the screen resolution link target.
+        RefreshHomeResolutionTarget();
+
         // See RegEnumKeyExWHook above: real entries first, virtual CLSIDs
         // appended after they're exhausted, so RegQueryInfoKeyW-based real
         // subkey counts stay accurate.
@@ -2843,10 +4085,7 @@ LSTATUS WINAPI RegEnumKeyWHook(HKEY hKey, DWORD dwIndex, LPWSTR lpName, DWORD cc
 
 // This hook only rewrites the two specific shell::: sub-page commands this
 // mod itself writes into the task-links XML (\pageWallpaper and
-// \pageColorization). Everything else — including shell::: commands from
-// other mods or from Explorer itself — is passed straight through to the
-// original API, since ShellExecuteExW is hooked process-wide and must not
-// change behaviour for callers other than this mod's own links.
+// \pageColorization). Everything else is passed straight through.
 static const wchar_t* kOwnRedirectedCommands[] = {
     L"shell:::{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}\\pagewallpaper",
     L"shell:::{ed834ed6-4b5a-4bfe-8f11-a626dcb6a921}\\pagecolorization",
@@ -3207,6 +4446,10 @@ void* GetRegFunc(const char* name) {
     if (!hAdv) hAdv = LoadLibraryW(L"advapi32.dll");
     if (hAdv) { void* p = (void*)GetProcAddress(hAdv, name); if (p) return p; }
     return nullptr;
+}
+
+static bool ClassicPersonalizationBlockCoversHomeLinks() {
+    return g_settings.restoreClassicTaskLinks.load();
 }
 
 void InvalidateClassicTaskLinksFile() {
@@ -3585,295 +4828,360 @@ static void SetupLegacyUnhide() {
 }
 
 
+
 // ===========================================================================
-// WHY THIS BLOCK MUST REMAIN IN THE SOURCE (for whoever is tempted
-// to press delete):
-//
-//  * It is a finished, reviewed, compiling implementation of the idea, one
-//    uncomment away from a future implementation. The day the hub-side half
-//    of the problem is solved (a different attribute name, a host navigation
-//    call, or a future build that finally honours relative navigation
-//    targets), this block is the starting line - not an archaeological find.
-//
-//  * Deleting it would scatter the knowledge across a thousand GitHub
-//    revisions, forks and issue threads, and the next person would have to
-//    re-excavate both failed mechanisms (the equal-length in-place rewrite,
-//    and the hooked-resource copy with the shell command demoted to a mere
-//    fallback) together with every invariant learned the hard way: a mapped
-//    resource blob cannot change size; a sentinel HGLOBAL may only be handed
-//    out while all three resource hooks are live; the override objects must
-//    outlive any toggle of the feature; themecpl.dll must be loaded for real
-//    and kept loaded for as long as HRSRC handles are stored.
-//
-//  * Its setting (inlinePersonalizationNavigation) is kept with it, hidden,
-//    in the settings block above, so that re-arming the feature is a single
-//    coherent uncomment. Nothing in this block compiles into the running
-//    mod: zero runtime cost, zero risk - only memory for the next attempt.
-//
+// In-place Personalization navigation
 // ===========================================================================
-/*
-// ===========================================================================
-// In-place Personalization navigation (themecpl.dll.mun markup patch)
-// ===========================================================================
-// The stock Personalization markup shipped in themecpl.dll.mun carries two
-// elements whose activation round-trips through the modern Settings app:
+// The stock Personalization markup in themecpl.dll.mun carries two elements
+// whose activation opens the Settings app in a separate window:
 //
-//   Desktop Background button:
-//     shellexecute="shell:settings\pagepersonalization-background"
-//   Window Color button:
+//   Desktop Background:
+//     shellexecute="ms-settings:personalization-background"
+//     (some builds use shellexecute="shell:settings\pagepersonalization-background")
+//   Window Color:
 //     shellexecute="ms-settings:personalization-colors"
 //
-// Clicking either spawns a separate Settings window. The fix: give those
-// elements a relative navigation target FIRST -
-// navigationtargetrelative="pageWallpaper" / "pageColorization" - so the
-// hub switches pages silently inside the hosting Explorer window, while the
-// original shellexecute command is KEPT, demoted to a mere fallback that
-// only matters on builds where the navigation target cannot be resolved.
+// The fix is to insert a relative navigation target BEFORE that command -
+// navigationtargetrelative="pageWallpaper" / "pageColorization" - so the hub
+// switches pages inside the hosting Explorer window. The Settings
+// shellexecute attributes are replaced with navigationtargetrelative; they
+// are not kept as a fallback.
 //
-// Why this is NOT an in-place byte patch: inserting the extra attribute
-// makes the markup longer, and a mapped resource blob cannot change size
-// (the previous equal-length rewrite had to delete shellexecute entirely,
-// which left no fallback and did not navigate on every build). Instead the
-// mod serves a patched COPY of the markup through hooked resource APIs
-// (LoadResource / LockResource / SizeofResource): no byte of the module is
-// modified, there is no page-protection trickery that can fail on .mun
-// mappings, and the replacement may be any size. With the feature off the
-// hooks are pure pass-through.
+// Why this is a parser rewrite, not an in-place byte patch and not a
+// LoadResource copy: inserting the extra attribute makes the markup longer,
+// and a mapped resource blob cannot change size. DirectUI::DUIXmlParser::SetXML
+// receives the markup as a string, so the replacement may be any length, no
+// page-protection trickery is required, and with the setting off the hook is
+// a pure pass-through. The rewrite is try/catch guarded so a C++ exception
+// can never unwind into Explorer's non-exception-aware call stack.
+// ===========================================================================
 
 struct ThemeCplMarkupReplacement {
-    const wchar_t* find;    // the shellexecute span, kept as fallback
-    const wchar_t* insert;  // navigation attribute inserted before it
+    const wchar_t* find;     // the Settings shellexecute span
+    const wchar_t* replace;  // classic in-place navigation attribute
 };
 
+// Resource Hacker / WinClassic patch: DELETE the Settings command and put
+// navigationtargetrelative in its place. Keeping both does not work: DirectUI
+// honours shellexecute when it is present, so Settings still opens.
 static const ThemeCplMarkupReplacement kThemeCplMarkupReplacements[] = {
+    { L"shellexecute=\"ms-settings:personalization-background\"",
+      L"navigationtargetrelative=\"pageWallpaper\"" },
     { L"shellexecute=\"shell:settings\\pagepersonalization-background\"",
-      L"navigationtargetrelative=\"pageWallpaper\" " },
+      L"navigationtargetrelative=\"pageWallpaper\"" },
     { L"shellexecute=\"ms-settings:personalization-colors\"",
-      L"navigationtargetrelative=\"pageColorization\" " },
+      L"navigationtargetrelative=\"pageColorization\"" },
+    { L"shellexecute=\"shell:settings\\pagepersonalization-colors\"",
+      L"navigationtargetrelative=\"pageColorization\"" },
 };
 
-// A patched copy of a markup resource that contained one or more of the
-// spans above. The LoadResource hook hands back the heap object's address
-// as a sentinel HGLOBAL (stable for the object's lifetime), which the
-// LockResource hook recognises and resolves to the patched bytes.
-struct ThemeMarkupOverride {
-    HRSRC hRes = nullptr;
-    std::vector<BYTE> data;
-};
+using DUIXmlParser_SetXML_t = HRESULT(WINAPI*)(void*, const WCHAR*, HINSTANCE, HINSTANCE);
+static DUIXmlParser_SetXML_t DUIXmlParser_SetXML_Original = nullptr;
 
-// Keep-alive reference on themecpl.dll: the recorded HRSRC handles and the
-// original resource bytes only stay valid while the module is mapped.
-// Released in UnpatchThemeCplMun() / Wh_ModUninit.
-static HMODULE g_themeCplModule = nullptr;
-static std::atomic<bool> g_themeCplNavigationActive{ false };
-static std::shared_mutex g_themeOverrideMutex;
-// Entries are append-only and never freed until process exit: a thread may
-// be holding a sentinel HGLOBAL between LoadResource and LockResource, so
-// the heap objects they resolve to must outlive any toggle of the feature.
-static std::vector<std::unique_ptr<ThemeMarkupOverride>> g_themeMarkupOverrides;
-
-typedef HGLOBAL(WINAPI *LoadResource_t)(HMODULE, HRSRC);
-typedef LPVOID(WINAPI *LockResource_t)(HGLOBAL);
-typedef DWORD(WINAPI *SizeofResource_t)(HMODULE, HRSRC);
-static LoadResource_t LoadResourceOriginal = nullptr;
-static LockResource_t LockResourceOriginal = nullptr;
-static SizeofResource_t SizeofResourceOriginal = nullptr;
-
-static bool ThemeCplCiEquals(const wchar_t* a, const wchar_t* b, size_t n) {
-    return _wcsnicmp(a, b, n) == 0;
-}
-static bool ThemeCplCiEquals(const char* a, const char* b, size_t n) {
-    return _strnicmp(a, b, n) == 0;
+// The Personalization hub markup is hosted by themecpl.dll. These hooks are
+// process-wide in explorer.exe, so checking the content alone would both
+// scan/copy every foreign DirectUI document (on the shell UI path) and risk
+// rewriting some unrelated page that merely shares the ms-settings: URIs.
+// Gate on the resource/host module first; everything else is passed straight
+// through before any scanning or resource load.
+static bool IsThemecplInstance(HINSTANCE h) {
+    return h != nullptr && h == GetModuleHandleW(L"themecpl.dll");
 }
 
-// Builds a copy of [src, src+count) with every shellexecute span preceded
-// by its navigationtargetrelative attribute. Returns false (and leaves
-// outBytes untouched) when the blob contains none of the spans.
-template <typename C>
-static bool BuildPatchedMarkupCopy(const C* src, size_t count,
-                                   std::vector<BYTE>& outBytes) {
-    std::vector<C> out(src, src + count);
+// Requires the document to actually be the Personalization hub before any
+// rewrite is applied. A document merely containing one of the Settings URIs
+// is not enough proof: another shell surface could link to the same
+// ms-settings: URI, now or in a future build, and rewriting it would delete
+// its only action (there is no shellexecute/navigationtargetrelative
+// fallback - see the comment above kThemeCplMarkupReplacements). The hub
+// markup is expected to also define both target pages elsewhere in the same
+// document (as the targets of its own internal navigation), or carry the
+// PersonalizationHubStyle marker.
+static bool PersonalizationMarkupIsHubDocument(const WCHAR* xml) {
+    if (!xml) return false;
+    if (wcsstr(xml, L"PersonalizationHubStyle")) return true;
+    return wcsstr(xml, L"pageWallpaper") && wcsstr(xml, L"pageColorization");
+}
+
+static bool PersonalizationMarkupLooksRelevant(const WCHAR* xml) {
+    if (!xml) return false;
+    bool hasSettingsUri = wcsstr(xml, L"ms-settings:personalization-background") ||
+                          wcsstr(xml, L"ms-settings:personalization-colors") ||
+                          wcsstr(xml, L"pagepersonalization-background") ||
+                          wcsstr(xml, L"pagepersonalization-colors");
+    if (!hasSettingsUri) return false;
+    return PersonalizationMarkupIsHubDocument(xml);
+}
+
+static size_t FindInsensitive(const std::wstring& hay, const wchar_t* needle, size_t from) {
+    const size_t nlen = wcslen(needle);
+    if (nlen == 0 || from > hay.size()) return std::wstring::npos;
+    for (size_t i = from; i + nlen <= hay.size(); ++i) {
+        if (_wcsnicmp(hay.c_str() + i, needle, nlen) == 0) return i;
+    }
+    return std::wstring::npos;
+}
+
+// Replaces each Settings shellexecute attribute with navigationtargetrelative.
+// std::wstring owns the copy (RAII). Returns true when at least one replacement
+// was made.
+static bool RewritePersonalizationMarkup(std::wstring& xml) {
     bool any = false;
-
     for (const ThemeCplMarkupReplacement& entry : kThemeCplMarkupReplacements) {
-        std::basic_string<C> findS;
-        std::basic_string<C> insS;
-        for (const wchar_t* p = entry.find; *p; ++p) findS.push_back((C)*p);
-        for (const wchar_t* p = entry.insert; *p; ++p) insS.push_back((C)*p);
-
-        size_t scan = 0;
-        while (scan + findS.size() <= out.size()) {
-            if (!ThemeCplCiEquals(out.data() + scan, findS.data(), findS.size())) {
-                scan++;
-                continue;
-            }
-            out.insert(out.begin() + scan, insS.begin(), insS.end());
+        const size_t findLen = wcslen(entry.find);
+        const size_t replLen = wcslen(entry.replace);
+        size_t pos = 0;
+        while ((pos = FindInsensitive(xml, entry.find, pos)) != std::wstring::npos) {
+            xml.replace(pos, findLen, entry.replace);
             any = true;
-            scan += insS.size() + findS.size();
+            pos += replLen;
+        }
+    }
+    return any;
+}
+
+HRESULT WINAPI DUIXmlParser_SetXML_Hook(void* pThis, const WCHAR* pszXML,
+                                        HINSTANCE hInstance, HINSTANCE hInstance2) {
+    if (!DUIXmlParser_SetXML_Original) return E_FAIL;
+    // Cheap module identity check up front (see IsThemecplInstance): skip every
+    // foreign DirectUI document before scanning its markup.
+    if (!g_settings.inlinePersonalizationNavigation.load() ||
+        !(IsThemecplInstance(hInstance) || IsThemecplInstance(hInstance2)) ||
+        !pszXML || !PersonalizationMarkupLooksRelevant(pszXML)) {
+        return DUIXmlParser_SetXML_Original(pThis, pszXML, hInstance, hInstance2);
+    }
+
+    try {
+        std::wstring xml(pszXML);
+        if (!RewritePersonalizationMarkup(xml)) {
+            return DUIXmlParser_SetXML_Original(pThis, pszXML, hInstance, hInstance2);
+        }
+        Wh_Log(L"in-place Personalization navigation: replaced Settings "
+               L"shellexecute with navigationtargetrelative");
+        // The rewrite deletes the shellexecute command, so if the build's
+        // parser rejects navigationtargetrelative the document must not be
+        // left broken: retry with the untouched original markup.
+        HRESULT hr = DUIXmlParser_SetXML_Original(pThis, xml.c_str(), hInstance, hInstance2);
+        if (FAILED(hr)) {
+            Wh_Log(L"patched Personalization XML rejected (hr=0x%08lX); retrying the original",
+                   (unsigned long)hr);
+            hr = DUIXmlParser_SetXML_Original(pThis, pszXML, hInstance, hInstance2);
+        }
+        return hr;
+    } catch (...) {
+        Wh_Log(L"Exception while rewriting Personalization markup; using the original XML");
+        return DUIXmlParser_SetXML_Original(pThis, pszXML, hInstance, hInstance2);
+    }
+}
+
+// Shell Control Panel pages (e.g. Personalization's themecpl.dll.mun) don't
+// hand DirectUI a markup string directly - their UIFILE/XMLFILE lives in a
+// resource, and DirectUI loads it through _SetXMLFromResource, which does
+// not route through the public SetXML above. That's why SetXML alone is not
+// enough: we hook _SetXMLFromResource too, load + rewrite the resource
+// ourselves, and feed the patched string through the raw SetXML pointer
+// (never through the resource loader we just bypassed).
+using DUIXmlParser_SetXMLFromResource_t =
+    HRESULT(WINAPI*)(void*, const WCHAR*, const WCHAR*, HINSTANCE, HINSTANCE, HINSTANCE);
+static DUIXmlParser_SetXMLFromResource_t DUIXmlParser_SetXMLFromResource_Original = nullptr;
+
+// Loads a UIFILE/XMLFILE DirectUI resource and returns it as a wide string.
+// DirectUI markup resources are stored as 8-bit text (UTF-8 on modern
+// Windows, ANSI on older ones), NOT UTF-16 - a UTF-16LE BOM'd blob is still
+// honoured for safety. Returns false (leaving 'out' untouched) on any failure
+// so the caller transparently falls back to the original, unpatched load.
+static bool LoadXmlResourceString(HINSTANCE hInstance, const WCHAR* pszResourceName,
+                                   const WCHAR* pszResourceType, std::wstring& out) {
+    if (!hInstance || !pszResourceName || !pszResourceType) return false;
+    HRSRC hRsrc = FindResourceExW(hInstance, pszResourceType, pszResourceName,
+                                   MAKELANGID(LANG_NEUTRAL, SUBLANG_NEUTRAL));
+    if (!hRsrc) {
+        hRsrc = FindResourceW(hInstance, pszResourceName, pszResourceType);
+    }
+    if (!hRsrc) return false;
+    HGLOBAL hGlobal = LoadResource(hInstance, hRsrc);
+    if (!hGlobal) return false;
+    DWORD size = SizeofResource(hInstance, hRsrc);
+    const BYTE* pData = static_cast<const BYTE*>(LockResource(hGlobal));
+    if (!pData || size == 0) return false;
+
+    if (size >= 2 && pData[0] == 0xFF && pData[1] == 0xFE) {
+        // Real UTF-16LE resource with a BOM (kept strict so 8-bit markup never
+        // lands here).
+        out.assign(reinterpret_cast<const WCHAR*>(pData), size / sizeof(WCHAR));
+    } else {
+        // Common case: 8-bit markup. Decode as UTF-8 first, fall back to the
+        // system ANSI code page if that yields nothing.
+        const char* text = reinterpret_cast<const char*>(pData);
+        int len = MultiByteToWideChar(CP_UTF8, 0, text, (int)size, nullptr, 0);
+        if (len > 0) {
+            out.resize(len);
+            if (MultiByteToWideChar(CP_UTF8, 0, text, (int)size, out.data(), len) <= 0)
+                out.clear();
+        }
+        if (out.empty()) {
+            int acpLen = MultiByteToWideChar(CP_ACP, 0, text, (int)size, nullptr, 0);
+            if (acpLen <= 0) return false;
+            out.resize(acpLen);
+            MultiByteToWideChar(CP_ACP, 0, text, (int)size, out.data(), acpLen);
         }
     }
 
-    if (!any) return false;
-    outBytes.assign((const BYTE*)out.data(),
-                    (const BYTE*)out.data() + out.size() * sizeof(C));
-    return true;
+    // Drop a surviving BOM and trim embedded/trailing NULs so wcsstr checks
+    // behave regardless of which decode path was taken.
+    while (!out.empty() && out.back() == L'\0') out.pop_back();
+    if (!out.empty() && out.front() == 0xFEFF) out.erase(out.begin());
+    return !out.empty();
 }
 
-static BOOL CALLBACK ThemeCplEnumResNamesProc(HMODULE hModule, LPCWSTR lpType,
-                                              LPWSTR lpName, LONG_PTR lParam) {
-    auto* found = (std::vector<std::unique_ptr<ThemeMarkupOverride>>*)lParam;
-    HRSRC hRes = FindResourceW(hModule, lpName, lpType);
-    if (!hRes) return TRUE;
-    // Read through the ORIGINALs: during a rebuild an existing override
-    // must not feed already-patched bytes back into the builder.
-    HGLOBAL hData = LoadResourceOriginal(hModule, hRes);
-    if (!hData) return TRUE;
-    BYTE* blob = (BYTE*)LockResourceOriginal(hData);
-    DWORD size = SizeofResourceOriginal(hModule, hRes);
-    if (!blob || !size) return TRUE;
+HRESULT WINAPI DUIXmlParser_SetXMLFromResource_Hook(void* pThis, const WCHAR* pszResourceName,
+                                                     const WCHAR* pszResourceType,
+                                                     HINSTANCE hInstance, HINSTANCE hInstance2,
+                                                     HINSTANCE hInstance3) {
+    if (!DUIXmlParser_SetXMLFromResource_Original) return E_FAIL;
+    auto callOriginal = [&]() {
+        return DUIXmlParser_SetXMLFromResource_Original(pThis, pszResourceName, pszResourceType,
+                                                          hInstance, hInstance2, hInstance3);
+    };
 
-    std::vector<BYTE> patched;
-    bool isMarkup = (size % sizeof(WCHAR) == 0) &&
-                    BuildPatchedMarkupCopy<WCHAR>((const WCHAR*)blob,
-                                                  size / sizeof(WCHAR), patched);
-    if (!isMarkup) {
-        isMarkup = BuildPatchedMarkupCopy<char>((const char*)blob, size, patched);
+    // Module gate before any FindResource/LoadResource/copy: the Personalization
+    // markup lives in themecpl.dll; everything else is let through untouched
+    // (and foreign UIFILEs are never loaded off the shell's UI-construction path).
+    // The resource is loaded from whichever of the three HINSTANCEs actually
+    // matched - LoadXmlResourceString used to always load from hInstance, so a
+    // match on hInstance2/hInstance3 alone would silently fail to load and the
+    // feature would quietly not apply.
+    HINSTANCE hThemecpl = nullptr;
+    if (IsThemecplInstance(hInstance)) hThemecpl = hInstance;
+    else if (IsThemecplInstance(hInstance2)) hThemecpl = hInstance2;
+    else if (IsThemecplInstance(hInstance3)) hThemecpl = hInstance3;
+    if (!g_settings.inlinePersonalizationNavigation.load() || !DUIXmlParser_SetXML_Original ||
+        !hThemecpl) {
+        return callOriginal();
     }
-    if (isMarkup) {
-        auto o = std::make_unique<ThemeMarkupOverride>();
-        o->hRes = hRes;
-        o->data = std::move(patched);
-        found->push_back(std::move(o));
-    }
-    return TRUE;  // keep enumerating
-}
 
-static BOOL CALLBACK ThemeCplEnumResTypesProc(HMODULE hModule, LPWSTR lpType,
-                                              LONG_PTR lParam) {
-    EnumResourceNamesW(hModule, lpType, ThemeCplEnumResNamesProc, lParam);
-    return TRUE;
-}
-
-static ThemeMarkupOverride* FindThemeOverrideLocked(HRSRC hRes) {
-    for (auto& entry : g_themeMarkupOverrides) {
-        if (entry->hRes == hRes) return entry.get();
-    }
-    return nullptr;
-}
-
-static HGLOBAL WINAPI LoadResourceHook(HMODULE hModule, HRSRC hRes) {
-    if (!LoadResourceOriginal) return nullptr;
-    // A sentinel may only be handed out when ALL three hooks are live:
-    // otherwise the real LockResource would receive the sentinel and crash.
-    if (hModule == g_themeCplModule && g_themeCplNavigationActive.load() &&
-        LockResourceOriginal && SizeofResourceOriginal) {
-        std::shared_lock lock(g_themeOverrideMutex);
-        if (ThemeMarkupOverride* o = FindThemeOverrideLocked(hRes))
-            return (HGLOBAL)o;
-    }
-    return LoadResourceOriginal(hModule, hRes);
-}
-
-static LPVOID WINAPI LockResourceHook(HGLOBAL hResData) {
-    if (!LockResourceOriginal) return nullptr;
-    if (hResData) {
-        std::shared_lock lock(g_themeOverrideMutex);
-        for (auto& entry : g_themeMarkupOverrides) {
-            if ((HGLOBAL)entry.get() == hResData) return entry->data.data();
+    try {
+        std::wstring xml;
+        if (!LoadXmlResourceString(hThemecpl, pszResourceName, pszResourceType, xml) ||
+            !PersonalizationMarkupLooksRelevant(xml.c_str())) {
+            return callOriginal();
         }
-    }
-    return LockResourceOriginal(hResData);
-}
-
-static DWORD WINAPI SizeofResourceHook(HMODULE hModule, HRSRC hRes) {
-    if (!SizeofResourceOriginal) return 0;
-    if (hModule == g_themeCplModule && g_themeCplNavigationActive.load()) {
-        std::shared_lock lock(g_themeOverrideMutex);
-        if (ThemeMarkupOverride* o = FindThemeOverrideLocked(hRes))
-            return (DWORD)o->data.size();
-    }
-    return SizeofResourceOriginal(hModule, hRes);
-}
-
-// The three hooks are installed once in Wh_ModInit (regardless of the
-// setting, so a later live toggle needs no hooking) and are removed by the
-// Windhawk engine when the mod unloads.
-static void InstallThemeCplResourceHooks() {
-    if (LoadResourceOriginal) return;  // already installed
-    HMODULE hKernelBase = GetModuleHandleW(L"kernelbase.dll");
-    if (!hKernelBase) {
-        Wh_Log(L"in-place Personalization navigation: kernelbase.dll not found");
-        return;
-    }
-    void* pLoad = (void*)GetProcAddress(hKernelBase, "LoadResource");
-    void* pLock = (void*)GetProcAddress(hKernelBase, "LockResource");
-    void* pSize = (void*)GetProcAddress(hKernelBase, "SizeofResource");
-    if (!pLoad || !pLock || !pSize) {
-        Wh_Log(L"in-place Personalization navigation: resource APIs not found");
-        return;
-    }
-    // Each hook is defensive on its own original, and a sentinel is only
-    // handed out when all three are live, so a partial install degrades to
-    // pure pass-through instead of breaking resource loading.
-    if (!WindhawkUtils::SetFunctionHook((LoadResource_t)pLoad, LoadResourceHook,
-                                        &LoadResourceOriginal))
-        Wh_Log(L"in-place Personalization navigation: failed to hook LoadResource");
-    if (!WindhawkUtils::SetFunctionHook((LockResource_t)pLock, LockResourceHook,
-                                        &LockResourceOriginal))
-        Wh_Log(L"in-place Personalization navigation: failed to hook LockResource");
-    if (!WindhawkUtils::SetFunctionHook((SizeofResource_t)pSize, SizeofResourceHook,
-                                        &SizeofResourceOriginal))
-        Wh_Log(L"in-place Personalization navigation: failed to hook SizeofResource");
-}
-
-// (Re-)builds the patched markup copies and flips the feature on.
-// Idempotent: existing overrides for the same HRSRC are kept as-is.
-static void PatchThemeCplMun() {
-    if (!LoadResourceOriginal) {
-        Wh_Log(L"in-place Personalization navigation: hooks not installed, skipping");
-        return;
-    }
-    if (!g_themeCplModule) {
-        // A real load, not LOAD_LIBRARY_AS_DATAFILE: the applet host must
-        // resolve the very same module (and HRSRC handles) when it creates
-        // the page, otherwise the hooks would never see its requests.
-        g_themeCplModule = LoadLibraryExW(L"themecpl.dll", nullptr,
-                                          LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-    if (!g_themeCplModule) {
-        Wh_Log(L"in-place Personalization navigation: themecpl.dll could not be loaded");
-        return;
-    }
-
-    std::vector<std::unique_ptr<ThemeMarkupOverride>> found;
-    EnumResourceTypesW(g_themeCplModule, ThemeCplEnumResTypesProc,
-                       (LONG_PTR)&found);
-
-    {
-        std::unique_lock lock(g_themeOverrideMutex);
-        for (auto& o : found) {
-            if (!FindThemeOverrideLocked(o->hRes))
-                g_themeMarkupOverrides.push_back(std::move(o));
+        if (!RewritePersonalizationMarkup(xml)) {
+            return callOriginal();
         }
+        Wh_Log(L"in-place Personalization navigation: replaced Settings "
+               L"shellexecute with navigationtargetrelative (resource path)");
+        // Same fallback as the SetXML hook: if the patched document is
+        // rejected, reload the original resource instead of leaving the page
+        // without any working action.
+        //
+        // Argument mapping: _SetXMLFromResource(pThis, lpName, lpType, hModule,
+        // param4, param5) loads the resource from hModule, while SetXML(xml,
+        // hInst, hInstParent) only takes two instances. hModule (hInstance) is
+        // the module the resource was loaded from, not one of the two SetXML
+        // wants - the (hInstance2, hInstance3) pair is the more likely
+        // correspondence to SetXML's (hInst, hInstParent), so that is what
+        // gets passed here instead of (hInstance, hInstance2).
+        HRESULT hr = DUIXmlParser_SetXML_Original(pThis, xml.c_str(), hInstance2, hInstance3);
+        if (FAILED(hr)) {
+            Wh_Log(L"patched Personalization resource XML rejected (hr=0x%08lX); "
+                   L"reloading the original resource", (unsigned long)hr);
+            return callOriginal();
+        }
+        return hr;
+    } catch (...) {
+        Wh_Log(L"Exception while rewriting Personalization markup from resource; "
+               L"using the original resource");
+        return callOriginal();
     }
-
-    g_themeCplNavigationActive.store(!found.empty());
-    Wh_Log(L"in-place Personalization navigation: %zu markup resource(s) patched "
-           L"(shellexecute kept as fallback)", found.size());
 }
 
-// Flips the feature off and drops the keep-alive module reference. The
-// override heap objects deliberately stay alive (see their declaration):
-// an in-flight LoadResource->LockResource pair may still be holding a
-// sentinel, and with the flag off no NEW request is ever answered with one.
-static void UnpatchThemeCplMun() {
-    g_themeCplNavigationActive.store(false);
-    if (g_themeCplModule) {
-        FreeLibrary(g_themeCplModule);
-        g_themeCplModule = nullptr;
+// Track the dui70.dll reference so it can be released in Wh_ModUninit when, and
+// only when, this mod loaded it itself (a handle already returned by
+// GetModuleHandleW must not be freed). SetFunctionHook keeps the patched
+// trampoline in place until Windhawk removes the hooks at unload, at which
+// point the reference is dropped - mirroring g_legacyUnhideWinStorageModule.
+static HMODULE g_dui70LoadedByMod = nullptr;
+
+// The Personalization DirectUI page is never rendered by control.exe, so
+// force-loading dui70.dll there (which @include control.exe would otherwise do
+// on every control.exe launch) is pure waste.
+static bool CurrentProcessRendersPersonalizationUi() {
+    wchar_t exePath[MAX_PATH] = {};
+    if (!GetModuleFileNameW(nullptr, exePath, MAX_PATH)) return true; // don't block on failure
+    wchar_t* fileName = wcsrchr(exePath, L'\\');
+    fileName = fileName ? fileName + 1 : exePath;
+    return _wcsicmp(fileName, L"control.exe") != 0;
+}
+
+// Installed once in Wh_ModInit regardless of the setting, so a later live
+// toggle needs no hooking. The rewrite itself is gated on the setting.
+static void InstallPersonalizationMarkupHook() {
+    if (DUIXmlParser_SetXML_Original) return;
+
+    if (!CurrentProcessRendersPersonalizationUi()) {
+        Wh_Log(L"in-place Personalization navigation: skipped in control.exe (no Personalization UI)");
+        return;
+    }
+
+    HMODULE hDui70 = GetModuleHandleW(L"dui70.dll");
+    if (!hDui70) {
+        // We own this reference: it is released again in Wh_ModUninit
+        // (ReleasePersonalizationMarkupModule), not leaked per enable cycle.
+        hDui70 = LoadLibraryExW(L"dui70.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (hDui70) g_dui70LoadedByMod = hDui70;
+    }
+    if (!hDui70) {
+        Wh_Log(L"in-place Personalization navigation: dui70.dll not found");
+        return;
+    }
+
+    // public: long __cdecl DirectUI::DUIXmlParser::SetXML(unsigned short const *, struct HINSTANCE__ *, struct HINSTANCE__ *)
+    void* pSetXML = (void*)GetProcAddress(
+        hDui70, "?SetXML@DUIXmlParser@DirectUI@@QEAAJPEBGPEAUHINSTANCE__@@1@Z");
+    if (!pSetXML) {
+        Wh_Log(L"in-place Personalization navigation: DirectUI::DUIXmlParser::SetXML not found");
+        return;
+    }
+    if (!WindhawkUtils::SetFunctionHook((DUIXmlParser_SetXML_t)pSetXML,
+                                        DUIXmlParser_SetXML_Hook,
+                                        &DUIXmlParser_SetXML_Original)) {
+        Wh_Log(L"in-place Personalization navigation: failed to hook SetXML");
+        return;
+    }
+    Wh_Log(L"in-place Personalization navigation: hooked DirectUI::DUIXmlParser::SetXML");
+
+    // protected: long __cdecl DirectUI::DUIXmlParser::_SetXMLFromResource(...)
+    // Resource-backed pages (Personalization included) take this path
+    // instead of the public SetXML above, so it must be hooked too.
+    void* pSetXMLFromResource = (void*)GetProcAddress(
+        hDui70,
+        "?_SetXMLFromResource@DUIXmlParser@DirectUI@@IEAAJPEBG0PEAUHINSTANCE__@@11@Z");
+    if (!pSetXMLFromResource) {
+        Wh_Log(L"in-place Personalization navigation: "
+               L"DirectUI::DUIXmlParser::_SetXMLFromResource not found");
+        return;
+    }
+    if (!WindhawkUtils::SetFunctionHook((DUIXmlParser_SetXMLFromResource_t)pSetXMLFromResource,
+                                        DUIXmlParser_SetXMLFromResource_Hook,
+                                        &DUIXmlParser_SetXMLFromResource_Original)) {
+        Wh_Log(L"in-place Personalization navigation: failed to hook _SetXMLFromResource");
+        return;
+    }
+    Wh_Log(L"in-place Personalization navigation: hooked "
+           L"DirectUI::DUIXmlParser::_SetXMLFromResource");
+}
+
+// Releases the dui70.dll reference this mod itself loaded (none is freed
+// when the module was already loaded). Called from Wh_ModUninit, after
+// Windhawk has removed the hooks that point into this image.
+static void ReleasePersonalizationMarkupModule() {
+    if (g_dui70LoadedByMod) {
+        FreeLibrary(g_dui70LoadedByMod);
+        g_dui70LoadedByMod = nullptr;
     }
 }
-*/
+
 // Maps an entry of LegacyUnhideMonikerIndex to the real applet it unhides,
 // so the confirmation pass below can ask the shell about each one.
 struct UnhideProbeTarget {
@@ -4072,8 +5380,7 @@ void Wh_ModSettingsChanged() {
     bool tabChanged = (oldTabMode != newTabMode);
     bool speechChanged = (oldSpeechMode != newSpeechMode);
     const bool prevUnhideLegacyApplets = g_settings.unhideLegacyApplets.load();
-    // (sleeping feature) const bool prevInlineNavigation =
-    //     g_settings.inlinePersonalizationNavigation.load();
+    const bool prevInlineNavigation = g_settings.inlinePersonalizationNavigation.load();
     if (bitChanged) {
         Wh_Log(L"bitLockerMode changed %d -> %d, clearing cached verdict", (int)oldBitMode, (int)newBitMode);
         Wh_DeleteValue(MakeVerdictValueName(L"bitlocker").c_str());
@@ -4144,22 +5451,15 @@ void Wh_ModSettingsChanged() {
             Wh_Log(L"Exception while invalidating cached applet verdicts after unhide feature toggle");
         }
     }
-    // (sleeping feature - the whole toggle is commented out; see
-    // THE SLEEPING NAVIGATION)
-    // if (prevInlineNavigation != g_settings.inlinePersonalizationNavigation.load()) {
-    //     try {
-    //         if (g_settings.inlinePersonalizationNavigation.load()) {
-    //             Wh_Log(L"in-place Personalization navigation enabled by settings");
-    //             PatchThemeCplMun();
-    //         } else {
-    //             Wh_Log(L"in-place Personalization navigation disabled by settings; "
-    //                    L"restoring markup bytes");
-    //             UnpatchThemeCplMun();
-    //         }
-    //     } catch (...) {
-    //         Wh_Log(L"Exception while toggling in-place Personalization navigation");
-    //     }
-    // }
+    if (prevInlineNavigation != g_settings.inlinePersonalizationNavigation.load()) {
+        try {
+            Wh_Log(L"in-place Personalization navigation %s by settings; "
+                   L"close and reopen the applet for the change to apply",
+                   g_settings.inlinePersonalizationNavigation.load() ? L"enabled" : L"disabled");
+        } catch (...) {
+            Wh_Log(L"Exception while toggling in-place Personalization navigation");
+        }
+    }
     // Regenerate task links file with updated settings
     InvalidateClassicTaskLinksFile();
     EnsureClassicTaskLinksFile();
@@ -4169,14 +5469,16 @@ void Wh_ModSettingsChanged() {
     if ((bitChanged || tabChanged || speechChanged) && g_lazyDetectionWakeEvent) {
         SetEvent(g_lazyDetectionWakeEvent);
     }
-    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d",
+    Wh_Log(L"Changed - Pers=%d Notif=%d Net=%d Print=%d iSCSI=%d Game=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Company=%d ToGo=%d Infrared=%d Work=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d InlineNav=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
+        g_settings.enableIscsiInitiator.load(), g_settings.enableGameControllers.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
         g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.suppressWindowsToGo.load(),
         g_settings.suppressInfrared.load(), g_settings.suppressWorkFolders.load(), g_settings.restoreClassicTaskLinks.load(),
-        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.unhideLegacyApplets.load());
+        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.unhideLegacyApplets.load(),
+        g_settings.inlinePersonalizationNavigation.load());
   } catch (...) {
       Wh_Log(L"Exception while applying changed settings");
   }
@@ -4216,6 +5518,47 @@ BOOL Wh_ModInit() {
     g_speechClsidRegistered.store(IsRegisteredClsid(kSpeechGuid));
     Wh_Log(L"Text to Speech CLSID %s", g_speechClsidRegistered.load()
         ? L"is registered" : L"is absent on this edition; applet will not be injected");
+    {
+        wchar_t system32[MAX_PATH] = {};
+        bool iscsiExeExists = false;
+        bool joyCplExists = false;
+        bool offlineDllExists = false;
+        if (GetSystemDirectoryW(system32, MAX_PATH)) {
+            const std::wstring iscsicplPath = std::wstring(system32) + L"\\iscsicpl.exe";
+            DWORD attributes = GetFileAttributesW(iscsicplPath.c_str());
+            iscsiExeExists = (attributes != INVALID_FILE_ATTRIBUTES &&
+                              !(attributes & FILE_ATTRIBUTE_DIRECTORY));
+            Wh_Log(L"iSCSI Initiator executable: %s %s", iscsicplPath.c_str(),
+                   iscsiExeExists ? L"exists" : L"does not exist");
+
+            const std::wstring joyCplPath = std::wstring(system32) + L"\\joy.cpl";
+            DWORD joyAttributes = GetFileAttributesW(joyCplPath.c_str());
+            joyCplExists = (joyAttributes != INVALID_FILE_ATTRIBUTES &&
+                            !(joyAttributes & FILE_ATTRIBUTE_DIRECTORY));
+            Wh_Log(L"Game Controllers (joy.cpl): %s %s", joyCplPath.c_str(),
+                   joyCplExists ? L"exists" : L"does not exist");
+
+            offlineDllExists = ResolveOfflineFilesTarget();
+            Wh_Log(L"Offline Files (cscui.dll): %s (%s)",
+                   offlineDllExists ? g_offlineFilesDllPath.c_str() : L"not found",
+                   offlineDllExists ? g_offlineFilesLaunchBase.c_str() : L"-");
+        }
+        g_iscsiInitiatorExeExists.store(iscsiExeExists);
+        g_joyCplExists.store(joyCplExists);
+        g_offlineFilesDllExists.store(offlineDllExists);
+    }
+    // Decode the embedded gamepad icon to a mod-storage .ico up front
+    // (before InitDisplayNames builds the virtual entry that references
+    // it). Only needed when the feature is actually enabled; a later live
+    // toggle is covered by the lazy re-ensure in TryProvideValue.
+    if (g_joyCplExists.load() && g_settings.enableGameControllers.load()) {
+        if (EnsureJoyControllerIconFile().empty())
+            Wh_Log(L"Game Controllers: embedded icon unavailable; entry will fall back to the default icon");
+    }
+    if (g_offlineFilesDllExists.load() && g_settings.enableOfflineFiles.load()) {
+        if (EnsureOfflineFilesIconFile().empty())
+            Wh_Log(L"Offline Files: embedded icon unavailable; entry will fall back to the cscui.dll icon");
+    }
     g_realPersonalizationRegistered.store(IsRegisteredClsid(kRealPersonalizationGuid));
     g_realSystemRegistered.store(IsRegisteredClsid(kSystemGuid));
     g_prevBitLockerMode.store(g_settings.bitLockerMode.load());
@@ -4276,13 +5619,15 @@ BOOL Wh_ModInit() {
 
     Wh_Log(L"=== Windows 7 Legacy Applet Restorer Init ===");
     Wh_Log(L"Windows build: %u", g_winBuild);
-    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d",
+    Wh_Log(L"Pers=%d Notif=%d Net=%d Print=%d iSCSI=%d Game=%d Home=%d BitLocker=%d TabletPC=%d Speech=%d CatApp=%d Suppress=%d TaskLinks=%d CatTaskLinks=%d Unhide=%d InlineNav=%d",
         g_settings.enablePersonalization.load(), g_settings.enableNotificationIcons.load(),
         g_settings.enableNetworkConnections.load(), g_settings.enablePrintersAndFaxes.load(),
+        g_settings.enableIscsiInitiator.load(), g_settings.enableGameControllers.load(),
         g_settings.enableHomeGroup.load(), g_injectBitlockerApplet.load(), g_injectTabletPcApplet.load(),
         g_injectSpeechApplet.load(), g_settings.enableCategoryAppearanceLinks.load(),
         g_settings.suppressCompanySync.load(), g_settings.restoreClassicTaskLinks.load(),
-        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.unhideLegacyApplets.load());
+        g_settings.restoreWin7CategoryTaskLinks.load(), g_settings.unhideLegacyApplets.load(),
+        g_settings.inlinePersonalizationNavigation.load());
 
     void* pRegOpenKeyExW      = GetRegFunc("RegOpenKeyExW");
     void* pRegCloseKey        = GetRegFunc("RegCloseKey");
@@ -4390,15 +5735,11 @@ BOOL Wh_ModInit() {
         EnsureClassicTaskLinksFile();
     }
 
-    // (sleeping feature - see THE SLEEPING NAVIGATION)
-    // InstallThemeCplResourceHooks();
-    // if (g_settings.inlinePersonalizationNavigation.load()) {
-    //     try {
-    //         PatchThemeCplMun();
-    //     } catch (...) {
-    //         Wh_Log(L"Exception during in-place Personalization navigation setup");
-    //     }
-    // }
+    try {
+        InstallPersonalizationMarkupHook();
+    } catch (...) {
+        Wh_Log(L"Exception during in-place Personalization navigation setup; rest of the mod active");
+    }
 
     Wh_Log(L"All hooks set successfully");
     Wh_Log(L"Shell32 symbol hook: %s", hShell32 ? L"loaded" : L"FAILED");
@@ -4460,11 +5801,22 @@ void Wh_ModAfterInit() {
 }
 
 static void CleanupTempFiles() {
-    // Delete the temp task-links file
+    // Delete the temp task-links file (and the embedded Game Controllers icon
+    // written alongside it).
     std::lock_guard<std::mutex> lock(g_taskLinksMutex);
     if (!g_classicTaskLinksFilePath.empty()) {
         DeleteFileW(g_classicTaskLinksFilePath.c_str());
         Wh_Log(L"Deleted task links file: %s", g_classicTaskLinksFilePath.c_str());
+    }
+    if (!g_joyIconFilePath.empty()) {
+        DeleteFileW(g_joyIconFilePath.c_str());
+        Wh_Log(L"Deleted Game Controllers icon file: %s", g_joyIconFilePath.c_str());
+        g_joyIconFilePath.clear();
+    }
+    if (!g_offlineFilesIconFilePath.empty()) {
+        DeleteFileW(g_offlineFilesIconFilePath.c_str());
+        Wh_Log(L"Deleted Offline Files icon file: %s", g_offlineFilesIconFilePath.c_str());
+        g_offlineFilesIconFilePath.clear();
     }
 }
 
@@ -4517,9 +5869,11 @@ void Wh_ModUninit() {
             FreeLibrary(g_legacyUnhideWinStorageModule);
             g_legacyUnhideWinStorageModule = nullptr;
         }
-        // (sleeping feature) restore the markup bytes first, then drop the
-        // themecpl.dll keep-alive reference.
-        // UnpatchThemeCplMun();
+        try {
+            ReleasePersonalizationMarkupModule();
+        } catch (...) {
+            Wh_Log(L"Exception while releasing in-place Personalization navigation");
+        }
         Wh_Log(L"Cleanup completed");
     } catch (...) {
         Wh_Log(L"Exception during cleanup, continuing anyway");

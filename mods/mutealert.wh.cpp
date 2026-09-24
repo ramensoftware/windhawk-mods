@@ -2,7 +2,7 @@
 // @id              mutealert
 // @name            MuteAlert - Microphone Activity Taskbar Widget
 // @description     Shows live microphone activity, call mute state, volume controls, and headset mute synchronization in the Windows 11 taskbar.
-// @version         0.9.7
+// @version         0.9.13
 // @author          Nikolay
 // @github          https://github.com/Nikolay1243
 // @homepage        https://github.com/MuteAlert/windhawk
@@ -20,6 +20,12 @@
 
 Adds a microphone button to the Windows 11 system tray area.
 
+> **Updating from 0.9.8 or earlier:** Version 0.9.10 organized the settings
+> into collapsible sections. Windhawk can't migrate the old flat setting paths,
+> so review and save your settings once after updating. In particular, re-enable
+> headset synchronization and call integrations, restore localized button text,
+> and check the position and locked-volume target.
+
 ![MuteAlert microphone activity widget](https://raw.githubusercontent.com/MuteAlert/windhawk/main/assets/taskbar-widget.png)
 
 * The microphone fills from bottom to top as the default input device detects
@@ -29,24 +35,48 @@ Adds a microphone button to the Windows 11 system tray area.
 * Scroll over the button to change the input volume.
 * Optionally lock the microphone at a chosen volume. Scrolling updates the
   locked target when this is enabled.
-* Left-click the button to mute or unmute the microphone.
-* A secondary Slack, Teams, or Zoom logo shows the active call microphone
+* Left-click the button to mute or unmute the microphone. An authoritative
+  vendor headset state can override this in full synchronization mode.
+* A secondary Slack, Teams, Zoom, or Google Meet logo shows the active call microphone
   state and focuses the call window when left-clicked.
 * Headset mute synchronization supports Windows hardware mute reporting,
   standard USB HID mute controls, and vendor-specific adapters. SteelSeries
   Arctis Nova Pro Wireless is the first high-confidence vendor adapter.
-* If you speak while muted in a Slack huddle, Microsoft Teams call, or Zoom
-  meeting, the widget warns you and can play an optional audio cue.
+* If you speak while muted in a Slack huddle, Microsoft Teams call, Zoom
+  meeting, or Google Meet, the widget warns you and can play an optional
+  audio cue.
 * Right-click the widget to mute or unmute active call apps when that action
   is shown in the tooltip.
 
 The widget follows the default Windows capture endpoint. Changing the default
 input device in Windows automatically moves the widget to the new device.
 
+> **Full headset synchronization:** When a vendor adapter can observe a
+> latched physical mute switch, that switch is the source of truth for the
+> configured Windows input role. While the switch reports unmuted, a mute made
+> with the widget, Windows, a keyboard shortcut, or another application is
+> released on the next headset status poll. This also applies when the default
+> input is a separate desk or XLR microphone. Use mute-only or status-only mode
+> if Windows privacy mutes must remain independent of the headset switch.
+
 Call-app monitoring and call synchronization are disabled by default. Enable
-only the Slack, Teams, or Zoom features you use. When enabled, MuteAlert first
-checks capture audio sessions and only performs UI Automation scans for an app
-that is recording, has a pending command, or was already detected in a call.
+only the Slack, Teams, Zoom, or Google Meet features you use. When enabled,
+MuteAlert first checks capture audio sessions and only performs UI Automation
+scans for an app that is recording, has a pending command, or was already
+detected in a call.
+
+Google Meet requires its meeting to be the active, visible tab in Chrome,
+Edge, Firefox, Brave, Vivaldi, Opera, or Arc. Browsers don't expose an inactive
+tab's meeting controls to Windows UI Automation.
+
+Meet monitoring requires **Enable Google Meet integration**, even when the
+shared call badge or headset synchronization is enabled. Only browsers with
+an active capture session (including their verified same-executable ancestors)
+are eligible for scanning. Title fragments and browser executable filenames
+are configurable. Browser accessibility may increase CPU and memory use until
+the browser exits. Browser support is best-effort; Firefox has not been
+verified in a live meeting. If capture stops or controls become inaccessible,
+Meet detection is cleared until they are observable again.
 
 Headset detection reports one of four methods in the hover tooltip: Windows
 hardware mute, Standard HID mute button, SteelSeries device state, or
@@ -65,7 +95,7 @@ Windows 11 is required. x64 and ARM64 Explorer are supported.
 
 Unlike **mic-tray-control**, MuteAlert injects a native XAML taskbar widget
 with a live bottom-to-top peak meter and an optional separate call-app badge.
-It also detects speaking while a Slack, Teams, or Zoom call is muted and can
+It also detects speaking while a Slack, Teams, Zoom, or Google Meet call is muted and can
 synchronize observable headset mute controls with Windows and active calls.
 **adaptive-microphone-icon-visibility** controls the visibility of Windows'
 built-in microphone indicator; MuteAlert supplies its own interactive meter,
@@ -75,139 +105,185 @@ volume control, call state, and headset integration.
 
 // ==WindhawkModSettings==
 /*
-- position: beforeClock
-  $name: Position
-  $description: Where to place the microphone widget in the system tray.
-  $options:
-  - beforeIcons: Before notification icons
-  - beforeOmni: Before Wi-Fi, volume, and battery
-  - beforeClock: Before the clock
-  - afterClock: After the clock
-  - afterShowDesktop: After the Show Desktop strip
-- deviceRole: console
-  $name: Default microphone role
-  $description: Which Windows default capture endpoint the widget follows.
-  $options:
-  - console: General/default input
-  - communications: Communications input
-  - multimedia: Multimedia input
-- volumeStep: 2
-  $name: Volume change per wheel notch (%)
-  $description: Scroll up to increase and scroll down to decrease the microphone volume.
-- forceVolume: false
-  $name: Keep microphone at the selected volume
-  $description: Restores the target input volume if Windows or another application changes it. Scrolling the widget changes the target.
-- forcedVolume: 100
-  $name: Locked microphone volume (%)
-  $description: "Target volume while volume lock is enabled. Range: 0-100%."
-- updateInterval: 50
-  $name: Meter update interval (ms)
-  $description: "Lower values make the meter smoother but wake Explorer more often. Range: 25-500 ms."
-- peakSensitivity: 150
-  $name: Meter sensitivity (%)
-  $description: Scales the displayed peak without changing the microphone volume. 100% is the raw Windows peak value.
-- iconSize: 18
-  $name: Microphone icon size (DIPs)
-  $description: "Logical XAML size for the microphone icon. Range: 12-32 DIPs. Windows scales DIPs for display density."
-- buttonWidth: 32
-  $name: Widget width (DIPs)
-  $description: "Logical XAML width reserved for each taskbar button. Range: 20-64 DIPs. Windows scales DIPs for display density."
-- showCallStateIcon: false
-  $name: Show active-call app icon
-  $description: Shows a secondary Slack, Teams, or Zoom logo while a supported call is active. Left-clicking it focuses the call window.
-- headsetSyncMode: off
+- General:
+  - position: beforeClock
+    $name: Position
+    $description: Where to place the microphone widget in the system tray.
+    $options:
+    - beforeIcons: Before notification icons
+    - beforeOmni: Before Wi-Fi, volume, and battery
+    - beforeClock: Before the clock
+    - afterClock: After the clock
+    - afterShowDesktop: After the Show Desktop strip
+  - deviceRole: console
+    $name: Default microphone role
+    $description: Which Windows default capture endpoint the widget follows.
+    $options:
+    - console: General/default input
+    - communications: Communications input
+    - multimedia: Multimedia input
+  - volumeStep: 2
+    $name: Volume change per wheel notch (%)
+    $description: Scroll up to increase and scroll down to decrease the microphone volume.
+  - forceVolume: false
+    $name: Keep microphone at the selected volume
+    $description: Restores the target input volume if Windows or another application changes it. Scrolling the widget changes the target.
+  - forcedVolume: 100
+    $name: Locked microphone volume (%)
+    $description: "Target volume while volume lock is enabled. Range: 0-100%."
+  - updateInterval: 50
+    $name: Meter update interval (ms)
+    $description: "Lower values make the meter smoother but wake Explorer more often. Range: 25-500 ms."
+  - peakSensitivity: 150
+    $name: Meter sensitivity (%)
+    $description: Scales the displayed peak without changing the microphone volume. 100% is the raw Windows peak value.
+  - iconSize: 18
+    $name: Microphone icon size (DIPs)
+    $description: "Logical XAML size for the microphone icon. Range: 12-32 DIPs. Windows scales DIPs for display density."
+  - buttonWidth: 32
+    $name: Widget width (DIPs)
+    $description: "Logical XAML width reserved for each taskbar button. Range: 20-64 DIPs. Windows scales DIPs for display density."
+  - showCallStateIcon: false
+    $name: Show active-call app icon
+    $description: Shows a secondary Slack, Teams, Zoom, or Google Meet logo while a supported call is active. Left-clicking it focuses the call window. Google Meet requires Enable Google Meet integration.
+  $name: General and microphone
+- Headset:
+  - headsetSyncMode: off
+    $name: Headset mute synchronization
+    $description: Uses Windows hardware mute, standard HID mute controls, or a supported vendor adapter. In full mode, an observable vendor state is authoritative for the Windows input and is re-applied on each status poll. Standard HID controls synchronize their explicit mute or unmute action. Call apps unmute only after a physical transition, and active-call mute retries are limited to once every five seconds. Silence is never interpreted as physical mute.
+    $options:
+    - full: Sync physical mute and unmute changes
+    - muteOnly: Sync only physical mute changes
+    - statusOnly: Show the physical state without changing software mute states
+    - off: Disabled
+  - headsetSyncWindows: true
+    $name: Synchronize headset mute with Windows input
+  - headsetSyncCalls: false
+    $name: Synchronize headset mute with active calls
+    $description: Google Meet requires Enable Google Meet integration. Headset synchronization must be in full or mute-only mode to change call mute states.
+  - headsetPollInterval: 500
+    $name: Headset status interval (ms)
+    $description: "How often to query vendor device state. Range: 200-2000 ms."
+  - headsetDiagnosticsPath: ""
+    $name: Export sanitized headset diagnostics
+    $description: Optional full .txt path. Applying settings exports device IDs, HID descriptors, and provider slots without paths, serial numbers, or raw report values. Sanitized report changes are included only while headset synchronization is enabled.
   $name: Headset mute synchronization
-  $description: Uses Windows hardware mute, standard HID mute controls, or a supported vendor adapter. The taskbar tooltip shows the current detection method and confidence. Silence is never interpreted as physical mute.
-  $options:
-  - full: Sync physical mute and unmute changes
-  - muteOnly: Sync only physical mute changes
-  - statusOnly: Show the physical state without changing software mute states
-  - off: Disabled
-- headsetSyncWindows: true
-  $name: Synchronize headset mute with Windows input
-- headsetSyncCalls: false
-  $name: Synchronize headset mute with active calls
-- headsetPollInterval: 500
-  $name: Headset status interval (ms)
-  $description: "How often to query vendor device state. Range: 200-2000 ms."
-- headsetDiagnosticsPath: ""
-  $name: Export sanitized headset diagnostics
-  $description: Optional full .txt path. Applying settings exports device IDs, HID descriptors, and provider slots without paths, serial numbers, or raw report values. Sanitized report changes are included only while headset synchronization is enabled.
-- slackWarning: false
-  $name: Warn when speaking while Slack is muted
-  $description: Uses Windows UI Automation to detect a visible muted Slack huddle. No Slack credentials or network access are used.
-- slackAudioCue: false
-  $name: Play Slack muted audio cue
-  $description: Plays the Windows exclamation sound once when the speaking-while-muted warning begins.
-- slackRightClickUnmute: false
-  $name: Right-click to toggle Slack microphone
-  $description: Invokes Slack's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a huddle.
-- slackMutedButtonText: "unmute"
-  $name: Slack muted-button text
-  $description: Case-insensitive text expected in Slack's button while your huddle microphone is muted. Change this for a localized Slack interface.
-- slackUnmutedButtonText: "mute"
-  $name: Slack unmuted-button text
-  $description: Case-insensitive text expected in Slack's button while your huddle microphone is unmuted. Change this for a localized Slack interface.
-- slackCallButtonText: "leave"
-  $name: Slack in-call button text
-  $description: Case-insensitive text expected in Slack's Leave huddle button. Change this for a localized Slack interface.
-- slackSpeechThreshold: 8
-  $name: Slack warning speech threshold (%)
-  $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
-- slackSpeechDelay: 500
-  $name: Slack warning delay (ms)
-  $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
-- teamsWarning: false
-  $name: Warn when speaking while Microsoft Teams is muted
-  $description: Uses Windows UI Automation to detect a visible muted Teams call. No Teams credentials or network access are used.
-- teamsAudioCue: false
-  $name: Play Teams muted audio cue
-  $description: Plays the Windows exclamation sound once when the Teams speaking-while-muted warning begins.
-- teamsRightClickUnmute: false
-  $name: Right-click to toggle Teams microphone
-  $description: Invokes Teams' accessible Mute or Unmute button when the taskbar microphone is right-clicked during a call.
-- teamsMutedButtonText: "unmute"
-  $name: Teams muted-button text
-  $description: Case-insensitive text expected in Teams' button while your call microphone is muted. Change this for a localized Teams interface.
-- teamsUnmutedButtonText: "mute"
-  $name: Teams unmuted-button text
-  $description: Case-insensitive text expected in Teams' button while your call microphone is unmuted. Change this for a localized Teams interface.
-- teamsCallButtonText: "hang up|leave"
-  $name: Teams in-call button text
-  $description: Case-insensitive text expected in Teams' Hang up or Leave button. Separate alternatives with a vertical bar.
-- teamsSpeechThreshold: 8
-  $name: Teams warning speech threshold (%)
-  $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
-- teamsSpeechDelay: 500
-  $name: Teams warning delay (ms)
-  $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
-- zoomWarning: false
-  $name: Warn when speaking while Zoom is muted
-  $description: Uses Windows UI Automation to detect a visible muted Zoom meeting. No Zoom credentials or network access are used.
-- zoomAudioCue: false
-  $name: Play Zoom muted audio cue
-  $description: Plays the Windows exclamation sound once when the Zoom speaking-while-muted warning begins.
-- zoomRightClickUnmute: false
-  $name: Right-click to toggle Zoom microphone
-  $description: Invokes Zoom's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a meeting.
-- zoomShortcutFallback: false
-  $name: Allow Zoom Alt+A fallback
-  $description: When Zoom hides its accessible microphone button, temporarily focuses Zoom and sends Alt+A. This can interrupt typing, is attempted at most three times, and is disabled by default.
-- zoomMutedButtonText: "unmute"
-  $name: Zoom muted-button text
-  $description: Case-insensitive text expected in Zoom's button while your meeting microphone is muted. Change this for a localized Zoom interface.
-- zoomUnmutedButtonText: "mute"
-  $name: Zoom unmuted-button text
-  $description: Case-insensitive text expected in Zoom's button while your meeting microphone is unmuted. Change this for a localized Zoom interface.
-- zoomCallButtonText: "leave|end"
-  $name: Zoom in-meeting button text
-  $description: Case-insensitive text expected in Zoom's Leave or End meeting button. Separate alternatives with a vertical bar.
-- zoomSpeechThreshold: 8
-  $name: Zoom warning speech threshold (%)
-  $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
-- zoomSpeechDelay: 500
-  $name: Zoom warning delay (ms)
-  $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
+- Slack:
+  - slackWarning: false
+    $name: Warn when speaking while Slack is muted
+    $description: Uses Windows UI Automation to detect a visible muted Slack huddle. No Slack credentials or network access are used.
+  - slackAudioCue: false
+    $name: Play Slack muted audio cue
+    $description: Plays the Windows exclamation sound once when the speaking-while-muted warning begins.
+  - slackRightClickUnmute: false
+    $name: Right-click to toggle Slack microphone
+    $description: Invokes Slack's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a huddle.
+  - slackMutedButtonText: "unmute"
+    $name: Slack muted-button text
+    $description: Case-insensitive text expected in Slack's button while your huddle microphone is muted. Change this for a localized Slack interface.
+  - slackUnmutedButtonText: "mute"
+    $name: Slack unmuted-button text
+    $description: Case-insensitive text expected in Slack's button while your huddle microphone is unmuted. Change this for a localized Slack interface.
+  - slackCallButtonText: "leave"
+    $name: Slack in-call button text
+    $description: Case-insensitive text expected in Slack's Leave huddle button. Change this for a localized Slack interface.
+  - slackSpeechThreshold: 8
+    $name: Slack warning speech threshold (%)
+    $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
+  - slackSpeechDelay: 500
+    $name: Slack warning delay (ms)
+    $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
+  $name: Slack
+- Teams:
+  - teamsWarning: false
+    $name: Warn when speaking while Microsoft Teams is muted
+    $description: Uses Windows UI Automation to detect a visible muted Teams call. No Teams credentials or network access are used.
+  - teamsAudioCue: false
+    $name: Play Teams muted audio cue
+    $description: Plays the Windows exclamation sound once when the Teams speaking-while-muted warning begins.
+  - teamsRightClickUnmute: false
+    $name: Right-click to toggle Teams microphone
+    $description: Invokes Teams' accessible Mute or Unmute button when the taskbar microphone is right-clicked during a call.
+  - teamsMutedButtonText: "unmute"
+    $name: Teams muted-button text
+    $description: Case-insensitive text expected in Teams' button while your call microphone is muted. Change this for a localized Teams interface.
+  - teamsUnmutedButtonText: "mute"
+    $name: Teams unmuted-button text
+    $description: Case-insensitive text expected in Teams' button while your call microphone is unmuted. Change this for a localized Teams interface.
+  - teamsCallButtonText: "hang up|leave"
+    $name: Teams in-call button text
+    $description: Case-insensitive text expected in Teams' Hang up or Leave button. Separate alternatives with a vertical bar.
+  - teamsSpeechThreshold: 8
+    $name: Teams warning speech threshold (%)
+    $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
+  - teamsSpeechDelay: 500
+    $name: Teams warning delay (ms)
+    $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
+  $name: Microsoft Teams
+- Zoom:
+  - zoomWarning: false
+    $name: Warn when speaking while Zoom is muted
+    $description: Uses Windows UI Automation to detect a visible muted Zoom meeting. No Zoom credentials or network access are used.
+  - zoomAudioCue: false
+    $name: Play Zoom muted audio cue
+    $description: Plays the Windows exclamation sound once when the Zoom speaking-while-muted warning begins.
+  - zoomRightClickUnmute: false
+    $name: Right-click to toggle Zoom microphone
+    $description: Invokes Zoom's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a meeting.
+  - zoomShortcutFallback: false
+    $name: Allow Zoom Alt+A fallback
+    $description: When Zoom hides its accessible microphone button, temporarily focuses Zoom and sends Alt+A. This can interrupt typing, is attempted at most three times, and is disabled by default.
+  - zoomMutedButtonText: "unmute"
+    $name: Zoom muted-button text
+    $description: Case-insensitive text expected in Zoom's button while your meeting microphone is muted. Change this for a localized Zoom interface.
+  - zoomUnmutedButtonText: "mute"
+    $name: Zoom unmuted-button text
+    $description: Case-insensitive text expected in Zoom's button while your meeting microphone is unmuted. Change this for a localized Zoom interface.
+  - zoomCallButtonText: "leave|end"
+    $name: Zoom in-meeting button text
+    $description: Case-insensitive text expected in Zoom's Leave or End meeting button. Separate alternatives with a vertical bar.
+  - zoomSpeechThreshold: 8
+    $name: Zoom warning speech threshold (%)
+    $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
+  - zoomSpeechDelay: 500
+    $name: Zoom warning delay (ms)
+    $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
+  $name: Zoom
+- GoogleMeet:
+  - meetEnabled: false
+    $name: Enable Google Meet integration
+    $description: Opt in to browser accessibility scanning. Also enable the call icon, Meet warning, Meet right-click control, or headset call synchronization to use it. Enabling accessibility can increase browser CPU and memory usage until the browser exits.
+  - meetWindowTitle: "meet -|meet –|meet —"
+    $name: Google Meet window title text
+    $description: Case-insensitive title fragments. Separate alternatives with a vertical bar. Customize for localized titles or installed Meet app windows.
+  - meetBrowserExecutables: "chrome.exe|msedge.exe|firefox.exe|brave.exe|vivaldi.exe|opera.exe|arc.exe"
+    $name: Google Meet browser executables
+    $description: Exact executable filenames separated with a vertical bar. Add your browser if absent. Opera GX uses opera.exe.
+  - meetWarning: false
+    $name: Warn when speaking while Google Meet is muted
+    $description: Requires Enable Google Meet integration. Uses Windows UI Automation to detect a muted Google Meet in the active, visible tab of a supported browser. No Google credentials or network access are used.
+  - meetAudioCue: false
+    $name: Play Google Meet muted audio cue
+    $description: Requires Enable Google Meet integration and Warn when speaking while Google Meet is muted. Plays the Windows exclamation sound once when the warning begins.
+  - meetRightClickUnmute: false
+    $name: Right-click to toggle Google Meet microphone
+    $description: Requires Enable Google Meet integration. Invokes Google Meet's accessible Mute or Unmute button when the taskbar microphone is right-clicked during a meeting.
+  - meetMutedButtonText: "turn on microphone"
+    $name: Google Meet muted-button text
+    $description: Case-insensitive text expected in Google Meet's button while your meeting microphone is muted. Separate alternatives with a vertical bar.
+  - meetUnmutedButtonText: "turn off microphone"
+    $name: Google Meet unmuted-button text
+    $description: Case-insensitive text expected in Google Meet's button while your meeting microphone is unmuted. Separate alternatives with a vertical bar.
+  - meetCallButtonText: "leave call"
+    $name: Google Meet in-meeting button text
+    $description: Case-insensitive text expected in Google Meet's Leave call button. Change this for a localized interface.
+  - meetSpeechThreshold: 8
+    $name: Google Meet warning speech threshold (%)
+    $description: Minimum displayed microphone peak considered speech. Raise this if background noise triggers warnings.
+  - meetSpeechDelay: 500
+    $name: Google Meet warning delay (ms)
+    $description: "How long sound must remain above the threshold before showing the warning. Range: 100-3000 ms."
+  $name: Google Meet
 */
 // ==/WindhawkModSettings==
 
@@ -389,26 +465,83 @@ struct ModSettings {
     std::wstring zoomCallButtonText = L"leave|end";
     int zoomSpeechThreshold = 8;
     int zoomSpeechDelay = 500;
+    bool meetEnabled = false;
+    std::wstring meetWindowTitle = L"meet -|meet \u2013|meet \u2014";
+    std::wstring meetBrowserExecutables =
+        L"chrome.exe|msedge.exe|firefox.exe|brave.exe|vivaldi.exe|opera.exe|arc.exe";
+    std::vector<std::wstring> meetBrowserNames;
+    bool meetWarning = false;
+    bool meetAudioCue = false;
+    bool meetRightClickToggle = false;
+    std::wstring meetMutedButtonText = L"turn on microphone";
+    std::wstring meetUnmutedButtonText = L"turn off microphone";
+    std::wstring meetCallButtonText = L"leave call";
+    int meetSpeechThreshold = 8;
+    int meetSpeechDelay = 500;
 };
 
 static ModSettings g_settings;
+
+static bool MeetMonitoringEnabled() {
+    bool syncCalls = g_settings.headsetSyncCalls &&
+        (g_settings.headsetSyncMode == L"full" ||
+         g_settings.headsetSyncMode == L"muteOnly");
+    return g_settings.meetEnabled &&
+        (g_settings.showCallStateIcon || g_settings.meetWarning ||
+         g_settings.meetRightClickToggle || syncCalls);
+}
 static std::atomic<int> g_audioRole{eConsole};
 static std::atomic<int> g_updateInterval{50};
 static std::atomic<int> g_peakSensitivity{150};
 static std::atomic<bool> g_forceVolume{false};
 static std::atomic<int> g_forcedVolume{100};
+static std::atomic<bool> g_windowsMutedByHeadset{false};
+
+static unsigned long long CurrentBootStamp() {
+    FILETIME fileTime{};
+    GetSystemTimeAsFileTime(&fileTime);
+    ULARGE_INTEGER systemTime{};
+    systemTime.LowPart = fileTime.dwLowDateTime;
+    systemTime.HighPart = fileTime.dwHighDateTime;
+    return systemTime.QuadPart / 10000000ULL - GetTickCount64() / 1000;
+}
+
+static bool HeadsetMuteOwnershipIsFromCurrentBoot() {
+    wchar_t buffer[32]{};
+    size_t length = Wh_GetStringValue(
+        L"windowsMutedByHeadsetBoot", buffer, ARRAYSIZE(buffer));
+    if (!length) return false;
+
+    wchar_t* end = nullptr;
+    unsigned long long saved = _wcstoui64(buffer, &end, 10);
+    if (end != buffer + length) return false;
+
+    unsigned long long current = CurrentBootStamp();
+    unsigned long long difference =
+        saved > current ? saved - current : current - saved;
+    return difference <= 5;
+}
 
 static std::wstring GetStringSetting(PCWSTR name) {
     return WindhawkUtils::StringSetting::make(name).get();
 }
 
 static void LoadSettings() {
-    g_settings.position = GetStringSetting(L"position");
+    bool ownsWindowsMute =
+        Wh_GetIntValue(L"windowsMutedByHeadset", 0) != 0;
+    if (ownsWindowsMute && !HeadsetMuteOwnershipIsFromCurrentBoot()) {
+        ownsWindowsMute = false;
+        Wh_SetIntValue(L"windowsMutedByHeadset", 0);
+        Wh_SetStringValue(L"windowsMutedByHeadsetDevice", L"");
+        Wh_SetStringValue(L"windowsMutedByHeadsetBoot", L"");
+    }
+    g_windowsMutedByHeadset.store(ownsWindowsMute);
+    g_settings.position = GetStringSetting(L"General.position");
     if (g_settings.position.empty()) {
         g_settings.position = L"beforeClock";
     }
 
-    std::wstring role = GetStringSetting(L"deviceRole");
+    std::wstring role = GetStringSetting(L"General.deviceRole");
     if (role == L"communications") {
         g_settings.deviceRole = eCommunications;
     } else if (role == L"multimedia") {
@@ -418,10 +551,10 @@ static void LoadSettings() {
     }
 
     g_settings.volumeStep =
-        std::clamp(Wh_GetIntSetting(L"volumeStep"), 1, 20);
-    g_settings.forceVolume = Wh_GetIntSetting(L"forceVolume") != 0;
+        std::clamp(Wh_GetIntSetting(L"General.volumeStep"), 1, 20);
+    g_settings.forceVolume = Wh_GetIntSetting(L"General.forceVolume") != 0;
     int configuredForcedVolume =
-        std::clamp(Wh_GetIntSetting(L"forcedVolume"), 0, 100);
+        std::clamp(Wh_GetIntSetting(L"General.forcedVolume"), 0, 100);
     int previousConfiguredVolume =
         Wh_GetIntValue(L"forcedVolumeSettingBaseline", -1);
     if (previousConfiguredVolume != configuredForcedVolume) {
@@ -431,37 +564,43 @@ static void LoadSettings() {
     g_settings.forcedVolume = std::clamp(
         Wh_GetIntValue(L"forcedVolumeTarget", configuredForcedVolume), 0, 100);
     g_settings.updateInterval =
-        std::clamp(Wh_GetIntSetting(L"updateInterval"), 25, 500);
+        std::clamp(Wh_GetIntSetting(L"General.updateInterval"), 25, 500);
     g_settings.peakSensitivity =
-        std::clamp(Wh_GetIntSetting(L"peakSensitivity"), 25, 500);
+        std::clamp(Wh_GetIntSetting(L"General.peakSensitivity"), 25, 500);
     g_settings.iconSize =
-        std::clamp(Wh_GetIntSetting(L"iconSize"), 12, 32);
+        std::clamp(Wh_GetIntSetting(L"General.iconSize"), 12, 32);
     g_settings.buttonWidth =
-        std::clamp(Wh_GetIntSetting(L"buttonWidth"), 20, 64);
+        std::clamp(Wh_GetIntSetting(L"General.buttonWidth"), 20, 64);
     g_settings.showCallStateIcon =
-        Wh_GetIntSetting(L"showCallStateIcon") != 0;
-    g_settings.headsetSyncMode = GetStringSetting(L"headsetSyncMode");
+        Wh_GetIntSetting(L"General.showCallStateIcon") != 0;
+    g_settings.headsetSyncMode = GetStringSetting(L"Headset.headsetSyncMode");
     if (g_settings.headsetSyncMode.empty()) {
         g_settings.headsetSyncMode = L"off";
     }
     g_settings.headsetSyncWindows =
-        Wh_GetIntSetting(L"headsetSyncWindows") != 0;
+        Wh_GetIntSetting(L"Headset.headsetSyncWindows") != 0;
+    if (!g_settings.headsetSyncWindows &&
+        g_windowsMutedByHeadset.exchange(false)) {
+        Wh_SetIntValue(L"windowsMutedByHeadset", 0);
+        Wh_SetStringValue(L"windowsMutedByHeadsetDevice", L"");
+        Wh_SetStringValue(L"windowsMutedByHeadsetBoot", L"");
+    }
     g_settings.headsetSyncCalls =
-        Wh_GetIntSetting(L"headsetSyncCalls") != 0;
+        Wh_GetIntSetting(L"Headset.headsetSyncCalls") != 0;
     g_settings.headsetPollInterval =
-        std::clamp(Wh_GetIntSetting(L"headsetPollInterval"), 200, 2000);
+        std::clamp(Wh_GetIntSetting(L"Headset.headsetPollInterval"), 200, 2000);
     g_settings.headsetDiagnosticsPath =
-        GetStringSetting(L"headsetDiagnosticsPath");
-    g_settings.slackWarning = Wh_GetIntSetting(L"slackWarning") != 0;
-    g_settings.slackAudioCue = Wh_GetIntSetting(L"slackAudioCue") != 0;
+        GetStringSetting(L"Headset.headsetDiagnosticsPath");
+    g_settings.slackWarning = Wh_GetIntSetting(L"Slack.slackWarning") != 0;
+    g_settings.slackAudioCue = Wh_GetIntSetting(L"Slack.slackAudioCue") != 0;
     g_settings.slackRightClickToggle =
-        Wh_GetIntSetting(L"slackRightClickUnmute") != 0;
+        Wh_GetIntSetting(L"Slack.slackRightClickUnmute") != 0;
     g_settings.slackMutedButtonText =
-        GetStringSetting(L"slackMutedButtonText");
+        GetStringSetting(L"Slack.slackMutedButtonText");
     g_settings.slackUnmutedButtonText =
-        GetStringSetting(L"slackUnmutedButtonText");
+        GetStringSetting(L"Slack.slackUnmutedButtonText");
     g_settings.slackCallButtonText =
-        GetStringSetting(L"slackCallButtonText");
+        GetStringSetting(L"Slack.slackCallButtonText");
     if (g_settings.slackMutedButtonText.empty()) {
         g_settings.slackMutedButtonText = L"unmute";
     }
@@ -472,19 +611,19 @@ static void LoadSettings() {
         g_settings.slackCallButtonText = L"leave";
     }
     g_settings.slackSpeechThreshold =
-        std::clamp(Wh_GetIntSetting(L"slackSpeechThreshold"), 1, 100);
+        std::clamp(Wh_GetIntSetting(L"Slack.slackSpeechThreshold"), 1, 100);
     g_settings.slackSpeechDelay =
-        std::clamp(Wh_GetIntSetting(L"slackSpeechDelay"), 100, 3000);
-    g_settings.teamsWarning = Wh_GetIntSetting(L"teamsWarning") != 0;
-    g_settings.teamsAudioCue = Wh_GetIntSetting(L"teamsAudioCue") != 0;
+        std::clamp(Wh_GetIntSetting(L"Slack.slackSpeechDelay"), 100, 3000);
+    g_settings.teamsWarning = Wh_GetIntSetting(L"Teams.teamsWarning") != 0;
+    g_settings.teamsAudioCue = Wh_GetIntSetting(L"Teams.teamsAudioCue") != 0;
     g_settings.teamsRightClickToggle =
-        Wh_GetIntSetting(L"teamsRightClickUnmute") != 0;
+        Wh_GetIntSetting(L"Teams.teamsRightClickUnmute") != 0;
     g_settings.teamsMutedButtonText =
-        GetStringSetting(L"teamsMutedButtonText");
+        GetStringSetting(L"Teams.teamsMutedButtonText");
     g_settings.teamsUnmutedButtonText =
-        GetStringSetting(L"teamsUnmutedButtonText");
+        GetStringSetting(L"Teams.teamsUnmutedButtonText");
     g_settings.teamsCallButtonText =
-        GetStringSetting(L"teamsCallButtonText");
+        GetStringSetting(L"Teams.teamsCallButtonText");
     if (g_settings.teamsMutedButtonText.empty()) {
         g_settings.teamsMutedButtonText = L"unmute";
     }
@@ -495,21 +634,21 @@ static void LoadSettings() {
         g_settings.teamsCallButtonText = L"hang up|leave";
     }
     g_settings.teamsSpeechThreshold =
-        std::clamp(Wh_GetIntSetting(L"teamsSpeechThreshold"), 1, 100);
+        std::clamp(Wh_GetIntSetting(L"Teams.teamsSpeechThreshold"), 1, 100);
     g_settings.teamsSpeechDelay =
-        std::clamp(Wh_GetIntSetting(L"teamsSpeechDelay"), 100, 3000);
-    g_settings.zoomWarning = Wh_GetIntSetting(L"zoomWarning") != 0;
-    g_settings.zoomAudioCue = Wh_GetIntSetting(L"zoomAudioCue") != 0;
+        std::clamp(Wh_GetIntSetting(L"Teams.teamsSpeechDelay"), 100, 3000);
+    g_settings.zoomWarning = Wh_GetIntSetting(L"Zoom.zoomWarning") != 0;
+    g_settings.zoomAudioCue = Wh_GetIntSetting(L"Zoom.zoomAudioCue") != 0;
     g_settings.zoomRightClickToggle =
-        Wh_GetIntSetting(L"zoomRightClickUnmute") != 0;
+        Wh_GetIntSetting(L"Zoom.zoomRightClickUnmute") != 0;
     g_settings.zoomShortcutFallback =
-        Wh_GetIntSetting(L"zoomShortcutFallback") != 0;
+        Wh_GetIntSetting(L"Zoom.zoomShortcutFallback") != 0;
     g_settings.zoomMutedButtonText =
-        GetStringSetting(L"zoomMutedButtonText");
+        GetStringSetting(L"Zoom.zoomMutedButtonText");
     g_settings.zoomUnmutedButtonText =
-        GetStringSetting(L"zoomUnmutedButtonText");
+        GetStringSetting(L"Zoom.zoomUnmutedButtonText");
     g_settings.zoomCallButtonText =
-        GetStringSetting(L"zoomCallButtonText");
+        GetStringSetting(L"Zoom.zoomCallButtonText");
     if (g_settings.zoomMutedButtonText.empty()) {
         g_settings.zoomMutedButtonText = L"unmute";
     }
@@ -520,9 +659,73 @@ static void LoadSettings() {
         g_settings.zoomCallButtonText = L"leave|end";
     }
     g_settings.zoomSpeechThreshold =
-        std::clamp(Wh_GetIntSetting(L"zoomSpeechThreshold"), 1, 100);
+        std::clamp(Wh_GetIntSetting(L"Zoom.zoomSpeechThreshold"), 1, 100);
     g_settings.zoomSpeechDelay =
-        std::clamp(Wh_GetIntSetting(L"zoomSpeechDelay"), 100, 3000);
+        std::clamp(Wh_GetIntSetting(L"Zoom.zoomSpeechDelay"), 100, 3000);
+    g_settings.meetEnabled = Wh_GetIntSetting(L"GoogleMeet.meetEnabled") != 0;
+    g_settings.meetWindowTitle = GetStringSetting(L"GoogleMeet.meetWindowTitle");
+    g_settings.meetBrowserExecutables = GetStringSetting(L"GoogleMeet.meetBrowserExecutables");
+    if (g_settings.meetWindowTitle.find_first_not_of(L" |\t\r\n") ==
+        std::wstring::npos) {
+        g_settings.meetWindowTitle = ModSettings{}.meetWindowTitle;
+    }
+    if (g_settings.meetBrowserExecutables.find_first_not_of(L" |\t\r\n") ==
+        std::wstring::npos) {
+        g_settings.meetBrowserExecutables = ModSettings{}.meetBrowserExecutables;
+    }
+    g_settings.meetBrowserNames.clear();
+    std::wistringstream browserTokens(g_settings.meetBrowserExecutables);
+    std::wstring browserToken;
+    while (std::getline(browserTokens, browserToken, L'|')) {
+        size_t first = browserToken.find_first_not_of(L" \t\r\n");
+        size_t last = browserToken.find_last_not_of(L" \t\r\n");
+        if (first == std::wstring::npos) continue;
+        browserToken = browserToken.substr(first, last - first + 1);
+        std::transform(browserToken.begin(), browserToken.end(),
+                       browserToken.begin(), [](wchar_t value) {
+                           return static_cast<wchar_t>(std::towlower(value));
+                       });
+        g_settings.meetBrowserNames.push_back(std::move(browserToken));
+    }
+    g_settings.meetWarning = Wh_GetIntSetting(L"GoogleMeet.meetWarning") != 0;
+    g_settings.meetAudioCue = Wh_GetIntSetting(L"GoogleMeet.meetAudioCue") != 0;
+    g_settings.meetRightClickToggle =
+        Wh_GetIntSetting(L"GoogleMeet.meetRightClickUnmute") != 0;
+    g_settings.meetMutedButtonText =
+        GetStringSetting(L"GoogleMeet.meetMutedButtonText");
+    g_settings.meetUnmutedButtonText =
+        GetStringSetting(L"GoogleMeet.meetUnmutedButtonText");
+    g_settings.meetCallButtonText =
+        GetStringSetting(L"GoogleMeet.meetCallButtonText");
+    if (g_settings.meetMutedButtonText.empty()) {
+        g_settings.meetMutedButtonText = L"turn on microphone";
+    }
+    if (g_settings.meetUnmutedButtonText.empty()) {
+        g_settings.meetUnmutedButtonText = L"turn off microphone";
+    }
+    if (g_settings.meetCallButtonText.empty()) {
+        g_settings.meetCallButtonText = L"leave call";
+    }
+    g_settings.meetSpeechThreshold =
+        std::clamp(Wh_GetIntSetting(L"GoogleMeet.meetSpeechThreshold"), 1, 100);
+    g_settings.meetSpeechDelay =
+        std::clamp(Wh_GetIntSetting(L"GoogleMeet.meetSpeechDelay"), 100, 3000);
+
+    if (!g_settings.meetEnabled &&
+        (g_settings.meetWarning || g_settings.meetRightClickToggle ||
+         g_settings.meetAudioCue)) {
+        Wh_Log(L"[Google Meet] Meet features are configured, but Enable Google "
+               L"Meet integration is off; Meet is not monitored.");
+    } else if (g_settings.meetEnabled && !MeetMonitoringEnabled()) {
+        Wh_Log(L"[Google Meet] Integration is enabled, but no feature uses it. "
+               L"Enable the call icon, Meet warning, right-click control, "
+               L"or headset call synchronization; Meet is not monitored.");
+    }
+    if (g_settings.meetEnabled && g_settings.meetAudioCue &&
+        !g_settings.meetWarning) {
+        Wh_Log(L"[Google Meet] The audio cue requires the speaking-while-muted "
+               L"warning to be enabled.");
+    }
 
     g_audioRole.store(static_cast<int>(g_settings.deviceRole));
     g_updateInterval.store(g_settings.updateInterval);
@@ -544,10 +747,13 @@ static std::atomic<int> g_pendingVolumeNotches{0};
 static std::atomic<int> g_pendingVolumeSet{-1};
 static std::atomic<int> g_pendingForcedVolumePersist{-1};
 static std::atomic<unsigned int> g_pendingMuteToggles{0};
-static std::atomic<int> g_pendingMuteSet{-1};
+// Low two bits: 0 = none, 1 = unmute, 2 = mute, 3 = owned-endpoint
+// unmute. Upper bits hold the GetTickCount64 deadline in milliseconds.
+static std::atomic<unsigned long long> g_pendingMuteRequest{0};
 static std::atomic<int> g_pendingSlackCommand{-1};
 static std::atomic<int> g_pendingTeamsCommand{-1};
 static std::atomic<int> g_pendingZoomCommand{-1};
+static std::atomic<int> g_pendingMeetCommand{-1};
 static std::atomic<int> g_pendingFocusCall{-1};
 static std::atomic<bool> g_slackCallActive{false};
 static std::atomic<bool> g_slackMuted{false};
@@ -562,6 +768,10 @@ static std::atomic<bool> g_zoomMuted{false};
 static std::atomic<bool> g_zoomStateKnown{false};
 static std::atomic<bool> g_zoomWarningActive{false};
 static std::atomic<HWND> g_zoomCallWindow{nullptr};
+static std::atomic<bool> g_meetCallActive{false};
+static std::atomic<bool> g_meetMuted{false};
+static std::atomic<bool> g_meetWarningActive{false};
+static std::atomic<HWND> g_meetCallWindow{nullptr};
 static std::atomic<bool> g_headsetAvailable{false};
 static std::atomic<bool> g_headsetMuted{false};
 static SRWLOCK g_headsetStatusLock = SRWLOCK_INIT;
@@ -602,6 +812,9 @@ static UINT g_removeWidgetsMessage = 0;
 static std::atomic<bool> g_updateQueued{false};
 static std::atomic<unsigned long long> g_audioNameGeneration{0};
 static std::atomic<unsigned long long> g_headsetStatusGeneration{0};
+// Active calls deliberately remain transition-driven: load-time call unmute
+// could create a hot mic after an Explorer restart. Windows recovery is instead
+// guarded by persisted ownership of the exact endpoint muted by MuteAlert.
 
 static bool IsStopping() {
     return g_unloading.load() ||
@@ -794,16 +1007,43 @@ static void QueueVolumeNotches(int notches) {
     }
 }
 
+static void ClearHeadsetMuteOwnership() {
+    if (g_windowsMutedByHeadset.exchange(false)) {
+        Wh_SetIntValue(L"windowsMutedByHeadset", 0);
+        Wh_SetStringValue(L"windowsMutedByHeadsetDevice", L"");
+        Wh_SetStringValue(L"windowsMutedByHeadsetBoot", L"");
+    }
+}
+
+static std::wstring GetHeadsetMutedEndpointId() {
+    wchar_t buffer[1024]{};
+    size_t length = Wh_GetStringValue(
+        L"windowsMutedByHeadsetDevice", buffer, ARRAYSIZE(buffer));
+    return std::wstring(buffer, length);
+}
+
 static void QueueMuteToggle() {
+    ClearHeadsetMuteOwnership();
     g_pendingMuteToggles.fetch_add(1);
     if (g_audioWakeEvent) {
         SetEvent(g_audioWakeEvent);
     }
 }
 
-static void QueueMuteSet(bool muted) {
-    g_pendingMuteSet.store(muted ? 1 : 0);
+static void QueueHeadsetMuteRequest(unsigned command) {
+    constexpr unsigned long long kCommandMask = 3;
+    unsigned long long deadline = GetTickCount64() + 5000;
+    g_pendingMuteRequest.store((deadline << 2) |
+                               (command & kCommandMask));
     if (g_audioWakeEvent) SetEvent(g_audioWakeEvent);
+}
+
+static void QueueHeadsetMute() {
+    QueueHeadsetMuteRequest(2);
+}
+
+static void QueueHeadsetUnmute() {
+    QueueHeadsetMuteRequest(1);
 }
 
 static constexpr int kCallCommandNone = -1;
@@ -823,17 +1063,30 @@ static void QueueZoomToggle() {
     g_pendingZoomCommand.store(kCallCommandToggle);
 }
 
-static void QueueActiveCallMuteState(bool muted) {
+static void QueueMeetToggle() {
+    g_pendingMeetCommand.store(kCallCommandToggle);
+}
+
+static bool QueueActiveCallMuteState(bool muted) {
     int command = muted ? kCallCommandMute : kCallCommandUnmute;
+    bool queued = false;
     if (g_slackCallActive.load() && g_slackMuted.load() != muted) {
         g_pendingSlackCommand.store(command);
+        queued = true;
     }
     if (g_teamsCallActive.load() && g_teamsMuted.load() != muted) {
         g_pendingTeamsCommand.store(command);
+        queued = true;
     }
     if (g_zoomCallActive.load() && g_zoomMuted.load() != muted) {
         g_pendingZoomCommand.store(command);
+        queued = true;
     }
+    if (g_meetCallActive.load() && g_meetMuted.load() != muted) {
+        g_pendingMeetCommand.store(command);
+        queued = true;
+    }
+    return queued;
 }
 
 static bool QueueActiveCallToggles() {
@@ -851,6 +1104,10 @@ static bool QueueActiveCallToggles() {
         QueueZoomToggle();
         queued = true;
     }
+    if (g_settings.meetRightClickToggle && g_meetCallActive.load()) {
+        QueueMeetToggle();
+        queued = true;
+    }
     return queued;
 }
 
@@ -858,12 +1115,15 @@ static int GetSelectedActiveCallIndex() {
     bool slackActive = g_slackCallActive.load();
     bool teamsActive = g_teamsCallActive.load();
     bool zoomActive = g_zoomCallActive.load();
+    bool meetActive = g_meetCallActive.load();
     if (slackActive && g_slackMuted.load()) return 0;
     if (teamsActive && g_teamsMuted.load()) return 1;
     if (zoomActive && g_zoomMuted.load()) return 2;
+    if (meetActive && g_meetMuted.load()) return 3;
     if (slackActive) return 0;
     if (teamsActive) return 1;
     if (zoomActive) return 2;
+    if (meetActive) return 3;
     return -1;
 }
 
@@ -966,12 +1226,13 @@ static void PublishUnavailableAudio() {
     changed |= g_slackWarningActive.exchange(false);
     changed |= g_teamsWarningActive.exchange(false);
     changed |= g_zoomWarningActive.exchange(false);
+    changed |= g_meetWarningActive.exchange(false);
     changed |= SetSharedDeviceName(L"No microphone available");
     UpdateWindowsHardwareSource(false, false, L"");
     if (changed) NotifyTaskbar();
 }
 
-enum class CallApp { Slack, Teams, Zoom };
+enum class CallApp { Slack, Teams, Zoom, GoogleMeet };
 enum class CallState { NotInCall, Unknown, Unmuted, Muted };
 
 static std::wstring Lowercase(std::wstring text) {
@@ -989,6 +1250,8 @@ static PCWSTR CallAppName(CallApp app) {
             return L"Microsoft Teams";
         case CallApp::Zoom:
             return L"Zoom";
+        case CallApp::GoogleMeet:
+            return L"Google Meet";
     }
     return L"Call app";
 }
@@ -996,6 +1259,7 @@ static PCWSTR CallAppName(CallApp app) {
 static constexpr unsigned kSlackAppMask = 1 << 0;
 static constexpr unsigned kTeamsAppMask = 1 << 1;
 static constexpr unsigned kZoomAppMask = 1 << 2;
+static constexpr unsigned kMeetAppMask = 1 << 3;
 
 struct ProcessImageCacheEntry {
     std::wstring fileName;
@@ -1055,7 +1319,66 @@ static unsigned CallAppMaskForProcess(DWORD processId) {
         (image->fileName == L"cpthost.exe" &&
          image->fullPath.find(L"\\zoom\\") != std::wstring::npos))
         return kZoomAppMask;
+    if (MeetMonitoringEnabled() &&
+        std::find(g_settings.meetBrowserNames.begin(),
+                  g_settings.meetBrowserNames.end(), image->fileName) !=
+            g_settings.meetBrowserNames.end())
+        return kMeetAppMask;
     return 0;
+}
+
+// Call-monitor-thread only. A capture session may belong to a browser's
+// audio-service child, while its top-level windows belong to an ancestor.
+static std::vector<DWORD> g_meetCaptureProcesses;
+static std::unordered_map<DWORD, DWORD> g_captureProcessParents;
+static bool g_captureParentsLoaded = false;
+
+static void EnsureCaptureProcessParents() {
+    if (g_captureParentsLoaded || IsStopping()) return;
+    g_captureParentsLoaded = true;
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return;
+    PROCESSENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    if (Process32FirstW(snapshot, &entry)) {
+        do {
+            g_captureProcessParents.emplace(entry.th32ProcessID,
+                                             entry.th32ParentProcessID);
+        } while (!IsStopping() && Process32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+}
+
+static void AddMeetCaptureProcess(DWORD processId) {
+    EnsureCaptureProcessParents();
+    const auto* image = CachedProcessImage(processId);
+    if (!image) return;
+    const std::wstring browserPath = image->fullPath;
+    for (int depth = 0; processId && depth < 32; ++depth) {
+        if (std::find(g_meetCaptureProcesses.begin(),
+                      g_meetCaptureProcesses.end(), processId) !=
+            g_meetCaptureProcesses.end()) break;
+        g_meetCaptureProcesses.push_back(processId);
+        auto parent = g_captureProcessParents.find(processId);
+        if (parent == g_captureProcessParents.end() ||
+            parent->second == processId) break;
+        DWORD parentId = parent->second;
+        const auto* parentImage = CachedProcessImage(parentId);
+        if (!parentImage || parentImage->fullPath != browserPath) break;
+        HANDLE child = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                   processId);
+        HANDLE ancestor = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                      FALSE, parentId);
+        FILETIME childCreated{}, parentCreated{}, exited{}, kernel{}, user{};
+        bool valid = child && ancestor &&
+            GetProcessTimes(child, &childCreated, &exited, &kernel, &user) &&
+            GetProcessTimes(ancestor, &parentCreated, &exited, &kernel, &user) &&
+            CompareFileTime(&parentCreated, &childCreated) <= 0;
+        if (child) CloseHandle(child);
+        if (ancestor) CloseHandle(ancestor);
+        if (!valid) break;
+        processId = parentId;
+    }
 }
 
 static unsigned CaptureSessionAppMaskForRole(IMMDeviceEnumerator* enumerator,
@@ -1092,17 +1415,41 @@ static unsigned CaptureSessionAppMaskForRole(IMMDeviceEnumerator* enumerator,
             !control2)
             continue;
         DWORD processId = 0;
-        if (SUCCEEDED(control2->GetProcessId(&processId)) && processId)
-            mask |= CallAppMaskForProcess(processId);
+        if (SUCCEEDED(control2->GetProcessId(&processId)) && processId) {
+            unsigned processMask = CallAppMaskForProcess(processId);
+            if (processMask & kMeetAppMask) {
+                if (state != AudioSessionStateActive) continue;
+                AddMeetCaptureProcess(processId);
+            }
+            mask |= processMask;
+        }
     }
     return mask;
 }
 
 static unsigned CaptureSessionAppMask(IMMDeviceEnumerator* enumerator) {
+    g_meetCaptureProcesses.clear();
+    g_captureProcessParents.clear();
+    g_captureParentsLoaded = false;
     if (!enumerator) return 0;
     return CaptureSessionAppMaskForRole(enumerator, eConsole) |
            CaptureSessionAppMaskForRole(enumerator, eCommunications) |
            CaptureSessionAppMaskForRole(enumerator, eMultimedia);
+}
+
+static bool ContainsConfiguredText(const std::wstring& name,
+                                   const std::wstring& configuredText);
+
+static bool WindowTitleLooksLikeMeet(HWND hWnd) {
+    int length = GetWindowTextLengthW(hWnd);
+    if (length <= 0 || length > 4096) return false;
+
+    std::wstring title(static_cast<size_t>(length) + 1, L'\0');
+    int copied = GetWindowTextW(hWnd, title.data(), length + 1);
+    if (copied <= 0) return false;
+    title.resize(static_cast<size_t>(copied));
+    title = Lowercase(std::move(title));
+    return ContainsConfiguredText(title, Lowercase(g_settings.meetWindowTitle));
 }
 
 static bool IsCallAppWindow(HWND hWnd, CallApp app) {
@@ -1113,6 +1460,13 @@ static bool IsCallAppWindow(HWND hWnd, CallApp app) {
     if (!processId) return false;
 
     unsigned mask = CallAppMaskForProcess(processId);
+    if (app == CallApp::GoogleMeet) {
+        return (mask & kMeetAppMask) &&
+               std::find(g_meetCaptureProcesses.begin(),
+                         g_meetCaptureProcesses.end(), processId) !=
+                   g_meetCaptureProcesses.end() &&
+               WindowTitleLooksLikeMeet(hWnd);
+    }
     return (app == CallApp::Slack && (mask & kSlackAppMask)) ||
            (app == CallApp::Teams && (mask & kTeamsAppMask)) ||
            (app == CallApp::Zoom && (mask & kZoomAppMask));
@@ -1281,7 +1635,20 @@ static CallState ReadCallState(IUIAutomation* automation, CallApp app,
         },
         reinterpret_cast<LPARAM>(&search));
 
-    if (appWindows.empty()) return CallState::NotInCall;
+    if (appWindows.empty()) {
+        if (app == CallApp::GoogleMeet && !g_meetCaptureProcesses.empty()) {
+            static ULONGLONG lastTitleDiagnostic = 0;
+            ULONGLONG now = GetTickCount64();
+            if (!lastTitleDiagnostic || now - lastTitleDiagnostic >= 60000) {
+                Wh_Log(L"[Google Meet] Browser capture detected but no eligible "
+                       L"window title matched. If you are in a Meet call, "
+                       L"check meetWindowTitle and keep "
+                       L"the meeting tab selected. Window titles are not logged.");
+                lastTitleDiagnostic = now;
+            }
+        }
+        return CallState::NotInCall;
+    }
 
     // Zoom's meeting toolbar can disappear from the automation tree while it
     // is auto-hidden. Keep a usable window target for the app badge even when
@@ -1329,6 +1696,11 @@ static CallState ReadCallState(IUIAutomation* automation, CallApp app,
             mutedButtonText = &g_settings.zoomMutedButtonText;
             unmutedButtonText = &g_settings.zoomUnmutedButtonText;
             callButtonText = &g_settings.zoomCallButtonText;
+            break;
+        case CallApp::GoogleMeet:
+            mutedButtonText = &g_settings.meetMutedButtonText;
+            unmutedButtonText = &g_settings.meetUnmutedButtonText;
+            callButtonText = &g_settings.meetCallButtonText;
             break;
     }
     std::wstring mutedText = Lowercase(*mutedButtonText);
@@ -1463,17 +1835,21 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
     ULONGLONG lastSlackCheck = 0;
     ULONGLONG lastTeamsCheck = 0;
     ULONGLONG lastZoomCheck = 0;
+    ULONGLONG lastMeetCheck = 0;
     ULONGLONG slackSpeakingSince = 0;
     ULONGLONG slackWarningUntil = 0;
     ULONGLONG teamsSpeakingSince = 0;
     ULONGLONG teamsWarningUntil = 0;
     ULONGLONG zoomSpeakingSince = 0;
     ULONGLONG zoomWarningUntil = 0;
+    ULONGLONG meetSpeakingSince = 0;
+    ULONGLONG meetWarningUntil = 0;
     ULONGLONG lastCaptureSessionCheck = 0;
     unsigned captureAppMask = 0;
     CallState slackState = CallState::NotInCall;
     CallState teamsState = CallState::NotInCall;
     CallState zoomState = CallState::NotInCall;
+    CallState meetState = CallState::NotInCall;
     int deferredZoomCommand = kCallCommandNone;
     int deferredZoomAttempts = 0;
     bool syncCallsFromHeadset =
@@ -1489,6 +1865,7 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
     bool monitorZoom =
         g_settings.showCallStateIcon || g_settings.zoomWarning ||
         g_settings.zoomRightClickToggle || syncCallsFromHeadset;
+    bool monitorMeet = MeetMonitoringEnabled();
 
     while (!IsStopping() &&
            WaitForSingleObject(g_audioStopEvent, 50) == WAIT_TIMEOUT) {
@@ -1620,12 +1997,37 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
             publishWindow(g_zoomCallWindow, callWindow);
         }
 
+        int meetCommand =
+            g_pendingMeetCommand.exchange(kCallCommandNone);
+        bool pollMeet =
+            monitorMeet &&
+            ((captureAppMask & kMeetAppMask) ||
+             meetCommand != kCallCommandNone ||
+             meetState != CallState::NotInCall);
+        if (pollMeet &&
+            (lastMeetCheck == 0 || now - lastMeetCheck >= 1500 ||
+             meetCommand != kCallCommandNone)) {
+            HWND callWindow = nullptr;
+            meetState = monitorMeet
+                            ? ReadCallState(automation.get(),
+                                            CallApp::GoogleMeet,
+                                            meetCommand, &callWindow)
+                            : CallState::NotInCall;
+            now = GetTickCount64();
+            lastMeetCheck = now;
+            publishBool(g_meetCallActive,
+                        meetState != CallState::NotInCall);
+            publishBool(g_meetMuted, meetState == CallState::Muted);
+            publishWindow(g_meetCallWindow, callWindow);
+        }
+
         int focusRequest = g_pendingFocusCall.exchange(-1);
         if (focusRequest >= 0) {
             HWND callWindow =
                 focusRequest == 0   ? g_slackCallWindow.load()
                 : focusRequest == 1 ? g_teamsCallWindow.load()
                 : focusRequest == 2 ? g_zoomCallWindow.load()
+                : focusRequest == 3 ? g_meetCallWindow.load()
                                     : nullptr;
             if (callWindow && IsWindow(callWindow)) {
                 RequestForegroundWindow(callWindow);
@@ -1680,6 +2082,11 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
                       g_settings.zoomSpeechThreshold,
                       g_settings.zoomSpeechDelay, zoomSpeakingSince,
                       zoomWarningUntil, g_zoomWarningActive);
+        updateWarning(meetState, g_settings.meetWarning,
+                      g_settings.meetAudioCue,
+                      g_settings.meetSpeechThreshold,
+                      g_settings.meetSpeechDelay, meetSpeakingSince,
+                      meetWarningUntil, g_meetWarningActive);
         if (playCue) MessageBeep(MB_ICONEXCLAMATION);
         if (notify) NotifyTaskbar();
     }
@@ -1697,8 +2104,15 @@ static DWORD WINAPI CallAppsThreadProc(void*) {
     g_zoomStateKnown.store(false);
     g_zoomWarningActive.store(false);
     g_zoomCallWindow.store(nullptr);
+    g_meetCallActive.store(false);
+    g_meetMuted.store(false);
+    g_meetWarningActive.store(false);
+    g_meetCallWindow.store(nullptr);
     g_pendingFocusCall.store(-1);
     g_processImageCache.clear();
+    g_meetCaptureProcesses.clear();
+    g_captureProcessParents.clear();
+    g_captureParentsLoaded = false;
     NotifyTaskbar();
     automation = nullptr;
     captureEnumerator = nullptr;
@@ -1733,6 +2147,7 @@ static DWORD WINAPI AudioThreadProc(void*) {
     ULONGLONG lastEndpointCheck = 0;
     ULONGLONG lastVolumeForce = 0;
     std::wstring observedEndpointId;
+    bool observedEndpointOwned = false;
     bool observedHardwareMuteKnown = false;
     bool observedHardwareMuted = false;
     HANDLE waits[] = {g_audioStopEvent, g_audioWakeEvent};
@@ -1760,6 +2175,8 @@ static DWORD WINAPI AudioThreadProc(void*) {
             }
             if (observedEndpointId != endpoint.id) {
                 observedEndpointId = endpoint.id;
+                observedEndpointOwned =
+                    GetHeadsetMutedEndpointId() == endpoint.id;
                 observedHardwareMuteKnown = false;
             }
         }
@@ -1786,11 +2203,47 @@ static DWORD WINAPI AudioThreadProc(void*) {
             }
         }
 
-        int requestedMute = g_pendingMuteSet.exchange(-1);
-        if (requestedMute >= 0) {
-            g_pendingMuteToggles.exchange(0);
-            endpoint.volume->SetMute(requestedMute != 0, nullptr);
+        unsigned long long muteRequest =
+            g_pendingMuteRequest.exchange(0);
+        unsigned muteCommand = static_cast<unsigned>(muteRequest & 3);
+        unsigned long long muteDeadline = muteRequest >> 2;
+        bool muteRequestExpired =
+            (muteCommand == 1 || muteCommand == 3) && now > muteDeadline;
+        if (muteCommand != 0 && !muteRequestExpired) {
+            bool requireOwnedEndpoint = muteCommand == 3;
+            bool targetMuted = muteCommand == 2;
+            bool endpointMatches =
+                !requireOwnedEndpoint ||
+                (g_windowsMutedByHeadset.load() &&
+                 GetHeadsetMutedEndpointId() == endpoint.id);
+            if (!endpointMatches) {
+                ClearHeadsetMuteOwnership();
+                RecordDiagnosticEvent(
+                    L"Skipped headset-owned unmute: default input changed");
+            } else {
+                g_pendingMuteToggles.exchange(0);
+                if (SUCCEEDED(endpoint.volume->SetMute(
+                           targetMuted, nullptr))) {
+                    std::wstring bootStamp =
+                        targetMuted
+                            ? std::to_wstring(CurrentBootStamp())
+                            : L"";
+                    g_windowsMutedByHeadset.store(targetMuted);
+                    Wh_SetIntValue(L"windowsMutedByHeadset",
+                                   targetMuted ? 1 : 0);
+                    Wh_SetStringValue(
+                        L"windowsMutedByHeadsetDevice",
+                        targetMuted ? endpoint.id.c_str() : L"");
+                    Wh_SetStringValue(
+                        L"windowsMutedByHeadsetBoot",
+                        bootStamp.c_str());
+                    observedEndpointOwned = targetMuted;
+                }
+            }
         } else {
+            if (muteRequestExpired) {
+                RecordDiagnosticEvent(L"Expired headset unmute request");
+            }
             unsigned int toggles = g_pendingMuteToggles.exchange(0);
             if ((toggles & 1U) != 0) {
                 BOOL muted = FALSE;
@@ -1809,6 +2262,14 @@ static DWORD WINAPI AudioThreadProc(void*) {
             endpoint.Reset();
             PublishUnavailableAudio();
             continue;
+        }
+
+        if (muted == FALSE && observedEndpointOwned &&
+            g_windowsMutedByHeadset.load()) {
+            // A different control removed the mute, so a later startup must
+            // not claim ownership of a subsequent manual privacy mute.
+            ClearHeadsetMuteOwnership();
+            observedEndpointOwned = false;
         }
 
         if (g_forceVolume.load()) {
@@ -1856,16 +2317,24 @@ static DWORD WINAPI AudioThreadProc(void*) {
         if (endpoint.hardwareMute) {
             bool changed = observedHardwareMuteKnown &&
                            observedHardwareMuted != (muted != FALSE);
-            bool initialMuted = !observedHardwareMuteKnown && muted != FALSE;
             bool syncMute = g_settings.headsetSyncMode == L"full" ||
                             g_settings.headsetSyncMode == L"muteOnly";
             bool syncUnmute = g_settings.headsetSyncMode == L"full";
-            if (g_settings.headsetSyncCalls &&
-                ((muted && (changed || initialMuted) && syncMute) ||
-                 (!muted && changed && syncUnmute))) {
+            bool initialMuted =
+                !observedHardwareMuteKnown && muted != FALSE;
+            bool assertMute = muted != FALSE && syncMute &&
+                              (changed || initialMuted);
+            bool assertUnmute = muted == FALSE && changed && syncUnmute;
+            bool shouldSync = assertMute || assertUnmute;
+            if (g_settings.headsetSyncCalls && shouldSync) {
                 QueueActiveCallMuteState(muted != FALSE);
+            }
+            if (g_settings.headsetSyncCalls &&
+                (changed || initialMuted) && shouldSync) {
                 RecordDiagnosticEvent(
-                    std::wstring(L"Windows hardware mute changed to ") +
+                    std::wstring(initialMuted
+                                     ? L"Windows hardware mute initial state: "
+                                     : L"Windows hardware mute changed to ") +
                     (muted ? L"muted" : L"unmuted"));
             }
         }
@@ -2286,6 +2755,7 @@ static std::optional<bool> CurrentCallMuteState() {
     if (selected == 0) return g_slackMuted.load();
     if (selected == 1) return g_teamsMuted.load();
     if (selected == 2 && g_zoomStateKnown.load()) return g_zoomMuted.load();
+    if (selected == 3) return g_meetMuted.load();
     return std::nullopt;
 }
 
@@ -2340,7 +2810,11 @@ static void ResolveStandardHidAction() {
     if (!targetMuted && g_settings.headsetSyncMode != L"full") return;
     if (g_settings.headsetSyncWindows &&
         (!currentAudioAvailable || currentAudioMuted != targetMuted)) {
-        QueueMuteSet(targetMuted);
+        if (targetMuted) {
+            QueueHeadsetMute();
+        } else {
+            QueueHeadsetUnmute();
+        }
     }
     if (g_settings.headsetSyncCalls) {
         QueueActiveCallMuteState(targetMuted);
@@ -2789,6 +3263,7 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
     bool previousMuted = false;
     ULONGLONG nextVendorPoll = 0;
     ULONGLONG scheduledVendorProbe = 0;
+    ULONGLONG lastVendorCallMuteAssert = 0;
     bool diagnosticsExported = false;
     ULONGLONG diagnosticsExportAt = GetTickCount64() + 2000;
 
@@ -2838,6 +3313,8 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
             } else {
                 bool stateChanged =
                     !stateKnown || observation.muted != previousMuted;
+                bool stateTransition =
+                    stateKnown && observation.muted != previousMuted;
                 UpdateSteelSeriesSource(true, observation.muted,
                                         observation.deviceName,
                                         observation.detail);
@@ -2854,15 +3331,24 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
                 if (observation.muted && syncMute) {
                     if (g_settings.headsetSyncWindows &&
                         !g_audioMuted.load()) {
-                        QueueMuteSet(true);
+                        QueueHeadsetMute();
                     }
-                    if (g_settings.headsetSyncCalls) {
-                        QueueActiveCallMuteState(true);
+                    if (g_settings.headsetSyncCalls &&
+                        (stateChanged || lastVendorCallMuteAssert == 0 ||
+                         now - lastVendorCallMuteAssert >= 5000) &&
+                        QueueActiveCallMuteState(true)) {
+                        lastVendorCallMuteAssert = now;
                     }
-                } else if (!observation.muted && syncUnmute && stateKnown &&
-                           previousMuted) {
-                    if (g_settings.headsetSyncWindows) QueueMuteSet(false);
-                    if (g_settings.headsetSyncCalls) {
+                } else if (!observation.muted && syncUnmute) {
+                    if (g_settings.headsetSyncWindows) {
+                        bool audioKnown = g_audioAvailable.load();
+                        if (!audioKnown || g_audioMuted.load()) {
+                            QueueHeadsetUnmute();
+                        } else if (audioKnown) {
+                            ClearHeadsetMuteOwnership();
+                        }
+                    }
+                    if (g_settings.headsetSyncCalls && stateTransition) {
                         QueueActiveCallMuteState(false);
                     }
                 }
@@ -2940,6 +3426,9 @@ static bool StartAudioThread() {
         return false;
     }
 
+    g_pendingMuteRequest.store(0);
+    g_pendingMuteToggles.store(0);
+
     g_audioThread = CreateThread(nullptr, 0, AudioThreadProc, nullptr, 0,
                                  nullptr);
     if (!g_audioThread) {
@@ -2957,7 +3446,8 @@ static bool StartAudioThread() {
         g_settings.slackWarning ||
         g_settings.slackRightClickToggle ||
         g_settings.teamsWarning || g_settings.teamsRightClickToggle ||
-        g_settings.zoomWarning || g_settings.zoomRightClickToggle) {
+        g_settings.zoomWarning || g_settings.zoomRightClickToggle ||
+        MeetMonitoringEnabled()) {
         g_callAppsThread = CreateThread(
             nullptr, 0, CallAppsThreadProc, nullptr, 0, nullptr);
         if (!g_callAppsThread) {
@@ -3233,6 +3723,7 @@ struct WidgetState {
     Grid callSlackLogo{nullptr};
     Grid callTeamsLogo{nullptr};
     Grid callZoomLogo{nullptr};
+    Grid callMeetLogo{nullptr};
     Grid callMultipleBadge{nullptr};
     Shapes::Line callMuteLine{nullptr};
     TextBlock callTooltipText{nullptr};
@@ -3262,12 +3753,15 @@ struct RenderSnapshot {
     bool slackWarning = false;
     bool teamsWarning = false;
     bool zoomWarning = false;
+    bool meetWarning = false;
     bool slackActive = false;
     bool teamsActive = false;
     bool zoomActive = false;
+    bool meetActive = false;
     bool slackMuted = false;
     bool teamsMuted = false;
     bool zoomMuted = false;
+    bool meetMuted = false;
     bool zoomStateKnown = false;
     unsigned long long audioNameGeneration = 0;
     unsigned long long headsetStatusGeneration = 0;
@@ -3288,12 +3782,15 @@ static bool SameRenderDetails(const RenderSnapshot& left,
            left.slackWarning == right.slackWarning &&
            left.teamsWarning == right.teamsWarning &&
            left.zoomWarning == right.zoomWarning &&
+           left.meetWarning == right.meetWarning &&
            left.slackActive == right.slackActive &&
            left.teamsActive == right.teamsActive &&
            left.zoomActive == right.zoomActive &&
+           left.meetActive == right.meetActive &&
            left.slackMuted == right.slackMuted &&
            left.teamsMuted == right.teamsMuted &&
            left.zoomMuted == right.zoomMuted &&
+           left.meetMuted == right.meetMuted &&
            left.zoomStateKnown == right.zoomStateKnown &&
            left.audioNameGeneration == right.audioNameGeneration &&
            left.headsetStatusGeneration == right.headsetStatusGeneration &&
@@ -3495,6 +3992,71 @@ static Grid BuildZoomLogo(double size) {
     return logo;
 }
 
+static Grid BuildMeetLogo(double size) {
+    double scale = size / 18.0;
+    Grid logo;
+    logo.Width(size);
+    logo.Height(size);
+    logo.IsHitTestVisible(false);
+
+    Canvas canvas;
+    canvas.Width(size);
+    canvas.Height(size);
+
+    Shapes::Rectangle body;
+    body.Width(9.0 * scale);
+    body.Height(11.0 * scale);
+    body.RadiusX(1.5 * scale);
+    body.RadiusY(1.5 * scale);
+    body.Fill(MakeBrush({255, 0, 172, 84}));
+    Canvas::SetLeft(body, 4.0 * scale);
+    Canvas::SetTop(body, 3.5 * scale);
+    canvas.Children().Append(body);
+
+    Shapes::Polygon lens;
+    lens.Fill(MakeBrush({255, 0, 172, 84}));
+    lens.Points().Append({13.0f * static_cast<float>(scale),
+                          6.0f * static_cast<float>(scale)});
+    lens.Points().Append({17.0f * static_cast<float>(scale),
+                          3.8f * static_cast<float>(scale)});
+    lens.Points().Append({17.0f * static_cast<float>(scale),
+                          14.2f * static_cast<float>(scale)});
+    lens.Points().Append({13.0f * static_cast<float>(scale),
+                          12.0f * static_cast<float>(scale)});
+    canvas.Children().Append(lens);
+
+    Shapes::Polygon yellowPart;
+    yellowPart.Fill(MakeBrush({255, 251, 188, 4}));
+    yellowPart.Points().Append({4.0f * static_cast<float>(scale),
+                                3.5f * static_cast<float>(scale)});
+    yellowPart.Points().Append({8.5f * static_cast<float>(scale),
+                                3.5f * static_cast<float>(scale)});
+    yellowPart.Points().Append({4.0f * static_cast<float>(scale),
+                                8.0f * static_cast<float>(scale)});
+    canvas.Children().Append(yellowPart);
+
+    Shapes::Polygon redPart;
+    redPart.Fill(MakeBrush({255, 234, 67, 53}));
+    redPart.Points().Append({4.0f * static_cast<float>(scale),
+                             10.0f * static_cast<float>(scale)});
+    redPart.Points().Append({8.5f * static_cast<float>(scale),
+                             14.5f * static_cast<float>(scale)});
+    redPart.Points().Append({4.0f * static_cast<float>(scale),
+                             14.5f * static_cast<float>(scale)});
+    canvas.Children().Append(redPart);
+
+    Shapes::Rectangle bluePart;
+    bluePart.Width(3.5 * scale);
+    bluePart.Height(5.0 * scale);
+    bluePart.Fill(MakeBrush({255, 66, 133, 244}));
+    Canvas::SetLeft(bluePart, 2.0 * scale);
+    Canvas::SetTop(bluePart, 6.5 * scale);
+    canvas.Children().Append(bluePart);
+
+    logo.Children().Append(canvas);
+    return logo;
+}
+
 static Grid BuildMultipleCallsBadge(double size) {
     double badgeSize = std::max(7.0, size * 0.44);
     Grid badge;
@@ -3561,12 +4123,15 @@ static void UpdateWidgets() {
     next.slackWarning = g_slackWarningActive.load();
     next.teamsWarning = g_teamsWarningActive.load();
     next.zoomWarning = g_zoomWarningActive.load();
+    next.meetWarning = g_meetWarningActive.load();
     next.slackActive = g_slackCallActive.load();
     next.teamsActive = g_teamsCallActive.load();
     next.zoomActive = g_zoomCallActive.load();
+    next.meetActive = g_meetCallActive.load();
     next.slackMuted = g_slackMuted.load();
     next.teamsMuted = g_teamsMuted.load();
     next.zoomMuted = g_zoomMuted.load();
+    next.meetMuted = g_meetMuted.load();
     next.zoomStateKnown = g_zoomStateKnown.load();
     next.audioNameGeneration =
         g_audioNameGeneration.load(std::memory_order_relaxed);
@@ -3599,6 +4164,7 @@ static void UpdateWidgets() {
         if (next.slackWarning) warningApps.push_back(L"Slack");
         if (next.teamsWarning) warningApps.push_back(L"Microsoft Teams");
         if (next.zoomWarning) warningApps.push_back(L"Zoom");
+        if (next.meetWarning) warningApps.push_back(L"Google Meet");
         if (!warningApps.empty()) {
             tooltip = L"You're speaking, but " + JoinAppNames(warningApps) +
                       (warningApps.size() == 1 ? L" is muted.\n\n"
@@ -3637,6 +4203,9 @@ static void UpdateWidgets() {
             next.zoomStateKnown) {
             toggleApps.push_back(L"Zoom");
         }
+        if (g_settings.meetRightClickToggle && next.meetActive) {
+            toggleApps.push_back(L"Google Meet");
+        }
         if (!toggleApps.empty()) {
             tooltip += L"\nRight-click: mute/unmute " +
                        JoinAppNames(toggleApps);
@@ -3656,6 +4225,8 @@ static void UpdateWidgets() {
                      L"Microsoft Teams");
         addCallState(next.zoomActive, next.zoomStateKnown, next.zoomMuted,
                      L"Zoom");
+        addCallState(next.meetActive, true, next.meetMuted,
+                     L"Google Meet");
         if (next.zoomActive && !next.zoomStateKnown) {
             callTooltip +=
                 L"\nShow Zoom's controls once to read its mute state.";
@@ -3666,17 +4237,22 @@ static void UpdateWidgets() {
             selectedCallLogo = 1;
         } else if (next.zoomActive && next.zoomMuted) {
             selectedCallLogo = 2;
+        } else if (next.meetActive && next.meetMuted) {
+            selectedCallLogo = 3;
         } else if (next.slackActive) {
             selectedCallLogo = 0;
         } else if (next.teamsActive) {
             selectedCallLogo = 1;
         } else if (next.zoomActive) {
             selectedCallLogo = 2;
+        } else if (next.meetActive) {
+            selectedCallLogo = 3;
         }
         PCWSTR selectedCallName =
             selectedCallLogo == 0   ? L"Slack"
             : selectedCallLogo == 1 ? L"Microsoft Teams"
             : selectedCallLogo == 2 ? L"Zoom"
+            : selectedCallLogo == 3 ? L"Google Meet"
                                     : L"active call";
         if (!activeApps.empty()) {
             callTooltip += L"\n\nLeft-click: focus " +
@@ -3688,7 +4264,8 @@ static void UpdateWidgets() {
         }
         anyCallMuted = (next.slackActive && next.slackMuted) ||
                        (next.teamsActive && next.teamsMuted) ||
-                       (next.zoomActive && next.zoomMuted);
+                       (next.zoomActive && next.zoomMuted) ||
+                       (next.meetActive && next.meetMuted);
     }
 
     bool renderFailed = false;
@@ -3723,6 +4300,9 @@ static void UpdateWidgets() {
                                           : Visibility::Collapsed);
                 widget.callZoomLogo.Visibility(
                     selectedCallLogo == 2 ? Visibility::Visible
+                                          : Visibility::Collapsed);
+                widget.callMeetLogo.Visibility(
+                    selectedCallLogo == 3 ? Visibility::Visible
                                           : Visibility::Collapsed);
                 widget.callLogoHost.Opacity(anyCallMuted ? 0.58 : 1.0);
                 widget.callMultipleBadge.Visibility(
@@ -3843,14 +4423,17 @@ static Button BuildCallStateButton(WidgetState* state) {
     auto slackLogo = BuildSlackLogo(iconSize);
     auto teamsLogo = BuildTeamsLogo(iconSize);
     auto zoomLogo = BuildZoomLogo(iconSize);
+    auto meetLogo = BuildMeetLogo(iconSize);
     auto multipleBadge = BuildMultipleCallsBadge(iconSize);
     slackLogo.Visibility(Visibility::Collapsed);
     teamsLogo.Visibility(Visibility::Collapsed);
     zoomLogo.Visibility(Visibility::Collapsed);
+    meetLogo.Visibility(Visibility::Collapsed);
     multipleBadge.Visibility(Visibility::Collapsed);
     logoHost.Children().Append(slackLogo);
     logoHost.Children().Append(teamsLogo);
     logoHost.Children().Append(zoomLogo);
+    logoHost.Children().Append(meetLogo);
     logoHost.Children().Append(multipleBadge);
 
     Shapes::Line muteLine;
@@ -3891,6 +4474,7 @@ static Button BuildCallStateButton(WidgetState* state) {
     state->callSlackLogo = slackLogo;
     state->callTeamsLogo = teamsLogo;
     state->callZoomLogo = zoomLogo;
+    state->callMeetLogo = meetLogo;
     state->callMultipleBadge = multipleBadge;
     state->callMuteLine = muteLine;
     state->callTooltipText = tooltipText;
