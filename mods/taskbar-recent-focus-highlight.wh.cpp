@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.9.31
+// @version         0.9.34
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -104,15 +104,16 @@ to clear highlights.
     Controls instant promotion when you re-focus an app (confirmed apps still
     become rank 1 once promoted — this only skips the wait timer).
 
-    Immediate if in recency map (default): any app still in the map (even if
-    not currently highlighted) promotes immediately.
+    Immediate if in recency map (default): an app whose last confirm is still
+    inside the decay window promotes immediately, even if it is not currently
+    highlighted. A confirm past that window waits again.
 
     Immediate only if highlighted: instant only when the app is already in the
     top-N glow set; rank 4+ and new apps wait the full min-focus time.
 
     Always wait: every app focus (including re-focus) waits min-focus seconds.
   $options:
-  - immediateTracked: Immediate if still in recency map (default)
+  - immediateTracked: Immediate if confirm is still inside decay (default)
   - immediateTopN: Immediate only if already highlighted (top N)
   - alwaysWait: Always wait min-focus time
 - decayMinutes: 30
@@ -5712,7 +5713,7 @@ void RefreshThumbnailFlyout_UIThread(FrameworkElement anyThumb) {
     //   2. Repeater index + Thumbnails.GetAt — holes only. The collection is
     //      cleared on TargetItemKey entry and recaptured for this target;
     //      still skip GetAt if it disagrees with a DataContext HWND.
-    // No unique-title fallback (stash/preview-unique-title.cpp).
+    // No unique-title fallback. A card that misses both stays unmarked.
     enum class ResolveHow : int { None = 0, Repeater, TaskItem };
     struct Scored {
         FrameworkElement view{nullptr};
@@ -5991,25 +5992,109 @@ bool DispatcherTryRun(
     }
 }
 
-// Unload handshake: the waiter must not proceed until this Completed
-// handler has run. The Low dispatcher callback must not SetEvent.
+// Unload handshake: Completed signals the waiter. The Low callback must not.
+// Completed can be set only once; a failure here does not mean the op is idle.
 template <typename Op>
 bool SubscribeDrainCompleted(Op const& op, HANDLE done) {
     if (!op || !done) {
         return false;
     }
     try {
-        op.Completed([done](auto&& o, auto&&) {
-            try {
-                (void)DispatcherOpWasQueued(o);
-            } catch (...) {
-            }
-            SetEvent(done);
-        });
+        op.Completed([done](auto&&, auto&&) { SetEvent(done); });
         return true;
     } catch (...) {
         return false;
     }
+}
+
+// What a TryRunAsync operation actually did. Started is not a result.
+// Completed + GetResults()==false means the callback was not run.
+enum class DispatcherOpEnd {
+    Absent,
+    Ran,
+    NotRun,
+    Unknown,
+    Gone,
+};
+
+// Dispatcher method calls that mean this object will not invoke us again.
+bool HresultMeansDispatcherGone(HRESULT hr) {
+    // The object rejected the call as disconnected or closed. Further posts
+    // cannot be observed. This is not a sentinel, and it is not proof about
+    // every earlier subscription; waiting can no longer succeed.
+    return hr == static_cast<HRESULT>(0x80010108) ||  // RPC_E_DISCONNECTED
+           hr == static_cast<HRESULT>(0x80010007) ||  // RPC_E_SERVER_DIED
+           hr == static_cast<HRESULT>(0x80010012) ||  // RPC_E_SERVER_DIED_DNE
+           hr == static_cast<HRESULT>(0x800401FD) ||  // CO_E_OBJNOTCONNECTED
+           hr == static_cast<HRESULT>(0x80000013);    // RO_E_CLOSED
+}
+
+// Must be called from a catch clause. The exception stays active there.
+bool ExceptionMeansDispatcherGone() {
+    try {
+        throw;
+    } catch (winrt::hresult_error const& ex) {
+        return HresultMeansDispatcherGone(ex.code());
+    } catch (...) {
+        return false;
+    }
+}
+
+// Wait until the operation is terminal, then report whether its callback ran.
+// A status read that throws is Unknown, not completion. done may be null.
+// pump runs while polling so a sentinel posted on the UI thread can execute.
+template <typename Op, typename Pump>
+DispatcherOpEnd ObserveDispatcherOp(Op const& op, HANDLE done, Pump pump) {
+    if (!op) {
+        return DispatcherOpEnd::Absent;
+    }
+    if (done) {
+        ResetEvent(done);
+    }
+    if (!done || !SubscribeDrainCompleted(op, done)) {
+        while (true) {
+            try {
+                if (op.Status() !=
+                    winrt::Windows::Foundation::AsyncStatus::Started) {
+                    break;
+                }
+            } catch (...) {
+                if (ExceptionMeansDispatcherGone()) {
+                    return DispatcherOpEnd::Gone;
+                }
+                return DispatcherOpEnd::Unknown;
+            }
+            if (pump()) {
+                return DispatcherOpEnd::Gone;
+            }
+        }
+    } else {
+        WaitForSingleObject(done, INFINITE);
+    }
+    try {
+        const auto st = op.Status();
+        if (st == winrt::Windows::Foundation::AsyncStatus::Completed) {
+            try {
+                return op.GetResults() ? DispatcherOpEnd::Ran
+                                       : DispatcherOpEnd::NotRun;
+            } catch (...) {
+                if (ExceptionMeansDispatcherGone()) {
+                    return DispatcherOpEnd::Gone;
+                }
+                return DispatcherOpEnd::Unknown;
+            }
+        }
+        if (st == winrt::Windows::Foundation::AsyncStatus::Error ||
+            st == winrt::Windows::Foundation::AsyncStatus::Canceled) {
+            return DispatcherOpEnd::NotRun;
+        }
+    } catch (...) {
+        if (ExceptionMeansDispatcherGone()) {
+            return DispatcherOpEnd::Gone;
+        }
+        return DispatcherOpEnd::Unknown;
+    }
+    return DispatcherOpEnd::Unknown;
 }
 
 std::vector<winrt::Windows::UI::Core::CoreDispatcher> CollectUiDispatchers() {
@@ -6020,10 +6105,132 @@ std::vector<winrt::Windows::UI::Core::CoreDispatcher> CollectUiDispatchers() {
     return *g_uiDispatchers;
 }
 
-// Uninit: run handler at High, then wait for a Low sentinel so earlier
-// Normal TryRunAsync work (which no-ops on g_unloading) has drained.
-// Must not return until every dispatcher has run — SizeChanged tokens live
-// in this image.
+// Proof the dispatcher will not call this mod again: the Low sentinel ran,
+// or a call failed because the dispatcher is gone. High completion is not
+// that proof. A timeout, a false TryRunAsync result, and a thrown status
+// read are not that proof either.
+enum class DrainProof { SentinelRan, DispatcherGone };
+
+// Returns true when the dispatcher object is disconnected or closed.
+// Any other failure is not a drain and must not escape unload.
+bool PauseDispatcherAttempt(
+    winrt::Windows::UI::Core::CoreDispatcher const& dispatcher) {
+    // On the UI thread a posted sentinel cannot finish until the queue is
+    // pumped. Off that thread, backoff only — do not pretend time is a drain.
+    try {
+        if (dispatcher.HasThreadAccess()) {
+            try {
+                dispatcher.ProcessEvents(
+                    winrt::Windows::UI::Core::CoreProcessEventsOption::
+                        ProcessOneIfPresent);
+            } catch (...) {
+                if (ExceptionMeansDispatcherGone()) {
+                    return true;
+                }
+            }
+        }
+    } catch (...) {
+        if (ExceptionMeansDispatcherGone()) {
+            return true;
+        }
+    }
+    Sleep(20);
+    return false;
+}
+
+DrainProof DrainOneUiDispatcher(
+    winrt::Windows::UI::Core::CoreDispatcher const& dispatcher,
+    winrt::Windows::UI::Core::DispatchedHandler const& handler,
+    HANDLE done) {
+    using AsyncOp = winrt::Windows::Foundation::IAsyncOperation<bool>;
+    using Pri = winrt::Windows::UI::Core::CoreDispatcherPriority;
+    // Completed is delivered on the dispatcher thread. Waiting for it here
+    // would deadlock. Poll and pump instead. A throw from the property is
+    // the same gone-or-retry policy as TryRunAsync, not an escape from unload.
+    try {
+        if (dispatcher.HasThreadAccess()) {
+            done = nullptr;
+        }
+    } catch (...) {
+        if (ExceptionMeansDispatcherGone()) {
+            return DrainProof::DispatcherGone;
+        }
+        done = nullptr;
+    }
+    AsyncOp highOp{nullptr};
+    bool highRan = false;
+    auto pump = [&]() { return PauseDispatcherAttempt(dispatcher); };
+    for (;;) {
+        if (!highRan) {
+            if (!highOp) {
+                try {
+                    highOp = dispatcher.TryRunAsync(Pri::High, handler);
+                } catch (...) {
+                    if (ExceptionMeansDispatcherGone()) {
+                        return DrainProof::DispatcherGone;
+                    }
+                    highOp = nullptr;
+                    if (pump()) {
+                        return DrainProof::DispatcherGone;
+                    }
+                    continue;
+                }
+            }
+            const DispatcherOpEnd highEnd =
+                ObserveDispatcherOp(highOp, done, pump);
+            if (highEnd == DispatcherOpEnd::Gone) {
+                return DrainProof::DispatcherGone;
+            }
+            if (highEnd == DispatcherOpEnd::Ran) {
+                highRan = true;
+            } else if (highEnd == DispatcherOpEnd::Unknown) {
+                // Same operation may still be running. Do not post another
+                // cleanup, and do not treat the read failure as finished.
+                if (pump()) {
+                    return DrainProof::DispatcherGone;
+                }
+                continue;
+            } else {
+                // Completed-false, canceled, or error: the callback did not
+                // run. Microsoft documents false during dispatcher shutdown.
+                // That rejects this post only. It does not show that work
+                // already queued will not run, so it is not a drain and not
+                // "dispatcher gone". Keep waiting.
+                highOp = nullptr;
+                if (pump()) {
+                    return DrainProof::DispatcherGone;
+                }
+                continue;
+            }
+        }
+        AsyncOp lowOp{nullptr};
+        try {
+            lowOp = dispatcher.TryRunAsync(Pri::Low, []() {});
+        } catch (...) {
+            if (ExceptionMeansDispatcherGone()) {
+                return DrainProof::DispatcherGone;
+            }
+            if (pump()) {
+                return DrainProof::DispatcherGone;
+            }
+            continue;
+        }
+        const DispatcherOpEnd lowEnd = ObserveDispatcherOp(lowOp, done, pump);
+        if (lowEnd == DispatcherOpEnd::Gone) {
+            return DrainProof::DispatcherGone;
+        }
+        // Only a sentinel that actually ran has drained earlier callbacks.
+        // A false/canceled/error completion is not that sentinel.
+        if (lowEnd == DispatcherOpEnd::Ran) {
+            return DrainProof::SentinelRan;
+        }
+        if (pump()) {
+            return DrainProof::DispatcherGone;
+        }
+    }
+}
+
+// Returns only after every dispatcher is proven idle or gone.
 bool RunOnEachUiDispatcherAndWait(
     const winrt::Windows::UI::Core::DispatchedHandler& handler) {
     auto dispatchers = CollectUiDispatchers();
@@ -6033,49 +6240,19 @@ bool RunOnEachUiDispatcherAndWait(
     }
     bool allOk = true;
     for (auto& dispatcher : dispatchers) {
-        try {
-            if (dispatcher.HasThreadAccess()) {
-                handler();
-                continue;
+        HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        struct CloseDone {
+            HANDLE h;
+            ~CloseDone() {
+                if (h) {
+                    CloseHandle(h);
+                }
             }
-            HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-            if (!done) {
-                allOk = false;
-                continue;
-            }
-            bool posted = false;
-            winrt::Windows::Foundation::IAsyncOperation<bool> drainOp{nullptr};
-            try {
-                posted = DispatcherTryRun(
-                    dispatcher,
-                    winrt::Windows::UI::Core::CoreDispatcherPriority::High,
-                    handler);
-                // Empty Low sentinel: queued after High / leftover Normal.
-                // Do not SetEvent here — Completed is the unload barrier.
-                drainOp = dispatcher.TryRunAsync(
-                    winrt::Windows::UI::Core::CoreDispatcherPriority::Low,
-                    []() {});
-            } catch (...) {
-            }
-            if (!posted) {
-                allOk = false;
-            }
-            bool subscribed = SubscribeDrainCompleted(drainOp, done);
-            if (!drainOp || !subscribed) {
-                SetEvent(done);
-                allOk = false;
-            }
-            const DWORD w = WaitForSingleObject(done, INFINITE);
-            CloseHandle(done);
-            if (w != WAIT_OBJECT_0) {
-                Wh_Log(L"ERROR: UI dispatcher cleanup wait failed (%u)", w);
-                allOk = false;
-            } else if (drainOp && !DispatcherOpWasQueued(drainOp)) {
-                allOk = false;
-            }
-        } catch (...) {
+        } closeDone{done};
+        const DrainProof proof = DrainOneUiDispatcher(dispatcher, handler, done);
+        if (proof == DrainProof::DispatcherGone) {
+            Wh_Log(L"UI drain: dispatcher can no longer invoke callbacks");
             allOk = false;
-            Wh_Log(L"ERROR: UI dispatcher cleanup failed");
         }
     }
     return allOk;
@@ -7301,8 +7478,15 @@ void HandleForegroundChanged(HWND hWnd) {
         auto& desk = CurrentDeskLocked();
         ranksNonEmpty = !desk.rankedApps.empty();
         auto it = desk.appFocusMap.find(key);
-        alreadyTracked =
-            it != desk.appFocusMap.end() && it->second.lastConfirmedFocusTick > 0;
+        // Decay, not the 30 s prune, ends immediate re-focus. A tick that is
+        // already past decayMinutes waits the minimum again.
+        if (it != desk.appFocusMap.end() &&
+            it->second.lastConfirmedFocusTick != 0) {
+            const ULONGLONG decayMs =
+                DecayMsFromMinutes(SettingsSnap()->decayMinutes);
+            alreadyTracked = !IsTickDecayed(it->second.lastConfirmedFocusTick,
+                                            decayMs, now);
+        }
         // Log title only. Identity is path / AUMID, not the window title.
         if (it != desk.appFocusMap.end() && !windowTitle.empty()) {
             it->second.lastWindowTitle = windowTitle;
@@ -7991,6 +8175,16 @@ void LoadSettings() {
 // Windhawk entry points
 // ---------------------------------------------------------------------------
 
+// Wh_ModUninit does not run when Wh_ModInit returns FALSE. Drop a
+// taskbar.dll this mod loaded or the extra reference stays in Explorer.
+void ReleaseTaskbarDllIfWeLoadedIt() {
+    if (g_taskbarDllLoadedByUs && g_taskbarDll) {
+        FreeLibrary(g_taskbarDll);
+    }
+    g_taskbarDll = nullptr;
+    g_taskbarDllLoadedByUs = false;
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L"> init " WH_MOD_VERSION);
 
@@ -8023,12 +8217,14 @@ BOOL Wh_ModInit() {
 
     if (!HookTaskbarDllSymbols()) {
         Wh_Log(L"taskbar.dll identity hooks failed");
+        ReleaseTaskbarDllIfWeLoadedIt();
         return FALSE;
     }
 
     if (HMODULE taskbarViewModule = GetTaskbarViewModuleHandle()) {
         if (!HookTaskbarViewDllSymbols(taskbarViewModule)) {
             Wh_Log(L"Taskbar.View hooks failed");
+            ReleaseTaskbarDllIfWeLoadedIt();
             return FALSE;
         }
         g_taskbarViewDllLoaded = true;
@@ -8038,6 +8234,7 @@ BOOL Wh_ModInit() {
 
     if (!StartWinEventHookThread()) {
         Wh_Log(L"Focus thread failed to start");
+        ReleaseTaskbarDllIfWeLoadedIt();
         return FALSE;
     }
     return TRUE;
@@ -8114,11 +8311,7 @@ void Wh_ModUninit() {
         std::lock_guard<std::mutex> lock(g_dispatchersMutex);
         g_uiDispatchers.reset();
     }
-    if (g_taskbarDllLoadedByUs && g_taskbarDll) {
-        FreeLibrary(g_taskbarDll);
-    }
-    g_taskbarDll = nullptr;
-    g_taskbarDllLoadedByUs = false;
+    ReleaseTaskbarDllIfWeLoadedIt();
 }
 
 void Wh_ModSettingsChanged() {
