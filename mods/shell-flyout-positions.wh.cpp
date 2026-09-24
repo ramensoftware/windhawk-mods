@@ -69,7 +69,7 @@ shift options allow fine-tuning in both directions.
     - center: Center
     - left: Left
     - tray: Tray area
-    - trayLeft: Tray area mirrored
+    - trayMirror: Tray area mirrored
   - horizontalShift: 0
     $name: Horizontal shift
     $description: >-
@@ -89,7 +89,7 @@ shift options allow fine-tuning in both directions.
     - center: Center
     - left: Left
     - tray: Tray area
-    - trayLeft: Tray area mirrored
+    - trayMirror: Tray area mirrored
   - horizontalShift: 0
     $name: Horizontal shift
     $description: >-
@@ -164,7 +164,7 @@ enum class TrayHorizontalAlignment {
     center,
     left,
     tray,
-    trayLeft,
+    trayMirror,
 };
 
 struct TrayElementSettings {
@@ -765,7 +765,7 @@ int CalculateAlignedX(
             }
             break;
         
-        case TrayHorizontalAlignment::trayLeft:
+        case TrayHorizontalAlignment::trayMirror:
             if (showDesktopButtonBounds) {
                 x = rcWork.right - showDesktopButtonBounds->right;
             } else {
@@ -783,7 +783,7 @@ int CalculateAlignedXForMonitor(HMONITOR monitor,
                                 int width,
                                 const TrayElementSettings& settings) {
     std::optional<RECT> showDesktopButtonBounds;
-    if (settings.horizontalAlignment == TrayHorizontalAlignment::tray || settings.horizontalAlignment == TrayHorizontalAlignment::trayLeft) {
+    if (settings.horizontalAlignment == TrayHorizontalAlignment::tray || settings.horizontalAlignment == TrayHorizontalAlignment::trayMirror) {
         HWND hTaskbarWnd = GetTaskbarForMonitor(monitor);
         if (hTaskbarWnd) {
             showDesktopButtonBounds = GetShowDesktopButtonBounds(hTaskbarWnd);
@@ -1950,9 +1950,9 @@ void LoadSettings() {
     } else if (wcscmp(notificationCenterHorizontalAlignment, L"tray") == 0) {
         g_settings.notificationCenter.horizontalAlignment =
             TrayHorizontalAlignment::tray;
-    } else if (wcscmp(notificationCenterHorizontalAlignment, L"trayLeft") == 0) {
+    } else if (wcscmp(notificationCenterHorizontalAlignment, L"trayMirror") == 0) {
         g_settings.notificationCenter.horizontalAlignment =
-            TrayHorizontalAlignment::trayLeft;
+            TrayHorizontalAlignment::trayMirror;
     }
     Wh_FreeStringSetting(notificationCenterHorizontalAlignment);
 
@@ -1980,9 +1980,9 @@ void LoadSettings() {
         } else if (wcscmp(actionCenterHorizontalAlignment, L"tray") == 0) {
             g_settings.actionCenter.horizontalAlignment =
                 TrayHorizontalAlignment::tray;
-        } else if (wcscmp(actionCenterHorizontalAlignment, L"trayLeft") == 0) {
+        } else if (wcscmp(actionCenterHorizontalAlignment, L"trayMirror") == 0) {
             g_settings.actionCenter.horizontalAlignment =
-                TrayHorizontalAlignment::trayLeft;
+                TrayHorizontalAlignment::trayMirror;
         }
 
         g_settings.actionCenter.horizontalShift =
