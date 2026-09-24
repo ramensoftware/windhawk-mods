@@ -608,12 +608,22 @@ namespace FileTrayLayout {
 // Layout for the collapsed idle strip (the clock, and optionally a weather
 // reading beside it).
 //
+// Fixes windhawk-mods#5086. Note the tracker: plain "#33"-style references in
+// this file are issues on devcode90/Dynamic-Island-for-Windows, whereas
+// "windhawk-mods#NNNN" is the ramensoftware/windhawk-mods tracker that the
+// published mod is submitted through. Both use bare #N in their own context, so
+// the upstream ones are always qualified here.
+//
 // This width used to be a bare constant in ActivityForKind -- 96px, or 170px
-// with weather -- which was wrong in both directions. A short "9:41" left over
-// half the pill as dead air, while "10:41:32 PM" with seconds in 12-hour mode
-// overran the 84px text box and got clipped by the content mask. The weather
-// variant then split the pill 50/50 at its centre no matter how wide the two
-// strings actually were.
+// with weather -- which was wrong in both directions. Measured at the idle
+// format's own face and size, "9:41" is 22.7px of ink in a 96px pill, so 24%
+// occupancy and the rest dead air. The weather variant then split the pill
+// 50/50 at its centre no matter how wide the two strings actually were.
+//
+// The fixed width also truncated long clocks, though only at larger type: the
+// text box was a flat 84px while the idle font is 13.0f * textScale, so
+// "10:41:32 PM" fits at textScale 1.0 (67.7px) but is clipped at 1.4 (94.8px)
+// and 1.6 (108.4px).
 //
 // The strip is now measured and sized to its real content. As with
 // GameOverlayLayout, the sizer (the render loop) and the painter
@@ -908,6 +918,10 @@ struct Settings {
     bool privacyDotsMic = true;
     bool privacyDotsCam = true;
     bool privacyDotsPulse = true;
+    // Modules.CapsLock -- fixes windhawk-mods#4352, which asked for a way to turn
+    // the Caps Lock / Num Lock indicator off. Gated in OverlayWndProc's
+    // WM_APP_CAPSLOCK handler so the keyboard hook stops feeding the island
+    // rather than merely hiding the pill after the fact.
     bool capsLock = true;
     bool timerEnabled = true;
     bool hideShowHotkeyEnabled = true;
@@ -7932,6 +7946,11 @@ class Renderer {
         mutedBrush_->SetOpacity(0.75f);
     }
 
+    // Fixes windhawk-mods#4352: wind direction was printed as compass
+    // initialisms (WSW, NE), which is meteorologist shorthand rather than
+    // something glanceable. These are flow arrows, not bearing arrows -- a wind
+    // *from* the north-east is drawn as an arrow pointing south-west, matching
+    // the convention weather apps use.
     std::wstring WindDirToArrow(const std::wstring& dir) {
         if (dir == L"N") return L"\x2193";
         if (dir == L"NNE" || dir == L"NE" || dir == L"ENE") return L"\x2199";
@@ -8940,7 +8959,8 @@ class Renderer {
             // the clock gets exactly the room it needs and the divider sits between
             // the two strings instead of at an arbitrary geometric centre. The old
             // version split the pill 50/50 at centerX and padded both ends by 6px,
-            // which is what produced the dead air on short strings (#5086).
+            // which is what produced the dead air on short strings
+            // (windhawk-mods#5086).
             const IdleStripMetrics idleMetrics = MeasureIdleStrip(state, settings, now);
             IDWriteTextFormat* idleFmt =
                 idleTextFormat_ ? idleTextFormat_.Get() : smallTextFormat_.Get();
@@ -10830,8 +10850,9 @@ Activity ActivityForKind(IslandKind kind, const Settings& settings, const Shared
                 // Seed only. The real collapsed width is measured from the clock
                 // and weather strings by Renderer::MeasureIdleStrip and applied in
                 // the render loop -- this function has no DWrite access. A fixed
-                // width here was the whole bug behind #5086: dead air around a
-                // short "9:41", and clipping on "10:41:32 PM".
+                // width here was the whole bug behind windhawk-mods#5086: dead
+                // air around a short "9:41", and clipping on "10:41:32 PM" once
+                // Text size reached 140.
                 activity.width = settings.weather ? 170.0f : 96.0f;
                 activity.height = IdleStripLayout::kHeight;
             }
@@ -11953,6 +11974,12 @@ DWORD WINAPI RenderThreadProc(void*) {
             g_hoveredMediaButton = -1;
             needsRender = true;
         }
+        // Fixes windhawk-mods#4738: active playback used to count as a continuous
+        // event, so the island stayed visible for as long as anything was playing
+        // and kept resetting the auto-hide timer. Only the 5s window after a
+        // *title* change is transient now, so the pill behaves like the clipboard
+        // and battery alerts -- it surfaces, then hides again while playback
+        // continues in the background.
         const bool recentTrackChange = g_settings.mediaAutoExpand &&
                                        !MediaExpandBlocked(snapshot.media) &&
                                        primary.kind == IslandKind::Media &&
@@ -12061,8 +12088,9 @@ DWORD WINAPI RenderThreadProc(void*) {
                 primary.height = MediaLayout::kExpandedHeight * g_settings.sizeScale;
             } else if (primary.width > 0.0f) {
                 // Collapsed: size the strip to the text it will actually render
-                // (#5086). ActivityForKind's 96/170px was wrong both ways -- dead
-                // air around a short "9:41", and clipping on "10:41:32 PM".
+                // (windhawk-mods#5086). ActivityForKind's 96/170px was wrong both
+                // ways -- dead air around a short "9:41", and clipping on
+                // "10:41:32 PM" at larger Text size.
                 // The > 0 guard preserves ActivityForKind's fully-hidden case.
                 primary.width =
                     renderer.MeasureIdleStrip(snapshot, g_settings, now).totalWidth *
