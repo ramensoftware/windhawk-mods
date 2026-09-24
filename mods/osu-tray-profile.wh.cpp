@@ -185,7 +185,7 @@ void FetchOsuStats() {
 
     HINTERNET hSession = NULL;
     WINHTTP_CURRENT_USER_IE_PROXY_CONFIG proxyConfig = {0};
-    LPCWSTR userAgent = L"osu-tray-profile/3.9.3";
+    LPCWSTR userAgent = L"osu-tray-profile/" WH_MOD_VERSION;
 
     if (WinHttpGetIEProxyConfigForCurrentUser(&proxyConfig)) {
         if (proxyConfig.lpszProxy) {
@@ -197,7 +197,7 @@ void FetchOsuStats() {
     }
 
     if (!hSession) {
-        hSession = WinHttpOpen(userAgent, 4, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+        hSession = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     }
 
     if (!hSession) {
@@ -334,11 +334,13 @@ void FetchOsuStats() {
         pos += 1;
     }
 
-    wchar_t tempPath[MAX_PATH];
-    GetTempPathW(MAX_PATH, tempPath);
-    std::wstring localAvatarPath = std::wstring(tempPath) + L"osu_avatar.jpg";
+    WCHAR storagePath[MAX_PATH];
+    std::wstring localAvatarPath;
+    if (Wh_GetModStoragePath(storagePath, ARRAYSIZE(storagePath))) {
+        localAvatarPath = std::wstring(storagePath) + L"\\avatar.jpg";
+    }
 
-    if (!avatarUrl.empty()) {
+    if (!avatarUrl.empty() && !localAvatarPath.empty()) {
         URLDownloadToFileW(NULL, StringToWString(avatarUrl).c_str(), localAvatarPath.c_str(), 0, NULL);
     }
 
