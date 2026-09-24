@@ -2,7 +2,7 @@
 // @id              taskbar-quick-pin
 // @name            Left Taskbar Quick Pin Dock
 // @description     A persistent icon dock anchored left of the Start button. Drag any app to pin it. Left-click to launch or focus. Double-right-click to unpin. Drag within the dock to reorder.
-// @version         2.5.3
+// @version         2.5.4
 // @author          Ashix
 // @github          https://github.com/k-ashix
 // @twitter         https://x.com/k_ashix
@@ -72,6 +72,18 @@ out. You can also raise the **Startup delay** setting.
   isn't ready yet.
 - English UI strings Only
 
+## v2.5.4
+
+- Broadcast-safe lock glow -- the lock/unlock glow window now lives on the dock's
+  message-pumping UI thread, so a system-wide broadcast (theme change,
+  WM_SETTINGCHANGE, some app launches) can no longer stall on it.
+- Correct placement on scaled / mixed-DPI displays -- the dock now sets its own
+  per-monitor-v2 DPI awareness, so it lands in the right spot and stays crisp
+  instead of being DWM-stretched.
+- "Separator opacity" is now "Show workspace divider" (showWorkspaceDivider) -- the
+  old 0-100 value behaved identically for every value 1-100, so it is now a simple
+  on/off toggle for the gold divider between workspace pins and app pins.
+
 ## v2.5.3
 
 - 🪶 **Leaner tool-mod runtime.** — General optimisation of the tool-mod process.
@@ -113,7 +125,7 @@ live; the two noted below need a mod reload.
 | Max pinned apps | How many apps can be pinned (1 - 20). The dock auto-sizes: min 5 slots, grows to 10, then extra pins scroll. | 5 |
 | Icon size | Icon size in px before DPI scaling (16 - 48). | 33 |
 | Dock gap from Start | Gap between the dock and the Start button (0 - 40 px). | 6 |
-| Separator opacity | Visibility of the right-edge divider line (0 - 100). | 100 |
+| Show workspace divider | Show the gold divider between workspace pins and app pins (only when you have both). | on |
 | Drag to reorder | Drag icons left/right to rearrange; off = drag only unpins. | on |
 | Double-right-click to unpin | Unpin an icon with a double right-click (dust effect). | off |
 | Rapid-click unpin-all (opt-in) | Three quick clicks on an icon unpins EVERYTHING. Off so it can't fire by accident. | off |
@@ -147,9 +159,8 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
   $description: >-
     Maximum number of apps that can be pinned (1 - 20).
     The dock now sizes itself to fit what is actually pinned: it shrinks when
-    you unpin (never below a 5-slot minimum) and grows as you pin, but stops
-    growing at 10 visible slots. Pin more than 10 and the extra icons are
-    reached with scroll-wheel navigation instead of the dock getting wider.
+    you unpin and grows as you pin, but stops growing at 10 visible slots. 
+    Pin more than 10 and the extra icons are reached with scroll-wheel navigation.
 
 - iconSize: 33
   $name: Icon size (px at 96 DPI)
@@ -162,21 +173,20 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
   $description: >-
     Distance in pixels between the dock's right edge and the Start button
     (0 - 40). This is independent of the fixed per-icon icon spacing  --  it
-    only controls how far the whole dock sits from Start. Applies live.
+    only controls how far the whole dock sits from Start.
 
-- separatorOpacity: 100
-  $name: Separator opacity
+- showWorkspaceDivider: true
+  $name: Show workspace divider
   $description: >-
-    Visibility of the right-edge separator line that divides the dock from the
-    rest of the taskbar (0 = hidden, 100 = fully visible).
+    Show the gold divider between your pinned workspace/folder icons and your
+    pinned app icons. It appears only when you have BOTH kinds of pin.
 
 - hideDockBorder: false
   $name: Hide dock outline
   $description: >-
     Windows 11 draws a thin grey outline around the dock on all sides. Turn this
-    ON to make that border invisible (colourless); OFF keeps the system default
-    outline. Purely cosmetic  --  the dock, icons and rounded corners are
-    unchanged. Applies live.
+    ON to make that border invisible; OFF keeps the system default
+    outline. Purely cosmetic
 
 - enableReorder: true
   $name: Drag to reorder
@@ -187,10 +197,10 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
 - enableDoubleRightClickUnpin: false
   $name: Double-right-click to unpin
   $description: >-
-    Unpin an icon by double-right-clicking it (it disintegrates with a "dust"
-    effect). When off, double-right-click is ignored and the normal right-click
+    Unpin an icon by double-right-clicking it.
+    When off, double-right-click is ignored and the normal right-click
     menu shows instead  --  you can still unpin by dragging an icon off the dock
-    or with the hotkey. Applies live.
+    or with the hotkey.
 
 - enableRapidUnpinAll: false
   $name: Rapid-click unpin-all gesture (opt-in)
@@ -198,7 +208,7 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
     When enabled, clicking a dock icon three times within one second unpins
     EVERY app at once. OFF by default so impatiently clicking a slow-to-launch
     app can never wipe your whole pin list. You can always unpin individually
-    via the right-click menu or by dragging an icon off the dock. Applies live.
+    via the right-click menu or by dragging an icon off the dock.
 
 - enableKeyGestures: false
   $name: Bare-key tap gestures (P / U / L, opt-in)
@@ -207,7 +217,6 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
     or toggles the dock lock  --  regardless of which window has focus. OFF by
     default because these fire while typing in other apps, games or password
     fields. The pin hotkey (default Ctrl + Alt + P) is the safe alternative.
-    Applies live.
 
 - enableLockAnimation: false
   $name: Lock/unlock flash animation
@@ -234,20 +243,20 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
   $name: Drag tether  --  thickness
   $description: >-
     Thickness of the drag rope's thread from 1 (ultra-thin hair strand) to 10
-    (bold cord). Each step increases evenly. Applies live.
+    (bold cord). Each step increases evenly.
 
 - dragRopeBreakLength: 450
   $name: Drag tether  --  break length (px)
   $description: >-
     How far (in pixels) you can pull an icon off the dock before the rope tears
     and unpins the app (150 - 650). Lower = snaps sooner, higher = lets you drag
-    further before it breaks. Applies live.
+    further before it breaks.
 
 - dragTetherHue: 30
   $name: Drag tether  --  hue (0 - 359)
   $description: >-
     Colour hue of the drag rope (0 - 359 degrees on the colour wheel).
-    Default 30 = warm tan/brown. Applies live.
+    Default 30 = warm tan/brown. 
 
 - unpinTrigger: ropeBreak
   $name: Unpin trigger (drag-off)
@@ -257,9 +266,9 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
     enough to snap the rope  --  if you let go before it breaks, the rope
     recoils back to the dock and the icon stays put. "Rope breaks OR released
     outside the dock" also unpins when you simply drop the icon anywhere off the
-    dock. Default: only when the rope breaks. Applies live.
+    dock. Default: only when the rope breaks.
   $options:
-  - ropeBreak: Only when the rope BREAKS (pull past the break length)
+  - ropeBreak: Only when the rope BREAKS
   - ropeBreakOrOutside: Rope breaks OR icon released outside the dock
 
 - cornerRoundness: 40
@@ -268,7 +277,7 @@ Created with ❤️ by Ashix. Thanks to the **Taskbar Dock Animation**
     Dock corner shape (0 - 100). 0 = square/rectangular corners,
     1 - 40 = small rounded corners, 41 - 100 = fully rounded corners.
     All levels are drawn by the compositor so they stay smooth (never
-    pixelated). Changing this applies live -- no need to restart Explorer.
+    pixelated). 
 
 - enableExplorerWorkspacePins: false
   $name: Explorer workspace pins
@@ -491,7 +500,16 @@ static int  MAX_PINNED_APPS      = 5;
 static int  BASE_ICON_SIZE       = 33;
 static int  BASE_ICON_SPACING    = 12;
 static int  DOCK_GAP_FROM_START  = 6;      // Gap between dock right edge and Start (user-configurable, clamp 0..40)
-static std::atomic<int> SEPARATOR_OPACITY{100};  // FIX(v10): atomic -- worker LoadSettings writes, UI WM_PAINT reads.
+static std::atomic<bool> SHOW_WORKSPACE_DIVIDER{true};  // v2.5.4: boolean toggle (replaces the old int separatorOpacity). Worker LoadSettings writes, UI WM_PAINT reads.
+
+// v2.5.4 (this-round Issue 3): the right-edge separator LINE was removed, so the
+// old 0..100 "separatorOpacity" (whose values 1..100 all behaved identically) is
+// now a plain on/off toggle for the gold workspace/app divider pill. Pure decision,
+// mirrored 1:1 into tests/workspace_divider.h and unit-tested in workspace_divider_test.cpp.
+static inline bool ShouldDrawWorkspaceDivider(bool showWorkspaceDivider,
+                                              int workspaceSlots, int appCount) {
+    return showWorkspaceDivider && workspaceSlots > 0 && appCount > 0;
+}
 // ENABLE_GLASS_OVERLAY removed: ApplyDockGlassTint / DrawGlassEdge were no-ops
 // and the setting description ("whole-dock red tint") was never implemented.
 // Shipping a setting that inverts what its label says is worse than no setting.
@@ -3962,6 +3980,10 @@ static void LaunchWorkspace(const std::wstring& workspaceId) {
 }
 
 static DWORD WINAPI LaunchWorkspaceThread(LPVOID param) {
+    // v2.5.4 (this-round Issue 2): the workspace-restore path calls window-geometry
+    // and SetForegroundWindow APIs, so set per-monitor-v2 DPI here too, matching the
+    // UI and worker threads in the tool process.
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     std::wstring* workspaceId = (std::wstring*)param;
     if (workspaceId) {
         // FIX-B2 (#6): bail out early if the mod is being torn down. Cheap guard
@@ -5600,7 +5622,10 @@ static void RenderLockGlow() {
     RECT dr = g_cachedDockRect;
     int dockW = dr.right - dr.left, dockH = dr.bottom - dr.top;
     if (dockW <= 4 || dockH <= 4) { if (g_lockGlowWnd) ShowWindow(g_lockGlowWnd, SW_HIDE); return; }
-    if (!EnsureLockGlowSurface()) return;
+    // v2.5.4 (this-round Issue 1): the window is created up front on the UI thread
+    // (PrewarmDragEffectWindows). The worker only PRESENTS into it, so bail if the
+    // surface never came up -- never create a worker-owned window from here.
+    if (!g_lockGlowWnd || !g_lockGlowDIB || !g_lockGlowBits) return;
 
     // CONFINED to the dock rectangle: the content box IS the dock rect (no
     // outward margin), so nothing can ever be painted outside the real dock.
@@ -7078,6 +7103,15 @@ static void PrewarmDragEffectWindows() {
         PrewarmLayered(g_tetherWnd, g_tetherDIB, g_tetherW, g_tetherH);
     if (EnsureVanishSurface())
         PrewarmLayered(g_vanishWnd, g_vanishDIB, g_vanishW, g_vanishH);
+    // v2.5.4 (this-round Issue 1): create the lock/drag-glow layer HERE too, on
+    // the UI thread that runs a GetMessageW pump. Previously it was created
+    // lazily on the worker (which only sleeps on g_exitEvent and never pumps),
+    // so a top-level window owned by that thread stalled any app broadcasting
+    // SendMessage / a DDE WM_DDE_INITIATE / a WM_SETTINGCHANGE (SendMessageTimeout)
+    // to HWND_BROADCAST -- and after ~5 s Windows flagged the thread as hung. The
+    // worker now only PRESENTS into this window, exactly like the tether/vanish.
+    if (EnsureLockGlowSurface())
+        PrewarmLayered(g_lockGlowWnd, g_lockGlowDIB, g_lockGlowW, g_lockGlowH);
 }
 
 // ============================================================
@@ -7274,8 +7308,9 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         if (n == 0) {
             // Empty dock: no apps pinned. The grey right-edge separator line that
             // used to mark the dock here was removed along with the rest of the
-            // right-edge line -- SEPARATOR_OPACITY now controls only the gold
-            // workspace divider, and drag / pin-limit feedback is the lock-glow bloom.
+            // right-edge line -- the gold workspace divider is the only chrome the
+            // showWorkspaceDivider toggle controls now; drag / pin-limit feedback is
+            // the lock-glow bloom.
             g_hoverIndex       = -1;
             g_dragFromDockIdx  = -1;
             LeaveCriticalSection(&g_cs);
@@ -7314,7 +7349,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         // this matches the dock-width section gap (an empty workspace region has
         // no gap, so there is nothing to divide).  Position it from the ACTUAL
         // workspace slot count so it sits in the centre of the real gap.
-        if (SEPARATOR_OPACITY > 0 && sepWsSlots > 0 && sepAppCount > 0) {
+        if (ShouldDrawWorkspaceDivider(SHOW_WORKSPACE_DIVIDER, sepWsSlots, sepAppCount)) {
             int sepWsRegionW = (sepWsSlots * ICON_SIZE) + ((sepWsSlots - 1) * ICON_SPACING);
             int sepX = DOCK_PAD_LEFT + sepWsRegionW + SECTION_GAP / 2;
 
@@ -7548,7 +7583,7 @@ LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         // pin-limit feedback now renders as a soft lock-glow bloom on its own
         // per-pixel-alpha layer (TriggerLockGlowKind: red LIMIT / green RELEASE),
         // not a hairline on this colour-key overlay. The gold workspace divider
-        // above is the only SEPARATOR_OPACITY-controlled chrome that remains.
+        // above is the only chrome the showWorkspaceDivider toggle controls now.
 
         LeaveCriticalSection(&g_cs);
         if (usingBackBuffer) PresentPaintBuffer(paintDC, paintW, paintH);
@@ -8072,6 +8107,11 @@ static void UnpinForegroundApp() {
 }
 
 DWORD WINAPI WorkerThread(LPVOID) {
+    // v2.5.4 (this-round Issue 2): match the UI thread's per-monitor-v2 DPI context
+    // so the worker's geometry polling (GetWindowRect on the taskbar/Start, dock
+    // anchoring, GetDpiForWindow) reads true physical pixels in the tool process.
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     // FIX-A8 (#11): the optional startup delay now runs HERE, on the worker
     // thread, instead of blocking WhTool_ModInit (which runs on the process main
     // thread at load, or the Windhawk Engine thread on a live reload -- either
@@ -9303,15 +9343,12 @@ DWORD WINAPI WorkerThread(LPVOID) {
         }
     }
 
-    // v2.5.3 -- single-thread ownership of the lock-glow window. It is created
-    // lazily on THIS (worker) thread (EnsureLockGlowSurface, from RenderLockGlow),
-    // so Win32 requires it be DESTROYED on this same thread. The worker is the
-    // SOLE owner of the window's lifetime: WhTool_ModUninit signals g_exitEvent
-    // and joins this thread FIRST, so this runs before any other thread can touch
-    // the handle -- there is no cross-thread DestroyWindow(g_lockGlowWnd) anywhere
-    // else. The DIB it paints into is a plain (non-thread-affine) GDI object and
-    // is still freed in WhTool_ModUninit.
-    if (g_lockGlowWnd) { DestroyWindow(g_lockGlowWnd); g_lockGlowWnd = NULL; }
+    // v2.5.4 (this-round Issue 1): the lock-glow window is no longer created OR
+    // destroyed on the worker. It is now a UI-thread-owned layer (prewarmed in
+    // PrewarmDragEffectWindows, torn down in UiThreadProc next to the tether/vanish
+    // windows); the worker only PRESENTS into it. Its DIB is freed in
+    // WhTool_ModUninit. Keeping the window on a message-pumping thread is what stops
+    // a broadcast SendMessage / WM_SETTINGCHANGE from hanging on this dock.
 
     return 0;
 }
@@ -9570,6 +9607,14 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
     PeekMessageW(&probe, NULL, WM_USER, WM_USER, PM_NOREMOVE);
     g_uiThreadId = GetCurrentThreadId();
 
+    // v2.5.4 (this-round Issue 2): as a tool mod the host is windhawk-mod.exe, not
+    // explorer.exe, so we no longer inherit Explorer's per-monitor-v2 DPI context.
+    // A window inherits the DPI context of the thread that creates it, so set it
+    // HERE before any dock window is created -- otherwise GetWindowRect / anchoring
+    // are virtualized on scaled or mixed-DPI setups and the dock lands in the wrong
+    // place with DWM-stretched bitmaps.
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
     bool ok = CreateInputOwnerWindow() && CreateOverlayWindow();
     InitGhostDIB();
     if (ok) ok = CreateGhostWindow();
@@ -9629,11 +9674,13 @@ static DWORD WINAPI UiThreadProc(LPVOID) {
         UnregisterHotKey(g_overlayWnd, HOTKEY_PIN_ID);
     if (g_tetherWnd) { DestroyWindow(g_tetherWnd); g_tetherWnd = NULL; }
     if (g_vanishWnd) { DestroyWindow(g_vanishWnd); g_vanishWnd = NULL; }
+    // v2.5.4 (this-round Issue 1): the lock-glow layer is now created on THIS UI
+    // thread (prewarmed in PrewarmDragEffectWindows), so it is destroyed here too,
+    // right next to the tether/vanish layers. The worker only presents into it and
+    // is joined before this UI thread is asked to quit, so the handle is untouched
+    // by the time we get here.
+    if (g_lockGlowWnd){ DestroyWindow(g_lockGlowWnd); g_lockGlowWnd = NULL; }
     if (g_ghostWnd)  { DestroyWindow(g_ghostWnd);  g_ghostWnd  = NULL; }
-    // v2.5.3: the lock-glow window is created AND destroyed by the WORKER thread
-    // (its sole owner; see WorkerThread's exit teardown). It is NOT destroyed here
-    // on the UI thread -- cross-thread DestroyWindow() is illegal. The worker is
-    // joined before this UI thread is asked to quit, so the handle is already gone.
     if (g_overlayWnd){ DestroyWindow(g_overlayWnd);g_overlayWnd= NULL; }
     if (g_inputWnd)  { DestroyWindow(g_inputWnd);  g_inputWnd  = NULL; }
     {
@@ -9657,7 +9704,7 @@ static void LoadSettings() {
     MAX_PINNED_APPS      = Wh_GetIntSetting(L"maxPinnedApps",     5);
     BASE_ICON_SIZE       = Wh_GetIntSetting(L"iconSize",          33);
     BASE_ICON_SPACING    = 12;   // fixed per-icon gap (iconSpacing setting removed from the Windhawk UI)
-    SEPARATOR_OPACITY    = Wh_GetIntSetting(L"separatorOpacity", 100);
+    SHOW_WORKSPACE_DIVIDER = Wh_GetIntSetting(L"showWorkspaceDivider", 1) != 0;
     // enableGlassOverlay removed (setting was dead -- no visible effect).
     ENABLE_REORDER       = Wh_GetIntSetting(L"enableReorder",       1) != 0;
     ENABLE_SCROLL_NAV    = Wh_GetIntSetting(L"enableScrollNav",     1) != 0;
@@ -9692,7 +9739,7 @@ static void LoadSettings() {
     MAX_APP_PINS = MAX_PINNED_APPS;
     BASE_ICON_SIZE    = std::max(16, std::min(48,   BASE_ICON_SIZE));
     // BASE_ICON_SPACING is fixed at 12 (no user setting) -- no clamp needed.
-    SEPARATOR_OPACITY = std::max(0,  std::min(100,  (int)SEPARATOR_OPACITY));
+    // SHOW_WORKSPACE_DIVIDER is a boolean toggle now -- no range clamp needed.
     CORNER_ROUNDNESS  = std::max(0,  std::min(100,  (int)CORNER_ROUNDNESS));
     STARTUP_DELAY_MS  = std::max(0,  std::min(3000, STARTUP_DELAY_MS));
     DOCK_GAP_FROM_START = std::max(0, std::min(40,  DOCK_GAP_FROM_START));
@@ -9722,6 +9769,10 @@ static bool QpIsWindows11OrGreater() {
 BOOL WhTool_ModInit() {
     // Read and clamp all user settings (shared with WhTool_ModSettingsChanged).
     LoadSettings();
+
+    // v2.5.4 (Issue 2): set per-monitor-v2 DPI before the first RefreshTaskbarCache()
+    // geometry probe below, matching the UI/worker threads (tool host isn't Explorer).
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
     // FIX (Issue 3): Windows 11 only. On older builds the mod can never produce
     // a supported layout, so return FALSE immediately -- creating NO resources
@@ -9790,7 +9841,7 @@ BOOL WhTool_ModInit() {
     // write g_taskbarAutoHide and call RepositionOverlay() concurrently. The worker is
     // now the single owner of the auto-hide state, so there is no startup race window.
 
-    Wh_Log(L"INIT: v2.5.3 OK. state=%d pinned=%d reorder=%d explorerWorkspaces=%d delay=%d hotkey=0x%X+0x%X autohide=%d",
+    Wh_Log(L"INIT: v2.5.4 OK. state=%d pinned=%d reorder=%d explorerWorkspaces=%d delay=%d hotkey=0x%X+0x%X autohide=%d",
               g_systemState, (int)g_pinnedApps.size(),
               (int)ENABLE_REORDER,
               (int)ENABLE_EXPLORER_WORKSPACE_PINS,
