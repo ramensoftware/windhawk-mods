@@ -2,7 +2,7 @@
 // @id              taskbar-disk-space-label
 // @name            Taskbar Disk Space Label
 // @description     A simple disk space label integrated into the Windows taskbar
-// @version         0.53
+// @version         0.54
 // @author          allelimo
 // @github          https://github.com/allelimo
 // @include         explorer.exe
@@ -40,15 +40,18 @@ Windows 11 only.
 - diskLetter: "C"
   $name: Disk
   $description: Drive letter, e.g. C
-- fontSize: 14
-  $name: Font size
-  $description: Font size of the disk label. [Default 14]
 - userFreeSpace: false
   $name: Current user available space
   $description: Select for the current user available free space, unselect for the total free space.  
 - showUnit: true
   $name: Show unit 
   $description: Show the unit (GB) for the disk space.
+- updateInterval: 60
+  $name: Update interval
+  $description: Update interval time in seconds. [Default 60]
+- fontSize: 14
+  $name: Font size
+  $description: Font size of the disk label. [Default 14]  
 */
 // ==/WindhawkModSettings==
 
@@ -88,8 +91,8 @@ static std::atomic_bool g_labelInjected{false};
 static std::atomic_bool g_systemTrayModuleHooked{false};
 
 [[clang::no_destroy]] static ColumnDefinition g_labelColumn{nullptr};
-[[clang::no_destroy]] static std::list<FrameworkElement::Loaded_revoker>
-    g_loadedRevokers;
+[[clang::no_destroy]] static std::optional<std::list<FrameworkElement::Loaded_revoker>>
+     g_loadedRevokers;
 
 static std::atomic_bool g_unloading{false};
 static HANDLE g_retryThread = nullptr;
@@ -98,8 +101,9 @@ static int myspacefree = 10;
 static int myspacetot = 100;
 
 struct {
-    std::wstring mysettings_diskLetter;
-    int mysettings_fontSize;
+    std::wstring diskLetter;
+    int fontSize;
+    int updateInterval;
     bool userFreeSpace;
     bool showUnit;
 } g_settings;
@@ -337,8 +341,6 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
 
 using RunFromWindowThreadProc_t = void (*)(void*);
 
-
-// fix from claude 149
 static void RunGuarded(RunFromWindowThreadProc_t proc, void* param) {
     try {
         proc(param);
@@ -402,9 +404,11 @@ static bool RunFromWindowThread(HWND hWnd,
     return true;
 }
 
-
+// -----------------------------------------------------------------------------
 // Runs on the taskbar thread. Stops the timer, detaches the label and its
 // column from whatever tree they are in, and drops the references.
+// -----------------------------------------------------------------------------
+
 static void ReleaseOwnedXaml() {
     if (g_refreshTimer) {
         g_refreshTimer.Stop();
@@ -412,9 +416,7 @@ static void ReleaseOwnedXaml() {
         g_refreshTimer = nullptr;
     }
 
-
-
-   if (g_labelText) {
+    if (g_labelText) {
         auto parentElement =
             VisualTreeHelper::GetParent(g_labelText).try_as<FrameworkElement>();
 
@@ -431,7 +433,7 @@ static void ReleaseOwnedXaml() {
 
             auto parentGrid = parentElement.try_as<Grid>();
 
-            if (parentGrid && g_labelColumn) {   //allelimo check
+            if (parentGrid && g_labelColumn) {
                 auto columns = parentGrid.ColumnDefinitions();
 
                 uint32_t columnIndex = 0;
@@ -461,10 +463,13 @@ static void ReleaseOwnedXaml() {
     }
 }
 
-
+// -----------------------------------------------------------------------------
+// get the disk root path
 // Accepts "C", "C:" or "C:\" and returns "C:\" (empty if unset).
+// -----------------------------------------------------------------------------
+
 static std::wstring GetDiskRootPath() {
-    std::wstring root = g_settings.mysettings_diskLetter;
+    std::wstring root = g_settings.diskLetter;
     if (root.empty()) {
         return root;
     }
@@ -484,6 +489,7 @@ static std::wstring GetDiskRootPath() {
 // -----------------------------------------------------------------------------
 // Get disk information: available free space, total space, total free space
 // -----------------------------------------------------------------------------
+
 static void GetDiskInfo() {
     ULARGE_INTEGER freeAvailable, totalBytes, totalFree;
 
@@ -528,15 +534,24 @@ static std::wstring FormatSpace(int spacefree,
 }
 
 
+// -----------------------------------------------------------------------------
+// Load settings
+// -----------------------------------------------------------------------------
+
 static void LoadSettings() {
     
-    g_settings.mysettings_fontSize = Wh_GetIntSetting(L"fontSize");
-    g_settings.mysettings_diskLetter = WindhawkUtils::StringSetting::make(L"diskLetter").get();
+    g_settings.fontSize = Wh_GetIntSetting(L"fontSize");
+    g_settings.diskLetter = WindhawkUtils::StringSetting::make(L"diskLetter").get();
     g_settings.userFreeSpace =  Wh_GetIntSetting(L"userFreeSpace");
     g_settings.showUnit = Wh_GetIntSetting(L"showUnit");
+    g_settings.updateInterval = Wh_GetIntSetting(L"updateInterval");
 
-    if (g_settings.mysettings_fontSize <= 0)
-        g_settings.mysettings_fontSize = 14;
+    if (g_settings.fontSize <= 0)
+        g_settings.fontSize = 14;
+
+    if (g_settings.updateInterval <= 0)
+        g_settings.updateInterval = 64;
+
 
 }
 
@@ -546,7 +561,7 @@ static void RefreshDiskSpaceLabel(void*) {
     if (g_labelText) {
         GetDiskInfo();
         g_labelText.Text(FormatSpace(myspacefree, myspacetot));
-        g_labelText.FontSize(g_settings.mysettings_fontSize);
+        g_labelText.FontSize(g_settings.fontSize);
      
     }
 }
@@ -621,7 +636,7 @@ static void AddDiskSpaceLabel(void* param) {
 
     g_labelText.VerticalAlignment(VerticalAlignment::Center);
     g_labelText.Padding(Thickness{4, 0, 4, 0});
-    g_labelText.FontSize(g_settings.mysettings_fontSize); 
+    g_labelText.FontSize(g_settings.fontSize); 
 
     auto children = panel.Children();
 
@@ -666,7 +681,7 @@ static void AddDiskSpaceLabel(void* param) {
 
     
     g_refreshTimer = DispatcherTimer();
-    g_refreshTimer.Interval(std::chrono::seconds(60));
+    g_refreshTimer.Interval(std::chrono::seconds(g_settings.updateInterval));
     g_refreshTickToken = g_refreshTimer.Tick(
         [](auto&&, auto&&) { RefreshDiskSpaceLabel(nullptr); });
     g_refreshTimer.Start();
@@ -680,7 +695,7 @@ static void AddDiskSpaceLabel(void* param) {
 static void RemoveDiskSpaceLabel(void*) {
 
     ReleaseOwnedXaml();
-    g_loadedRevokers.clear();
+    g_loadedRevokers.reset();
     g_labelInjected.store(false);
 }
 
@@ -768,13 +783,13 @@ static void* WINAPI IconView_IconView_Hook(void* pThis) {
             return result;
         }
 
-        g_loadedRevokers.emplace_back();
-        auto it = std::prev(g_loadedRevokers.end());
+        g_loadedRevokers->emplace_back();
+        auto it = std::prev(g_loadedRevokers->end());
 
         *it = iconView.Loaded(winrt::auto_revoke_t{},
                         [it](winrt::Windows::Foundation::IInspectable const&,
                         RoutedEventArgs const&) {
-                            g_loadedRevokers.erase(it);
+                            g_loadedRevokers->erase(it);
 
                             if (g_unloading.load()) {
                                 return;
@@ -794,15 +809,23 @@ static void* WINAPI IconView_IconView_Hook(void* pThis) {
 }
 
 static bool HookSystemTraySymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK systemTrayDllHooks[] = {{
-        {LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"},
+
+    // SystemTray.dll, Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {{
+        {
+            LR"(public: __cdecl winrt::SystemTray::implementation::IconView::IconView(void))"
+        },
         &IconView_IconView_Original,
         IconView_IconView_Hook,
     }};
 
-    return WindhawkUtils::HookSymbols(module, systemTrayDllHooks,
-                                      ARRAYSIZE(systemTrayDllHooks));
+    return WindhawkUtils::HookSymbols(
+        module,
+        systemTrayHooks,
+        ARRAYSIZE(systemTrayHooks)
+    );
 }
+
 
 static void HandleLoadedModuleIfSystemTray(HMODULE module) {
     if (GetSystemTrayModuleHandle() != module) {
@@ -829,7 +852,6 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
 
     return module;
 }
-
 
 
 // -----------------------------------------------------------------------------
