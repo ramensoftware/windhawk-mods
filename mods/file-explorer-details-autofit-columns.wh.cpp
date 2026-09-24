@@ -2,7 +2,7 @@
 // @id              file-explorer-details-autofit-columns
 // @name            File Explorer Details Auto-Fit Columns
 // @description     Automatically fits all column widths to their content when refreshing in Details view. Has no effect on other view modes.
-// @version         1.1.0
+// @version         1.2.0
 // @author          Armaninyow
 // @github          https://github.com/armaninyow
 // @include         explorer.exe
@@ -20,57 +20,60 @@ Automatically fits all visible column widths to their content whenever a folder 
 
 ## Triggers
 
-- Opening or navigating to a folder
-- Minimizing and restoring the Explorer window
 - `Ctrl + R`
 - `F5`
 - Right-click context menu → Refresh
 - The refresh button in the toolbar
-- Any actual change to the folder's contents (files added/removed/renamed), regardless of what caused it
+- Any actual change to the folder's contents (files added/removed/renamed), regardless of what caused it (Passive Trigger)
+- Opening or navigating to a folder (Passive Trigger)
+- Minimizing and restoring the Explorer window (Passive Trigger)
 
 Only affects `Details view`. Other view modes (Icons, Tiles, List, etc.) are untouched.
 
 ## Settings
 
+`Passive Triggers`: The four explicit refresh actions above always fit. This setting controls the other three (folder content changes, opening/navigating, minimize/restore) as a group, since some people find a fit running just from restoring a window, or from an unrelated background change, more annoying than useful.
+
 `Refresh Delay (ms)`: How long the mod waits before auto-fitting columns. The default is 400ms, which gives Explorer enough time to finish loading files before measuring content width. If you notice columns fitting too early in large folders, increase this value. If you want a snappier response in small folders, decrease it.
 
-`Fit Mode`: Explorer's built-in auto-fit only measures rows currently rendered on screen, so a long filename further down an unscrolled list can end up truncated even after fitting.
+`Elastic Mode`: Stretches the Name column to fill whatever width is left over in the window after the other columns are sized, macOS Finder-style. Reacts to resizing the Explorer window, settling into place shortly after you finish dragging.
 
-- `Visible Rows Only` keeps that default, fast behavior.
-- `Scan Entire Folder` measures every item in the folder instead, so nothing is left truncated after opening, navigating to, or explicitly refreshing a folder. (Known limitation: scanning the folder adds its own delay on top of the Refresh Delay setting, so fitting can take noticeably longer in large folders.)
-- `Elastic (macOS-like)` sizes every other column to fit its content, then lets the Name column fill whatever width is left over in the current window. No leftover empty space, and no horizontal scrollbar unless the window gets too narrow even for a small minimum Name width. Reacts to resizing the Explorer window, settling into place shortly after you finish dragging. (Known limitation: on top of the scanning delay and the Refresh Delay, this mode also makes a few extra attempts to find the exact width that avoids a horizontal scrollbar, adding a bit more delay still.)
+`Scan Entire Folder`: Explorer's built-in auto-fit only measures rows currently rendered on screen, so a long filename further down an unscrolled list can end up truncated even after fitting. Turning this on measures every item in the folder instead, so nothing is left truncated after opening, navigating to, or explicitly refreshing a folder. (Known limitation: scanning the folder adds its own delay on top of the Refresh Delay setting, so fitting can take noticeably longer in large folders.)
 
-`Max Items to Scan`: Only used in `Scan Entire Folder` and `Elastic` modes. Folders larger than this item count fall back to `Visible Rows Only` for that folder, to avoid a noticeable delay in very large folders.
+`Elastic Mode` and `Scan Entire Folder` combine independently:
+
+- Both off: fast, matches Explorer's default auto-fit.
+- Scan on, Elastic Mode off: exact fit for every column, no truncation, slower on large folders.
+- Scan off, Elastic Mode on: fast, Name fills leftover space, other columns keep the visible-rows-only truncation risk.
+- Both on: exact fit for every column, Name fills leftover space, no leftover empty space and no horizontal scrollbar unless the window gets too narrow even for a small minimum Name width. Slowest combination, but nothing is left truncated. (Known limitation: on top of the scanning delay, this combination also makes a few extra attempts to find the exact width that avoids a horizontal scrollbar, adding a bit more delay still.)
+
+`Max Items to Scan`: Only used while `Scan Entire Folder` is on. Folders larger than this item count fall back to the visible-rows-only behavior for that folder, to avoid a noticeable delay in very large folders.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
+- passiveTriggers: false
+  $name: Passive Triggers
+  $description: >-
+    Automatically fits after opening or navigating to a folder, after restoring a minimized Explorer window, and after a folder's contents change on their own (files added, removed, or renamed by any process, regardless of what caused it).
 - delay: 400
   $name: Refresh Delay (ms)
   $description: "How long to wait after a refresh before fitting columns to content. Increase if columns fit before all files are loaded (e.g. large folders). Decrease for a snappier response. Default: 400ms."
-- fitModeSettings:
-  - fitMode: visible
-    $name: Fit Mode
+- scanSettings:
+  - scanEntireFolder: false
+    $name: Scan Entire Folder
     $description: >-
-      Visible rows only - is fast and matches Explorer's default auto-fit behavior, but can leave long filenames further down the list truncated until you scroll to them.
-
-
-
-      Scan entire folder - measures every item in the folder so nothing is left truncated. (Known limitation: scanning the folder adds its own delay on top of the Refresh Delay setting above, so fitting can take noticeably longer in large folders.)
-
-
-
-      Elastic (macOS-like) - sizes every other column to fit its content, then lets the Name column fill whatever width is left over in the window, avoiding leftover empty space and (down to a small minimum) horizontal scrolling. (Known limitation: on top of the scanning delay and the Refresh Delay, this mode also makes a few extra attempts to find the exact width that avoids a horizontal scrollbar, adding a bit more delay still.)
-    $options:
-    - visible: Visible rows only (fast, default)
-    - full: Scan entire folder (exact fit)
-    - elastic: Elastic (macOS-like, Name column fills remaining space)
+      Measures every item in the folder instead of just the visible rows, so nothing is left truncated after opening, navigating to, or explicitly refreshing a folder. Adds its own delay on top of the Refresh Delay setting above, so fitting can take noticeably longer in large folders.
   - maxScanItems: 500
     $name: Max Items to Scan
-    $description: "If a folder has more items than this, skip the exhaustive scan to avoid a delay: Scan Entire Folder falls back to Visible Rows Only, and Elastic still stretches the Name column using native auto-fit results for the other columns. Very large values add wall-clock overhead from the scan itself, independent of how fast each item measures."
-  $name: Fit Mode Settings
-  $description: Controls how columns are measured and sized.
+    $description: "Only used while Scan Entire Folder above is on. Folders larger than this item count skip the exhaustive scan and fall back to visible-rows-only for that folder, to avoid a noticeable delay in very large folders. Very large values add wall-clock overhead from the scan itself, independent of how fast each item measures."
+  $name: Scan Settings
+  $description: Controls whether the whole folder is scanned for an exact fit, or just the rows currently visible on screen.
+- elastic: false
+  $name: Elastic Mode
+  $description: >-
+    Stretches the Name column to fill whatever width is left over in the window after the other columns are sized, the same way macOS Finder does. Reacts to resizing the Explorer window, settling into place shortly after you finish dragging.
 */
 // ==/WindhawkModSettings==
 
@@ -143,16 +146,25 @@ static CRITICAL_SECTION g_cs;
 // Set at the top of Wh_ModUninit so in-flight window messages stop arming new timers mid-teardown.
 static std::atomic<bool> g_unloading{false};
 
-enum class FitMode { Visible, Full, Elastic };
+enum class FitMode { Visible, Full, Elastic, FastElastic };
+
+// True for either elastic mode (Name-stretch), scanning or not. Used instead
+// of comparing against FitMode::Elastic alone, which previously missed
+// FastElastic at two call sites and silently dropped its resize re-fit.
+static bool FitModeIsElastic(FitMode mode) {
+    return mode == FitMode::Elastic || mode == FitMode::FastElastic;
+}
 
 struct Settings {
     UINT delayMs = 400;
     int maxScanItems = 500;
     FitMode fitMode = FitMode::Visible;
+    bool passiveTriggers = false;
 };
 static std::atomic<UINT> g_delayMs{400};
 static std::atomic<int> g_maxScanItems{500};
 static std::atomic<FitMode> g_fitMode{FitMode::Visible};
+static std::atomic<bool> g_passiveTriggers{false};
 
 static UINT g_shellNotifyMsg = 0;  // registered in Wh_ModInit; replaces a WM_APP-relative id
 static UINT g_cleanupMsg = 0;      // registered in Wh_ModInit; marshals teardown onto the owning thread
@@ -189,6 +201,12 @@ static std::unordered_map<HWND, PIDLIST_ABSOLUTE> g_tabFolderPidl;
 // Per-window minimized state, so a restore-from-minimize WM_SIZE can be told
 // apart from an ordinary resize and always re-fit regardless of Fit Mode.
 static std::unordered_map<HWND, bool> g_windowWasMinimized;
+
+// Per-window tick of the last restore-from-minimize transition. Restoring
+// sends more than one WM_SIZE(SIZE_RESTORED) as it settles; this suppresses
+// the follow-ups from being mistaken for a deliberate resize.
+static std::unordered_map<HWND, ULONGLONG> g_lastRestoreTick;
+static constexpr ULONGLONG kRestoreSettleMs = 2500;
 
 static bool SameColumnKeys(const std::vector<PROPERTYKEY>& a, const std::vector<PROPERTYKEY>& b) {
     if (a.size() != b.size()) return false;
@@ -242,19 +260,28 @@ static TriggerKind ConsumeTriggerKind(HWND hwndTimer) {
 // Cached settings
 
 static void LoadSettings() {
+    bool passiveTriggers = Wh_GetIntSetting(L"passiveTriggers") != 0;
+
     int delayRaw = Wh_GetIntSetting(L"delay");
     UINT delay = static_cast<UINT>(std::clamp(delayRaw, 0, 10000));
 
-    int maxScan = Wh_GetIntSetting(L"fitModeSettings.maxScanItems");
+    bool elasticOn = Wh_GetIntSetting(L"elastic") != 0;
+    bool scanOn = Wh_GetIntSetting(L"scanSettings.scanEntireFolder") != 0;
+
+    int maxScan = Wh_GetIntSetting(L"scanSettings.maxScanItems");
     if (maxScan <= 0) maxScan = 500;
     // No hard ceiling here: the scan is now bounded by wall-clock time
     // (kScanTimeBudgetMs) regardless of how high this is set.
 
+    // The four FitMode values are exactly this 2x2: elastic on/off crossed
+    // with scan on/off. FitMode itself is unchanged internally -- only how
+    // it's derived from settings changed.
     FitMode mode = FitMode::Visible;
-    auto fitModeStr = WindhawkUtils::StringSetting::make(L"fitModeSettings.fitMode");
-    if (wcscmp(fitModeStr.get(), L"full") == 0) mode = FitMode::Full;
-    else if (wcscmp(fitModeStr.get(), L"elastic") == 0) mode = FitMode::Elastic;
+    if (scanOn && elasticOn) mode = FitMode::Elastic;
+    else if (scanOn) mode = FitMode::Full;
+    else if (elasticOn) mode = FitMode::FastElastic;
 
+    g_passiveTriggers.store(passiveTriggers, std::memory_order_relaxed);
     g_delayMs.store(delay, std::memory_order_relaxed);
     g_maxScanItems.store(maxScan, std::memory_order_relaxed);
     g_fitMode.store(mode, std::memory_order_relaxed);
@@ -262,6 +289,7 @@ static void LoadSettings() {
 
 static Settings GetCachedSettings() {
     Settings s;
+    s.passiveTriggers = g_passiveTriggers.load(std::memory_order_relaxed);
     s.delayMs = g_delayMs.load(std::memory_order_relaxed);
     s.maxScanItems = g_maxScanItems.load(std::memory_order_relaxed);
     s.fitMode = g_fitMode.load(std::memory_order_relaxed);
@@ -345,8 +373,13 @@ static bool ElementHasHorizontalScroll(IUIAutomationElement* pElement) {
     HRESULT hrPat = pElement->GetCurrentPatternAs(UIA_ScrollPatternId, IID_PPV_ARGS(&pScroll));
     if (SUCCEEDED(hrPat) && pScroll) {
         BOOL scrollable = FALSE;
-        if (SUCCEEDED(pScroll->get_CurrentHorizontallyScrollable(&scrollable)))
-            result = (scrollable != FALSE);
+        double viewSize = 100.0;
+        // CurrentHorizontallyScrollable is a static capability (almost always
+        // true for a list view), not a "content overflows right now" signal.
+        // CurrentHorizontalViewSize (100 = fully visible) is the real one.
+        if (SUCCEEDED(pScroll->get_CurrentHorizontallyScrollable(&scrollable)) && scrollable &&
+            SUCCEEDED(pScroll->get_CurrentHorizontalViewSize(&viewSize)))
+            result = (viewSize < 99.5);
         pScroll->Release();
     }
     return result;
@@ -525,6 +558,7 @@ struct FitContext {
 
     std::vector<int> headerFloor;               // used only as a floor under the measured width
     std::vector<PITEMID_CHILD> widestPidl;       // owned; per column, from the initial scan
+    std::vector<UINT> unmeasurableQueue;         // elastic-only: columns needing a native-autosize read-back
     std::vector<UINT> exactColumnQueue;          // column indices still needing scroll+autosize+read
     size_t exactQueueIndex = 0;
     int preAutosizeWidth = 0;                    // width just before the current column's autosize
@@ -554,7 +588,8 @@ struct FitContext {
     bool inStep = false;
     bool pendingDestroy = false;
 
-    enum class Phase { WaitScanChunk, WaitFastAutosizeSettle, WaitSelectWidest, WaitExactAutosize, WaitRestoreScroll, WaitElasticVerify }
+    enum class Phase { WaitScanChunk, WaitFastAutosizeSettle, WaitNameShrinkSettle, WaitUnmeasurableAutosize,
+                       WaitSelectWidest, WaitExactAutosize, WaitRestoreScroll, WaitElasticVerify }
         phase = Phase::WaitSelectWidest;
 
     ~FitContext() {
@@ -593,6 +628,7 @@ static void Step_Finalize(FitContext* ctx, HWND hwndOwner) {
 }
 
 static void Step_SelectWidest(FitContext* ctx, HWND hwndOwner);
+static void Step_ResolveUnmeasurableColumns(FitContext* ctx, HWND hwndOwner);
 
 // Releases the scan's owned GDI/COM resources. The old font is restored into
 // hdcScan before hFontItemScan is deleted: DeleteObject silently fails (and
@@ -651,20 +687,45 @@ static void Step_ReadFastAutosizeAndStretch(FitContext* ctx, HWND hwndOwner) {
     SetTimer(hwndOwner, FITSTEP_TIMER_ID, kElasticVerifyDelayMs, nullptr);
 }
 
+static void Step_AfterNameShrinkSettle(FitContext* ctx, HWND hwndOwner);
+
 // Finishes bookkeeping once every item has been scanned (or the folder was too
 // small to need more than one chunk): elastic empty-column padding, then the
 // scroll position to restore later, before moving on to exact measurement.
 static void Step_FinishScan(FitContext* ctx, HWND hwndOwner) {
     ReleaseScanResources(ctx);
 
-    ctx->maxWidths.assign(ctx->colCount, 0);
     if (ctx->elasticMode) {
-        // Elastic needs a known fixed width per column to compute Name's leftover space --
-        // CM_WIDTH_AUTOSIZE's actual result is decided by Explorer afterward and could
-        // exceed what was assumed here, overflowing the row.
-        int emptyColPad = static_cast<int>(20 * ctx->dpiScale);
-        for (UINT c = 0; c < ctx->colCount; c++)
-            if (!ctx->widestPidl[c]) ctx->maxWidths[c] = ctx->headerFloor[c] + emptyColPad;
+        // Name still holds the previous fit's (often wide) width and can
+        // crowd other columns off-screen during their own autosize below.
+        // Shrink it and wait a tick so Explorer actually re-lays-out first.
+        CM_COLUMNINFO ciName = {};
+        ciName.cbSize = sizeof(ciName);
+        ciName.dwMask = CM_MASK_WIDTH;
+        ciName.uWidth = static_cast<UINT>(60 * ctx->dpiScale);
+        ctx->pCM->SetColumnInfo(ctx->keys[ctx->nameColumnIndex], &ciName);
+        ctx->phase = FitContext::Phase::WaitNameShrinkSettle;
+        SetTimer(hwndOwner, FITSTEP_TIMER_ID, kFitStepDelayMs, nullptr);
+        return;
+    }
+
+    Step_AfterNameShrinkSettle(ctx, hwndOwner);
+}
+
+// Timer target for Phase::WaitNameShrinkSettle (elastic only); continues what
+// used to be the rest of Step_FinishScan once the header has actually settled.
+static void Step_AfterNameShrinkSettle(FitContext* ctx, HWND hwndOwner) {
+    ctx->maxWidths.assign(ctx->colCount, 0);
+    ctx->unmeasurableQueue.clear();
+    if (ctx->elasticMode) {
+        for (UINT c = 0; c < ctx->colCount; c++) {
+            if (ctx->widestPidl[c]) continue;
+            // "No content" per our own GetDetailsEx probe isn't reliable:
+            // some of Explorer's own columns (e.g. Date, a rollup property)
+            // can render real content our probe never sees. Never guess a
+            // width for these -- always defer to Explorer's own real autosize.
+            ctx->unmeasurableQueue.push_back(c);
+        }
     }
 
     // Capture where the user actually is before any scrolling starts, so
@@ -683,6 +744,39 @@ static void Step_FinishScan(FitContext* ctx, HWND hwndOwner) {
         }
     }
 
+    Step_ResolveUnmeasurableColumns(ctx, hwndOwner);
+}
+
+// Elastic-only: columns whose content exists but couldn't be measured need a
+// real, known width for the leftover-space math, so ask Explorer to autosize
+// just those columns natively and wait a tick before reading the result back.
+static void Step_ResolveUnmeasurableColumns(FitContext* ctx, HWND hwndOwner) {
+    if (ctx->unmeasurableQueue.empty()) {
+        Step_SelectWidest(ctx, hwndOwner);
+        return;
+    }
+
+    CM_COLUMNINFO ci = {};
+    ci.cbSize = sizeof(ci);
+    ci.dwMask = CM_MASK_WIDTH;
+    ci.uWidth = CM_WIDTH_AUTOSIZE;
+    for (UINT c : ctx->unmeasurableQueue)
+        ctx->pCM->SetColumnInfo(ctx->keys[c], &ci);
+
+    ctx->phase = FitContext::Phase::WaitUnmeasurableAutosize;
+    SetTimer(hwndOwner, FITSTEP_TIMER_ID, kFitStepDelayMs, nullptr);
+}
+
+// Timer target for Phase::WaitUnmeasurableAutosize: reads back what Explorer's
+// own native autosize decided, one tick after it was requested.
+static void Step_ReadUnmeasurableAutosize(FitContext* ctx, HWND hwndOwner) {
+    for (UINT c : ctx->unmeasurableQueue) {
+        CM_COLUMNINFO ci = {};
+        ci.cbSize = sizeof(ci);
+        ci.dwMask = CM_MASK_WIDTH;
+        bool ok = SUCCEEDED(ctx->pCM->GetColumnInfo(ctx->keys[c], &ci));
+        ctx->maxWidths[c] = ok ? static_cast<int>(ci.uWidth) : ctx->headerFloor[c];
+    }
     Step_SelectWidest(ctx, hwndOwner);
 }
 
@@ -814,7 +908,8 @@ static void Step_ReadExactAndRestore(FitContext* ctx, HWND hwndOwner) {
     CM_COLUMNINFO ciResult = {};
     ciResult.cbSize = sizeof(ciResult);
     ciResult.dwMask = CM_MASK_WIDTH;
-    bool gotResult = SUCCEEDED(ctx->pCM->GetColumnInfo(ctx->keys[c], &ciResult)) && ciResult.uWidth > 0;
+    HRESULT hrGet = ctx->pCM->GetColumnInfo(ctx->keys[c], &ciResult);
+    bool gotResult = SUCCEEDED(hrGet) && ciResult.uWidth > 0;
 
     // A read-back equal to the pre-autosize width likely means the view
     // hadn't finished relayout yet; wait one more tick and re-read once.
@@ -972,12 +1067,14 @@ static void AdvanceFitContext(HWND hwndOwner) {
     if (!ctx) return;
 
     switch (ctx->phase) {
-        case FitContext::Phase::WaitScanChunk:          Step_ScanChunk(ctx, hwndOwner); break;
-        case FitContext::Phase::WaitFastAutosizeSettle: Step_ReadFastAutosizeAndStretch(ctx, hwndOwner); break;
-        case FitContext::Phase::WaitSelectWidest:       Step_ApplyExactAutosize(ctx, hwndOwner); break;
-        case FitContext::Phase::WaitExactAutosize:      Step_ReadExactAndRestore(ctx, hwndOwner); break;
-        case FitContext::Phase::WaitRestoreScroll:      Step_FinishAfterRestore(ctx, hwndOwner); break;
-        case FitContext::Phase::WaitElasticVerify:      Step_VerifyElasticFit(ctx, hwndOwner); break;
+        case FitContext::Phase::WaitScanChunk:              Step_ScanChunk(ctx, hwndOwner); break;
+        case FitContext::Phase::WaitFastAutosizeSettle:     Step_ReadFastAutosizeAndStretch(ctx, hwndOwner); break;
+        case FitContext::Phase::WaitNameShrinkSettle:       Step_AfterNameShrinkSettle(ctx, hwndOwner); break;
+        case FitContext::Phase::WaitUnmeasurableAutosize:   Step_ReadUnmeasurableAutosize(ctx, hwndOwner); break;
+        case FitContext::Phase::WaitSelectWidest:           Step_ApplyExactAutosize(ctx, hwndOwner); break;
+        case FitContext::Phase::WaitExactAutosize:          Step_ReadExactAndRestore(ctx, hwndOwner); break;
+        case FitContext::Phase::WaitRestoreScroll:          Step_FinishAfterRestore(ctx, hwndOwner); break;
+        case FitContext::Phase::WaitElasticVerify:          Step_VerifyElasticFit(ctx, hwndOwner); break;
     }
 
     // Re-validate under the lock before touching ctx again: a normal
@@ -1131,7 +1228,7 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner, TriggerKind kin
         return;
     }
 
-    bool elasticMode = (settings.fitMode == FitMode::Elastic);
+    bool elasticMode = FitModeIsElastic(settings.fitMode);
     UINT nameColIndex = FindNameColumnIndex(keys);
     if (elasticMode && nameColIndex == kNoNameColumn) {
         // No Name column to stretch -- degrade to Full-mode behavior rather
@@ -1184,7 +1281,17 @@ static void StartAutoFit(IShellView* pShellView, HWND hwndOwner, TriggerKind kin
                                 std::move(widths), pListElement);
             return;
         }
-        // No usable cache -- fall through to a full scan.
+        // No usable cache -- fall through to the no-scan path below.
+    }
+
+    if (settings.fitMode == FitMode::FastElastic) {
+        // Elastic (Visible Rows Only): never scans, regardless of folder
+        // size -- other columns get Explorer's own native autosize (cheap,
+        // same as Visible Rows Only), Name fills what's left.
+        ApplyFastAutosizeFit(pFV2, pCM, std::move(keys), colCount, nameColIndex, elasticMode,
+                              hwndOwner, hwndView, hwndListView, hwndHeader, dpiScale,
+                              L"visible rows only");
+        return;
     }
 
     int itemCount = 0;
@@ -1516,14 +1623,16 @@ HRESULT __thiscall CDefView_UIActivate_hook(void* pThis, UINT uState) {
             if (sameFolder) {
                 CoTaskMemFree(currentPidl);  // focus/tab-switch activation, folder unchanged
                 // A background tab can have a stale Elastic Name width if the
-                // window was resized while another tab was active; this is the
-                // cheap cached fast path, no scan and no scrolling.
-                if (GetCachedSettings().fitMode == FitMode::Elastic)
+                // window was resized while another tab was active. Also fires
+                // on any reactivation (restoring from minimize included), so
+                // it's grouped under Passive Triggers just like the others.
+                if (GetCachedSettings().passiveTriggers && FitModeIsElastic(GetCachedSettings().fitMode))
                     ScheduleFit(hwndTab, TriggerKind::ResizeOnly);
             } else {
                 TrackFolderPidl(hwndTab, currentPidl);
                 RegisterFolderChangeNotify(hwndTab, currentPidl);  // takes ownership
-                ScheduleFit(hwndTab, TriggerKind::Full);
+                if (GetCachedSettings().passiveTriggers)
+                    ScheduleFit(hwndTab, TriggerKind::Full);
             }
         }
         pShellView->Release();
@@ -1659,6 +1768,7 @@ static void CleanupWindowState(HWND hwnd) {
     g_tabWidthCache.erase(hwnd);
     g_pendingTriggerKind.erase(hwnd);
     g_windowWasMinimized.erase(hwnd);
+    g_lastRestoreTick.erase(hwnd);
     if (auto itPidl = g_tabFolderPidl.find(hwnd); itPidl != g_tabFolderPidl.end()) {
         ILFree(itPidl->second);
         g_tabFolderPidl.erase(itPidl);
@@ -1695,7 +1805,7 @@ static LRESULT CALLBACK ExplorerSubclassProc(
     // Shell-level change notification for this tab's folder: a passive write
     // (download, sync, build, extraction), not an explicit user navigate or
     // refresh, so it gets its own, lighter trigger kind (see StartAutoFit).
-    if (g_shellNotifyMsg != 0 && uMsg == g_shellNotifyMsg) {
+    if (g_shellNotifyMsg != 0 && uMsg == g_shellNotifyMsg && GetCachedSettings().passiveTriggers) {
         PIDLIST_ABSOLUTE* rgpidl = nullptr;
         LONG lEvent = 0;  // required out-param; the event itself isn't filtered on
         HANDLE hLock = SHChangeNotification_Lock(
@@ -1711,18 +1821,32 @@ static LRESULT CALLBACK ExplorerSubclassProc(
     // via UIActivate); WM_SIZE(SIZE_MINIMIZED) itself must not, since its
     // empty client rect would otherwise collapse Name to CM_WIDTH_AUTOSIZE.
     if (uMsg == WM_SIZE) {
+        // Keyed by top-level window, not hwnd: only the frame gets
+        // SIZE_MINIMIZED/SIZE_RESTORED, but restoring it cascades plain
+        // WM_SIZE to other subclassed children (e.g. the tab) too.
+        HWND hwndRoot = GetAncestor(hwnd, GA_ROOT);
+        if (!hwndRoot) hwndRoot = hwnd;
+
         bool wasMinimized = false;
+        bool recentlyRestored = false;
+        ULONGLONG now = GetTickCount64();
         EnterCriticalSection(&g_cs);
-        auto itMin = g_windowWasMinimized.find(hwnd);
+        auto itMin = g_windowWasMinimized.find(hwndRoot);
         wasMinimized = (itMin != g_windowWasMinimized.end() && itMin->second);
-        g_windowWasMinimized[hwnd] = (wParam == SIZE_MINIMIZED);
+        g_windowWasMinimized[hwndRoot] = (wParam == SIZE_MINIMIZED);
+        if (wasMinimized) g_lastRestoreTick[hwndRoot] = now;
+        auto itRestore = g_lastRestoreTick.find(hwndRoot);
+        recentlyRestored = (itRestore != g_lastRestoreTick.end() &&
+                             now - itRestore->second < kRestoreSettleMs);
         LeaveCriticalSection(&g_cs);
 
         if (wParam != SIZE_MINIMIZED) {
-            if (wasMinimized)
-                isFullRefresh = true;
-            else if (GetCachedSettings().fitMode == FitMode::Elastic)
+            if (wasMinimized) {
+                // Bookkeeping above always runs; only the fit itself is optional.
+                if (GetCachedSettings().passiveTriggers) isFullRefresh = true;
+            } else if (!recentlyRestored && FitModeIsElastic(GetCachedSettings().fitMode)) {
                 isResizeRefresh = true;
+            }
         }
     }
 
@@ -1895,7 +2019,8 @@ static void TrackAndFitDiscoveredShellView(IShellView* pShellView) {
     PIDLIST_ABSOLUTE currentPidl = GetShellViewFolderPidl(pShellView);
     TrackFolderPidl(hwndTab, currentPidl);
     RegisterFolderChangeNotify(hwndTab, currentPidl);  // takes ownership
-    ScheduleFit(hwndTab, TriggerKind::Full);
+    if (GetCachedSettings().passiveTriggers)
+        ScheduleFit(hwndTab, TriggerKind::Full);
 }
 
 // Runs fn(param) synchronously on the thread that owns hwnd, via the same
@@ -2040,6 +2165,7 @@ void Wh_ModUninit() {
     g_tabWidthCache.clear();
     g_pendingTriggerKind.clear();
     g_windowWasMinimized.clear();
+    g_lastRestoreTick.clear();
     for (auto& [hwnd, pidl] : g_tabFolderPidl)
         ILFree(pidl);
     g_tabFolderPidl.clear();
@@ -2085,6 +2211,6 @@ void Wh_ModSettingsChanged() {
         ScheduleFit(hwndTab, TriggerKind::Full);
 
     Settings s = GetCachedSettings();
-    Wh_Log(L"SettingsChanged — delay: %ums, fit mode: %d, max scan items: %d",
-           s.delayMs, static_cast<int>(s.fitMode), s.maxScanItems);
+    Wh_Log(L"SettingsChanged — passive triggers: %d, delay: %ums, fit mode: %d, max scan items: %d",
+           s.passiveTriggers, s.delayMs, static_cast<int>(s.fitMode), s.maxScanItems);
 }
