@@ -1,3 +1,8 @@
+## 1.5 ([Sep 24, 2026](https://github.com/ramensoftware/windhawk-mods/blob/83a455e97dbd8810c9bd0f441cfa3f61ae3830bf/mods/win7-login-fade.wh.cpp))
+
+* Fix a critical winlogon crash occurring on Windhawk 2.0 alpha 6 (by @m417z)
+* Add support for all fade modes on Windows 8.x
+
 ## 1.4 ([May 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/930fda20adf00a5f1f789d3b4ffcb6eb949119e8/mods/win7-login-fade.wh.cpp))
 
 * Fix monitor not turning off when the Windows 10+ lock screen is being displayed

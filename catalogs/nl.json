@@ -14790,7 +14790,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 2],
         "ratingUsers": 2,
         "reviews": 0,
-        "updated": 1789672184000,
+        "updated": 1790283744000,
         "users": 268
       },
       "metadata": {
@@ -14809,7 +14809,7 @@
         "license": "GPL-3.0-only",
         "name": "Windows Vista/7 Blocked Shutdown UX & Logoff Sequence",
         "twitter": "https://twitter.com/Ingan121",
-        "version": "1.2"
+        "version": "1.3"
       }
     },
     "win7-classic-autoplay-restorer": {
@@ -15026,7 +15026,7 @@
         "ratingBreakdown": [0, 0, 0, 1, 12],
         "ratingUsers": 13,
         "reviews": 0,
-        "updated": 1777880171000,
+        "updated": 1790283748000,
         "users": 1115
       },
       "metadata": {
@@ -15043,7 +15043,7 @@
         ],
         "name": "Logon & Sleep Fade Restorer",
         "twitter": "https://twitter.com/Ingan121",
-        "version": "1.4"
+        "version": "1.5"
       }
     },
     "win7-logoff-screen-restorer": {
