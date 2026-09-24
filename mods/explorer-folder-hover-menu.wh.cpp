@@ -2,7 +2,7 @@
 // @id              explorer-folder-hover-menu
 // @name            Folder Hover Menu
 // @description     Hover a folder in File Explorer to get an expand button that opens a cascading menu of the folder's contents
-// @version         1.2
+// @version         1.3
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -84,6 +84,14 @@ Inspired by [QTTabBar](https://qttabbar.wikidot.com/).
     Also show the expand button in open and save file dialogs. The folder click
     actions above apply there too. Clicking a file in the menu puts it into the
     dialog's file name box (it is not launched).
+- showHidden: systemDefault
+  $name: Hidden files and folders
+  $description: >-
+    Whether hidden files and folders are included in the pop-up menu.
+  $options:
+  - systemDefault: Use the File Explorer settings
+  - hide: Never show
+  - show: Always show
 - maxItems: 200
   $name: Maximum items
   $description: >-
@@ -181,6 +189,13 @@ enum class FolderAction {
     newTab,
 };
 
+// Whether hidden items are included in the pop-up menu.
+enum class ShowHidden {
+    systemDefault,
+    hide,
+    show,
+};
+
 struct {
     bool roundedCorners;
     int iconSize;
@@ -191,6 +206,7 @@ struct {
     FolderAction clickAction;
     FolderAction middleClickAction;
     bool fileDialogs;
+    ShowHidden showHidden;
     int maxEnumItems;
     int enumTimeoutMs;
 } g_settings;
@@ -251,6 +267,15 @@ void LoadSettings() {
 
     g_settings.fileDialogs = Wh_GetIntSetting(L"fileDialogs");
 
+    PCWSTR showHidden = Wh_GetStringSetting(L"showHidden");
+    g_settings.showHidden = ShowHidden::systemDefault;
+    if (wcscmp(showHidden, L"hide") == 0) {
+        g_settings.showHidden = ShowHidden::hide;
+    } else if (wcscmp(showHidden, L"show") == 0) {
+        g_settings.showHidden = ShowHidden::show;
+    }
+    Wh_FreeStringSetting(showHidden);
+
     int maxItems = Wh_GetIntSetting(L"maxItems");
     if (maxItems < 1) {
         maxItems = 1;
@@ -300,17 +325,14 @@ UINT g_shellHookMsg;
 HANDLE g_workerThread;
 DWORD g_workerThreadId;
 HANDLE g_workerReadyEvent;
-// Worker thread only. Heap-allocated and intentionally never freed. The worker
-// releases these on its own STA at clean shutdown (see WorkerThreadProc). If
-// the UI thread hangs, WhTool_ModUninit falls back to ExitProcess, which kills
-// the worker first, then runs C++ static destructors on another thread -
-// letting a com_ptr destructor Release these here would marshal into the dead
-// worker STA and crash. Leaking the holder avoids that; the OS reclaims it on
-// exit anyway.
-winrt::com_ptr<IUIAutomation>& g_workerUia =
-    *new winrt::com_ptr<IUIAutomation>();
-winrt::com_ptr<IUIAutomationElement>& g_workerContainer =
-    *new winrt::com_ptr<IUIAutomationElement>();
+// Worker thread only. The worker releases these on its own STA at clean
+// shutdown (see WorkerThreadProc). If the UI thread hangs, WhTool_ModUninit
+// falls back to ExitProcess, which kills the worker first, then runs C++ static
+// destructors on another thread - letting a com_ptr destructor Release these
+// here would marshal into the dead worker STA and crash, so suppress the
+// destructors.
+[[clang::no_destroy]] winrt::com_ptr<IUIAutomation> g_workerUia;
+[[clang::no_destroy]] winrt::com_ptr<IUIAutomationElement> g_workerContainer;
 HWND g_workerContainerTab;           // Worker thread only: the tab the
                                      // cached container belongs to.
 PIDLIST_ABSOLUTE g_workerFolderAbs;  // Worker thread only: the folder
@@ -350,6 +372,22 @@ bool g_rawInputRegistered;
 // stationary cursor (double-click / keyboard Enter) is noticed without a move.
 constexpr UINT kWatchdogIntervalMs = 500;
 constexpr UINT_PTR kWatchdogTimerId = 1;
+
+// The modern common file dialog shows its frame (file name box, buttons) first
+// and attaches the shell view (the file list) and address bar asynchronously a
+// few hundred ms later, with no activation or focus event to announce it. So
+// the activation check sees no shell view when the dialog becomes foreground
+// and, without this, would leave the mod inactive until the dialog is
+// refocused. After such a dialog appears, poll for the shell view at this
+// interval for at most this many ticks, so the mod activates on its own once
+// the view is built.
+constexpr UINT kDialogActivatePollMs = 100;
+constexpr UINT_PTR kDialogActivateTimerId = 2;
+constexpr int kDialogActivateMaxPolls = 30;
+// The file dialog being polled for a shell view, and the number of polls left
+// before giving up. UI thread only.
+HWND g_dialogActivatePending;
+int g_dialogActivatePollsLeft;
 
 // One visible item in the active view: its rectangle (screen coords) and name.
 struct CachedItem {
@@ -607,6 +645,139 @@ void InitMenuColorHooks() {
                                    &GetSysColorBrush_Orig);
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
                                    &CreateWindowExW_Orig);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Per-monitor DPI for the pop-up menu. The menu band lays itself out from
+// GetSystemMetrics and SystemParametersInfo, which in a per-monitor-aware
+// thread report values for the system DPI, not for the monitor the window ends
+// up on. Left alone, the menu is sized for the system DPI everywhere, so it
+// comes out too small or too large on every other monitor. While our menu is
+// up, the hooks below answer these queries for the monitor it was opened on.
+
+// Effective DPI of the monitor that contains the given rectangle.
+UINT GetDpiForRect(const RECT& rc) {
+    using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
+    static GetDpiForMonitor_t pGetDpiForMonitor = []() -> GetDpiForMonitor_t {
+        HMODULE shcore = LoadLibraryExW(L"shcore.dll", nullptr,
+                                        LOAD_LIBRARY_SEARCH_SYSTEM32);
+        return shcore ? (GetDpiForMonitor_t)GetProcAddress(shcore,
+                                                           "GetDpiForMonitor")
+                      : nullptr;
+    }();
+
+    POINT center = {(rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2};
+    HMONITOR monitor = MonitorFromPoint(center, MONITOR_DEFAULTTONEAREST);
+    UINT dpiX = 96;
+    UINT dpiY = 96;
+    if (pGetDpiForMonitor &&
+        SUCCEEDED(pGetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, &dpiX,
+                                    &dpiY))) {
+        return dpiX;
+    }
+    return 96;
+}
+
+// The DPI the open menu is laid out for, 0 when no menu is up.
+UINT g_menuDpi;
+
+int(WINAPI* g_pGetSystemMetricsForDpi)(int, UINT);
+BOOL(WINAPI* g_pSystemParametersInfoForDpi)(UINT, UINT, PVOID, UINT, UINT);
+UINT(WINAPI* g_pGetDpiForSystem)();
+
+// The hooks are process-wide, so they also have to stay out of the way of the
+// worker thread, which runs shell code of its own while the menu is up and must
+// keep seeing the real system metrics.
+bool UseMenuDpi() {
+    return GetCurrentThreadId() == g_uiThreadId && g_menuDpi;
+}
+
+// The metrics the menu band sizes itself with. A whitelist rather than a
+// blanket redirect, so the metrics it fits itself on screen with (SM_CXSCREEN
+// and friends) keep coming from the real system.
+constexpr int kMenuDpiMetrics[] = {
+    SM_CXSMICON,    SM_CYSMICON,      SM_CXICON,        SM_CYICON,
+    SM_CXMENUCHECK, SM_CYMENUCHECK,   SM_CXMENUSIZE,    SM_CYMENUSIZE,
+    SM_CYMENU,      SM_CXBORDER,      SM_CYBORDER,      SM_CXEDGE,
+    SM_CYEDGE,      SM_CXVSCROLL,     SM_CYVSCROLL,     SM_CXHSCROLL,
+    SM_CYHSCROLL,   SM_CXFOCUSBORDER, SM_CYFOCUSBORDER,
+};
+
+bool IsMenuDpiMetric(int index) {
+    for (int i = 0; i < (int)ARRAYSIZE(kMenuDpiMetrics); i++) {
+        if (kMenuDpiMetrics[i] == index) {
+            return true;
+        }
+    }
+    return false;
+}
+
+using GetSystemMetrics_t = decltype(&GetSystemMetrics);
+GetSystemMetrics_t GetSystemMetrics_Orig;
+int WINAPI GetSystemMetrics_Hook(int index) {
+    if (UseMenuDpi() && IsMenuDpiMetric(index)) {
+        return g_pGetSystemMetricsForDpi(index, g_menuDpi);
+    }
+    return GetSystemMetrics_Orig(index);
+}
+
+using SystemParametersInfoW_t = decltype(&SystemParametersInfoW);
+SystemParametersInfoW_t SystemParametersInfoW_Orig;
+BOOL WINAPI SystemParametersInfoW_Hook(UINT uiAction,
+                                       UINT uiParam,
+                                       PVOID pvParam,
+                                       UINT fWinIni) {
+    // The menu font comes from SPI_GETNONCLIENTMETRICS. The three actions here
+    // are the only ones SystemParametersInfoForDpi accepts.
+    if (UseMenuDpi() && (uiAction == SPI_GETNONCLIENTMETRICS ||
+                         uiAction == SPI_GETICONMETRICS ||
+                         uiAction == SPI_GETICONTITLELOGFONT)) {
+        return g_pSystemParametersInfoForDpi(uiAction, uiParam, pvParam,
+                                             fWinIni, g_menuDpi);
+    }
+    return SystemParametersInfoW_Orig(uiAction, uiParam, pvParam, fWinIni);
+}
+
+// The modern spelling of the same question, answered the same way so a newer
+// code path stays consistent with the metrics above.
+using GetDpiForSystem_t = UINT(WINAPI*)();
+GetDpiForSystem_t GetDpiForSystem_Orig;
+UINT WINAPI GetDpiForSystem_Hook() {
+    if (UseMenuDpi()) {
+        return g_menuDpi;
+    }
+    return GetDpiForSystem_Orig();
+}
+
+void InitMenuDpiHooks() {
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) {
+        return;
+    }
+
+    g_pGetSystemMetricsForDpi = (int(WINAPI*)(int, UINT))GetProcAddress(
+        user32, "GetSystemMetricsForDpi");
+    g_pSystemParametersInfoForDpi =
+        (BOOL(WINAPI*)(UINT, UINT, PVOID, UINT, UINT))GetProcAddress(
+            user32, "SystemParametersInfoForDpi");
+    g_pGetDpiForSystem =
+        (UINT(WINAPI*)())GetProcAddress(user32, "GetDpiForSystem");
+
+    // Windows 10 1607 and newer. Without them there is no way to ask for
+    // another monitor's metrics, so leave the menu at the system DPI.
+    if (!g_pGetSystemMetricsForDpi || !g_pSystemParametersInfoForDpi) {
+        return;
+    }
+
+    WindhawkUtils::SetFunctionHook(GetSystemMetrics, GetSystemMetrics_Hook,
+                                   &GetSystemMetrics_Orig);
+    WindhawkUtils::SetFunctionHook(SystemParametersInfoW,
+                                   SystemParametersInfoW_Hook,
+                                   &SystemParametersInfoW_Orig);
+    if (g_pGetDpiForSystem) {
+        WindhawkUtils::SetFunctionHook(g_pGetDpiForSystem, GetDpiForSystem_Hook,
+                                       &GetDpiForSystem_Orig);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2136,13 +2307,51 @@ HRESULT STDMETHODCALLTYPE EnumObjects_Hook(IShellFolder* pThis,
         return E_FAIL;
     }
 
+    // The background worker also enumerates folders (to build its hover map)
+    // and must see the complete, unbounded list, so only the menu band's
+    // enumeration is adjusted below.
+    bool bandEnumeration = GetCurrentThreadId() != g_workerThreadId;
+
+    // The band's own enumeration doesn't follow Explorer's "Hidden files and
+    // folders" setting, so hidden item visibility is decided here.
+    // SHCONTF_INCLUDEHIDDEN adds the items carrying the hidden attribute;
+    // hidden+system ("protected operating system") items come along with them
+    // only when Explorer's separate "Hide protected operating system files"
+    // setting is off. SHCONTF_INCLUDESUPERHIDDEN forces those in even when it
+    // is on, and does nothing without SHCONTF_INCLUDEHIDDEN; leaving it out
+    // keeps them tracking that setting, like the file list does. The worker
+    // always enumerates hidden items when building its resolution map.
+    if (bandEnumeration) {
+        bool includeHidden;
+        switch (g_settings.showHidden) {
+            case ShowHidden::hide:
+                includeHidden = false;
+                break;
+
+            case ShowHidden::show:
+                includeHidden = true;
+                break;
+
+            case ShowHidden::systemDefault:
+            default: {
+                SHELLFLAGSTATE shellFlagState{};
+                SHGetSettings(&shellFlagState, SSF_SHOWALLOBJECTS);
+                includeHidden = shellFlagState.fShowAllObjects;
+                break;
+            }
+        }
+
+        if (includeHidden) {
+            grfFlags |= SHCONTF_INCLUDEHIDDEN;
+        } else {
+            grfFlags &= ~SHCONTF_INCLUDEHIDDEN;
+        }
+    }
+
     HRESULT hr = origs->enumObjects(pThis, hwnd, grfFlags, ppenumIDList);
 
-    // Only the menu band's enumeration is bounded. The background worker also
-    // enumerates folders (to build its hover map) and must see the complete
-    // list, so its own enumeration - and only its - is left untouched.
-    if (hr != S_OK || !ppenumIDList || !*ppenumIDList ||
-        GetCurrentThreadId() == g_workerThreadId) {
+    // Only the menu band's enumeration is bounded.
+    if (hr != S_OK || !ppenumIDList || !*ppenumIDList || !bandEnumeration) {
         return hr;
     }
 
@@ -2483,6 +2692,11 @@ HWND FindDescendantOfClass(HWND parent, PCWSTR className) {
     return params.result;
 }
 
+// Accumulated sub-notch wheel delta for menu scrolling, plus the tick of the
+// last scroll step.
+int g_menuScrollAccumulatedDelta;
+ULONGLONG g_menuScrollLastTick;
+
 // Scrolls a long folder menu with the mouse wheel. The menu band has no native
 // wheel support: it parks its (taller-than-screen) item toolbar in a Pager
 // control whose top and bottom arrows are the only built-in way to scroll, and
@@ -2519,11 +2733,18 @@ void ScrollMenuWithWheel(HWND pager, int wheelDelta) {
     }
 
     // Accumulate sub-notch deltas so high-resolution wheels and touchpads still
-    // step smoothly.
-    static int s_accumulatedDelta;
-    s_accumulatedDelta += wheelDelta;
-    int notches = s_accumulatedDelta / WHEEL_DELTA;
-    s_accumulatedDelta -= notches * WHEEL_DELTA;
+    // step smoothly. Drop the leftover fraction after a spell of inactivity so
+    // a stale remainder from an old gesture never nudges a fresh one.
+    constexpr ULONGLONG kAccumIdleResetMs = 5000;
+    ULONGLONG now = GetTickCount64();
+    if (now - g_menuScrollLastTick >= kAccumIdleResetMs) {
+        g_menuScrollAccumulatedDelta = 0;
+    }
+    g_menuScrollLastTick = now;
+
+    g_menuScrollAccumulatedDelta += wheelDelta;
+    int notches = g_menuScrollAccumulatedDelta / WHEEL_DELTA;
+    g_menuScrollAccumulatedDelta -= notches * WHEEL_DELTA;
     if (notches == 0) {
         return;
     }
@@ -2898,7 +3119,11 @@ winrt::com_ptr<IMenuBand> PopupFolderMenu(PCIDLIST_ABSOLUTE pidlAbs,
 // Shows the folder menu and pumps a nested message loop until it is dismissed.
 void ShowFolderMenuModal(PCIDLIST_ABSOLUTE pidlAbs, RECT anchorRect) {
     g_menuActive = true;
+    // The button sits on the monitor the menu opens on, so its rect picks the
+    // DPI the band should lay itself out for (see InitMenuDpiHooks).
+    g_menuDpi = GetDpiForRect(anchorRect);
     g_leftDownToolbar = nullptr;
+    g_menuScrollAccumulatedDelta = 0;
 
     winrt::com_ptr<IMenuBand> band = PopupFolderMenu(pidlAbs, anchorRect);
     if (band) {
@@ -2911,6 +3136,7 @@ void ShowFolderMenuModal(PCIDLIST_ABSOLUTE pidlAbs, RECT anchorRect) {
             Wh_Log(L"Could not bring menu window to foreground, closing");
             CloseMenuBand(band.get());
             g_menuActive = false;
+            g_menuDpi = 0;
             return;
         }
 
@@ -2980,33 +3206,11 @@ void ShowFolderMenuModal(PCIDLIST_ABSOLUTE pidlAbs, RECT anchorRect) {
     // we return to the outer message loop, which keeps pumping.
     g_pendingExecAction = FolderAction::nothing;
     g_menuActive = false;
+    g_menuDpi = 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // The expand-button overlay window.
-
-// Effective DPI of the monitor that contains the given rectangle.
-UINT GetDpiForRect(const RECT& rc) {
-    using GetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
-    static GetDpiForMonitor_t pGetDpiForMonitor = []() -> GetDpiForMonitor_t {
-        HMODULE shcore = LoadLibraryExW(L"shcore.dll", nullptr,
-                                        LOAD_LIBRARY_SEARCH_SYSTEM32);
-        return shcore ? (GetDpiForMonitor_t)GetProcAddress(shcore,
-                                                           "GetDpiForMonitor")
-                      : nullptr;
-    }();
-
-    POINT center = {(rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2};
-    HMONITOR monitor = MonitorFromPoint(center, MONITOR_DEFAULTTONEAREST);
-    UINT dpiX = 96;
-    UINT dpiY = 96;
-    if (pGetDpiForMonitor &&
-        SUCCEEDED(pGetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, &dpiX,
-                                    &dpiY))) {
-        return dpiX;
-    }
-    return 96;
-}
 
 void AddRoundedRectPath(Gdiplus::GraphicsPath& path,
                         const Gdiplus::RectF& rc,
@@ -3396,6 +3600,36 @@ void SetRawInputActive(bool enable) {
     }
 }
 
+// Stops polling for a file dialog's shell view (see
+// StartDialogActivatePolling).
+void StopDialogActivatePolling() {
+    if (!g_dialogActivatePending) {
+        return;
+    }
+    g_dialogActivatePending = nullptr;
+    g_dialogActivatePollsLeft = 0;
+    if (g_sinkWnd) {
+        KillTimer(g_sinkWnd, kDialogActivateTimerId);
+    }
+}
+
+// Begins polling for the shell view of a file dialog that just became
+// foreground without one yet (see kDialogActivatePollMs). The poll handler in
+// SinkWndProc activates once the file list appears; without this the mod stays
+// inactive for the dialog until it is refocused. No-ops if already polling this
+// dialog, so repeated foreground events don't extend the budget.
+void StartDialogActivatePolling(HWND dlg) {
+    if (g_dialogActivatePending == dlg) {
+        return;
+    }
+    g_dialogActivatePending = dlg;
+    g_dialogActivatePollsLeft = kDialogActivateMaxPolls;
+    if (g_sinkWnd) {
+        SetTimer(g_sinkWnd, kDialogActivateTimerId, kDialogActivatePollMs,
+                 nullptr);
+    }
+}
+
 // Re-derives whether Explorer or the desktop is the active foreground window
 // and syncs raw-input registration to match. Returns the new active state. On a
 // transition into the active state the hover button is hidden/shown as needed;
@@ -3430,9 +3664,14 @@ bool SyncActiveState() {
     // A null foreground (nobody owns it, seen mid-transition and right after an
     // Explorer restart) is treated as the desktop being the active surface.
     bool active = !fg || ClassifyRoot(fg, &isDesktop, &isDialog);
-    // Don't wake for every #32770 dialog; only ones that host a file list.
+    // Don't wake for every #32770 dialog; only ones that host a file list. A
+    // file dialog that just opened may not have built its shell view yet, so
+    // poll for it instead of staying inactive until the dialog is refocused.
     if (active && isDialog && !HasShellView(fg)) {
         active = false;
+        StartDialogActivatePolling(fg);
+    } else {
+        StopDialogActivatePolling();
     }
     if (active == g_active) {
         return active;
@@ -3489,6 +3728,23 @@ LRESULT CALLBACK SinkWndProc(HWND hwnd,
         // Periodic re-check while the button is shown, to catch navigation that
         // moved no mouse (double-click / keyboard Enter).
         Evaluate(true);
+        return 0;
+    }
+
+    if (msg == WM_TIMER && wParam == kDialogActivateTimerId) {
+        // Waiting for a just-opened file dialog to build its shell view.
+        // Re-derive the active state, which activates and stops this poll once
+        // the file list exists. Give up if the dialog lost the foreground, a
+        // menu opened, or the poll budget ran out.
+        HWND fg = GetForegroundWindow();
+        if (g_menuActive || fg != g_dialogActivatePending ||
+            --g_dialogActivatePollsLeft <= 0) {
+            StopDialogActivatePolling();
+            return 0;
+        }
+        // SyncActiveState activates and stops this poll once the shell view
+        // exists; until then it re-arms the same poll (a no-op extend).
+        SyncActiveState();
         return 0;
     }
 
@@ -3689,12 +3945,6 @@ DWORD WINAPI UiThreadProc(LPVOID param) {
     // re-derives the active state (see SinkWndProc), recovering the desktop
     // without polling.
     g_taskbarCreatedMsg = RegisterWindowMessageW(L"TaskbarCreated");
-    if (g_taskbarCreatedMsg) {
-        // Let the broadcast through UIPI in case this process runs at a higher
-        // integrity level than Explorer (which sends it).
-        ChangeWindowMessageFilterEx(g_sinkWnd, g_taskbarCreatedMsg,
-                                    MSGFLT_ALLOW, nullptr);
-    }
 
     // Register for shell hook notifications (HSHELL_WINDOWACTIVATED etc.) as an
     // additional activation signal. The genuine return to Explorer after the
@@ -3702,11 +3952,6 @@ DWORD WINAPI UiThreadProc(LPVOID param) {
     // and the shell hook runs through different machinery, so it may fire
     // there.
     g_shellHookMsg = RegisterWindowMessageW(L"SHELLHOOK");
-    if (g_shellHookMsg) {
-        // Allow it through UIPI, like TaskbarCreated above.
-        ChangeWindowMessageFilterEx(g_sinkWnd, g_shellHookMsg, MSGFLT_ALLOW,
-                                    nullptr);
-    }
     if (!RegisterShellHookWindow(g_sinkWnd)) {
         Wh_Log(L"RegisterShellHookWindow failed, le=%lu", GetLastError());
     }
@@ -3781,6 +4026,7 @@ BOOL WhTool_ModInit() {
     LoadSettings();
 
     InitMenuColorHooks();
+    InitMenuDpiHooks();
     InitEnumTimeoutHooks();
 
     InitializeCriticalSection(&g_snapshotLock);

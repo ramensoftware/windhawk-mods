@@ -64,6 +64,14 @@ function isFlowEnabled(prNumber) {
   return ENABLED_PR_NUMBERS.length === 0 || ENABLED_PR_NUMBERS.includes(prNumber);
 }
 
+// While the AI reviewer is being worked on, an accepted /ai-review posts a
+// notice instead of queueing a review.
+const AI_REVIEW_UNAVAILABLE = false;
+
+const AI_REVIEW_UNAVAILABLE_COMMENT_BODY =
+  'The AI review bot is under construction, so no review was posted this time. ' +
+  'Please try again in a few hours.';
+
 // The flow doesn't start until the author asks for a review, so a newly opened
 // pull request gets the instructions it takes to move it forward.
 const WELCOME_COMMENT_BODY =
@@ -441,6 +449,11 @@ async function runAiReview({ github, core, owner, repo, pullRequest, currentFlow
     );
   }
 
+  if (AI_REVIEW_UNAVAILABLE) {
+    await postComment({ github, owner, repo, prNumber, body: AI_REVIEW_UNAVAILABLE_COMMENT_BODY });
+    return null;
+  }
+
   await setFlowLabel({
     github,
     core,
@@ -484,7 +497,9 @@ async function runReadyForReviewer({
     return 'this pull request is a draft. Mark it as ready for review first.';
   }
 
-  if (currentFlowLabels.includes(WAITING_FOR_REVIEWER)) {
+  // Only the settled state is refused, so that repeating the command repairs a
+  // pull request that was left with an extra flow label.
+  if (currentFlowLabels.length === 1 && currentFlowLabels[0] === WAITING_FOR_REVIEWER) {
     return 'this pull request is already waiting for a human reviewer.';
   }
 
