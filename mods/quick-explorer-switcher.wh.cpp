@@ -16,7 +16,7 @@
 # Quick Explorer Switcher
 
 When a program shows an **Open**, **Save As** or **Select Folder** dialog, this
-mod adds the folders currently open in File Explorer (up to 3) to the top of
+mod adds the folders currently open in File Explorer (up to 3) to the bottom of
 the dialog's navigation pane, most recently used first. One click and you're
 there.
 
