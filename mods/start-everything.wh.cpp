@@ -4278,8 +4278,29 @@ void TakeForeground(bool force = false) {
             return;
         }
 
-        SetForegroundWindow(ours);
-        BringWindowToTop(ours);
+        DWORD ourWindowTid = GetWindowThreadProcessId(ours, nullptr);
+        DWORD currentTid = current ? GetWindowThreadProcessId(current, nullptr) : 0;
+        DWORD callerTid = GetCurrentThreadId();
+
+        // Simulate Alt press/release to bypass Windows foreground restriction
+        keybd_event(VK_MENU, 0, 0, 0);
+        keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
+
+        if (currentTid && currentTid != callerTid) {
+            AttachThreadInput(callerTid, currentTid, TRUE);
+            if (ourWindowTid && ourWindowTid != callerTid && ourWindowTid != currentTid) {
+                AttachThreadInput(ourWindowTid, currentTid, TRUE);
+            }
+            SetForegroundWindow(ours);
+            BringWindowToTop(ours);
+            if (ourWindowTid && ourWindowTid != callerTid && ourWindowTid != currentTid) {
+                AttachThreadInput(ourWindowTid, currentTid, FALSE);
+            }
+            AttachThreadInput(callerTid, currentTid, FALSE);
+        } else {
+            SetForegroundWindow(ours);
+            BringWindowToTop(ours);
+        }
     } catch (...) {
     }
 }
@@ -4595,6 +4616,8 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                         TakeForeground(true);
                         TriggerMenuOpenFocus();
                     }
+                } else {
+                    TriggerMenuOpenFocus();
                 }
             }
         }
@@ -4699,7 +4722,7 @@ void CALLBACK AttachWatchProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
         !hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
         return;
     }
-    if (event == EVENT_OBJECT_UNCLOAKED && hwnd == GetOurCoreWindow()) {
+    if ((event == EVENT_OBJECT_UNCLOAKED || event == EVENT_OBJECT_SHOW) && hwnd == GetOurCoreWindow()) {
         g_suppressRefocus.store(false);
         TriggerMenuOpenFocus();
     }
