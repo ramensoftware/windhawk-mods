@@ -939,39 +939,6 @@ inline ULONGLONG Descending(ULONGLONG v) {
 
 }  // namespace detail
 
-// Builds an Everything search query that excludes noisy paths, unless the user explicitly
-// searched for an excluded keyword.
-inline std::wstring BuildEverythingQuery(const std::wstring& baseQuery,
-                                        const std::vector<std::wstring>& excludedPaths) {
-    std::wstring qLower = ToLower(baseQuery);
-    while (!qLower.empty() && qLower.front() == L' ') qLower.erase(0, 1);
-    while (!qLower.empty() && qLower.back() == L' ') qLower.pop_back();
-    if (qLower.empty() || excludedPaths.empty()) {
-        return baseQuery;
-    }
-
-    std::wstring out = baseQuery;
-    for (const auto& raw : excludedPaths) {
-        if (raw.empty()) continue;
-        std::wstring trimmed = detail::TrimSlashes(raw);
-        if (trimmed.empty()) continue;
-
-        // If the user's search query specifically typed this keyword, don't exclude it
-        std::wstring rawLower = ToLower(trimmed);
-        if (qLower.find(rawLower) != std::wstring::npos) {
-            continue;
-        }
-
-        out += L" !path:";
-        if (trimmed.find(L' ') != std::wstring::npos) {
-            out += L"\"" + trimmed + L"\"";
-        } else {
-            out += trimmed;
-        }
-    }
-    return out;
-}
-
 // Reorders a pool in place and truncates it to limit.
 inline void Rank(std::vector<everything::Result>* pool,
                  const std::wstring& query, size_t limit,
@@ -1001,9 +968,15 @@ inline void Rank(std::vector<everything::Result>* pool,
 
     std::sort(keys.begin(), keys.end());
 
+    // If we have clean (non-noisy) matches, do not pollute remaining slots with noisy items!
+    bool hasCleanMatches = !keys.empty() && keys.front().matchClass < 100;
+
     std::vector<everything::Result> ranked;
     ranked.reserve(keys.size() < limit ? keys.size() : limit);
     for (size_t i = 0; i < keys.size() && ranked.size() < limit; i++) {
+        if (hasCleanMatches && keys[i].matchClass >= 100) {
+            break;
+        }
         ranked.push_back(std::move((*pool)[keys[i].index]));
     }
     *pool = std::move(ranked);
@@ -6986,15 +6959,8 @@ void SearchThreadMain() {
             ms = 0;
         } else if (isExplicitWeb) {
             if (!explicitWeb.queryTerm.empty()) {
-                std::wstring qSearch = explicitWeb.queryTerm;
-                if (filterNoise && !excludedPaths.empty()) {
-                    qSearch = ranker::BuildEverythingQuery(explicitWeb.queryTerm, excludedPaths);
-                }
                 auto start = std::chrono::steady_clock::now();
-                if (client.Query(qSearch, ranker::kDefaultPool, &pool, &total)) {
-                    if (pool.empty() && qSearch != explicitWeb.queryTerm) {
-                        client.Query(explicitWeb.queryTerm, ranker::kDefaultPool, &pool, &total);
-                    }
+                if (client.Query(explicitWeb.queryTerm, ranker::kDefaultPool, &pool, &total)) {
                     ranker::Rank(&pool, explicitWeb.queryTerm, static_cast<size_t>(maxFiles), noisePtr);
                 }
                 ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -7002,17 +6968,8 @@ void SearchThreadMain() {
                          .count();
             }
         } else {
-            std::wstring qSearch = query;
-            if (filterNoise && !excludedPaths.empty()) {
-                qSearch = ranker::BuildEverythingQuery(query, excludedPaths);
-            }
             auto start = std::chrono::steady_clock::now();
-            bool ok = client.Query(qSearch, ranker::kDefaultPool, &pool, &total);
-            if (ok && pool.empty() && qSearch != query) {
-                // Fallback: If no results with noisy paths excluded, search Everything
-                // without exclusion filters so noisy items still appear as fallback.
-                ok = client.Query(query, ranker::kDefaultPool, &pool, &total);
-            }
+            bool ok = client.Query(query, ranker::kDefaultPool, &pool, &total);
             ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::steady_clock::now() - start)
                           .count();
