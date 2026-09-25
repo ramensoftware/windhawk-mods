@@ -225,6 +225,12 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 #include <dwmapi.h>
 #include <shlwapi.h>
 #include <limits>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <map>
+#include <optional>
+#include <thread>
 
 inline HMODULE GetCurrentModuleHandle() {
     HMODULE module = nullptr;
@@ -2895,9 +2901,6 @@ inline std::wstring NormalizeUnit(const std::wstring& unitRaw) {
 #ifndef WH_MOD_ID
 #define WH_MOD_ID L"start-everything"
 #endif
-#ifndef WH_MOD_VERSION
-#define WH_MOD_VERSION L"1.0"
-#endif
 #include <windhawk_utils.h>
 
 namespace wf = winrt::Windows::Foundation;
@@ -3561,15 +3564,22 @@ void InitSearchHost() {
 [[clang::no_destroy]] static std::optional<std::thread> g_searchHostWatchdog;
 static void StartSearchHostWatchdog() {
     g_searchHostWatchdog.emplace([] {
+        std::vector<HWND> hooked;
         for (int i = 0; i < 120 && !g_quit.load(); ++i) {
-            EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
+            EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+                auto* done = reinterpret_cast<std::vector<HWND>*>(lp);
+                if (std::find(done->begin(), done->end(), hwnd) != done->end()) {
+                    return TRUE;
+                }
                 DWORD pid = 0;
                 GetWindowThreadProcessId(hwnd, &pid);
                 if (pid == GetCurrentProcessId()) {
-                    WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc, 0);
+                    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc, 0)) {
+                        done->push_back(hwnd);
+                    }
                 }
                 return TRUE;
-            }, 0);
+            }, reinterpret_cast<LPARAM>(&hooked));
             for (int s = 0; s < 10 && !g_quit.load(); ++s) {
                 Sleep(50);
             }
@@ -3805,10 +3815,11 @@ struct AppCardUI {
     wuxc::Button button{nullptr};
     bool canRunAsAdmin = true;
     bool isSetting = false;
+    bool isFile = false;
 };
 
-static std::optional<std::vector<wuxc::Button>> g_appButtonsOpt;
-static std::optional<std::vector<AppCardUI>> g_activeAppsOpt;
+[[clang::no_destroy]] static std::optional<std::vector<wuxc::Button>> g_appButtonsOpt;
+[[clang::no_destroy]] static std::optional<std::vector<AppCardUI>> g_activeAppsOpt;
 
 [[clang::no_destroy]] wuxc::Border g_appsHeaderHolder{nullptr};
 [[clang::no_destroy]] wuxc::Border g_filesHeaderHolder{nullptr};
@@ -4361,14 +4372,11 @@ void DismissStartMenu() {
 
         HWND ours = GetOurCoreWindow();
         if (ours && IsWindow(ours)) {
-            HWND fg = GetForegroundWindow();
-            DWORD fgPid = 0;
-            if (fg) GetWindowThreadProcessId(fg, &fgPid);
-            if (fg == ours || fgPid == GetCurrentProcessId() || fg == nullptr) {
-                keybd_event(VK_ESCAPE, 0, 0, 0);
-                keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0);
-                Wh_Log(L"DismissStartMenu: sent targeted Escape to CoreWindow %p", ours);
-            }
+            SetForegroundWindow(ours);
+            BringWindowToTop(ours);
+            keybd_event(VK_ESCAPE, 0, 0, 0);
+            keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0);
+            Wh_Log(L"DismissStartMenu: sent Escape via keybd_event to CoreWindow %p", ours);
         }
     } catch (...) {
     }
@@ -4788,6 +4796,7 @@ struct Row {
     bool canRunAsAdmin = true;
     bool isSetting = false;
     bool isFolder = false;
+    bool isFile = false;
     std::wstring copyText;   // text to copy to clipboard on activation
     std::wstring customGlyph; // Segoe Fluent glyph override (e.g. \uE1D0, \uE701, \uE88E)
 };
@@ -5938,7 +5947,7 @@ void RenderResults() try {
             } else if (!isSettingItem && !item.openPath.empty()) {
                 std::wstring locTarget = item.openPath;
                 std::wstring appTitle = item.title;
-                bool isFile = (GetFileAttributesW(locTarget.c_str()) != INVALID_FILE_ATTRIBUTES);
+                bool isFile = item.isFile;
 
                 if (isFile) {
                     wuxc::MenuFlyoutSeparator sep1;
@@ -6009,7 +6018,7 @@ void RenderResults() try {
 
         button.ContextFlyout(flyout);
 
-        return AppCardUI{item.appIndex, item.title, item.openPath, button, item.canRunAsAdmin, item.isSetting};
+        return AppCardUI{item.appIndex, item.title, item.openPath, button, item.canRunAsAdmin, item.isSetting, item.isFile};
     };
 
     auto makeAppEmptyCard = [isLight]() -> wuxc::Border {
@@ -6106,6 +6115,7 @@ void RenderResults() try {
                 (*g_activeAppsOpt)[existingIdx].appIndex = want.appIndex;
                 (*g_activeAppsOpt)[existingIdx].canRunAsAdmin = want.canRunAsAdmin;
                 (*g_activeAppsOpt)[existingIdx].isSetting = want.isSetting;
+                (*g_activeAppsOpt)[existingIdx].isFile = want.isFile;
 
                 if (static_cast<size_t>(existingIdx) != targetIdx) {
                     auto card = (*g_activeAppsOpt)[existingIdx];
@@ -7095,6 +7105,7 @@ void SearchThreadMain() {
                 row.isSetting = isSettingItem;
 
                 bool canAdmin = true;
+                bool isFileTarget = false;
                 if (isSettingItem) {
                     if (!m.app->area.empty()) {
                         row.subtitle = L"Settings \u2022 " + m.app->area;
@@ -7105,6 +7116,7 @@ void SearchThreadMain() {
                 } else if (!m.app->targetPath.empty() && GetFileAttributesW(m.app->targetPath.c_str()) != INVALID_FILE_ATTRIBUTES) {
                     row.subtitle = m.app->targetPath;
                     canAdmin = true;
+                    isFileTarget = true;
                 } else if (!m.app->exeNameLower.empty()) {
                     row.subtitle = m.app->exeNameLower + L".exe";
                     canAdmin = true;
@@ -7112,6 +7124,7 @@ void SearchThreadMain() {
                     row.subtitle = L"Application";
                 }
                 row.canRunAsAdmin = canAdmin;
+                row.isFile = isFileTarget;
                 row.openPath = m.app->targetPath;
                 row.appIndex = static_cast<int>(lastHits.size());
 
@@ -7640,28 +7653,6 @@ void Wh_ModUninit() {
 
     StopAttachWatch();
 
-    HWND hCore = g_hCoreWindow;
-    if (hCore && IsWindow(hCore)) {
-        DWORD_PTR result = 0;
-        LRESULT lr = SendMessageTimeoutW(hCore, GetTeardownMessage(), 0, 0,
-                                         SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, &result);
-        if (lr == 0) {
-            Wh_Log(L"uninit: SendMessageTimeoutW timed out or failed (%lu); attempting direct teardown", GetLastError());
-            try {
-                TeardownStartMenuUi();
-            } catch (...) {}
-        }
-    } else {
-        try {
-            TeardownStartMenuUi();
-        } catch (...) {}
-    }
-
-    if (g_hGetMsgHook) {
-        UnhookWindowsHookEx(g_hGetMsgHook);
-        g_hGetMsgHook = nullptr;
-    }
-
     {
         std::lock_guard<std::mutex> lock(g_queryMutex);
         g_searchQuit.store(true);
@@ -7672,5 +7663,41 @@ void Wh_ModUninit() {
         g_searchThread.reset();
     }
     WaitForTrackedLaunches();
+
+    if (g_hGetMsgHook) {
+        UnhookWindowsHookEx(g_hGetMsgHook);
+        g_hGetMsgHook = nullptr;
+    }
+
+    bool tornDown = false;
+    if (g_ourBox) {
+        try {
+            auto dispatcher = g_ourBox.Dispatcher();
+            if (dispatcher) {
+                auto op = dispatcher.RunAsync(
+                    wuc::CoreDispatcherPriority::Low,
+                    wuc::DispatchedHandler{[] { TeardownStartMenuUi(); }});
+                if (op.wait_for(std::chrono::seconds(5)) == wf::AsyncStatus::Completed) {
+                    tornDown = true;
+                }
+            }
+        } catch (...) {}
+    }
+    if (!tornDown) {
+        HWND hCore = g_hCoreWindow;
+        if (hCore && IsWindow(hCore)) {
+            DWORD_PTR result = 0;
+            LRESULT lr = SendMessageTimeoutW(hCore, GetTeardownMessage(), 0, 0,
+                                             SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, &result);
+            if (lr != 0) {
+                tornDown = true;
+            }
+        }
+    }
+    if (!tornDown) {
+        try {
+            TeardownStartMenuUi();
+        } catch (...) {}
+    }
     Wh_Log(L"uninit: StartMenuExperienceHost teardown complete");
 }
