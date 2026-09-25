@@ -920,9 +920,14 @@ struct Settings {
     bool privacyDotsCam = true;
     bool privacyDotsPulse = true;
     // Modules.CapsLock -- fixes windhawk-mods#4352, which asked for a way to turn
-    // the Caps Lock / Num Lock indicator off. Gated in OverlayWndProc's
-    // WM_APP_CAPSLOCK handler so the keyboard hook stops feeding the island
-    // rather than merely hiding the pill after the fact.
+    // the Caps Lock / Num Lock indicator off.
+    //
+    // Enforced in three places, because any one of them alone leaks:
+    //   ChooseActivities        - the pill is never selected for display
+    //   WM_APP_CAPSLOCK handler - no state is recorded, no nudge is triggered
+    //   CapsLockHookWanted      - WH_KEYBOARD_LL is not installed at all
+    // The activity gate is the one that actually hides the pill; the others stop
+    // the work leading up to it.
     bool capsLock = true;
     bool timerEnabled = true;
     bool hideShowHotkeyEnabled = true;
@@ -1974,6 +1979,7 @@ D2D1_COLOR_F GetSystemAccentColor() {
 void ApplyHideShowHotkey();                 // forward declaration; defined after LoadSettings()
 void ApplyBackdropMaterial(HWND);           // forward declaration; defined after LoadSettings()
 void ApplyBackdropRegion(HWND, int, int);   // forward declaration; defined below PositionOverlayWindow
+void NotifyKeyboardThreadSettingChanged();  // forward declaration; defined with the keyboard hook
 
 void LoadSettings() {
     Settings next;
@@ -2425,9 +2431,11 @@ void LoadSettings() {
     bool cityChanged = false;
     bool hotkeySettingChanged = false;
     bool backdropChanged = false;
+    bool capsLockChanged = false;
     {
         std::lock_guard lock(g_settingsMutex);
         cityChanged = next.weatherCity != g_settings.weatherCity;
+        capsLockChanged = next.capsLock != g_settings.capsLock;
         hotkeySettingChanged =
             next.hideShowHotkeyEnabled != g_settings.hideShowHotkeyEnabled ||
             next.hideShowModifiers != g_settings.hideShowModifiers ||
@@ -2440,6 +2448,11 @@ void LoadSettings() {
     g_layoutDirty = true;
     if (cityChanged && g_settingsChangedEvent) {
         SetEvent(g_settingsChangedEvent);
+    }
+    // Installs or removes WH_KEYBOARD_LL to match. The keyboard thread would pick
+    // this up on its next backstop tick anyway; this just makes it immediate.
+    if (capsLockChanged) {
+        NotifyKeyboardThreadSettingChanged();
     }
     // g_hwnd only exists once RenderThreadProc has created the overlay window;
     // the very first LoadSettings() call (at mod init, before StartThreads())
@@ -10871,7 +10884,10 @@ std::vector<IslandKind> ChooseActivities(const SharedState& state, const Setting
     if (state.clipboard.active && now < state.clipboard.expiresAt) {
         activities.push_back(IslandKind::Clipboard);
     }
-    if (state.capsLock.active && now < state.capsLock.expiresAt) {
+    // settings.capsLock is checked here, like every other module above and below.
+    // Leaving it out was what made the Caps Lock toggle not actually work: the
+    // handler gate stopped the nudge but the pill was still selected and drawn.
+    if (settings.capsLock && state.capsLock.active && now < state.capsLock.expiresAt) {
         activities.push_back(IslandKind::CapsLock);
     }
     if (state.device.active && now < state.device.expiresAt) {
@@ -10918,24 +10934,27 @@ HHOOK g_keyboardHook = nullptr;
 HANDLE g_keyboardThread = nullptr;
 DWORD g_keyboardThreadId = 0;
 
+// Deliberately does nothing but forward the event.
+//
+// This used to write g_state.capsLock here, under g_stateMutex, before posting.
+// Two problems with that. It recorded the pill even when the Caps Lock module was
+// switched off, because the setting is only checked once the message reaches the
+// window thread -- so the pill still appeared for its full 2.5s. And a
+// WH_KEYBOARD_LL callback runs inline on the input path, blocking every keystroke
+// system-wide until it returns, so taking a lock that the render, weather or
+// media threads also hold risked stalling typing on the whole desktop.
+//
+// The WM_APP_CAPSLOCK handler writes exactly the same fields on the window
+// thread, after checking the setting. Nothing is lost by only posting.
 LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
         if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
             auto* kbd = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
             if (kbd->vkCode == VK_CAPITAL || kbd->vkCode == VK_NUMLOCK) {
-                bool capsOn = (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
-                bool numOn = (GetKeyState(VK_NUMLOCK) & 0x0001) != 0;
-                {
-                    std::lock_guard lock(g_stateMutex);
-                    g_state.capsLock.active = true;
-                    g_state.capsLock.capsOn = capsOn;
-                    g_state.capsLock.numOn = numOn;
-                    g_state.capsLock.isNumEvent = (kbd->vkCode == VK_NUMLOCK);
-                    g_state.capsLock.expiresAt = NowSeconds() + 2.5;
-                }
-                HWND hwnd = g_hwnd;
-                if (hwnd) {
-                    LPARAM state = (capsOn ? 1 : 0) | (numOn ? 2 : 0);
+                const bool capsOn = (GetKeyState(VK_CAPITAL) & 0x0001) != 0;
+                const bool numOn = (GetKeyState(VK_NUMLOCK) & 0x0001) != 0;
+                if (HWND hwnd = g_hwnd) {
+                    const LPARAM state = (capsOn ? 1 : 0) | (numOn ? 2 : 0);
                     PostMessageW(hwnd, WM_APP_CAPSLOCK, kbd->vkCode, state);
                 }
             }
@@ -10944,16 +10963,60 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
 }
 
+// A system-wide WH_KEYBOARD_LL puts this process on the path of every keystroke
+// on the desktop, so it is only installed while it has something to report. The
+// hook exists solely to notice Caps Lock and Num Lock for the indicator pill;
+// with that module off it was still running for nothing.
+static bool CapsLockHookWanted() {
+    return g_settings.capsLock;
+}
+
+// Wakes the keyboard thread so it re-evaluates whether the hook is needed.
+void NotifyKeyboardThreadSettingChanged() {
+    if (g_keyboardThreadId != 0) {
+        PostThreadMessageW(g_keyboardThreadId, WM_NULL, 0, 0);
+    }
+}
+
 DWORD WINAPI KeyboardThreadProc(void*) {
-    while (!g_hwnd) {
-        Sleep(10);
+    // Bounded by the stop event rather than an open-ended Sleep loop, so an early
+    // unload cannot leave this spinning while waiting for a window that is never
+    // going to appear.
+    while (!g_hwnd && WaitForSingleObject(g_stopEvent, 10) == WAIT_TIMEOUT) {
     }
-    g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, nullptr, 0);
-    MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
+
+    bool quit = false;
+    while (!quit && WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
+        const bool wanted = CapsLockHookWanted();
+        if (wanted && !g_keyboardHook) {
+            g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeyboardProc, nullptr, 0);
+        } else if (!wanted && g_keyboardHook) {
+            UnhookWindowsHookEx(g_keyboardHook);
+            g_keyboardHook = nullptr;
+        }
+
+        // A low-level hook is delivered through the installing thread's message
+        // queue, so this has to keep pumping while the hook is up.
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                quit = true;
+                break;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        if (quit) {
+            break;
+        }
+
+        // Blocks until the stop event fires, a message arrives, or the timeout.
+        // LoadSettings posts a WM_NULL when the module is toggled so the hook is
+        // reconciled at once; the timeout is only a backstop. A timed wait, not a
+        // spin, so an idle keyboard thread costs nothing.
+        MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, 1000, QS_ALLINPUT);
     }
+
     if (g_keyboardHook) {
         UnhookWindowsHookEx(g_keyboardHook);
         g_keyboardHook = nullptr;
