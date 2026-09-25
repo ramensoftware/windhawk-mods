@@ -2,7 +2,7 @@
 // @id              mutealert
 // @name            MuteAlert - Microphone Activity Taskbar Widget
 // @description     Shows live microphone activity, call mute state, volume controls, and headset mute synchronization in the Windows 11 taskbar.
-// @version         0.9.13
+// @version         0.9.14
 // @author          Nikolay
 // @github          https://github.com/Nikolay1243
 // @homepage        https://github.com/MuteAlert/windhawk
@@ -3330,7 +3330,10 @@ static DWORD WINAPI HeadsetThreadProc(void*) {
                 bool syncUnmute = g_settings.headsetSyncMode == L"full";
                 if (observation.muted && syncMute) {
                     if (g_settings.headsetSyncWindows &&
-                        !g_audioMuted.load()) {
+                        (stateChanged || !g_audioAvailable.load() ||
+                         !g_audioMuted.load())) {
+                        // The initial physical state must replace any unmute
+                        // queued before the headset finished connecting.
                         QueueHeadsetMute();
                     }
                     if (g_settings.headsetSyncCalls &&
