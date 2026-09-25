@@ -20,6 +20,7 @@ const allowedAuthorNamePairs = [
 // current account.
 const allowedAuthorGithubPairs = [
     ['https://github.com/meteoni', 'https://github.com/meteony'],
+    ['https://github.com/getrektbynoob15', 'https://github.com/getrektbynoob20'],
 ];
 
 type ModAuthorData = {
@@ -603,7 +604,8 @@ async function assignGithubIds(
     const renamedGithubs = new Set(allowedAuthorGithubPairs.flatMap(pair => pair.slice(1)));
 
     for (const [authorKey, data] of Object.entries(modAuthorData)) {
-        if (renamedGithubs.has(data.github)) {
+        if (renamedGithubs.has(authorKey)) {
+            data.githubId = null;
             continue;
         }
 
