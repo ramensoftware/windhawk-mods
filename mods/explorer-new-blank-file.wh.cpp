@@ -179,6 +179,11 @@ static void SafeRelease(T*& p) {
 
 static IUIAutomation* g_uia = nullptr;
 static volatile LONG g_actionRunning = 0;
+static SRWLOCK g_settingsLock = SRWLOCK_INIT;
+static int g_mod1 = VK_CONTROL;
+static int g_mod2 = 0;
+static int g_hotkey = 'G';
+static std::wstring g_fileName = L"file";
 
 static bool EnsureUIA() {
     if (g_uia) {
@@ -557,18 +562,14 @@ static void LoadSettings() {
     g_hotkey = hotkey;
     g_fileName = fileName;
     ReleaseSRWLockExclusive(&g_settingsLock);
-} else if (c >= L'A' && c <= L'Z') {
-                vk = (WORD)c;
-            }
-        }
-        Wh_FreeStringSetting(keyStr);
-    }
-    g_targetKeyVk = vk;
-    Wh_Log(L"Loaded hotkey setting: Ctrl+%c (VK 0x%02X)", (char)g_targetKeyVk, g_targetKeyVk);
 }
 
 static void WaitForModifierKeysReleased() {
-    const WORD targetKey = g_targetKeyVk;
+    int targetKey;
+    AcquireSRWLockShared(&g_settingsLock);
+    targetKey = g_hotkey;
+    ReleaseSRWLockShared(&g_settingsLock);
+    
     for (int i = 0; i < 40; ++i) {
         bool ctrlDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
         bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
