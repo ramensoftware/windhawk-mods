@@ -30,11 +30,11 @@ Changes are applied immediately to existing StartAllBack jump-list windows. When
 
 ### Before
 
-![StartAllBack Jump List before](https://github.com/user-attachments/assets/65e5c46d-9dd3-44ea-8cbf-8ab1a58f4b04)
+![StartAllBack Jump List before](https://raw.githubusercontent.com/Murtuzoff/windhawk-assets/main/before.png)
 
 ### After
 
-![StartAllBack Jump List after](https://github.com/user-attachments/assets/d5e41c33-81ca-4f7c-b129-56e546e428e9)
+![StartAllBack Jump List after](https://raw.githubusercontent.com/Murtuzoff/windhawk-assets/main/after.png)
 */
 // ==/WindhawkModReadme==
 
