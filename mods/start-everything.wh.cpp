@@ -825,7 +825,7 @@ namespace ranker {
 // and 200 is the largest pool that stays close to it for every query
 // including a single letter. 300 is already 48 ms on "c" and 1000 is far too
 // slow to run per keystroke.
-inline constexpr DWORD kDefaultPool = 200;
+inline constexpr DWORD kDefaultPool = 300;
 
 inline std::wstring ToLower(std::wstring s) {
     std::transform(s.begin(), s.end(), s.begin(),
@@ -834,6 +834,12 @@ inline std::wstring ToLower(std::wstring s) {
 }
 
 namespace detail {
+
+inline std::wstring TrimSlashes(std::wstring_view s) {
+    while (!s.empty() && (s.front() == L'\\' || s.front() == L'/')) s.remove_prefix(1);
+    while (!s.empty() && (s.back() == L'\\' || s.back() == L'/')) s.remove_suffix(1);
+    return std::wstring(s);
+}
 
 // Match quality, coarse buckets, lower is better. This is the primary key and
 // the only signal available when Everything is too old for QUERY2.
@@ -859,15 +865,45 @@ inline int Classify(const std::wstring& nameLower, const std::wstring& q) {
     return wordStart ? kNameWordStart : kNameSubstring;
 }
 
-// Results out of package caches, build outputs and version-control internals
-// swamp everything else on a developer machine: the first unranked page for
-// "code" was eight Gradle doc stubs. Demoted a whole match class rather than
-// hidden, so they still show up once the better matches run out.
-inline bool IsNoise(const std::wstring& pathLower, const std::vector<std::wstring>* customNoise = nullptr) {
-    if (!customNoise) return false;
+// Checks if an item belongs to any excluded noisy path pattern.
+// Handles directory paths with or without trailing slashes, full item paths,
+// and skips penalization if the user explicitly typed the keyword in their query.
+inline bool IsNoise(const std::wstring& pathLower, const std::wstring& nameLower, bool isFolder,
+                    const std::wstring& qLower,
+                    const std::vector<std::wstring>* customNoise = nullptr) {
+    if (!customNoise || customNoise->empty()) return false;
+
+    // Normalised directory path with trailing backslash
+    std::wstring dir = pathLower;
+    if (dir.empty() || dir.back() != L'\\') {
+        dir.push_back(L'\\');
+    }
+
+    // Normalised full item path with trailing backslash for directories
+    std::wstring full = dir + nameLower;
+    if (isFolder) {
+        full.push_back(L'\\');
+    }
+
     for (const auto& n : *customNoise) {
-        if (!n.empty() && pathLower.find(n) != std::wstring::npos) {
+        if (n.empty()) continue;
+
+        // If the query explicitly targets this noise pattern, don't penalize it
+        std::wstring raw = TrimSlashes(n);
+        if (!raw.empty() && qLower.find(raw) != std::wstring::npos) {
+            continue;
+        }
+
+        // Direct substring check on dir or full item path
+        if (dir.find(n) != std::wstring::npos || full.find(n) != std::wstring::npos) {
             return true;
+        }
+        // Match with path delimiters around raw pattern
+        if (!raw.empty()) {
+            std::wstring bounded = L"\\" + raw + L"\\";
+            if (dir.find(bounded) != std::wstring::npos || full.find(bounded) != std::wstring::npos) {
+                return true;
+            }
         }
     }
     return false;
@@ -903,6 +939,39 @@ inline ULONGLONG Descending(ULONGLONG v) {
 
 }  // namespace detail
 
+// Builds an Everything search query that excludes noisy paths, unless the user explicitly
+// searched for an excluded keyword.
+inline std::wstring BuildEverythingQuery(const std::wstring& baseQuery,
+                                        const std::vector<std::wstring>& excludedPaths) {
+    std::wstring qLower = ToLower(baseQuery);
+    while (!qLower.empty() && qLower.front() == L' ') qLower.erase(0, 1);
+    while (!qLower.empty() && qLower.back() == L' ') qLower.pop_back();
+    if (qLower.empty() || excludedPaths.empty()) {
+        return baseQuery;
+    }
+
+    std::wstring out = baseQuery;
+    for (const auto& raw : excludedPaths) {
+        if (raw.empty()) continue;
+        std::wstring trimmed = detail::TrimSlashes(raw);
+        if (trimmed.empty()) continue;
+
+        // If the user's search query specifically typed this keyword, don't exclude it
+        std::wstring rawLower = ToLower(trimmed);
+        if (qLower.find(rawLower) != std::wstring::npos) {
+            continue;
+        }
+
+        out += L" !path:";
+        if (trimmed.find(L' ') != std::wstring::npos) {
+            out += L"\"" + trimmed + L"\"";
+        } else {
+            out += trimmed;
+        }
+    }
+    return out;
+}
+
 // Reorders a pool in place and truncates it to limit.
 inline void Rank(std::vector<everything::Result>* pool,
                  const std::wstring& query, size_t limit,
@@ -917,10 +986,9 @@ inline void Rank(std::vector<everything::Result>* pool,
     for (size_t i = 0; i < pool->size(); i++) {
         const everything::Result& r = (*pool)[i];
         int cls = detail::Classify(ToLower(r.name), q);
-        // A noisy location costs a whole class, so an exact name match buried
-        // in node_modules still loses to a plain prefix match somewhere real.
-        if (detail::IsNoise(ToLower(r.path), excludedPaths)) {
-            cls += detail::kPathOnly + 1;
+        // Demote noisy locations by 100 so all non-noise matches rank above them.
+        if (detail::IsNoise(ToLower(r.path), ToLower(r.name), r.isFolder, q, excludedPaths)) {
+            cls += 100;
         }
         // Everything only counts opens that went through Everything itself,
         // so this is sparse -- but where it is set it is the strongest
@@ -6918,8 +6986,15 @@ void SearchThreadMain() {
             ms = 0;
         } else if (isExplicitWeb) {
             if (!explicitWeb.queryTerm.empty()) {
+                std::wstring qSearch = explicitWeb.queryTerm;
+                if (filterNoise && !excludedPaths.empty()) {
+                    qSearch = ranker::BuildEverythingQuery(explicitWeb.queryTerm, excludedPaths);
+                }
                 auto start = std::chrono::steady_clock::now();
-                if (client.Query(explicitWeb.queryTerm, ranker::kDefaultPool, &pool, &total)) {
+                if (client.Query(qSearch, ranker::kDefaultPool, &pool, &total)) {
+                    if (pool.empty() && qSearch != explicitWeb.queryTerm) {
+                        client.Query(explicitWeb.queryTerm, ranker::kDefaultPool, &pool, &total);
+                    }
                     ranker::Rank(&pool, explicitWeb.queryTerm, static_cast<size_t>(maxFiles), noisePtr);
                 }
                 ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -6927,8 +7002,17 @@ void SearchThreadMain() {
                          .count();
             }
         } else {
+            std::wstring qSearch = query;
+            if (filterNoise && !excludedPaths.empty()) {
+                qSearch = ranker::BuildEverythingQuery(query, excludedPaths);
+            }
             auto start = std::chrono::steady_clock::now();
-            bool ok = client.Query(query, ranker::kDefaultPool, &pool, &total);
+            bool ok = client.Query(qSearch, ranker::kDefaultPool, &pool, &total);
+            if (ok && pool.empty() && qSearch != query) {
+                // Fallback: If no results with noisy paths excluded, search Everything
+                // without exclusion filters so noisy items still appear as fallback.
+                ok = client.Query(query, ranker::kDefaultPool, &pool, &total);
+            }
             ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::steady_clock::now() - start)
                           .count();
