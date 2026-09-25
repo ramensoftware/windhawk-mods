@@ -414,11 +414,11 @@ bool TaskbarUsesCenteredAlignment() {
                           : ReadTaskbarUsesCenteredAlignment();
 }
 
-double GetLeftHostOffset(Controls::Grid root, FrameworkElement startButton) {
+double GetLeftHostOffset(Controls::Grid root, FrameworkElement widgets,
+                         FrameworkElement startButton) {
     // Leave room for the Widgets button and for a Start button pinned to the
     // physical left edge by another mod.
     double offset = 0;
-    auto widgets = FindDescendantByName(root, L"AugmentedEntryPointButton");
     if (widgets && widgets.Visibility() == Visibility::Visible &&
         widgets.ActualWidth() > 0) {
         try {
@@ -557,7 +557,8 @@ void UpdateLeftHostOffset(MovedClockData& data) {
         return;
     }
 
-    double offset = GetLeftHostOffset(root, data.startButton.get());
+    double offset = GetLeftHostOffset(root, data.widgets.get(),
+                                      data.startButton.get());
     Thickness margin = data.leftHost.Margin();
     if (margin.Left != offset) {
         Wh_Log(L"Clock left offset updated: %.1f -> %.1f", margin.Left,
@@ -838,7 +839,8 @@ bool MoveClock(FrameworkElement content) {
     data.leftHost = Controls::Grid();
     data.leftHost.HorizontalAlignment(HorizontalAlignment::Left);
     data.leftHost.VerticalAlignment(VerticalAlignment::Stretch);
-    data.leftHost.Margin(Thickness{GetLeftHostOffset(root, startButton), 0, 0, 0});
+    data.leftHost.Margin(
+        Thickness{GetLeftHostOffset(root, widgets, startButton), 0, 0, 0});
     Controls::Grid::SetColumn(data.leftHost, 0);
     Controls::Grid::SetColumnSpan(
         data.leftHost,
