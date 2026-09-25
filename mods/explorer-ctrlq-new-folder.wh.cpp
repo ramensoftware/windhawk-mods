@@ -162,7 +162,7 @@ static int GetHotkeyVK(const std::wstring& keyStr) {
             case L'\'': return VK_OEM_7;
             case L'[': return VK_OEM_4;
             case L']': return VK_OEM_6;
-            case L'\': return VK_OEM_5;
+            case L'\\': return VK_OEM_5;
             case L'-': return VK_OEM_MINUS;
             case L'=': return VK_OEM_PLUS;
             case L'`': return VK_OEM_3;
@@ -376,8 +376,8 @@ static std::wstring GetDesktopDir() {
 static std::wstring MakeUniqueFolderName(const std::wstring& dir) {
     auto join = [](const std::wstring& a, const std::wstring& b) {
         if (a.empty()) return b;
-        if (a.back() == L'\' || a.back() == L'/') return a + b;
-        return a + L'\' + b;
+        if (a.back() == L'\\' || a.back() == L'/') return a + b;
+        return a + L'\\' + b;
     };
     
     std::wstring base;
@@ -518,6 +518,81 @@ static HHOOK g_lowLevelHook = nullptr;
 static bool g_nKeyDown = false;
 
 static DWORD WINAPI HookThread(void* pParameter);
+static LRESULT CALLBACK LowLevelKeybdProc(int nCode, WPARAM wParam, LPARAM lParam);
+
+static BOOL KeybdHook_Init() {
+    if (g_hookThread) return TRUE;
+
+    HANDLE readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!readyEvent) return FALSE;
+
+    HANDLE hThread = CreateThread(nullptr, 0, HookThread, readyEvent, CREATE_SUSPENDED, &g_hookThreadId);
+    if (!hThread) {
+        CloseHandle(readyEvent);
+        return FALSE;
+    }
+
+    SetThreadPriority(hThread, THREAD_PRIORITY_ABOVE_NORMAL);
+    ResumeThread(hThread);
+
+    WaitForSingleObject(readyEvent, INFINITE);
+    CloseHandle(readyEvent);
+
+    if (!g_lowLevelHook) {
+        Wh_Log(L"[CtrlQ] SetWindowsHookEx failed.");
+        WaitForSingleObject(hThread, INFINITE);
+        CloseHandle(hThread);
+        g_hookThreadId = 0;
+        return FALSE;
+    }
+    g_hookThread = hThread;
+    return TRUE;
+}
+
+static void KeybdHook_Exit() {
+    HANDLE hThread = (HANDLE)InterlockedExchangePointer((PVOID*)&g_hookThread, nullptr);
+    if (!hThread) return;
+
+    if (g_hookThreadId) PostThreadMessageW(g_hookThreadId, WM_APP, 0, 0);
+    WaitForSingleObject(hThread, INFINITE);
+    CloseHandle(hThread);
+    g_hookThreadId = 0;
+    g_lowLevelHook = nullptr;
+}
+
+static DWORD WINAPI HookThread(void* pParameter) {
+    HANDLE readyEvent = (HANDLE)pParameter;
+    MSG msg;
+
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);  // create queue
+    g_lowLevelHook = SetWindowsHookExW(WH_KEYBOARD_LL, LowLevelKeybdProc, HINST_THISCOMPONENT, 0);
+    SetEvent(readyEvent);
+    if (!g_lowLevelHook) return 0;
+
+    while (true) {
+        BOOL bRet = GetMessageW(&msg, nullptr, 0, 0);
+        if (bRet <= 0) break;
+
+        if (msg.hwnd == nullptr) {
+            if (msg.message == WM_APP) {
+                PostQuitMessage(0);
+                continue;
+            }
+            if (msg.message == WM_APP + 1) {
+                PerformNewFolderAction();
+                continue;
+            }
+        }
+
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    UnhookWindowsHookEx(g_lowLevelHook);
+    g_lowLevelHook = nullptr;
+    return 0;
+}
+
 static LRESULT CALLBACK LowLevelKeybdProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
         const KBDLLHOOKSTRUCT* info = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
