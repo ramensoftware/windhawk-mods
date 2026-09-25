@@ -474,11 +474,7 @@ static void SendSimpleKey(WORD key) {
 }
 
 
-static SRWLOCK g_settingsLock = SRWLOCK_INIT;
-static int g_mod1 = VK_CONTROL;
-static int g_mod2 = 0;
-static int g_hotkey = 'G';
-static std::wstring g_fileName = L"file";
+
 
 static int GetModifierVK(const std::wstring& modStr) {
     if (modStr == L"ctrl") return VK_CONTROL;
