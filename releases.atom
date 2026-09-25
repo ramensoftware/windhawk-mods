@@ -2,12 +2,66 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-25T12:02:18.000Z</updated>
+    <updated>2026-09-25T15:40:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Wobbly Windows 0.115]]></title>
+        <id>https://windhawk.net/mods/wobbly-windows#dfb8f35a56860377efb2ee4c719ca66997f6eb0a</id>
+        <link href="https://windhawk.net/mods/wobbly-windows"/>
+        <updated>2026-09-25T15:40:27.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="wobblywindows">Wobbly Windows</h1>
+<p>The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!</p>
+<p><img src="https://raw.githubusercontent.com/lalimatyus/Wobbly-Windows/refs/heads/main/showcase.gif" alt="Showcase" /></p>
+<h2 id="important">⚠️ IMPORTANT ⚠️</h2>
+<p>Since this mod runs in <code>dwm.exe</code>, add <code>dwm.exe</code> to Windhawk's
+<strong>Settings > Advanced settings > More advanced settings > Process inclusion list</strong>:</p>
+<p><img src="https://raw.githubusercontent.com/lalimatyus/Wobbly-Windows/refs/heads/main/dwm.gif" alt="Tutorial" /></p>
+<p>This mod runs inside <code>dwm.exe</code> and has been tested on Windows 11 <code>23H2</code>, <code>24H2</code>, <code>25H2</code>
+and <code>Insider Preview 26H2</code>. If the required private
+uDWM symbols or validated object layouts aren't available, the mod refuses to
+initialize instead of using unverified addresses.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Change the wobbliness of the windows from 5 presets</li>
+<li>Enable custom physics to change each parameter independently, instead of a preset</li>
+<li>Fluid wobble animations for dragging, snapping and even resizing windows</li>
+<li>Uses a 4x4 spring simulation fitted to a smooth whole-window transform</li>
+</ul>
+<h2 id="knownissues">Known Issues</h2>
+<ul>
+<li>ARM64 isn't supported yet.</li>
+<li>If DWM stops servicing its scene thread while the mod is being disabled or updated,
+a transformed window can remain deformed until DWM recreates its visual.
+Try minimizing and restoring or reopening the affected window to recover.</li>
+<li>Some windows may show blur, ghosting, or temporary artifacts along their thin borders during wobble animations.
+These effects can be more noticeable on high-refresh-rate displays.</li>
+<li>Snap detection intentionally uses permissive geometry checks to support custom
+layouts such as PowerToys FancyZones, rather than only standard Windows Snap zones.
+An unsnapped window placed close to a work-area corner may also trigger a snap wobble.</li>
+</ul>
+<h2 id="feedback">Feedback</h2>
+<p>If you found a reproducible issue or need help, open an issue in the <a href="https://github.com/lalimatyus/Wobbly-Windows">GitHub repository</a>.</p>
+<h2 id="credits">Credits</h2>
+<ul>
+<li>The physics presets and edge-locking behavior are based on
+<a href="https://invent.kde.org/plasma/kwin/-/tree/master/src/plugins/wobblywindows">KDE Plasma/KWin's Wobbly Windows effect</a>.</li>
+<li>The Dwminit crash-loop guard and the <code>CWindowData::IsGhostWindow</code>-based HWND-offset
+discovery draw on <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/custom-corner-radius.wh.cpp">Custom Window Corner Radius</a>
+by m417z and contributors, published under GPLv3.</li>
+</ul>
+<h2 id="license">License</h2>
+<p>This mod is distributed under the <a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU General Public License, version 3</a>
+(<code>GPL-3.0-only</code>). GPLv3 is used to accommodate the GPLv3-derived code credited above;
+the combined mod is not offered under GPLv2.</p>]]></content>
+        <author>
+            <name>lalimatyus</name>
+            <uri>https://github.com/lalimatyus</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar App Memory 0.2.2]]></title>
         <id>https://windhawk.net/mods/taskbar-app-memory#75889517b3f88a2c1ab9d77938ed76a3fad560b1</id>
@@ -1940,26 +1994,6 @@ immediately.</li>
         <author>
             <name>bardelyne</name>
             <uri>https://github.com/bardelyne</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Icons Transparency 1.0.0]]></title>
-        <id>https://windhawk.net/mods/desktop-icons-transparency#bc6a3d1b64ba1cb348c263d8c8e75a74bf3dde71</id>
-        <link href="https://windhawk.net/mods/desktop-icons-transparency"/>
-        <updated>2026-09-21T10:04:12.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopiconstransparency">Desktop Icons Transparency</h1>
-<p>A lightweight mod that adjusts the opacity (alpha channel) of Windows desktop icons, including their text labels and drop shadows.</p>
-<p>Unlike <strong>Transparent Desktop Icons with Spotlight</strong>, this mod applies a fixed opacity directly at draw time using native alpha blending — without creating DirectComposition overlays, duplicate wallpaper layers, or spotlight hover effects.</p>
-<h3 id="features">Features</h3>
-<ul>
-<li>Synchronously fades icon images, labels, and text shadows.</li>
-<li>Does not darken wallpaper or cause black background artifacts.</li>
-<li>Scoped strictly to desktop repainting: does not affect taskbar, tooltips, context menus, Explorer folder windows, or icon renaming.</li>
-<li>Zero CPU and RAM overhead in idle.</li>
-</ul>]]></content>
-        <author>
-            <name>zed712969-crypto</name>
-            <uri>https://github.com/zed712969-crypto</uri>
         </author>
     </entry>
 </feed>

@@ -15996,6 +15996,33 @@
         "version": "1.0"
       }
     },
+    "wobbly-windows": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790350827000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790350827000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "amd64"
+        ],
+        "author": "lalimatyus",
+        "compilerOptions": "-lwevtapi",
+        "description": "The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!",
+        "github": "https://github.com/lalimatyus",
+        "include": [
+          "dwm.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "Wobbly Windows",
+        "version": "0.115"
+      }
+    },
     "word-image-resize-anti-flip": {
       "details": {
         "defaultSorting": 450,
