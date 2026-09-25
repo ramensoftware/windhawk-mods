@@ -12,6 +12,7 @@
 // @exclude         StartMenuExperienceHost.exe
 // @exclude         SearchHost.exe
 // @exclude         dwm.exe
+// @exclude         mmc.exe
 // @exclude         git.exe
 // @exclude         git-remote-https.exe
 // @exclude         AudioCaptureService.exe
@@ -23,9 +24,9 @@
 // ==/WindhawkMod==
 
 // The explicit process exclusions above are pre-injection fast paths for
-// known interactive-session helpers that never host an animatable top-level
-// window. The runtime session/command-line checks below cover generic helper
-// roles, but they run only after injection has already occurred.
+// unsupported window hosts and known interactive-session helpers. The runtime
+// session/command-line checks below cover generic helper roles, but they run
+// only after injection has already occurred.
 
 // ==WindhawkModReadme==
 /*
@@ -33,6 +34,7 @@
 > ⚠️ **NOTE:** 
 > * **Packaged & System Apps:** Many packaged apps can be animated when they expose a normal top-level window, but protected or system-hosted windows such as some Settings, Store, and shell surfaces can bypass interception and use their native transition instead.
 > * **Browsers & Tray Apps:** Some browsers and tray apps, including Chrome, Edge, Discord, and Windhawk, can keep running or hide their window when you click the 'X' button instead of exiting. To animate those hidden transitions, turn on **"Animate windows hidden to the tray"** in the settings.
+> * **MMC Consoles:** Services, Task Scheduler, Event Viewer, and other `mmc.exe` snap-ins are excluded and use native Windows transitions.
 
 Welcome to **Windows Animations**, a comprehensive window transition suite for your desktop. Built from the ground up to deliver cinematic window animations. 
 
@@ -351,6 +353,7 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <tlhelp32.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <dcomp.h>
@@ -533,7 +536,11 @@ struct LocalShowDesktopCloakWatchData {
     HWND hWnd;
     ULONG_PTR token;
 };
-struct SwitchAnimData { HWND hWnd; int durationMs; };
+struct SwitchAnimData {
+    HWND hWnd;
+    int durationMs;
+    BOOL needsFullExplorerRepair;
+};
 struct SnapCache {
     HBITMAP hBmp;
     void* pBits;
@@ -2817,11 +2824,72 @@ static void UpdateDwmTransitions(HWND hWnd, BOOL enable) {
 static void SetWindowCloak(HWND hWnd, BOOL cloak) {
     DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
 }
+struct WindowCompositionAttributeData {
+    DWORD attribute;
+    void* data;
+    SIZE_T dataSize;
+};
+using GetWindowCompositionAttribute_t =
+    BOOL(WINAPI*)(HWND, WindowCompositionAttributeData*);
+
+static bool HasActiveWindowAccentPolicy(HWND hWnd) {
+    if (!hWnd) return false;
+    static const auto getWindowCompositionAttribute =
+        reinterpret_cast<GetWindowCompositionAttribute_t>(GetProcAddress(
+            GetModuleHandleW(L"user32.dll"),
+            "GetWindowCompositionAttribute"));
+    if (!getWindowCompositionAttribute) return false;
+
+    BOOL hasAccentPolicy = FALSE;
+    WindowCompositionAttributeData data{
+        34, &hasAccentPolicy,
+        sizeof(hasAccentPolicy)};  // WCA_HAS_ACCENT_POLICY
+    return getWindowCompositionAttribute(hWnd, &data) != FALSE &&
+           hasAccentPolicy;
+}
+static bool IsTranslucentWindowsModLoaded() {
+    HANDLE snapshot = CreateToolhelp32Snapshot(
+        TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
+    if (snapshot == INVALID_HANDLE_VALUE) return false;
+
+    MODULEENTRY32W module{};
+    module.dwSize = sizeof(module);
+    bool found = false;
+    if (Module32FirstW(snapshot, &module)) {
+        constexpr PCWSTR prefixes[] = {
+            L"translucent-windows_",
+            L"local@translucent-windows_",
+        };
+        do {
+            for (PCWSTR prefix : prefixes) {
+                if (_wcsnicmp(module.szModule, prefix, wcslen(prefix)) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+        } while (!found && Module32NextW(snapshot, &module));
+    }
+    CloseHandle(snapshot);
+    return found;
+}
 static bool IsExplorerFrameWindow(HWND hWnd) {
     WCHAR cls[64]{};
     return GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
            (_wcsicmp(cls, L"CabinetWClass") == 0 ||
             _wcsicmp(cls, L"ExploreWClass") == 0);
+}
+static bool HasModernExplorerTitleFrame(HWND hWnd) {
+    if (!IsExplorerFrameWindow(hWnd)) return false;
+
+    // Control Panel and modern File Explorer share CabinetWClass. Detect the
+    // latter by its WinUI title-bar children instead of its DWM backdrop:
+    // translucency mods can replace or clear the backdrop attribute while the
+    // Explorer frame still requires full-client extension after an uncloak.
+    return FindWindowExW(hWnd, nullptr,
+                         L"TITLE_BAR_SCAFFOLDING_WINDOW_CLASS", nullptr) ||
+           FindWindowExW(hWnd, nullptr,
+                         L"Microsoft.UI.Content.DesktopChildSiteBridge",
+                         nullptr);
 }
 static bool HasExplicitSystemBackdrop(HWND hWnd, UINT* backdropOut = nullptr) {
     UINT backdrop = 0;
@@ -2832,6 +2900,18 @@ static bool HasExplicitSystemBackdrop(HWND hWnd, UINT* backdropOut = nullptr) {
         backdrop >= 2;
     if (backdropOut) *backdropOut = backdrop;
     return present;
+}
+static bool IsTranslucentWindowsAccentBlurActive(HWND hWnd) {
+    if (!IsTranslucentWindowsModLoaded() ||
+        !HasActiveWindowAccentPolicy(hWnd)) {
+        return false;
+    }
+
+    UINT backdrop = 0;
+    return SUCCEEDED(DwmGetWindowAttribute(
+               hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop,
+               sizeof(backdrop))) &&
+           backdrop < 2;
 }
 static bool RequiresCpuClosePresentation(HWND hWnd) {
     // Preserve the already-proven CPU exception for Explorer and windows that
@@ -2854,15 +2934,44 @@ static bool RefreshDwmChromeAfterUncloak(HWND hWnd,
                                          bool lightweight = false) {
     if (!hWnd || !IsWindow(hWnd)) return false;
     const bool explorerFrame = IsExplorerFrameWindow(hWnd);
+    const bool modernExplorerFrame =
+        explorerFrame && HasModernExplorerTitleFrame(hWnd);
     UINT backdrop = 0;
     const bool explicitBackdrop =
         HasExplicitSystemBackdrop(hWnd, &backdrop);
     if (!explorerFrame && !explicitBackdrop) return false;
     if (explicitBackdrop) {
         DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+        if (lightweight && modernExplorerFrame && backdrop >= 2) {
+            UINT reappliedBackdrop = backdrop;
+            if (SUCCEEDED(DwmGetWindowAttribute(
+                    hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &reappliedBackdrop,
+                    sizeof(reappliedBackdrop))) &&
+                reappliedBackdrop < 2 &&
+                HasActiveWindowAccentPolicy(hWnd)) {
+                // AccentBlur compatibility mods can intercept the native
+                // Explorer backdrop reassertion and replace it with AUTO.
+                // That transition needs the complete frame repair below;
+                // returning through the lightweight path leaves the title
+                // surface black.
+                lightweight = false;
+                if (IsDiagnosticLoggingEnabled()) {
+                    Wh_Log(L"Explorer backdrop reassertion overridden "
+                           L"hwnd=%p requested=%u actual=%u",
+                           hWnd, backdrop, reappliedBackdrop);
+                }
+            }
+        }
     }
     if (explorerFrame && !lightweight) {
-        MARGINS margins = {-1, -1, -1, -1};
+        // CabinetWClass also hosts classic shell surfaces such as Control
+        // Panel. Keep their normal zero client-area extension, but preserve
+        // full-client extension for modern File Explorer even if another mod
+        // has changed its advertised system backdrop.
+        MARGINS margins{};
+        if (modernExplorerFrame || explicitBackdrop) {
+            margins = {-1, -1, -1, -1};
+        }
         DwmExtendFrameIntoClientArea(hWnd, &margins);
     }
     if (lightweight) {
@@ -2890,6 +2999,20 @@ static bool RefreshDwmChromeAfterUncloak(HWND hWnd,
                             SMTO_ABORTIFHUNG | SMTO_NORMAL, 50, nullptr);
     }
     return true;
+}
+static void RestoreSwitchTargetAfterUncloak(HWND hWnd,
+                                             BOOL needsFullExplorerRepair) {
+    if (!hWnd || !IsWindow(hWnd)) return;
+
+    SetWindowCloak(hWnd, FALSE);
+    // Accent-policy acrylic can retain its policy while its visual becomes
+    // stale across a cloak. Use the same frame/composition repair that already
+    // succeeds after restore, but only when the pre-cloak checks identified
+    // Translucent Windows' AccentBlur path. Default Explorer keeps the
+    // lightweight cleanup.
+    RefreshDwmChromeAfterUncloak(
+        hWnd, /*nonBlocking=*/true,
+        /*lightweight=*/!needsFullExplorerRepair);
 }
 static void RestoreLayeredOpacity(HWND hWnd, LONG_PTR originalExStyle) {
     SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
@@ -4579,15 +4702,17 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
     SwitchAnimData* data = (SwitchAnimData*)lpParam;
     HWND hWnd = data->hWnd;
     int durationMs = data->durationMs;
+    const BOOL needsFullExplorerRepair =
+        data->needsFullExplorerRepair;
     delete data; 
     struct CleanupGuard {
         HWND h;
+        BOOL needsFullExplorerRepair;
         bool uncloaked = false; 
         ~CleanupGuard() {
             if (!uncloaked && IsWindow(h)) {
-                SetWindowCloak(h, FALSE);
-                RefreshDwmChromeAfterUncloak(
-                    h, /*nonBlocking=*/true, /*lightweight=*/true);
+                RestoreSwitchTargetAfterUncloak(
+                    h, needsFullExplorerRepair);
                 FlushDwmOrYield();
             }
             {
@@ -4599,7 +4724,7 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
                 RemovePropW(h, kPropSwitchAnimationActive);
             }
         }
-    } guard{ hWnd };
+    } guard{hWnd, needsFullExplorerRepair};
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
     RECT winRect;
     if (g_unloading.load(std::memory_order_relaxed) || !IsWindow(hWnd) || !IsAppMainWindow(hWnd, true) || !GetWindowRect(hWnd, &winRect)) {
@@ -4668,9 +4793,8 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
         FlushDwmOrYield();
     }
     if (IsWindow(hWnd)) {
-        SetWindowCloak(hWnd, FALSE);
-        RefreshDwmChromeAfterUncloak(
-            hWnd, /*nonBlocking=*/true, /*lightweight=*/true);
+        RestoreSwitchTargetAfterUncloak(hWnd,
+                                        needsFullExplorerRepair);
         guard.uncloaked = true;
     }
     FlushDwmOrYield();
@@ -4694,18 +4818,23 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hWnd,
         g_AnimRestoreRequestForeground.erase(hWnd);
         g_AsyncRestoreReservations.erase(hWnd);
     }
+    const BOOL needsFullExplorerRepair =
+        HasModernExplorerTitleFrame(hWnd) &&
+        IsTranslucentWindowsAccentBlurActive(hWnd);
     if (IsDiagnosticLoggingEnabled()) {
-        Wh_Log(L"Switch animation start hwnd=%p", hWnd);
+        Wh_Log(L"Switch animation start hwnd=%p fullExplorerRepair=%d",
+               hWnd, needsFullExplorerRepair);
     }
     SetPropW(hWnd, kPropSwitchAnimationActive, reinterpret_cast<HANDLE>(1));
     SetWindowCloak(hWnd, TRUE);
     auto* data = new (std::nothrow)
-        SwitchAnimData{hWnd, g_switchDurationMs.load(std::memory_order_relaxed)};
+        SwitchAnimData{hWnd,
+                       g_switchDurationMs.load(std::memory_order_relaxed),
+                       needsFullExplorerRepair};
     if (!data || !StartWorkerThread(SwitchingAnimThread, data)) {
         Wh_Log(L"Switch animation worker failed hwnd=%p", hWnd);
-        SetWindowCloak(hWnd, FALSE);
-        RefreshDwmChromeAfterUncloak(
-            hWnd, /*nonBlocking=*/true, /*lightweight=*/true);
+        RestoreSwitchTargetAfterUncloak(hWnd,
+                                        needsFullExplorerRepair);
         RemovePropW(hWnd, kPropSwitchAnimationActive);
         delete data;
         std::lock_guard<std::mutex> lock(g_StateMutex);
