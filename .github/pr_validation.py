@@ -394,11 +394,13 @@ class ModMetadataValidator:
         path: Path,
         properties: dict[ModPropertyKey, ModPropertyValue],
         expected_author: str,
+        expected_author_id: Optional[int],
         mod_source: str,
     ):
         self.ctx = ValidationContext(path)
         self.properties = properties
         self.expected_author = expected_author
+        self.expected_author_id = expected_author_id
         self.mod_source = mod_source
         self.mod_author_data = get_mod_author_data()
 
@@ -419,6 +421,30 @@ class ModMetadataValidator:
             self.mod_author_data.get(self.github_url.lower())
             if self.github_url
             else None
+        )
+
+        # Another account on record with the id of the pull request author,
+        # meaning that the pull request author renamed their account.
+        self.renamed_from_github = None
+        if expected_author_id is not None:
+            expected_github = f'https://github.com/{expected_author}'.lower()
+            for other_github, other_data in self.mod_author_data.items():
+                if (
+                    other_data.get('githubId') == expected_author_id
+                    and other_github != expected_github
+                ):
+                    self.renamed_from_github = other_data['github']
+                    break
+
+    def renamed_account_note(self) -> str:
+        if not self.renamed_from_github:
+            return ''
+
+        return (
+            '\nNote: The GitHub user id of the pull request author matches the one'
+            f' on record for {self.renamed_from_github}, which suggests that the'
+            ' account was renamed. Renamed accounts require a manual update of the'
+            ' records, please mention the rename in the pull request.'
         )
 
     def property(
@@ -485,6 +511,7 @@ class ModMetadataValidator:
                     ' them to submit the update instead.\n'
                     'For more information about submitting a mod update, refer to the'
                     ' "Submitting a Mod Update" section in the repository\'s README.md.'
+                    + self.renamed_account_note()
                 )
 
         expected = f'https://github.com/{self.expected_author}'
@@ -506,6 +533,39 @@ class ModMetadataValidator:
                 ' submit the update instead.\n'
                 'For more information about submitting a mod update, refer to the'
                 ' "Submitting a Mod Update" section in the repository\'s README.md.'
+                + self.renamed_account_note()
+            )
+        elif self.renamed_from_github and not self.author_data:
+            prop.warn(
+                f'@@ ({prop.value}) has no previous submissions.'
+                + self.renamed_account_note()
+            )
+
+        self.validate_github_id(prop)
+
+    def validate_github_id(self, prop: PropertyValidator):
+        """Validate that the GitHub account is the one on record, and not a new
+        account registered with the same name after the original was deleted."""
+        if self.expected_author_id is None or not self.author_data:
+            return
+
+        if prop.value.lower() != f'https://github.com/{self.expected_author}'.lower():
+            return
+
+        github_id = self.author_data.get('githubId')
+        if github_id is None:
+            prop.warn(
+                f'No GitHub user id is on record for {prop.value}, manual'
+                ' verification is required'
+            )
+        elif github_id != self.expected_author_id:
+            prop.warn(
+                'The GitHub user id of the pull request author'
+                f' ({self.expected_author_id}) doesn\'t match the one on record for'
+                f' {prop.value} ({github_id}).\n'
+                'This can happen if the original account was deleted, and a new'
+                ' account was registered with the same name. Only the original'
+                ' author of the mod is allowed to submit updates.'
             )
 
     def validate_id(self):
@@ -806,14 +866,21 @@ class ModMetadataValidator:
             arch_prop.warn('@@ must not be specified for tool mods')
 
 
-def validate_metadata(path: Path, mod_source: str, expected_author: str) -> int:
+def validate_metadata(
+    path: Path,
+    mod_source: str,
+    expected_author: str,
+    expected_author_id: Optional[int],
+) -> int:
     properties, initial_warnings = get_mod_file_metadata(
         StringIO(mod_source),
         warn_callback=lambda line, msg: add_warning(path, line, msg),
     )
 
     # Validate metadata properties
-    validator = ModMetadataValidator(path, properties, expected_author, mod_source)
+    validator = ModMetadataValidator(
+        path, properties, expected_author, expected_author_id, mod_source
+    )
     metadata_warnings = validator.validate_all()
 
     # Validate file path
@@ -1576,13 +1643,13 @@ def validate_callback_signatures(path: Path, mod_source: str):
     return warnings
 
 
-def validate_mod_file(path: Path, pr_author: str) -> int:
+def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]) -> int:
     mod_source = path.read_text(encoding='utf-8', errors='ignore').removeprefix(
         '\ufeff'
     )
 
     warnings = validate_encoding(path)
-    warnings += validate_metadata(path, mod_source, pr_author)
+    warnings += validate_metadata(path, mod_source, pr_author, pr_author_id)
     warnings += validate_readme(path, mod_source)
     warnings += validate_settings(path, mod_source)
     warnings += validate_symbol_hooks(path, mod_source)
@@ -1593,14 +1660,18 @@ def validate_mod_file(path: Path, pr_author: str) -> int:
 
 
 def test_run():
-    if len(sys.argv) != 3:
-        print('Test run usage: pr_validation.py <mod_file_path> <pr_author>')
+    if len(sys.argv) not in [3, 4]:
+        print(
+            'Test run usage: pr_validation.py <mod_file_path> <pr_author>'
+            ' [pr_author_id]'
+        )
         sys.exit(1)
 
     print('Test run: Validating single file...')
     path = Path(sys.argv[1])
     pr_author = sys.argv[2]
-    warnings = validate_mod_file(path, pr_author)
+    pr_author_id = int(sys.argv[3]) if len(sys.argv) == 4 else None
+    warnings = validate_mod_file(path, pr_author, pr_author_id)
     if warnings > 0:
         print(f'Got {warnings} warnings')
 
@@ -1656,6 +1727,7 @@ def main():
     print('Validating PR...')
 
     pr_author = os.environ['PR_AUTHOR']
+    pr_author_id = int(os.environ['PR_AUTHOR_ID'])
     if pr_author in DISALLOWED_AUTHORS:
         sys.exit(f'Submissions from {pr_author} are not allowed')
 
@@ -1697,7 +1769,7 @@ def main():
     for path in paths:
         print(f'Checking {path=}')
 
-        path_warnings = validate_mod_file(path, pr_author)
+        path_warnings = validate_mod_file(path, pr_author, pr_author_id)
         warnings += path_warnings
 
         if path_warnings == 0:
