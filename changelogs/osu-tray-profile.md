@@ -1,3 +1,11 @@
+## 3.9.3 ([Sep 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6502faca91d032111ad13180057004cd3d289ace/mods/osu-tray-profile.wh.cpp))
+
+* Set custom "User-Agent" (`osu-tray-profile/3.9.3`) to prevent Cloudflare blocks.
+* Reverted "Content-Type" to `application/x-www-form-urlencoded` for token requests, as Cloudflare was rejecting `application/json`.
+* Added URL encoding for spaces in usernames (`%20`) to correctly format GET requests to the API.
+* Improved JSON parsing to safely handle `null` values (e.g. for players without a global rank).
+* Increased the retry timeout on error to 60 seconds to avoid temporary IP bans for spamming requests.
+
 ## 3.9.2 ([May 10, 2026](https://github.com/ramensoftware/windhawk-mods/blob/681c473a5d25049e49fc88918ef94e51757e8d1d/mods/osu-tray-profile.wh.cpp))
 
 * Fixed the display of information when opening startup on Windows 11. (@EmanDev, [#3945](https://github.com/ramensoftware/windhawk-mods/issues/3945))

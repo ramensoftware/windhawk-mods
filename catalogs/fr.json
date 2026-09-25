@@ -9030,7 +9030,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 3],
         "ratingUsers": 3,
         "reviews": 0,
-        "updated": 1778445111000,
+        "updated": 1790345116000,
         "users": 47
       },
       "metadata": {
@@ -9042,7 +9042,7 @@
           "windhawk.exe"
         ],
         "name": "osu!Profile in Taskbar",
-        "version": "3.9.2"
+        "version": "3.9.3"
       }
     },
     "parallax-wallpaper": {

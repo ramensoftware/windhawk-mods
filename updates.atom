@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-25T12:02:18.000Z</updated>
+    <updated>2026-09-25T14:05:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[osu!Profile in Taskbar 3.9.3]]></title>
+        <id>https://windhawk.net/mods/osu-tray-profile#6502faca91d032111ad13180057004cd3d289ace</id>
+        <link href="https://windhawk.net/mods/osu-tray-profile"/>
+        <updated>2026-09-25T14:05:16.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Set custom "User-Agent" (<code>osu-tray-profile/3.9.3</code>) to prevent Cloudflare blocks.</li>
+<li>Reverted "Content-Type" to <code>application/x-www-form-urlencoded</code> for token requests, as Cloudflare was rejecting <code>application/json</code>.</li>
+<li>Added URL encoding for spaces in usernames (<code>%20</code>) to correctly format GET requests to the API.</li>
+<li>Improved JSON parsing to safely handle <code>null</code> values (e.g. for players without a global rank).</li>
+<li>Increased the retry timeout on error to 60 seconds to avoid temporary IP bans for spamming requests.</li>
+</ul>]]></content>
+        <author>
+            <name>antoshika</name>
+            <uri>https://github.com/Antoshika</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar App Memory 0.2.2]]></title>
         <id>https://windhawk.net/mods/taskbar-app-memory#75889517b3f88a2c1ab9d77938ed76a3fad560b1</id>
@@ -1030,26 +1047,6 @@ getter 产生过值时，存储值至多每秒回读一次；若连存储值也�
         <author>
             <name>Abdullah Masood</name>
             <uri>https://github.com/Abdullah-Masood-05</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Virtual Desktop Helper 2.5.0]]></title>
-        <id>https://windhawk.net/mods/virtual-desktop-helper#dc9cd28419f63d2d86396bcb845cf8e307186d5e</id>
-        <link href="https://windhawk.net/mods/virtual-desktop-helper"/>
-        <updated>2026-09-23T20:02:47.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Per-key disable: Leaving PrevDesktopKey, NextDesktopKey, LastDesktopKey, or PinKey blank now disables only that hotkey instead of falling back to the default key. Invalid key values are logged and disabled.</li>
-<li>Named key handling: Tab, Space, and Enter are parsed explicitly, and unsupported multi-character key names are rejected instead of being interpreted as their first character.</li>
-<li>Last-used desktop: Renamed from "last visited desktop"; SwitchToLastDesktop now repairs stale tracking against the actual virtual desktop manager state and ignores targets that are already the current desktop.</li>
-<li>Desktop tracking: Foreground-window tracking now treats the virtual desktop manager as authoritative, avoiding incorrect state when a foreground event briefly refers to a window from the previous desktop during a transition.</li>
-<li>Z-order fix: After moving a window to another desktop, it is raised to the front of the normal non-topmost Z-order band without temporarily making it always-on-top.</li>
-<li>Hotkey lifecycle: Settings changes are applied on the existing hotkey thread through its message window instead of restarting the thread.</li>
-<li>No key-repeat switching: Hotkeys are registered with MOD_NOREPEAT, preventing a held key from queueing repeated desktop operations.</li>
-<li>UIAccess support: Adds the normal Windhawk 2.0 host and UIAccess host in addition to windhawk.exe, allowing the appropriate Windhawk 2.0 host to be used while retaining compatibility with the current stable tool-mod implementation.</li>
-</ul>]]></content>
-        <author>
-            <name>u2x1</name>
-            <uri>https://github.com/u2x1</uri>
         </author>
     </entry>
 </feed>
