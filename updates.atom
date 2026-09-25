@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-25T10:23:11.000Z</updated>
+    <updated>2026-09-25T11:01:15.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Agenda in Calendar View 1.2]]></title>
+        <id>https://windhawk.net/mods/agenda-in-calendar-view#daf5b1adee13a44563227cca49c521cf24701fd4</id>
+        <link href="https://windhawk.net/mods/agenda-in-calendar-view"/>
+        <updated>2026-09-25T11:01:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Make text highlightable</li>
+<li>Add support for hyperlinks (#5652)</li>
+<li>Add option to hide events upon completion</li>
+<li>Add option to move the calendar below the agenda (#5661)</li>
+<li>Add tooltips for the button that toggles the visibility of the calendar </li>
+<li>Add support for multiple <code>.ics</code> sources (#5658)</li>
+<li>Updated README</li>
+<li>Use user locale rather than hardcoded format for the date (#5660)</li>
+</ul>]]></content>
+        <author>
+            <name>lonfro</name>
+            <uri>https://github.com/lonfro</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chrome Context Menu Items 1.0.0]]></title>
         <id>https://windhawk.net/mods/chrome-context-menu-items#b0a115af85f476fd7e61a7ccfc9b06770f8d9b9f</id>
@@ -1017,228 +1037,6 @@ adjust the taskbar background with only one of them at a time.</li>
         <author>
             <name>lzxujun</name>
             <uri>https://github.com/lzxujun</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Vector Screen Holder 1.6.1]]></title>
-        <id>https://windhawk.net/mods/vector-screen-holder#626f8d9337bdf82bf02e798ae15a07934173763a</id>
-        <link href="https://windhawk.net/mods/vector-screen-holder"/>
-        <updated>2026-09-23T20:02:40.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="vectorscreenholder">Vector Screen Holder</h1>
-<p>Fills a display with generative line art and holds the screen awake for as long
-as it runs. <strong>It runs on your primary display, on any single display you name,
-on all of them at once, or on all but the one you work on.</strong></p>
-<p>Every frame is drawn as strokes through Direct2D on the GPU. There are no
-images, no video file and no fixed resolution, so the artwork is generated for
-whatever size the display you choose actually is: a 1080p monitor and a 4K
-portrait panel each get correctly proportioned art.</p>
-<p>Uploading a dataset, rendering out a model, updating a shelf of games,
-seeding torrents overnight, a long build or backup, a download that will take
-an hour, or a run of AI agents grinding through a queue. Anything where the
-machine has to stay awake and stay signed in, but a black screen tells you
-nothing. Start the Screen Holder, put it on whichever display you can spare,
-and go to lunch. The work keeps running, the screen stays awake, and you can
-still see progress at a glance from across the room.</p>
-<p><img src="https://raw.githubusercontent.com/akilluminati47/vector-screen-holder/main/assets/typing.gif" alt="The overlay running on a portrait monitor while a note is typed in Notepad" /></p>
-<p>Above: a note being written on the side monitor while the art keeps running
-underneath it. The overlay is below the window, not over it.</p>
-<h2 id="controls">Controls</h2>
-<p>| Input | What it does |
-| --- | --- |
-| <strong>Esc</strong> | Close the overlay (focus it first, or see below) |
-| <strong>Left click</strong> | Cycle to the next enabled style |
-| <strong>Right click</strong> | Step the amount: how much information is on screen |
-| <strong>Mouse wheel</strong> | Adjust the current style's parameter |
-| <strong>Space</strong> | Step to the next palette |
-| <strong>Ctrl+Alt+H</strong> | Toggle the overlay on and off (configurable below) |</p>
-<p><img src="https://raw.githubusercontent.com/akilluminati47/vector-screen-holder/main/assets/readout.gif" alt="The readout naming the style, the wheel value, the amount notch and the palette" /></p>
-<p>Above: the mouse wheel taking vigor from 0 to 100 across a single growth cycle.</p>
-<p>The overlay opens clean, with no labels and no chrome, nothing on screen but
-the art. Adjusting anything raises one line along the bottom naming the style,
-its parameter value, the amount notch and the palette, which fades after about
-two seconds. That line is the only text the mod draws, and only your own input
-raises it: the rotation timer changes style in silence.</p>
-<p>That line is set in a pixel font carried inside the mod, so there is nothing to
-install and it looks identical on every machine. The wording is translated into
-sixteen languages and follows your Windows display language, unless you pick
-one in the settings.</p>
-<p>The font carries the Latin, Greek and Cyrillic alphabets. Scripts it does not
-carry, Chinese, Japanese, Korean, Arabic, Hebrew and the rest, are drawn in
-your own system interface font, size matched so the line still reads as a
-single typeface. Either way the size is worked out by measuring against your
-display before anything is drawn, so the line never wraps and never runs past
-the edge. The font is published on its own as
-<a href="https://github.com/akilluminati47/fusion-pixel-font/releases/tag/vsh-subset-2026.09.01">a TrueType release</a>
-if you want it elsewhere.</p>
-<p>Every control except the hotkey needs the overlay focused. Click it once and it
-takes them, without ever coming to the front. That first click, the one that
-moves focus, only raises the readout: it confirms the click landed and the
-overlay is listening, without changing what is on screen. Clicks after that
-cycle the style as usual.</p>
-<p><strong>Ctrl+Alt+H works from anywhere</strong>, so you can always close the overlay even
-when something else has focus.</p>
-<p>If you turn on <strong>Click through to the desktop</strong>, none of the controls above
-apply: every click goes to the desktop instead, which is the point of it, and
-the overlay never takes focus, so it never sees a key either. It runs on what
-you set in the settings. The hotkey still shows and hides it, and <strong>Global
-Esc</strong> still closes it if you have that on.</p>
-<p><strong>Start active</strong> brings the overlay up as soon as the mod loads. Windhawk loads
-its mods when you sign in, so that means it is waiting on your chosen display
-after every reboot, not just the time you ticked the box.</p>
-<p>The mod also listens on a named event, <code>Local\WindhawkVectorScreenHolderToggle</code>,
-in the per-session namespace, so an ordinary Windows shortcut can toggle the
-overlay without opening Windhawk at all. Save this as
-<code>toggle-screen-holder.vbs</code> and make a shortcut to it:</p>
-<pre><code class="vbs language-vbs">CreateObject("WScript.Shell").Run "powershell -nop -w hidden -c ""[Threading.EventWaitHandle]::OpenExisting('Local\WindhawkVectorScreenHolderToggle').Set()""", 0, False
-</code></pre>
-<p>The mod has to be <strong>enabled in Windhawk</strong> for that to do anything, because
-the event only exists while the mod is loaded. The overlay itself does not
-have to be on screen.</p>
-<p>If you would rather <strong>Esc</strong> reached the overlay from any application, turn on
-<strong>Global Esc</strong> in the settings. It is off by default because Esc is a heavily
-used key, and a reflexive press meant for a dialog or a search box in another
-window would end the session and release the keep-awake with nothing on screen
-to say it had happened. Esc is the only key watched that way, and it is never
-swallowed, so the application you are in still receives it.</p>
-<p>The overlay sits above your wallpaper but <em>below</em> your windows: anything you
-open covers it normally, and it never steals focus by itself or appears in
-Alt+Tab.</p>
-<p>It does cover the desktop icons on the display it runs on, and by default a
-click there goes to the overlay rather than the desktop. Turn on <strong>Click
-through to the desktop</strong> and every click passes to the desktop instead, so the
-icons keep working with the artwork drawn over them. The overlay is then shown
-and hidden by the toggle hotkey rather than by clicking it, which is the trade
-that setting makes.</p>
-<p>Drawing <em>behind</em> the icons rather than over them is possible, and two mods in
-this catalog do it, but only by injecting into <code>explorer.exe</code> and rendering
-into the window between the wallpaper and the icon view. This mod is built not
-to load into another process at all, so that route is closed to it by design.</p>
-<p>The <strong>Display</strong> setting defaults to your primary screen, which is the right
-choice on a single monitor machine. On more than one, point it at whichever
-display you are not working on, or pick <strong>All but the primary display</strong> and it
-covers every screen except that one, which is usually what a desk with side
-monitors wants. Either way the overlay only goes for good when you press Esc
-or toggle it off.</p>
-<h2 id="color">Color</h2>
-<p>Seven palettes: aurora, ember, ocean, neon, forest, mono, and custom, which
-takes its colors from the two custom settings. <strong>Space</strong> steps to the next one
-while the overlay has focus. The one you land on is remembered, so you can
-pick a palette by eye instead of by name. Changing the palette in
-the settings overrides whatever you stepped to, so the setting is never a dead
-control.</p>
-<p><strong>Hue shift</strong> rotates the whole palette by a fixed number of degrees. It is a
-dial across the color wheel rather than a switch: 180 of its 359 degrees lands
-on the opposite side and reads as a flip of the palette you picked, and values
-between shift it part of the way there. <strong>Leave it at 0, the default</strong>, to get
-each palette exactly as it was designed; reach for it when you want a variation
-without writing a custom palette.</p>
-<p>Turn on the <strong>automatic color ramp</strong> and the hue rotates continuously from
-whatever the hue shift is set to. Turning the ramp back off returns the colors
-to that value, rather than leaving them wherever the rotation happened to
-stop.</p>
-<p>One thing to expect when you step the palette mid-composition: flow field,
-growth and harmonograph build up into a buffer, so the new palette takes the
-background and everything drawn from that moment on, while the strokes already
-laid down keep the colors they were drawn in until the next scene begins.
-Contours redraw every frame, so they change over wholesale.</p>
-<h2 id="thefourstyles">The four styles</h2>
-<p>Each has its own <strong>parameter</strong> (the wheel) and its own <strong>amount</strong> (right click).
-The parameter changes the character of the art; the amount changes how much of
-it there is. Amount has five notches: minimal, sparse, balanced, dense, maximal.</p>
-<p>| Style | Parameter (wheel) | Amount (right click) |
-| --- | --- | --- |
-| <strong>Flow field</strong> | turbulence of the underlying field | how tightly ribbons pack: a few broad ones through to many fine ones |
-| <strong>Contours</strong> | relief (how rough the terrain is) | number of contour levels, 6 through 46 |
-| <strong>Differential growth</strong> | vigor (how hard the colony pushes outward) | number of colonies, 1 through 6 |
-| <strong>Harmonograph</strong> | tempo (how fast the figure is drawn) | number of overlaid figures, 1 through 6 |</p>
-<p>On flow field and growth the wheel is a pace control as well as a character
-one: turning turbulence or vigor up draws the piece as much as five times
-faster on its way to the same kind of result. Harmonograph's tempo is only
-speed, and contours is paced by the clock alone.</p>
-<p><img src="https://raw.githubusercontent.com/akilluminati47/vector-screen-holder/main/assets/styles.png" alt="The four styles: flow field, contours, differential growth, harmonograph" /></p>
-<p>Left to right: flow field, contours, differential growth, harmonograph.</p>
-<p>All four draw themselves in progressively. Contours and growth keep moving
-once the picture is full, holding it a while before fading out; flow field and
-harmonograph are one-shot, and begin to fade the moment they finish. Either
-way a new piece follows.</p>
-<p>The wheel reaches flow field a little differently from the other three. Each
-ribbon traces its whole path at the moment it spawns, so a turn of the wheel
-steers the ribbons drawn from then on and leaves the ones already on screen as
-they were drawn. The other three answer the wheel immediately.</p>
-<h2 id="keepingthepcawake">Keeping the PC awake</h2>
-<p>While the overlay is up the mod calls <code>SetThreadExecutionState</code> with
-<code>ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED</code>, which is the
-supported way to tell Windows the display and system should stay on. The flags
-are cleared the moment you close it.</p>
-<p>It does <strong>not</strong> fake keystrokes or mouse movement. Some corporate presence
-tools (Teams, Slack) track real input rather than display state and will still
-mark you away.</p>
-<p>The overlay is an ordinary window, so it belongs to the virtual desktop it was
-opened on. Switch desktops and it goes with the rest of them; the screen is
-still held awake, you just will not see the art until you switch back. Windows
-offers no supported way to pin a window across desktops.</p>
-<p>For the same reason it will not hold a managed workstation open. Suppressing
-the screen saver also suppresses the lock that rides on it, which covers the
-consumer default, but a machine-inactivity policy measures real input idle
-time and will lock on schedule regardless.</p>
-<h2 id="whatitcosts">What it costs</h2>
-<p>The overlay is real work on the GPU and the CPU, and the whole point is to run
-it <em>while</em> something else is busy, so it is worth being plain about the price.</p>
-<p>Measured, rather than guessed at: on a 1440x2560 portrait display driven at
-<strong>180</strong> frames per second, which is three times the default, differential
-growth at the <em>balanced</em> amount costs about <strong>0.88 of one core</strong>, and stepping
-it to <em>maximal</em> takes that to about <strong>0.95</strong>. On a sixteen core machine that
-is under 6% of the whole CPU. At the default 60 the same work comes to roughly
-a third of those figures.</p>
-<p>The default is 60 on purpose rather than something lower. How smoothly the
-art moves is most of the first impression, and the default amount is
-<em>balanced</em> rather than maximal, so nobody lands on the expensive end by
-accident. <strong>Frames per second</strong> is yours to set anywhere from 10 to 240.</p>
-<p>Contours is the heaviest of the four, because it re-marches the field and
-rebuilds every contour level on every frame, where flow field, growth and
-harmonograph draw themselves in and then idle on the finished picture. If you
-want the mod further out of the way of a long job:</p>
-<ul>
-<li>drop <strong>Frames per second</strong>. The artwork is paced against the clock rather
-than the frame count, so a lower rate stays smooth instead of becoming
-choppy.</li>
-<li>step the <strong>amount</strong> down a notch or two with right click.</li>
-<li>prefer flow field or harmonograph over contours.</li>
-</ul>
-<p>Nothing is simulated at all while the overlay is genuinely occluded. That is
-narrower than it sounds: with desktop composition on, which is always on these
-days, an ordinary maximized window over the overlay is still composited and
-does not count. What does count is the workstation locked, or a fullscreen
-exclusive window on that display.</p>
-<p>On more than one display the overlays are presented without waiting on vsync,
-so they do not divide a single refresh between them. The cost is some tearing
-in the artwork, which single display users do not get.</p>
-<h2 id="sourceandcredits">Source and credits</h2>
-<p>The mod lives at
-<a href="https://github.com/akilluminati47/vector-screen-holder">github.com/akilluminati47/vector-screen-holder</a>,
-along with the browser prototype the four algorithms were developed in before
-the Direct2D port. There is a short showcase of all four styles at
-<a href="https://vector.akilluminati47.pages.dev/">vector.akilluminati47.pages.dev</a>.</p>
-<p>Originally created by <a href="https://akilluminati47.github.io/akilluminati47/"><strong>akilluminati47</strong></a>,
-developed with the help of the AI pair-programmers Claude and Big-Pickle
-(opencode).</p>
-<p>None of the four techniques is original to this mod. They are well-trodden
-generative art, and these are the implementations and write-ups each scene was
-built from:</p>
-<p>| Style | Drawn after |
-| --- | --- |
-| <strong>Flow field</strong> | <a href="https://github.com/moistkitteh/Flowfield_Generative_Art">moistkitteh/Flowfield<em>Generative</em>Art</a>, itself after Tyler Hobbs' <em>Fidenza</em> |
-| <strong>Contours</strong> | <a href="https://github.com/arthurxavierx/contour-lines">arthurxavierx/contour-lines</a> by Arthur Xavier |
-| <strong>Differential growth</strong> | <a href="https://github.com/inconvergent/differential-line">inconvergent/differential-line</a> by inconvergent |
-| <strong>Harmonograph</strong> | <a href="https://paulbourke.net/geometry/harmonograph/">Paul Bourke's harmonograph notes</a> |</p>
-<p>The readout is set in <a href="https://github.com/TakWolf/fusion-pixel-font">Fusion Pixel Font</a>
-by <a href="https://takwolf.com">TakWolf</a>, used under the SIL Open Font License 1.1.
-The 717 glyph subset the mod carries, and the script that cuts it, are
-published at
-<a href="https://github.com/akilluminati47/fusion-pixel-font/releases/tag/vsh-subset-2026.09.01">akilluminati47/fusion-pixel-font</a>.</p>]]></content>
-        <author>
-            <name>akilluminati47</name>
-            <uri>https://github.com/akilluminati47</uri>
         </author>
     </entry>
 </feed>

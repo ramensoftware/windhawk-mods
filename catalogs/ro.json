@@ -294,7 +294,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 4],
         "ratingUsers": 4,
         "reviews": 0,
-        "updated": 1790196788000,
+        "updated": 1790334075000,
         "users": 66
       },
       "metadata": {
@@ -311,7 +311,7 @@
         ],
         "license": "GPL-3.0-only",
         "name": "Agenda in Calendar View",
-        "version": "1.1"
+        "version": "1.2"
       }
     },
     "alt-drag": {
