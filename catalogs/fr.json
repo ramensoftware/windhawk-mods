@@ -4475,7 +4475,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 1],
         "ratingUsers": 1,
         "reviews": 0,
-        "updated": 1790005338000,
+        "updated": 1790319794000,
         "users": 10
       },
       "metadata": {
@@ -4491,7 +4491,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Custom Shortcuts",
-        "version": "1.0"
+        "version": "1.3.0"
       }
     },
     "explorer-details-better-file-sizes": {
@@ -5541,7 +5541,7 @@
         "ratingBreakdown": [1, 0, 2, 10, 24],
         "ratingUsers": 37,
         "reviews": 0,
-        "updated": 1790007028000,
+        "updated": 1790319797000,
         "users": 911
       },
       "metadata": {
@@ -5554,7 +5554,7 @@
         ],
         "license": "MIT",
         "name": "File Explorer Details Auto-Fit Columns",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "file-explorer-remove-suffixes": {
@@ -7838,20 +7838,24 @@
         "ratingBreakdown": [0, 0, 0, 2, 32],
         "ratingUsers": 34,
         "reviews": 0,
-        "updated": 1789406855000,
+        "updated": 1790319790000,
         "users": 257
       },
       "metadata": {
         "author": "MCheng404",
-        "compilerOptions": "-ld2d1 -ld3d11 -ldxgi -ldcomp -ldwmapi -lole32 -lgdi32 -lshell32 -ld3dcompiler -lavrt -lksuser",
-        "description": "Highly customizable cursor trail with D3D11 rendering, 23 color modes, 10 trail shapes, 2.5D particles, click effects, centripetal vortex, particle physics, music reactive. DirectComposition acceleration, low idle CPU.",
+        "compilerOptions": "-ld2d1 -ld3d11 -ldxgi -ldcomp -ldwmapi -lole32 -lgdi32 -lshell32 -ld3dcompiler -lavrt -lksuser -ldwrite",
+        "description": "Traînée de souris: D3D11 + DirectComposition, 23 modes couleur, 10 styles, faible CPU.",
         "github": "https://github.com/MCheng404",
         "include": [
           "windhawk.exe"
         ],
         "license": "MIT",
-        "name": "Mouse Trail",
-        "version": "3.4.1"
+        "name": "Traînée de souris",
+        "version": "3.4.2.2"
+      },
+      "metadataEnglish": {
+        "description": "Customizable cursor trail: D3D11 + DirectComposition, 23 color modes, 10 trail styles, low idle CPU.",
+        "name": "Mouse Trail"
       }
     },
     "move-quietly": {

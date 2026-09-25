@@ -2,12 +2,71 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-24T22:03:40.000Z</updated>
+    <updated>2026-09-25T07:03:17.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Explorer Details Auto-Fit Columns 1.2.0]]></title>
+        <id>https://windhawk.net/mods/file-explorer-details-autofit-columns#74b039ce245ef372309dc3409117394c9bc0d906</id>
+        <link href="https://windhawk.net/mods/file-explorer-details-autofit-columns"/>
+        <updated>2026-09-25T07:03:17.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a new "Passive Triggers" setting that lets you turn off automatic fitting for folder changes, navigating between folders, and restoring a minimized window</li>
+<li>Reorganized the settings:<ul>
+<li>Passive Triggers (new)</li>
+<li>Refresh Delay</li>
+<li>Scan Settings<ul>
+<li>Scan Entire Folder</li>
+<li>Max Items to Scan</li></ul></li>
+<li>Elastic Mode</li></ul></li>
+<li>Fixed the Date column not auto-fitting</li>
+<li>Fixed the Name column sometimes shrinking and leaving a large empty gap on the right side with Elastic Mode on</li>
+</ul>]]></content>
+        <author>
+            <name>Armaninyow</name>
+            <uri>https://github.com/armaninyow</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Custom Shortcuts 1.3.0]]></title>
+        <id>https://windhawk.net/mods/explorer-custom-shortcuts#7146805e48b73f481404dd1d80808c88f0fc7dc0</id>
+        <link href="https://windhawk.net/mods/explorer-custom-shortcuts"/>
+        <updated>2026-09-25T07:03:14.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added <code>internal:openParentFolder</code> command to navigate the active Explorer tab to its parent folder.</li>
+<li>Added <code>internal:copyPath</code> command to copy absolute path(s) of selected items without quotes.</li>
+<li>Added <code>internal:copyName</code> command to copy filename(s) with extension without quotes.</li>
+<li>Added <code>internal:openWith</code> command to trigger the native Windows "Open with" dialog.</li>
+<li>Expanded key parser (<code>ParseKey</code>) to support <code>Backspace</code>, <code>Insert</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, and <code>PageDown</code>.</li>
+<li>Updated README documentation and settings schema for the new commands and supported keys.</li>
+</ul>]]></content>
+        <author>
+            <name>ArvindSaini978</name>
+            <uri>https://github.com/ArvindSaini978</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Mouse Trail 3.4.2.2]]></title>
+        <id>https://windhawk.net/mods/mouse-trail#78e72a6fb982d2956daee2c013a1b355854ef9a1</id>
+        <link href="https://windhawk.net/mods/mouse-trail"/>
+        <updated>2026-09-25T07:03:10.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add：Frame sync toggle for tear-free presentation</li>
+<li>Add：Trail stroke with configurable width</li>
+<li>Add：Particle stroke with configurable width, alpha and color</li>
+<li>Add：Device loss recovery (GPU TDR, driver update, sleep/resume)</li>
+<li>Add：Global hotkeys for trail, particles and master toggle</li>
+<li>Fix：Overlay window z-order after system restart</li>
+<li>Fix：Settings hot-reload callback registration</li>
+</ul>]]></content>
+        <author>
+            <name>MCheng404</name>
+            <uri>https://github.com/MCheng404</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Three Finger Drag 1.1.0]]></title>
         <id>https://windhawk.net/mods/three-finger-drag#14b59f8f635fae78114073adf62be79cf4dddbea</id>
@@ -1160,151 +1219,6 @@ start.</li>
         <author>
             <name>Kismeria</name>
             <uri>https://github.com/Kismeria</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[System Tray Folders 1.0.0]]></title>
-        <id>https://windhawk.net/mods/system-tray-folders#a1190b6c1b631a725f6d628189886d410b3760f6</id>
-        <link href="https://windhawk.net/mods/system-tray-folders"/>
-        <updated>2026-09-22T16:22:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="systemtrayfolders">System Tray Folders</h1>
-<p>Adds folders to the Windows 11 tray overflow flyout (the "^" / "Show hidden
-icons" popup). Each folder appears as a tile in the icon grid with a preview of
-the icons inside. Clicking it shows the folder's icons in place, with a back
-tile to return.</p>
-<p><img src="https://raw.githubusercontent.com/RisPNG/windhawk-mods/assets/system-tray-folders/without-mod.png" alt="Without the mod" /><br />
-<em>Without the mod</em></p>
-<p><img src="https://raw.githubusercontent.com/RisPNG/windhawk-mods/assets/system-tray-folders/folders.png" alt="Folders" /><br />
-<em>With folders</em></p>
-<p><img src="https://raw.githubusercontent.com/RisPNG/windhawk-mods/assets/system-tray-folders/inside-folder.png" alt="Inside a folder" /><br />
-<em>Inside a folder</em></p>
-<p>Icons inside a folder are the real tray icons, so clicking, right clicking and
-tooltips keep working. Dragging icons between the taskbar and the flyout and
-reordering them work as usual, and an icon dragged back into the flyout returns
-to its folder. Which folder an icon belongs to comes from the settings, not
-from dragging.</p>
-<h2 id="choosingicons">Choosing icons</h2>
-<p>Each pattern is compared (case insensitive) with three names of every icon:</p>
-<ul>
-<li><strong>App name</strong>: the program name Windows keeps for the icon, usually the
-executable's description or file name, e.g. <code>RazerAppEngine</code>,
-<code>Docker Desktop</code> or <code>PowerToys.Runner</code>. It doesn't change, so it's the most
-reliable choice.</li>
-<li><strong>Tooltip</strong>: the text you see when hovering the icon, e.g. <code>NVIDIA Settings</code>.
-Some apps change it or leave it empty. A changed tooltip is picked up the
-next time the flyout opens.</li>
-<li><strong>Accessible name</strong>: a name Windows keeps for the icon for accessibility
-tools. It's usually the same as one of the other two names.</li>
-</ul>
-<p>A few icons aren't image icons; they have no tooltip or accessible name, so
-only their app name can match.</p>
-<p>A pattern without wildcards must match the whole name. Use <code>*</code> for any text
-and <code>?</code> for a single character, e.g. <code>Razer*</code> or <code>*Graphics Command Center</code>.</p>
-<p>An icon goes into the first folder with a matching pattern. Icons that match
-nothing stay in the main grid. Until a folder has icons (or <strong>Show empty
-folders</strong> is on), the mod unloads itself and leaves the flyout alone.</p>
-<p>An empty row in the <strong>Folders</strong> or <strong>Icons</strong> list is skipped, but two empty rows
-in a row end the list.</p>
-<p>To see the exact names of your icons, set <strong>Debug logging</strong> to <strong>Mod logs</strong> in
-the mod's <strong>Advanced</strong> tab, open the tray overflow once, then click <strong>Show log
-output</strong>.
-Each icon is listed as <code>Icon: app="..." tooltip="..." name="..." folder=N</code>,
-where <code>N</code> is the folder it went into, counting from 0, or -1 for none.</p>
-<p>Windows 11 only. Tested on build 26300, where the tray is hosted in
-<code>SystemTray.dll</code>. Older builds that host it in <code>Taskbar.View.dll</code> may work, but
-haven't been tested.</p>]]></content>
-        <author>
-            <name>Ris Peng</name>
-            <uri>https://github.com/RisPNG</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Tags 0.7.1]]></title>
-        <id>https://windhawk.net/mods/explorer-tags#5ed44affb201b349874dd33bc5276b47bda4320d</id>
-        <link href="https://windhawk.net/mods/explorer-tags"/>
-        <updated>2026-09-22T14:55:03.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorertags">Explorer Tags</h1>
-<p>Adds a <strong>Tags</strong> panel at the bottom of File Explorer's navigation pane, below
-"This PC" and "Network", and a <strong>Tags ▸</strong> submenu to the file context menu.</p>
-<p>Windows' own tags only work for file types with a property handler, so <code>.txt</code>,
-<code>.zip</code>, <code>.rar</code> and folders can't be tagged. These work for anything.</p>
-<p><img src="https://raw.githubusercontent.com/buedgik/explorer-tags/main/docs/panel.png" alt="The Tags panel at the bottom of the navigation pane" /></p>
-<p><img src="https://raw.githubusercontent.com/buedgik/explorer-tags/main/docs/menu.png" alt="The Tags submenu in the file context menu" /></p>
-<ul>
-<li><strong>Tag something:</strong> drag files or folders onto the tag.</li>
-<li><strong>See a tag's files:</strong> click it. The tab opens the tag's folder, with a
-shortcut for each file. Middle-click, or right-click ▸ "Open in new window",
-opens it in a window of its own.</li>
-<li><strong>Remove a tag:</strong> delete the shortcut inside the tag's folder. The original
-file is untouched.</li>
-<li><strong>Collapse the panel:</strong> click the "Tags" title.</li>
-<li><strong>Right-click menu:</strong> on selected files, a <strong>Tags ▸</strong> submenu appears, with
-one entry per tag. Checked means all selected items have it; picking it
-removes it from all of them. Unchecked adds it to all of them. "Remove all tags" appears
-when at least one already has tags. Works in the classic menu (for example
-with the "Classic context menu" mod); the new Windows 11 menu isn't
-changed.</li>
-</ul>
-<p>Tags are defined in the mod settings (name and color).</p>
-<h2 id="howfilesaretracked">How files are tracked</h2>
-<p>Each tagged file is recorded by its NTFS ID. If you rename it or move it
-within the same drive, the tag follows it and the shortcut is fixed. If it's
-overwritten by an editor (which changes the ID), it's recognized by path.
-Copied to another drive, the copy doesn't carry the tag.</p>
-<p>If you rename a tag in the settings, the old tag stops appearing; putting the
-old name back brings it back.</p>
-<p>The record of what is tagged is the mod's own bookkeeping, so it lives in the
-storage Windhawk keeps for the mod, in a folder per user. It stays outside the
-tags folder: deleting or moving the tags folder doesn't lose anything, the
-shortcuts are recreated.</p>
-<p>It works the other way round too: the shortcuts are enough to rebuild the
-record. A shortcut in a tag's folder that the record doesn't know about is
-taken in, so losing the record — uninstalling the mod takes its storage with
-it — costs nothing while the tag folders are there, and you can tag a file
-by putting a shortcut to it in a tag's folder yourself. A tag whose name is
-no longer in the settings can't be rebuilt: put the name back and its files
-come back with it.</p>
-<h2 id="worthknowing">Worth knowing</h2>
-<ul>
-<li><strong>Don't put the tags folder in a synced location</strong> (OneDrive, Dropbox, a
-network share). A shortcut that is missing while the folder syncs looks
-exactly like a shortcut you deleted, and the tag goes with it. For the same
-reason, keep it somewhere quiet: the whole folder tree is watched, so a busy
-folder means constant rechecking.</li>
-<li><strong>What is in the tag folders is what is tagged.</strong> Deleting a shortcut
-removes the tag; renaming one keeps it; moving one into another tag's
-folder moves the tag; restoring one from the Recycle Bin brings the tag
-back. A shortcut that points at nothing is left alone, never deleted.</li>
-<li><strong>A tagged file in the Recycle Bin keeps its tags.</strong> Its shortcut stays,
-pointing where the file used to be, so restoring the file makes it work
-again. Emptying the bin is what finally removes the tag.</li>
-<li><strong>The tags folder and the record stay after the mod is disabled</strong>, and so do
-your shortcuts. A tag's folder appears the first time you tag something with
-it, or the first time you click it in the panel; the record folder appears
-with the first tag.</li>
-<li><strong>Changing the tags folder in the settings leaves the old one behind.</strong> The
-shortcuts are rebuilt under the new folder; the old folders aren't deleted,
-in case something else lives there.</li>
-<li><strong>The desktop and file dialogs are left alone.</strong> The panel and the submenu
-are for Explorer windows; right-clicking a file on the desktop shows the
-usual menu, without Tags.</li>
-</ul>]]></content>
-        <author>
-            <name>buedgik</name>
-            <uri>https://github.com/buedgik</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[On-Screen Indicator Position 1.4.3]]></title>
-        <id>https://windhawk.net/mods/on-screen-indicator-position#6300d15608cf4ff49c749bced382b1ab27cc9340</id>
-        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
-        <updated>2026-09-22T13:07:43.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Bug reports and feature requests now go to the mod's own issues page on GitHub.</li>
-</ul>]]></content>
-        <author>
-            <name>mario0318</name>
-            <uri>https://github.com/mario0318</uri>
         </author>
     </entry>
 </feed>
