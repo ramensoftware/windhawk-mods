@@ -23,6 +23,20 @@ const allowedAuthorGithubPairs = [
     ['https://github.com/getrektbynoob15', 'https://github.com/getrektbynoob20'],
 ];
 
+// Ids of accounts which were renamed or deleted, and so can't be looked up by
+// their login. Taken from the pull requests submitted by these accounts.
+const knownGithubIds: Record<string, number> = {
+    'https://github.com/arukateru': 84914212, // Renamed to kanlaya5.
+    'https://github.com/barrypp': 4166765, // Renamed to Barrypp-zzx.
+    'https://github.com/getrektbynoob20': 109096888, // Renamed to Getrektbynoob15.
+    'https://github.com/ilikecoding-197': 124097137, // Renamed to codingisfun2831t.
+    'https://github.com/meteony': 141850520, // Renamed to Meteoni.
+    'https://github.com/nox1st': 107254950, // Renamed to qvoke.
+    'https://github.com/oliviaistyping': 149018134, // Renamed to AllieTheFox.
+    'https://github.com/sanskarprasad': 77920907, // Renamed to Sanskaaar1.
+    'https://github.com/u3l6': 75152141, // Renamed to intoop.
+};
+
 type ModAuthorData = {
     github: string;
     // The numeric id of the github account, which, unlike the login, is never
@@ -604,6 +618,11 @@ async function assignGithubIds(
     const renamedGithubs = new Set(allowedAuthorGithubPairs.flatMap(pair => pair.slice(1)));
 
     for (const [authorKey, data] of Object.entries(modAuthorData)) {
+        if (authorKey in knownGithubIds) {
+            data.githubId = knownGithubIds[authorKey];
+            continue;
+        }
+
         if (renamedGithubs.has(authorKey)) {
             data.githubId = null;
             continue;
@@ -662,7 +681,10 @@ function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
 
         if (data.githubId !== undefined && data.githubId !== null) {
             const seenGithubIdKey = seenGithubId.get(data.githubId);
-            if (seenGithubIdKey !== undefined) {
+            const allowed = seenGithubIdKey !== undefined && allowedAuthorGithubPairs.some(pair =>
+                pair.includes(authorKey) && pair.includes(seenGithubIdKey)
+            );
+            if (seenGithubIdKey !== undefined && !allowed) {
                 throw new Error(
                     `Duplicate github id ${data.githubId} found for authors '${authorKey}' and '${seenGithubIdKey}',` +
                     ` a renamed account must be added to allowedAuthorGithubPairs`);
