@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.9.34
+// @version         0.9.35
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -681,8 +681,13 @@ std::unordered_map<void*, winrt::weak_ref<FrameworkElement>> g_trackedButtons;
 // off the UI thread (last-ref ~FrameworkElement would run on the wrong thread).
 // no_destroy: process teardown must not ~CoreDispatcher after XAML is gone.
 std::mutex g_dispatchersMutex;
+struct UiDispatcher {
+    winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
+    winrt::handle thread;
+    DWORD threadId;
+};
 [[clang::no_destroy]] std::optional<
-    std::vector<winrt::Windows::UI::Core::CoreDispatcher>>
+    std::vector<std::shared_ptr<UiDispatcher>>>
     g_uiDispatchers{std::in_place};
 
 bool RememberUiDispatcher(FrameworkElement el) {
@@ -691,7 +696,7 @@ bool RememberUiDispatcher(FrameworkElement el) {
     }
     try {
         auto dispatcher = el.Dispatcher();
-        if (!dispatcher) {
+        if (!dispatcher || !dispatcher.HasThreadAccess()) {
             return false;
         }
         std::lock_guard<std::mutex> lock(g_dispatchersMutex);
@@ -699,11 +704,25 @@ bool RememberUiDispatcher(FrameworkElement el) {
             return false;
         }
         for (const auto& existing : *g_uiDispatchers) {
-            if (existing == dispatcher) {
+            if (existing->dispatcher == dispatcher) {
                 return true;
             }
         }
-        g_uiDispatchers->push_back(dispatcher);
+        // Capture a real handle while on its owning thread. An ID can be
+        // reused after termination; failure to open it later proves nothing.
+        HANDLE thread = nullptr;
+        if (!DuplicateHandle(GetCurrentProcess(), GetCurrentThread(),
+                             GetCurrentProcess(), &thread, SYNCHRONIZE,
+                             FALSE, 0)) {
+            Wh_Log(L"Cannot capture UI thread: %u", GetLastError());
+            return false;
+        }
+        winrt::handle ownedThread{thread};
+        auto entry = std::make_shared<UiDispatcher>();
+        entry->dispatcher = dispatcher;
+        entry->thread = std::move(ownedThread);
+        entry->threadId = GetCurrentThreadId();
+        g_uiDispatchers->push_back(std::move(entry));
         return true;
     } catch (...) {
         return false;
@@ -6007,97 +6026,79 @@ bool SubscribeDrainCompleted(Op const& op, HANDLE done) {
     }
 }
 
-// What a TryRunAsync operation actually did. Started is not a result.
-// Completed + GetResults()==false means the callback was not run.
-enum class DispatcherOpEnd {
-    Absent,
-    Ran,
-    NotRun,
-    Unknown,
-    Gone,
-};
+// Completion and thread termination are different safe boundaries. A failed
+// API call, rejected post, or elapsed interval is neither one.
+enum class DispatcherOpEnd { Ran, NotRun, ThreadExited };
 
-// Dispatcher method calls that mean this object will not invoke us again.
-bool HresultMeansDispatcherGone(HRESULT hr) {
-    // The object rejected the call as disconnected or closed. Further posts
-    // cannot be observed. This is not a sentinel, and it is not proof about
-    // every earlier subscription; waiting can no longer succeed.
-    return hr == static_cast<HRESULT>(0x80010108) ||  // RPC_E_DISCONNECTED
-           hr == static_cast<HRESULT>(0x80010007) ||  // RPC_E_SERVER_DIED
-           hr == static_cast<HRESULT>(0x80010012) ||  // RPC_E_SERVER_DIED_DNE
-           hr == static_cast<HRESULT>(0x800401FD) ||  // CO_E_OBJNOTCONNECTED
-           hr == static_cast<HRESULT>(0x80000013);    // RO_E_CLOSED
+bool UiThreadExited(const UiDispatcher& ui) {
+    return WaitForSingleObject(ui.thread.get(), 0) == WAIT_OBJECT_0;
 }
 
-// Must be called from a catch clause. The exception stays active there.
-bool ExceptionMeansDispatcherGone() {
-    try {
-        throw;
-    } catch (winrt::hresult_error const& ex) {
-        return HresultMeansDispatcherGone(ex.code());
-    } catch (...) {
-        return false;
+void PauseDispatcherAttempt(const UiDispatcher& ui) {
+    if (GetCurrentThreadId() == ui.threadId) {
+        try {
+            ui.dispatcher.ProcessEvents(
+                winrt::Windows::UI::Core::CoreProcessEventsOption::
+                    ProcessOneIfPresent);
+        } catch (...) {
+            // A disconnected object is not proof its thread has terminated.
+        }
+    }
+    // Also wakes immediately if the original owning thread exits.
+    if (WaitForSingleObject(ui.thread.get(), 20) == WAIT_FAILED) {
+        Sleep(20);  // Wait failure must not authorize unload or busy-spin.
     }
 }
 
-// Wait until the operation is terminal, then report whether its callback ran.
-// A status read that throws is Unknown, not completion. done may be null.
-// pump runs while polling so a sentinel posted on the UI thread can execute.
-template <typename Op, typename Pump>
-DispatcherOpEnd ObserveDispatcherOp(Op const& op, HANDLE done, Pump pump) {
+// Keep the operation until its result is known or its owning thread exits.
+// Completed is the barrier, not a signal from inside the dispatched callback.
+// If event creation/subscription fails, poll the same operation instead.
+template <typename Op>
+DispatcherOpEnd ObserveDispatcherOp(const UiDispatcher& ui, Op const& op,
+                                   HANDLE done) {
     if (!op) {
-        return DispatcherOpEnd::Absent;
+        return DispatcherOpEnd::NotRun;
     }
     if (done) {
         ResetEvent(done);
     }
-    if (!done || !SubscribeDrainCompleted(op, done)) {
-        while (true) {
-            try {
-                if (op.Status() !=
-                    winrt::Windows::Foundation::AsyncStatus::Started) {
-                    break;
-                }
-            } catch (...) {
-                if (ExceptionMeansDispatcherGone()) {
-                    return DispatcherOpEnd::Gone;
-                }
-                return DispatcherOpEnd::Unknown;
+    const bool subscribed = done && SubscribeDrainCompleted(op, done);
+    if (subscribed) {
+        HANDLE waits[] = {done, ui.thread.get()};
+        for (;;) {
+            const DWORD result = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+            if (result == WAIT_OBJECT_0 + 1) {
+                return DispatcherOpEnd::ThreadExited;
             }
-            if (pump()) {
-                return DispatcherOpEnd::Gone;
+            if (result == WAIT_OBJECT_0) {
+                break;
             }
+            // Do not close the event while its completion delegate can run.
+            PauseDispatcherAttempt(ui);
         }
-    } else {
-        WaitForSingleObject(done, INFINITE);
     }
-    try {
-        const auto st = op.Status();
-        if (st == winrt::Windows::Foundation::AsyncStatus::Completed) {
-            try {
+    for (;;) {
+        if (UiThreadExited(ui)) {
+            return DispatcherOpEnd::ThreadExited;
+        }
+        try {
+            const auto status = op.Status();
+            if (status == winrt::Windows::Foundation::AsyncStatus::Completed) {
                 return op.GetResults() ? DispatcherOpEnd::Ran
                                        : DispatcherOpEnd::NotRun;
-            } catch (...) {
-                if (ExceptionMeansDispatcherGone()) {
-                    return DispatcherOpEnd::Gone;
-                }
-                return DispatcherOpEnd::Unknown;
             }
+            if (status == winrt::Windows::Foundation::AsyncStatus::Error ||
+                status == winrt::Windows::Foundation::AsyncStatus::Canceled) {
+                return DispatcherOpEnd::NotRun;
+            }
+        } catch (...) {
+            // Retain this operation: inability to observe it is not completion.
         }
-        if (st == winrt::Windows::Foundation::AsyncStatus::Error ||
-            st == winrt::Windows::Foundation::AsyncStatus::Canceled) {
-            return DispatcherOpEnd::NotRun;
-        }
-    } catch (...) {
-        if (ExceptionMeansDispatcherGone()) {
-            return DispatcherOpEnd::Gone;
-        }
-        return DispatcherOpEnd::Unknown;
+        PauseDispatcherAttempt(ui);
     }
-    return DispatcherOpEnd::Unknown;
 }
 
-std::vector<winrt::Windows::UI::Core::CoreDispatcher> CollectUiDispatchers() {
+std::vector<std::shared_ptr<UiDispatcher>> CollectUiDispatchers() {
     std::lock_guard<std::mutex> lock(g_dispatchersMutex);
     if (!g_uiDispatchers) {
         return {};
@@ -6105,154 +6106,64 @@ std::vector<winrt::Windows::UI::Core::CoreDispatcher> CollectUiDispatchers() {
     return *g_uiDispatchers;
 }
 
-// Proof the dispatcher will not call this mod again: the Low sentinel ran,
-// or a call failed because the dispatcher is gone. High completion is not
-// that proof. A timeout, a false TryRunAsync result, and a thrown status
-// read are not that proof either.
-enum class DrainProof { SentinelRan, DispatcherGone };
-
-// Returns true when the dispatcher object is disconnected or closed.
-// Any other failure is not a drain and must not escape unload.
-bool PauseDispatcherAttempt(
-    winrt::Windows::UI::Core::CoreDispatcher const& dispatcher) {
-    // On the UI thread a posted sentinel cannot finish until the queue is
-    // pumped. Off that thread, backoff only — do not pretend time is a drain.
-    try {
-        if (dispatcher.HasThreadAccess()) {
-            try {
-                dispatcher.ProcessEvents(
-                    winrt::Windows::UI::Core::CoreProcessEventsOption::
-                        ProcessOneIfPresent);
-            } catch (...) {
-                if (ExceptionMeansDispatcherGone()) {
-                    return true;
-                }
-            }
-        }
-    } catch (...) {
-        if (ExceptionMeansDispatcherGone()) {
-            return true;
-        }
-    }
-    Sleep(20);
-    return false;
-}
+enum class DrainProof { SentinelRan, ThreadExited };
 
 DrainProof DrainOneUiDispatcher(
-    winrt::Windows::UI::Core::CoreDispatcher const& dispatcher,
-    winrt::Windows::UI::Core::DispatchedHandler const& handler,
+    const UiDispatcher& ui,
+    const winrt::Windows::UI::Core::DispatchedHandler& handler,
     HANDLE done) {
     using AsyncOp = winrt::Windows::Foundation::IAsyncOperation<bool>;
     using Pri = winrt::Windows::UI::Core::CoreDispatcherPriority;
-    // Completed is delivered on the dispatcher thread. Waiting for it here
-    // would deadlock. Poll and pump instead. A throw from the property is
-    // the same gone-or-retry policy as TryRunAsync, not an escape from unload.
-    try {
-        if (dispatcher.HasThreadAccess()) {
-            done = nullptr;
-        }
-    } catch (...) {
-        if (ExceptionMeansDispatcherGone()) {
-            return DrainProof::DispatcherGone;
-        }
+    // Never wait for a dispatcher callback on its own thread without pumping.
+    if (GetCurrentThreadId() == ui.threadId) {
         done = nullptr;
     }
-    AsyncOp highOp{nullptr};
     bool highRan = false;
-    auto pump = [&]() { return PauseDispatcherAttempt(dispatcher); };
+    bool loggedRejection = false;
     for (;;) {
-        if (!highRan) {
-            if (!highOp) {
-                try {
-                    highOp = dispatcher.TryRunAsync(Pri::High, handler);
-                } catch (...) {
-                    if (ExceptionMeansDispatcherGone()) {
-                        return DrainProof::DispatcherGone;
-                    }
-                    highOp = nullptr;
-                    if (pump()) {
-                        return DrainProof::DispatcherGone;
-                    }
-                    continue;
-                }
-            }
-            const DispatcherOpEnd highEnd =
-                ObserveDispatcherOp(highOp, done, pump);
-            if (highEnd == DispatcherOpEnd::Gone) {
-                return DrainProof::DispatcherGone;
-            }
-            if (highEnd == DispatcherOpEnd::Ran) {
-                highRan = true;
-            } else if (highEnd == DispatcherOpEnd::Unknown) {
-                // Same operation may still be running. Do not post another
-                // cleanup, and do not treat the read failure as finished.
-                if (pump()) {
-                    return DrainProof::DispatcherGone;
-                }
-                continue;
-            } else {
-                // Completed-false, canceled, or error: the callback did not
-                // run. Microsoft documents false during dispatcher shutdown.
-                // That rejects this post only. It does not show that work
-                // already queued will not run, so it is not a drain and not
-                // "dispatcher gone". Keep waiting.
-                highOp = nullptr;
-                if (pump()) {
-                    return DrainProof::DispatcherGone;
-                }
-                continue;
-            }
+        if (UiThreadExited(ui)) {
+            return DrainProof::ThreadExited;
         }
-        AsyncOp lowOp{nullptr};
+        AsyncOp op{nullptr};
         try {
-            lowOp = dispatcher.TryRunAsync(Pri::Low, []() {});
+            op = highRan ? ui.dispatcher.TryRunAsync(Pri::Low, []() {})
+                         : ui.dispatcher.TryRunAsync(Pri::High, handler);
         } catch (...) {
-            if (ExceptionMeansDispatcherGone()) {
-                return DrainProof::DispatcherGone;
+            // Includes disconnected HRESULTs: wait for actual thread exit.
+        }
+        const auto end = ObserveDispatcherOp(ui, op, done);
+        if (end == DispatcherOpEnd::ThreadExited) {
+            return DrainProof::ThreadExited;
+        }
+        if (end == DispatcherOpEnd::Ran) {
+            if (highRan) {
+                return DrainProof::SentinelRan;
             }
-            if (pump()) {
-                return DrainProof::DispatcherGone;
-            }
+            highRan = true;
             continue;
         }
-        const DispatcherOpEnd lowEnd = ObserveDispatcherOp(lowOp, done, pump);
-        if (lowEnd == DispatcherOpEnd::Gone) {
-            return DrainProof::DispatcherGone;
+        if (!loggedRejection) {
+            Wh_Log(L"UI drain: post rejected or failed; waiting for a sentinel "
+                   L"or thread %u exit (no unsafe timeout)", ui.threadId);
+            loggedRejection = true;
         }
-        // Only a sentinel that actually ran has drained earlier callbacks.
-        // A false/canceled/error completion is not that sentinel.
-        if (lowEnd == DispatcherOpEnd::Ran) {
-            return DrainProof::SentinelRan;
-        }
-        if (pump()) {
-            return DrainProof::DispatcherGone;
-        }
+        // A closed dispatcher on a still-live thread may remain here. Keeping
+        // the mod loaded is intentional; rejection alone cannot prove safety.
+        PauseDispatcherAttempt(ui);
     }
 }
 
-// Returns only after every dispatcher is proven idle or gone.
+// Returns only after each Low sentinel completed or its owning thread exited.
 bool RunOnEachUiDispatcherAndWait(
     const winrt::Windows::UI::Core::DispatchedHandler& handler) {
     auto dispatchers = CollectUiDispatchers();
-    if (dispatchers.empty()) {
-        Wh_Log(L"UI cleanup: no dispatcher");
-        return true;
-    }
     bool allOk = true;
-    for (auto& dispatcher : dispatchers) {
-        HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        struct CloseDone {
-            HANDLE h;
-            ~CloseDone() {
-                if (h) {
-                    CloseHandle(h);
-                }
-            }
-        } closeDone{done};
-        const DrainProof proof = DrainOneUiDispatcher(dispatcher, handler, done);
-        if (proof == DrainProof::DispatcherGone) {
-            Wh_Log(L"UI drain: dispatcher can no longer invoke callbacks");
-            allOk = false;
+    for (const auto& ui : dispatchers) {
+        winrt::handle done{CreateEventW(nullptr, TRUE, FALSE, nullptr)};
+        if (DrainOneUiDispatcher(*ui, handler, done.get()) ==
+            DrainProof::ThreadExited) {
+            Wh_Log(L"UI drain: original thread %u exited", ui->threadId);
+            allOk = false;  // No claim that native visual cleanup ran.
         }
     }
     return allOk;
@@ -6274,7 +6185,11 @@ bool RunOnUiThread(const winrt::Windows::UI::Core::DispatchedHandler& handler) {
     }
 
     bool any = false;
-    for (auto& dispatcher : dispatchers) {
+    for (const auto& ui : dispatchers) {
+        if (UiThreadExited(*ui)) {
+            continue;
+        }
+        const auto& dispatcher = ui->dispatcher;
         try {
             if (dispatcher.HasThreadAccess()) {
                 handler();
