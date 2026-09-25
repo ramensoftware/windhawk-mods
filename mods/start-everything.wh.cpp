@@ -79,6 +79,9 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 - maxFileResults: 12
   $name: Max File Results
   $description: Number of file matches to display in the Files column (default 12).
+- searchDebounceMs: 25
+  $name: Search Debounce Delay (ms)
+  $description: Delay in milliseconds to settle input during rapid typing before executing search (default 25ms, 0 for instant).
 - showKeyHints: true
   $name: Show Keyboard Shortcuts Bar
   $description: Display the keyboard shortcut hints ([Up/Down] Select, [Enter] Open, [Ctrl+Enter] Admin, [Esc] Close) in the bottom bar.
@@ -3613,6 +3616,7 @@ struct Settings {
     std::vector<std::wstring> excludedPaths;
     int maxAppResults = 6;
     int maxFileResults = 12;
+    int searchDebounceMs = 25;
     bool showKeyHints = true;
     bool filterNoisyPaths = true;
 };
@@ -3723,11 +3727,20 @@ void LoadSettings() {
     int maxFiles = Wh_GetIntSetting(L"maxFileResults");
     g_settings.maxFileResults = (maxFiles > 0) ? std::clamp(maxFiles, 1, 50) : 12;
 
+    auto debounceSetting = WindhawkUtils::StringSetting::make(L"searchDebounceMs");
+    if (debounceSetting.get() && *debounceSetting.get()) {
+        int debounce = Wh_GetIntSetting(L"searchDebounceMs");
+        g_settings.searchDebounceMs = std::clamp(debounce, 0, 1000);
+    } else {
+        g_settings.searchDebounceMs = 25;
+    }
+
     g_settings.showKeyHints = Wh_GetIntSetting(L"showKeyHints") != 0;
 
-    Wh_Log(L"=== settings: defSearch=%ls shortcuts=%zu maxApps=%d maxFiles=%d hints=%d filterNoise=%d excluded=%zu ===",
+    Wh_Log(L"=== settings: defSearch=%ls shortcuts=%zu maxApps=%d maxFiles=%d debounce=%d hints=%d filterNoise=%d excluded=%zu ===",
         g_settings.defaultSearchUrl.c_str(), g_settings.webShortcuts.size(),
         g_settings.maxAppResults, g_settings.maxFileResults,
+        g_settings.searchDebounceMs,
         g_settings.showKeyHints ? 1 : 0,
         g_settings.filterNoisyPaths ? 1 : 0,
         g_settings.excludedPaths.size());
@@ -6847,9 +6860,14 @@ void SearchThreadMain() {
 
         // Settle: if starting a fresh query from empty, search immediately with
         // zero delay so results are ready before overlay reveals.
-        // For subsequent typing bursts, settle for 25ms so we search the newer text.
-        if (!last.empty()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        // For subsequent typing bursts, settle for searchDebounceMs so we search the newer text.
+        int debounceMs = 25;
+        {
+            std::lock_guard<std::mutex> lock(g_settingsMutex);
+            debounceMs = g_settings.searchDebounceMs;
+        }
+        if (!last.empty() && debounceMs > 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(debounceMs));
             std::lock_guard<std::mutex> lock(g_queryMutex);
             if (g_pendingQuery != query) {
                 g_queryDirty.store(true);
