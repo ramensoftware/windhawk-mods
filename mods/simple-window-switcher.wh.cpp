@@ -1021,6 +1021,9 @@ static bool IsNativeAltTabWindow(HWND hWnd) {
     WCHAR title[64] = {0};
     GetWindowTextW(hRoot, title, ARRAYSIZE(title));
     if (wcscmp(title, L"Task Switching") != 0) {
+        if (isIsland || isMultiView) {
+            Wh_Log(L"SWS: Alt+Tab/TaskView candidate rejected (title): class=%s title='%s'", cls, title);
+        }
         return false;
     }
 
@@ -1034,6 +1037,9 @@ static bool IsNativeAltTabWindow(HWND hWnd) {
     if (pGetWindowBand) {
         DWORD band = 0;
         if (pGetWindowBand(hRoot, &band) && band != ZBID_SYSTEM_TOOLS) {
+            if (isIsland || isMultiView) {
+                Wh_Log(L"SWS: Alt+Tab/TaskView candidate rejected (band=%u): class=%s title='%s'", band, cls, title);
+            }
             return false;
         }
     }
@@ -1055,6 +1061,9 @@ static bool IsNativeAltTabWindow(HWND hWnd) {
                     PWSTR desc = nullptr;
                     if (SUCCEEDED(pGetThreadDescription(hThread, &desc)) && desc) {
                         bool isMultitasking = (wcscmp(desc, L"MultitaskingView") == 0);
+                        if (!isMultitasking) {
+                            Wh_Log(L"SWS: Alt+Tab/TaskView candidate rejected (thread description='%s'): class=%s title='%s'", desc, cls, title);
+                        }
                         LocalFree(desc);
                         if (!isMultitasking) {
                             CloseHandle(hThread);
@@ -1067,6 +1076,7 @@ static bool IsNativeAltTabWindow(HWND hWnd) {
         }
     }
 
+    Wh_Log(L"SWS: Alt+Tab/TaskView match: class=%s title='%s'", cls, title);
     return true;
 }
 
@@ -13205,10 +13215,89 @@ thread_exit:
     return 0;
 }
 
+// ─── Touchpad diagnostics (temporary, for the raw-HID touchpad refactor) ──────
+// Reads the Windows precision-touchpad swipe settings and logs this process's
+// integrity level: the raw reader planned for the touchpad refactor needs to know
+// which finger count Windows already consumes on the test machine, and whether the
+// tool-mod process runs above medium integrity (Windows does not deliver touchpad
+// raw input to a lower-integrity process while an elevated window is foreground).
+// Remove once the new reader is in place.
+
+static void LogPrecisionTouchpadConfig() {
+    HKEY key = NULL;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      L"Software\\Microsoft\\Windows\\CurrentVersion\\PrecisionTouchPad",
+                      0, KEY_READ, &key) != ERROR_SUCCESS) {
+        Wh_Log(L"SWS: PrecisionTouchPad settings key not found");
+        return;
+    }
+
+    for (const WCHAR* fingers : { L"ThreeFinger", L"FourFinger" }) {
+        WCHAR name[48];
+        DWORD value = 0, type = 0, size = sizeof(value);
+        swprintf_s(name, L"%sSlideEnabled", fingers);
+        LSTATUS status = RegQueryValueExW(key, name, nullptr, &type, (BYTE*)&value, &size);
+        if (status != ERROR_SUCCESS || type != REG_DWORD) {
+            Wh_Log(L"SWS: %s: not set (Windows default: swipes on)", name);
+            continue;
+        }
+        if (value != 0xFFFF) {
+            Wh_Log(L"SWS: %s = %u (%s)", name, value, value ? L"on" : L"off");
+            continue;
+        }
+        WCHAR enabled[96] = L"";
+        for (const WCHAR* dir : { L"Up", L"Down", L"Left", L"Right" }) {
+            DWORD dirValue = 0;
+            type = 0;
+            size = sizeof(dirValue);
+            swprintf_s(name, L"%s%s", fingers, dir);
+            if (RegQueryValueExW(key, name, nullptr, &type, (BYTE*)&dirValue, &size) == ERROR_SUCCESS &&
+                type == REG_DWORD && dirValue) {
+                if (enabled[0]) wcscat_s(enabled, L",");
+                wcscat_s(enabled, dir);
+            }
+        }
+        Wh_Log(L"SWS: %sSlideEnabled = custom per direction; swipes on for: %s",
+               fingers, enabled[0] ? enabled : L"(none)");
+    }
+
+    RegCloseKey(key);
+}
+
+static void LogProcessIntegrityLevel(const WCHAR* tag) {
+    HANDLE hToken = NULL;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        Wh_Log(L"SWS: %s: OpenProcessToken failed (%u)", tag, GetLastError());
+        return;
+    }
+    DWORD needed = 0;
+    GetTokenInformation(hToken, TokenIntegrityLevel, nullptr, 0, &needed);
+    std::vector<BYTE> buffer(needed ? needed : sizeof(TOKEN_MANDATORY_LABEL) + 64);
+    DWORD rid = 0;
+    if (GetTokenInformation(hToken, TokenIntegrityLevel, buffer.data(),
+                            (DWORD)buffer.size(), &needed)) {
+        TOKEN_MANDATORY_LABEL* label = (TOKEN_MANDATORY_LABEL*)buffer.data();
+        if (label->Label.Sid) {
+            UCHAR* count = GetSidSubAuthorityCount(label->Label.Sid);
+            if (count && *count > 0) {
+                DWORD* sub = GetSidSubAuthority(label->Label.Sid, (DWORD)(*count - 1));
+                if (sub) rid = *sub;
+            }
+        }
+    }
+    CloseHandle(hToken);
+    const WCHAR* level = (rid >= SECURITY_MANDATORY_SYSTEM_RID) ? L"system" :
+                         (rid >= SECURITY_MANDATORY_HIGH_RID)   ? L"high" :
+                         (rid >= SECURITY_MANDATORY_MEDIUM_RID) ? L"medium" : L"low";
+    Wh_Log(L"SWS: %s: integrity RID = 0x%X (%s)", tag, rid, level);
+}
+
 // Tool Mod callbacks
 
 BOOL WhTool_ModInit() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModInit");
+    LogProcessIntegrityLevel(L"tool-mod process");
+    LogPrecisionTouchpadConfig();
     if (!g_WM_SWS_TOUCHPAD_TRIGGER) {
         g_WM_SWS_TOUCHPAD_TRIGGER = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadTrigger");
     }
@@ -13321,6 +13410,8 @@ BOOL Wh_ModInit() {
         Wh_Log(L"SWS: Loaded into explorer.exe, setting up hooks");
 
         g_settings.handleTouchpadGestures = LoadBoolSetting(L"Accessibility.handleTouchpadGestures", true);
+        LogProcessIntegrityLevel(L"explorer.exe");
+        LogPrecisionTouchpadConfig();
 
         if (!g_WM_SWS_GET_UWP_ICON) {
             g_WM_SWS_GET_UWP_ICON = RegisterWindowMessageW(L"Windhawk_SWS_GetUwpIcon");
