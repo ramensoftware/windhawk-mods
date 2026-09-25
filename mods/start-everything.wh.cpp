@@ -66,7 +66,7 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 - /c <number>: Display all configured unit conversions and programmer radix (Hex, Bin, Oct).
 - /c <number> <unit>: Targeted unit conversion (e.g. /c 100 km, /c 32 c, /c 50 lbs).
 - /ip: List all active network interfaces and IP addresses.
-- ?<term>: Web search using default search engine.
+- ? <term>: Web search using default search engine.
 - ?<shortcut> <term>: Targeted web search (e.g. ?yt lo-fi, ?gh windhawk, ?w physics, ?r windows).
 */
 // ==/WindhawkModReadme==
@@ -4367,9 +4367,9 @@ void TriggerMenuOpenFocus() {
             HWND fg = GetForegroundWindow();
             DWORD fgPid = 0;
             if (fg) GetWindowThreadProcessId(fg, &fgPid);
-            // Reclaim foreground from SearchHost or other window if lost within the grace window
-            if (fg != ours && fgPid != GetCurrentProcessId()) {
-                TakeForeground(true);
+            // Reclaim foreground only from SearchHost if it temporarily stole it
+            if (fg != ours && (fg == nullptr || IsProcessNamed(fgPid, L"SearchHost.exe"))) {
+                TakeForeground();
             }
             FocusOurBoxNow();
             auto now = wux::Input::FocusManager::GetFocusedElement();
@@ -4613,25 +4613,6 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
             if (g_openFocus) {
                 g_openFocus.Stop();
                 g_openFocus = nullptr;
-            }
-        }
-    } else if (uMsg == WM_WINDOWPOSCHANGED) {
-        WINDOWPOS* wp = reinterpret_cast<WINDOWPOS*>(lParam);
-        if (wp && !(wp->flags & SWP_HIDEWINDOW)) {
-            if (!IsOurWindowCloaked()) {
-                HWND fg = GetForegroundWindow();
-                if (fg != hWnd) {
-                    DWORD fgPid = 0;
-                    if (fg) GetWindowThreadProcessId(fg, &fgPid);
-                    if (fgPid != GetCurrentProcessId()) {
-                        Wh_Log(L"subclass: WM_WINDOWPOSCHANGED uncloaked, fg=%p (ours=%p) -> claiming foreground", fg, hWnd);
-                        g_suppressRefocus.store(false);
-                        TakeForeground(true);
-                        TriggerMenuOpenFocus();
-                    }
-                } else {
-                    TriggerMenuOpenFocus();
-                }
             }
         }
     } else if (uMsg == WM_SETFOCUS) {
