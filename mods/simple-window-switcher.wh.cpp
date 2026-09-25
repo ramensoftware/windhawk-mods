@@ -8469,7 +8469,6 @@ static void RevealPendingSwitcher() {
     }
     ShowBackdropBlur(); // blurred backdrop behind the switcher (opt-in)
     ShowWindow(g_hSwitcher, SW_SHOWNA);
-    ShowWindow(g_hSwitcher, SW_SHOWNA);
     BringWindowToTop(g_hSwitcher);
     SetForegroundWindow(g_hSwitcher);
     // Mirrors already carry frame 0 (pushed by PaintSwitcher above); show them
@@ -9365,11 +9364,6 @@ static void EnterAppGroup() {
             GetWindowTextW(hw, e.title, 256);
             if (!e.title[0]) InternalGetWindowText(hw, e.title, 256);
             e.hIcon = LoadWindowIcon(hw);
-            // Freshly-built entries have no DWM thumbnail yet, so RefreshEntrySourceSize
-            // falls back to the live window rect. Pre-populating effectiveSourceSize here
-            // (same fix as the dynamic-addition path) prevents the 1:1-square fallback in
-            // ComputeLayout, which left the last drilled-in thumbnail shrunken.
-            RefreshEntrySourceSize(e);
             g_windows.push_back(std::move(e));
         }
         if (g_windows.empty()) {  // every window closed in the meantime; abort
@@ -9493,7 +9487,6 @@ static void EnterAppGroup() {
             GetWindowTextW(hw, e.title, 256);
             if (!e.title[0]) InternalGetWindowText(hw, e.title, 256);
             e.hIcon = LoadWindowIcon(hw);
-            RefreshEntrySourceSize(e); // avoid 1:1-square fallback for fresh entries
             g_windows.push_back(std::move(e));
         }
         if (g_windows.empty()) {
@@ -9612,18 +9605,11 @@ static void ExitAppGroup() {
         // rcThumbTarget are final. Same order as RecomputeAndReposition.
         RegisterThumbnailsEarly();
         HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
+        // RefreshEntrySourceSize already covers the no-thumbnail and DWM-query-failed
+        // cases (restore rect for minimized windows, live rect otherwise), so no extra
+        // zero-size fallback is needed here.
         for (auto& w : g_windows) {
             RefreshEntrySourceSize(w);
-            if (w.effectiveSourceSize.cx <= 0 || w.effectiveSourceSize.cy <= 0) {
-                RECT wr = {};
-                if (w.hWnd && IsWindow(w.hWnd) && GetWindowRect(w.hWnd, &wr)) {
-                    int ww = wr.right - wr.left, wh = wr.bottom - wr.top;
-                    if (ww > 0 && wh > 0) {
-                        w.sourceSize = { ww, wh };
-                        w.effectiveSourceSize = { ww, wh };
-                    }
-                }
-            }
         }
         ComputeLayout(hMon);
         if (DockLayoutActive()) UpdateDockPreviewForSelection();
