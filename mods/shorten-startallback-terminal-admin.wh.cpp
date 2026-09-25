@@ -11,6 +11,24 @@
 // @license MIT
 // ==/WindhawkMod==
 
+// ==WindhawkModReadme==
+/*
+# Shorten StartAllBack Terminal Admin
+
+Shortens the Russian StartAllBack menu label:
+
+`Терминал Windows (Администратор)`
+
+to:
+
+`Терминал Windows (Админ)`
+
+The replacement text can be customized in the mod settings.
+
+This mod is intended for systems using the Russian Windows/StartAllBack interface.
+*/
+// ==/WindhawkModReadme==
+
 // ==WindhawkModSettings==
 /*
 - newText: Терминал Windows (Админ)
