@@ -30,7 +30,8 @@ A high-performance, native replacement for Windows 11 Start Menu search powered 
 - Inline Calculator: Type /c <expression> (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200, /c 2^10) to evaluate math expressions instantly. Press Enter to copy the result.
 - Configurable Unit Conversions: Type /c <number> [unit] to convert units using formulas configured in Mod Settings. Users can add, edit, or delete conversion items individually from the settings UI.
 - Network Interface Inspector: Type /ip to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
-- Full Right-Click Context Menu: Right-click any file, folder, or application to Open, Run as Administrator, Create desktop shortcut, Cut/Copy (files), Copy path, or Open file location.
+- Full Right-Click Context Menu: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal (folders), Properties, Create desktop shortcut, Cut/Copy (files), Copy path, or Open file location.
+- Explorer Shell Property Relay: Seamlessly bridges the AppContainer isolation boundary to display native Win32 properties dialogs hosted directly by explorer.exe.
 - Explicit Web Search: Trigger web searches on demand using the '?' prefix (e.g. '?query'). Includes customizable keyword shortcuts such as '?yt' (YouTube), '?gh' (GitHub), '?w' (Wikipedia), and '?r' (Reddit).
 - Start Menu Styler Compatibility: Automatically syncs background styles (Tinted Glass, Acrylic, custom theme colors) in real time without restarting the mod.
 - Robust Win32 Key Listener: Combines a WH_GETMESSAGE UI thread hook, HWND subclassing, and XAML CoreWindow handling to ensure zero dropped keystrokes.
@@ -55,7 +56,9 @@ All searches will now seamlessly route through the native Start Menu (Windows Ke
 - Enter: Launch the selected application, copy calculation/conversion/IP result, or open item.
 - Ctrl + Enter: Run the selected application or file as Administrator (triggers UAC).
 - Escape: Clear the current query and smoothly collapse the search palette back to pinned apps.
-- Right-Click: Context menu with Open, Run as Administrator, Create desktop shortcut, Cut/Copy (files), Copy path, and Open file location.
+- Right-Click: Context menu with Open, Run as Administrator, Open in terminal, Properties, Create desktop shortcut, Cut/Copy (files), Copy path, and Open file location.
+
+Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start Menu. Use 'Create desktop shortcut' first, then right-click the shortcut on your desktop and select 'Pin to Taskbar' or 'Pin to Start'.
 
 ## Command Reference
 
