@@ -2,12 +2,110 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-24T22:03:37.000Z</updated>
+    <updated>2026-09-25T10:23:11.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Chrome Context Menu Items 1.0.0]]></title>
+        <id>https://windhawk.net/mods/chrome-context-menu-items#b0a115af85f476fd7e61a7ccfc9b06770f8d9b9f</id>
+        <link href="https://windhawk.net/mods/chrome-context-menu-items"/>
+        <updated>2026-09-25T10:23:11.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="chromecontextmenuitems">Chrome Context Menu Items</h1>
+<p>Clean up and restyle <strong>Google Chrome's menus</strong>: hide the built-in context menu
+entries you never use, add your own commands, group extension entries into one
+submenu, and change how menus, tabs and extension buttons look.</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/chrome-context-menu-items/screenshots/main.gif" alt="Chrome Context Menu Items demo" /></p>
+<p>Designed for 64-bit Chrome on Windows.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Hide built-in items</strong> - individually hide Ask Gemini, Print, Cast, Save page
+as, Open in reading mode, Search with Google Lens, Send to your devices, Create
+QR Code, Translate, Translate selection, View page source, Save link as, Open
+link in split view and Search image with Google Lens.</li>
+<li><strong>Hide by label</strong> - hide any page menu entry whose label contains a piece of
+text, ignoring case. Works for Chrome commands, extension entries, submenus and
+your own items (up to 64 rules).</li>
+<li><strong>Custom commands</strong> - add up to 64 entries to the page right-click menu. Each
+one opens a program, document, folder or URL, with optional arguments, working
+directory and environment variables such as <code>%USERPROFILE%</code>, and can run as
+administrator or in a minimized, maximized or hidden window.</li>
+<li><strong>Custom items group</strong> - optionally put your custom commands into one submenu
+with a label of your choice.</li>
+<li><strong>Extensions submenu</strong> - move all extension commands into a single
+<strong>Extensions</strong> submenu, keeping their icons, submenus, checked states and
+actions.</li>
+<li><strong>Precise ordering</strong> - place custom items, the Custom group and the Extensions
+submenu at an exact position: <code>1</code>, <code>2</code>, … from the top, <code>-1</code>, <code>-2</code>, … from the
+bottom, or <code>0</code> to append.</li>
+<li><strong>Menu appearance</strong> - font size, item spacing, item corner radius, group
+padding, top / bottom spacing, custom background colors, background
+transparency and a custom group border.</li>
+<li><strong>Choose which menus to style</strong> - page right-click, the three-dot menu, tab
+menus, bookmark menus and all other Chrome menus, each with their submenus.</li>
+<li><strong>Less clutter</strong> - hide leading icons (everywhere, or only in the main page
+menu) and keyboard shortcut labels, without disabling the shortcuts.</li>
+<li><strong>Tabs and toolbar</strong> - tab title font size, hidden tab close buttons, tab
+icon-to-title spacing and extension button width.</li>
+</ul>
+<h2 id="screenshots">Screenshots</h2>
+<p>Hiding built-in context menu items:</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/chrome-context-menu-items/screenshots/hide-context-menu-items.gif" alt="Hide context menu items" /></p>
+<p>Hiding any item by its label, including extension entries:</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/chrome-context-menu-items/screenshots/hide-custom-context-menu-items.gif" alt="Hide custom context menu items" /></p>
+<p>Grouping extension commands into one Extensions submenu:</p>
+<p><img src="https://raw.githubusercontent.com/DanRotaru/windhawk-mods/master/chrome-context-menu-items/screenshots/group-extensions-context-menu.gif" alt="Group extensions" /></p>
+<h2 id="defaultconfiguration">Default configuration</h2>
+<p>Out of the box the mod:</p>
+<ul>
+<li>Styles all menu families with an item corner radius of 8, group padding of 4,
+top / bottom spacing of 6 and a <code>#3b3b3b</code> group border. Background
+transparency is off.</li>
+<li>Hides Ask Gemini, Print, Cast, Save page as, Open in reading mode, Search with
+Google Lens, Send to your devices, Create QR Code, both Translate entries, Open
+link in split view and Search image with Google Lens. <em>View page source</em> and
+<em>Save link as</em> stay visible.</li>
+<li>Hides icons in the main page right-click menu and keyboard shortcut labels.</li>
+<li>Groups extension commands into an <strong>Extensions</strong> submenu, second-last.</li>
+<li>Adds no custom commands and leaves tabs and extension buttons at Chrome's
+defaults.</li>
+</ul>
+<p>Everything is configurable in the mod settings. Use <strong>Chrome default</strong> or
+disable an option to restore its normal behavior.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod hooks Chrome's own menu code in <code>chrome.dll</code>: the page context menu
+(<code>RenderViewContextMenu</code>) to hide, add, group and reorder entries, and the
+shared Views menu classes to change fonts, spacing, colors and borders. Tab and
+toolbar tweaks hook Chrome's tab and toolbar views.</p>
+<p>These functions aren't exported, so their addresses come from Chrome's debug
+symbols, which Windhawk downloads from Chromium's symbol server. The download is
+several gigabytes and happens once for each new Chrome build; Windhawk caches
+the result, so later launches of the same build start right away. Every hook is
+matched by its full decorated name, so if Chrome changes a function's signature,
+that feature is simply unavailable instead of being hooked with the wrong
+arguments.</p>
+<p>If preparing a new build takes longer than 5 seconds, Chrome starts without the
+mod's changes and a tray icon reports the progress. Restart Chrome once it says
+setup is complete.</p>
+<h3 id="notes">Notes</h3>
+<ul>
+<li>Close and reopen menus after changing settings. Open menus are closed when the
+mod is disabled or updated.</li>
+<li>If the mod is disabled while the debug symbols for a new Chrome build are
+still downloading, Windhawk waits for the download to finish before unloading
+the mod, which can take several minutes.</li>
+<li>The tab, extension button and menu font / spacing / corner radius options
+overlap with Chrome Native UI Tweaks. If you use both mods, configure each of
+those options in one mod only and leave it at Chrome default in the other.</li>
+<li>Thanks to Dron007, this mod started from it.</li>
+</ul>]]></content>
+        <author>
+            <name>DanRotaru</name>
+            <uri>https://github.com/DanRotaru</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Volume Percentage Indicator 1.6.3]]></title>
         <id>https://windhawk.net/mods/taskbar-volume-percentage#d716eb9c201b51aaa77af303bfd64272e4ea2ab5</id>
@@ -1795,40 +1893,6 @@ option in Win32 UI Modernizer; using both for this effect is redundant.</li>
         <author>
             <name>Hùng</name>
             <uri>https://github.com/NoMorePlz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Visual Tweaks Dark 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-visual-tweaks-dark#0e6b56702ef4219f8b01cfce98cd8a4f7d4adcfb</id>
-        <link href="https://windhawk.net/mods/explorer-visual-tweaks-dark"/>
-        <updated>2026-09-20T19:00:54.000Z</updated>
-        <content type="html"><![CDATA[<p>This mod fixes visual inconsistencies in Windows Explorer and related windows,
-primarily in the standard dark theme. It brings the Preview Pane, plain-text
-preview, drive progress indicators, item selection, and Navigation Pane focus
-states to a consistent appearance, and allows their colors and rounding to be
-customized.
-The selection and progress renderers aren't tied to a particular theme.
-Their default colors are tuned for the standard dark theme, but can be changed
-to suit another theme. The Preview Pane correction is intentionally inactive
-in the standard light app mode, where the original color mismatch doesn't
-exist.
-Selection styling applies to Explorer and Explorer-based Open/Save dialogs.
-Drive progress rendering replaces only the PROGRESS part/state pairs used by
-Explorer. Preview Pane fixes cover Explorer, Open/Save dialog hosts, and
-prevhost.exe.
-Selection and Progress settings apply immediately.</p>
-<h3 id="screenshots">Screenshots</h3>
-<p><img src="https://raw.githubusercontent.com/VitalSkib/files/refs/heads/main/explorer-visual-tweaks-dark-thispc.png" alt="Explorer selections and drive progress" />
-<img src="https://raw.githubusercontent.com/VitalSkib/files/refs/heads/main/explorer-visual-tweaks-dark-text.png" alt="Preview Pane and plain-text preview" />
-<strong>Important:</strong> Preview Pane tweaks require restarting File Explorer and any
-included host applications for changed values and colors to apply correctly.
-A restart is also required after disabling the mod to fully restore the
-default Preview Pane appearance.
-To style an Explorer-based Open/Save dialog, add its host application to
-Windhawk's Inclusion List.</p>]]></content>
-        <author>
-            <name>VitalS</name>
-            <uri>https://github.com/VitalSkib</uri>
         </author>
     </entry>
 </feed>
