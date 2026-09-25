@@ -7,8 +7,28 @@ import { Feed } from 'feed';
 import { OutgoingHttpHeaders } from 'http';
 import showdown from 'showdown';
 
+// Author name variations of the same github account. The first item of each
+// pair is the canonical name.
+const allowedAuthorNamePairs = [
+    ['CatmanFan / Mr._Lechkar', 'CatmanFan'],
+    ['Anixx', 'anixx'],
+    ['Isabella Lulamoon (kawapure)', 'kawapure'],
+];
+
+// Github accounts of the same author, e.g. after a rename, where old mod
+// versions still refer to the old account. The first item of each pair is the
+// current account.
+const allowedAuthorGithubPairs = [
+    ['https://github.com/meteoni', 'https://github.com/meteony'],
+    ['https://github.com/getrektbynoob15', 'https://github.com/getrektbynoob20'],
+];
+
 type ModAuthorData = {
     github: string;
+    // The numeric id of the github account, which, unlike the login, is never
+    // reused. Null if the account at the login isn't the author's. Kept from the
+    // last deploy once recorded.
+    githubId?: number | null;
     author: string;
     homepages: string[],
     twitter?: string;
@@ -22,6 +42,27 @@ type CommitMeta = {
 type FileChange = {
     changeType: string;
     filePath: string;
+};
+
+// A row of the update server's reviews/get_all.php: approved reviews only,
+// in ascending id. A reply is a review whose parentId names another.
+type PublicReview = {
+    id: number;
+    modId: string;
+    parentId: number | null;
+    timestamp: number;
+    authorName: string;
+    modVersion: string | null;
+    content: string;
+    votes: number;
+};
+
+type ModReviews = {
+    // The number of top-level reviews (replies excluded), what the catalog
+    // carries.
+    count: number;
+    // The file's entries, in the order the server gave them.
+    reviews: Omit<PublicReview, 'modId'>[];
 };
 
 class GitCache {
@@ -70,6 +111,12 @@ class GitCache {
     }
 }
 
+class HttpError extends Error {
+    constructor(public statusCode: number | undefined, body: string) {
+        super('Request failed. status: ' + statusCode + ', body: ' + body);
+    }
+}
+
 // Inspired by https://gist.github.com/ktheory/df3440b01d4b9d3197180d5254d7fb65
 async function fetchJson(url: string, headers?: OutgoingHttpHeaders) {
     return new Promise<any>((resolve, reject) => {
@@ -83,7 +130,7 @@ async function fetchJson(url: string, headers?: OutgoingHttpHeaders) {
                     if (res.statusCode && res.statusCode >= 200 && res.statusCode <= 299) {
                         resolve(JSON.parse(body));
                     } else {
-                        reject('Request failed. status: ' + res.statusCode + ', body: ' + body);
+                        reject(new HttpError(res.statusCode, body));
                     }
                 });
             });
@@ -100,6 +147,13 @@ function JSONstringifyOrder(obj: any, space: number) {
         return value;
     });
     return JSON.stringify(obj, Array.from(allKeys).sort(), space);
+}
+
+// Puts arrays of plain numbers in formatted JSON on a single line. Can't match
+// inside strings, since JSON strings can't contain raw newlines.
+function JSONcompactNumberArrays(json: string) {
+    return json.replace(/\[\s*(-?[\d.eE+-]+(?:,\s*-?[\d.eE+-]+)*)\s*\]/g,
+        (_match, items: string) => '[' + items.split(/,\s*/).join(', ') + ']');
 }
 
 function gitExec(args: string[]) {
@@ -340,19 +394,11 @@ function validateAndUpdateAuthorData(
     }
 
     if (metadata.author !== entry.author) {
-        // Allow specific known author name variations
-        const allowedPairs = [
-            ['CatmanFan / Mr._Lechkar', 'CatmanFan'],
-            ['Anixx', 'anixx'],
-            ['Isabella Lulamoon (kawapure)', 'kawapure'],
-        ];
-
-        const matchedPair = allowedPairs.find(pair =>
+        const matchedPair = allowedAuthorNamePairs.find(pair =>
             pair.includes(metadata.author) && pair.includes(entry.author)
         );
 
         if (matchedPair) {
-            // Normalize to the first item in the pair
             entry.author = matchedPair[0];
         } else {
             inconsistencies.push(`author: expected '${entry.author}', got '${metadata.author}'`);
@@ -433,7 +479,14 @@ function generateChangelogEntry(modId: string, commit: string, lastCommit: strin
     return { changelogEntry, commitTime };
 }
 
-function generateModData(modId: string, changelogPath: string, modDir: string, modAuthorData: Record<string, ModAuthorData>, cache: GitCache) {
+function generateModData(
+    modId: string,
+    changelogPath: string,
+    modDir: string,
+    modAuthorData: Record<string, ModAuthorData>,
+    authorFirstSubmission: Map<string, number>,
+    cache: GitCache
+) {
     if (!fs.existsSync(modDir)) {
         fs.mkdirSync(modDir);
     }
@@ -466,6 +519,13 @@ function generateModData(modId: string, changelogPath: string, modDir: string, m
             homepage: metadata.homepage,
             twitter: metadata.twitter,
         }, modAuthorData);
+
+        const authorKey = metadata.github.toLowerCase();
+        const submissionTime = cache.getCommitMeta(commit).timestamp * 1000;
+        const firstSubmission = authorFirstSubmission.get(authorKey);
+        if (firstSubmission === undefined || submissionTime < firstSubmission) {
+            authorFirstSubmission.set(authorKey, submissionTime);
+        }
 
         const prerelease = metadata.version.includes('-');
         if (prerelease && sawReleaseVersion) {
@@ -508,8 +568,87 @@ function generateModData(modId: string, changelogPath: string, modDir: string, m
     fs.writeFileSync(versionsPath, JSON.stringify(versions));
 }
 
+async function fetchGithubUser(login: string): Promise<{ id: number; createdAt: number } | null> {
+    try {
+        const user = await fetchJson(`https://api.github.com/users/${encodeURIComponent(login)}`, {
+            Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+        });
+        return { id: user.id, createdAt: Date.parse(user.created_at) };
+    } catch (e) {
+        if (e instanceof HttpError && e.statusCode === 404) {
+            return null;
+        }
+        throw e;
+    }
+}
+
+// Ids are looked up only for accounts with no id recorded in the last deploy,
+// so that a deleted account whose login was registered again by someone else
+// keeps the id of its original owner. A login with no account, or with an
+// account created after the first submission under it, is recorded as null.
+async function assignGithubIds(
+    modAuthorData: Record<string, ModAuthorData>,
+    authorFirstSubmission: Map<string, number>
+) {
+    const lastDeployPath = process.env.WINDHAWK_MODS_LAST_DEPLOY_PATH;
+    if (!lastDeployPath) {
+        throw new Error('WINDHAWK_MODS_LAST_DEPLOY_PATH is not set');
+    }
+
+    const lastModAuthorDataPath = path.join(lastDeployPath, 'mod_author_data.json');
+    const lastModAuthorData: Record<string, ModAuthorData> = fs.existsSync(lastModAuthorDataPath)
+        ? JSON.parse(fs.readFileSync(lastModAuthorDataPath, 'utf8'))
+        : {};
+
+    // The login of a renamed account no longer belongs to the author.
+    const renamedGithubs = new Set(allowedAuthorGithubPairs.flatMap(pair => pair.slice(1)));
+
+    for (const [authorKey, data] of Object.entries(modAuthorData)) {
+        if (renamedGithubs.has(authorKey)) {
+            data.githubId = null;
+            continue;
+        }
+
+        const lastGithubId = lastModAuthorData[authorKey]?.githubId;
+        if (lastGithubId !== undefined) {
+            data.githubId = lastGithubId;
+            continue;
+        }
+
+        const match = data.github.match(/^https:\/\/github\.com\/([A-Za-z0-9-]+)$/);
+        if (!match) {
+            throw new Error(`Unexpected github URL '${data.github}'`);
+        }
+
+        const user = await fetchGithubUser(match[1]);
+        if (user === null) {
+            console.warn(`Github account ${data.github} doesn't exist, recording a null id`);
+            data.githubId = null;
+            continue;
+        }
+
+        const firstSubmission = authorFirstSubmission.get(authorKey);
+        if (firstSubmission === undefined) {
+            throw new Error(`No submissions found for ${data.github}`);
+        }
+
+        if (!(user.createdAt < firstSubmission)) {
+            console.warn(
+                `Github account ${data.github} (id ${user.id}) was created at` +
+                ` ${new Date(user.createdAt).toISOString()}, after its first submission at` +
+                ` ${new Date(firstSubmission).toISOString()}, recording a null id`);
+            data.githubId = null;
+            continue;
+        }
+
+        console.log(`Recording github id ${user.id} for ${data.github}`);
+        data.githubId = user.id;
+    }
+}
+
 function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
     const seenGithub = new Map<string, string>();
+    const seenGithubId = new Map<number, string>();
     const seenAuthor = new Map<string, string>();
     const seenHomepage = new Map<string, string>();
     const seenTwitter = new Map<string, string>();
@@ -521,9 +660,26 @@ function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
         }
         seenGithub.set(githubLower, authorKey);
 
+        if (data.githubId !== undefined && data.githubId !== null) {
+            const seenGithubIdKey = seenGithubId.get(data.githubId);
+            if (seenGithubIdKey !== undefined) {
+                throw new Error(
+                    `Duplicate github id ${data.githubId} found for authors '${authorKey}' and '${seenGithubIdKey}',` +
+                    ` a renamed account must be added to allowedAuthorGithubPairs`);
+            }
+            seenGithubId.set(data.githubId, authorKey);
+        }
+
         const authorLower = data.author.toLowerCase();
-        if (seenAuthor.has(authorLower) && seenAuthor.get(authorLower) !== authorKey) {
-            throw new Error(`Duplicate author name '${data.author}' found for authors '${authorKey}' and '${seenAuthor.get(authorLower)}'`);
+        const seenAuthorKey = seenAuthor.get(authorLower);
+        if (seenAuthorKey !== undefined && seenAuthorKey !== authorKey) {
+            const allowed = allowedAuthorGithubPairs.some(pair =>
+                pair.includes(authorKey) && pair.includes(seenAuthorKey)
+            );
+
+            if (!allowed) {
+                throw new Error(`Duplicate author name '${data.author}' found for authors '${authorKey}' and '${seenAuthorKey}'`);
+            }
         }
         seenAuthor.set(authorLower, authorKey);
 
@@ -545,13 +701,14 @@ function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
     }
 }
 
-function generateModsData(cache: GitCache) {
+async function generateModsData(cache: GitCache) {
     const changelogDir = 'changelogs';
     if (!fs.existsSync(changelogDir)) {
         fs.mkdirSync(changelogDir);
     }
 
     const modAuthorData: Record<string, ModAuthorData> = {};
+    const authorFirstSubmission = new Map<string, number>();
 
     const modsSourceDir = fs.opendirSync('mods');
     try {
@@ -561,19 +718,70 @@ function generateModsData(cache: GitCache) {
                 const modId = modsSourceDirEntry.name.slice(0, -'.wh.cpp'.length);
                 const changelogPath = path.join(changelogDir, `${modId}.md`);
                 const modDir = path.join('mods', modId);
-                generateModData(modId, changelogPath, modDir, modAuthorData, cache);
+                generateModData(modId, changelogPath, modDir, modAuthorData, authorFirstSubmission, cache);
             }
         }
     } finally {
         modsSourceDir.closeSync();
     }
 
+    await assignGithubIds(modAuthorData, authorFirstSubmission);
+
     validateModAuthorData(modAuthorData);
 
     fs.writeFileSync('mod_author_data.json', JSONstringifyOrder(modAuthorData, 2));
 }
 
-function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: any, cache: GitCache) {
+function groupReviews(allReviews: PublicReview[], knownModIds: Set<string>): Map<string, ModReviews> {
+    const byMod = new Map<string, ModReviews>();
+    for (const { modId, ...review } of allReviews) {
+        if (!knownModIds.has(modId)) {
+            // A review on a mod that is no longer in the repository has no
+            // page to be read on and no file name to trust.
+            console.warn(`Skipping review ${review.id} on unknown mod ${modId}`);
+            continue;
+        }
+        let entry = byMod.get(modId);
+        if (!entry) {
+            entry = { count: 0, reviews: [] };
+            byMod.set(modId, entry);
+        }
+        entry.reviews.push(review);
+        if (review.parentId === null) {
+            entry.count++;
+        }
+    }
+    return byMod;
+}
+
+// Writes reviews/<modId>.json for each mod with at least one top-level
+// review. The directory is rebuilt from scratch every run, so a mod that lost
+// its last review loses its file at the deploy step's git add -A.
+function writeModReviews(byMod: Map<string, ModReviews>) {
+    const reviewsDir = 'reviews';
+    if (!fs.existsSync(reviewsDir)) {
+        fs.mkdirSync(reviewsDir);
+    }
+    for (const [modId, { count, reviews }] of byMod) {
+        if (count === 0) {
+            // The server omits replies whose review is unapproved, so this
+            // is unreachable today; kept as the file's own invariant.
+            continue;
+        }
+        fs.writeFileSync(
+            path.join(reviewsDir, `${modId}.json`),
+            JSONstringifyOrder({ modId, reviews }, 2),
+        );
+    }
+}
+
+function enrichCatalog(
+    catalog: Record<string, any>,
+    enrichment: any,
+    reviewsByMod: Map<string, ModReviews>,
+    modTimes: any,
+    cache: GitCache,
+) {
     const app = {
         version: enrichment.app.version,
         versionBleedingEdge: enrichment.app.versionBleedingEdge,
@@ -603,6 +811,9 @@ function enrichCatalog(catalog: Record<string, any>, enrichment: any, modTimes: 
                 ratingUsers: 0,
                 ratingBreakdown: [0, 0, 0, 0, 0],
                 ...enrichment.mods[id]?.details,
+                // After the spread: the count must come from the same fetch
+                // as the mod's reviews file, whatever the enrichment carries.
+                reviews: reviewsByMod.get(id)?.count ?? 0,
             },
         };
 
@@ -621,6 +832,15 @@ async function generateModCatalogs(cache: GitCache) {
     const enrichmentUrl = 'https://update.windhawk.net/mods_catalog_enrichment.json';
     const enrichment = await fetchJson(enrichmentUrl);
 
+    // A failed fetch fails the run, like the enrichment: a deploy that went on
+    // with an empty list would delete every reviews file and zero every
+    // count for a day.
+    const reviewsUrl = 'https://update.windhawk.net/reviews/get_all.php';
+    const allReviews: PublicReview[] = await fetchJson(reviewsUrl);
+    if (!Array.isArray(allReviews)) {
+        throw new Error(`Expected an array from ${reviewsUrl}`);
+    }
+
     const translateFilesUrl = 'https://api.github.com/repos/ramensoftware/windhawk-translate/contents';
     const translateFiles = await fetchJson(translateFilesUrl, {
         Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
@@ -631,8 +851,11 @@ async function generateModCatalogs(cache: GitCache) {
     const modTimes = {};
 
     const englishCatalog = modSourceUtils.getMetadataOfMods('en-US');
-    const englishCatalogEnriched = enrichCatalog(englishCatalog, enrichment, modTimes, cache);
-    fs.writeFileSync('catalog.json', JSONstringifyOrder(englishCatalogEnriched, 2));
+    const reviewsByMod = groupReviews(allReviews, new Set(Object.keys(englishCatalog)));
+    writeModReviews(reviewsByMod);
+
+    const englishCatalogEnriched = enrichCatalog(englishCatalog, enrichment, reviewsByMod, modTimes, cache);
+    fs.writeFileSync('catalog.json', JSONcompactNumberArrays(JSONstringifyOrder(englishCatalogEnriched, 2)));
 
     const catalogsDir = 'catalogs';
     if (!fs.existsSync(catalogsDir)) {
@@ -647,7 +870,7 @@ async function generateModCatalogs(cache: GitCache) {
 
         const language = translateFileName.slice(0, -'.yml'.length);
         const catalog = modSourceUtils.getMetadataOfMods(language);
-        const catalogEnriched = enrichCatalog(catalog, enrichment, modTimes, cache);
+        const catalogEnriched = enrichCatalog(catalog, enrichment, reviewsByMod, modTimes, cache);
 
         // Keep the original (English) name and description for searching,
         // copying each field only if the translation changed it.
@@ -670,7 +893,7 @@ async function generateModCatalogs(cache: GitCache) {
             }
         }
 
-        fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONstringifyOrder(catalogEnriched, 2));
+        fs.writeFileSync(path.join(catalogsDir, `${language}.json`), JSONcompactNumberArrays(JSONstringifyOrder(catalogEnriched, 2)));
     }
 }
 
@@ -803,7 +1026,7 @@ function generateRssFeed(feedType: 'updates' | 'releases', cache: GitCache) {
 async function main() {
     const cache = buildGitCache();
 
-    generateModsData(cache);
+    await generateModsData(cache);
 
     await generateModCatalogs(cache);
 

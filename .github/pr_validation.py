@@ -5,10 +5,13 @@ PURPOSE:     Verifies the mod information in the modified mods.
 COPYRIGHT:   Copyright 2023 Mark Jansen <mark.jansen@reactos.org>
 '''
 
+import http.client
 import json
+import math
 import os
 import re
 import sys
+import time
 import unicodedata
 import urllib.error
 import urllib.parse
@@ -26,6 +29,17 @@ DISALLOWED_AUTHORS = [
     # https://github.com/ramensoftware/windhawk-mods/pull/676
     'arukateru',
 ]
+
+
+# A reviewer adds this label to a pull request once they've confirmed that the
+# X (Twitter) account and the GitHub account belong to the same person.
+TWITTER_VERIFIED_LABEL = 'twitter-verified'
+
+
+@cache
+def get_pr_labels() -> set[str]:
+    """Labels that are on the pull request, as passed in by the workflow."""
+    return set(json.loads(os.environ.get('PR_LABELS', '[]')))
 
 
 ALLOWED_AUTHOR_NAME_CHANGES = {
@@ -72,6 +86,22 @@ CALLBACK_SIGNATURES: dict[str, list[str]] = {
     'WhTool_ModSettingsChanged': ['void WhTool_ModSettingsChanged()'],
     'WhTool_ModEntryPoint': ['void WhTool_ModEntryPoint()'],
 }
+
+
+# A tool mod runs in Windhawk's own processes rather than being injected into
+# other programs. Its Windhawk targets must be exactly one of these sets.
+TOOL_MOD_ALLOWED_INCLUDES = [
+    ['windhawk.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe', 'windhawk-mod-uiaccess.exe'],
+    ['windhawk.exe', 'windhawk-mod.exe', 'windhawk-mod-elevated.exe'],
+    [
+        'windhawk.exe',
+        'windhawk-mod.exe',
+        'windhawk-mod-uiaccess.exe',
+        'windhawk-mod-elevated.exe',
+    ],
+]
 
 
 # RFC 3986 unreserved and reserved characters, plus % for percent-encoding.
@@ -197,18 +227,50 @@ def get_mod_file_metadata(
     return properties, warnings
 
 
+FETCH_ATTEMPTS = 3
+
+
+class FetchError(Exception):
+    """A fetch failed even after retries, most likely due to a transient network
+    problem rather than anything in the mod being validated."""
+
+
+def fetch_url(url: str) -> bytes:
+    """Fetch a URL, retrying connection errors and 5xx responses. 4xx responses
+    are raised as HTTPError right away so callers can treat 404 as "not found"."""
+    last_error: Optional[Exception] = None
+    for attempt in range(1, FETCH_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(url) as response:
+                return response.read()
+        except urllib.error.HTTPError as e:
+            if e.code < 500:
+                raise
+            last_error = e
+        except (OSError, http.client.HTTPException) as e:
+            last_error = e
+
+        if attempt < FETCH_ATTEMPTS:
+            print(f'Fetching {url} failed ({last_error!r}), retrying...')
+            time.sleep(2)
+
+    raise FetchError(
+        f'Failed to fetch {url} after {FETCH_ATTEMPTS} attempts ({last_error!r}).'
+        ' This is most likely a temporary network error unrelated to the mod'
+        ' itself, re-run the workflow to try again.'
+    )
+
+
 @cache
 def get_mod_author_data():
     url = 'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mod_author_data.json'
-    response = urllib.request.urlopen(url).read()
-    return json.loads(response)
+    return json.loads(fetch_url(url))
 
 
 @cache
 def get_valid_license_identifiers_lowercase():
     url = 'https://spdx.org/licenses/licenses.json'
-    response = urllib.request.urlopen(url).read()
-    data = json.loads(response)
+    data = json.loads(fetch_url(url))
     return {license['licenseId'].lower() for license in data['licenses']}
 
 
@@ -221,8 +283,7 @@ def get_existing_mod_metadata(mod_id: str) -> Optional[dict]:
     """Fetch existing mod metadata from mods.windhawk.net, or None if mod doesn't exist."""
     try:
         url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}.wh.cpp'
-        response = urllib.request.urlopen(url)
-        content = response.read().decode('utf-8')
+        content = fetch_url(url).decode('utf-8')
 
         # Use existing robust metadata parser (no warnings needed for existing mods)
         properties, _ = get_mod_file_metadata(StringIO(content), warn_callback=None)
@@ -246,8 +307,7 @@ def get_existing_mod_versions(mod_id: str) -> Optional[list[str]]:
     """Fetch list of existing versions for a mod, or None if mod doesn't exist."""
     try:
         url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/mods/{urllib.parse.quote(mod_id)}/versions.json'
-        response = urllib.request.urlopen(url)
-        data = json.loads(response.read())
+        data = json.loads(fetch_url(url))
         return [item['version'] for item in data]
     except urllib.error.HTTPError as e:
         if e.code == 404:
@@ -334,10 +394,14 @@ class ModMetadataValidator:
         path: Path,
         properties: dict[ModPropertyKey, ModPropertyValue],
         expected_author: str,
+        expected_author_id: Optional[int],
+        mod_source: str,
     ):
         self.ctx = ValidationContext(path)
         self.properties = properties
         self.expected_author = expected_author
+        self.expected_author_id = expected_author_id
+        self.mod_source = mod_source
         self.mod_author_data = get_mod_author_data()
 
         # Extract mod ID and fetch existing mod data
@@ -357,6 +421,30 @@ class ModMetadataValidator:
             self.mod_author_data.get(self.github_url.lower())
             if self.github_url
             else None
+        )
+
+        # Another account on record with the id of the pull request author,
+        # meaning that the pull request author renamed their account.
+        self.renamed_from_github = None
+        if expected_author_id is not None:
+            expected_github = f'https://github.com/{expected_author}'.lower()
+            for other_github, other_data in self.mod_author_data.items():
+                if (
+                    other_data.get('githubId') == expected_author_id
+                    and other_github != expected_github
+                ):
+                    self.renamed_from_github = other_data['github']
+                    break
+
+    def renamed_account_note(self) -> str:
+        if not self.renamed_from_github:
+            return ''
+
+        return (
+            '\nNote: The GitHub user id of the pull request author matches the one'
+            f' on record for {self.renamed_from_github}, which suggests that the'
+            ' account was renamed. Renamed accounts require a manual update of the'
+            ' records, please mention the rename in the pull request.'
         )
 
     def property(
@@ -401,6 +489,7 @@ class ModMetadataValidator:
         self.validate_name()
         self.validate_description()
         self.validate_architecture()
+        self.validate_tool_mod()
 
         return self.ctx.warning_count()
 
@@ -422,6 +511,7 @@ class ModMetadataValidator:
                     ' them to submit the update instead.\n'
                     'For more information about submitting a mod update, refer to the'
                     ' "Submitting a Mod Update" section in the repository\'s README.md.'
+                    + self.renamed_account_note()
                 )
 
         expected = f'https://github.com/{self.expected_author}'
@@ -443,6 +533,39 @@ class ModMetadataValidator:
                 ' submit the update instead.\n'
                 'For more information about submitting a mod update, refer to the'
                 ' "Submitting a Mod Update" section in the repository\'s README.md.'
+                + self.renamed_account_note()
+            )
+        elif self.renamed_from_github and not self.author_data:
+            prop.warn(
+                f'@@ ({prop.value}) has no previous submissions.'
+                + self.renamed_account_note()
+            )
+
+        self.validate_github_id(prop)
+
+    def validate_github_id(self, prop: PropertyValidator):
+        """Validate that the GitHub account is the one on record, and not a new
+        account registered with the same name after the original was deleted."""
+        if self.expected_author_id is None or not self.author_data:
+            return
+
+        if prop.value.lower() != f'https://github.com/{self.expected_author}'.lower():
+            return
+
+        github_id = self.author_data.get('githubId')
+        if github_id is None:
+            prop.warn(
+                f'No GitHub user id is on record for {prop.value}, manual'
+                ' verification is required'
+            )
+        elif github_id != self.expected_author_id:
+            prop.warn(
+                'The GitHub user id of the pull request author'
+                f' ({self.expected_author_id}) doesn\'t match the one on record for'
+                f' {prop.value} ({github_id}).\n'
+                'This can happen if the original account was deleted, and a new'
+                ' account was registered with the same name. Only the original'
+                ' author of the mod is allowed to submit updates.'
             )
 
     def validate_id(self):
@@ -566,16 +689,18 @@ class ModMetadataValidator:
                     )
                     break
             else:
-                # Not used by anyone else, still requires manual verification
-                prop.warn(
-                    '@@ requires manual verification\n\n'
-                    'To verify your X (Twitter) account, please send me'
-                    ' (https://x.com/m417z) a direct message with the following'
-                    ' content:\n\n'
-                    'I attest that I\'m the sole owner of both this Twitter account'
-                    f' ({prop.value}) and the following GitHub account:'
-                    f' {self.github_url}'
-                )
+                # Not used by anyone else, so it takes a manual check that the
+                # same person owns both accounts.
+                if TWITTER_VERIFIED_LABEL not in get_pr_labels():
+                    prop.warn(
+                        '@@ requires manual verification\n\n'
+                        'To verify your X (Twitter) account, please send me'
+                        ' (https://x.com/m417z) a direct message with the following'
+                        ' content:\n\n'
+                        'I attest that I\'m the sole owner of both this Twitter account'
+                        f' ({prop.value}) and the following GitHub account:'
+                        f' {self.github_url}'
+                    )
 
         prop.validate_url_format()
 
@@ -711,15 +836,51 @@ class ModMetadataValidator:
         if msg:
             prop.warn(msg.rstrip('\n'))
 
+    def validate_tool_mod(self):
+        """Validate the metadata of a tool mod: one that targets windhawk.exe
+        with a WhTool_ModInit entry point, or any windhawk-*.exe process."""
+        prop = self.property('include')
+        if not prop:
+            return
 
-def validate_metadata(path: Path, mod_source: str, expected_author: str) -> int:
+        includes = {x.lower() for x in prop.value.split('\n') if x != ''}
+        windhawk_includes = {
+            x for x in includes if re.fullmatch(r'windhawk(-[\w-]+)?\.exe', x)
+        }
+        is_tool_mod = any(x != 'windhawk.exe' for x in windhawk_includes) or (
+            'windhawk.exe' in windhawk_includes
+            and re.search(r'\bWhTool_ModInit\b', self.mod_source) is not None
+        )
+        if not is_tool_mod:
+            return
+
+        if windhawk_includes not in [set(x) for x in TOOL_MOD_ALLOWED_INCLUDES]:
+            prop.warn(
+                'Tool mods must @@ exactly one of the following combinations of'
+                ' Windhawk processes:\n'
+                + '\n'.join(f'* {", ".join(x)}' for x in TOOL_MOD_ALLOWED_INCLUDES)
+            )
+
+        arch_prop = self.property('architecture')
+        if arch_prop:
+            arch_prop.warn('@@ must not be specified for tool mods')
+
+
+def validate_metadata(
+    path: Path,
+    mod_source: str,
+    expected_author: str,
+    expected_author_id: Optional[int],
+) -> int:
     properties, initial_warnings = get_mod_file_metadata(
         StringIO(mod_source),
         warn_callback=lambda line, msg: add_warning(path, line, msg),
     )
 
     # Validate metadata properties
-    validator = ModMetadataValidator(path, properties, expected_author)
+    validator = ModMetadataValidator(
+        path, properties, expected_author, expected_author_id, mod_source
+    )
     metadata_warnings = validator.validate_all()
 
     # Validate file path
@@ -871,16 +1032,299 @@ def validate_settings(path: Path, mod_source: str) -> int:
     return warnings
 
 
+class SettingsYamlLoader(yaml.SafeLoader):
+    """PyYAML loader that behaves like js-yaml's JSON_SCHEMA, which Windhawk
+    parses the settings block with.
+
+    Plain scalars resolve only to null, bool, int and float, with js-yaml's
+    patterns (so e.g. `yes`, `2024-01-01` and `<<` are plain strings), explicit
+    tags are limited to the same set, mapping keys are strings, and duplicate
+    keys are an error.
+    """
+
+    # The failsafe types and the fallback for unknown tags; the JSON_SCHEMA
+    # scalar types are registered with add_scalar_type below.
+    yaml_constructors = {
+        tag: yaml.SafeLoader.yaml_constructors[tag]
+        for tag in (
+            None,
+            'tag:yaml.org,2002:str',
+            'tag:yaml.org,2002:seq',
+            'tag:yaml.org,2002:map',
+        )
+    }
+    yaml_implicit_resolvers = {}
+
+    @classmethod
+    def add_scalar_type(cls, tag: str, regexp: re.Pattern, construct: Callable):
+        """Register a scalar type that plain scalars matching regexp resolve to.
+
+        Like js-yaml, an explicit tag on a scalar that doesn't match is an error.
+        """
+
+        def construct_checked(loader, node):
+            value = loader.construct_scalar(node)
+            if not regexp.match(value):
+                raise yaml.constructor.ConstructorError(
+                    None,
+                    None,
+                    f'cannot resolve {value!r} with explicit tag {node.tag}',
+                    node.start_mark,
+                )
+            return construct(loader, node)
+
+        cls.add_implicit_resolver(tag, regexp, None)
+        cls.add_constructor(tag, construct_checked)
+
+    def construct_mapping(self, node, deep=False):
+        if not isinstance(node, yaml.MappingNode):
+            raise yaml.constructor.ConstructorError(
+                None,
+                None,
+                f'expected a mapping node, but found {node.id}',
+                node.start_mark,
+            )
+        mapping = {}
+        for key_node, value_node in node.value:
+            key = self.key_string(key_node)
+            if key in mapping:
+                raise yaml.constructor.ConstructorError(
+                    None, None, f'found duplicate key {key!r}', key_node.start_mark
+                )
+            mapping[key] = self.construct_object(value_node, deep=deep)
+        return mapping
+
+    def key_string(self, key_node) -> str:
+        """The mapping key as JavaScript's String() would render it."""
+        key = self.construct_object(key_node)
+        if key is None:
+            return 'null'
+        if isinstance(key, bool):
+            return 'true' if key else 'false'
+        # Integral floats print without a fraction, up to where JavaScript
+        # switches to exponent notation.
+        if isinstance(key, float) and key.is_integer() and abs(key) < 1e21:
+            return str(int(key))
+        if isinstance(key, (int, float, str)):
+            return str(key)
+        raise yaml.constructor.ConstructorError(
+            None, None, 'complex mapping keys are not supported', key_node.start_mark
+        )
+
+
+def construct_js_number(loader: SettingsYamlLoader, node):
+    """Number construction with js-yaml's semantics for both int and float."""
+    value = loader.construct_scalar(node).replace('_', '')
+    sign = -1 if value.startswith('-') else 1
+    value = value.lstrip('+-')
+    if value.lower() == '.inf':
+        return sign * math.inf
+    if value.lower() == '.nan':
+        return math.nan
+    if value[:2] in ('0b', '0x', '0o'):
+        return sign * int(value, 0)
+    if value.isdigit():
+        return sign * int(value)
+    return sign * float(value)
+
+
+# js-yaml's JSON_SCHEMA scalar types, in its resolution order.
+for _tag, _pattern, _construct in [
+    ('null', r'~|null|Null|NULL|', lambda loader, node: None),
+    (
+        'bool',
+        r'true|True|TRUE|false|False|FALSE',
+        lambda loader, node: loader.construct_scalar(node) in ('true', 'True', 'TRUE'),
+    ),
+    (
+        'int',
+        r'[-+]?(?:0b[01_]*[01]|0x[0-9a-fA-F_]*[0-9a-fA-F]|0o[0-7_]*[0-7]'
+        r'|[1-9][0-9_]*(?<!_)|0(?:[0-9][0-9_]*(?<!_))?)',
+        construct_js_number,
+    ),
+    (
+        'float',
+        r'(?:[-+]?[0-9][0-9_]*(?:\.[0-9_]*)?(?:[eE][-+]?[0-9]+)?'
+        r'|\.[0-9_]+(?:[eE][-+]?[0-9]+)?)(?<!_)'
+        r'|[-+]?\.(?:inf|Inf|INF)|\.(?:nan|NaN|NAN)',
+        construct_js_number,
+    ),
+]:
+    SettingsYamlLoader.add_scalar_type(
+        f'tag:yaml.org,2002:{_tag}', re.compile(rf'(?:{_pattern})\Z'), _construct
+    )
+
+
+def is_js_number(value) -> bool:
+    """A finite number, as JSON schema's "number" type accepts it. Unlike in
+    Python, a boolean is not a number."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+class SettingsSchemaError(Exception):
+    """A settings structure that Windhawk rejects, located by its YAML node."""
+
+    def __init__(self, node, message: str):
+        super().__init__(message)
+        self.node = node
+
+
+class SettingsSchemaChecker:
+    """Checks a parsed settings node tree against the structure Windhawk
+    accepts: a non-empty array of objects, each with exactly one setting key
+    plus optional $name, $description and $options (each optionally suffixed
+    with a :language), where a setting's value is a boolean, number, string,
+    array of numbers, array of strings, nested settings, or array of nested
+    settings.
+    """
+
+    SETTING_KEY_RE = re.compile(r'[0-9A-Za-z_-]+')
+    TEXT_META_KEY_RE = re.compile(r'\$(?:name|description)(?::[a-z]{2}(?:-[A-Z]{2})?)?')
+    OPTIONS_META_KEY_RE = re.compile(r'\$options(?::[a-z]{2}(?:-[A-Z]{2})?)?')
+
+    def __init__(self, loader: SettingsYamlLoader):
+        self.loader = loader
+
+    def value(self, node):
+        return self.loader.construct_object(node)
+
+    def check_settings(self, node):
+        if not isinstance(node, yaml.SequenceNode):
+            raise SettingsSchemaError(node, 'Settings must be a YAML array')
+        if not node.value:
+            raise SettingsSchemaError(
+                node, 'Settings array must have at least one item'
+            )
+        for item_node in node.value:
+            self.check_settings_object(item_node)
+
+    def check_settings_object(self, node):
+        if not isinstance(node, yaml.MappingNode):
+            raise SettingsSchemaError(node, 'Settings array items must be objects')
+        if not node.value:
+            raise SettingsSchemaError(
+                node, 'Settings object must have at least one property'
+            )
+
+        setting_keys = []
+        for key_node, value_node in node.value:
+            key = self.loader.key_string(key_node)
+            if self.SETTING_KEY_RE.fullmatch(key):
+                setting_keys.append(key)
+                self.check_setting_value(key, value_node)
+            elif self.TEXT_META_KEY_RE.fullmatch(key):
+                if not isinstance(self.value(value_node), str):
+                    raise SettingsSchemaError(
+                        value_node, f'Settings property "{key}" must be a string'
+                    )
+            elif self.OPTIONS_META_KEY_RE.fullmatch(key):
+                self.check_options(key, value_node)
+            elif key.startswith('$'):
+                raise SettingsSchemaError(
+                    key_node,
+                    f'Unsupported settings property "{key}"; only $name, $description'
+                    ' and $options are allowed, optionally with a :language suffix',
+                )
+            else:
+                raise SettingsSchemaError(
+                    key_node,
+                    f'Invalid settings key "{key}"; keys may only contain letters,'
+                    ' digits, "_" and "-"',
+                )
+
+        if not setting_keys:
+            raise SettingsSchemaError(
+                node, 'Settings object has no setting key, only $ properties'
+            )
+        if len(setting_keys) > 1:
+            raise SettingsSchemaError(
+                node,
+                'Settings object has more than one setting key: '
+                + ', '.join(setting_keys),
+            )
+
+    def check_setting_value(self, key: str, node):
+        value = self.value(node)
+        if isinstance(value, (bool, str)) or is_js_number(value):
+            return
+        if value is None:
+            raise SettingsSchemaError(node, f'Setting "{key}" has no value')
+        if isinstance(value, float):
+            raise SettingsSchemaError(node, f'Setting "{key}" must be a finite number')
+        if isinstance(value, dict):
+            raise SettingsSchemaError(
+                node,
+                f'Setting "{key}" must not be an object; nested settings are an'
+                ' array of objects',
+            )
+        if not isinstance(value, list):
+            raise SettingsSchemaError(
+                node, f'Setting "{key}" must be a boolean, number, string or array'
+            )
+
+        if not value:
+            raise SettingsSchemaError(
+                node, f'Setting "{key}" array must have at least one item'
+            )
+        if all(is_js_number(x) for x in value) or all(
+            isinstance(x, str) for x in value
+        ):
+            return
+        if all(isinstance(x, dict) for x in value):
+            self.check_settings(node)
+        elif all(isinstance(x, list) for x in value):
+            for item_node in node.value:
+                self.check_settings(item_node)
+        else:
+            raise SettingsSchemaError(
+                node,
+                f'Setting "{key}" array must contain only numbers, only strings, or'
+                ' only nested settings',
+            )
+
+    def check_options(self, key: str, node):
+        value = self.value(node)
+        if not isinstance(value, list):
+            raise SettingsSchemaError(
+                node, f'Settings property "{key}" must be an array'
+            )
+        if len(value) < 2:
+            raise SettingsSchemaError(
+                node, f'Settings property "{key}" must have at least two items'
+            )
+        for item_node in node.value:
+            if not isinstance(self.value(item_node), dict):
+                raise SettingsSchemaError(
+                    item_node, f'Settings property "{key}" items must be objects'
+                )
+            if len(item_node.value) != 1:
+                raise SettingsSchemaError(
+                    item_node,
+                    f'Settings property "{key}" items must have exactly one property',
+                )
+            ((_, label_node),) = item_node.value
+            if not isinstance(self.value(label_node), str):
+                raise SettingsSchemaError(
+                    label_node, f'Settings property "{key}" labels must be strings'
+                )
+
+
 def validate_settings_yaml(path: Path, mod_source: str) -> int:
     """Validate that the settings block parses as the structure Windhawk expects.
 
-    Mirrors the engine's extraction (windhawk-utils mod-source settings.rs): the
-    block body must be valid YAML, a non-empty array, with every item a non-empty
-    object. The structural integrity of the comment block itself (markers, /* */
-    placement, etc.) is reported separately by validate_marker_block, so a block
-    that doesn't match the pattern below is simply skipped here.
+    Mirrors Windhawk's extraction (windhawk-vscode modSourceUtils.ts,
+    extractInitialSettings): the block body is parsed like js-yaml with its
+    JSON_SCHEMA and then checked against Windhawk's settings schema, so that
+    anything Windhawk rejects is reported here. The structural integrity of the
+    comment block itself (markers, /* */ placement, etc.) is reported separately
+    by validate_marker_block, so a block that doesn't match the pattern below is
+    simply skipped here.
     """
-    # Use the same extraction the engine uses. The surrounding \s* consumes the
+    # Use the same extraction Windhawk uses. The surrounding \s* consumes the
     # whitespace around the body, so we parse exactly the text Windhawk feeds to
     # its YAML parser.
     block_re = re.compile(
@@ -896,8 +1340,15 @@ def validate_settings_yaml(path: Path, mod_source: str) -> int:
     body = match.group(1)
     body_start_line = mod_source.count('\n', 0, match.start(1)) + 1
 
+    loader = SettingsYamlLoader(body)
     try:
-        settings = yaml.safe_load(body)
+        node = loader.get_single_node()
+        if node is None:
+            return add_warning(path, body_start_line, 'Settings must be a YAML array')
+        # Constructing the whole document reports duplicate keys and bad tags,
+        # and caches every node's value for the checker to read.
+        loader.construct_object(node, deep=True)
+        SettingsSchemaChecker(loader).check_settings(node)
     except yaml.YAMLError as e:
         line = body_start_line
         mark = getattr(e, 'problem_mark', None)
@@ -905,26 +1356,10 @@ def validate_settings_yaml(path: Path, mod_source: str) -> int:
             # problem_mark.line is 0-based and relative to the parsed body.
             line = body_start_line + mark.line
         return add_warning(path, line, f'Settings block is not valid YAML: {e}')
-
-    if not isinstance(settings, list):
-        return add_warning(path, body_start_line, 'Settings block must be a YAML array')
-
-    if len(settings) == 0:
-        return add_warning(
-            path, body_start_line, 'Settings block array must have at least one item'
-        )
-
-    for item in settings:
-        if not isinstance(item, dict):
-            return add_warning(
-                path, body_start_line, 'Settings block array items must be objects'
-            )
-        if len(item) == 0:
-            return add_warning(
-                path,
-                body_start_line,
-                'Settings block objects must have at least one property',
-            )
+    except SettingsSchemaError as e:
+        return add_warning(path, body_start_line + e.node.start_mark.line, str(e))
+    finally:
+        loader.dispose()
 
     return 0
 
@@ -946,8 +1381,7 @@ def get_all_mod_names() -> dict[str, str]:
 @cache
 def get_existing_windows_file_names():
     url = 'https://winbindex.m417z.com/data/filenames.json'
-    response = urllib.request.urlopen(url).read()
-    return json.loads(response)
+    return json.loads(fetch_url(url))
 
 
 def is_existing_windows_file_name(name: str):
@@ -1068,20 +1502,23 @@ def validate_specific_keywords(path: Path, mod_source: str):
     # form feed and similar, hiding them from the control character check.
     mod_source_lines = mod_source.split('\n')
 
-    # Words to check (pattern, description)
+    # fmt: off
     keyword_patterns = [
-        (r'InternalWh', 'InternalWh'),
-        (r'WH_EDITING', 'WH_EDITING'),
-        (r'\bWH_MOD\b', 'WH_MOD'),
-        (r'(^|,)\s*GWL_WNDPROC', 'GWL_WNDPROC'),
-        (r'(^|,)\s*GWLP_WNDPROC', 'GWLP_WNDPROC'),
-        (r'Wh_FindFirstSymbol', 'Wh_FindFirstSymbol'),
-        (r'Wh_FindNextSymbol', 'Wh_FindNextSymbol'),
-        (r'Wh_FindCloseSymbol', 'Wh_FindCloseSymbol'),
+        (r'\bInternalWh', 'InternalWh', 'Avoid using internal API unless absolutely necessary'),
+        (r'\bWH_EDITING\b', 'WH_EDITING', 'Avoid using WH_EDITING unless absolutely necessary'),
+        (r'\bWH_MOD\b', 'WH_MOD', 'Avoid using WH_MOD unless absolutely necessary'),
+        (r'(^|,)\s*GWL_WNDPROC\b', 'GWL_WNDPROC', '`WindhawkUtils::SetWindowSubclassFromAnyThread` is usually preferred for subclassing'),
+        (r'(^|,)\s*GWLP_WNDPROC\b', 'GWLP_WNDPROC', '`WindhawkUtils::SetWindowSubclassFromAnyThread` is usually preferred for subclassing'),
+        (r'\bWh_FindFirstSymbol\b', 'Wh_FindFirstSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
+        (r'\bWh_FindNextSymbol\b', 'Wh_FindNextSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
+        (r'\bWh_FindCloseSymbol\b', 'Wh_FindCloseSymbol', '`WindhawkUtils::HookSymbols` is usually preferred for symbol hooking'),
+        (r'\bnoUndecoratedSymbols\b', 'noUndecoratedSymbols', 'Decorated symbols don\'t support online caching, undecorated symbols are usually preferred'),
+        (r'\bWh_SetFunctionHookT\b', 'Wh_SetFunctionHookT', 'Deprecated, use `WindhawkUtils::SetFunctionHook` instead'),
     ]
+    # fmt: on
 
     for line_num, line in enumerate(mod_source_lines, start=1):
-        for pattern, word in keyword_patterns:
+        for pattern, word, description in keyword_patterns:
             if re.search(pattern, line):
                 # Skip GWL(P)_WNDPROC when used with GetWindowLong(Ptr)
                 if word in ('GWL_WNDPROC', 'GWLP_WNDPROC') and re.search(
@@ -1090,7 +1527,9 @@ def validate_specific_keywords(path: Path, mod_source: str):
                     continue
 
                 warnings += add_warning(
-                    path, line_num, f'Line requires manual inspection for "{word}"'
+                    path,
+                    line_num,
+                    f'Line requires manual inspection for "{word}": {description}',
                 )
 
         hidden_ws = [
@@ -1158,18 +1597,31 @@ def validate_callback_signatures(path: Path, mod_source: str):
             assert m, sig
             expected.append((m.group(1), normalize_callback_param_types(m.group(2))))
 
-        # Match: previous word + whitespace + callback name + ( params ). The
-        # previous-word check naturally skips function calls (e.g. "= Wh_Mod..."
-        # or "(Wh_Mod...") since those aren't preceded by a bare identifier.
-        pattern = r'\b(\w+)\s+' + re.escape(callback_name) + r'\s*\(([^)]*)\)'
+        # Match: optional specifiers + return type + callback name + ( params ).
+        # Requiring a bare identifier before the name naturally skips function
+        # calls (e.g. "= Wh_Mod..." or "(Wh_Mod...").
+        pattern = (
+            r'((?:\b(?:static|extern(?:\s+"C")?|inline)\s+)*)\b(\w+)\s+'
+            + re.escape(callback_name)
+            + r'\s*\(([^)]*)\)'
+        )
         for match in re.finditer(pattern, mod_source):
             # Skip if inside a single-line comment.
             line_start = mod_source.rfind('\n', 0, match.start()) + 1
             if '//' in mod_source[line_start : match.start()]:
                 continue
 
-            return_type = match.group(1)
-            params = match.group(2)
+            line_num = 1 + mod_source[: match.start()].count('\n')
+            specifiers, return_type, params = match.groups()
+
+            if specifiers:
+                warnings += add_warning(
+                    path,
+                    line_num,
+                    f'Unexpected "{" ".join(specifiers.split())}" before'
+                    f' {callback_name}',
+                )
+
             normalized_return_type = normalize_return_type(return_type)
             normalized_params = normalize_callback_param_types(params)
 
@@ -1179,7 +1631,6 @@ def validate_callback_signatures(path: Path, mod_source: str):
             ):
                 continue
 
-            line_num = 1 + mod_source[: match.start()].count('\n')
             expected_list = ' or '.join(f'"{s}"' for s in expected_signatures)
             warnings += add_warning(
                 path,
@@ -1192,13 +1643,13 @@ def validate_callback_signatures(path: Path, mod_source: str):
     return warnings
 
 
-def validate_mod_file(path: Path, pr_author: str) -> int:
+def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]) -> int:
     mod_source = path.read_text(encoding='utf-8', errors='ignore').removeprefix(
         '\ufeff'
     )
 
     warnings = validate_encoding(path)
-    warnings += validate_metadata(path, mod_source, pr_author)
+    warnings += validate_metadata(path, mod_source, pr_author, pr_author_id)
     warnings += validate_readme(path, mod_source)
     warnings += validate_settings(path, mod_source)
     warnings += validate_symbol_hooks(path, mod_source)
@@ -1209,16 +1660,63 @@ def validate_mod_file(path: Path, pr_author: str) -> int:
 
 
 def test_run():
-    if len(sys.argv) != 3:
-        print('Test run usage: pr_validation.py <mod_file_path> <pr_author>')
+    if len(sys.argv) not in [3, 4]:
+        print(
+            'Test run usage: pr_validation.py <mod_file_path> <pr_author>'
+            ' [pr_author_id]'
+        )
         sys.exit(1)
 
     print('Test run: Validating single file...')
     path = Path(sys.argv[1])
     pr_author = sys.argv[2]
-    warnings = validate_mod_file(path, pr_author)
+    pr_author_id = int(sys.argv[3]) if len(sys.argv) == 4 else None
+    warnings = validate_mod_file(path, pr_author, pr_author_id)
     if warnings > 0:
         print(f'Got {warnings} warnings')
+
+
+def validate_pr_changelog(pr_body: str) -> int:
+    """Mod updates must describe the changes in the PR description."""
+    markers_re = re.compile(
+        r'<!--\s*changelog:start\s*-->(.*?)<!--\s*changelog:end\s*-->',
+        re.DOTALL | re.IGNORECASE,
+    )
+
+    # The sample items of the pull request template, which are to be replaced
+    # with the actual changes.
+    placeholder_item_re = re.compile(
+        r'^[ \t]*\*[ \t]*Changelog item \d+\.\.\.[ \t]*$', re.MULTILINE
+    )
+
+    template_hint = (
+        ' See the pull request template'
+        ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1).'
+    )
+
+    matches = markers_re.findall(pr_body)
+    if len(matches) != 1:
+        return add_warning(
+            Path('.github/pull_request_template.md'),
+            1,
+            'Mod updates must have a changelog in the PR description, between a single'
+            ' pair of the "<!-- changelog:start -->" and "<!-- changelog:end -->"'
+            f' markers, found {len(matches)} such pairs.' + template_hint,
+        )
+
+    changelog = placeholder_item_re.sub('', matches[0]).strip()
+    if changelog == '':
+        return add_warning(
+            Path('.github/pull_request_template.md'),
+            1,
+            'The changelog between the "<!-- changelog:start -->" and'
+            ' "<!-- changelog:end -->" markers in the PR description is empty,'
+            ' please describe the changes of this mod update.'
+            + template_hint,
+        )
+
+    print(f'Changelog:\n{changelog}')
+    return 0
 
 
 def main():
@@ -1229,6 +1727,7 @@ def main():
     print('Validating PR...')
 
     pr_author = os.environ['PR_AUTHOR']
+    pr_author_id = int(os.environ['PR_AUTHOR_ID'])
     if pr_author in DISALLOWED_AUTHORS:
         sys.exit(f'Submissions from {pr_author} are not allowed')
 
@@ -1250,23 +1749,27 @@ def main():
             f'{added_count=} {modified_count=} {all_count=}',
         )
 
-    if added_count != 0:
-        pr_body = os.environ.get('PR_BODY', '')
-        if '## Mod authorship' not in pr_body:
-            warnings += add_warning(
-                Path('.github/pull_request_template.md'),
-                1,
-                'New mod submissions must keep the "## Mod authorship" section from the'
-                ' pull request template'
-                ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
-                ' in the PR description, so reviewers know how the mod was authored.'
-                ' Please restore that section and fill it in.',
-            )
+    # The PR body is sent with CRLF line endings.
+    pr_body = os.environ.get('PR_BODY', '').replace('\r\n', '\n')
+
+    if added_count != 0 and '## Mod authorship' not in pr_body:
+        warnings += add_warning(
+            Path('.github/pull_request_template.md'),
+            1,
+            'New mod submissions must keep the "## Mod authorship" section from the'
+            ' pull request template'
+            ' (https://github.com/ramensoftware/windhawk-mods/blob/main/.github/pull_request_template.md?plain=1)'
+            ' in the PR description, so reviewers know how the mod was authored.'
+            ' Please restore that section and fill it in.',
+        )
+
+    if modified_count != 0:
+        warnings += validate_pr_changelog(pr_body)
 
     for path in paths:
         print(f'Checking {path=}')
 
-        path_warnings = validate_mod_file(path, pr_author)
+        path_warnings = validate_mod_file(path, pr_author, pr_author_id)
         warnings += path_warnings
 
         if path_warnings == 0:
@@ -1284,4 +1787,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except FetchError as e:
+        print(f'::error::{e}')
+        sys.exit(1)

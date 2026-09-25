@@ -2,7 +2,7 @@
 // @id              windows-update-control-panel-restorer
 // @name            Windows Update Control Panel Page Restorer
 // @description     This mod restores the Windows Update Control Panel page in Windows 10 and Windows 11
-// @version         1.0.0
+// @version         1.1.0
 // @author          babamohammed
 // @github          https://github.com/babamohammed2022
 // @include         explorer.exe
@@ -4846,11 +4846,15 @@ static std::wstring BuildWindowsUpdateSettingsPageParams() {
 }
 
 static std::wstring BuildChangeWindowsUpdateSettingsLinkXml() {
+    // Opens the classic settings child page via the bare shell::: URI,
+    // exactly like BuildOpenWindowsUpdateSettingsLinkXml. Deliberately NOT
+    // "%SystemRoot%\explorer.exe" with shellexecuteparams: that spawns a NEW
+    // explorer.exe process (which reloads Windhawk mods and then hands the
+    // command over), which is unstable inside the shell and crashes explorer.
+    // A bare shell: URI is dispatched by the existing shell instance.
     return
         L"<NavigateButton layout=\"flowlayout()\" margin=\"rect(0,5rp,0,0)\" "
-        L"shellexecute=\"%SystemRoot%\\explorer.exe\" shellexecuteparams=\"" +
-        BuildWindowsUpdateSettingsPageParams() +
-        L"\">"
+        L"shellexecute=\"" + BuildWindowsUpdateSettingsPageParams() + L"\">"
         L"<Button sheet=\"wu_cp_style\" class=\"cp_content_link\" active=\"mouse | keyboard\" content=\"" +
         XmlEscape(SelectChangeWindowsUpdateSettingsLinkText()) +
         L"\"/></NavigateButton>";
@@ -5574,73 +5578,20 @@ static void StartWuUpdateCheck(HWND host);
 static HICON LoadAppletLogoIconForShell(int size);
 using ShellExecuteExW_t = BOOL(WINAPI*)(SHELLEXECUTEINFOW*);
 static ShellExecuteExW_t ShellExecuteExWOriginal = nullptr;
-static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
-    // Once teardown has begun, stop handling our private protocol: the handlers
-    // create windows/dialogs whose procedures live in this image.
-    if (!g_stopping.load() && info && info->lpFile &&
-        _wcsnicmp(info->lpFile, kWuRestorerProtocol,
-                  wcslen(kWuRestorerProtocol)) == 0) {
-        // Case-insensitive: the shell is free to normalize the scheme of a
-        // command it round-trips (and does, on some builds), and a
-        // case-sensitive compare here silently fell through to the original
-        // ShellExecuteExW, which fails with "no app associated" for a scheme
-        // no one has registered - i.e. the sidebar link did nothing at all.
-        const wchar_t* p = info->lpFile + wcslen(kWuRestorerProtocol);
-        Wh_Log(L"Windows Update Restorer: private command received: %s", p);
-        if (_wcsicmp(p, L"opensettings") == 0) {
-            // Open the classic settings dialog as an ADDITIONAL window on top
-            // of the settings page (which stays open - we do not navigate away).
-            ShowWuSettingsDialog(info->hwnd);
-            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
-            return TRUE;
-        } else if (_wcsicmp(p, L"check") == 0) {
-            // "Check for updates" micro-feature (see StartWuUpdateCheck): opens
-            // a small Win32 dialog with a native progress bar that runs a
-            // real online Windows Update search; the page itself is left untouched.
-            StartWuUpdateCheck(info->hwnd);
-            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
-            return TRUE;
-        } else if (_wcsicmp(p, L"faq") == 0) {
-            ShowWuFaqDialog(info->hwnd);
-            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
-            return TRUE;
-        } else if (_wcsicmp(p, L"history") == 0) {
-            OpenInstalledUpdates(info->hwnd, InstalledUpdatesDestination::History);
-            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
-            return TRUE;
-        } else if (_wcsicmp(p, L"hidden") == 0) {
-            OpenInstalledUpdates(info->hwnd, InstalledUpdatesDestination::HiddenUpdates);
-            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
-            return TRUE;
-        } else if (_wcsicmp(p, L"installed") == 0) {
-            OpenInstalledUpdates(info->hwnd, InstalledUpdatesDestination::UninstallUpdates);
-            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
-            return TRUE;
-        } else if (_wcsicmp(p, L"security") == 0) {
-            OpenSecurityAndMaintenance(info->hwnd);
-            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
-            return TRUE;
-        }
-        // An unrecognized private verb must be visible: falling through to the
-        // real ShellExecuteExW would just produce a generic "no app associated"
-        // error with nothing pointing back at this mod.
-        Wh_Log(L"Windows Update Restorer: UNHANDLED private command: %s", p);
-        info->hInstApp = reinterpret_cast<HINSTANCE>(SE_ERR_FNF);
-        SetLastError(ERROR_FILE_NOT_FOUND);
-        return FALSE;
-    }
-    return ShellExecuteExWOriginal(info);
-}
-
+static ShellExecuteExW_t ShellExecuteExWOriginalWinStorage = nullptr;
 using ShellExecuteW_t = HINSTANCE(WINAPI*)(HWND, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, INT);
 static ShellExecuteW_t ShellExecuteWOriginal = nullptr;
-// ANSI entry points. Only ShellExecuteExW/ShellExecuteW were hooked, so a
-// caller that reached the ANSI export instead - which the Control Panel task
-// dispatcher can do for a CPNAVTYPE_ShellExec command - bypassed the private
-// protocol entirely and the sidebar link silently did nothing. These thin
-// wrappers widen the command and reuse the same handler.
+static ShellExecuteW_t ShellExecuteWOriginalWinStorage = nullptr;
+// ANSI entry points. The wide exports alone are not enough: the Control Panel
+// task dispatcher can reach an ANSI export for a CPNAVTYPE_ShellExec command,
+// and that would bypass the private protocol entirely (the sidebar link
+// silently did nothing). These widen the command and reuse the same handler.
 using ShellExecuteExA_t = BOOL(WINAPI*)(SHELLEXECUTEINFOA*);
 static ShellExecuteExA_t ShellExecuteExAOriginal = nullptr;
+static ShellExecuteExA_t ShellExecuteExAOriginalWinStorage = nullptr;
+using ShellExecuteA_t = HINSTANCE(WINAPI*)(HWND, LPCSTR, LPCSTR, LPCSTR, LPCSTR, INT);
+static ShellExecuteA_t ShellExecuteAOriginal = nullptr;
+static ShellExecuteA_t ShellExecuteAOriginalWinStorage = nullptr;
 
 static bool IsWuRestorerAnsiCommand(LPCSTR file, std::wstring& wide) {
     if (!file) return false;
@@ -5653,56 +5604,275 @@ static bool IsWuRestorerAnsiCommand(LPCSTR file, std::wstring& wide) {
                      wcslen(kWuRestorerProtocol)) == 0;
 }
 
-static BOOL WINAPI ShellExecuteExAHook(SHELLEXECUTEINFOA* info) {
-    std::wstring wide;
-    if (!g_stopping.load() && info && IsWuRestorerAnsiCommand(info->lpFile, wide)) {
-        Wh_Log(L"Windows Update Restorer: private command received (ANSI): %s",
-               wide.c_str());
-        SHELLEXECUTEINFOW wideInfo{};
-        wideInfo.cbSize = sizeof(wideInfo);
-        wideInfo.fMask = info->fMask;
-        wideInfo.hwnd = info->hwnd;
-        wideInfo.lpFile = wide.c_str();
-        wideInfo.nShow = info->nShow;
-        if (ShellExecuteExWHook(&wideInfo)) {
-            info->hInstApp = wideInfo.hInstApp;
-            return TRUE;
-        }
+// Executes a recognized "wurestorer:<verb>" command. Returns true when the
+// verb was handled; false for an unknown verb, which the caller then surfaces
+// as a failure instead of letting the real ShellExecute produce a generic
+// "no app associated" error.
+static bool DispatchWuRestorerCommand(HWND hwnd, const wchar_t* verb) {
+    if (_wcsicmp(verb, L"opensettings") == 0) {
+        // Open the classic settings dialog as an ADDITIONAL window on top
+        // of the settings page (which stays open - we do not navigate away).
+        ShowWuSettingsDialog(hwnd);
+    } else if (_wcsicmp(verb, L"check") == 0) {
+        // "Check for updates" micro-feature (see StartWuUpdateCheck): opens
+        // a small Win32 dialog with a native progress bar that runs a
+        // real online Windows Update search; the page itself is left untouched.
+        StartWuUpdateCheck(hwnd);
+    } else if (_wcsicmp(verb, L"faq") == 0) {
+        ShowWuFaqDialog(hwnd);
+    } else if (_wcsicmp(verb, L"history") == 0) {
+        OpenInstalledUpdates(hwnd, InstalledUpdatesDestination::History);
+    } else if (_wcsicmp(verb, L"hidden") == 0) {
+        OpenInstalledUpdates(hwnd, InstalledUpdatesDestination::HiddenUpdates);
+    } else if (_wcsicmp(verb, L"installed") == 0) {
+        OpenInstalledUpdates(hwnd, InstalledUpdatesDestination::UninstallUpdates);
+    } else if (_wcsicmp(verb, L"security") == 0) {
+        OpenSecurityAndMaintenance(hwnd);
+    } else {
+        return false;
     }
-    if (!ShellExecuteExAOriginal) return FALSE;
-    return ShellExecuteExAOriginal(info);
+    return true;
 }
 
-static HINSTANCE WINAPI ShellExecuteWHook(HWND hwnd, LPCWSTR operation, LPCWSTR file,
-                                          LPCWSTR parameters, LPCWSTR directory, INT show) {
+// Shared ShellExecuteExW handling. `original` is the trampoline of the module
+// this call arrived through (shell32.dll or windows.storage.dll); `fallback` is
+// the other module's trampoline. Forwarding to the other module's trampoline
+// would re-enter that module's hook, so each module keeps its own pointer - the
+// same per-module split used for the combase/ole32 COM hooks above. The
+// fallback exists purely for defence: a wrapper whose hook was never installed
+// (GetProcAddress returned NULL) is never invoked, but if a null trampoline
+// ever reached this shared handler, calling through it would crash explorer on
+// a path that runs constantly - so it falls back first and then fails cleanly.
+static BOOL HandleShellExecuteExW(SHELLEXECUTEINFOW* info,
+                                  ShellExecuteExW_t original,
+                                  ShellExecuteExW_t fallback) {
+    // Once teardown has begun, stop handling our private protocol: the handlers
+    // create windows/dialogs whose procedures live in this image.
+    if (!g_stopping.load() && info && info->lpFile &&
+        _wcsnicmp(info->lpFile, kWuRestorerProtocol,
+                  wcslen(kWuRestorerProtocol)) == 0) {
+        // Case-insensitive: the shell is free to normalize the scheme of a
+        // command it round-trips (and does, on some builds), and a
+        // case-sensitive compare here silently fell through to the original
+        // ShellExecuteExW, which fails with "no app associated" for a scheme
+        // no one has registered - i.e. the sidebar link did nothing at all.
+        const wchar_t* p = info->lpFile + wcslen(kWuRestorerProtocol);
+        Wh_Log(L"Windows Update Restorer: private command received: %s", p);
+        if (DispatchWuRestorerCommand(info->hwnd, p)) {
+            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
+            return TRUE;
+        }
+        // An unrecognized private verb must be visible: falling through to the
+        // real ShellExecuteExW would just produce a generic "no app associated"
+        // error with nothing pointing back at this mod.
+        Wh_Log(L"Windows Update Restorer: UNHANDLED private command: %s", p);
+        info->hInstApp = reinterpret_cast<HINSTANCE>(SE_ERR_FNF);
+        SetLastError(ERROR_FILE_NOT_FOUND);
+        return FALSE;
+    }
+    if (!original) original = fallback;
+    if (!original) {
+        SetLastError(ERROR_INVALID_FUNCTION);
+        return FALSE;
+    }
+    return original(info);
+}
+
+static HINSTANCE HandleShellExecuteW(HWND hwnd, LPCWSTR operation, LPCWSTR file,
+                                     LPCWSTR parameters, LPCWSTR directory, INT show,
+                                     ShellExecuteW_t original,
+                                     ShellExecuteW_t fallback) {
     if (!g_stopping.load() && file &&
         _wcsnicmp(file, kWuRestorerProtocol, wcslen(kWuRestorerProtocol)) == 0) {
         const wchar_t* p = file + wcslen(kWuRestorerProtocol);
         Wh_Log(L"Windows Update Restorer: private command received (ShellExecuteW): %s", p);
-        bool handled = true;
-        if (_wcsicmp(p, L"opensettings") == 0) {
-            ShowWuSettingsDialog(hwnd);
-        } else if (_wcsicmp(p, L"check") == 0) {
-            StartWuUpdateCheck(hwnd);
-        } else if (_wcsicmp(p, L"faq") == 0) {
-            ShowWuFaqDialog(hwnd);
-        } else if (_wcsicmp(p, L"history") == 0) {
-            OpenInstalledUpdates(hwnd, InstalledUpdatesDestination::History);
-        } else if (_wcsicmp(p, L"hidden") == 0) {
-            OpenInstalledUpdates(hwnd, InstalledUpdatesDestination::HiddenUpdates);
-        } else if (_wcsicmp(p, L"installed") == 0) {
-            OpenInstalledUpdates(hwnd, InstalledUpdatesDestination::UninstallUpdates);
-        } else if (_wcsicmp(p, L"security") == 0) {
-            OpenSecurityAndMaintenance(hwnd);
-        } else {
-            handled = false;
+        if (DispatchWuRestorerCommand(hwnd, p)) {
+            return reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
         }
-        if (handled) return reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
     }
-    return ShellExecuteWOriginal(hwnd, operation, file, parameters, directory, show);
+    if (!original) original = fallback;
+    if (!original) {
+        SetLastError(ERROR_INVALID_FUNCTION);
+        return reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(SE_ERR_FNF));
+    }
+    return original(hwnd, operation, file, parameters, directory, show);
 }
 
-// -----------------------------------------------------------------------------
+static BOOL HandleShellExecuteExA(SHELLEXECUTEINFOA* info,
+                                  ShellExecuteExA_t original,
+                                  ShellExecuteExA_t fallback) {
+    std::wstring wide;
+    if (!g_stopping.load() && info && IsWuRestorerAnsiCommand(info->lpFile, wide)) {
+        Wh_Log(L"Windows Update Restorer: private command received (ANSI): %s",
+               wide.c_str());
+        const wchar_t* p = wide.c_str() + wcslen(kWuRestorerProtocol);
+        if (DispatchWuRestorerCommand(info->hwnd, p)) {
+            info->hInstApp = reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
+            return TRUE;
+        }
+    }
+    if (!original) original = fallback;
+    if (!original) return FALSE;
+    return original(info);
+}
+
+static HINSTANCE HandleShellExecuteA(HWND hwnd, LPCSTR operation, LPCSTR file,
+                                     LPCSTR parameters, LPCSTR directory, INT show,
+                                     ShellExecuteA_t original,
+                                     ShellExecuteA_t fallback) {
+    std::wstring wide;
+    if (!g_stopping.load() && IsWuRestorerAnsiCommand(file, wide)) {
+        const wchar_t* p = wide.c_str() + wcslen(kWuRestorerProtocol);
+        Wh_Log(L"Windows Update Restorer: private command received (ShellExecuteA): %s", p);
+        if (DispatchWuRestorerCommand(hwnd, p)) {
+            return reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(33));
+        }
+    }
+    if (!original) original = fallback;
+    if (!original) {
+        SetLastError(ERROR_INVALID_FUNCTION);
+        return reinterpret_cast<HINSTANCE>(static_cast<UINT_PTR>(SE_ERR_FNF));
+    }
+    return original(hwnd, operation, file, parameters, directory, show);
+}
+
+// Per-module trampoline wrappers. Windows 11 moved the real ShellExecute
+// implementation into windows.storage.dll while shell32.dll kept thin proxy
+// exports, so both modules' exports must be hooked (each with its own
+// original - see HandleShellExecuteExW) or a call routed through
+// windows.storage.dll - which is what the Control Panel task dispatcher uses
+// on Windows 11 - bypasses the hook and falls through to the OS-level URI
+// resolution, surfacing "Get an app to open this 'wurestorer' link".
+static BOOL WINAPI ShellExecuteExWHook(SHELLEXECUTEINFOW* info) {
+    return HandleShellExecuteExW(info, ShellExecuteExWOriginal,
+                                 ShellExecuteExWOriginalWinStorage);
+}
+static BOOL WINAPI ShellExecuteExWHookWinStorage(SHELLEXECUTEINFOW* info) {
+    return HandleShellExecuteExW(info, ShellExecuteExWOriginalWinStorage,
+                                 ShellExecuteExWOriginal);
+}
+static HINSTANCE WINAPI ShellExecuteWHook(HWND hwnd, LPCWSTR operation, LPCWSTR file,
+                                          LPCWSTR parameters, LPCWSTR directory, INT show) {
+    return HandleShellExecuteW(hwnd, operation, file, parameters, directory, show,
+                               ShellExecuteWOriginal, ShellExecuteWOriginalWinStorage);
+}
+static HINSTANCE WINAPI ShellExecuteWHookWinStorage(HWND hwnd, LPCWSTR operation, LPCWSTR file,
+                                                    LPCWSTR parameters, LPCWSTR directory, INT show) {
+    return HandleShellExecuteW(hwnd, operation, file, parameters, directory, show,
+                               ShellExecuteWOriginalWinStorage, ShellExecuteWOriginal);
+}
+static BOOL WINAPI ShellExecuteExAHook(SHELLEXECUTEINFOA* info) {
+    return HandleShellExecuteExA(info, ShellExecuteExAOriginal,
+                                 ShellExecuteExAOriginalWinStorage);
+}
+static BOOL WINAPI ShellExecuteExAHookWinStorage(SHELLEXECUTEINFOA* info) {
+    return HandleShellExecuteExA(info, ShellExecuteExAOriginalWinStorage,
+                                 ShellExecuteExAOriginal);
+}
+static HINSTANCE WINAPI ShellExecuteAHook(HWND hwnd, LPCSTR operation, LPCSTR file,
+                                          LPCSTR parameters, LPCSTR directory, INT show) {
+    return HandleShellExecuteA(hwnd, operation, file, parameters, directory, show,
+                               ShellExecuteAOriginal, ShellExecuteAOriginalWinStorage);
+}
+static HINSTANCE WINAPI ShellExecuteAHookWinStorage(HWND hwnd, LPCSTR operation, LPCSTR file,
+                                                    LPCSTR parameters, LPCSTR directory, INT show) {
+    return HandleShellExecuteA(hwnd, operation, file, parameters, directory, show,
+                               ShellExecuteAOriginalWinStorage, ShellExecuteAOriginal);
+}
+
+// Windows 11-only: cover the shell-storage split. On Windows 11 the Control
+// Panel task links and DirectUI buttons resolve the ShellExecute family
+// through windows.storage.dll (via the ext-ms-win-shell-shell32 API set),
+// where shell32 is only a proxy, so the shell32-only hooks installed in
+// InstallShellPresentationHooks never see those calls and every wurestorer:
+// sidebar command surfaced "Get an app to open this 'wurestorer' link". This
+// helper also closes the missing ShellExecuteA coverage. Windows 10 behaviour
+// is deliberately left untouched: the caller invokes this only on Windows 11+.
+static void InstallAdditionalShellExecuteHooks() {
+    HMODULE shell32 = GetModuleHandleW(L"shell32.dll");
+    if (!shell32) shell32 = LoadLibraryExW(L"shell32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (shell32) {
+        if (void* p = reinterpret_cast<void*>(GetProcAddress(shell32, "ShellExecuteA"))) {
+            WindhawkUtils::SetFunctionHook(reinterpret_cast<ShellExecuteA_t>(p),
+                                           ShellExecuteAHook, &ShellExecuteAOriginal);
+        }
+    }
+
+    HMODULE winStorage = GetModuleHandleW(L"windows.storage.dll");
+    if (!winStorage) winStorage = LoadLibraryExW(L"windows.storage.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!winStorage) {
+        Wh_Log(L"Windows Update Restorer: windows.storage.dll unavailable; ShellExecute coverage unchanged");
+        return;
+    }
+
+    // GetProcAddress resolves export forwarders, so when shell32's export is a
+    // forwarder to windows.storage.dll the two lookups return the SAME address
+    // and the existing shell32 hook already covers that target; re-hooking it
+    // would re-patch an already-trampolined address and leave one trampoline
+    // unset. Only hook a windows.storage export when it is a distinct, real
+    // address. The addresses are logged so a machine where the sidebar link
+    // still fails can be diagnosed from the Windhawk log alone.
+    struct ShellExecTarget {
+        const char* name;
+        void* shell32;
+        void* storage;
+    };
+    ShellExecTarget targets[4];
+    if (shell32) {
+        targets[0] = {"ShellExecuteExW",
+                      reinterpret_cast<void*>(GetProcAddress(shell32, "ShellExecuteExW")),
+                      reinterpret_cast<void*>(GetProcAddress(winStorage, "ShellExecuteExW"))};
+        targets[1] = {"ShellExecuteW",
+                      reinterpret_cast<void*>(GetProcAddress(shell32, "ShellExecuteW")),
+                      reinterpret_cast<void*>(GetProcAddress(winStorage, "ShellExecuteW"))};
+        targets[2] = {"ShellExecuteExA",
+                      reinterpret_cast<void*>(GetProcAddress(shell32, "ShellExecuteExA")),
+                      reinterpret_cast<void*>(GetProcAddress(winStorage, "ShellExecuteExA"))};
+        targets[3] = {"ShellExecuteA",
+                      reinterpret_cast<void*>(GetProcAddress(shell32, "ShellExecuteA")),
+                      reinterpret_cast<void*>(GetProcAddress(winStorage, "ShellExecuteA"))};
+    } else {
+        targets[0] = {"ShellExecuteExW", nullptr,
+                      reinterpret_cast<void*>(GetProcAddress(winStorage, "ShellExecuteExW"))};
+        targets[1] = {"ShellExecuteW", nullptr,
+                      reinterpret_cast<void*>(GetProcAddress(winStorage, "ShellExecuteW"))};
+        targets[2] = {"ShellExecuteExA", nullptr,
+                      reinterpret_cast<void*>(GetProcAddress(winStorage, "ShellExecuteExA"))};
+        targets[3] = {"ShellExecuteA", nullptr,
+                      reinterpret_cast<void*>(GetProcAddress(winStorage, "ShellExecuteA"))};
+    }
+    for (const ShellExecTarget& target : targets) {
+        Wh_Log(L"Windows Update Restorer: ShellExecute coverage %S: shell32=%p windows.storage=%p",
+               target.name, target.shell32, target.storage);
+    }
+
+    unsigned hooked = 0;
+    unsigned forwarded = 0;
+    unsigned missing = 0;
+    if (targets[0].storage && targets[0].storage != targets[0].shell32) {
+        if (WindhawkUtils::SetFunctionHook(reinterpret_cast<ShellExecuteExW_t>(targets[0].storage),
+                                           ShellExecuteExWHookWinStorage,
+                                           &ShellExecuteExWOriginalWinStorage)) ++hooked;
+    } else if (targets[0].storage) ++forwarded; else ++missing;
+    if (targets[1].storage && targets[1].storage != targets[1].shell32) {
+        if (WindhawkUtils::SetFunctionHook(reinterpret_cast<ShellExecuteW_t>(targets[1].storage),
+                                           ShellExecuteWHookWinStorage,
+                                           &ShellExecuteWOriginalWinStorage)) ++hooked;
+    } else if (targets[1].storage) ++forwarded; else ++missing;
+    if (targets[2].storage && targets[2].storage != targets[2].shell32) {
+        if (WindhawkUtils::SetFunctionHook(reinterpret_cast<ShellExecuteExA_t>(targets[2].storage),
+                                           ShellExecuteExAHookWinStorage,
+                                           &ShellExecuteExAOriginalWinStorage)) ++hooked;
+    } else if (targets[2].storage) ++forwarded; else ++missing;
+    if (targets[3].storage && targets[3].storage != targets[3].shell32) {
+        if (WindhawkUtils::SetFunctionHook(reinterpret_cast<ShellExecuteA_t>(targets[3].storage),
+                                           ShellExecuteAHookWinStorage,
+                                           &ShellExecuteAOriginalWinStorage)) ++hooked;
+    } else if (targets[3].storage) ++forwarded; else ++missing;
+
+    Wh_Log(L"Windows Update Restorer: windows.storage ShellExecute hooks: installed=%u forwarded-to-shell32=%u missing=%u",
+           hooked, forwarded, missing);
+}
 // Native Control Panel navigation links
 // -----------------------------------------------------------------------------
 // wucltux publishes a private CControlPanelNavLinks object by writing it to the
@@ -9287,6 +9457,131 @@ static void GatherBackgroundStatus() {
 
 
 // Applies the top-level Windows Update page XML patch.
+
+// -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Windows 11 ultra-defensive classic-interface suppression.
+//
+// On Windows 11 the Windows 8.1 wucltux.dll code-behind can still resolve and
+// show its own status modules (moduleUpToDate, moduleUpdatesAvailable,
+// moduleNoUpdatesReady, moduleProgress, moduleInstallResults,
+// moduleRebootRequired, moduleFirmwareUpdateAvailable, moduleSelfUpdateRequired,
+// moduleCheckForUpdates and moduleAUNotConfigured) against the modern Windows
+// Update service. When that happens the classic interface renders alongside -
+// or instead of - the recreated hub, which is exactly the "classic page appears
+// when it must not" symptom this guard prevents. Windows 10 behaviour is
+// deliberately left untouched: the caller only invokes this on Windows 11.
+//
+// Two tiers, both of which KEEP the module's atom(...) id resolvable (erasing
+// the id makes DUISetXML return S_FALSE on Windows 11 24H2+, which triggers
+// the provider fallback that re-materializes the native module from its
+// internal template - recreating the very bug this guard fixes):
+//
+//  * Static red boxes (moduleAUNotConfigured, moduleCheckForUpdates) are fully
+//    collapsed to a self-closing zero-sized element. They are not populated by
+//    the code-behind, and this exact collapse is what the hub path above and
+//    the unavailable-service path already ship, so it is proven safe.
+//
+//  * Dynamic status modules (progress, install results, reboot prompt,
+//    available/up-to-date banners) are only zero-sized and marked invisible,
+//    keeping their CHILD atoms intact. Their subtrees ARE actively populated by
+//    the code-behind (progress bar position, install results, reboot text),
+//    which resolves children by id/position and may not null-check them;
+//    deleting those children could dereference missing elements and crash
+//    explorer.exe exactly when a restart is pending or an install is running.
+// -----------------------------------------------------------------------------
+static void ForceHideClassicInterfaceModules(std::wstring& xml) {
+    // The recreated hub must actually be present before anything is suppressed.
+    // With the recreated interface disabled (ShowServiceNotice off) the native
+    // page is returned untouched and the classic modules are allowed to show.
+    if (xml.find(L"wuamodern_best_effort") == std::wstring::npos) return;
+
+    static constexpr PCWSTR kCollapseAtoms[] = {
+        L"moduleAUNotConfigured",
+        L"moduleCheckForUpdates",
+    };
+    static constexpr PCWSTR kZeroSizeAtoms[] = {
+        L"moduleUpdatesAvailable",
+        L"moduleFirmwareUpdateAvailable",
+        L"moduleProgress",
+        L"moduleInstallResults",
+        L"moduleUpToDate",
+        L"moduleNoUpdatesReady",
+        L"moduleRebootRequired",
+        L"moduleSelfUpdateRequired",
+    };
+
+    unsigned collapsed = 0;
+    unsigned zeroSized = 0;
+
+    // Tier 1: fully collapse the static red boxes (safe - not code-behind driven).
+    for (PCWSTR atom : kCollapseAtoms) {
+        const std::wstring needle =
+            std::wstring(L"<element id=\"atom(") + atom + L")\"";
+        size_t searchFrom = 0;
+        for (;;) {
+            const size_t start = xml.find(needle, searchFrom);
+            if (start == std::wstring::npos) break;
+            // An already self-closing element (collapsed by an earlier pass,
+            // e.g. moduleAUNotConfigured above) has no matching </element>, so
+            // FindElementEnd would over-run into the next sibling. Skip it.
+            const size_t gt = xml.find(L'>', start);
+            if (gt != std::wstring::npos && gt > start && xml[gt - 1] == L'/') {
+                searchFrom = gt + 1;
+                continue;
+            }
+            size_t end = 0;
+            if (!FindElementEnd(xml, start, end)) {
+                // Malformed tree: do not corrupt it, move past this occurrence.
+                searchFrom = start + needle.size();
+                continue;
+            }
+            const std::wstring collapsedEl =
+                needle + L" width=\"0rp\" height=\"0rp\" visible=\"false\"/>";
+            xml.replace(start, end - start, collapsedEl);
+            ++collapsed;
+            searchFrom = start + collapsedEl.size();
+        }
+    }
+
+    // Tier 2: zero-size + hide the dynamic modules WITHOUT deleting their
+    // children, so every child atom stays resolvable for the code-behind.
+    for (PCWSTR atom : kZeroSizeAtoms) {
+        const std::wstring needle =
+            std::wstring(L"<element id=\"atom(") + atom + L")\"";
+        size_t searchFrom = 0;
+        for (;;) {
+            const size_t start = xml.find(needle, searchFrom);
+            if (start == std::wstring::npos) break;
+            const size_t gt = xml.find(L'>', start);
+            if (gt == std::wstring::npos) {
+                searchFrom = start + needle.size();
+                continue;
+            }
+            if (gt > start && xml[gt - 1] == L'/') {
+                // Already self-closing: convert to a zero-sized self-closing node.
+                const std::wstring collapsedEl =
+                    needle + L" width=\"0rp\" height=\"0rp\" visible=\"false\"/>";
+                xml.replace(start, gt + 1 - start, collapsedEl);
+                ++zeroSized;
+                searchFrom = start + collapsedEl.size();
+                continue;
+            }
+            // Inject the hide attributes into the opening tag, keeping the
+            // module's subtree (and therefore every atom inside it) in place.
+            const std::wstring attrs = L" width=\"0rp\" height=\"0rp\" visible=\"false\"";
+            xml.insert(gt, attrs);
+            ++zeroSized;
+            searchFrom = gt + attrs.size() + 1;
+        }
+    }
+
+    if (collapsed || zeroSized) {
+        Wh_Log(L"Windows Update Restorer: Windows 11 classic-interface guard: %u module(s) collapsed, %u zero-sized",
+               collapsed, zeroSized);
+    }
+}
+
 static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
     // The outer ControlPanelNavPane is deliberately left untouched. Links are
     // published through the pane's per-layout ControlPanelNavLinks object.
@@ -9607,6 +9902,16 @@ static std::wstring PatchModernWuPageXmlImpl(const std::wstring& input) {
     // Keep provider-owned modules intact; only the specific AU module above is
     // replaced. Collapsing all module(...) ancestors invalidates the WU page on
     // current Windows builds and produces S_FALSE.
+    //
+    // Windows 11 ultra-defensive pass: the legacy wucltux code-behind can still
+    // resolve and show its own status modules against the modern Windows Update
+    // service, so the classic interface can render alongside the recreated hub
+    // even though it must not. Force-hide every remaining classic module when
+    // the recreated interface is present. Windows 10 is deliberately left
+    // untouched (no version-gated change for it).
+    if (IsWindows11OrLater()) {
+        ForceHideClassicInterfaceModules(patched);
+    }
     return patched;
 }
 
@@ -9998,6 +10303,16 @@ static void InstallShellPresentationHooks() {
                                            ShellExecuteExAHook,
                                            &ShellExecuteExAOriginal);
         }
+    }
+
+    // Windows 11 moved the real ShellExecute implementation into
+    // windows.storage.dll (shell32 became a thin proxy), so the
+    // hooks above miss the Control Panel task-link path on Windows 11
+    // and every wurestorer: command fell through to the OS-level URI
+    // resolution ("Get an app to open this 'wurestorer' link"). Cover
+    // that module on Windows 11 and later; Windows 10 is untouched.
+    if (IsWindows11OrLater()) {
+        InstallAdditionalShellExecuteHooks();
     }
 
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
@@ -11682,7 +11997,7 @@ BOOL Wh_ModInit() {
                 if (auto rtlGetVersion = reinterpret_cast<RtlGetVersion_t>(
                         GetProcAddress(ntdll, "RtlGetVersion"))) {
                     if (rtlGetVersion(&osInfo) == 0) {
-                        Wh_Log(L"Windows Update Restorer 1.0.0: starting on Windows %lu.%lu build %lu",
+                        Wh_Log(L"Windows Update Restorer 1.1.0: starting on Windows %lu.%lu build %lu",
                                osInfo.dwMajorVersion, osInfo.dwMinorVersion,
                                osInfo.dwBuildNumber);
                     }
