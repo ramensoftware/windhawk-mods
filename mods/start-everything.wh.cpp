@@ -597,10 +597,6 @@ class Client {
         return true;
     }
 
-    // Did the reply come back through QUERY2? Only meaningful after a
-    // successful Query; false means the extra fields are not populated.
-    bool usedQuery2() const { return usedQuery2_; }
-
     bool Query(const std::wstring& text, DWORD maxResults,
                std::vector<Result>* out, DWORD* totalMatches,
                DWORD timeoutMs = 500,
@@ -613,7 +609,6 @@ class Client {
 
         if (SendQuery2(everything, text, maxResults, requestFlags, sortType) &&
             Await(timeoutMs)) {
-            usedQuery2_ = true;
             *out = std::move(results_);
             if (totalMatches) {
                 *totalMatches = total_;
@@ -628,7 +623,6 @@ class Client {
             !Await(timeoutMs)) {
             return false;
         }
-        usedQuery2_ = false;
         *out = std::move(results_);
         if (totalMatches) {
             *totalMatches = total_;
@@ -758,7 +752,6 @@ class Client {
     DWORD total_ = 0;
     DWORD expecting_ = 0;
     bool replied_ = false;
-    bool usedQuery2_ = false;
 };
 
 }  // namespace everything
@@ -862,32 +855,9 @@ inline int Classify(const std::wstring& nameLower, const std::wstring& q) {
 // "code" was eight Gradle doc stubs. Demoted a whole match class rather than
 // hidden, so they still show up once the better matches run out.
 inline bool IsNoise(const std::wstring& pathLower, const std::vector<std::wstring>* customNoise = nullptr) {
-    if (customNoise) {
-        for (const auto& n : *customNoise) {
-            if (!n.empty() && pathLower.find(n) != std::wstring::npos) {
-                return true;
-            }
-        }
-        return false;
-    }
-    static const wchar_t* kNoisy[] = {
-        L"\\node_modules\\",
-        L"\\.git\\",
-        L"\\.gradle\\",
-        L"\\appdata\\local\\temp\\",
-        L"\\appdata\\local\\packages\\",
-        L"\\__pycache__\\",
-        L"\\.venv\\",
-        L"\\site-packages\\",
-        L"\\.cache\\",
-        L"\\build\\intermediates\\",
-        L"\\obj\\debug\\",
-        L"\\obj\\release\\",
-        L"\\windows\\winsxs\\",
-        L"\\windows\\servicing\\",
-    };
-    for (const wchar_t* n : kNoisy) {
-        if (pathLower.find(n) != std::wstring::npos) {
+    if (!customNoise) return false;
+    for (const auto& n : *customNoise) {
+        if (!n.empty() && pathLower.find(n) != std::wstring::npos) {
             return true;
         }
     }
@@ -2104,41 +2074,6 @@ class Index {
         return hits;
     }
 
-    static HBITMAP LoadIcon(const App& app, int size) {
-        if (!app.pidl) {
-            return nullptr;
-        }
-        IShellItem* item = nullptr;
-        if (FAILED(SHCreateItemFromIDList(app.pidl.get(), IID_PPV_ARGS(&item))) ||
-            !item) {
-            return nullptr;
-        }
-        IShellItemImageFactory* factory = nullptr;
-        HBITMAP bitmap = nullptr;
-        if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(&factory))) && factory) {
-            SIZE s{size, size};
-            if (FAILED(factory->GetImage(s, SIIGBF_ICONONLY, &bitmap))) {
-                bitmap = nullptr;
-            }
-            factory->Release();
-        }
-        item->Release();
-        return bitmap;
-    }
-
-    static bool Launch(const App& app) {
-        if (!app.pidl) {
-            return false;
-        }
-        SHELLEXECUTEINFOW ei{};
-        ei.cbSize = sizeof(ei);
-        ei.fMask = SEE_MASK_IDLIST | SEE_MASK_FLAG_NO_UI;
-        ei.lpIDList = app.pidl.get();
-        ei.lpVerb = L"open";
-        ei.nShow = SW_SHOWNORMAL;
-        return ShellExecuteExW(&ei) != FALSE;
-    }
-
    private:
     mutable std::mutex mutex_;
     std::vector<App> apps_;
@@ -2861,12 +2796,6 @@ inline bool EvaluateConversionFormula(const std::wstring& formula, double n, dou
 // ---------------------------------------------------------------------------
 // 5. Standalone Number & Multi-Unit Conversions (/c)
 // ---------------------------------------------------------------------------
-struct UnitConversionResult {
-    std::wstring title;
-    std::wstring subtitle;
-    std::wstring copyText;
-};
-
 inline bool ParseConversionQuery(const std::wstring& input, double& outNum, std::wstring& outUnit, bool& isHelp) {
     std::wstring t = Trim(input);
     if (t.starts_with(L"/c") || t.starts_with(L"/C")) {
@@ -2945,242 +2874,6 @@ inline std::wstring NormalizeUnit(const std::wstring& unitRaw) {
     return u;
 }
 
-inline std::vector<UnitConversionResult> GenerateUnitConversions(double n, const std::wstring& reqUnitRaw) {
-    std::vector<UnitConversionResult> list;
-    std::wstring numStr = FormatCleanNumber(n);
-    std::wstring u = ToLower(Trim(reqUnitRaw));
-
-    auto add = [&](const std::wstring& fromUnit, double toVal, const std::wstring& toUnit, const std::wstring& cat) {
-        std::wstring toStr = FormatCleanNumber(toVal);
-        list.push_back({
-            numStr + L" " + fromUnit + L" = " + toStr + L" " + toUnit,
-            cat + L" \u2022 Press Enter to copy " + toStr + L" " + toUnit,
-            toStr + L" " + toUnit
-        });
-    };
-
-    // 1. Specific Unit requested
-    if (!u.empty()) {
-        if (u == L"c" || u == L"\u00B0c" || u == L"celsius") {
-            add(L"\u00B0C", (n * 9.0 / 5.0) + 32.0, L"\u00B0F", L"Temperature");
-            add(L"\u00B0C", n + 273.15, L"K", L"Temperature");
-        } else if (u == L"f" || u == L"\u00B0f" || u == L"fahrenheit") {
-            add(L"\u00B0F", (n - 32.0) * 5.0 / 9.0, L"\u00B0C", L"Temperature");
-            add(L"\u00B0F", (n - 32.0) * 5.0 / 9.0 + 273.15, L"K", L"Temperature");
-        } else if (u == L"k" || u == L"kelvin") {
-            add(L"K", n - 273.15, L"\u00B0C", L"Temperature");
-            add(L"K", (n - 273.15) * 9.0 / 5.0 + 32.0, L"\u00B0F", L"Temperature");
-        } else if (u == L"km" || u == L"kilometer" || u == L"kilometers") {
-            add(L"km", n * 0.621371, L"miles", L"Distance");
-            add(L"km", n * 1000.0, L"meters", L"Distance");
-            add(L"km", n * 3280.84, L"feet", L"Distance");
-            add(L"km", n * 1093.61, L"yards", L"Distance");
-        } else if (u == L"mi" || u == L"mile" || u == L"miles") {
-            add(L"miles", n * 1.60934, L"km", L"Distance");
-            add(L"miles", n * 5280.0, L"feet", L"Distance");
-            add(L"miles", n * 1760.0, L"yards", L"Distance");
-        } else if (u == L"m" || u == L"meter" || u == L"meters") {
-            add(L"m", n * 3.28084, L"feet", L"Length");
-            add(L"m", n * 1.09361, L"yards", L"Length");
-            add(L"m", n * 39.3701, L"inches", L"Length");
-            add(L"m", n / 1000.0, L"km", L"Distance");
-        } else if (u == L"cm" || u == L"centimeter" || u == L"centimeters") {
-            add(L"cm", n / 2.54, L"inches", L"Length");
-            add(L"cm", n / 30.48, L"feet", L"Length");
-            add(L"cm", n * 10.0, L"mm", L"Length");
-            add(L"cm", n / 100.0, L"m", L"Length");
-        } else if (u == L"mm" || u == L"millimeter" || u == L"millimeters") {
-            add(L"mm", n / 25.4, L"inches", L"Length");
-            add(L"mm", n / 10.0, L"cm", L"Length");
-        } else if (u == L"in" || u == L"inch" || u == L"inches" || u == L"\"") {
-            add(L"in", n * 2.54, L"cm", L"Length");
-            add(L"in", n * 25.4, L"mm", L"Length");
-            add(L"in", n / 12.0, L"feet", L"Length");
-        } else if (u == L"ft" || u == L"foot" || u == L"feet" || u == L"'") {
-            add(L"ft", n * 0.3048, L"m", L"Length");
-            add(L"ft", n * 30.48, L"cm", L"Length");
-            add(L"ft", n * 12.0, L"inches", L"Length");
-            add(L"ft", n / 3.0, L"yards", L"Length");
-        } else if (u == L"yd" || u == L"yard" || u == L"yards") {
-            add(L"yd", n * 0.9144, L"m", L"Length");
-            add(L"yd", n * 3.0, L"feet", L"Length");
-        } else if (u == L"kg" || u == L"kilo" || u == L"kilogram" || u == L"kilograms") {
-            add(L"kg", n * 2.20462, L"lbs", L"Weight");
-            add(L"kg", n * 1000.0, L"grams", L"Weight");
-            add(L"kg", n * 35.274, L"oz", L"Weight");
-            add(L"kg", n / 1000.0, L"tonnes", L"Weight");
-        } else if (u == L"lb" || u == L"lbs" || u == L"pound" || u == L"pounds") {
-            add(L"lbs", n / 2.20462, L"kg", L"Weight");
-            add(L"lbs", n * 16.0, L"oz", L"Weight");
-            add(L"lbs", n * 453.592, L"grams", L"Weight");
-        } else if (u == L"g" || u == L"gram" || u == L"grams") {
-            add(L"g", n * 0.035274, L"oz", L"Weight");
-            add(L"g", n / 453.592, L"lbs", L"Weight");
-            add(L"g", n / 1000.0, L"kg", L"Weight");
-        } else if (u == L"oz" || u == L"ounce" || u == L"ounces") {
-            add(L"oz", n * 28.3495, L"grams", L"Weight");
-            add(L"oz", n / 16.0, L"lbs", L"Weight");
-        } else if (u == L"kmh" || u == L"km/h" || u == L"kph") {
-            add(L"km/h", n * 0.621371, L"mph", L"Speed");
-            add(L"km/h", n / 3.6, L"m/s", L"Speed");
-            add(L"km/h", n * 0.539957, L"knots", L"Speed");
-        } else if (u == L"mph") {
-            add(L"mph", n * 1.60934, L"km/h", L"Speed");
-            add(L"mph", n * 0.44704, L"m/s", L"Speed");
-            add(L"mph", n * 0.868976, L"knots", L"Speed");
-        } else if (u == L"b" || u == L"bytes" || u == L"byte") {
-            add(L"Bytes", n / 1024.0, L"KB", L"Digital Storage");
-            add(L"Bytes", n / (1024.0 * 1024.0), L"MB", L"Digital Storage");
-            add(L"Bytes", n * 8.0, L"Bits", L"Digital Storage");
-        } else if (u == L"kb" || u == L"kilobyte" || u == L"kilobytes") {
-            add(L"KB", n / 1024.0, L"MB", L"Digital Storage");
-            add(L"KB", n * 1024.0, L"Bytes", L"Digital Storage");
-            add(L"KB", n / (1024.0 * 1024.0), L"GB", L"Digital Storage");
-        } else if (u == L"mb" || u == L"megabyte" || u == L"megabytes") {
-            add(L"MB", n / 1024.0, L"GB", L"Digital Storage");
-            add(L"MB", n * 1024.0, L"KB", L"Digital Storage");
-            add(L"MB", n / (1024.0 * 1024.0), L"TB", L"Digital Storage");
-        } else if (u == L"gb" || u == L"gigabyte" || u == L"gigabytes") {
-            add(L"GB", n / 1024.0, L"TB", L"Digital Storage");
-            add(L"GB", n * 1024.0, L"MB", L"Digital Storage");
-            add(L"GB", n * 1024.0 * 1024.0, L"KB", L"Digital Storage");
-        } else if (u == L"tb" || u == L"terabyte" || u == L"terabytes") {
-            add(L"TB", n * 1024.0, L"GB", L"Digital Storage");
-            add(L"TB", n / 1024.0, L"PB", L"Digital Storage");
-        } else if (u == L"s" || u == L"sec" || u == L"second" || u == L"seconds") {
-            add(L"s", n / 60.0, L"minutes", L"Time");
-            add(L"s", n / 3600.0, L"hours", L"Time");
-            add(L"s", n * 1000.0, L"ms", L"Time");
-        } else if (u == L"min" || u == L"minute" || u == L"minutes") {
-            add(L"min", n / 60.0, L"hours", L"Time");
-            add(L"min", n * 60.0, L"seconds", L"Time");
-            add(L"min", n / 1440.0, L"days", L"Time");
-        } else if (u == L"h" || u == L"hr" || u == L"hrs" || u == L"hour" || u == L"hours") {
-            add(L"hours", n / 24.0, L"days", L"Time");
-            add(L"hours", n * 60.0, L"minutes", L"Time");
-            add(L"hours", n * 3600.0, L"seconds", L"Time");
-        } else if (u == L"d" || u == L"day" || u == L"days") {
-            add(L"days", n / 7.0, L"weeks", L"Time");
-            add(L"days", n * 24.0, L"hours", L"Time");
-            add(L"days", n / 365.25, L"years", L"Time");
-        } else if (u == L"l" || u == L"liter" || u == L"liters") {
-            add(L"L", n * 0.264172, L"US gal", L"Volume");
-            add(L"L", n * 1000.0, L"ml", L"Volume");
-            add(L"L", n * 33.814, L"fl oz", L"Volume");
-            add(L"L", n * 4.22675, L"cups", L"Volume");
-        } else if (u == L"gal" || u == L"gallon" || u == L"gallons") {
-            add(L"US gal", n * 3.78541, L"L", L"Volume");
-            add(L"US gal", n * 128.0, L"fl oz", L"Volume");
-        } else if (u == L"bar") {
-            add(L"bar", n * 14.5038, L"psi", L"Pressure");
-            add(L"bar", n * 100.0, L"kPa", L"Pressure");
-            add(L"bar", n * 0.986923, L"atm", L"Pressure");
-        } else if (u == L"psi") {
-            add(L"psi", n * 0.0689476, L"bar", L"Pressure");
-            add(L"psi", n * 6.89476, L"kPa", L"Pressure");
-        } else if (u == L"kw") {
-            add(L"kW", n * 1.34102, L"hp", L"Power");
-            add(L"kW", n * 1000.0, L"Watts", L"Power");
-        } else if (u == L"hp") {
-            add(L"hp", n * 0.7457, L"kW", L"Power");
-            add(L"hp", n * 745.7, L"Watts", L"Power");
-        }
-    }
-
-    // 2. If no specific unit was requested or matched, generate ALL standard conversion pairs
-    if (list.empty()) {
-        // Temperature
-        add(L"\u00B0C", (n * 9.0 / 5.0) + 32.0, L"\u00B0F", L"Temperature");
-        add(L"\u00B0F", (n - 32.0) * 5.0 / 9.0, L"\u00B0C", L"Temperature");
-        add(L"\u00B0C", n + 273.15, L"K", L"Temperature");
-
-        // Distance & Length
-        add(L"km", n * 0.621371, L"miles", L"Distance");
-        add(L"miles", n * 1.60934, L"km", L"Distance");
-        add(L"m", n * 3.28084, L"feet", L"Length");
-        add(L"feet", n * 0.3048, L"m", L"Length");
-        add(L"cm", n / 2.54, L"inches", L"Length");
-        add(L"inches", n * 2.54, L"cm", L"Length");
-        add(L"mm", n / 25.4, L"inches", L"Length");
-        add(L"yd", n * 0.9144, L"m", L"Length");
-
-        // Weight / Mass
-        add(L"kg", n * 2.20462, L"lbs", L"Weight");
-        add(L"lbs", n / 2.20462, L"kg", L"Weight");
-        add(L"g", n * 0.035274, L"oz", L"Weight");
-        add(L"oz", n * 28.3495, L"g", L"Weight");
-
-        // Speed
-        add(L"km/h", n * 0.621371, L"mph", L"Speed");
-        add(L"mph", n * 1.60934, L"km/h", L"Speed");
-        add(L"m/s", n * 3.6, L"km/h", L"Speed");
-
-        // Digital Storage
-        if (n >= 1.0) {
-            add(L"MB", n / 1024.0, L"GB", L"Digital Storage");
-            add(L"GB", n * 1024.0, L"MB", L"Digital Storage");
-            add(L"GB", n / 1024.0, L"TB", L"Digital Storage");
-            add(L"TB", n * 1024.0, L"GB", L"Digital Storage");
-            add(L"KB", n / 1024.0, L"MB", L"Digital Storage");
-        }
-
-        // Time
-        if (n >= 1.0) {
-            add(L"hours", n / 24.0, L"days", L"Time");
-            add(L"days", n / 7.0, L"weeks", L"Time");
-            add(L"minutes", n / 60.0, L"hours", L"Time");
-            add(L"seconds", n / 60.0, L"minutes", L"Time");
-        }
-
-        // Volume
-        add(L"L", n * 0.264172, L"US gal", L"Volume");
-        add(L"US gal", n * 3.78541, L"L", L"Volume");
-        add(L"ml", n * 0.033814, L"fl oz", L"Volume");
-
-        // Pressure
-        add(L"bar", n * 14.5038, L"psi", L"Pressure");
-        add(L"psi", n * 0.0689476, L"bar", L"Pressure");
-
-        // Power
-        add(L"kW", n * 1.34102, L"hp", L"Power");
-        add(L"hp", n * 0.7457, L"kW", L"Power");
-
-        // Radix
-        if (n >= 0.0 && n <= 16777215.0 && (n == std::floor(n))) {
-            unsigned long long intVal = static_cast<unsigned long long>(n);
-            wchar_t hexBuf[32];
-            swprintf_s(hexBuf, L"0x%llX", intVal);
-            std::wstring binStr = L"0b";
-            if (intVal == 0) {
-                binStr += L"0";
-            } else {
-                for (int b = 31; b >= 0; --b) {
-                    if ((intVal >> b) & 1) {
-                        for (int j = b; j >= 0; --j) {
-                            binStr.push_back(((intVal >> j) & 1) ? L'1' : L'0');
-                        }
-                        break;
-                    }
-                }
-            }
-            wchar_t octBuf[32];
-            swprintf_s(octBuf, L"0o%llo", intVal);
-
-            list.push_back({
-                numStr + L" = " + hexBuf + L" (Hex) = " + binStr + L" (Bin) = " + octBuf + L" (Oct)",
-                L"Base Radix \u2022 Press Enter to copy " + std::wstring(hexBuf),
-                hexBuf
-            });
-        }
-    }
-
-    return list;
-}
-
-inline std::vector<UnitConversionResult> GenerateCommonConversions(double n) {
-    return GenerateUnitConversions(n, L"");
-}
-
 } // namespace tools
 
 #include <winrt/Windows.System.h>
@@ -3203,24 +2896,9 @@ inline std::vector<UnitConversionResult> GenerateCommonConversions(double n) {
 #define WH_MOD_ID L"start-everything"
 #endif
 #ifndef WH_MOD_VERSION
-#define WH_MOD_VERSION L"0.1"
+#define WH_MOD_VERSION L"1.0"
 #endif
-
 #include <windhawk_utils.h>
-
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cwctype>
-#include <memory>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <condition_variable>
-#include <map>
-#include <mutex>
-#include <thread>
-#include <vector>
 
 namespace wf = winrt::Windows::Foundation;
 namespace wut = winrt::Windows::UI::Text;
@@ -3233,10 +2911,6 @@ namespace wui = winrt::Windows::UI::Input;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 namespace wuxmi = winrt::Windows::UI::Xaml::Media::Imaging;
 namespace wuxma = winrt::Windows::UI::Xaml::Media::Animation;
-
-namespace {
-// Rec removed in favor of native Wh_Log
-}  // namespace
 
 static std::atomic<bool> g_quit{false};
 
@@ -3279,7 +2953,9 @@ static bool IsProcessNamed(DWORD pid, const wchar_t* name) {
     DWORD size = MAX_PATH;
     bool match = false;
     if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
-        match = (StrStrIW(path, name) != nullptr);
+        const wchar_t* exeName = wcsrchr(path, L'\\');
+        exeName = exeName ? (exeName + 1) : path;
+        match = (_wcsicmp(exeName, name) == 0);
     }
     CloseHandle(hProcess);
     return match;
@@ -3394,6 +3070,55 @@ static void WINAPI Hook_Explorer_SwitchToThisWindow(HWND hWnd, BOOL fAltTab) {
     }
 }
 
+// Tracked launch threads for clean unload synchronization across processes
+static std::mutex g_launchHandlesMutex;
+static std::vector<HANDLE> g_launchHandles;
+
+template <typename F>
+static void SpawnTrackedLaunch(F&& f) {
+    auto fnCopy = new std::decay_t<F>(std::forward<F>(f));
+    HANDLE h = CreateThread(nullptr, 0, [](LPVOID param) -> DWORD {
+        auto pFn = reinterpret_cast<std::decay_t<F>*>(param);
+        try {
+            (*pFn)();
+        } catch (...) {}
+        delete pFn;
+        return 0;
+    }, fnCopy, 0, nullptr);
+
+    if (h) {
+        std::lock_guard<std::mutex> lock(g_launchHandlesMutex);
+        g_launchHandles.erase(
+            std::remove_if(g_launchHandles.begin(), g_launchHandles.end(),
+                [](HANDLE handle) {
+                    if (WaitForSingleObject(handle, 0) == WAIT_OBJECT_0) {
+                        CloseHandle(handle);
+                        return true;
+                    }
+                    return false;
+                }),
+            g_launchHandles.end()
+        );
+        g_launchHandles.push_back(h);
+    } else {
+        delete fnCopy;
+    }
+}
+
+static void WaitForTrackedLaunches() {
+    std::vector<HANDLE> handlesToJoin;
+    {
+        std::lock_guard<std::mutex> lock(g_launchHandlesMutex);
+        handlesToJoin = std::move(g_launchHandles);
+    }
+    for (HANDLE h : handlesToJoin) {
+        if (h) {
+            WaitForSingleObject(h, INFINITE);
+            CloseHandle(h);
+        }
+    }
+}
+
 // ===========================================================================
 // Domain: Explorer Shell Property Relay
 // ===========================================================================
@@ -3403,7 +3128,9 @@ static const wchar_t kExplorerHelperWindowName[] = L"StartEverything_ExplorerHos
 static const ULONG_PTR kExplorerCopyDataMagic = 0x53455052; // 'SEPR'
 
 static HANDLE g_hExplorerHelperThread = nullptr;
+static DWORD g_explorerHelperThreadId = 0;
 static HWND g_hExplorerHelperWnd = nullptr;
+static HANDLE g_hExplorerHelperReadyEvent = nullptr;
 
 static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
@@ -3423,9 +3150,31 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
                 targetPath.pop_back();
             }
 
-            Wh_Log(L"[Explorer] Received SEPR WM_COPYDATA for: %ls", targetPath.c_str());
+            if (targetPath.empty()) return 0;
 
-            std::thread([path = std::move(targetPath)]() {
+            // Security validation: reject UNC paths and remote network drives
+            if (PathIsUNCW(targetPath.c_str()) || targetPath.starts_with(L"\\\\")) {
+                Wh_Log(L"[Explorer] Rejected UNC path: %ls", targetPath.c_str());
+                return 0;
+            }
+            if (targetPath.size() >= 2 && targetPath[1] == L':') {
+                wchar_t root[4] = { targetPath[0], L':', L'\\', 0 };
+                if (GetDriveTypeW(root) == DRIVE_REMOTE) {
+                    Wh_Log(L"[Explorer] Rejected remote drive path: %ls", targetPath.c_str());
+                    return 0;
+                }
+            }
+
+            // Security validation: path must exist
+            DWORD attr = GetFileAttributesW(targetPath.c_str());
+            if (attr == INVALID_FILE_ATTRIBUTES) {
+                Wh_Log(L"[Explorer] Rejected non-existent path: %ls", targetPath.c_str());
+                return 0;
+            }
+
+            Wh_Log(L"[Explorer] Received valid SEPR WM_COPYDATA for: %ls", targetPath.c_str());
+
+            SpawnTrackedLaunch([path = std::move(targetPath)]() {
                 HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
                 AllowSetForegroundWindow(ASFW_ANY);
@@ -3465,21 +3214,10 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
                     Wh_Log(L"[Explorer] ShellExecuteExW string returned %d, err=%lu", ok, GetLastError());
                 }
 
-                // Keep STA thread pumping messages briefly so shell extensions and COM handoff initialize
-                MSG msg;
-                DWORD start = GetTickCount();
-                while (GetTickCount() - start < 2000) {
-                    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-                        TranslateMessage(&msg);
-                        DispatchMessageW(&msg);
-                    }
-                    Sleep(50);
-                }
-
                 if (SUCCEEDED(hr)) {
                     CoUninitialize();
                 }
-            }).detach();
+            });
 
             return 1;
         }
@@ -3523,6 +3261,10 @@ static DWORD WINAPI ExplorerHelperThreadProc(LPVOID) {
         Wh_Log(L"[Explorer] Failed to create helper host window, err=%lu", GetLastError());
     }
 
+    if (g_hExplorerHelperReadyEvent) {
+        SetEvent(g_hExplorerHelperReadyEvent);
+    }
+
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
         TranslateMessage(&msg);
@@ -3549,9 +3291,14 @@ static void StartExplorerHelperHost() {
         return;
     }
 
-    g_hExplorerHelperThread = CreateThread(nullptr, 0, ExplorerHelperThreadProc, nullptr, 0, nullptr);
-    if (!g_hExplorerHelperThread) {
-        Wh_Log(L"[Explorer] Failed to create helper host thread, err=%lu", GetLastError());
+    g_hExplorerHelperReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_hExplorerHelperThread = CreateThread(nullptr, 0, ExplorerHelperThreadProc, nullptr, 0, &g_explorerHelperThreadId);
+    if (g_hExplorerHelperThread && g_hExplorerHelperReadyEvent) {
+        WaitForSingleObject(g_hExplorerHelperReadyEvent, 3000);
+    }
+    if (g_hExplorerHelperReadyEvent) {
+        CloseHandle(g_hExplorerHelperReadyEvent);
+        g_hExplorerHelperReadyEvent = nullptr;
     }
 }
 
@@ -3559,25 +3306,30 @@ static void StopExplorerHelperHost() {
     if (g_hExplorerHelperWnd && IsWindow(g_hExplorerHelperWnd)) {
         PostMessageW(g_hExplorerHelperWnd, WM_CLOSE, 0, 0);
     }
+    if (g_explorerHelperThreadId) {
+        PostThreadMessageW(g_explorerHelperThreadId, WM_QUIT, 0, 0);
+    }
     if (g_hExplorerHelperThread) {
-        WaitForSingleObject(g_hExplorerHelperThread, 2000);
+        WaitForSingleObject(g_hExplorerHelperThread, INFINITE);
         CloseHandle(g_hExplorerHelperThread);
         g_hExplorerHelperThread = nullptr;
+        g_explorerHelperThreadId = 0;
     }
+    WaitForTrackedLaunches();
 }
 
 void InitExplorer() {
     Wh_Log(L"=== start-everything: initializing explorer.exe shell hooks ===");
-    Wh_SetFunctionHook((void*)SetForegroundWindow, (void*)Hook_Explorer_SetForegroundWindow,
-                       (void**)&pOriginalExplorerSetForegroundWindow);
-    Wh_SetFunctionHook((void*)BringWindowToTop, (void*)Hook_Explorer_BringWindowToTop,
-                       (void**)&pOriginalExplorerBringWindowToTop);
+    WindhawkUtils::SetFunctionHook(SetForegroundWindow, Hook_Explorer_SetForegroundWindow,
+                                   &pOriginalExplorerSetForegroundWindow);
+    WindhawkUtils::SetFunctionHook(BringWindowToTop, Hook_Explorer_BringWindowToTop,
+                                   &pOriginalExplorerBringWindowToTop);
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (hUser32) {
-        void* pSwitch = (void*)GetProcAddress(hUser32, "SwitchToThisWindow");
+        auto pSwitch = (Explorer_SwitchToThisWindow_t)GetProcAddress(hUser32, "SwitchToThisWindow");
         if (pSwitch) {
-            Wh_SetFunctionHook(pSwitch, (void*)Hook_Explorer_SwitchToThisWindow,
-                               (void**)&pOriginalExplorerSwitchToThisWindow);
+            WindhawkUtils::SetFunctionHook(pSwitch, Hook_Explorer_SwitchToThisWindow,
+                                           &pOriginalExplorerSwitchToThisWindow);
         }
     }
 
@@ -3789,19 +3541,19 @@ static void WINAPI Hook_SearchHost_SwitchToThisWindow(HWND hWnd, BOOL fAltTab) {
 
 void InitSearchHost() {
     Wh_Log(L"=== start-everything: initializing SearchHost disconnect & suppression hooks ===");
-    Wh_SetFunctionHook((void*)CreateProcessW, (void*)Hook_SearchHost_CreateProcessW, (void**)&pOriginalCreateProcessW);
-    Wh_SetFunctionHook((void*)CreateFileW, (void*)Hook_SearchHost_CreateFileW, (void**)&pOriginalCreateFileW);
-    Wh_SetFunctionHook((void*)CoCreateInstance, (void*)Hook_SearchHost_CoCreateInstance, (void**)&pOriginalCoCreateInstance);
-    Wh_SetFunctionHook((void*)SetForegroundWindow, (void*)Hook_SearchHost_SetForegroundWindow, (void**)&pOrigSearchHostSetForegroundWindow);
-    Wh_SetFunctionHook((void*)BringWindowToTop, (void*)Hook_SearchHost_BringWindowToTop, (void**)&pOrigSearchHostBringWindowToTop);
-    Wh_SetFunctionHook((void*)ShowWindow, (void*)Hook_SearchHost_ShowWindow, (void**)&pOrigSearchHostShowWindow);
-    Wh_SetFunctionHook((void*)SetWindowPos, (void*)Hook_SearchHost_SetWindowPos, (void**)&pOrigSearchHostSetWindowPos);
+    WindhawkUtils::SetFunctionHook(CreateProcessW, Hook_SearchHost_CreateProcessW, &pOriginalCreateProcessW);
+    WindhawkUtils::SetFunctionHook(CreateFileW, Hook_SearchHost_CreateFileW, &pOriginalCreateFileW);
+    WindhawkUtils::SetFunctionHook(CoCreateInstance, Hook_SearchHost_CoCreateInstance, &pOriginalCoCreateInstance);
+    WindhawkUtils::SetFunctionHook(SetForegroundWindow, Hook_SearchHost_SetForegroundWindow, &pOrigSearchHostSetForegroundWindow);
+    WindhawkUtils::SetFunctionHook(BringWindowToTop, Hook_SearchHost_BringWindowToTop, &pOrigSearchHostBringWindowToTop);
+    WindhawkUtils::SetFunctionHook(ShowWindow, Hook_SearchHost_ShowWindow, &pOrigSearchHostShowWindow);
+    WindhawkUtils::SetFunctionHook(SetWindowPos, Hook_SearchHost_SetWindowPos, &pOrigSearchHostSetWindowPos);
 
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (hUser32) {
-        void* pSwitch = (void*)GetProcAddress(hUser32, "SwitchToThisWindow");
+        auto pSwitch = (SwitchToThisWindow_t)GetProcAddress(hUser32, "SwitchToThisWindow");
         if (pSwitch) {
-            Wh_SetFunctionHook(pSwitch, (void*)Hook_SearchHost_SwitchToThisWindow, (void**)&pOrigSearchHostSwitchToThisWindow);
+            WindhawkUtils::SetFunctionHook(pSwitch, Hook_SearchHost_SwitchToThisWindow, &pOrigSearchHostSwitchToThisWindow);
         }
     }
 }
@@ -3818,7 +3570,9 @@ static void StartSearchHostWatchdog() {
                 }
                 return TRUE;
             }, 0);
-            Sleep(500);
+            for (int s = 0; s < 10 && !g_quit.load(); ++s) {
+                Sleep(50);
+            }
         }
     });
 }
@@ -3922,9 +3676,6 @@ void LoadSettings() {
     g_settings.excludedPaths.clear();
     for (int i = 0;; ++i) {
         auto val = WindhawkUtils::StringSetting::make(L"excludedPaths[%d]", i);
-        if (!val.get() || !*val.get()) {
-            val = WindhawkUtils::StringSetting::make(L"excludedPaths[%d].pattern", i);
-        }
         if (!val.get() || !*val.get()) break;
         std::wstring s = tools::ToLower(tools::Trim(val.get()));
         for (auto& ch : s) {
@@ -4047,8 +3798,6 @@ std::wstring FocusedElementLabel() {
 [[clang::no_destroy]] wuxc::Grid g_resultsHost{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_resultsList{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_appsList{nullptr};
-[[clang::no_destroy]] std::optional<std::vector<wuxc::Button>> g_appButtonsOpt{std::in_place};
-
 struct AppCardUI {
     int appIndex = -1;
     std::wstring title;
@@ -4057,18 +3806,10 @@ struct AppCardUI {
     bool canRunAsAdmin = true;
     bool isSetting = false;
 };
-[[clang::no_destroy]] std::optional<std::vector<AppCardUI>> g_activeAppsOpt{std::in_place};
 
-inline std::vector<wuxc::Button>& GetAppButtons() {
-    if (!g_appButtonsOpt) g_appButtonsOpt.emplace();
-    return *g_appButtonsOpt;
-}
-inline std::vector<AppCardUI>& GetActiveApps() {
-    if (!g_activeAppsOpt) g_activeAppsOpt.emplace();
-    return *g_activeAppsOpt;
-}
-#define g_appButtons (GetAppButtons())
-#define g_activeApps (GetActiveApps())
+static std::optional<std::vector<wuxc::Button>> g_appButtonsOpt;
+static std::optional<std::vector<AppCardUI>> g_activeAppsOpt;
+
 [[clang::no_destroy]] wuxc::Border g_appsHeaderHolder{nullptr};
 [[clang::no_destroy]] wuxc::Border g_filesHeaderHolder{nullptr};
 [[clang::no_destroy]] wuxc::Border g_searchBarBorder{nullptr};
@@ -4086,6 +3827,11 @@ void HideOverlayAnimated();
 void HideAllOtherSearchBoxes(wux::DependencyObject const& root, int depth = 15);
 void SyncOverlayBackground();
 void RequestRender();
+void TeardownStartMenuUi();
+inline UINT GetTeardownMessage() {
+    static UINT s_msg = RegisterWindowMessageW(L"Windhawk_StartMenuTeardown_start-everything");
+    return s_msg;
+}
 
 [[clang::no_destroy]] wuxc::TextBox::TextChanged_revoker g_ourBoxChanged;
 [[clang::no_destroy]] wux::UIElement::LostFocus_revoker g_ourBoxLost;
@@ -4095,28 +3841,47 @@ inline wuxm::SolidColorBrush MakeBrush(uint8_t a, uint8_t r, uint8_t g, uint8_t 
     return wuxm::SolidColorBrush{winrt::Windows::UI::ColorHelper::FromArgb(a, r, g, b)};
 }
 
-inline bool IsLightTheme() {
+static std::atomic<int> g_cachedLightTheme{-1};
+
+inline void RefreshThemeCache() {
     DWORD val = 0;
     DWORD sz = sizeof(val);
     if (RegGetValueW(HKEY_CURRENT_USER,
                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
                      L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &val, &sz) == ERROR_SUCCESS) {
-        return val != 0;
+        g_cachedLightTheme.store(val != 0 ? 1 : 0);
+        return;
     }
     if (RegGetValueW(HKEY_CURRENT_USER,
                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
                      L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &val, &sz) == ERROR_SUCCESS) {
-        return val != 0;
+        g_cachedLightTheme.store(val != 0 ? 1 : 0);
+        return;
     }
     try {
         wux::FrameworkElement target = g_resultsHost ? g_resultsHost.try_as<wux::FrameworkElement>() : g_stockButton;
         if (target) {
             auto theme = target.ActualTheme();
-            if (theme == wux::ElementTheme::Light) return true;
-            if (theme == wux::ElementTheme::Dark) return false;
+            if (theme == wux::ElementTheme::Light) {
+                g_cachedLightTheme.store(1);
+                return;
+            }
+            if (theme == wux::ElementTheme::Dark) {
+                g_cachedLightTheme.store(0);
+                return;
+            }
         }
     } catch (...) {}
-    return false;
+    g_cachedLightTheme.store(0);
+}
+
+inline bool IsLightTheme() {
+    int cached = g_cachedLightTheme.load();
+    if (cached >= 0) {
+        return cached != 0;
+    }
+    RefreshThemeCache();
+    return g_cachedLightTheme.load() != 0;
 }
 
 wuxc::Border FindMenuAcrylicBorder() {
@@ -4291,8 +4056,8 @@ void HideOverlayAnimated() {
                 }
                 if (g_resultsList) g_resultsList.Children().Clear();
                 if (g_appsList) g_appsList.Children().Clear();
-                g_activeApps.clear();
-                g_appButtons.clear();
+                if (g_activeAppsOpt) g_activeAppsOpt->clear();
+                if (g_appButtonsOpt) g_appButtonsOpt->clear();
             }
         });
 
@@ -4307,18 +4072,54 @@ void HideOverlayAnimated() {
     }
 }
 
+struct SuppressedElement {
+    winrt::weak_ref<wux::FrameworkElement> element;
+    wux::Visibility visibility = wux::Visibility::Visible;
+    double opacity = 1.0;
+    bool hitTestVisible = true;
+    double width = std::numeric_limits<double>::quiet_NaN();
+    double maxWidth = std::numeric_limits<double>::quiet_NaN();
+    double height = std::numeric_limits<double>::quiet_NaN();
+    double maxHeight = std::numeric_limits<double>::quiet_NaN();
+    wux::Thickness margin{};
+    bool isControl = false;
+    bool tabStop = true;
+    bool tabStopOnly = false;
+};
+
+static std::vector<SuppressedElement> g_suppressed;
+
 void SuppressShellElement(wux::FrameworkElement const& fe, bool collapse = true,
                           bool zeroSize = false, bool tabStopOnly = false) {
     if (!fe) {
         return;
     }
     try {
+        SuppressedElement saved;
+        saved.element = winrt::make_weak(fe);
+        if (auto ctl = fe.try_as<wuxc::Control>()) {
+            saved.isControl = true;
+            saved.tabStop = ctl.IsTabStop();
+        }
+        saved.tabStopOnly = tabStopOnly;
+
         if (tabStopOnly) {
+            g_suppressed.push_back(std::move(saved));
             if (auto ctl = fe.try_as<wuxc::Control>()) {
                 ctl.IsTabStop(false);
             }
             return;
         }
+
+        saved.visibility = fe.Visibility();
+        saved.opacity = fe.Opacity();
+        saved.hitTestVisible = fe.IsHitTestVisible();
+        saved.width = fe.Width();
+        saved.maxWidth = fe.MaxWidth();
+        saved.height = fe.Height();
+        saved.maxHeight = fe.MaxHeight();
+        saved.margin = fe.Margin();
+        g_suppressed.push_back(std::move(saved));
 
         fe.Opacity(0.0);
         fe.IsHitTestVisible(false);
@@ -4326,12 +4127,54 @@ void SuppressShellElement(wux::FrameworkElement const& fe, bool collapse = true,
             fe.Visibility(wux::Visibility::Collapsed);
         }
         if (zeroSize) {
+            fe.MaxWidth(0.0);
+            fe.Width(0.0);
             fe.MaxHeight(0.0);
             fe.Height(0.0);
             fe.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 0));
         }
     } catch (...) {
     }
+}
+
+void RestoreShellElements() {
+    size_t restored = 0;
+    for (auto it = g_suppressed.rbegin(); it != g_suppressed.rend(); ++it) {
+        auto fe = it->element.get();
+        if (!fe) {
+            continue;
+        }
+        try {
+            if (it->tabStopOnly) {
+                if (it->isControl) {
+                    if (auto ctl = fe.try_as<wuxc::Control>()) {
+                        ctl.IsTabStop(it->tabStop);
+                    }
+                }
+                ++restored;
+                continue;
+            }
+
+            fe.Visibility(it->visibility);
+            fe.Opacity(it->opacity);
+            fe.IsHitTestVisible(it->hitTestVisible);
+            fe.Width(it->width);
+            fe.MaxWidth(it->maxWidth);
+            fe.Height(it->height);
+            fe.MaxHeight(it->maxHeight);
+            fe.Margin(it->margin);
+            if (it->isControl) {
+                if (auto ctl = fe.try_as<wuxc::Control>()) {
+                    ctl.IsTabStop(it->tabStop);
+                }
+            }
+            ++restored;
+        } catch (...) {
+        }
+    }
+    Wh_Log(L"teardown: restored %zu shell element(s) of %zu", restored,
+        g_suppressed.size());
+    g_suppressed.clear();
 }
 
 void HideAllOtherSearchBoxes(wux::DependencyObject const& root, int depth) {
@@ -4521,10 +4364,6 @@ void DismissStartMenu() {
             PostMessageW(ours, WM_KEYDOWN, VK_ESCAPE, 0x00010001);
             PostMessageW(ours, WM_KEYUP, VK_ESCAPE, 0xC0010001);
             Wh_Log(L"DismissStartMenu: posted targeted VK_ESCAPE to CoreWindow %p", ours);
-        } else {
-            keybd_event(VK_ESCAPE, 0, 0, 0);
-            keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0);
-            Wh_Log(L"DismissStartMenu: sent fallback dismiss signal");
         }
     } catch (...) {
     }
@@ -4681,6 +4520,11 @@ void InstallMessageHook() {
 
 static bool g_subclassed = false;
 static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
+    if (uMsg && uMsg == GetTeardownMessage()) {
+        Wh_Log(L"subclass: teardown message received");
+        TeardownStartMenuUi();
+        return 0;
+    }
     if (uMsg == WM_ACTIVATE) {
         HWND otherHwnd = reinterpret_cast<HWND>(lParam);
         DWORD otherPid = 0;
@@ -4753,7 +4597,8 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
             return 0;
         }
     } else if (uMsg == WM_SETTINGCHANGE || uMsg == WM_THEMECHANGED) {
-        Wh_Log(L"subclass: setting or theme changed -> synchronizing overlay colors");
+        Wh_Log(L"subclass: setting or theme changed -> refreshing theme and synchronizing overlay colors");
+        RefreshThemeCache();
         SyncOverlayBackground();
         if (g_isOverlayVisible.load()) {
             RequestRender();
@@ -4893,9 +4738,10 @@ void SubclassStartMenuWindow() {
             SetPropW(tray, L"WindhawkStartMenuHwnd", ours);
         }
         if (!g_subclassed) {
-            WindhawkUtils::SetWindowSubclassFromAnyThread(ours, StartMenuSubclassProc, 0);
-            g_subclassed = true;
-            Wh_Log(L"subclass: hooked CoreWindow HWND %p", ours);
+            if (WindhawkUtils::SetWindowSubclassFromAnyThread(ours, StartMenuSubclassProc, 0)) {
+                g_subclassed = true;
+                Wh_Log(L"subclass: hooked CoreWindow HWND %p", ours);
+            }
         }
     }
     InstallMessageHook();
@@ -4903,7 +4749,6 @@ void SubclassStartMenuWindow() {
 
 // Results, handed from the search thread to the XAML thread.
 std::mutex g_resultsMutex;
-std::vector<everything::Result> g_results;
 std::atomic<DWORD> g_totalMatches{0};
 
 [[clang::no_destroy]] std::optional<std::thread> g_searchThread;
@@ -4937,6 +4782,7 @@ struct Row {
     std::vector<BYTE> icon;  // BGRA, kIconSize square, or empty
     bool canRunAsAdmin = true;
     bool isSetting = false;
+    bool isFolder = false;
     std::wstring copyText;   // text to copy to clipboard on activation
     std::wstring customGlyph; // Segoe Fluent glyph override (e.g. \uE1D0, \uE701, \uE88E)
 };
@@ -4964,54 +4810,7 @@ std::vector<Row> g_fileRows;
 std::atomic<int> g_launchRequest{-1};
 std::atomic<bool> g_launchAsAdmin{false};
 
-// Opens what was clicked.
-static std::mutex g_launchHandlesMutex;
-static std::vector<HANDLE> g_launchHandles;
 
-template <typename F>
-static void SpawnTrackedLaunch(F&& f) {
-    auto fnCopy = new std::decay_t<F>(std::forward<F>(f));
-    HANDLE h = CreateThread(nullptr, 0, [](LPVOID param) -> DWORD {
-        auto pFn = reinterpret_cast<std::decay_t<F>*>(param);
-        try {
-            (*pFn)();
-        } catch (...) {}
-        delete pFn;
-        return 0;
-    }, fnCopy, 0, nullptr);
-
-    if (h) {
-        std::lock_guard<std::mutex> lock(g_launchHandlesMutex);
-        g_launchHandles.erase(
-            std::remove_if(g_launchHandles.begin(), g_launchHandles.end(),
-                [](HANDLE handle) {
-                    if (WaitForSingleObject(handle, 0) == WAIT_OBJECT_0) {
-                        CloseHandle(handle);
-                        return true;
-                    }
-                    return false;
-                }),
-            g_launchHandles.end()
-        );
-        g_launchHandles.push_back(h);
-    } else {
-        delete fnCopy;
-    }
-}
-
-static void WaitForTrackedLaunches() {
-    std::vector<HANDLE> handlesToJoin;
-    {
-        std::lock_guard<std::mutex> lock(g_launchHandlesMutex);
-        handlesToJoin = std::move(g_launchHandles);
-    }
-    for (HANDLE h : handlesToJoin) {
-        if (h) {
-            WaitForSingleObject(h, INFINITE);
-            CloseHandle(h);
-        }
-    }
-}
 
 // Opens what was clicked.
 //
@@ -5099,7 +4898,6 @@ void ShowPropertiesDialog(std::wstring path) {
         HWND hHost = nullptr;
         for (int retry = 0; retry < 3 && !hHost; ++retry) {
             hHost = FindWindowW(kExplorerHelperClassName, kExplorerHelperWindowName);
-            if (!hHost) hHost = FindWindowW(nullptr, kExplorerHelperWindowName);
             if (!hHost) Sleep(50);
         }
 
@@ -5344,25 +5142,24 @@ inline ResolvedWebQuery ResolveWebSearch(const std::wstring& input) {
 void QueueQuery(std::wstring text);
 
 std::vector<Row> g_currentAppRows;
-std::vector<Row> g_currentFileRows;
 static int g_selectedApp = -1;
 static uint64_t g_lastNavTick = 0;
 
 void SetAppSelection(int index) {
-    if (g_appButtons.empty()) {
+    if (!g_appButtonsOpt || g_appButtonsOpt->empty()) {
         g_selectedApp = -1;
         return;
     }
     if (index < 0) index = 0;
-    if (index >= static_cast<int>(g_appButtons.size())) {
-        index = static_cast<int>(g_appButtons.size()) - 1;
+    if (index >= static_cast<int>(g_appButtonsOpt->size())) {
+        index = static_cast<int>(g_appButtonsOpt->size()) - 1;
     }
     g_selectedApp = index;
 
     bool isLight = IsLightTheme();
 
-    for (size_t i = 0; i < g_appButtons.size(); ++i) {
-        auto& btn = g_appButtons[i];
+    for (size_t i = 0; i < g_appButtonsOpt->size(); ++i) {
+        auto& btn = (*g_appButtonsOpt)[i];
         if (!btn) continue;
 
         if (static_cast<int>(i) == index) {
@@ -5422,15 +5219,15 @@ void HandleNavigationKey(winrt::Windows::System::VirtualKey key, bool ctrl) {
     g_lastNavTick = now;
 
     if (key == winrt::Windows::System::VirtualKey::Down) {
-        if (!g_appButtons.empty()) {
+        if (g_appButtonsOpt && !g_appButtonsOpt->empty()) {
             int next = (g_selectedApp < 0) ? 0 : g_selectedApp + 1;
-            if (next >= static_cast<int>(g_appButtons.size())) {
-                next = static_cast<int>(g_appButtons.size()) - 1;
+            if (next >= static_cast<int>(g_appButtonsOpt->size())) {
+                next = static_cast<int>(g_appButtonsOpt->size()) - 1;
             }
             SetAppSelection(next);
         }
     } else if (key == winrt::Windows::System::VirtualKey::Up) {
-        if (!g_appButtons.empty()) {
+        if (g_appButtonsOpt && !g_appButtonsOpt->empty()) {
             int prev = (g_selectedApp <= 0) ? 0 : g_selectedApp - 1;
             SetAppSelection(prev);
         }
@@ -5450,6 +5247,9 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     if (g_resultsHost) {
         return;
     }
+
+    if (!g_activeAppsOpt) g_activeAppsOpt.emplace();
+    if (!g_appButtonsOpt) g_appButtonsOpt.emplace();
 
     wuxc::Grid root;
     root.Name(L"WindhawkEverythingResults");
@@ -5795,7 +5595,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
 // Runs on the XAML thread.
 void RenderResults() try {
-    if (!g_resultsList || !g_resultsHost || !g_appsList) {
+    if (!g_resultsList || !g_resultsHost || !g_appsList || !g_activeAppsOpt || !g_appButtonsOpt) {
         return;
     }
 
@@ -5813,7 +5613,6 @@ void RenderResults() try {
 
     if (files.empty() && appNames.empty() && g_ourBox && g_ourBox.Text().empty()) {
         g_currentAppRows.clear();
-        g_currentFileRows.clear();
         g_selectedApp = -1;
         HideOverlayAnimated();
         Wh_Log(L"render: nothing to show; menu restored");
@@ -5822,7 +5621,6 @@ void RenderResults() try {
 
     g_resultsList.Children().Clear();
     g_currentAppRows = appNames;
-    g_currentFileRows = files;
 
     // Update bottom status bar
     if (g_footerStatus) {
@@ -6053,8 +5851,9 @@ void RenderResults() try {
             MakeBrush(0, 0, 0, 0));
 
         button.PointerEntered([btn = button](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const&) {
-            for (size_t i = 0; i < g_activeApps.size(); ++i) {
-                if (g_activeApps[i].button == btn) {
+            if (!g_activeAppsOpt) return;
+            for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
+                if ((*g_activeAppsOpt)[i].button == btn) {
                     SetAppSelection(static_cast<int>(i));
                     break;
                 }
@@ -6062,8 +5861,9 @@ void RenderResults() try {
         });
 
         button.Click([btn = button](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-            for (size_t i = 0; i < g_activeApps.size(); ++i) {
-                if (g_activeApps[i].button == btn) {
+            if (!g_activeAppsOpt) return;
+            for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
+                if ((*g_activeAppsOpt)[i].button == btn) {
                     LaunchSelectedApp(static_cast<int>(i), false);
                     return;
                 }
@@ -6083,21 +5883,7 @@ void RenderResults() try {
             flyout.Items().Append(copyItem);
         } else {
             bool isWebItem = item.openPath.starts_with(L"http:") || item.openPath.starts_with(L"https:");
-            auto toLowerStr = [](std::wstring s) {
-                for (auto& c : s) c = static_cast<wchar_t>(towlower(c));
-                return s;
-            };
-            std::wstring lowerTitle = toLowerStr(item.title);
-            std::wstring lowerPath = toLowerStr(item.openPath);
-            std::wstring lowerSub = toLowerStr(item.subtitle);
-
-            bool isSettingItem = item.isSetting ||
-                                 lowerTitle == L"settings" ||
-                                 lowerTitle == L"windows settings" ||
-                                 lowerPath.starts_with(L"ms-settings:") ||
-                                 lowerPath.find(L"immersivecontrolpanel") != std::wstring::npos ||
-                                 lowerPath.find(L"systemsettings.exe") != std::wstring::npos ||
-                                 lowerSub.starts_with(L"settings");
+            bool isSettingItem = item.isSetting;
 
             wuxc::MenuFlyoutItem openItem;
             openItem.Text(isWebItem ? L"Search in browser" : L"Open");
@@ -6105,8 +5891,9 @@ void RenderResults() try {
             openIcon.Glyph(isWebItem ? L"\uE774" : L"\uE8A7");
             openItem.Icon(openIcon);
             openItem.Click([btn = button](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                for (size_t i = 0; i < g_activeApps.size(); ++i) {
-                    if (g_activeApps[i].button == btn) {
+                if (!g_activeAppsOpt) return;
+                for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
+                    if ((*g_activeAppsOpt)[i].button == btn) {
                         LaunchSelectedApp(static_cast<int>(i), false);
                         return;
                     }
@@ -6121,8 +5908,9 @@ void RenderResults() try {
                 adminIcon.Glyph(L"\uE7EF");
                 adminItem.Icon(adminIcon);
                 adminItem.Click([btn = button](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    for (size_t i = 0; i < g_activeApps.size(); ++i) {
-                        if (g_activeApps[i].button == btn) {
+                    if (!g_activeAppsOpt) return;
+                    for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
+                        if ((*g_activeAppsOpt)[i].button == btn) {
                             LaunchSelectedApp(static_cast<int>(i), true);
                             return;
                         }
@@ -6268,33 +6056,33 @@ void RenderResults() try {
     };
 
     if (appNames.empty()) {
-        for (int i = static_cast<int>(g_activeApps.size()) - 1; i >= 0; --i) {
+        for (int i = static_cast<int>(g_activeAppsOpt->size()) - 1; i >= 0; --i) {
             g_appsList.Children().RemoveAt(i);
         }
-        g_activeApps.clear();
-        g_appButtons.clear();
+        g_activeAppsOpt->clear();
+        g_appButtonsOpt->clear();
 
         if (g_appsList.Children().Size() == 0) {
             g_appsList.Children().Append(makeAppEmptyCard());
         }
         SetAppSelection(-1);
     } else {
-        if (g_activeApps.empty() && g_appsList.Children().Size() > 0) {
+        if (g_activeAppsOpt->empty() && g_appsList.Children().Size() > 0) {
             g_appsList.Children().Clear();
         }
 
         // 1. Remove cards that are no longer in appNames
-        for (int i = static_cast<int>(g_activeApps.size()) - 1; i >= 0; --i) {
+        for (int i = static_cast<int>(g_activeAppsOpt->size()) - 1; i >= 0; --i) {
             bool found = false;
             for (const auto& newApp : appNames) {
-                if (isMatch(g_activeApps[i], newApp)) {
+                if (isMatch((*g_activeAppsOpt)[i], newApp)) {
                     found = true;
                     break;
                 }
             }
             if (!found) {
                 g_appsList.Children().RemoveAt(i);
-                g_activeApps.erase(g_activeApps.begin() + i);
+                g_activeAppsOpt->erase(g_activeAppsOpt->begin() + i);
             }
         }
 
@@ -6302,36 +6090,36 @@ void RenderResults() try {
         for (size_t targetIdx = 0; targetIdx < appNames.size(); ++targetIdx) {
             const Row& want = appNames[targetIdx];
             int existingIdx = -1;
-            for (size_t i = targetIdx; i < g_activeApps.size(); ++i) {
-                if (isMatch(g_activeApps[i], want)) {
+            for (size_t i = targetIdx; i < g_activeAppsOpt->size(); ++i) {
+                if (isMatch((*g_activeAppsOpt)[i], want)) {
                     existingIdx = static_cast<int>(i);
                     break;
                 }
             }
 
             if (existingIdx >= 0) {
-                g_activeApps[existingIdx].appIndex = want.appIndex;
-                g_activeApps[existingIdx].canRunAsAdmin = want.canRunAsAdmin;
-                g_activeApps[existingIdx].isSetting = want.isSetting;
+                (*g_activeAppsOpt)[existingIdx].appIndex = want.appIndex;
+                (*g_activeAppsOpt)[existingIdx].canRunAsAdmin = want.canRunAsAdmin;
+                (*g_activeAppsOpt)[existingIdx].isSetting = want.isSetting;
 
                 if (static_cast<size_t>(existingIdx) != targetIdx) {
-                    auto card = g_activeApps[existingIdx];
-                    g_activeApps.erase(g_activeApps.begin() + existingIdx);
-                    g_activeApps.insert(g_activeApps.begin() + targetIdx, card);
+                    auto card = (*g_activeAppsOpt)[existingIdx];
+                    g_activeAppsOpt->erase(g_activeAppsOpt->begin() + existingIdx);
+                    g_activeAppsOpt->insert(g_activeAppsOpt->begin() + targetIdx, card);
 
                     g_appsList.Children().RemoveAt(existingIdx);
                     g_appsList.Children().InsertAt(static_cast<uint32_t>(targetIdx), card.button);
                 }
             } else {
                 AppCardUI newCard = makeAppCard(want);
-                g_activeApps.insert(g_activeApps.begin() + targetIdx, newCard);
+                g_activeAppsOpt->insert(g_activeAppsOpt->begin() + targetIdx, newCard);
                 g_appsList.Children().InsertAt(static_cast<uint32_t>(targetIdx), newCard.button);
             }
         }
 
-        g_appButtons.clear();
-        for (const auto& card : g_activeApps) {
-            g_appButtons.push_back(card.button);
+        g_appButtonsOpt->clear();
+        for (const auto& card : *g_activeAppsOpt) {
+            g_appButtonsOpt->push_back(card.button);
         }
 
         SetAppSelection(0);
@@ -6380,8 +6168,7 @@ void RenderResults() try {
             fallbackIcon.HorizontalAlignment(wux::HorizontalAlignment::Center);
             fallbackIcon.VerticalAlignment(wux::VerticalAlignment::Center);
 
-            DWORD attr = (!item.openPath.empty()) ? GetFileAttributesW(item.openPath.c_str()) : INVALID_FILE_ATTRIBUTES;
-            if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            if (item.isFolder) {
                 fallbackIcon.Glyph(L"\uE8B7");
             } else {
                 fallbackIcon.Glyph(L"\uE8A5");
@@ -6477,59 +6264,30 @@ void RenderResults() try {
                 flyout.Items().Append(adminItem);
             }
 
-            DWORD attr = GetFileAttributesW(target.c_str());
-            bool isFolder = (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY));
-            if (isFolder) {
+            if (item.isFolder) {
                 wuxc::MenuFlyoutSubItem termSub;
                 termSub.Text(L"Open in terminal");
                 wuxc::FontIcon termIcon;
                 termIcon.Glyph(L"\uE756");
                 termSub.Icon(termIcon);
 
-                auto bindTerminalItem = [target](wuxc::MenuFlyoutItem const& mi, bool isPowerShell) {
-                    mi.Click([target, isPowerShell](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                auto addTermItem = [&](const wchar_t* label, bool isPowerShell, bool asAdmin) {
+                    wuxc::MenuFlyoutItem termItem;
+                    termItem.Text(winrt::hstring{label});
+                    wuxc::FontIcon icon;
+                    icon.Glyph(asAdmin ? L"\uE7EF" : L"\uE756");
+                    termItem.Icon(icon);
+                    termItem.Click([target, isPowerShell, asAdmin](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                         DismissStartMenu();
-                        LaunchTerminal(target, isPowerShell, /*asAdmin=*/false);
+                        LaunchTerminal(target, isPowerShell, asAdmin);
                     });
-
-                    auto runAdmin = [target, isPowerShell]() {
-                        static std::atomic<ULONGLONG> s_lastAdmin{0};
-                        ULONGLONG now = GetTickCount64();
-                        ULONGLONG prev = s_lastAdmin.load(std::memory_order_relaxed);
-                        if (now - prev < 800) return;
-                        s_lastAdmin.store(now, std::memory_order_relaxed);
-                        DismissStartMenu();
-                        LaunchTerminal(target, isPowerShell, /*asAdmin=*/true);
-                    };
-
-                    mi.RightTapped([runAdmin](wf::IInspectable const&, wuxi::RightTappedRoutedEventArgs const& e) {
-                        e.Handled(true);
-                        runAdmin();
-                    });
-
-                    mi.PointerPressed([runAdmin](wf::IInspectable const&, wuxi::PointerRoutedEventArgs const& e) {
-                        if (e.GetCurrentPoint(nullptr).Properties().IsRightButtonPressed()) {
-                            e.Handled(true);
-                            runAdmin();
-                        }
-                    });
+                    termSub.Items().Append(termItem);
                 };
 
-                wuxc::MenuFlyoutItem cmdItem;
-                cmdItem.Text(L"Command Prompt");
-                wuxc::FontIcon cmdIcon;
-                cmdIcon.Glyph(L"\uE756");
-                cmdItem.Icon(cmdIcon);
-                bindTerminalItem(cmdItem, /*isPowerShell=*/false);
-                termSub.Items().Append(cmdItem);
-
-                wuxc::MenuFlyoutItem psItem;
-                psItem.Text(L"PowerShell");
-                wuxc::FontIcon psIcon;
-                psIcon.Glyph(L"\uE756");
-                psItem.Icon(psIcon);
-                bindTerminalItem(psItem, /*isPowerShell=*/true);
-                termSub.Items().Append(psItem);
+                addTermItem(L"Command Prompt", false, false);
+                addTermItem(L"Command Prompt (Administrator)", false, true);
+                addTermItem(L"PowerShell", true, false);
+                addTermItem(L"PowerShell (Administrator)", true, true);
 
                 flyout.Items().Append(termSub);
             }
@@ -7071,7 +6829,6 @@ void SearchThreadMain() {
             g_launchRequest.store(-1);
             {
                 std::lock_guard<std::mutex> lock(g_resultsMutex);
-                g_results.clear();
                 g_appRows.clear();
                 g_fileRows.clear();
                 g_totalMatches.store(0);
@@ -7329,13 +7086,7 @@ void SearchThreadMain() {
                 }
                 Row row;
                 row.title = m.app->name;
-                bool isSettingItem = m.app->isSetting ||
-                                     m.app->targetPath.starts_with(L"ms-settings:") ||
-                                     m.app->targetPathLower.starts_with(L"ms-settings:") ||
-                                     m.app->nameLower == L"settings" ||
-                                     m.app->nameLower == L"windows settings" ||
-                                     m.app->targetPathLower.find(L"immersivecontrolpanel") != std::wstring::npos ||
-                                     m.app->exeNameLower == L"systemsettings";
+                bool isSettingItem = m.app->isSetting;
                 row.isSetting = isSettingItem;
 
                 bool canAdmin = true;
@@ -7362,7 +7113,7 @@ void SearchThreadMain() {
                 auto cached = appIconCache.find(m.app->name);
                 if (cached == appIconCache.end()) {
                     std::vector<BYTE> pixels;
-                    if (!m.app->isSetting) {
+                    if (!m.app->isSetting || m.app->pidl) {
                         FetchAppIcon(m.app, kIconSize, &pixels);
                     }
                     cached = appIconCache.emplace(m.app->name, std::move(pixels))
@@ -7411,6 +7162,7 @@ void SearchThreadMain() {
             Row row;
             row.title = r.name;
             row.subtitle = r.path;
+            row.isFolder = r.isFolder;
             row.openPath = r.path;
             if (!row.openPath.empty() && row.openPath.back() != L'\\') {
                 row.openPath += L'\\';
@@ -7427,7 +7179,6 @@ void SearchThreadMain() {
 
         {
             std::lock_guard<std::mutex> lock(g_resultsMutex);
-            g_results = pool;
             g_appRows = appRows;
             g_fileRows = fileRows;
             g_totalMatches.store(total);
@@ -7535,7 +7286,8 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
         g_ourBox = nullptr;
         g_appsList = nullptr;
         g_resultsList = nullptr;
-        g_activeApps.clear();
+        if (g_activeAppsOpt) g_activeAppsOpt->clear();
+        if (g_appButtonsOpt) g_appButtonsOpt->clear();
         g_appsHeaderHolder = nullptr;
         g_filesHeaderHolder = nullptr;
         g_searchBarBorder = nullptr;
@@ -7673,6 +7425,102 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
     Wh_Log(L"PlaceOurSearchBox error: %08X", static_cast<unsigned>(winrt::to_hresult()));
 }
 
+void TeardownStartMenuUi() {
+    Wh_Log(L"teardown: tearing down Start Menu UI on XAML thread");
+    try {
+        StopAttachWatch();
+    } catch (...) {}
+
+    try {
+        if (g_hCoreWindow && g_subclassed) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hCoreWindow, StartMenuSubclassProc);
+            g_subclassed = false;
+        }
+    } catch (...) {}
+
+    if (g_openFocus) {
+        g_openFocus.Stop();
+        g_openFocus = nullptr;
+    }
+    if (g_revealAnim) {
+        g_revealAnim.Stop();
+        g_revealAnim = nullptr;
+    }
+    if (g_hideAnim) {
+        g_hideAnim.Stop();
+        g_hideAnim = nullptr;
+    }
+
+    try {
+        auto core = wuc::CoreWindow::GetForCurrentThread();
+        if (core) {
+            if (g_charReceivedToken) {
+                core.CharacterReceived(g_charReceivedToken);
+                g_charReceivedToken = {};
+            }
+            if (g_keyDownToken) {
+                core.KeyDown(g_keyDownToken);
+                g_keyDownToken = {};
+            }
+            if (g_activatedToken) {
+                core.Activated(g_activatedToken);
+                g_activatedToken = {};
+            }
+        }
+    } catch (...) {}
+    g_coreEventsHooked = false;
+
+    try {
+        g_ourBoxChanged.revoke();
+        g_ourBoxLost.revoke();
+    } catch (...) {}
+
+    try {
+        if (g_resultsList) {
+            g_resultsList.Children().Clear();
+        }
+        if (g_appsList) {
+            g_appsList.Children().Clear();
+        }
+        if (g_resultsHost) {
+            g_resultsHost.Visibility(wux::Visibility::Collapsed);
+            g_resultsHost.Opacity(0.0);
+            g_resultsHost.IsHitTestVisible(false);
+            auto parent = wuxm::VisualTreeHelper::GetParent(g_resultsHost);
+            if (parent) {
+                if (auto parentPanel = parent.try_as<wuxc::Panel>()) {
+                    uint32_t idx = 0;
+                    if (parentPanel.Children().IndexOf(g_resultsHost, idx)) {
+                        parentPanel.Children().RemoveAt(idx);
+                    }
+                }
+            }
+        }
+    } catch (...) {}
+
+    g_activeAppsOpt.reset();
+    g_appButtonsOpt.reset();
+    g_resultsTranslate = nullptr;
+    g_resultsHost = nullptr;
+    g_ourBox = nullptr;
+    g_appsList = nullptr;
+    g_resultsList = nullptr;
+    g_appsHeaderHolder = nullptr;
+    g_filesHeaderHolder = nullptr;
+    g_searchBarBorder = nullptr;
+    g_divider = nullptr;
+    g_footerBorder = nullptr;
+    g_footerStatus = nullptr;
+    g_footerHints = nullptr;
+    g_currentAppRows.clear();
+    g_isOverlayVisible.store(false);
+    g_isHiding.store(false);
+    g_stockButton = nullptr;
+
+    RestoreShellElements();
+    Wh_Log(L"teardown: Start Menu UI teardown complete");
+}
+
 }  // namespace
 
 // ===========================================================================
@@ -7760,8 +7608,21 @@ void Wh_ModUninit() {
     g_quit.store(true);
 
     if (g_targetProcess == TargetProcess::SearchHost) {
-        Wh_Log(L"uninit: SearchHost exiting to guarantee clean stock reload");
-        ExitProcess(0);
+        Wh_Log(L"uninit: SearchHost cleaning up");
+        if (g_searchHostWatchdog && g_searchHostWatchdog->joinable()) {
+            g_searchHostWatchdog->join();
+            g_searchHostWatchdog.reset();
+        }
+        EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hwnd, &pid);
+            if (pid == GetCurrentProcessId()) {
+                WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc);
+            }
+            return TRUE;
+        }, 0);
+        Wh_Log(L"uninit: SearchHost cleanup complete");
+        return;
     }
 
     if (g_targetProcess != TargetProcess::StartMenu) {
@@ -7773,6 +7634,24 @@ void Wh_ModUninit() {
     }
 
     StopAttachWatch();
+
+    HWND hCore = g_hCoreWindow;
+    if (hCore && IsWindow(hCore)) {
+        DWORD_PTR result = 0;
+        LRESULT lr = SendMessageTimeoutW(hCore, GetTeardownMessage(), 0, 0,
+                                         SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, &result);
+        if (lr == 0) {
+            Wh_Log(L"uninit: SendMessageTimeoutW timed out or failed (%lu); attempting direct teardown", GetLastError());
+            try {
+                TeardownStartMenuUi();
+            } catch (...) {}
+        }
+    } else {
+        try {
+            TeardownStartMenuUi();
+        } catch (...) {}
+    }
+
     if (g_hGetMsgHook) {
         UnhookWindowsHookEx(g_hGetMsgHook);
         g_hGetMsgHook = nullptr;
@@ -7788,11 +7667,5 @@ void Wh_ModUninit() {
         g_searchThread.reset();
     }
     WaitForTrackedLaunches();
-
-    // Terminating StartMenuExperienceHost on mod disable is the only 100% reliable
-    // way to restore Windows 11's complex XAML tree to pristine factory state without
-    // leaving zero-sized controls, hidden search placeholders, or detached overlays.
-    // Windows automatically and seamlessly restarts StartMenuExperienceHost in <30ms.
-    Wh_Log(L"uninit: StartMenuExperienceHost exiting to guarantee clean stock reload");
-    ExitProcess(0);
+    Wh_Log(L"uninit: StartMenuExperienceHost teardown complete");
 }
