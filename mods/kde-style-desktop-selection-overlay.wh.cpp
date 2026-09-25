@@ -1,12 +1,12 @@
 // ==WindhawkMod==
-// @id             kde-style-desktop-selection-overlay
-// @name           KDE Style Desktop Selection Overlay
-// @description    Draws a custom KDE-inspired rounded selection box when drag-selecting on the Desktop
-// @version        2.0
-// @author         Xezjk
-// @github         https://github.com/xezjk
-// @include        explorer.exe
-// @compilerOptions -lgdi32 -luser32 -lgdiplus
+// @id           kde-style-desktop-selection-overlay
+// @name         KDE Style Desktop Selection Overlay
+// @description  Draws a custom KDE-inspired rounded selection box when drag-selecting on the Desktop
+// @version      2.0.3
+// @author       Xezjk
+// @github       https://github.com/xezjk
+// @include      explorer.exe
+// @compilerOptions -lgdi32 -luser32 -lgdiplus -lcomctl32 -lshlwapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -14,6 +14,14 @@
 # KDE Desktop Selection Overlay
 Renders a modern, KDE Breeze-inspired rounded selection box when drag-selecting 
 icons or empty space on the Windows Desktop.
+
+![KDE Desktop Selection Overlay](https://raw.githubusercontent.com/xezjk/kde-style-desktop-selection-overlay/main/assets/preview.png)
+
+### Features & Settings:
+- **Corner Radius**: Adjust the curvature of the selection rectangle.
+- **Fill & Border Colors**: Customize RGB and Alpha values for both the inner fill and outer line.
+- **Border Thickness**: Set custom outline width (value divided by 10).
+- **Render Layer**: Choose whether to render behind existing application windows.
 */
 // ==/WindhawkModReadme==
 
@@ -52,6 +60,13 @@ icons or empty space on the Windows Desktop.
 
 using namespace Gdiplus;
 
+// Custom Window Messages
+#define WM_USER_START_DRAG  (WM_USER + 1)
+#define WM_USER_UPDATE_DRAG (WM_USER + 2)
+#define WM_USER_STOP_DRAG   (WM_USER + 3)
+
+#define TIMER_DRAG_CHECK 101
+
 struct {
     int cornerRadius;
     BYTE fillR, fillG, fillB, fillA;
@@ -67,38 +82,70 @@ POINT g_ptStart = {0, 0};
 volatile BOOL g_isDragging = FALSE;
 HANDLE g_hThread = NULL;
 DWORD g_dwThreadId = 0;
-HANDLE g_hMonitorThread = NULL;
-volatile BOOL g_stopMonitorThread = FALSE;
+HANDLE g_hThreadReadyEvent = NULL;
 
-void ClearOverlayBuffer(HWND hwnd);
+HWND g_hCachedListView = NULL;
+HDC g_hdcMem = NULL;
+HBITMAP g_hBitmap = NULL;
+HBITMAP g_hOldBmp = NULL;
+void* g_pBits = NULL;
+int g_cachedBufWidth = 0;
+int g_cachedBufHeight = 0;
 
-void StopDragging() {
-    if (g_isDragging) {
-        g_isDragging = FALSE;
-        if (g_hOverlayWnd) {
-            ShowWindow(g_hOverlayWnd, SW_HIDE);
-            ClearOverlayBuffer(g_hOverlayWnd);
-        }
+// Hook typedef for in-process LVS_EX_DOUBLEBUFFER / ListviewAlphaSelect override
+typedef DWORD (WINAPI *SHRegGetBoolUSValueW_t)(LPCWSTR, LPCWSTR, BOOL, BOOL);
+SHRegGetBoolUSValueW_t pfnSHRegGetBoolUSValueW = NULL;
+
+DWORD WINAPI Hook_SHRegGetBoolUSValueW(LPCWSTR pszSubKey, LPCWSTR pszValue, BOOL fIgnoreHKCU, BOOL fDefault) {
+    if (pszValue && lstrcmpiW(pszValue, L"ListviewAlphaSelect") == 0) {
+        // Return false to turn off native translucent drag box on shell listviews dynamically
+        return FALSE;
+    }
+    return pfnSHRegGetBoolUSValueW(pszSubKey, pszValue, fIgnoreHKCU, fDefault);
+}
+
+void FreeRenderTarget() {
+    if (g_hdcMem) {
+        if (g_hOldBmp) SelectObject(g_hdcMem, g_hOldBmp);
+        if (g_hBitmap) DeleteObject(g_hBitmap);
+        DeleteDC(g_hdcMem);
+        g_hdcMem = NULL;
+        g_hBitmap = NULL;
+        g_hOldBmp = NULL;
+        g_pBits = NULL;
+        g_cachedBufWidth = 0;
+        g_cachedBufHeight = 0;
     }
 }
 
-DWORD WINAPI MouseMonitorThreadProc(LPVOID lpParam) {
-    while (!g_stopMonitorThread) {
-        if (g_isDragging) {
-            if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
-                StopDragging();
-            }
-        }
-        Sleep(10);
+void EnsureRenderTarget(HDC hdcRef, int width, int height) {
+    if (g_hdcMem && width == g_cachedBufWidth && height == g_cachedBufHeight) {
+        return; // Cache hit
     }
-    return 0;
+
+    FreeRenderTarget();
+
+    g_hdcMem = CreateCompatibleDC(hdcRef);
+
+    BITMAPINFO bmi = {0};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height; // Top-down DIB
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    g_hBitmap = CreateDIBSection(g_hdcMem, &bmi, DIB_RGB_COLORS, &g_pBits, NULL, 0);
+    g_hOldBmp = (HBITMAP)SelectObject(g_hdcMem, g_hBitmap);
+    g_cachedBufWidth = width;
+    g_cachedBufHeight = height;
 }
 
 HWND GetDesktopWindowHandle() {
     HWND hProgman = FindWindowW(L"Progman", NULL);
     HWND hDesktopWnd = hProgman;
-
     HWND hWorkerW = NULL;
+
     do {
         hWorkerW = FindWindowExW(NULL, hWorkerW, L"WorkerW", NULL);
         if (hWorkerW) {
@@ -113,49 +160,44 @@ HWND GetDesktopWindowHandle() {
     return hDesktopWnd;
 }
 
-BOOL IsClickOnEmptyDesktopSpace(HWND hWndUnderMouse, POINT ptScreen) {
-    WCHAR className[256];
-    GetClassNameW(hWndUnderMouse, className, 256);
+HWND GetDesktopListViewHandle() {
+    HWND hDesktop = GetDesktopWindowHandle();
+    if (!hDesktop) return NULL;
 
-    HWND hListView = NULL;
-
-    if (wcscmp(className, L"SysListView32") == 0) {
-        hListView = hWndUnderMouse;
-    } else if (wcscmp(className, L"WorkerW") == 0 || wcscmp(className, L"Progman") == 0) {
-        HWND hShellDll = FindWindowExW(hWndUnderMouse, NULL, L"SHELLDLL_DefView", NULL);
-        if (hShellDll) {
-            hListView = FindWindowExW(hShellDll, NULL, L"SysListView32", NULL);
-        }
+    HWND hShellDll = FindWindowExW(hDesktop, NULL, L"SHELLDLL_DefView", NULL);
+    if (!hShellDll) {
+        HWND hProgman = FindWindowW(L"Progman", NULL);
+        hShellDll = FindWindowExW(hProgman, NULL, L"SHELLDLL_DefView", NULL);
     }
 
-    if (!hListView) return FALSE;
+    if (hShellDll) {
+        return FindWindowExW(hShellDll, NULL, L"SysListView32", NULL);
+    }
+    return NULL;
+}
+
+BOOL IsClickOnEmptyDesktopSpace(POINT ptScreen) {
+    if (!g_hCachedListView || !IsWindow(g_hCachedListView)) {
+        g_hCachedListView = GetDesktopListViewHandle();
+    }
+
+    if (!g_hCachedListView) return FALSE;
 
     POINT ptClient = ptScreen;
-    ScreenToClient(hListView, &ptClient);
+    ScreenToClient(g_hCachedListView, &ptClient);
 
     LVHITTESTINFO hitInfo = {0};
     hitInfo.pt = ptClient;
 
-    int hitIndex = (int)SendMessageW(hListView, LVM_HITTEST, 0, (LPARAM)&hitInfo);
-
-    if (hitIndex == -1 || (hitInfo.flags & LVHT_NOWHERE)) {
-        return TRUE;
-    }
-
-    return FALSE;
+    int hitIndex = (int)SendMessageW(g_hCachedListView, LVM_HITTEST, 0, (LPARAM)&hitInfo);
+    return (hitIndex == -1 || (hitInfo.flags & LVHT_NOWHERE));
 }
 
-void SetNativeTranslucentSelection(BOOL enable) {
-    HKEY hKey;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, 
-                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", 
-                      0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
-        DWORD value = enable ? 1 : 0;
-        RegSetValueExW(hKey, L"ListviewAlphaSelect", 0, REG_DWORD, (BYTE*)&value, sizeof(value));
-        RegCloseKey(hKey);
-
-        DWORD_PTR result;
-        SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, 0, SMTO_ABORTIFHUNG, 100, &result);
+void StopDraggingInternal(HWND hwnd) {
+    if (g_isDragging) {
+        g_isDragging = FALSE;
+        KillTimer(hwnd, TIMER_DRAG_CHECK);
+        ShowWindow(hwnd, SW_HIDE);
     }
 }
 
@@ -168,165 +210,192 @@ void RedrawOverlay(HWND hwnd, RECT rc) {
         return;
     }
 
-    int screenWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    int screenHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    int screenLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    int screenTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    float penWidth = settings.borderThickness;
+    int margin = (int)ceilf(penWidth);
+    
+    int w = selWidth + (margin * 2);
+    int h = selHeight + (margin * 2);
+
+    int posX = rc.left - margin;
+    int posY = rc.top - margin;
 
     if (settings.keepBehindWindows) {
         HWND hDesktop = GetDesktopWindowHandle();
-        SetWindowPos(hwnd, hDesktop, screenLeft, screenTop, screenWidth, screenHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        SetWindowPos(hwnd, hDesktop, posX, posY, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     } else {
-        SetWindowPos(hwnd, HWND_TOPMOST, screenLeft, screenTop, screenWidth, screenHeight, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        SetWindowPos(hwnd, HWND_TOPMOST, posX, posY, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     }
 
     HDC hdc = GetDC(hwnd);
-    HDC hdcMem = CreateCompatibleDC(hdc);
+    EnsureRenderTarget(hdc, w, h);
 
-    BITMAPINFO bmi = {0};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = screenWidth;
-    bmi.bmiHeader.biHeight = -screenHeight; // Top-down DIB
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    void* pBits = NULL;
-    HBITMAP hBitmap = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
-    HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hBitmap);
-
-    Graphics graphics(hdcMem);
+    // Render through Gdiplus::Bitmap wrapping DIB bits directly with PixelFormat32bppPARGB
+    Bitmap bitmap(w, h, w * 4, PixelFormat32bppPARGB, (BYTE*)g_pBits);
+    Graphics graphics(&bitmap);
     graphics.SetSmoothingMode(SmoothingModeAntiAlias);
     graphics.Clear(Color(0, 0, 0, 0));
 
-    REAL x = (REAL)(rc.left - screenLeft);
-    REAL y = (REAL)(rc.top - screenTop);
-    REAL penWidth = settings.borderThickness;
+    REAL x = (REAL)margin;
+    REAL y = (REAL)margin;
     REAL offset = penWidth / 2.0f;
-    REAL w = (REAL)selWidth - penWidth;
-    REAL h = (REAL)selHeight - penWidth;
+    REAL drawW = (REAL)selWidth - penWidth;
+    REAL drawH = (REAL)selHeight - penWidth;
 
     int radius = settings.cornerRadius;
     int diameter = radius * 2;
-    if (diameter > w) diameter = (int)w;
-    if (diameter > h) diameter = (int)h;
+    if (diameter > drawW) diameter = (int)drawW;
+    if (diameter > drawH) diameter = (int)drawH;
 
     GraphicsPath path;
-    path.AddArc(x + offset, y + offset, (REAL)diameter, (REAL)diameter, 180.0f, 90.0f);
-    path.AddArc(x + offset + w - diameter, y + offset, (REAL)diameter, (REAL)diameter, 270.0f, 90.0f);
-    path.AddArc(x + offset + w - diameter, y + offset + h - diameter, (REAL)diameter, (REAL)diameter, 0.0f, 90.0f);
-    path.AddArc(x + offset, y + offset + h - diameter, (REAL)diameter, (REAL)diameter, 90.0f, 90.0f);
-    path.CloseFigure();
+    if (diameter > 0) {
+        path.AddArc(x + offset, y + offset, (REAL)diameter, (REAL)diameter, 180.0f, 90.0f);
+        path.AddArc(x + offset + drawW - diameter, y + offset, (REAL)diameter, (REAL)diameter, 270.0f, 90.0f);
+        path.AddArc(x + offset + drawW - diameter, y + offset + drawH - diameter, (REAL)diameter, (REAL)diameter, 0.0f, 90.0f);
+        path.AddArc(x + offset, y + offset + drawH - diameter, (REAL)diameter, (REAL)diameter, 90.0f, 90.0f);
+        path.CloseFigure();
+    } else {
+        path.AddRectangle(RectF(x + offset, y + offset, drawW, drawH));
+    }
 
-    // Costruzione nativa ARGB per GDI+ Bitmap 32bit DIB Section
-    SolidBrush brush(Color(settings.fillA, settings.fillR, settings.fillG, settings.fillB));
+    // Premultiplied Alpha construction for ULW_ALPHA compatibility
+    BYTE fA = settings.fillA;
+    BYTE fR = (BYTE)((settings.fillR * fA) / 255);
+    BYTE fG = (BYTE)((settings.fillG * fA) / 255);
+    BYTE fB = (BYTE)((settings.fillB * fA) / 255);
+    SolidBrush brush(Color(fA, fR, fG, fB));
     graphics.FillPath(&brush, &path);
 
-    Pen pen(Color(settings.borderA, settings.borderR, settings.borderG, settings.borderB), penWidth);
+    BYTE bA = settings.borderA;
+    BYTE bR = (BYTE)((settings.borderR * bA) / 255);
+    BYTE bG = (BYTE)((settings.borderG * bA) / 255);
+    BYTE bB = (BYTE)((settings.borderB * bA) / 255);
+    Pen pen(Color(bA, bR, bG, bB), penWidth);
     graphics.DrawPath(&pen, &path);
 
     BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-    POINT ptDst = { screenLeft, screenTop };
-    SIZE size = { screenWidth, screenHeight };
+    POINT ptDst = { posX, posY };
+    SIZE size = { w, h };
     POINT ptSrc = { 0, 0 };
 
-    UpdateLayeredWindow(hwnd, hdc, &ptDst, &size, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
-
-    SelectObject(hdcMem, hOldBmp);
-    DeleteObject(hBitmap);
-    DeleteDC(hdcMem);
+    UpdateLayeredWindow(hwnd, hdc, &ptDst, &size, g_hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
     ReleaseDC(hwnd, hdc);
 }
 
-void ClearOverlayBuffer(HWND hwnd) {
-    HDC hdc = GetDC(hwnd);
-    HDC hdcMem = CreateCompatibleDC(hdc);
-    HBITMAP hBitmap = CreateCompatibleBitmap(hdc, 1, 1);
-    HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hBitmap);
+LRESULT CALLBACK OverlayWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+    case WM_USER_START_DRAG: {
+        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        if (IsClickOnEmptyDesktopSpace(pt)) {
+            g_ptStart = pt;
+            g_isDragging = TRUE;
+            SetTimer(hwnd, TIMER_DRAG_CHECK, 15, NULL);
+        }
+        return 0;
+    }
+    case WM_USER_UPDATE_DRAG: {
+        if (g_isDragging) {
+            POINT ptCurrent = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            RECT rc;
+            rc.left = (std::min)(g_ptStart.x, ptCurrent.x);
+            rc.top = (std::min)(g_ptStart.y, ptCurrent.y);
+            rc.right = (std::max)(g_ptStart.x, ptCurrent.x);
+            rc.bottom = (std::max)(g_ptStart.y, ptCurrent.y);
 
-    Graphics graphics(hdcMem);
-    graphics.Clear(Color(0, 0, 0, 0));
-
-    BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
-    POINT ptDst = { 0, 0 };
-    SIZE size = { 1, 1 };
-    POINT ptSrc = { 0, 0 };
-
-    UpdateLayeredWindow(hwnd, hdc, &ptDst, &size, hdcMem, &ptSrc, 0, &blend, ULW_ALPHA);
-
-    SelectObject(hdcMem, hOldBmp);
-    DeleteObject(hBitmap);
-    DeleteDC(hdcMem);
-    ReleaseDC(hwnd, hdc);
+            RedrawOverlay(hwnd, rc);
+        }
+        return 0;
+    }
+    case WM_USER_STOP_DRAG: {
+        StopDraggingInternal(hwnd);
+        return 0;
+    }
+    case WM_TIMER: {
+        if (wParam == TIMER_DRAG_CHECK) {
+            if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+                StopDraggingInternal(hwnd);
+            }
+        }
+        return 0;
+    }
+    case WM_DESTROY: {
+        StopDraggingInternal(hwnd);
+        FreeRenderTarget();
+        PostQuitMessage(0);
+        return 0;
+    }
+    }
+    return DefWindowProcW(hwnd, uMsg, wParam, lParam);
 }
 
 LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode >= 0) {
+    if (nCode >= 0 && g_hOverlayWnd) {
         MSLLHOOKSTRUCT* pMouse = (MSLLHOOKSTRUCT*)lParam;
 
         if (wParam == WM_LBUTTONDOWN) {
-            HWND hWndUnderMouse = WindowFromPoint(pMouse->pt);
-            
-            if (IsClickOnEmptyDesktopSpace(hWndUnderMouse, pMouse->pt)) {
-                g_ptStart = pMouse->pt;
-                g_isDragging = TRUE;
-
-                ShowWindow(g_hOverlayWnd, SW_HIDE);
-                ClearOverlayBuffer(g_hOverlayWnd);
-            }
+            PostMessageW(g_hOverlayWnd, WM_USER_START_DRAG, 0, MAKELPARAM(pMouse->pt.x, pMouse->pt.y));
         }
         else if (wParam == WM_MOUSEMOVE && g_isDragging) {
-            if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
-                StopDragging();
-            } else {
-                RECT rc;
-                rc.left = (std::min)(g_ptStart.x, pMouse->pt.x);
-                rc.top = (std::min)(g_ptStart.y, pMouse->pt.y);
-                rc.right = (std::max)(g_ptStart.x, pMouse->pt.x);
-                rc.bottom = (std::max)(g_ptStart.y, pMouse->pt.y);
-
-                RedrawOverlay(g_hOverlayWnd, rc);
-            }
+            PostMessageW(g_hOverlayWnd, WM_USER_UPDATE_DRAG, 0, MAKELPARAM(pMouse->pt.x, pMouse->pt.y));
         }
         else if (wParam == WM_LBUTTONUP && g_isDragging) {
-            StopDragging();
+            PostMessageW(g_hOverlayWnd, WM_USER_STOP_DRAG, 0, 0);
         }
     }
     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
 }
 
 DWORD WINAPI HookThreadProc(LPVOID lpParam) {
+    HMODULE hMod = GetModuleHandle(NULL);
+
+    // Force message queue creation to avoid race conditions with PostThreadMessage
+    MSG msgPeek;
+    PeekMessageW(&msgPeek, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+
     WNDCLASSW wc = {0};
-    wc.lpfnWndProc = DefWindowProcW;
-    wc.hInstance = GetModuleHandle(NULL);
+    wc.lpfnWndProc = OverlayWndProc;
+    wc.hInstance = hMod;
     wc.lpszClassName = L"WindhawkKDESelectionOverlay";
-    RegisterClassW(&wc);
+    
+    if (!RegisterClassW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
+        SetEvent(g_hThreadReadyEvent);
+        return 0;
+    }
 
     g_hOverlayWnd = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW,
         L"WindhawkKDESelectionOverlay", L"",
-        WS_POPUP, 0, 0, 0, 0, NULL, NULL, GetModuleHandle(NULL), NULL
+        WS_POPUP, 0, 0, 0, 0, NULL, NULL, hMod, NULL
     );
 
-    g_hMouseHook = SetWindowsHookEx(WH_MOUSE_LL, MouseProc, GetModuleHandle(NULL), 0);
+    g_hMouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseProc, hMod, 0);
+
+    // Signal main thread that loop setup is ready
+    SetEvent(g_hThreadReadyEvent);
 
     MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
+    while (GetMessageW(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        DispatchMessageW(&msg);
     }
 
-    if (g_hMouseHook) UnhookWindowsHookEx(g_hMouseHook);
-    if (g_hOverlayWnd) DestroyWindow(g_hOverlayWnd);
+    if (g_hMouseHook) {
+        UnhookWindowsHookEx(g_hMouseHook);
+        g_hMouseHook = NULL;
+    }
 
+    if (g_hOverlayWnd) {
+        DestroyWindow(g_hOverlayWnd);
+        g_hOverlayWnd = NULL;
+    }
+
+    UnregisterClassW(L"WindhawkKDESelectionOverlay", hMod);
     return 0;
 }
 
 void LoadSettings() {
     settings.cornerRadius = Wh_GetIntSetting(L"cornerRadius");
-    if (settings.cornerRadius <= 0) settings.cornerRadius = 4;
+    if (settings.cornerRadius < 0) settings.cornerRadius = 0;
 
-    // Lettura valori R, G, B, A separati (evita problemi di parsing esadecimale)
     settings.fillR = (BYTE)Wh_GetIntSetting(L"fillR");
     settings.fillG = (BYTE)Wh_GetIntSetting(L"fillG");
     settings.fillB = (BYTE)Wh_GetIntSetting(L"fillB");
@@ -344,36 +413,59 @@ void LoadSettings() {
 }
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"Init KDE Desktop Overlay Mod v2.0.2");
+    // Process Scoping Guard: Ensure mod only runs inside the main shell Explorer process
+    HWND hShellWnd = GetShellWindow();
+    DWORD dwShellProcessId = 0;
+    if (hShellWnd) {
+        GetWindowThreadProcessId(hShellWnd, &dwShellProcessId);
+    }
+
+    if (dwShellProcessId == 0 || dwShellProcessId != GetCurrentProcessId()) {
+        return FALSE; // Ignore non-shell processes (folder windows, embedding, etc.)
+    }
+
+    Wh_Log(L"Init KDE Desktop Overlay Mod v2.0.3");
     LoadSettings();
 
-    SetNativeTranslucentSelection(FALSE);
+    // Hook SHRegGetBoolUSValueW to override native selection rectangle in-process
+    HMODULE hShlwapi = GetModuleHandleW(L"shlwapi.dll");
+    if (hShlwapi) {
+        void* pSHRegGetBoolUSValueW = (void*)GetProcAddress(hShlwapi, "SHRegGetBoolUSValueW");
+        if (pSHRegGetBoolUSValueW) {
+            Wh_SetFunctionHook(pSHRegGetBoolUSValueW, (void*)Hook_SHRegGetBoolUSValueW, (void**)&pfnSHRegGetBoolUSValueW);
+        }
+    }
 
     GdiplusStartupInput gdiplusStartupInput;
     GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, NULL);
 
+    g_hThreadReadyEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+
     g_hThread = CreateThread(NULL, 0, HookThreadProc, NULL, 0, &g_dwThreadId);
+    if (g_hThread) {
+        WaitForSingleObject(g_hThreadReadyEvent, INFINITE);
+    }
     
-    g_stopMonitorThread = FALSE;
-    g_hMonitorThread = CreateThread(NULL, 0, MouseMonitorThreadProc, NULL, 0, NULL);
+    CloseHandle(g_hThreadReadyEvent);
+    g_hThreadReadyEvent = NULL;
 
     return TRUE;
 }
 
 void Wh_ModUninit() {
-    SetNativeTranslucentSelection(TRUE);
-
-    g_stopMonitorThread = TRUE;
-    if (g_hMonitorThread) {
-        WaitForSingleObject(g_hMonitorThread, 1000);
-        CloseHandle(g_hMonitorThread);
-    }
-
     if (g_dwThreadId) {
-        PostThreadMessage(g_dwThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_hThread, 1000);
+        // Retry PostThreadMessage until thread queue receives WM_QUIT reliably
+        while (!PostThreadMessageW(g_dwThreadId, WM_QUIT, 0, 0)) {
+            Sleep(10);
+        }
+        
+        // Wait safely with INFINITE to avoid unmapping executing DLL memory
+        WaitForSingleObject(g_hThread, INFINITE);
         CloseHandle(g_hThread);
+        g_hThread = NULL;
+        g_dwThreadId = 0;
     }
+
     GdiplusShutdown(g_gdiplusToken);
 }
 
