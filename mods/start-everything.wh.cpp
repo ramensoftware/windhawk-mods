@@ -4361,9 +4361,14 @@ void DismissStartMenu() {
 
         HWND ours = GetOurCoreWindow();
         if (ours && IsWindow(ours)) {
-            PostMessageW(ours, WM_KEYDOWN, VK_ESCAPE, 0x00010001);
-            PostMessageW(ours, WM_KEYUP, VK_ESCAPE, 0xC0010001);
-            Wh_Log(L"DismissStartMenu: posted targeted VK_ESCAPE to CoreWindow %p", ours);
+            HWND fg = GetForegroundWindow();
+            DWORD fgPid = 0;
+            if (fg) GetWindowThreadProcessId(fg, &fgPid);
+            if (fg == ours || fgPid == GetCurrentProcessId() || fg == nullptr) {
+                keybd_event(VK_ESCAPE, 0, 0, 0);
+                keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0);
+                Wh_Log(L"DismissStartMenu: sent targeted Escape to CoreWindow %p", ours);
+            }
         }
     } catch (...) {
     }
