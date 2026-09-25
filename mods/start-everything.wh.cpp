@@ -26,7 +26,7 @@ A high-performance, native replacement for Windows 11 Start Menu search powered 
 - Instant Everything Search: Sub-millisecond file querying directly through the voidtools Everything Win32 IPC interface. Instant results across millions of files without background indexing lag or disk thrashing.
 - Smart Apps and Settings Search: Fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, and Windows Settings URIs (ms-settings:) with high-resolution shell icons.
 - On-Demand Animated Palette: The Start Menu stays completely clean and uncluttered when idle. The search palette smoothly reveals with a 140ms ease-out animation the moment you type or click the top search trigger, and collapses on empty or Escape.
-- Complete SearchHost Disconnection: Prevents background Bing web queries, Edge WebView2 child processes, and indexing CPU spikes via process, database file, and COM interception (direct SearchUx.UI.dll CPU spike bypass targets Windows 11 23H2 build 22631 with safe signature fallback).
+- Complete SearchHost Disconnection: Prevents background Bing web queries, Edge WebView2 child processes, and indexing CPU spikes via process, database file, and COM interception.
 - Inline Calculator: Type /c <expression> (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200, /c 2^10) to evaluate math expressions instantly. Press Enter to copy the result.
 - Configurable Unit Conversions: Type /c <number> [unit] to convert units using formulas configured in Mod Settings. Users can add, edit, or delete conversion items individually from the settings UI.
 - Network Interface Inspector: Type /ip to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
@@ -79,6 +79,27 @@ All searches will now seamlessly route through the native Start Menu (Windows Ke
 - showKeyHints: true
   $name: Show Keyboard Shortcuts Bar
   $description: Display the keyboard shortcut hints ([Up/Down] Select, [Enter] Open, [Ctrl+Enter] Admin, [Esc] Close) in the bottom bar.
+- filterNoisyPaths: true
+  $name: Demote Noisy Paths
+  $description: Automatically demote deep build caches, version control internals, and temporary directories to the bottom of file search results.
+- excludedPaths:
+    - "\\node_modules\\"
+    - "\\.git\\"
+    - "\\.gradle\\"
+    - "\\appdata\\local\\temp\\"
+    - "\\appdata\\local\\packages\\"
+    - "\\__pycache__\\"
+    - "\\.venv\\"
+    - "\\site-packages\\"
+    - "\\.cache\\"
+    - "\\build\\intermediates\\"
+    - "\\obj\\debug\\"
+    - "\\obj\\release\\"
+    - "\\windows\\winsxs\\"
+    - "\\windows\\servicing\\"
+  $name: Excluded Path Patterns
+  $description: >-
+    Paths matching any of these substrings will be demoted in file search results so build caches, dependencies, and internal system folders don't clutter the top matches.
 - defaultSearchUrl: "https://duckduckgo.com/?q={q}"
   $name: Default Search Engine URL
   $description: >-
@@ -211,7 +232,7 @@ inline HMODULE GetCurrentModuleHandle() {
 }
 
 // ===========================================================================
-// Inlined Component: Everything IPC Client (broker/everything_ipc.h)
+// Component: Everything IPC Client
 // ===========================================================================
 // Everything IPC client.
 //
@@ -739,7 +760,7 @@ class Client {
 
 }  // namespace everything
 // ===========================================================================
-// Inlined Component: Everything Relevance Ranker (broker/file_ranker.h)
+// Component: Everything Relevance Ranker
 // ===========================================================================
 // Relevance ordering for Everything results.
 //
@@ -837,7 +858,15 @@ inline int Classify(const std::wstring& nameLower, const std::wstring& q) {
 // swamp everything else on a developer machine: the first unranked page for
 // "code" was eight Gradle doc stubs. Demoted a whole match class rather than
 // hidden, so they still show up once the better matches run out.
-inline bool IsNoise(const std::wstring& pathLower) {
+inline bool IsNoise(const std::wstring& pathLower, const std::vector<std::wstring>* customNoise = nullptr) {
+    if (customNoise) {
+        for (const auto& n : *customNoise) {
+            if (!n.empty() && pathLower.find(n) != std::wstring::npos) {
+                return true;
+            }
+        }
+        return false;
+    }
     static const wchar_t* kNoisy[] = {
         L"\\node_modules\\",
         L"\\.git\\",
@@ -894,7 +923,8 @@ inline ULONGLONG Descending(ULONGLONG v) {
 
 // Reorders a pool in place and truncates it to limit.
 inline void Rank(std::vector<everything::Result>* pool,
-                 const std::wstring& query, size_t limit) {
+                 const std::wstring& query, size_t limit,
+                 const std::vector<std::wstring>* excludedPaths = nullptr) {
     if (!pool || pool->empty()) {
         return;
     }
@@ -907,7 +937,7 @@ inline void Rank(std::vector<everything::Result>* pool,
         int cls = detail::Classify(ToLower(r.name), q);
         // A noisy location costs a whole class, so an exact name match buried
         // in node_modules still loses to a plain prefix match somewhere real.
-        if (detail::IsNoise(ToLower(r.path))) {
+        if (detail::IsNoise(ToLower(r.path), excludedPaths)) {
             cls += detail::kPathOnly + 1;
         }
         // Everything only counts opens that went through Everything itself,
@@ -931,7 +961,7 @@ inline void Rank(std::vector<everything::Result>* pool,
 
 }  // namespace ranker
 // ===========================================================================
-// Inlined Component: Shell Icon Utilities (broker/icon_util.h)
+// Component: Shell Icon Utilities
 // ===========================================================================
 // Turning shell icons into the pixel format the panel can draw.
 //
@@ -939,9 +969,6 @@ inline void Rank(std::vector<everything::Result>* pool,
 // access, so it cannot fetch an icon for anything. Icons have to arrive as
 // raw pixels over the same message that carries the rows: BGRA, top-down,
 // premultiplied, which is what a XAML WriteableBitmap expects.
-
-
-#include <windows.h>
 
 #include <commoncontrols.h>
 #include <shellapi.h>
@@ -1116,10 +1143,8 @@ class ExtensionCache {
 
 }  // namespace icons
 // ===========================================================================
-// Inlined Component: Windows Settings Database (broker/settings_data.h)
+// Component: Windows Settings Database
 // ===========================================================================
-
-#include <vector>
 
 namespace settings {
 
@@ -1481,7 +1506,7 @@ inline const std::vector<SettingItem>& GetSettingsList() {
 
 } // namespace settings
 // ===========================================================================
-// Inlined Component: Apps & Settings Indexer (broker/apps_index.h)
+// Apps & Settings Indexer
 // ===========================================================================
 // An index of installed applications, from the shell's AppsFolder.
 //
@@ -1491,24 +1516,13 @@ inline const std::vector<SettingItem>& GetSettingsList() {
 // enumerated once up front and icons are fetched lazily, for visible rows
 // only.
 //
-// This must run at normal integrity: SearchHost is a Low-IL AppContainer with
-// no shell namespace access, so the index lives in the broker and results are
-// pushed to the panel.
+// Enumeration runs in-process on the background search thread in
+// StartMenuExperienceHost at Medium integrity.
 
-
-#include <windows.h>
-
-#include <shlobj.h>
-#include <shobjidl.h>
-
-
-#include <algorithm>
 #include <cwctype>
 #include <memory>
 #include <mutex>
 #include <sstream>
-#include <string>
-#include <vector>
 
 namespace apps {
 
@@ -2129,18 +2143,12 @@ class Index {
 
 }  // namespace apps
 // ===========================================================================
-// Inlined Component: Calculator & Power Tools (broker/calc_and_tools.h)
+// Calculator & Power Tools
 // ===========================================================================
 
-#include <windows.h>
-#include <shlobj.h>
 #include <iphlpapi.h>
 #include <cmath>
-#include <string>
-#include <vector>
-#include <sstream>
 #include <iomanip>
-#include <algorithm>
 #include <cctype>
 
 #ifndef DROPEFFECT_COPY
@@ -3180,6 +3188,7 @@ inline std::vector<UnitConversionResult> GenerateCommonConversions(double n) {
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Input.h>
 #include <winrt/Windows.UI.Xaml.Media.Imaging.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/Windows.UI.Xaml.Media.Animation.h>
@@ -3201,6 +3210,7 @@ inline std::vector<UnitConversionResult> GenerateCommonConversions(double n) {
 #include <chrono>
 #include <cwctype>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <condition_variable>
@@ -3215,6 +3225,8 @@ namespace wuc = winrt::Windows::UI::Core;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 namespace wuxcp = winrt::Windows::UI::Xaml::Controls::Primitives;
+namespace wuxi = winrt::Windows::UI::Xaml::Input;
+namespace wui = winrt::Windows::UI::Input;
 namespace wuxm = winrt::Windows::UI::Xaml::Media;
 namespace wuxmi = winrt::Windows::UI::Xaml::Media::Imaging;
 namespace wuxma = winrt::Windows::UI::Xaml::Media::Animation;
@@ -3277,6 +3289,14 @@ static HWND FindStartMenuCoreWindow() {
         if (h && IsWindow(h)) return h;
     }
 
+    HWND hStart = FindWindowW(L"Windows.UI.Core.CoreWindow", L"Start");
+    if (hStart && IsWindow(hStart)) {
+        if (tray) {
+            SetPropW(tray, L"WindhawkStartMenuHwnd", hStart);
+        }
+        return hStart;
+    }
+
     HWND found = nullptr;
     EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
         if (GetPropW(hwnd, L"WindhawkStartMenuWindow")) {
@@ -3301,14 +3321,6 @@ static HWND FindStartMenuCoreWindow() {
             SetPropW(tray, L"WindhawkStartMenuHwnd", found);
         }
         return found;
-    }
-
-    HWND hStart = FindWindowW(L"Windows.UI.Core.CoreWindow", L"Start");
-    if (hStart && IsWindow(hStart)) {
-        if (tray) {
-            SetPropW(tray, L"WindhawkStartMenuHwnd", hStart);
-        }
-        return hStart;
     }
 
     return nullptr;
@@ -3379,6 +3391,178 @@ static void WINAPI Hook_Explorer_SwitchToThisWindow(HWND hWnd, BOOL fAltTab) {
     }
 }
 
+// ===========================================================================
+// Domain: Explorer Shell Property Relay
+// ===========================================================================
+
+static const wchar_t kExplorerHelperClassName[] = L"StartEverything_ExplorerHostClass";
+static const wchar_t kExplorerHelperWindowName[] = L"StartEverything_ExplorerHost";
+static const ULONG_PTR kExplorerCopyDataMagic = 0x53455052; // 'SEPR'
+
+static HANDLE g_hExplorerHelperThread = nullptr;
+static HWND g_hExplorerHelperWnd = nullptr;
+
+static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+    case WM_COPYDATA: {
+        auto pcds = reinterpret_cast<const COPYDATASTRUCT*>(lParam);
+        if (pcds && pcds->dwData == kExplorerCopyDataMagic && pcds->lpData && pcds->cbData >= sizeof(wchar_t)) {
+            size_t charCount = pcds->cbData / sizeof(wchar_t);
+            const wchar_t* pStr = reinterpret_cast<const wchar_t*>(pcds->lpData);
+            std::wstring targetPath(pStr, charCount);
+            while (!targetPath.empty() && targetPath.back() == L'\0') {
+                targetPath.pop_back();
+            }
+            while (!targetPath.empty() && (targetPath.front() == L' ' || targetPath.front() == L'\t' || targetPath.front() == L'"')) {
+                targetPath.erase(targetPath.begin());
+            }
+            while (!targetPath.empty() && (targetPath.back() == L' ' || targetPath.back() == L'\t' || targetPath.back() == L'"')) {
+                targetPath.pop_back();
+            }
+
+            Wh_Log(L"[Explorer] Received SEPR WM_COPYDATA for: %ls", targetPath.c_str());
+
+            std::thread([path = std::move(targetPath)]() {
+                HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
+                AllowSetForegroundWindow(ASFW_ANY);
+
+                // Attempt 1: SHObjectProperties (Dedicated Win32 Shell Properties API)
+                BOOL ok = SHObjectProperties(nullptr, 0x00000002 /* SHOP_FILEPATH */, path.c_str(), nullptr);
+                Wh_Log(L"[Explorer] SHObjectProperties returned %d, err=%lu for %ls", ok, GetLastError(), path.c_str());
+
+                // Attempt 2: ShellExecuteExW with PIDL
+                if (!ok) {
+                    PIDLIST_ABSOLUTE pidl = nullptr;
+                    SFGAOF sfgao = 0;
+                    if (SUCCEEDED(SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, &sfgao)) && pidl) {
+                        SHELLEXECUTEINFOW sei{};
+                        sei.cbSize = sizeof(sei);
+                        sei.fMask = SEE_MASK_INVOKEIDLIST;
+                        sei.hwnd = nullptr;
+                        sei.lpIDList = pidl;
+                        sei.lpVerb = L"properties";
+                        sei.nShow = SW_SHOWNORMAL;
+                        ok = ShellExecuteExW(&sei);
+                        Wh_Log(L"[Explorer] ShellExecuteExW PIDL returned %d, err=%lu", ok, GetLastError());
+                        CoTaskMemFree(pidl);
+                    }
+                }
+
+                // Attempt 3: ShellExecuteExW with file path
+                if (!ok) {
+                    SHELLEXECUTEINFOW sei{};
+                    sei.cbSize = sizeof(sei);
+                    sei.fMask = SEE_MASK_INVOKEIDLIST;
+                    sei.hwnd = nullptr;
+                    sei.lpFile = path.c_str();
+                    sei.lpVerb = L"properties";
+                    sei.nShow = SW_SHOWNORMAL;
+                    ok = ShellExecuteExW(&sei);
+                    Wh_Log(L"[Explorer] ShellExecuteExW string returned %d, err=%lu", ok, GetLastError());
+                }
+
+                // Keep STA thread pumping messages briefly so shell extensions and COM handoff initialize
+                MSG msg;
+                DWORD start = GetTickCount();
+                while (GetTickCount() - start < 2000) {
+                    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                        TranslateMessage(&msg);
+                        DispatchMessageW(&msg);
+                    }
+                    Sleep(50);
+                }
+
+                if (SUCCEEDED(hr)) {
+                    CoUninitialize();
+                }
+            }).detach();
+
+            return 1;
+        }
+        break;
+    }
+    case WM_CLOSE:
+        DestroyWindow(hWnd);
+        return 0;
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    default:
+        break;
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+static DWORD WINAPI ExplorerHelperThreadProc(LPVOID) {
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
+    WNDCLASSEXW wc = { sizeof(wc) };
+    wc.lpfnWndProc = ExplorerHelperWndProc;
+    wc.hInstance = GetCurrentModuleHandle();
+    wc.lpszClassName = kExplorerHelperClassName;
+    RegisterClassExW(&wc);
+
+    HWND hWnd = CreateWindowExW(
+        WS_EX_TOOLWINDOW,
+        kExplorerHelperClassName,
+        kExplorerHelperWindowName,
+        WS_POPUP,
+        0, 0, 0, 0,
+        nullptr, nullptr, wc.hInstance, nullptr
+    );
+
+    if (hWnd) {
+        ChangeWindowMessageFilterEx(hWnd, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
+        g_hExplorerHelperWnd = hWnd;
+        Wh_Log(L"[Explorer] Helper host window created: %p", hWnd);
+    } else {
+        Wh_Log(L"[Explorer] Failed to create helper host window, err=%lu", GetLastError());
+    }
+
+    MSG msg;
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+
+    if (hWnd && IsWindow(hWnd)) {
+        DestroyWindow(hWnd);
+    }
+    g_hExplorerHelperWnd = nullptr;
+    UnregisterClassW(kExplorerHelperClassName, wc.hInstance);
+
+    if (SUCCEEDED(hr)) {
+        CoUninitialize();
+    }
+    return 0;
+}
+
+static void StartExplorerHelperHost() {
+    if (g_hExplorerHelperThread) return;
+
+    if (FindWindowW(kExplorerHelperClassName, kExplorerHelperWindowName)) {
+        Wh_Log(L"[Explorer] Helper host window already active in another explorer instance");
+        return;
+    }
+
+    g_hExplorerHelperThread = CreateThread(nullptr, 0, ExplorerHelperThreadProc, nullptr, 0, nullptr);
+    if (!g_hExplorerHelperThread) {
+        Wh_Log(L"[Explorer] Failed to create helper host thread, err=%lu", GetLastError());
+    }
+}
+
+static void StopExplorerHelperHost() {
+    if (g_hExplorerHelperWnd && IsWindow(g_hExplorerHelperWnd)) {
+        PostMessageW(g_hExplorerHelperWnd, WM_CLOSE, 0, 0);
+    }
+    if (g_hExplorerHelperThread) {
+        WaitForSingleObject(g_hExplorerHelperThread, 2000);
+        CloseHandle(g_hExplorerHelperThread);
+        g_hExplorerHelperThread = nullptr;
+    }
+}
+
 void InitExplorer() {
     Wh_Log(L"=== start-everything: initializing explorer.exe shell hooks ===");
     Wh_SetFunctionHook((void*)SetForegroundWindow, (void*)Hook_Explorer_SetForegroundWindow,
@@ -3393,6 +3577,8 @@ void InitExplorer() {
                                (void**)&pOriginalExplorerSwitchToThisWindow);
         }
     }
+
+    StartExplorerHelperHost();
 }
 
 // ===========================================================================
@@ -3521,17 +3707,8 @@ static LRESULT CALLBACK SearchHostSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPar
             Wh_Log(L"[SearchHost] WM_ACTIVATE (active) on 0x%p -> redirecting foreground to StartMenu", hWnd);
             HWND hStart = FindStartMenuCoreWindow();
             if (hStart && IsWindow(hStart)) {
-                DWORD startTid = GetWindowThreadProcessId(hStart, nullptr);
-                DWORD curTid = GetCurrentThreadId();
-                if (startTid && startTid != curTid) {
-                    AttachThreadInput(curTid, startTid, TRUE);
-                    SetForegroundWindow(hStart);
-                    BringWindowToTop(hStart);
-                    AttachThreadInput(curTid, startTid, FALSE);
-                } else {
-                    SetForegroundWindow(hStart);
-                    BringWindowToTop(hStart);
-                }
+                SetForegroundWindow(hStart);
+                BringWindowToTop(hStart);
             }
             return 0;
         }
@@ -3560,17 +3737,8 @@ static BOOL WINAPI Hook_SearchHost_SetForegroundWindow(HWND hWnd) {
     HWND hStart = FindStartMenuCoreWindow();
     if (hStart && IsWindow(hStart)) {
         Wh_Log(L"[SearchHost] Redirecting SetForegroundWindow to StartMenu 0x%p", hStart);
-        DWORD startTid = GetWindowThreadProcessId(hStart, nullptr);
-        DWORD curTid = GetCurrentThreadId();
-        if (startTid && startTid != curTid) {
-            AttachThreadInput(curTid, startTid, TRUE);
-            pOrigSearchHostSetForegroundWindow(hStart);
-            BringWindowToTop(hStart);
-            AttachThreadInput(curTid, startTid, FALSE);
-        } else {
-            pOrigSearchHostSetForegroundWindow(hStart);
-            BringWindowToTop(hStart);
-        }
+        pOrigSearchHostSetForegroundWindow(hStart);
+        BringWindowToTop(hStart);
     }
     return TRUE;
 }
@@ -3616,63 +3784,6 @@ static void WINAPI Hook_SearchHost_SwitchToThisWindow(HWND hWnd, BOOL fAltTab) {
     }
 }
 
-using NotifyQueryTextChanged_t = void (*)(void* thisPtr, void* queryText, int selStart, int selLen);
-static NotifyQueryTextChanged_t pOrigNotifyQueryTextChanged = nullptr;
-static void Hook_NotifyQueryTextChanged(void* thisPtr, void* queryText, int selStart, int selLen) {
-    Wh_Log(L"[SearchHost] Suppressed SearchBoxViewModel::NotifyQueryTextChanged (0 searches, 0 CPU)");
-    return;
-}
-
-using CallHandler_t = HRESULT (*)(void* handler, void* str);
-static CallHandler_t pOrigCallHandler = nullptr;
-static HRESULT Hook_CallHandler(void* handler, void* str) {
-    thread_local bool inHook = false;
-    if (inHook) {
-        return pOrigCallHandler(handler, nullptr);
-    }
-    DisconnectRecursionGuard guard(inHook);
-    return pOrigCallHandler(handler, nullptr);
-}
-
-static bool g_searchUxHooked = false;
-static void HookSearchUx() {
-    if (g_searchUxHooked) return;
-    HMODULE hSearchUx = GetModuleHandleW(L"SearchUx.UI.dll");
-    if (!hSearchUx) {
-        hSearchUx = LoadLibraryExW(L"SearchUx.UI.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-    if (!hSearchUx) return;
-
-    const BYTE sigNotify[] = {
-        0x40, 0x55, 0x53, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
-        0x48, 0x8D, 0x6C, 0x24, 0xF1, 0x48, 0x81, 0xEC, 0xB8, 0x00, 0x00, 0x00
-    };
-
-    void* pKnownNotify = (void*)((BYTE*)hSearchUx + 0x191F40);
-    if (memcmp(pKnownNotify, sigNotify, sizeof(sigNotify)) == 0) {
-        Wh_SetFunctionHook(pKnownNotify, (void*)Hook_NotifyQueryTextChanged, (void**)&pOrigNotifyQueryTextChanged);
-        Wh_Log(L"[SearchHost] Hooked SearchUx.UI.dll!NotifyQueryTextChanged (CPU Spike Killer)");
-    } else {
-        Wh_Log(L"[SearchHost] SearchUx.UI.dll build does not match known RVA, skipping NotifyQueryTextChanged hook");
-    }
-
-    void* pKnownAuto = (void*)((BYTE*)hSearchUx + 0x2819F0);
-    BYTE* bKnownAuto = (BYTE*)pKnownAuto;
-    const BYTE sigAutoPrefix[] = {
-        0x48, 0x83, 0xEC, 0x28, 0x48, 0x8B, 0x01, 0x48, 0x8B, 0x40, 0x48, 0xFF, 0x15
-    };
-    const BYTE sigAutoSuffix[] = { 0x85, 0xC0, 0x79, 0x08 };
-    if (memcmp(bKnownAuto, sigAutoPrefix, sizeof(sigAutoPrefix)) == 0 &&
-        memcmp(bKnownAuto + 17, sigAutoSuffix, sizeof(sigAutoSuffix)) == 0) {
-        Wh_SetFunctionHook(pKnownAuto, (void*)Hook_CallHandler, (void**)&pOrigCallHandler);
-        Wh_Log(L"[SearchHost] Hooked SearchUx.UI.dll!SetAutoCompleteQueryText");
-    } else {
-        Wh_Log(L"[SearchHost] SearchUx.UI.dll build does not match known AutoComplete signature, skipping");
-    }
-
-    g_searchUxHooked = true;
-}
-
 void InitSearchHost() {
     Wh_Log(L"=== start-everything: initializing SearchHost disconnect & suppression hooks ===");
     Wh_SetFunctionHook((void*)CreateProcessW, (void*)Hook_SearchHost_CreateProcessW, (void**)&pOriginalCreateProcessW);
@@ -3690,13 +3801,11 @@ void InitSearchHost() {
             Wh_SetFunctionHook(pSwitch, (void*)Hook_SearchHost_SwitchToThisWindow, (void**)&pOrigSearchHostSwitchToThisWindow);
         }
     }
-
-    HookSearchUx();
 }
 
-[[clang::no_destroy]] static std::thread g_searchHostWatchdog;
+[[clang::no_destroy]] static std::optional<std::thread> g_searchHostWatchdog;
 static void StartSearchHostWatchdog() {
-    g_searchHostWatchdog = std::thread([] {
+    g_searchHostWatchdog.emplace([] {
         for (int i = 0; i < 120 && !g_quit.load(); ++i) {
             EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
                 DWORD pid = 0;
@@ -3714,13 +3823,6 @@ static void StartSearchHostWatchdog() {
 // ===========================================================================
 // Domain: StartMenuExperienceHost.exe
 // ===========================================================================
-
-// Defined much further down, next to the TAP that used to contain them.
-// Declared at global scope, which is where they are defined -- declaring them
-// inside the anonymous namespace below would create a second, undefined pair
-// and make every call that can see both ambiguous.
-void TeardownStartMenuUi();
-UINT GetTeardownMessage();
 
 namespace {
 
@@ -3741,15 +3843,16 @@ struct Settings {
     std::wstring defaultSearchUrl = L"https://duckduckgo.com/?q={q}";
     std::vector<WebShortcut> webShortcuts;
     std::vector<CustomConversion> unitConversions;
+    std::vector<std::wstring> excludedPaths;
     int maxAppResults = 6;
     int maxFileResults = 12;
     bool showKeyHints = true;
+    bool filterNoisyPaths = true;
 };
 
-[[clang::no_destroy]] Settings g_settings;
-[[clang::no_destroy]] std::mutex g_settingsMutex;
+Settings g_settings;
+std::mutex g_settingsMutex;
 std::atomic<DWORD> g_xamlThreadId{0};
-std::atomic<int> g_seen{0};
 
 void LoadSettings() {
     std::lock_guard<std::mutex> lock(g_settingsMutex);
@@ -3811,6 +3914,45 @@ void LoadSettings() {
         g_settings.unitConversions.push_back({L"mb", L"GB", L"x / 1024", L"Storage"});
     }
 
+    g_settings.filterNoisyPaths = Wh_GetIntSetting(L"filterNoisyPaths") != 0;
+
+    g_settings.excludedPaths.clear();
+    for (int i = 0;; ++i) {
+        auto val = WindhawkUtils::StringSetting::make(L"excludedPaths[%d]", i);
+        if (!val.get() || !*val.get()) {
+            val = WindhawkUtils::StringSetting::make(L"excludedPaths[%d].pattern", i);
+        }
+        if (!val.get() || !*val.get()) break;
+        std::wstring s = tools::ToLower(tools::Trim(val.get()));
+        for (auto& ch : s) {
+            if (ch == L'/') ch = L'\\';
+        }
+        if (!s.empty()) {
+            g_settings.excludedPaths.push_back(std::move(s));
+        }
+    }
+    if (g_settings.excludedPaths.empty() && g_settings.filterNoisyPaths) {
+        static const wchar_t* kDefaults[] = {
+            L"\\node_modules\\",
+            L"\\.git\\",
+            L"\\.gradle\\",
+            L"\\appdata\\local\\temp\\",
+            L"\\appdata\\local\\packages\\",
+            L"\\__pycache__\\",
+            L"\\.venv\\",
+            L"\\site-packages\\",
+            L"\\.cache\\",
+            L"\\build\\intermediates\\",
+            L"\\obj\\debug\\",
+            L"\\obj\\release\\",
+            L"\\windows\\winsxs\\",
+            L"\\windows\\servicing\\",
+        };
+        for (const wchar_t* d : kDefaults) {
+            g_settings.excludedPaths.push_back(d);
+        }
+    }
+
     int maxApps = Wh_GetIntSetting(L"maxAppResults");
     g_settings.maxAppResults = (maxApps > 0) ? std::clamp(maxApps, 1, 30) : 6;
 
@@ -3819,10 +3961,12 @@ void LoadSettings() {
 
     g_settings.showKeyHints = Wh_GetIntSetting(L"showKeyHints") != 0;
 
-    Wh_Log(L"=== settings: defSearch=%ls shortcuts=%zu maxApps=%d maxFiles=%d hints=%d ===",
+    Wh_Log(L"=== settings: defSearch=%ls shortcuts=%zu maxApps=%d maxFiles=%d hints=%d filterNoise=%d excluded=%zu ===",
         g_settings.defaultSearchUrl.c_str(), g_settings.webShortcuts.size(),
         g_settings.maxAppResults, g_settings.maxFileResults,
-        g_settings.showKeyHints ? 1 : 0);
+        g_settings.showKeyHints ? 1 : 0,
+        g_settings.filterNoisyPaths ? 1 : 0,
+        g_settings.excludedPaths.size());
 }
 
 wux::DependencyObject FindDescendantByName(wux::DependencyObject const& root,
@@ -3900,7 +4044,7 @@ std::wstring FocusedElementLabel() {
 [[clang::no_destroy]] wuxc::Grid g_resultsHost{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_resultsList{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_appsList{nullptr};
-[[clang::no_destroy]] std::vector<wuxc::Button> g_appButtons;
+[[clang::no_destroy]] std::optional<std::vector<wuxc::Button>> g_appButtonsOpt{std::in_place};
 
 struct AppCardUI {
     int appIndex = -1;
@@ -3910,9 +4054,23 @@ struct AppCardUI {
     bool canRunAsAdmin = true;
     bool isSetting = false;
 };
-[[clang::no_destroy]] std::vector<AppCardUI> g_activeApps;
+[[clang::no_destroy]] std::optional<std::vector<AppCardUI>> g_activeAppsOpt{std::in_place};
+
+inline std::vector<wuxc::Button>& GetAppButtons() {
+    if (!g_appButtonsOpt) g_appButtonsOpt.emplace();
+    return *g_appButtonsOpt;
+}
+inline std::vector<AppCardUI>& GetActiveApps() {
+    if (!g_activeAppsOpt) g_activeAppsOpt.emplace();
+    return *g_activeAppsOpt;
+}
+#define g_appButtons (GetAppButtons())
+#define g_activeApps (GetActiveApps())
 [[clang::no_destroy]] wuxc::Border g_appsHeaderHolder{nullptr};
 [[clang::no_destroy]] wuxc::Border g_filesHeaderHolder{nullptr};
+[[clang::no_destroy]] wuxc::Border g_searchBarBorder{nullptr};
+[[clang::no_destroy]] wuxc::Border g_divider{nullptr};
+[[clang::no_destroy]] wuxc::Border g_footerBorder{nullptr};
 [[clang::no_destroy]] wuxm::TranslateTransform g_resultsTranslate{nullptr};
 [[clang::no_destroy]] wuxma::Storyboard g_revealAnim{nullptr};
 [[clang::no_destroy]] wuxma::Storyboard g_hideAnim{nullptr};
@@ -3924,12 +4082,39 @@ void RevealOverlayAnimated();
 void HideOverlayAnimated();
 void HideAllOtherSearchBoxes(wux::DependencyObject const& root, int depth = 15);
 void SyncOverlayBackground();
+void RequestRender();
 
 [[clang::no_destroy]] wuxc::TextBox::TextChanged_revoker g_ourBoxChanged;
 [[clang::no_destroy]] wux::UIElement::LostFocus_revoker g_ourBoxLost;
-[[clang::no_destroy]] wux::DispatcherTimer g_focusProbe{nullptr};
 [[clang::no_destroy]] wux::DispatcherTimer g_openFocus{nullptr};
-[[clang::no_destroy]] wux::DispatcherTimer g_refocus{nullptr};
+
+inline wuxm::SolidColorBrush MakeBrush(uint8_t a, uint8_t r, uint8_t g, uint8_t b) {
+    return wuxm::SolidColorBrush{winrt::Windows::UI::ColorHelper::FromArgb(a, r, g, b)};
+}
+
+inline bool IsLightTheme() {
+    DWORD val = 0;
+    DWORD sz = sizeof(val);
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &val, &sz) == ERROR_SUCCESS) {
+        return val != 0;
+    }
+    if (RegGetValueW(HKEY_CURRENT_USER,
+                     L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                     L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &val, &sz) == ERROR_SUCCESS) {
+        return val != 0;
+    }
+    try {
+        wux::FrameworkElement target = g_resultsHost ? g_resultsHost.try_as<wux::FrameworkElement>() : g_stockButton;
+        if (target) {
+            auto theme = target.ActualTheme();
+            if (theme == wux::ElementTheme::Light) return true;
+            if (theme == wux::ElementTheme::Dark) return false;
+        }
+    } catch (...) {}
+    return false;
+}
 
 wuxc::Border FindMenuAcrylicBorder() {
     try {
@@ -3968,8 +4153,25 @@ void SyncOverlayBackground() {
                     auto cr = border.CornerRadius();
                     g_resultsHost.CornerRadius(cr);
                 } catch (...) {}
-                return;
             }
+        }
+    } catch (...) {}
+
+    // Synchronize search bar, divider, and footer theme colors in real time
+    try {
+        bool isLight = IsLightTheme();
+        if (g_resultsHost) {
+            g_resultsHost.RequestedTheme(isLight ? wux::ElementTheme::Light : wux::ElementTheme::Dark);
+        }
+        if (g_searchBarBorder) {
+            g_searchBarBorder.Background(isLight ? MakeBrush(0xD0, 0xFF, 0xFF, 0xFF) : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
+            g_searchBarBorder.BorderBrush(isLight ? MakeBrush(0x30, 0x00, 0x00, 0x00) : MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
+        }
+        if (g_divider) {
+            g_divider.Background(isLight ? MakeBrush(0x18, 0x00, 0x00, 0x00) : MakeBrush(0x14, 0xFF, 0xFF, 0xFF));
+        }
+        if (g_footerBorder) {
+            g_footerBorder.BorderBrush(isLight ? MakeBrush(0x18, 0x00, 0x00, 0x00) : MakeBrush(0x12, 0xFF, 0xFF, 0xFF));
         }
     } catch (...) {}
 }
@@ -4102,50 +4304,18 @@ void HideOverlayAnimated() {
     }
 }
 
-struct SuppressedElement {
-    winrt::weak_ref<wux::FrameworkElement> element;
-    wux::Visibility visibility = wux::Visibility::Visible;
-    double opacity = 1.0;
-    bool hitTestVisible = true;
-    double height = std::numeric_limits<double>::quiet_NaN();
-    double maxHeight = std::numeric_limits<double>::quiet_NaN();
-    wux::Thickness margin{};
-    bool isControl = false;
-    bool tabStop = true;
-    bool tabStopOnly = false;
-};
-
-[[clang::no_destroy]] std::vector<SuppressedElement> g_suppressed;
-
 void SuppressShellElement(wux::FrameworkElement const& fe, bool collapse = true,
                           bool zeroSize = false, bool tabStopOnly = false) {
     if (!fe) {
         return;
     }
     try {
-        SuppressedElement saved;
-        saved.element = winrt::make_weak(fe);
-        if (auto ctl = fe.try_as<wuxc::Control>()) {
-            saved.isControl = true;
-            saved.tabStop = ctl.IsTabStop();
-        }
-        saved.tabStopOnly = tabStopOnly;
-
         if (tabStopOnly) {
-            g_suppressed.push_back(std::move(saved));
             if (auto ctl = fe.try_as<wuxc::Control>()) {
                 ctl.IsTabStop(false);
             }
             return;
         }
-
-        saved.visibility = fe.Visibility();
-        saved.opacity = fe.Opacity();
-        saved.hitTestVisible = fe.IsHitTestVisible();
-        saved.height = fe.Height();
-        saved.maxHeight = fe.MaxHeight();
-        saved.margin = fe.Margin();
-        g_suppressed.push_back(std::move(saved));
 
         fe.Opacity(0.0);
         fe.IsHitTestVisible(false);
@@ -4159,44 +4329,6 @@ void SuppressShellElement(wux::FrameworkElement const& fe, bool collapse = true,
         }
     } catch (...) {
     }
-}
-
-void RestoreShellElements() {
-    size_t restored = 0;
-    for (auto it = g_suppressed.rbegin(); it != g_suppressed.rend(); ++it) {
-        auto fe = it->element.get();
-        if (!fe) {
-            continue;
-        }
-        try {
-            if (it->tabStopOnly) {
-                if (it->isControl) {
-                    if (auto ctl = fe.try_as<wuxc::Control>()) {
-                        ctl.IsTabStop(it->tabStop);
-                    }
-                }
-                ++restored;
-                continue;
-            }
-
-            fe.Visibility(it->visibility);
-            fe.Opacity(it->opacity);
-            fe.IsHitTestVisible(it->hitTestVisible);
-            fe.Height(it->height);
-            fe.MaxHeight(it->maxHeight);
-            fe.Margin(it->margin);
-            if (it->isControl) {
-                if (auto ctl = fe.try_as<wuxc::Control>()) {
-                    ctl.IsTabStop(it->tabStop);
-                }
-            }
-            ++restored;
-        } catch (...) {
-        }
-    }
-    Wh_Log(L"teardown: restored %zu shell element(s) of %zu", restored,
-        g_suppressed.size());
-    g_suppressed.clear();
 }
 
 void HideAllOtherSearchBoxes(wux::DependencyObject const& root, int depth) {
@@ -4289,29 +4421,8 @@ void TakeForeground(bool force = false) {
             return;
         }
 
-        DWORD ourWindowTid = GetWindowThreadProcessId(ours, nullptr);
-        DWORD currentTid = current ? GetWindowThreadProcessId(current, nullptr) : 0;
-        DWORD callerTid = GetCurrentThreadId();
-
-        // Simulate Alt press/release to bypass Windows foreground restriction
-        keybd_event(VK_MENU, 0, 0, 0);
-        keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
-
-        if (currentTid && currentTid != callerTid) {
-            AttachThreadInput(callerTid, currentTid, TRUE);
-            if (ourWindowTid && ourWindowTid != callerTid && ourWindowTid != currentTid) {
-                AttachThreadInput(ourWindowTid, currentTid, TRUE);
-            }
-            SetForegroundWindow(ours);
-            BringWindowToTop(ours);
-            if (ourWindowTid && ourWindowTid != callerTid && ourWindowTid != currentTid) {
-                AttachThreadInput(ourWindowTid, currentTid, FALSE);
-            }
-            AttachThreadInput(callerTid, currentTid, FALSE);
-        } else {
-            SetForegroundWindow(ours);
-            BringWindowToTop(ours);
-        }
+        SetForegroundWindow(ours);
+        BringWindowToTop(ours);
     } catch (...) {
     }
 }
@@ -4353,7 +4464,7 @@ void TriggerMenuOpenFocus() {
             g_openFocus = nullptr;
         }
         auto t = wux::DispatcherTimer();
-        t.Interval(std::chrono::milliseconds(60));
+        t.Interval(std::chrono::milliseconds(50));
         auto ticks = std::make_shared<int>(0);
         t.Tick([ticks](wf::IInspectable const& sender, wf::IInspectable const&) {
             auto timer = sender.try_as<wux::DispatcherTimer>();
@@ -4365,12 +4476,13 @@ void TriggerMenuOpenFocus() {
             HWND fg = GetForegroundWindow();
             DWORD fgPid = 0;
             if (fg) GetWindowThreadProcessId(fg, &fgPid);
-            // Reclaim foreground from SearchHost or other window if lost within the 600ms grace window
+            // Reclaim foreground from SearchHost or other window if lost within the grace window
             if (fg != ours && fgPid != GetCurrentProcessId()) {
                 TakeForeground(true);
             }
             FocusOurBoxNow();
-            if (++(*ticks) >= 10) { // 10 * 60ms = 600ms grace window
+            auto now = wux::Input::FocusManager::GetFocusedElement();
+            if ((now && now == g_ourBox && fg == ours) || ++(*ticks) >= 10) {
                 if (timer) timer.Stop();
             }
         });
@@ -4383,10 +4495,6 @@ void TriggerMenuOpenFocus() {
 void DismissStartMenu() {
     try {
         g_suppressRefocus.store(true);
-        if (g_refocus) {
-            g_refocus.Stop();
-            g_refocus = nullptr;
-        }
         if (g_openFocus) {
             g_openFocus.Stop();
             g_openFocus = nullptr;
@@ -4401,53 +4509,20 @@ void DismissStartMenu() {
             if (g_resultsTranslate) g_resultsTranslate.Y(-8.0);
         }
         g_isOverlayVisible.store(false);
+        g_isHiding.store(false);
+        if (g_revealAnim) g_revealAnim.Stop();
+        if (g_hideAnim) g_hideAnim.Stop();
+
         HWND ours = GetOurCoreWindow();
-        if (ours) {
+        if (ours && IsWindow(ours)) {
             PostMessageW(ours, WM_KEYDOWN, VK_ESCAPE, 0x00010001);
             PostMessageW(ours, WM_KEYUP, VK_ESCAPE, 0xC0010001);
+            Wh_Log(L"DismissStartMenu: posted targeted VK_ESCAPE to CoreWindow %p", ours);
+        } else {
+            keybd_event(VK_ESCAPE, 0, 0, 0);
+            keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0);
+            Wh_Log(L"DismissStartMenu: sent fallback dismiss signal");
         }
-        keybd_event(VK_ESCAPE, 0, 0, 0);
-        keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0);
-        Wh_Log(L"DismissStartMenu: sent dismiss signal");
-    } catch (...) {
-    }
-}
-
-void RestoreWindowSoon() {
-    try {
-        if (g_suppressRefocus.load()) return;
-        if (!g_isOverlayVisible.load()) return;
-        if (g_refocus) {
-            g_refocus.Stop();
-            g_refocus = nullptr;
-        }
-        auto back = wux::DispatcherTimer();
-        back.Interval(std::chrono::milliseconds(40));
-        back.Tick([](wf::IInspectable const& sender, wf::IInspectable const&) {
-            if (auto timer = sender.try_as<wux::DispatcherTimer>()) {
-                timer.Stop();
-            }
-            if (g_suppressRefocus.load()) return;
-            if (!g_isOverlayVisible.load()) return;
-            if (g_ourBox) {
-                auto now = wux::Input::FocusManager::GetFocusedElement();
-                if (now && now == g_ourBox) {
-                    return; // ALREADY focused! Leave it alone!
-                }
-                // If user clicked/focused an app or result item, keep it!
-                if (now && (now.try_as<wuxc::Button>() || 
-                            now.try_as<wuxc::GridViewItem>() || 
-                            now.try_as<wuxc::ListViewItem>())) {
-                    return;
-                }
-                TakeForeground();
-                g_ourBox.Focus(wux::FocusState::Programmatic);
-                g_ourBox.SelectionStart(static_cast<int32_t>(g_ourBox.Text().size()));
-                g_ourBox.SelectionLength(0);
-            }
-        });
-        back.Start();
-        g_refocus = back;
     } catch (...) {
     }
 }
@@ -4603,14 +4678,6 @@ void InstallMessageHook() {
 
 static bool g_subclassed = false;
 static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
-    // Unload, marshalled here from Windhawk's thread. This proc runs on the
-    // thread that owns the window, which is the XAML thread, which is the one
-    // thread allowed to touch any of it.
-    if (uMsg && uMsg == GetTeardownMessage()) {
-        Wh_Log(L"subclass: teardown message received");
-        TeardownStartMenuUi();
-        return 0;
-    }
     if (uMsg == WM_ACTIVATE) {
         HWND otherHwnd = reinterpret_cast<HWND>(lParam);
         DWORD otherPid = 0;
@@ -4653,10 +4720,6 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                 g_openFocus.Stop();
                 g_openFocus = nullptr;
             }
-            if (g_refocus) {
-                g_refocus.Stop();
-                g_refocus = nullptr;
-            }
         }
     } else if (uMsg == WM_WINDOWPOSCHANGED) {
         WINDOWPOS* wp = reinterpret_cast<WINDOWPOS*>(lParam);
@@ -4686,6 +4749,12 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
         if (ProcessKeyCommand(wParam)) {
             return 0;
         }
+    } else if (uMsg == WM_SETTINGCHANGE || uMsg == WM_THEMECHANGED) {
+        Wh_Log(L"subclass: setting or theme changed -> synchronizing overlay colors");
+        SyncOverlayBackground();
+        if (g_isOverlayVisible.load()) {
+            RequestRender();
+        }
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
@@ -4694,9 +4763,8 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton);
 
 // The search box, found by walking rather than by being told.
 //
-// Same set of types the diagnostics callback matched on: the stock toggle is
-// what we replace, and anything else search-shaped gets suppressed so two
-// boxes are never live at once.
+// The stock SearchBoxToggleButton is what we replace, and anything else
+// search-shaped gets suppressed so two boxes are never live at once.
 wux::FrameworkElement FindStockSearchToggle(wux::DependencyObject const& root,
                                             int depth = 24) {
     if (!root || depth < 0) {
@@ -4754,8 +4822,7 @@ void TryAttachFromWindowRoot() {
             return;  // tree not built yet; the next shown window retries
         }
         g_xamlThreadId.store(GetCurrentThreadId());
-        Wh_Log(L"attach: found SearchBoxToggleButton (%.0fx%.0f) without "
-            L"diagnostics, on thread %lu",
+        Wh_Log(L"attach: found SearchBoxToggleButton (%.0fx%.0f) on thread %lu",
             toggle.ActualWidth(), toggle.ActualHeight(), GetCurrentThreadId());
         PlaceOurSearchBox(toggle);
     } catch (...) {
@@ -4789,8 +4856,7 @@ void StartAttachWatch() {
                                     GetCurrentModuleHandle(), AttachWatchProc,
                                     GetCurrentProcessId(), 0,
                                     WINEVENT_INCONTEXT);
-    Wh_Log(L"attach watch %ls (tapless, no diagnostics slot taken)",
-        g_attachWatch ? L"installed" : L"FAILED");
+    Wh_Log(L"attach watch %ls", g_attachWatch ? L"installed" : L"FAILED");
 }
 
 void StopAttachWatch() {
@@ -4833,14 +4899,14 @@ void SubclassStartMenuWindow() {
 }
 
 // Results, handed from the search thread to the XAML thread.
-[[clang::no_destroy]] std::mutex g_resultsMutex;
-[[clang::no_destroy]] std::vector<everything::Result> g_results;
+std::mutex g_resultsMutex;
+std::vector<everything::Result> g_results;
 std::atomic<DWORD> g_totalMatches{0};
 
-[[clang::no_destroy]] std::thread g_searchThread;
-[[clang::no_destroy]] std::mutex g_queryMutex;
-[[clang::no_destroy]] std::condition_variable g_queryWake;
-[[clang::no_destroy]] std::wstring g_pendingQuery;
+[[clang::no_destroy]] std::optional<std::thread> g_searchThread;
+std::mutex g_queryMutex;
+std::condition_variable g_queryWake;
+std::wstring g_pendingQuery;
 std::atomic<bool> g_searchQuit{false};
 std::atomic<bool> g_queryDirty{false};
 
@@ -4883,8 +4949,8 @@ struct Row {
 inline constexpr int kIconSize = 48;     // what we ask the shell for
 inline constexpr int kIconDisplay = 24;  // what it occupies in the row
 
-[[clang::no_destroy]] std::vector<Row> g_appRows;
-[[clang::no_destroy]] std::vector<Row> g_fileRows;
+std::vector<Row> g_appRows;
+std::vector<Row> g_fileRows;
 
 // Launch requests, posted from the XAML thread back to the search thread,
 // which owns the app index and therefore the PIDLs.
@@ -4892,20 +4958,8 @@ inline constexpr int kIconDisplay = 24;  // what it occupies in the row
 // A PIDL cannot simply be captured in a click handler: the index is rebuilt
 // and the pointer would dangle. Sending an index back to the owning thread
 // keeps the lifetime where the data lives.
-[[clang::no_destroy]] std::mutex g_launchMutex;
 std::atomic<int> g_launchRequest{-1};
 std::atomic<bool> g_launchAsAdmin{false};
-
-// ---------------------------------------------------------------------------
-// The results list
-//
-// Sits over the pinned apps, in the same Grid the search row lives in, and is
-// shown only while there is a query. Hiding it again restores the menu
-// exactly, because nothing about the menu's own children is touched -- the
-// list is simply collapsed.
-// ---------------------------------------------------------------------------
-
-[[clang::no_destroy]] wuxc::TextBlock g_resultsHeader{nullptr};
 
 // Opens what was clicked.
 static std::mutex g_launchHandlesMutex;
@@ -5017,6 +5071,124 @@ void OpenFileLocation(std::wstring path) {
         HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
         std::wstring args = L"/select,\"" + path + L"\"";
         ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+        if (SUCCEEDED(comHr)) {
+            CoUninitialize();
+        }
+    });
+}
+
+void ShowPropertiesDialog(std::wstring path) {
+    SpawnTrackedLaunch([path = std::move(path)] {
+        // Sleep briefly to let DismissStartMenu()'s VK_ESCAPE pass through
+        Sleep(150);
+
+        std::wstring cleanPath = path;
+        while (!cleanPath.empty() && (cleanPath.front() == L' ' || cleanPath.front() == L'\t' || cleanPath.front() == L'"')) {
+            cleanPath.erase(cleanPath.begin());
+        }
+        while (!cleanPath.empty() && (cleanPath.back() == L' ' || cleanPath.back() == L'\t' || cleanPath.back() == L'"')) {
+            cleanPath.pop_back();
+        }
+
+        if (cleanPath.empty()) return;
+
+        // 1. Relay to Explorer host window (runs at Medium integrity desktop shell)
+        HWND hHost = nullptr;
+        for (int retry = 0; retry < 3 && !hHost; ++retry) {
+            hHost = FindWindowW(kExplorerHelperClassName, kExplorerHelperWindowName);
+            if (!hHost) hHost = FindWindowW(nullptr, kExplorerHelperWindowName);
+            if (!hHost) Sleep(50);
+        }
+
+        if (hHost && IsWindow(hHost)) {
+            COPYDATASTRUCT cds{};
+            cds.dwData = kExplorerCopyDataMagic;
+            cds.cbData = static_cast<DWORD>((cleanPath.size() + 1) * sizeof(wchar_t));
+            cds.lpData = const_cast<wchar_t*>(cleanPath.c_str());
+
+            DWORD_PTR dwResult = 0;
+            LRESULT lres = SendMessageTimeoutW(
+                hHost,
+                WM_COPYDATA,
+                0,
+                reinterpret_cast<LPARAM>(&cds),
+                SMTO_ABORTIFHUNG | SMTO_NORMAL,
+                3000,
+                &dwResult
+            );
+            Wh_Log(L"ShowPropertiesDialog: SendMessageTimeoutW to explorer host returned %ld, res=%llu for %ls",
+                   lres, (unsigned long long)dwResult, cleanPath.c_str());
+            if (lres && dwResult == 1) {
+                return; // Successfully handed off to Explorer
+            }
+        }
+
+        Wh_Log(L"ShowPropertiesDialog: explorer host not reachable, trying direct fallback for %ls", cleanPath.c_str());
+
+        // 2. Direct in-process fallback
+        HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
+        BOOL ok = SHObjectProperties(nullptr, 0x00000002 /* SHOP_FILEPATH */, cleanPath.c_str(), nullptr);
+        if (!ok) {
+            PIDLIST_ABSOLUTE pidl = nullptr;
+            SFGAOF sfgao = 0;
+            if (SUCCEEDED(SHParseDisplayName(cleanPath.c_str(), nullptr, &pidl, 0, &sfgao)) && pidl) {
+                SHELLEXECUTEINFOW sei{};
+                sei.cbSize = sizeof(sei);
+                sei.fMask = SEE_MASK_INVOKEIDLIST;
+                sei.hwnd = nullptr;
+                sei.lpIDList = pidl;
+                sei.lpVerb = L"properties";
+                sei.nShow = SW_SHOWNORMAL;
+                ok = ShellExecuteExW(&sei);
+                CoTaskMemFree(pidl);
+            }
+        }
+
+        Sleep(1000);
+
+        if (SUCCEEDED(comHr)) {
+            CoUninitialize();
+        }
+    });
+}
+
+void LaunchTerminal(const std::wstring& dir, bool isPowerShell, bool asAdmin) {
+    SpawnTrackedLaunch([dir, isPowerShell, asAdmin] {
+        HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        if (isPowerShell) {
+            std::wstring psTarget = dir;
+            size_t pos = 0;
+            while ((pos = psTarget.find(L'\'', pos)) != std::wstring::npos) {
+                psTarget.insert(pos, L"'");
+                pos += 2;
+            }
+            std::wstring params = L"-NoExit -Command Set-Location -LiteralPath '" + psTarget + L"'";
+            SHELLEXECUTEINFOW sei{};
+            sei.cbSize = sizeof(sei);
+            sei.fMask = SEE_MASK_NOASYNC;
+            sei.lpVerb = asAdmin ? L"runas" : L"open";
+            sei.lpFile = L"powershell.exe";
+            sei.lpParameters = params.c_str();
+            sei.lpDirectory = dir.c_str();
+            sei.nShow = SW_SHOWNORMAL;
+            ShellExecuteExW(&sei);
+        } else {
+            std::wstring cmdTarget = dir;
+            if (cmdTarget.size() > 3 && cmdTarget.back() == L'\\') {
+                cmdTarget.pop_back();
+            }
+            std::wstring params = L"/K cd /d \"" + cmdTarget + (cmdTarget.back() == L'\\' ? L"\\\"" : L"\"");
+            SHELLEXECUTEINFOW sei{};
+            sei.cbSize = sizeof(sei);
+            sei.fMask = SEE_MASK_NOASYNC;
+            sei.lpVerb = asAdmin ? L"runas" : L"open";
+            sei.lpFile = L"cmd.exe";
+            sei.lpParameters = params.c_str();
+            sei.lpDirectory = dir.c_str();
+            sei.nShow = SW_SHOWNORMAL;
+            ShellExecuteExW(&sei);
+        }
         if (SUCCEEDED(comHr)) {
             CoUninitialize();
         }
@@ -5163,17 +5335,13 @@ inline ResolvedWebQuery ResolveWebSearch(const std::wstring& input) {
     return res;
 }
 
-inline wuxm::SolidColorBrush MakeBrush(uint8_t a, uint8_t r, uint8_t g, uint8_t b) {
-    return wuxm::SolidColorBrush{winrt::Windows::UI::ColorHelper::FromArgb(a, r, g, b)};
-}
-
 [[clang::no_destroy]] wuxc::TextBlock g_footerStatus{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_footerHints{nullptr};
 
 void QueueQuery(std::wstring text);
 
-[[clang::no_destroy]] std::vector<Row> g_currentAppRows;
-[[clang::no_destroy]] std::vector<Row> g_currentFileRows;
+std::vector<Row> g_currentAppRows;
+std::vector<Row> g_currentFileRows;
 static int g_selectedApp = -1;
 static uint64_t g_lastNavTick = 0;
 
@@ -5188,13 +5356,20 @@ void SetAppSelection(int index) {
     }
     g_selectedApp = index;
 
+    bool isLight = IsLightTheme();
+
     for (size_t i = 0; i < g_appButtons.size(); ++i) {
         auto& btn = g_appButtons[i];
         if (!btn) continue;
 
         if (static_cast<int>(i) == index) {
-            btn.Background(MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
-            btn.BorderBrush(MakeBrush(0x55, 0x60, 0xCD, 0xFF));
+            if (isLight) {
+                btn.Background(MakeBrush(0x14, 0x00, 0x5F, 0xB8));
+                btn.BorderBrush(MakeBrush(0x80, 0x00, 0x5F, 0xB8));
+            } else {
+                btn.Background(MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
+                btn.BorderBrush(MakeBrush(0x55, 0x60, 0xCD, 0xFF));
+            }
             try {
                 btn.StartBringIntoView();
             } catch (...) {}
@@ -5308,16 +5483,19 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     root.RowDefinitions().Append(resultsRowDef);
     root.RowDefinitions().Append(footerRowDef);
 
+    bool isLight = IsLightTheme();
+
     // Search bar container at Row 0
     wuxc::Border searchBarBorder;
     searchBarBorder.Margin(wux::ThicknessHelper::FromLengths(0, 0, 0, 8));
     searchBarBorder.Padding(wux::ThicknessHelper::FromLengths(12, 0, 10, 0));
     searchBarBorder.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
-    searchBarBorder.Background(MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
-    searchBarBorder.BorderBrush(MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
+    searchBarBorder.Background(isLight ? MakeBrush(0xD0, 0xFF, 0xFF, 0xFF) : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
+    searchBarBorder.BorderBrush(isLight ? MakeBrush(0x30, 0x00, 0x00, 0x00) : MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
     searchBarBorder.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
     searchBarBorder.Height(40);
     wuxc::Grid::SetRow(searchBarBorder, 0);
+    g_searchBarBorder = searchBarBorder;
 
     wuxc::Grid searchBarGrid;
     wuxc::ColumnDefinition sbIconCol, sbBoxCol;
@@ -5345,6 +5523,8 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     box.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
     box.IsTabStop(true);
     box.TabIndex(0);
+    box.IsSpellCheckEnabled(false);
+    box.IsTextPredictionEnabled(false);
 
     static const wchar_t* kClearKeys[] = {
         L"TextControlBackground",
@@ -5461,10 +5641,11 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     divider.Width(1);
     divider.HorizontalAlignment(wux::HorizontalAlignment::Center);
     divider.VerticalAlignment(wux::VerticalAlignment::Stretch);
-    divider.Background(MakeBrush(0x14, 0xFF, 0xFF, 0xFF));
+    divider.Background(isLight ? MakeBrush(0x18, 0x00, 0x00, 0x00) : MakeBrush(0x14, 0xFF, 0xFF, 0xFF));
     divider.Margin(wux::ThicknessHelper::FromLengths(6, 4, 6, 4));
     wuxc::Grid::SetColumn(divider, 1);
     resultsGrid.Children().Append(divider);
+    g_divider = divider;
 
     wuxc::StackPanel files;
     wuxc::Grid filesColGrid;
@@ -5496,9 +5677,10 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     wuxc::Border footerBorder;
     footerBorder.Margin(wux::ThicknessHelper::FromLengths(0, 6, 0, 0));
     footerBorder.Padding(wux::ThicknessHelper::FromLengths(8, 6, 8, 4));
-    footerBorder.BorderBrush(MakeBrush(0x12, 0xFF, 0xFF, 0xFF));
+    footerBorder.BorderBrush(isLight ? MakeBrush(0x18, 0x00, 0x00, 0x00) : MakeBrush(0x12, 0xFF, 0xFF, 0xFF));
     footerBorder.BorderThickness(wux::ThicknessHelper::FromLengths(0, 1, 0, 0));
     wuxc::Grid::SetRow(footerBorder, 2);
+    g_footerBorder = footerBorder;
 
     wuxc::Grid footerGrid;
     wuxc::ColumnDefinition fColLeft, fColRight;
@@ -5534,7 +5716,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     rightHints.Orientation(wuxc::Orientation::Horizontal);
     rightHints.VerticalAlignment(wux::VerticalAlignment::Center);
 
-    auto makeKeyCap = [](const wchar_t* key, const wchar_t* action) {
+    auto makeKeyCap = [isLight](const wchar_t* key, const wchar_t* action) {
         wuxc::StackPanel pair;
         pair.Orientation(wuxc::Orientation::Horizontal);
         pair.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -5542,8 +5724,8 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
         wuxc::Border keyBadge;
         keyBadge.CornerRadius(wux::CornerRadius{3, 3, 3, 3});
-        keyBadge.Background(MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
-        keyBadge.BorderBrush(MakeBrush(0x24, 0xFF, 0xFF, 0xFF));
+        keyBadge.Background(isLight ? MakeBrush(0x0C, 0x00, 0x00, 0x00) : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
+        keyBadge.BorderBrush(isLight ? MakeBrush(0x20, 0x00, 0x00, 0x00) : MakeBrush(0x24, 0xFF, 0xFF, 0xFF));
         keyBadge.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
         keyBadge.Padding(wux::ThicknessHelper::FromLengths(4, 1, 4, 1));
         keyBadge.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -5599,7 +5781,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     SyncOverlayBackground();
     if (!root.Background()) {
-        root.Background(MakeBrush(0xF2, 0x20, 0x20, 0x20));
+        root.Background(isLight ? MakeBrush(0xF2, 0xF3, 0xF3, 0xF3) : MakeBrush(0xF2, 0x20, 0x20, 0x20));
         Wh_Log(L"results: no AcrylicBorder found; flat background instead");
     }
 
@@ -5613,6 +5795,8 @@ void RenderResults() try {
     if (!g_resultsList || !g_resultsHost || !g_appsList) {
         return;
     }
+
+    bool isLight = IsLightTheme();
 
     std::vector<Row> files;
     std::vector<Row> appNames;
@@ -5680,7 +5864,7 @@ void RenderResults() try {
         g_footerHints.Visibility(showHints ? wux::Visibility::Visible : wux::Visibility::Collapsed);
     }
 
-    auto makeHeader = [](const std::wstring& title, const wchar_t* iconGlyph, int count, const std::wstring& badgeText = L"") {
+    auto makeHeader = [isLight](const std::wstring& title, const wchar_t* iconGlyph, int count, const std::wstring& badgeText = L"") {
         wuxc::Grid headerGrid;
         headerGrid.Margin(wux::ThicknessHelper::FromLengths(8, 4, 8, 6));
 
@@ -5718,8 +5902,8 @@ void RenderResults() try {
         if (!badgeStr.empty() && count >= 0) {
             wuxc::Border badge;
             badge.CornerRadius(wux::CornerRadius{4, 4, 4, 4});
-            badge.Background(MakeBrush(0x15, 0xFF, 0xFF, 0xFF));
-            badge.BorderBrush(MakeBrush(0x20, 0xFF, 0xFF, 0xFF));
+            badge.Background(isLight ? MakeBrush(0x0E, 0x00, 0x00, 0x00) : MakeBrush(0x15, 0xFF, 0xFF, 0xFF));
+            badge.BorderBrush(isLight ? MakeBrush(0x18, 0x00, 0x00, 0x00) : MakeBrush(0x20, 0xFF, 0xFF, 0xFF));
             badge.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
             badge.Padding(wux::ThicknessHelper::FromLengths(7, 1, 7, 1));
             badge.VerticalAlignment(wux::VerticalAlignment::Center);
@@ -5757,7 +5941,7 @@ void RenderResults() try {
         g_filesHeaderHolder.Child(makeHeader(L"FILES", L"\uE8B7", static_cast<int>(files.size()), filesBadge));
     }
 
-    auto makeAppCard = [](const Row& item) -> AppCardUI {
+    auto makeAppCard = [isLight](const Row& item) -> AppCardUI {
         wuxc::Grid layout;
         wuxc::ColumnDefinition iconCol, textCol;
         iconCol.Width(wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
@@ -5850,6 +6034,20 @@ void RenderResults() try {
         button.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
         button.Padding(wux::ThicknessHelper::FromLengths(10, 6, 10, 6));
         button.Margin(wux::ThicknessHelper::FromLengths(2, 1, 2, 1));
+        button.IsTabStop(false);
+
+        button.Resources().Insert(winrt::box_value(L"ButtonBackgroundPointerOver"),
+            isLight ? MakeBrush(0x14, 0x00, 0x5F, 0xB8) : MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
+        button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushPointerOver"),
+            isLight ? MakeBrush(0x80, 0x00, 0x5F, 0xB8) : MakeBrush(0x55, 0x60, 0xCD, 0xFF));
+        button.Resources().Insert(winrt::box_value(L"ButtonBackgroundPressed"),
+            isLight ? MakeBrush(0x24, 0x00, 0x5F, 0xB8) : MakeBrush(0x35, 0xFF, 0xFF, 0xFF));
+        button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushPressed"),
+            isLight ? MakeBrush(0xA0, 0x00, 0x5F, 0xB8) : MakeBrush(0x70, 0x60, 0xCD, 0xFF));
+        button.Resources().Insert(winrt::box_value(L"ButtonBackgroundFocused"),
+            MakeBrush(0, 0, 0, 0));
+        button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushFocused"),
+            MakeBrush(0, 0, 0, 0));
 
         button.PointerEntered([btn = button](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const&) {
             for (size_t i = 0; i < g_activeApps.size(); ++i) {
@@ -5877,7 +6075,6 @@ void RenderResults() try {
             copyIcon.Glyph(L"\uE8C8");
             copyItem.Icon(copyIcon);
             copyItem.Click([txt = item.copyText](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                DismissStartMenu();
                 tools::CopyTextToClipboard(txt);
             });
             flyout.Items().Append(copyItem);
@@ -5939,7 +6136,6 @@ void RenderResults() try {
                 copyIcon.Glyph(L"\uE8C8");
                 copyUrlItem.Icon(copyIcon);
                 copyUrlItem.Click([webUrl](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    DismissStartMenu();
                     CopyTextToClipboard(webUrl);
                 });
                 flyout.Items().Append(copyUrlItem);
@@ -5969,7 +6165,6 @@ void RenderResults() try {
                     copyPathIcon.Glyph(L"\uE71B");
                     copyPathItem.Icon(copyPathIcon);
                     copyPathItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        DismissStartMenu();
                         tools::CopyTextToClipboard(locTarget);
                     });
                     flyout.Items().Append(copyPathItem);
@@ -5984,6 +6179,20 @@ void RenderResults() try {
                         tools::CreateDesktopShortcut(locTarget, appTitle);
                     });
                     flyout.Items().Append(shortcutItem);
+
+                    wuxc::MenuFlyoutSeparator sep2;
+                    flyout.Items().Append(sep2);
+
+                    wuxc::MenuFlyoutItem propItem;
+                    propItem.Text(L"Properties");
+                    wuxc::FontIcon propIcon;
+                    propIcon.Glyph(L"\uE946");
+                    propItem.Icon(propIcon);
+                    propItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        DismissStartMenu();
+                        ShowPropertiesDialog(locTarget);
+                    });
+                    flyout.Items().Append(propItem);
                 } else if (!locTarget.starts_with(L"ms-settings:") && !locTarget.starts_with(L"http:") && !locTarget.starts_with(L"https:")) {
                     wuxc::MenuFlyoutSeparator sep1;
                     flyout.Items().Append(sep1);
@@ -6007,11 +6216,11 @@ void RenderResults() try {
         return AppCardUI{item.appIndex, item.title, item.openPath, button, item.canRunAsAdmin, item.isSetting};
     };
 
-    auto makeAppEmptyCard = []() -> wuxc::Border {
+    auto makeAppEmptyCard = [isLight]() -> wuxc::Border {
         wuxc::Border emptyCard;
         emptyCard.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
-        emptyCard.Background(MakeBrush(0x0A, 0xFF, 0xFF, 0xFF));
-        emptyCard.BorderBrush(MakeBrush(0x10, 0xFF, 0xFF, 0xFF));
+        emptyCard.Background(isLight ? MakeBrush(0x08, 0x00, 0x00, 0x00) : MakeBrush(0x0A, 0xFF, 0xFF, 0xFF));
+        emptyCard.BorderBrush(isLight ? MakeBrush(0x15, 0x00, 0x00, 0x00) : MakeBrush(0x10, 0xFF, 0xFF, 0xFF));
         emptyCard.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
         emptyCard.Padding(wux::ThicknessHelper::FromLengths(16, 22, 16, 22));
         emptyCard.Margin(wux::ThicknessHelper::FromLengths(6, 10, 6, 8));
@@ -6126,7 +6335,7 @@ void RenderResults() try {
     }
 
     // Files renderer
-    auto makeFileRow = [](const Row& item) {
+    auto makeFileRow = [isLight](const Row& item) {
         wuxc::Grid layout;
         wuxc::ColumnDefinition iconCol, textCol;
         iconCol.Width(wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
@@ -6208,10 +6417,25 @@ void RenderResults() try {
         button.HorizontalAlignment(wux::HorizontalAlignment::Stretch);
         button.HorizontalContentAlignment(wux::HorizontalAlignment::Stretch);
         button.Background(MakeBrush(0, 0, 0, 0));
-        button.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+        button.BorderBrush(MakeBrush(0, 0, 0, 0));
+        button.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
         button.CornerRadius(wux::CornerRadius{6, 6, 6, 6});
         button.Padding(wux::ThicknessHelper::FromLengths(10, 6, 10, 6));
         button.Margin(wux::ThicknessHelper::FromLengths(2, 1, 2, 1));
+        button.IsTabStop(false);
+
+        button.Resources().Insert(winrt::box_value(L"ButtonBackgroundPointerOver"),
+            isLight ? MakeBrush(0x14, 0x00, 0x5F, 0xB8) : MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
+        button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushPointerOver"),
+            isLight ? MakeBrush(0x80, 0x00, 0x5F, 0xB8) : MakeBrush(0x55, 0x60, 0xCD, 0xFF));
+        button.Resources().Insert(winrt::box_value(L"ButtonBackgroundPressed"),
+            isLight ? MakeBrush(0x24, 0x00, 0x5F, 0xB8) : MakeBrush(0x35, 0xFF, 0xFF, 0xFF));
+        button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushPressed"),
+            isLight ? MakeBrush(0xA0, 0x00, 0x5F, 0xB8) : MakeBrush(0x70, 0x60, 0xCD, 0xFF));
+        button.Resources().Insert(winrt::box_value(L"ButtonBackgroundFocused"),
+            MakeBrush(0, 0, 0, 0));
+        button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushFocused"),
+            MakeBrush(0, 0, 0, 0));
 
         if (!item.openPath.empty()) {
             std::wstring target = item.openPath;
@@ -6250,6 +6474,63 @@ void RenderResults() try {
                 flyout.Items().Append(adminItem);
             }
 
+            DWORD attr = GetFileAttributesW(target.c_str());
+            bool isFolder = (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY));
+            if (isFolder) {
+                wuxc::MenuFlyoutSubItem termSub;
+                termSub.Text(L"Open in terminal");
+                wuxc::FontIcon termIcon;
+                termIcon.Glyph(L"\uE756");
+                termSub.Icon(termIcon);
+
+                auto bindTerminalItem = [target](wuxc::MenuFlyoutItem const& mi, bool isPowerShell) {
+                    mi.Click([target, isPowerShell](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        DismissStartMenu();
+                        LaunchTerminal(target, isPowerShell, /*asAdmin=*/false);
+                    });
+
+                    auto runAdmin = [target, isPowerShell]() {
+                        static std::atomic<ULONGLONG> s_lastAdmin{0};
+                        ULONGLONG now = GetTickCount64();
+                        ULONGLONG prev = s_lastAdmin.load(std::memory_order_relaxed);
+                        if (now - prev < 800) return;
+                        s_lastAdmin.store(now, std::memory_order_relaxed);
+                        DismissStartMenu();
+                        LaunchTerminal(target, isPowerShell, /*asAdmin=*/true);
+                    };
+
+                    mi.RightTapped([runAdmin](wf::IInspectable const&, wuxi::RightTappedRoutedEventArgs const& e) {
+                        e.Handled(true);
+                        runAdmin();
+                    });
+
+                    mi.PointerPressed([runAdmin](wf::IInspectable const&, wuxi::PointerRoutedEventArgs const& e) {
+                        if (e.GetCurrentPoint(nullptr).Properties().IsRightButtonPressed()) {
+                            e.Handled(true);
+                            runAdmin();
+                        }
+                    });
+                };
+
+                wuxc::MenuFlyoutItem cmdItem;
+                cmdItem.Text(L"Command Prompt");
+                wuxc::FontIcon cmdIcon;
+                cmdIcon.Glyph(L"\uE756");
+                cmdItem.Icon(cmdIcon);
+                bindTerminalItem(cmdItem, /*isPowerShell=*/false);
+                termSub.Items().Append(cmdItem);
+
+                wuxc::MenuFlyoutItem psItem;
+                psItem.Text(L"PowerShell");
+                wuxc::FontIcon psIcon;
+                psIcon.Glyph(L"\uE756");
+                psItem.Icon(psIcon);
+                bindTerminalItem(psItem, /*isPowerShell=*/true);
+                termSub.Items().Append(psItem);
+
+                flyout.Items().Append(termSub);
+            }
+
             wuxc::MenuFlyoutSeparator sep1;
             flyout.Items().Append(sep1);
 
@@ -6259,7 +6540,6 @@ void RenderResults() try {
             cutIcon.Glyph(L"\uE8C6");
             cutItem.Icon(cutIcon);
             cutItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                DismissStartMenu();
                 tools::CopyOrCutFileToClipboard(target, true /* isCut */);
             });
             flyout.Items().Append(cutItem);
@@ -6270,7 +6550,6 @@ void RenderResults() try {
             copyIcon.Glyph(L"\uE8C8");
             copyItem.Icon(copyIcon);
             copyItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                DismissStartMenu();
                 tools::CopyOrCutFileToClipboard(target, false /* isCut */);
             });
             flyout.Items().Append(copyItem);
@@ -6281,7 +6560,6 @@ void RenderResults() try {
             copyPathIcon.Glyph(L"\uE71B");
             copyPathItem.Icon(copyPathIcon);
             copyPathItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                DismissStartMenu();
                 tools::CopyTextToClipboard(target);
             });
             flyout.Items().Append(copyPathItem);
@@ -6311,6 +6589,20 @@ void RenderResults() try {
             });
             flyout.Items().Append(shortcutItem);
 
+            wuxc::MenuFlyoutSeparator sep3;
+            flyout.Items().Append(sep3);
+
+            wuxc::MenuFlyoutItem propItem;
+            propItem.Text(L"Properties");
+            wuxc::FontIcon propIcon;
+            propIcon.Glyph(L"\uE946");
+            propItem.Icon(propIcon);
+            propItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                DismissStartMenu();
+                ShowPropertiesDialog(target);
+            });
+            flyout.Items().Append(propItem);
+
             button.ContextFlyout(flyout);
         }
         return button;
@@ -6320,8 +6612,8 @@ void RenderResults() try {
     if (files.empty()) {
         wuxc::Border emptyCard;
         emptyCard.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
-        emptyCard.Background(MakeBrush(0x0A, 0xFF, 0xFF, 0xFF));
-        emptyCard.BorderBrush(MakeBrush(0x10, 0xFF, 0xFF, 0xFF));
+        emptyCard.Background(isLight ? MakeBrush(0x08, 0x00, 0x00, 0x00) : MakeBrush(0x0A, 0xFF, 0xFF, 0xFF));
+        emptyCard.BorderBrush(isLight ? MakeBrush(0x15, 0x00, 0x00, 0x00) : MakeBrush(0x10, 0xFF, 0xFF, 0xFF));
         emptyCard.BorderThickness(wux::ThicknessHelper::FromUniformLength(1));
         emptyCard.Padding(wux::ThicknessHelper::FromLengths(16, 22, 16, 22));
         emptyCard.Margin(wux::ThicknessHelper::FromLengths(6, 10, 6, 8));
@@ -6811,11 +7103,17 @@ void SearchThreadMain() {
 
         int maxFiles = 12;
         int maxApps = 6;
+        bool filterNoise = true;
+        std::vector<std::wstring> excludedPaths;
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             maxFiles = g_settings.maxFileResults;
             maxApps = g_settings.maxAppResults;
+            filterNoise = g_settings.filterNoisyPaths;
+            excludedPaths = g_settings.excludedPaths;
         }
+        static const std::vector<std::wstring> s_disabledNoise;
+        const std::vector<std::wstring>* noisePtr = filterNoise ? &excludedPaths : &s_disabledNoise;
 
         if (isIpCommand || isCCommand) {
             pool.clear();
@@ -6825,7 +7123,7 @@ void SearchThreadMain() {
             if (!explicitWeb.queryTerm.empty()) {
                 auto start = std::chrono::steady_clock::now();
                 if (client.Query(explicitWeb.queryTerm, ranker::kDefaultPool, &pool, &total)) {
-                    ranker::Rank(&pool, explicitWeb.queryTerm, static_cast<size_t>(maxFiles));
+                    ranker::Rank(&pool, explicitWeb.queryTerm, static_cast<size_t>(maxFiles), noisePtr);
                 }
                 ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                          std::chrono::steady_clock::now() - start)
@@ -6842,7 +7140,7 @@ void SearchThreadMain() {
                 pool.clear();
                 total = 0;
             } else {
-                ranker::Rank(&pool, query, static_cast<size_t>(maxFiles));
+                ranker::Rank(&pool, query, static_cast<size_t>(maxFiles), noisePtr);
             }
         }
 
@@ -7237,6 +7535,9 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
         g_activeApps.clear();
         g_appsHeaderHolder = nullptr;
         g_filesHeaderHolder = nullptr;
+        g_searchBarBorder = nullptr;
+        g_divider = nullptr;
+        g_footerBorder = nullptr;
         BuildResultsList(ownerPanel);
     }
 
@@ -7355,10 +7656,6 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
                                     g_openFocus.Stop();
                                     g_openFocus = nullptr;
                                 }
-                                if (g_refocus) {
-                                    g_refocus.Stop();
-                                    g_refocus = nullptr;
-                                }
                             }
                         });
                     }
@@ -7374,153 +7671,6 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
 }
 
 }  // namespace
-
-
-
-// Undoes everything this mod put into StartMenuExperienceHost's UI.
-//
-// Must run on the XAML thread, and must run before Wh_ModUninit returns.
-// Everything it releases is either a XAML object -- which throws
-// RPC_E_WRONG_THREAD if touched from anywhere else -- or a callback whose code
-// lives in this DLL, which Windhawk unmaps the moment uninit returns. Leaving
-// one behind is not a leak, it is a crash on the next keystroke: XAML calls
-// the handler, the handler is gone, and the process dies of 0xc000041d in
-// Windows.UI.Xaml.dll.
-void TeardownStartMenuUi() {
-    Wh_Log(L"teardown: enter (thread %lu)", GetCurrentThreadId());
-    StopAttachWatch();
-
-    // HWND-level cleanup MUST happen first so that off-thread unloads or XAML RPC
-    // exceptions cannot skip removing subclasses or window hooks.
-    if (g_subclassed) {
-        EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(hwnd, &pid);
-            if (pid != GetCurrentProcessId()) return TRUE;
-            wchar_t cls[128] = {};
-            GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-            if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
-                WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, StartMenuSubclassProc);
-                return FALSE;
-            }
-            return TRUE;
-        }, 0);
-        g_subclassed = false;
-        Wh_Log(L"teardown: subclass removed");
-    }
-
-    if (g_hGetMsgHook) {
-        UnhookWindowsHookEx(g_hGetMsgHook);
-        g_hGetMsgHook = nullptr;
-        Wh_Log(L"teardown: message hook removed");
-    }
-
-    try {
-        if (g_focusProbe) {
-            g_focusProbe.Stop();
-            g_focusProbe = nullptr;
-        }
-        if (g_openFocus) {
-            g_openFocus.Stop();
-            g_openFocus = nullptr;
-        }
-        if (g_refocus) {
-            g_refocus.Stop();
-            g_refocus = nullptr;
-        }
-        if (g_revealAnim) {
-            g_revealAnim.Stop();
-            g_revealAnim = nullptr;
-        }
-        if (g_hideAnim) {
-            g_hideAnim.Stop();
-            g_hideAnim = nullptr;
-        }
-        Wh_Log(L"teardown: timers and animations stopped");
-    } catch (...) {}
-
-    try {
-        if (g_appsList) {
-            g_appsList.Children().Clear();
-            g_appsList = nullptr;
-        }
-        if (g_resultsList) {
-            g_resultsList.Children().Clear();
-            g_resultsList = nullptr;
-        }
-        if (g_resultsHost) {
-            g_resultsHost.Visibility(wux::Visibility::Collapsed);
-        }
-        for (auto element : {g_resultsHost ? g_resultsHost.try_as<wux::FrameworkElement>() : nullptr,
-                             g_ourBox ? g_ourBox.try_as<wux::FrameworkElement>() : nullptr}) {
-            if (!element) {
-                continue;
-            }
-            auto parent = wuxm::VisualTreeHelper::GetParent(element);
-            if (auto panel = parent ? parent.try_as<wuxc::Panel>() : nullptr) {
-                uint32_t index = 0;
-                if (panel.Children().IndexOf(element, index)) {
-                    panel.Children().RemoveAt(index);
-                }
-            }
-        }
-
-        g_resultsTranslate = nullptr;
-        g_resultsList = nullptr;
-        g_resultsHost = nullptr;
-        g_ourBox = nullptr;
-        g_activeApps.clear();
-        g_appsHeaderHolder = nullptr;
-        g_filesHeaderHolder = nullptr;
-        RestoreShellElements();
-        Wh_Log(L"teardown: lists and host released");
-    } catch (...) {}
-
-    try {
-        if (auto window = wux::Window::Current()) {
-            if (auto core = window.CoreWindow()) {
-                if (g_charReceivedToken) {
-                    core.CharacterReceived(g_charReceivedToken);
-                    g_charReceivedToken = {};
-                }
-                if (g_keyDownToken) {
-                    core.KeyDown(g_keyDownToken);
-                    g_keyDownToken = {};
-                }
-                if (g_activatedToken) {
-                    core.Activated(g_activatedToken);
-                    g_activatedToken = {};
-                }
-            }
-        }
-    } catch (...) {}
-    g_coreEventsHooked = false;
-
-    try {
-        g_ourBoxChanged.revoke();
-        g_ourBoxLost.revoke();
-        g_ourBox = nullptr;
-    } catch (...) {}
-    Wh_Log(L"teardown: done");
-}
-
-// Lets Wh_ModUninit reach the XAML thread.
-//
-// SendMessage to a window owned by that thread runs the handler there and
-// blocks until it has finished, which is the guarantee uninit needs: by the
-// time it returns, nothing of ours is still attached. A posted message would
-// only promise that the work had been queued.
-UINT g_teardownMessage = 0;
-
-UINT GetTeardownMessage() {
-    if (!g_teardownMessage) {
-        // A registered message rather than WM_APP+n: WM_APP values belong to
-        // the window's own class, and this window is the shell's.
-        g_teardownMessage =
-            RegisterWindowMessageW(L"WindhawkStartEverythingTeardown");
-    }
-    return g_teardownMessage;
-}
 
 // ===========================================================================
 // Mod entry points
@@ -7563,7 +7713,7 @@ void Wh_ModAfterInit() {
     }
 
     g_searchQuit.store(false);
-    g_searchThread = std::thread(SearchThreadMain);
+    g_searchThread.emplace(SearchThreadMain);
 
     StartAttachWatch();
 }
@@ -7606,33 +7756,16 @@ void Wh_ModUninit() {
 
     g_quit.store(true);
 
-    if (g_searchHostWatchdog.joinable()) {
-        g_searchHostWatchdog.join();
-    }
-
-    // The watchdog subclasses every window in this process, twice a second
-    // for a minute, and nothing ever removed them -- so in SearchHost the
-    // same unload crash was waiting, with more windows to fire it. Joining
-    // the watchdog first is what makes this safe: it cannot add another one
-    // behind us.
-    //
-    // Removing a subclass is meant to happen on the thread that owns the
-    // window. This does not, and neither did the SetWindowSubclass calls it
-    // is undoing; matching them is still strictly better than leaving the
-    // process pointing at an unmapped DLL.
     if (g_targetProcess == TargetProcess::SearchHost) {
-        EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(hwnd, &pid);
-            if (pid == GetCurrentProcessId()) {
-                WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc);
-            }
-            return TRUE;
-        }, 0);
-        return;
+        Wh_Log(L"uninit: SearchHost exiting to guarantee clean stock reload");
+        ExitProcess(0);
     }
 
     if (g_targetProcess != TargetProcess::StartMenu) {
+        if (g_targetProcess == TargetProcess::Explorer) {
+            StopExplorerHelperHost();
+        }
+        Wh_Log(L"uninit: explorer.exe unhook complete");
         return;
     }
 
@@ -7647,44 +7780,16 @@ void Wh_ModUninit() {
         g_searchQuit.store(true);
     }
     g_queryWake.notify_all();
-    if (g_searchThread.joinable()) {
-        g_searchThread.join();
+    if (g_searchThread && g_searchThread->joinable()) {
+        g_searchThread->join();
+        g_searchThread.reset();
     }
     WaitForTrackedLaunches();
 
-    // The part that was missing, and the reason disabling this mod used to
-    // take the Start menu down with it.
-    //
-    // Sent, not posted, and sent to a window the XAML thread owns, so the
-    // work happens on that thread and has finished before this returns. The
-    // timeout is a concession to a wedged shell: hanging Windhawk's unload
-    // forever is worse than logging that the teardown did not land, and
-    // SMTO_ABORTIFHUNG gets us out if the thread is already gone.
-    Wh_Log(L"uninit: start menu teardown beginning (hwnd %p)", g_hCoreWindow);
-    bool tornDown = false;
-    if (g_hCoreWindow && IsWindow(g_hCoreWindow)) {
-        DWORD_PTR result = 0;
-        if (SendMessageTimeoutW(g_hCoreWindow, GetTeardownMessage(), 0, 0,
-                                SMTO_ABORTIFHUNG, 5000, &result)) {
-            tornDown = true;
-            Wh_Log(L"uninit: teardown ran on the XAML thread");
-        } else {
-            Wh_Log(L"uninit: teardown message timed out (%lu)", GetLastError());
-        }
-    }
-
-    if (!tornDown) {
-        // Last resort. Touching XAML from this thread can throw
-        // RPC_E_WRONG_THREAD, but the alternative is returning with live
-        // handlers in a DLL that is about to be unmapped, which is certain
-        // rather than merely likely to crash.
-        Wh_Log(L"uninit: tearing down off-thread, which may throw");
-        try {
-            TeardownStartMenuUi();
-        } catch (...) {
-            Wh_Log(L"uninit: off-thread teardown threw %08X",
-                static_cast<unsigned>(winrt::to_hresult()));
-        }
-    }
-    Wh_Log(L"uninit: returning");
+    // Terminating StartMenuExperienceHost on mod disable is the only 100% reliable
+    // way to restore Windows 11's complex XAML tree to pristine factory state without
+    // leaving zero-sized controls, hidden search placeholders, or detached overlays.
+    // Windows automatically and seamlessly restarts StartMenuExperienceHost in <30ms.
+    Wh_Log(L"uninit: StartMenuExperienceHost exiting to guarantee clean stock reload");
+    ExitProcess(0);
 }
