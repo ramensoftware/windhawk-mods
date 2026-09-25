@@ -7539,24 +7539,24 @@
         "ratingBreakdown": [0, 0, 0, 1, 4],
         "ratingUsers": 5,
         "reviews": 0,
-        "updated": 1788265679000,
+        "updated": 1790323501000,
         "users": 43
       },
       "metadata": {
         "author": "Farael Hanafi",
         "compilerOptions": "-lole32 -luser32 -lgdi32 -lgdiplus -lshcore -lshell32",
-        "description": "Hotkey global untuk mute/unmute mikrofon default, dengan indikator overlay melayang yang selalu di atas dan beranimasi saat mikrofon aktif",
+        "description": "Hotkey global untuk mute/unmute mikrofon default, dengan indikator overlay melayang yang selalu di atas dan beranimasi saat mikrofon aktif. Opsional: ikon hanya saat mute, hotkey on/off mod, garis merah di pinggir layar, overlay di semua monitor, mute semua mikrofon",
         "github": "https://github.com/Eliasilyz",
         "homepage": "https://farelhanafi.my.id/",
         "include": [
           "windhawk.exe"
         ],
         "license": "MIT",
-        "name": "Global Hotkey Mute Microphone + Floating Overlay",
-        "version": "1.0.0"
+        "name": "Global Hotkey Mute Microphone",
+        "version": "1.1.0"
       },
       "metadataEnglish": {
-        "description": "Global hotkey to mute/unmute the default microphone, with a floating always-on-top overlay that animates while the mic is active"
+        "description": "Global hotkey to mute/unmute the default microphone, with a floating always-on-top overlay that animates while the mic is active. Optional: show-only-when-muted, mod on/off hotkey, red screen border, all-monitor overlay, mute all microphones"
       }
     },
     "mic-tray-control": {
