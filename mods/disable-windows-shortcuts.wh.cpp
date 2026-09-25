@@ -19,8 +19,7 @@ Selectively disable Windows keyboard shortcuts with individual toggles for each 
 - Uses a lightweight background hook thread ensuring third-party modifiers (like AltSnap, GlazeWM) are completely unaffected.
 
 ## Special Shortcuts
-A small number of system shortcuts (`Win+A`, `Win+C`, `Win+K`, `Win+N`, `Win+P`, `Win+U`, `Win+/`) open flyout panels and are not registered via the standard `RegisterHotKey` API.
-The mod provides **three options** for each of these:
+A small number of system shortcuts (`Win+A`, `Win+C`, `Win+K`, `Win+N`, `Win+P`, `Win+U`, `Win+/`) open flyout panels and require special handling to preserve compatibility with third-party tools that simulate them:
 - **Off:** The shortcut is completely unaffected.
 - **Disable hotkey:** Blocks the shortcut natively by intercepting it in Explorer. Lightweight and does **not** require `dwm.exe`. Note: third-party apps that simulate these keys (e.g. some custom taskbars) will also be blocked.
 - **Block hotkey:** Physically suppresses the keystroke via a low-level hook running in `dwm.exe`, while letting Windows believe the key was registered. Third-party tools that simulate the shortcut continue to work. Requires `dwm.exe` in the inclusion list.
@@ -33,10 +32,6 @@ Required only if you use the **"Block hotkey"** option on Special Shortcuts, or 
 4. Click **Save**. Windhawk will automatically restart to apply the new settings.
 
 *Note: Changes to standard shortcuts (like Win+E) require an Explorer restart to completely release the hotkeys for other applications. You will be prompted automatically. If you completely disable or remove this mod from Windhawk, you must restart Explorer to restore those standard shortcuts.*
-
-## Changes in 1.3.0
-- Added new shortcuts: `Win+Shift+C`, `Win+Shift+R`, `Win+Shift+Up/Down/Left/Right`, `Win+Ctrl+Shift+B`, Office hotkeys (`Win+Ctrl+Shift+Alt`), and more.
-- If upgrading from version 1.2.1 or earlier, your existing Special Shortcuts settings are preserved. Other settings remain unchanged.
 
 ## Notes
 - Win+L (Lock PC) cannot be blocked through standard hooks
@@ -1369,13 +1364,6 @@ void Wh_ModSettingsChanged()
     
     if (g_isExplorer && IsMainExplorer() && !GetSystemMetrics(SM_SHUTTINGDOWN) && !StandardShortcutsEqual(oldSettings, g_settings))
     {
-        if (!HasAnyStandardShortcutsDisabled())
-        {
-            // All standard shortcuts turned off — clear the block record so uninit/init
-            // no longer treat this process as having blocked registrations.
-            Wh_SetIntValue(L"blockedInPid", 0);
-            g_recordedBlock = false;
-        }
         PromptForExplorerRestart();
     }
 }
