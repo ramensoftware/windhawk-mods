@@ -59,6 +59,7 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
 - **Hover & Scroll:** Hover over the island to seamlessly expand it. Use your mouse scroll wheel to swipe between the Media, Calendar, Weather, Hardware Monitor, and File Tray tabs.
 - **File Tray:** Enable the File Tray module, then drag files onto the island. It jumps to the shelf to confirm the drop. Click a row to open that file; right-click the island to clear the shelf.
 - **Right-Click Menu:** Right-click the island to access Theme presets, Transparency settings, and to pin the island open.
+- **⚠️ Right-click choices are per-session:** The right-click menu is a quick way to try things out, not a place to configure the mod. **Theme**, **shape style** (Pill / Notch / Windows 11) and **pin open** are all re-applied from your Windhawk settings whenever the mod restarts — so a reboot, a mod update, or toggling the mod off and on will discard them. Anything you want to keep, set in the **Mod Settings** tab instead. (Transparency and Expand-on-hover do persist, but the settings tab is still the reliable place for them.)
 - **Windhawk Settings:** Visit the Mod Settings tab to change the island's Position, Size Scale, Refresh Rate (Target FPS), Animation Style (Smooth/Default/Bouncy/Snappy), Animation Speed, and toggle specific modules. You can also perfectly align the island using the `Offset X` and `Offset Y` settings, and select exactly which monitor the island should appear on (including a "Follow Mouse" mode!).
 - **Notifications:** Windows must allow apps to read notifications: turn on **Settings > Privacy & security > Notifications > "Let apps access your notifications"**. Without that permission Windows denies the listener and the module stays silent. Nothing needs to be added to the process inclusion list; the island runs in its own process and reads notifications from there.
 - **Quick Hide/Show:** Right-click the island and choose "Hide Island" to collapse it completely — CPU usage drops to ~0% while hidden since the mod fully parks its render thread. Bring it back instantly with the configurable hotkey (default **Ctrl+Alt+D**, changeable in the **Shortcuts** settings tab). Because a hidden island can't be right-clicked, the hotkey is the *only* way back once hidden — if you turn the hotkey off while hidden, re-enable it (or disable the mod) from Windhawk's settings.
@@ -11829,20 +11830,27 @@ DWORD WINAPI RenderThreadProc(void*) {
     static auto pTimeEndPeriod = reinterpret_cast<TimeEndPeriod_t>(
         GetProcAddress(GetModuleHandleW(L"winmm.dll"), "timeEndPeriod"));
 
-    // timeBeginPeriod raises the timer resolution for the *whole system*, not just
-    // this process, which raises power draw everywhere. It used to be requested
-    // once here and released only at shutdown, so a parked or idle island held the
-    // machine at 1ms for its entire lifetime -- most of it spent doing nothing.
+    // A 1ms timer resolution costs power, so it is requested only while the island
+    // is actually animating. It used to be requested once here and released at
+    // shutdown, so a parked or idle island held it for the mod's whole lifetime.
     //
-    // It is now held only across the precise frame pacing below, which is the one
-    // thing that actually needs sub-millisecond sleeps. Every path that parks or
-    // drops to the 16ms idle wait releases it first.
+    // Since Windows 10 2004 this affects only the calling process's timers rather
+    // than the system clock globally, but the power cost is the reason to scope it
+    // either way.
     //
     // The flag is only set when timeBeginPeriod actually succeeded, so the
     // begin/end pairs stay balanced -- these calls are reference counted per
     // process, and an unmatched timeEndPeriod would decrement someone else's
     // request.
     bool highResTimer = false;
+
+    // How long the resolution is held after the last paint. Long enough to bridge
+    // the gap between 60Hz content frames without flapping, short enough that a
+    // settled island releases it promptly. A plain local rather than a static, so
+    // an unload/reload cycle cannot carry a stale timestamp across.
+    constexpr double kHighResTimerHoldSec = 0.5;
+    double lastRenderAt = -1.0;
+
     auto setHighResTimer = [&](bool want) {
         if (want == highResTimer) {
             return;
@@ -12374,18 +12382,22 @@ DWORD WINAPI RenderThreadProc(void*) {
             prevPinned = pinned;
         }
 
-        // Animated activities that require continuous rendering — but the
-        // waveform bars / marquee scroll / pulsing ring don't look any
-        // different above ~60 FPS, so don't let this piggyback on whatever
-        // high Target FPS the user picked for structural resize animation.
-        if (primary.kind == IslandKind::Media || primary.kind == IslandKind::BatteryLow ||
-            primary.kind == IslandKind::Clipboard || primary.kind == IslandKind::Notification) {
-            static double s_lastContinuousRenderTime = 0.0;
-            constexpr double kContinuousRenderIntervalSec = 1.0 / 60.0;
-            if (now - s_lastContinuousRenderTime >= kContinuousRenderIntervalSec) {
-                needsRender = true;
-                s_lastContinuousRenderTime = now;
-            }
+        // Activities that animate continuously: the waveform bars, the marquee
+        // scroll and the battery pulse. These still only want ~60Hz -- they look no
+        // different above it, and they should not piggyback on whatever high Target
+        // FPS the user picked for structural resize animation.
+        //
+        // The rate limit lives in the pacer at the bottom of the loop, not here.
+        // This used to gate needsRender behind a 1/60s (16.667ms) timer and then
+        // fall through to the flat 16ms idle wait, which cannot satisfy it: 16ms is
+        // shorter than the gate, so the next pass failed the check and waited a
+        // second time. The result was a paint roughly every 32ms -- about 31fps
+        // instead of 60, which is what made playing media look choppy.
+        const bool continuousAnimation =
+            primary.kind == IslandKind::Media || primary.kind == IslandKind::BatteryLow ||
+            primary.kind == IslandKind::Clipboard || primary.kind == IslandKind::Notification;
+        if (continuousAnimation) {
+            needsRender = true;
         }
 
         // Privacy dots
@@ -12494,20 +12506,59 @@ DWORD WINAPI RenderThreadProc(void*) {
             targetFps = GetMonitorRefreshRate(hwnd);
         }
         targetFps = ClampInt(targetFps, 30, 1000);
-        const double targetFrameMs = 1000.0 / static_cast<double>(targetFps);
+        double targetFrameMs = 1000.0 / static_cast<double>(targetFps);
+
+        // Structural animation -- the springs resizing or nudging the island -- is
+        // what benefits from a high Target FPS. Continuous content does not, so once
+        // the springs have settled the interval is relaxed to 60Hz and the precise
+        // pacer below hits it accurately.
+        //
+        // std::max, not a plain assignment: a user who deliberately set Target FPS
+        // to 40 should keep 40 rather than being pushed up to 60.
+        const bool springsAnimating =
+            std::fabs(widthSpring.value - widthSpring.target) > 0.5f ||
+            std::fabs(heightSpring.value - heightSpring.target) > 0.5f ||
+            std::fabs(widthSpring.velocity) > 0.5f ||
+            std::fabs(heightSpring.velocity) > 0.5f ||
+            std::fabs(nudgeSpring.value) > 0.5f ||
+            std::fabs(nudgeSpring.velocity) > 0.5f;
+
+        if (continuousAnimation && !springsAnimating) {
+            constexpr double kContinuousFrameMs = 1000.0 / 60.0;
+            targetFrameMs = std::max(targetFrameMs, kContinuousFrameMs);
+        }
+
+        // Decided from whether the island is *animating*, not from whether this
+        // particular iteration painted.
+        //
+        // Keying it to needsRender per frame looked right but thrashed. The
+        // continuous-render activities above (media waveform and marquee, battery
+        // pulse, clipboard, notification) are deliberately gated to 60Hz, so with
+        // Target FPS on Auto against a 144Hz panel the loop comes round every ~7ms
+        // and only every second or third pass paints. needsRender therefore
+        // alternates, which meant timeBeginPeriod/timeEndPeriod ran dozens of times
+        // a second for as long as anything was playing -- exactly the frequent
+        // switching the API's documentation warns about. Worse, the non-painting
+        // passes released the resolution and then slept 16ms at the coarse ~15.6ms
+        // granularity, which rounds up toward ~31ms and dragged the waveform down
+        // to roughly 30fps with uneven spacing.
+        //
+        // Holding it for a short while after the last paint keeps it steady through
+        // continuous content and through spring animations, while a genuinely still
+        // island still gives it back: the idle clock only repaints once a minute.
+        if (needsRender) {
+            lastRenderAt = now;
+        }
+        setHighResTimer(lastRenderAt >= 0.0 && now - lastRenderAt < kHighResTimerHoldSec);
 
         if (!needsRender) {
-            // When nothing is animating or changing on screen, sleep 16ms (~60 Hz) to conserve 100% CPU.
-            // A 16ms wait does not need 1ms timer resolution, so release it while
-            // the island sits still -- which is most of the time.
-            setHighResTimer(false);
+            // Nothing changed on screen, so poll at ~60Hz rather than the target
+            // frame rate. Between two 60Hz paints the resolution is still held by
+            // the hysteresis above, so this wait stays accurate.
             WaitForSingleObject(g_stopEvent, 16);
             nextFrameTarget = std::chrono::steady_clock::now();
         } else {
             // When animating, achieve ultra-smooth target refresh rate (e.g. 144Hz, 240Hz, 360Hz+).
-            // This is the only branch that sleeps in sub-millisecond slices, so it
-            // is the only one that asks for the higher resolution.
-            setHighResTimer(true);
             nextFrameTarget += std::chrono::duration_cast<std::chrono::steady_clock::duration>(
                 std::chrono::duration<double, std::milli>(targetFrameMs));
 
