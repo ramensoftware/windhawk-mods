@@ -2,12 +2,117 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-25T10:23:11.000Z</updated>
+    <updated>2026-09-25T12:02:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar App Memory 0.2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-app-memory#75889517b3f88a2c1ab9d77938ed76a3fad560b1</id>
+        <link href="https://windhawk.net/mods/taskbar-app-memory"/>
+        <updated>2026-09-25T12:02:18.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarappmemory">Taskbar App Memory</h1>
+<p>On the Windows 11 taskbar, an app that isn't pinned loses its place when you
+close it: open it again and its button goes to the end. With this mod, the
+apps you choose go back where they were.</p>
+<p><img src="https://raw.githubusercontent.com/buedgik/taskbar-app-memory/main/screenshot.png" alt="The Remember positions submenu" /></p>
+<ul>
+<li><strong>Choose the apps</strong>: right-click an empty part of the taskbar, open
+<strong>Remember positions</strong> (Lembrar posições on a Portuguese Windows), and tick
+the apps whose place should be kept. It lists the open apps that aren't
+pinned (pinned apps stay where Windows puts them anyway), then the ticked
+apps that are closed or pinned since, so you can untick those too. In the
+mod's settings you can have every app remembered instead; the submenu then
+only says so.</li>
+<li><strong>Arrange the buttons by dragging them</strong>, as usual. The mod remembers where
+you leave the ticked apps.</li>
+<li><strong>Close a ticked app and open it later</strong>, even after restarting the
+computer: its button goes back between the same neighbours it had.</li>
+<li><strong>The other apps go where Windows puts them</strong>, as usual. The mod keeps track
+of where they are, since the ticked apps are placed next to them.</li>
+<li><strong>Pinned apps stay where Windows puts them.</strong> The mod never moves them, it
+only uses them as landmarks: a ticked app you left between two pinned apps
+goes back between them.</li>
+</ul>
+<h2 id="howtheplaceischosen">How the place is chosen</h2>
+<p>The mod keeps one list of every app it has seen on the taskbar, in the order
+they were last seen, closed apps included. When a ticked app opens, its button
+goes right after the nearest app that comes before it in that list and is on
+the taskbar now. When none of those are there, it goes in front of the apps on
+the taskbar that the list has.</p>
+<p>So the order you arrange is kept whatever order the apps open in, which is
+what makes it survive a restart: the apps that start with Windows each go to
+their place as they appear. A ticked app's place is certain next to pinned
+apps and other ticked apps; next to apps that aren't ticked it can shift,
+since those go wherever Windows puts them.</p>
+<p>Only what happens while the mod is running is learned. Ticked apps rearranged
+while it's disabled go back to their old places when they reopen; drag them
+with the mod on to change that. Pinned apps are the exception: when their
+order changes without a drag (another program moving a pin, or pins moved
+while the mod was off), the mod follows it from the next time a button opens
+or is dragged. Until then, an app next to the pin that moved can come back on
+its other side if it closes first, or if Explorer restarts (adding a separator
+with Taskbar Icon Separators is one such change).</p>
+<h2 id="worthknowing">Worth knowing</h2>
+<ul>
+<li><strong>Apps are told apart by their App ID</strong>, the identity Windows uses to put
+windows under one button. An app that changes it is a new app to the mod:
+a browser's new profile, or a portable app moved to another folder.</li>
+<li><strong>A ticked app you unpin keeps the place it had among the pinned apps</strong>:
+when it opens again, it goes there (with All apps, every app does). Drag it
+once to put it somewhere else. An app that isn't ticked opens at the end,
+like any other.</li>
+<li><strong>Only the order of the buttons is kept</strong>, not the order of the windows
+inside one button.</li>
+<li><strong>With several monitors</strong> there is one list for all the taskbars, and each
+taskbar places an app relative to the apps it shows. With "Show my taskbar
+apps on: All taskbars" (the default), Windows keeps the taskbars in the same
+order after each drag. Not after pinning an app from Start, though: the new
+pin goes to the end of the main taskbar but among the pinned apps on the
+others, and until the next drag an app next to it there can come back on
+its other side. With the two "taskbar where window is open" settings, an app
+can have a button on two taskbars but has one place in the list, so arrange
+the apps on the main taskbar (ticking an app shown only on another monitor
+takes its place from that monitor, which can put it on the other side of a
+pinned app on the main taskbar); and on the other taskbars, where the pinned
+apps aren't shown, a pinned app's button is left where Windows puts it.</li>
+<li><strong>Switching virtual desktops</strong> takes buttons off the taskbar and puts them
+back; the ticked ones come back in the remembered order.</li>
+<li><strong>With the Taskbar Grouping mod</strong>, which can give each window a button of its
+own, a ticked app's first button goes back to its place, and the buttons of
+its other windows go where Taskbar Grouping's settings say. Their places
+aren't remembered: an app that sat right next to another app's extra-window
+buttons can come back on their far side, and dropping an app between another
+app and that app's extra windows isn't kept. When the first window closes,
+Taskbar Grouping passes its identity on to another of the app's windows, and
+that window's button becomes the app's place.</li>
+<li><strong>The list is the file <code>order.txt</code></strong>, in the mod's storage folder, in a
+folder named after your account's SID. With Windhawk's logging on, the mod
+writes its exact path to the log when it starts ("Order file: …"). It's
+read when the mod starts and rewritten while it runs: to reset or edit it,
+disable the mod, delete or edit the file, then enable the mod again. Its
+first line is <code>taskbar-app-memory v1</code>, and each line after it is one app, in
+order, with tabs between: the day it was last seen, <code>r</code> if it's ticked or
+<code>-</code> if not, its App ID, and its name. A file the mod can't read is moved
+aside as <code>order.txt.&lt;date&gt;-&lt;time&gt;.bad</code>; one it can only read in part is
+copied there, then rewritten with the lines it could read. Uninstalling the
+mod deletes the folder. Past 256 apps, the ones not seen for the longest
+time are forgotten, ticked ones last.</li>
+<li><strong>If the submenu doesn't appear</strong> (the mod's log says "No menu"), choose
+All apps in the settings, or, with the mod disabled, change the <code>-</code> to <code>r</code>
+on the app's line in <code>order.txt</code>.</li>
+<li><strong>Windows 11 with its own taskbar</strong>, tested on 25H2 (build 26200) with four
+monitors. With the old taskbar that ExplorerPatcher or StartAllBack bring
+back, the mod does nothing. On 21H2, and on 22H2 without recent updates,
+buttons may still open at the end.</li>
+</ul>]]></content>
+        <author>
+            <name>buedgik</name>
+            <uri>https://github.com/buedgik</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Chrome Context Menu Items 1.0.0]]></title>
         <id>https://windhawk.net/mods/chrome-context-menu-items#b0a115af85f476fd7e61a7ccfc9b06770f8d9b9f</id>
@@ -1855,44 +1960,6 @@ immediately.</li>
         <author>
             <name>zed712969-crypto</name>
             <uri>https://github.com/zed712969-crypto</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer Focus Border Remover 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-hide-focus-border#2fbe603edfe78de8a03f7ec29458e68203a30862</id>
-        <link href="https://windhawk.net/mods/explorer-hide-focus-border"/>
-        <updated>2026-09-21T10:02:17.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="fileexplorerfocusborderremover">File Explorer Focus Border Remover</h1>
-<p>Removes the white rectangular focus border around selected files, folders and
-drives in Windows 11 File Explorer while keeping the normal selection and hover
-highlights intact.</p>
-<p>This is different from <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/no-focus-rectangle.wh.cpp">No Focus Rectangle</a>:
-that mod suppresses the classic dotted <code>DrawFocusRect</code>, while this mod targets
-the themed focus border used by the modern File Explorer item view.</p>
-<h2 id="beforeafter">Before / After</h2>
-<p><img src="https://raw.githubusercontent.com/NoMorePlz/windhawk-mods/cbf6be5c3a729079aff4d7cd44011f5189ed771f/assets/explorer-hide-focus-border-before-after-v2.png" alt="Before and after" /></p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Designed for Windows 11 File Explorer.</li>
-<li>The effect is applied at draw time, so it takes effect without restarting
-Explorer when the mod is enabled.</li>
-<li>The implementation relies on an undocumented File Explorer theme detail:
-<code>ItemsView</code>, part 3, state 1 is used for the focus border on current Windows
-builds. A future Windows update may change this.</li>
-<li>On the tested Windows 11 build, <code>GetThemeClass</code> resolved the File Explorer
-item view to the full class name <code>ItemsView</code> in both the tested light/dark
-scenarios, so the implementation matches that class name exactly.</li>
-<li>The mod is scoped to <code>explorer.exe</code>; common Open/Save dialogs hosted by other
-applications are not affected.</li>
-<li>Older Windows versions are untested.</li>
-<li>The intended targets include regular File Explorer items and
-<strong>This PC > Devices and drives</strong>.</li>
-<li>The same focus-border effect can also be changed by the <strong>Rounded Selection</strong>
-option in Win32 UI Modernizer; using both for this effect is redundant.</li>
-</ul>]]></content>
-        <author>
-            <name>Hùng</name>
-            <uri>https://github.com/NoMorePlz</uri>
         </author>
     </entry>
 </feed>

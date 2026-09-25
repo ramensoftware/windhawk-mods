@@ -4070,7 +4070,7 @@
         "rating": 9,
         "ratingBreakdown": [18, 17, 44, 153, 593],
         "ratingUsers": 825,
-        "reviews": 0,
+        "reviews": 1,
         "updated": 1780991467000,
         "users": 20833
       },
@@ -11153,6 +11153,34 @@
         "license": "MIT",
         "name": "Taskbar AI Quota Bars",
         "version": "1.6.5"
+      }
+    },
+    "taskbar-app-memory": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790337738000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790337738000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "buedgik",
+        "compilerOptions": "-lcomctl32 -ladvapi32 -lole32 -loleaut32 -lruntimeobject",
+        "description": "Apps you choose go back to their place on the taskbar when they reopen, instead of to the end",
+        "github": "https://github.com/buedgik",
+        "homepage": "https://github.com/buedgik/taskbar-app-memory",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Taskbar App Memory",
+        "version": "0.2.2"
       }
     },
     "taskbar-audio-device-switcher": {

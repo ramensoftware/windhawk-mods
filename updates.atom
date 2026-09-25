@@ -2,12 +2,117 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-25T11:01:15.000Z</updated>
+    <updated>2026-09-25T12:02:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar App Memory 0.2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-app-memory#75889517b3f88a2c1ab9d77938ed76a3fad560b1</id>
+        <link href="https://windhawk.net/mods/taskbar-app-memory"/>
+        <updated>2026-09-25T12:02:18.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarappmemory">Taskbar App Memory</h1>
+<p>On the Windows 11 taskbar, an app that isn't pinned loses its place when you
+close it: open it again and its button goes to the end. With this mod, the
+apps you choose go back where they were.</p>
+<p><img src="https://raw.githubusercontent.com/buedgik/taskbar-app-memory/main/screenshot.png" alt="The Remember positions submenu" /></p>
+<ul>
+<li><strong>Choose the apps</strong>: right-click an empty part of the taskbar, open
+<strong>Remember positions</strong> (Lembrar posições on a Portuguese Windows), and tick
+the apps whose place should be kept. It lists the open apps that aren't
+pinned (pinned apps stay where Windows puts them anyway), then the ticked
+apps that are closed or pinned since, so you can untick those too. In the
+mod's settings you can have every app remembered instead; the submenu then
+only says so.</li>
+<li><strong>Arrange the buttons by dragging them</strong>, as usual. The mod remembers where
+you leave the ticked apps.</li>
+<li><strong>Close a ticked app and open it later</strong>, even after restarting the
+computer: its button goes back between the same neighbours it had.</li>
+<li><strong>The other apps go where Windows puts them</strong>, as usual. The mod keeps track
+of where they are, since the ticked apps are placed next to them.</li>
+<li><strong>Pinned apps stay where Windows puts them.</strong> The mod never moves them, it
+only uses them as landmarks: a ticked app you left between two pinned apps
+goes back between them.</li>
+</ul>
+<h2 id="howtheplaceischosen">How the place is chosen</h2>
+<p>The mod keeps one list of every app it has seen on the taskbar, in the order
+they were last seen, closed apps included. When a ticked app opens, its button
+goes right after the nearest app that comes before it in that list and is on
+the taskbar now. When none of those are there, it goes in front of the apps on
+the taskbar that the list has.</p>
+<p>So the order you arrange is kept whatever order the apps open in, which is
+what makes it survive a restart: the apps that start with Windows each go to
+their place as they appear. A ticked app's place is certain next to pinned
+apps and other ticked apps; next to apps that aren't ticked it can shift,
+since those go wherever Windows puts them.</p>
+<p>Only what happens while the mod is running is learned. Ticked apps rearranged
+while it's disabled go back to their old places when they reopen; drag them
+with the mod on to change that. Pinned apps are the exception: when their
+order changes without a drag (another program moving a pin, or pins moved
+while the mod was off), the mod follows it from the next time a button opens
+or is dragged. Until then, an app next to the pin that moved can come back on
+its other side if it closes first, or if Explorer restarts (adding a separator
+with Taskbar Icon Separators is one such change).</p>
+<h2 id="worthknowing">Worth knowing</h2>
+<ul>
+<li><strong>Apps are told apart by their App ID</strong>, the identity Windows uses to put
+windows under one button. An app that changes it is a new app to the mod:
+a browser's new profile, or a portable app moved to another folder.</li>
+<li><strong>A ticked app you unpin keeps the place it had among the pinned apps</strong>:
+when it opens again, it goes there (with All apps, every app does). Drag it
+once to put it somewhere else. An app that isn't ticked opens at the end,
+like any other.</li>
+<li><strong>Only the order of the buttons is kept</strong>, not the order of the windows
+inside one button.</li>
+<li><strong>With several monitors</strong> there is one list for all the taskbars, and each
+taskbar places an app relative to the apps it shows. With "Show my taskbar
+apps on: All taskbars" (the default), Windows keeps the taskbars in the same
+order after each drag. Not after pinning an app from Start, though: the new
+pin goes to the end of the main taskbar but among the pinned apps on the
+others, and until the next drag an app next to it there can come back on
+its other side. With the two "taskbar where window is open" settings, an app
+can have a button on two taskbars but has one place in the list, so arrange
+the apps on the main taskbar (ticking an app shown only on another monitor
+takes its place from that monitor, which can put it on the other side of a
+pinned app on the main taskbar); and on the other taskbars, where the pinned
+apps aren't shown, a pinned app's button is left where Windows puts it.</li>
+<li><strong>Switching virtual desktops</strong> takes buttons off the taskbar and puts them
+back; the ticked ones come back in the remembered order.</li>
+<li><strong>With the Taskbar Grouping mod</strong>, which can give each window a button of its
+own, a ticked app's first button goes back to its place, and the buttons of
+its other windows go where Taskbar Grouping's settings say. Their places
+aren't remembered: an app that sat right next to another app's extra-window
+buttons can come back on their far side, and dropping an app between another
+app and that app's extra windows isn't kept. When the first window closes,
+Taskbar Grouping passes its identity on to another of the app's windows, and
+that window's button becomes the app's place.</li>
+<li><strong>The list is the file <code>order.txt</code></strong>, in the mod's storage folder, in a
+folder named after your account's SID. With Windhawk's logging on, the mod
+writes its exact path to the log when it starts ("Order file: …"). It's
+read when the mod starts and rewritten while it runs: to reset or edit it,
+disable the mod, delete or edit the file, then enable the mod again. Its
+first line is <code>taskbar-app-memory v1</code>, and each line after it is one app, in
+order, with tabs between: the day it was last seen, <code>r</code> if it's ticked or
+<code>-</code> if not, its App ID, and its name. A file the mod can't read is moved
+aside as <code>order.txt.&lt;date&gt;-&lt;time&gt;.bad</code>; one it can only read in part is
+copied there, then rewritten with the lines it could read. Uninstalling the
+mod deletes the folder. Past 256 apps, the ones not seen for the longest
+time are forgotten, ticked ones last.</li>
+<li><strong>If the submenu doesn't appear</strong> (the mod's log says "No menu"), choose
+All apps in the settings, or, with the mod disabled, change the <code>-</code> to <code>r</code>
+on the app's line in <code>order.txt</code>.</li>
+<li><strong>Windows 11 with its own taskbar</strong>, tested on 25H2 (build 26200) with four
+monitors. With the old taskbar that ExplorerPatcher or StartAllBack bring
+back, the mod does nothing. On 21H2, and on 22H2 without recent updates,
+buttons may still open at the end.</li>
+</ul>]]></content>
+        <author>
+            <name>buedgik</name>
+            <uri>https://github.com/buedgik</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Agenda in Calendar View 1.2]]></title>
         <id>https://windhawk.net/mods/agenda-in-calendar-view#daf5b1adee13a44563227cca49c521cf24701fd4</id>
@@ -945,98 +1050,6 @@ getter 产生过值时，存储值至多每秒回读一次；若连存储值也�
         <author>
             <name>u2x1</name>
             <uri>https://github.com/u2x1</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar brightness and opacity tuner 1.13.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-brightness-and-opacity-tuner#b2a584ca279e3cf93bcbc2ea78a2cef240441cdb</id>
-        <link href="https://windhawk.net/mods/taskbar-brightness-and-opacity-tuner"/>
-        <updated>2026-09-23T20:02:44.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarbrightnessandopacitytuner">Taskbar brightness and opacity tuner</h1>
-<blockquote>
-  <p><strong>English:</strong> Adjust the opacity of the taskbar background and of its icons
-  and text, and dim the taskbar background, to build a clean, beautiful
-  taskbar that fits your desktop — and a taskbar which blends into it is also
-  easier on the eyes and lighter on OLED displays.</p>
-  <p><strong>中文：</strong> 调整任务栏背景与图标文字的不透明度，并可调暗任务栏背景，定制出
-  简洁漂亮的任务栏——与桌面融为一体的任务栏，也更护眼、更适合 OLED 显示器。</p>
-</blockquote>
-<p>The taskbar is adjusted in two independent layers, each displayed on a simple
-0-100 scale:</p>
-<ul>
-<li><strong>Taskbar background</strong> - the material behind the icons. 0 means fully
-transparent, 100 means unchanged.</li>
-<li><strong>Icons and text</strong> - buttons, labels and the system tray. 0 means fully
-transparent, 100 means unchanged.</li>
-</ul>
-<p>The taskbar background can additionally be dimmed on a 0-100 brightness
-scale: 0 means fully dimmed to black, 100 means unchanged. Dimming darkens
-exactly what the taskbar background itself shows, never an overlay painted
-on top of it - a low, dark taskbar is easier on the eyes at night and
-reduces OLED burn-in. The mod only dims, never brightens.</p>
-<p>Additionally:</p>
-<ul>
-<li><strong>Show the taskbar top line</strong> - shows or hides the thin line at the top
-edge of the taskbar.</li>
-<li>The small gray rounded drag handle at the top center of the taskbar is
-part of Windows itself (on the default, locked taskbar Windows renders it
-permanently). Since v1.12.0 the mod no longer touches it at all, so it only
-shows up when Windows itself shows it - it is never affected by the icon
-and text opacity.</li>
-</ul>
-<h2 id="screenshots">Screenshots</h2>
-<p><strong>Task buttons area, transparency unchanged:</strong></p>
-<p><img src="https://i.imgur.com/L37dzXL.png" alt="Taskbar task button area when transparency has not been modified" /></p>
-<p><strong>Task buttons area, transparency set to 35%:</strong></p>
-<p><img src="https://i.imgur.com/QHkfKZJ.png" alt="Taskbar task button area when transparency is set to 35%" /></p>
-<p><strong>Task buttons area, transparency state:</strong></p>
-<p><img src="https://i.imgur.com/DrMjBOY.png" alt="Taskbar task button area transparency state" /></p>
-<p><strong>System tray area, transparency state:</strong></p>
-<p><img src="https://i.imgur.com/ACFLOFC.png" alt="Taskbar system tray area transparency state" /></p>
-<h2 id="howitworks">How it works</h2>
-<p>The two layers are XAML elements of the taskbar visual tree, and their
-opacity is adjusted exactly, with no visual tricks: the background blends
-into whatever is behind the taskbar, and the icons and text blend into the
-background.</p>
-<p>The background dimming is exact as well, in one of three ways: with
-transparency effects on, the taskbar fill is an acrylic brush and the color
-it shows - including the accent color when "Show accent color on Start and
-taskbar" is enabled - is dimmed by scaling the RGB channels of the brush's
-tint while the alpha is kept, so the material behind the taskbar stays
-untouched. When the fill is a plain solid color, the color itself is dimmed
-the same way. Otherwise the fill of the background rectangle is replaced with
-a brush which renders the live backdrop filtered by a color matrix effect, so
-what gets darker is the real content behind the taskbar - not an overlay
-painted on top of it.</p>
-<p>The icons and text layer is found by walking the taskbar visual tree: every
-subtree which contains neither the background nor a flyout host is adjusted
-as a unit. This covers all icon areas (the Start, search and Task View
-buttons, the task buttons and the system tray) on every Windows build,
-without depending on the class names of the individual containers.</p>
-<h2 id="comparedwithothermods">Compared with other mods</h2>
-<ul>
-<li><strong>Windows 11 Taskbar Styler</strong> can restyle the top line, the drag grip and
-the background (and much more), but it takes style rules. This mod is a
-zero-configuration dial instead: two 0-100 values cover the whole taskbar
-at once, no rules to write.</li>
-<li><strong>Taskbar Background Helper</strong> and <strong>Dynamic Taskbar Transparency</strong> adjust
-the background only (blur/acrylic/color, or per-shell-state opacity). This
-mod adjusts the background opacity and dimming as well, but additionally
-the icons and text as a whole layer.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Windows 11 only (the mod relies on the XAML taskbar visual tree).</li>
-<li>If nothing seems to happen, make sure at least one setting differs from
-its default.</li>
-<li>The background layer is the same XAML element which background mods such as
-<strong>Windows 11 Taskbar Styler</strong> or <strong>Taskbar Background Helper</strong> adjust. Two
-mods fighting over the same element can overwrite each other's result, so
-adjust the taskbar background with only one of them at a time.</li>
-</ul>]]></content>
-        <author>
-            <name>lzxujun</name>
-            <uri>https://github.com/lzxujun</uri>
         </author>
     </entry>
 </feed>
