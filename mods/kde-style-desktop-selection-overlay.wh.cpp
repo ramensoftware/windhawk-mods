@@ -2,7 +2,7 @@
 // @id           kde-style-desktop-selection-overlay
 // @name         KDE Style Desktop Selection Overlay
 // @description  Draws a custom KDE-inspired rounded selection box when drag-selecting on the Desktop
-// @version      2.0.3
+// @version      2.5
 // @author       Xezjk
 // @github       https://github.com/xezjk
 // @include      explorer.exe
@@ -18,10 +18,10 @@ icons or empty space on the Windows Desktop.
 ![KDE Desktop Selection Overlay](https://raw.githubusercontent.com/xezjk/kde-style-desktop-selection-overlay/main/assets/preview.png)
 
 ### Features & Settings:
-- **Corner Radius**: Adjust the curvature of the selection rectangle.
-- **Fill & Border Colors**: Customize RGB and Alpha values for both the inner fill and outer line.
-- **Border Thickness**: Set custom outline width (value divided by 10).
-- **Render Layer**: Choose whether to render behind existing application windows.
+- **Corner Radius**: Adjust the curvature of the selection box corners.
+- **Fill & Border Colors**: Customize RGB and Alpha values for fill and outline.
+- **Border Thickness**: Set custom outline thickness (value divided by 10 px).
+- **Render Layer**: Choose whether to render behind or above existing windows.
 */
 // ==/WindhawkModReadme==
 
@@ -54,6 +54,7 @@ icons or empty space on the Windows Desktop.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <windowsx.h>
 #include <commctrl.h>
 #include <gdiplus.h>
 #include <algorithm>
@@ -85,6 +86,7 @@ DWORD g_dwThreadId = 0;
 HANDLE g_hThreadReadyEvent = NULL;
 
 HWND g_hCachedListView = NULL;
+
 HDC g_hdcMem = NULL;
 HBITMAP g_hBitmap = NULL;
 HBITMAP g_hOldBmp = NULL;
@@ -92,53 +94,18 @@ void* g_pBits = NULL;
 int g_cachedBufWidth = 0;
 int g_cachedBufHeight = 0;
 
-// Hook typedef for in-process LVS_EX_DOUBLEBUFFER / ListviewAlphaSelect override
-typedef DWORD (WINAPI *SHRegGetBoolUSValueW_t)(LPCWSTR, LPCWSTR, BOOL, BOOL);
-SHRegGetBoolUSValueW_t pfnSHRegGetBoolUSValueW = NULL;
+void SetNativeTranslucentSelection(BOOL enable) {
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, 
+                      L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced", 
+                      0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+        DWORD value = enable ? 1 : 0;
+        RegSetValueExW(hKey, L"ListviewAlphaSelect", 0, REG_DWORD, (BYTE*)&value, sizeof(value));
+        RegCloseKey(hKey);
 
-DWORD WINAPI Hook_SHRegGetBoolUSValueW(LPCWSTR pszSubKey, LPCWSTR pszValue, BOOL fIgnoreHKCU, BOOL fDefault) {
-    if (pszValue && lstrcmpiW(pszValue, L"ListviewAlphaSelect") == 0) {
-        // Return false to turn off native translucent drag box on shell listviews dynamically
-        return FALSE;
+        DWORD_PTR result;
+        SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, 0, SMTO_ABORTIFHUNG, 100, &result);
     }
-    return pfnSHRegGetBoolUSValueW(pszSubKey, pszValue, fIgnoreHKCU, fDefault);
-}
-
-void FreeRenderTarget() {
-    if (g_hdcMem) {
-        if (g_hOldBmp) SelectObject(g_hdcMem, g_hOldBmp);
-        if (g_hBitmap) DeleteObject(g_hBitmap);
-        DeleteDC(g_hdcMem);
-        g_hdcMem = NULL;
-        g_hBitmap = NULL;
-        g_hOldBmp = NULL;
-        g_pBits = NULL;
-        g_cachedBufWidth = 0;
-        g_cachedBufHeight = 0;
-    }
-}
-
-void EnsureRenderTarget(HDC hdcRef, int width, int height) {
-    if (g_hdcMem && width == g_cachedBufWidth && height == g_cachedBufHeight) {
-        return; // Cache hit
-    }
-
-    FreeRenderTarget();
-
-    g_hdcMem = CreateCompatibleDC(hdcRef);
-
-    BITMAPINFO bmi = {0};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = width;
-    bmi.bmiHeader.biHeight = -height; // Top-down DIB
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    g_hBitmap = CreateDIBSection(g_hdcMem, &bmi, DIB_RGB_COLORS, &g_pBits, NULL, 0);
-    g_hOldBmp = (HBITMAP)SelectObject(g_hdcMem, g_hBitmap);
-    g_cachedBufWidth = width;
-    g_cachedBufHeight = height;
 }
 
 HWND GetDesktopWindowHandle() {
@@ -174,6 +141,43 @@ HWND GetDesktopListViewHandle() {
         return FindWindowExW(hShellDll, NULL, L"SysListView32", NULL);
     }
     return NULL;
+}
+
+void FreeRenderTarget() {
+    if (g_hdcMem) {
+        if (g_hOldBmp) SelectObject(g_hdcMem, g_hOldBmp);
+        if (g_hBitmap) DeleteObject(g_hBitmap);
+        DeleteDC(g_hdcMem);
+        g_hdcMem = NULL;
+        g_hBitmap = NULL;
+        g_hOldBmp = NULL;
+        g_pBits = NULL;
+        g_cachedBufWidth = 0;
+        g_cachedBufHeight = 0;
+    }
+}
+
+void EnsureRenderTarget(HDC hdcRef, int width, int height) {
+    if (g_hdcMem && width == g_cachedBufWidth && height == g_cachedBufHeight) {
+        return;
+    }
+
+    FreeRenderTarget();
+
+    g_hdcMem = CreateCompatibleDC(hdcRef);
+
+    BITMAPINFO bmi = {0};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    g_hBitmap = CreateDIBSection(g_hdcMem, &bmi, DIB_RGB_COLORS, &g_pBits, NULL, 0);
+    g_hOldBmp = (HBITMAP)SelectObject(g_hdcMem, g_hBitmap);
+    g_cachedBufWidth = width;
+    g_cachedBufHeight = height;
 }
 
 BOOL IsClickOnEmptyDesktopSpace(POINT ptScreen) {
@@ -229,7 +233,6 @@ void RedrawOverlay(HWND hwnd, RECT rc) {
     HDC hdc = GetDC(hwnd);
     EnsureRenderTarget(hdc, w, h);
 
-    // Render through Gdiplus::Bitmap wrapping DIB bits directly with PixelFormat32bppPARGB
     Bitmap bitmap(w, h, w * 4, PixelFormat32bppPARGB, (BYTE*)g_pBits);
     Graphics graphics(&bitmap);
     graphics.SetSmoothingMode(SmoothingModeAntiAlias);
@@ -257,19 +260,10 @@ void RedrawOverlay(HWND hwnd, RECT rc) {
         path.AddRectangle(RectF(x + offset, y + offset, drawW, drawH));
     }
 
-    // Premultiplied Alpha construction for ULW_ALPHA compatibility
-    BYTE fA = settings.fillA;
-    BYTE fR = (BYTE)((settings.fillR * fA) / 255);
-    BYTE fG = (BYTE)((settings.fillG * fA) / 255);
-    BYTE fB = (BYTE)((settings.fillB * fA) / 255);
-    SolidBrush brush(Color(fA, fR, fG, fB));
+    SolidBrush brush(Color(settings.fillA, settings.fillR, settings.fillG, settings.fillB));
     graphics.FillPath(&brush, &path);
 
-    BYTE bA = settings.borderA;
-    BYTE bR = (BYTE)((settings.borderR * bA) / 255);
-    BYTE bG = (BYTE)((settings.borderG * bA) / 255);
-    BYTE bB = (BYTE)((settings.borderB * bA) / 255);
-    Pen pen(Color(bA, bR, bG, bB), penWidth);
+    Pen pen(Color(settings.borderA, settings.borderR, settings.borderG, settings.borderB), penWidth);
     graphics.DrawPath(&pen, &path);
 
     BLENDFUNCTION blend = { AC_SRC_OVER, 0, 255, AC_SRC_ALPHA };
@@ -347,7 +341,6 @@ LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
 DWORD WINAPI HookThreadProc(LPVOID lpParam) {
     HMODULE hMod = GetModuleHandle(NULL);
 
-    // Force message queue creation to avoid race conditions with PostThreadMessage
     MSG msgPeek;
     PeekMessageW(&msgPeek, NULL, WM_USER, WM_USER, PM_NOREMOVE);
 
@@ -369,7 +362,6 @@ DWORD WINAPI HookThreadProc(LPVOID lpParam) {
 
     g_hMouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseProc, hMod, 0);
 
-    // Signal main thread that loop setup is ready
     SetEvent(g_hThreadReadyEvent);
 
     MSG msg;
@@ -421,20 +413,14 @@ BOOL Wh_ModInit() {
     }
 
     if (dwShellProcessId == 0 || dwShellProcessId != GetCurrentProcessId()) {
-        return FALSE; // Ignore non-shell processes (folder windows, embedding, etc.)
+        return FALSE;
     }
 
-    Wh_Log(L"Init KDE Desktop Overlay Mod v2.0.3");
+    Wh_Log(L"Init KDE Desktop Overlay Mod v2.1.1");
     LoadSettings();
 
-    // Hook SHRegGetBoolUSValueW to override native selection rectangle in-process
-    HMODULE hShlwapi = GetModuleHandleW(L"shlwapi.dll");
-    if (hShlwapi) {
-        void* pSHRegGetBoolUSValueW = (void*)GetProcAddress(hShlwapi, "SHRegGetBoolUSValueW");
-        if (pSHRegGetBoolUSValueW) {
-            Wh_SetFunctionHook(pSHRegGetBoolUSValueW, (void*)Hook_SHRegGetBoolUSValueW, (void**)&pfnSHRegGetBoolUSValueW);
-        }
-    }
+    // Disable native translucent marquee via registry setting
+    SetNativeTranslucentSelection(FALSE);
 
     GdiplusStartupInput gdiplusStartupInput;
     GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, NULL);
@@ -453,13 +439,14 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    // Re-enable native selection rectangle on unload
+    SetNativeTranslucentSelection(TRUE);
+
     if (g_dwThreadId) {
-        // Retry PostThreadMessage until thread queue receives WM_QUIT reliably
         while (!PostThreadMessageW(g_dwThreadId, WM_QUIT, 0, 0)) {
             Sleep(10);
         }
         
-        // Wait safely with INFINITE to avoid unmapping executing DLL memory
         WaitForSingleObject(g_hThread, INFINITE);
         CloseHandle(g_hThread);
         g_hThread = NULL;
