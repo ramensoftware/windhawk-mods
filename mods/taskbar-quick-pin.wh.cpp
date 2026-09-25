@@ -82,7 +82,7 @@ out. You can also raise the **Startup delay** setting.
   instead of being DWM-stretched.
 - "Separator opacity" is now "Show workspace divider" (showWorkspaceDivider) -- the
   old 0-100 value behaved identically for every value 1-100, so it is now a simple
-  on/off toggle for the gold divider between workspace pins and app pins.
+  on/off toggle for the golden divider between workspace pins and app pins.
 
 ## v2.5.3
 
