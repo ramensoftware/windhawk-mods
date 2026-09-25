@@ -487,7 +487,7 @@ std::wstring GetModulePath(HMODULE module) {
     if (!module) return L"<unknown>";
 
     std::wstring path(MAX_PATH, L'\0');
-    
+
     while (true) {
         DWORD len = GetModuleFileName(module, path.data(), path.size());
         if (len == 0) return L"<unknown>";
@@ -521,7 +521,7 @@ bool IsSystemModulePath(PCWSTR path) {
         GetModuleHandleEx(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, 
             (PCWSTR) address, &callerModule
-        ) && callerModule == g_shell32
+        ) && callerModule == expectedModule
     ) {
         return true;
     }
@@ -533,12 +533,16 @@ bool IsSystemModulePath(PCWSTR path) {
     WORD count = CaptureStackBackTrace(3, ARRAYSIZE(frames), frames, nullptr);
     
     for (WORD i = 0; i < count; i++) {
-        GetModuleHandleEx(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, 
-            (PCWSTR) frames[i], &callerModule
-        );
-
-        if (callerModule == expectedModule) return true;
+        if (
+            GetModuleHandleEx(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, 
+                (PCWSTR) address, &callerModule
+            ) && callerModule == expectedModule
+        ) {
+            return true;
+        }
+        
+        std::wstring callerPath = GetModulePath(callerModule);
         if (IsSystemModulePath(callerPath.c_str())) return false;
     }
 
