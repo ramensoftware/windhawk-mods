@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              explorer-ctrlfn-newfolder
 // @name            Explorer Ctrl+F+N to New Folder
-// @description     Ctrl+F+N makes a new folder and names it - inline rename (native) or a themed light/dark popup box, one setting. Batch: <name> 1..N.
+// @description     Ctrl+F+N makes a new folder and names it - inline rename (native) or a popup box, one setting. Batch: <name> 1..N.
 // @version         0.6.0
 // @author          Ashix
 // @github          https://github.com/k-ashix
