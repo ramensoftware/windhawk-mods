@@ -2,7 +2,7 @@
 // @id              taskbar-disk-space-label
 // @name            Taskbar Disk Space Label
 // @description     A simple disk space label integrated into the Windows taskbar
-// @version         0.59
+// @version         0.60
 // @author          allelimo
 // @github          https://github.com/allelimo
 // @include         explorer.exe
@@ -30,8 +30,11 @@ Windows 11 only.
 - Choose the update interval (default to 60 seconds)
 - Choose the description text on the first line of the label (default to "Free Space")
 - Leave the description text empty to have a single-line label with no info text
-- When the label gets clipped, please lower the font size, or to clear the description
 - Choose the alignment of the label text
+
+When the label gets clipped, please lower the font size, or clear the description
+
+
 ## Screenshot
 
 ![Screenshot](https://i.imgur.com/Nwuevwf.png)
@@ -57,11 +60,11 @@ Windows 11 only.
   $name: Font size
   $description: Font size of the disk label. [Default 12]  
 - labelInfoText: "Free Space"
-  $name: Label description text. 
+  $name: Label description text 
   $description: Text on the first line of the label. Leave empty for a single-line label [Default "Free Space"] 
 - labelAlignment: left
   $name: Alignment
-  $description: Aligns the label text. [Default "Left"]
+  $description: Aligns the label text of a two-lines label [Default "Left"]
   $options:
     - left: Left
     - center: Center
@@ -508,7 +511,6 @@ static std::wstring GetDiskRootPath() {
 
 static void GetDiskInfo() {
     ULARGE_INTEGER freeAvailable, totalBytes, totalFree;
-
     
     if (GetDiskFreeSpaceExW(GetDiskRootPath().c_str(), &freeAvailable,
                             &totalBytes, &totalFree)) {
@@ -533,43 +535,9 @@ static void GetDiskInfo() {
 // Format space information to be displayed on the taskbar label
 // -----------------------------------------------------------------------------
 
-// static std::wstring FormatSpace(int spacefree,
-//                                 int spacetot) {
-    
-//     std::wstring label = GetDiskRootPath().substr(0, 2);
-        
-//     if (spacefree == 0 && spacetot == 0) {
-
-//         if (g_settings.labelInfoText.empty()) {
-//             return label + L" n/a";
-//         } else {
-//             return g_settings.labelInfoText + L"\n" + label + L" n/a";
-//         }
-//     }
-
-//     if (g_settings.showUnit) {
-
-//         if (g_settings.labelInfoText.empty()) {
-//             return label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot) + L" GB";
-
-//         } else {
-//             return g_settings.labelInfoText + L"\n" + label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot) + L" GB";
-//         }  
-
-//     } else {
-
-//         if (g_settings.labelInfoText.empty()) {
-//             return label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot);
-
-//         } else {
-//             return g_settings.labelInfoText + L"\n" + label + L" " + std::to_wstring(spacefree) + L"/" + std::to_wstring(spacetot);
-//         }
-
-//     }
-// }
-
 static std::wstring FormatSpace(int spacefree, int spacetot) {
     std::wstring text = GetDiskRootPath().substr(0, 2);
+    
     if (spacefree == 0 && spacetot == 0) {
         text += L" n/a";
     } else {
@@ -582,6 +550,19 @@ static std::wstring FormatSpace(int spacefree, int spacetot) {
         text = g_settings.labelInfoText + L"\n" + text;
     }
     return text;
+}
+
+
+// -----------------------------------------------------------------------------
+// Apply label alignment
+// -----------------------------------------------------------------------------
+
+static void ApplyLabelAlignment() {
+    const auto& align = g_settings.labelAlignment;
+    
+    g_labelText.TextAlignment(align == L"center" ? TextAlignment::Center
+                              : align == L"right" ? TextAlignment::Right
+                                                  : TextAlignment::Left);
 }
 
 
@@ -609,28 +590,25 @@ static void LoadSettings() {
 }
 
 
+// -----------------------------------------------------------------------------
+// Reload settings on save changes
+// -----------------------------------------------------------------------------
+
 static void RefreshDiskSpaceLabel(void*) {
     
     if (g_labelText) {
         GetDiskInfo();
         g_labelText.Text(FormatSpace(myspacefree, myspacetot));
         g_labelText.FontSize(g_settings.fontSize);
-
-    // horizontal alignment
-    std::wstring align = g_settings.labelAlignment;
-    if (align == L"center") {
-        g_labelText.TextAlignment(TextAlignment::Center);
-    } else if (align == L"right") {
-        g_labelText.TextAlignment(TextAlignment::Right);
-    } else {
-        g_labelText.TextAlignment(TextAlignment::Left);    
-    }
-     
+    
+        ApplyLabelAlignment();
+  
     }
 }
 
 
 static void ReloadSettingsAndRefresh(void*) {
+    
     LoadSettings();
     if (g_refreshTimer) {
         g_refreshTimer.Interval(std::chrono::seconds(g_settings.updateInterval));
@@ -644,6 +622,7 @@ static void ReloadSettingsAndRefresh(void*) {
 // -----------------------------------------------------------------------------
 
 static void AddDiskSpaceLabel(void* param) {
+    
     if (g_unloading.load()) {
         return;
     }
@@ -705,14 +684,7 @@ static void AddDiskSpaceLabel(void* param) {
     g_labelText.FontSize(g_settings.fontSize); 
 
     // horizontal alignment
-    std::wstring align = g_settings.labelAlignment;
-    if (align == L"center") {
-        g_labelText.TextAlignment(TextAlignment::Center);
-    } else if (align == L"right") {
-        g_labelText.TextAlignment(TextAlignment::Right);
-    } else {
-        g_labelText.TextAlignment(TextAlignment::Left);    
-    }
+    ApplyLabelAlignment();
 
     auto children = panel.Children();
     auto trayClass = winrt::get_class_name(tray);
@@ -774,6 +746,7 @@ static void RemoveDiskSpaceLabel(void*) {
 }
 
 static void ApplyDiskSpaceLabelIfAvailable() {
+    
     if (g_unloading.load()) {
         return;
     }
