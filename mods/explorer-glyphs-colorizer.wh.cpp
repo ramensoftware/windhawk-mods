@@ -30,6 +30,8 @@ File Explorer to reload them. Turning the mod off brings back their original
 colors; restart Explorer if any open window still shows the old color.
 
 Supports File Explorer on Windows 11.
+On ARM PCs, glyphs in already open windows may need an Explorer restart after
+the color changes.
 
 ## Gallery / Galeria / Galería
 
@@ -74,6 +76,8 @@ cores originais voltam; reinicie o Explorador se alguma janela ainda mostrar
 a cor anterior.
 
 Compatível com o Explorador do Windows 11.
+Em PCs ARM, glyphs em janelas já abertas podem precisar de uma reinicialização
+do Explorador após a mudança de cor.
 
 ## Inspiração
 
@@ -99,6 +103,8 @@ cargarlos. Al desactivar el mod, vuelven los colores originales; reinicie el
 Explorador si alguna ventana sigue mostrando el color anterior.
 
 Compatible con el Explorador de Windows 11.
+En equipos ARM, los glifos de las ventanas abiertas pueden necesitar reiniciar
+el Explorador después de cambiar el color.
 
 ## Inspiración
 
@@ -141,7 +147,6 @@ Compatible con el Explorador de Windows 11.
 #include <atomic>
 #include <cstring>
 #include <iterator>
-#include <memory>
 #include <mutex>
 #include <string_view>
 #include <utility>
@@ -149,7 +154,6 @@ Compatible con el Explorador de Windows 11.
 
 #undef GetCurrentTime
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
@@ -157,7 +161,6 @@ Compatible con el Explorador de Windows 11.
 #include <winrt/Microsoft.UI.Xaml.Media.Imaging.h>
 
 namespace wf = winrt::Windows::Foundation;
-namespace muid = winrt::Microsoft::UI::Dispatching;
 namespace mux = winrt::Microsoft::UI::Xaml;
 namespace muxc = winrt::Microsoft::UI::Xaml::Controls;
 namespace muxi = winrt::Microsoft::UI::Xaml::Input;
@@ -191,6 +194,7 @@ struct TrackedFile {
 static SRWLOCK g_filesLock = SRWLOCK_INIT;
 static std::array<TrackedFile, 256> g_files{};
 static std::atomic<unsigned int> g_fileCount{0};
+static std::atomic<bool> g_fileOverflowLogged{false};
 // Protected by g_filesLock; avoids scanning unused slots on every read/close.
 static size_t g_fileScanLimit = 0;
 
@@ -225,25 +229,23 @@ struct TrackedSource {
     bool hasAppliedColor = false;
 };
 static std::mutex g_sourcesMutex;
-static std::array<TrackedSource, 4096> g_sources{};
+[[clang::no_destroy]] static std::array<TrackedSource, 4096> g_sources{};
 static size_t g_sourceCount = 0;
+static std::atomic<bool> g_sourceOverflowLogged{false};
 
-struct DispatchState {
-    muid::DispatcherQueue queue{nullptr};
-    DWORD threadId = 0;
-};
-static std::mutex g_dispatchMutex;
-static std::array<DispatchState, 256> g_dispatchers{};
-static size_t g_dispatcherCount = 0;
+static std::mutex g_uiThreadsMutex;
+static std::array<DWORD, 256> g_uiThreads{};
+static size_t g_uiThreadCount = 0;
 static HANDLE g_watcherStopEvent;
 static HANDLE g_watcherThread;
-static std::atomic<unsigned int> g_pendingRefreshes{0};
 
 static void ScheduleColorRefresh();
 static COLORREF CurrentColor(SvgTheme theme);
 
-static wchar_t LowerAscii(wchar_t c) {
-    return c >= L'A' && c <= L'Z' ? c + (L'a' - L'A') : c;
+template <typename Char>
+static Char LowerAscii(Char c) {
+    return c >= static_cast<Char>('A') && c <= static_cast<Char>('Z')
+               ? c + ('a' - 'A') : c;
 }
 
 static bool EqualsIgnoreCase(std::wstring_view a, std::wstring_view b) {
@@ -297,12 +299,15 @@ static void TrackFile(HANDLE handle, SvgTheme theme) {
         if (freeIndex == g_fileScanLimit && slot.theme == SvgTheme::None)
             freeIndex = i;
     }
-    if (freeIndex < g_files.size()) {
+    bool overflow = freeIndex == g_files.size();
+    if (!overflow) {
         if (freeIndex == g_fileScanLimit) ++g_fileScanLimit;
         g_files[freeIndex] = {handle, theme};
         g_fileCount.fetch_add(1, std::memory_order_release);
     }
     ReleaseSRWLockExclusive(&g_filesLock);
+    if (overflow && !g_fileOverflowLogged.exchange(true))
+        Wh_Log(L"Tracked SVG file limit reached; some glyphs may retain their original color");
 }
 
 static SvgTheme FindFile(HANDLE handle) {
@@ -395,25 +400,19 @@ static void RefreshAccentColors() {
 }
 
 static void LoadSettings() {
-    PCWSTR mode = Wh_GetStringSetting(L"colorMode");
+    auto mode = WindhawkUtils::StringSetting::make(L"colorMode");
     ColorMode colorMode = ColorMode::Accent;
-    if (mode && _wcsicmp(mode, L"neutral") == 0)
+    if (_wcsicmp(mode, L"neutral") == 0)
         colorMode = ColorMode::Neutral;
-    else if (mode && _wcsicmp(mode, L"custom") == 0)
+    else if (_wcsicmp(mode, L"custom") == 0)
         colorMode = ColorMode::Custom;
-    Wh_FreeStringSetting(mode);
-    PCWSTR text = Wh_GetStringSetting(L"customColor");
+    auto text = WindhawkUtils::StringSetting::make(L"customColor");
     COLORREF customColor;
-    if (text && ParseColor(text, &customColor)) {
+    if (ParseColor(static_cast<PCWSTR>(text), &customColor)) {
         g_settings.customColor.store(customColor, std::memory_order_relaxed);
     }
-    Wh_FreeStringSetting(text);
     RefreshAccentColors();
     g_settings.colorMode.store(colorMode, std::memory_order_release);
-}
-
-static char LowerAscii(char c) {
-    return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c;
 }
 
 static bool MatchesColor(const char* bytes, const char* color) {
@@ -455,9 +454,6 @@ static NTSTATUS NTAPI NtCreateFile_Hook(
         NT_SUCCESS(status) && fileHandle) {
         SvgTheme theme = ThemeFromPath(attributes);
         if (theme != SvgTheme::None) {
-            if (g_settings.colorMode.load(std::memory_order_acquire) ==
-                ColorMode::Accent)
-                RefreshAccentColors();
             TrackFile(*fileHandle, theme);
         }
     }
@@ -473,9 +469,6 @@ static NTSTATUS NTAPI NtOpenFile_Hook(
         NT_SUCCESS(status) && fileHandle) {
         SvgTheme theme = ThemeFromPath(attributes);
         if (theme != SvgTheme::None) {
-            if (g_settings.colorMode.load(std::memory_order_acquire) ==
-                ColorMode::Accent)
-                RefreshAccentColors();
             TrackFile(*fileHandle, theme);
         }
     }
@@ -539,20 +532,15 @@ static COLORREF CurrentColor(SvgTheme theme) {
         : g_settings.lightAccent.load(std::memory_order_relaxed);
 }
 
-static void RegisterDispatcherForCurrentThread() {
+static void RegisterUiThread() {
     if (g_unloading.load(std::memory_order_acquire)) return;
     DWORD threadId = GetCurrentThreadId();
-    try {
-        auto queue = muid::DispatcherQueue::GetForCurrentThread();
-        if (!queue) return;
-        std::lock_guard lock(g_dispatchMutex);
-        if (g_unloading.load(std::memory_order_acquire)) return;
-        for (size_t i = 0; i < g_dispatcherCount; ++i)
-            if (g_dispatchers[i].threadId == threadId) return;
-        if (g_dispatcherCount == g_dispatchers.size()) return;
-        g_dispatchers[g_dispatcherCount++] = {queue, threadId};
-    } catch (...) {
-    }
+    std::lock_guard lock(g_uiThreadsMutex);
+    if (g_unloading.load(std::memory_order_acquire)) return;
+    for (size_t i = 0; i < g_uiThreadCount; ++i)
+        if (g_uiThreads[i] == threadId) return;
+    if (g_uiThreadCount == g_uiThreads.size()) return;
+    g_uiThreads[g_uiThreadCount++] = threadId;
 }
 
 static bool CaptureSource(muxim::SvgImageSource const& source,
@@ -565,7 +553,7 @@ static bool CaptureSource(muxim::SvgImageSource const& source,
         void* identity = winrt::get_abi(source);
         auto weak = winrt::make_weak(source);
         {
-            std::lock_guard lock(g_sourcesMutex);
+            std::unique_lock lock(g_sourcesMutex);
             for (size_t i = 0; i < g_sourceCount;) {
                 // Resolve XAML weak references only on their owning UI thread.
                 if (g_sources[i].threadId == threadId &&
@@ -584,7 +572,12 @@ static bool CaptureSource(muxim::SvgImageSource const& source,
                 }
                 ++i;
             }
-            if (g_sourceCount == g_sources.size()) return false;
+            if (g_sourceCount == g_sources.size()) {
+                lock.unlock();
+                if (!g_sourceOverflowLogged.exchange(true))
+                    Wh_Log(L"Tracked glyph limit reached; live color updates may be incomplete");
+                return false;
+            }
             auto& tracked = g_sources[g_sourceCount++];
             tracked.weak = std::move(weak);
             tracked.uri = uri;
@@ -593,7 +586,7 @@ static bool CaptureSource(muxim::SvgImageSource const& source,
             tracked.appliedColor = CurrentColor(theme);
             tracked.hasAppliedColor = !fromVisualTree;
         }
-        RegisterDispatcherForCurrentThread();
+        RegisterUiThread();
         return true;
     } catch (...) {
     }
@@ -716,52 +709,115 @@ static void RefreshOnCurrentThread() {
         }
     }
     if (!hasSources) {
-        std::lock_guard lock(g_dispatchMutex);
-        for (size_t i = 0; i < g_dispatcherCount; ++i) {
-            if (g_dispatchers[i].threadId == threadId) {
-                g_dispatchers[i] = std::move(g_dispatchers[g_dispatcherCount - 1]);
-                g_dispatchers[--g_dispatcherCount] = {};
+        std::lock_guard lock(g_uiThreadsMutex);
+        for (size_t i = 0; i < g_uiThreadCount; ++i) {
+            if (g_uiThreads[i] == threadId) {
+                g_uiThreads[i] = g_uiThreads[g_uiThreadCount - 1];
+                g_uiThreads[--g_uiThreadCount] = 0;
                 break;
             }
         }
     }
 }
 
-struct PendingRefresh {
-    PendingRefresh() {
-        g_pendingRefreshes.fetch_add(1, std::memory_order_acq_rel);
-    }
-    ~PendingRefresh() {
-        g_pendingRefreshes.fetch_sub(1, std::memory_order_acq_rel);
-    }
+static UINT RunOnUiThreadMessage() {
+    static const UINT message = RegisterWindowMessageW(
+        L"Windhawk_ExplorerGlyphsColorizer_RunOnUiThread");
+    return message;
+}
+
+struct ThreadWindow {
+    HWND window = nullptr;
 };
 
-static void ScheduleColorRefresh() {
-    std::array<DispatchState, 256> dispatchers{};
-    size_t count = 0;
-    {
-        std::lock_guard lock(g_dispatchMutex);
-        count = g_dispatcherCount;
-        for (size_t i = 0; i < count; ++i)
-            dispatchers[i] = g_dispatchers[i];
-    }
-    for (size_t i = 0; i < count; ++i) {
-        try {
-            if (dispatchers[i].threadId == GetCurrentThreadId()) {
-                RefreshOnCurrentThread();
-                continue;
+static HWND FindThreadWindow(DWORD threadId) {
+    ThreadWindow found;
+    EnumThreadWindows(threadId, [](HWND window, LPARAM data) -> BOOL {
+        auto& found = *reinterpret_cast<ThreadWindow*>(data);
+        wchar_t className[64];
+        if (GetClassNameW(window, className, ARRAYSIZE(className)) &&
+            _wcsicmp(className, L"CabinetWClass") == 0) {
+            found.window = window;
+            return FALSE;
+        }
+        if (!found.window) found.window = window;
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&found));
+    return found.window;
+}
+
+struct RunOnUiThreadParam {
+    HWND window;
+    DWORD threadId;
+    void (*callback)();
+    bool called = false;
+};
+
+static LRESULT CALLBACK RunOnUiThreadHook(int code, WPARAM wParam,
+                                           LPARAM lParam) {
+    if (code == HC_ACTION) {
+        auto* message = reinterpret_cast<const CWPSTRUCT*>(lParam);
+        if (message->message == RunOnUiThreadMessage() && message->lParam) {
+            auto* param = reinterpret_cast<RunOnUiThreadParam*>(message->lParam);
+            if (message->hwnd == param->window &&
+                param->threadId == GetCurrentThreadId() && !param->called) {
+                param->called = true;
+                try {
+                    param->callback();
+                } catch (...) {
+                }
             }
-            auto pending = std::make_shared<PendingRefresh>();
-            dispatchers[i].queue.TryEnqueue([pending]() {
-                    if (g_unloading.load(std::memory_order_acquire)) return;
-                    try {
-                        RefreshOnCurrentThread();
-                    } catch (...) {
-                    }
-                });
-        } catch (...) {
         }
     }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
+static bool RunOnUiThread(DWORD threadId, void (*callback)()) {
+    if (threadId == GetCurrentThreadId()) {
+        try {
+            callback();
+        } catch (...) {
+            return false;
+        }
+        return true;
+    }
+    HWND window = FindThreadWindow(threadId);
+    if (!window || !RunOnUiThreadMessage()) return false;
+    DWORD processId;
+    if (GetWindowThreadProcessId(window, &processId) != threadId ||
+        processId != GetCurrentProcessId()) return false;
+
+    // Avoid waiting on a UI thread that has already stopped pumping messages.
+    DWORD_PTR result;
+    if (!SendMessageTimeoutW(window, WM_NULL, 0, 0,
+                             SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, &result))
+        return false;
+
+    HHOOK hook = SetWindowsHookExW(WH_CALLWNDPROC, RunOnUiThreadHook,
+                                  nullptr, threadId);
+    if (!hook) return false;
+    RunOnUiThreadParam param{window, threadId, callback};
+    SendMessageW(window, RunOnUiThreadMessage(), 0,
+                 reinterpret_cast<LPARAM>(&param));
+    UnhookWindowsHookEx(hook);
+    return param.called;
+}
+
+static void ForEachUiThread(void (*callback)()) {
+    std::array<DWORD, 256> threads{};
+    size_t count = 0;
+    {
+        std::lock_guard lock(g_uiThreadsMutex);
+        count = g_uiThreadCount;
+        for (size_t i = 0; i < count; ++i) threads[i] = g_uiThreads[i];
+    }
+    for (size_t i = 0; i < count; ++i)
+        RunOnUiThread(threads[i], callback);
+}
+
+static void ScheduleColorRefresh() {
+    if (!g_unloading.load(std::memory_order_acquire))
+        ForEachUiThread(RefreshOnCurrentThread);
 }
 
 static void PointerPressed_Hook(
@@ -872,33 +928,7 @@ static void RestoreOnCurrentThread() {
 }
 
 static void RestoreNativeSources() {
-    std::array<DispatchState, 256> dispatchers{};
-    size_t count = 0;
-    {
-        std::lock_guard lock(g_dispatchMutex);
-        count = g_dispatcherCount;
-        for (size_t i = 0; i < count; ++i)
-            dispatchers[i] = g_dispatchers[i];
-    }
-    for (size_t i = 0; i < count; ++i) {
-        try {
-            if (dispatchers[i].threadId == GetCurrentThreadId()) {
-                RestoreOnCurrentThread();
-                continue;
-            }
-            auto pending = std::make_shared<PendingRefresh>();
-            dispatchers[i].queue.TryEnqueue([pending]() {
-                    try {
-                        RestoreOnCurrentThread();
-                    } catch (...) {
-                    }
-                });
-        } catch (...) {
-        }
-    }
-    // Queued callbacks still execute code from this DLL. Wait for them before
-    // Windhawk unloads it, even if an Explorer UI thread is temporarily busy.
-    while (g_pendingRefreshes.load(std::memory_order_acquire)) Sleep(1);
+    ForEachUiThread(RestoreOnCurrentThread);
 }
 
 #if defined(_M_X64)
@@ -909,7 +939,8 @@ struct ActiveSymbolSetup {
         g_symbolSetupActive.fetch_add(1, std::memory_order_acq_rel);
     }
     ~ActiveSymbolSetup() {
-        g_symbolSetupActive.fetch_sub(1, std::memory_order_acq_rel);
+        if (g_symbolSetupActive.fetch_sub(1, std::memory_order_acq_rel) == 1)
+            g_symbolSetupActive.notify_all();
     }
 };
 
@@ -1012,7 +1043,8 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModBeforeUninit() {
     g_unloading.store(true, std::memory_order_release);
-    while (g_symbolSetupActive.load(std::memory_order_acquire)) Sleep(1);
+    while (auto active = g_symbolSetupActive.load(std::memory_order_acquire))
+        g_symbolSetupActive.wait(active);
     if (g_watcherThread) {
         SetEvent(g_watcherStopEvent);
         WaitForSingleObject(g_watcherThread, INFINITE);
@@ -1023,8 +1055,6 @@ void Wh_ModBeforeUninit() {
         CloseHandle(g_watcherStopEvent);
         g_watcherStopEvent = nullptr;
     }
-    // A queued callback must finish before its code can be unloaded.
-    while (g_pendingRefreshes.load(std::memory_order_acquire)) Sleep(1);
 }
 
 void Wh_ModUninit() {
@@ -1032,9 +1062,12 @@ void Wh_ModUninit() {
     // Rebinding now decodes native SVG bytes instead of recolored bytes.
     RestoreNativeSources();
     {
-        std::lock_guard lock(g_dispatchMutex);
-        for (size_t i = 0; i < g_dispatcherCount; ++i)
-            g_dispatchers[i] = {};
-        g_dispatcherCount = 0;
+        std::lock_guard lock(g_sourcesMutex);
+        for (size_t i = 0; i < g_sourceCount; ++i) g_sources[i] = {};
+        g_sourceCount = 0;
+    }
+    {
+        std::lock_guard lock(g_uiThreadsMutex);
+        g_uiThreadCount = 0;
     }
 }
