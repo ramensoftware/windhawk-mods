@@ -257,42 +257,6 @@ template <typename T> struct ComPtr {
   operator T *() const { return ptr; }
 };
 
-#ifndef __IDXGIAdapter3_INTERFACE_DEFINED__
-#define __IDXGIAdapter3_INTERFACE_DEFINED__
-enum DXGI_MEMORY_SEGMENT_GROUP {
-  DXGI_MEMORY_SEGMENT_GROUP_LOCAL = 0,
-  DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL = 1
-};
-
-struct DXGI_QUERY_VIDEO_MEMORY_INFO {
-  UINT64 Budget;
-  UINT64 CurrentUsage;
-  UINT64 AvailableForReservation;
-  UINT64 CurrentReservation;
-};
-
-MIDL_INTERFACE("645967A4-1392-4310-A798-8053CE3E93FD")
-IDXGIAdapter3 : public IDXGIAdapter2 {
-public:
-  virtual HRESULT STDMETHODCALLTYPE RegisterHardwareContentProtectionTeardownStatusEvent(
-      HANDLE hEvent, DWORD *pdwCookie) = 0;
-  virtual void STDMETHODCALLTYPE UnregisterHardwareContentProtectionTeardownStatus(
-      DWORD dwCookie) = 0;
-  virtual HRESULT STDMETHODCALLTYPE QueryVideoMemoryInfo(
-      UINT NodeIndex,
-      DXGI_MEMORY_SEGMENT_GROUP MemorySegmentGroup,
-      DXGI_QUERY_VIDEO_MEMORY_INFO *pVideoMemoryInfo) = 0;
-  virtual HRESULT STDMETHODCALLTYPE SetVideoMemoryReservation(
-      UINT NodeIndex,
-      DXGI_MEMORY_SEGMENT_GROUP MemorySegmentGroup,
-      UINT64 Reservation) = 0;
-  virtual HRESULT STDMETHODCALLTYPE RegisterVideoMemoryBudgetChangeNotificationEvent(
-      HANDLE hEvent, DWORD *pdwCookie) = 0;
-  virtual void STDMETHODCALLTYPE UnregisterVideoMemoryBudgetChangeNotification(
-      DWORD dwCookie) = 0;
-};
-#endif
-
 // ----------------------------------------------------------------------------
 // Profiler Operating Modes
 // ----------------------------------------------------------------------------
@@ -705,11 +669,6 @@ private:
 
 // [Deduplicated] #include "PerformanceProfiler.h" (already included)
 
-// External Windhawk logging declaration (supplied by Windhawk toolchain)
-#ifndef Wh_Log
-extern void Wh_Log(const wchar_t *format, ...);
-#endif
-
 // ----------------------------------------------------------------------------
 // Static Profiler State
 // ----------------------------------------------------------------------------
@@ -789,7 +748,7 @@ struct OverlayCache {
     }
   }
 };
-[[clang::no_destroy]] OverlayCache s_overlayCache;
+OverlayCache s_overlayCache;
 
 // Helper to retrieve or register a section by name without allocations
 SectionTimer *GetOrRegisterSection(const char *name) {
@@ -3281,6 +3240,12 @@ DWORD g_pickerThreadId = 0;
 DWORD WINAPI FilePickerThreadProc(LPVOID param) {
   if (WaitForSingleObject(g_shutdownEvent, 0) == WAIT_OBJECT_0)
     return 0;
+  HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  if (FAILED(comHr)) {
+    Wh_Log(L"FilePickerThreadProc: COM initialization failed, hr=0x%08lX",
+           static_cast<unsigned long>(comHr));
+    return 1;
+  }
   HWND ownerWnd = static_cast<HWND>(param);
   HWND tempOwner =
       CreateWindowExW(WS_EX_TOPMOST, L"STATIC", L"", WS_POPUP, 0, 0, 0, 0,
@@ -3324,6 +3289,7 @@ DWORD WINAPI FilePickerThreadProc(LPVOID param) {
       PostMessageW(ownerWnd, kMsgReloadSource, 0, 0);
     }
   }
+  CoUninitialize();
   return 0;
 }
 
@@ -3438,8 +3404,7 @@ DWORD WINAPI WallpaperThreadProc(LPVOID) {
   }
 
   HWND progman = nullptr;
-  const int kProgmanMaxAttempts = 120;
-  for (int attempt = 0; attempt < kProgmanMaxAttempts; attempt++) {
+  for (;;) {
     if (WaitForSingleObject(g_shutdownEvent, 0) == WAIT_OBJECT_0)
       break;
     HWND shellWindow = GetShellWindow();
@@ -3448,6 +3413,7 @@ DWORD WINAPI WallpaperThreadProc(LPVOID) {
       GetWindowThreadProcessId(shellWindow, &shellPid);
       if (shellPid != GetCurrentProcessId()) {
         Wh_Log(L"WallpaperThreadProc: this Explorer process does not own the desktop");
+        progman = nullptr;
         break;
       }
     }
