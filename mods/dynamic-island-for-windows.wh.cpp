@@ -12416,15 +12416,35 @@ DWORD WINAPI RenderThreadProc(void*) {
         // The marquees are expanded-only, hence the hover/pinned terms. No need to
         // include recentTrackChange: it already requires snapshot.media.playing, so
         // it cannot be true while paused.
+        // Checks the secondary pill too. The island can show two pills side by side,
+        // so a playing media pill sitting next to a running timer or a progress ring
+        // is the secondary one -- and looking only at primary left its waveform
+        // frozen.
+        const bool mediaShown = primary.kind == IslandKind::Media ||
+                                (secondary && secondary->kind == IslandKind::Media);
         const bool mediaAnimating =
-            primary.kind == IslandKind::Media &&
-            (snapshot.media.playing || isHoverExpanded || pinned);
+            mediaShown && (snapshot.media.playing || isHoverExpanded || pinned);
 
-        // Battery, clipboard and notification pills all expire after 2.5-4s, so
-        // treating them as continuous cannot run away.
+        // Transient alert pills. All expire within a few seconds, so treating them as
+        // continuous cannot run away.
+        //
+        // Device, Bluetooth and Do Not Disturb are here only when the countdown bar
+        // is switched on, since that bar is the one thing on them that moves.
+        const auto isTransientPill = [](IslandKind kind) {
+            return kind == IslandKind::BatteryLow || kind == IslandKind::Clipboard ||
+                   kind == IslandKind::Notification;
+        };
+        const auto hasCountdownBar = [](IslandKind kind) {
+            return kind == IslandKind::Device || kind == IslandKind::Bluetooth ||
+                   kind == IslandKind::DoNotDisturb;
+        };
+        const bool countdownBarsOn = g_settings.statusCountdownProgress;
+
         const bool continuousAnimation =
-            mediaAnimating || primary.kind == IslandKind::BatteryLow ||
-            primary.kind == IslandKind::Clipboard || primary.kind == IslandKind::Notification;
+            mediaAnimating || isTransientPill(primary.kind) ||
+            (secondary && isTransientPill(secondary->kind)) ||
+            (countdownBarsOn && (hasCountdownBar(primary.kind) ||
+                                 (secondary && hasCountdownBar(secondary->kind))));
         if (continuousAnimation) {
             needsRender = true;
         }
@@ -12443,6 +12463,38 @@ DWORD WINAPI RenderThreadProc(void*) {
                 needsRender = true;
                 prevTime = local;
             }
+        }
+
+        // Text that ticks once a second: the focus timer countdown and, when Show
+        // seconds is on, the clock.
+        //
+        // Both used to ride on a side effect. The system poll refreshed CPU load
+        // every second and the change detection compared it unconditionally, so the
+        // whole island repainted about once a second whether anything visible had
+        // changed or not. Gating those metric comparisons on visibility removed that,
+        // which left DrawTimer recomputing its m:ss from NowSeconds() on a surface
+        // nothing marked dirty -- a 25 minute session sat at 25:00 until some
+        // unrelated event forced a paint -- and left the seconds clock updating once
+        // a minute despite its own setting promising every second.
+        //
+        // Keyed to the displayed value rather than to elapsed time, so each visible
+        // change paints exactly once. Deliberately not folded into
+        // continuousAnimation: these need one frame per second, not the 1ms timer
+        // resolution that continuous animation asks for.
+        int shownSecond = -1;
+        const bool timerShown = primary.kind == IslandKind::Timer ||
+                               (secondary && secondary->kind == IslandKind::Timer);
+        if (timerShown && snapshot.timer.running) {
+            shownSecond = static_cast<int>(std::ceil(snapshot.timer.endsAt - now));
+        } else if (primary.kind == IslandKind::Idle && g_settings.showSeconds && !isHidden) {
+            SYSTEMTIME st = {};
+            GetLocalTime(&st);
+            shownSecond = st.wSecond;
+        }
+        static int s_prevShownSecond = -1;
+        if (shownSecond != s_prevShownSecond) {
+            s_prevShownSecond = shownSecond;
+            needsRender = true;
         }
 
         // Compare data snapshot to detect changes
