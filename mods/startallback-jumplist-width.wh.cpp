@@ -1,12 +1,13 @@
 // ==WindhawkMod==
 // @id startallback-jumplist-width
 // @name StartAllBack Jump List Width
-// @description Resizes StartAllBack Jump List together with its internal list controls.
+// @description Changes the width of StartAllBack jump lists and keeps their internal controls aligned.
 // @version 1.2
 // @author Murtuzoff
 // @github https://github.com/Murtuzoff
 // @include explorer.exe
 // @architecture x86-64
+// @compilerOptions -lcomctl32
 // @license MIT
 // ==/WindhawkMod==
 
@@ -14,16 +15,26 @@
 /*
 # StartAllBack Jump List Width
 
-Changes the width of StartAllBack jump lists and resizes their internal list controls to match.
+Changes the width of StartAllBack jump lists and resizes their internal controls to match.
 
-The mod targets StartAllBack's `SIBJumpView` window hierarchy inside `explorer.exe`. It adjusts the outer jump-list window, its `SIBBarHost` containers, and the nested `SysListView32` controls so the list keeps a consistent layout at the configured width.
+The mod targets StartAllBack's `SIBJumpView` hierarchy in `explorer.exe`. Instead of globally hooking window-resize APIs, it subclasses only the relevant jump-list window and adjusts its size when Windows is about to resize that window.
 
 ## Settings
 
-- **Jump List width** - overall target width of the StartAllBack jump list. The value is limited to 120-600 pixels.
-- The internal `SysListView32` controls use a fixed 6-pixel right margin.
+- **Jump List width** - target width at 100% scaling (96 DPI). The value is limited to 120-600 pixels and is scaled automatically for the DPI of the monitor where the jump list is shown.
+- The internal list uses a fixed 6-pixel right margin at 100% scaling, also scaled automatically for DPI.
 
-Changes are applied immediately to existing StartAllBack jump-list windows when the settings are changed.
+Changes are applied immediately to existing StartAllBack jump-list windows. When the mod is disabled, the original StartAllBack width is restored.
+
+## Before and after
+
+### Before
+
+![StartAllBack Jump List before](https://github.com/user-attachments/assets/65e5c46d-9dd3-44ea-8cbf-8ab1a58f4b04)
+
+### After
+
+![StartAllBack Jump List after](https://github.com/user-attachments/assets/d5e41c33-81ca-4f7c-b129-56e546e428e9)
 */
 // ==/WindhawkModReadme==
 
@@ -31,1078 +42,435 @@ Changes are applied immediately to existing StartAllBack jump-list windows when 
 /*
 - width: 225
   $name: Jump List width
-  $description: Overall width of the StartAllBack Jump List.
+  $description: Target width at 100% scaling (96 DPI). The value is scaled automatically for the current monitor DPI.
   $name:ru-RU: Ширина Jump List
-  $description:ru-RU: Общая ширина StartAllBack Jump List.
+  $description:ru-RU: Ширина при масштабе 100% (96 DPI). Значение автоматически масштабируется с учётом DPI текущего монитора.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_utils.h>
 #include <windows.h>
+#include <commctrl.h>
 
 #include <algorithm>
-
 #include <atomic>
-
 #include <cwchar>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
 
-// ============================================================
+namespace {
 
-// Settings
+constexpr int kDefaultWidth96 = 225;
+constexpr int kMinWidth96 = 120;
+constexpr int kMaxWidth96 = 600;
+constexpr int kEdgeMargin96 = 6;
 
-// ============================================================
+std::atomic<int> g_width96{kDefaultWidth96};
+std::atomic_bool g_unloading{false};
 
-static std::atomic<int> g_width{225};
+struct JumpViewState {
+    std::atomic<int> originalWidth{0};
+    std::atomic_bool applyingModResize{false};
+};
 
-static constexpr int kEdgeMargin = 6;
+std::mutex g_statesMutex;
+std::unordered_map<HWND, std::shared_ptr<JumpViewState>> g_states;
 
-static void LoadSettings()
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original = nullptr;
 
-{
-
+void LoadSettings() {
     int width = Wh_GetIntSetting(L"width");
-
-    width = std::clamp(width, 120, 600);
-
-    g_width.store(width, std::memory_order_relaxed);
-
+    width = std::clamp(width, kMinWidth96, kMaxWidth96);
+    g_width96.store(width, std::memory_order_relaxed);
 }
 
-static int GetTargetWidth()
-
-{
-
-    return g_width.load(std::memory_order_relaxed);
-
-}
-
-// ============================================================
-
-// Window-class helpers
-
-// ============================================================
-
-static bool IsClass(HWND hWnd, const wchar_t* wanted)
-
-{
-
-    if (!hWnd)
-
+bool IsClass(HWND hWnd, const wchar_t* wanted) {
+    if (!hWnd) {
         return false;
+    }
 
     wchar_t className[128] = {};
-
-    if (!GetClassNameW(
-
-        hWnd,
-
-        className,
-
-        ARRAYSIZE(className)))
-
-    {
-
+    if (!GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
         return false;
-
     }
 
     return wcscmp(className, wanted) == 0;
-
 }
 
-static bool IsSIBJumpView(HWND hWnd)
-
-{
-
+bool IsSIBJumpView(HWND hWnd) {
     return IsClass(hWnd, L"SIBJumpView");
-
 }
 
-static bool IsJumpBarHost(HWND hWnd)
-
-{
-
-    if (!IsClass(hWnd, L"SIBBarHost"))
-
-        return false;
-
-    HWND parent = GetParent(hWnd);
-
-    return IsSIBJumpView(parent);
-
+UINT GetWindowDpiSafe(HWND hWnd) {
+    UINT dpi = GetDpiForWindow(hWnd);
+    return dpi ? dpi : 96;
 }
 
-static bool IsJumpListView(HWND hWnd)
-
-{
-
-    if (!IsClass(hWnd, L"SysListView32"))
-
-        return false;
-
-    HWND host = GetParent(hWnd);
-
-    if (!IsClass(host, L"SIBBarHost"))
-
-        return false;
-
-    HWND jumpView = GetParent(host);
-
-    return IsSIBJumpView(jumpView);
-
+int ScaleForWindow(HWND hWnd, int value96) {
+    return MulDiv(value96, static_cast<int>(GetWindowDpiSafe(hWnd)), 96);
 }
 
-// ============================================================
+int GetTargetWidthForWindow(HWND hWnd) {
+    return ScaleForWindow(hWnd, g_width96.load(std::memory_order_relaxed));
+}
 
-// Relative child geometry
+int GetEdgeMarginForWindow(HWND hWnd) {
+    return ScaleForWindow(hWnd, kEdgeMargin96);
+}
 
-// ============================================================
-
-static bool GetRelativeRect(
-
-    HWND hWnd,
-
-    HWND parent,
-
-    RECT* rect)
-
-{
-
-    if (!rect)
-
+bool GetRelativeRect(HWND hWnd, HWND parent, RECT* rect) {
+    if (!rect || !GetWindowRect(hWnd, rect)) {
         return false;
+    }
 
-    if (!GetWindowRect(hWnd, rect))
-
-        return false;
-
-    MapWindowPoints(
-
-        HWND_DESKTOP,
-
-        parent,
-
-        reinterpret_cast<LPPOINT>(rect),
-
-        2
-
-    );
-
+    MapWindowPoints(HWND_DESKTOP, parent, reinterpret_cast<LPPOINT>(rect), 2);
     return true;
-
 }
 
-// ============================================================
+std::shared_ptr<JumpViewState> GetState(HWND hWnd) {
+    std::lock_guard<std::mutex> lock(g_statesMutex);
+    auto it = g_states.find(hWnd);
+    return it != g_states.end() ? it->second : nullptr;
+}
 
-// Original functions
+void RemoveState(HWND hWnd) {
+    std::lock_guard<std::mutex> lock(g_statesMutex);
+    g_states.erase(hWnd);
+}
 
-// ============================================================
+int GetCurrentWidth(HWND hWnd) {
+    RECT rect = {};
+    if (!GetWindowRect(hWnd, &rect)) {
+        return 0;
+    }
 
-using SetWindowPos_t =
+    return rect.right - rect.left;
+}
 
-    decltype(&SetWindowPos);
-
-static SetWindowPos_t
-
-    SetWindowPos_Original = nullptr;
-
-using MoveWindow_t =
-
-    decltype(&MoveWindow);
-
-static MoveWindow_t
-
-    MoveWindow_Original = nullptr;
-
-using ShowWindow_t =
-
-    decltype(&ShowWindow);
-
-static ShowWindow_t
-
-    ShowWindow_Original = nullptr;
-
-// ============================================================
-
-// Resize internal StartAllBack controls
-
-//
-
-// Штатная структура из диагностики:
-
-//
-
-// SIBJumpView
-
-// ├─ SIBBarHost
-
-// │  └─ SysListView32  x=4, right margin=4
-
-// └─ SIBBarHost
-
-//    └─ SysListView32  x=4, right margin=4
-
-// ============================================================
-
-static void ResizeChildren(HWND jumpView)
-
-{
-
-    if (!IsSIBJumpView(jumpView))
-
+void ResizeChildren(HWND jumpView) {
+    if (g_unloading.load(std::memory_order_relaxed) || !IsSIBJumpView(jumpView)) {
         return;
+    }
 
-    int targetWidth = GetTargetWidth();
+    const int targetWidth = GetTargetWidthForWindow(jumpView);
+    const int edgeMargin = GetEdgeMarginForWindow(jumpView);
 
-    constexpr int edgeMargin = kEdgeMargin;
-
-    // Только непосредственные SIBBarHost.
-
-    for (
-
-        HWND host = GetWindow(jumpView, GW_CHILD);
-
-        host;
-
-        host = GetWindow(host, GW_HWNDNEXT))
-
-    {
-
-        if (!IsClass(host, L"SIBBarHost"))
-
+    for (HWND host = GetWindow(jumpView, GW_CHILD); host;
+         host = GetWindow(host, GW_HWNDNEXT)) {
+        if (!IsClass(host, L"SIBBarHost")) {
             continue;
+        }
 
         RECT hostRect = {};
-
-        if (!GetRelativeRect(
-
-            host,
-
-            jumpView,
-
-            &hostRect))
-
-        {
-
+        if (!GetRelativeRect(host, jumpView, &hostRect)) {
             continue;
-
         }
 
-        int hostX = hostRect.left;
-
-        int hostY = hostRect.top;
-
-        int hostHeight =
-
-            hostRect.bottom -
-
-            hostRect.top;
-
-        if (hostHeight <= 0)
-
+        const int hostX = hostRect.left;
+        const int hostY = hostRect.top;
+        const int hostHeight = hostRect.bottom - hostRect.top;
+        if (hostHeight <= 0) {
             continue;
+        }
 
-        // SIBBarHost штатно доходит до правого края SIBJumpView.
+        const int newHostWidth = std::max(1, targetWidth - hostX);
 
-        int newHostWidth =
+        SetWindowPos(host, nullptr, hostX, hostY, newHostWidth, hostHeight,
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
 
-            targetWidth - hostX;
-
-        if (newHostWidth < 1)
-
-            newHostWidth = 1;
-
-        // Сначала считываем геометрию ListView,
-
-        // пока она ещё доступна.
-
-        for (
-
-            HWND list = GetWindow(host, GW_CHILD);
-
-            list;
-
-            list = GetWindow(list, GW_HWNDNEXT))
-
-        {
-
-            if (!IsClass(list, L"SysListView32"))
-
+        for (HWND list = GetWindow(host, GW_CHILD); list;
+             list = GetWindow(list, GW_HWNDNEXT)) {
+            if (!IsClass(list, L"SysListView32")) {
                 continue;
+            }
 
             RECT listRect = {};
-
-            if (!GetRelativeRect(
-
-                list,
-
-                host,
-
-                &listRect))
-
-            {
-
+            if (!GetRelativeRect(list, host, &listRect)) {
                 continue;
-
             }
 
-            int listX = listRect.left;
-
-            int listY = listRect.top;
-
-            int listHeight =
-
-                listRect.bottom -
-
-                listRect.top;
-
-            if (listHeight <= 0)
-
+            const int listX = listRect.left;
+            const int listY = listRect.top;
+            const int listHeight = listRect.bottom - listRect.top;
+            if (listHeight <= 0) {
                 continue;
-
-            // Штатно:
-
-            // x = 4
-
-            // right margin = 4
-
-            //
-
-            // Поэтому при width=225:
-
-            // 225 - 4 - 4 = 217 px
-
-            int newListWidth =
-
-                newHostWidth -
-
-                listX -
-
-                edgeMargin;
-
-            if (newListWidth < 1)
-
-                newListWidth = 1;
-
-            SetWindowPos_Original(
-
-                list,
-
-                nullptr,
-
-                listX,
-
-                listY,
-
-                newListWidth,
-
-                listHeight,
-
-                SWP_NOZORDER |
-
-                SWP_NOACTIVATE |
-
-                SWP_NOOWNERZORDER
-
-            );
-
-        }
-
-        SetWindowPos_Original(
-
-            host,
-
-            nullptr,
-
-            hostX,
-
-            hostY,
-
-            newHostWidth,
-
-            hostHeight,
-
-            SWP_NOZORDER |
-
-            SWP_NOACTIVATE |
-
-            SWP_NOOWNERZORDER
-
-        );
-
-    }
-
-}
-
-// ============================================================
-
-// Apply complete geometry
-
-// ============================================================
-
-static void ApplyLayout(HWND jumpView)
-
-{
-
-    if (!IsSIBJumpView(jumpView))
-
-        return;
-
-    RECT rc = {};
-
-    if (!GetWindowRect(jumpView, &rc))
-
-        return;
-
-    int height =
-
-        rc.bottom -
-
-        rc.top;
-
-    if (height <= 0)
-
-        return;
-
-    int targetWidth =
-
-        GetTargetWidth();
-
-    // Parent.
-
-    SetWindowPos_Original(
-
-        jumpView,
-
-        nullptr,
-
-        0,
-
-        0,
-
-        targetWidth,
-
-        height,
-
-        SWP_NOMOVE |
-
-        SWP_NOZORDER |
-
-        SWP_NOACTIVATE |
-
-        SWP_NOOWNERZORDER
-
-    );
-
-    // Children.
-
-    ResizeChildren(jumpView);
-
-    RedrawWindow(
-
-        jumpView,
-
-        nullptr,
-
-        nullptr,
-
-        RDW_INVALIDATE |
-
-        RDW_FRAME |
-
-        RDW_ALLCHILDREN
-
-    );
-
-}
-
-// ============================================================
-
-// SetWindowPos hook
-
-// ============================================================
-
-static BOOL WINAPI SetWindowPos_Hook(
-
-    HWND hWnd,
-
-    HWND hWndInsertAfter,
-
-    int X,
-
-    int Y,
-
-    int cx,
-
-    int cy,
-
-    UINT flags)
-
-{
-
-    int targetWidth = GetTargetWidth();
-
-    constexpr int edgeMargin = kEdgeMargin;
-
-    // --------------------------------------------------------
-
-    // SIBJumpView
-
-    // --------------------------------------------------------
-
-    if (IsSIBJumpView(hWnd))
-
-    {
-
-        if (!(flags & SWP_NOSIZE))
-
-        {
-
-            cx = targetWidth;
-
-        }
-
-        else if (flags & SWP_SHOWWINDOW)
-
-        {
-
-            RECT rc = {};
-
-            if (GetWindowRect(hWnd, &rc))
-
-            {
-
-                int height =
-
-                    rc.bottom -
-
-                    rc.top;
-
-                if (height > 0)
-
-                {
-
-                    cx = targetWidth;
-
-                    cy = height;
-
-                    flags &= ~SWP_NOSIZE;
-
-                }
-
             }
 
+            const int newListWidth =
+                std::max(1, newHostWidth - listX - edgeMargin);
+
+            SetWindowPos(list, nullptr, listX, listY, newListWidth, listHeight,
+                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
         }
+    }
+}
 
-        // Важно: подгоняем children ДО первого видимого кадра.
+void ApplyTargetWidth(HWND jumpView) {
+    if (g_unloading.load(std::memory_order_relaxed) || !IsWindow(jumpView) ||
+        !IsSIBJumpView(jumpView)) {
+        return;
+    }
 
-        ResizeChildren(hWnd);
+    auto state = GetState(jumpView);
+    if (!state) {
+        return;
+    }
 
-        BOOL result =
+    RECT rect = {};
+    if (!GetWindowRect(jumpView, &rect)) {
+        return;
+    }
 
-            SetWindowPos_Original(
+    const int height = rect.bottom - rect.top;
+    if (height <= 0) {
+        return;
+    }
 
-                hWnd,
+    const int targetWidth = GetTargetWidthForWindow(jumpView);
+    const int currentWidth = rect.right - rect.left;
 
-                hWndInsertAfter,
+    if (currentWidth != targetWidth) {
+        state->applyingModResize.store(true, std::memory_order_release);
+        SetWindowPos(jumpView, nullptr, 0, 0, targetWidth, height,
+                     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE |
+                         SWP_NOOWNERZORDER);
+        state->applyingModResize.store(false, std::memory_order_release);
+    } else {
+        ResizeChildren(jumpView);
+    }
+}
 
-                X,
-
-                Y,
-
-                cx,
-
-                cy,
-
-                flags
-
-            );
-
-        // И ещё раз после layout StartAllBack.
-
-        ResizeChildren(hWnd);
-
+LRESULT CALLBACK JumpViewSubclassProc(HWND hWnd,
+                                      UINT uMsg,
+                                      WPARAM wParam,
+                                      LPARAM lParam,
+                                      DWORD_PTR) {
+    if (uMsg == WM_NCDESTROY) {
+        LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        RemoveState(hWnd);
         return result;
-
     }
 
-    // --------------------------------------------------------
+    if (uMsg == WM_WINDOWPOSCHANGING &&
+        !g_unloading.load(std::memory_order_relaxed)) {
+        auto state = GetState(hWnd);
+        auto* windowPos = reinterpret_cast<WINDOWPOS*>(lParam);
 
-    // SIBBarHost
-
-    // --------------------------------------------------------
-
-    if (IsJumpBarHost(hWnd))
-
-    {
-
-        if (!(flags & SWP_NOSIZE))
-
-        {
-
-            HWND jumpView = GetParent(hWnd);
-
-            int x = X;
-
-            if (flags & SWP_NOMOVE)
-
-            {
-
-                RECT rc = {};
-
-                if (GetRelativeRect(
-
-                    hWnd,
-
-                    jumpView,
-
-                    &rc))
-
-                {
-
-                    x = rc.left;
-
-                }
-
+        if (state && windowPos && !(windowPos->flags & SWP_NOSIZE)) {
+            if (!state->applyingModResize.load(std::memory_order_acquire) &&
+                windowPos->cx > 0) {
+                state->originalWidth.store(windowPos->cx,
+                                           std::memory_order_relaxed);
             }
 
-            cx =
-
-                targetWidth -
-
-                x;
-
-            if (cx < 1)
-
-                cx = 1;
-
+            windowPos->cx = GetTargetWidthForWindow(hWnd);
         }
-
-        return SetWindowPos_Original(
-
-            hWnd,
-
-            hWndInsertAfter,
-
-            X,
-
-            Y,
-
-            cx,
-
-            cy,
-
-            flags
-
-        );
-
     }
 
-    // --------------------------------------------------------
+    LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
-    // SysListView32 inside SIBBarHost
-
-    // --------------------------------------------------------
-
-    if (IsJumpListView(hWnd))
-
-    {
-
-        if (!(flags & SWP_NOSIZE))
-
-        {
-
-            HWND host =
-
-                GetParent(hWnd);
-
-            RECT hostClient = {};
-
-            if (GetClientRect(
-
-                host,
-
-                &hostClient))
-
-            {
-
-                int listX = X;
-
-                if (flags & SWP_NOMOVE)
-
-                {
-
-                    RECT rc = {};
-
-                    if (GetRelativeRect(
-
-                        hWnd,
-
-                        host,
-
-                        &rc))
-
-                    {
-
-                        listX = rc.left;
-
-                    }
-
-                }
-
-                int hostWidth =
-
-                    hostClient.right -
-
-                    hostClient.left;
-
-                cx =
-
-                    hostWidth -
-
-                    listX -
-
-                    edgeMargin;
-
-                if (cx < 1)
-
-                    cx = 1;
-
-            }
-
-        }
-
-        return SetWindowPos_Original(
-
-            hWnd,
-
-            hWndInsertAfter,
-
-            X,
-
-            Y,
-
-            cx,
-
-            cy,
-
-            flags
-
-        );
-
-    }
-
-    // Всё остальное Explorer не трогаем.
-
-    return SetWindowPos_Original(
-
-        hWnd,
-
-        hWndInsertAfter,
-
-        X,
-
-        Y,
-
-        cx,
-
-        cy,
-
-        flags
-
-    );
-
-}
-
-// ============================================================
-
-// MoveWindow hook
-
-// ============================================================
-
-static BOOL WINAPI MoveWindow_Hook(
-
-    HWND hWnd,
-
-    int X,
-
-    int Y,
-
-    int nWidth,
-
-    int nHeight,
-
-    BOOL bRepaint)
-
-{
-
-    int targetWidth = GetTargetWidth();
-
-    constexpr int edgeMargin = kEdgeMargin;
-
-    if (IsSIBJumpView(hWnd))
-
-    {
-
-        nWidth = targetWidth;
-
-        ResizeChildren(hWnd);
-
-        BOOL result =
-
-            MoveWindow_Original(
-
-                hWnd,
-
-                X,
-
-                Y,
-
-                nWidth,
-
-                nHeight,
-
-                bRepaint
-
-            );
-
-        ResizeChildren(hWnd);
-
+    if (g_unloading.load(std::memory_order_relaxed)) {
         return result;
-
     }
 
-    if (IsJumpBarHost(hWnd))
+    switch (uMsg) {
+        case WM_SIZE:
+            ResizeChildren(hWnd);
+            break;
 
-    {
-
-        nWidth =
-
-            targetWidth - X;
-
-        if (nWidth < 1)
-
-            nWidth = 1;
-
-    }
-
-    if (IsJumpListView(hWnd))
-
-    {
-
-        HWND host =
-
-            GetParent(hWnd);
-
-        RECT rc = {};
-
-        if (GetClientRect(
-
-            host,
-
-            &rc))
-
-        {
-
-            int hostWidth =
-
-                rc.right -
-
-                rc.left;
-
-            nWidth =
-
-                hostWidth -
-
-                X -
-
-                edgeMargin;
-
-            if (nWidth < 1)
-
-                nWidth = 1;
-
-        }
-
-    }
-
-    return MoveWindow_Original(
-
-        hWnd,
-
-        X,
-
-        Y,
-
-        nWidth,
-
-        nHeight,
-
-        bRepaint
-
-    );
-
-}
-
-// ============================================================
-
-// ShowWindow hook
-
-// ============================================================
-
-static BOOL WINAPI ShowWindow_Hook(
-
-    HWND hWnd,
-
-    int nCmdShow)
-
-{
-
-    if (nCmdShow != SW_HIDE &&
-
-        IsSIBJumpView(hWnd))
-
-    {
-
-        // Исправляем всю иерархию ДО показа.
-
-        ApplyLayout(hWnd);
-
-    }
-
-    BOOL result =
-
-        ShowWindow_Original(
-
-            hWnd,
-
-            nCmdShow
-
-        );
-
-    if (nCmdShow != SW_HIDE &&
-
-        IsSIBJumpView(hWnd))
-
-    {
-
-        ResizeChildren(hWnd);
-
+        case WM_DPICHANGED:
+            ApplyTargetWidth(hWnd);
+            break;
     }
 
     return result;
-
 }
 
-// ============================================================
+bool AttachJumpView(HWND jumpView) {
+    if (!IsWindow(jumpView) || !IsSIBJumpView(jumpView)) {
+        return false;
+    }
 
-// Existing cached JumpView
+    {
+        std::lock_guard<std::mutex> lock(g_statesMutex);
+        if (g_states.find(jumpView) != g_states.end()) {
+            return true;
+        }
+    }
 
-// ============================================================
+    auto state = std::make_shared<JumpViewState>();
+    state->originalWidth.store(GetCurrentWidth(jumpView),
+                               std::memory_order_relaxed);
 
-static BOOL CALLBACK EnumWindowsProc(
+    {
+        std::lock_guard<std::mutex> lock(g_statesMutex);
+        auto [it, inserted] = g_states.emplace(jumpView, state);
+        if (!inserted) {
+            return true;
+        }
+    }
 
-    HWND hWnd,
+    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(
+            jumpView, JumpViewSubclassProc, 0)) {
+        RemoveState(jumpView);
+        Wh_Log(L"Failed to subclass SIBJumpView %p", jumpView);
+        return false;
+    }
 
-    LPARAM)
+    Wh_Log(L"Subclassed SIBJumpView %p", jumpView);
+    return true;
+}
 
-{
+HWND GetOwningJumpView(HWND hWnd) {
+    if (IsSIBJumpView(hWnd)) {
+        return hWnd;
+    }
 
+    if (IsClass(hWnd, L"SIBBarHost")) {
+        HWND parent = GetParent(hWnd);
+        return IsSIBJumpView(parent) ? parent : nullptr;
+    }
+
+    if (IsClass(hWnd, L"SysListView32")) {
+        HWND host = GetParent(hWnd);
+        if (!IsClass(host, L"SIBBarHost")) {
+            return nullptr;
+        }
+
+        HWND jumpView = GetParent(host);
+        return IsSIBJumpView(jumpView) ? jumpView : nullptr;
+    }
+
+    return nullptr;
+}
+
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
+                                 LPCWSTR lpClassName,
+                                 LPCWSTR lpWindowName,
+                                 DWORD dwStyle,
+                                 int X,
+                                 int Y,
+                                 int nWidth,
+                                 int nHeight,
+                                 HWND hWndParent,
+                                 HMENU hMenu,
+                                 HINSTANCE hInstance,
+                                 LPVOID lpParam) {
+    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
+                                         dwStyle, X, Y, nWidth, nHeight,
+                                         hWndParent, hMenu, hInstance, lpParam);
+
+    if (!hWnd || g_unloading.load(std::memory_order_relaxed)) {
+        return hWnd;
+    }
+
+    HWND jumpView = GetOwningJumpView(hWnd);
+    if (!jumpView) {
+        return hWnd;
+    }
+
+    if (AttachJumpView(jumpView)) {
+        if (hWnd == jumpView) {
+            ApplyTargetWidth(jumpView);
+        } else {
+            ResizeChildren(jumpView);
+        }
+    }
+
+    return hWnd;
+}
+
+BOOL CALLBACK EnumJumpViewsProc(HWND hWnd, LPARAM lParam) {
     DWORD processId = 0;
-
-    GetWindowThreadProcessId(
-
-        hWnd,
-
-        &processId
-
-    );
-
-    if (processId !=
-
-        GetCurrentProcessId())
-
-    {
-
+    GetWindowThreadProcessId(hWnd, &processId);
+    if (processId != GetCurrentProcessId() || !IsSIBJumpView(hWnd)) {
         return TRUE;
-
     }
 
-    if (IsSIBJumpView(hWnd))
-
-    {
-
-        ApplyLayout(hWnd);
-
+    const bool applyLayout = lParam != 0;
+    if (AttachJumpView(hWnd) && applyLayout) {
+        ApplyTargetWidth(hWnd);
     }
 
     return TRUE;
-
 }
 
-// ============================================================
+std::vector<HWND> GetTrackedWindows() {
+    std::lock_guard<std::mutex> lock(g_statesMutex);
 
-// Windhawk
+    std::vector<HWND> windows;
+    windows.reserve(g_states.size());
+    for (const auto& [hWnd, state] : g_states) {
+        (void)state;
+        windows.push_back(hWnd);
+    }
 
-// ============================================================
+    return windows;
+}
 
-BOOL Wh_ModInit()
+void RestoreAndDetachJumpView(HWND hWnd) {
+    auto state = GetState(hWnd);
+    if (!state) {
+        return;
+    }
 
-{
+    if (IsWindow(hWnd)) {
+        const int originalWidth =
+            state->originalWidth.load(std::memory_order_relaxed);
 
-    Wh_Log(
+        RECT rect = {};
+        if (originalWidth > 0 && GetWindowRect(hWnd, &rect)) {
+            const int height = rect.bottom - rect.top;
+            if (height > 0) {
+                SetWindowPos(hWnd, nullptr, 0, 0, originalWidth, height,
+                             SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE |
+                                 SWP_NOOWNERZORDER);
+            }
+        }
 
-        L"Initializing StartAllBack Jump List Width v1.2"
+        RedrawWindow(hWnd, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
 
-    );
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hWnd, JumpViewSubclassProc);
+    }
+
+    RemoveState(hWnd);
+}
+
+}  // namespace
+
+BOOL Wh_ModInit() {
+    Wh_Log(L"Initializing, version %s", WH_MOD_VERSION);
 
     LoadSettings();
+    g_unloading.store(false, std::memory_order_relaxed);
 
-    WindhawkUtils::SetFunctionHook(
-        SetWindowPos,
-        SetWindowPos_Hook,
-        &SetWindowPos_Original);
-
-    WindhawkUtils::SetFunctionHook(
-        MoveWindow,
-        MoveWindow_Hook,
-        &MoveWindow_Original);
-
-    WindhawkUtils::SetFunctionHook(
-        ShowWindow,
-        ShowWindow_Hook,
-        &ShowWindow_Original);
+    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                        &CreateWindowExW_Original)) {
+        Wh_Log(L"Failed to hook CreateWindowExW");
+        return FALSE;
+    }
 
     return TRUE;
-
 }
 
-void Wh_ModAfterInit()
-
-{
-
-    EnumWindows(
-
-        EnumWindowsProc,
-
-        0
-
-    );
-
+void Wh_ModAfterInit() {
+    EnumWindows(EnumJumpViewsProc, 1);
 }
 
-void Wh_ModSettingsChanged()
-
-{
-
+void Wh_ModSettingsChanged() {
     LoadSettings();
+    EnumWindows(EnumJumpViewsProc, 1);
+}
 
-    EnumWindows(
+void Wh_ModUninit() {
+    g_unloading.store(true, std::memory_order_relaxed);
 
-        EnumWindowsProc,
-
-        0
-
-    );
-
+    for (HWND hWnd : GetTrackedWindows()) {
+        RestoreAndDetachJumpView(hWnd);
+    }
 }
