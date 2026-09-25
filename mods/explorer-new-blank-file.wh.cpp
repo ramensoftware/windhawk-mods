@@ -137,6 +137,9 @@ The hotkey letter can be customized in the mod settings (any letter A-Z).
 #include <shlguid.h>
 #include <uiautomation.h>
 
+#ifndef WH_MOD
+#define WH_MOD
+#endif
 #if __has_include(<windhawk_api.h>)
 #include <windhawk_api.h>
 #endif
