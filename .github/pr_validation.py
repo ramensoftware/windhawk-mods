@@ -235,13 +235,14 @@ class FetchError(Exception):
     problem rather than anything in the mod being validated."""
 
 
-def fetch_url(url: str) -> bytes:
+def fetch_url(url: str, headers: Optional[dict[str, str]] = None) -> bytes:
     """Fetch a URL, retrying connection errors and 5xx responses. 4xx responses
     are raised as HTTPError right away so callers can treat 404 as "not found"."""
+    request = urllib.request.Request(url, headers=headers or {})
     last_error: Optional[Exception] = None
     for attempt in range(1, FETCH_ATTEMPTS + 1):
         try:
-            with urllib.request.urlopen(url) as response:
+            with urllib.request.urlopen(request) as response:
                 return response.read()
         except urllib.error.HTTPError as e:
             if e.code < 500:
@@ -394,11 +395,13 @@ class ModMetadataValidator:
         path: Path,
         properties: dict[ModPropertyKey, ModPropertyValue],
         expected_author: str,
+        expected_author_id: Optional[int],
         mod_source: str,
     ):
         self.ctx = ValidationContext(path)
         self.properties = properties
         self.expected_author = expected_author
+        self.expected_author_id = expected_author_id
         self.mod_source = mod_source
         self.mod_author_data = get_mod_author_data()
 
@@ -419,6 +422,30 @@ class ModMetadataValidator:
             self.mod_author_data.get(self.github_url.lower())
             if self.github_url
             else None
+        )
+
+        # Another account on record with the id of the pull request author,
+        # meaning that the pull request author renamed their account.
+        self.renamed_from_github = None
+        if expected_author_id is not None:
+            expected_github = f'https://github.com/{expected_author}'.lower()
+            for other_github, other_data in self.mod_author_data.items():
+                if (
+                    other_data.get('githubId') == expected_author_id
+                    and other_github != expected_github
+                ):
+                    self.renamed_from_github = other_data['github']
+                    break
+
+    def renamed_account_note(self) -> str:
+        if not self.renamed_from_github:
+            return ''
+
+        return (
+            '\nNote: The GitHub user id of the pull request author matches the one'
+            f' on record for {self.renamed_from_github}, which suggests that the'
+            ' account was renamed. Renamed accounts require a manual update of the'
+            ' records, please mention the rename in the pull request.'
         )
 
     def property(
@@ -485,6 +512,7 @@ class ModMetadataValidator:
                     ' them to submit the update instead.\n'
                     'For more information about submitting a mod update, refer to the'
                     ' "Submitting a Mod Update" section in the repository\'s README.md.'
+                    + self.renamed_account_note()
                 )
 
         expected = f'https://github.com/{self.expected_author}'
@@ -506,6 +534,39 @@ class ModMetadataValidator:
                 ' submit the update instead.\n'
                 'For more information about submitting a mod update, refer to the'
                 ' "Submitting a Mod Update" section in the repository\'s README.md.'
+                + self.renamed_account_note()
+            )
+        elif self.renamed_from_github and not self.author_data:
+            prop.warn(
+                f'@@ ({prop.value}) has no previous submissions.'
+                + self.renamed_account_note()
+            )
+
+        self.validate_github_id(prop)
+
+    def validate_github_id(self, prop: PropertyValidator):
+        """Validate that the GitHub account is the one on record, and not a new
+        account registered with the same name after the original was deleted."""
+        if self.expected_author_id is None or not self.author_data:
+            return
+
+        if prop.value.lower() != f'https://github.com/{self.expected_author}'.lower():
+            return
+
+        github_id = self.author_data.get('githubId')
+        if github_id is None:
+            prop.warn(
+                f'No GitHub user id is on record for {prop.value}, manual'
+                ' verification is required'
+            )
+        elif github_id != self.expected_author_id:
+            prop.warn(
+                'The GitHub user id of the pull request author'
+                f' ({self.expected_author_id}) doesn\'t match the one on record for'
+                f' {prop.value} ({github_id}).\n'
+                'This can happen if the original account was deleted, and a new'
+                ' account was registered with the same name. Only the original'
+                ' author of the mod is allowed to submit updates.'
             )
 
     def validate_id(self):
@@ -806,14 +867,21 @@ class ModMetadataValidator:
             arch_prop.warn('@@ must not be specified for tool mods')
 
 
-def validate_metadata(path: Path, mod_source: str, expected_author: str) -> int:
+def validate_metadata(
+    path: Path,
+    mod_source: str,
+    expected_author: str,
+    expected_author_id: Optional[int],
+) -> int:
     properties, initial_warnings = get_mod_file_metadata(
         StringIO(mod_source),
         warn_callback=lambda line, msg: add_warning(path, line, msg),
     )
 
     # Validate metadata properties
-    validator = ModMetadataValidator(path, properties, expected_author, mod_source)
+    validator = ModMetadataValidator(
+        path, properties, expected_author, expected_author_id, mod_source
+    )
     metadata_warnings = validator.validate_all()
 
     # Validate file path
@@ -951,9 +1019,107 @@ def validate_marker_block(
 
 def validate_readme(path: Path, mod_source: str) -> int:
     """Validate the mod's README block."""
-    return validate_marker_block(
+    warnings = validate_marker_block(
         path, mod_source, 'WindhawkModReadme', 'README', required=True
     )
+    warnings += validate_readme_images(path, mod_source)
+    return warnings
+
+
+# Must match the patterns in scripts/archive_mod_images.py, which archives the
+# README images at the URL-derived paths. The script's image pattern is this one
+# restricted to the supported hosts.
+ARCHIVED_README_PATTERN = r'^//[ \t]+==WindhawkModReadme==[ \t]*$\s*/\*\s*([\s\S]+?)\s*\*/\s*^//[ \t]+==/WindhawkModReadme==[ \t]*$'
+ARCHIVED_IMAGE_URL_PATTERN = r'!\[[^\]]*\]\(\s*([^)]+?)\s*\)'
+ARCHIVED_IMAGE_HOSTS = ['i.imgur.com', 'raw.githubusercontent.com']
+
+# The archive runs on Windows, and the images folder is several directories
+# deep, so the path is kept well within MAX_PATH.
+ARCHIVED_IMAGE_MAX_PATH_LENGTH = 200
+
+WINDOWS_RESERVED_FILE_NAMES = {
+    'CON', 'PRN', 'AUX', 'NUL',
+    *(f'COM{i}' for i in range(1, 10)),
+    *(f'LPT{i}' for i in range(1, 10)),
+}
+
+
+def get_archived_image_path_error(path: str) -> Optional[str]:
+    """Return why the path, relative to the images folder, can't be used on
+    Windows, or None if it can."""
+    if len(path) > ARCHIVED_IMAGE_MAX_PATH_LENGTH:
+        return f'path is longer than {ARCHIVED_IMAGE_MAX_PATH_LENGTH} characters'
+
+    for component in path.split('/'):
+        if component in ('', '.', '..') or component.startswith('..'):
+            return f'path component "{component}" is not allowed'
+        invalid_chars = sorted(
+            {c for c in component if c in '<>:"\\|?*' or ord(c) < 0x20}
+        )
+        if invalid_chars:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in invalid_chars)
+            return f'path component "{component}" contains invalid characters ({chars})'
+        if component[-1] in '. ':
+            return f'path component "{component}" must not end with a dot or a space'
+        if component.split('.')[0].upper() in WINDOWS_RESERVED_FILE_NAMES:
+            return f'path component "{component}" is a reserved Windows file name'
+
+    return None
+
+
+def validate_readme_images(path: Path, mod_source: str) -> int:
+    """Validate that the README images can be archived."""
+    readme_match = re.search(ARCHIVED_README_PATTERN, mod_source, re.MULTILINE)
+    if not readme_match:
+        return 0
+
+    readme = readme_match.group(1)
+    warnings = 0
+
+    def line_of(pos: int) -> int:
+        return mod_source.count('\n', 0, readme_match.start(1) + pos) + 1
+
+    for match in re.finditer(r'<img\b', readme, re.IGNORECASE):
+        warnings += add_warning(
+            path,
+            line_of(match.start()),
+            'HTML <img> tags are not supported in the README, use Markdown'
+            ' image syntax: ![description](url)',
+        )
+
+    hosts = ', '.join(ARCHIVED_IMAGE_HOSTS)
+    for match in re.finditer(ARCHIVED_IMAGE_URL_PATTERN, readme):
+        url = match.group(1)
+        line = line_of(match.start(1))
+
+        if not any(url.startswith(f'https://{host}/') for host in ARCHIVED_IMAGE_HOSTS):
+            warnings += add_warning(
+                path,
+                line,
+                f'Image host is not supported, images must be hosted on one of:'
+                f' {hosts}. Got: "{url}"',
+            )
+            continue
+
+        if not re.fullmatch(URL_PATTERN, url):
+            warnings += add_warning(path, line, f'Invalid image URL: "{url}"')
+            continue
+
+        image_path = urllib.parse.unquote(url.removeprefix('https://'))
+        if error := get_archived_image_path_error(image_path):
+            warnings += add_warning(
+                path, line, f'Image URL can\'t be archived, {error}: "{url}"'
+            )
+            continue
+
+        try:
+            fetch_url(url, headers={'User-Agent': 'Mozilla/5.0'})
+        except urllib.error.HTTPError as e:
+            warnings += add_warning(
+                path, line, f'Image URL returned HTTP {e.code}: "{url}"'
+            )
+
+    return warnings
 
 
 def validate_settings(path: Path, mod_source: str) -> int:
@@ -1576,13 +1742,13 @@ def validate_callback_signatures(path: Path, mod_source: str):
     return warnings
 
 
-def validate_mod_file(path: Path, pr_author: str) -> int:
+def validate_mod_file(path: Path, pr_author: str, pr_author_id: Optional[int]) -> int:
     mod_source = path.read_text(encoding='utf-8', errors='ignore').removeprefix(
         '\ufeff'
     )
 
     warnings = validate_encoding(path)
-    warnings += validate_metadata(path, mod_source, pr_author)
+    warnings += validate_metadata(path, mod_source, pr_author, pr_author_id)
     warnings += validate_readme(path, mod_source)
     warnings += validate_settings(path, mod_source)
     warnings += validate_symbol_hooks(path, mod_source)
@@ -1593,14 +1759,18 @@ def validate_mod_file(path: Path, pr_author: str) -> int:
 
 
 def test_run():
-    if len(sys.argv) != 3:
-        print('Test run usage: pr_validation.py <mod_file_path> <pr_author>')
+    if len(sys.argv) not in [3, 4]:
+        print(
+            'Test run usage: pr_validation.py <mod_file_path> <pr_author>'
+            ' [pr_author_id]'
+        )
         sys.exit(1)
 
     print('Test run: Validating single file...')
     path = Path(sys.argv[1])
     pr_author = sys.argv[2]
-    warnings = validate_mod_file(path, pr_author)
+    pr_author_id = int(sys.argv[3]) if len(sys.argv) == 4 else None
+    warnings = validate_mod_file(path, pr_author, pr_author_id)
     if warnings > 0:
         print(f'Got {warnings} warnings')
 
@@ -1656,6 +1826,7 @@ def main():
     print('Validating PR...')
 
     pr_author = os.environ['PR_AUTHOR']
+    pr_author_id = int(os.environ['PR_AUTHOR_ID'])
     if pr_author in DISALLOWED_AUTHORS:
         sys.exit(f'Submissions from {pr_author} are not allowed')
 
@@ -1697,7 +1868,7 @@ def main():
     for path in paths:
         print(f'Checking {path=}')
 
-        path_warnings = validate_mod_file(path, pr_author)
+        path_warnings = validate_mod_file(path, pr_author, pr_author_id)
         warnings += path_warnings
 
         if path_warnings == 0:
