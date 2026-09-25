@@ -11569,6 +11569,10 @@ static void CloseSwitcherEntry(int idx) {
     }
 }
 
+// Diagnostics for the raw-HID touchpad refactor, defined in the tool-mod section.
+static void LogPrecisionTouchpadConfig();
+static void LogProcessIntegrityLevel(const WCHAR* tag);
+
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (g_animExitActive) {
         if (uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN || uMsg == WM_KEYUP || uMsg == WM_SYSKEYUP ||
@@ -11596,6 +11600,15 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     if (g_WM_SWS_TOUCHPAD_TRIGGER && uMsg == g_WM_SWS_TOUCHPAD_TRIGGER) {
         Wh_Log(L"SWS: Touchpad trigger (flags=0x%IX, source=%IX, isVisible=%d, isPending=%d, gestureActive=%d, exitActive=%d)",
                wParam, lParam, g_isVisible, g_isPendingShow, g_isTouchpadGestureActive, g_animExitActive);
+        // The startup dump is logged when the mod is injected, which a log opened
+        // later never sees. Repeat it once here so any capture taken during a
+        // gesture is self-sufficient.
+        static bool s_touchpadDiagLogged = false;
+        if (!s_touchpadDiagLogged) {
+            s_touchpadDiagLogged = true;
+            LogProcessIntegrityLevel(L"tool-mod process (at first gesture)");
+            LogPrecisionTouchpadConfig();
+        }
         // Re-entrant: a new gesture must always be able to (re)open the switcher even if a
         // previous gesture left stale state. Force a clean slate if we are mid-exit.
         if (g_animExitActive) {
