@@ -110,32 +110,32 @@ Frequency of background occlusion safety-net polling (`fast`: 100ms, `normal`: 2
   - pause: Pause video (maximum battery life)
   - drop: Drop to 15 FPS (reduced power consumption)
   - normal: Play normally (ignore battery status)
-- targetFps: 60
+- targetFps: "60"
   $name: Target frame rate (FPS)
   $description: Max frame rate to render wallpaper at. Set to monitor to sync with display refresh rate.
   $options:
   - monitor: Monitor refresh rate (V-Sync)
-  - 60: 60 FPS
-  - 30: 30 FPS
-  - 15: 15 FPS
+  - "60": 60 FPS
+  - "30": 30 FPS
+  - "15": 15 FPS
 - audioMuted: true
   $name: Mute audio output
   $description: Whether to mute any audio track embedded in the MP4 file.
-- audioVolume: 100
+- audioVolume: "100"
   $name: Audio volume
   $description: Volume percentage for unmuted audio playback.
   $options:
-    - 100: 100% (Maximum)
-    - 90: 90%
-    - 80: 80%
-    - 70: 70%
-    - 60: 60%
-    - 50: 50%
-    - 40: 40%
-    - 30: 30%
-    - 20: 20%
-    - 10: 10%
-    - 0: Muted (0%)
+    - "100": 100% (Maximum)
+    - "90": 90%
+    - "80": 80%
+    - "70": 70%
+    - "60": 60%
+    - "50": 50%
+    - "40": 40%
+    - "30": 30%
+    - "20": 20%
+    - "10": 10%
+    - "0": Muted (0%)
 - occlusionInterval: normal
   $name: Occlusion check interval
   $description: Polling frequency for desktop occlusion safety-net (fast=100ms, normal=250ms, relaxed=500ms).
