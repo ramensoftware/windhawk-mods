@@ -4618,6 +4618,25 @@ static void UpdateEntrySourceCrop(WindowEntry& w) {
     w.rcSourceCrop = { 0, 0, src.cx, src.cy };
 }
 
+// Restore-rect size for a minimized window. GetWindowRect on a minimized window
+// returns the tiny "iconic" rect (measured 160x28), not the size the window has
+// when restored, which made the derived thumbnail aspect ratio (and the
+// max-tile-width clamp in ComputeLayout) shrink those entries. rcNormalPosition
+// keeps the restore rect while the window is minimized.
+static bool GetWindowRestoreSize(HWND hWnd, SIZE* out) {
+    WINDOWPLACEMENT wp = { sizeof(wp) };
+    if (GetWindowPlacement(hWnd, &wp)) {
+        int w = wp.rcNormalPosition.right - wp.rcNormalPosition.left;
+        int h = wp.rcNormalPosition.bottom - wp.rcNormalPosition.top;
+        if (w > 0 && h > 0) {
+            out->cx = w;
+            out->cy = h;
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool RefreshEntrySourceSize(WindowEntry& w) {
     if (!g_hSwitcher || !w.hWnd || !IsWindow(w.hWnd)) return false;
     HTHUMBNAIL hT = NULL;
@@ -4626,11 +4645,34 @@ static bool RefreshEntrySourceSize(WindowEntry& w) {
         hT = it->second;
     }
     SIZE src = {0};
+    bool haveSrc = false;
     if (hT) {
-        if (FAILED(DwmQueryThumbnailSourceSize(hT, &src)) || src.cx <= 0 || src.cy <= 0) {
-            return false;
+        if (SUCCEEDED(DwmQueryThumbnailSourceSize(hT, &src)) && src.cx > 0 && src.cy > 0) {
+            haveSrc = true;
+        } else {
+            SIZE restore = {0};
+            if (IsIconic(w.hWnd) && GetWindowRestoreSize(w.hWnd, &restore)) {
+                // DWM has no surface for it yet (it can report a placeholder or zero
+                // right after registration). Prefer the restore rect over a stale or
+                // iconic-sized value, but never shrink a larger DWM-reported size on a
+                // transient query failure, which would make the layout oscillate.
+                long curArea = (long)w.sourceSize.cx * w.sourceSize.cy;
+                if (curArea <= 0 || (long)restore.cx * restore.cy >= curArea) {
+                    src = restore;
+                    haveSrc = true;
+                }
+            }
         }
     } else {
+        SIZE restore = {0};
+        if (IsIconic(w.hWnd) && GetWindowRestoreSize(w.hWnd, &restore)) {
+            // No thumbnail yet, and GetWindowRect would give the tiny iconic rect here.
+            src = restore;
+            haveSrc = true;
+        }
+    }
+    if (!haveSrc) {
+        if (hT) return false;  // keep the last known good size
         RECT wr = {0};
         GetWindowRect(w.hWnd, &wr);
         src.cx = wr.right - wr.left;
@@ -9356,7 +9398,13 @@ static void EnterAppGroup() {
         g_animHoverAlphaCurrent = 0.0f;
         g_animHoverAlphaTarget  = 0.0f;
 
-        // 5. Compute new layout to get target cell rects
+        // 5. Compute new layout to get target cell rects.
+        // Register the fresh per-window entries' DWM thumbnails BEFORE the layout pass so
+        // RefreshEntrySourceSize reads DWM's real source size instead of a placeholder
+        // fallback; otherwise the layout (and the rcThumbTarget captured below) is computed
+        // from a wrong aspect and the transition leaves the entry shrunken. Same order as
+        // RecomputeAndReposition.
+        RegisterThumbnailsEarly();
         HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
         for (auto& w : g_windows) RefreshEntrySourceSize(w);
         ComputeLayout(hMon);
@@ -9556,11 +9604,13 @@ static void ExitAppGroup() {
         g_animHoverAlphaTarget  = 0.0f;
 
         // 5. Compute restored layout to get target rects.
-        // Restored app-list entries kept their stale sourceSize/effectiveSourceSize from
-        // before drill-in, and their DWM thumbnails were moved into departing snapshots.
-        // Without a refresh, ComputeLayout can emit a zero/1:1 rcThumbTarget for them,
-        // leaving those entries (typically the last row) icon-only after the transition.
-        // RefreshEntrySourceSize (GetWindowRect fallback) gives every entry a real aspect.
+        // The restored app-list entries lost their DWM thumbnails to the departing
+        // snapshots at drill-in, so register fresh ones BEFORE the layout pass:
+        // RefreshEntrySourceSize then reads DWM's real source size for every entry
+        // (minimized ones included, via the restore rect while DWM has no surface yet)
+        // instead of the iconic/GetWindowRect fallback, so the rects captured below as
+        // rcThumbTarget are final. Same order as RecomputeAndReposition.
+        RegisterThumbnailsEarly();
         HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
         for (auto& w : g_windows) {
             RefreshEntrySourceSize(w);
