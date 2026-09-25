@@ -12393,8 +12393,31 @@ DWORD WINAPI RenderThreadProc(void*) {
         // shorter than the gate, so the next pass failed the check and waited a
         // second time. The result was a paint roughly every 32ms -- about 31fps
         // instead of 60, which is what made playing media look choppy.
+        // Media only counts as continuous while something on it is actually moving.
+        //
+        // ChooseActivities selects the Media pill for any *available* SMTC session,
+        // playing or not, so keying off the kind alone meant a paused Spotify or a
+        // browser tab with a paused video -- which can sit there for hours, since
+        // browsers keep the session alive -- held the island at a 60fps render loop
+        // and 1ms timer resolution indefinitely. Nothing on it moves in that state:
+        // the collapsed pill draws the album art plus a row of flat bars, taking the
+        // !playing branch that skips DrawWaveform entirely.
+        //
+        // Paused media now falls back to the ordinary change detection above (title
+        // and art generation, springs, hover), so the timer is released 0.5s after
+        // the last paint.
+        //
+        // The marquees are expanded-only, hence the hover/pinned terms. No need to
+        // include recentTrackChange: it already requires snapshot.media.playing, so
+        // it cannot be true while paused.
+        const bool mediaAnimating =
+            primary.kind == IslandKind::Media &&
+            (snapshot.media.playing || isHoverExpanded || pinned);
+
+        // Battery, clipboard and notification pills all expire after 2.5-4s, so
+        // treating them as continuous cannot run away.
         const bool continuousAnimation =
-            primary.kind == IslandKind::Media || primary.kind == IslandKind::BatteryLow ||
+            mediaAnimating || primary.kind == IslandKind::BatteryLow ||
             primary.kind == IslandKind::Clipboard || primary.kind == IslandKind::Notification;
         if (continuousAnimation) {
             needsRender = true;
