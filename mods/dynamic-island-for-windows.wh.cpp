@@ -6484,15 +6484,42 @@ void ShowContextMenu(HWND hwnd, POINT screenPoint) {
             LoadSettings();
             break;
         case 9: {
-            wchar_t currentProcessPath[MAX_PATH] = {};
-            GetModuleFileNameW(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath));
+            // Launch the Windhawk UI, resolved relative to our own module rather
+            // than by launching our own executable.
+            //
+            // Running the current process directly only worked because under
+            // Windhawk 1.x that *is* windhawk.exe. Windhawk 2.0 runs tool mods in
+            // a separate windhawk-mod.exe, so re-launching the current process
+            // would have spawned another mod host instead of opening settings.
+            // Taking the directory and appending windhawk.exe is correct on both,
+            // since the two executables live side by side.
+            wchar_t windhawkPath[MAX_PATH] = {};
+            const DWORD pathLen =
+                GetModuleFileNameW(nullptr, windhawkPath, ARRAYSIZE(windhawkPath));
+            if (pathLen == 0 || pathLen >= ARRAYSIZE(windhawkPath)) {
+                Wh_Log(L"Could not resolve the Windhawk directory (GetModuleFileNameW: %lu).",
+                       pathLen);
+                break;
+            }
+
+            wchar_t* lastSlash = wcsrchr(windhawkPath, L'\\');
+            if (!lastSlash) {
+                Wh_Log(L"Unexpected module path with no directory separator.");
+                break;
+            }
+            *(lastSlash + 1) = L'\0';  // keep the trailing slash
+
+            if (wcscat_s(windhawkPath, ARRAYSIZE(windhawkPath), L"windhawk.exe") != 0) {
+                Wh_Log(L"Windhawk directory path is too long to append the executable name.");
+                break;
+            }
 
             HINSTANCE result = ShellExecuteW(nullptr, L"open",
-                                             currentProcessPath,
+                                             windhawkPath,
                                              nullptr,
                                              nullptr, SW_SHOWNORMAL);
             if (reinterpret_cast<INT_PTR>(result) <= 32) {
-                Wh_Log(L"Failed to open Windhawk settings.");
+                Wh_Log(L"Failed to open Windhawk settings (%s).", windhawkPath);
             }
             break;
         }
@@ -11801,9 +11828,36 @@ DWORD WINAPI RenderThreadProc(void*) {
         GetProcAddress(LoadLibraryW(L"winmm.dll"), "timeBeginPeriod"));
     static auto pTimeEndPeriod = reinterpret_cast<TimeEndPeriod_t>(
         GetProcAddress(GetModuleHandleW(L"winmm.dll"), "timeEndPeriod"));
-    if (pTimeBeginPeriod) {
-        pTimeBeginPeriod(1);
-    }
+
+    // timeBeginPeriod raises the timer resolution for the *whole system*, not just
+    // this process, which raises power draw everywhere. It used to be requested
+    // once here and released only at shutdown, so a parked or idle island held the
+    // machine at 1ms for its entire lifetime -- most of it spent doing nothing.
+    //
+    // It is now held only across the precise frame pacing below, which is the one
+    // thing that actually needs sub-millisecond sleeps. Every path that parks or
+    // drops to the 16ms idle wait releases it first.
+    //
+    // The flag is only set when timeBeginPeriod actually succeeded, so the
+    // begin/end pairs stay balanced -- these calls are reference counted per
+    // process, and an unmatched timeEndPeriod would decrement someone else's
+    // request.
+    bool highResTimer = false;
+    auto setHighResTimer = [&](bool want) {
+        if (want == highResTimer) {
+            return;
+        }
+        if (want) {
+            if (pTimeBeginPeriod && pTimeBeginPeriod(1) == TIMERR_NOERROR) {
+                highResTimer = true;
+            }
+        } else {
+            if (pTimeEndPeriod) {
+                pTimeEndPeriod(1);
+            }
+            highResTimer = false;
+        }
+    };
 
     SpringValue widthSpring;
     SpringValue heightSpring;
@@ -11860,7 +11914,9 @@ DWORD WINAPI RenderThreadProc(void*) {
             previousFrame = std::chrono::steady_clock::now();
             // Fully parked: no polling, no timer wakeups — only the stop
             // event or a posted/queued message (hotkey, settings change,
-            // clipboard update, etc.) wakes this thread while hidden.
+            // clipboard update, etc.) wakes this thread while hidden. Nothing
+            // is being paced, so give the system timer resolution back.
+            setHighResTimer(false);
             MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, INFINITE, QS_ALLINPUT);
             nextFrameTarget = std::chrono::steady_clock::now();
             continue;
@@ -11883,6 +11939,8 @@ DWORD WINAPI RenderThreadProc(void*) {
                 g_autoHiddenParked = false;
             } else {
                 previousFrame = std::chrono::steady_clock::now();
+                // Auto-parked, so nothing is animating; same reasoning as above.
+                setHighResTimer(false);
                 if (parkedForFullscreen) {
                     MsgWaitForMultipleObjects(1, &g_stopEvent, FALSE, 1500, QS_ALLINPUT);
                     const bool stillFullscreen =
@@ -12427,6 +12485,7 @@ DWORD WINAPI RenderThreadProc(void*) {
             g_autoHiddenParked = true;
             ShowWindow(hwnd, SW_HIDE);
             g_audioCaptureNeeded.store(false, std::memory_order_relaxed);
+            setHighResTimer(false);
             continue;
         }
 
@@ -12439,10 +12498,16 @@ DWORD WINAPI RenderThreadProc(void*) {
 
         if (!needsRender) {
             // When nothing is animating or changing on screen, sleep 16ms (~60 Hz) to conserve 100% CPU.
+            // A 16ms wait does not need 1ms timer resolution, so release it while
+            // the island sits still -- which is most of the time.
+            setHighResTimer(false);
             WaitForSingleObject(g_stopEvent, 16);
             nextFrameTarget = std::chrono::steady_clock::now();
         } else {
             // When animating, achieve ultra-smooth target refresh rate (e.g. 144Hz, 240Hz, 360Hz+).
+            // This is the only branch that sleeps in sub-millisecond slices, so it
+            // is the only one that asks for the higher resolution.
+            setHighResTimer(true);
             nextFrameTarget += std::chrono::duration_cast<std::chrono::steady_clock::duration>(
                 std::chrono::duration<double, std::milli>(targetFrameMs));
 
@@ -12465,9 +12530,8 @@ DWORD WINAPI RenderThreadProc(void*) {
         }
     }
 
-    if (pTimeEndPeriod) {
-        pTimeEndPeriod(1);
-    }
+    // Balances whichever state the loop exited in; a no-op if already released.
+    setHighResTimer(false);
 
     renderer.Shutdown();
     DestroyWindow(hwnd);
