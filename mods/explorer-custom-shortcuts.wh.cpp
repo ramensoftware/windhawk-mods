@@ -102,14 +102,14 @@ You can add your own shortcuts using these templates in the settings:
 
 ---
 
-#### Comparison with Existing Mods
+### Comparison with Existing Mods
 
 While related mods exist in the Windhawk repository, **Explorer Custom Shortcuts** provides a distinct, keyboard-first workflow engine:
 * **`explorer-command-bar`**: Adds visual custom toolbar buttons exclusively to the modern Windows 11 command bar. In contrast, this mod provides a pure, zero-UI, low-latency keyboard shortcut accelerator engine operating across both classic and tabbed Explorer windows. It introduces specialized batch looping capabilities (`loop_files`, `loop_folders`), rich token expansions (`%n`, `%ext`, `%c`, `%files`, `%folders`), and context-aware suppression during inline edits.
 * **`keyboard-shortcut-actions`**: A general-purpose desktop/window hotkey dispatcher without Explorer context awareness. This mod parses active Explorer tab navigation, item selections, and folder paths directly into CLI parameters.
 * **`toggle-hidden-files` / `explorer-ctrln-newfile` / `explorer-ctrlq-new-folder`**: Single-purpose mods; here, internal shell actions are optional presets within a single hotkey table, allowing users to bind them to whatever key combinations they prefer without installing multiple separate hooks.
 
-#### Attribution & Acknowledgments
+### Attribution & Acknowledgments
 Process execution concepts (`ResolveCommandPath`, `ExecuteApp`) and shell window inspection adapt techniques from `explorer-command-bar` (DanRotaru, MIT). Settings toggling follows patterns established in `toggle-hidden-files` (Asteski).
 */
 // ==/WindhawkModReadme==
@@ -810,214 +810,197 @@ Gdiplus::Color GetSystemAccentColor(BYTE alpha = 255) {
 }
 
 void ShowActionToast(HWND hOwner, const wchar_t* message) {
-    if (!g_showActionToasts.load()) {
-        Wh_Log(L"ShowActionToast skipped (showActionToasts is false)");
-        return;
-    }
-    if (!message || g_unloading.load())
+    if (!g_showActionToasts.load() || !message || g_unloading.load())
         return;
 
     std::wstring textStr = message;
-    Wh_Log(L"ShowActionToast queued: '%s'", textStr.c_str());
-    QueueBackgroundWork([hOwner, textStr]() {
-        // ============================================================
-        // 1. THEME-AWARE COLOR PALETTES
-        // ============================================================
-        bool isLight = IsSystemInLightTheme();
+    Wh_Log(L"ShowActionToast: Displaying '%s'", textStr.c_str());
 
-        // Dark Theme Colors
-        const Gdiplus::Color DARK_BG(250, 50, 50, 60);
-        const Gdiplus::Color DARK_TEXT(255, 245, 245, 245);
-        const Gdiplus::Color DARK_BORDER(50, 255, 255, 255);
-
-        // Light Theme Colors (Frosted white/off-white with dark charcoal text)
-        const Gdiplus::Color LIGHT_BG(240, 230, 230, 230);
-        const Gdiplus::Color LIGHT_TEXT(255, 24, 24, 24);
-        const Gdiplus::Color LIGHT_BORDER(40, 0, 0, 0);
-
-        // Active Theme Selections
-        const Gdiplus::Color BG_COLOR = isLight ? LIGHT_BG : DARK_BG;
-        const Gdiplus::Color TEXT_COLOR = isLight ? LIGHT_TEXT : DARK_TEXT;
-        const Gdiplus::Color BORDER_COLOR =
-            isLight ? LIGHT_BORDER : DARK_BORDER;
-
-        // ============================================================
-        // 2. STYLE CONFIGURATION (Geometry & Typography)
-        // ============================================================
-        const wchar_t* FONT_FAMILY = L"Segoe UI Semibold";
-        const float FONT_SIZE = 11;
-        const auto FONT_STYLE = Gdiplus::FontStyleRegular;
-
-        const int TOAST_HEIGHT = 50;
-        const int PAD_X = 46;
-        const int MIN_WIDTH = 95;
-        const int CORNER_RADIUS = 10;
-
-        const bool ENABLE_BORDER =
-            false;  // Subtle outline helps separate in light mode
-        const float BORDER_WIDTH = 1.0f;
-        // ============================================================
-
-        static const wchar_t* CLASS_NAME = L"ExplorerShortcutToastOSD";
-        static bool classRegistered = false;
-
-        HINSTANCE hInstance = GetModuleHandle(nullptr);
-        if (!classRegistered) {
-            WNDCLASSEXW wc = {sizeof(wc)};
-            wc.lpfnWndProc = DefWindowProcW;
-            wc.hInstance = hInstance;
-            wc.lpszClassName = CLASS_NAME;
-            RegisterClassExW(&wc);
-            classRegistered = true;
+    // Resolve per-monitor DPI for the active Explorer window
+    UINT dpi = 96;
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+    if (hUser32) {
+        using GetDpiForWindow_t = UINT(WINAPI*)(HWND);
+        auto pfnGetDpiForWindow = reinterpret_cast<GetDpiForWindow_t>(
+            GetProcAddress(hUser32, "GetDpiForWindow"));
+        if (pfnGetDpiForWindow && hOwner) {
+            dpi = pfnGetDpiForWindow(hOwner);
         }
+    }
+    if (dpi == 0) dpi = 96;
 
-        // Measure text with specified font settings
-        HDC hdcScreen = GetDC(nullptr);
+    auto ScaleDPI = [dpi](int val) -> int {
+        return MulDiv(val, static_cast<int>(dpi), 96);
+    };
+
+    // ============================================================
+    // 1. THEME-AWARE COLOR PALETTES
+    // ============================================================
+    bool isLight = IsSystemInLightTheme();
+
+    const Gdiplus::Color DARK_BG(250, 50, 50, 60);
+    const Gdiplus::Color DARK_TEXT(255, 245, 245, 245);
+    const Gdiplus::Color LIGHT_BG(240, 230, 230, 230);
+    const Gdiplus::Color LIGHT_TEXT(255, 24, 24, 24);
+
+    const Gdiplus::Color BG_COLOR = isLight ? LIGHT_BG : DARK_BG;
+    const Gdiplus::Color TEXT_COLOR = isLight ? LIGHT_TEXT : DARK_TEXT;
+
+    // ============================================================
+    // 2. DPI-SCALED GEOMETRY & TYPOGRAPHY
+    // ============================================================
+    const wchar_t* FONT_FAMILY = L"Segoe UI Semibold";
+    const int FONT_PIXEL_SIZE = ScaleDPI(15);
+    const auto FONT_STYLE = Gdiplus::FontStyleRegular;
+
+    const int TOAST_HEIGHT = ScaleDPI(46);
+    const int PAD_X = ScaleDPI(46);
+    const int MIN_WIDTH = ScaleDPI(95);
+    const int CORNER_RADIUS = ScaleDPI(10);
+    const int OFFSET_BOTTOM = ScaleDPI(80);
+
+    static const wchar_t* CLASS_NAME = L"ExplorerShortcutToastOSD";
+    static bool classRegistered = false;
+
+    HINSTANCE hInstance = GetModuleHandle(nullptr);
+    if (!classRegistered) {
+        WNDCLASSEXW wc = {sizeof(wc)};
+        wc.lpfnWndProc = DefWindowProcW;
+        wc.hInstance = hInstance;
+        wc.lpszClassName = CLASS_NAME;
+        RegisterClassExW(&wc);
+        classRegistered = true;
+    }
+
+    HDC hdcScreen = GetDC(nullptr);
+    Gdiplus::FontFamily fontFamily(FONT_FAMILY);
+    Gdiplus::Font font(&fontFamily, static_cast<Gdiplus::REAL>(FONT_PIXEL_SIZE), FONT_STYLE, Gdiplus::UnitPixel);
+
+    int width = MIN_WIDTH;
+    int height = TOAST_HEIGHT;
+
+    // Scope gMeasure so it frees its HDC reference before ReleaseDC
+    {
         Gdiplus::Graphics gMeasure(hdcScreen);
-        Gdiplus::FontFamily fontFamily(FONT_FAMILY);
-        Gdiplus::Font font(&fontFamily, FONT_SIZE, FONT_STYLE,
-                           Gdiplus::UnitPoint);
-
         Gdiplus::RectF boundRect;
         gMeasure.MeasureString(textStr.c_str(), -1, &font,
-                               Gdiplus::RectF(0, 0, 1000, 100), &boundRect);
+                               Gdiplus::RectF(0, 0, 1000.0f, 100.0f), &boundRect);
+        width = static_cast<int>(boundRect.Width) + PAD_X;
+        if (width < MIN_WIDTH) width = MIN_WIDTH;
+    }
 
-        int height = TOAST_HEIGHT;
-        int width = (int)boundRect.Width + PAD_X;
-        if (width < MIN_WIDTH)
-            width = MIN_WIDTH;
+    POINT pt = {0, 0};
+    RECT rcOwner = {};
+    if (hOwner && GetWindowRect(hOwner, &rcOwner)) {
+        pt.x = rcOwner.left + (rcOwner.right - rcOwner.left - width) / 2;
+        pt.y = rcOwner.bottom - height - OFFSET_BOTTOM;
+    } else {
+        GetCursorPos(&pt);
+        pt.x += ScaleDPI(12);
+        pt.y += ScaleDPI(12);
+    }
 
-        POINT pt = {0, 0};
-        RECT rcOwner = {};
-        if (hOwner && GetWindowRect(hOwner, &rcOwner)) {
-            pt.x = rcOwner.left + (rcOwner.right - rcOwner.left - width) / 2;
-            pt.y = rcOwner.bottom - height - 80;
-        } else {
-            GetCursorPos(&pt);
-            pt.x += 12;
-            pt.y += 12;
-        }
+    HWND hwnd = CreateWindowExW(
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
+        CLASS_NAME, nullptr, WS_POPUP, pt.x, pt.y, width, height,
+        nullptr, nullptr, hInstance, nullptr);
 
-        HWND hwnd =
-            CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED |
-                                WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
-                            CLASS_NAME, nullptr, WS_POPUP, pt.x, pt.y, width,
-                            height, nullptr, nullptr, hInstance, nullptr);
-
-        if (!hwnd) {
-            Wh_Log(L"ShowActionToast: CreateWindowExW failed (%lu)",
-                   GetLastError());
-            ReleaseDC(nullptr, hdcScreen);
-            return;
-        }
-        Wh_Log(L"ShowActionToast: Window displayed (%dx%d)", width, height);
-
-        HDC hdcMem = CreateCompatibleDC(hdcScreen);
-        BITMAPINFO bmi = {};
-        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bmi.bmiHeader.biWidth = width;
-        bmi.bmiHeader.biHeight = -height;
-        bmi.bmiHeader.biPlanes = 1;
-        bmi.bmiHeader.biBitCount = 32;
-        bmi.bmiHeader.biCompression = BI_RGB;
-
-        void* pvBits = nullptr;
-        HBITMAP hBmp = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS,
-                                        &pvBits, nullptr, 0);
-        HGDIOBJ hOldBmp = SelectObject(hdcMem, hBmp);
-
-        {
-            Gdiplus::Graphics g(hdcMem);
-            g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-            g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
-            g.Clear(Gdiplus::Color(0, 0, 0, 0));
-
-            // Build path based on configured CORNER_RADIUS
-            Gdiplus::GraphicsPath path;
-            int r = CORNER_RADIUS;
-            if (r <= 0) {
-                path.AddRectangle(Gdiplus::Rect(0, 0, width, height));
-            } else {
-                if (r > height / 2)
-                    r = height / 2;
-                path.AddArc(0, 0, r * 2, r * 2, 180, 90);
-                path.AddArc(width - (r * 2), 0, r * 2, r * 2, 270, 90);
-                path.AddArc(width - (r * 2), height - (r * 2), r * 2, r * 2, 0,
-                            90);
-                path.AddArc(0, height - (r * 2), r * 2, r * 2, 90, 90);
-                path.CloseFigure();
-            }
-
-            // Fill background
-            Gdiplus::SolidBrush bgBrush(BG_COLOR);
-            g.FillPath(&bgBrush, &path);
-
-            // ==========================================
-            // DRAW LEFT VERTICAL ACCENT PILL
-            // ==========================================
-            Gdiplus::Color accentColor = GetSystemAccentColor(255);
-            Gdiplus::SolidBrush accentBrush(accentColor);
-
-            int pillBarWidth = 4;             // Width of the vertical bar
-            int pillBarHeight = height - 14;  // Height with top/bottom inset
-            int pillBarX = 8;                 // Left margin inset
-            int pillBarY = (height - pillBarHeight) / 2;
-
-            Gdiplus::GraphicsPath accentPath;
-            accentPath.AddArc(pillBarX, pillBarY, pillBarWidth, pillBarWidth,
-                              180, 180);
-            accentPath.AddArc(pillBarX, pillBarY + pillBarHeight - pillBarWidth,
-                              pillBarWidth, pillBarWidth, 0, 180);
-            accentPath.CloseFigure();
-
-            g.FillPath(&accentBrush, &accentPath);
-
-            // Draw border if enabled
-            if (ENABLE_BORDER) {
-                Gdiplus::Pen borderPen(BORDER_COLOR, BORDER_WIDTH);
-                g.DrawPath(&borderPen, &path);
-            }
-
-            // Render text
-            Gdiplus::SolidBrush textBrush(TEXT_COLOR);
-            Gdiplus::StringFormat sf;
-            sf.SetAlignment(Gdiplus::StringAlignmentCenter);
-            sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-
-            // Shift the left bound inward by the accent bar width + gap
-            int textLeftOffset = pillBarX + pillBarWidth + 6;
-            Gdiplus::RectF drawRect(
-                (Gdiplus::REAL)textLeftOffset, 0.0f,
-                (Gdiplus::REAL)(width - textLeftOffset - 14),
-                (Gdiplus::REAL)height);
-            g.DrawString(textStr.c_str(), -1, &font, drawRect, &sf, &textBrush);
-        }
-
-        POINT ptZero = {0, 0};
-        SIZE size = {width, height};
-        BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-        UpdateLayeredWindow(hwnd, hdcScreen, &pt, &size, hdcMem, &ptZero, 0,
-                            &bf, ULW_ALPHA);
-        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-
-        // Display for 1.4s, then smoothly fade out
-        Sleep(1400);
-        for (int a = 255; a >= 0; a -= 25) {
-            if (g_unloading.load())
-                break;
-            bf.SourceConstantAlpha = (BYTE)a;
-            UpdateLayeredWindow(hwnd, nullptr, nullptr, nullptr, nullptr,
-                                nullptr, 0, &bf, ULW_ALPHA);
-            Sleep(15);
-        }
-
-        DestroyWindow(hwnd);
-        Wh_Log(L"ShowActionToast: Window destroyed");
-        SelectObject(hdcMem, hOldBmp);
-        DeleteObject(hBmp);
-        DeleteDC(hdcMem);
+    if (!hwnd) {
+        Wh_Log(L"ShowActionToast: CreateWindowExW failed (%lu)", GetLastError());
         ReleaseDC(nullptr, hdcScreen);
-    });
+        return;
+    }
+
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* pvBits = nullptr;
+    HBITMAP hBmp = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pvBits, nullptr, 0);
+    HGDIOBJ hOldBmp = SelectObject(hdcMem, hBmp);
+
+    {
+        Gdiplus::Graphics g(hdcMem);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+        g.Clear(Gdiplus::Color(0, 0, 0, 0));
+
+        Gdiplus::GraphicsPath path;
+        int r = CORNER_RADIUS;
+        if (r <= 0) {
+            path.AddRectangle(Gdiplus::Rect(0, 0, width, height));
+        } else {
+            if (r > height / 2) r = height / 2;
+            path.AddArc(0, 0, r * 2, r * 2, 180, 90);
+            path.AddArc(width - (r * 2), 0, r * 2, r * 2, 270, 90);
+            path.AddArc(width - (r * 2), height - (r * 2), r * 2, r * 2, 0, 90);
+            path.AddArc(0, height - (r * 2), r * 2, r * 2, 90, 90);
+            path.CloseFigure();
+        }
+
+        Gdiplus::SolidBrush bgBrush(BG_COLOR);
+        g.FillPath(&bgBrush, &path);
+
+        // Scaled left vertical accent pill
+        Gdiplus::Color accentColor = GetSystemAccentColor(255);
+        Gdiplus::SolidBrush accentBrush(accentColor);
+
+        int pillBarWidth = ScaleDPI(4);
+        int pillBarHeight = height - ScaleDPI(14);
+        int pillBarX = ScaleDPI(8);
+        int pillBarY = (height - pillBarHeight) / 2;
+
+        Gdiplus::GraphicsPath accentPath;
+        accentPath.AddArc(pillBarX, pillBarY, pillBarWidth, pillBarWidth, 180, 180);
+        accentPath.AddArc(pillBarX, pillBarY + pillBarHeight - pillBarWidth, pillBarWidth, pillBarWidth, 0, 180);
+        accentPath.CloseFigure();
+
+        g.FillPath(&accentBrush, &accentPath);
+
+        // Centered label with text bounds
+        Gdiplus::SolidBrush textBrush(TEXT_COLOR);
+        Gdiplus::StringFormat sf;
+        sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+        sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+
+        int textLeftOffset = pillBarX + pillBarWidth + ScaleDPI(6);
+        Gdiplus::RectF drawRect(
+            static_cast<Gdiplus::REAL>(textLeftOffset), 0.0f,
+            static_cast<Gdiplus::REAL>(width - textLeftOffset - ScaleDPI(14)),
+            static_cast<Gdiplus::REAL>(height));
+        g.DrawString(textStr.c_str(), -1, &font, drawRect, &sf, &textBrush);
+    }
+
+    POINT ptZero = {0, 0};
+    SIZE size = {width, height};
+    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    UpdateLayeredWindow(hwnd, hdcScreen, &pt, &size, hdcMem, &ptZero, 0, &bf, ULW_ALPHA);
+    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+
+    // Sleep in small increments to exit promptly if the mod is unloading
+    for (int i = 0; i < 28; ++i) {
+        if (g_unloading.load()) break;
+        Sleep(50);
+    }
+
+    // Smooth fade out
+    for (int a = 255; a >= 0; a -= 25) {
+        if (g_unloading.load()) break;
+        bf.SourceConstantAlpha = static_cast<BYTE>(a);
+        UpdateLayeredWindow(hwnd, nullptr, nullptr, nullptr, nullptr, nullptr, 0, &bf, ULW_ALPHA);
+        Sleep(15);
+    }
+
+    DestroyWindow(hwnd);
+    SelectObject(hdcMem, hOldBmp);
+    DeleteObject(hBmp);
+    DeleteDC(hdcMem);
+    ReleaseDC(nullptr, hdcScreen);
 }
 
 bool SetClipboardTextHelper(const std::wstring& text) {
@@ -1590,10 +1573,12 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    WindhawkUtils::SetFunctionHook(TranslateAcceleratorW,
-                                   TranslateAcceleratorW_Hook,
-                                   &TranslateAcceleratorW_Original);
-
+    if (!WindhawkUtils::SetFunctionHook(TranslateAcceleratorW,
+                                        TranslateAcceleratorW_Hook,
+                                        &TranslateAcceleratorW_Original)) {
+        Wh_Log(L"Failed to hook TranslateAcceleratorW");
+        return FALSE;
+    }
     Wh_Log(L"Mod initialized successfully.");
     return TRUE;
 }
