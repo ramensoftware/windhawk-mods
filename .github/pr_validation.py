@@ -235,13 +235,14 @@ class FetchError(Exception):
     problem rather than anything in the mod being validated."""
 
 
-def fetch_url(url: str) -> bytes:
+def fetch_url(url: str, headers: Optional[dict[str, str]] = None) -> bytes:
     """Fetch a URL, retrying connection errors and 5xx responses. 4xx responses
     are raised as HTTPError right away so callers can treat 404 as "not found"."""
+    request = urllib.request.Request(url, headers=headers or {})
     last_error: Optional[Exception] = None
     for attempt in range(1, FETCH_ATTEMPTS + 1):
         try:
-            with urllib.request.urlopen(url) as response:
+            with urllib.request.urlopen(request) as response:
                 return response.read()
         except urllib.error.HTTPError as e:
             if e.code < 500:
@@ -1018,9 +1019,107 @@ def validate_marker_block(
 
 def validate_readme(path: Path, mod_source: str) -> int:
     """Validate the mod's README block."""
-    return validate_marker_block(
+    warnings = validate_marker_block(
         path, mod_source, 'WindhawkModReadme', 'README', required=True
     )
+    warnings += validate_readme_images(path, mod_source)
+    return warnings
+
+
+# Must match the patterns in scripts/archive_mod_images.py, which archives the
+# README images at the URL-derived paths. The script's image pattern is this one
+# restricted to the supported hosts.
+ARCHIVED_README_PATTERN = r'^//[ \t]+==WindhawkModReadme==[ \t]*$\s*/\*\s*([\s\S]+?)\s*\*/\s*^//[ \t]+==/WindhawkModReadme==[ \t]*$'
+ARCHIVED_IMAGE_URL_PATTERN = r'!\[[^\]]*\]\(\s*([^)]+?)\s*\)'
+ARCHIVED_IMAGE_HOSTS = ['i.imgur.com', 'raw.githubusercontent.com']
+
+# The archive runs on Windows, and the images folder is several directories
+# deep, so the path is kept well within MAX_PATH.
+ARCHIVED_IMAGE_MAX_PATH_LENGTH = 200
+
+WINDOWS_RESERVED_FILE_NAMES = {
+    'CON', 'PRN', 'AUX', 'NUL',
+    *(f'COM{i}' for i in range(1, 10)),
+    *(f'LPT{i}' for i in range(1, 10)),
+}
+
+
+def get_archived_image_path_error(path: str) -> Optional[str]:
+    """Return why the path, relative to the images folder, can't be used on
+    Windows, or None if it can."""
+    if len(path) > ARCHIVED_IMAGE_MAX_PATH_LENGTH:
+        return f'path is longer than {ARCHIVED_IMAGE_MAX_PATH_LENGTH} characters'
+
+    for component in path.split('/'):
+        if component in ('', '.', '..') or component.startswith('..'):
+            return f'path component "{component}" is not allowed'
+        invalid_chars = sorted(
+            {c for c in component if c in '<>:"\\|?*' or ord(c) < 0x20}
+        )
+        if invalid_chars:
+            chars = ', '.join(f'U+{ord(c):04X}' for c in invalid_chars)
+            return f'path component "{component}" contains invalid characters ({chars})'
+        if component[-1] in '. ':
+            return f'path component "{component}" must not end with a dot or a space'
+        if component.split('.')[0].upper() in WINDOWS_RESERVED_FILE_NAMES:
+            return f'path component "{component}" is a reserved Windows file name'
+
+    return None
+
+
+def validate_readme_images(path: Path, mod_source: str) -> int:
+    """Validate that the README images can be archived."""
+    readme_match = re.search(ARCHIVED_README_PATTERN, mod_source, re.MULTILINE)
+    if not readme_match:
+        return 0
+
+    readme = readme_match.group(1)
+    warnings = 0
+
+    def line_of(pos: int) -> int:
+        return mod_source.count('\n', 0, readme_match.start(1) + pos) + 1
+
+    for match in re.finditer(r'<img\b', readme, re.IGNORECASE):
+        warnings += add_warning(
+            path,
+            line_of(match.start()),
+            'HTML <img> tags are not supported in the README, use Markdown'
+            ' image syntax: ![description](url)',
+        )
+
+    hosts = ', '.join(ARCHIVED_IMAGE_HOSTS)
+    for match in re.finditer(ARCHIVED_IMAGE_URL_PATTERN, readme):
+        url = match.group(1)
+        line = line_of(match.start(1))
+
+        if not any(url.startswith(f'https://{host}/') for host in ARCHIVED_IMAGE_HOSTS):
+            warnings += add_warning(
+                path,
+                line,
+                f'Image host is not supported, images must be hosted on one of:'
+                f' {hosts}. Got: "{url}"',
+            )
+            continue
+
+        if not re.fullmatch(URL_PATTERN, url):
+            warnings += add_warning(path, line, f'Invalid image URL: "{url}"')
+            continue
+
+        image_path = urllib.parse.unquote(url.removeprefix('https://'))
+        if error := get_archived_image_path_error(image_path):
+            warnings += add_warning(
+                path, line, f'Image URL can\'t be archived, {error}: "{url}"'
+            )
+            continue
+
+        try:
+            fetch_url(url, headers={'User-Agent': 'Mozilla/5.0'})
+        except urllib.error.HTTPError as e:
+            warnings += add_warning(
+                path, line, f'Image URL returned HTTP {e.code}: "{url}"'
+            )
+
+    return warnings
 
 
 def validate_settings(path: Path, mod_source: str) -> int:
