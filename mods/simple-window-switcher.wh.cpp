@@ -794,6 +794,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 #define SWS_TOUCHPAD_IDLE_TIMER_ID 105
 #define SWS_DYNAMIC_RESIZE_TIMER_ID 106
 #define SWS_BACKDROP_FADE_TIMER_ID 107
+#define SWS_BACKDROP_PREROLL_TIMER_ID 108
 // Posted by the low-level mouse hook so the heavy CycleLinear work runs in the
 // wndproc instead of on the synchronous raw-input path. WPARAM is the direction.
 #define WM_SWS_SCROLL           (WM_APP + 1)
@@ -1143,11 +1144,13 @@ static Settings g_settings;
 static bool g_backdropClassRegistered = false;
 static Gdiplus::Bitmap* g_backdropBitmap = NULL; // blurred backdrop, dim veil baked in
 
-// Layered-window fade. The backdrop opens faster than the switcher's own
-// entrance (240 ms) and closes together with its exit dissolve so the desktop
-// never shows through a half-faded switcher.
-#define SWS_BACKDROP_FADE_IN_MS  130
+// Layered-window fade. The backdrop opens faster than the switcher's own entrance
+// (240 ms), and the switcher is only presented once the backdrop is fully in, so the
+// two never animate at the same time. The fade-out runs with the switcher's exit
+// dissolve so the desktop never shows through a half-faded switcher.
+#define SWS_BACKDROP_FADE_IN_MS  80
 #define SWS_BACKDROP_FADE_OUT_MS 160
+static bool g_backdropPreRollActive = false; // switcher presentation waits for the fade
 static float g_backdropFadeAlpha = 0.0f;
 static float g_backdropFadeFrom = 0.0f;
 static float g_backdropFadeTarget = 0.0f;
@@ -1156,6 +1159,8 @@ static ULONGLONG g_backdropFadeStartTick = 0;
 static DWORD g_backdropFadeDurationMs = 0;
 
 static bool AreAnimationsGloballyEnabled(); // defined further down
+static bool IsWin11OrGreater();             // defined further down
+static void LogBackdropCoverage();          // TEMP diagnostic, defined below
 
 static bool BackdropBlurEnabled() { return wcscmp(g_settings.backdropBlurEffect, L"off") != 0; }
 static bool BackdropBlurUsesWallpaper() { return wcscmp(g_settings.backdropBlurEffect, L"acrylicWallpaper") == 0; }
@@ -1214,6 +1219,8 @@ static void BackdropFadeTick(HWND hWnd) {
         if (hide) {
             ShowWindow(hWnd, SW_HIDE);
             BackdropFreeBitmap();
+        } else {
+            LogBackdropCoverage(); // TEMP: check coverage once the backdrop is fully in
         }
     }
 }
@@ -1265,14 +1272,23 @@ static void EnsureBackdropWindow() {
         WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED,
         SWS_BACKDROP_CLASSNAME, L"",
         WS_POPUP, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
-    if (g_hBackdropWnd) BackdropApplyAlpha(g_hBackdropWnd, 0.0f);
+    if (!g_hBackdropWnd) return;
+    // Never let DWM round a full-screen overlay: rounded corners would leave the four
+    // corner cut-outs showing the sharp desktop.
+    if (IsWin11OrGreater()) {
+        int corner = 1; // DWMWCP_DONOTROUND
+        DwmSetWindowAttribute(g_hBackdropWnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */,
+                              &corner, sizeof(corner));
+    }
+    BackdropApplyAlpha(g_hBackdropWnd, 0.0f);
 }
 
-// Both backdrop sources are built at 1/8 resolution: the separable box blur below is
-// then radius-equivalent to 8x its pixel radius on screen, and the upscale at draw
-// time hides the rest of the box kernel.
-#define SWS_BACKDROP_DOWNSCALE 8
-#define SWS_BACKDROP_BLUR_RADIUS 8 // px at downscaled res (~64 px on screen)
+// Backdrop sources are built at half resolution: cheap enough for a once-per-show
+// blur, and detailed enough that the box passes below read as a smooth gaussian
+// instead of as blocks.
+#define SWS_BACKDROP_DOWNSCALE 2
+#define SWS_BACKDROP_BLUR_RADIUS 24 // px at downscaled res (~48 px on screen)
+#define SWS_BACKDROP_BLUR_PASSES 3  // three box passes approximate a gaussian
 
 static Gdiplus::Bitmap* BackdropAllocCanvas(int w, int h, int& sw, int& sh) {
     sw = w / SWS_BACKDROP_DOWNSCALE > 0 ? w / SWS_BACKDROP_DOWNSCALE : 1;
@@ -1280,45 +1296,59 @@ static Gdiplus::Bitmap* BackdropAllocCanvas(int w, int h, int& sw, int& sh) {
     return new Gdiplus::Bitmap(sw, sh, PixelFormat32bppARGB);
 }
 
-// Blur the 32bpp canvas in place (2 passes, horizontal + vertical, directly on the
-// pixels - MinGW has no GDI+ 1.1 effect classes), then bake the dim veil in so the
-// backdrop is a single opaque bitmap. Runs once per show, never per frame.
+// One box-blur pass over `len` samples that are `step` bytes apart. Running sums keep
+// it O(len) per line (no inner loop over the kernel), so multiple passes stay cheap.
+static void BackdropBoxBlurLine(const BYTE* base, BYTE* out, int len, size_t step, int R) {
+    int sum[4] = {0, 0, 0, 0};
+    int count = 0;
+    int seed = (R < len - 1) ? R : len - 1;
+    for (int k = 0; k <= seed; k++) {
+        const BYTE* p = base + (size_t)k * step;
+        sum[0] += p[0]; sum[1] += p[1]; sum[2] += p[2]; sum[3] += p[3];
+        count++;
+    }
+    for (int i = 0; i < len; i++) {
+        BYTE* o = out + (size_t)i * step;
+        o[0] = (BYTE)(sum[0] / count); o[1] = (BYTE)(sum[1] / count);
+        o[2] = (BYTE)(sum[2] / count); o[3] = (BYTE)(sum[3] / count);
+        int add = i + R + 1, rem = i - R;
+        if (add < len) {
+            const BYTE* p = base + (size_t)add * step;
+            sum[0] += p[0]; sum[1] += p[1]; sum[2] += p[2]; sum[3] += p[3];
+            count++;
+        }
+        if (rem >= 0) {
+            const BYTE* p = base + (size_t)rem * step;
+            sum[0] -= p[0]; sum[1] -= p[1]; sum[2] -= p[2]; sum[3] -= p[3];
+            count--;
+        }
+    }
+}
+
+// Blur the 32bpp canvas in place: SWS_BACKDROP_BLUR_PASSES separable box passes, which
+// approximate a gaussian without the blocky plateaus a single pass leaves behind (and
+// MinGW has no GDI+ 1.1 effect classes). The dim veil is baked in afterwards so the
+// backdrop is one opaque bitmap. Runs once per show, never per frame.
 static void BackdropBlurAndVeil(Gdiplus::Bitmap* bmp, int sw, int sh) {
     const int R = SWS_BACKDROP_BLUR_RADIUS;
     Gdiplus::Rect full(0, 0, sw, sh);
     Gdiplus::BitmapData bd = {};
     if (bmp->LockBits(&full, Gdiplus::ImageLockModeRead | Gdiplus::ImageLockModeWrite,
                       PixelFormat32bppARGB, &bd) == Gdiplus::Ok && bd.Scan0) {
-        std::vector<BYTE> tmp((size_t)sw * sh * 4);
-        BYTE* srcPx = (BYTE*)bd.Scan0;
-        // Horizontal pass into tmp.
-        for (int y = 0; y < sh; y++) {
-            const BYTE* row = srcPx + (size_t)y * bd.Stride;
-            BYTE* orow = tmp.data() + (size_t)y * sw * 4;
-            for (int x = 0; x < sw; x++) {
-                int b = 0, g = 0, r = 0, a = 0, n = 0;
-                for (int k = -R; k <= R; k++) {
-                    int xx = x + k; if (xx < 0) xx = 0; if (xx >= sw) xx = sw - 1;
-                    const BYTE* p = row + (size_t)xx * 4;
-                    b += p[0]; g += p[1]; r += p[2]; a += p[3]; n++;
-                }
-                BYTE* o = orow + (size_t)x * 4;
-                o[0] = (BYTE)(b / n); o[1] = (BYTE)(g / n); o[2] = (BYTE)(r / n); o[3] = (BYTE)(a / n);
-            }
-        }
-        // Vertical pass from tmp back into the bitmap.
-        for (int x = 0; x < sw; x++) {
+        const size_t stride = (size_t)bd.Stride;
+        std::vector<BYTE> src(stride * sh), dst(stride * sh);
+        memcpy(src.data(), bd.Scan0, stride * sh);
+        for (int pass = 0; pass < SWS_BACKDROP_BLUR_PASSES; pass++) {
             for (int y = 0; y < sh; y++) {
-                int b = 0, g = 0, r = 0, a = 0, n = 0;
-                for (int k = -R; k <= R; k++) {
-                    int yy = y + k; if (yy < 0) yy = 0; if (yy >= sh) yy = sh - 1;
-                    const BYTE* p = tmp.data() + ((size_t)yy * sw + x) * 4;
-                    b += p[0]; g += p[1]; r += p[2]; a += p[3]; n++;
-                }
-                BYTE* o = srcPx + (size_t)y * bd.Stride + (size_t)x * 4;
-                o[0] = (BYTE)(b / n); o[1] = (BYTE)(g / n); o[2] = (BYTE)(r / n); o[3] = (BYTE)(a / n);
+                BackdropBoxBlurLine(src.data() + (size_t)y * stride, dst.data() + (size_t)y * stride,
+                                    sw, 4, R);
+            }
+            for (int x = 0; x < sw; x++) {
+                BackdropBoxBlurLine(dst.data() + (size_t)x * 4, src.data() + (size_t)x * 4,
+                                    sh, stride, R);
             }
         }
+        memcpy(bd.Scan0, src.data(), stride * sh);
         bmp->UnlockBits(&bd);
     }
 
@@ -1426,6 +1456,15 @@ static void BuildBackdropWallpaper(int w, int h) {
 static void BuildBackdropSnapshot(int w, int h) {
     BackdropFreeBitmap();
     if (w <= 0 || h <= 0) return;
+    // Nothing of ours may be on screen while capturing and DWM needs a frame to
+    // composite without it, or the switcher ends up inside its own backdrop.
+    if (IsWindowVisible(g_hBackdropWnd)) ShowWindow(g_hBackdropWnd, SW_HIDE);
+    if (IsWindowVisible(g_hSwitcher)) ShowWindow(g_hSwitcher, SW_HIDE);
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        if (IsWindowVisible(hMirror)) ShowWindow(hMirror, SW_HIDE);
+    }
+    if (g_hCloseBtnWnd && IsWindowVisible(g_hCloseBtnWnd)) ShowWindow(g_hCloseBtnWnd, SW_HIDE);
+    DwmFlush();
     int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
     int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
     HDC hScreen = GetDC(NULL);
@@ -1455,7 +1494,43 @@ static void BuildBackdropSnapshot(int w, int h) {
     g_backdropBitmap = small;
 }
 
+// TEMP (coverage report): log the composited screen pixels at the four corners next to
+// the pixels the backdrop bitmap has there, so a real coverage gap can be told apart
+// from a blur that is simply hard to notice over flat desktop areas. Remove with the
+// next backdrop change once this is confirmed.
+static void LogBackdropCoverage() {
+    if (!g_backdropBitmap || !g_hBackdropWnd) return;
+    int vx = GetSystemMetrics(SM_XVIRTUALSCREEN), vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN), vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    RECT wr = {0, 0, 0, 0};
+    GetWindowRect(g_hBackdropWnd, &wr);
+    HDC hScreen = GetDC(NULL);
+    if (!hScreen) return;
+    const int sx[4] = { vx + 1, vx + vw - 2, vx + 1, vx + vw - 2 };
+    const int sy[4] = { vy + 1, vy + 1, vy + vh - 2, vy + vh - 2 };
+    const int bw = (int)g_backdropBitmap->GetWidth(), bh = (int)g_backdropBitmap->GetHeight();
+    const int bx[4] = { 0, bw - 1, 0, bw - 1 };
+    const int by[4] = { 0, 0, bh - 1, bh - 1 };
+    WCHAR actual[128] = L"", expected[128] = L"";
+    for (int i = 0; i < 4; i++) {
+        COLORREF a = GetPixel(hScreen, sx[i], sy[i]);
+        Gdiplus::Color e(0, 0, 0);
+        g_backdropBitmap->GetPixel(bx[i], by[i], &e);
+        WCHAR buf[32];
+        swprintf_s(buf, L"%s%06X", i ? L" " : L"", (unsigned)(a & 0xFFFFFF));
+        wcscat_s(actual, buf);
+        swprintf_s(buf, L"%s%02X%02X%02X", i ? L" " : L"", (unsigned)e.GetR(), (unsigned)e.GetG(),
+                   (unsigned)e.GetB());
+        wcscat_s(expected, buf);
+    }
+    ReleaseDC(NULL, hScreen);
+    Wh_Log(L"SWS: backdrop coverage: screen=%d,%d %dx%d window=%d,%d %dx%d canvas=%dx%d screen=%s expected=%s",
+           vx, vy, vw, vh, wr.left, wr.top, wr.right - wr.left, wr.bottom - wr.top,
+           bw, bh, actual, expected);
+}
+
 static void ShowBackdropBlur() {
+    g_backdropPreRollActive = false;
     if (!BackdropBlurEnabled()) return;
     EnsureBackdropWindow();
     if (!g_hBackdropWnd) return;
@@ -1464,6 +1539,10 @@ static void ShowBackdropBlur() {
     int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
     int w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
     int h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+    // Hide the window before building: a backdrop that is still fading out must never
+    // end up inside the new bitmap.
+    if (IsWindowVisible(g_hBackdropWnd)) ShowWindow(g_hBackdropWnd, SW_HIDE);
 
     if (BackdropBlurUsesWallpaper()) {
         BuildBackdropWallpaper(w, h);
@@ -1482,8 +1561,12 @@ static void ShowBackdropBlur() {
     UpdateWindow(g_hBackdropWnd); // first frame on screen before the fade starts
     if (AreAnimationsGloballyEnabled()) {
         BackdropStartFade(g_hBackdropWnd, 1.0f, SWS_BACKDROP_FADE_IN_MS, false);
+        // The caller presents the switcher windows only once this fade is done, so the
+        // backdrop is always fully in place first (see SWS_BACKDROP_PREROLL_TIMER_ID).
+        g_backdropPreRollActive = true;
     } else {
         BackdropApplyAlpha(g_hBackdropWnd, 1.0f);
+        LogBackdropCoverage(); // TEMP
     }
 }
 
@@ -8559,6 +8642,32 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
 }
 
+// Show the switcher, its overlay and the mirrors, then start the entrance animation.
+// Kept in one place because the backdrop fade pre-roll (see
+// SWS_BACKDROP_PREROLL_TIMER_ID) defers exactly this step.
+static void PresentSwitcherWindows() {
+    if (g_hCloseBtnWnd) {
+        ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
+    }
+    ShowWindow(g_hSwitcher, SW_SHOWNA);
+    BringWindowToTop(g_hSwitcher);
+    SetForegroundWindow(g_hSwitcher);
+    // Mirrors already carry frame 0 (pushed by PaintSwitcher above); show them
+    // now so no unpainted white frame is ever composed.
+    ShowMirrorSwitchers();
+
+    if (g_animEntranceActive) {
+        StartAnimationTicker();
+    } else {
+        PaintSwitcher();
+        UpdateWindow(g_hSwitcher);
+        if (g_hCloseBtnWnd) {
+            PaintSwitcherOverlay();
+            UpdateWindow(g_hCloseBtnWnd);
+        }
+    }
+}
+
 static void RevealPendingSwitcher() {
     if (!g_isPendingShow || !g_hSwitcher) {
         return;
@@ -8661,27 +8770,13 @@ static void RevealPendingSwitcher() {
         PaintSwitcherOverlay();
     }
 
-    // Backdrop first: the overlay and the switcher must land above it.
+    // Backdrop first: it fades in on its own and the switcher windows are presented
+    // only once it is fully in place, so the two never animate at the same time.
     ShowBackdropBlur(); // blurred backdrop behind the switcher (opt-in)
-    if (g_hCloseBtnWnd) {
-        ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
-    }
-    ShowWindow(g_hSwitcher, SW_SHOWNA);
-    BringWindowToTop(g_hSwitcher);
-    SetForegroundWindow(g_hSwitcher);
-    // Mirrors already carry frame 0 (pushed by PaintSwitcher above); show them
-    // now so no unpainted white frame is ever composed.
-    ShowMirrorSwitchers();
-
-    if (g_animEntranceActive) {
-        StartAnimationTicker();
+    if (g_backdropPreRollActive) {
+        SetTimer(g_hSwitcher, SWS_BACKDROP_PREROLL_TIMER_ID, SWS_BACKDROP_FADE_IN_MS + 16, NULL);
     } else {
-        PaintSwitcher();
-        UpdateWindow(g_hSwitcher);
-        if (g_hCloseBtnWnd) {
-            PaintSwitcherOverlay();
-            UpdateWindow(g_hCloseBtnWnd);
-        }
+        PresentSwitcherWindows();
     }
 
     if (!g_isSticky && !g_isTouchpadGestureActive) {
@@ -9088,27 +9183,13 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
         PaintSwitcherOverlay();
     }
 
-    // Backdrop first: the overlay and the switcher must land above it.
+    // Backdrop first: it fades in on its own and the switcher windows are presented
+    // only once it is fully in place, so the two never animate at the same time.
     ShowBackdropBlur(); // blurred backdrop behind the switcher (opt-in)
-    if (g_hCloseBtnWnd) {
-        ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
-    }
-    ShowWindow(g_hSwitcher, SW_SHOWNA);
-    BringWindowToTop(g_hSwitcher);
-    SetForegroundWindow(g_hSwitcher);
-    // Mirrors already carry frame 0 (pushed by PaintSwitcher above); show them
-    // now so no unpainted white frame is ever composed.
-    ShowMirrorSwitchers();
-
-    if (g_animEntranceActive) {
-        StartAnimationTicker();
+    if (g_backdropPreRollActive) {
+        SetTimer(g_hSwitcher, SWS_BACKDROP_PREROLL_TIMER_ID, SWS_BACKDROP_FADE_IN_MS + 16, NULL);
     } else {
-        PaintSwitcher();
-        UpdateWindow(g_hSwitcher);
-        if (g_hCloseBtnWnd) {
-            PaintSwitcherOverlay();
-            UpdateWindow(g_hCloseBtnWnd);
-        }
+        PresentSwitcherWindows();
     }
 
     if (!sticky && !g_isTouchpadGestureActive) {
@@ -9120,7 +9201,9 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
 static void HideSwitcher() {
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_DYNAMIC_RESIZE_TIMER_ID);
+        KillTimer(g_hSwitcher, SWS_BACKDROP_PREROLL_TIMER_ID);
     }
+    g_backdropPreRollActive = false;
     // Hide the backdrop first so it never outlives the switcher on screen.
     HideBackdropBlur();
     // Hide every switcher window FIRST, before any teardown or WS_EX_LAYERED /
@@ -9233,6 +9316,9 @@ static void RestoreWindowIfIconic(HWND hWnd) {
 
 static void StartExitAnimation(bool activateSelectedWindow) {
     if ((!g_isVisible && !g_isPendingShow) || g_animExitActive) return;
+    // Drop a pending backdrop pre-roll: the switcher must not be presented after this.
+    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_BACKDROP_PREROLL_TIMER_ID);
+    g_backdropPreRollActive = false;
 
     if (activateSelectedWindow) {
         // Switching to target window: hide everything FIRST and only then do
@@ -11720,6 +11806,16 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 }
             } else {
                 s_pendingCloseRetries = 0;
+            }
+            return 0;
+        }
+
+        if (wParam == SWS_BACKDROP_PREROLL_TIMER_ID) {
+            // The backdrop has finished fading in: present the switcher on top of it.
+            KillTimer(hWnd, SWS_BACKDROP_PREROLL_TIMER_ID);
+            g_backdropPreRollActive = false;
+            if (g_isVisible || g_isPendingShow) {
+                PresentSwitcherWindows();
             }
             return 0;
         }
