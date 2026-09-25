@@ -253,7 +253,6 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
         
     $name: Light mode colors
     $name:ro: Culori pentru modul luminos
-    # #! $hideIf: {rendering.renderingMode: winuiLike, rendering.winuiLikeRenderingCustomColors: false}
   
   
   - darkModeColors:
@@ -289,7 +288,6 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
       
     $name: Dark mode colors
     $name:ro: Culori pentru modul întunecat
-    # #! $hideIf: {rendering.renderingMode: winuiLike, rendering.winuiLikeRenderingCustomColors: false}
 
   $name: Custom rendering
   $name:ro: Randare personalizată
@@ -313,6 +311,7 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
 #include <vsstyle.h>
 #include <versionhelpers.h>
 #include <gdiplus.h>
+#include <string>
 
 using namespace Gdiplus;
 
@@ -484,11 +483,54 @@ static bool AreAppsUsingDarkTheme() {
 }
 
 
-[[clang::noinline]] bool IsExpectedCallerModule(HMODULE expectedModule) {
+std::wstring GetModulePath(HMODULE module) {
+    if (!module) return L"<unknown>";
+
+    std::wstring path(MAX_PATH, L'\0');
+    
+    while (true) {
+        DWORD len = GetModuleFileName(module, path.data(), path.size());
+        if (len == 0) return L"<unknown>";
+
+        // A result equal to the buffer size means the path was truncated.
+        if (len == path.size()) {
+            path.resize(len * 2);
+            continue;
+        }
+
+        path.resize(len);
+        return path;
+    }
+}
+
+
+bool IsSystemModulePath(PCWSTR path) {
+    WCHAR windowsDir[MAX_PATH];
+    UINT len = GetSystemWindowsDirectory(windowsDir, ARRAYSIZE(windowsDir));
+
+    if (len == 0 || len >= ARRAYSIZE(windowsDir)) return false;
+
+    return _wcsnicmp(path, windowsDir, len) == 0 && path[len] == L'\\';
+}
+
+
+[[clang::noinline]] bool IsExpectedCallerModule(HMODULE expectedModule, void* address) {
     HMODULE callerModule = nullptr;
 
-    void* frames[6];
-    WORD count = CaptureStackBackTrace(1, ARRAYSIZE(frames), frames, nullptr);
+    if (
+        GetModuleHandleEx(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, 
+            (PCWSTR) address, &callerModule
+        ) && callerModule == g_shell32
+    ) {
+        return true;
+    }
+
+    std::wstring callerPath = GetModulePath(callerModule);
+    if (IsSystemModulePath(callerPath.c_str())) return false;
+
+    void* frames[4];
+    WORD count = CaptureStackBackTrace(3, ARRAYSIZE(frames), frames, nullptr);
     
     for (WORD i = 0; i < count; i++) {
         GetModuleHandleEx(
@@ -497,6 +539,7 @@ static bool AreAppsUsingDarkTheme() {
         );
 
         if (callerModule == expectedModule) return true;
+        if (IsSystemModulePath(callerPath.c_str())) return false;
     }
 
     return false;
@@ -610,7 +653,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
     );
 
     if (isThemeClassValid) {
-        if (!IsExpectedCallerModule(g_shell32))
+        if (!IsExpectedCallerModule(g_shell32, __builtin_return_address(0)))
             return DrawThemeBackground_orig(hTheme, hdc, iPartId, iStateId, pRect, pClipRect);
 
         COLORREF color;
