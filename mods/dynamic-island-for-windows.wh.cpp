@@ -11844,12 +11844,13 @@ DWORD WINAPI RenderThreadProc(void*) {
     // request.
     bool highResTimer = false;
 
-    // How long the resolution is held after the last paint. Long enough to bridge
-    // the gap between 60Hz content frames without flapping, short enough that a
-    // settled island releases it promptly. A plain local rather than a static, so
-    // an unload/reload cycle cannot carry a stale timestamp across.
+    // How long the resolution is held after animation stops. Long enough to ride
+    // out the gaps between 60Hz content frames and brief pauses between spring
+    // animations without flapping, short enough that a settled island gives it back
+    // promptly. A plain local rather than a static, so an unload/reload cycle cannot
+    // carry a stale timestamp across.
     constexpr double kHighResTimerHoldSec = 0.5;
-    double lastRenderAt = -1.0;
+    double lastAnimatingAt = -1.0;
 
     auto setHighResTimer = [&](bool want) {
         if (want == highResTimer) {
@@ -12194,17 +12195,22 @@ DWORD WINAPI RenderThreadProc(void*) {
         const bool camIndicatorActive = snapshot.system.cameraActive && g_settings.privacyDots && g_settings.privacyDotsCam;
         const bool privacyActive = micIndicatorActive || camIndicatorActive;
 
-        // GPU/network counters are only sampled when something is actually
-        // showing them right now: the in-game overlay, or the idle
-        // dashboard's Hardware Monitor tab while it's expanded (hovered or
-        // pinned open) and actually scrolled into view.
-        if (now >= nextSystemPoll) {
-            const int tabIdx = NormalizedTabIndex(g_settings);
-            const bool onHardwareMonitorTab = (tabIdx == HardwareMonitorTabIndex(g_settings));
-            const bool hwMonitorVisible = (primary.kind == IslandKind::Idle || primary.kind == IslandKind::Media) &&
-                !isFullscreen && !gameMetricsPresent && (pinned || isHoverExpanded) && onHardwareMonitorTab;
-            const bool gameOverlayVisible = gameMetricsPresent && !isFullscreen;
+        // Whether any surface that actually draws CPU / RAM / disk / GPU / network
+        // figures is on screen: the in-game overlay, or the idle dashboard's
+        // Hardware Monitor tab while expanded (hovered or pinned) and scrolled into
+        // view.
+        //
+        // Hoisted out of the poll block below because two decisions need it: whether
+        // to sample the expensive GPU and network counters at all, and whether a
+        // change in those numbers is worth repainting for.
+        const int metricTabIdx = NormalizedTabIndex(g_settings);
+        const bool onHardwareMonitorTab = (metricTabIdx == HardwareMonitorTabIndex(g_settings));
+        const bool hwMonitorVisible = (primary.kind == IslandKind::Idle || primary.kind == IslandKind::Media) &&
+            !isFullscreen && !gameMetricsPresent && (pinned || isHoverExpanded) && onHardwareMonitorTab;
+        const bool gameOverlayVisible = gameMetricsPresent && !isFullscreen;
+        const bool systemMetricsVisible = hwMonitorVisible || gameOverlayVisible;
 
+        if (now >= nextSystemPoll) {
             const bool needGpuStats = gameOverlayVisible || hwMonitorVisible;
             const bool needNetStats = hwMonitorVisible;  // net is only ever drawn in the HW dashboard
 
@@ -12453,15 +12459,29 @@ DWORD WINAPI RenderThreadProc(void*) {
         static bool prevCharging = false;
         static int prevProg = -1;
         static std::wstring prevMediaTitle;
+        static bool prevPlaying = false;
+
+        // CPU / RAM / disk are compared only while a surface that draws them is on
+        // screen. UpdateSystemSnapshot refreshes them every second and CPU load
+        // essentially always differs between samples, so comparing them
+        // unconditionally repainted the whole island once a second for numbers that
+        // appear nowhere on the collapsed pill.
+        const bool systemMetricsChanged =
+            systemMetricsVisible && (snapshot.system.cpuPercent != prevCpu ||
+                                     snapshot.system.memoryPercent != prevRam ||
+                                     snapshot.system.diskFreePercent != prevDisk);
 
         if (snapshot.media.artGeneration != prevArtGen ||
             snapshot.media.sourceIconGeneration != prevSrcIconGen ||
             snapshot.media.title != prevMediaTitle ||
+            // Play/pause has to be in here now that the metric tick no longer
+            // repaints every second as a side effect. Pausing while collapsed swaps
+            // the live waveform for the static bars, and without this the frozen
+            // last playing frame stayed up until some unrelated repaint came along.
+            snapshot.media.playing != prevPlaying ||
             snapshot.notification.icon.generation != prevNotifIconGen ||
             snapshot.clipboard.appIcon.generation != prevClipIconGen ||
-            snapshot.system.cpuPercent != prevCpu ||
-            snapshot.system.memoryPercent != prevRam ||
-            snapshot.system.diskFreePercent != prevDisk ||
+            systemMetricsChanged ||
             snapshot.system.volumePercent != prevVol ||
             snapshot.system.volumeMuted != prevMuted ||
             snapshot.battery.percent != prevBat ||
@@ -12471,6 +12491,7 @@ DWORD WINAPI RenderThreadProc(void*) {
             prevArtGen = snapshot.media.artGeneration;
             prevSrcIconGen = snapshot.media.sourceIconGeneration;
             prevMediaTitle = snapshot.media.title;
+            prevPlaying = snapshot.media.playing;
             prevNotifIconGen = snapshot.notification.icon.generation;
             prevClipIconGen = snapshot.clipboard.appIcon.generation;
             prevCpu = snapshot.system.cpuPercent;
@@ -12551,33 +12572,30 @@ DWORD WINAPI RenderThreadProc(void*) {
             targetFrameMs = std::max(targetFrameMs, kContinuousFrameMs);
         }
 
-        // Decided from whether the island is *animating*, not from whether this
-        // particular iteration painted.
+        // Keyed to actual animation, not to repainting.
         //
-        // Keying it to needsRender per frame looked right but thrashed. The
-        // continuous-render activities above (media waveform and marquee, battery
-        // pulse, clipboard, notification) are deliberately gated to 60Hz, so with
-        // Target FPS on Auto against a 144Hz panel the loop comes round every ~7ms
-        // and only every second or third pass paints. needsRender therefore
-        // alternates, which meant timeBeginPeriod/timeEndPeriod ran dozens of times
-        // a second for as long as anything was playing -- exactly the frequent
-        // switching the API's documentation warns about. Worse, the non-painting
-        // passes released the resolution and then slept 16ms at the coarse ~15.6ms
-        // granularity, which rounds up toward ~31ms and dragged the waveform down
-        // to roughly 30fps with uneven spacing.
+        // A single repaint does not need 1ms pacing -- it needs one frame, which the
+        // pacer delivers fine at the default resolution. Only things that draw a
+        // *sequence* of frames care: continuous content and spring motion.
         //
-        // Holding it for a short while after the last paint keeps it steady through
-        // continuous content and through spring animations, while a genuinely still
-        // island still gives it back: the idle clock only repaints once a minute.
-        if (needsRender) {
-            lastRenderAt = now;
+        // Keying it to needsRender was wrong twice over. Per frame it thrashed,
+        // because needsRender alternates when 60Hz content runs under a higher
+        // Target FPS. And with the hold added, any one-off repaint still took the
+        // resolution for the full hold -- including the metric tick, which fired
+        // every second, so a plain idle island requested and released it once a
+        // second and held it roughly half the time with nothing moving at all.
+        //
+        // continuousAnimation and springsAnimating are exactly the two cases that
+        // want precise frame spacing, so they drive it directly.
+        if (continuousAnimation || springsAnimating) {
+            lastAnimatingAt = now;
         }
-        setHighResTimer(lastRenderAt >= 0.0 && now - lastRenderAt < kHighResTimerHoldSec);
+        setHighResTimer(lastAnimatingAt >= 0.0 && now - lastAnimatingAt < kHighResTimerHoldSec);
 
         if (!needsRender) {
             // Nothing changed on screen, so poll at ~60Hz rather than the target
-            // frame rate. Between two 60Hz paints the resolution is still held by
-            // the hysteresis above, so this wait stays accurate.
+            // frame rate. Accuracy does not matter here -- this is a poll interval,
+            // not frame pacing -- so it runs at whatever resolution is in effect.
             WaitForSingleObject(g_stopEvent, 16);
             nextFrameTarget = std::chrono::steady_clock::now();
         } else {
