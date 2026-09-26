@@ -2,7 +2,7 @@
 // @id              dynamic-island-for-windows
 // @name            Dynamic Island for Windows
 // @description     A living, breathing pill overlay inspired by iPhone's Dynamic Island. Reacts to media, downloads, clipboard, battery, and more.
-// @version         1.3.0
+// @version         1.3.1
 // @author          Himanshu
 // @github          https://github.com/devcode90
 // @include         windhawk.exe
@@ -18,7 +18,7 @@ A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful
 
 ![Dynamic Island running on the desktop](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/desktop.png)
 
-![Dynamic Island surfaces](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/Full-preview.png)
+![Dynamic Island surfaces](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/Full-preview-v2.png)
 
 ---
 
@@ -28,14 +28,14 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
 
 | Module | Description | Preview |
 | :--- | :--- | :--- |
-| **Media Player** | Shows live album art, track details, audio waveforms, and full playback controls. | ![Media](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/media.png) |
+| **Media Player** | Shows live album art, track details, audio waveforms, and full playback controls. | ![Media](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/media-v2.png) |
 | **Calendar** | A monthly grid that always fits its rows, with today marked in the accent colour. | ![Calendar](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/calendar.png) |
-| **Weather** | Real-time weather stats powered by wttr.in, including wind speed, humidity, and "feels like" temperature. | ![Weather](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/weather.png) |
+| **Weather** | Real-time weather stats powered by wttr.in, including wind speed, humidity, and "feels like" temperature. | ![Weather](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/weather-v2.png) |
 | **Hardware Monitor** | CPU, RAM, GPU, disk and live network throughput, with load bars that turn amber past 75% and red past 90%. | ![Hardware Monitor](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/hardware-monitor.png) |
-| **Game Overlay** | Real-time FPS, CPU, GPU, RAM and disk, sized to whichever metrics you enable. | ![Gamebar](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/gamebar.png) |
-| **Idle View** | A minimal dashboard with your battery status, digital clock, and sleek pagination dots. | ![Idle](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/idle.png) |
-| **Camera Privacy** | Shows a green dot when an app is actively using your webcam. | ![Camera](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/camera-detected.png) |
-| **Mic Privacy** | Shows an orange dot when an app is actively using your microphone. | ![Mic](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/mic-detected.png) |
+| **Game Overlay** | Real-time FPS, CPU, GPU, RAM and disk, sized to whichever metrics you enable. | ![Gamebar](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/gamebar-v2.png) |
+| **Idle View** | A minimal dashboard with your battery status, digital clock, and sleek pagination dots. | ![Idle](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/idle-v2.png) |
+| **Camera Privacy** | Shows a green dot when an app is actively using your webcam. | ![Camera](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/camera-detected-v2.png) |
+| **Mic Privacy** | Shows an orange dot when an app is actively using your microphone. | ![Mic](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/mic-detected-v2.png) |
 
 ---
 
