@@ -4,7 +4,7 @@
 // @description     Replace the Windows Start button with your own image.
 // @version         1.0.0
 // @author          RobsHs
-// @github          https://github.com/robshs
+// @github          https://github.com/RobsHs
 // @include         explorer.exe
 // @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -luxtheme -lgdi32 -luser32 -lgdiplus -lcomctl32 -lshlwapi
@@ -987,7 +987,8 @@ static void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) 
 }
 
 static bool HookTaskbarViewSymbols(HMODULE module) {
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbar_view_dll_hooks[] = {
         {
             {LR"(protected: virtual void __cdecl winrt::Taskbar::implementation::ExperienceToggleButton::UpdateButtonPadding(void))"},
             reinterpret_cast<void**>(&ExperienceToggleButton_UpdateButtonPadding_Original),
@@ -996,7 +997,7 @@ static bool HookTaskbarViewSymbols(HMODULE module) {
         },
     };
 
-    return HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return HookSymbols(module, taskbar_view_dll_hooks, ARRAYSIZE(taskbar_view_dll_hooks));
 }
 
 static bool HookTaskbarDllSymbols() {
@@ -1006,7 +1007,8 @@ static bool HookTaskbarDllSymbols() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // taskbar.dll
+    WindhawkUtils::SYMBOL_HOOK taskbar_dll_hooks[] = {
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CTaskBand_ITaskListWndSite_vftable,
@@ -1033,7 +1035,7 @@ static bool HookTaskbarDllSymbols() {
         },
     };
 
-    return HookSymbols(module, hooks, ARRAYSIZE(hooks));
+    return HookSymbols(module, taskbar_dll_hooks, ARRAYSIZE(taskbar_dll_hooks));
 }
 
 }  // namespace Win11Subsystem
