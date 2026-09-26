@@ -4327,8 +4327,25 @@ void TakeForeground(bool force = false) {
             return;
         }
 
-        SetForegroundWindow(ours);
-        BringWindowToTop(ours);
+        DWORD ourWindowTid = GetWindowThreadProcessId(ours, nullptr);
+        DWORD currentTid = current ? GetWindowThreadProcessId(current, nullptr) : 0;
+        DWORD callerTid = GetCurrentThreadId();
+
+        if (currentTid && currentTid != callerTid) {
+            AttachThreadInput(callerTid, currentTid, TRUE);
+            if (ourWindowTid && ourWindowTid != callerTid && ourWindowTid != currentTid) {
+                AttachThreadInput(ourWindowTid, currentTid, TRUE);
+            }
+            SetForegroundWindow(ours);
+            BringWindowToTop(ours);
+            if (ourWindowTid && ourWindowTid != callerTid && ourWindowTid != currentTid) {
+                AttachThreadInput(ourWindowTid, currentTid, FALSE);
+            }
+            AttachThreadInput(callerTid, currentTid, FALSE);
+        } else {
+            SetForegroundWindow(ours);
+            BringWindowToTop(ours);
+        }
     } catch (...) {
     }
 }
@@ -4349,6 +4366,7 @@ void FocusOurBoxNow() {
         }
     } catch (...) {}
 
+    TakeForeground();
     try {
         bool ok = g_ourBox.Focus(wux::FocusState::Programmatic);
         g_ourBox.SelectionStart(static_cast<int32_t>(g_ourBox.Text().size()));
