@@ -4125,10 +4125,12 @@ namespace
         double next =
             displayed + (target - displayed) * chaseAmount;
 
-        // Allow a completed operation/file to land exactly on 100%.
-        if (target >= 100.0 && target - next < 0.05)
+        // Stop chasing once the remaining difference is smaller than a
+        // visible fraction of a pixel. This prevents the animation timer
+        // from running after the progress is visually complete.
+        if (target - next < 0.05)
         {
-            next = 100.0;
+            next = target;
         }
 
         return std::min(next, target);
@@ -4335,15 +4337,13 @@ namespace
         bool currentFileNeedsTimer =
             animateCurrentFile &&
             currentFileValid &&
-            (animation.targetPercent < 100.0 ||
-             animation.displayedPercent <
-                 animation.targetPercent);
+            animation.displayedPercent <
+                animation.targetPercent;
 
         bool overallNeedsTimer =
             animateOverall &&
-            (animation.targetOverallPercent < 100.0 ||
-             animation.displayedOverallPercent <
-                 animation.targetOverallPercent);
+            animation.displayedOverallPercent <
+                animation.targetOverallPercent;
 
         animation.timerRunning =
             currentFileNeedsTimer ||
