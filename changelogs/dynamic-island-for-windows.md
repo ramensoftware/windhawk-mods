@@ -1,3 +1,52 @@
+## 1.3.0 ([Sep 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0ea4c30d36a16f1e5e5579eebf6fd6a953ce7d98/mods/dynamic-island-for-windows.wh.cpp))
+
+### Resolved Issues
+- Fixes #4352 — Caps Lock indicator can now be switched off, and wind direction shows as an arrow
+- Fixes #4738 — playing media no longer keeps the island on screen permanently
+- Fixes #5086 — the idle island hugs the clock instead of leaving empty space
+
+### Fixes
+- Media previous and next buttons now work. They used to open the player instead of changing track.
+- The orange microphone dot no longer stays lit after you stop using the mic.
+- VLC playback now shows up on the island.
+- Playing music no longer keeps the island on screen the whole time. It appears briefly on a track change, then hides again.
+- Weather text is properly centred.
+- Custom background colours now apply, including see-through ones written as `#RRGGBBAA`.
+- Album art no longer has a clipped corner at larger sizes.
+- Weather no longer shows "0°" before the forecast has loaded.
+- The island no longer gets buried behind other always-on-top windows, such as the PowerToys bar.
+- The idle island now fits its clock instead of leaving empty space, and no longer cuts off longer time formats at larger text sizes.
+- Fixed a rare crash when changing settings while the island was on screen.
+- Six-row months are no longer cut off at the bottom of the calendar.
+
+### New Features
+- **Eight new themes:** Obsidian, Graphite, Slate, Nord, Evergreen, Espresso, Plum, and Porcelain (light). Pick one from the Theme submenu when you right-click the island. If you were using one of the old themes, your choice carries over automatically.
+- **File Tray:** drag files onto the island to park them, then click a row to open one. Files are only referenced, never copied or moved.
+- **12 languages**, following your Windows display language by default.
+- **Real Windows blur or acrylic** behind the island, if you want it.
+- **Focus timer** with a live countdown, started from the right-click menu.
+- **Hide and show the island with a keyboard shortcut.**
+- **Auto-hide when an app is fullscreen**, so the island stays out of games and videos.
+- **Clock and date controls:** 12 or 24 hour, optional seconds, custom date formats such as `yyyy年MM月dd日`, and date above time.
+- **Independent text size**, so you can make labels bigger without growing the whole island.
+- **Bluetooth battery level** shown when a device connects, where the device reports it.
+- **Do Not Disturb integration**, so notifications respect Windows Focus Assist.
+- **Clipboard image previews**, so copying an image shows a thumbnail.
+- **Media waveform**, which reacts to whatever is playing.
+- **Ctrl+hover click-through**, to click whatever is underneath the island.
+- **Media blocklist**, so short-form video feeds stop expanding the island on every track change.
+- **Higher frame rate support** up to 500 FPS, matching your monitor automatically.
+- **Caps Lock and Num Lock indicator can be turned off.**
+- **Per-metric toggles and a compact mode** for the game overlay.
+- **Separate vertical positions** for the collapsed and expanded island.
+
+### Visual Redesign
+- Removed the lit edges. Surfaces now use soft shading and contrast instead of bright outlines.
+- Weather, hardware monitor, game overlay and calendar rebuilt on one card style with one icon set, so the same reading looks the same everywhere.
+- Load colour now means something: normal below 75%, amber from 75%, red from 90%.
+- Wind direction is an arrow rather than a compass abbreviation like WSW.
+- Accent colours are checked for contrast against the island background, which is what makes the light theme readable.
+
 ## 1.1.1 ([Jun 9, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f9abdadf12d052e7120571bdf52f578ad98c4333/mods/dynamic-island-for-windows.wh.cpp))
 
 ## Fixes
