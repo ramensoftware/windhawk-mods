@@ -10160,7 +10160,6 @@ namespace
             PublishSharedProgress(*binding);
 
         }
-        }
 
 
         return COperationDataProvider_WriteProgressValues_Original(
