@@ -7,8 +7,8 @@
 // @github          https://github.com/BaselAshraf81
 // @homepage        https://baselashraf.com/winduo
 // @include         windhawk.exe
-// @compilerOptions -ld3d11 -ldxgi -ldcomp -ld3dcompiler_47 -lmfplat -lmfreadwrite -lmf -lmfuuid -lole32 -luuid
-// @license         MIT
+// @compilerOptions -ld3d11 -ldxgi -ldcomp -ld3dcompiler_47 -lmfplat -lmfreadwrite -lmf -lmfuuid -lole32 -luuid -lwtsapi32
+// @license         Apache-2.0
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -31,11 +31,26 @@ Makito).
 It runs as its own process (a Windhawk *tool mod*), injects into nothing, and
 hooks nothing.
 
+![The screen leaning back as the lid closes](https://raw.githubusercontent.com/BaselAshraf81/winduo/main/docs/windhawk-preview.gif)
+
 ## What to expect
 
-- **The camera stays on while the mod is enabled**, so its privacy light stays
-  lit. Frames are measured in memory and never stored or sent anywhere. Disable
-  the mod to turn the camera off.
+- **The camera stays on while you are using the laptop**, so its privacy light
+  stays lit. It has to be watching before the lid starts to move. It turns off
+  while the lid is shut, the display is off, the session is locked, or the
+  built-in screen is not in use. Frames are measured in memory and never stored
+  or sent anywhere. Disable the mod to turn the camera off entirely.
+- **Battery.** A streaming webcam costs roughly as much as a video call's
+  camera does, which on most laptops is well under a watt but is not nothing.
+- **Other camera apps.** On many laptops, especially on Windows 10, only one
+  app can use the camera at a time. While the mod is streaming, a video call or
+  the Camera app started afterwards may report that the camera is in use:
+  disable the mod for the call. If the other app has the camera first, the mod
+  backs off and tries again later (every few seconds at first, then up to once
+  a minute) until the camera is free.
+- **Built-in screen only.** The effect runs on the laptop's own panel, even
+  when an external monitor is the main display, and does nothing while the
+  laptop is docked with the lid shut.
 - **Camera permission.** The mod reads the camera as an ordinary desktop app
   (it runs inside `windhawk.exe`), so Windows shows no prompt. It needs
   *Settings > Privacy & security > Camera > Let desktop apps access your
@@ -115,33 +130,23 @@ whatever is on screen, then the switch can be turned back off.
 #include <mferror.h>
 #include <mfidl.h>
 #include <mfreadwrite.h>
+#include <wtsapi32.h>
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <vector>
 
-#ifndef WDA_EXCLUDEFROMCAPTURE
-#define WDA_EXCLUDEFROMCAPTURE 0x00000011
-#endif
-#ifndef WS_EX_NOREDIRECTIONBITMAP
-#define WS_EX_NOREDIRECTIONBITMAP 0x00200000L
-#endif
-
-// Resolved at run time, so the mod does not depend on which Windows version
-// the SDK headers were configured for. Per-monitor-v2 makes the overlay and
-// Desktop Duplication agree on physical pixels on a scaled display.
+// Per-monitor-v2 makes the overlay and Desktop Duplication agree on physical
+// pixels on a scaled display.
 static void UsePhysicalPixels() {
-    using SetContext = HANDLE(WINAPI*)(HANDLE);
-    auto set = reinterpret_cast<SetContext>(reinterpret_cast<void*>(
-        GetProcAddress(GetModuleHandle(L"user32.dll"), "SetThreadDpiAwarenessContext")));
-    if (set) {
-        set(reinterpret_cast<HANDLE>(-4));  // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
-    }
+    SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 }
 
 template <typename T>
@@ -197,7 +202,9 @@ static Settings g_settings;
 static std::atomic<int> g_settingsVersion{0};
 static std::atomic<bool> g_previewRequested{false};
 
-static void LoadSettings() {
+// `changed` is false on the first load, so a Preview switch left on does not
+// replay the preview at every sign-in.
+static void LoadSettings(bool changed) {
     Settings s;
     s.triggerTravel = Clamp(Wh_GetIntSetting(L"TriggerTravel"), 2, 40);
     s.fullEffectTravel = Clamp(Wh_GetIntSetting(L"FullEffectTravel"), 5, 90);
@@ -222,7 +229,7 @@ static void LoadSettings() {
     bool startPreview;
     {
         std::lock_guard<std::mutex> lock(g_settingsLock);
-        startPreview = s.preview && !g_settings.preview;
+        startPreview = changed && s.preview && !g_settings.preview;
         g_settings = s;
     }
     if (startPreview) {
@@ -789,6 +796,19 @@ class Estimator {
 // reader, reduced to 320-wide grayscale, measured, and published.
 // ---------------------------------------------------------------------------
 
+// Machine state the camera and render threads both read. Written by the
+// overlay window's message handler.
+static std::atomic<bool> g_lidShut{false};         // one-shot: the lid just shut
+static std::atomic<bool> g_displayChanged{false};  // one-shot: rebuild the overlay
+static std::atomic<bool> g_lidOpen{true};
+static std::atomic<bool> g_displayOn{true};
+static std::atomic<bool> g_sessionLocked{false};
+static std::atomic<bool> g_overlayReady{false};
+
+static bool CameraWanted() {
+    return g_overlayReady && g_lidOpen && g_displayOn && !g_sessionLocked;
+}
+
 static std::mutex g_sampleLock;
 static AngleSample g_latestSample;
 static std::atomic<bool> g_stopping{false};
@@ -838,13 +858,18 @@ static IMFSourceReader* OpenCamera(int index, UINT32& width, UINT32& height,
         }
         goto done;
     }
-    MFCreateAttributes(&readerAttrs, 1);
+    if (FAILED(MFCreateAttributes(&readerAttrs, 1))) {
+        goto done;
+    }
     readerAttrs->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE);
     if (FAILED(MFCreateSourceReaderFromMediaSource(source, readerAttrs, &reader))) {
         Wh_Log(L"camera reader failed");
         goto done;
     }
-    MFCreateMediaType(&type);
+    if (FAILED(MFCreateMediaType(&type))) {
+        SafeRelease(reader);
+        goto done;
+    }
     type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
     type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
     MFSetAttributeSize(type, MF_MT_FRAME_SIZE, 640, 480);
@@ -897,6 +922,16 @@ static void CameraThread() {
     UINT32 width = 0, height = 0;
     LONG stride = 0;
 
+    // Seconds to wait before the next open attempt. Grows while the camera
+    // keeps failing to open, which is usually another app holding it, so the
+    // mod does not keep knocking on a camera a video call is using.
+    double backoff = 0;
+    double retryAt = 0;
+    // Starts paused: the overlay, which reports lid and display state, is
+    // still being built. Only later pauses are worth a log line.
+    bool paused = true;
+    bool started = false;
+
     while (!g_stopping) {
         Settings st = CurrentSettings();
         if (openedVersion != g_settingsVersion) {
@@ -904,18 +939,49 @@ static void CameraThread() {
             if (st.cameraIndex != openedIndex) {
                 SafeRelease(reader);
                 openedIndex = -1;
+                backoff = 0;
+                retryAt = 0;
             }
         }
+
+        // Nothing can be shown with the lid shut, the display off, the
+        // session locked, or the built-in panel inactive, so the camera (and
+        // its privacy light) goes off until that changes.
+        if (!CameraWanted()) {
+            if (!paused) {
+                paused = true;
+                SafeRelease(reader);
+                estimator.Reset();
+                Publish(AngleSample{});
+                Wh_Log(L"camera off: lid shut, display off, locked, or panel inactive");
+            }
+            Sleep(200);
+            continue;
+        }
+        if (paused) {
+            paused = false;
+            backoff = 0;
+            retryAt = 0;
+            if (started) {
+                Wh_Log(L"camera back on");
+            }
+            started = true;
+        }
+
         if (!reader) {
+            if (Now() < retryAt) {
+                Sleep(200);
+                continue;
+            }
             reader = OpenCamera(st.cameraIndex, width, height, stride);
             if (!reader || width == 0 || height == 0) {
                 SafeRelease(reader);
                 Publish(estimator.Dropped(Now()));
-                for (int i = 0; i < 30 && !g_stopping; i++) {
-                    Sleep(100);
-                }
+                backoff = backoff <= 0 ? 3 : std::min(backoff * 2, 60.0);
+                retryAt = Now() + backoff;
                 continue;
             }
+            backoff = 0;
             openedIndex = st.cameraIndex;
             tracker.Reset();
             estimator.Reset();
@@ -933,7 +999,14 @@ static void CameraThread() {
             SafeRelease(sample);
             SafeRelease(reader);
             Publish(estimator.Dropped(now));
-            Sleep(500);
+            backoff = backoff <= 0 ? 3 : std::min(backoff * 2, 60.0);
+            retryAt = now + backoff;
+            continue;
+        }
+        if (flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) {
+            // Width, height and stride all came from the old format.
+            SafeRelease(sample);
+            SafeRelease(reader);
             continue;
         }
         if (!sample) {
@@ -1105,6 +1178,43 @@ constexpr double kPrewarmLinger = 2.0;
 // {BA3E0F4D-B817-4094-A2D1-D56379E6A0F3}
 static const GUID kLidSwitchGuid = {
     0xba3e0f4d, 0xb817, 0x4094, {0xa2, 0xd1, 0xd5, 0x63, 0x79, 0xe6, 0xa0, 0xf3}};
+// GUID_CONSOLE_DISPLAY_STATE {6FE69556-704A-47A0-8F24-C28D936FDA47}
+static const GUID kDisplayStateGuid = {
+    0x6fe69556, 0x704a, 0x47a0, {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
+
+// The GDI device name (\\.\DISPLAYn) of the active built-in panel, if any.
+static bool FindInternalPanel(wchar_t (&name)[32]) {
+    UINT32 pathCount = 0, modeCount = 0;
+    if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) !=
+        ERROR_SUCCESS) {
+        return false;
+    }
+    std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+    std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+    if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount,
+                           modes.data(), nullptr) != ERROR_SUCCESS) {
+        return false;
+    }
+    for (UINT32 i = 0; i < pathCount; i++) {
+        auto tech = paths[i].targetInfo.outputTechnology;
+        bool internal = tech == DISPLAYCONFIG_OUTPUT_TECHNOLOGY_INTERNAL ||
+                        tech == DISPLAYCONFIG_OUTPUT_TECHNOLOGY_DISPLAYPORT_EMBEDDED ||
+                        tech == DISPLAYCONFIG_OUTPUT_TECHNOLOGY_UDI_EMBEDDED;
+        if (!internal) {
+            continue;
+        }
+        DISPLAYCONFIG_SOURCE_DEVICE_NAME source{};
+        source.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+        source.header.size = sizeof(source);
+        source.header.adapterId = paths[i].sourceInfo.adapterId;
+        source.header.id = paths[i].sourceInfo.id;
+        if (DisplayConfigGetDeviceInfo(&source.header) == ERROR_SUCCESS) {
+            wcsncpy_s(name, source.viewGdiDeviceName, _TRUNCATE);
+            return true;
+        }
+    }
+    return false;
+}
 
 class Overlay {
    public:
@@ -1113,18 +1223,25 @@ class Overlay {
         if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
             return false;
         }
+        // The lid belongs to the built-in panel, which is not necessarily the
+        // primary display: a docked laptop usually has an external primary.
+        // So the effect goes on the internal panel, and on nothing if that
+        // panel is off (lid-closed docking, "second screen only").
+        wchar_t panel[32] = {};
+        if (!FindInternalPanel(panel)) {
+            SafeRelease(factory);
+            Wh_Log(L"the built-in display is not active; the effect is idle");
+            return false;
+        }
         IDXGIAdapter1* adapter = nullptr;
         IDXGIOutput* output = nullptr;
-        // The adapter that drives the primary display, so duplication and
-        // rendering share one device.
+        // The adapter that drives that panel, so duplication and rendering
+        // share one device.
         for (UINT a = 0; !output && factory->EnumAdapters1(a, &adapter) == S_OK; a++) {
             for (UINT o = 0; adapter->EnumOutputs(o, &output) == S_OK; o++) {
                 DXGI_OUTPUT_DESC desc;
                 output->GetDesc(&desc);
-                MONITORINFO mi{};
-                mi.cbSize = sizeof(mi);
-                GetMonitorInfo(desc.Monitor, &mi);
-                if (mi.dwFlags & MONITORINFOF_PRIMARY) {
+                if (wcscmp(desc.DeviceName, panel) == 0) {
                     break;
                 }
                 SafeRelease(output);
@@ -1135,7 +1252,7 @@ class Overlay {
         }
         SafeRelease(factory);
         if (!output) {
-            Wh_Log(L"no primary output");
+            Wh_Log(L"no DXGI output for %s", panel);
             return false;
         }
         output->QueryInterface(IID_PPV_ARGS(&output1_));
@@ -1179,6 +1296,14 @@ class Overlay {
             UnregisterPowerSettingNotification(lidNotify_);
             lidNotify_ = nullptr;
         }
+        if (displayNotify_) {
+            UnregisterPowerSettingNotification(displayNotify_);
+            displayNotify_ = nullptr;
+        }
+        if (sessionNotify_ && hwnd_) {
+            WTSUnRegisterSessionNotification(hwnd_);
+            sessionNotify_ = false;
+        }
         if (hwnd_) {
             DestroyWindow(hwnd_);
             hwnd_ = nullptr;
@@ -1191,16 +1316,32 @@ class Overlay {
     double Height() const { return height_; }
     bool HasPicture() const { return hasPicture_; }
 
-    bool StartCapture() {
+    bool StartCapture(double now) {
         if (duplication_) {
             return true;
+        }
+        // A failure (a UAC prompt on the secure desktop, for one) tends to
+        // last a while; retrying every frame would only fill the log.
+        if (now < captureRetryAt_) {
+            return false;
         }
         HRESULT hr = output1_->DuplicateOutput(device_, &duplication_);
         if (FAILED(hr)) {
             Wh_Log(L"DuplicateOutput failed (0x%08X)", (unsigned)hr);
+            captureRetryAt_ = now + 1.0;
             return false;
         }
         return true;
+    }
+
+    // Shows or hides our visual in the composition tree.
+    void Attach(bool attached) {
+        if (!target_ || attached == attached_) {
+            return;
+        }
+        target_->SetRoot(attached ? visual_ : nullptr);
+        dcomp_->Commit();
+        attached_ = attached;
     }
 
     void StopCapture() { SafeRelease(duplication_); }
@@ -1215,7 +1356,7 @@ class Overlay {
         HRESULT hr = duplication_->AcquireNextFrame(0, &info, &resource);
         if (hr == DXGI_ERROR_ACCESS_LOST) {
             StopCapture();
-            StartCapture();
+            StartCapture(Now());
             return;
         }
         if (FAILED(hr)) {
@@ -1237,7 +1378,11 @@ class Overlay {
 
     void ForgetPicture() { hasPicture_ = false; }
 
-    void Draw(const ShaderParams& params) {
+    // False when the device was lost and the overlay has to be rebuilt.
+    bool Draw(const ShaderParams& params) {
+        if (!targetRtv_) {
+            return true;
+        }
         D3D11_MAPPED_SUBRESOURCE mapped;
         if (cbuffer_ && SUCCEEDED(context_->Map(cbuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
             std::memcpy(mapped.pData, &params, sizeof(params));
@@ -1260,7 +1405,13 @@ class Overlay {
             ID3D11ShaderResourceView* none = nullptr;
             context_->PSSetShaderResources(0, 1, &none);
         }
-        swapchain_->Present(1, 0);
+        HRESULT hr = swapchain_->Present(1, 0);
+        if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
+            Wh_Log(L"graphics device lost (0x%08X); rebuilding", (unsigned)hr);
+            g_displayChanged = true;
+            return false;
+        }
+        return true;
     }
 
     void Raise() {
@@ -1302,15 +1453,25 @@ class Overlay {
                    GetLastError());
             excluded_ = false;
         }
+        // Each registration delivers the current state straight away, so the
+        // camera starts correctly paused if the display is already off.
         lidNotify_ = RegisterPowerSettingNotification(hwnd_, &kLidSwitchGuid,
                                                       DEVICE_NOTIFY_WINDOW_HANDLE);
+        displayNotify_ = RegisterPowerSettingNotification(hwnd_, &kDisplayStateGuid,
+                                                          DEVICE_NOTIFY_WINDOW_HANDLE);
+        sessionNotify_ = WTSRegisterSessionNotification(hwnd_, NOTIFY_FOR_THIS_SESSION);
 
         IDXGIDevice* dxgiDevice = nullptr;
         IDXGIAdapter* adapter = nullptr;
         IDXGIFactory2* factory = nullptr;
-        device_->QueryInterface(IID_PPV_ARGS(&dxgiDevice));
-        dxgiDevice->GetAdapter(&adapter);
-        adapter->GetParent(IID_PPV_ARGS(&factory));
+        if (FAILED(device_->QueryInterface(IID_PPV_ARGS(&dxgiDevice))) ||
+            FAILED(dxgiDevice->GetAdapter(&adapter)) ||
+            FAILED(adapter->GetParent(IID_PPV_ARGS(&factory)))) {
+            SafeRelease(adapter);
+            SafeRelease(dxgiDevice);
+            Wh_Log(L"could not reach the DXGI factory");
+            return false;
+        }
         DXGI_SWAP_CHAIN_DESC1 sd{};
         sd.Width = width_;
         sd.Height = height_;
@@ -1345,8 +1506,12 @@ class Overlay {
             return false;
         }
         ID3D11Texture2D* back = nullptr;
-        swapchain_->GetBuffer(0, IID_PPV_ARGS(&back));
-        device_->CreateRenderTargetView(back, nullptr, &targetRtv_);
+        if (FAILED(swapchain_->GetBuffer(0, IID_PPV_ARGS(&back))) ||
+            FAILED(device_->CreateRenderTargetView(back, nullptr, &targetRtv_))) {
+            SafeRelease(back);
+            Wh_Log(L"could not create the overlay's render target");
+            return false;
+        }
         SafeRelease(back);
 
         // Shown once, fully transparent, and never hidden. Showing a topmost
@@ -1355,6 +1520,7 @@ class Overlay {
         ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
         ShaderParams blank{};
         Draw(blank);
+        Attach(false);
         return true;
     }
 
@@ -1450,28 +1616,44 @@ class Overlay {
     ID3D11VertexShader* vs_ = nullptr;
     ID3D11PixelShader* ps_ = nullptr;
     HPOWERNOTIFY lidNotify_ = nullptr;
+    HPOWERNOTIFY displayNotify_ = nullptr;
+    bool sessionNotify_ = false;
     HWND hwnd_ = nullptr;
     RECT rect_{};
     int width_ = 0, height_ = 0;
     float maxLevel_ = 0;
     bool hasPicture_ = false;
     bool excluded_ = true;
+    bool attached_ = true;
+    double captureRetryAt_ = 0;
 
    public:
     bool Excluded() const { return excluded_; }
 };
 
-static std::atomic<bool> g_lidShut{false};
-static std::atomic<bool> g_displayChanged{false};
-
 LRESULT CALLBACK Overlay::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_POWERBROADCAST && wp == PBT_POWERSETTINGCHANGE) {
         auto* setting = reinterpret_cast<POWERBROADCAST_SETTING*>(lp);
-        if (setting && IsEqualGUID(setting->PowerSetting, kLidSwitchGuid) &&
-            setting->DataLength >= 1 && setting->Data[0] == 0) {
-            g_lidShut = true;
+        if (setting && setting->DataLength >= 1) {
+            if (IsEqualGUID(setting->PowerSetting, kLidSwitchGuid)) {
+                bool open = setting->Data[0] != 0;
+                g_lidOpen = open;
+                if (!open) {
+                    g_lidShut = true;
+                }
+            } else if (IsEqualGUID(setting->PowerSetting, kDisplayStateGuid)) {
+                g_displayOn = setting->Data[0] != 0;  // 0 off, 1 on, 2 dimmed
+            }
         }
         return TRUE;
+    }
+    if (msg == WM_WTSSESSION_CHANGE) {
+        if (wp == WTS_SESSION_LOCK) {
+            g_sessionLocked = true;
+        } else if (wp == WTS_SESSION_UNLOCK) {
+            g_sessionLocked = false;
+        }
+        return 0;
     }
     if (msg == WM_DISPLAYCHANGE) {
         g_displayChanged = true;  // the render loop rebuilds the overlay
@@ -1544,18 +1726,26 @@ static void RenderThread() {
     UsePhysicalPixels();
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
+    bool loggedFailure = false;
     while (!g_stopping) {
         Overlay overlay;
         if (!overlay.Init()) {
-            Wh_Log(L"the overlay could not start; retrying in 5 s");
+            // Usually the built-in panel being off (docked with the lid shut).
+            // Checked again every few seconds, quietly after the first time.
+            if (!loggedFailure) {
+                Wh_Log(L"the overlay could not start; checking again every 5 s");
+                loggedFailure = true;
+            }
             overlay.Destroy();
             for (int i = 0; i < 50 && !g_stopping; i++) {
                 Sleep(100);
             }
             continue;
         }
+        loggedFailure = false;
         Wh_Log(L"overlay ready at %.0fx%.0f", overlay.Width(), overlay.Height());
         g_displayChanged = false;
+        g_overlayReady = true;
 
         Controller controller;
         PreviewSweep preview;
@@ -1581,14 +1771,20 @@ static void RenderThread() {
             double now = Now();
             Settings st = CurrentSettings();
 
-            if (g_previewRequested.exchange(false) && !controller.Active()) {
-                overlay.StartCapture();
+            // Left pending while an effect runs, rather than dropped.
+            if (!controller.Active() && g_previewRequested.exchange(false)) {
+                overlay.StartCapture(now);
                 prewarmUntil = now + 8;
                 preview.Start(st, now);
             }
             if (g_lidShut.exchange(false)) {
                 controller.LidShut();
                 preview.startedAt = -1;
+                // The controller goes straight to idle with no final frame, so
+                // nothing else would ever fade this out. Hide it on this tick.
+                if (shown) {
+                    fadeTo(0, 0, now);
+                }
             }
 
             AngleSample sample;
@@ -1605,7 +1801,7 @@ static void RenderThread() {
                 prewarmUntil = now + kPrewarmLinger;
             }
             if (now < prewarmUntil) {
-                overlay.StartCapture();
+                overlay.StartCapture(now);
             } else if (!shown) {
                 overlay.StopCapture();
             }
@@ -1616,6 +1812,7 @@ static void RenderThread() {
                 if (!shown) {
                     shown = true;
                     overlay.ForgetPicture();
+                    overlay.Attach(true);
                     overlay.Raise();
                     opacity = 0;
                     fadeTo(0, 0, now);
@@ -1647,7 +1844,10 @@ static void RenderThread() {
                 opacity = fadeFrom + (fadeTarget - fadeFrom) * t;
                 if (haveParams) {
                     params.opacity = float(opacity);
-                    overlay.Draw(params);  // Present(1) paces this at the refresh rate
+                    // Present(1) paces this loop at the refresh rate.
+                    if (!overlay.Draw(params)) {
+                        break;  // device lost; rebuild
+                    }
                 }
                 if (!controller.Active() && fadeTarget == 0 && t >= 1) {
                     shown = false;
@@ -1655,6 +1855,9 @@ static void RenderThread() {
                     params.opacity = 0;
                     overlay.Draw(params);
                     overlay.ForgetPicture();
+                    // Detached while idle, so the compositor has nothing of
+                    // ours to blend over full-screen video or games.
+                    overlay.Attach(false);
                 }
                 continue;
             }
@@ -1664,6 +1867,7 @@ static void RenderThread() {
             MsgWaitForMultipleObjects(0, nullptr, FALSE, moving ? 16 : 125, QS_ALLINPUT);
         }
 
+        g_overlayReady = false;
         overlay.Destroy();
     }
 
@@ -1674,26 +1878,28 @@ static void RenderThread() {
 // Tool mod entry points.
 // ---------------------------------------------------------------------------
 
-static std::thread g_cameraThread;
-static std::thread g_renderThread;
+// Optional and never destroyed, so an exit that skips WhTool_ModUninit does not
+// run ~thread() on a joinable thread and terminate the process.
+[[clang::no_destroy]] static std::optional<std::thread> g_cameraThread;
+[[clang::no_destroy]] static std::optional<std::thread> g_renderThread;
 
 BOOL WhTool_ModInit() {
-    LoadSettings();
+    LoadSettings(false);
     g_stopping = false;
-    g_cameraThread = std::thread(CameraThread);
-    g_renderThread = std::thread(RenderThread);
+    g_cameraThread.emplace(CameraThread);
+    g_renderThread.emplace(RenderThread);
     return TRUE;
 }
 
-void WhTool_ModSettingsChanged() { LoadSettings(); }
+void WhTool_ModSettingsChanged() { LoadSettings(true); }
 
 void WhTool_ModUninit() {
     g_stopping = true;
-    if (g_renderThread.joinable()) {
-        g_renderThread.join();
-    }
-    if (g_cameraThread.joinable()) {
-        g_cameraThread.join();
+    for (auto* thread : {&g_renderThread, &g_cameraThread}) {
+        if (*thread && (*thread)->joinable()) {
+            (*thread)->join();
+        }
+        thread->reset();
     }
 }
 
