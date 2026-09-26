@@ -2,12 +2,170 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-25T15:40:27.000Z</updated>
+    <updated>2026-09-26T10:02:43.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[MuteAlert - Microphone Activity Taskbar Widget 0.9.14]]></title>
+        <id>https://windhawk.net/mods/mutealert#e0b005149fc9a16518fa3f84747e3301d853916a</id>
+        <link href="https://windhawk.net/mods/mutealert"/>
+        <updated>2026-09-26T10:02:43.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="fixed">Fixed</h3>
+<ul>
+<li>Prevented Windows from being unmuted when an Arctis headset first connects while physically muted.</li>
+</ul>]]></content>
+        <author>
+            <name>Nikolay</name>
+            <uri>https://github.com/Nikolay1243</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Glyphs Colorizer 1.0]]></title>
+        <id>https://windhawk.net/mods/explorer-glyphs-colorizer#febdb36ac3071a5971518b2943614196937ed10b</id>
+        <link href="https://windhawk.net/mods/explorer-glyphs-colorizer"/>
+        <updated>2026-09-26T10:02:39.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerglyphscolorizer">Explorer Glyphs Colorizer</h1>
+<p>Give the blue details in File Explorer's glyphs a color that fits your desktop.
+Choose the Windows accent color, a custom color, or a neutral shade that blends
+with the rest of the glyphs.</p>
+<p>The color change is not permanent, and the original Windows files are never
+touched. If you choose the Windows accent color, changing it usually updates
+glyphs in open windows. Changing the mod settings does too. Some glyphs may
+need a click or navigation to update. If they still do not change, restart
+File Explorer to reload them. Turning the mod off brings back their original
+colors; restart Explorer if any open window still shows the old color.</p>
+<p>Supports File Explorer on Windows 11.
+On ARM PCs, glyphs in already open windows may need an Explorer restart after
+the color changes.</p>
+<h2 id="gallerygaleriagalera">Gallery / Galeria / Galería</h2>
+<h3 id="neutralneutro">Neutral / Neutro</h3>
+<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Explorer%20Glyphs%20Colorizer/Neutro%201.jpg" alt="Neutral 1" />
+<img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Explorer%20Glyphs%20Colorizer/Neutro%202.jpg" alt="Neutral 2" />
+<img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Explorer%20Glyphs%20Colorizer/Neutro%203.jpg" alt="Neutral 3" />
+<img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Explorer%20Glyphs%20Colorizer/Neutro%204.jpg" alt="Neutral 4" /></p>
+<h3 id="purpleroxomorado">Purple / Roxo / Morado</h3>
+<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Explorer%20Glyphs%20Colorizer/Roxo%201.jpg" alt="Purple 1" />
+<img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Explorer%20Glyphs%20Colorizer/Roxo%202.jpg" alt="Purple 2" /></p>
+<h3 id="greenverde">Green / Verde</h3>
+<p><img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Explorer%20Glyphs%20Colorizer/Verde%201.jpg" alt="Green 1" />
+<img src="https://raw.githubusercontent.com/crazyboyybs/assets/main/Explorer%20Glyphs%20Colorizer/Verde%202.jpg" alt="Green 2" /></p>
+<h2 id="inspiration">Inspiration</h2>
+<ul>
+<li><a href="https://github.com/krlvm/AccentColorizer-E11">AccentColorizer-E11</a> inspired
+the idea of colorizing File Explorer glyphs.</li>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-start-button-colorizer.wh.cpp">Start button colorizer</a>
+inspired the goal of recoloring native UI without replacing its files.</li>
+</ul>
+<hr />
+<h1 id="colorizadordeglyphsdoexplorador">Colorizador de Glyphs do Explorador</h1>
+<p>Dê aos detalhes azuis dos glyphs do Explorador uma cor que combine com seu
+desktop. Escolha a cor de destaque do Windows, uma cor personalizada ou um tom
+neutro que combine com o restante dos glyphs.</p>
+<p>A mudança de cor não é permanente, e os arquivos originais do Windows nunca
+são tocados. Se você escolher a cor de destaque do Windows, mudá-la geralmente
+atualiza os glyphs nas janelas abertas. Mudar as configurações também. Alguns
+glyphs podem precisar de um clique ou de navegação para atualizar. Se ainda
+não mudarem, reinicie o Explorador para recarregá-los. Ao desativar o mod, as
+cores originais voltam; reinicie o Explorador se alguma janela ainda mostrar
+a cor anterior.</p>
+<p>Compatível com o Explorador do Windows 11.
+Em PCs ARM, glyphs em janelas já abertas podem precisar de uma reinicialização
+do Explorador após a mudança de cor.</p>
+<h2 id="inspirao">Inspiração</h2>
+<ul>
+<li><a href="https://github.com/krlvm/AccentColorizer-E11">AccentColorizer-E11</a> inspirou
+a ideia de colorir os glyphs do Explorador.</li>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-start-button-colorizer.wh.cpp">Start button colorizer</a>
+inspirou o objetivo de recolorir a interface nativa sem substituir arquivos.</li>
+</ul>
+<hr />
+<h1 id="colorizadordeglifosdelexplorador">Colorizador de Glifos del Explorador</h1>
+<p>Dé a los detalles azules de los glifos del Explorador un color que combine con
+su escritorio. Elija el color de énfasis de Windows, un color personalizado o
+un tono neutro que combine con el resto de los glifos.</p>
+<p>El cambio de color no es permanente, y los archivos originales de Windows
+nunca se modifican. Si elige el color de énfasis de Windows, cambiarlo suele
+actualizar los glifos en las ventanas abiertas. Cambiar la configuración
+también. Algunos glifos pueden necesitar un clic o una navegación para
+actualizarse. Si todavía no cambian, reinicie el Explorador para volver a
+cargarlos. Al desactivar el mod, vuelven los colores originales; reinicie el
+Explorador si alguna ventana sigue mostrando el color anterior.</p>
+<p>Compatible con el Explorador de Windows 11.
+En equipos ARM, los glifos de las ventanas abiertas pueden necesitar reiniciar
+el Explorador después de cambiar el color.</p>
+<h2 id="inspiracin">Inspiración</h2>
+<ul>
+<li><a href="https://github.com/krlvm/AccentColorizer-E11">AccentColorizer-E11</a> inspiró
+la idea de colorear los glifos del Explorador.</li>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-start-button-colorizer.wh.cpp">Start button colorizer</a>
+inspiró el objetivo de recolorear la interfaz nativa sin reemplazar archivos.</li>
+</ul>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Quick Explorer Switcher 1.0]]></title>
+        <id>https://windhawk.net/mods/quick-explorer-switcher#ee3bfa55c123e8023d52ae73d054b8ac3dd395e0</id>
+        <link href="https://windhawk.net/mods/quick-explorer-switcher"/>
+        <updated>2026-09-26T10:02:35.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="quickexplorerswitcher">Quick Explorer Switcher</h1>
+<p>When a program shows an <strong>Open</strong>, <strong>Save As</strong> or <strong>Select Folder</strong> dialog, this
+mod adds the folders currently open in File Explorer (up to 3) to the bottom of
+the dialog's navigation pane, most recently used first. One click and you're
+there.</p>
+<p>Optionally, the dialog can open directly in the most recently used File
+Explorer folder.</p>
+<p><img src="https://i.imgur.com/3E1dyV3.jpeg" alt="Showcase" /></p>
+<h2 id="details">Details</h2>
+<ul>
+<li>Folders are ordered by window Z-order, so the Explorer window you used last
+comes first.</li>
+<li>With Windows 11 File Explorer tabs, the active tab of each window takes
+precedence over the inactive ones.</li>
+<li>Duplicate folders are shown only once.</li>
+<li>Virtual locations such as "Home" or "This PC" are skipped by default (this
+can be changed in the settings).</li>
+</ul>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li>Works with the standard Windows file dialog (Vista and later). Not affected:
+programs that draw their own dialogs, and legacy-style dialogs (programs
+that customize <code>GetOpenFileName</code>/<code>GetSaveFileName</code> with a hook procedure or
+a dialog template get the older dialog, which has no navigation pane).</li>
+<li>A dialog that is already open when the mod is enabled won't show the
+suggestions; they appear the next time a dialog is opened.</li>
+</ul>
+<p>If you don't want the mod in a specific program (for example, a browser that
+already remembers its download folder), exclude it in the mod's <strong>Advanced</strong>
+tab.</p>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows Animations 1.3.6]]></title>
+        <id>https://windhawk.net/mods/windows-animations#11cdbe16e5bde3004e8dfa71168d5f2de0d5c2ac</id>
+        <link href="https://windhawk.net/mods/windows-animations"/>
+        <updated>2026-09-26T10:02:32.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add donation support, introduced in version 1.3.5 but omitted from the previous changelog.</li>
+<li>Improve launch compatibility for Tauri/WebView2 applications.</li>
+<li>Fix Firefox-family browsers opening a duplicate window during animated launch.</li>
+<li>Preserve snapped window placement after minimize and restore.</li>
+<li>Fix black Control Panel title bar</li>
+<li>Exclude <code>mmc.exe</code> from animations</li>
+</ul>]]></content>
+        <author>
+            <name>ReDrag</name>
+            <uri>https://github.com/redrag2105</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Wobbly Windows 0.115]]></title>
         <id>https://windhawk.net/mods/wobbly-windows#dfb8f35a56860377efb2ee4c719ca66997f6eb0a</id>
@@ -859,236 +1017,6 @@ This mod is MIT as well.</p>]]></content>
         <author>
             <name>Threshold Editor</name>
             <uri>https://github.com/CakeDev4k</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Folder Thumbnails 1.1]]></title>
-        <id>https://windhawk.net/mods/disable-folder-thumbnails#15c9d272aa92e51f4b345ac3b32df401971a891f</id>
-        <link href="https://windhawk.net/mods/disable-folder-thumbnails"/>
-        <updated>2026-09-23T21:03:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>fix work in elevated file dialogs</li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Premiere Pro Theme 1.0.1]]></title>
-        <id>https://windhawk.net/mods/premiere-pro-theme#da37018fd20a8b772aa5c5cc9e533aed6f2925f3</id>
-        <link href="https://windhawk.net/mods/premiere-pro-theme"/>
-        <updated>2026-09-23T21:03:49.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Premiere Pro 26.3 and later are themed again. Those versions no longer ship the module the mod used to hook, so panels, the timeline and the rest of the interface kept Premiere's own gray while only the window frame, the menu bar and the native dialogs followed the palette.</li>
-<li>The band around the picture in the Source and Program monitors takes the theme's <strong>Monitor background</strong> on those versions too. As before, <strong>Monitor band</strong> is its own switch and ships off.</li>
-<li>Custom theme colors copied from a color picker work now. A picker writes them as <code>#RRGGBBAA</code>, and a color in that form was refused — so a theme picked rather than typed fell back to Onyx one color at a time, and looked like it had changed nothing.</li>
-<li>Sharing a theme no longer needs the palette set to <strong>Custom</strong> first. The mod's log writes the ready-to-paste line for whichever palette is in force, so a built-in palette comes out as the custom theme that reproduces it — which is where a theme of your own starts.</li>
-<li>The <strong>Menu bar and menus</strong> description no longer promises palette-colored dropdown menus on Windows 11. They are dark there, from the app mode, rather than colored by the palette, and a menu taller than the screen keeps light scroll buttons. Both were measured on build 26200.</li>
-<li>A Premiere the mod cannot theme now says so in the log, instead of looking exactly like one it can.</li>
-</ul>]]></content>
-        <author>
-            <name>Threshold Editor</name>
-            <uri>https://github.com/CakeDev4k</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Icon Group Centering 1.3.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-icon-group-centering#b007498a784503d418f532185b861bb684c5437a</id>
-        <link href="https://windhawk.net/mods/taskbar-icon-group-centering"/>
-        <updated>2026-09-23T21:03:45.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbaricongroupcentering">Taskbar Icon Group Centering</h1>
-<p>Center the taskbar icons after a chosen position as one group, relative to the
-whole taskbar. There is no line, dot or shape anywhere: the mod only measures
-the buttons and writes the margins that move the group, and it adds no element
-of its own to the taskbar.</p>
-<h2 id="preview">Preview</h2>
-<p><img src="https://raw.githubusercontent.com/Suioio/taskbar-separators-dynamic-centering/main/preview.png" alt="Taskbar Icon Group Centering preview" /></p>
-<p><img src="https://raw.githubusercontent.com/Suioio/taskbar-separators-dynamic-centering/main/dynamic-centering.gif" alt="The icon group after the chosen position re-centers as apps open and close" /></p>
-<h2 id="whatitdoes">What it does</h2>
-<ul>
-<li>The icons after <strong>Icon group position</strong> form a single group that is centered
-relative to the entire taskbar, including the system tray.</li>
-<li>The group is clamped so it cannot run into the tray: when centering would
-push it under the tray, the gap is reduced instead.</li>
-<li><strong>Stop centering when the icon count after the position reaches</strong> stops
-centering once that many icons are after the position, which restores the
-normal left-aligned layout. The default 0 never stops.</li>
-<li>The mod only adds its own delta on top of the button margins that already
-exist, and hands back exactly the value it still owns when centering stops,
-so margins written by Windows or by another mod are never overwritten.</li>
-</ul>
-<h2 id="whenitapplies">When it applies</h2>
-<p>Only while the taskbar is <strong>left-aligned</strong>, <strong>horizontal</strong> and <strong>not mirrored
-(right-to-left)</strong>. On a centered taskbar Windows centers the whole row itself
-and this mod has nothing to add: the gap it computes there comes out as zero,
-so no margin is written. If no getter has produced a value and the stored one
-cannot be read either, the mod assumes left and does the same work with the same
-zero result instead of going quiet. Nothing is applied on a
-vertical or mirrored taskbar, and the mod never writes the taskbar alignment or
-any other Windows setting.</p>
-<p>To use it, switch the taskbar to <strong>Left</strong> alignment in Windows' taskbar
-settings. Whether the taskbar is left-aligned is the value the shell's own
-alignment getter returns, which this mod hooks, and which is seeded once from
-the stored setting when the mod is loaded after the shell has already read it -
-so switching the alignment is picked up in both directions on the fly, without
-a mod reload. Because that getter sits above the stored value, the mod follows
-the alignment <strong>the shell itself reads</strong>. The one seed covers the case where
-the shell has already read it before the mod was loaded. There is no polling
-and no thread of its own: the layout is watched through an event the shell
-already raises, a switch to the alignment is followed inside a bounded settling
-window instead of being polled for, and where the getter could not be hooked
-the stored value is re-read at most once per second.</p>
-<h2 id="differencesfromtheneighbouringmods">Differences from the neighbouring mods</h2>
-<ul>
-<li><strong>taskbar-separators</strong> groups icons by <em>drawing separators</em> between them.
-This mod draws nothing at all; it only moves the icons after the position.</li>
-<li><strong>taskbar-split</strong> inserts flexible space between the running and the pinned
-group. This mod centers a single group whose position you pick.</li>
-<li><strong>taskbar-centered-start-split-icons</strong> splits the buttons into two groups
-around a <strong>centered Start button</strong>. This mod never touches the Start button,
-and the position is a plain setting rather than a consequence of Start.</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<p>| Setting | Default | Meaning |
-| --- | --- | --- |
-| Icon group position | 2 | 1-based position counted from the first application button (the Start button is not counted). The icons <em>after</em> this position are the centered group. |
-| Stop centering when the icon count after the position reaches | 0 | Stop centering once this many usable application buttons are after the position, which restores the normal left-aligned layout. The default 0 never stops. |</p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Windows 11, horizontal taskbar, x86-64</li>
-<li>Compatible with Windows 11 Taskbar Styler in normal configurations</li>
-<li>Taskbar labels, and uncombined or otherwise variable-width taskbar buttons</li>
-<li>Mixed multi-monitor layouts with different button modes on each taskbar</li>
-<li>The mod adds no element to the taskbar at all: it only writes button margins,
-and unload hands every tracked margin back, so nothing of the mod is left
-behind</li>
-<li>Layered margin mods: any mod that rewrites taskbar button margins by reading
-the current value and adding its own gap on top compounds with this one - both
-ledgers keep adding to each other without bound, so do not run two of those at
-once. A mod that writes an <strong>absolute</strong> margin is fine: this mod re-bases on
-top of whatever it finds. Taskbar Separators is the layering kind; its default
-Divider gap is 0, in which case it writes no button margins and the two
-coexist, but raise that gap and the two should not be enabled together.</li>
-</ul>
-<h2 id="uninstall">Uninstall</h2>
-<p>Disabling or removing the mod stops centering and hands back the button margins
-it applied. The taskbar alignment is never written, so there is nothing to
-restore.</p>
-<h2 id="licenseandattribution">License and attribution</h2>
-<p>Licensed under the GNU General Public License v3.0.</p>
-<p>This mod is extracted from <strong>Taskbar Separators Dynamic Centering</strong>, which is a
-fork of <strong>Taskbar Separators</strong> by digART; the original mod and its copyright
-belong to digART. The centering geometry in this mod is kept from that fork.</p>
-<p>Taskbar hook and UI-thread infrastructure includes code and patterns adapted
-from Windhawk mods by Michael Maltsev (m417z), including Taskbar Labels for
-Windows 11, Taskbar Multirow, and Windows 11 Taskbar Styler.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>Closing a pinned-release icon that sits exactly on the split — the last icon of
-the left group or the first icon of the centered group — removes a button the
-mod is measuring, so the spacing can look one layout pass stale for a few tens
-of milliseconds before it settles. The split is anchored on that button itself
-rather than on its position in the realized list, so a button appearing or
-disappearing anywhere else no longer moves it, and the anchor is relearned only
-once the boundary button has really been gone for a quarter of a second.</li>
-<li>While an icon is being dragged, Explorer draws the dragged icon as a floating
-copy that follows the cursor. Holding it inside the spacing makes the spacing
-look like two halves with the icon in between. The margins the mod writes are
-unaffected: the spacing returns as soon as the icon is dropped.</li>
-<li>The taskbar hooks rely on Windows component symbols, vtable slots and a
-machine-code pattern. A Windows update that changes them can stop the mod from
-working; a symbol that fails to resolve and every failed reconciliation are
-logged. The alignment is read from the two getters Windows has served it
-from and from the stored value; a build that removes or changes all three
-stops the mod from centering.</li>
-<li>If unload cannot detach its event handlers from the taskbar thread, those
-handlers stay registered and applied margins may not be handed back; the mod
-log records it. This limitation is shared with the mod it was derived from.</li>
-</ul>
-<h2 id="">中文说明</h2>
-<p>把任务栏中<strong>指定位置之后</strong>的图标作为一组，相对<strong>整条任务栏</strong>（含系统托盘）
-居中。画面里没有任何线条或方块：本模组只测量按钮并写入移动该组所需的边距，
-不向任务栏添加任何元素。</p>
-<h3 id="-1">功能</h3>
-<ul>
-<li><strong>图标组位置</strong>之后的图标构成一个整体，相对整条任务栏居中。</li>
-<li>该组会被钳制，不会压到系统托盘：居中会把组推入托盘时，间距会被减小。</li>
-<li><strong>位置之后的图标数量达到该值时停止居中</strong>：达到设定值后停止居中，恢复正常的
-左对齐排布。默认 0 表示永不停止。</li>
-<li>本模组只在已有按钮边距之上叠加自己的增量，并在停止居中时只归还自己仍然持有的
-那个值，因此不会覆盖 Windows 或其它模组写入的边距。</li>
-</ul>
-<h3 id="-2">生效条件</h3>
-<p>只在任务栏<strong>左对齐</strong>、<strong>水平</strong>且<strong>非镜像（从右到左）</strong>时生效。任务栏居中时整排按钮
-由系统居中，本模组保持不生效；垂直任务栏与镜像任务栏上也不生效。模组从不写入任务栏
-对齐设置或任何其它 Windows 设置。</p>
-<p>请在 Windows 的任务栏设置里把对齐方式改为<strong>左对齐</strong>。是否左对齐取的是系统自身的
-对齐 getter 返回值（本模组挂钩了它），并在模组晚于系统首次读取才启用时用存储的设置值
-播种一次——因此切换对齐会被实时识别，<strong>双向</strong>响应，无需重新加载模组。由于该 getter
-位于存储值之上，本模组跟随的是“shell 自己读到的对齐”。那次播种用于覆盖“shell
-在本模组加载之前就已经读过该值”的情形。模组不轮询、也
-不保留自己的线程：布局只
-通过 shell 本就会触发的事件观察，切换对齐在有界的沉降窗口内跟随而不是靠轮询；没有
-getter 产生过值时，存储值至多每秒回读一次；若连存储值也读不到，模组按左对齐处理：此时在真居中的任务栏上算出的间隙为 0，不会写入任何边距，只是仍会做同样的计算，而不是保持沉默。</p>
-<h3 id="-3">与相邻模组的区别</h3>
-<ul>
-<li><strong>taskbar-separators</strong>：用<strong>画分隔线</strong>的方式把图标分组；本模组什么都不画，
-只移动指定位置之后的图标。</li>
-<li><strong>taskbar-split</strong>：在“运行中”和“固定”两组之间插入弹性空白；本模组居中单个
-由你指定位置的组。</li>
-<li><strong>taskbar-centered-start-split-icons</strong>：围绕<strong>居中的开始按钮</strong>把按钮分成两组；
-本模组完全不涉及开始按钮，位置只是一个普通设置项。</li>
-</ul>
-<h3 id="-4">设置项</h3>
-<p>| 设置项 | 默认 | 说明 |
-| --- | --- | --- |
-| 图标组位置 | 2 | 从第一个应用按钮算起的 1 基位置（不含开始按钮）；该位置<strong>之后</strong>的图标构成居中的那一组。 |
-| 位置之后的图标数量达到该值时停止居中 | 0 | 该位置之后的可用应用按钮数量达到该值时停止居中，恢复正常左对齐排布。默认 0 表示永不停止。 |</p>
-<h3 id="-5">兼容性</h3>
-<ul>
-<li>Windows 11、水平任务栏、x86-64</li>
-<li>正常情况下与 Windows 11 Taskbar Styler 兼容</li>
-<li>任务栏标签，以及不合并或其它可变宽度的任务栏按钮</li>
-<li>多显示器下每条任务栏按钮模式不同的混合布局</li>
-<li>模组不向任务栏添加任何元素，只写入按钮边距；卸载时会归还全部被跟踪的边距，
-不留下模组的任何痕迹</li>
-<li>叠加式边距模组：任何“先读当前值、再把自己的间隙加上去”的模组都会与本模组互相累积，两套账本会无上限地叠加，因此不要同时启用两个这类模组。写<strong>绝对值</strong>边距的模组没有问题——本模组会自动在其之上重设基准。Taskbar Separators 属于叠加式：它的 Divider gap 默认为 0（此时不写按钮边距，可共存）；若把该值调大于 0，请勿同时启用两个模组。</li>
-</ul>
-<h3 id="-6">卸载</h3>
-<p>停用或移除模组会停止居中并归还它写入的按钮边距。任务栏对齐设置从未被写入，
-因此没有需要恢复的内容。</p>
-<h3 id="-7">许可与署名</h3>
-<p>以 GNU General Public License v3.0 发布。</p>
-<p>本模组抽取自 <strong>Taskbar Separators Dynamic Centering</strong>，后者是 digART 的
-<strong>Taskbar Separators</strong> 的分叉；原模组及其版权归 digART 所有。本模组中的居中几何
-代码取自该分叉。</p>
-<p>任务栏挂钩与 UI 线程基础设施包含改编自 Michael Maltsev（m417z）模组的代码与模式，
-包括 Taskbar Labels for Windows 11、Taskbar Multirow 与 Windows 11 Taskbar Styler。</p>
-<h3 id="-8">已知限制</h3>
-<ul>
-<li>关闭正好位于分割点上的“未固定”图标（左组最后一个、或居中组第一个）时，被移除的正是模组正在测量的按钮，间距可能有一个布局帧的陈旧感（几十毫秒）后自行恢复正常。分割点锚定在该按钮<strong>本身</strong>、而不是它在“已实现列表”中的位置，因此其它位置出现或消失按钮都不会再让它移位；只有边界按钮确实消失约四分之一秒后才会重新锚定。</li>
-<li>拖动图标时，Explorer 会把被拖图标做成跟随光标的浮动副本；把它停在空隙中间时，视觉上会像“空隙被劈成两半、中间夹着图标”。模组写入的间距并未改变，放下图标即恢复。</li>
-<li>任务栏挂钩依赖 Windows 组件的符号、虚表槽位与一段机器码特征；Windows 更新若改变它们，模组可能失效，届时模组日志会记录重排失败。对齐值会同时从 Windows 曾提供的两个 getter 与存储值读取；若某个版本把这三者都改掉或去掉，模组就不再居中。</li>
-<li>若卸载时无法从任务栏线程注销事件处理器，这些处理器会保留、已应用的边距可能未归还；模组日志会记录。这一限制与其来源模组相同。</li>
-</ul>]]></content>
-        <author>
-            <name>Suioio</name>
-            <uri>https://github.com/Suioio</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Agenda in Calendar View 1.1]]></title>
-        <id>https://windhawk.net/mods/agenda-in-calendar-view#f92c8ef2d4379c880aaf84e639ab4b24e53f69ef</id>
-        <link href="https://windhawk.net/mods/agenda-in-calendar-view"/>
-        <updated>2026-09-23T20:53:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Update README with new/updated features</li>
-<li>Add tooltips to buttons</li>
-</ul>]]></content>
-        <author>
-            <name>lonfro</name>
-            <uri>https://github.com/lonfro</uri>
         </author>
     </entry>
 </feed>

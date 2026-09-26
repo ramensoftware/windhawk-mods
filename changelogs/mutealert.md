@@ -1,3 +1,8 @@
+## 0.9.14 ([Sep 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e0b005149fc9a16518fa3f84747e3301d853916a/mods/mutealert.wh.cpp))
+
+### Fixed
+- Prevented Windows from being unmuted when an Arctis headset first connects while physically muted.
+
 ## 0.9.13 ([Sep 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/2bf015383d0f7ea4d5365120ae08c9e6359ca882/mods/mutealert.wh.cpp))
 
 - make an observable SteelSeries mute state authoritative for the Windows input in full synchronization mode

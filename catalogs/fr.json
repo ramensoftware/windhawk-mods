@@ -4707,6 +4707,32 @@
         "version": "1.0.8"
       }
     },
+    "explorer-glyphs-colorizer": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790416959000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790416959000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "crazyboyybs",
+        "compilerOptions": "-ldwmapi -ladvapi32 -lole32 -loleaut32 -lruntimeobject",
+        "description": "Customize the blue details of File Explorer glyphs without changing the original files",
+        "github": "https://github.com/crazyboyybs",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Explorer Glyphs Colorizer",
+        "version": "1.0"
+      }
+    },
     "explorer-hide-focus-border": {
       "details": {
         "defaultSorting": 976,
@@ -8047,7 +8073,7 @@
         "ratingBreakdown": [0, 0, 0, 1, 5],
         "ratingUsers": 6,
         "reviews": 0,
-        "updated": 1790078605000,
+        "updated": 1790416963000,
         "users": 138
       },
       "metadata": {
@@ -8064,7 +8090,7 @@
         ],
         "license": "MIT",
         "name": "MuteAlert - Microphone Activity Taskbar Widget",
-        "version": "0.9.13"
+        "version": "0.9.14"
       }
     },
     "native-brightness": {
@@ -9616,6 +9642,33 @@
         "license": "MIT",
         "name": "Proportional cursor between monitors",
         "version": "1.0.0"
+      }
+    },
+    "quick-explorer-switcher": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790416955000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790416955000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "HaVeN80",
+        "compilerOptions": "-lole32 -loleaut32 -lshell32 -luuid",
+        "description": "Shows the folders currently open in File Explorer (up to 3) as shortcuts in the Open/Save dialogs of any program",
+        "exclude": [
+          "conhost.exe",
+          "windhawk.exe"
+        ],
+        "github": "https://github.com/haven80",
+        "include": [
+          "*"
+        ],
+        "name": "Quick Explorer Switcher",
+        "version": "1.0"
       }
     },
     "quick-launch-media-panel": {
@@ -15756,7 +15809,7 @@
         "ratingBreakdown": [10, 6, 16, 51, 482],
         "ratingUsers": 565,
         "reviews": 0,
-        "updated": 1789924714000,
+        "updated": 1790416952000,
         "users": 37224
       },
       "metadata": {
@@ -15770,6 +15823,7 @@
           "StartMenuExperienceHost.exe",
           "SearchHost.exe",
           "dwm.exe",
+          "mmc.exe",
           "git.exe",
           "git-remote-https.exe",
           "AudioCaptureService.exe",
@@ -15783,7 +15837,7 @@
         ],
         "license": "MIT",
         "name": "Windows Animations",
-        "version": "1.3.5"
+        "version": "1.3.6"
       }
     },
     "windows-update-control-panel-restorer": {

@@ -1,3 +1,12 @@
+## 1.3.6 ([Sep 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/11cdbe16e5bde3004e8dfa71168d5f2de0d5c2ac/mods/windows-animations.wh.cpp))
+
+* Add donation support, introduced in version 1.3.5 but omitted from the previous changelog.
+* Improve launch compatibility for Tauri/WebView2 applications.
+* Fix Firefox-family browsers opening a duplicate window during animated launch.
+* Preserve snapped window placement after minimize and restore.
+* Fix black Control Panel title bar
+* Exclude `mmc.exe` from animations
+
 ## 1.3.5 ([Sep 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/9b0af5f09f130af8d7f59d90f4133bc0e019588e/mods/windows-animations.wh.cpp))
 
 * **Added smart hybrid GPU acceleration:** Restores and compatible launches can use DirectComposition GPU rendering, while qualifying large 1 px Thanos/Perlin closes can use GPU rendering. Minimize, ordinary close, Square Shatter, and unsupported cases use the faster or safer optimized CPU path.
