@@ -3365,11 +3365,17 @@ using SetForegroundWindow_t = BOOL(WINAPI*)(HWND);
 static SetForegroundWindow_t pOrigSearchHostSetForegroundWindow = nullptr;
 
 static void ActivateStartMenuFromSearchHost() {
+    static std::atomic<ULONGLONG> s_lastHandoffTick{0};
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG prev = s_lastHandoffTick.exchange(now);
+    bool shouldWake = (now - prev > 300);
+
     AllowSetForegroundWindow(ASFW_ANY);
     HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
     HWND hStart = FindStartMenuCoreWindow();
     bool cloaked = !hStart || IsWindowCloaked(hStart);
-    if (cloaked && tray) {
+
+    if (shouldWake && cloaked && tray) {
         Wh_Log(L"[SearchHost] StartMenu cloaked or missing, waking via SC_TASKLIST");
         PostMessageW(tray, WM_SYSCOMMAND, SC_TASKLIST, 0);
     }
@@ -3452,6 +3458,10 @@ static BOOL WINAPI Hook_SearchHost_ShowWindow(HWND hWnd, int nCmdShow) {
     if (nCmdShow == SW_SHOW || nCmdShow == SW_SHOWNORMAL || nCmdShow == SW_RESTORE || nCmdShow == SW_SHOWDEFAULT) {
         Wh_Log(L"[SearchHost] Redirected SearchHost ShowWindow to SW_HIDE");
         nCmdShow = SW_HIDE;
+        if (hWnd) {
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SearchHostSubclassProc, 0);
+            ActivateStartMenuFromSearchHost();
+        }
     }
     return pOrigSearchHostShowWindow(hWnd, nCmdShow);
 }
@@ -3462,6 +3472,10 @@ static BOOL WINAPI Hook_SearchHost_SetWindowPos(HWND hWnd, HWND hWndInsertAfter,
     if (uFlags & SWP_SHOWWINDOW) {
         uFlags &= ~SWP_SHOWWINDOW;
         uFlags |= SWP_HIDEWINDOW;
+        if (hWnd) {
+            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SearchHostSubclassProc, 0);
+            ActivateStartMenuFromSearchHost();
+        }
     }
     return pOrigSearchHostSetWindowPos(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
@@ -3493,30 +3507,53 @@ void InitSearchHost() {
     }
 }
 
-[[clang::no_destroy]] static std::optional<std::thread> g_searchHostWatchdog;
-static void StartSearchHostWatchdog() {
-    g_searchHostWatchdog.emplace([] {
-        std::vector<HWND> hooked;
-        for (int i = 0; i < 120 && !g_quit.load(); ++i) {
-            EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
-                auto* done = reinterpret_cast<std::vector<HWND>*>(lp);
-                if (std::find(done->begin(), done->end(), hwnd) != done->end()) {
-                    return TRUE;
-                }
-                DWORD pid = 0;
-                GetWindowThreadProcessId(hwnd, &pid);
-                if (pid == GetCurrentProcessId()) {
-                    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc, 0)) {
-                        done->push_back(hwnd);
-                    }
-                }
-                return TRUE;
-            }, reinterpret_cast<LPARAM>(&hooked));
-            for (int s = 0; s < 10 && !g_quit.load(); ++s) {
-                Sleep(50);
+static HWINEVENTHOOK g_searchHostAttachWatch = nullptr;
+
+static void CALLBACK SearchHostAttachWatchProc(
+    HWINEVENTHOOK, DWORD event, HWND hwnd,
+    LONG idObject, LONG idChild, DWORD, DWORD) {
+    if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
+        return;
+    }
+    wchar_t cls[64] = {};
+    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+    if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
+        Wh_Log(L"[SearchHost] CoreWindow event 0x%04lx on 0x%p", event, hwnd);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc, 0);
+        if (event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_CREATE) {
+            ActivateStartMenuFromSearchHost();
+        }
+    }
+}
+
+static void StartSearchHostAttachWatch() {
+    if (g_searchHostAttachWatch) return;
+    g_searchHostAttachWatch = SetWinEventHook(
+        EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW,
+        GetCurrentModuleHandle(), SearchHostAttachWatchProc,
+        GetCurrentProcessId(), 0,
+        WINEVENT_INCONTEXT);
+    Wh_Log(L"[SearchHost] attach watch %ls", g_searchHostAttachWatch ? L"installed" : L"FAILED");
+
+    EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid == GetCurrentProcessId()) {
+            wchar_t cls[64] = {};
+            GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
+            if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
+                WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc, 0);
             }
         }
-    });
+        return TRUE;
+    }, 0);
+}
+
+static void StopSearchHostAttachWatch() {
+    if (g_searchHostAttachWatch) {
+        UnhookWinEvent(g_searchHostAttachWatch);
+        g_searchHostAttachWatch = nullptr;
+    }
 }
 
 // ===========================================================================
@@ -7496,7 +7533,7 @@ void Wh_ModAfterInit() {
         g_targetProcess == TargetProcess::Explorer ? L"Explorer" : L"Unknown");
 
     if (g_targetProcess == TargetProcess::SearchHost) {
-        StartSearchHostWatchdog();
+        StartSearchHostAttachWatch();
         return;
     }
 
@@ -7550,10 +7587,7 @@ void Wh_ModUninit() {
 
     if (g_targetProcess == TargetProcess::SearchHost) {
         Wh_Log(L"uninit: SearchHost cleaning up");
-        if (g_searchHostWatchdog && g_searchHostWatchdog->joinable()) {
-            g_searchHostWatchdog->join();
-            g_searchHostWatchdog.reset();
-        }
+        StopSearchHostAttachWatch();
         EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
             DWORD pid = 0;
             GetWindowThreadProcessId(hwnd, &pid);
