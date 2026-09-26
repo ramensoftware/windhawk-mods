@@ -177,6 +177,15 @@ static double Now() {
 // Settings
 // ---------------------------------------------------------------------------
 
+// Machine state the camera and render threads both read. Written by the
+// overlay window's message handler.
+static std::atomic<bool> g_lidShut{false};         // one-shot: the lid just shut
+static std::atomic<bool> g_displayChanged{false};  // one-shot: rebuild the overlay
+static std::atomic<bool> g_lidOpen{true};
+static std::atomic<bool> g_displayOn{true};
+static std::atomic<bool> g_sessionLocked{false};
+static std::atomic<bool> g_overlayReady{false};
+
 struct Settings {
     double triggerTravel = 10;
     double fullEffectTravel = 75;
@@ -232,7 +241,8 @@ static void LoadSettings(bool changed) {
         startPreview = changed && s.preview && !g_settings.preview;
         g_settings = s;
     }
-    if (startPreview) {
+    // Only while an overlay exists, so it cannot play hours later.
+    if (startPreview && g_overlayReady) {
         g_previewRequested = true;
     }
     g_settingsVersion++;
@@ -796,15 +806,6 @@ class Estimator {
 // reader, reduced to 320-wide grayscale, measured, and published.
 // ---------------------------------------------------------------------------
 
-// Machine state the camera and render threads both read. Written by the
-// overlay window's message handler.
-static std::atomic<bool> g_lidShut{false};         // one-shot: the lid just shut
-static std::atomic<bool> g_displayChanged{false};  // one-shot: rebuild the overlay
-static std::atomic<bool> g_lidOpen{true};
-static std::atomic<bool> g_displayOn{true};
-static std::atomic<bool> g_sessionLocked{false};
-static std::atomic<bool> g_overlayReady{false};
-
 static bool CameraWanted() {
     return g_overlayReady && g_lidOpen && g_displayOn && !g_sessionLocked;
 }
@@ -825,6 +826,20 @@ static AngleSample Latest(double now) {
         s.valid = false;
     }
     return s;
+}
+
+// Frame size and stride of the reader's current output format.
+static void ReadFormat(IMFSourceReader* reader, UINT32& width, UINT32& height,
+                       LONG& stride) {
+    IMFMediaType* actual = nullptr;
+    if (SUCCEEDED(reader->GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM,
+                                              &actual))) {
+        MFGetAttributeSize(actual, MF_MT_FRAME_SIZE, &width, &height);
+        UINT32 s = 0;
+        stride = SUCCEEDED(actual->GetUINT32(MF_MT_DEFAULT_STRIDE, &s)) ? (LONG)s
+                                                                          : (LONG)width * 4;
+        actual->Release();
+    }
 }
 
 static IMFSourceReader* OpenCamera(int index, UINT32& width, UINT32& height,
@@ -883,16 +898,7 @@ static IMFSourceReader* OpenCamera(int index, UINT32& width, UINT32& height,
             goto done;
         }
     }
-    if (SUCCEEDED(reader->GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-                                              &actual))) {
-        MFGetAttributeSize(actual, MF_MT_FRAME_SIZE, &width, &height);
-        UINT32 s = 0;
-        if (SUCCEEDED(actual->GetUINT32(MF_MT_DEFAULT_STRIDE, &s))) {
-            stride = (LONG)s;
-        } else {
-            stride = (LONG)width * 4;
-        }
-    }
+    ReadFormat(reader, width, height, stride);
     Wh_Log(L"camera %d open at %ux%u, stride %ld", index, width, height, stride);
 
 done:
@@ -1004,10 +1010,9 @@ static void CameraThread() {
             continue;
         }
         if (flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) {
-            // Width, height and stride all came from the old format.
-            SafeRelease(sample);
-            SafeRelease(reader);
-            continue;
+            // The sample that came with the flag is already in the new format.
+            ReadFormat(reader, width, height, stride);
+            tracker.Reset();  // the old row profiles no longer match
         }
         if (!sample) {
             Publish(estimator.Dropped(now));
@@ -1182,6 +1187,21 @@ static const GUID kLidSwitchGuid = {
 static const GUID kDisplayStateGuid = {
     0x6fe69556, 0x704a, 0x47a0, {0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47}};
 
+static bool IsSessionLocked() {
+    WTSINFOEXW* info = nullptr;
+    DWORD bytes = 0;
+    bool locked = false;
+    if (WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION,
+                                    WTSSessionInfoEx, reinterpret_cast<LPWSTR*>(&info),
+                                    &bytes) &&
+        info) {
+        locked = info->Level == 1 &&
+                 info->Data.WTSInfoExLevel1.SessionFlags == WTS_SESSIONSTATE_LOCK;
+        WTSFreeMemory(info);
+    }
+    return locked;
+}
+
 // The GDI device name (\\.\DISPLAYn) of the active built-in panel, if any.
 static bool FindInternalPanel(wchar_t (&name)[32]) {
     UINT32 pathCount = 0, modeCount = 0;
@@ -1230,7 +1250,6 @@ class Overlay {
         wchar_t panel[32] = {};
         if (!FindInternalPanel(panel)) {
             SafeRelease(factory);
-            Wh_Log(L"the built-in display is not active; the effect is idle");
             return false;
         }
         IDXGIAdapter1* adapter = nullptr;
@@ -1460,6 +1479,9 @@ class Overlay {
         displayNotify_ = RegisterPowerSettingNotification(hwnd_, &kDisplayStateGuid,
                                                           DEVICE_NOTIFY_WINDOW_HANDLE);
         sessionNotify_ = WTSRegisterSessionNotification(hwnd_, NOTIFY_FOR_THIS_SESSION);
+        // Unlike the power settings, session registration reports no current
+        // state, and an unlock may have happened while no window existed.
+        g_sessionLocked = IsSessionLocked();
 
         IDXGIDevice* dxgiDevice = nullptr;
         IDXGIAdapter* adapter = nullptr;
@@ -1733,7 +1755,8 @@ static void RenderThread() {
             // Usually the built-in panel being off (docked with the lid shut).
             // Checked again every few seconds, quietly after the first time.
             if (!loggedFailure) {
-                Wh_Log(L"the overlay could not start; checking again every 5 s");
+                Wh_Log(L"the built-in display is not active, or the overlay could not "
+                       L"start; checking again every 5 s");
                 loggedFailure = true;
             }
             overlay.Destroy();
@@ -1743,6 +1766,7 @@ static void RenderThread() {
             continue;
         }
         loggedFailure = false;
+        g_previewRequested = false;  // anything requested while unavailable is stale
         Wh_Log(L"overlay ready at %.0fx%.0f", overlay.Width(), overlay.Height());
         g_displayChanged = false;
         g_overlayReady = true;
