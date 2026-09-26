@@ -483,7 +483,7 @@ static bool AreAppsUsingDarkTheme() {
 }
 
 
-std::wstring GetModulePath(HMODULE module) {
+static std::wstring GetModulePath(HMODULE module) {
     if (!module) return L"<unknown>";
 
     std::wstring path(MAX_PATH, L'\0');
@@ -504,7 +504,7 @@ std::wstring GetModulePath(HMODULE module) {
 }
 
 
-bool IsSystemModulePath(PCWSTR path) {
+static bool IsSystemModulePath(PCWSTR path) {
     WCHAR windowsDir[MAX_PATH];
     UINT len = GetSystemWindowsDirectory(windowsDir, ARRAYSIZE(windowsDir));
 
@@ -533,16 +533,18 @@ bool IsSystemModulePath(PCWSTR path) {
     WORD count = CaptureStackBackTrace(3, ARRAYSIZE(frames), frames, nullptr);
     
     for (WORD i = 0; i < count; i++) {
+        callerPath = nullptr;
+
         if (
             GetModuleHandleEx(
                 GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, 
-                (PCWSTR) address, &callerModule
+                (PCWSTR) frames[i], &callerModule
             ) && callerModule == expectedModule
         ) {
             return true;
         }
         
-        std::wstring callerPath = GetModulePath(callerModule);
+        callerPath = GetModulePath(callerModule);
         if (IsSystemModulePath(callerPath.c_str())) return false;
     }
 
