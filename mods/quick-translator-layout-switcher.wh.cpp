@@ -2,11 +2,11 @@
 // @id              quick-translator-layout-switcher
 // @name            Selection Layout Switcher & Translator
 // @description     Fast layout corrector, in-place translator, and floating HUD tooltip.
-// @version         1.0
+// @version         1.0.1
 // @author          zed712969-crypto
 // @github          https://github.com/zed712969-crypto
-// @include         explorer.exe
-// @compilerOptions -lwinhttp -lgdi32
+// @include         windhawk.exe
+// @compilerOptions -lwinhttp -lgdi32 -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -15,42 +15,38 @@
 
 A lightweight Windows utility that bridges communication between English and Russian speakers. Eliminates mistyped keyboard layout errors and allows instant two-way translation without breaking workflow.
 
-> **Privacy Notice**: This mod connects to Google Translate (`translate.googleapis.com`) over HTTPS to perform translations. Selected text is transmitted only when a translation hotkey is triggered. This feature can be toggled in settings.
-
-## Screenshot
-
-![HUD Tooltip Preview](https://i.imgur.com/MWnpLgr.png)
+> **Privacy Notice**: This mod optionally connects to Google Translate (`translate.googleapis.com`) over HTTPS to perform translations. Selected text is transmitted only when a translation hotkey is triggered. This feature is strictly **opt-in and disabled by default**.
 
 ## Features
 
-- **Layout Correction (`Ctrl + Shift + Space`)**: Fixes mistyped text (`ghbdtn` -> `привет` or vice versa) with full punctuation mapping and automatically updates the active system input layout.
-- **In-Place Translation (`Alt + T`)**: Replaces selected text directly inside any editable input field using HTTPS POST requests. Supports multi-line paragraphs up to 4000+ characters.
-- **Floating HUD Tooltip (`Alt + Q`)**: Translates read-only incoming messages (Discord, Telegram, web pages, games) in a sleek DPI-aware dark tooltip positioned near your cursor.
+- **Layout Correction (`Ctrl + Alt + L`)**: Fixes mistyped text (`ghbdtn` -> `привет` or vice versa) with full punctuation mapping and automatically updates the active system input layout.
+- **In-Place Translation (`Ctrl + Alt + T`)**: Replaces selected text directly inside any editable input field using HTTPS POST requests. Supports multi-line paragraphs.
+- **Floating HUD Tooltip (`Ctrl + Alt + Q`)**: Translates read-only incoming messages in a sleek DPI-aware dark tooltip positioned near your cursor.
 - **Smart Auto-Dismiss**: The tooltip remains visible until you click anywhere, scroll the mouse wheel, or press navigation keys (Esc / Arrows).
-- **Clipboard Preservation**: Automatically restores previous text clipboard contents after performing operations.
+- **Clipboard Preservation**: Automatically restores previous clipboard contents after performing operations.
 
 ## Default Hotkeys
 
-- `Ctrl + Shift + Space` - Switch mistyped layout (US <-> RU)
-- `Alt + T` - In-place translation
-- `Alt + Q` - Floating HUD Tooltip translation
+- `Ctrl + Alt + L` - Switch mistyped layout (US <-> RU)
+- `Ctrl + Alt + T` - In-place translation (Requires enabling online translation in Settings)
+- `Ctrl + Alt + Q` - Floating HUD Tooltip translation (Requires enabling online translation in Settings)
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
-- enable_translation: true
+- enable_translation: false
   $name: "Enable Online Translation"
-  $description: "Allow sending selected text to Google Translate over HTTPS for translation features."
-- hotkey_layout: "Ctrl + Shift + Space"
+  $description: "Allow sending selected text to Google Translate over HTTPS for translation features. Disabled by default for privacy."
+- hotkey_layout: "Ctrl + Alt + L"
   $name: "Layout Correction Hotkey"
-  $description: "Switch mistyped layout (default: Ctrl + Shift + Space). Supports Ctrl, Shift, Alt, Space, Insert, letters, digits."
-- hotkey_translate: "Alt + T"
+  $description: "Switch mistyped layout (default: Ctrl + Alt + L). Supports combinations of Ctrl, Shift, Alt, Space, Insert, letters, digits."
+- hotkey_translate: "Ctrl + Alt + T"
   $name: "In-Place Translate Hotkey"
-  $description: "Translate selected text inline (default: Alt + T)."
-- hotkey_tooltip: "Alt + Q"
+  $description: "Translate selected text inline (default: Ctrl + Alt + T)."
+- hotkey_tooltip: "Ctrl + Alt + Q"
   $name: "HUD Tooltip Translate Hotkey"
-  $description: "Translate selected text in a floating tooltip (default: Alt + Q)."
+  $description: "Translate selected text in a floating tooltip (default: Ctrl + Alt + Q)."
 - anim_duration: 150
   $name: "Animation Duration (ms)"
   $description: "Fade animation speed in ms (0 to disable)."
@@ -59,6 +55,7 @@ A lightweight Windows utility that bridges communication between English and Rus
 
 #include <windows.h>
 #include <winhttp.h>
+#include <shellapi.h>
 #include <string>
 #include <unordered_map>
 #include <cwctype>
@@ -73,7 +70,6 @@ A lightweight Windows utility that bridges communication between English and Rus
 
 #define TIMER_ANIM 2
 
-static HANDLE g_hSingleInstanceMutex = NULL;
 HHOOK g_keyboardHook = NULL;
 HHOOK g_mouseHook = NULL;
 HANDLE g_hMainThread = NULL;
@@ -95,7 +91,7 @@ AnimState g_animState = STATE_HIDDEN;
 DWORD g_animStartTime = 0;
 int g_targetX = 0, g_targetY = 0, g_winW = 0, g_winH = 0;
 
-bool g_bEnableTranslation = true;
+bool g_bEnableTranslation = false;
 int g_animDuration = 150;
 
 struct HotkeyConfig {
@@ -217,47 +213,60 @@ void ParseHotkey(const std::wstring& str, HotkeyConfig& cfg, bool defCtrl, bool 
 void LoadSettings() {
     g_bEnableTranslation = Wh_GetIntSetting(L"enable_translation") != 0;
 
-    ParseHotkey(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"hotkey_layout")).get(), g_hkLayout, true, true, false, VK_SPACE);
-    ParseHotkey(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"hotkey_translate")).get(), g_hkTranslate, false, false, true, 'T');
-    ParseHotkey(WindhawkUtils::StringSetting(Wh_GetStringSetting(L"hotkey_tooltip")).get(), g_hkTooltip, false, false, true, 'Q');
+    PCWSTR sLayout = Wh_GetStringSetting(L"hotkey_layout");
+    ParseHotkey(sLayout ? sLayout : L"", g_hkLayout, true, false, true, 'L');
+    if (sLayout) Wh_FreeStringSetting(sLayout);
+
+    PCWSTR sTrans = Wh_GetStringSetting(L"hotkey_translate");
+    ParseHotkey(sTrans ? sTrans : L"", g_hkTranslate, true, false, true, 'T');
+    if (sTrans) Wh_FreeStringSetting(sTrans);
+
+    PCWSTR sTooltip = Wh_GetStringSetting(L"hotkey_tooltip");
+    ParseHotkey(sTooltip ? sTooltip : L"", g_hkTooltip, true, false, true, 'Q');
+    if (sTooltip) Wh_FreeStringSetting(sTooltip);
 
     g_animDuration = Wh_GetIntSetting(L"anim_duration");
     if (g_animDuration < 0) g_animDuration = 150;
 }
 
-void SendKey(WORD vk, bool keyUp) {
-    INPUT input = {};
-    input.type = INPUT_KEYBOARD;
-    input.ki.wVk = vk;
-    if (keyUp) input.ki.dwFlags |= KEYEVENTF_KEYUP;
-    SendInput(1, &input, sizeof(INPUT));
-}
-
 void WaitForModifiersUp() {
-    for (int i = 0; i < 25; ++i) {
+    for (int i = 0; i < 30; ++i) {
         bool ctrl  = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
         bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
         bool alt   = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
         if (!ctrl && !shift && !alt) break;
-        Sleep(15);
+        Sleep(10);
     }
+
+    INPUT inputs[3] = {};
+    inputs[0].type = INPUT_KEYBOARD; inputs[0].ki.wVk = VK_MENU;    inputs[0].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[1].type = INPUT_KEYBOARD; inputs[1].ki.wVk = VK_CONTROL; inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[2].type = INPUT_KEYBOARD; inputs[2].ki.wVk = VK_SHIFT;   inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(3, inputs, sizeof(INPUT));
+}
+
+void SendCtrlKey(WORD vk) {
+    INPUT inputs[4] = {};
+    inputs[0].type = INPUT_KEYBOARD; inputs[0].ki.wVk = VK_MENU;    inputs[0].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[1].type = INPUT_KEYBOARD; inputs[1].ki.wVk = VK_CONTROL; inputs[1].ki.dwFlags = 0;
+    inputs[2].type = INPUT_KEYBOARD; inputs[2].ki.wVk = vk;         inputs[2].ki.dwFlags = 0;
+    SendInput(3, inputs, sizeof(INPUT));
+
+    Sleep(25);
+
+    inputs[0].type = INPUT_KEYBOARD; inputs[0].ki.wVk = vk;         inputs[0].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[1].type = INPUT_KEYBOARD; inputs[1].ki.wVk = VK_CONTROL; inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(2, inputs, sizeof(INPUT));
 }
 
 bool ForceCopy() {
     WaitForModifiersUp();
     DWORD seqBefore = GetClipboardSequenceNumber();
 
-    SendKey(VK_CONTROL, true);
-    SendKey(VK_SHIFT, true);
-    SendKey(VK_MENU, true);
     Sleep(25);
+    SendCtrlKey('C');
 
-    SendKey(VK_CONTROL, false);
-    SendKey('C', false);
-    SendKey('C', true);
-    SendKey(VK_CONTROL, true);
-
-    for (int i = 0; i < 20; ++i) {
+    for (int i = 0; i < 25; ++i) {
         if (GetClipboardSequenceNumber() != seqBefore) return true;
         Sleep(15);
     }
@@ -266,15 +275,8 @@ bool ForceCopy() {
 
 void ForcePaste() {
     WaitForModifiersUp();
-    SendKey(VK_CONTROL, true);
-    SendKey(VK_SHIFT, true);
-    SendKey(VK_MENU, true);
     Sleep(25);
-
-    SendKey(VK_CONTROL, false);
-    SendKey('V', false);
-    SendKey('V', true);
-    SendKey(VK_CONTROL, true);
+    SendCtrlKey('V');
 }
 
 std::wstring GetClipboardText() {
@@ -303,9 +305,14 @@ void SetClipboardText(const std::wstring& text) {
             EmptyClipboard();
             HGLOBAL hGlob = GlobalAlloc(GMEM_MOVEABLE, (text.length() + 1) * sizeof(wchar_t));
             if (hGlob) {
-                memcpy(GlobalLock(hGlob), text.c_str(), (text.length() + 1) * sizeof(wchar_t));
-                GlobalUnlock(hGlob);
-                SetClipboardData(CF_UNICODETEXT, hGlob);
+                void* pBuf = GlobalLock(hGlob);
+                if (pBuf) {
+                    memcpy(pBuf, text.c_str(), (text.length() + 1) * sizeof(wchar_t));
+                    GlobalUnlock(hGlob);
+                    SetClipboardData(CF_UNICODETEXT, hGlob);
+                } else {
+                    GlobalFree(hGlob);
+                }
             }
             CloseClipboard();
             break;
@@ -396,7 +403,7 @@ std::wstring ParseGoogleTranslateResponse(const std::string& json) {
 std::wstring FetchTranslationWinHttp(const std::wstring& text, bool toRussian) {
     if (g_bStopRequested) return L"";
 
-    HINTERNET hSession = WinHttpOpen(L"Windhawk-Translator/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    HINTERNET hSession = WinHttpOpen(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64)", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession) return L"";
 
     WinHttpSetTimeouts(hSession, 3000, 3000, 4000, 4000);
@@ -505,7 +512,7 @@ DWORD WINAPI TooltipWorker(LPVOID) {
         return 0;
     }
 
-    if (g_hTooltipWnd) {
+    if (g_hTooltipWnd && IsWindow(g_hTooltipWnd)) {
         auto* pText = new std::wstring(std::move(translated));
         if (!PostMessage(g_hTooltipWnd, WM_SHOW_TOOLTIP, 0, (LPARAM)pText)) {
             delete pText;
@@ -517,13 +524,24 @@ DWORD WINAPI TooltipWorker(LPVOID) {
 std::wstring ConvertLayout(const std::wstring& input, bool& outWasEnglish) {
     size_t enCount = 0, ruCount = 0;
     for (wchar_t c : input) {
-        if (g_toRuMap.count(c)) enCount++;
-        if (g_toEnMap.count(c)) ruCount++;
+        if ((c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z')) {
+            enCount++;
+        } else if ((c >= 0x0400 && c <= 0x04FF) || c == L'ё' || c == L'Ё') {
+            ruCount++;
+        }
     }
 
-    outWasEnglish = (enCount >= ruCount);
-    std::wstring result = input;
+    if (enCount > 0 || ruCount > 0) {
+        outWasEnglish = (enCount >= ruCount);
+    } else {
+        for (wchar_t c : input) {
+            if (g_toRuMap.count(c)) enCount++;
+            if (g_toEnMap.count(c)) ruCount++;
+        }
+        outWasEnglish = (enCount >= ruCount);
+    }
 
+    std::wstring result = input;
     for (size_t i = 0; i < result.length(); ++i) {
         wchar_t c = result[i];
         if (outWasEnglish) {
@@ -558,9 +576,19 @@ DWORD WINAPI LayoutWorker(LPVOID) {
 
     HWND hwnd = GetForegroundWindow();
     if (hwnd) {
+        DWORD targetThread = GetWindowThreadProcessId(hwnd, NULL);
+        DWORD curThread = GetCurrentThreadId();
         HKL targetLayout = wasEnglish ? LoadKeyboardLayoutW(L"00000419", KLF_ACTIVATE)
                                       : LoadKeyboardLayoutW(L"00000409", KLF_ACTIVATE);
-        PostMessage(hwnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)targetLayout);
+        if (targetThread && targetThread != curThread) {
+            AttachThreadInput(curThread, targetThread, TRUE);
+            ActivateKeyboardLayout(targetLayout, KLF_SETFORPROCESS);
+            PostMessage(hwnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)targetLayout);
+            AttachThreadInput(curThread, targetThread, FALSE);
+        } else {
+            ActivateKeyboardLayout(targetLayout, KLF_SETFORPROCESS);
+            PostMessage(hwnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)targetLayout);
+        }
     }
 
     Sleep(250);
@@ -777,6 +805,10 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
         KBDLLHOOKSTRUCT* pKey = (KBDLLHOOKSTRUCT*)lParam;
 
+        if (pKey->flags & LLKHF_INJECTED) {
+            return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
+        }
+
         if (g_hTooltipWnd && g_animState != STATE_HIDDEN) {
             if (pKey->vkCode == VK_ESCAPE || pKey->vkCode == VK_LEFT ||
                 pKey->vkCode == VK_RIGHT || pKey->vkCode == VK_UP || pKey->vkCode == VK_DOWN) {
@@ -880,16 +912,7 @@ DWORD WINAPI MainThread(LPVOID) {
     return 0;
 }
 
-BOOL Wh_ModInit() {
-    g_hSingleInstanceMutex = CreateMutexW(NULL, FALSE, L"Local\\Windhawk_QuickTranslator_SingleInstance");
-    if (!g_hSingleInstanceMutex || GetLastError() == ERROR_ALREADY_EXISTS) {
-        if (g_hSingleInstanceMutex) {
-            CloseHandle(g_hSingleInstanceMutex);
-            g_hSingleInstanceMutex = NULL;
-        }
-        return FALSE;
-    }
-
+BOOL WhTool_ModInit() {
     InitMaps();
     LoadSettings();
     g_bStopRequested = false;
@@ -897,32 +920,180 @@ BOOL Wh_ModInit() {
     return g_hMainThread != NULL;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     if (g_mainThreadId) {
         PostThreadMessage(g_mainThreadId, WM_APP_SETTINGS_CHANGED, 0, 0);
     }
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     g_bStopRequested = true;
 
     if (g_mainThreadId) {
         PostThreadMessage(g_mainThreadId, WM_QUIT, 0, 0);
         if (g_hMainThread) {
-            WaitForSingleObject(g_hMainThread, INFINITE);
+            WaitForSingleObject(g_hMainThread, 1500);
             CloseHandle(g_hMainThread);
             g_hMainThread = NULL;
         }
     }
 
     if (g_hWorkerThread) {
-        WaitForSingleObject(g_hWorkerThread, INFINITE);
+        WaitForSingleObject(g_hWorkerThread, 1500);
         CloseHandle(g_hWorkerThread);
         g_hWorkerThread = NULL;
     }
+}
 
-    if (g_hSingleInstanceMutex) {
-        CloseHandle(g_hSingleInstanceMutex);
-        g_hSingleInstanceMutex = NULL;
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) && sessionId == 0) {
+        return FALSE;
     }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex = CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath, ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 + (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath, WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule, "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        return;
+    }
+
+    STARTUPINFO si = { sizeof(STARTUPINFO) };
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
