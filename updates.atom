@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-26T12:04:46.000Z</updated>
+    <updated>2026-09-26T13:00:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[StartAllBack Jump List Width 1.2]]></title>
+        <id>https://windhawk.net/mods/startallback-jumplist-width#33490a366015e6a37b09d4d5c41b12af2b27366e</id>
+        <link href="https://windhawk.net/mods/startallback-jumplist-width"/>
+        <updated>2026-09-26T13:00:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="startallbackjumplistwidth">StartAllBack Jump List Width</h1>
+<p>Changes the width of StartAllBack jump lists and resizes their internal controls to match.</p>
+<p>The mod targets StartAllBack's <code>SIBJumpView</code> hierarchy in <code>explorer.exe</code>.
+It subclasses the relevant jump-list window and its <code>SIBBarHost</code> /
+<code>SysListView32</code> children, so the configured width and the internal right
+margin remain stable even if StartAllBack performs another layout pass.
+When the width changes, the jump list stays centered around the position
+chosen by StartAllBack and is clamped to the monitor work area.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Jump List width</strong> - target width at 100% scaling (96 DPI). The value is
+limited to 120-600 pixels and is scaled automatically for the DPI of the
+monitor where the jump list is shown.</li>
+<li>The internal list uses a fixed 6-pixel right margin at 100% scaling, also
+scaled automatically for DPI.</li>
+</ul>
+<p>Changes are applied immediately to existing StartAllBack jump-list windows.
+When the mod is disabled, the original StartAllBack width and internal layout
+are restored.</p>
+<h2 id="beforeandafter">Before and after</h2>
+<h3 id="before">Before</h3>
+<p><img src="https://raw.githubusercontent.com/Murtuzoff/windhawk-assets/main/before.png" alt="StartAllBack Jump List before" /></p>
+<h3 id="after">After</h3>
+<p><img src="https://raw.githubusercontent.com/Murtuzoff/windhawk-assets/main/after.png" alt="StartAllBack Jump List after" /></p>]]></content>
+        <author>
+            <name>Murtuzoff</name>
+            <uri>https://github.com/Murtuzoff</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock to Left 2.2]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-to-left#9b682750ef56a668a628b3da682b49100cee3c7d</id>
@@ -783,22 +817,6 @@ GPU; on the software renderer they work but cost noticeably more CPU.</li>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable grouping on the taskbar 1.3.11]]></title>
-        <id>https://windhawk.net/mods/taskbar-grouping#eae5841a485e04316a4a06dccb7da5f1d86a7b5d</id>
-        <link href="https://windhawk.net/mods/taskbar-grouping"/>
-        <updated>2026-09-23T22:29:37.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added an option for defining a list of per-app exceptions for the "Use window icons" option.</li>
-<li>Improved the compatibility of the "Place ungrouped items together" option with virtual desktops.</li>
-<li>Fixed item reordering when the first running item replaces the pinned item or when the last running item is closed and replaced with a pinned item. The issue could happen if there are other running instances in another monitor or virtual desktop.</li>
-<li>Fixed compatibility with the latest Windows 11 update.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

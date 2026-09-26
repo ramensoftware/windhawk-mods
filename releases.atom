@@ -2,12 +2,46 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-26T10:02:39.000Z</updated>
+    <updated>2026-09-26T13:00:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[StartAllBack Jump List Width 1.2]]></title>
+        <id>https://windhawk.net/mods/startallback-jumplist-width#33490a366015e6a37b09d4d5c41b12af2b27366e</id>
+        <link href="https://windhawk.net/mods/startallback-jumplist-width"/>
+        <updated>2026-09-26T13:00:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="startallbackjumplistwidth">StartAllBack Jump List Width</h1>
+<p>Changes the width of StartAllBack jump lists and resizes their internal controls to match.</p>
+<p>The mod targets StartAllBack's <code>SIBJumpView</code> hierarchy in <code>explorer.exe</code>.
+It subclasses the relevant jump-list window and its <code>SIBBarHost</code> /
+<code>SysListView32</code> children, so the configured width and the internal right
+margin remain stable even if StartAllBack performs another layout pass.
+When the width changes, the jump list stays centered around the position
+chosen by StartAllBack and is clamped to the monitor work area.</p>
+<h2 id="settings">Settings</h2>
+<ul>
+<li><strong>Jump List width</strong> - target width at 100% scaling (96 DPI). The value is
+limited to 120-600 pixels and is scaled automatically for the DPI of the
+monitor where the jump list is shown.</li>
+<li>The internal list uses a fixed 6-pixel right margin at 100% scaling, also
+scaled automatically for DPI.</li>
+</ul>
+<p>Changes are applied immediately to existing StartAllBack jump-list windows.
+When the mod is disabled, the original StartAllBack width and internal layout
+are restored.</p>
+<h2 id="beforeandafter">Before and after</h2>
+<h3 id="before">Before</h3>
+<p><img src="https://raw.githubusercontent.com/Murtuzoff/windhawk-assets/main/before.png" alt="StartAllBack Jump List before" /></p>
+<h3 id="after">After</h3>
+<p><img src="https://raw.githubusercontent.com/Murtuzoff/windhawk-assets/main/after.png" alt="StartAllBack Jump List after" /></p>]]></content>
+        <author>
+            <name>Murtuzoff</name>
+            <uri>https://github.com/Murtuzoff</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Glyphs Colorizer 1.0]]></title>
         <id>https://windhawk.net/mods/explorer-glyphs-colorizer#febdb36ac3071a5971518b2943614196937ed10b</id>
@@ -1897,53 +1931,6 @@ log output in the issue report.</p>]]></content>
         <author>
             <name>Johhannas Reyn</name>
             <uri>https://github.com/JohhannasReyn</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Shadows Tuner 0.6.4]]></title>
-        <id>https://windhawk.net/mods/native-shadow-tuner#5ba5889e229443d62d6b13a03419c11dcbd6e01c</id>
-        <link href="https://windhawk.net/mods/native-shadow-tuner"/>
-        <updated>2026-09-21T15:42:29.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="windowsshadowstuner">Windows Shadows Tuner</h1>
-<p>Customize native Windows window shadows: make them lighter or more pronounced,
-and adjust their size and blur.</p>
-<h2 id="examples">Examples</h2>
-<p><strong>Shadow intensity and size comparison</strong></p>
-<p><img src="https://i.imgur.com/epfTlMZ.png" alt="Windows Shadows TUNER comparison" /></p>
-<h2 id="setup">Setup</h2>
-<p><code>dwm.exe</code> is a critical system process and Windhawk doesn't inject mods into it
-by default. Open Windhawk Settings, go to <strong>Advanced settings</strong>, then
-<strong>More advanced settings</strong>, and add <code>dwm.exe</code> to the process inclusion list.</p>
-<p><img src="https://i.imgur.com/LRhREtJ.png" alt="Windhawk advanced settings" /></p>
-<h2 id="controls">Controls</h2>
-<ul>
-<li><strong>Intensity</strong>: controls the opacity of the native shadow. The default value is
-180%. Set it to 100% to restore the original Windows intensity, 50% for a
-lighter shadow, or 0% to make it invisible.</li>
-<li><strong>Size and blur</strong>: controls the shadow spread and blur. The default value is
-150%. Set it to 100% to restore the original Windows size.</li>
-</ul>
-<p>When both controls are set to 100%, the mod doesn't install any hooks because
-the requested appearance is identical to the original Windows appearance.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod hooks a single uDWM function, <code>CWindowBorder::GetShadowParameters</code>,
-and scales the radius and alpha values it produces. To apply changes to windows
-that are already open and restore the original shadows when the mod is disabled,
-the mod briefly toggles the system drop-shadow setting off and on in memory so
-DWM rebuilds every window's shadow. The user profile isn't modified and no
-settings-change message is broadcast. Shadows can blink for a fraction of a
-second when the mod is loaded, unloaded, or its settings are changed. The mod
-creates no overlay windows and stores no persistent state.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>Tested on Windows 11 25H2 build 26200.9445.</p>
-<p>Windows 11 24H2 (build 26100.x): the uDWM symbol resolves, but the current
-version hasn't been visually confirmed there yet. If you're on 24H2, please
-report whether the shadows change.</p>
-<p>Other Windows builds haven't been tested. If the required uDWM symbol can't
-be resolved, the mod logs the error and doesn't load.</p>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>

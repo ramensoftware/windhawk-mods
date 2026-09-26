@@ -11017,6 +11017,33 @@
         "version": "1.0.0"
       }
     },
+    "startallback-jumplist-width": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790427637000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790427637000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Murtuzoff",
+        "compilerOptions": "-lcomctl32",
+        "description": "Changes the width of StartAllBack jump lists and keeps their internal controls aligned.",
+        "github": "https://github.com/Murtuzoff",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "StartAllBack Jump List Width",
+        "version": "1.2"
+      }
+    },
     "startup-app-delay-fix": {
       "details": {
         "defaultSorting": 17820,
