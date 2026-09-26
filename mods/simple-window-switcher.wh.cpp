@@ -7,7 +7,7 @@
 // @github          https://github.com/Louis047
 // @include         windhawk.exe
 // @include         explorer.exe
-// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion -lwinmm -ladvapi32 -lmsimg32
+// @compilerOptions -ldwmapi -luxtheme -lgdi32 -lshlwapi -loleaut32 -lole32 -lcomctl32 -lgdiplus -lversion -lwinmm -ladvapi32 -lmsimg32 -lhid
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -703,6 +703,15 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
       $name: Handle Touchpad Switcher Gestures
       $description: Intercept touchpad task-switching gestures in Explorer to invoke Simple Window Switcher instead of the native Windows switcher.
   $name: Accessibility
+- Touchpad:
+    - inputMode: legacy
+      $name: Touchpad Input Mode
+      $description: How touchpad gestures reach the switcher. "Legacy" keeps the Explorer gesture interception; "Raw HID" reads the precision touchpad's reports directly and only logs them, to collect the data the new navigation support needs. Raw HID changes no switching behavior yet.
+      $options:
+      - legacy: Legacy (Explorer gesture interception)
+      - raw: Raw HID (diagnostics only)
+  $name: Touchpad
+  $description: Precision touchpad input. Raw HID is a diagnostics mode; the frames it reads are written to the mod log.
 - ExcludedWindows:
     - excludeByTitle: ""
       $name: Exclude by Window Title
@@ -744,6 +753,8 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 #include <windowsx.h>
 #include <commctrl.h>
 #include <appmodel.h>
+#include <hidusage.h>
+#include <hidpi.h>
 #include <vector>
 #include <atomic>
 #include <map>
@@ -950,6 +961,7 @@ struct Settings {
     bool enableHoverAnimation;
     bool excludeXboxMode;
     bool handleTouchpadGestures;
+    WCHAR touchpadInputMode[16];
 };
 
 static std::vector<std::wstring> g_excludeTitlePatterns;
@@ -13124,6 +13136,11 @@ static void LoadSettings() {
 
     g_settings.excludeXboxMode = LoadBoolSetting(L"ExcludedWindows.excludeXboxMode", false);
     g_settings.handleTouchpadGestures = LoadBoolSetting(L"Accessibility.handleTouchpadGestures", true);
+    LoadStringSetting(L"Touchpad.inputMode", g_settings.touchpadInputMode, L"legacy");
+    if (wcscmp(g_settings.touchpadInputMode, L"legacy") != 0 &&
+        wcscmp(g_settings.touchpadInputMode, L"raw") != 0) {
+        wcsncpy_s(g_settings.touchpadInputMode, L"legacy", _TRUNCATE);
+    }
 
     // Custom per-process header (array of { process, iconPath, appName }).
     g_customHeaderRules.clear();
@@ -13533,6 +13550,372 @@ static void LogProcessIntegrityLevel(const WCHAR* tag) {
     Wh_Log(L"SWS: %s: integrity RID = 0x%X (%s)", tag, rid, level);
 }
 
+// --- Raw-HID touchpad reader (plan stage B1: frames + logging, opt-in) --------
+// The tool-mod process reads the precision touchpad's HID reports directly (same
+// mechanism as the Three Finger Drag mod) so gestures can later drive the switcher
+// instead of relying on Explorer's native-switcher interception. This stage only logs
+// the frames B2's navigation mapping will be derived from: the reader never consumes,
+// blocks or injects input, and nothing runs unless Touchpad.inputMode is "raw". If the
+// device or the registration is unavailable, the mod behaves exactly as with "legacy".
+#define SWS_TOUCHPAD_READER_CLASSNAME L"WindhawkSWS_TouchpadReader"
+
+#define SWS_HID_PAGE_GENERIC        0x01
+#define SWS_HID_USAGE_X             0x30
+#define SWS_HID_USAGE_Y             0x31
+#define SWS_HID_PAGE_DIGITIZER      0x0D
+#define SWS_HID_USAGE_TOUCHPAD      0x05
+#define SWS_HID_USAGE_TIP_SWITCH    0x42
+#define SWS_HID_USAGE_CONTACT_ID    0x51
+#define SWS_HID_USAGE_CONTACT_COUNT 0x54
+
+struct TouchpadContact {
+    ULONG id;
+    LONG x;
+    LONG y;
+    bool tip;
+};
+
+struct TouchpadDevice {
+    std::vector<BYTE> preparsed;
+    std::vector<USHORT> fingerCollections;
+    USHORT contactCountCollection = 0;
+    double rangeX = 0.0;
+    double rangeY = 0.0;
+    bool hasContactCount = false;
+    bool valid = false;
+};
+
+static std::map<HANDLE, TouchpadDevice> g_touchpadDevices;
+static std::vector<TouchpadContact> g_touchpadFrame;
+static ULONG g_touchpadFrameExpected = 0;
+static HANDLE g_hTouchpadReaderThread = NULL;
+static HANDLE g_hTouchpadReaderStopEvent = NULL;
+
+// Some devices declare a maximum which only fits unsigned.
+static double TouchpadLogicalRange(const HIDP_VALUE_CAPS& caps) {
+    LONGLONG min = caps.LogicalMin;
+    LONGLONG max = caps.LogicalMax;
+    if (max <= min && caps.BitSize > 0 && caps.BitSize <= 32) {
+        min = 0;
+        max = (1LL << caps.BitSize) - 1;
+    }
+    return (double)(max - min);
+}
+
+static const TouchpadDevice* TouchpadDeviceFor(HANDLE hDevice) {
+    auto it = g_touchpadDevices.find(hDevice);
+    if (it != g_touchpadDevices.end()) {
+        return it->second.valid ? &it->second : NULL;
+    }
+
+    TouchpadDevice& dev = g_touchpadDevices[hDevice];
+
+    UINT size = 0;
+    if (GetRawInputDeviceInfoW(hDevice, RIDI_PREPARSEDDATA, NULL, &size) != 0 || !size) {
+        return NULL;
+    }
+
+    dev.preparsed.resize(size);
+    if (GetRawInputDeviceInfoW(hDevice, RIDI_PREPARSEDDATA, dev.preparsed.data(), &size) == (UINT)-1) {
+        return NULL;
+    }
+
+    PHIDP_PREPARSED_DATA preparsed = (PHIDP_PREPARSED_DATA)dev.preparsed.data();
+    HIDP_CAPS caps = {};
+    if (HidP_GetCaps(preparsed, &caps) != HIDP_STATUS_SUCCESS) {
+        return NULL;
+    }
+
+    USHORT valueCapsCount = caps.NumberInputValueCaps;
+    std::vector<HIDP_VALUE_CAPS> valueCaps(valueCapsCount);
+    if (!valueCapsCount ||
+        HidP_GetValueCaps(HidP_Input, valueCaps.data(), &valueCapsCount, preparsed) != HIDP_STATUS_SUCCESS) {
+        return NULL;
+    }
+
+    for (USHORT i = 0; i < valueCapsCount; i++) {
+        const HIDP_VALUE_CAPS& vc = valueCaps[i];
+        USAGE usage = vc.IsRange ? vc.Range.UsageMin : vc.NotRange.Usage;
+
+        if (vc.UsagePage == SWS_HID_PAGE_DIGITIZER && usage == SWS_HID_USAGE_CONTACT_COUNT) {
+            dev.hasContactCount = true;
+            dev.contactCountCollection = vc.LinkCollection;
+        } else if (vc.UsagePage == SWS_HID_PAGE_GENERIC && usage == SWS_HID_USAGE_X) {
+            if (std::find(dev.fingerCollections.begin(), dev.fingerCollections.end(), vc.LinkCollection) ==
+                dev.fingerCollections.end()) {
+                dev.fingerCollections.push_back(vc.LinkCollection);
+            }
+            if (!dev.rangeX) dev.rangeX = TouchpadLogicalRange(vc);
+        } else if (vc.UsagePage == SWS_HID_PAGE_GENERIC && usage == SWS_HID_USAGE_Y) {
+            if (!dev.rangeY) dev.rangeY = TouchpadLogicalRange(vc);
+        }
+    }
+
+    dev.valid = !dev.fingerCollections.empty() && dev.rangeX > 0 && dev.rangeY > 0;
+    Wh_Log(L"SWS touchpad reader: device %p valid=%d slots=%u contactCount=%d range=%.0fx%.0f", hDevice,
+           dev.valid, (UINT)dev.fingerCollections.size(), dev.hasContactCount, dev.rangeX, dev.rangeY);
+    return dev.valid ? &dev : NULL;
+}
+
+static void TouchpadReaderLogFrame(const TouchpadDevice& dev) {
+    ULONG tips = 0;
+    double cx = 0.0;
+    double cy = 0.0;
+    for (const TouchpadContact& c : g_touchpadFrame) {
+        if (c.tip) {
+            tips++;
+            cx += c.x;
+            cy += c.y;
+        }
+    }
+    if (tips) {
+        cx /= tips;
+        cy /= tips;
+    }
+    // Everything the B2 mapping needs to be derived from: finger count, tip count,
+    // centroid and the normalized position (axis orientation included).
+    Wh_Log(L"SWS touchpad frame: contacts=%u tips=%u centroid=%.0f,%.0f normalized=%.3f,%.3f",
+           (UINT)g_touchpadFrame.size(), tips, cx, cy, dev.rangeX > 0 ? cx / dev.rangeX : 0.0,
+           dev.rangeY > 0 ? cy / dev.rangeY : 0.0);
+}
+
+static void TouchpadReaderOnReport(const TouchpadDevice& dev, PCHAR report, ULONG length) {
+    PHIDP_PREPARSED_DATA preparsed = (PHIDP_PREPARSED_DATA)dev.preparsed.data();
+
+    if (dev.hasContactCount) {
+        ULONG count = 0;
+        if (HidP_GetUsageValue(HidP_Input, SWS_HID_PAGE_DIGITIZER, dev.contactCountCollection,
+                               SWS_HID_USAGE_CONTACT_COUNT, &count, preparsed, report,
+                               length) == HIDP_STATUS_SUCCESS &&
+            count > 0) {
+            g_touchpadFrame.clear();
+            g_touchpadFrameExpected = count;
+        }
+        if (!g_touchpadFrameExpected) {
+            return; // the rest of a frame whose start was missed
+        }
+    }
+
+    for (USHORT collection : dev.fingerCollections) {
+        ULONG x = 0;
+        ULONG y = 0;
+        if (HidP_GetUsageValue(HidP_Input, SWS_HID_PAGE_GENERIC, collection, SWS_HID_USAGE_X, &x,
+                               preparsed, report, length) != HIDP_STATUS_SUCCESS ||
+            HidP_GetUsageValue(HidP_Input, SWS_HID_PAGE_GENERIC, collection, SWS_HID_USAGE_Y, &y,
+                               preparsed, report, length) != HIDP_STATUS_SUCCESS) {
+            continue;
+        }
+
+        ULONG id = collection;
+        HidP_GetUsageValue(HidP_Input, SWS_HID_PAGE_DIGITIZER, collection, SWS_HID_USAGE_CONTACT_ID,
+                           &id, preparsed, report, length);
+
+        bool tip = false;
+        USAGE usages[16];
+        ULONG usageCount = ARRAYSIZE(usages);
+        if (HidP_GetUsages(HidP_Input, SWS_HID_PAGE_DIGITIZER, collection, usages, &usageCount,
+                           preparsed, report, length) == HIDP_STATUS_SUCCESS) {
+            tip = std::find(usages, usages + usageCount, SWS_HID_USAGE_TIP_SWITCH) != usages + usageCount;
+        }
+
+        g_touchpadFrame.push_back({id, (LONG)x, (LONG)y, tip});
+    }
+
+    // Hybrid devices announce the contact count first and spread the contacts over
+    // several reports; collect until the announced count is reached.
+    if (!dev.hasContactCount || g_touchpadFrame.size() >= g_touchpadFrameExpected) {
+        TouchpadReaderLogFrame(dev);
+        g_touchpadFrame.clear();
+        g_touchpadFrameExpected = 0;
+    }
+}
+
+static void TouchpadReaderOnRawInput(HRAWINPUT hRawInput) {
+    UINT size = 0;
+    if (GetRawInputData(hRawInput, RID_INPUT, NULL, &size, sizeof(RAWINPUTHEADER)) != 0 || !size) {
+        return;
+    }
+
+    static std::vector<BYTE> buffer;
+    buffer.resize(size);
+    if (GetRawInputData(hRawInput, RID_INPUT, buffer.data(), &size, sizeof(RAWINPUTHEADER)) == (UINT)-1) {
+        return;
+    }
+
+    const RAWINPUT* raw = (const RAWINPUT*)buffer.data();
+    if (raw->header.dwType != RIM_TYPEHID) {
+        return;
+    }
+
+    const TouchpadDevice* dev = TouchpadDeviceFor(raw->header.hDevice);
+    if (!dev) {
+        return;
+    }
+
+    const RAWHID& hid = raw->data.hid;
+    for (DWORD i = 0; i < hid.dwCount; i++) {
+        TouchpadReaderOnReport(*dev, (PCHAR)hid.bRawData + (size_t)i * hid.dwSizeHid, hid.dwSizeHid);
+    }
+}
+
+// A handle can be reused by another device, and a device that goes away takes the
+// fingers on it with it.
+static void TouchpadReaderOnDeviceChange(HANDLE hDevice) {
+    g_touchpadDevices.erase(hDevice);
+    g_touchpadFrame.clear();
+    g_touchpadFrameExpected = 0;
+}
+
+// "One registration per process" check, so a leftover registration is visible in the
+// log before the reader adds its own.
+static void TouchpadReaderLogRegistrations(const WCHAR* tag) {
+    UINT count = 0;
+    GetRegisteredRawInputDevices(NULL, &count, sizeof(RAWINPUTDEVICE));
+    if (!count) {
+        Wh_Log(L"SWS touchpad reader: %s: no raw input devices registered in this process", tag);
+        return;
+    }
+    std::vector<RAWINPUTDEVICE> devices(count);
+    if (GetRegisteredRawInputDevices(devices.data(), &count, sizeof(RAWINPUTDEVICE)) == (UINT)-1) {
+        return;
+    }
+    for (const RAWINPUTDEVICE& rid : devices) {
+        Wh_Log(L"SWS touchpad reader: %s: usagePage=0x%X usage=0x%X flags=0x%X", tag, rid.usUsagePage,
+               rid.usUsage, rid.dwFlags);
+    }
+}
+
+static LRESULT CALLBACK TouchpadReaderWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+        case WM_INPUT:
+            TouchpadReaderOnRawInput((HRAWINPUT)lParam);
+            break;
+        case WM_INPUT_DEVICE_CHANGE:
+            TouchpadReaderOnDeviceChange((HANDLE)lParam);
+            return 0;
+    }
+    return DefWindowProcW(hWnd, uMsg, wParam, lParam);
+}
+
+static DWORD WINAPI TouchpadReaderThread(LPVOID) {
+    // Same thread setup as the reference mod: PMv2 DPI for the window and high priority
+    // so a busy frame cannot delay report parsing. The DPI call is resolved dynamically
+    // to stay independent of the SDK's DPI headers.
+    using SetThreadDpiAwarenessContext_t = HANDLE(WINAPI*)(HANDLE);
+    static auto pSetThreadDpiAwarenessContext = (SetThreadDpiAwarenessContext_t)GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext");
+    if (pSetThreadDpiAwarenessContext) {
+        pSetThreadDpiAwarenessContext((HANDLE)-4); // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+    }
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
+
+    HINSTANCE hInstance = NULL;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       (LPCWSTR)&TouchpadReaderWndProc, &hInstance);
+
+    WNDCLASSEXW wc = { sizeof(wc) };
+    wc.lpfnWndProc = TouchpadReaderWndProc;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = SWS_TOUCHPAD_READER_CLASSNAME;
+    if (!RegisterClassExW(&wc)) {
+        Wh_Log(L"SWS touchpad reader: RegisterClassEx failed (%u)", GetLastError());
+        return 0;
+    }
+
+    // A hidden top-level window rather than a message-only one: raw input in the
+    // background is not reliably delivered to message-only windows.
+    HWND hReaderWnd = CreateWindowExW(WS_EX_TOOLWINDOW, SWS_TOUCHPAD_READER_CLASSNAME, L"", WS_POPUP, 0, 0,
+                                      0, 0, NULL, NULL, hInstance, NULL);
+    if (!hReaderWnd) {
+        Wh_Log(L"SWS touchpad reader: CreateWindowEx failed (%u)", GetLastError());
+        UnregisterClassW(SWS_TOUCHPAD_READER_CLASSNAME, hInstance);
+        return 0;
+    }
+
+    TouchpadReaderLogRegistrations(L"before register");
+    RAWINPUTDEVICE rid = {};
+    rid.usUsagePage = SWS_HID_PAGE_DIGITIZER;
+    rid.usUsage = SWS_HID_USAGE_TOUCHPAD;
+    rid.dwFlags = RIDEV_INPUTSINK | RIDEV_DEVNOTIFY;
+    rid.hwndTarget = hReaderWnd;
+    BOOL registered = RegisterRawInputDevices(&rid, 1, sizeof(rid));
+    if (registered) {
+        TouchpadReaderLogRegistrations(L"after register");
+    } else {
+        Wh_Log(L"SWS touchpad reader: RegisterRawInputDevices failed (%u)", GetLastError());
+    }
+
+    MSG msg;
+    while (registered) {
+        DWORD wake = MsgWaitForMultipleObjectsEx(1, &g_hTouchpadReaderStopEvent, INFINITE, QS_ALLINPUT,
+                                                 MWMO_INPUTAVAILABLE);
+        if (wake != WAIT_OBJECT_0 + 1) {
+            break; // stop event signaled, or the wait failed
+        }
+        bool quit = false;
+        while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                quit = true;
+                break;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        if (quit) {
+            break;
+        }
+    }
+
+    if (registered) {
+        rid.dwFlags = RIDEV_REMOVE;
+        rid.hwndTarget = NULL;
+        RegisterRawInputDevices(&rid, 1, sizeof(rid));
+    }
+    g_touchpadDevices.clear();
+    g_touchpadFrame.clear();
+    g_touchpadFrameExpected = 0;
+    DestroyWindow(hReaderWnd);
+    UnregisterClassW(SWS_TOUCHPAD_READER_CLASSNAME, hInstance);
+    Wh_Log(L"SWS touchpad reader: stopped");
+    return 0;
+}
+
+static bool TouchpadRawInputRequested() {
+    WCHAR mode[16];
+    LoadStringSetting(L"Touchpad.inputMode", mode, L"legacy");
+    return wcscmp(mode, L"raw") == 0;
+}
+
+static void StartTouchpadReader() {
+    if (g_hTouchpadReaderThread) {
+        return;
+    }
+    g_hTouchpadReaderStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!g_hTouchpadReaderStopEvent) {
+        return;
+    }
+    g_hTouchpadReaderThread = CreateThread(NULL, 0, TouchpadReaderThread, NULL, 0, NULL);
+    if (!g_hTouchpadReaderThread) {
+        CloseHandle(g_hTouchpadReaderStopEvent);
+        g_hTouchpadReaderStopEvent = NULL;
+        return;
+    }
+    Wh_Log(L"SWS touchpad reader: started");
+}
+
+static void StopTouchpadReader() {
+    if (!g_hTouchpadReaderThread) {
+        return;
+    }
+    Wh_Log(L"SWS touchpad reader: stopping");
+    SetEvent(g_hTouchpadReaderStopEvent);
+    WaitForSingleObject(g_hTouchpadReaderThread, INFINITE);
+    CloseHandle(g_hTouchpadReaderThread);
+    g_hTouchpadReaderThread = NULL;
+    CloseHandle(g_hTouchpadReaderStopEvent);
+    g_hTouchpadReaderStopEvent = NULL;
+}
+
 // Tool Mod callbacks
 
 BOOL WhTool_ModInit() {
@@ -13546,11 +13929,17 @@ BOOL WhTool_ModInit() {
         g_WM_SWS_TOUCHPAD_DISMISS = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadDismiss");
     }
     g_hSwitcherThread = CreateThread(NULL, 0, SwitcherThread, NULL, 0, &g_dwSwitcherThreadId);
+    if (TouchpadRawInputRequested()) {
+        StartTouchpadReader();
+    }
     return g_hSwitcherThread != NULL;
 }
 
 void WhTool_ModUninit() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModUninit");
+    // The reader owns a window class and a raw input registration: stop and join it
+    // before anything else is torn down.
+    StopTouchpadReader();
     while (g_dwSwitcherThreadId &&
            !PostThreadMessage(g_dwSwitcherThreadId, WM_QUIT, 0, 0)) {
         if (GetLastError() != ERROR_INVALID_THREAD_ID) break;
@@ -13590,6 +13979,11 @@ void WhTool_ModUninit() {
 
 void WhTool_ModSettingsChanged() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModSettingsChanged");
+    if (TouchpadRawInputRequested()) {
+        StartTouchpadReader();
+    } else {
+        StopTouchpadReader();
+    }
     if (g_hSwitcher) {
         PostMessage(g_hSwitcher, WM_SWS_SETTINGS_CHANGED, 0, 0);
     }
