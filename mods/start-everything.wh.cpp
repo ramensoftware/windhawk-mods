@@ -86,8 +86,8 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
   $name: Show Keyboard Shortcuts Bar
   $description: Display the keyboard shortcut hints ([Up/Down] Select, [Enter] Open, [Ctrl+Enter] Admin, [Esc] Close) in the bottom bar.
 - filterNoisyPaths: true
-  $name: Demote Noisy Paths
-  $description: Automatically demote deep build caches, version control internals, and temporary directories to the bottom of file search results.
+  $name: Filter Noisy Paths
+  $description: Filter out deep build caches, version control internals, and temporary directories from file search results unless no other matches exist.
 - excludedPaths:
     - "\\node_modules\\"
     - "\\.git\\"
@@ -105,7 +105,7 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
     - "\\windows\\servicing\\"
   $name: Excluded Path Patterns
   $description: >-
-    Paths matching any of these substrings will be demoted in file search results so build caches, dependencies, and internal system folders don't clutter the top matches.
+    Paths matching any of these substrings will be filtered out from file search results so build caches, dependencies, and internal system folders don't clutter matches.
 - defaultSearchUrl: "https://duckduckgo.com/?q={q}"
   $name: Default Search Engine URL
   $description: >-
@@ -227,6 +227,7 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <shlwapi.h>
+#include <string_view>
 #include <limits>
 #include <atomic>
 #include <chrono>
@@ -825,7 +826,7 @@ namespace ranker {
 // and 200 is the largest pool that stays close to it for every query
 // including a single letter. 300 is already 48 ms on "c" and 1000 is far too
 // slow to run per keystroke.
-inline constexpr DWORD kDefaultPool = 300;
+inline constexpr DWORD kDefaultPool = 200;
 
 inline std::wstring ToLower(std::wstring s) {
     std::transform(s.begin(), s.end(), s.begin(),
@@ -3768,13 +3769,7 @@ void LoadSettings() {
     int maxFiles = Wh_GetIntSetting(L"maxFileResults");
     g_settings.maxFileResults = (maxFiles > 0) ? std::clamp(maxFiles, 1, 50) : 12;
 
-    auto debounceSetting = WindhawkUtils::StringSetting::make(L"searchDebounceMs");
-    if (debounceSetting.get() && *debounceSetting.get()) {
-        int debounce = Wh_GetIntSetting(L"searchDebounceMs");
-        g_settings.searchDebounceMs = std::clamp(debounce, 0, 1000);
-    } else {
-        g_settings.searchDebounceMs = 25;
-    }
+    g_settings.searchDebounceMs = std::clamp(Wh_GetIntSetting(L"searchDebounceMs"), 0, 1000);
 
     g_settings.showKeyHints = Wh_GetIntSetting(L"showKeyHints") != 0;
 
@@ -4332,29 +4327,8 @@ void TakeForeground(bool force = false) {
             return;
         }
 
-        DWORD ourWindowTid = GetWindowThreadProcessId(ours, nullptr);
-        DWORD currentTid = current ? GetWindowThreadProcessId(current, nullptr) : 0;
-        DWORD callerTid = GetCurrentThreadId();
-
-        // Simulate Alt press/release to bypass Windows foreground restriction
-        keybd_event(VK_MENU, 0, 0, 0);
-        keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0);
-
-        if (currentTid && currentTid != callerTid) {
-            AttachThreadInput(callerTid, currentTid, TRUE);
-            if (ourWindowTid && ourWindowTid != callerTid && ourWindowTid != currentTid) {
-                AttachThreadInput(ourWindowTid, currentTid, TRUE);
-            }
-            SetForegroundWindow(ours);
-            BringWindowToTop(ours);
-            if (ourWindowTid && ourWindowTid != callerTid && ourWindowTid != currentTid) {
-                AttachThreadInput(ourWindowTid, currentTid, FALSE);
-            }
-            AttachThreadInput(callerTid, currentTid, FALSE);
-        } else {
-            SetForegroundWindow(ours);
-            BringWindowToTop(ours);
-        }
+        SetForegroundWindow(ours);
+        BringWindowToTop(ours);
     } catch (...) {
     }
 }
@@ -4375,7 +4349,6 @@ void FocusOurBoxNow() {
         }
     } catch (...) {}
 
-    TakeForeground();
     try {
         bool ok = g_ourBox.Focus(wux::FocusState::Programmatic);
         g_ourBox.SelectionStart(static_cast<int32_t>(g_ourBox.Text().size()));
@@ -4449,9 +4422,14 @@ void DismissStartMenu() {
         if (ours && IsWindow(ours)) {
             SetForegroundWindow(ours);
             BringWindowToTop(ours);
-            keybd_event(VK_ESCAPE, 0, 0, 0);
-            keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0);
-            Wh_Log(L"DismissStartMenu: sent Escape via keybd_event to CoreWindow %p", ours);
+            if (GetForegroundWindow() == ours) {
+                keybd_event(VK_ESCAPE, 0, 0, 0);
+                keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0);
+                Wh_Log(L"DismissStartMenu: sent Escape to foreground (CoreWindow %p)", ours);
+            } else {
+                Wh_Log(L"DismissStartMenu: could not foreground CoreWindow %p (current=%p), skipped Escape",
+                    ours, GetForegroundWindow());
+            }
         }
     } catch (...) {
     }
@@ -4756,10 +4734,6 @@ void CALLBACK AttachWatchProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
     if ((event != EVENT_OBJECT_SHOW && event != EVENT_OBJECT_UNCLOAKED) ||
         !hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
         return;
-    }
-    if ((event == EVENT_OBJECT_UNCLOAKED || event == EVENT_OBJECT_SHOW) && hwnd == GetOurCoreWindow()) {
-        g_suppressRefocus.store(false);
-        TriggerMenuOpenFocus();
     }
     // In-context, so this is the thread that raised the event. The filter is
     // Window::Current() returning something rather than a class name, because
@@ -7742,6 +7716,8 @@ void Wh_ModUninit() {
                     wuc::DispatchedHandler{[] { TeardownStartMenuUi(); }});
                 if (op.wait_for(std::chrono::seconds(5)) == wf::AsyncStatus::Completed) {
                     tornDown = true;
+                } else {
+                    op.Cancel();
                 }
             }
         } catch (...) {}
