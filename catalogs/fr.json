@@ -4058,7 +4058,7 @@
         "ratingBreakdown": [17, 17, 44, 156, 600],
         "ratingUsers": 834,
         "reviews": 1,
-        "updated": 1790434954000,
+        "updated": 1790443976000,
         "users": 20976
       },
       "metadata": {
@@ -4071,7 +4071,7 @@
         ],
         "license": "MIT",
         "name": "Dynamic Island for Windows",
-        "version": "1.3.0"
+        "version": "1.3.1"
       }
     },
     "dynamic-taskbar-transparency": {

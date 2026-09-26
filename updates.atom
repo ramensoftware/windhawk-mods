@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-26T15:02:34.000Z</updated>
+    <updated>2026-09-26T17:32:56.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Dynamic Island for Windows 1.3.1]]></title>
+        <id>https://windhawk.net/mods/dynamic-island-for-windows#682a7f72694eb768724bea8ef72b079aedd9c57b</id>
+        <link href="https://windhawk.net/mods/dynamic-island-for-windows"/>
+        <updated>2026-09-26T17:32:56.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the preview images on this page showing an older version.</li>
+</ul>]]></content>
+        <author>
+            <name>Himanshu</name>
+            <uri>https://github.com/devcode90</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Dynamic Island for Windows 1.3.0]]></title>
         <id>https://windhawk.net/mods/dynamic-island-for-windows#0ea4c30d36a16f1e5e5579eebf6fd6a953ce7d98</id>
@@ -723,21 +736,6 @@ after the next volume change.</li>
         <content type="html"><![CDATA[<ul>
 <li>Fix a critical winlogon crash occurring on Windhawk 2.0 alpha 6 (by @m417z)</li>
 <li>Add support for all fade modes on Windows 8.x</li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Vista/7 Blocked Shutdown UX & Logoff Sequence 1.3]]></title>
-        <id>https://windhawk.net/mods/win7-bsdr#0b31194932e041ef6da46e6bd165567d4b400099</id>
-        <link href="https://windhawk.net/mods/win7-bsdr"/>
-        <updated>2026-09-24T21:02:24.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Hardcode Windows Vista style resources, as well as 35 languages from every available Vista/7 MUIs.</li>
-<li>External DLL is no longer required for using the Vista style or localization. It is now only left for advanced users who want to customize the dialog with Resource Hacker.<ul>
-<li>If you have been using an external DLL, please set the dialog style to either Custom or your desired one.</li></ul></li>
 </ul>]]></content>
         <author>
             <name>Ingan121</name>

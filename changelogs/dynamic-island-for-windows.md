@@ -1,3 +1,7 @@
+## 1.3.1 ([Sep 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/682a7f72694eb768724bea8ef72b079aedd9c57b/mods/dynamic-island-for-windows.wh.cpp))
+
+* Fixed the preview images on this page showing an older version.
+
 ## 1.3.0 ([Sep 26, 2026](https://github.com/ramensoftware/windhawk-mods/blob/0ea4c30d36a16f1e5e5579eebf6fd6a953ce7d98/mods/dynamic-island-for-windows.wh.cpp))
 
 ### Resolved Issues
