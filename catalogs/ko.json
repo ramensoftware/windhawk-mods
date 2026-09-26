@@ -11654,7 +11654,7 @@
         "ratingBreakdown": [0, 0, 0, 1, 10],
         "ratingUsers": 11,
         "reviews": 0,
-        "updated": 1788909372000,
+        "updated": 1790424286000,
         "users": 116
       },
       "metadata": {
@@ -11670,7 +11670,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Clock to Left",
-        "version": "2.1"
+        "version": "2.2"
       }
     },
     "taskbar-content-presenter-injector": {

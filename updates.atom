@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-26T10:02:43.000Z</updated>
+    <updated>2026-09-26T12:04:46.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock to Left 2.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-to-left#9b682750ef56a668a628b3da682b49100cee3c7d</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-to-left"/>
+        <updated>2026-09-26T12:04:46.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Place the relocated clock to the right of a Start button pinned to the physical left edge while taskbar apps remain centered.</li>
+<li>Recalculate the clock offset after taskbar layout updates without repeatedly searching the whole visual tree.</li>
+</ul>]]></content>
+        <author>
+            <name>pleromyst</name>
+            <uri>https://github.com/pleromyst</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[MuteAlert - Microphone Activity Taskbar Widget 0.9.14]]></title>
         <id>https://windhawk.net/mods/mutealert#e0b005149fc9a16518fa3f84747e3301d853916a</id>
@@ -785,238 +799,6 @@ GPU; on the software renderer they work but cost noticeably more CPU.</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[After Effects Theme 1.0.0]]></title>
-        <id>https://windhawk.net/mods/after-effects-theme#d577b0225340f06c1c6f6cee8676feb4b520c701</id>
-        <link href="https://windhawk.net/mods/after-effects-theme"/>
-        <updated>2026-09-23T22:04:46.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="aftereffectstheme">After Effects Theme</h1>
-<p>Recolors After Effects far beyond what the Appearance brightness slider
-reaches, and does it consistently across the parts of the app that are painted
-in different ways.</p>
-<p>It is the sister of <strong>Premiere Pro Theme</strong>: the two apps share Adobe's UI
-toolkit, <code>dvaui.dll</code>, so the same palettes land on After Effects the same way.
-The two mods are one codebase kept as two, so that each app has a palette and
-switches of its own in Windhawk; a fix to what they share goes into both.</p>
-<h2 id="screenshots">Screenshots</h2>
-<p>The same project in After Effects 2026, palette by palette.</p>
-<p><strong>Onyx</strong>: the default. Near black, and neutral.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/onyx.png" alt="Onyx palette" /></p>
-<p><strong>Abyss</strong>: absolute black, for an OLED panel.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/abyss.png" alt="Abyss palette" /></p>
-<p><strong>Graphite</strong>: dark, a little more legible.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/graphite.png" alt="Graphite palette" /></p>
-<p><strong>After Effects</strong>: the violet sampled from the app icon.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/aftereffects.png" alt="After Effects palette" /></p>
-<p><strong>Comfy</strong>: warm brown, low contrast for long sessions.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/comfy.png" alt="Comfy palette" /></p>
-<p><strong>Neon</strong>: near black with magenta.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/neon.png" alt="Neon palette" /></p>
-<p><strong>Glitch</strong>: acid green with a magenta accent.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/glitch.png" alt="Glitch palette" /></p>
-<p><strong>Contrast</strong>: black panels, light dividers, pure white text.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/contrast.png" alt="Contrast palette" /></p>
-<p><strong>Violet</strong>: a purple interface, not just a purple accent.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/violet.png" alt="Violet palette" /></p>
-<p><strong>Blossom</strong>: dark rose, pastel in its text and border.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/blossom.png" alt="Blossom palette" /></p>
-<p><strong>Ember</strong>: near black under a strong orange.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/ember.png" alt="Ember palette" /></p>
-<p><strong>Amethyst</strong>: neutral panels, the purple only on the edges.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/amethyst.png" alt="Amethyst palette" /></p>
-<p><strong>Crimson</strong>: near black under a strong red.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/crimson.png" alt="Crimson palette" /></p>
-<p><strong>Threshold</strong>: <code>#050505</code>, <code>#FFFFFF</code> and <code>#DC2626</code>.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/threshold.png" alt="Threshold palette" /></p>
-<p><strong>Miku</strong>: deep teal with a cyan accent.</p>
-<p><img src="https://raw.githubusercontent.com/CakeDev4k/after-effects-theme/main/screenshots/miku.png" alt="Miku palette" /></p>
-<h2 id="palettes">Palettes</h2>
-<p>Neutral:</p>
-<p>| Level   | Onyx      | Abyss     | Graphite  | Contrast  |
-|---------|-----------|-----------|-----------|-----------|
-| Base    | <code>#050505</code> | <code>#000000</code> | <code>#0D0D0D</code> | <code>#000000</code> |
-| Panel   | <code>#090909</code> | <code>#040404</code> | <code>#141414</code> | <code>#060606</code> |
-| Surface | <code>#0E0E0E</code> | <code>#080808</code> | <code>#1A1A1A</code> | <code>#101010</code> |
-| Raised  | <code>#161616</code> | <code>#101010</code> | <code>#232323</code> | <code>#202020</code> |
-| Border  | <code>#242424</code> | <code>#1C1C1C</code> | <code>#303030</code> | <code>#4A4A4A</code> |</p>
-<p>Tinted:</p>
-<p>| Level   | After Effects | Comfy     | Neon      | Glitch    |
-|---------|---------------|-----------|-----------|-----------|
-| Base    | <code>#06060F</code>     | <code>#100C09</code> | <code>#080508</code> | <code>#060A02</code> |
-| Panel   | <code>#0C0C20</code>     | <code>#181310</code> | <code>#0E0A0D</code> | <code>#0C1305</code> |
-| Surface | <code>#131333</code>     | <code>#211A15</code> | <code>#1A0F18</code> | <code>#131D08</code> |
-| Raised  | <code>#1E1E4D</code>     | <code>#2E241C</code> | <code>#2A1526</code> | <code>#1E2C0C</code> |
-| Border  | <code>#33337A</code>     | <code>#453528</code> | <code>#4D213F</code> | <code>#3C5410</code> |
-| Text    | <code>#D2D2F7</code>     | <code>#EDE0D0</code> | <code>#FAF5EF</code> | <code>#E9F7C0</code> |
-| Accent  | <code>#3A3A99</code>     | <code>#5A4028</code> | <code>#5C1F47</code> | <code>#B8157A</code> |</p>
-<p>Vivid — the hue is in the ramp, so the panels themselves carry it:</p>
-<p>| Level     | Violet    | Blossom   | Ember     | Crimson   | Miku      |
-|-----------|-----------|-----------|-----------|-----------|-----------|
-| Base      | <code>#0A0414</code> | <code>#120A0E</code> | <code>#0C0703</code> | <code>#0D0405</code> | <code>#061014</code> |
-| Panel     | <code>#120827</code> | <code>#180D13</code> | <code>#140B04</code> | <code>#150609</code> | <code>#0A1920</code> |
-| Surface   | <code>#1C0C3B</code> | <code>#241320</code> | <code>#1F1206</code> | <code>#200A0E</code> | <code>#10262D</code> |
-| Raised    | <code>#2A1257</code> | <code>#341B2E</code> | <code>#2E1A08</code> | <code>#300F15</code> | <code>#173740</code> |
-| Border    | <code>#4B2088</code> | <code>#5A2C4A</code> | <code>#55300C</code> | <code>#591A24</code> | <code>#28515C</code> |
-| Text      | <code>#E2D4FA</code> | <code>#FBDCE8</code> | <code>#FBE3C8</code> | <code>#F7D9DD</code> | <code>#DDFBFF</code> |
-| Accent    | <code>#6D28D9</code> | <code>#864160</code> | <code>#944108</code> | <code>#B91C1C</code> | <code>#0E7478</code> |
-| Highlight | <code>#7737DC</code> | <code>#934869</code> | <code>#9F4608</code> | <code>#BB2222</code> | <code>#2B6A68</code> |</p>
-<p>Strong accent on near black — the panels stay neutral, and the color is only the
-edge, the accent and the highlight:</p>
-<p>| Level     | Amethyst  | Threshold |
-|-----------|-----------|-----------|
-| Base      | <code>#050507</code> | <code>#050505</code> |
-| Panel     | <code>#09090D</code> | <code>#0A0A0A</code> |
-| Surface   | <code>#0F0F16</code> | <code>#121212</code> |
-| Raised    | <code>#181823</code> | <code>#1C1C1C</code> |
-| Border    | <code>#33254F</code> | <code>#2B2B2B</code> |
-| Text      | <code>#E4DCF2</code> | <code>#FFFFFF</code> |
-| Accent    | <code>#6730C6</code> | <code>#DC2626</code> |
-| Highlight | <code>#7537DF</code> | <code>#BC2020</code> |</p>
-<p><strong>After Effects</strong> takes its violet from the app's icon; <strong>Neon</strong> and
-<strong>Glitch</strong> come from reference artwork, and <strong>Comfy</strong> is the lightest, for
-long sessions. <strong>Contrast</strong> keeps a <code>#4A4A4A</code> border so edges stay legible on
-black panels. <strong>Blossom</strong> is pastel in its text and border only: a pastel
-background would leave the app's own light text unreadable. <strong>Threshold</strong> is
-threshold-editor.com.br's <code>#050505</code>, <code>#FFFFFF</code> and <code>#DC2626</code>.</p>
-<p>The accent stays out of the ramp, which is interpolated, so it only shows on
-hovered menu items and system highlights; each one is at least 4.5:1 against
-its palette's text.</p>
-<p>Contrast and the palettes with a <strong>Highlight</strong> row give the interface blue —
-the focused panel's border, the active tool, selections, links — their own
-hue, each blue at its own brightness, so white text on a blue button keeps its
-contrast. The row is the shade of Spectrum's <code>#005CC8</code>, the blue most of the
-interface uses; Contrast's is the gray <code>#606060</code>. <strong>Palette highlight</strong> in the
-settings keeps the blue on any palette.</p>
-<h2 id="customthemes">Custom themes</h2>
-<p><strong>Custom</strong> takes its colors from the <strong>Custom theme</strong> group in the settings,
-one field each:</p>
-<p>| Field             |          | What it colors                                                |
-|-------------------|----------|---------------------------------------------------------------|
-| <strong>Base</strong>          | required | the darkest step: the deepest background                      |
-| <strong>Panel</strong>         | required | the second step, and the title bar and menu bar               |
-| <strong>Surface</strong>       | required | the middle step                                               |
-| <strong>Raised</strong>        | required | the fourth step                                               |
-| <strong>Border</strong>        | required | the lightest step: dividers and edges                         |
-| <strong>Text</strong>          | required | menu and title bar text                                       |
-| <strong>Accent</strong>        | optional | hovered menu items; the border when left empty                |
-| <strong>Disabled text</strong> | optional | disabled menu items; halfway from text to panel when empty    |
-| <strong>Highlight</strong>     | optional | the hue the interface blue takes; the blue stays when empty   |</p>
-<p>Colors are <code>#RRGGBB</code>, or <code>#RRGGBBAA</code> from a picker that writes an alpha,
-which is ignored. The group starts as Onyx, with <strong>Highlight</strong> empty. A
-required field left empty or misspelled falls back to Onyx's color, named in
-the log, so the interface never ends up half themed.</p>
-<p><strong>Highlight</strong> in the palette tables above is the shade the hue produces, not
-the hue: Violet's row reads <code>#7737DC</code>, which is what its <code>#6D28D9</code> becomes at
-the brightness of the interface's own blue — so a custom theme wanting
-Violet's highlight takes <code>#6D28D9</code>. Every other row is the value the field
-takes directly.</p>
-<h3 id="sharingone">Sharing one</h3>
-<p>The <strong>Settings</strong> tab has a text mode next to the visual one, and what it holds
-is the settings as YAML — the palette, then <code>customTheme</code> as a block under it:</p>
-<pre><code class="yaml language-yaml">palette: custom
-customTheme:
-  base: '#050505'
-  panel: '#0A0A0A'
-  surface: '#121212'
-  raised: '#1C1C1C'
-  border: '#2B2B2B'
-  text: '#FFFFFF'
-  accent: '#DC2626'
-  disabledText: '#8A8A8A'
-  highlight: '#DC2626'
-</code></pre>
-<p><strong>To use a theme someone sent you</strong>, paste it into that box over what is there
-and save. The colors need their quotes: a bare <code>#</code> starts a comment in YAML.</p>
-<p><strong>To copy your own out</strong>, put the palette on <strong>Custom</strong> and read the mod's log.
-It writes the theme as one line, in YAML's flow form, which that box reads the
-same as the block above. Saving that box replaces every setting it is given, so
-the log writes only the palette and the colors, never the layer switches.</p>
-<p>Keep the five steps dark and in order: After Effects' own text is light and is
-not recolored.</p>
-<h2 id="whatitchangesandwhatitleavesalone">What it changes, and what it leaves alone</h2>
-<p>Each layer has its own switch in the settings:</p>
-<ul>
-<li><strong>After Effects interface</strong> — the theme colors served by <code>dvaui.dll</code>,
-Adobe's UI toolkit: panels, the Timeline, the viewers, Effect Controls.</li>
-<li><strong>Direct fills</strong> — surfaces painted without asking the theme, through the
-Direct2D brush factory most solid fills pass through.</li>
-<li><strong>Window and system dialogs</strong> — dark title bar, border and native dialogs.</li>
-<li><strong>Menu bar and menus</strong> — the File / Edit / Composition bar and its dropdowns.</li>
-<li><strong>GDI surfaces</strong> — brushes, pens and text backgrounds created by Adobe's
-own modules.</li>
-<li><strong>UXP panels</strong> — the Home screen, bar across its top included, drawn from
-stylesheets, scripts and design tokens of its own. Off by default, because
-it only follows a change across a restart: turn it on, and restart, for the
-Home screen to take the palette.</li>
-<li><strong>Palette highlight</strong> — the interface blue, on the palettes that carry a
-highlight.</li>
-</ul>
-<p>Saturated colors — layer labels, keyframes, warnings, and the interface blue
-unless the palette carries a highlight — pass through, and so does anything
-above the <strong>brightness ceiling</strong>: text, icons, and the <code>#4B4B4B</code> of disabled
-text. Content is left alone whatever its color: the color picker, color
-chips, the solid-color button and the gradient editor's ramp.</p>
-<h2 id="ifsomethingbecomesunreadable">If something becomes unreadable</h2>
-<p>Lower the ceiling. Raising it darkens more, starting with disabled text — which
-is exactly what disappears first.</p>
-<p>Settings apply while After Effects is running. Some surfaces keep the previous
-palette until After Effects restarts, because it copies those colors into
-caches of its own.</p>
-<p>If an After Effects update ever makes a panel misbehave with the mod on,
-switch off <strong>After Effects interface</strong>, <strong>Direct fills</strong> and <strong>GDI surfaces</strong>
-together and restart After Effects. With all three off when the mod loads, it
-does not hook Adobe's modules at all.</p>
-<h2 id="othermodsthatdarkenmenus">Other mods that darken menus</h2>
-<p>If your menu bar ignores the palette, another mod is painting it first: any mod
-that darkens Win32 menus globally answers the same <code>DefWindowProc</code> messages
-before this one, with its own fixed color. Add <code>AfterFX.exe</code> to that mod's
-process <strong>exclusion</strong> list and this one takes over.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<p><strong>The Home screen changes on restart</strong>, which is why <strong>UXP panels</strong> is off by
-default. After Effects reads its files once, when it loads, and the mod
-recolors that read — a temporary copy, deleted as soon as it is closed;
-nothing on disk changes. So turning the switch on, a palette switch, and
-turning it back off or disabling the mod all show there after a restart.</p>
-<p><strong>The dropdown menus are dark, not palette-colored.</strong> The menu bar itself is
-painted here, item by item; the menus that drop out of it, and the right-click
-menus, are drawn by Windows with the dark menu theme this mod switches on.
-Measured on Windows 11 build 26200, the theme those menus draw with never
-passes through the entry points the mod watches, so they are dark rather than
-the palette. A menu taller than the screen grows a small scroll button at each
-end, which Windows paints outside the theme system altogether, so those keep
-the light system color.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>The mod looks up each color function by name at startup, installs the ones the
-running build exports, and logs the rest, so a version that moved or dropped a
-function loses that surface, not the mod. Measured against the installed
-builds:</p>
-<p>| After Effects | Color functions found | Drawing primitives |
-|---------------|-----------------------|--------------------|
-| 2026          | 26 of 26              | 5 of 5             |
-| 2023          | 7 of 26               | 4 of 5             |</p>
-<p>The 2023 toolkit is older and has no skins utilities or <code>dna</code> family; what it
-does export covers the classic theme and the Spectrum gray ramp, and the brush
-factory catches much of the rest. The window frame, the menu bar and the
-native dialogs do not depend on the After Effects version at all. Native dark
-mode needs Windows 10 build 17763 or newer; below that the mod still themes
-the interface and paints the menus itself.</p>
-<p>Turn on <strong>Mod logs</strong> in Windhawk's Advanced tab to see what a session got: it
-logs <code>dvaui: N hooks active</code>, or says the interface layer is not installed
-when a build exports none of the functions.</p>
-<h2 id="questionsbugsandpalettes">Questions, bugs and palettes</h2>
-<p>Bug reports and palette suggestions are welcome on
-<a href="https://discord.gg/m5kVMR8Vuu">Discord</a>, where an After Effects build and a
-screenshot are usually all it takes to work one out.</p>
-<h2 id="credits">Credits</h2>
-<p>The menu bar technique — the undocumented <code>WM_UAHDRAWMENU</code> messages and the
-<code>DarkMode::Menu</code> theme class — comes from
-<a href="https://github.com/adzm/win32-darkmode">win32-darkmode</a> by adzm, MIT licensed.
-This mod is MIT as well.</p>]]></content>
-        <author>
-            <name>Threshold Editor</name>
-            <uri>https://github.com/CakeDev4k</uri>
         </author>
     </entry>
 </feed>
