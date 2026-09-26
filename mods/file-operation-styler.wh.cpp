@@ -8926,7 +8926,8 @@ namespace
                 return;
             }
 
-            if (EnsureSharedProgressBridge())
+            if (g_showCurrentFileProgressBar &&
+                EnsureSharedProgressBridge())
             {
                 ULONGLONG readNow = GetTickCount64();
                 bool foundSharedCurrentFile = false;
@@ -10032,7 +10033,8 @@ namespace
             COperationDataProvider_WriteCurrentItem_Original(
                 thisPtr, currentItem);
 
-        if (!g_unloading.load(std::memory_order_acquire))
+        if (!g_unloading.load(std::memory_order_acquire) &&
+            g_showCurrentFileProgressBar)
         {
             PWSTR filePath = nullptr;
 
@@ -10157,6 +10159,7 @@ namespace
             binding->latestProgressValid = true;
             PublishSharedProgress(*binding);
 
+        }
         }
 
 
