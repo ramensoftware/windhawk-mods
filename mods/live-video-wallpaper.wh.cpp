@@ -31,6 +31,7 @@ playback.
 - **Battery-Aware Power Saving:** Configurable behavior (`Pause`, `Drop to 15 FPS`, or `Play normally`) when running on laptop battery power.
 - **Instant First-Frame Presentation:** Decodes and presents the initial video frame immediately upon loading so the wallpaper never gets stuck on a black screen when starting in paused/battery mode.
 - **Scaling Modes & Aspect Ratio Fix:** Support for `Fill` (stretch to fill screen), `Cover` (zoom & crop edges without distortion), and `Fit` (letterbox with cinema-style black borders). Fixed aspect ratio scaling for wide, ultrawide, and 1:1 square monitors.
+- **Multi-monitor layout:** Span one video across the desktop, or show the same video on each monitor with independent scaling.
 - **Async File Picker (`Ctrl + Alt + G`):** Asynchronous background thread file picker for `.mp4`, `.m4v`, `.mov`, `.wmv`, and `.webm` files with zero frame drops during selection.
 - **Zero Desktop Right-Click Menu Delay:** Full input transparency (`HTTRANSPARENT`, `WS_EX_TRANSPARENT`, `WS_DISABLED`) ensures right-clicking desktop icons or background opens context menus with 0ms latency.
 - **Auto-Recovery:** Automatic D3D device-loss and Media Foundation decode stall recovery.
@@ -38,7 +39,7 @@ playback.
 ## Controls & Hotkeys
 
 - **`Ctrl + Alt + G`** — Open the interactive file picker to load a new video (`.mp4`, `.m4v`, `.mov`, `.wmv`, `.webm`).
-- **`Ctrl + Alt + H`** — Toggle wallpaper visibility on/off.
+- **`Ctrl + Alt + H`** — Hide and pause the wallpaper and its audio, or show and resume them.
 - **`Ctrl + Alt + D`** — Toggle Performance Profiler HUD (On / Off), if enabled in settings.
 
 ## Performance Profiler HUD
@@ -93,11 +94,17 @@ Frequency of background occlusion safety-net polling (`fast`: 100ms, `normal`: 2
   $description: Full path to an .mp4 file on disk. Tip -- press Ctrl+Alt+G in the desktop to pick a file interactively instead of typing a path here.
 - fitMode: fill
   $name: Fit mode
-  $description: How to scale the video across your monitor
+  $description: How to scale the video within the chosen display layout
   $options:
   - fill: Fill / Stretch (stretch both horizontally & vertically to fill screen)
   - cover: Cover / Zoom (zoom and crop edges to fill screen without distortion)
   - fit: Fit (letterbox with aspect ratio preserved and black borders)
+- displayLayout: span
+  $name: Display layout
+  $description: Span one video across all screens, or show the same video on each screen.
+  $options:
+  - span: Span all screens (one continuous video)
+  - clone: Same video on each screen
 - batteryMode: pause
   $name: Battery saving mode
   $description: What to do when running on laptop battery power
@@ -166,6 +173,7 @@ Frequency of background occlusion safety-net polling (`fast`: 100ms, `normal`: 2
 #include <shlwapi.h>
 #include <stdio.h>
 #include <string>
+#include <vector>
 #include <windows.h>
 #include <wtsapi32.h>
 
@@ -1528,6 +1536,7 @@ enum class BatteryMode { Pause, DropFps, Normal };
 CRITICAL_SECTION g_pathLock;
 std::wstring g_videoPath;
 std::atomic<int> g_fitMode{0}; // 0 = fill/stretch, 1 = cover/zoom, 2 = fit/letterbox
+std::atomic<bool> g_cloneDisplays{false};
 std::atomic<BatteryMode> g_batteryMode{BatteryMode::Pause};
 std::atomic<int> g_targetFps{60};
 std::atomic<bool> g_audioMuted{true};
@@ -1597,6 +1606,11 @@ std::wstring LoadSettings() {
   } else {
     g_fitMode = 0;
   }
+
+  PCWSTR displayLayoutStr = Wh_GetStringSetting(L"displayLayout");
+  g_cloneDisplays = displayLayoutStr && wcscmp(displayLayoutStr, L"clone") == 0;
+  if (displayLayoutStr)
+    Wh_FreeStringSetting(displayLayoutStr);
 
   PCWSTR batteryModeStr = Wh_GetStringSetting(L"batteryMode");
   BatteryMode newBatteryMode;
@@ -1725,6 +1739,28 @@ private:
 // Video player: D3D11 device, DXGI swap chain bound to the wallpaper HWND,
 // and the Media Foundation media engine that decodes into it.
 // ---------------------------------------------------------------------------
+
+struct MonitorRects {
+  std::vector<RECT>* rects;
+  POINT origin;
+  int width;
+  int height;
+
+  static BOOL CALLBACK Collect(HMONITOR, HDC, LPRECT monitor, LPARAM param) {
+    auto* data = reinterpret_cast<MonitorRects*>(param);
+    RECT rect = {monitor->left - data->origin.x,
+                 monitor->top - data->origin.y,
+                 monitor->right - data->origin.x,
+                 monitor->bottom - data->origin.y};
+    rect.left = (std::max)(0L, rect.left);
+    rect.top = (std::max)(0L, rect.top);
+    rect.right = (std::min)(static_cast<LONG>(data->width), rect.right);
+    rect.bottom = (std::min)(static_cast<LONG>(data->height), rect.bottom);
+    if (rect.right > rect.left && rect.bottom > rect.top)
+      data->rects->push_back(rect);
+    return TRUE;
+  }
+};
 
 struct VideoPlayer {
   ComPtr<ID3D11Device> d3dDevice;
@@ -2100,7 +2136,14 @@ struct VideoPlayer {
   // Called when MF_MEDIA_ENGINE_EVENT_CANPLAY (or similar readiness event)
   // arrives via kMsgMediaEngineEvent, back on the wallpaper thread.
   bool IsEffectivePaused() const {
-    return pausedForFullscreen || pausedForBattery || pausedForSession;
+    return pausedForFullscreen || pausedForBattery || pausedForSession ||
+           g_wallpaperHidden;
+  }
+
+  bool ShouldPauseNow() const {
+    // The first frame may be rendered while paused for battery/fullscreen,
+    // but a hidden wallpaper should not decode or play audio at all.
+    return IsEffectivePaused() && (!needsInitialFrame || g_wallpaperHidden);
   }
 
   static UINT GetMonitorRefreshIntervalMs() {
@@ -2132,7 +2175,7 @@ struct VideoPlayer {
       engine->SetMuted(g_audioMuted.load() ? TRUE : FALSE);
       engine->SetVolume(static_cast<double>(g_audioVolume.load()) / 100.0);
     }
-    if (IsEffectivePaused() && !needsInitialFrame) {
+    if (ShouldPauseNow()) {
       engine->Pause();
       if (boundHwnd)
         KillTimer(boundHwnd, kRenderTimerId);
@@ -2170,10 +2213,11 @@ struct VideoPlayer {
            wantsPlay ? 1 : 0, pausedForFullscreen ? 1 : 0,
            pausedForBattery ? 1 : 0);
     if (wantsPlay) {
-      HRESULT hr = engine->Play();
-      Wh_Log(L"VideoPlayer::OnCanPlay: Play() hr=0x%08lX", (unsigned long)hr);
-      if (IsEffectivePaused() && !needsInitialFrame) {
+      if (ShouldPauseNow()) {
         engine->Pause();
+      } else {
+        HRESULT hr = engine->Play();
+        Wh_Log(L"VideoPlayer::OnCanPlay: Play() hr=0x%08lX", (unsigned long)hr);
       }
     }
   }
@@ -2384,7 +2428,7 @@ struct VideoPlayer {
     Profiler::RecordTickCall();
     Profiler::UpdateWindowsState(pausedForFullscreen, pausedForBattery, pausedForSession, g_wallpaperHidden, isOnBattery);
 
-    if (deviceLost || !engine.Get() || !canPlay || (IsEffectivePaused() && !needsInitialFrame) ||
+    if (deviceLost || !engine.Get() || !canPlay || ShouldPauseNow() ||
         !swapChain.Get() || (transferMode == TransferMode::OffscreenFallback && !renderTarget.Get())) {
 // Throttled diagnostic: if we're perpetually blocked on one of
 // these gate conditions (most likely canPlay never becoming
@@ -2450,8 +2494,23 @@ struct VideoPlayer {
       ~FrameGuard() { Profiler::EndFrame(); }
     } frameGuard;
 
-    RECT dest;
-    ComputeDestRect(dest, fitMode);
+    RECT spanDest;
+    ComputeDestRect(spanDest, fitMode);
+
+    // Monitor rectangles are converted from screen to wallpaper-client coordinates.
+    // Enumerate here so hot-plugging, rearranging, and WorkerW reparenting all
+    // take effect without restarting the video.
+    std::vector<RECT> displayRects;
+    if (g_cloneDisplays.load() && boundHwnd) {
+      POINT origin = {0, 0};
+      ClientToScreen(boundHwnd, &origin);
+      MonitorRects data{&displayRects, origin, width, height};
+      EnumDisplayMonitors(nullptr, nullptr, MonitorRects::Collect,
+                          reinterpret_cast<LPARAM>(&data));
+    }
+    if (displayRects.empty())
+      displayRects.push_back({0, 0, width, height});
+    bool clone = g_cloneDisplays.load() && displayRects.size() > 1;
 
     ComPtr<ID3D11Texture2D> backBuffer;
     hr = swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D),
@@ -2463,19 +2522,17 @@ struct VideoPlayer {
       return false;
     }
 
-    // In fit mode (fitMode == 2), clear target textures to solid black before transferring
-    // so letterbox borders never show underlying Windows wallpaper. In fill (0) or cover (1) mode,
-    // the video frame covers 100% of the target texture, making per-frame clears redundant GPU work.
-    if (fitMode == 2) {
+    // Fit leaves letterbox borders; clone can also leave gaps between monitors.
+    // Clear those areas before drawing the current frame.
+    if (fitMode == 2 || clone) {
       ClearTexture(backBuffer.Get());
       if (renderTarget.Get()) {
         ClearTexture(renderTarget.Get());
       }
     }
 
-    MFVideoNormalizedRect srcRect = {0.0f, 0.0f, 1.0f, 1.0f};
-    bool useSrcRect = false;
-    if (fitMode == 1 && engine.Get() && (cachedVideoW == 0 || cachedVideoH == 0)) {
+    if ((fitMode == 1 || (clone && fitMode == 2)) && engine.Get() &&
+        (cachedVideoW == 0 || cachedVideoH == 0)) {
       DWORD videoW = 0, videoH = 0;
       if (SUCCEEDED(engine->GetNativeVideoSize(&videoW, &videoH)) && videoW > 0 && videoH > 0) {
         cachedVideoW = videoW;
@@ -2483,25 +2540,50 @@ struct VideoPlayer {
       }
     }
 
-    if (fitMode == 1 && cachedVideoW > 0 && cachedVideoH > 0 && width > 0 && height > 0) {
-      float screenAspect = (float)width / (float)height;
-      float videoAspect = (float)cachedVideoW / (float)cachedVideoH;
-      if (videoAspect > screenAspect && screenAspect > 0) {
-        float cropW = screenAspect / videoAspect;
-        srcRect.left = (1.0f - cropW) / 2.0f;
-        srcRect.right = srcRect.left + cropW;
-        useSrcRect = true;
-      } else if (videoAspect < screenAspect && videoAspect > 0) {
-        float cropH = videoAspect / screenAspect;
-        srcRect.top = (1.0f - cropH) / 2.0f;
-        srcRect.bottom = srcRect.top + cropH;
-        useSrcRect = true;
-      }
-    }
-    const MFVideoNormalizedRect* pSrc = useSrcRect ? &srcRect : nullptr;
-    const RECT* pDst = (dest.right > 0 && dest.bottom > 0) ? &dest : nullptr;
-
     static const MFARGB kBorderColor = {0, 0, 0, 0xFF};
+    auto transferDisplays = [&](ID3D11Texture2D* target) -> HRESULT {
+      size_t count = clone ? displayRects.size() : 1;
+      for (size_t i = 0; i < count; ++i) {
+        RECT area = clone ? displayRects[i] : RECT{0, 0, width, height};
+        RECT dest = clone ? area : spanDest;
+        int areaW = area.right - area.left;
+        int areaH = area.bottom - area.top;
+        MFVideoNormalizedRect src = {0.0f, 0.0f, 1.0f, 1.0f};
+        bool cropped = false;
+        if (cachedVideoW > 0 && cachedVideoH > 0 && areaW > 0 && areaH > 0) {
+          float videoAspect = static_cast<float>(cachedVideoW) / cachedVideoH;
+          float areaAspect = static_cast<float>(areaW) / areaH;
+          if (fitMode == 1) {
+            if (videoAspect > areaAspect) {
+              float cropW = areaAspect / videoAspect;
+              src.left = (1.0f - cropW) / 2.0f;
+              src.right = src.left + cropW;
+              cropped = true;
+            } else if (videoAspect < areaAspect) {
+              float cropH = videoAspect / areaAspect;
+              src.top = (1.0f - cropH) / 2.0f;
+              src.bottom = src.top + cropH;
+              cropped = true;
+            }
+          } else if (clone && fitMode == 2) {
+            float scale = (std::min)(static_cast<float>(areaW) / cachedVideoW,
+                                     static_cast<float>(areaH) / cachedVideoH);
+            int drawW = static_cast<int>(cachedVideoW * scale);
+            int drawH = static_cast<int>(cachedVideoH * scale);
+            dest.left = area.left + (areaW - drawW) / 2;
+            dest.top = area.top + (areaH - drawH) / 2;
+            dest.right = dest.left + drawW;
+            dest.bottom = dest.top + drawH;
+          }
+        }
+        HRESULT result = engine->TransferVideoFrame(target, cropped ? &src : nullptr,
+                                                    &dest, &kBorderColor);
+        if (FAILED(result))
+          return result;
+      }
+      return S_OK;
+    };
+
     LARGE_INTEGER tStart, tEnd;
     LARGE_INTEGER qpcFreq;
     QueryPerformanceFrequency(&qpcFreq);
@@ -2510,7 +2592,7 @@ struct VideoPlayer {
     Profiler::BeginSection("TransferVideoFrame");
     bool usedDirectBackBuffer = false;
     if (transferMode == TransferMode::DirectBackBuffer || transferMode == TransferMode::Unknown) {
-      hr = engine->TransferVideoFrame(backBuffer.Get(), pSrc, pDst, &kBorderColor);
+      hr = transferDisplays(backBuffer.Get());
       if (SUCCEEDED(hr)) {
         if (transferMode == TransferMode::Unknown) {
           Wh_Log(L"VideoPlayer::Tick: direct TransferVideoFrame to backBuffer succeeded; locking in DirectBackBuffer mode");
@@ -2528,7 +2610,7 @@ struct VideoPlayer {
         ClearTexture(renderTarget.Get());
       }
       if (renderTarget.Get()) {
-        hr = engine->TransferVideoFrame(renderTarget.Get(), pSrc, pDst, &kBorderColor);
+        hr = transferDisplays(renderTarget.Get());
         usedDirectBackBuffer = false;
       } else {
         hr = E_FAIL;
@@ -2786,7 +2868,8 @@ void PinBehindTargetWindow() {
 
   // If rendering is active and canPlay is true, make sure our window hasn't been hidden
   // by Explorer during startup/theme transition.
-  if (g_player.canPlay && !IsWindowVisible(g_wallpaperWnd)) {
+  if (g_player.canPlay && !g_wallpaperHidden &&
+      !IsWindowVisible(g_wallpaperWnd)) {
     ShowWindow(g_wallpaperWnd, SW_SHOWNOACTIVATE);
   }
 }
@@ -2933,6 +3016,25 @@ bool IsDesktopFullyCovered(bool forceCheck = false) {
           hwnd = GetWindow(hwnd, GW_HWNDNEXT);
           continue;
         }
+      }
+    }
+
+    // Fullscreen browser videos are usually borderless windows. If the
+    // foreground app covers an entire monitor, pause playback even when its
+    // window has no caption or thick frame. This also handles a fullscreen
+    // video on just one monitor of a multi-monitor desktop.
+    HWND foreground = GetForegroundWindow();
+    if (foreground && hwnd == GetAncestor(foreground, GA_ROOT) &&
+        hwnd != GetDesktopWindow()) {
+      HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+      MONITORINFO mi = {sizeof(mi)};
+      if (GetMonitorInfoW(monitor, &mi) &&
+          wr.left <= mi.rcMonitor.left + 4 &&
+          wr.top <= mi.rcMonitor.top + 4 &&
+          wr.right >= mi.rcMonitor.right - 4 &&
+          wr.bottom >= mi.rcMonitor.bottom - 4) {
+        cachedResult = true;
+        return true;
       }
     }
 
@@ -3145,6 +3247,7 @@ LRESULT CALLBACK WallpaperWndProc(HWND hwnd, UINT msg, WPARAM wParam,
       PickAndLoadVideoViaDialogAsync(hwnd);
     } else if (wParam == kVisibilityHotkeyId) {
       g_wallpaperHidden = !g_wallpaperHidden;
+      g_player.UpdatePlaybackState();
       ShowWindow(hwnd, g_wallpaperHidden ? SW_HIDE : SW_SHOWNOACTIVATE);
       if (!g_wallpaperHidden) {
         PinBehindTargetWindow();
@@ -3359,7 +3462,6 @@ HANDLE g_messageQueueReadyEvent = nullptr;
 HMODULE g_modInstance = nullptr;
 bool g_mfStarted = false;
 bool g_comInitialized = false;
-
 void RegisterConfiguredHotkeys() {
   UnregisterHotKey(g_wallpaperWnd, kHotkeyId);
   UnregisterHotKey(g_wallpaperWnd, kVisibilityHotkeyId);
@@ -3569,6 +3671,7 @@ DWORD WINAPI WallpaperThreadProc(LPVOID) {
   Wh_Log(L"WallpaperThreadProc: message loop exiting");
 
   g_player.Shutdown();
+
 
   if (g_wallpaperWnd) {
     if (g_hWinEventHook) {
