@@ -3110,6 +3110,7 @@ static void WaitForTrackedLaunches() {
 static const wchar_t kExplorerHelperClassName[] = L"StartEverything_ExplorerHostClass";
 static const wchar_t kExplorerHelperWindowName[] = L"StartEverything_ExplorerHost";
 static const ULONG_PTR kExplorerCopyDataMagic = 0x53455052; // 'SEPR'
+static constexpr UINT WM_SE_WAKE_START_MENU = WM_USER + 201;
 
 static HANDLE g_hExplorerHelperThread = nullptr;
 static DWORD g_explorerHelperThreadId = 0;
@@ -3207,6 +3208,22 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
         }
         break;
     }
+    case WM_SE_WAKE_START_MENU: {
+        HWND hStart = FindStartMenuCoreWindow();
+        if (!hStart || IsWindowCloaked(hStart)) {
+            static std::atomic<ULONGLONG> s_lastWakeTick{0};
+            ULONGLONG now = GetTickCount64();
+            ULONGLONG prev = s_lastWakeTick.exchange(now);
+            if (now - prev > 400) {
+                Wh_Log(L"[Explorer] Helper host waking StartMenu via SC_TASKLIST");
+                HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+                if (tray) {
+                    PostMessageW(tray, WM_SYSCOMMAND, SC_TASKLIST, 0);
+                }
+            }
+        }
+        return 0;
+    }
     case WM_CLOSE:
         DestroyWindow(hWnd);
         return 0;
@@ -3239,6 +3256,7 @@ static DWORD WINAPI ExplorerHelperThreadProc(LPVOID) {
 
     if (hWnd) {
         ChangeWindowMessageFilterEx(hWnd, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
+        ChangeWindowMessageFilterEx(hWnd, WM_SE_WAKE_START_MENU, MSGFLT_ALLOW, nullptr);
         g_hExplorerHelperWnd = hWnd;
         Wh_Log(L"[Explorer] Helper host window created: %p", hWnd);
     } else {
@@ -3302,8 +3320,92 @@ static void StopExplorerHelperHost() {
     WaitForTrackedLaunches();
 }
 
+using Explorer_SetForegroundWindow_t = BOOL(WINAPI*)(HWND);
+static Explorer_SetForegroundWindow_t pOriginalExplorerSetForegroundWindow = nullptr;
+static BOOL WINAPI Hook_Explorer_SetForegroundWindow(HWND hWnd) {
+    if (!hWnd) {
+        return pOriginalExplorerSetForegroundWindow(hWnd);
+    }
+
+    DWORD targetPid = 0;
+    GetWindowThreadProcessId(hWnd, &targetPid);
+
+    if (IsProcessNamed(targetPid, L"SearchHost.exe")) {
+        Wh_Log(L"[Explorer] Intercepted SetForegroundWindow to SearchHost.exe (0x%p)", hWnd);
+
+        HWND hStart = FindStartMenuCoreWindow();
+        bool startOpen = hStart && IsWindow(hStart) && !IsWindowCloaked(hStart);
+
+        if (startOpen) {
+            Wh_Log(L"[Explorer] StartMenu is open -> redirecting foreground to StartMenu window 0x%p", hStart);
+            pOriginalExplorerSetForegroundWindow(hStart);
+        } else {
+            static std::atomic<ULONGLONG> s_lastSearchWakeTick{0};
+            ULONGLONG now = GetTickCount64();
+            ULONGLONG prev = s_lastSearchWakeTick.exchange(now);
+            if (now - prev > 400) {
+                Wh_Log(L"[Explorer] Opening StartMenu search via SC_TASKLIST");
+                HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+                if (tray) {
+                    PostMessageW(tray, WM_SYSCOMMAND, SC_TASKLIST, 0);
+                }
+            }
+        }
+        return TRUE;
+    }
+
+    return pOriginalExplorerSetForegroundWindow(hWnd);
+}
+
+using Explorer_BringWindowToTop_t = BOOL(WINAPI*)(HWND);
+static Explorer_BringWindowToTop_t pOriginalExplorerBringWindowToTop = nullptr;
+static BOOL WINAPI Hook_Explorer_BringWindowToTop(HWND hWnd) {
+    if (hWnd) {
+        DWORD targetPid = 0;
+        GetWindowThreadProcessId(hWnd, &targetPid);
+        if (IsProcessNamed(targetPid, L"SearchHost.exe")) {
+            HWND hStart = FindStartMenuCoreWindow();
+            if (hStart && IsWindow(hStart) && !IsWindowCloaked(hStart)) {
+                return pOriginalExplorerBringWindowToTop(hStart);
+            }
+            return TRUE;
+        }
+    }
+    return pOriginalExplorerBringWindowToTop(hWnd);
+}
+
+using Explorer_SwitchToThisWindow_t = void(WINAPI*)(HWND, BOOL);
+static Explorer_SwitchToThisWindow_t pOriginalExplorerSwitchToThisWindow = nullptr;
+static void WINAPI Hook_Explorer_SwitchToThisWindow(HWND hWnd, BOOL fAltTab) {
+    if (hWnd) {
+        DWORD targetPid = 0;
+        GetWindowThreadProcessId(hWnd, &targetPid);
+        if (IsProcessNamed(targetPid, L"SearchHost.exe")) {
+            HWND hStart = FindStartMenuCoreWindow();
+            if (hStart && IsWindow(hStart) && !IsWindowCloaked(hStart)) {
+                pOriginalExplorerSwitchToThisWindow(hStart, fAltTab);
+                return;
+            }
+            return;
+        }
+    }
+    pOriginalExplorerSwitchToThisWindow(hWnd, fAltTab);
+}
+
 void InitExplorer() {
-    Wh_Log(L"=== start-everything: initializing explorer.exe ===");
+    Wh_Log(L"=== start-everything: initializing explorer.exe shell hooks ===");
+    WindhawkUtils::SetFunctionHook(SetForegroundWindow, Hook_Explorer_SetForegroundWindow,
+                                   &pOriginalExplorerSetForegroundWindow);
+    WindhawkUtils::SetFunctionHook(BringWindowToTop, Hook_Explorer_BringWindowToTop,
+                                   &pOriginalExplorerBringWindowToTop);
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+    if (hUser32) {
+        auto pSwitch = (Explorer_SwitchToThisWindow_t)GetProcAddress(hUser32, "SwitchToThisWindow");
+        if (pSwitch) {
+            WindhawkUtils::SetFunctionHook(pSwitch, Hook_Explorer_SwitchToThisWindow,
+                                           &pOriginalExplorerSwitchToThisWindow);
+        }
+    }
     StartExplorerHelperHost();
 }
 
@@ -3361,79 +3463,28 @@ static BOOL WINAPI Hook_SearchHost_CreateProcessW(
                                   currentDirectory, startupInfo, processInformation);
 }
 
+static void RequestStartMenuWakeFromSearchHost() {
+    HWND hStart = FindStartMenuCoreWindow();
+    if (!hStart || IsWindowCloaked(hStart)) {
+        static std::atomic<ULONGLONG> s_lastNotifyTick{0};
+        ULONGLONG now = GetTickCount64();
+        ULONGLONG prev = s_lastNotifyTick.exchange(now);
+        if (now - prev > 400) {
+            HWND helper = FindWindowW(kExplorerHelperClassName, kExplorerHelperWindowName);
+            if (helper) {
+                Wh_Log(L"[SearchHost] Notifying Explorer helper to wake StartMenu");
+                PostMessageW(helper, WM_SE_WAKE_START_MENU, 0, 0);
+            }
+        }
+    }
+}
+
 using SetForegroundWindow_t = BOOL(WINAPI*)(HWND);
 static SetForegroundWindow_t pOrigSearchHostSetForegroundWindow = nullptr;
-
-static void ActivateStartMenuFromSearchHost() {
-    static std::atomic<ULONGLONG> s_lastHandoffTick{0};
-    ULONGLONG now = GetTickCount64();
-    ULONGLONG prev = s_lastHandoffTick.exchange(now);
-    bool shouldWake = (now - prev > 300);
-
-    AllowSetForegroundWindow(ASFW_ANY);
-    HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    HWND hStart = FindStartMenuCoreWindow();
-    bool cloaked = !hStart || IsWindowCloaked(hStart);
-
-    if (shouldWake && cloaked && tray) {
-        Wh_Log(L"[SearchHost] StartMenu cloaked or missing, waking via SC_TASKLIST");
-        PostMessageW(tray, WM_SYSCOMMAND, SC_TASKLIST, 0);
-    }
-    if (hStart && IsWindow(hStart)) {
-        Wh_Log(L"[SearchHost] Transferring foreground to StartMenu 0x%p", hStart);
-        if (pOrigSearchHostSetForegroundWindow) {
-            pOrigSearchHostSetForegroundWindow(hStart);
-        } else {
-            SetForegroundWindow(hStart);
-        }
-        BringWindowToTop(hStart);
-    }
-    if (cloaked) {
-        SpawnTrackedLaunch([] {
-            for (int i = 0; i < 20 && !g_quit.load(); ++i) {
-                Sleep(25);
-                HWND h = FindStartMenuCoreWindow();
-                if (h && IsWindow(h) && !IsWindowCloaked(h)) {
-                    Wh_Log(L"[SearchHost] StartMenu uncloaked after %d ms -> setting foreground", (i + 1) * 25);
-                    AllowSetForegroundWindow(ASFW_ANY);
-                    if (pOrigSearchHostSetForegroundWindow) {
-                        pOrigSearchHostSetForegroundWindow(h);
-                    } else {
-                        SetForegroundWindow(h);
-                    }
-                    BringWindowToTop(h);
-                    break;
-                }
-            }
-        });
-    }
-}
-
-static LRESULT CALLBACK SearchHostSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
-    if (uMsg == WM_ACTIVATE) {
-        if (LOWORD(wParam) != WA_INACTIVE) {
-            Wh_Log(L"[SearchHost] WM_ACTIVATE (active) on 0x%p -> redirecting foreground to StartMenu", hWnd);
-            ActivateStartMenuFromSearchHost();
-            return 0;
-        }
-    } else if (uMsg == WM_SETFOCUS) {
-        Wh_Log(L"[SearchHost] WM_SETFOCUS on 0x%p -> redirecting foreground to StartMenu", hWnd);
-        ActivateStartMenuFromSearchHost();
-        return 0;
-    } else if (uMsg == WM_WINDOWPOSCHANGING) {
-        WINDOWPOS* wp = reinterpret_cast<WINDOWPOS*>(lParam);
-        if (wp) {
-            wp->flags |= SWP_HIDEWINDOW;
-            wp->flags &= ~SWP_SHOWWINDOW;
-        }
-    }
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
 static BOOL WINAPI Hook_SearchHost_SetForegroundWindow(HWND hWnd) {
     Wh_Log(L"[SearchHost] SetForegroundWindow called for 0x%p", hWnd);
     HWND hStart = FindStartMenuCoreWindow();
-    if (hStart && IsWindow(hStart)) {
+    if (hStart && IsWindow(hStart) && !IsWindowCloaked(hStart)) {
         Wh_Log(L"[SearchHost] Redirecting SetForegroundWindow to StartMenu 0x%p", hStart);
         pOrigSearchHostSetForegroundWindow(hStart);
         BringWindowToTop(hStart);
@@ -3446,7 +3497,7 @@ static BringWindowToTop_t pOrigSearchHostBringWindowToTop = nullptr;
 static BOOL WINAPI Hook_SearchHost_BringWindowToTop(HWND hWnd) {
     Wh_Log(L"[SearchHost] BringWindowToTop called for 0x%p", hWnd);
     HWND hStart = FindStartMenuCoreWindow();
-    if (hStart && IsWindow(hStart)) {
+    if (hStart && IsWindow(hStart) && !IsWindowCloaked(hStart)) {
         pOrigSearchHostBringWindowToTop(hStart);
     }
     return TRUE;
@@ -3458,10 +3509,7 @@ static BOOL WINAPI Hook_SearchHost_ShowWindow(HWND hWnd, int nCmdShow) {
     if (nCmdShow == SW_SHOW || nCmdShow == SW_SHOWNORMAL || nCmdShow == SW_RESTORE || nCmdShow == SW_SHOWDEFAULT) {
         Wh_Log(L"[SearchHost] Redirected SearchHost ShowWindow to SW_HIDE");
         nCmdShow = SW_HIDE;
-        if (hWnd) {
-            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SearchHostSubclassProc, 0);
-            ActivateStartMenuFromSearchHost();
-        }
+        RequestStartMenuWakeFromSearchHost();
     }
     return pOrigSearchHostShowWindow(hWnd, nCmdShow);
 }
@@ -3472,10 +3520,7 @@ static BOOL WINAPI Hook_SearchHost_SetWindowPos(HWND hWnd, HWND hWndInsertAfter,
     if (uFlags & SWP_SHOWWINDOW) {
         uFlags &= ~SWP_SHOWWINDOW;
         uFlags |= SWP_HIDEWINDOW;
-        if (hWnd) {
-            WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SearchHostSubclassProc, 0);
-            ActivateStartMenuFromSearchHost();
-        }
+        RequestStartMenuWakeFromSearchHost();
     }
     return pOrigSearchHostSetWindowPos(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
 }
@@ -3485,7 +3530,7 @@ static SwitchToThisWindow_t pOrigSearchHostSwitchToThisWindow = nullptr;
 static void WINAPI Hook_SearchHost_SwitchToThisWindow(HWND hWnd, BOOL fAltTab) {
     Wh_Log(L"[SearchHost] SwitchToThisWindow called for 0x%p", hWnd);
     HWND hStart = FindStartMenuCoreWindow();
-    if (hStart && IsWindow(hStart)) {
+    if (hStart && IsWindow(hStart) && !IsWindowCloaked(hStart)) {
         SetForegroundWindow(hStart);
     }
 }
@@ -3504,55 +3549,6 @@ void InitSearchHost() {
         if (pSwitch) {
             WindhawkUtils::SetFunctionHook(pSwitch, Hook_SearchHost_SwitchToThisWindow, &pOrigSearchHostSwitchToThisWindow);
         }
-    }
-}
-
-static HWINEVENTHOOK g_searchHostAttachWatch = nullptr;
-
-static void CALLBACK SearchHostAttachWatchProc(
-    HWINEVENTHOOK, DWORD event, HWND hwnd,
-    LONG idObject, LONG idChild, DWORD, DWORD) {
-    if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
-        return;
-    }
-    wchar_t cls[64] = {};
-    GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-    if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
-        Wh_Log(L"[SearchHost] CoreWindow event 0x%04lx on 0x%p", event, hwnd);
-        WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc, 0);
-        if (event == EVENT_OBJECT_SHOW || event == EVENT_OBJECT_CREATE) {
-            ActivateStartMenuFromSearchHost();
-        }
-    }
-}
-
-static void StartSearchHostAttachWatch() {
-    if (g_searchHostAttachWatch) return;
-    g_searchHostAttachWatch = SetWinEventHook(
-        EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW,
-        GetCurrentModuleHandle(), SearchHostAttachWatchProc,
-        GetCurrentProcessId(), 0,
-        WINEVENT_INCONTEXT);
-    Wh_Log(L"[SearchHost] attach watch %ls", g_searchHostAttachWatch ? L"installed" : L"FAILED");
-
-    EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
-        DWORD pid = 0;
-        GetWindowThreadProcessId(hwnd, &pid);
-        if (pid == GetCurrentProcessId()) {
-            wchar_t cls[64] = {};
-            GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-            if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
-                WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc, 0);
-            }
-        }
-        return TRUE;
-    }, 0);
-}
-
-static void StopSearchHostAttachWatch() {
-    if (g_searchHostAttachWatch) {
-        UnhookWinEvent(g_searchHostAttachWatch);
-        g_searchHostAttachWatch = nullptr;
     }
 }
 
@@ -7533,7 +7529,6 @@ void Wh_ModAfterInit() {
         g_targetProcess == TargetProcess::Explorer ? L"Explorer" : L"Unknown");
 
     if (g_targetProcess == TargetProcess::SearchHost) {
-        StartSearchHostAttachWatch();
         return;
     }
 
@@ -7587,15 +7582,6 @@ void Wh_ModUninit() {
 
     if (g_targetProcess == TargetProcess::SearchHost) {
         Wh_Log(L"uninit: SearchHost cleaning up");
-        StopSearchHostAttachWatch();
-        EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(hwnd, &pid);
-            if (pid == GetCurrentProcessId()) {
-                WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc);
-            }
-            return TRUE;
-        }, 0);
         WaitForTrackedLaunches();
         Wh_Log(L"uninit: SearchHost cleanup complete");
         return;
