@@ -533,7 +533,7 @@ static bool IsSystemModulePath(PCWSTR path) {
     WORD count = CaptureStackBackTrace(3, ARRAYSIZE(frames), frames, nullptr);
     
     for (WORD i = 0; i < count; i++) {
-        callerPath = nullptr;
+        callerModule = nullptr;
 
         if (
             GetModuleHandleEx(
