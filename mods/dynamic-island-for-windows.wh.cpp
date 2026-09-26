@@ -16,9 +16,9 @@
 
 A fluid, living overlay inspired by Apple's Dynamic Island, bringing a beautiful, highly-responsive UI to your Windows desktop. Built natively with hardware-accelerated Direct2D rendering for a buttery-smooth 60 FPS experience.
 
-![Dynamic Island running on the desktop](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/desktop.png)
+![Dynamic Island running on the desktop](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/793cf954d51aa9748c39d544187fab6e25ecd0fb/previews/desktop.png)
 
-![Dynamic Island surfaces](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/Full-preview-v2.png)
+![Dynamic Island surfaces](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/793cf954d51aa9748c39d544187fab6e25ecd0fb/previews/Full-preview-v2.png)
 
 ---
 
@@ -28,14 +28,14 @@ The Dynamic Island intelligently expands to display context-aware dashboards. Yo
 
 | Module | Description | Preview |
 | :--- | :--- | :--- |
-| **Media Player** | Shows live album art, track details, audio waveforms, and full playback controls. | ![Media](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/media-v2.png) |
-| **Calendar** | A monthly grid that always fits its rows, with today marked in the accent colour. | ![Calendar](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/calendar.png) |
-| **Weather** | Real-time weather stats powered by wttr.in, including wind speed, humidity, and "feels like" temperature. | ![Weather](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/weather-v2.png) |
-| **Hardware Monitor** | CPU, RAM, GPU, disk and live network throughput, with load bars that turn amber past 75% and red past 90%. | ![Hardware Monitor](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/hardware-monitor.png) |
-| **Game Overlay** | Real-time FPS, CPU, GPU, RAM and disk, sized to whichever metrics you enable. | ![Gamebar](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/gamebar-v2.png) |
-| **Idle View** | A minimal dashboard with your battery status, digital clock, and sleek pagination dots. | ![Idle](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/idle-v2.png) |
-| **Camera Privacy** | Shows a green dot when an app is actively using your webcam. | ![Camera](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/camera-detected-v2.png) |
-| **Mic Privacy** | Shows an orange dot when an app is actively using your microphone. | ![Mic](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/main/previews/mic-detected-v2.png) |
+| **Media Player** | Shows live album art, track details, audio waveforms, and full playback controls. | ![Media](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/793cf954d51aa9748c39d544187fab6e25ecd0fb/previews/media-v2.png) |
+| **Calendar** | A monthly grid that always fits its rows, with today marked in the accent colour. | ![Calendar](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/793cf954d51aa9748c39d544187fab6e25ecd0fb/previews/calendar.png) |
+| **Weather** | Real-time weather stats powered by wttr.in, including wind speed, humidity, and "feels like" temperature. | ![Weather](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/793cf954d51aa9748c39d544187fab6e25ecd0fb/previews/weather-v2.png) |
+| **Hardware Monitor** | CPU, RAM, GPU, disk and live network throughput, with load bars that turn amber past 75% and red past 90%. | ![Hardware Monitor](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/793cf954d51aa9748c39d544187fab6e25ecd0fb/previews/hardware-monitor.png) |
+| **Game Overlay** | Real-time FPS, CPU, GPU, RAM and disk, sized to whichever metrics you enable. | ![Gamebar](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/793cf954d51aa9748c39d544187fab6e25ecd0fb/previews/gamebar-v2.png) |
+| **Idle View** | A minimal dashboard with your battery status, digital clock, and sleek pagination dots. | ![Idle](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/793cf954d51aa9748c39d544187fab6e25ecd0fb/previews/idle-v2.png) |
+| **Camera Privacy** | Shows a green dot when an app is actively using your webcam. | ![Camera](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/793cf954d51aa9748c39d544187fab6e25ecd0fb/previews/camera-detected-v2.png) |
+| **Mic Privacy** | Shows an orange dot when an app is actively using your microphone. | ![Mic](https://raw.githubusercontent.com/devcode90/Dynamic-Island-for-Windows/793cf954d51aa9748c39d544187fab6e25ecd0fb/previews/mic-detected-v2.png) |
 
 ---
 
