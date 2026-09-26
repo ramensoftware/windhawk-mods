@@ -988,7 +988,7 @@ static void WINAPI ExperienceToggleButton_UpdateButtonPadding_Hook(void* pThis) 
 
 static bool HookTaskbarViewSymbols(HMODULE module) {
     // Taskbar.View.dll, ExplorerExtensions.dll
-    WindhawkUtils::SYMBOL_HOOK taskbar_view_dll_hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {
             {LR"(protected: virtual void __cdecl winrt::Taskbar::implementation::ExperienceToggleButton::UpdateButtonPadding(void))"},
             reinterpret_cast<void**>(&ExperienceToggleButton_UpdateButtonPadding_Original),
@@ -997,7 +997,7 @@ static bool HookTaskbarViewSymbols(HMODULE module) {
         },
     };
 
-    return HookSymbols(module, taskbar_view_dll_hooks, ARRAYSIZE(taskbar_view_dll_hooks));
+    return HookSymbols(module, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks));
 }
 
 static bool HookTaskbarDllSymbols() {
@@ -1008,7 +1008,7 @@ static bool HookTaskbarDllSymbols() {
     }
 
     // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK taskbar_dll_hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarHooks[] = {
         {
             {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
             &CTaskBand_ITaskListWndSite_vftable,
@@ -1035,7 +1035,7 @@ static bool HookTaskbarDllSymbols() {
         },
     };
 
-    return HookSymbols(module, taskbar_dll_hooks, ARRAYSIZE(taskbar_dll_hooks));
+    return HookSymbols(module, taskbarHooks, ARRAYSIZE(taskbarHooks));
 }
 
 }  // namespace Win11Subsystem
