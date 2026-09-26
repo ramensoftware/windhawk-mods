@@ -208,6 +208,7 @@ constexpr UINT WM_APP_SHOW_MIXER = WM_APP + 3;
 constexpr UINT WM_APP_FINISH_VOLUME_ENTRY = WM_APP + 4;
 constexpr UINT WM_APP_AUDIO_CHANGED = WM_APP + 5;
 constexpr UINT WM_APP_MASTER_STATE_CHANGED = WM_APP + 6;
+constexpr UINT WM_APP_DEFAULT_OUTPUT_CHANGED = WM_APP + 7;
 constexpr UINT_PTR TIMER_METERS = 1;
 constexpr UINT_PTR TIMER_REFRESH = 2;
 constexpr UINT_PTR TIMER_CHECK_FOCUS = 3;
@@ -433,6 +434,12 @@ HANDLE g_audioNotificationRebuildEvent;
 HANDLE g_audioNotificationSessionEvent;
 std::atomic<bool> g_audioUiRefreshPosted;
 
+// Lifetime IMMNotificationClient used on the UI thread. It exists for the
+// window's whole lifetime so default-output changes are always observed, even
+// while the mixer is hidden. It posts WM_APP_DEFAULT_OUTPUT_CHANGED.
+IMMDeviceEnumerator* g_uiDeviceEnumerator = nullptr;
+class EndpointNotification;
+
 int g_dpi = 96;
 int g_scrollRow;
 int g_availableAppRows = 15;
@@ -450,6 +457,7 @@ bool g_showingMixer;
 bool g_outputMenuOpen;
 bool g_sourceMenuOpen;
 bool g_outputHovered;
+bool g_pendingDefaultOutputChange;
 std::unordered_set<std::wstring> g_temporarilyHiddenSources;
 HWND g_nameTooltip;
 std::wstring g_nameTooltipText;
@@ -893,8 +901,7 @@ std::wstring ReadEndpointName(IMMDevice* device) {
     return result;
 }
 
-void ReleaseAudioData() {
-    g_apps->clear();
+void ReleaseDefaultEndpointVolume() {
     if (g_endpointVolumeCallback) {
         g_endpointVolumeCallback->SetWindow(nullptr);
         if (g_endpointVolume) {
@@ -907,6 +914,59 @@ void ReleaseAudioData() {
         g_endpointVolume->Release();
         g_endpointVolume = nullptr;
     }
+}
+
+// Binds the given endpoint, replacing any previous binding. Registers the
+// IAudioEndpointVolumeCallback against the supplied window so that mute and
+// volume changes propagate even when the mixer is hidden.
+bool BindDefaultEndpointVolumeFromDevice(IMMDevice* device, HWND hWnd) {
+    if (!device) return false;
+
+    g_endpointName = ReadEndpointName(device);
+
+    HRESULT hr = device->Activate(
+        __uuidof(IAudioEndpointVolume), CLSCTX_INPROC_SERVER, nullptr,
+        reinterpret_cast<void**>(&g_endpointVolume));
+    if (FAILED(hr) || !g_endpointVolume) {
+        g_endpointVolume = nullptr;
+        g_endpointName.clear();
+        return false;
+    }
+
+    auto* callback = new EndpointVolumeNotification(hWnd);
+    if (SUCCEEDED(g_endpointVolume->RegisterControlChangeNotify(callback))) {
+        g_endpointVolumeCallback = callback;
+    } else {
+        callback->Release();
+    }
+    return true;
+}
+
+// Resolves the current eRender/eMultimedia endpoint and binds it, releasing
+// any previous binding first. Safe to call while the mixer is hidden.
+bool BindDefaultEndpointVolume(HWND hWnd) {
+    ReleaseDefaultEndpointVolume();
+
+    IMMDeviceEnumerator* enumerator = nullptr;
+    HRESULT hr = CoCreateInstance(
+        __uuidof(MMDeviceEnumerator), nullptr, CLSCTX_INPROC_SERVER,
+        __uuidof(IMMDeviceEnumerator),
+        reinterpret_cast<void**>(&enumerator));
+    if (FAILED(hr) || !enumerator) return false;
+
+    IMMDevice* device = nullptr;
+    hr = enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &device);
+    enumerator->Release();
+    if (FAILED(hr) || !device) return false;
+
+    bool result = BindDefaultEndpointVolumeFromDevice(device, hWnd);
+    device->Release();
+    return result;
+}
+
+void ReleaseAudioData() {
+    g_apps->clear();
+    ReleaseDefaultEndpointVolume();
     g_endpointName.clear();
     g_audioAvailable = false;
 }
@@ -1144,9 +1204,15 @@ private:
     AudioNotificationContext* m_context;
 };
 
+// Generic IMMNotificationClient with two optional sinks: an event for the
+// background audio-notification thread, and a window for the UI thread.
+// Construct with either; the other sink stays unused.
 class EndpointNotification final : public IMMNotificationClient {
 public:
-    explicit EndpointNotification(HANDLE rebuildEvent) : m_rebuildEvent(rebuildEvent) {}
+    explicit EndpointNotification(HANDLE rebuildEvent)
+        : m_rebuildEvent(rebuildEvent) {}
+
+    void SetWindow(HWND window) { m_window.store(window); }
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
         if (!object) return E_POINTER;
@@ -1199,11 +1265,16 @@ private:
 
     void SignalRebuild() {
         if (m_rebuildEvent) SetEvent(m_rebuildEvent);
+        HWND window = m_window.load();
+        if (window) PostMessageW(window, WM_APP_DEFAULT_OUTPUT_CHANGED, 0, 0);
     }
 
     LONG m_references = 1;
-    HANDLE m_rebuildEvent;
+    HANDLE m_rebuildEvent = nullptr;
+    std::atomic<HWND> m_window{nullptr};
 };
+
+EndpointNotification* g_uiEndpointNotification = nullptr;
 
 struct AudioSessionWatcher {
     IAudioSessionManager2* manager = nullptr;
@@ -1657,18 +1728,9 @@ void RefreshAudioSessions(HWND hWnd, bool diagnostics = false) {
             defaultId = id;
             CoTaskMemFree(id);
         }
-        g_endpointName = ReadEndpointName(defaultDevice);
-        defaultDevice->Activate(__uuidof(IAudioEndpointVolume),
-                                 CLSCTX_INPROC_SERVER, nullptr,
-                                 reinterpret_cast<void**>(&g_endpointVolume));
-        if (g_endpointVolume) {
-            auto* callback = new EndpointVolumeNotification(hWnd);
-            if (SUCCEEDED(g_endpointVolume->RegisterControlChangeNotify(callback))) {
-                g_endpointVolumeCallback = callback;
-            } else {
-                callback->Release();
-            }
-        }
+        // The helper releases any previous binding (via ReleaseAudioData
+        // above) and re-registers the endpoint callback against this window.
+        BindDefaultEndpointVolumeFromDevice(defaultDevice, hWnd);
     }
 
     bool completeScan = true;
@@ -1729,29 +1791,9 @@ bool EnsureDefaultEndpointVolume() {
     if (g_endpointVolume) {
         return true;
     }
-
-    IMMDeviceEnumerator* enumerator = nullptr;
-    IMMDevice* device = nullptr;
-    HRESULT hr = CoCreateInstance(
-        __uuidof(MMDeviceEnumerator), nullptr, CLSCTX_INPROC_SERVER,
-        __uuidof(IMMDeviceEnumerator),
-        reinterpret_cast<void**>(&enumerator));
-    if (FAILED(hr) || !enumerator) {
-        return false;
-    }
-
-    hr = enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &device);
-    if (SUCCEEDED(hr) && device) {
-        hr = device->Activate(
-            __uuidof(IAudioEndpointVolume), CLSCTX_INPROC_SERVER, nullptr,
-            reinterpret_cast<void**>(&g_endpointVolume));
-    }
-
-    if (device) {
-        device->Release();
-    }
-    enumerator->Release();
-    return SUCCEEDED(hr) && g_endpointVolume != nullptr;
+    // Fallback path: no live binding yet. Bind through the helper so the
+    // callback is registered against the current window.
+    return BindDefaultEndpointVolume(g_hWnd.load());
 }
 
 float GetMasterVolume() {
@@ -3660,6 +3702,10 @@ void ShowSourceMenu(HWND window, int row, POINT screenPoint) {
     }
 
     g_sourceMenuOpen = false;
+    if (g_pendingDefaultOutputChange) {
+        g_pendingDefaultOutputChange = false;
+        PostMessageW(window, WM_APP_DEFAULT_OUTPUT_CHANGED, 0, 0);
+    }
     if (!IsWindow(window)) return;
 
     if (command == MENU_SOURCE_HIDE) {
@@ -3732,6 +3778,11 @@ void ShowTrayMenu(HWND hWnd, int x, int y) {
 
     PostMessageW(hWnd, WM_NULL, 0, 0);
     DestroyMenu(menu);
+
+    if (g_pendingDefaultOutputChange) {
+        g_pendingDefaultOutputChange = false;
+        PostMessageW(hWnd, WM_APP_DEFAULT_OUTPUT_CHANGED, 0, 0);
+    }
 
     switch (command) {
         case MENU_OPEN:
@@ -3918,6 +3969,10 @@ void ShowOutputPicker(HWND window) {
         PositionMixer(window);
     }
     g_outputMenuOpen = false;
+    if (g_pendingDefaultOutputChange) {
+        g_pendingDefaultOutputChange = false;
+        PostMessageW(window, WM_APP_DEFAULT_OUTPUT_CHANGED, 0, 0);
+    }
     InvalidateRect(window, nullptr, FALSE);
     if (g_settings.closeWhenFocusIsLost && IsWindowVisible(window))
         SetTimer(window, TIMER_CHECK_FOCUS, 150, nullptr);
@@ -3983,6 +4038,13 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             }
             CreateFonts(hWnd);
             UpdateTheme();
+
+            // Bind the master endpoint before anything queries its mute state.
+            // This registers the IAudioEndpointVolumeCallback immediately so
+            // the tray icon and middle-click mute stay accurate even while the
+            // mixer is hidden.
+            BindDefaultEndpointVolume(hWnd);
+
             RefreshIconSizes(hWnd);
             ApplyTransparencyStyle(hWnd);
             DWORD corner = 2;  // DWMWCP_ROUND.
@@ -3992,6 +4054,29 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 StartDefaultVolumeNotifications(hWnd);
             }
             RefreshMasterIcons(hWnd, true);
+
+            // Lifetime watcher: react to default-output changes even when the
+            // mixer is hidden, so tray mute controls always target the current
+            // device. CoCreateInstance here runs on the UI thread and the
+            // notifications are marshalled through the window message below.
+            IMMDeviceEnumerator* uiEnumerator = nullptr;
+            if (SUCCEEDED(CoCreateInstance(
+                    __uuidof(MMDeviceEnumerator), nullptr,
+                    CLSCTX_INPROC_SERVER, __uuidof(IMMDeviceEnumerator),
+                    reinterpret_cast<void**>(&uiEnumerator))) &&
+                uiEnumerator) {
+                auto* uiNotification = new EndpointNotification(nullptr);
+                uiNotification->SetWindow(hWnd);
+                if (SUCCEEDED(uiEnumerator->RegisterEndpointNotificationCallback(
+                        uiNotification))) {
+                    g_uiDeviceEnumerator = uiEnumerator;
+                    g_uiEndpointNotification = uiNotification;
+                } else {
+                    Wh_Log(L"Mixer: default output notification registration failed");
+                    uiNotification->Release();
+                    uiEnumerator->Release();
+                }
+            }
             return 0;
         }
 
@@ -4059,6 +4144,31 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
         case WM_APP_MASTER_STATE_CHANGED:
             RefreshMasterIcons(hWnd);
             return 0;
+
+        case WM_APP_DEFAULT_OUTPUT_CHANGED: {
+            // A popup menu's modal loop delivers this message while the menu
+            // is on screen. Shell_NotifyIconW (via RefreshMasterIcons) talks
+            // to the taskbar and can demote the popup inside the topmost
+            // band; the STA COM calls in BindDefaultEndpointVolume re-enter
+            // the menu's message pump. Defer the whole update until the menu
+            // closes and re-post the message from the menu paths below.
+            if (g_sourceMenuOpen || g_outputMenuOpen) {
+                g_pendingDefaultOutputChange = true;
+                return 0;
+            }
+            bool canRefresh =
+                IsWindowVisible(hWnd) && g_dragRow == DRAG_NONE &&
+                !g_volumeEntry;
+            if (canRefresh) {
+                RefreshAudioSessions(hWnd);
+                PositionMixer(hWnd);
+            } else {
+                BindDefaultEndpointVolume(hWnd);
+            }
+            RefreshMasterIcons(hWnd, true);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
 
         case WM_APP_RELOAD_SETTINGS:
             FinishVolumeEntry(hWnd, false, false);
@@ -4376,6 +4486,20 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             FinishVolumeEntry(hWnd, false, false);
             CancelNameTooltip(hWnd);
             StopDefaultVolumeNotifications();
+
+            if (g_uiDeviceEnumerator && g_uiEndpointNotification) {
+                g_uiDeviceEnumerator->UnregisterEndpointNotificationCallback(
+                    g_uiEndpointNotification);
+            }
+            if (g_uiEndpointNotification) {
+                g_uiEndpointNotification->Release();
+                g_uiEndpointNotification = nullptr;
+            }
+            if (g_uiDeviceEnumerator) {
+                g_uiDeviceEnumerator->Release();
+                g_uiDeviceEnumerator = nullptr;
+            }
+
             if (g_nameTooltip) {
                 DestroyWindow(g_nameTooltip);
                 g_nameTooltip = nullptr;
