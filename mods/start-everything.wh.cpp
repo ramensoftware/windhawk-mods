@@ -4735,6 +4735,10 @@ void CALLBACK AttachWatchProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
         !hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
         return;
     }
+    if ((event == EVENT_OBJECT_UNCLOAKED || event == EVENT_OBJECT_SHOW) && hwnd == GetOurCoreWindow()) {
+        g_suppressRefocus.store(false);
+        TriggerMenuOpenFocus();
+    }
     // In-context, so this is the thread that raised the event. The filter is
     // Window::Current() returning something rather than a class name, because
     // a name that changes across builds breaks quietly.
