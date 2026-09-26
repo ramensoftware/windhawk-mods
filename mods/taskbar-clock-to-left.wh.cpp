@@ -2,7 +2,7 @@
 // @id              taskbar-clock-to-left
 // @name            Taskbar Clock to Left
 // @description     Move the native Windows 11 clock/notification button to the left without shifting centered taskbar apps
-// @version         2.1
+// @version         2.2
 // @author          pleromyst
 // @github          https://github.com/pleromyst
 // @license         GPL-3.0
@@ -26,6 +26,9 @@ On a centered taskbar, the left host is placed after the Widgets/weather button
 when it is visible. If Windows is configured to left-align Start and app icons,
 the clock stays in its native position to avoid covering those buttons.
 
+If another mod pins the Start button to the physical left edge while taskbar
+apps remain centered, the clock is placed to its right.
+
 ![Taskbar Clock to Left](https://i.imgur.com/Wew0LZh.png)
 
 Windows 11's modern taskbar is required.
@@ -47,6 +50,7 @@ This mod was inspired by [Taskbar Clock Customization](https://windhawk.net/mods
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.UI.Core.h>
+#include <winrt/Windows.UI.Xaml.Automation.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 #include <winrt/base.h>
@@ -58,9 +62,11 @@ struct MovedClockData {
     winrt::weak_ref<Controls::Panel> originalParent;
     winrt::weak_ref<Controls::Grid> taskbarRoot;
     winrt::weak_ref<FrameworkElement> widgets;
+    winrt::weak_ref<FrameworkElement> startButton;
     Controls::Grid leftHost{nullptr};
     std::optional<winrt::event_token> widgetsSizeChangedToken;
     int64_t widgetsVisibilityChangedToken{};
+    std::optional<winrt::event_token> startLayoutUpdatedToken;
     double layoutReservedWidth;
     uint32_t originalIndex;
     int originalColumn;
@@ -364,6 +370,30 @@ FrameworkElement FindDescendantByName(FrameworkElement element,
     return nullptr;
 }
 
+FrameworkElement FindStartButton(FrameworkElement element) {
+    int count = Media::VisualTreeHelper::GetChildrenCount(element);
+    for (int i = 0; i < count; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
+        if (!child) {
+            continue;
+        }
+
+        if (winrt::get_class_name(child) ==
+                L"Taskbar.ExperienceToggleButton" &&
+            Automation::AutomationProperties::GetAutomationId(child) ==
+                L"StartButton") {
+            return child;
+        }
+
+        if (auto result = FindStartButton(child)) {
+            return result;
+        }
+    }
+
+    return nullptr;
+}
+
 bool ReadTaskbarUsesCenteredAlignment() {
     DWORD value = 1;
     DWORD size = sizeof(value);
@@ -384,28 +414,56 @@ bool TaskbarUsesCenteredAlignment() {
                           : ReadTaskbarUsesCenteredAlignment();
 }
 
-double GetLeftHostOffset(Controls::Grid root) {
-    // The Widgets/weather entry point occupies the physical left edge on the
-    // centered taskbar. Keep the relocated clock beside it instead of placing
-    // an input-capable overlay on top of it.
-    auto widgets = FindDescendantByName(root, L"AugmentedEntryPointButton");
-    if (!widgets || widgets.Visibility() != Visibility::Visible ||
-        widgets.ActualWidth() <= 0) {
-        return 0;
-    }
-
-    try {
-        auto origin = widgets.TransformToVisual(root).TransformPoint({0, 0});
-        double rightEdge = origin.X + widgets.ActualWidth();
-        if (origin.X >= 0 && rightEdge > 0 &&
-            rightEdge <= root.ActualWidth() / 2) {
-            return rightEdge + 4;
+double GetLeftHostOffset(Controls::Grid root, FrameworkElement widgets,
+                         FrameworkElement startButton) {
+    // Leave room for the Widgets button and for a Start button pinned to the
+    // physical left edge by another mod.
+    double offset = 0;
+    if (widgets && widgets.Visibility() == Visibility::Visible &&
+        widgets.ActualWidth() > 0) {
+        try {
+            auto origin = widgets.TransformToVisual(root).TransformPoint({0, 0});
+            double rightEdge = origin.X + widgets.ActualWidth();
+            if (origin.X >= 0 && rightEdge > 0 &&
+                rightEdge <= root.ActualWidth() / 2) {
+                offset = rightEdge + 4;
+            }
+        } catch (...) {
+            Wh_Log(L"Widgets position lookup failed: %08X",
+                   winrt::to_hresult());
         }
-    } catch (...) {
-        Wh_Log(L"Widgets position lookup failed: %08X", winrt::to_hresult());
     }
 
-    return 0;
+    if (startButton && startButton.Visibility() == Visibility::Visible) {
+        try {
+            auto origin =
+                startButton.TransformToVisual(root).TransformPoint({0, 0});
+            // A centered Start button must not affect the clock's left offset.
+            if (origin.X >= 0 && origin.X <= 16) {
+                double width = 0;
+                if (Media::VisualTreeHelper::GetChildrenCount(startButton) > 0) {
+                    auto content = Media::VisualTreeHelper::GetChild(startButton, 0)
+                                       .try_as<FrameworkElement>();
+                    if (content) {
+                        width = content.DesiredSize().Width;
+                        if (width <= 0) {
+                            width = content.ActualWidth();
+                        }
+                    }
+                }
+
+                double rightEdge = origin.X + width;
+                if (rightEdge > 0 && rightEdge <= root.ActualWidth() / 2) {
+                    offset = std::max(offset, rightEdge + 4);
+                }
+            }
+        } catch (...) {
+            Wh_Log(L"Start button position lookup failed: %08X",
+                   winrt::to_hresult());
+        }
+    }
+
+    return offset;
 }
 
 bool TaskbarClockShowsSeconds() {
@@ -499,9 +557,12 @@ void UpdateLeftHostOffset(MovedClockData& data) {
         return;
     }
 
-    double offset = GetLeftHostOffset(root);
+    double offset = GetLeftHostOffset(root, data.widgets.get(),
+                                      data.startButton.get());
     Thickness margin = data.leftHost.Margin();
     if (margin.Left != offset) {
+        Wh_Log(L"Clock left offset updated: %.1f -> %.1f", margin.Left,
+               offset);
         margin.Left = offset;
         data.leftHost.Margin(margin);
     }
@@ -529,12 +590,25 @@ void UpdateLeftHostOffsetForClock(
 
 void RegisterLeftHostTracking(MovedClockData& data,
                               FrameworkElement clock) {
+    auto weakClock = winrt::make_weak(clock);
+    if (auto startButton = data.startButton.get()) {
+        data.startLayoutUpdatedToken = startButton.LayoutUpdated(
+            [weakClock](winrt::Windows::Foundation::IInspectable const&,
+                        winrt::Windows::Foundation::IInspectable const&) {
+                try {
+                    UpdateLeftHostOffsetForClock(weakClock);
+                } catch (...) {
+                    Wh_Log(L"Start button layout handling failed: %08X",
+                           winrt::to_hresult());
+                }
+            });
+    }
+
     auto widgets = data.widgets.get();
     if (!widgets) {
         return;
     }
 
-    auto weakClock = winrt::make_weak(clock);
     data.widgetsSizeChangedToken = widgets.SizeChanged(
         [weakClock](winrt::Windows::Foundation::IInspectable const&,
                     SizeChangedEventArgs const&) {
@@ -559,6 +633,13 @@ void RegisterLeftHostTracking(MovedClockData& data,
 }
 
 void RevokeLeftHostTracking(MovedClockData& data) {
+    if (auto startButton = data.startButton.get()) {
+        if (data.startLayoutUpdatedToken) {
+            startButton.LayoutUpdated(*data.startLayoutUpdatedToken);
+        }
+    }
+    data.startLayoutUpdatedToken.reset();
+
     auto widgets = data.widgets.get();
     if (widgets) {
         if (data.widgetsSizeChangedToken) {
@@ -734,12 +815,14 @@ bool MoveClock(FrameworkElement content) {
     double layoutReservedWidth =
         CalculateNativeClockLayoutWidth(content, clock);
     auto widgets = FindDescendantByName(root, L"AugmentedEntryPointButton");
+    auto startButton = FindStartButton(root);
 
     MovedClockData data{
         .clock = clock,
         .originalParent = originalParent,
         .taskbarRoot = root,
         .widgets = widgets,
+        .startButton = startButton,
         .layoutReservedWidth = layoutReservedWidth,
         .originalIndex = originalIndex,
         .originalColumn = Controls::Grid::GetColumn(clock),
@@ -756,7 +839,8 @@ bool MoveClock(FrameworkElement content) {
     data.leftHost = Controls::Grid();
     data.leftHost.HorizontalAlignment(HorizontalAlignment::Left);
     data.leftHost.VerticalAlignment(VerticalAlignment::Stretch);
-    data.leftHost.Margin(Thickness{GetLeftHostOffset(root), 0, 0, 0});
+    data.leftHost.Margin(
+        Thickness{GetLeftHostOffset(root, widgets, startButton), 0, 0, 0});
     Controls::Grid::SetColumn(data.leftHost, 0);
     Controls::Grid::SetColumnSpan(
         data.leftHost,
@@ -798,8 +882,10 @@ bool MoveClock(FrameworkElement content) {
         return false;
     }
 
-    Wh_Log(L"Clock moved to the left host; visual=%.1f, layout=%.1f",
-           clock.ActualWidth(), layoutReservedWidth);
+    Wh_Log(L"Clock moved to the left host; visual=%.1f, layout=%.1f, "
+           L"offset=%.1f",
+           clock.ActualWidth(), layoutReservedWidth,
+           MovedClocks().back().leftHost.Margin().Left);
     return true;
 }
 
