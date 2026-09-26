@@ -2,7 +2,7 @@
 // @id              taskbar-disk-space-label
 // @name            Taskbar Disk Space Label
 // @description     A simple disk space label integrated into the Windows taskbar
-// @version         0.71
+// @version         0.72
 // @author          allelimo
 // @github          https://github.com/allelimo
 // @include         explorer.exe
@@ -352,7 +352,6 @@ static XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
     return result;
 }
 
-
 // -----------------------------------------------------------------------------
 // Execute code on taskbar XAML thread
 // -----------------------------------------------------------------------------
@@ -367,7 +366,6 @@ static void RunGuarded(RunFromWindowThreadProc_t proc, void* param) {
                static_cast<unsigned>(winrt::to_hresult()));
     }
 }
-
 
 static bool RunFromWindowThread(HWND hWnd,
                                 RunFromWindowThreadProc_t proc,
@@ -503,7 +501,6 @@ static std::wstring GetDiskRootPath() {
     return root;
 }
 
-
 // -----------------------------------------------------------------------------
 // Get disk information: available free space, total space, total free space
 // -----------------------------------------------------------------------------
@@ -529,7 +526,6 @@ static void GetDiskInfo() {
     }
 }
 
-
 // -----------------------------------------------------------------------------
 // Format space information to be displayed on the taskbar label
 // -----------------------------------------------------------------------------
@@ -551,7 +547,6 @@ static std::wstring FormatSpace(int spacefree, int spacetot) {
     return text;
 }
 
-
 // -----------------------------------------------------------------------------
 // Apply label alignment
 // -----------------------------------------------------------------------------
@@ -563,7 +558,6 @@ static void ApplyLabelAlignment() {
                               : align == L"right" ? TextAlignment::Right
                                                   : TextAlignment::Left);
 }
-
 
 // -----------------------------------------------------------------------------
 // Load settings
@@ -590,7 +584,6 @@ static void LoadSettings() {
         g_settings.updateInterval = 60;
 }
 
-
 // -----------------------------------------------------------------------------
 // Refresh label text / reload settings
 // -----------------------------------------------------------------------------
@@ -606,7 +599,6 @@ static void RefreshDiskSpaceLabel(void*) {
     }
 }
 
-
 static void ReloadSettingsAndRefresh(void*) {
     LoadSettings();
     if (g_refreshTimer) {
@@ -614,7 +606,6 @@ static void ReloadSettingsAndRefresh(void*) {
     }    
     RefreshDiskSpaceLabel(nullptr);
 }
-
 
 // -----------------------------------------------------------------------------
 // Add/remove taskbar label
@@ -670,7 +661,7 @@ static void AddDiskSpaceLabel(void* param) {
 
     g_labelText.Name(L"TaskbarDiskSpaceLabel");
 
-    // get disk iNformation
+    // get disk information
     GetDiskInfo();
 
     // format the info to be displayed
@@ -761,7 +752,6 @@ static void ApplyDiskSpaceLabelIfAvailable() {
     }
 }
 
-
 // -----------------------------------------------------------------------------
 // System tray rebuild hook
 // -----------------------------------------------------------------------------
@@ -773,7 +763,6 @@ static IconView_IconView_t IconView_IconView_Original = nullptr;
 using LoadLibraryExW_t = HMODULE(WINAPI*)(LPCWSTR, HANDLE, DWORD);
 
 static LoadLibraryExW_t LoadLibraryExW_Original = nullptr;
-
 
 static VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE module) {
     HRSRC resource =
@@ -870,7 +859,6 @@ static bool HookSystemTraySymbols(HMODULE module) {
     );
 }
 
-
 static void HandleLoadedModuleIfSystemTray(HMODULE module) {
     if (GetSystemTrayModuleHandle() != module) {
         return;
@@ -896,7 +884,6 @@ static HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName,
 
     return module;
 }
-
 
 // -----------------------------------------------------------------------------
 // Windhawk
@@ -945,7 +932,6 @@ void Wh_ModAfterInit() {
     ApplyDiskSpaceLabelIfAvailable();
 
 }
-
 
 void Wh_ModBeforeUninit() {
     g_unloading.store(true);
