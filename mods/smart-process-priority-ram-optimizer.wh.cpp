@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         3.2.1
+// @version         3.3.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -186,6 +186,7 @@ An intelligent system responsiveness and memory optimization engine for Windows.
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <deque>
 #include <mutex>
@@ -380,6 +381,19 @@ static SystemHardwareProfile GetHardwareProfile() {
         return p;
     }();
     return profile;
+}
+
+// Calculates the effective free RAM threshold adapted to the machine's physical RAM capacity.
+// For a standard 16 GB baseline, the effective threshold equals the configured user percentage.
+// For other capacities (4, 8, 32, 64, 128 GB+), it scales sub-linearly (sqrt(16 / totalRamGb))
+// ensuring safe operating headroom without demanding excessive empty gigabytes on large systems.
+static double GetAdaptiveRamThreshold(double userThresholdPercent, double totalRamGb) {
+    if (totalRamGb <= 0.0) {
+        return userThresholdPercent;
+    }
+    double scale = std::sqrt(16.0 / totalRamGb);
+    double adaptivePercent = userThresholdPercent * scale;
+    return std::clamp(adaptivePercent, 5.0, 60.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -3245,6 +3259,9 @@ static void MemoryOptimizerWorker() {
     g_modStartTime = std::chrono::steady_clock::now();
     g_lastPeriodicCleanTime = g_modStartTime;
     g_lastIdleCleanTime = g_modStartTime;
+    g_lastTriggerCleanTime = g_modStartTime;
+
+    bool isWarmupPass = true;
 
     while (g_workerRunning.load()) {
         if (g_systemSuspended.load()) {
@@ -3328,36 +3345,42 @@ static void MemoryOptimizerWorker() {
                 bool triggerCooldownElapsed =
                     elapsedSinceTrigger >= kTriggerCooldownSec;
 
+                SystemHardwareProfile hw = GetHardwareProfile();
+                double effectiveFreeRamThreshold = GetAdaptiveRamThreshold(
+                    static_cast<double>(settings.freeRamThresholdPercent), hw.totalRamGb);
+                double effectiveTieredThreshold = GetAdaptiveRamThreshold(
+                    static_cast<double>(settings.tieredHogThresholdPercent), hw.totalRamGb);
+
                 // 1. Smart threshold trigger (low free RAM).
                 bool hogsOnly = false;
-                if (settings.cleanMode == CleanMode::SmartThreshold ||
-                    settings.cleanMode == CleanMode::SmartAndPeriodic) {
-                    if (freePercent <= settings.freeRamThresholdPercent &&
+                if (!isWarmupPass && (settings.cleanMode == CleanMode::SmartThreshold ||
+                                      settings.cleanMode == CleanMode::SmartAndPeriodic)) {
+                    if (freePercent <= effectiveFreeRamThreshold &&
                         triggerCooldownElapsed) {
                         shouldClean = true;
                         hogsOnly = false;
-                        wchar_t buf[128];
-                        swprintf_s(buf, L"[Standard Threshold: Free RAM %.1f%% <= %d%%]",
-                                   freePercent, settings.freeRamThresholdPercent);
+                        wchar_t buf[160];
+                        swprintf_s(buf, L"[Standard Threshold: Free RAM %.1f%% <= %.1f%% (adapted for %.1f GB)]",
+                                   freePercent, effectiveFreeRamThreshold, hw.totalRamGb);
                         reason = buf;
                         g_lastTriggerCleanTime = now;
                     } else if (settings.enableTieredRamThreshold &&
-                               freePercent <= settings.tieredHogThresholdPercent &&
+                               freePercent <= effectiveTieredThreshold &&
                                triggerCooldownElapsed) {
                         shouldClean = true;
                         hogsOnly = true;
-                        wchar_t buf[128];
+                        wchar_t buf[160];
                         swprintf_s(
                             buf,
-                            L"[Tiered Threshold: Free RAM %.1f%% <= %d%% (Inactive Hogs Only)]",
-                            freePercent, settings.tieredHogThresholdPercent);
+                            L"[Tiered Threshold: Free RAM %.1f%% <= %.1f%% (adapted for %.1f GB, Inactive Hogs Only)]",
+                            freePercent, effectiveTieredThreshold, hw.totalRamGb);
                         reason = buf;
                         g_lastTriggerCleanTime = now;
                     }
                 }
 
                 // 2. Periodic timer trigger (gated on memory pressure).
-                if (!shouldClean &&
+                if (!shouldClean && !isWarmupPass &&
                     (settings.cleanMode == CleanMode::Periodic ||
                      settings.cleanMode == CleanMode::SmartAndPeriodic)) {
                     auto elapsedMinutes =
@@ -3365,15 +3388,15 @@ static void MemoryOptimizerWorker() {
                             now - g_lastPeriodicCleanTime)
                             .count();
                     if (elapsedMinutes >= settings.periodicIntervalMinutes) {
-                        if (freePercent <= settings.freeRamThresholdPercent) {
+                        if (freePercent <= effectiveFreeRamThreshold) {
                             shouldClean = true;
                             hogsOnly = false;
-                            wchar_t buf[128];
+                            wchar_t buf[160];
                             swprintf_s(buf,
                                        L"[Periodic Trigger: %d min interval (Free RAM %.1f%% "
-                                       L"<= %d%%)]",
+                                       L"<= %.1f%%)]",
                                        settings.periodicIntervalMinutes, freePercent,
-                                       settings.freeRamThresholdPercent);
+                                       effectiveFreeRamThreshold);
                             reason = buf;
                         }
                         g_lastPeriodicCleanTime = now;
@@ -3390,7 +3413,7 @@ static void MemoryOptimizerWorker() {
                     static_cast<DWORD>(settings.idleThresholdMinutes) * 60;
                 bool isSystemIdle = (idleSec >= idleThresholdSec);
 
-                if (!shouldClean && settings.enableIdleBoost && isSystemIdle &&
+                if (!shouldClean && !isWarmupPass && settings.enableIdleBoost && isSystemIdle &&
                     triggerCooldownElapsed) {
                     auto elapsedSinceIdleClean =
                         std::chrono::duration_cast<std::chrono::minutes>(
@@ -3399,20 +3422,32 @@ static void MemoryOptimizerWorker() {
                     int idleIntervalMin =
                         (std::max)(10, settings.periodicIntervalMinutes);
                     if (!g_wasIdle || elapsedSinceIdleClean >= idleIntervalMin) {
-                        if (freePercent <= settings.freeRamThresholdPercent) {
+                        if (freePercent <= effectiveFreeRamThreshold) {
                             shouldClean = true;
                             hogsOnly = false;
-                            wchar_t buf[128];
+                            wchar_t buf[160];
                             swprintf_s(buf,
                                        L"[Idle Trigger: idle for %u min (Free RAM %.1f%% <= "
-                                       L"%d%%)]",
+                                       L"%.1f%%)]",
                                        idleSec / 60, freePercent,
-                                       settings.freeRamThresholdPercent);
+                                       effectiveFreeRamThreshold);
                             reason = buf;
                             g_lastIdleCleanTime = now;
                             g_lastTriggerCleanTime = now;
                         }
                     }
+                }
+
+                // 4. Critical emergency safety: if free RAM drops to <= 5.0%,
+                // intervene immediately even during the first cycle.
+                if (!shouldClean && freePercent <= 5.0 && triggerCooldownElapsed) {
+                    shouldClean = true;
+                    hogsOnly = false;
+                    wchar_t buf[128];
+                    swprintf_s(buf, L"[Critical Emergency: Free RAM %.1f%% <= 5.0%%]",
+                               freePercent);
+                    reason = buf;
+                    g_lastTriggerCleanTime = now;
                 }
 
                 if (!isSystemIdle) {
@@ -3427,6 +3462,8 @@ static void MemoryOptimizerWorker() {
                 }
             }
         }
+
+        isWarmupPass = false;
 
         DWORD waitSec = (DWORD)std::clamp(settings.checkIntervalSec, 1, 60);
         DWORD waitRes =
@@ -3580,9 +3617,6 @@ static void LoadSettings() {
     // Automatically adapt thresholds to the machine's physical hardware capacity.
     SystemHardwareProfile hw = GetHardwareProfile();
     if (hw.isLowRamTier) {
-        if (g_settings.freeRamThresholdPercent < 25) {
-            g_settings.freeRamThresholdPercent = 25;
-        }
         if (g_settings.electronMemoryCapMb > 350) {
             g_settings.electronMemoryCapMb = 350;
         }
@@ -3601,7 +3635,7 @@ static void LoadSettings() {
 BOOL WhTool_ModInit() {
     LogEvent(
         LogCategory::Boot, LogDetailLevel::Minimal,
-        L"Initializing Smart Process Priority & RAM Optimizer v3.2.1 (Dedicated Tool Process)...");
+        L"Initializing Smart Process Priority & RAM Optimizer v3.3.0 (Dedicated Tool Process)...");
 
     // Initialize Per-Monitor V2 DPI awareness dynamically so window coordinates across
     // multi-monitor configurations with mixed DPI scaling factors (e.g. 4K 150% + 1440p 100%)
@@ -3781,7 +3815,7 @@ void WhTool_ModUninit() {
             immuneCount = g_accessDeniedImmunitySet.size();
         }
         Wh_Log(L"[SmartOptimizer::Shutdown] ========================================");
-        Wh_Log(L"[SmartOptimizer::Shutdown] Smart Process Priority & RAM Optimizer v3.2.1");
+        Wh_Log(L"[SmartOptimizer::Shutdown] Smart Process Priority & RAM Optimizer v3.3.0");
         Wh_Log(L"[SmartOptimizer::Shutdown] Session Summary Report:");
         Wh_Log(L"[SmartOptimizer::Shutdown]   • Total Uptime: %s", uptime.c_str());
         Wh_Log(L"[SmartOptimizer::Shutdown]   • Total RAM Reclaimed: %.2f GB across %u passes (%u process trimmings)",
@@ -3834,7 +3868,7 @@ BOOL Wh_ModInit() {
         if (wcscmp(argv[i], L"-service") == 0 ||
             wcscmp(argv[i], L"-service-start") == 0 ||
             wcscmp(argv[i], L"-service-stop") == 0) {
-            LocalFree(argv);
+            LocalFree(reinterpret_cast<HLOCAL>(argv));
             return FALSE;
         }
     }
@@ -3849,7 +3883,7 @@ BOOL Wh_ModInit() {
         }
     }
 
-    LocalFree(argv);
+    LocalFree(reinterpret_cast<HLOCAL>(argv));
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
