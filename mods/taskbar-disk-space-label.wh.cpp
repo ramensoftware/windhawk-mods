@@ -2,7 +2,7 @@
 // @id              taskbar-disk-space-label
 // @name            Taskbar Disk Space Label
 // @description     A simple disk space label integrated into the Windows taskbar
-// @version         0.60
+// @version         0.71
 // @author          allelimo
 // @github          https://github.com/allelimo
 // @include         explorer.exe
@@ -19,7 +19,7 @@
 A lightweight free/available disk space label integrated directly into the
 Windows 11 taskbar. This is kind of a "remix" of the Taskbar Countdown Timer
 module by Richi (https://github.com/richilp) 
-The label is showed on primary taskbar only, taskbars on secondary monitors don't show it.
+The label is shown on the primary taskbar only, taskbars on secondary monitors don't show it.
 Windows 11 only.
 
 ## Features
@@ -34,7 +34,6 @@ Windows 11 only.
 
 When the label gets clipped, please lower the font size, or clear the description
 
-
 ## Screenshot
 
 ![Screenshot](https://i.imgur.com/Nwuevwf.png)
@@ -46,7 +45,7 @@ When the label gets clipped, please lower the font size, or clear the descriptio
 /*
 - diskLetter: "C"
   $name: Disk
-  $description: Drive letter, e.g. C
+  $description: Drive letter, e.g. C. If empty, defaults to "C"
 - userFreeSpace: false
   $name: Current user available space
   $description: Select for the current user available free space, unselect for the total free space.  
@@ -64,7 +63,7 @@ When the label gets clipped, please lower the font size, or clear the descriptio
   $description: Text on the first line of the label. Leave empty for a single-line label [Default "Free Space"] 
 - labelAlignment: left
   $name: Alignment
-  $description: Aligns the label text of a two-lines label [Default "Left"]
+  $description: Aligns the label text of a two-line label [Default "Left"]
   $options:
     - left: Left
     - center: Center
@@ -571,7 +570,6 @@ static void ApplyLabelAlignment() {
 // -----------------------------------------------------------------------------
 
 static void LoadSettings() {
-    
     g_settings.fontSize = Wh_GetIntSetting(L"fontSize");
     g_settings.diskLetter = WindhawkUtils::StringSetting::make(L"diskLetter").get();
     g_settings.labelInfoText = WindhawkUtils::StringSetting::make(L"labelInfoText").get();
@@ -582,6 +580,9 @@ static void LoadSettings() {
     g_settings.showUnit = Wh_GetIntSetting(L"showUnit");
     g_settings.updateInterval = Wh_GetIntSetting(L"updateInterval");
 
+    if (g_settings.diskLetter.empty()) 
+        g_settings.diskLetter = L"C";
+
     if (g_settings.fontSize <= 0)
         g_settings.fontSize = 12;
 
@@ -591,11 +592,10 @@ static void LoadSettings() {
 
 
 // -----------------------------------------------------------------------------
-// Reload settings on save changes
+// Refresh label text / reload settings
 // -----------------------------------------------------------------------------
 
 static void RefreshDiskSpaceLabel(void*) {
-    
     if (g_labelText) {
         GetDiskInfo();
         g_labelText.Text(FormatSpace(myspacefree, myspacetot));
@@ -608,7 +608,6 @@ static void RefreshDiskSpaceLabel(void*) {
 
 
 static void ReloadSettingsAndRefresh(void*) {
-    
     LoadSettings();
     if (g_refreshTimer) {
         g_refreshTimer.Interval(std::chrono::seconds(g_settings.updateInterval));
@@ -622,7 +621,6 @@ static void ReloadSettingsAndRefresh(void*) {
 // -----------------------------------------------------------------------------
 
 static void AddDiskSpaceLabel(void* param) {
-    
     if (g_unloading.load()) {
         return;
     }
@@ -672,7 +670,7 @@ static void AddDiskSpaceLabel(void* param) {
 
     g_labelText.Name(L"TaskbarDiskSpaceLabel");
 
-    // get disk iformation
+    // get disk iNformation
     GetDiskInfo();
 
     // format the info to be displayed
@@ -739,7 +737,6 @@ static void AddDiskSpaceLabel(void* param) {
 }
 
 static void RemoveDiskSpaceLabel(void*) {
-
     ReleaseOwnedXaml();
     g_loadedRevokers.reset();
     g_labelInjected.store(false);
