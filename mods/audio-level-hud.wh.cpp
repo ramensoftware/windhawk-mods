@@ -6,8 +6,8 @@
 // @author          AKS HAY
 // @github          https://github.com/sysakshay
 // @license         GPL-3.0
-// @include         explorer.exe
-// @compilerOptions -lole32 -lmmdevapi -ld3d11 -ldxgi -ldcomp -ld2d1 -ldwrite -luser32 -lgdi32 -ldwmapi -lcomctl32 -luxtheme
+// @include         windhawk.exe
+// @compilerOptions -lole32 -lshell32 -lmmdevapi -ld3d11 -ldxgi -ldcomp -ld2d1 -ldwrite -luser32 -lgdi32 -ldwmapi -lcomctl32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -16,7 +16,11 @@
 
 A lightweight, always-on-top, Fluent 2-styled desktop overlay for Windows that
 displays real-time VU meters for both **Microphone Input** and **System Audio
-Output (Desktop Loopback)**.
+Output**.
+
+The microphone meter opens a capture stream while it is visible. Windows will
+show the microphone privacy indicator during that time. Hiding the HUD or
+choosing System Output Only closes that stream.
 
 ![Preview](https://raw.githubusercontent.com/sysakshay/audio-level-hud-wh/main/previews/preview1.png)
 ![Settings
@@ -26,17 +30,16 @@ Preview](https://raw.githubusercontent.com/sysakshay/audio-level-hud-wh/main/pre
 - **DirectComposition & DXGI SwapChain**: Hardware-accelerated presentation with
 `DXGI_ALPHA_MODE_PREMULTIPLIED` for pixel-perfect anti-aliased rounded corners
 without GDI artifacts or corner leak lines.
-- **Liquid Glass Design**: Real-time DWM acrylic blur sampling, specular rim
+- **Liquid Glass Design**: Translucent card styling, specular rim
 lighting, top glass reflection sheen, and 3D glossy level meter pills.
 - **Dual Real-time VU Meters**: WASAPI peak meters for mic capture and system
 audio output.
 - **Overlay Customization**: Corner snapping, custom drag-and-drop positioning,
 opacity, and click-through mode.
-- **Global Hotkey Toggle**: Default `Ctrl+Shift+M` shortcut to show/hide the
-HUD.
+- **Optional Global Hotkeys**: Set shortcuts in Windhawk settings to show/hide
+the HUD or toggle click-through mode. Both are disabled by default.
 
 ---
-*Created with Windhawk.*
 */
 // ==/WindhawkModReadme==
 
@@ -97,19 +100,19 @@ HUD.
 - click_through: true
   $name: Click-Through Mode
   $description: Allow mouse clicks to pass through the HUD to underlying windows.
-- toggle_hotkey: "Ctrl+Shift+M"
+- toggle_hotkey: ""
   $name: Toggle Hotkey
   $description: Global shortcut string to show/hide the HUD (e.g., Ctrl+Shift+M, Alt+Shift+A).
-- clickthrough_hotkey: "Ctrl+Shift+C"
+- clickthrough_hotkey: ""
   $name: Click-Through Hotkey
   $description: Global shortcut string to toggle Click-Through mode on/off (e.g., Ctrl+Shift+C, Alt+Shift+C).
-- fps_limit: 30
+- fps_limit: '30'
   $name: Refresh Rate (FPS)
   $description: Target update frequency for the level meters.
   $options:
-    - 15: 15 FPS (Ultra Low Overhead)
-    - 30: 30 FPS (Balanced - Recommended)
-    - 60: 60 FPS (Ultra Smooth)
+    - '15': 15 FPS (Ultra Low Overhead)
+    - '30': 30 FPS (Balanced - Recommended)
+    - '60': 60 FPS (Ultra Smooth)
 - color_theme: fluent
   $name: Color Theme
   $description: Visual theme for the VU level bars.
@@ -129,6 +132,7 @@ HUD.
 // ==/WindhawkModSettings==
 
 #include <algorithm>
+#include <atomic>
 #include <audiopolicy.h>
 #include <commctrl.h>
 #include <d2d1.h>
@@ -245,6 +249,7 @@ struct AudioEndpointTracker {
   DWORD peakHoldTime = 0;
   DWORD lastUpdateTick = 0;
   DWORD clipTime = 0;
+  DWORD lastRetryTick = 0;
   BOOL isMuted = FALSE;
   BOOL isClipping = FALSE;
 
@@ -277,8 +282,8 @@ struct ModSettings {
   BOOL showSystem = TRUE;
   BOOL showLabels = TRUE;
   BOOL clickThrough = TRUE;
-  WCHAR toggleHotkey[64] = L"Ctrl+Shift+M";
-  WCHAR clickthroughHotkey[64] = L"Ctrl+Shift+C";
+  WCHAR toggleHotkey[64] = L"";
+  WCHAR clickthroughHotkey[64] = L"";
   int fpsLimit = 30;
   WCHAR colorTheme[32] = L"fluent";
   WCHAR micDevice[256] = L"default";
@@ -289,10 +294,11 @@ struct ModSettings {
 };
 
 static ModSettings g_Settings;
-static HWND g_hHudWnd = NULL;
+static std::atomic<HWND> g_hHudWnd = NULL;
 static HWND g_hFlyoutWnd = NULL; // Settings flyout popup window
 static HBRUSH g_hFlyoutBgBrush =
     NULL; // Reusable dark bg brush for flyout controls
+static HFONT g_hFlyoutControlFont = NULL;
 static HANDLE g_hHudThread = NULL;
 static HANDLE g_hStopEvent = NULL;
 static DWORD g_dwThreadId = 0;
@@ -334,7 +340,7 @@ static const IID IID_IAudioEndVol = __uuidof(IAudioEndpointVolume);
 static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT message, WPARAM wParam,
                                    LPARAM lParam);
 static DWORD WINAPI HudThreadProc(LPVOID lpParam);
-static void ApplyAcrylicBlur(HWND hWnd);
+static void ApplyCornerPreference(HWND hWnd);
 static void LoadModSettings();
 static void PositionHudWindow();
 static void InitAudioTracker(EDataFlow dataFlow, AudioEndpointTracker &tracker);
@@ -349,58 +355,6 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hWnd, UINT message, WPARAM wParam,
                                       LPARAM lParam);
 static void ShowSettingsFlyout();
 static void DismissFlyout();
-
-#ifndef ZBID_UIACCESS
-#define ZBID_UIACCESS 2
-#endif
-#ifndef ZBID_SYSTEM_TOOLS
-#define ZBID_SYSTEM_TOOLS 7
-#endif
-
-typedef DWORD(WINAPI *pfnSetWindowBand)(HWND hWnd, HWND hwndInsertAfter,
-                                        DWORD dwBand);
-typedef HWND(WINAPI *pfnCreateWindowInBandEx)(
-    DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle,
-    int x, int y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu,
-    HINSTANCE hInstance, LPVOID lpParam, DWORD dwBand, DWORD dwTypeFlags);
-
-static HWND CreateOverlayWindowInBand(DWORD dwExStyle, LPCWSTR lpClassName,
-                                      LPCWSTR lpWindowName, DWORD dwStyle,
-                                      int x, int y, int width, int height) {
-  HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-  if (hUser32) {
-    pfnCreateWindowInBandEx pCreateWindowInBandEx =
-        (pfnCreateWindowInBandEx)GetProcAddress(hUser32,
-                                                "CreateWindowInBandEx");
-    if (pCreateWindowInBandEx) {
-      HWND hWnd = pCreateWindowInBandEx(
-          dwExStyle, lpClassName, lpWindowName, dwStyle, x, y, width, height,
-          NULL, NULL, GetModuleHandle(NULL), NULL, ZBID_UIACCESS, 0);
-      if (hWnd)
-        return hWnd;
-    }
-  }
-  return CreateWindowExW(dwExStyle, lpClassName, lpWindowName, dwStyle, x, y,
-                         width, height, NULL, NULL, GetModuleHandle(NULL),
-                         NULL);
-}
-
-static void EnsureWindowBandAndTopmost(HWND hWnd) {
-  if (!hWnd)
-    return;
-
-  HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-  if (hUser32) {
-    pfnSetWindowBand pSetWindowBand =
-        (pfnSetWindowBand)GetProcAddress(hUser32, "SetWindowBand");
-    if (pSetWindowBand) {
-      pSetWindowBand(hWnd, NULL, ZBID_UIACCESS);
-    }
-  }
-
-  SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0,
-               SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-}
 
 // Logarithmic Audio dB VU Meter Ratio Mapping (-60 dB to 0 dB mapped to 0.0
 // to 1.0 with DAW-style expansion in the -20 dB to 0 dB range)
@@ -446,17 +400,12 @@ static void EnableDarkModeForControl(HWND hCtrl) {
     if (pAllowDarkModeForWindow) {
       pAllowDarkModeForWindow(hCtrl, TRUE);
     }
-    pfnSetPreferredAppMode pSetPreferredAppMode =
-        (pfnSetPreferredAppMode)GetProcAddress(hUxtheme, MAKEINTRESOURCEA(135));
-    if (pSetPreferredAppMode) {
-      pSetPreferredAppMode(AllowDark);
-    }
   }
   SetWindowTheme(hCtrl, L"DarkMode_Explorer", NULL);
 }
 
-// Native Fluent 2 Windows Acrylic Blur effect
-static void ApplyAcrylicBlur(HWND hWnd) {
+// Let DirectComposition supply the transparent rounded corners
+static void ApplyCornerPreference(HWND hWnd) {
   if (!hWnd)
     return;
 
@@ -475,7 +424,7 @@ static void ApplyAcrylicBlur(HWND hWnd) {
   // alongside DirectComposition causes the DWM to apply acrylic to the full
   // rectangular window bounds, bleeding opaque blur outside the D2D rounded
   // rect and producing visible square corner artifacts. DirectComposition
-  // handles compositing natively via premultiplied alpha — no accent policy
+  // handles compositing natively via premultiplied alpha Ã¢â‚¬â€ no accent policy
   // needed.
 }
 
@@ -565,6 +514,7 @@ static IMMDevice *FindDeviceByNameOrId(EDataFlow flow,
 static void InitAudioTracker(EDataFlow dataFlow,
                              AudioEndpointTracker &tracker) {
   tracker.Release();
+  tracker.lastRetryTick = GetTickCount();
 
   if (!g_pEnumerator) {
     HRESULT hr = CoCreateInstance(CLSID_MMDevEnum, NULL, CLSCTX_ALL,
@@ -602,30 +552,25 @@ static void InitAudioTracker(EDataFlow dataFlow,
   if (pDevice) {
     tracker.pDevice = pDevice;
 
-    // Active WASAPI audio client capture stream.
-    // Windows WASAPI requires an active IAudioClient stream on capture
-    // endpoints (microphones) so the Windows Audio Engine pumps microphone
-    // hardware audio samples into WASAPI metering.
-    IAudioClient *pAudioClient = nullptr;
-    if (SUCCEEDED(pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL,
-                                    (void **)&pAudioClient)) &&
-        pAudioClient) {
-      WAVEFORMATEX *pwfx = nullptr;
-      if (SUCCEEDED(pAudioClient->GetMixFormat(&pwfx)) && pwfx) {
-        HRESULT hrInit =
-            pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED,
-                                     0,        // Default shared stream flags
-                                     10000000, // 1 second buffer (100ns units)
-                                     0, pwfx, NULL);
-        CoTaskMemFree(pwfx);
-        if (SUCCEEDED(hrInit)) {
-          pAudioClient->Start();
-          tracker.pAudioClient = pAudioClient;
+    // Only a visible capture meter needs an active stream. Render endpoint
+    // metering reports the output mix without creating a render stream.
+    if (dataFlow == eCapture && g_Settings.showMic && g_bHudVisible) {
+      IAudioClient *pAudioClient = nullptr;
+      if (SUCCEEDED(pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL,
+                                      (void **)&pAudioClient)) && pAudioClient) {
+        WAVEFORMATEX *pwfx = nullptr;
+        if (SUCCEEDED(pAudioClient->GetMixFormat(&pwfx)) && pwfx) {
+          HRESULT hrInit = pAudioClient->Initialize(
+              AUDCLNT_SHAREMODE_SHARED, 0, 10000000, 0, pwfx, NULL);
+          CoTaskMemFree(pwfx);
+          if (SUCCEEDED(hrInit) && SUCCEEDED(pAudioClient->Start())) {
+            tracker.pAudioClient = pAudioClient;
+          } else {
+            pAudioClient->Release();
+          }
         } else {
           pAudioClient->Release();
         }
-      } else {
-        pAudioClient->Release();
       }
     }
 
@@ -643,13 +588,26 @@ static void InitAudioTracker(EDataFlow dataFlow,
   }
 }
 
+static void RefreshAudioTrackers() {
+  if (g_bHudVisible && g_Settings.showMic)
+    InitAudioTracker(eCapture, g_MicTracker);
+  else
+    g_MicTracker.Release();
+
+  if (g_bHudVisible && g_Settings.showSystem)
+    InitAudioTracker(eRender, g_SystemTracker);
+  else
+    g_SystemTracker.Release();
+}
+
 // Update Audio Levels from WASAPI peak meters
 static void UpdateAudioLevels() {
   DWORD currentTick = GetTickCount();
 
   // 1. Update Microphone Input Level
   if (g_Settings.showMic) {
-    if (!g_MicTracker.pMeter) {
+    if (!g_MicTracker.pMeter &&
+        currentTick - g_MicTracker.lastRetryTick >= 3000) {
       InitAudioTracker(eCapture, g_MicTracker);
     }
 
@@ -657,7 +615,8 @@ static void UpdateAudioLevels() {
       float rawPeak = 0.0f;
       HRESULT hr = g_MicTracker.pMeter->GetPeakValue(&rawPeak);
       if (FAILED(hr)) {
-        InitAudioTracker(eCapture, g_MicTracker);
+        g_MicTracker.Release();
+        g_MicTracker.lastRetryTick = currentTick;
       } else {
         if (g_MicTracker.pVolume) {
           g_MicTracker.pVolume->GetMute(&g_MicTracker.isMuted);
@@ -700,9 +659,10 @@ static void UpdateAudioLevels() {
     }
   }
 
-  // 2. Update System Audio Output Level (WASAPI Loopback)
+  // 2. Update System Audio Output Level (endpoint peak meter)
   if (g_Settings.showSystem) {
-    if (!g_SystemTracker.pMeter) {
+    if (!g_SystemTracker.pMeter &&
+        currentTick - g_SystemTracker.lastRetryTick >= 3000) {
       InitAudioTracker(eRender, g_SystemTracker);
     }
 
@@ -710,7 +670,8 @@ static void UpdateAudioLevels() {
       float rawPeak = 0.0f;
       HRESULT hr = g_SystemTracker.pMeter->GetPeakValue(&rawPeak);
       if (FAILED(hr)) {
-        InitAudioTracker(eRender, g_SystemTracker);
+        g_SystemTracker.Release();
+        g_SystemTracker.lastRetryTick = currentTick;
       } else {
         if (g_SystemTracker.pVolume) {
           g_SystemTracker.pVolume->GetMute(&g_SystemTracker.isMuted);
@@ -977,7 +938,7 @@ static void LoadModSettings() {
     StringCchCopyW(g_Settings.toggleHotkey, 64, strVal);
     Wh_FreeStringSetting(strVal);
   } else {
-    StringCchCopyW(g_Settings.toggleHotkey, 64, L"Ctrl+Shift+M");
+    g_Settings.toggleHotkey[0] = L'\0';
   }
 
   strVal = Wh_GetStringSetting(L"clickthrough_hotkey");
@@ -985,10 +946,13 @@ static void LoadModSettings() {
     StringCchCopyW(g_Settings.clickthroughHotkey, 64, strVal);
     Wh_FreeStringSetting(strVal);
   } else {
-    StringCchCopyW(g_Settings.clickthroughHotkey, 64, L"Ctrl+Shift+C");
+    g_Settings.clickthroughHotkey[0] = L'\0';
   }
 
-  g_Settings.fpsLimit = Wh_GetIntSetting(L"fps_limit");
+  strVal = Wh_GetStringSetting(L"fps_limit");
+  g_Settings.fpsLimit = strVal ? _wtoi(strVal) : 30;
+  if (strVal)
+    Wh_FreeStringSetting(strVal);
   if (g_Settings.fpsLimit <= 0)
     g_Settings.fpsLimit = 30;
 
@@ -1015,6 +979,8 @@ static void PositionHudWindow() {
   if (!g_hHudWnd)
     return;
 
+  float dpiScale = GetDpiForWindow(g_hHudWnd) / 96.0f;
+
   HMONITOR hMonitor = MonitorFromWindow(g_hHudWnd, MONITOR_DEFAULTTOPRIMARY);
   MONITORINFO mi = {sizeof(MONITORINFO)};
   GetMonitorInfoW(hMonitor, &mi);
@@ -1034,34 +1000,38 @@ static void PositionHudWindow() {
   int baseW = isVertical ? (activeChannels == 2 ? 136 : 76) : 500;
   int baseH = isVertical ? 420 : (activeChannels == 1 ? 62 : 104);
 
-  int w = (int)roundf(baseW * scale);
-  int h = (int)roundf(baseH * scale);
+  int w = (int)roundf(baseW * scale * dpiScale);
+  int h = (int)roundf(baseH * scale * dpiScale);
+  int margin = (int)roundf(24 * dpiScale);
 
-  int x = workArea.right - w - 24;
-  int y = workArea.top + 24;
+  int x = workArea.right - w - margin;
+  int y = workArea.top + margin;
 
   if (_wcsicmp(g_Settings.position, L"custom") == 0) {
-    x = Wh_GetIntValue(L"custom_x", workArea.right - w - 24);
-    y = Wh_GetIntValue(L"custom_y", workArea.top + 24);
+    x = Wh_GetIntValue(L"custom_x", workArea.right - w - margin);
+    y = Wh_GetIntValue(L"custom_y", workArea.top + margin);
   } else if (_wcsicmp(g_Settings.position, L"top-left") == 0) {
-    x = workArea.left + 24;
-    y = workArea.top + 24;
+    x = workArea.left + margin;
+    y = workArea.top + margin;
   } else if (_wcsicmp(g_Settings.position, L"bottom-right") == 0) {
-    x = workArea.right - w - 24;
-    y = workArea.bottom - h - 24;
+    x = workArea.right - w - margin;
+    y = workArea.bottom - h - margin;
   } else if (_wcsicmp(g_Settings.position, L"bottom-left") == 0) {
-    x = workArea.left + 24;
-    y = workArea.bottom - h - 24;
+    x = workArea.left + margin;
+    y = workArea.bottom - h - margin;
   } else {
     // top-right (default preset)
-    x = workArea.right - w - 24;
-    y = workArea.top + 24;
+    x = workArea.right - w - margin;
+    y = workArea.top + margin;
   }
+
+  x = std::clamp(x, (int)workArea.left,
+                 std::max((int)workArea.left, (int)workArea.right - w));
+  y = std::clamp(y, (int)workArea.top,
+                 std::max((int)workArea.top, (int)workArea.bottom - h));
 
   SetWindowPos(g_hHudWnd, HWND_TOPMOST, x, y, w, h,
                SWP_NOACTIVATE | SWP_SHOWWINDOW);
-
-  EnsureWindowBandAndTopmost(g_hHudWnd);
 
   // Apply click-through styles dynamically
 
@@ -1135,12 +1105,10 @@ static HRESULT InitDirectComposition(HWND hWnd) {
     hr = pDxgiAdapter->GetParent(__uuidof(IDXGIFactory2),
                                  (void **)&pDxgiFactory2);
     if (SUCCEEDED(hr) && pDxgiFactory2) {
-      BOOL isVertical = (_wcsicmp(g_Settings.layout, L"vertical") == 0);
-      float scale = g_Settings.hudScale / 100.0f;
-      if (scale < 0.25f)
-        scale = 0.25f;
-      int scaledWidth = (int)roundf((isVertical ? 104 : 500) * scale);
-      int scaledHeight = (int)roundf((isVertical ? 420 : 104) * scale);
+      RECT clientRect;
+      GetClientRect(hWnd, &clientRect);
+      int scaledWidth = std::max(1L, clientRect.right - clientRect.left);
+      int scaledHeight = std::max(1L, clientRect.bottom - clientRect.top);
 
       DXGI_SWAP_CHAIN_DESC1 desc = {0};
       desc.Width = scaledWidth;
@@ -1195,17 +1163,18 @@ static HRESULT InitDirectComposition(HWND hWnd) {
     if (scale < 0.25f)
       scale = 0.25f;
 
+    float dpi = (float)GetDpiForWindow(hWnd) * scale;
     D2D1_BITMAP_PROPERTIES1 bitmapProperties = D2D1::BitmapProperties1(
         D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
                           D2D1_ALPHA_MODE_PREMULTIPLIED),
-        96.0f * scale, 96.0f * scale);
+        dpi, dpi);
 
     hr = g_pD2DContext->CreateBitmapFromDxgiSurface(
         pDxgiBackBuffer, &bitmapProperties, &g_pD2DTargetBitmap);
     if (SUCCEEDED(hr) && g_pD2DTargetBitmap) {
       g_pD2DContext->SetTarget(g_pD2DTargetBitmap);
-      g_pD2DContext->SetDpi(96.0f * scale, 96.0f * scale);
+      g_pD2DContext->SetDpi(dpi, dpi);
     }
     pDxgiBackBuffer->Release();
   }
@@ -1501,6 +1470,9 @@ static void RenderHud() {
   if (_wcsicmp(g_Settings.colorTheme, L"neon") == 0) {
     greenColor = D2D1::ColorF(0.00f, 0.90f, 1.00f);
     yellowColor = D2D1::ColorF(1.00f, 0.00f, 0.60f);
+  } else if (_wcsicmp(g_Settings.colorTheme, L"emerald") == 0) {
+    greenColor = D2D1::ColorF(0.00f, 0.72f, 0.42f);
+    yellowColor = D2D1::ColorF(0.70f, 0.95f, 0.18f);
   } else if (_wcsicmp(g_Settings.colorTheme, L"sunset") == 0) {
     greenColor = D2D1::ColorF(1.00f, 0.55f, 0.00f);
     yellowColor = D2D1::ColorF(0.95f, 0.20f, 0.20f);
@@ -1545,7 +1517,7 @@ static void RenderHud() {
   float fontComp = (scale < 1.0f) ? (1.0f / sqrtf(scale)) : 1.0f;
 
   if (isVertical) {
-    // ── Vertical Orientation Renderer ─────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Vertical Orientation Renderer Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     int colIndex = 0;
     float colWidth = size.width / (float)activeChannels;
 
@@ -1680,7 +1652,7 @@ static void RenderHud() {
       DrawVerticalChannel(g_SystemTracker, sysIconStr, L"System");
     }
   } else {
-    // ── Horizontal Orientation Renderer ───────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Horizontal Orientation Renderer Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     float rowHeight = size.height / (float)activeChannels;
     float currentY = 0.0f;
 
@@ -1813,7 +1785,7 @@ static void RenderHud() {
     }
   }
 
-  // Draw Settings overflow button (⋮) if clickable
+  // Draw Settings overflow button (Ã¢â€¹Â®) if clickable
   if (!g_Settings.clickThrough && g_pIconFontFormat && pTextBrush) {
     WCHAR moreIconStr[2] = {L'\uE712', L'\0'};
 
@@ -1851,7 +1823,7 @@ static void RenderHud() {
   }
 }
 
-// ─── Settings Flyout ────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Settings Flyout Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 static void DismissFlyout() {
   if (g_hFlyoutWnd) {
@@ -1868,6 +1840,12 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hWnd, UINT message, WPARAM wParam,
     HDC hdc = BeginPaint(hWnd, &ps);
     RECT rc;
     GetClientRect(hWnd, &rc);
+    UINT dpi = GetDpiForWindow(hWnd);
+    SetMapMode(hdc, MM_ANISOTROPIC);
+    SetWindowExtEx(hdc, 96, 96, NULL);
+    SetViewportExtEx(hdc, dpi, dpi, NULL);
+    rc.right = MulDiv(rc.right, 96, dpi);
+    rc.bottom = MulDiv(rc.bottom, 96, dpi);
     if (!g_hFlyoutBgBrush)
       g_hFlyoutBgBrush = CreateSolidBrush(RGB(20, 20, 32));
     FillRect(hdc, &rc, g_hFlyoutBgBrush);
@@ -2105,6 +2083,9 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hWnd, UINT message, WPARAM wParam,
         g_Settings.enablePeakHold = checked;
         Wh_SetIntValue(L"rt_enablePeakHold", checked);
       }
+      if (id == FLYOUT_CTRL_BOTH || id == FLYOUT_CTRL_MIC_ONLY ||
+          id == FLYOUT_CTRL_SYS_ONLY)
+        RefreshAudioTrackers();
       if (g_hHudWnd)
         InvalidateRect(g_hHudWnd, NULL, FALSE);
     } else if (notif == CBN_SELCHANGE && id == FLYOUT_CTRL_MIC_COMBO) {
@@ -2115,7 +2096,8 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hWnd, UINT message, WPARAM wParam,
         SendMessageW(hCombo, CB_GETLBTEXT, index, (LPARAM)selText);
         StringCchCopyW(g_Settings.micDevice, 256, selText);
         Wh_SetStringValue(L"rt_micDevice", selText);
-        InitAudioTracker(eCapture, g_MicTracker);
+        if (g_bHudVisible && g_Settings.showMic)
+          InitAudioTracker(eCapture, g_MicTracker);
         if (g_hHudWnd)
           InvalidateRect(g_hHudWnd, NULL, FALSE);
       }
@@ -2134,6 +2116,10 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hWnd, UINT message, WPARAM wParam,
     return 0;
 
   case WM_DESTROY:
+    if (g_hFlyoutControlFont) {
+      DeleteObject(g_hFlyoutControlFont);
+      g_hFlyoutControlFont = NULL;
+    }
     g_hFlyoutWnd = NULL;
     return 0;
 
@@ -2156,24 +2142,29 @@ static void ShowSettingsFlyout() {
 
   const int FLY_W = 250;
   const int FLY_H = 470;
+  UINT dpi = GetDpiForWindow(g_hHudWnd);
+  int flyW = MulDiv(FLY_W, dpi, 96);
+  int flyH = MulDiv(FLY_H, dpi, 96);
 
   BOOL isVertical = (_wcsicmp(g_Settings.layout, L"vertical") == 0);
-  int x = isVertical ? (hudRect.left + (hudRect.right - hudRect.left) / 2 - FLY_W / 2)
-                     : (hudRect.right - FLY_W - 4);
-  int y = hudRect.bottom + 6;
+  int x = isVertical ? (hudRect.left + (hudRect.right - hudRect.left) / 2 - flyW / 2)
+                     : (hudRect.right - flyW - 4);
+  int y = hudRect.bottom + MulDiv(6, dpi, 96);
 
-  int screenW = GetSystemMetrics(SM_CXSCREEN);
-  int screenH = GetSystemMetrics(SM_CYSCREEN);
-  if (y + FLY_H > screenH)
-    y = hudRect.top - FLY_H - 6;
-  if (x + FLY_W > screenW - 4)
-    x = screenW - FLY_W - 4;
-  if (x < 4)
-    x = 4;
+  MONITORINFO monitorInfo = {sizeof(monitorInfo)};
+  GetMonitorInfoW(MonitorFromWindow(g_hHudWnd, MONITOR_DEFAULTTONEAREST),
+                  &monitorInfo);
+  RECT work = monitorInfo.rcWork;
+  if (y + flyH > work.bottom)
+    y = hudRect.top - flyH - MulDiv(6, dpi, 96);
+  x = std::clamp(x, (int)work.left,
+                 std::max((int)work.left, (int)work.right - flyW));
+  y = std::clamp(y, (int)work.top,
+                 std::max((int)work.top, (int)work.bottom - flyH));
 
   g_hFlyoutWnd =
       CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, FLYOUT_WINDOW_CLASS,
-                      L"", WS_POPUP | WS_CLIPCHILDREN, x, y, FLY_W, FLY_H, NULL,
+                      L"", WS_POPUP | WS_CLIPCHILDREN, x, y, flyW, flyH, NULL,
                       NULL, GetModuleHandle(NULL), NULL);
 
   if (!g_hFlyoutWnd)
@@ -2186,8 +2177,8 @@ static void ShowSettingsFlyout() {
   DWORD cornerPref = 2; // DWMWCP_ROUND
   DwmSetWindowAttribute(g_hFlyoutWnd, 33, &cornerPref, sizeof(cornerPref));
 
-  HFONT hControlFont =
-      CreateFontW(-13, 0, 0, 0, FW_REGULAR, FALSE, FALSE, FALSE,
+  g_hFlyoutControlFont =
+      CreateFontW(-MulDiv(13, dpi, 96), 0, 0, 0, FW_REGULAR, FALSE, FALSE, FALSE,
                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                   CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
 
@@ -2200,11 +2191,11 @@ static void ShowSettingsFlyout() {
     if (!hCtrl)
       return;
     EnableDarkModeForControl(hCtrl);
-    if (hControlFont)
-      SendMessageW(hCtrl, WM_SETFONT, (WPARAM)hControlFont, TRUE);
+    if (g_hFlyoutControlFont)
+      SendMessageW(hCtrl, WM_SETFONT, (WPARAM)g_hFlyoutControlFont, TRUE);
   };
 
-  // ── Opacity Row ──────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Opacity Row Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   HWND hSlider = CreateWindowExW(0, TRACKBAR_CLASS, L"",
                                  WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_NOTICKS,
                                  PAD_X + 80, SLIDER_Y, 102, 26, g_hFlyoutWnd,
@@ -2221,7 +2212,7 @@ static void ShowSettingsFlyout() {
                       (HMENU)FLYOUT_CTRL_OP_LBL, hInst, NULL);
   ApplyControlStyle(hOpLbl);
 
-  // ── HUD Scale Row ────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ HUD Scale Row Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   HWND hScaleSlider = CreateWindowExW(
       0, TRACKBAR_CLASS, L"", WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_NOTICKS,
       PAD_X + 80, 58, 102, 26, g_hFlyoutWnd, (HMENU)FLYOUT_CTRL_SCALE, hInst,
@@ -2238,7 +2229,7 @@ static void ShowSettingsFlyout() {
                       (HMENU)FLYOUT_CTRL_SCALE_LBL, hInst, NULL);
   ApplyControlStyle(hScaleLbl);
 
-  // ── Orientation Row ──────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Orientation Row Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   HWND hRadHorz =
       CreateWindowExW(0, WC_BUTTON, L"Horizontal Bar (Default)",
                       WS_CHILD | WS_VISIBLE | BS_OWNERDRAW | WS_GROUP,
@@ -2259,7 +2250,7 @@ static void ShowSettingsFlyout() {
     SendMessageW(hRadHorz, BM_SETCHECK, BST_CHECKED, 0);
   }
 
-  // ── Display Row ──────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Display Row Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   HWND hRadBoth =
       CreateWindowExW(0, WC_BUTTON, L"Show Both Meters",
                       WS_CHILD | WS_VISIBLE | BS_OWNERDRAW | WS_GROUP,
@@ -2296,7 +2287,7 @@ static void ShowSettingsFlyout() {
     SendMessageW(hRadSys, BM_SETCHECK, BST_CHECKED, 0);
   }
 
-  // ── Input Device Row ──────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Input Device Row Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   HWND hMicCombo = CreateWindowExW(
       0, WC_COMBOBOX, L"",
       CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_CHILD | WS_OVERLAPPED |
@@ -2365,7 +2356,7 @@ static void ShowSettingsFlyout() {
     }
   }
 
-  // ── Behavior Row ─────────────────────────────────────────────
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Behavior Row Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   HWND hCtChk = CreateWindowExW(
       0, WC_BUTTON, L"  Click-Through", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
       PAD_X + 2, 396, FLY_W - PAD_X * 2, ROW_H, g_hFlyoutWnd,
@@ -2382,6 +2373,28 @@ static void ShowSettingsFlyout() {
   SendMessageW(hPkChk, BM_SETCHECK,
                g_Settings.enablePeakHold ? BST_CHECKED : BST_UNCHECKED, 0);
   ApplyControlStyle(hPkChk);
+
+  if (dpi != 96) {
+    EnumChildWindows(g_hFlyoutWnd,
+                     [](HWND child, LPARAM dpiValue) -> BOOL {
+                       HWND parent = GetParent(child);
+                       RECT rect;
+                       GetWindowRect(child, &rect);
+                       MapWindowPoints(HWND_DESKTOP, parent,
+                                       reinterpret_cast<POINT *>(&rect), 2);
+                       int width = rect.right - rect.left;
+                       int height = rect.bottom - rect.top;
+                       int targetDpi = static_cast<int>(dpiValue);
+                       SetWindowPos(child, NULL,
+                                    MulDiv(rect.left, targetDpi, 96),
+                                    MulDiv(rect.top, targetDpi, 96),
+                                    MulDiv(width, targetDpi, 96),
+                                    MulDiv(height, targetDpi, 96),
+                                    SWP_NOZORDER | SWP_NOACTIVATE);
+                       return TRUE;
+                     },
+                     dpi);
+  }
 
   ShowWindow(g_hFlyoutWnd, SW_SHOWNOACTIVATE);
   SetForegroundWindow(g_hFlyoutWnd);
@@ -2411,9 +2424,8 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT message, WPARAM wParam,
     LoadModSettings();
     PositionHudWindow();
     RegisterGlobalHotkey();
-    ApplyAcrylicBlur(hWnd);
-    InitAudioTracker(eCapture, g_MicTracker);
-    InitAudioTracker(eRender, g_SystemTracker);
+    ApplyCornerPreference(hWnd);
+    RefreshAudioTrackers();
     InitDirectComposition(hWnd);
     InvalidateRect(hWnd, NULL, FALSE);
     return 0;
@@ -2424,7 +2436,8 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT message, WPARAM wParam,
       int y = GET_Y_LPARAM(lParam);
       RECT rc;
       GetClientRect(hWnd, &rc);
-      float scale = g_Settings.hudScale / 100.0f;
+      float scale = g_Settings.hudScale / 100.0f *
+                    GetDpiForWindow(hWnd) / 96.0f;
       if (scale < 0.25f)
         scale = 0.25f;
       BOOL isVertical = (_wcsicmp(g_Settings.layout, L"vertical") == 0);
@@ -2443,9 +2456,22 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT message, WPARAM wParam,
   }
 
   case WM_SIZE:
-    if (g_pD2DContext && g_pSwapChain) {
-      // Re-create swap chain buffers on size change if needed
+    if (g_hHudWnd == hWnd && LOWORD(lParam) && HIWORD(lParam))
+      InitDirectComposition(hWnd);
+    return 0;
+
+  case WM_DPICHANGED:
+    DismissFlyout();
+    if (lParam) {
+      const RECT *suggested = reinterpret_cast<const RECT *>(lParam);
+      SetWindowPos(hWnd, NULL, suggested->left, suggested->top,
+                   suggested->right - suggested->left,
+                   suggested->bottom - suggested->top,
+                   SWP_NOZORDER | SWP_NOACTIVATE);
     }
+    PositionHudWindow();
+    InitDirectComposition(hWnd);
+    InvalidateRect(hWnd, NULL, FALSE);
     return 0;
 
   case WM_TIMER:
@@ -2459,6 +2485,7 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT message, WPARAM wParam,
     if (wParam == HUD_HOTKEY_ID) {
       g_bHudVisible = !g_bHudVisible;
       Wh_SetIntValue(L"rt_hudVisible", g_bHudVisible);
+      RefreshAudioTrackers();
       ShowWindow(hWnd, g_bHudVisible ? SW_SHOWNOACTIVATE : SW_HIDE);
     } else if (wParam == HUD_CLICKTHRU_HOTKEY_ID) {
       g_Settings.clickThrough = !g_Settings.clickThrough;
@@ -2486,7 +2513,8 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT message, WPARAM wParam,
     ScreenToClient(hWnd, &pt);
     RECT rc;
     GetClientRect(hWnd, &rc);
-    float scale = g_Settings.hudScale / 100.0f;
+    float scale = g_Settings.hudScale / 100.0f *
+                  GetDpiForWindow(hWnd) / 96.0f;
     if (scale < 0.25f)
       scale = 0.25f;
     BOOL isVertical = (_wcsicmp(g_Settings.layout, L"vertical") == 0);
@@ -2538,16 +2566,8 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT message, WPARAM wParam,
 
 // Dedicated Message Loop Thread Proc
 static DWORD WINAPI HudThreadProc(LPVOID lpParam) {
-  // Wait for the Explorer shell to fully load (useful during cold boots)
-  // before we try to initialize COM, Audio Endpoints, and DirectComposition.
-  int waitCount = 0;
-  while (!FindWindowW(L"Shell_TrayWnd", NULL) && waitCount < 60) {
-    if (WaitForSingleObject(g_hStopEvent, 500) == WAIT_OBJECT_0)
-      return 0;
-    waitCount++;
-  }
-  // Extra buffer for audio services to spin up.
-  if (WaitForSingleObject(g_hStopEvent, 1000) == WAIT_OBJECT_0)
+  SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+  if (WaitForSingleObject(g_hStopEvent, 0) == WAIT_OBJECT_0)
     return 0;
 
   CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
@@ -2584,6 +2604,7 @@ static DWORD WINAPI HudThreadProc(LPVOID lpParam) {
   float scale = g_Settings.hudScale / 100.0f;
   if (scale < 0.25f)
     scale = 0.25f;
+  float dpiScale = GetDpiForSystem() / 96.0f;
 
   BOOL isVertical = (_wcsicmp(g_Settings.layout, L"vertical") == 0);
   int baseW = isVertical ? 104 : 500;
@@ -2595,9 +2616,11 @@ static DWORD WINAPI HudThreadProc(LPVOID lpParam) {
     exStyle |= (WS_EX_LAYERED | WS_EX_TRANSPARENT);
   }
 
-  g_hHudWnd = CreateOverlayWindowInBand(
+  g_hHudWnd = CreateWindowExW(
       exStyle, HUD_WINDOW_CLASS, L"Audio Level HUD", WS_POPUP, 0, 0,
-      (int)roundf(baseW * scale), (int)roundf(baseH * scale));
+      (int)roundf(baseW * scale * dpiScale),
+      (int)roundf(baseH * scale * dpiScale), NULL, NULL,
+      GetModuleHandle(NULL), NULL);
 
   if (!g_hHudWnd) {
     UnregisterClassW(HUD_WINDOW_CLASS, GetModuleHandle(NULL));
@@ -2620,11 +2643,10 @@ static DWORD WINAPI HudThreadProc(LPVOID lpParam) {
 
   PositionHudWindow();
   RegisterGlobalHotkey();
-  ApplyAcrylicBlur(g_hHudWnd);
+  ApplyCornerPreference(g_hHudWnd);
 
   // Initial audio setup
-  InitAudioTracker(eCapture, g_MicTracker);
-  InitAudioTracker(eRender, g_SystemTracker);
+  RefreshAudioTrackers();
 
   ShowWindow(g_hHudWnd, g_bHudVisible ? SW_SHOWNOACTIVATE : SW_HIDE);
   if (g_bHudVisible)
@@ -2656,7 +2678,7 @@ static DWORD WINAPI HudThreadProc(LPVOID lpParam) {
 }
 
 // Windhawk Lifecycle Initialization Callback
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
   Wh_Log(L"Initializing Audio Level HUD mod...");
 
   LoadModSettings();
@@ -2679,7 +2701,7 @@ BOOL Wh_ModInit() {
 }
 
 // Windhawk Lifecycle Uninitialization Callback
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
   Wh_Log(L"Uninitializing Audio Level HUD mod...");
 
   if (g_hStopEvent)
@@ -2703,9 +2725,188 @@ void Wh_ModUninit() {
 }
 
 // Windhawk Settings Changed Callback
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
   Wh_Log(L"Settings changed, posting reload message to UI thread...");
   if (g_hHudWnd) {
     PostMessageW(g_hHudWnd, WM_HUD_RELOAD_SETTINGS, 0, 0);
   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
