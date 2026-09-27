@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-27T19:22:30.000Z</updated>
+    <updated>2026-09-27T22:11:47.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.5.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#55660e096dc79a0629ae8e31394904ad201d3a73</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2026-09-27T22:11:47.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed a missing running indicators regression introduced in the last update.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.9]]></title>
         <id>https://windhawk.net/mods/explorer-frame-classic#582196130c92ede2c510c1d1394072fb57cdbd1c</id>
@@ -703,28 +716,6 @@ those options in one mod only and leave it at Chrome default in the other.</li>
         <author>
             <name>Farael Hanafi</name>
             <uri>https://github.com/Eliasilyz</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Explorer Details Auto-Fit Columns 1.2.0]]></title>
-        <id>https://windhawk.net/mods/file-explorer-details-autofit-columns#74b039ce245ef372309dc3409117394c9bc0d906</id>
-        <link href="https://windhawk.net/mods/file-explorer-details-autofit-columns"/>
-        <updated>2026-09-25T07:03:17.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added a new "Passive Triggers" setting that lets you turn off automatic fitting for folder changes, navigating between folders, and restoring a minimized window</li>
-<li>Reorganized the settings:<ul>
-<li>Passive Triggers (new)</li>
-<li>Refresh Delay</li>
-<li>Scan Settings<ul>
-<li>Scan Entire Folder</li>
-<li>Max Items to Scan</li></ul></li>
-<li>Elastic Mode</li></ul></li>
-<li>Fixed the Date column not auto-fitting</li>
-<li>Fixed the Name column sometimes shrinking and leaving a large empty gap on the right side with Elastic Mode on</li>
-</ul>]]></content>
-        <author>
-            <name>Armaninyow</name>
-            <uri>https://github.com/armaninyow</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,7 @@
+## 1.5.1 ([Sep 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/55660e096dc79a0629ae8e31394904ad201d3a73/mods/taskbar-labels.wh.cpp))
+
+* Fixed a missing running indicators regression introduced in the last update.
+
 ## 1.5 ([Sep 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5a826c2e4c0bdc6e5c5d06d32d57c7f09f1d63f9/mods/taskbar-labels.wh.cpp))
 
 * Made excluded program settings work for all four modes. Previously, they had no effect when combining was enabled.
