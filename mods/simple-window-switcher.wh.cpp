@@ -710,6 +710,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
       $options:
       - legacy: Legacy (Explorer gesture interception)
       - raw: Raw HID (direct gesture handling)
+    - suppressTaskView: true
+      $name: Suppress Task View for Touchpad Swipes
+      $description: Hide Task View when a 3-finger up swipe opens it, and use 3-finger vertical swipes to move through the switcher's rows while it is open. When off, Windows keeps the vertical swipes (Task View, Show desktop) and the switcher only navigates cyclically.
   $name: Touchpad
   $description: Precision touchpad input. Raw HID requires a precision touchpad; if the reports are unavailable, Legacy behavior is used instead.
 - ExcludedWindows:
@@ -962,6 +965,7 @@ struct Settings {
     bool excludeXboxMode;
     bool handleTouchpadGestures;
     WCHAR touchpadInputMode[16];
+    bool suppressTaskView;
 };
 
 static std::vector<std::wstring> g_excludeTitlePatterns;
@@ -4277,8 +4281,8 @@ static int s_rawGestureTips = 0;
 static bool s_rawGestureArmed = false;
 static int s_rawGestureAnchorX = 0;
 static int s_rawGestureAnchorY = 0;
-static int s_rawGestureAxis = 0; // 0 = undecided, 1 = horizontal, 2 = vertical
-static int s_rawGestureLastDir = 0;
+static int s_rawAppliedX = 0; // entries applied across, from the gesture's start position
+static int s_rawAppliedY = 0; // rows applied, from the gesture's start position
 std::map<std::wstring, HICON> g_uwpIconCache;
 
 struct FindCoreWindowData { HWND coreHwnd; };
@@ -11557,8 +11561,8 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
     if (!hwnd || !IsWindow(hwnd)) return;
 
     if (event == EVENT_OBJECT_SHOW && wcscmp(g_settings.touchpadInputMode, L"raw") == 0 &&
-        g_settings.handleTouchpadGestures && GetTickCount64() - s_rawTouchpadLastFrameTick < 600 &&
-        IsTaskViewWindow(hwnd)) {
+        g_settings.handleTouchpadGestures && g_settings.suppressTaskView &&
+        GetTickCount64() - s_rawTouchpadLastFrameTick < 600 && IsTaskViewWindow(hwnd)) {
         Wh_Log(L"SWS: hid Task View shown by a 3-finger swipe");
         ShowWindow(hwnd, SW_HIDE);
         return;
@@ -11713,17 +11717,42 @@ static void EndTouchpadGesture() {
     }
 }
 
-// Raw-HID frames drive the switcher with a horizontal 3-finger swipe: one step per
-// twelfth of the pad width (about one card of travel, so the selection tracks the fingers
-// at card scale), commit on finger lift. Only exactly 3 fingers are handled: 2-finger
-// panning stays with the wheel/scroll path and 4-finger is consumed by Windows (never
-// reported). Lifting fingers can emit a last frame at the pad edge, which is why
-// sub-3-tip frames never navigate and only a full lift commits.
+// Raw-HID frames drive the switcher: the selection follows the finger position, one entry
+// per twelfth of the pad (about one card, so it tracks at card scale), and the finger lift
+// commits. Both axes navigate - across entries and by rows, exactly like the arrow keys -
+// but only while the switcher is open, so a vertical swipe with no session stays with
+// Windows (Task View, Show desktop) unless Task View is suppressed. Only exactly 3 fingers
+// are handled: 2-finger panning stays with the wheel/scroll path and 4-finger is consumed
+// by Windows (never reported). Lifting fingers can emit a last frame at the pad edge, which
+// is why sub-3-tip frames never navigate and only a full lift commits.
 #define SWS_RAW_SWIPE_FINGERS 3
-#define SWS_RAW_SWIPE_STEP_TRAVEL (65535 / 12)
-// Until about 4% of travel the gesture has no axis; whichever axis grows faster then owns
-// the swipe, so a vertical (Task View) swipe that drifts sideways cannot step the switcher.
-#define SWS_RAW_SWIPE_AXIS_LOCK_TRAVEL (65535 / 25)
+#define SWS_RAW_SWIPE_ENTRY_PITCH (65535 / 12)
+// The dominant axis has to lead by this much before it navigates, so the sideways drift of
+// a vertical swipe (and vice versa) cannot move the selection in the other direction.
+#define SWS_RAW_SWIPE_DOMINANCE_NUM 3
+#define SWS_RAW_SWIPE_DOMINANCE_DEN 2
+
+static int RoundDiv(int value, int divisor) {
+    return (value >= 0) ? (value + divisor / 2) / divisor : -((-value + divisor / 2) / divisor);
+}
+
+// One axis maps to the linear list order and the other to the grid's rows, exactly like the
+// arrow keys: a horizontal task list is navigated left/right, a vertical one up/down.
+static void TouchpadNavigate(bool horizontalSwipe, int delta) {
+    bool linear = (horizontalSwipe != LayoutIsVertical());
+    if (linear) {
+        CycleLinear(delta);
+    } else {
+        while (delta > 0) {
+            CycleDirectional(1);
+            delta--;
+        }
+        while (delta < 0) {
+            CycleDirectional(-1);
+            delta++;
+        }
+    }
+}
 static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     s_rawTouchpadLastFrameTick = GetTickCount64();
 
@@ -11745,7 +11774,6 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
 
     if (tips == 0) {
         s_rawGestureArmed = false;
-        s_rawGestureLastDir = 0;
         if (g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow)) {
             HWND hTarget = (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size())
                                ? g_windows[g_selectedIndex].hWnd
@@ -11775,8 +11803,8 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         s_rawGestureArmed = true;
         s_rawGestureAnchorX = x;
         s_rawGestureAnchorY = y;
-        s_rawGestureAxis = 0;
-        s_rawGestureLastDir = 0;
+        s_rawAppliedX = 0;
+        s_rawAppliedY = 0;
         return;
     }
 
@@ -11788,47 +11816,51 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     int dy = y - s_rawGestureAnchorY;
     int adx = dx < 0 ? -dx : dx;
     int ady = dy < 0 ? -dy : dy;
+    bool sessionOpen = g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow);
 
-    if (s_rawGestureAxis == 0) {
-        if (adx < SWS_RAW_SWIPE_AXIS_LOCK_TRAVEL && ady < SWS_RAW_SWIPE_AXIS_LOCK_TRAVEL) {
+    if (adx * SWS_RAW_SWIPE_DOMINANCE_DEN >= ady * SWS_RAW_SWIPE_DOMINANCE_NUM) {
+        // Across entries: the first entry of travel opens the session, then the selection
+        // follows the finger position, so moving back un-selects just as directly.
+        int want = RoundDiv(dx, SWS_RAW_SWIPE_ENTRY_PITCH);
+        int delta = want - s_rawAppliedX;
+        if (!delta) {
             return;
         }
-        s_rawGestureAxis = (adx >= ady) ? 1 : 2;
-    }
-    if (s_rawGestureAxis != 1 || adx < SWS_RAW_SWIPE_STEP_TRAVEL) {
-        return; // vertical swipe (Task View) or not enough travel yet
-    }
-
-    int dir = dx > 0 ? 1 : -1;
-    if (dir != s_rawGestureLastDir) {
-        // Turning around starts a fresh window at the current position; otherwise the first
-        // step in the new direction would also have to eat the remainder kept in the old
-        // one, which made the opposite direction feel twice as heavy.
-        s_rawGestureAnchorX = x;
+        s_rawAppliedX = want;
+        if (!sessionOpen) {
+            // No hotkey and no Explorer grant here: make this process eligible for the
+            // foreground before opening, or the commit could not activate the selection.
+            TapUnassignedKeyForForeground();
+            BeginTouchpadGesture(0);
+            Wh_Log(L"SWS: raw gesture opened (switcher foreground=%d)", GetForegroundWindow() == g_hSwitcher);
+        }
+        if (g_settings.reverseScrollDirection) {
+            delta = -delta;
+        }
+        Wh_Log(L"SWS: raw touchpad move (dx=%d, entries=%d)", dx, delta);
+        TouchpadNavigate(true, delta);
+    } else if (ady * SWS_RAW_SWIPE_DOMINANCE_DEN >= adx * SWS_RAW_SWIPE_DOMINANCE_NUM &&
+               g_settings.suppressTaskView && sessionOpen) {
+        // By rows: needs Task View suppression, because with it off the vertical swipes
+        // belong to Windows, and an open session, so a vertical swipe never opens one.
+        int want = RoundDiv(dy, SWS_RAW_SWIPE_ENTRY_PITCH);
+        int delta = want - s_rawAppliedY;
+        if (!delta) {
+            return;
+        }
+        s_rawAppliedY = want;
+        if (g_settings.reverseScrollDirection) {
+            delta = -delta;
+        }
+        Wh_Log(L"SWS: raw touchpad move (dy=%d, rows=%d)", dy, delta);
+        TouchpadNavigate(false, delta);
     } else {
-        s_rawGestureAnchorX += dir * SWS_RAW_SWIPE_STEP_TRAVEL;
-    }
-    s_rawGestureLastDir = dir;
-    if (g_settings.reverseScrollDirection) {
-        dir = -dir;
+        return;
     }
 
-    Wh_Log(L"SWS: raw touchpad step %d (dx=%d, x=%d)", dir, dx, x);
-    if (!g_isTouchpadGestureActive) {
-        // No hotkey and no Explorer grant here: make this process eligible for the
-        // foreground before opening, or the commit could not activate the selection.
-        TapUnassignedKeyForForeground();
-        BeginTouchpadGesture(dir);
-        if (g_hSwitcher) {
-            SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
-        }
-        Wh_Log(L"SWS: raw gesture opened (switcher foreground=%d)", GetForegroundWindow() == g_hSwitcher);
-    } else if (g_isVisible && !g_windows.empty()) {
-        CycleLinear(dir);
-        s_lastTouchpadScrollTick = GetTickCount64();
-        if (g_hSwitcher) {
-            SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
-        }
+    s_lastTouchpadScrollTick = GetTickCount64();
+    if (g_hSwitcher) {
+        SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
     }
 }
 
@@ -13349,6 +13381,7 @@ static void LoadSettings() {
         wcscmp(g_settings.touchpadInputMode, L"raw") != 0) {
         wcsncpy_s(g_settings.touchpadInputMode, L"legacy", _TRUNCATE);
     }
+    g_settings.suppressTaskView = LoadBoolSetting(L"Touchpad.suppressTaskView", true);
 
     // Custom per-process header (array of { process, iconPath, appName }).
     g_customHeaderRules.clear();
