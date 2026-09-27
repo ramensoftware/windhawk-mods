@@ -1033,6 +1033,10 @@ ARCHIVED_README_PATTERN = r'^//[ \t]+==WindhawkModReadme==[ \t]*$\s*/\*\s*([\s\S
 ARCHIVED_IMAGE_URL_PATTERN = r'!\[[^\]]*\]\(\s*([^)]+?)\s*\)'
 ARCHIVED_IMAGE_HOSTS = ['i.imgur.com', 'raw.githubusercontent.com']
 
+# Images under this prefix are shown from their original URL instead of the
+# archived copy, so they may change after being archived.
+DIRECTLY_SERVED_IMAGE_URL_PREFIX = 'https://raw.githubusercontent.com/ramensoftware/'
+
 # The archive runs on Windows, and the images folder is several directories
 # deep, so the path is kept well within MAX_PATH.
 ARCHIVED_IMAGE_MAX_PATH_LENGTH = 200
@@ -1131,6 +1135,9 @@ def validate_readme_images(path: Path, mod_source: str) -> int:
             warnings += add_warning(
                 path, line, f'Image URL returned HTTP {e.code}: "{url}"'
             )
+            continue
+
+        if url.startswith(DIRECTLY_SERVED_IMAGE_URL_PREFIX):
             continue
 
         archived_image = get_archived_image(image_path)
