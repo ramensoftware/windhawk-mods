@@ -4,12 +4,12 @@
 // @description     Takes small icons out of the white thumbnail frame of Explorer's large icon views and enlarges them to the size of the view without blur (classic SysListView32 file list); folders and shortcuts get icons instead of thumbnails
 // @name:ru         Увеличенные значки без рамки эскиза
 // @description:ru  Вынимает маленькие значки из белой рамки эскиза в крупных видах Проводника и увеличивает их до размера вида без размытия (классический список SysListView32); папки и ярлыки показываются значками вместо эскизов
-// @version         2.8.3
+// @version         2.9
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lole32 -lpropsys -lshlwapi -lgdi32 -lcomctl32 -lpsapi -static-libstdc++ -static-libgcc
+// @compilerOptions -lole32 -lgdi32 -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -24,6 +24,14 @@ middle of a white frame and is never enlarged to the size of the view. This mod
 takes such icons out of the frame and enlarges them to fill the view, with
 nearest-neighbour scaling, so classic icons stay sharp instead of blurred. The
 small arrow of a shortcut is kept in the corner of the enlarged icon.
+
+Before (the mod disabled):
+
+![Before](https://raw.githubusercontent.com/appEW/images/main/enlarged-icons-without-thumbnail-frames/before.png)
+
+After:
+
+![After](https://raw.githubusercontent.com/appEW/images/main/enlarged-icons-without-thumbnail-frames/after.png)
 
 It is not another way to turn thumbnails off. Mods like
 [Disable Folder Thumbnails](https://windhawk.net/mods/disable-folder-thumbnails)
@@ -49,9 +57,13 @@ their thumbnails.
 
 ## Notes
 
-* Only the file list of Explorer folder windows is redrawn. The desktop, the
-  folder tree and other programs are left alone. Whenever the mod cannot be sure
-  that a drawing step is safe, it leaves the original Windows drawing in place.
+* Only the file list of Explorer folder windows is redrawn, and only in the
+  views with icons of 32 pixels and larger. The desktop, the folder tree and
+  other programs are left alone. Whenever the mod cannot be sure that a drawing
+  step is safe, it leaves the original Windows drawing in place.
+* The *Folders* and *Shortcuts* settings apply wherever Explorer itself chooses
+  between an icon and a thumbnail, so they also affect the desktop. File dialogs
+  of other programs are not affected.
 * Turning *Folders* or *Shortcuts* on or off, or disabling the mod, affects
   items as their images are loaded again - reopen or refresh a folder to see it.
 * [Disable Thumbnail Minimum Size](https://windhawk.net/mods/disable-thumbnail-minimum-size)
@@ -86,8 +98,11 @@ their thumbnails.
 папки файловой системы и все ярлыки `.lnk` показывать значки, чтобы они
 рисовались и увеличивались так же, как всё остальное. У файлов эскизы остаются.
 
-Перерисовывается только список файлов в окнах папок Проводника; рабочий стол,
-дерево папок и другие программы не затрагиваются. Изменение настроек «Папки» и
+Перерисовывается только список файлов в окнах папок Проводника и только в видах
+со значками от 32 пикселей; рабочий стол, дерево папок и другие программы не
+затрагиваются. Настройки «Папки» и «Ярлыки» действуют везде, где сам Проводник
+выбирает между значком и эскизом, поэтому и на рабочем столе; диалоги открытия
+файлов других программ не затрагиваются. Изменение настроек «Папки» и
 «Ярлыки» или отключение мода видно, когда изображения загружаются заново, -
 откройте папку снова или обновите её. Мод Disable Thumbnail Minimum Size
 перехватывает то же решение об эскизах; если включены оба, настройки «Папки» и
@@ -160,8 +175,6 @@ their thumbnails.
 #include <shobjidl.h>
 #include <wrl/client.h>
 
-// Kept in this single source so the standalone regression harness tests the
-// same pixel and DC validation code that Windhawk compiles.
 namespace FolderScaler {
 constexpr unsigned int kNeverUseThumbnail = 0x7fffffff;
 constexpr PROPERTYKEY kItemType = {
@@ -710,9 +723,8 @@ bool GetCaptureArea(HDC dc, int x, int y, int width, int height, RECT& visible,
     return true;
 }
 
-// In 2.6 each draw was analyzed after the window clip had already discarded
-// source pixels. That cannot yield a stable image near a viewport edge. Here
-// the outer draw runs ONCE into a full-size private canvas. Nested icon/overlay
+// A draw analyzed after the window clip has already discarded source pixels
+// cannot yield a stable image near a viewport edge. So the outer draw runs ONCE into a full-size private canvas. Nested icon/overlay
 // processing sees the complete source; only presentation is window-clipped.
 // No rendered images, shell-item pointers or coordinates survive this call.
 // A true return means draw was invoked: callers MUST NOT replay it, including
@@ -788,21 +800,12 @@ bool TryDrawCompleteCell(const IMAGELISTDRAWPARAMS& parameters,
     }
 }
 
-bool IsScrollMessage(UINT message, WPARAM key) {
-    return message == WM_VSCROLL || message == WM_HSCROLL ||
-           message == WM_MOUSEWHEEL || message == WM_MOUSEHWHEEL ||
-           message == LVM_SCROLL || (message == WM_KEYDOWN &&
-               (key == VK_UP || key == VK_DOWN || key == VK_LEFT ||
-                key == VK_RIGHT || key == VK_PRIOR || key == VK_NEXT ||
-                key == VK_HOME || key == VK_END));
-}
 
-bool ShouldInvalidateContentView(bool contentView, UINT message, WPARAM key, bool enabled) {
-    // Theme/display messages are also sent by classic-desktop modifications
-    // during their updates. The desktop is outside this renderer's scope.
+// Theme and DPI changes resize the images of a view; repaint it as a whole.
+bool IsLayoutChangeMessage(UINT message) {
     constexpr UINT kDpiChangedAfterParent = 0x02e3;
-    return contentView && (message == kDpiChangedAfterParent || message == WM_DISPLAYCHANGE ||
-        message == WM_THEMECHANGED || (enabled && IsScrollMessage(message, key)));
+    return message == kDpiChangedAfterParent || message == WM_DISPLAYCHANGE ||
+           message == WM_THEMECHANGED;
 }
 
 // The overlay is drawn once over the saved RGB with destination alpha zero.
@@ -955,23 +958,28 @@ bool TryDrawAnchoredOverlay(const IMAGELISTDRAWPARAMS& p, DrawContext& context,
     }
 }
 
-// Called before the control's BeginPaint, never after EndPaint. The same
-// paint validates this expanded update region, so there is no repaint loop.
-void PrepareStablePaint(HWND window) {
-    if (window) InvalidateRect(window, nullptr, TRUE);
+// Called before the control's BeginPaint, never after EndPaint. A narrow
+// update strip (a hovered item, a scrolled-in edge) is widened by one cell in
+// each direction, so every cell it touches is erased and then rendered as one
+// piece by TryDrawCompleteCell, never half native and half corrected. The same
+// paint validates the widened region, so there is no repaint loop.
+void ExpandUpdateToWholeCells(HWND window) {
+    RECT update{};
+    if (!window || !GetUpdateRect(window, &update, FALSE)) return;
+    DWORD spacing = static_cast<DWORD>(SendMessageW(window, LVM_GETITEMSPACING, FALSE, 0));
+    int cellWidth = LOWORD(spacing), cellHeight = HIWORD(spacing);
+    RECT item{};
+    item.left = LVIR_BOUNDS;
+    if (SendMessageW(window, LVM_GETITEMRECT, 0, reinterpret_cast<LPARAM>(&item))) {
+        cellWidth = std::max<int>(cellWidth, item.right - item.left);
+        cellHeight = std::max<int>(cellHeight, item.bottom - item.top);
+    }
+    InflateRect(&update, cellWidth, cellHeight);
+    InvalidateRect(window, &update, TRUE);
 }
 }  // namespace FolderScaler
 
-#ifndef FOLDER_SCALER_TEST
-#include <cstdarg>
-#include <initguid.h>
-#include <psapi.h>
-#include <propsys.h>
-#include <propvarutil.h>
-#include <shlobj.h>
-#include <shlwapi.h>
 #include <windhawk_utils.h>
-#include <wrl.h>
 
 using Microsoft::WRL::ComPtr;
 std::atomic<bool> g_folders = true, g_shortcuts = true;
@@ -981,30 +989,11 @@ std::atomic<unsigned int> g_smallContentPercent = 65;
 std::atomic<unsigned int> g_scalePercent = 200;
 std::atomic<unsigned int> g_maximumFillPercent = 80;
 std::atomic<bool> g_ready = false, g_unloading = false;
-std::atomic<int> g_debugMessagesRemaining = 160;
+bool g_rendererHooked = false;
 thread_local HWND g_paintView = nullptr;
 thread_local bool g_bypassDrawProcessing = false;
 thread_local bool g_completeCellDraw = false;
 thread_local FolderScaler::DrawContext* g_drawContext = nullptr;
-
-UINT ViewDpi(HWND window) {
-    // Resolve at runtime: Windhawk's compiler headers can target a pre-1607
-    // Windows SDK even though Explorer is running on a modern Windows build.
-    using GetDpiForWindowFn = UINT (WINAPI*)(HWND);
-    static const auto getDpi = reinterpret_cast<GetDpiForWindowFn>(
-        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
-    return getDpi ? getDpi(window) : 0;
-}
-
-void DebugLog(PCWSTR format, ...) {
-    if (g_debugMessagesRemaining.fetch_sub(1, std::memory_order_relaxed) <= 0) return;
-    wchar_t body[512];
-    va_list args;
-    va_start(args, format);
-    vswprintf(body, ARRAYSIZE(body), format, args);
-    va_end(args);
-    Wh_Log(L"[FolderIconScaler] %ls", body);
-}
 
 template<typename T>
 struct ScopedValue {
@@ -1054,35 +1043,44 @@ bool IsExplorerContentView(HWND window) {
     return false;
 }
 
+// A thumbnail frame is only drawn in the icon and tile views, with images of
+// at least 32 pixels. Details, List and Small icons are painted natively
+// without any extra work.
+bool IsProcessedView(HWND window) {
+    LRESULT view = SendMessageW(window, LVM_GETVIEW, 0, 0);
+    if (view != LV_VIEW_ICON && view != LV_VIEW_TILE) return false;
+    auto images = reinterpret_cast<HIMAGELIST>(
+        SendMessageW(window, LVM_GETIMAGELIST, LVSIL_NORMAL, 0));
+    int width = 0, height = 0;
+    return images && ImageList_GetIconSize(images, &width, &height) &&
+           width >= 32 && height >= 32 && IsExplorerContentView(window);
+}
+
 LRESULT CALLBACK ListViewSubclass(HWND window, UINT message, WPARAM wParam,
                                  LPARAM lParam, DWORD_PTR) {
     if (g_unloading.load())
         return DefSubclassProc(window, message, wParam, lParam);
 
-    // Use the actual window even with buffered rendering. Expand before
-    // BeginPaint so transferred scroll pixels and narrow update strips cannot
-    // leave a mixture of native and corrected images in one visible cell.
+    // Use the actual window even with buffered rendering.
     if (message == WM_PAINT || message == WM_PRINTCLIENT) {
-        bool contentView = IsExplorerContentView(window);
-        if (contentView && message == WM_PAINT &&
-            (g_folders.load() || g_shortcuts.load()))
-            FolderScaler::PrepareStablePaint(window);
-        ScopedValue<HWND> scope(g_paintView, contentView ? window : nullptr);
+        bool processed = (g_folders.load() || g_shortcuts.load()) &&
+                         IsProcessedView(window);
+        if (processed && message == WM_PAINT)
+            FolderScaler::ExpandUpdateToWholeCells(window);
+        ScopedValue<HWND> scope(g_paintView, processed ? window : nullptr);
         return DefSubclassProc(window, message, wParam, lParam);
     }
     LRESULT result = DefSubclassProc(window, message, wParam, lParam);
-    if (FolderScaler::ShouldInvalidateContentView(IsExplorerContentView(window), message, wParam,
-        g_folders.load() || g_shortcuts.load())) {
+    if (FolderScaler::IsLayoutChangeMessage(message) && IsExplorerContentView(window))
         InvalidateRect(window, nullptr, TRUE);
-    }
     return result;
 }
 
 void AttachListView(HWND window) {
     if (g_unloading.load() || !HasClass(window, L"SysListView32")) return;
     if (WindhawkUtils::SetWindowSubclassFromAnyThread(window, ListViewSubclass, 0)) {
-        DebugLog(L"attached view=%p dpi=%u explorer=%d", window,
-                 ViewDpi(window), IsExplorerContentView(window));
+        Wh_Log(L"attached view=%p dpi=%u explorer=%d", window,
+                 GetDpiForWindow(window), IsExplorerContentView(window));
     }
 }
 
@@ -1092,16 +1090,6 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR className,
     LPCWSTR title, DWORD style, int x, int y, int width, int height,
     HWND parent, HMENU menu, HINSTANCE instance, LPVOID parameter) {
     HWND window = CreateWindowExW_Original(exStyle, className, title, style,
-        x, y, width, height, parent, menu, instance, parameter);
-    if (window && g_ready.load()) AttachListView(window);
-    return window;
-}
-using CreateWindowExA_t = decltype(&CreateWindowExA);
-CreateWindowExA_t CreateWindowExA_Original;
-HWND WINAPI CreateWindowExA_Hook(DWORD exStyle, LPCSTR className,
-    LPCSTR title, DWORD style, int x, int y, int width, int height,
-    HWND parent, HMENU menu, HINSTANCE instance, LPVOID parameter) {
-    HWND window = CreateWindowExA_Original(exStyle, className, title, style,
         x, y, width, height, parent, menu, instance, parameter);
     if (window && g_ready.load()) AttachListView(window);
     return window;
@@ -1166,7 +1154,7 @@ HRESULT ImageListDraw_Common(size_t slot, void* imageList,
         HRESULT overlayStatus = E_FAIL;
         FolderScaler::Settings settings{g_minimumCanvasSize.load(), g_smallContentPercent.load(),
             g_scalePercent.load(), g_maximumFillPercent.load(), g_upscaleSmallIcons.load()};
-        if (FolderScaler::TryDrawAnchoredOverlay(*params, context, ViewDpi(g_paintView), settings,
+        if (FolderScaler::TryDrawAnchoredOverlay(*params, context, GetDpiForWindow(g_paintView), settings,
             [&](IMAGELISTDRAWPARAMS* isolated) {
                 ScopedValue<bool> guard(g_bypassDrawProcessing, true);
                 return g_drawHooks[slot].original(imageList, isolated);
@@ -1183,7 +1171,7 @@ HRESULT ImageListDraw_Common(size_t slot, void* imageList,
     // above, otherwise on the unchanged original destination as a fallback.
     // GetDpiForWindow is evaluated for this view on every draw, never taken
     // from the primary display or remembered from Explorer's startup.
-    unsigned int dpi = ViewDpi(g_paintView);
+    unsigned int dpi = GetDpiForWindow(g_paintView);
     if (!dpi) return original();
     HRESULT originalResult = E_FAIL;
     bool originalCalled = false;
@@ -1240,7 +1228,7 @@ HRESULT ImageListDraw_Common(size_t slot, void* imageList,
         }
         context.MarkChanged();
         context.RememberMainIcon(result);
-        DebugLog(L"frame removed view=%p dpi=%u slot=%u i=%d %dx%d -> %dx%d cell=%dx%d nearest=%d",
+        Wh_Log(L"frame removed view=%p dpi=%u slot=%u i=%d %dx%d -> %dx%d cell=%dx%d nearest=%d",
             g_paintView, dpi, static_cast<unsigned int>(slot), params->i,
             result.width, result.height, result.destinationWidth,
             result.destinationHeight, width, height, result.enlarged);
@@ -1294,25 +1282,6 @@ const WindhawkUtils::SYMBOL_HOOK storageHooks[] = {
      &CImageManager_GetItem_Original},
 };
 
-HMODULE FindLoadedComctl32() {
-    HMODULE modules[1024];
-    DWORD bytes = 0;
-    if (!EnumProcessModules(GetCurrentProcess(), modules, sizeof(modules), &bytes))
-        return nullptr;
-    HMODULE fallback = nullptr;
-    for (size_t i = 0; i < std::min<size_t>(bytes / sizeof(HMODULE), ARRAYSIZE(modules)); ++i) {
-        wchar_t path[MAX_PATH]{};
-        if (GetModuleFileNameW(modules[i], path, ARRAYSIZE(path)) &&
-            StrCmpIW(PathFindFileNameW(path), L"comctl32.dll") == 0) {
-            // A cold Explorer process can load both v5 and v6; prefer the
-            // side-by-side v6 library which implements these image lists.
-            if (StrStrIW(path, L"\\WinSxS\\")) return modules[i];
-            fallback = modules[i];
-        }
-    }
-    return fallback;
-}
-
 void LoadSettings() {
     g_folders = Wh_GetIntSetting(L"folders") != 0;
     g_shortcuts = Wh_GetIntSetting(L"shortcuts") != 0;
@@ -1330,8 +1299,6 @@ BOOL CALLBACK VisitChild(HWND window, LPARAM actionValue) {
     if (action == ViewAction::Attach) AttachListView(window);
     if (action == ViewAction::Detach)
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(window, ListViewSubclass);
-    // Desktop is also repainted to restore an icon damaged by an older mod,
-    // but its pixels never pass through this version's modification path.
     RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE);
     return TRUE;
 }
@@ -1349,32 +1316,34 @@ BOOL Wh_ModInit() {
     LoadSettings();
     HMODULE storage = LoadLibraryExW(L"windows.storage.dll", nullptr,
                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
-    HMODULE controls = FindLoadedComctl32();
-    if (!storage || !controls ||
-        !WindhawkUtils::HookSymbols(storage, storageHooks, ARRAYSIZE(storageHooks)) ||
-        !WindhawkUtils::HookSymbols(controls, comctl32Hooks, ARRAYSIZE(comctl32Hooks)))
+    if (!storage ||
+        !WindhawkUtils::HookSymbols(storage, storageHooks, ARRAYSIZE(storageHooks)))
         return FALSE;
-    if (!WindhawkUtils::SetFunctionHook(
-            CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original) ||
-        !WindhawkUtils::SetFunctionHook(
-            CreateWindowExA, CreateWindowExA_Hook, &CreateWindowExA_Original))
-        return FALSE;
-    Wh_Log(L"[FolderIconScaler] v2.8.3 initialized: cell-local clipping during label editing, native virtual items");
+
+    // Explorer's manifest redirects this load to the side-by-side comctl32 v6,
+    // which implements the image lists hooked here. Without them the frame
+    // removal is skipped, and the Folders and Shortcuts settings still work.
+    HMODULE controls = LoadLibraryExW(L"comctl32.dll", nullptr,
+                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
+    g_rendererHooked = controls &&
+        WindhawkUtils::HookSymbols(controls, comctl32Hooks, ARRAYSIZE(comctl32Hooks)) &&
+        WindhawkUtils::SetFunctionHook(
+            CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
+    if (!g_rendererHooked)
+        Wh_Log(L"comctl32 image list hooks failed, frames are left as they are");
     return TRUE;
 }
 void Wh_ModAfterInit() {
+    if (!g_rendererHooked) return;
     g_ready = true;
     VisitViews(ViewAction::Attach);
 }
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    g_debugMessagesRemaining = 160;
-    VisitViews(ViewAction::Repaint);
+    if (g_rendererHooked) VisitViews(ViewAction::Repaint);
 }
 void Wh_ModBeforeUninit() {
     g_unloading = true;
     g_ready = false;
-    VisitViews(ViewAction::Detach);
+    if (g_rendererHooked) VisitViews(ViewAction::Detach);
 }
-void Wh_ModUninit() {}
-#endif  // FOLDER_SCALER_TEST
