@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Customize text labels and combining for running programs on the taskbar (Windows 11 only)
-// @version         1.5
+// @version         1.5.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -1855,6 +1855,94 @@ TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook(
     return ret;
 }
 
+void* TaskListWindowViewModel_ITaskbarAppItemViewModel_vftable;
+void* TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable;
+
+void** g_taskListWindowViewModelHasLabelSlot;
+void** g_taskListGroupViewModelHasLabelSlot;
+
+// Leaves the slot intact if it doesn't hold the expected value, e.g. if another
+// mod patched it.
+bool SetVtableSlot(void** slot, void* expected, void* value) {
+    DWORD oldProtect;
+    if (!VirtualProtect(slot, sizeof(*slot), PAGE_READWRITE, &oldProtect)) {
+        return false;
+    }
+
+    bool set =
+        InterlockedCompareExchangePointer(slot, value, expected) == expected;
+    VirtualProtect(slot, sizeof(*slot), oldProtect, &oldProtect);
+    return set;
+}
+
+// The HasLabel getters are hooked in their vtable slots, since the linker can
+// fold a getter with other identical ones. For example, get_HasLabel and
+// get_IsRunning of TaskListWindowViewModel both return true, and hooking the
+// shared code would hide the running indicator along with the label.
+void HookHasLabelVtableSlots() {
+    auto windowVtable =
+        (void**)TaskListWindowViewModel_ITaskbarAppItemViewModel_vftable;
+    auto groupVtable =
+        (void**)TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable;
+    auto windowGetHasLabel = (void*)
+        TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original;
+    auto groupGetHasLabel = (void*)
+        TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original;
+    if (!windowVtable || !groupVtable || !windowGetHasLabel ||
+        !groupGetHasLabel) {
+        return;
+    }
+
+    auto windowHook = (void*)
+        TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook;
+    auto groupHook = (void*)
+        TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook;
+
+    // Both vtables are of the same interface. The group getter reads a field,
+    // so its address is unique in its vtable, unlike the window getter's. The
+    // first 6 slots are of IInspectable.
+    for (int i = 6; i < 64; i++) {
+        if (groupVtable[i] != groupGetHasLabel) {
+            continue;
+        }
+
+        if (!SetVtableSlot(&windowVtable[i], windowGetHasLabel, windowHook) ||
+            !SetVtableSlot(&groupVtable[i], groupGetHasLabel, groupHook)) {
+            Wh_Log(L"Failed to set HasLabel vtable slot %d", i);
+            SetVtableSlot(&windowVtable[i], windowHook, windowGetHasLabel);
+            return;
+        }
+
+        g_taskListWindowViewModelHasLabelSlot = &windowVtable[i];
+        g_taskListGroupViewModelHasLabelSlot = &groupVtable[i];
+        return;
+    }
+
+    Wh_Log(L"HasLabel vtable slot not found");
+}
+
+void UnhookHasLabelVtableSlots() {
+    if (g_taskListWindowViewModelHasLabelSlot) {
+        SetVtableSlot(
+            g_taskListWindowViewModelHasLabelSlot,
+            (void*)
+                TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook,
+            (void*)
+                TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original);
+        g_taskListWindowViewModelHasLabelSlot = nullptr;
+    }
+
+    if (g_taskListGroupViewModelHasLabelSlot) {
+        SetVtableSlot(
+            g_taskListGroupViewModelHasLabelSlot,
+            (void*)
+                TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook,
+            (void*)
+                TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original);
+        g_taskListGroupViewModelHasLabelSlot = nullptr;
+    }
+}
+
 using TaskListGroupViewModel_OnPropertyChanged_t =
     void(WINAPI*)(void* pThis, const std::wstring_view& propertyName);
 TaskListGroupViewModel_OnPropertyChanged_t
@@ -2143,13 +2231,25 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             {
                 {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_HasLabel(bool *))"},
                 &TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original,
-                TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook,
+                nullptr,
                 true,  // From 10.0.22621.2361.
             },
             {
                 {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_HasLabel(bool *))"},
                 &TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original,
-                TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook,
+                nullptr,
+                true,  // From 10.0.22621.2361.
+            },
+            {
+                {LR"(const winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::`vftable')"},
+                &TaskListWindowViewModel_ITaskbarAppItemViewModel_vftable,
+                nullptr,
+                true,  // From 10.0.22621.2361.
+            },
+            {
+                {LR"(const winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::`vftable')"},
+                &TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable,
+                nullptr,
                 true,  // From 10.0.22621.2361.
             },
             {
@@ -2352,6 +2452,10 @@ BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
             pKernelBaseRegGetValueW, RegGetValueW_Hook, &RegGetValueW_Original);
     }
 
+    // Last, so that a failed init doesn't leave the slots pointing to the
+    // hooks.
+    HookHasLabelVtableSlots();
+
     return TRUE;
 }
 
@@ -2404,6 +2508,9 @@ void Wh_ModBeforeUninit() {
     Wh_Log(L">");
 
     g_unloading = true;
+
+    // Before the unload, to let calls which already read the slots return.
+    UnhookHasLabelVtableSlots();
 
     if (g_taskbarViewDllLoaded) {
         ApplySettings();
