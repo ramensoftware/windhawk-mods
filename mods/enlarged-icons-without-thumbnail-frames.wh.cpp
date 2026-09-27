@@ -1,9 +1,9 @@
 // ==WindhawkMod==
-// @id              icons-only-for-folders-and-shortcuts
-// @name            Icons Only for Folders and Shortcuts
-// @description     Shows plain icons instead of thumbnails for folders and shortcuts in Explorer's large icon views, without the thumbnail frame and enlarged without blur, while files keep their thumbnails
-// @name:ru         Значки вместо эскизов для папок и ярлыков
-// @description:ru  Показывает в крупных видах Проводника обычные значки вместо эскизов для папок и ярлыков - без рамки эскиза и увеличенные без размытия; у файлов эскизы остаются
+// @id              enlarged-icons-without-thumbnail-frames
+// @name            Enlarged Icons Without Thumbnail Frames
+// @description     Takes small icons out of the white thumbnail frame of Explorer's large icon views and enlarges them to the size of the view without blur (classic SysListView32 file list); folders and shortcuts get icons instead of thumbnails
+// @name:ru         Увеличенные значки без рамки эскиза
+// @description:ru  Вынимает маленькие значки из белой рамки эскиза в крупных видах Проводника и увеличивает их до размера вида без размытия (классический список SysListView32); папки и ярлыки показываются значками вместо эскизов
 // @version         2.8.3
 // @author          appEW
 // @github          https://github.com/appEW
@@ -14,104 +14,84 @@
 
 // ==WindhawkModReadme==
 /*
-# Icons Only for Folders and Shortcuts
-
-In the large icon views of Explorer, Windows draws folders and shortcuts as
-thumbnails: a folder becomes a preview of the files inside it, and a small
-classic icon ends up in a white frame. This mod keeps plain icons for file
-system folders and `.lnk` shortcuts, removes the thumbnail frame around them
-and enlarges them to the size of the view with nearest-neighbour scaling, so
-classic 32x32 icons stay sharp instead of blurred. Files keep their thumbnails.
-
-Only the file list of Explorer folder windows is touched. The desktop
-(including the Recycle Bin), the folder tree, other programs and virtual
-folders keep the normal Windows behaviour. Whenever the mod cannot be sure a
-drawing step is safe, it leaves the original Windows drawing in place.
+# Enlarged Icons Without Thumbnail Frames
 
 > **Tested only on Windows 11 24H2 (build 26100).** It has not been tried on any other version of Windows and may not work there.
 
-## Version history
+In the large icon views of Explorer, an item that has only a small icon - a
+classic 32x32 icon, say - is shown as a "thumbnail": the small icon sits in the
+middle of a white frame and is never enlarged to the size of the view. This mod
+takes such icons out of the frame and enlarges them to fill the view, with
+nearest-neighbour scaling, so classic icons stay sharp instead of blurred. The
+small arrow of a shortcut is kept in the corner of the enlarged icon.
 
-Filesystem folders and .lnk shortcuts use icons. File thumbnails remain enabled.
+It is not another way to turn thumbnails off. Mods like
+[Disable Folder Thumbnails](https://windhawk.net/mods/disable-folder-thumbnails)
+choose *whether* a folder gets a thumbnail; this one changes *how* an icon that
+Windows puts in a thumbnail frame is drawn, so that it can be as large as the
+view instead of staying small inside the frame.
 
-Version 2.8.3 keeps icon enlargement active during inline folder creation and
-renaming. A label editor can make the view's overall clip region complex even
-when an individual icon is fully visible. Capture now checks clipping inside
-that icon's cell and restores the original DC state before drawing. Real holes
-inside a cell still use the safe native fallback. No new repaint triggers,
-desktop changes, timers or shell-item queries were added.
+**Requirement: the classic list view.** The frame removal and the enlargement
+work on the classic `SysListView32` file list, which Explorer only uses when a
+mod or tweak turns it on - for example
+[Enable SyslistView32](https://windhawk.net/mods/syslistview32-enabler), or the
+*Use native list view* option of Aerexplorer. With the default Windows 11 file
+list, only the *Folders* and *Shortcuts* settings below have an effect.
 
-Version 2.8.2 requests IShellItem from the private item helper and explicitly
-queries IShellItem2 before using its property methods. The optimized helper in
-the local Windows build ignores the requested IID and returns IShellItem, so
-requesting IShellItem2 directly is not safe. Failed interface/property queries
-retain the native cutoff. Theme/display invalidation is content-view-only.
-The pixel renderer and shortcut-overlay transport are unchanged.
+## Folders and shortcuts
 
-Version 2.8.1 removes the global type-only thumbnail-cutoff hook. Only an item
-positively identified as filesystem-backed can override the native cutoff.
-Virtual items (including Recycle Bin), failed queries and unknown types keep
-the original manager result. The 2.8 pixel/overlay renderer is unchanged.
+A folder whose thumbnail is a preview of the files inside it, and a shortcut
+whose thumbnail is taken from its target, cannot be enlarged as icons, because
+they are not icons. The *Folders* and *Shortcuts* settings (both on by default)
+make file system folders and all `.lnk` shortcuts use their icons instead, so
+that they are drawn - and enlarged - the same way as everything else. Files keep
+their thumbnails.
 
-Version 2.8 corrects tight frames and anchors the arrow glyph, not its padded cell:
-- Exact-fit 50px cells can contain 48px native icons with no empty moat.
-  Only their verified outer frame lines are removed; every inner pixel stays.
-- The outer overlay draws once on its own saved RGB background with alpha
-  initially zero. Valid coverage allows compositing just the arrow glyph at
-  the main icon's lower-left corner, without transferring its old background.
-- A framed or unframed arrow keeps its native size. Large unframed main icons
-  also supply their bounds. If coverage cannot be established, the native
-  position is retained rather than guessing transparency.
+## Notes
 
-The single-pass, scroll-independent rendering introduced in 2.7 is retained:
-- Only SysListView32 content inside Explorer folder windows is processed.
-  Desktop (including Recycle Bin), tree icons and other windows are bypassed.
-- The outer image-list draw executes once into a complete private cell on a
-  verified flat background. All scaling and overlay composition happen there;
-  only the final copy is clipped to the visible window/update region.
-- Before BeginPaint the Explorer view's update region is expanded and erased
-  so transferred scroll pixels cannot mix old and new image sizes. Scroll
-  messages also request a fresh paint; there is no timer or repaint loop.
-- Only a verified low-contrast frame around isolated icon content is removed.
-  If the complete-cell preparation is unsafe (e.g. a nonuniform background or
-  transformed DC), the original destination path remains the fallback.
-- Frame thickness is measured from connected border lines, not assumed to be
-  four pixels. Compact 54px cells and overlay layers below 32px are supported.
-- Frame removal preserves the original icon position when no enlargement fits.
-- Nested draws on the cell destination are processed before compositing finishes.
-  Once a child is corrected, its ancestors cannot enlarge the result again.
-- A lower-left overlay layer is never enlarged. Its verified frame is restored
-  from the pre-draw pixels, including any main-icon pixels underneath the frame.
-- Overlay glyph coordinates follow a corrected main icon within the same item draw.
-  A coloured frame is checked against each pre-draw pixel, including uniform
-  colour fields and frame sides hidden by the main icon's existing outline.
-- Nearest-neighbour enlargement preserves classic icon pixels without blur.
-- Each original method runs once, without black/white replay or shell-item
-  extraction during painting. All GDI writes are flushed before DIB reads.
-  The fallback never enlarges an incomplete source fragment.
-- DPI is read from the current list-view window for each draw, not from the
-  primary display at startup. No rendered image cache is shared across monitors.
-- The previous off-screen black/white replay and hard-coded CLVDrawState offsets
-  have been removed.
-
-The standalone regression tests live in folder-icon-scaler-tests. This file is
-self-contained for installation via Windhawk.
+* Only the file list of Explorer folder windows is redrawn. The desktop, the
+  folder tree and other programs are left alone. Whenever the mod cannot be sure
+  that a drawing step is safe, it leaves the original Windows drawing in place.
+* Turning *Folders* or *Shortcuts* on or off, or disabling the mod, affects
+  items as their images are loaded again - reopen or refresh a folder to see it.
+* [Disable Thumbnail Minimum Size](https://windhawk.net/mods/disable-thumbnail-minimum-size)
+  hooks the same thumbnail decision. With both mods enabled, the one whose hook
+  runs first wins, so the *Folders* and *Shortcuts* settings may have no effect.
 
 ---
 
 ## По-русски
 
-В крупных видах Проводника Windows рисует папки и ярлыки как эскизы: папка
-превращается в превью лежащих в ней файлов, а маленький классический значок
-оказывается в белой рамке. Мод оставляет для папок файловой системы и ярлыков
-`.lnk` обычные значки, убирает вокруг них рамку эскиза и увеличивает их до
-размера вида без сглаживания, так что классические значки 32x32 остаются
-чёткими, а не размытыми. У файлов эскизы сохраняются.
+В крупных видах Проводника объект, у которого есть только маленький значок, -
+например, классический значок 32x32 - показывается как «эскиз»: маленький значок
+стоит посередине белой рамки и никогда не увеличивается до размера вида. Мод
+вынимает такие значки из рамки и увеличивает их на весь размер вида без
+сглаживания, так что классические значки остаются чёткими, а не размытыми.
+Стрелка ярлыка остаётся в углу увеличенного значка.
 
-Затрагивается только список файлов в окнах папок Проводника. Рабочий стол
-(включая Корзину), дерево папок, другие программы и виртуальные папки ведут
-себя как обычно. Если мод не уверен, что шаг отрисовки безопасен, остаётся
-обычная отрисовка Windows.
+Это не очередной способ отключить эскизы. Моды вроде Disable Folder Thumbnails
+решают, *будет ли* у папки эскиз; этот мод меняет то, *как рисуется* значок,
+который Windows помещает в рамку эскиза, - чтобы он был размером с вид, а не
+оставался маленьким внутри рамки.
+
+**Требование: классический список файлов.** Снятие рамки и увеличение работают в
+классическом списке `SysListView32`, который Проводник использует, только если
+его включает мод или настройка - например, мод Enable SyslistView32 или параметр
+*Use native list view* в Aerexplorer. Со стандартным списком файлов Windows 11
+действуют только настройки «Папки» и «Ярлыки».
+
+Папка, эскиз которой - превью лежащих в ней файлов, и ярлык, эскиз которого
+берётся у его цели, не могут быть увеличены как значки, потому что это не
+значки. Настройки «Папки» и «Ярлыки» (обе включены по умолчанию) заставляют
+папки файловой системы и все ярлыки `.lnk` показывать значки, чтобы они
+рисовались и увеличивались так же, как всё остальное. У файлов эскизы остаются.
+
+Перерисовывается только список файлов в окнах папок Проводника; рабочий стол,
+дерево папок и другие программы не затрагиваются. Изменение настроек «Папки» и
+«Ярлыки» или отключение мода видно, когда изображения загружаются заново, -
+откройте папку снова или обновите её. Мод Disable Thumbnail Minimum Size
+перехватывает то же решение об эскизах; если включены оба, настройки «Папки» и
+«Ярлыки» могут не действовать.
 
 > **Проверено только на Windows 11 24H2 (сборка 26100).** На других версиях Windows мод не проверялся и может не работать.
 */
@@ -122,9 +102,21 @@ self-contained for installation via Windhawk.
 - folders: true
   $name: Folders
   $name:ru: Папки
+  $description: >-
+    File system folders show their icon instead of a preview of their
+    contents, so it can be enlarged.
+  $description:ru: >-
+    Папки файловой системы показывают свой значок вместо превью содержимого,
+    чтобы его можно было увеличить.
 - shortcuts: true
   $name: Shortcuts (.lnk)
   $name:ru: Ярлыки (.lnk)
+  $description: >-
+    Shortcuts show their icon instead of a thumbnail of their target, so it
+    can be enlarged.
+  $description:ru: >-
+    Ярлыки показывают свой значок вместо эскиза цели, чтобы его можно было
+    увеличить.
 - upscaleSmallIcons: true
   $name: Enlarge small icons without blur in large views
   $name:ru: Увеличивать маленькие значки без размытия в крупных видах
