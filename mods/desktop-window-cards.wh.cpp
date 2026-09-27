@@ -6,9 +6,6 @@
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
-// @architecture    x86
-// @architecture    x86-64
-// @architecture    arm64
 // @compilerOptions -ldwmapi -lgdi32 -lshell32
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
