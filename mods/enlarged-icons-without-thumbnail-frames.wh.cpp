@@ -4,7 +4,7 @@
 // @description     Takes small icons out of the white thumbnail frame of Explorer's large icon views and enlarges them to the size of the view without blur (classic SysListView32 file list); folders and shortcuts get icons instead of thumbnails
 // @name:ru         Увеличенные значки без рамки эскиза
 // @description:ru  Вынимает маленькие значки из белой рамки эскиза в крупных видах Проводника и увеличивает их до размера вида без размытия (классический список SysListView32); папки и ярлыки показываются значками вместо эскизов
-// @version         2.9.1
+// @version         2.9.2
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         explorer.exe
@@ -1017,6 +1017,8 @@ unsigned int CImageManager_GetThumbnailCutoff_Hook(void* manager, void* store) {
     // filesystem folders.
     // Private _GetItem is optimized for IID_IShellItem in some Windows builds;
     // the signature alone does not mean its REFIID argument is honored.
+    if (!CImageManager_GetItem_Original)
+        return CImageManager_GetThumbnailCutoff_Original(manager, store);
     ComPtr<IShellItem> item;
     HRESULT itemStatus = CImageManager_GetItem_Original(manager, store, IID_PPV_ARGS(&item));
     return FolderScaler::ItemThumbnailCutoff(SUCCEEDED(itemStatus) ? item.Get() : nullptr,
@@ -1312,15 +1314,18 @@ void VisitViews(ViewAction action) {
 
 BOOL Wh_ModInit() {
     LoadSettings();
+    // The two parts are independent: the Folders and Shortcuts settings need
+    // windows.storage.dll, the frame removal needs comctl32. The mod only
+    // fails to load when neither of them can be hooked.
     HMODULE storage = LoadLibraryExW(L"windows.storage.dll", nullptr,
                                    LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!storage ||
-        !WindhawkUtils::HookSymbols(storage, storageHooks, ARRAYSIZE(storageHooks)))
-        return FALSE;
+    bool thumbnailsHooked = storage &&
+        WindhawkUtils::HookSymbols(storage, storageHooks, ARRAYSIZE(storageHooks));
+    if (!thumbnailsHooked)
+        Wh_Log(L"windows.storage hooks failed, Folders and Shortcuts have no effect");
 
     // Explorer's manifest redirects this load to the side-by-side comctl32 v6,
-    // which implements the image lists hooked here. Without them the frame
-    // removal is skipped, and the Folders and Shortcuts settings still work.
+    // which implements the image lists hooked here.
     HMODULE controls = LoadLibraryExW(L"comctl32.dll", nullptr,
                                     LOAD_LIBRARY_SEARCH_SYSTEM32);
     g_rendererHooked = controls &&
@@ -1329,7 +1334,7 @@ BOOL Wh_ModInit() {
             CreateWindowExW, CreateWindowExW_Hook, &CreateWindowExW_Original);
     if (!g_rendererHooked)
         Wh_Log(L"comctl32 image list hooks failed, frames are left as they are");
-    return TRUE;
+    return thumbnailsHooked || g_rendererHooked;
 }
 void Wh_ModAfterInit() {
     if (!g_rendererHooked) return;
