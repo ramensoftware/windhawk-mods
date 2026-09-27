@@ -11622,6 +11622,25 @@ static void CloseSwitcherEntry(int idx) {
 static void LogPrecisionTouchpadConfig();
 static void LogProcessIntegrityLevel(const WCHAR* tag);
 
+// The raw path has no hotkey and no Explorer grant for the foreground (the legacy path
+// is granted it while the OS gesture runs), so the switcher could fail to become the
+// foreground window and the commit then could not activate the selected window. Tapping
+// an unassigned key first makes this process the one that received the last input, which
+// is what the foreground rules check; the reference mod uses the same key, the one
+// AutoHotkey masks menu keys with.
+#define SWS_RAW_FOREGROUND_TAP_VK 0xE8
+// The legacy 1.5 s backstop must not end a raw session while the fingers are still down.
+// Every frame refreshes this, so only a lost reader or a missed lift can reach it.
+#define SWS_RAW_SESSION_LOST_TIMEOUT_MS 4000
+static void TapUnassignedKeyForForeground() {
+    INPUT inputs[2] = {};
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = SWS_RAW_FOREGROUND_TAP_VK;
+    inputs[1] = inputs[0];
+    inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
+}
+
 // Touchpad gesture sessions, shared by the Explorer-interception path (legacy) and the
 // raw-HID frame path; the switcher thread owns the state either way.
 static void BeginTouchpadGesture(int step) {
@@ -11675,6 +11694,12 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         return;
     }
 
+    // Any frame is proof that the gesture is still alive: keep the session open while the
+    // fingers stay down and only let a lost reader or a missed lift commit it.
+    if (g_isTouchpadGestureActive && g_hSwitcher) {
+        SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
+    }
+
     int x = (int)(packedPos & 0xFFFF); // normalized 0..65535
     int prevTips = s_rawGestureTips;
     s_rawGestureTips = (int)tips;
@@ -11682,8 +11707,12 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     if (tips == 0) {
         s_rawGestureArmed = false;
         if (g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow)) {
-            Wh_Log(L"SWS: raw touchpad lift -> committing");
+            HWND hTarget = (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size())
+                               ? g_windows[g_selectedIndex].hWnd
+                               : NULL;
+            Wh_Log(L"SWS: raw touchpad lift -> committing (target=%p)", hTarget);
             EndTouchpadGesture();
+            Wh_Log(L"SWS: raw touchpad commit done (foreground=%p, target=%p)", GetForegroundWindow(), hTarget);
         }
         return;
     }
@@ -11717,12 +11746,19 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
 
     Wh_Log(L"SWS: raw touchpad step %d (travel=%d, x=%d)", dir, travel, x);
     if (!g_isTouchpadGestureActive) {
+        // No hotkey and no Explorer grant here: make this process eligible for the
+        // foreground before opening, or the commit could not activate the selection.
+        TapUnassignedKeyForForeground();
         BeginTouchpadGesture(dir);
+        if (g_hSwitcher) {
+            SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
+        }
+        Wh_Log(L"SWS: raw gesture opened (switcher foreground=%d)", GetForegroundWindow() == g_hSwitcher);
     } else if (g_isVisible && !g_windows.empty()) {
         CycleLinear(dir);
         s_lastTouchpadScrollTick = GetTickCount64();
         if (g_hSwitcher) {
-            SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, 1500, NULL);
+            SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
         }
     }
 }
@@ -13790,16 +13826,23 @@ static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
     static ULONG s_lastTips = 0;
     static double s_lastX = -1.0;
     static double s_lastY = -1.0;
+    static ULONGLONG s_lastPostTick = 0;
     double dx = cx - s_lastX;
     double dy = cy - s_lastY;
     if (dx < 0) dx = -dx;
     if (dy < 0) dy = -dy;
-    if (tips == s_lastTips && s_lastX >= 0.0 && dx < dev.rangeX * 0.01 && dy < dev.rangeY * 0.01) {
+    ULONGLONG now = GetTickCount64();
+    // Heartbeat while any finger is still down: the switcher keeps a raw session open
+    // until the lift, so resting fingers have to keep producing posts.
+    bool heartbeat = tips > 0 && now - s_lastPostTick >= 500;
+    if (tips == s_lastTips && s_lastX >= 0.0 && dx < dev.rangeX * 0.01 && dy < dev.rangeY * 0.01 &&
+        !heartbeat) {
         return;
     }
     s_lastTips = tips;
     s_lastX = cx;
     s_lastY = cy;
+    s_lastPostTick = now;
 
     ULONG packedPos = ((ULONG)(nx * 65535.0) & 0xFFFF) | (((ULONG)(ny * 65535.0) & 0xFFFF) << 16);
     PostMessageW(g_hSwitcher, g_WM_SWS_TOUCHPAD_FRAME, (WPARAM)tips, (LPARAM)packedPos);
