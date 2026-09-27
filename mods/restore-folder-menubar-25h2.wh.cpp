@@ -371,10 +371,9 @@ LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReser
             {
                 if (cbBuffer < sizeof(DWORD)) return ERROR_MORE_DATA;
                 *(DWORD*)lpData = g_settingDisplayMenuBar;
-                return ERROR_SUCCESS;
             }
-        }
-
+        }  
+        return ERROR_SUCCESS;
     }
     return pOriginalRegQueryValueExW(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
 }
