@@ -4276,6 +4276,9 @@ static ULONGLONG s_rawTouchpadLastFrameTick = 0;
 static int s_rawGestureTips = 0;
 static bool s_rawGestureArmed = false;
 static int s_rawGestureAnchorX = 0;
+static int s_rawGestureAnchorY = 0;
+static int s_rawGestureAxis = 0; // 0 = undecided, 1 = horizontal, 2 = vertical
+static int s_rawGestureLastDir = 0;
 std::map<std::wstring, HICON> g_uwpIconCache;
 
 struct FindCoreWindowData { HWND coreHwnd; };
@@ -8534,11 +8537,9 @@ static void CancelPendingShow() {
             DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
         }
     }
-    if (s_hWinEventHook) {
-        UnhookWinEvent(s_hWinEventHook);
-        s_hWinEventHook = NULL;
-    }
-
+    // The WinEvent hook stays installed for the switcher thread's lifetime: the raw-HID
+    // path needs it while the switcher is hidden, to hide a Task View the OS shows for its
+    // own 3-finger up gesture. It is unhooked when the switcher window is destroyed.
     g_isPendingShow = false;
     g_pendingSwitcherRect = { 0, 0, 0, 0 };
 }
@@ -11530,19 +11531,25 @@ static void AddWindowEntry(HWND hWnd) {
     }
 }
 
-// Task View (the 3-finger up swipe) is an XAML island like the switcher, told apart by
-// its title; the OS shows it for its own gesture regardless of what the mod does, so it
-// is hidden again while raw frames are flowing. Win+Tab and the taskbar button do not
-// come with raw frames and are unaffected.
+// Task View (the 3-finger up swipe) is an XAML island like the switcher; the OS shows it
+// for its own gesture regardless of what the mod does, so it is hidden again while raw
+// frames are flowing. Matched by class plus title (an island that has no title yet is
+// reported as such in the log, so the match can be tightened from real evidence), and
+// Win+Tab or the taskbar button do not come with raw frames and stay untouched.
 static bool IsTaskViewWindow(HWND hWnd) {
     WCHAR cls[64] = {0};
     if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return false;
-    if (wcscmp(cls, L"XamlExplorerHostIslandWindow") != 0 && wcscmp(cls, L"MultitaskingViewFrame") != 0) {
-        return false;
-    }
+    bool isIsland = (wcscmp(cls, L"XamlExplorerHostIslandWindow") == 0);
+    bool isMultiView = (wcscmp(cls, L"MultitaskingViewFrame") == 0);
+    if (!isIsland && !isMultiView) return false;
+
     WCHAR title[64] = {0};
     GetWindowTextW(hWnd, title, ARRAYSIZE(title));
-    return wcscmp(title, L"Task View") == 0;
+    bool match = isMultiView || wcscmp(title, L"Task View") == 0 || !title[0];
+    if (!match) return false;
+
+    Wh_Log(L"SWS: multitasking island from a swipe: class=%s title='%s'", cls, title);
+    return true;
 }
 
 static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
@@ -11563,7 +11570,10 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
     if (GetAncestor(hwnd, GA_ROOT) != hwnd) return;
 
     if (event == EVENT_OBJECT_SHOW) {
-        if (g_settings.handleTouchpadGestures && IsNativeSwitcherWindow(hwnd)) {
+        // The native switcher is only intercepted while the switcher it would replace is up;
+        // the Explorer side triggers the initial show (see BeginTouchpadGesture).
+        if ((g_isVisible || g_isPendingShow) && g_settings.handleTouchpadGestures &&
+            IsNativeSwitcherWindow(hwnd)) {
             ShowWindow(hwnd, SW_HIDE);
             if (g_hSwitcher) {
                 g_isTouchpadGestureActive = true;
@@ -11711,6 +11721,9 @@ static void EndTouchpadGesture() {
 // sub-3-tip frames never navigate and only a full lift commits.
 #define SWS_RAW_SWIPE_FINGERS 3
 #define SWS_RAW_SWIPE_STEP_TRAVEL (65535 / 12)
+// Until about 4% of travel the gesture has no axis; whichever axis grows faster then owns
+// the swipe, so a vertical (Task View) swipe that drifts sideways cannot step the switcher.
+#define SWS_RAW_SWIPE_AXIS_LOCK_TRAVEL (65535 / 25)
 static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     s_rawTouchpadLastFrameTick = GetTickCount64();
 
@@ -11725,12 +11738,14 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
     }
 
-    int x = (int)(packedPos & 0xFFFF); // normalized 0..65535
+    int x = (int)(packedPos & 0xFFFF);       // normalized 0..65535
+    int y = (int)((packedPos >> 16) & 0xFFFF);
     int prevTips = s_rawGestureTips;
     s_rawGestureTips = (int)tips;
 
     if (tips == 0) {
         s_rawGestureArmed = false;
+        s_rawGestureLastDir = 0;
         if (g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow)) {
             HWND hTarget = (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size())
                                ? g_windows[g_selectedIndex].hWnd
@@ -11741,7 +11756,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
             // to lean on, so force the activation again if the foreground change did not
             // take (a hidden switcher can leave the foreground momentarily empty).
             if (hTarget && IsWindow(hTarget) && GetForegroundWindow() != hTarget) {
-                Wh_Log(L"SWS: raw commit activation retry for %p", hTarget);
+                Wh_Log(L"SWS: raw commit activation recheck for %p", hTarget);
                 SetForegroundWindow(hTarget);
                 SwitchToThisWindow(hTarget, TRUE);
             }
@@ -11759,6 +11774,9 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         // Three fingers just landed: a new swipe window starts from this position.
         s_rawGestureArmed = true;
         s_rawGestureAnchorX = x;
+        s_rawGestureAnchorY = y;
+        s_rawGestureAxis = 0;
+        s_rawGestureLastDir = 0;
         return;
     }
 
@@ -11766,18 +11784,36 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         return;
     }
 
-    int travel = x - s_rawGestureAnchorX;
-    if (travel < SWS_RAW_SWIPE_STEP_TRAVEL && travel > -SWS_RAW_SWIPE_STEP_TRAVEL) {
-        return;
+    int dx = x - s_rawGestureAnchorX;
+    int dy = y - s_rawGestureAnchorY;
+    int adx = dx < 0 ? -dx : dx;
+    int ady = dy < 0 ? -dy : dy;
+
+    if (s_rawGestureAxis == 0) {
+        if (adx < SWS_RAW_SWIPE_AXIS_LOCK_TRAVEL && ady < SWS_RAW_SWIPE_AXIS_LOCK_TRAVEL) {
+            return;
+        }
+        s_rawGestureAxis = (adx >= ady) ? 1 : 2;
+    }
+    if (s_rawGestureAxis != 1 || adx < SWS_RAW_SWIPE_STEP_TRAVEL) {
+        return; // vertical swipe (Task View) or not enough travel yet
     }
 
-    int dir = travel > 0 ? 1 : -1;
-    s_rawGestureAnchorX += dir * SWS_RAW_SWIPE_STEP_TRAVEL;
+    int dir = dx > 0 ? 1 : -1;
+    if (dir != s_rawGestureLastDir) {
+        // Turning around starts a fresh window at the current position; otherwise the first
+        // step in the new direction would also have to eat the remainder kept in the old
+        // one, which made the opposite direction feel twice as heavy.
+        s_rawGestureAnchorX = x;
+    } else {
+        s_rawGestureAnchorX += dir * SWS_RAW_SWIPE_STEP_TRAVEL;
+    }
+    s_rawGestureLastDir = dir;
     if (g_settings.reverseScrollDirection) {
         dir = -dir;
     }
 
-    Wh_Log(L"SWS: raw touchpad step %d (travel=%d, x=%d)", dir, travel, x);
+    Wh_Log(L"SWS: raw touchpad step %d (dx=%d, x=%d)", dir, dx, x);
     if (!g_isTouchpadGestureActive) {
         // No hotkey and no Explorer grant here: make this process eligible for the
         // foreground before opening, or the commit could not activate the selection.
@@ -13489,6 +13525,15 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     g_hSwitcher = CreateSWSWindow(exStyle, SWS_CLASSNAME, L"",
         dwStyle, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
     if (!g_hSwitcher) { Wh_Log(L"Failed to create switcher window"); return 1; }
+
+    // Installed for the thread's lifetime (see CancelPendingShow): the raw-HID path needs it
+    // while the switcher is hidden, to hide a Task View the OS shows for its own 3-finger
+    // up gesture.
+    s_hWinEventHook = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, NULL,
+                                      WinEventShowHideProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!s_hWinEventHook) {
+        Wh_Log(L"SWS: SetWinEventHook failed (%u)", GetLastError());
+    }
 
     g_hCloseBtnWnd = CreateSWSWindow(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT,
