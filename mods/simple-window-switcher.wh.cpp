@@ -4283,7 +4283,7 @@ static int s_rawGestureAnchorX = 0;
 static int s_rawGestureAnchorY = 0;
 static int s_rawGestureAxis = 0;  // 0 = none yet, 1 = across entries, 2 = rows
 static int s_rawAppliedX = 0;     // entries applied since the current direction started
-static bool s_rawRowArmed = true; // a row move needs the hand to come back first
+static ULONGLONG s_rawRowTick = 0; // pacing for the vertical axis
 static int s_rawLastFrameX = 0;
 static int s_rawLastFrameY = 0;
 std::map<std::wstring, HICON> g_uwpIconCache;
@@ -11567,6 +11567,23 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
         g_settings.handleTouchpadGestures && g_settings.suppressTaskView &&
         GetTickCount64() - s_rawTouchpadLastFrameTick < 600 && IsTaskViewWindow(hwnd)) {
         Wh_Log(L"SWS: hid Task View shown by a 3-finger swipe");
+        // Hiding the window alone leaves the shell believing Task View is still open, which
+        // swallows the next 3-finger down (show desktop needs a second swipe). Escape is
+        // Task View's own dismiss key, so close it through the shell while it owns the
+        // foreground; the hide below then only cuts the closing animation short.
+        HWND hFg = GetForegroundWindow();
+        if (hFg && GetAncestor(hFg, GA_ROOT) == GetAncestor(hwnd, GA_ROOT)) {
+            INPUT inputs[2] = {};
+            inputs[0].type = INPUT_KEYBOARD;
+            inputs[0].ki.wVk = VK_ESCAPE;
+            inputs[1] = inputs[0];
+            inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+            if (SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT))) {
+                Wh_Log(L"SWS: dismissed Task View through the shell");
+            }
+        } else {
+            Wh_Log(L"SWS: Task View was not foreground, hid it without dismissing");
+        }
         ShowWindow(hwnd, SW_HIDE);
         if (g_hSwitcher && (g_isVisible || g_isPendingShow)) {
             // Hiding the island can hand the foreground to the shell; keep the switcher
@@ -11743,6 +11760,9 @@ static void EndTouchpadGesture() {
 // position the pad emitted at an edge, not a finger: it restarts the gesture window
 // instead of navigating, otherwise the selection would fly through the grid.
 #define SWS_RAW_SWIPE_JUMP_TRAVEL (65535 / 4)
+// Pacing for the vertical axis: one row (or page) per this interval, which keeps a long drag
+// from walking the layout through itself while still covering several rows when needed.
+#define SWS_RAW_SWIPE_ROW_INTERVAL_MS 140
 
 static int RoundDiv(int value, int divisor) {
     return (value >= 0) ? (value + divisor / 2) / divisor : -((-value + divisor / 2) / divisor);
@@ -11835,7 +11855,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         s_rawGestureAnchorY = y;
         s_rawGestureAxis = 0;
         s_rawAppliedX = 0;
-        s_rawRowArmed = true;
+        s_rawRowTick = 0;
         s_rawLastFrameX = x;
         s_rawLastFrameY = y;
         return;
@@ -11863,7 +11883,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         s_rawGestureAnchorY = y;
         s_rawGestureAxis = 0;
         s_rawAppliedX = 0;
-        s_rawRowArmed = true;
+        s_rawRowTick = 0;
         Wh_Log(L"SWS: raw touchpad re-anchor after a jump (dX=%d, dY=%d)", stepX, stepY);
         return;
     }
@@ -11888,7 +11908,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         s_rawGestureAnchorX = x;
         s_rawGestureAnchorY = y;
         s_rawAppliedX = 0;
-        s_rawRowArmed = true;
+        s_rawRowTick = 0;
         if (axis != 0) {
             Wh_Log(L"SWS: raw touchpad direction -> %s", axis == 1 ? L"across" : L"rows");
         }
@@ -11937,30 +11957,33 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         Wh_Log(L"SWS: raw touchpad move (dx=%d, entries=%d)", dx, delta);
         TouchpadNavigate(true, delta);
     } else {
-        // By rows: one row per vertical swipe, like one press of an arrow key. The hand has
-        // to come back before the next row, so a long drag cannot walk the grid through
-        // itself (that row walk reflows the layout, which is what kept breaking the flow).
-        // It needs Task View suppression, because without it the vertical swipes belong to
-        // Windows, and an open session, so a vertical swipe never opens one.
-        if (!sessionOpen || !g_settings.suppressTaskView || !LayoutHasMultipleLines()) {
+        // Vertical: rows when the grid has them, pages when a single line overflows and has
+        // no rows, so the gesture is never dead. One move per SWS_RAW_SWIPE_ROW_INTERVAL_MS
+        // keeps a long drag from walking the layout through itself (a row walk reflows the
+        // layout, and doing that per report is what kept breaking the flow), while still
+        // covering several rows or pages when the hand keeps going. It needs Task View
+        // suppression, because without it the vertical swipes belong to Windows, and an open
+        // session, so a vertical swipe never opens one.
+        if (!sessionOpen || !g_settings.suppressTaskView || ady < SWS_RAW_SWIPE_ENTRY_PITCH) {
             return;
         }
-        if (!s_rawRowArmed) {
-            if (ady <= SWS_RAW_SWIPE_ENTRY_PITCH / 2) {
-                s_rawRowArmed = true;
-            }
+        ULONGLONG now = GetTickCount64();
+        if (s_rawRowTick && now - s_rawRowTick < SWS_RAW_SWIPE_ROW_INTERVAL_MS) {
             return;
         }
-        if (ady < SWS_RAW_SWIPE_ENTRY_PITCH) {
-            return;
-        }
-        s_rawRowArmed = false;
+        s_rawRowTick = now;
         int delta = dy > 0 ? 1 : -1;
         if (g_settings.reverseScrollDirection) {
             delta = -delta;
         }
-        Wh_Log(L"SWS: raw touchpad move (dy=%d, rows=%d)", dy, delta);
-        TouchpadNavigate(false, delta);
+        bool rows = LayoutHasMultipleLines();
+        Wh_Log(L"SWS: raw touchpad move (dy=%d, rows=%d, pages=%d)", dy, rows ? delta : 0,
+               rows ? 0 : delta);
+        if (rows) {
+            TouchpadNavigate(false, delta);
+        } else {
+            CyclePage(delta);
+        }
     }
 
     s_lastTouchpadScrollTick = GetTickCount64();
