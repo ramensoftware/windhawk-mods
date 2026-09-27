@@ -1,10 +1,10 @@
 // ==WindhawkMod==
 // @id              recycle-bin-original-names
-// @name            Real Names in Recycle Bin Prompts
-// @description     Shows the file's real name in the prompts for deleting it from the Recycle Bin, instead of the internal $R name the Recycle Bin keeps it under
-// @name:ru         Настоящие имена файлов в запросах Корзины
-// @description:ru  Показывает в запросах на удаление из Корзины настоящее имя файла вместо служебного $R-имени, под которым Корзина его хранит
-// @version         1.2
+// @name            Real Names in Pre-Vista Recycle Bin Prompts
+// @description     Companion to Pre-Vista File Operation Dialogs: its XP-style prompts for deleting from the Recycle Bin show the file's real name instead of the internal $R name the Recycle Bin keeps it under
+// @name:ru         Настоящие имена в запросах Корзины в стиле XP
+// @description:ru  Дополнение к Pre-Vista File Operation Dialogs: его запросы в стиле XP на удаление из Корзины показывают настоящее имя файла вместо служебного $R-имени, под которым Корзина его хранит
+// @version         1.3
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         explorer.exe
@@ -14,7 +14,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Real Names in Recycle Bin Prompts
+# Real Names in Pre-Vista Recycle Bin Prompts
 
 > **Tested only on Windows 11 24H2 (build 26100).** It has not been tried on any other version of Windows and may not work there.
 
