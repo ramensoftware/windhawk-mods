@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              quick-translator-layout-switcher
-// @name            Selection Layout Switcher & Translator
+// @name            quick-translator & layout-switcher
 // @description     Fast layout corrector, in-place translator, and floating HUD tooltip.
 // @version         1.0.1
 // @author          zed712969-crypto
@@ -348,6 +348,18 @@ std::string UrlEncodeUtf8(const std::wstring& wstr) {
     return escaped;
 }
 
+static unsigned int ParseHex4(const std::string& s, size_t offset) {
+    unsigned int cp = 0;
+    for (int k = 2; k <= 5; ++k) {
+        char h = s[offset + k];
+        cp <<= 4;
+        if (h >= '0' && h <= '9') cp |= (h - '0');
+        else if (h >= 'a' && h <= 'f') cp |= (h - 'a' + 10);
+        else if (h >= 'A' && h <= 'F') cp |= (h - 'A' + 10);
+    }
+    return cp;
+}
+
 std::wstring ParseGoogleTranslateResponse(const std::string& json) {
     std::wstring fullResult = L"";
     const std::string key = "\"trans\":\"";
@@ -362,23 +374,40 @@ std::wstring ParseGoogleTranslateResponse(const std::string& json) {
                 char next = json[pos + 1];
                 if (next == '\"') { transUtf8 += '\"'; pos += 2; }
                 else if (next == '\\') { transUtf8 += '\\'; pos += 2; }
-                else if (next == 'n') { transUtf8 += "\r\n"; pos += 2; }
-                else if (next == 'r') { pos += 2; }
-                else if (next == 't') { transUtf8 += '\t'; pos += 2; }
+                else if (next == '/')  { transUtf8 += '/';  pos += 2; }
+                else if (next == 'n')  { transUtf8 += "\r\n"; pos += 2; }
+                else if (next == 'r')  { pos += 2; }
+                else if (next == 't')  { transUtf8 += '\t'; pos += 2; }
                 else if (next == 'u' && pos + 5 < json.length()) {
-                    unsigned int codepoint = 0;
-                    for (int k = 2; k <= 5; ++k) {
-                        char h = json[pos + k];
-                        codepoint <<= 4;
-                        if (h >= '0' && h <= '9') codepoint |= (h - '0');
-                        else if (h >= 'a' && h <= 'f') codepoint |= (h - 'a' + 10);
-                        else if (h >= 'A' && h <= 'F') codepoint |= (h - 'A' + 10);
-                    }
-                    wchar_t wch = (wchar_t)codepoint;
-                    char utf8Buf[4] = {};
-                    int u8len = WideCharToMultiByte(CP_UTF8, 0, &wch, 1, utf8Buf, sizeof(utf8Buf), NULL, NULL);
-                    for (int i = 0; i < u8len; ++i) transUtf8 += utf8Buf[i];
+                    unsigned int codepoint = ParseHex4(json, pos);
                     pos += 6;
+
+                    // Если это старший суррогат, проверяем, идет ли следом младший суррогат
+                    if (codepoint >= 0xD800 && codepoint <= 0xDBFF &&
+                        pos + 5 < json.length() && json[pos] == '\\' && json[pos + 1] == 'u') {
+                        unsigned int low = ParseHex4(json, pos);
+                        if (low >= 0xDC00 && low <= 0xDFFF) {
+                            codepoint = 0x10000 + (((codepoint - 0xD800) << 10) | (low - 0xDC00));
+                            pos += 6;
+                        }
+                    }
+
+                    // Кодируем codepoint в стандартный UTF-8
+                    if (codepoint <= 0x7F) {
+                        transUtf8 += (char)codepoint;
+                    } else if (codepoint <= 0x7FF) {
+                        transUtf8 += (char)(0xC0 | (codepoint >> 6));
+                        transUtf8 += (char)(0x80 | (codepoint & 0x3F));
+                    } else if (codepoint <= 0xFFFF) {
+                        transUtf8 += (char)(0xE0 | (codepoint >> 12));
+                        transUtf8 += (char)(0x80 | ((codepoint >> 6) & 0x3F));
+                        transUtf8 += (char)(0x80 | (codepoint & 0x3F));
+                    } else if (codepoint <= 0x10FFFF) {
+                        transUtf8 += (char)(0xF0 | (codepoint >> 18));
+                        transUtf8 += (char)(0x80 | ((codepoint >> 12) & 0x3F));
+                        transUtf8 += (char)(0x80 | ((codepoint >> 6) & 0x3F));
+                        transUtf8 += (char)(0x80 | (codepoint & 0x3F));
+                    }
                 } else {
                     transUtf8 += json[pos];
                     pos++;
