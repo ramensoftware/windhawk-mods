@@ -706,12 +706,12 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 - Touchpad:
     - inputMode: legacy
       $name: Touchpad Input Mode
-      $description: How touchpad gestures reach the switcher. "Legacy" keeps the Explorer gesture interception; "Raw HID" reads the precision touchpad's reports directly and only logs them, to collect the data the new navigation support needs. Raw HID changes no switching behavior yet.
+      $description: How touchpad gestures reach the switcher. "Legacy" keeps the Explorer native-switcher interception; "Raw HID" reads the precision touchpad's HID reports directly and drives the switcher from 3-finger horizontal swipes (2-finger panning stays with scrolling, and 4-finger is consumed by Windows). Swipe direction follows Accessibility - Reverse Scroll Direction.
       $options:
       - legacy: Legacy (Explorer gesture interception)
-      - raw: Raw HID (diagnostics only)
+      - raw: Raw HID (direct gesture handling)
   $name: Touchpad
-  $description: Precision touchpad input. Raw HID is a diagnostics mode; the frames it reads are written to the mod log.
+  $description: Precision touchpad input. Raw HID requires a precision touchpad; if the reports are unavailable, Legacy behavior is used instead.
 - ExcludedWindows:
     - excludeByTitle: ""
       $name: Exclude by Window Title
@@ -4269,7 +4269,13 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 UINT g_WM_SWS_GET_UWP_ICON = 0;
 UINT g_WM_SWS_TOUCHPAD_TRIGGER = 0;
 UINT g_WM_SWS_TOUCHPAD_DISMISS = 0;
+UINT g_WM_SWS_TOUCHPAD_FRAME = 0;
 static bool g_isTouchpadGestureActive = false;
+// Raw-frame gesture state (Touchpad.inputMode = raw); switcher thread only.
+static ULONGLONG s_rawTouchpadLastFrameTick = 0;
+static int s_rawGestureTips = 0;
+static bool s_rawGestureArmed = false;
+static int s_rawGestureAnchorX = 0;
 std::map<std::wstring, HICON> g_uwpIconCache;
 
 struct FindCoreWindowData { HWND coreHwnd; };
@@ -11616,6 +11622,111 @@ static void CloseSwitcherEntry(int idx) {
 static void LogPrecisionTouchpadConfig();
 static void LogProcessIntegrityLevel(const WCHAR* tag);
 
+// Touchpad gesture sessions, shared by the Explorer-interception path (legacy) and the
+// raw-HID frame path; the switcher thread owns the state either way.
+static void BeginTouchpadGesture(int step) {
+    // Re-entrant: a new gesture must always be able to (re)open the switcher even if a
+    // previous gesture left stale state. Force a clean slate if we are mid-exit.
+    if (g_animExitActive) {
+        Wh_Log(L"SWS: Touchpad gesture during exit animation -> forcing clean state");
+        FinishAnimations();
+        g_animExitActive = false;
+    }
+    g_isTouchpadGestureActive = true;
+    s_lastTouchpadScrollTick = GetTickCount64();
+    if (!g_isVisible && !g_isPendingShow) {
+        ShowSwitcher(false, true);
+    } else if (g_isPendingShow) {
+        RevealPendingSwitcher();
+    }
+    if (g_isVisible && !g_windows.empty() && step != 0) {
+        CycleLinear(step);
+    }
+    if (g_hSwitcher) {
+        BringWindowToTop(g_hSwitcher);
+        SetForegroundWindow(g_hSwitcher);
+        SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, 1500, NULL);
+    }
+}
+
+static void EndTouchpadGesture() {
+    g_isTouchpadGestureActive = false;
+    if (g_hSwitcher) {
+        KillTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID);
+    }
+    if (g_isVisible || g_isPendingShow) {
+        SwitchToSelected();
+    }
+}
+
+// Raw-HID frames drive the switcher with a horizontal 3-finger swipe: one step per
+// quarter of the pad width of travel (the remainder is kept, so slow drifts are not
+// lost), commit on finger lift. Only exactly 3 fingers are handled: 2-finger panning
+// stays with the wheel/scroll path and 4-finger is consumed by Windows (never reported).
+// Lifting fingers can emit a last frame at the pad edge, which is why sub-3-tip frames
+// never navigate and only a full lift commits.
+#define SWS_RAW_SWIPE_FINGERS 3
+#define SWS_RAW_SWIPE_STEP_TRAVEL (65535 / 4)
+static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
+    s_rawTouchpadLastFrameTick = GetTickCount64();
+
+    if (!g_settings.handleTouchpadGestures || g_isSticky ||
+        (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0) {
+        return;
+    }
+
+    int x = (int)(packedPos & 0xFFFF); // normalized 0..65535
+    int prevTips = s_rawGestureTips;
+    s_rawGestureTips = (int)tips;
+
+    if (tips == 0) {
+        s_rawGestureArmed = false;
+        if (g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow)) {
+            Wh_Log(L"SWS: raw touchpad lift -> committing");
+            EndTouchpadGesture();
+        }
+        return;
+    }
+
+    if (tips != SWS_RAW_SWIPE_FINGERS) {
+        s_rawGestureArmed = false;
+        return;
+    }
+
+    if (prevTips != SWS_RAW_SWIPE_FINGERS) {
+        // Three fingers just landed: a new swipe window starts from this position.
+        s_rawGestureArmed = true;
+        s_rawGestureAnchorX = x;
+        return;
+    }
+
+    if (!s_rawGestureArmed) {
+        return;
+    }
+
+    int travel = x - s_rawGestureAnchorX;
+    if (travel < SWS_RAW_SWIPE_STEP_TRAVEL && travel > -SWS_RAW_SWIPE_STEP_TRAVEL) {
+        return;
+    }
+
+    int dir = travel > 0 ? 1 : -1;
+    s_rawGestureAnchorX += dir * SWS_RAW_SWIPE_STEP_TRAVEL;
+    if (g_settings.reverseScrollDirection) {
+        dir = -dir;
+    }
+
+    Wh_Log(L"SWS: raw touchpad step %d (travel=%d, x=%d)", dir, travel, x);
+    if (!g_isTouchpadGestureActive) {
+        BeginTouchpadGesture(dir);
+    } else if (g_isVisible && !g_windows.empty()) {
+        CycleLinear(dir);
+        s_lastTouchpadScrollTick = GetTickCount64();
+        if (g_hSwitcher) {
+            SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, 1500, NULL);
+        }
+    }
+}
+
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     if (g_animExitActive) {
         if (uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN || uMsg == WM_KEYUP || uMsg == WM_SYSKEYUP ||
@@ -11652,19 +11763,13 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             LogProcessIntegrityLevel(L"tool-mod process (at first gesture)");
             LogPrecisionTouchpadConfig();
         }
-        // Re-entrant: a new gesture must always be able to (re)open the switcher even if a
-        // previous gesture left stale state. Force a clean slate if we are mid-exit.
-        if (g_animExitActive) {
-            Wh_Log(L"SWS: Touchpad trigger during exit animation -> forcing clean state");
-            FinishAnimations();
-            g_animExitActive = false;
-        }
-        g_isTouchpadGestureActive = true;
-        s_lastTouchpadScrollTick = GetTickCount64();
-        if (!g_isVisible && !g_isPendingShow) {
-            ShowSwitcher(false, true);
-        } else if (g_isPendingShow) {
-            RevealPendingSwitcher();
+        // Raw mode owns the swipe: the OS gesture still fires and its native switcher
+        // window is already hidden on the Explorer side, so ignore this trigger while raw
+        // frames are flowing (otherwise the same swipe would step twice). The window
+        // covers the native switcher's show, which can land right after the finger lift.
+        if (wcscmp(g_settings.touchpadInputMode, L"raw") == 0 &&
+            GetTickCount64() - s_rawTouchpadLastFrameTick < 800) {
+            return 0;
         }
         int step = 1;
         if (lParam == 1) {
@@ -11673,22 +11778,20 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 step = -1;
             }
         }
-        if (g_isVisible && !g_windows.empty()) {
-            CycleLinear(step);
-        }
-        BringWindowToTop(g_hSwitcher);
-        SetForegroundWindow(g_hSwitcher);
-        SetTimer(hWnd, SWS_TOUCHPAD_IDLE_TIMER_ID, 1500, NULL);
+        BeginTouchpadGesture(step);
         return 0;
     }
 
     if (g_WM_SWS_TOUCHPAD_DISMISS && uMsg == g_WM_SWS_TOUCHPAD_DISMISS) {
         Wh_Log(L"SWS: Received touchpad dismiss message (active=%d, isVisible=%d)", g_isTouchpadGestureActive, g_isVisible);
         if (g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow)) {
-            g_isTouchpadGestureActive = false;
-            KillTimer(hWnd, SWS_TOUCHPAD_IDLE_TIMER_ID);
-            SwitchToSelected();
+            EndTouchpadGesture();
         }
+        return 0;
+    }
+
+    if (g_WM_SWS_TOUCHPAD_FRAME && uMsg == g_WM_SWS_TOUCHPAD_FRAME) {
+        HandleRawTouchpadFrame((ULONG)wParam, (ULONG)lParam);
         return 0;
     }
 
@@ -13550,13 +13653,13 @@ static void LogProcessIntegrityLevel(const WCHAR* tag) {
     Wh_Log(L"SWS: %s: integrity RID = 0x%X (%s)", tag, rid, level);
 }
 
-// --- Raw-HID touchpad reader (plan stage B1: frames + logging, opt-in) --------
+// --- Raw-HID touchpad reader (plan stage B2: drives the switcher from raw frames) -----
 // The tool-mod process reads the precision touchpad's HID reports directly (same
-// mechanism as the Three Finger Drag mod) so gestures can later drive the switcher
-// instead of relying on Explorer's native-switcher interception. This stage only logs
-// the frames B2's navigation mapping will be derived from: the reader never consumes,
-// blocks or injects input, and nothing runs unless Touchpad.inputMode is "raw". If the
-// device or the registration is unavailable, the mod behaves exactly as with "legacy".
+// mechanism as the Three Finger Drag mod), so the 3-finger swipe drives the switcher
+// from the raw frames instead of relying on Explorer's native-switcher interception.
+// Nothing runs unless Touchpad.inputMode is "raw" and touchpad gestures are enabled; the
+// reader itself never consumes, blocks or injects input, and if the device or the
+// registration is unavailable the mod behaves exactly as with "legacy".
 #define SWS_TOUCHPAD_READER_CLASSNAME L"WindhawkSWS_TouchpadReader"
 
 #define SWS_HID_PAGE_GENERIC        0x01
@@ -13657,7 +13760,7 @@ static const TouchpadDevice* TouchpadDeviceFor(HANDLE hDevice) {
     return dev.valid ? &dev : NULL;
 }
 
-static void TouchpadReaderLogFrame(const TouchpadDevice& dev) {
+static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
     ULONG tips = 0;
     double cx = 0.0;
     double cy = 0.0;
@@ -13672,11 +13775,34 @@ static void TouchpadReaderLogFrame(const TouchpadDevice& dev) {
         cx /= tips;
         cy /= tips;
     }
-    // Everything the B2 mapping needs to be derived from: finger count, tip count,
-    // centroid and the normalized position (axis orientation included).
+    double nx = dev.rangeX > 0 ? cx / dev.rangeX : 0.0;
+    double ny = dev.rangeY > 0 ? cy / dev.rangeY : 0.0;
+
+    // Logged for the diagnostics setting; the switcher side only gets frames that can
+    // change a decision (finger count change or ~1% of travel), so a long hold on the
+    // pad cannot flood the switcher thread's queue.
     Wh_Log(L"SWS touchpad frame: contacts=%u tips=%u centroid=%.0f,%.0f normalized=%.3f,%.3f",
-           (UINT)g_touchpadFrame.size(), tips, cx, cy, dev.rangeX > 0 ? cx / dev.rangeX : 0.0,
-           dev.rangeY > 0 ? cy / dev.rangeY : 0.0);
+           (UINT)g_touchpadFrame.size(), tips, cx, cy, nx, ny);
+
+    if (!g_hSwitcher || !g_WM_SWS_TOUCHPAD_FRAME || !IsWindow(g_hSwitcher)) {
+        return;
+    }
+    static ULONG s_lastTips = 0;
+    static double s_lastX = -1.0;
+    static double s_lastY = -1.0;
+    double dx = cx - s_lastX;
+    double dy = cy - s_lastY;
+    if (dx < 0) dx = -dx;
+    if (dy < 0) dy = -dy;
+    if (tips == s_lastTips && s_lastX >= 0.0 && dx < dev.rangeX * 0.01 && dy < dev.rangeY * 0.01) {
+        return;
+    }
+    s_lastTips = tips;
+    s_lastX = cx;
+    s_lastY = cy;
+
+    ULONG packedPos = ((ULONG)(nx * 65535.0) & 0xFFFF) | (((ULONG)(ny * 65535.0) & 0xFFFF) << 16);
+    PostMessageW(g_hSwitcher, g_WM_SWS_TOUCHPAD_FRAME, (WPARAM)tips, (LPARAM)packedPos);
 }
 
 static void TouchpadReaderOnReport(const TouchpadDevice& dev, PCHAR report, ULONG length) {
@@ -13724,7 +13850,7 @@ static void TouchpadReaderOnReport(const TouchpadDevice& dev, PCHAR report, ULON
     // Hybrid devices announce the contact count first and spread the contacts over
     // several reports; collect until the announced count is reached.
     if (!dev.hasContactCount || g_touchpadFrame.size() >= g_touchpadFrameExpected) {
-        TouchpadReaderLogFrame(dev);
+        TouchpadReaderProcessFrame(dev);
         g_touchpadFrame.clear();
         g_touchpadFrameExpected = 0;
     }
@@ -13881,6 +14007,9 @@ static DWORD WINAPI TouchpadReaderThread(LPVOID) {
 }
 
 static bool TouchpadRawInputRequested() {
+    if (!LoadBoolSetting(L"Accessibility.handleTouchpadGestures", true)) {
+        return false;
+    }
     WCHAR mode[16];
     LoadStringSetting(L"Touchpad.inputMode", mode, L"legacy");
     return wcscmp(mode, L"raw") == 0;
@@ -13927,6 +14056,9 @@ BOOL WhTool_ModInit() {
     }
     if (!g_WM_SWS_TOUCHPAD_DISMISS) {
         g_WM_SWS_TOUCHPAD_DISMISS = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadDismiss");
+    }
+    if (!g_WM_SWS_TOUCHPAD_FRAME) {
+        g_WM_SWS_TOUCHPAD_FRAME = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadFrame");
     }
     g_hSwitcherThread = CreateThread(NULL, 0, SwitcherThread, NULL, 0, &g_dwSwitcherThreadId);
     if (TouchpadRawInputRequested()) {
