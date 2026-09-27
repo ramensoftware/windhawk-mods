@@ -9,6 +9,15 @@
       "parentId": null,
       "timestamp": 1790370164,
       "votes": 0
+    },
+    {
+      "authorName": "m417z",
+      "content": "tl;dr fixed in version 1.7.\n\nIt was a known gap for a long time, and it was recommended to use the Translucent Windows mod for proper translucent background effects. Version 1.3 (Feb 3, 2026) added very basic background effects, but there were several limitations, and so they were only applied for the top part by default. In version 1.7 that was just released, I finally added proper support for applying translucent effects for the whole window, which is also the default region now.",
+      "id": 23,
+      "modVersion": "1.7",
+      "parentId": 22,
+      "timestamp": 1790474844,
+      "votes": 0
     }
   ]
 }
