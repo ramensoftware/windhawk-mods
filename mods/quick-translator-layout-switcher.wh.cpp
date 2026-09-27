@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id              quick-translator-layout-switcher
-// @name            quick-translator & layout-switcher
+// @name            quick translator & layout-switcher
 // @description     Fast layout corrector, in-place translator, and floating HUD tooltip.
 // @version         1.0.1
 // @author          zed712969-crypto
