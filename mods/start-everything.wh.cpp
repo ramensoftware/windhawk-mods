@@ -3308,8 +3308,77 @@ static void StopExplorerHelperHost() {
     WaitForTrackedLaunches();
 }
 
+using Explorer_SetForegroundWindow_t = BOOL(WINAPI*)(HWND);
+static Explorer_SetForegroundWindow_t pOriginalExplorerSetForegroundWindow = nullptr;
+
+static BOOL WINAPI Hook_Explorer_SetForegroundWindow(HWND hWnd) {
+    if (hWnd) {
+        DWORD targetPid = 0;
+        GetWindowThreadProcessId(hWnd, &targetPid);
+        static DWORD s_startPid = 0;
+        if (targetPid) {
+            if (targetPid == s_startPid || IsProcessNamed(targetPid, L"StartMenuExperienceHost.exe")) {
+                s_startPid = targetPid;
+                AllowSetForegroundWindow(targetPid);
+            }
+        }
+    }
+    return pOriginalExplorerSetForegroundWindow(hWnd);
+}
+
+using Explorer_BringWindowToTop_t = BOOL(WINAPI*)(HWND);
+static Explorer_BringWindowToTop_t pOriginalExplorerBringWindowToTop = nullptr;
+
+static BOOL WINAPI Hook_Explorer_BringWindowToTop(HWND hWnd) {
+    if (hWnd) {
+        DWORD targetPid = 0;
+        GetWindowThreadProcessId(hWnd, &targetPid);
+        static DWORD s_startPid = 0;
+        if (targetPid) {
+            if (targetPid == s_startPid || IsProcessNamed(targetPid, L"StartMenuExperienceHost.exe")) {
+                s_startPid = targetPid;
+                AllowSetForegroundWindow(targetPid);
+            }
+        }
+    }
+    return pOriginalExplorerBringWindowToTop(hWnd);
+}
+
+using Explorer_SwitchToThisWindow_t = void(WINAPI*)(HWND, BOOL);
+static Explorer_SwitchToThisWindow_t pOriginalExplorerSwitchToThisWindow = nullptr;
+
+static void WINAPI Hook_Explorer_SwitchToThisWindow(HWND hWnd, BOOL fAltTab) {
+    if (hWnd) {
+        DWORD targetPid = 0;
+        GetWindowThreadProcessId(hWnd, &targetPid);
+        static DWORD s_startPid = 0;
+        if (targetPid) {
+            if (targetPid == s_startPid || IsProcessNamed(targetPid, L"StartMenuExperienceHost.exe")) {
+                s_startPid = targetPid;
+                AllowSetForegroundWindow(targetPid);
+            }
+        }
+    }
+    if (pOriginalExplorerSwitchToThisWindow) {
+        pOriginalExplorerSwitchToThisWindow(hWnd, fAltTab);
+    }
+}
+
 void InitExplorer() {
-    Wh_Log(L"=== start-everything: initializing explorer.exe properties relay ===");
+    Wh_Log(L"=== start-everything: initializing explorer.exe shell hooks ===");
+    WindhawkUtils::SetFunctionHook(SetForegroundWindow, Hook_Explorer_SetForegroundWindow,
+                                   &pOriginalExplorerSetForegroundWindow);
+    WindhawkUtils::SetFunctionHook(BringWindowToTop, Hook_Explorer_BringWindowToTop,
+                                   &pOriginalExplorerBringWindowToTop);
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+    if (hUser32) {
+        auto pSwitch = (Explorer_SwitchToThisWindow_t)GetProcAddress(hUser32, "SwitchToThisWindow");
+        if (pSwitch) {
+            WindhawkUtils::SetFunctionHook(pSwitch, Hook_Explorer_SwitchToThisWindow,
+                                           &pOriginalExplorerSwitchToThisWindow);
+        }
+    }
+
     StartExplorerHelperHost();
 }
 
@@ -3370,10 +3439,6 @@ static BOOL WINAPI Hook_SearchHost_CreateProcessW(
 static void TransferForegroundToStart() {
     HWND hStart = FindStartMenuCoreWindow();
     if (hStart && IsWindow(hStart)) {
-        DWORD cloaked = 0;
-        if (SUCCEEDED(DwmGetWindowAttribute(hStart, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked != 0) {
-            return;
-        }
         DWORD startPid = 0;
         GetWindowThreadProcessId(hStart, &startPid);
         if (startPid) {
@@ -3407,6 +3472,31 @@ static LRESULT CALLBACK SearchHostSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPar
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
+using SetForegroundWindow_t = BOOL(WINAPI*)(HWND);
+static SetForegroundWindow_t pOrigSearchHostSetForegroundWindow = nullptr;
+static BOOL WINAPI Hook_SearchHost_SetForegroundWindow(HWND hWnd) {
+    Wh_Log(L"[SearchHost] SetForegroundWindow called for 0x%p", hWnd);
+    TransferForegroundToStart();
+    HWND hStart = FindStartMenuCoreWindow();
+    if (hStart && IsWindow(hStart)) {
+        pOrigSearchHostSetForegroundWindow(hStart);
+        BringWindowToTop(hStart);
+    }
+    return TRUE;
+}
+
+using BringWindowToTop_t = BOOL(WINAPI*)(HWND);
+static BringWindowToTop_t pOrigSearchHostBringWindowToTop = nullptr;
+static BOOL WINAPI Hook_SearchHost_BringWindowToTop(HWND hWnd) {
+    Wh_Log(L"[SearchHost] BringWindowToTop called for 0x%p", hWnd);
+    TransferForegroundToStart();
+    HWND hStart = FindStartMenuCoreWindow();
+    if (hStart && IsWindow(hStart)) {
+        pOrigSearchHostBringWindowToTop(hStart);
+    }
+    return TRUE;
+}
+
 using ShowWindow_t = BOOL(WINAPI*)(HWND, int);
 static ShowWindow_t pOrigSearchHostShowWindow = nullptr;
 static BOOL WINAPI Hook_SearchHost_ShowWindow(HWND hWnd, int nCmdShow) {
@@ -3435,6 +3525,8 @@ static BOOL WINAPI Hook_SearchHost_SetWindowPos(HWND hWnd, HWND hWndInsertAfter,
 void InitSearchHost() {
     Wh_Log(L"=== start-everything: initializing SearchHost suppression & focus return hooks ===");
     WindhawkUtils::SetFunctionHook(CreateProcessW, Hook_SearchHost_CreateProcessW, &pOriginalCreateProcessW);
+    WindhawkUtils::SetFunctionHook(SetForegroundWindow, Hook_SearchHost_SetForegroundWindow, &pOrigSearchHostSetForegroundWindow);
+    WindhawkUtils::SetFunctionHook(BringWindowToTop, Hook_SearchHost_BringWindowToTop, &pOrigSearchHostBringWindowToTop);
     WindhawkUtils::SetFunctionHook(ShowWindow, Hook_SearchHost_ShowWindow, &pOrigSearchHostShowWindow);
     WindhawkUtils::SetFunctionHook(SetWindowPos, Hook_SearchHost_SetWindowPos, &pOrigSearchHostSetWindowPos);
 
