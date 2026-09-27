@@ -3007,10 +3007,18 @@ static bool IsProcessNamed(DWORD pid, const wchar_t* name) {
 }
 
 static HWND FindStartMenuCoreWindow() {
+    static HWND s_cached = nullptr;
+    if (s_cached && IsWindow(s_cached)) {
+        return s_cached;
+    }
+
     HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
     if (tray) {
         HWND h = reinterpret_cast<HWND>(GetPropW(tray, L"WindhawkStartMenuHwnd"));
-        if (h && IsWindow(h)) return h;
+        if (h && IsWindow(h)) {
+            s_cached = h;
+            return h;
+        }
     }
 
     HWND hStart = FindWindowW(L"Windows.UI.Core.CoreWindow", L"Start");
@@ -3018,6 +3026,7 @@ static HWND FindStartMenuCoreWindow() {
         if (tray) {
             SetPropW(tray, L"WindhawkStartMenuHwnd", hStart);
         }
+        s_cached = hStart;
         return hStart;
     }
 
@@ -3044,6 +3053,7 @@ static HWND FindStartMenuCoreWindow() {
         if (tray) {
             SetPropW(tray, L"WindhawkStartMenuHwnd", found);
         }
+        s_cached = found;
         return found;
     }
 
@@ -3400,7 +3410,10 @@ static LRESULT CALLBACK SearchHostSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPar
 using ShowWindow_t = BOOL(WINAPI*)(HWND, int);
 static ShowWindow_t pOrigSearchHostShowWindow = nullptr;
 static BOOL WINAPI Hook_SearchHost_ShowWindow(HWND hWnd, int nCmdShow) {
-    WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SearchHostSubclassProc, 0);
+    if (hWnd && !GetPropW(hWnd, L"WindhawkSearchHostSubclassed")) {
+        SetPropW(hWnd, L"WindhawkSearchHostSubclassed", (HANDLE)1);
+        WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SearchHostSubclassProc, 0);
+    }
     if (nCmdShow == SW_SHOW || nCmdShow == SW_SHOWNORMAL || nCmdShow == SW_RESTORE || nCmdShow == SW_SHOWDEFAULT) {
         Wh_Log(L"[SearchHost] Redirected SearchHost ShowWindow to SW_HIDE with foreground return");
         TransferForegroundToStart();
@@ -3412,9 +3425,7 @@ static BOOL WINAPI Hook_SearchHost_ShowWindow(HWND hWnd, int nCmdShow) {
 using SetWindowPos_t = BOOL(WINAPI*)(HWND, HWND, int, int, int, int, UINT);
 static SetWindowPos_t pOrigSearchHostSetWindowPos = nullptr;
 static BOOL WINAPI Hook_SearchHost_SetWindowPos(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
-    WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, SearchHostSubclassProc, 0);
     if (uFlags & SWP_SHOWWINDOW) {
-        TransferForegroundToStart();
         uFlags &= ~SWP_SHOWWINDOW;
         uFlags |= SWP_HIDEWINDOW;
     }
@@ -3431,7 +3442,10 @@ void InitSearchHost() {
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
         if (pid == GetCurrentProcessId()) {
-            WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc, 0);
+            if (!GetPropW(hwnd, L"WindhawkSearchHostSubclassed")) {
+                SetPropW(hwnd, L"WindhawkSearchHostSubclassed", (HANDLE)1);
+                WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc, 0);
+            }
         }
         return TRUE;
     }, 0);
@@ -7472,6 +7486,7 @@ void Wh_ModUninit() {
             DWORD pid = 0;
             GetWindowThreadProcessId(hwnd, &pid);
             if (pid == GetCurrentProcessId()) {
+                RemovePropW(hwnd, L"WindhawkSearchHostSubclassed");
                 WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc);
             }
             return TRUE;
