@@ -35,7 +35,7 @@ A high-performance, native replacement for Windows 11 Start Menu search powered 
 - Explicit Web Search: Trigger web searches on demand using the '?' prefix (e.g. '?query'). Includes customizable keyword shortcuts such as '?yt' (YouTube), '?gh' (GitHub), '?w' (Wikipedia), and '?r' (Reddit).
 - Start Menu Styler Compatibility: Automatically syncs background styles (Tinted Glass, Acrylic, custom theme colors) in real time without restarting the mod.
 - Robust Win32 Key Listener: Combines a WH_GETMESSAGE UI thread hook, HWND subclassing, and XAML CoreWindow handling to ensure zero dropped keystrokes.
-- Shell Focus Protection: Intercepts explorer.exe foreground redirection to prevent SearchHost from stealing focus away from the Start Menu.
+- Focus Management: Safely returns foreground focus from SearchHost directly to the Start Menu to prevent search flyouts from stealing focus.
 
 ## Requirements
 
@@ -2987,11 +2987,8 @@ TargetProcess IdentifyCurrentProcess() {
 }
 
 // ===========================================================================
-// Domain: explorer.exe (Shell Focus Redirection)
+// Domain: explorer.exe (Properties Dialog Relay)
 // ===========================================================================
-
-using Explorer_SetForegroundWindow_t = BOOL(WINAPI*)(HWND);
-static Explorer_SetForegroundWindow_t pOriginalExplorerSetForegroundWindow = nullptr;
 
 static bool IsProcessNamed(DWORD pid, const wchar_t* name) {
     if (!pid || pid == GetCurrentProcessId()) return false;
@@ -3063,47 +3060,7 @@ static HWND FindStartMenuCoreWindow() {
     return nullptr;
 }
 
-static BOOL WINAPI Hook_Explorer_SetForegroundWindow(HWND hWnd) {
-    if (!hWnd) {
-        return pOriginalExplorerSetForegroundWindow(hWnd);
-    }
 
-    DWORD targetPid = 0;
-    GetWindowThreadProcessId(hWnd, &targetPid);
-    if (targetPid && (IsProcessNamed(targetPid, L"StartMenuExperienceHost.exe") || IsProcessNamed(targetPid, L"SearchHost.exe"))) {
-        AllowSetForegroundWindow(targetPid);
-    }
-
-    return pOriginalExplorerSetForegroundWindow(hWnd);
-}
-
-using Explorer_BringWindowToTop_t = BOOL(WINAPI*)(HWND);
-static Explorer_BringWindowToTop_t pOriginalExplorerBringWindowToTop = nullptr;
-
-static BOOL WINAPI Hook_Explorer_BringWindowToTop(HWND hWnd) {
-    if (!hWnd) return pOriginalExplorerBringWindowToTop(hWnd);
-    DWORD targetPid = 0;
-    GetWindowThreadProcessId(hWnd, &targetPid);
-    if (targetPid && (IsProcessNamed(targetPid, L"StartMenuExperienceHost.exe") || IsProcessNamed(targetPid, L"SearchHost.exe"))) {
-        AllowSetForegroundWindow(targetPid);
-    }
-    return pOriginalExplorerBringWindowToTop(hWnd);
-}
-
-using Explorer_SwitchToThisWindow_t = void(WINAPI*)(HWND, BOOL);
-static Explorer_SwitchToThisWindow_t pOriginalExplorerSwitchToThisWindow = nullptr;
-
-static void WINAPI Hook_Explorer_SwitchToThisWindow(HWND hWnd, BOOL fAltTab) {
-    if (!hWnd) return;
-    DWORD targetPid = 0;
-    GetWindowThreadProcessId(hWnd, &targetPid);
-    if (targetPid && (IsProcessNamed(targetPid, L"StartMenuExperienceHost.exe") || IsProcessNamed(targetPid, L"SearchHost.exe"))) {
-        AllowSetForegroundWindow(targetPid);
-    }
-    if (pOriginalExplorerSwitchToThisWindow) {
-        pOriginalExplorerSwitchToThisWindow(hWnd, fAltTab);
-    }
-}
 
 // Tracked launch threads for clean unload synchronization across processes
 static std::mutex g_launchHandlesMutex;
@@ -3352,20 +3309,7 @@ static void StopExplorerHelperHost() {
 }
 
 void InitExplorer() {
-    Wh_Log(L"=== start-everything: initializing explorer.exe shell hooks ===");
-    WindhawkUtils::SetFunctionHook(SetForegroundWindow, Hook_Explorer_SetForegroundWindow,
-                                   &pOriginalExplorerSetForegroundWindow);
-    WindhawkUtils::SetFunctionHook(BringWindowToTop, Hook_Explorer_BringWindowToTop,
-                                   &pOriginalExplorerBringWindowToTop);
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (hUser32) {
-        auto pSwitch = (Explorer_SwitchToThisWindow_t)GetProcAddress(hUser32, "SwitchToThisWindow");
-        if (pSwitch) {
-            WindhawkUtils::SetFunctionHook(pSwitch, Hook_Explorer_SwitchToThisWindow,
-                                           &pOriginalExplorerSwitchToThisWindow);
-        }
-    }
-
+    Wh_Log(L"=== start-everything: initializing explorer.exe properties relay ===");
     StartExplorerHelperHost();
 }
 
