@@ -4147,6 +4147,32 @@
         "version": "0.3.1"
       }
     },
+    "edge-native-ui-tweaks": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790502635000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790502635000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Dron007",
+        "compilerOptions": "-lshell32",
+        "description": "Use Windows folder icons for Favorites and restore Edge's classic yellow folder icons.",
+        "github": "https://github.com/Dron007",
+        "include": [
+          "msedge.exe"
+        ],
+        "name": "Edge Native UI Tweaks",
+        "version": "1.0"
+      }
+    },
     "edge-snap-throw": {
       "details": {
         "defaultSorting": 1288,

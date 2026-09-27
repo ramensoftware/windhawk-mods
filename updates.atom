@@ -2,12 +2,52 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-27T01:16:54.000Z</updated>
+    <updated>2026-09-27T09:50:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Edge Native UI Tweaks 1.0]]></title>
+        <id>https://windhawk.net/mods/edge-native-ui-tweaks#1c29695bedd11217ed60ffc68edcbf3ee21b2d8b</id>
+        <link href="https://windhawk.net/mods/edge-native-ui-tweaks"/>
+        <updated>2026-09-27T09:50:35.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="edgenativeuitweaks">Edge Native UI Tweaks</h1>
+<p>Customize Favorites folder icons in Microsoft Edge's native browser interface without affecting web content.</p>
+<p><img src="https://i.imgur.com/idipoQV.png" alt="Favorites folder icons" /></p>
+<h2 id="gettingstarted">Getting started</h2>
+<ol>
+<li>Enable the mod.</li>
+<li>Restart Edge. If closing and reopening it doesn't restart the browser process, use <code>edge://restart</code>.</li>
+<li>Enable or disable <strong>Use Windows folder icons</strong> under <strong>Favorites</strong>.</li>
+</ol>
+<p>Once the mod is active, the setting applies immediately without restarting Edge.</p>
+<p>Disabling or uninstalling the mod restores Edge's original folder icons in the running browser. Re-enabling the mod in that same Edge instance may require a restart; use <code>edge://restart</code> if closing and reopening Edge doesn't do it.</p>
+<h2 id="features">Features</h2>
+<h3 id="favorites">Favorites</h3>
+<p>When <strong>Use Windows folder icons</strong> is enabled:</p>
+<ul>
+<li>Favorites bar folders, their drop-down menus, and folder drag images use the Windows system folder icon.</li>
+<li>The Favorites flyout, pinned Favorites pane, and Favorites page use Edge's older yellow folder icons instead of the newer monoline icons.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Tested with <strong>Microsoft Edge 154.0.4258.37 x64</strong>.</li>
+<li>Edge controls its newer monochrome folder style through the <code>msFavoritesMonolineFolder</code> feature. The mod suppresses that path while the option is enabled. This keeps the implementation simpler and avoids hooking private Favorites menu/button classes.</li>
+<li>The older non-monoline path is still present in current Edge but may eventually be removed by Microsoft. If that happens, the yellow Edge icons in the Favorites flyout, pane, and page may no longer be restorable. The Windows icons on the Favorites bar, its folder menus, and drag images use a separate icon hook.</li>
+<li>The mod relies on Edge's internal native UI symbols, so Edge updates can occasionally require compatibility adjustments. If the required symbols aren't available, the folder-icon tweak is left inactive rather than partially applied.</li>
+<li>After an Edge update, Windhawk may need to download and resolve new <code>msedge.dll</code> symbols. The mod waits up to 5 seconds for cached symbols. If resolution takes longer, Edge continues with its normal UI while symbol preparation finishes in the background. A temporary tray icon shows the current status and notifies you when the symbols are ready; restart Edge once after preparation completes. If closing and reopening Edge doesn't restart the browser process, use <code>edge://restart</code>.</li>
+<li>A full fresh-symbol fallback can still take several minutes. In an Edge 154.0.4258.37 test with the local PDB and Windhawk symbol cache removed, <code>msedge.dll.pdb</code> was <strong>676.0 MB (644.7 MiB)</strong> and total preparation took <strong>515.1 seconds (8 min 35 sec)</strong> on a <strong>75 Mbit/s</strong> connection and an <strong>Intel Core i7-8700K</strong>. The PDB download itself took about <strong>8 min 32 sec</strong>, while symbol resolution after the PDB was opened took under <strong>2 seconds</strong>. In this test Microsoft's symbol server delivered the <code>.pdb</code> directly rather than the compressed <code>.pd_</code> variant, and effective transfer speed was only about <strong>10.6 Mbit/s</strong>, so the download dominated the total time. Times vary with symbol-server/CDN throughput, connection, CPU, and Edge build.</li>
+<li>Disabling, updating, or uninstalling the mod while fresh symbol preparation is still running can leave Windhawk in <code>uninitializing</code> until that work completes. This is intentional: the symbol resolver can't be cancelled safely while code from the mod is still executing.</li>
+<li>Edge processes launched with <code>--remote-debugging-pipe</code> are intentionally skipped so automation sessions don't pay the native UI symbol-resolution cost.</li>
+<li>The Windows system folder icon is a raster icon. It doesn't follow Edge theme colors and isn't fully DPI-aware on high-DPI or mixed-DPI monitor setups.</li>
+</ul>]]></content>
+        <author>
+            <name>Dron007</name>
+            <uri>https://github.com/Dron007</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows 11 File Explorer Styler 1.7]]></title>
         <id>https://windhawk.net/mods/windows-11-file-explorer-styler#51ade424ed357b916e17107b2200e91c6f73b30a</id>
@@ -695,57 +735,6 @@ those options in one mod only and leave it at Chrome default in the other.</li>
         <author>
             <name>rodrigothomazi</name>
             <uri>https://github.com/RodrigoThomazi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Percentage Indicator 1.6.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-volume-percentage#d716eb9c201b51aaa77af303bfd64272e4ea2ab5</id>
-        <link href="https://windhawk.net/mods/taskbar-volume-percentage"/>
-        <updated>2026-09-24T22:03:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarvolumepercentageindicator">Taskbar Volume Percentage Indicator</h1>
-<p>Replaces the Windows 11 system tray volume icon with the current master volume
-level, updated in real time.</p>
-<p><img src="https://i.imgur.com/vjwali8.png" alt="Taskbar Volume Percentage Preview 1" />
-<img src="https://i.imgur.com/XEf8m50.png" alt="Taskbar Volume Percentage Preview 2" />
-<img src="https://i.imgur.com/27iyViO.png" alt="Taskbar Volume Percentage Preview 3" />
-<img src="https://i.imgur.com/1alQd1j.png" alt="Taskbar Volume Percentage Preview 4" /></p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Display style</strong>: Format of the volume indicator in the taskbar:</li>
-<li>Percentage (<code>50%</code>)</li>
-<li>Number only (<code>50</code>)</li>
-<li>Prefix and percentage (<code>50% Vol</code> or <code>Vol 50%</code>, with custom prefix)</li>
-<li>Icon and percentage (<code>50% 🔊</code> or <code>🔊 50%</code>)</li>
-<li>Native icon and percentage</li>
-<li>Native icon and number</li>
-<li><strong>Element position</strong>: Placement of the icon or prefix relative to the volume text for styles that include both:</li>
-<li>On the right (default)</li>
-<li>On the left</li>
-<li><strong>Custom prefix</strong>: Text prefix used with the "Prefix and percentage" style (default: <code>Vol</code>).</li>
-<li><strong>Mute display style</strong>: Style of the mute indicator when audio is muted:</li>
-<li>MUT</li>
-<li>Mute</li>
-<li>0%</li>
-<li>Cross symbol (<code>✕</code>)</li>
-<li>Mute emoji (<code>🔇</code>)</li>
-<li>Native mute icon</li>
-<li>Custom text</li>
-<li><strong>Custom mute text</strong>: Text used when the "Custom text" mute style is selected (default: <code>Mute</code>).</li>
-<li><strong>Container width</strong>: Width in device-independent pixels (DIPs) of the volume container to prevent adjacent icons from shifting when digit count changes (<code>0</code> for dynamic auto-calculation, <code>-1</code> for Windows default).</li>
-</ul>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Only Windows 11 is supported.</li>
-<li>If the mod is enabled while Explorer is already running, the text appears
-after the next volume change.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>Inspired by the taskbar visual customization concepts from <a href="https://github.com/m417z">m417z</a> and <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/taskbar-tray-system-icon-tweaks.wh.cpp">taskbar-tray-system-icon-tweaks</a>.</li>
-</ul>]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
         </author>
     </entry>
 </feed>
