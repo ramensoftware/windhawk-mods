@@ -4,7 +4,7 @@
 // @description     Takes small icons out of the white thumbnail frame of Explorer's large icon views and enlarges them to the size of the view without blur (classic SysListView32 file list); folders and shortcuts get icons instead of thumbnails
 // @name:ru         Увеличенные значки без рамки эскиза
 // @description:ru  Вынимает маленькие значки из белой рамки эскиза в крупных видах Проводника и увеличивает их до размера вида без размытия (классический список SysListView32); папки и ярлыки показываются значками вместо эскизов
-// @version         2.9
+// @version         2.9.1
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         explorer.exe
@@ -1063,8 +1063,7 @@ LRESULT CALLBACK ListViewSubclass(HWND window, UINT message, WPARAM wParam,
 
     // Use the actual window even with buffered rendering.
     if (message == WM_PAINT || message == WM_PRINTCLIENT) {
-        bool processed = (g_folders.load() || g_shortcuts.load()) &&
-                         IsProcessedView(window);
+        bool processed = IsProcessedView(window);
         if (processed && message == WM_PAINT)
             FolderScaler::ExpandUpdateToWholeCells(window);
         ScopedValue<HWND> scope(g_paintView, processed ? window : nullptr);
@@ -1117,8 +1116,7 @@ HRESULT ImageListDraw_Common(size_t slot, void* imageList,
     if (g_unloading.load() || g_bypassDrawProcessing || !g_paintView ||
         !params || params->cbSize < sizeof(IMAGELISTDRAWPARAMS) ||
         !imageList || !params->himl || !params->hdcDst || params->i < 0 ||
-        params->xBitmap || params->yBitmap ||
-        (!g_folders.load() && !g_shortcuts.load())) return bypass();
+        params->xBitmap || params->yBitmap) return bypass();
 
     // Mask-only, raster-op, glow, animation and similar auxiliary draws are
     // not final icon images. Let their normal rendering proceed unchanged.
