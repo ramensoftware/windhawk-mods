@@ -1,3 +1,7 @@
+## 1.0.9 ([Sep 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/582196130c92ede2c510c1d1394072fb57cdbd1c/mods/explorer-frame-classic.wh.cpp))
+
+* Fixed the classic navigation bar disappearing when window preloading is enabled in Explorer's settings.
+
 ## 1.0.8 ([Sep 13, 2025](https://github.com/ramensoftware/windhawk-mods/blob/6f51e042633377e716a98ab8daae0c62f03cbbe7/mods/explorer-frame-classic.wh.cpp))
 
 * Fixed compatibility with a recent Windows 11 update. You may need to restart Explorer after updating the mod to apply the fix.

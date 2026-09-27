@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-27T18:32:19.000Z</updated>
+    <updated>2026-09-27T19:22:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic Explorer navigation bar 1.0.9]]></title>
+        <id>https://windhawk.net/mods/explorer-frame-classic#582196130c92ede2c510c1d1394072fb57cdbd1c</id>
+        <link href="https://windhawk.net/mods/explorer-frame-classic"/>
+        <updated>2026-09-27T19:22:30.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed the classic navigation bar disappearing when window preloading is enabled in Explorer's settings.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.5]]></title>
         <id>https://windhawk.net/mods/taskbar-labels#5a826c2e4c0bdc6e5c5d06d32d57c7f09f1d63f9</id>
@@ -712,24 +725,6 @@ those options in one mod only and leave it at Chrome default in the other.</li>
         <author>
             <name>Armaninyow</name>
             <uri>https://github.com/armaninyow</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Custom Shortcuts 1.3.0]]></title>
-        <id>https://windhawk.net/mods/explorer-custom-shortcuts#7146805e48b73f481404dd1d80808c88f0fc7dc0</id>
-        <link href="https://windhawk.net/mods/explorer-custom-shortcuts"/>
-        <updated>2026-09-25T07:03:14.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added <code>internal:openParentFolder</code> command to navigate the active Explorer tab to its parent folder.</li>
-<li>Added <code>internal:copyPath</code> command to copy absolute path(s) of selected items without quotes.</li>
-<li>Added <code>internal:copyName</code> command to copy filename(s) with extension without quotes.</li>
-<li>Added <code>internal:openWith</code> command to trigger the native Windows "Open with" dialog.</li>
-<li>Expanded key parser (<code>ParseKey</code>) to support <code>Backspace</code>, <code>Insert</code>, <code>Home</code>, <code>End</code>, <code>PageUp</code>, and <code>PageDown</code>.</li>
-<li>Updated README documentation and settings schema for the new commands and supported keys.</li>
-</ul>]]></content>
-        <author>
-            <name>ArvindSaini978</name>
-            <uri>https://github.com/ArvindSaini978</uri>
         </author>
     </entry>
 </feed>

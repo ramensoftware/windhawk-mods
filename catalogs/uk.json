@@ -4710,7 +4710,7 @@
         "ratingBreakdown": [2, 1, 2, 7, 143],
         "ratingUsers": 155,
         "reviews": 0,
-        "updated": 1757724908000,
+        "updated": 1790536950000,
         "users": 7086
       },
       "metadata": {
@@ -4727,7 +4727,7 @@
         ],
         "name": "Classic Explorer navigation bar",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.0.8"
+        "version": "1.0.9"
       }
     },
     "explorer-glyphs-colorizer": {
