@@ -1,3 +1,11 @@
+## 1.4 ([Sep 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/012bba132d43ec1e2cfcc1b985bf7f46d16a4832/mods/taskbar-vertical.wh.cpp))
+
+* The mod now uses and customizes the native Windows vertical taskbar implementation, if available:
+  * Custom taskbar width.
+  * Different sides for different monitors.
+  * Jump list vertical alignment.
+  * Start menu vertical alignment.
+
 ## 1.3.14 ([Sep 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/38468ddcc6fd3b16536af293da0a0a6cfa4ddbf2/mods/taskbar-vertical.wh.cpp))
 
 * Fixed misaligned task item labels in the latest Windows version.

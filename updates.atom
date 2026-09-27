@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-27T22:11:47.000Z</updated>
+    <updated>2026-09-27T23:45:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#012bba132d43ec1e2cfcc1b985bf7f46d16a4832</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2026-09-27T23:45:21.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The mod now uses and customizes the native Windows vertical taskbar implementation, if available:</li>
+<li>Custom taskbar width.</li>
+<li>Different sides for different monitors.</li>
+<li>Jump list vertical alignment.</li>
+<li>Start menu vertical alignment.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.5.1]]></title>
         <id>https://windhawk.net/mods/taskbar-labels#55660e096dc79a0629ae8e31394904ad201d3a73</id>
@@ -697,25 +714,6 @@ those options in one mod only and leave it at Chrome default in the other.</li>
         <author>
             <name>DanRotaru</name>
             <uri>https://github.com/DanRotaru</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Global Hotkey Mute Microphone 1.1.0]]></title>
-        <id>https://windhawk.net/mods/mic-mute-hotkey-overlay#27499ec9224da66253ff4eaa444b77ffe872497d</id>
-        <link href="https://windhawk.net/mods/mic-mute-hotkey-overlay"/>
-        <updated>2026-09-25T08:05:01.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added <code>allMonitors</code> setting to replicate overlay indicators and borders across all connected displays.</li>
-<li>Added <code>redBorderMode</code> and <code>redBorderThickness</code> settings to render a red screen frame while muted.</li>
-<li>Added <code>muteAllMicrophones</code> setting to toggle mute across every active capture device.</li>
-<li>Added <code>modToggleHotkey</code> setting to enable or disable the mod dynamically.</li>
-<li>Added <code>showOnlyWhenMuted</code> setting to display the indicator exclusively when muted.</li>
-<li>Refactored render target caching into a multi-slot system and implemented auxiliary window management for multi-display rendering.</li>
-<li>Updated mod metadata, localized descriptions, and README documentation.</li>
-</ul>]]></content>
-        <author>
-            <name>Farael Hanafi</name>
-            <uri>https://github.com/Eliasilyz</uri>
         </author>
     </entry>
 </feed>
