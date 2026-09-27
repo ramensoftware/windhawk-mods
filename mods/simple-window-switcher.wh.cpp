@@ -4281,8 +4281,9 @@ static int s_rawGestureTips = 0;
 static bool s_rawGestureArmed = false;
 static int s_rawGestureAnchorX = 0;
 static int s_rawGestureAnchorY = 0;
-static int s_rawAppliedX = 0; // entries applied across, from the gesture's start position
-static int s_rawAppliedY = 0; // rows applied, from the gesture's start position
+static int s_rawGestureAxis = 0;  // 0 = none yet, 1 = across entries, 2 = rows
+static int s_rawAppliedX = 0;     // entries applied since the current direction started
+static bool s_rawRowArmed = true; // a row move needs the hand to come back first
 static int s_rawLastFrameX = 0;
 static int s_rawLastFrameY = 0;
 std::map<std::wstring, HICON> g_uwpIconCache;
@@ -11832,8 +11833,9 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         s_rawGestureArmed = true;
         s_rawGestureAnchorX = x;
         s_rawGestureAnchorY = y;
+        s_rawGestureAxis = 0;
         s_rawAppliedX = 0;
-        s_rawAppliedY = 0;
+        s_rawRowArmed = true;
         s_rawLastFrameX = x;
         s_rawLastFrameY = y;
         return;
@@ -11847,7 +11849,6 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     int dy = y - s_rawGestureAnchorY;
     int adx = dx < 0 ? -dx : dx;
     int ady = dy < 0 ? -dy : dy;
-    bool sessionOpen = g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow);
 
     // A clamped or mirrored position (padding edges) arrives as a huge move between two
     // reports; treat it as a fresh start so it cannot fly the selection across the grid.
@@ -11860,15 +11861,54 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     if (stepX > SWS_RAW_SWIPE_JUMP_TRAVEL || stepY > SWS_RAW_SWIPE_JUMP_TRAVEL) {
         s_rawGestureAnchorX = x;
         s_rawGestureAnchorY = y;
+        s_rawGestureAxis = 0;
         s_rawAppliedX = 0;
-        s_rawAppliedY = 0;
+        s_rawRowArmed = true;
+        Wh_Log(L"SWS: raw touchpad re-anchor after a jump (dX=%d, dY=%d)", stepX, stepY);
         return;
     }
 
+    // Which way the swipe is going. Movement that sits between the two axes keeps the
+    // direction the swipe already had, so a drag with the usual sideways drift cannot flip
+    // the direction back and forth.
+    int axis = 0;
     if (adx * SWS_RAW_SWIPE_DOMINANCE_DEN >= ady * SWS_RAW_SWIPE_DOMINANCE_NUM) {
-        // Across entries: the first entry of travel opens the session, then the selection
-        // follows the finger position, so moving back un-selects just as directly.
+        axis = 1;
+    } else if (ady * SWS_RAW_SWIPE_DOMINANCE_DEN >= adx * SWS_RAW_SWIPE_DOMINANCE_NUM) {
+        axis = 2;
+    } else if (s_rawGestureAxis != 0) {
+        axis = s_rawGestureAxis;
+    }
+
+    // Every direction change opens its own window: nothing carries over from the previous
+    // direction, so the first move of a new direction can never dump the other axis's
+    // leftover travel into one burst.
+    if (axis != s_rawGestureAxis) {
+        s_rawGestureAxis = axis;
+        s_rawGestureAnchorX = x;
+        s_rawGestureAnchorY = y;
+        s_rawAppliedX = 0;
+        s_rawRowArmed = true;
+        if (axis != 0) {
+            Wh_Log(L"SWS: raw touchpad direction -> %s", axis == 1 ? L"across" : L"rows");
+        }
+        return;
+    }
+    if (axis == 0) {
+        return;
+    }
+
+    bool sessionOpen = g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow);
+    if (axis == 1) {
+        // Across entries: the selection follows the finger position, one entry per twelfth of
+        // the pad, and at most one per report so a fast drag catches up smoothly instead of
+        // teleporting through the grid.
         int want = RoundDiv(dx, SWS_RAW_SWIPE_ENTRY_PITCH);
+        if (want > s_rawAppliedX + 1) {
+            want = s_rawAppliedX + 1;
+        } else if (want < s_rawAppliedX - 1) {
+            want = s_rawAppliedX - 1;
+        }
         int delta = want - s_rawAppliedX;
         if (!delta) {
             return;
@@ -11890,30 +11930,37 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
             s_rawGestureAnchorX = x;
             s_rawGestureAnchorY = y;
             s_rawAppliedX = 0;
-            s_rawAppliedY = 0;
         }
         if (g_settings.reverseScrollDirection) {
             delta = -delta;
         }
         Wh_Log(L"SWS: raw touchpad move (dx=%d, entries=%d)", dx, delta);
         TouchpadNavigate(true, delta);
-    } else if (ady * SWS_RAW_SWIPE_DOMINANCE_DEN >= adx * SWS_RAW_SWIPE_DOMINANCE_NUM &&
-               g_settings.suppressTaskView && sessionOpen && LayoutHasMultipleLines()) {
-        // By rows: needs Task View suppression, because with it off the vertical swipes
-        // belong to Windows, and an open session, so a vertical swipe never opens one.
-        int want = RoundDiv(dy, SWS_RAW_SWIPE_ENTRY_PITCH);
-        int delta = want - s_rawAppliedY;
-        if (!delta) {
+    } else {
+        // By rows: one row per vertical swipe, like one press of an arrow key. The hand has
+        // to come back before the next row, so a long drag cannot walk the grid through
+        // itself (that row walk reflows the layout, which is what kept breaking the flow).
+        // It needs Task View suppression, because without it the vertical swipes belong to
+        // Windows, and an open session, so a vertical swipe never opens one.
+        if (!sessionOpen || !g_settings.suppressTaskView || !LayoutHasMultipleLines()) {
             return;
         }
-        s_rawAppliedY = want;
+        if (!s_rawRowArmed) {
+            if (ady <= SWS_RAW_SWIPE_ENTRY_PITCH / 2) {
+                s_rawRowArmed = true;
+            }
+            return;
+        }
+        if (ady < SWS_RAW_SWIPE_ENTRY_PITCH) {
+            return;
+        }
+        s_rawRowArmed = false;
+        int delta = dy > 0 ? 1 : -1;
         if (g_settings.reverseScrollDirection) {
             delta = -delta;
         }
         Wh_Log(L"SWS: raw touchpad move (dy=%d, rows=%d)", dy, delta);
         TouchpadNavigate(false, delta);
-    } else {
-        return;
     }
 
     s_lastTouchpadScrollTick = GetTickCount64();
