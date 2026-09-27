@@ -4,7 +4,7 @@
 // @description     Removes the View submenu from the desktop context menu and moves "Show desktop icons" into Sort by, as in Windows XP and earlier; works on Windows 11 24H2
 // @name:ru         Без подменю «Вид» на рабочем столе
 // @description:ru  Убирает подменю «Вид» из контекстного меню рабочего стола и переносит пункт «Отображать значки рабочего стола» в «Сортировка», как в Windows XP и более ранних; работает в Windows 11 24H2
-// @version         2.0
+// @version         2.1
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         explorer.exe
@@ -21,7 +21,8 @@
 Windows XP and before did not let you change the view of the desktop and had no
 "View" submenu in the desktop's context menu. This mod removes that submenu and,
 like Windows XP, keeps the "Show desktop icons" switch by moving it into the
-"Sort by" ("Arrange Icons By") submenu.
+"Sort by" ("Arrange Icons By") submenu. The settings can also keep that switch
+in the context menu itself, where View used to be, or remove it as well.
 
 Folder windows are not touched - only the desktop's own context menu.
 
@@ -121,10 +122,13 @@ static HMENU GetSubMenuByCommand(HMENU hMenu, UINT uId) {
     return mii.hSubMenu;
 }
 
+/* GetMenuItemID returns -1 for an item that opens a submenu, and View is one,
+   so the ID is read with GetMenuItemInfoW, which reports it for those too. */
 static int GetPositionByCommand(HMENU hMenu, UINT uId) {
     int cItems = GetMenuItemCount(hMenu);
     for (int i = 0; i < cItems; i++) {
-        if (GetMenuItemID(hMenu, i) == uId) {
+        MENUITEMINFOW mii = {sizeof(mii), MIIM_ID};
+        if (GetMenuItemInfoW(hMenu, i, TRUE, &mii) && mii.wID == uId) {
             return i;
         }
     }
@@ -182,9 +186,6 @@ static void RemoveViewMenu(HMENU hMenu) {
 
     if (fHasIconsItem &&
         g_settings.showDesktopIcons != IconsItemPlacement::remove) {
-        miiIcons.fMask = MIIM_ID | MIIM_FTYPE | MIIM_STATE | MIIM_STRING;
-        miiIcons.dwTypeData = szIcons;
-
         HMENU hmenuArrange =
             g_settings.showDesktopIcons == IconsItemPlacement::sortBy
                 ? GetSubMenuByCommand(hMenu, SFVIDM_MENU_ARRANGE)
@@ -261,7 +262,8 @@ const WindhawkUtils::SYMBOL_HOOK shell32DllHooks[] = {
 };
 
 static void LoadSettings(void) {
-    PCWSTR placement = Wh_GetStringSetting(L"showDesktopIcons");
+    WindhawkUtils::StringSetting placement =
+        WindhawkUtils::StringSetting::make(L"showDesktopIcons");
 
     g_settings.showDesktopIcons = IconsItemPlacement::sortBy;
     if (0 == wcscmp(placement, L"menu")) {
@@ -269,8 +271,6 @@ static void LoadSettings(void) {
     } else if (0 == wcscmp(placement, L"remove")) {
         g_settings.showDesktopIcons = IconsItemPlacement::remove;
     }
-
-    Wh_FreeStringSetting(placement);
 }
 
 BOOL Wh_ModInit(void) {
