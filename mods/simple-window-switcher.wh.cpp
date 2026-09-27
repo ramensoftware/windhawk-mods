@@ -652,11 +652,10 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
       $name: Reverse Scroll Direction
     - backwardShortcut: altShiftTab
       $name: Backward Shortcut
-      $description: Shortcut used to move backward in the switcher.
+      $description: Shortcut used to move backward in the switcher. Alt+Backtick is not listed here because it has its own action setting below.
       $options:
       - altShiftTab: Alt+Shift+Tab (default)
       - altShift: Alt+Shift
-      - altBacktick: Alt+Backtick
     - altBacktickBehavior: backward
       $name: Alt+Backtick Behavior
       $description: Action to perform when pressing Alt+` (Backtick).
@@ -712,7 +711,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
       - raw: Raw HID (direct gesture handling)
     - suppressTaskView: true
       $name: Suppress Task View for Touchpad Swipes
-      $description: Hide Task View when a 3-finger up swipe opens it, and use 3-finger vertical swipes to move through the switcher's rows while it is open. When off, Windows keeps the vertical swipes (Task View, Show desktop) and the switcher only navigates cyclically.
+      $description: Hide Task View when a 3-finger up swipe opens it. While the switcher is open, vertical swipes move through its rows (or pages) and the Show desktop action the OS runs for a downward swipe is dropped, so the gesture belongs to the switcher until the fingers are lifted. When off, Windows keeps the vertical swipes (Task View, Show desktop) and the switcher only navigates cyclically.
   $name: Touchpad
   $description: Precision touchpad input. Raw HID requires a precision touchpad; if the reports are unavailable, Legacy behavior is used instead.
 - ExcludedWindows:
@@ -808,6 +807,9 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 #define SWS_TOUCHPAD_IDLE_TIMER_ID 105
 #define SWS_DYNAMIC_RESIZE_TIMER_ID 106
 #define SWS_BACKDROP_FADE_TIMER_ID 107
+// Explorer-side hook retry. Symbol lookup can fail while Windhawk is still loading symbols,
+// so the Explorer IPC window keeps retrying until CTray::_RaiseDesktop is hooked.
+#define SWS_EXPLORER_HOOK_RETRY_TIMER_ID 108
 // Posted by the low-level mouse hook so the heavy CycleLinear work runs in the
 // wndproc instead of on the synchronous raw-input path. WPARAM is the direction.
 #define WM_SWS_SCROLL           (WM_APP + 1)
@@ -1867,7 +1869,6 @@ static bool IconSizeIs(const WCHAR* v) { return wcscmp(g_settings.iconSize, v) =
 static bool BackwardShortcutIs(const WCHAR* v) { return wcscmp(g_settings.backwardShortcut, v) == 0; }
 static bool UseAltShiftTabBackward() { return BackwardShortcutIs(L"altShiftTab"); }
 static bool UseAltShiftBackward() { return BackwardShortcutIs(L"altShift"); }
-static bool UseAltBacktickBackward() { return BackwardShortcutIs(L"altBacktick"); }
 static bool ThumbnailIsBottom() { return s_cachedSettings.thumbnailIsBottom; }
 static bool ThumbnailIsTop() { return s_cachedSettings.thumbnailIsTop; }
 static bool ThumbnailIsLeft() { return s_cachedSettings.thumbnailIsLeft; }
@@ -4284,6 +4285,7 @@ static int s_rawGestureAnchorY = 0;
 static int s_rawGestureAxis = 0;  // 0 = none yet, 1 = across entries, 2 = rows
 static int s_rawAppliedX = 0;     // entries applied since the current direction started
 static ULONGLONG s_rawRowTick = 0; // pacing for the vertical axis
+static ULONGLONG s_rawSwipePublishTick = 0; // last publish of the raw session marker
 static int s_rawLastFrameX = 0;
 static int s_rawLastFrameY = 0;
 std::map<std::wstring, HICON> g_uwpIconCache;
@@ -4375,7 +4377,17 @@ static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
     return hIcon;
 }
 
+// Retries the Explorer-side symbol hook below; declared here because the IPC window (which
+// drives the retry timer) is created earlier in the file.
+static bool TryHookRaiseDesktop();
+
 LRESULT CALLBACK ExplorerIpcWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_TIMER && wParam == SWS_EXPLORER_HOOK_RETRY_TIMER_ID) {
+        if (TryHookRaiseDesktop()) {
+            KillTimer(hWnd, SWS_EXPLORER_HOOK_RETRY_TIMER_ID);
+        }
+        return 0;
+    }
     if (g_WM_SWS_GET_UWP_ICON && uMsg == g_WM_SWS_GET_UWP_ICON) {
         HWND hWndTarget = (HWND)wParam;
         int desiredSizePx = (int)lParam;
@@ -4507,7 +4519,14 @@ static DWORD WINAPI ExplorerIpcThread(LPVOID) {
     RegisterClassW(&wc);
     
     HWND hIpcWnd = CreateWindowExW(0, L"WindhawkSWS_IpcWindow", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, NULL, wc.hInstance, NULL);
-    
+
+    // Hooking CTray::_RaiseDesktop needs Windhawk's symbols for explorer.exe, which can
+    // still be loading when the mod is injected: try once now and let the IPC window's
+    // timer retry until it takes (see ExplorerIpcWndProc).
+    if (hIpcWnd && !TryHookRaiseDesktop()) {
+        SetTimer(hIpcWnd, SWS_EXPLORER_HOOK_RETRY_TIMER_ID, 2000, NULL);
+    }
+
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
@@ -11760,6 +11779,14 @@ static void EndTouchpadGesture() {
 // position the pad emitted at an edge, not a finger: it restarts the gesture window
 // instead of navigating, otherwise the selection would fly through the grid.
 #define SWS_RAW_SWIPE_JUMP_TRAVEL (65535 / 4)
+// While a raw session is open the switcher publishes it on its own window (a window
+// property, so the Explorer side can read it without a cross-process call), and Explorer
+// drops the shell's 'show desktop' swipe action for that gesture (see RaiseDesktop_Hook).
+#define SWS_RAW_SWIPE_PROP L"WindhawkSWSRawSwipe"
+// The published value is the low 32 bits of GetTickCount64, so this window stays far below
+// the 32-bit wrap and long enough to cover the finger lift, where the shell can still run
+// the action it recognised for the swipe.
+#define SWS_RAW_SWIPE_OWNER_MS 1200
 // Pacing for the vertical axis: one row (or page) per this interval, which keeps a long drag
 // from walking the layout through itself while still covering several rows when needed.
 #define SWS_RAW_SWIPE_ROW_INTERVAL_MS 140
@@ -11919,6 +11946,19 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     }
 
     bool sessionOpen = g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow);
+    if (sessionOpen && g_settings.suppressTaskView && g_hSwitcher) {
+        // Publish the session for the Explorer side, which drops the OS 'show desktop' swipe
+        // action while this gesture belongs to the switcher. Refreshing every 150 ms keeps
+        // the marker live through the whole drag (and its tail covers the finger lift, when
+        // the shell may still run its own action) without touching the server per report.
+        // Publishing only with suppression on keeps the setting's meaning: with it off the
+        // vertical swipes stay with Windows, Show desktop included.
+        ULONGLONG publishNow = GetTickCount64();
+        if (publishNow - s_rawSwipePublishTick >= 150) {
+            s_rawSwipePublishTick = publishNow;
+            SetPropW(g_hSwitcher, SWS_RAW_SWIPE_PROP, (HANDLE)(ULONG_PTR)(DWORD)publishNow);
+        }
+    }
     if (axis == 1) {
         // Across entries: the selection follows the finger position, one entry per twelfth of
         // the pad, and at most one per report so a fast drag catches up smoothly instead of
@@ -12220,7 +12260,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         case SWS_HOTKEY_ALTBACKTICK_UK:
             if (wcscmp(g_settings.altBacktickBehavior, L"sameApp") == 0) {
                 isAltBacktickTrigger = true;
-            } else if (wcscmp(g_settings.altBacktickBehavior, L"backward") == 0 || UseAltBacktickBackward()) {
+            } else if (wcscmp(g_settings.altBacktickBehavior, L"backward") == 0) {
                 isBackward = true;
             } else {
                 return 0;
@@ -12582,7 +12622,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 return 0;
             }
             if ((wParam == VK_OEM_3 || wParam == VK_OEM_8) &&
-                (wcscmp(g_settings.altBacktickBehavior, L"backward") == 0 || UseAltBacktickBackward())) {
+                wcscmp(g_settings.altBacktickBehavior, L"backward") == 0) {
                 CycleLinear(-1);
                 return 0;
             }
@@ -12977,7 +13017,7 @@ static bool g_altBacktickUkRegistered = false;
 
 static void SWS_RegisterHotkeys() {
     if (g_hotkeysRegistered || !g_hSwitcher) return;
-    bool wantAltBacktick = (wcscmp(g_settings.altBacktickBehavior, L"none") != 0) || BackwardShortcutIs(L"altBacktick");
+    bool wantAltBacktick = (wcscmp(g_settings.altBacktickBehavior, L"none") != 0);
     BOOL r1 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTTAB, MOD_ALT, VK_TAB);
     BOOL r2 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTSHIFTTAB, MOD_ALT | MOD_SHIFT, VK_TAB);
     BOOL r3 = RegisterHotKey(g_hSwitcher, SWS_HOTKEY_ALTCTRLTAB, MOD_ALT | MOD_CONTROL, VK_TAB);
@@ -13156,9 +13196,13 @@ static void LoadSettings() {
         wcsncpy_s(g_settings.thumbnailAlignment, L"left", _TRUNCATE);
     }
     LoadStringSetting(L"Accessibility.backwardShortcut", g_settings.backwardShortcut, L"altShiftTab");
-    if (wcscmp(g_settings.backwardShortcut, L"altShiftTab") != 0 &&
-        wcscmp(g_settings.backwardShortcut, L"altShift") != 0 &&
-        wcscmp(g_settings.backwardShortcut, L"altBacktick") != 0) {
+    if (wcscmp(g_settings.backwardShortcut, L"altBacktick") == 0) {
+        // Alt+Backtick is no longer an entry of this setting: it is configured on its own
+        // (Alt+Backtick Behavior), which cycles backward by default, so a saved selection of
+        // the removed entry folds into the default shortcut and keeps behaving the same.
+        wcsncpy_s(g_settings.backwardShortcut, L"altShiftTab", _TRUNCATE);
+    } else if (wcscmp(g_settings.backwardShortcut, L"altShiftTab") != 0 &&
+               wcscmp(g_settings.backwardShortcut, L"altShift") != 0) {
         wcsncpy_s(g_settings.backwardShortcut, L"altShiftTab", _TRUNCATE);
     }
     
@@ -13646,6 +13690,82 @@ static BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     }
     return ShowWindow_Original(hWnd, nCmdShow);
 }
+
+// --- 3-finger 'show desktop' swipe ------------------------------------------------------
+// The shell runs the touchpad show-desktop swipe through CTray::_RaiseDesktop, the same
+// entry point as Win+D and the taskbar button (the win-d-per-monitor mod hooks it for the
+// same reason). While the switcher owns a 3-finger gesture, that action is the OS acting on
+// a swipe the switcher is navigating with, so it is dropped: minimizing every window under
+// the session tears the grid and the session apart, and the gesture is supposed to navigate
+// rows or pages until the fingers are lifted. The switcher publishes its raw session as a
+// window property (see HandleRawTouchpadFrame), so this side only reads it and the shell's
+// gesture thread never has to wait on another process. A vertical swipe with no session in
+// progress stays with Windows, exactly as before.
+#if defined(_M_IX86)
+// The receiver of a member function arrives in ECX on x86, which a plain hook signature
+// cannot describe, and the 32-bit shell is only reachable on 32-bit Windows: skip the hook
+// there and keep the block on the 64-bit architectures.
+static bool TryHookRaiseDesktop() {
+    static bool s_logged = false;
+    if (!s_logged) {
+        s_logged = true;
+        Wh_Log(L"SWS: show desktop swipe filtering is not available in the 32-bit shell");
+    }
+    return true;
+}
+#else
+using RaiseDesktop_t = void(__cdecl*)(void* pThis, int flags);
+static RaiseDesktop_t RaiseDesktop_Original = nullptr;
+static bool s_raiseDesktopHooked = false;
+static bool s_raiseDesktopHookGaveUp = false;
+static int s_raiseDesktopHookAttempts = 0;
+
+static bool SwitcherOwnsRawSwipe() {
+    HWND hSwitcher = FindWindowW(SWS_CLASSNAME, NULL);
+    if (!hSwitcher) return false;
+    HANDLE hSession = GetPropW(hSwitcher, SWS_RAW_SWIPE_PROP);
+    if (!hSession) return false;
+    DWORD lastFrame = (DWORD)(ULONG_PTR)hSession;
+    DWORD age = (DWORD)(GetTickCount64() - (ULONGLONG)lastFrame);
+    return age < SWS_RAW_SWIPE_OWNER_MS;
+}
+
+static void __cdecl RaiseDesktop_Hook(void* pThis, int flags) {
+    if (SwitcherOwnsRawSwipe()) {
+        Wh_Log(L"SWS: dropped show desktop from a 3-finger swipe (flags=%d)", flags);
+        return;
+    }
+    RaiseDesktop_Original(pThis, flags);
+}
+
+// Returns true when the retry timer can stop (hook installed, or given up on).
+static bool TryHookRaiseDesktop() {
+    if (s_raiseDesktopHooked || s_raiseDesktopHookGaveUp) return true;
+    HMODULE hExplorerModule = GetModuleHandleW(L"explorer.exe");
+    if (!hExplorerModule) return true;
+
+    s_raiseDesktopHookAttempts++;
+    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
+        {
+            {LR"(protected: void __cdecl CTray::_RaiseDesktop(enum RAISEDESKTOPFLAGS))"},
+            (void**)&RaiseDesktop_Original,
+            (void*)RaiseDesktop_Hook,
+        },
+    };
+    if (WindhawkUtils::HookSymbols(hExplorerModule, explorerExeHooks,
+                                   ARRAYSIZE(explorerExeHooks))) {
+        s_raiseDesktopHooked = true;
+        Wh_Log(L"SWS: hooked CTray::_RaiseDesktop (a 3-finger show desktop swipe is dropped while the switcher owns the swipe)");
+        return true;
+    }
+    if (s_raiseDesktopHookAttempts >= 30) {
+        s_raiseDesktopHookGaveUp = true;
+        Wh_Log(L"SWS: CTray::_RaiseDesktop not available, the show desktop swipe cannot be filtered");
+        return true;
+    }
+    return false;
+}
+#endif
 
 // Background thread for tool mod process
 
