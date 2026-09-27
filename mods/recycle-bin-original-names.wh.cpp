@@ -4,12 +4,12 @@
 // @description     Shows the file's real name in the prompts for deleting it from the Recycle Bin, instead of the internal $R name the Recycle Bin keeps it under
 // @name:ru         Настоящие имена файлов в запросах Корзины
 // @description:ru  Показывает в запросах на удаление из Корзины настоящее имя файла вместо служебного $R-имени, под которым Корзина его хранит
-// @version         1.0
+// @version         1.1
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lshlwapi
+// @compilerOptions -lshlwapi -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -35,21 +35,28 @@ the path wins: `SHGetFileInfo` is asked for a display name for
 file name - the stub. The progress dialog asks the item instead, which is why it
 shows the right name where the prompt does not.
 
-This mod reads the `$I` file and puts the real name back. Any `$R` stub name on
-its way into a dialog is looked up across the `$Recycle.Bin` folders of the
-local drives; if a matching `$I` file is there, the name it records is
-substituted. Text with no `$R` in it is passed straight through, and a `$R` that
-no `$I` file accounts for is left exactly as it was - a file of your own called
-`$Report.xlsx` is never touched.
+This mod reads the `$I` file and puts the real name back. When `SHGetFileInfo`
+is asked for the display name of a `$R` file inside `$Recycle.Bin`, it answers
+with the name recorded in the `$I` file next to it - one small file read, no
+searching.
 
-Where the text carries a full `C:\$Recycle.Bin\<SID>\$R...` path, the whole path
-is replaced by the original one, so the prompt names the place the file actually
-came from.
+As a fallback for prompts that put the stub's name straight into their text,
+the labels of dialogs (never edit boxes or other controls that hold data) are
+checked for `$R` names as well:
+
+* a full `C:\$Recycle.Bin\<SID>\$R...` path is replaced by the original path,
+  read from the `$I` file next to it;
+* a bare `$R` name is looked up in the `$Recycle.Bin` folders of the fixed
+  drives. That listing is taken at most once a second.
+
+Text with no `$R` in it is passed straight through, and a `$R` that no `$I`
+file accounts for is left exactly as it was - a file of your own called
+`$Report.xlsx` is never touched.
 
 ## What it does not do
 
 Nothing about the Recycle Bin's contents, its folder view, or the files
-themselves. This only rewrites what a dialog is about to display.
+themselves. This only changes the name a prompt is about to display.
 
 ---
 
@@ -65,16 +72,24 @@ themselves. This only rewrites what a dialog is about to display.
 видит служебное.
 
 Запрос на удаление как раз смотрит на файл на диске. Мод читает файл `$I` и
-возвращает настоящее имя: любое `$R`-имя, которое попадает в текст окна,
-ищется в папках `$Recycle.Bin` локальных дисков, и если для него есть файл
-`$I`, подставляется записанное там имя. Если в тексте указан полный путь
-`C:\$Recycle.Bin\<SID>\$R...`, он заменяется исходным путём, так что в запросе
-видно, откуда файл был удалён. Текст без `$R` проходит без изменений, а `$R`,
-для которого нет файла `$I`, остаётся как есть, - ваш собственный файл
-`$Report.xlsx` мод не тронет.
+возвращает настоящее имя: когда у `SHGetFileInfo` спрашивают отображаемое имя
+`$R`-файла в `$Recycle.Bin`, мод отвечает именем, записанным в соседнем файле
+`$I`, - это одно чтение маленького файла, без всякого поиска.
+
+Запасной путь - для запросов, которые вписывают служебное имя прямо в текст:
+надписи в окнах (но никогда не поля ввода и другие элементы с данными)
+проверяются на `$R`-имена:
+
+* полный путь `C:\$Recycle.Bin\<SID>\$R...` заменяется исходным путём из
+  соседнего файла `$I`;
+* одиночное `$R`-имя ищется в папках `$Recycle.Bin` несъёмных дисков, причём
+  список этих папок составляется не чаще раза в секунду.
+
+Текст без `$R` проходит без изменений, а `$R`, для которого нет файла `$I`,
+остаётся как есть, - ваш собственный файл `$Report.xlsx` мод не тронет.
 
 Мод ничего не меняет в содержимом Корзины, в её окне и в самих файлах - только
-текст, который окно собирается показать.
+имя, которое запрос собирается показать.
 
 > **Проверено только на Windows 11 24H2 (сборка 26100).** На других версиях Windows мод не проверялся и может не работать.
 */
@@ -91,20 +106,15 @@ themselves. This only rewrites what a dialog is about to display.
   $description:ru: >-
     Называть файл местом, откуда он был удалён ("C:\Users\Me\Notes\a.b"),
     а не одним именем ("a.b").
-- log: false
-  $name: Write to the Windhawk log
-  $name:ru: Писать в журнал Windhawk
-  $description: >-
-    Records every name that was substituted. Only needed when looking into
-    a problem.
-  $description:ru: >-
-    Записывает каждую подставленную замену. Нужно только для разбора неполадок.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <shellapi.h>
 #include <shlwapi.h>
+#include <windhawk_utils.h>
 
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -118,13 +128,18 @@ struct StubEntry {
 
 static std::mutex g_indexMutex;
 static std::vector<StubEntry> g_stubs;
+static bool g_stubsBuilt = false;
 static ULONGLONG g_stubsTick = 0;
 
-static bool g_fullPath = false;
-static bool g_log = false;
+// A listing is at most this old before it is taken again. It also caps how
+// often the drives are listed at all, whether a lookup found something or not.
+constexpr ULONGLONG kIndexLifetimeMs = 1000;
+
+static std::atomic<bool> g_fullPath{false};
 
 // Rebuilt rather than watched: a prompt appears rarely enough that listing the
 // Recycle Bin folders on the spot is cheaper than keeping a live view of them.
+// Only fixed drives are listed; Windows keeps no Recycle Bin on removable ones.
 static void BuildStubIndex() {
     g_stubs.clear();
 
@@ -135,8 +150,7 @@ static void BuildStubIndex() {
         }
 
         WCHAR root[4] = {(WCHAR)(L'A' + i), L':', L'\\', L'\0'};
-        UINT driveType = GetDriveTypeW(root);
-        if (driveType != DRIVE_FIXED && driveType != DRIVE_REMOVABLE) {
+        if (GetDriveTypeW(root) != DRIVE_FIXED) {
             continue;
         }
 
@@ -188,7 +202,17 @@ static void BuildStubIndex() {
         FindClose(hUsers);
     }
 
+    g_stubsBuilt = true;
     g_stubsTick = GetTickCount64();
+}
+
+// Lists the Recycle Bin folders again, unless that was done less than
+// kIndexLifetimeMs ago.
+static void RefreshStubIndex() {
+    if (g_stubsBuilt && GetTickCount64() - g_stubsTick < kIndexLifetimeMs) {
+        return;
+    }
+    BuildStubIndex();
 }
 
 // The $I file: an eight byte version, the size, the deletion time, and then the
@@ -259,6 +283,23 @@ static bool ReadOriginalPath(const std::wstring& metaPath, std::wstring* path) {
     return true;
 }
 
+// For "...\$Recycle.Bin\<SID>\$R<suffix>", reads the original path out of the
+// "$I<suffix>" file next to it. Nothing is listed: the path says where to look.
+static bool OriginalPathForStubPath(LPCWSTR stubPath, std::wstring* original) {
+    if (!stubPath || !StrStrIW(stubPath, L"\\$Recycle.Bin\\")) {
+        return false;
+    }
+
+    LPCWSTR name = PathFindFileNameW(stubPath);
+    if (name[0] != L'$' || (name[1] != L'R' && name[1] != L'r') || !name[2]) {
+        return false;
+    }
+
+    std::wstring metaPath(stubPath);
+    metaPath[(name - stubPath) + 1] = L'I';
+    return ReadOriginalPath(metaPath, original);
+}
+
 // `text` points at a "$R". Longest suffix wins, so a stub name that happens to
 // begin with another one cannot be cut short.
 static bool MatchStub(const WCHAR* text, size_t* matched, std::wstring* path) {
@@ -285,8 +326,9 @@ static bool MatchStub(const WCHAR* text, size_t* matched, std::wstring* path) {
 }
 
 // If what has been copied out so far ends in "<drive>:\$Recycle.Bin\<SID>\",
-// drop it: the stub's whole path is about to be replaced by the original one.
-static bool TrimRecycleBinPrefix(std::wstring* out) {
+// move that part into `prefix`: the stub's whole path is about to be replaced
+// by the original one.
+static bool TrimRecycleBinPrefix(std::wstring* out, std::wstring* prefix) {
     static const WCHAR kBin[] = L"$Recycle.Bin\\";
     const size_t kBinLen = ARRAYSIZE(kBin) - 1;
 
@@ -314,23 +356,29 @@ static bool TrimRecycleBinPrefix(std::wstring* out) {
         start -= 1;
     }
 
+    prefix->assign(*out, start, std::wstring::npos);
     out->erase(start);
     return true;
 }
 
+// Length of the file name that starts at `p`: up to the first character that
+// cannot be part of one, a closing quotation mark or the end of the line.
+static size_t FileNameLength(const WCHAR* p) {
+    size_t n = 0;
+    while (p[n] && !wcschr(L"\\/:*?\"<>|\r\n\x201D\x00BB", p[n])) {
+        n++;
+    }
+    return n;
+}
+
 static bool TransformText(const WCHAR* text, std::wstring* out) {
-    if (!text || !wcsstr(text, L"$R")) {
+    if (!text || !StrStrIW(text, L"$R")) {
         return false;
     }
 
     std::lock_guard<std::mutex> guard(g_indexMutex);
 
-    bool rebuilt = false;
-    if (g_stubs.empty() || GetTickCount64() - g_stubsTick > 1000) {
-        BuildStubIndex();
-        rebuilt = true;
-    }
-
+    bool listed = false;
     bool changed = false;
     out->clear();
 
@@ -342,21 +390,31 @@ static bool TransformText(const WCHAR* text, std::wstring* out) {
 
         size_t matched = 0;
         std::wstring original;
-        bool found = MatchStub(p, &matched, &original);
-        if (!found && !rebuilt) {
-            // The item may have reached the Recycle Bin since the last listing.
-            BuildStubIndex();
-            rebuilt = true;
+        std::wstring prefix;
+        bool wasPath = TrimRecycleBinPrefix(out, &prefix);
+        bool found = false;
+
+        if (wasPath) {
+            // A full path names its own $I file; no listing is needed.
+            size_t nameLen = FileNameLength(p);
+            found = OriginalPathForStubPath(
+                (prefix + std::wstring(p, nameLen)).c_str(), &original);
+            matched = nameLen;
+        } else {
+            if (!listed) {
+                RefreshStubIndex();
+                listed = true;
+            }
             found = MatchStub(p, &matched, &original);
         }
 
         if (!found) {
+            out->append(prefix);
             out->push_back(*p++);
             continue;
         }
 
         // Text that named a path keeps naming one, whatever the setting says.
-        bool wasPath = TrimRecycleBinPrefix(out);
         out->append((g_fullPath || wasPath)
                         ? original.c_str()
                         : PathFindFileNameW(original.c_str()));
@@ -367,16 +425,51 @@ static bool TransformText(const WCHAR* text, std::wstring* out) {
     return changed;
 }
 
+// Only labels are rewritten. The text of an edit box or a combo box is data the
+// user may act on, not a caption, so it is left exactly as it was.
+static bool IsLabel(HWND hWnd) {
+    WCHAR className[32];
+    if (!hWnd || !GetClassNameW(hWnd, className, ARRAYSIZE(className))) {
+        return false;
+    }
+    return _wcsicmp(className, L"Static") == 0 ||
+           _wcsicmp(className, L"#32770") == 0;
+}
+
+// The delete prompt asks for the display name of the stub's path, and for a
+// plain file path that is just the stub's own name. This answers with the
+// name recorded in the stub's $I file instead.
+using SHGetFileInfoW_t = decltype(&SHGetFileInfoW);
+SHGetFileInfoW_t SHGetFileInfoW_Original;
+
+DWORD_PTR WINAPI SHGetFileInfoW_Hook(LPCWSTR pszPath, DWORD dwFileAttributes,
+                                     SHFILEINFOW* psfi, UINT cbFileInfo,
+                                     UINT uFlags) {
+    DWORD_PTR ret = SHGetFileInfoW_Original(pszPath, dwFileAttributes, psfi,
+                                            cbFileInfo, uFlags);
+    if (!ret || !psfi || !(uFlags & SHGFI_DISPLAYNAME) || (uFlags & SHGFI_PIDL)) {
+        return ret;
+    }
+
+    std::wstring original;
+    if (OriginalPathForStubPath(pszPath, &original)) {
+        LPCWSTR name =
+            g_fullPath ? original.c_str() : PathFindFileNameW(original.c_str());
+        Wh_Log(L"display name: [%s] -> [%s]", pszPath, name);
+        wcsncpy_s(psfi->szDisplayName, name, _TRUNCATE);
+    }
+    return ret;
+}
+
 using SetDlgItemTextW_t = decltype(&SetDlgItemTextW);
 SetDlgItemTextW_t SetDlgItemTextW_Original;
 
 BOOL WINAPI SetDlgItemTextW_Hook(HWND hDlg, int nIDDlgItem, LPCWSTR lpString) {
     std::wstring fixed;
-    if (TransformText(lpString, &fixed)) {
-        if (g_log) {
-            Wh_Log(L"control %d: [%s] -> [%s]", nIDDlgItem, lpString,
-                   fixed.c_str());
-        }
+    if (IsLabel(GetDlgItem(hDlg, nIDDlgItem)) &&
+        TransformText(lpString, &fixed)) {
+        Wh_Log(L"control %d: [%s] -> [%s]", nIDDlgItem, lpString,
+               fixed.c_str());
         return SetDlgItemTextW_Original(hDlg, nIDDlgItem, fixed.c_str());
     }
 
@@ -388,10 +481,8 @@ SetWindowTextW_t SetWindowTextW_Original;
 
 BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
     std::wstring fixed;
-    if (TransformText(lpString, &fixed)) {
-        if (g_log) {
-            Wh_Log(L"window: [%s] -> [%s]", lpString, fixed.c_str());
-        }
+    if (IsLabel(hWnd) && TransformText(lpString, &fixed)) {
+        Wh_Log(L"window: [%s] -> [%s]", lpString, fixed.c_str());
         return SetWindowTextW_Original(hWnd, fixed.c_str());
     }
 
@@ -400,16 +491,17 @@ BOOL WINAPI SetWindowTextW_Hook(HWND hWnd, LPCWSTR lpString) {
 
 static void LoadSettings() {
     g_fullPath = Wh_GetIntSetting(L"fullPath") != 0;
-    g_log = Wh_GetIntSetting(L"log") != 0;
 }
 
 BOOL Wh_ModInit() {
     LoadSettings();
 
-    Wh_SetFunctionHook((void*)SetDlgItemTextW, (void*)SetDlgItemTextW_Hook,
-                       (void**)&SetDlgItemTextW_Original);
-    Wh_SetFunctionHook((void*)SetWindowTextW, (void*)SetWindowTextW_Hook,
-                       (void**)&SetWindowTextW_Original);
+    WindhawkUtils::SetFunctionHook(SHGetFileInfoW, SHGetFileInfoW_Hook,
+                                   &SHGetFileInfoW_Original);
+    WindhawkUtils::SetFunctionHook(SetDlgItemTextW, SetDlgItemTextW_Hook,
+                                   &SetDlgItemTextW_Original);
+    WindhawkUtils::SetFunctionHook(SetWindowTextW, SetWindowTextW_Hook,
+                                   &SetWindowTextW_Original);
 
     return TRUE;
 }
@@ -421,4 +513,5 @@ void Wh_ModSettingsChanged() {
 void Wh_ModUninit() {
     std::lock_guard<std::mutex> guard(g_indexMutex);
     g_stubs.clear();
+    g_stubsBuilt = false;
 }
