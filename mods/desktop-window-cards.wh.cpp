@@ -2,12 +2,13 @@
 // @id              desktop-window-cards
 // @name            Desktop Window Cards
 // @description     Minimized windows fall onto the desktop as dimmed thumbnail cards you can restore or close
-// @version         1.0
+// @version         1.3
 // @author          HaVeN80
 // @github          https://github.com/haven80
-// @include         explorer.exe
+// @include         windhawk.exe
+// @architecture    x86
 // @architecture    x86-64
-// @compilerOptions -ldwmapi -lgdi32
+// @compilerOptions -ldwmapi -lgdi32 -lshell32
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
 
@@ -18,8 +19,7 @@
 When you minimize a window, a copy of it "falls" onto the desktop: it drops
 away, tilts back, loses its shadow and dims, until it lands as a small card
 underneath all other windows.
-![Showcase](https://i.imgur.com/jo794nO.gif)
-[Watch the full-quality video](https://i.imgur.com/YmIrKAd.mp4)
+
 * **Click the thumbnail:** the card rises back to the window's original
   position and the real window is restored in its place.
 * **Top bar:** drag it to move the card around the desktop. With the option
@@ -35,7 +35,8 @@ Cards use DWM thumbnails, the same ones used by taskbar previews. The content
 stays live as long as the app keeps drawing while minimized; many apps stop
 doing so and show their last frame.
 
-The mod runs in the shell's `explorer.exe` process, not in `dwm.exe`.
+The mod runs in a dedicated Windhawk tool process. Cards remain available
+across Explorer restarts.
 
 ## Notes
 
@@ -46,14 +47,13 @@ The mod runs in the shell's `explorer.exe` process, not in `dwm.exe`.
   the taskbar therefore remains visible as well. "Always off" disables it while
   the mod is active: no double animation, but no maximize animation either.
   These changes only apply to the current session.
-* If Explorer crashes while the native animation is switched off, the mod
-  switches it back on the next time it starts.
+* If the mod's process ends unexpectedly while the native animation is
+  switched off, the mod switches it back on the next time it starts.
 * Cards don't follow virtual desktops.
 * Windows running as administrator can be shown as cards, but restoring or
   closing them from a card may fall back to a plain restore, since a
   non-elevated process can't send them commands.
 * Apps that hide to the notification area when minimized don't get a card.
-* Tested on Windows 11 25H2 build (26200.9457)
 */
 // ==/WindhawkModReadme==
 
@@ -64,11 +64,13 @@ The mod runs in the shell's `explorer.exe` process, not in `dwm.exe`.
   $description: Size of the thumbnail relative to the original window (10-60).
 - MaxWidth: 360
   $name: Maximum width (px at 100% scaling)
+  $description: Upper limit for the card width (120-1200).
 - Brightness: 60
   $name: Resting brightness (%)
-  $description: 100 = no dimming. The card brightens on mouse hover.
+  $description: 20-100. 100 = no dimming. The card brightens on mouse hover.
 - AnimationMs: 480
   $name: Fall duration (ms)
+  $description: 150-2000. Restoring takes three quarters of this time.
 - CloseAction: window
   $name: X button
   $options:
@@ -87,17 +89,21 @@ The mod runs in the shell's `explorer.exe` process, not in `dwm.exe`.
 - SmoothReveal: true
   $name: Smooth reveal on restore
   $description: Hides the flicker of transparent windows (Mica/Acrylic) with a fade.
-- RevealDelayMs: 5
+- RevealDelayMs: 200
   $name: Delay before fading (ms)
-  $description: Time given to Windows to rebuild transparency. Increase it if you still see flicker.
-- RevealFadeMs: 5
+  $description: >-
+    0-2000. Time given to Windows to rebuild transparency. Increase it if you
+    still see flicker.
+- RevealFadeMs: 220
   $name: Fade duration (ms)
+  $description: 0-1500. 0 removes the snapshot at once, without fading.
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
 #include <windowsx.h>
 #include <dwmapi.h>
+#include <shellapi.h>
 
 #include <algorithm>
 #include <atomic>
@@ -132,10 +138,11 @@ constexpr int kHeaderDip = 24;
 constexpr DWORD kDwmCornerPreference = 33;  // DWMWA_WINDOW_CORNER_PREFERENCE
 constexpr int kDwmCornerRoundSmall = 3;     // DWMWCP_ROUNDSMALL
 constexpr DWORD kDwmCloak = 13;             // DWMWA_CLOAK
-// Persisted across Explorer crashes: set while the mod has Windows' min/max
+// Persisted across crashes of the mod's process: set while it has Windows' min/max
 // animation switched off, so a restarted instance can switch it back on.
 constexpr wchar_t kAnimationDisabledValue[] = L"MinAnimateDisabledByMod";
 
+// Defaults mirror the WindhawkModSettings block; LoadSettings overwrites them.
 struct Settings {
     int scalePercent = 25;
     int maxWidth = 360;
@@ -305,7 +312,7 @@ void LoadSettings() {
     g_settings.rememberPosition = Wh_GetIntSetting(L"RememberPosition") != 0;
     g_settings.smoothReveal = Wh_GetIntSetting(L"SmoothReveal") != 0;
     g_settings.revealDelayMs = std::clamp(Wh_GetIntSetting(L"RevealDelayMs"), 0, 2000);
-    g_settings.revealFadeMs = std::clamp(Wh_GetIntSetting(L"RevealFadeMs"), 50, 1500);
+    g_settings.revealFadeMs = std::clamp(Wh_GetIntSetting(L"RevealFadeMs"), 0, 1500);
 }
 
 // All changes are session-only (no SPIF_UPDATEINIFILE): signing out resets them.
@@ -317,7 +324,7 @@ bool SetMinAnimate(bool enabled) {
     return true;
 }
 
-// A previous instance may have died (Explorer crash) with the animation off.
+// A previous instance may have died (process crash) with the animation off.
 void RecoverNativeAnimationAfterCrash() {
     if (Wh_GetIntValue(kAnimationDisabledValue, 0)) {
         Wh_Log(L"Re-enabling the native min/max animation left off by a previous instance");
@@ -465,7 +472,8 @@ bool GetRestoredGeometry(HWND hwnd, RECT& windowRect, RECT& insets, bool& maximi
 
 std::wstring GetTitle(HWND hwnd) {
     wchar_t buffer[256] = {};
-    GetWindowTextW(hwnd, buffer, ARRAYSIZE(buffer));
+    // Never sends WM_GETTEXT, so a hung target can't block the worker thread.
+    InternalGetWindowText(hwnd, buffer, ARRAYSIZE(buffer));
     return buffer;
 }
 
@@ -693,6 +701,24 @@ void PaintCard(Card& c, HDC hdc) {
 // Strong while the window is "in the air", gone once it lies on the desk.
 void HideShadow(Card& c) {
     if (c.shadow) ShowWindow(c.shadow, SW_HIDE);
+}
+
+// The shadow bitmap grows to the largest size it was drawn at (up to the whole
+// window at the start of the fall): free it once the card lands. UpdateShadow
+// recreates the window and the bitmap on demand when the card rises.
+void ReleaseShadow(Card& c) {
+    if (c.shadow) DestroyWindow(c.shadow);
+    c.shadow = nullptr;
+    if (c.shadowDC) {
+        SelectObject(c.shadowDC, c.shadowOldBmp);
+        DeleteObject(c.shadowBmp);
+        DeleteDC(c.shadowDC);
+    }
+    c.shadowDC = nullptr;
+    c.shadowBmp = nullptr;
+    c.shadowOldBmp = nullptr;
+    c.shadowBits = nullptr;
+    c.shadowCapW = c.shadowCapH = 0;
 }
 
 void UpdateShadow(Card& c, const RECT& cardRect) {
@@ -959,11 +985,12 @@ void OnAnimationFinished(Card& c) {
             c.bright = c.brightTo;
             c.shadowStrength = 0;
             ApplyFrame(c, c.restThumbRect);
+            ReleaseShadow(c);
             SendCardToDesktopLevel(c);
             break;
         case CardState::Rising: {
             c.state = CardState::Handoff;
-            HideShadow(c);
+            ReleaseShadow(c);
             if (g_settings.smoothReveal && CreateRevealOverlay(c)) {
                 // The snapshot now covers everything: the live card is no longer needed.
                 if (c.thumb) {
@@ -1069,12 +1096,7 @@ void DestroyCard(Card* card) {
     if (owned->thumb) DwmUnregisterThumbnail(owned->thumb);
     DestroyRevealOverlay(*owned);
     if (owned->host) DestroyWindow(owned->host);
-    if (owned->shadow) DestroyWindow(owned->shadow);
-    if (owned->shadowDC) {
-        SelectObject(owned->shadowDC, owned->shadowOldBmp);
-        DeleteObject(owned->shadowBmp);
-        DeleteDC(owned->shadowDC);
-    }
+    ReleaseShadow(*owned);
     if (owned->icon) DestroyIcon(owned->icon);
     if (owned->font) DeleteObject(owned->font);
 }
@@ -1118,8 +1140,10 @@ void CreateCard(HWND target, bool animate) {
         DwmSetWindowAttribute(c.host, kDwmCloak, &off, sizeof(off));
     };
 
-    if (FAILED(DwmRegisterThumbnail(c.host, target, &c.thumb))) {
-        Wh_Log(L"DwmRegisterThumbnail failed for %p", target);
+    HRESULT thumbnailResult = DwmRegisterThumbnail(c.host, target, &c.thumb);
+    if (FAILED(thumbnailResult)) {
+        Wh_Log(L"DwmRegisterThumbnail failed for %p: 0x%08X", target,
+               static_cast<unsigned>(thumbnailResult));
         DestroyWindow(c.host);
         return;
     }
@@ -1486,21 +1510,7 @@ BOOL CALLBACK CollectMinimizedWindow(HWND hwnd, LPARAM lParam) {
 // ---------------------------------------------------------------------------
 // Worker thread
 
-bool WaitUntilShellProcess() {
-    while (!g_stop.load()) {
-        HWND shell = GetShellWindow();
-        if (shell) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(shell, &pid);
-            return pid == GetCurrentProcessId();
-        }
-        Sleep(500);
-    }
-    return false;
-}
-
 DWORD WINAPI WorkerThread(void*) {
-    if (!WaitUntilShellProcess()) return 0;
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     LoadSettings();
 
@@ -1582,14 +1592,14 @@ DWORD WINAPI WorkerThread(void*) {
 
 }  // namespace
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Init");
     g_stop = false;
     g_thread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
     return g_thread != nullptr;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Uninit");
     g_stop = true;
     if (HWND controller = g_controller.load()) PostMessageW(controller, WM_CLOSE, 0, 0);
@@ -1601,6 +1611,180 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     if (HWND controller = g_controller.load()) PostMessageW(controller, WM_APP_RELOAD, 0, 0);
+}
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
