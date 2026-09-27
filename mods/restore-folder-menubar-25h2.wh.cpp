@@ -359,13 +359,12 @@ LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReser
 {   
 
     if (lpValueName && !lstrcmpiW(lpValueName, L"AlwaysShowMenus")) {
-        
         if (lpData && !lpcbData) return ERROR_INVALID_PARAMETER;
 
         if (lpType) *lpType = REG_DWORD;
 
         if (lpcbData)
-        { 
+        {
             DWORD cbBuffer = *lpcbData;
             *lpcbData = sizeof(DWORD);
             if (lpData)
@@ -377,7 +376,6 @@ LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReser
         }
 
     }
-
     return pOriginalRegQueryValueExW(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
 }
 
