@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.6.3
+// @version         1.7.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -43,8 +43,11 @@ level, updated in real time.
   - Cross symbol (`✕`)
   - Mute emoji (`🔇`)
   - Native mute icon
+  - Native mute icon and text
+  - Native mute icon and 0%
   - Custom text
-- **Custom mute text**: Text used when the "Custom text" mute style is selected (default: `Mute`).
+- **Custom mute text**: Text used when the "Custom text" or "Native mute icon and text" mute style is selected (default: `Mute`).
+- **Icon spacing**: Spacing in device-independent pixels (DIPs) between the native icon and the text in dual-display styles (default: `4`, set to `-1` for Taskbar Styler compatibility).
 - **Container width**: Width in device-independent pixels (DIPs) of the volume container to prevent adjacent icons from shifting when digit count changes (`0` for dynamic auto-calculation, `-1` for Windows default).
 
 ## Compatibility
@@ -90,10 +93,20 @@ level, updated in real time.
   - cross: "✕ (Cross symbol)"
   - emoji: "🔇 (Mute emoji)"
   - glyph: Native mute icon
+  - glyphText: Native mute icon and text
+  - glyphZero: Native mute icon and 0%
   - custom: Custom text
 - customMuteText: "Mute"
   $name: Custom mute text
-  $description: Used with the "Custom text" mute display style.
+  $description: >-
+    Used with the "Custom text" and "Native mute icon and text" mute display
+    styles.
+- iconSpacing: 4
+  $name: Icon spacing
+  $description: >-
+    Spacing in device-independent pixels (DIPs) between the native icon and the
+    text in dual-display styles. Set to -1 to disable hardcoded spacing and let
+    Taskbar Styler or custom XAML rules control it.
 - fixedContainerWidth: 0
   $name: Container width
   $description: >-
@@ -148,6 +161,8 @@ enum class MuteStyle {
     cross,
     emoji,
     glyph,
+    glyphText,
+    glyphZero,
     custom,
 };
 
@@ -158,6 +173,7 @@ struct {
     MuteStyle muteStyle;
     WindhawkUtils::StringSetting customMuteText;
     int fixedContainerWidth;
+    int iconSpacing;
 } g_settings;
 
 std::atomic<bool> g_unloading;
@@ -230,6 +246,9 @@ struct TrackedVolumeContent {
     winrt::weak_ref<FrameworkElement> underlayElement;
     winrt::weak_ref<Controls::TextBlock> subBlock;
     bool isCustomLayoutConfigured = false;
+    bool lastDualBoxMode = false;
+    ElementPosition lastElementPosition = ElementPosition::right;
+    int lastIconSpacing = 4;
     winrt::Windows::Foundation::IInspectable origUnderlayVisibility{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseVisibility{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayAlignment{nullptr};
@@ -378,13 +397,17 @@ bool IsDualBoxStyle() {
 
 std::wstring FormatVolumeText(float volumeLevel, bool isMuted) {
     if (isMuted) {
-        return (g_settings.muteStyle == MuteStyle::mute)    ? L"Mute"
-               : (g_settings.muteStyle == MuteStyle::zero)  ? L"0%"
-               : (g_settings.muteStyle == MuteStyle::cross) ? L"\u2715"
-               : (g_settings.muteStyle == MuteStyle::emoji) ? L"\U0001F507"
-               : (g_settings.muteStyle == MuteStyle::glyph) ? L"\uE74F"
+        std::wstring customText = g_settings.customMuteText.get();
+        return (g_settings.muteStyle == MuteStyle::mute)        ? L"Mute"
+               : (g_settings.muteStyle == MuteStyle::zero)      ? L"0%"
+               : (g_settings.muteStyle == MuteStyle::cross)     ? L"\u2715"
+               : (g_settings.muteStyle == MuteStyle::emoji)     ? L"\U0001F507"
+               : (g_settings.muteStyle == MuteStyle::glyph)     ? L"\uE74F"
+               : (g_settings.muteStyle == MuteStyle::glyphZero) ? L"0%"
+               : (g_settings.muteStyle == MuteStyle::glyphText)
+                   ? (!customText.empty() ? customText : L"Mute")
                : (g_settings.muteStyle == MuteStyle::custom)
-                   ? g_settings.customMuteText.get()
+                   ? customText
                    : L"MUT";
     }
 
@@ -442,7 +465,10 @@ double CalculateAutoWidth() {
     // Compact padding (~8 DIPs) + Segoe UI Variable character metrics (~7.0 DIPs/char)
     double estimatedWidth = 8.0 + (static_cast<double>(maxLen) * 7.0);
     if (IsDualBoxStyle()) {
-        estimatedWidth += 20.0; // Native speaker icon (~16 DIPs) + column gap (4 DIPs)
+        double gap = (g_settings.iconSpacing >= 0)
+                         ? static_cast<double>(g_settings.iconSpacing)
+                         : 4.0;
+        estimatedWidth += 16.0 + gap;
     }
 
     double minFloor = (g_settings.displayStyle == DisplayStyle::glyphRight)    ? 54.0
@@ -675,6 +701,7 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
                     tracked.origTextIconContentAlignment);
     }
 
+    tracked.lastDualBoxMode = false;
     tracked.isCustomLayoutConfigured = false;
 }
 
@@ -725,6 +752,9 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
             underlayElement,
             nullptr,
             false,
+            false,
+            ElementPosition::right,
+            4,
         });
         tracked = &g_trackedVolumeContents->back();
     } else {
@@ -775,83 +805,110 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         textIconContent.HorizontalAlignment(HorizontalAlignment::Center);
     }
 
-    if (!IsDualBoxStyle()) {
-        if (auto subBlock = tracked->subBlock.get()) {
-            uint32_t index = 0;
-            if (containerGrid.Children().IndexOf(subBlock, index)) {
-                containerGrid.Children().RemoveAt(index);
-            }
-            tracked->subBlock = nullptr;
-        }
+    bool isDualBoxRequested = IsDualBoxStyle();
+    bool isMuteDualBox = isDualBoxRequested && g_isMuted &&
+                         (g_settings.muteStyle == MuteStyle::glyphText ||
+                          g_settings.muteStyle == MuteStyle::glyphZero);
+    bool showDualBox = isDualBoxRequested && (!g_isMuted || isMuteDualBox);
 
-        if (containerGrid.ColumnDefinitions().Size() > 0) {
-            containerGrid.ColumnDefinitions().Clear();
-        }
-
-        if (GetContainerWidth() > 0) {
-            applyLayout(baseElement, 0, Visibility::Visible,
-                        Thickness{0.0, 0.0, 0.0, 0.0});
-            applyLayout(underlayElement, 0, Visibility::Visible,
-                        Thickness{0.0, 0.0, 0.0, 0.0});
-            if (FrameworkElement textBlockEl =
-                    FindChildByName(baseElement, L"InnerTextBlock")) {
-                if (auto tb = textBlockEl.try_as<Controls::TextBlock>()) {
-                    tb.TextAlignment(TextAlignment::Center);
-                    tb.HorizontalAlignment(HorizontalAlignment::Center);
-                }
+    // Fast-path: when layout structure, mode, position, and spacing are already
+    // configured, update only the text without touching margins or columns.
+    // This preserves custom XAML styling (e.g. from Taskbar Styler) on volume changes.
+    if (tracked->isCustomLayoutConfigured &&
+        tracked->lastDualBoxMode == showDualBox &&
+        tracked->lastElementPosition == g_settings.elementPosition &&
+        tracked->lastIconSpacing == g_settings.iconSpacing) {
+        if (showDualBox) {
+            if (auto subBlock = tracked->subBlock.get()) {
+                subBlock.Text(g_volumeText);
             }
-            if (FrameworkElement underlayTextBlockEl =
-                    FindChildByName(underlayElement, L"InnerTextBlock")) {
-                if (auto tb =
-                        underlayTextBlockEl.try_as<Controls::TextBlock>()) {
-                    tb.TextAlignment(TextAlignment::Center);
-                    tb.HorizontalAlignment(HorizontalAlignment::Center);
-                }
+        } else if (IsDualBoxStyle() && g_settings.muteStyle != MuteStyle::glyph) {
+            if (auto subBlock = tracked->subBlock.get()) {
+                subBlock.Text(g_volumeText);
             }
         }
-
-        tracked->isCustomLayoutConfigured = true;
         return;
     }
 
-    Controls::TextBlock subBlock = nullptr;
-    if (auto existingSubBlock = tracked->subBlock.get()) {
-        subBlock = existingSubBlock;
-    } else {
-        FrameworkElement child =
-            FindChildByName(containerGrid, L"VolumePercentageSubBlock");
-        if (child) {
-            subBlock = child.try_as<Controls::TextBlock>();
+    if (!showDualBox) {
+        if (!IsDualBoxStyle()) {
+            if (auto subBlock = tracked->subBlock.get()) {
+                uint32_t index = 0;
+                if (containerGrid.Children().IndexOf(subBlock, index)) {
+                    containerGrid.Children().RemoveAt(index);
+                }
+                tracked->subBlock = nullptr;
+            }
+
+            if (containerGrid.ColumnDefinitions().Size() > 0) {
+                containerGrid.ColumnDefinitions().Clear();
+            }
+
+            if (GetContainerWidth() > 0) {
+                applyLayout(baseElement, 0, Visibility::Visible,
+                            Thickness{0.0, 0.0, 0.0, 0.0});
+                applyLayout(underlayElement, 0, Visibility::Visible,
+                            Thickness{0.0, 0.0, 0.0, 0.0});
+                if (FrameworkElement textBlockEl =
+                        FindChildByName(baseElement, L"InnerTextBlock")) {
+                    if (auto tb = textBlockEl.try_as<Controls::TextBlock>()) {
+                        tb.TextAlignment(TextAlignment::Center);
+                        tb.HorizontalAlignment(HorizontalAlignment::Center);
+                    }
+                }
+                if (FrameworkElement underlayTextBlockEl =
+                        FindChildByName(underlayElement, L"InnerTextBlock")) {
+                    if (auto tb =
+                            underlayTextBlockEl.try_as<Controls::TextBlock>()) {
+                        tb.TextAlignment(TextAlignment::Center);
+                        tb.HorizontalAlignment(HorizontalAlignment::Center);
+                    }
+                }
+            }
+
+            tracked->lastDualBoxMode = false;
+            tracked->lastElementPosition = g_settings.elementPosition;
+            tracked->lastIconSpacing = g_settings.iconSpacing;
+            tracked->isCustomLayoutConfigured = true;
+            return;
         }
-    }
 
-    if (!subBlock) {
-        subBlock = Controls::TextBlock();
-        subBlock.Name(L"VolumePercentageSubBlock");
-        subBlock.VerticalAlignment(VerticalAlignment::Center);
-        subBlock.FontFamily(
-            Media::FontFamily(L"Segoe UI Variable Text, Segoe UI"));
-        subBlock.FontSize(12.0);
-
-        containerGrid.Children().Append(subBlock);
-        tracked->subBlock = subBlock;
-    }
-
-    FrameworkElement textBlockEl =
-        FindChildByName(baseElement, L"InnerTextBlock");
-    if (textBlockEl) {
-        if (auto innerTextBlock =
-                textBlockEl.try_as<Controls::TextBlock>()) {
-            subBlock.Foreground(innerTextBlock.Foreground());
-            subBlock.FontWeight(innerTextBlock.FontWeight());
-        }
-    }
-
-    if (g_isMuted) {
-        // In mute state, display a single centered indicator rather than
-        // two indicators side-by-side.
+        // Single-element indicator in mute state (either glyph only or text only)
         containerGrid.ColumnDefinitions().Clear();
         bool isMuteGlyph = (g_settings.muteStyle == MuteStyle::glyph);
+
+        Controls::TextBlock subBlock = nullptr;
+        if (auto existingSubBlock = tracked->subBlock.get()) {
+            subBlock = existingSubBlock;
+        } else {
+            FrameworkElement child =
+                FindChildByName(containerGrid, L"VolumePercentageSubBlock");
+            if (child) {
+                subBlock = child.try_as<Controls::TextBlock>();
+            }
+        }
+
+        if (!subBlock) {
+            subBlock = Controls::TextBlock();
+            subBlock.Name(L"VolumePercentageSubBlock");
+            subBlock.VerticalAlignment(VerticalAlignment::Center);
+            subBlock.FontFamily(
+                Media::FontFamily(L"Segoe UI Variable Text, Segoe UI"));
+            subBlock.FontSize(12.0);
+
+            containerGrid.Children().Append(subBlock);
+            tracked->subBlock = subBlock;
+        }
+
+        FrameworkElement textBlockEl =
+            FindChildByName(baseElement, L"InnerTextBlock");
+        if (textBlockEl) {
+            if (auto innerTextBlock =
+                    textBlockEl.try_as<Controls::TextBlock>()) {
+                subBlock.Foreground(innerTextBlock.Foreground());
+                subBlock.FontWeight(innerTextBlock.FontWeight());
+            }
+        }
 
         if (isMuteGlyph) {
             subBlock.Text(L"");
@@ -886,44 +943,94 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         applyLayout(baseElement, 0, baseVis, Thickness{0.0, 0.0, 0.0, 0.0});
         applyLayout(underlayElement, 0, baseVis,
                     Thickness{0.0, 0.0, 0.0, 0.0});
+
+        tracked->lastDualBoxMode = false;
+        tracked->lastElementPosition = g_settings.elementPosition;
+        tracked->lastIconSpacing = g_settings.iconSpacing;
+        tracked->isCustomLayoutConfigured = true;
+        return;
+    }
+
+    // Dual-column layout (unmuted OR muted with glyphText / glyphZero)
+    Controls::TextBlock subBlock = nullptr;
+    if (auto existingSubBlock = tracked->subBlock.get()) {
+        subBlock = existingSubBlock;
     } else {
-        // Unmuted: dual-column layout with configurable icon position.
-        if (containerGrid.ColumnDefinitions().Size() < 2) {
-            containerGrid.ColumnDefinitions().Clear();
-            Controls::ColumnDefinition col0, col1;
-            col0.Width(GridLength{1.0, GridUnitType::Auto});
-            col1.Width(GridLength{1.0, GridUnitType::Auto});
-            containerGrid.ColumnDefinitions().Append(col0);
-            containerGrid.ColumnDefinitions().Append(col1);
-        }
-
-        if (g_settings.elementPosition == ElementPosition::left) {
-            // Native speaker icon on left (col 0), text on right (col 1).
-            applyLayout(baseElement, 0, Visibility::Visible,
-                        Thickness{0.0, 0.0, 4.0, 0.0});
-            applyLayout(underlayElement, 0, Visibility::Visible,
-                        Thickness{0.0, 0.0, 4.0, 0.0});
-
-            subBlock.Text(g_volumeText);
-            subBlock.HorizontalAlignment(HorizontalAlignment::Left);
-            subBlock.Margin(Thickness{0.0, 0.0, 0.0, 0.0});
-            subBlock.Visibility(Visibility::Visible);
-            Controls::Grid::SetColumn(subBlock, 1);
-        } else {
-            // Text on left (col 0), native speaker icon on right (col 1).
-            subBlock.Text(g_volumeText);
-            subBlock.HorizontalAlignment(HorizontalAlignment::Right);
-            subBlock.Margin(Thickness{0.0, 0.0, 4.0, 0.0});
-            subBlock.Visibility(Visibility::Visible);
-            Controls::Grid::SetColumn(subBlock, 0);
-
-            applyLayout(baseElement, 1, Visibility::Visible,
-                        Thickness{0.0, 0.0, 0.0, 0.0});
-            applyLayout(underlayElement, 1, Visibility::Visible,
-                        Thickness{0.0, 0.0, 0.0, 0.0});
+        FrameworkElement child =
+            FindChildByName(containerGrid, L"VolumePercentageSubBlock");
+        if (child) {
+            subBlock = child.try_as<Controls::TextBlock>();
         }
     }
 
+    if (!subBlock) {
+        subBlock = Controls::TextBlock();
+        subBlock.Name(L"VolumePercentageSubBlock");
+        subBlock.VerticalAlignment(VerticalAlignment::Center);
+        subBlock.FontFamily(
+            Media::FontFamily(L"Segoe UI Variable Text, Segoe UI"));
+        subBlock.FontSize(12.0);
+
+        containerGrid.Children().Append(subBlock);
+        tracked->subBlock = subBlock;
+    }
+
+    FrameworkElement textBlockEl =
+        FindChildByName(baseElement, L"InnerTextBlock");
+    if (textBlockEl) {
+        if (auto innerTextBlock =
+                textBlockEl.try_as<Controls::TextBlock>()) {
+            subBlock.Foreground(innerTextBlock.Foreground());
+            subBlock.FontWeight(innerTextBlock.FontWeight());
+        }
+    }
+
+    if (containerGrid.ColumnDefinitions().Size() < 2) {
+        containerGrid.ColumnDefinitions().Clear();
+        Controls::ColumnDefinition col0, col1;
+        col0.Width(GridLength{1.0, GridUnitType::Auto});
+        col1.Width(GridLength{1.0, GridUnitType::Auto});
+        containerGrid.ColumnDefinitions().Append(col0);
+        containerGrid.ColumnDefinitions().Append(col1);
+    }
+
+    double spacing = (g_settings.iconSpacing >= 0)
+                         ? static_cast<double>(g_settings.iconSpacing)
+                         : 0.0;
+    bool applySpacing = (g_settings.iconSpacing >= 0);
+    Thickness col0Margin = applySpacing ? Thickness{0.0, 0.0, spacing, 0.0}
+                                        : Thickness{0.0, 0.0, 0.0, 0.0};
+    Thickness zeroMargin = Thickness{0.0, 0.0, 0.0, 0.0};
+
+    if (g_settings.elementPosition == ElementPosition::left) {
+        // Native speaker/mute icon on left (col 0), text on right (col 1).
+        applyLayout(baseElement, 0, Visibility::Visible, col0Margin);
+        applyLayout(underlayElement, 0, Visibility::Visible, col0Margin);
+
+        subBlock.Text(g_volumeText);
+        subBlock.HorizontalAlignment(HorizontalAlignment::Left);
+        if (applySpacing) {
+            subBlock.Margin(zeroMargin);
+        }
+        subBlock.Visibility(Visibility::Visible);
+        Controls::Grid::SetColumn(subBlock, 1);
+    } else {
+        // Text on left (col 0), native speaker/mute icon on right (col 1).
+        subBlock.Text(g_volumeText);
+        subBlock.HorizontalAlignment(HorizontalAlignment::Right);
+        if (applySpacing) {
+            subBlock.Margin(col0Margin);
+        }
+        subBlock.Visibility(Visibility::Visible);
+        Controls::Grid::SetColumn(subBlock, 0);
+
+        applyLayout(baseElement, 1, Visibility::Visible, zeroMargin);
+        applyLayout(underlayElement, 1, Visibility::Visible, zeroMargin);
+    }
+
+    tracked->lastDualBoxMode = true;
+    tracked->lastElementPosition = g_settings.elementPosition;
+    tracked->lastIconSpacing = g_settings.iconSpacing;
     tracked->isCustomLayoutConfigured = true;
 }
 
@@ -1428,16 +1535,26 @@ void LoadSettings() {
 
     auto muteStyle = WindhawkUtils::StringSetting::make(L"muteStyle");
     std::wstring_view ms = muteStyle.get();
-    g_settings.muteStyle = (ms == L"mute")     ? MuteStyle::mute
-                           : (ms == L"zero")   ? MuteStyle::zero
-                           : (ms == L"cross")  ? MuteStyle::cross
-                           : (ms == L"emoji")  ? MuteStyle::emoji
-                           : (ms == L"glyph")  ? MuteStyle::glyph
-                           : (ms == L"custom") ? MuteStyle::custom
-                                               : MuteStyle::mut;
+    g_settings.muteStyle = (ms == L"mute")        ? MuteStyle::mute
+                           : (ms == L"zero")      ? MuteStyle::zero
+                           : (ms == L"cross")     ? MuteStyle::cross
+                           : (ms == L"emoji")     ? MuteStyle::emoji
+                           : (ms == L"glyph")     ? MuteStyle::glyph
+                           : (ms == L"glyphText") ? MuteStyle::glyphText
+                           : (ms == L"glyphZero") ? MuteStyle::glyphZero
+                           : (ms == L"custom")    ? MuteStyle::custom
+                                                  : MuteStyle::mut;
 
     g_settings.customMuteText =
         WindhawkUtils::StringSetting::make(L"customMuteText");
+
+    PCWSTR iconSpacingSetting = Wh_GetStringSetting(L"iconSpacing");
+    if (iconSpacingSetting && *iconSpacingSetting) {
+        g_settings.iconSpacing = Wh_GetIntSetting(L"iconSpacing");
+        Wh_FreeStringSetting(iconSpacingSetting);
+    } else {
+        g_settings.iconSpacing = 4;
+    }
 
     g_settings.fixedContainerWidth = Wh_GetIntSetting(L"fixedContainerWidth");
     g_maxObservedWidth = 0.0;
@@ -1560,6 +1677,12 @@ void Wh_ModSettingsChanged() {
             LoadSettings();
 
             SafeXamlCall([] {
+                if (g_trackedVolumeContents) {
+                    for (auto& tracked : *g_trackedVolumeContents) {
+                        tracked.lastDualBoxMode = false;
+                        tracked.isCustomLayoutConfigured = false;
+                    }
+                }
                 UpdateAllVolumeLayouts();
                 RefreshVolumeIcons();
                 ApplyVolumeIconViewsWidth();
