@@ -416,9 +416,21 @@ the icon and the name of whatever was selected, a divider line under it, a line
 of text and a short list of *See also* links. Windows Vista dropped it, and
 Windows 11 has no trace of it left.
 
-This mod puts it back, and the interesting half of it works: the icon and the
-name follow the selection, they fall back to the folder itself when nothing is
-selected, and the links navigate the same window the way they used to.
+This mod puts it back. The icon and the name follow the selection, and fall
+back to the folder itself when nothing is selected; the links navigate the same
+window the way they used to. On top of that, the pane brings back two things
+Windows 2000 showed there:
+
+* authentic descriptions of the system folders - This PC, Documents, Recycle
+  Bin and the others;
+* for a drive, its capacity, used and free space and the three-dimensional pie
+  chart of how full it is.
+
+![This PC, with the description of the folder](https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/my-computer.png)
+
+![A drive, with its capacity and how full it is](https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/drive.png)
+
+![The Recycle Bin](https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/recycle-bin.png)
 
 ## How it works
 
@@ -506,10 +518,17 @@ Windows 2000 показывала слева от списка файлов па
 под ними, строку описания и короткий список ссылок «Перейти к». В Windows Vista
 её убрали, в Windows 11 от неё не осталось ничего.
 
-Мод возвращает эту панель. Значок и имя следуют за выделением, для диска
-показывается ёмкость, занятое и свободное место и объёмная круговая диаграмма,
-для системных папок - короткое описание, а ссылки открывают папку в том же окне.
+Мод возвращает эту панель. Значок и имя следуют за выделением, а ссылки
+открывают папку в том же окне. Кроме того, панель возвращает то, что Windows
+2000 показывала в ней:
+
+* аутентичные описания системных папок - «Мой компьютер», «Документы»,
+  «Корзина» и других;
+* для диска - ёмкость, занятое и свободное место и объёмную круговую диаграмму
+  его заполненности.
+
 В узком окне панель, как и в Windows 2000, первой уступает место списку файлов.
+Скриншоты - выше, в английской части.
 
 Внешний вид настраивается: ширина и сторона панели, размер значка, картинка
 в углу (облака из `%SystemRoot%\Web` Windows 2000 - скопируйте файл и укажите
