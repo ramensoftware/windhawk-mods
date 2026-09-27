@@ -17,6 +17,8 @@
 When you minimize a window, a copy of it "falls" onto the desktop: it drops
 away, tilts back, loses its shadow and dims, until it lands as a small card
 underneath all other windows.
+![Showcase](https://i.imgur.com/jo794nO.gif)
+[Watch the full-quality video](https://i.imgur.com/YmIrKAd.mp4)
 
 * **Click the thumbnail:** the card rises back to the window's original
   position and the real window is restored in its place.
