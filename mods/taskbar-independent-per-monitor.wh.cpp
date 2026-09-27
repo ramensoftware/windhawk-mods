@@ -2075,6 +2075,7 @@ static void BtnPrepared_hook(void* s, bool v) {
 static void InitAnimationHooks() {
     HMODULE tv = GetModuleHandleW(L"Taskbar.View.dll");
     if (!tv || Entrance_orig || g_safeMode) return;
+    // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{L"public: void __cdecl winrt::Taskbar::implementation::TaskListButton::PlayEntranceAnimation(enum winrt::Taskbar::implementation::TaskListButtonEntranceAnimationKind,double,struct winrt::Windows::Foundation::Numerics::float3,class std::chrono::duration<__int64,struct std::ratio<1,10000000> >,bool)"},
          (void**)&Entrance_orig, (void*)Entrance_hook, true},
@@ -2083,6 +2084,7 @@ static void InitAnimationHooks() {
     };
     WindhawkUtils::HookSymbols(tv, hooks, ARRAYSIZE(hooks));
     Wh_Log(L"-> Animation %ls", (Entrance_orig && ExitAnim_orig) ? L"active" : L"partial");
+    // Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK labelFix[] = {
         {{L"public: void __cdecl winrt::Taskbar::implementation::TaskListButton::HasLabel(bool)"},
          (void**)&BtnHasLabel_orig, (void*)BtnHasLabel_hook, true},
@@ -2112,6 +2114,7 @@ static HRESULT PinTrusted_hook(void* self, PCIDLIST_ABSOLUTE pidl, int caller) {
 static bool InitPinListHooks() {
     HMODULE tw = GetModuleHandleW(L"twinui.pcshell.dll");
     if (!tw) return false;
+    // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{L"public: virtual long __cdecl CPinnedList::GetAppIDForPinnedItem(struct _ITEMIDLIST const __unaligned *,unsigned short * *)"},
          (void**)&pGetAppIDForPinned, nullptr, true},
@@ -2167,6 +2170,7 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK hooks[] = {
         {{L"public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void)"},
          (void**)&pGroupGetAppID},
@@ -2202,6 +2206,7 @@ BOOL Wh_ModInit() {
     }
 
     // Optional, lookup only - nothing is called
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK probe[] = {
         {{L"public: virtual struct HWND__ * __cdecl CWindowTaskItem::GetWindow(void)"},
          (void**)&pItemGetWindow, nullptr, true},
@@ -2212,12 +2217,14 @@ BOOL Wh_ModInit() {
     WindhawkUtils::HookSymbols(tb, probe, ARRAYSIZE(probe));
 
     g_tb = tb;
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK upd[] = {
         {{L"public: virtual long __cdecl CTaskGroup::UpdateFlags(unsigned long,unsigned long)"},
          (void**)&pGroupUpdateFlags, nullptr, true},
     };
     WindhawkUtils::HookSymbols(tb, upd, ARRAYSIZE(upd));
 
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK jump[] = {
         {{L"public: virtual long __cdecl CTaskGroup::SetShortcutIDList(struct _ITEMIDLIST_ABSOLUTE const *)"},
          (void**)&pGroupSetShortcut, nullptr, true},
@@ -2230,12 +2237,14 @@ BOOL Wh_ModInit() {
     Wh_Log(L"-> Jump list pins %ls", (pGroupUpdateFlags && ShowJump_orig && EnumPinned_orig)
                                         ? L"active" : L"INCOMPLETE");
 
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK tbg[] = {
         {{L"protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup *,int *)"},
          (void**)&pGetTBGroup, nullptr, true},
     };
     WindhawkUtils::HookSymbols(tb, tbg, ARRAYSIZE(tbg));
 
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK sync[] = {
         {{L"public: virtual class std::vector<class Microsoft::WRL::ComPtr<struct ITaskGroup>,class std::allocator<class Microsoft::WRL::ComPtr<struct ITaskGroup> > > __cdecl CTaskListWnd::GetGroups(void)"},
          (void**)&pGetGroups, nullptr, true},
@@ -2253,12 +2262,14 @@ BOOL Wh_ModInit() {
     InitDpaOffset();
     Wh_Log(L"-> Startup sync %ls", (pGetGroups && pGroupVft && pGroupItemFromWindow && pBtnGetNumItems && pBtnGetTaskItem) ? L"active" : L"MISSING");
     if (pGetTBGroup) {
+        // taskbar.dll
         WindhawkUtils::SYMBOL_HOOK order[] = {
             {{L"public: virtual void __cdecl CTaskListWnd::SetRelativeTaskOrder(struct ITaskGroup *,int)"},
              (void**)&SetOrder_orig, (void*)SetOrder_hook, true},
         };
         WindhawkUtils::HookSymbols(tb, order, ARRAYSIZE(order));
     }
+    // taskbar.dll
     WindhawkUtils::SYMBOL_HOOK pinEvt[] = {
         {{L"public: virtual void __cdecl CTaskListWnd::HandleTaskGroupPinned(struct ITaskGroup *)"},
          (void**)&PinnedEvt_orig, (void*)PinnedEvt_hook, true},
