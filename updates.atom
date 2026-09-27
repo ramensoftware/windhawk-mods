@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-27T09:50:35.000Z</updated>
+    <updated>2026-09-27T12:04:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Disk Usage Bar Customizer 1.2.1]]></title>
+        <id>https://windhawk.net/mods/disk-usage-bar-customizer#1233abdb504db4383993ca27139f940c41b5cb51</id>
+        <link href="https://windhawk.net/mods/disk-usage-bar-customizer"/>
+        <updated>2026-09-27T12:04:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fixed conflicts with other mods that also hook <code>DrawThemeBackground()</code></li>
+<li>Added display hints (settings annotations) to the mod settings (Windhawk 2.0 alpha 6 and up)</li>
+</ul>]]></content>
+        <author>
+            <name>Valer100</name>
+            <uri>https://github.com/Valer100</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Edge Native UI Tweaks 1.0]]></title>
         <id>https://windhawk.net/mods/edge-native-ui-tweaks#1c29695bedd11217ed60ffc68edcbf3ee21b2d8b</id>
@@ -718,23 +732,6 @@ those options in one mod only and leave it at Chrome default in the other.</li>
         <author>
             <name>MCheng404</name>
             <uri>https://github.com/MCheng404</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Three Finger Drag 1.1.0]]></title>
-        <id>https://windhawk.net/mods/three-finger-drag#14b59f8f635fae78114073adf62be79cf4dddbea</id>
-        <link href="https://windhawk.net/mods/three-finger-drag"/>
-        <updated>2026-09-24T22:03:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed windows falling behind the cursor with native move in programs slow to move them, such as WhatsApp and Task Manager, and replaying the drag in slow motion after the fingers stopped</li>
-<li>Native move starts sooner: the window is asked to get ready during the first part of the motion, and the cursor keeps following the fingers meanwhile</li>
-<li>macOS drag mode is paced the same way when the press lands on a title bar</li>
-<li>A click of your own can't start a drag: only the mod's own press is taken</li>
-<li>More detail in the log for bug reports</li>
-</ul>]]></content>
-        <author>
-            <name>rodrigothomazi</name>
-            <uri>https://github.com/RodrigoThomazi</uri>
         </author>
     </entry>
 </feed>

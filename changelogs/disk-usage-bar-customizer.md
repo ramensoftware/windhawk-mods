@@ -1,3 +1,8 @@
+## 1.2.1 ([Sep 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/1233abdb504db4383993ca27139f940c41b5cb51/mods/disk-usage-bar-customizer.wh.cpp))
+
+- Fixed conflicts with other mods that also hook `DrawThemeBackground()`
+- Added display hints (settings annotations) to the mod settings (Windhawk 2.0 alpha 6 and up)
+
 ## 1.2.0 ([Sep 7, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d2d0c6132a9cdb7deeece76d86a69ca28fb2ea0f/mods/disk-usage-bar-customizer.wh.cpp))
 
 - Add WinUI-like rendering option

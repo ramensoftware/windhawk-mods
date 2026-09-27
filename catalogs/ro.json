@@ -3831,7 +3831,7 @@
         "ratingBreakdown": [2, 1, 1, 3, 26],
         "ratingUsers": 33,
         "reviews": 0,
-        "updated": 1788817914000,
+        "updated": 1790510673000,
         "users": 1292
       },
       "metadata": {
@@ -3843,7 +3843,7 @@
           "explorer.exe"
         ],
         "name": "Personalizator bară de utilizare discuri",
-        "version": "1.2.0"
+        "version": "1.2.1"
       },
       "metadataEnglish": {
         "description": "Customize everything about the disk usage bar from the This PC section in the File Explorer, including theme-aware colors, height, border, rounded corners and more.",
