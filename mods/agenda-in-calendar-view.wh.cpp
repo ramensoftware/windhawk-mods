@@ -2,7 +2,7 @@
 // @id              agenda-in-calendar-view
 // @name            Agenda in Calendar View
 // @description     Show .ics events in the calendar of the Notification Centre, like in Windows 10
-// @version         1.1
+// @version         1.2
 // @author          lonfro
 // @github          https://github.com/lonfro
 // @include         ShellExperienceHost.exe
@@ -18,11 +18,9 @@
 ![Agenda in Calendar](https://i.imgur.com/lQhwoAL.png)
 ## Bring back the Windows 10 Agenda to Windows 11
 
-This mod brings the Windows 10-style agenda to Windows 11, allowing you to
-quickly and conveniently view your events from the Notification Centre.
+This mod brings the Windows 10-style agenda to Windows 11, allowing you to quickly and conveniently view your events from the Notification Centre.
 
-It supports `.ics` files from both local and remote locations.
-
+It supports `.ics` files from both local and remote locations, including Google Calendar and Outlook.
 
 ## Details
 ![event](https://i.imgur.com/EkWnp1c.png)
@@ -32,6 +30,7 @@ The details shown include:
 - Event description
 - Location
 - Starting and ending time
+- URL
 
 
 ## Additional features
@@ -44,6 +43,10 @@ Keyboard navigation:
 Customising whether the calendar is shown inline or as a popup:
 
 ![comparison](https://i.imgur.com/od3kcQS.png)
+
+Customising whether the calendar is shown above or below the agenda:
+
+![comparison](https://i.imgur.com/xbioNVC.png)
 
 Hiding the focus panel:
 
@@ -70,19 +73,36 @@ Checking events on other dates:
 
 
 ## FAQ
-* **My local `.ics` file does not work!**
-  - First try going to its Properties in File Explorer, and ticking "Unblock".
-  - If that doesn't work, grant read permissions on your file to AppContainers by running:
-    `icacls "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"`
-    in PowerShell.
-    This allows `ShellExperienceHost.exe` and `ShellHost.exe`, which host the calendar pane, to access your calendar file.
-    *Note: `*S-1-15-2-1` grants read permissions to ALL APPLICATION PACKAGES (all UWP/packaged apps).*
+**How do I sync my Google Calendar?**
+* Follow [this](https://support.google.com/calendar/answer/37648?hl=en#zippy=%2Cget-your-calendar-view-only:~:text=Get%20your%20calendar,other%20calendar%20application.) guide to get a remote `.ics` link to your calendar.
 
+**How do I sync my Outlook Calendar?**
 
-* **When my list of events is long, and the inline calendar is expanded, it becomes too tall for the screen!**
-  - Set a maximum height for the agenda list in the mod settings.
-  - You can specify different maximum heights for when the inline calendar is expanded and when it is collapsed. This way, you can limit the height only when the calendar is expanded.
-  - If the calendar pane fits within the screen, but is touching the bottom (misaligned downwards), reduce the maximum height by incremental amounts until it shifts back upwards to the correct position.
+* Warning: this may be restricted/hidden on accounts managed by an organisation!
+
+1) Go to Outlook Calendar
+2) Open Settings
+3) Click "Shared calendars" in the second column
+4) Publish your calendar under the "Publish a calendar" section
+5) Copy the `.ics` link to this mod's settings
+
+**My local `.ics` file does not work!**
+- First try going to its Properties in File Explorer, and ticking "Unblock".
+- If that doesn't work, grant read permissions on your file to AppContainers by running:
+
+  `icacls "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"`
+
+  in PowerShell.
+
+  This allows `ShellExperienceHost.exe` and `ShellHost.exe`, which host the calendar pane, to access your calendar file.
+
+   *Note: `*S-1-15-2-1` grants read permissions to ALL APPLICATION PACKAGES (all UWP/packaged apps).*
+
+**When my list of events is long, and the inline calendar is expanded, it becomes too tall for the screen!**
+- Set a maximum height for the agenda list in the mod settings.
+- You can specify different maximum heights for when the inline calendar is expanded and when it is collapsed. This way, you can limit the height only when the calendar is expanded.
+- If the calendar pane fits within the screen, but is touching the bottom (misaligned downwards), reduce the maximum height by incremental amounts until it shifts back upwards to the correct position.
+
 ![fix](https://i.imgur.com/9zRoO6I.png)
 */
 // ==/WindhawkModReadme==
@@ -91,11 +111,21 @@ Checking events on other dates:
 
 // ==WindhawkModSettings==
 /*
-- icsPath: ""
+- icsPath: [""]
   $name: Path to .ics
   $description: |
     Local file path or remote URL to the .ics calendar file.
     Read the FAQ if you have issues with local files.
+- calendarPosition: above
+  $name: Calendar position
+  $description: Show calendar above or below the agenda
+  $options:
+  - above: Show calendar above agenda
+  - below: Show calendar below agenda
+- hideCompletedEvents: false
+  $name: Hide completed events
+  $description: |
+    Hide events upon completion time. Events without ending times are hidden on the next day.
 - groupingMode: inline
   $name: Calendar pane mode
   $description: |
@@ -173,6 +203,7 @@ Checking events on other dates:
 
 
 
+#include <winrt/Windows.ApplicationModel.DataTransfer.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.System.h>
@@ -193,6 +224,7 @@ Checking events on other dates:
 
 namespace wf = winrt::Windows::Foundation;
 namespace ws = winrt::Windows::System;
+namespace wadt = winrt::Windows::ApplicationModel::DataTransfer;
 namespace wux = winrt::Windows::UI::Xaml;
 namespace wuxc = winrt::Windows::UI::Xaml::Controls;
 namespace wuxi = winrt::Windows::UI::Xaml::Input;
@@ -207,6 +239,15 @@ inline void NormalizeSystemTime(SYSTEMTIME& st) {
     if (SystemTimeToFileTime(&st, &ft)) {
         FileTimeToSystemTime(&ft, &st);
     }
+}
+
+inline void CopyTextToClipboard(const std::wstring& text) {
+    if (text.empty()) return;
+    try {
+        wadt::DataPackage package;
+        package.SetText(text);
+        wadt::Clipboard::SetContent(package);
+    } catch (...) {}
 }
 
 inline SYSTEMTIME ShiftLocalDate(const SYSTEMTIME& stLocal, int deltaDays) {
@@ -347,6 +388,7 @@ struct CalendarEvent {
     std::wstring name;
     std::wstring location;
     std::wstring notes;
+    std::wstring url;
     bool hasRRule = false;
     RecurrenceRule rrule;
     std::vector<std::wstring> exDates;
@@ -355,12 +397,16 @@ struct CalendarEvent {
 std::vector<CalendarEvent> g_allParsedEvents;
 std::mutex g_eventsMutex;
 
+struct CalendarCacheEntry {
+    std::wstring cachedContent;
+    std::vector<CalendarEvent> cachedEvents;
+    FILETIME lastLocalFileWriteTime{};
+    ULONGLONG lastSuccessfulFetchTick = 0;
+};
+
 std::mutex g_cacheMutex;
 std::mutex g_watcherMutex;
-std::wstring g_lastFetchedPath;
-FILETIME g_lastLocalFileWriteTime{};
-ULONGLONG g_lastSuccessfulFetchTick = 0;
-std::wstring g_cachedIcsContent;
+std::unordered_map<std::wstring, CalendarCacheEntry> g_calendarCaches;
 
 inline int SafeParseIntW(const std::wstring& s, size_t pos, size_t len) {
     if (pos + len > s.size())
@@ -546,6 +592,32 @@ inline RecurrenceRule ParseRRule(const std::wstring& rruleStr) {
         }
     }
     return rule;
+}
+
+inline bool IsEventCompleted(const CalendarEvent& ev, const SYSTEMTIME& nowLocal) {
+    if (ev.hasEnd && !ev.isAllDay) {
+        FILETIME ftEnd{}, ftNow{};
+        if (SystemTimeToFileTime(&ev.endLocal, &ftEnd) && SystemTimeToFileTime(&nowLocal, &ftNow)) {
+            ULARGE_INTEGER uEnd, uNow;
+            uEnd.LowPart = ftEnd.dwLowDateTime; uEnd.HighPart = ftEnd.dwHighDateTime;
+            uNow.LowPart = ftNow.dwLowDateTime; uNow.HighPart = ftNow.dwHighDateTime;
+            return uNow.QuadPart >= uEnd.QuadPart;
+        }
+        return false;
+    } else {
+        if (ev.isAllDay && ev.hasEnd) {
+            if (CompareDateOnly(ev.startLocal, ev.endLocal) < 0) {
+                return CompareDateOnly(nowLocal, ev.endLocal) >= 0;
+            } else {
+                return CompareDateOnly(nowLocal, ev.endLocal) > 0;
+            }
+        }
+        return CompareDateOnly(nowLocal, ev.startLocal) > 0;
+    }
+}
+
+inline bool GetHideCompletedEventsSetting() {
+    return Wh_GetIntSetting(L"hideCompletedEvents") != 0;
 }
 
 inline bool EventOccursOnDate(const CalendarEvent& ev, const SYSTEMTIME& tDate) {
@@ -781,6 +853,12 @@ inline bool RecurrenceMatchesDate(const CalendarEvent& ev, const SYSTEMTIME& can
 std::vector<CalendarEvent> FilterEventsForDate(
     std::vector<CalendarEvent> const& allEvents,
     SYSTEMTIME const& targetDate) {
+    bool hideCompleted = GetHideCompletedEventsSetting();
+    SYSTEMTIME nowLocal{};
+    if (hideCompleted) {
+        GetLocalTime(&nowLocal);
+    }
+
     SYSTEMTIME tDate = targetDate;
     NormalizeSystemTime(tDate);
     std::wstring targetYmd = FormatDateYmd(tDate);
@@ -840,6 +918,9 @@ std::vector<CalendarEvent> FilterEventsForDate(
 
         if (!ev.hasRRule) {
             if (EventOccursOnDate(ev, tDate)) {
+                if (hideCompleted && IsEventCompleted(ev, nowLocal)) {
+                    continue;
+                }
                 result.push_back(ev);
             }
             continue;
@@ -886,6 +967,9 @@ std::vector<CalendarEvent> FilterEventsForDate(
                     occ.endLocal = ShiftLocalDate(ev.endLocal, days);
                 }
                 if (EventOccursOnDate(occ, tDate)) {
+                    if (hideCompleted && IsEventCompleted(occ, nowLocal)) {
+                        continue;
+                    }
                     FILETIME ft{};
                     SystemTimeToFileTime(&occ.startLocal, &ft);
                     occ.sortKey =
@@ -912,23 +996,66 @@ void TriggerBackgroundFetch(bool force = false);
 void StartWorkerThread();
 void StopWorkerThread();
 
+std::vector<std::wstring> GetIcsPathsSetting() {
+    std::vector<std::wstring> paths;
+    for (int i = 0;; i++) {
+        PCWSTR val = Wh_GetStringSetting(L"icsPath[%d]", i);
+        bool hasVal = (val && *val);
+        if (hasVal) {
+            std::wstring clean = val;
+            while (!clean.empty() && (clean.front() == L' ' || clean.front() == L'\t' || clean.front() == L'"')) {
+                clean.erase(clean.begin());
+            }
+            while (!clean.empty() && (clean.back() == L' ' || clean.back() == L'\t' || clean.back() == L'"')) {
+                clean.pop_back();
+            }
+            if (!clean.empty()) {
+                paths.push_back(clean);
+            }
+        }
+        if (val) {
+            Wh_FreeStringSetting(val);
+        }
+        if (!hasVal) {
+            break;
+        }
+    }
+    if (paths.empty()) {
+        PCWSTR val = Wh_GetStringSetting(L"icsPath");
+        if (val && *val) {
+            std::wstring clean = val;
+            while (!clean.empty() && (clean.front() == L' ' || clean.front() == L'\t' || clean.front() == L'"')) {
+                clean.erase(clean.begin());
+            }
+            while (!clean.empty() && (clean.back() == L' ' || clean.back() == L'\t' || clean.back() == L'"')) {
+                clean.pop_back();
+            }
+            if (!clean.empty()) {
+                paths.push_back(clean);
+            }
+        }
+        if (val) {
+            Wh_FreeStringSetting(val);
+        }
+    }
+    return paths;
+}
+
 std::wstring GetIcsPathSetting() {
+    auto paths = GetIcsPathsSetting();
+    return paths.empty() ? L"" : paths.front();
+}
 
-    WindhawkUtils::StringSetting string = WindhawkUtils::StringSetting::make(L"icsPath"); // RAII
-
-    std::wstring result = string.get();
-
-    while (!result.empty() &&
-           (result.front() == L' ' || result.front() == L'\t' ||
-            result.front() == L'"')) {
-        result.erase(result.begin());
+bool IsCalendarAboveAgenda() {
+    PCWSTR pos = Wh_GetStringSetting(L"calendarPosition");
+    bool isAbove = true;
+    if (pos) {
+        if (wcscmp(pos, L"below") == 0) {
+            isAbove = false;
+        }
+        Wh_FreeStringSetting(pos);
     }
-    while (!result.empty() &&
-           (result.back() == L' ' || result.back() == L'\t' ||
-            result.back() == L'"')) {
-        result.pop_back();
-    }
-    return result;
+    return isAbove;
 }
 
 bool IsInlineCalendarMode() {
@@ -1051,6 +1178,53 @@ std::wstring UnescapeIcsText(const std::wstring& str) {
     return result;
 }
 
+std::wstring FindUrlInText(const std::wstring& text) {
+    if (text.empty()) return L"";
+
+    const std::wstring schemes[] = { L"https://", L"http://" };
+    size_t bestPos = std::wstring::npos;
+    for (const auto& scheme : schemes) {
+        for (size_t i = 0; i + scheme.size() <= text.size(); ++i) {
+            bool match = true;
+            for (size_t j = 0; j < scheme.size(); ++j) {
+                if (towlower(text[i + j]) != scheme[j]) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) {
+                if (bestPos == std::wstring::npos || i < bestPos) {
+                    bestPos = i;
+                }
+                break;
+            }
+        }
+    }
+
+    if (bestPos == std::wstring::npos) return L"";
+
+    size_t endPos = bestPos;
+    while (endPos < text.size()) {
+        wchar_t c = text[endPos];
+        if (iswspace(c) || c == L'"' || c == L'\'' || c == L'<' || c == L'>' ||
+            c == L'(' || c == L')' || c == L'[' || c == L']' || c == L'{' || c == L'}') {
+            break;
+        }
+        ++endPos;
+    }
+
+    while (endPos > bestPos) {
+        wchar_t c = text[endPos - 1];
+        if (c == L'.' || c == L',' || c == L';' || c == L':' || c == L'?' || c == L'!') {
+            --endPos;
+        } else {
+            break;
+        }
+    }
+
+    return text.substr(bestPos, endPos - bestPos);
+}
+
 std::vector<CalendarEvent> ParseIcs(const std::wstring& icsContent) {
     std::wstring unfolded;
     unfolded.reserve(icsContent.size());
@@ -1129,6 +1303,12 @@ std::vector<CalendarEvent> ParseIcs(const std::wstring& icsContent) {
         }
         if (line == L"END:VEVENT") {
             if (inEvent) {
+                if (currentEvent.url.empty()) {
+                    currentEvent.url = FindUrlInText(currentEvent.location);
+                    if (currentEvent.url.empty()) {
+                        currentEvent.url = FindUrlInText(currentEvent.notes);
+                    }
+                }
                 events.push_back(currentEvent);
                 inEvent = false;
             }
@@ -1179,6 +1359,12 @@ std::vector<CalendarEvent> ParseIcs(const std::wstring& icsContent) {
             for (auto& ch : currentEvent.notes) {
                 if (ch == L'\r' || ch == L'\n')
                     ch = L' ';
+            }
+        } else if (key == L"URL") {
+            std::wstring u = TrimW(valPart);
+            if (_wcsnicmp(u.c_str(), L"http://", 7) == 0 ||
+                _wcsnicmp(u.c_str(), L"https://", 8) == 0) {
+                currentEvent.url = u;
             }
         } else if (key == L"X-MICROSOFT-CDO-ALLDAYEVENT" ||
                    key == L"X-MICROSOFT-MSNCALENDAR-ALL-DAY-EVENT") {
@@ -1278,36 +1464,39 @@ std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
 
     {
         std::lock_guard<std::mutex> lock(g_cacheMutex);
-        if (!force && minFetchInterval > 0 && pathOrUrl == g_lastFetchedPath &&
-            !g_cachedIcsContent.empty() &&
-            (now - g_lastSuccessfulFetchTick < ttlMs)) {
-            if (isRemote) {
-                Wh_Log(L"Using cached remote ICS content (TTL remaining)");
-                outFromCache = true;
-                return g_cachedIcsContent;
-            } else {
-                std::wstring localPath = pathOrUrl;
-                if (_wcsnicmp(localPath.c_str(), L"file:///", 8) == 0)
-                    localPath = localPath.substr(8);
-                else if (_wcsnicmp(localPath.c_str(), L"file://", 7) == 0)
-                    localPath = localPath.substr(7);
-                for (auto& ch : localPath) {
-                    if (ch == L'/')
-                        ch = L'\\';
-                }
+        auto it = g_calendarCaches.find(pathOrUrl);
+        if (it != g_calendarCaches.end()) {
+            auto& entry = it->second;
+            if (!force && minFetchInterval > 0 && !entry.cachedContent.empty() &&
+                (now - entry.lastSuccessfulFetchTick < ttlMs)) {
+                if (isRemote) {
+                    Wh_Log(L"Using cached remote ICS content for %s (TTL remaining)", pathOrUrl.c_str());
+                    outFromCache = true;
+                    return entry.cachedContent;
+                } else {
+                    std::wstring localPath = pathOrUrl;
+                    if (_wcsnicmp(localPath.c_str(), L"file:///", 8) == 0)
+                        localPath = localPath.substr(8);
+                    else if (_wcsnicmp(localPath.c_str(), L"file://", 7) == 0)
+                        localPath = localPath.substr(7);
+                    for (auto& ch : localPath) {
+                        if (ch == L'/')
+                            ch = L'\\';
+                    }
 
-                WIN32_FILE_ATTRIBUTE_DATA attr{};
-                if (GetFileAttributesExW(localPath.c_str(),
-                                         GetFileExInfoStandard, &attr)) {
-                    if (attr.ftLastWriteTime.dwLowDateTime ==
-                            g_lastLocalFileWriteTime.dwLowDateTime &&
-                        attr.ftLastWriteTime.dwHighDateTime ==
-                            g_lastLocalFileWriteTime.dwHighDateTime) {
-                        Wh_Log(
-                            L"Using cached local ICS content (TTL remaining & "
-                            L"file write time unchanged)");
-                        outFromCache = true;
-                        return g_cachedIcsContent;
+                    WIN32_FILE_ATTRIBUTE_DATA attr{};
+                    if (GetFileAttributesExW(localPath.c_str(),
+                                             GetFileExInfoStandard, &attr)) {
+                        if (attr.ftLastWriteTime.dwLowDateTime ==
+                                entry.lastLocalFileWriteTime.dwLowDateTime &&
+                            attr.ftLastWriteTime.dwHighDateTime ==
+                                entry.lastLocalFileWriteTime.dwHighDateTime) {
+                            Wh_Log(
+                                L"Using cached local ICS content for %s (TTL remaining & "
+                                L"file write time unchanged)", pathOrUrl.c_str());
+                            outFromCache = true;
+                            return entry.cachedContent;
+                        }
                     }
                 }
             }
@@ -1334,6 +1523,13 @@ std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
                 Wh_FreeUrlContent(content);
             } else {
                 Wh_Log(L"Wh_GetUrlContent returned null");
+            }
+            std::lock_guard<std::mutex> lock(g_cacheMutex);
+            auto it = g_calendarCaches.find(pathOrUrl);
+            if (it != g_calendarCaches.end() && !it->second.cachedContent.empty()) {
+                Wh_Log(L"Fetch failed; using cached content for %s as fallback", pathOrUrl.c_str());
+                outFromCache = true;
+                return it->second.cachedContent;
             }
             return {};
         }
@@ -1365,6 +1561,13 @@ std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
         if (hFile == INVALID_HANDLE_VALUE) {
             Wh_Log(L"CreateFileW failed (%u) for local path: %s",
                    GetLastError(), localPath.c_str());
+            std::lock_guard<std::mutex> lock(g_cacheMutex);
+            auto it = g_calendarCaches.find(pathOrUrl);
+            if (it != g_calendarCaches.end() && !it->second.cachedContent.empty()) {
+                Wh_Log(L"Read failed; using cached content for %s as fallback", pathOrUrl.c_str());
+                outFromCache = true;
+                return it->second.cachedContent;
+            }
             return {};
         }
 
@@ -1374,6 +1577,12 @@ std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
             CloseHandle(hFile);
             Wh_Log(L"Local file is empty, invalid, or exceeds 50MB: %s",
                    localPath.c_str());
+            std::lock_guard<std::mutex> lock(g_cacheMutex);
+            auto it = g_calendarCaches.find(pathOrUrl);
+            if (it != g_calendarCaches.end() && !it->second.cachedContent.empty()) {
+                outFromCache = true;
+                return it->second.cachedContent;
+            }
             return {};
         }
 
@@ -1384,6 +1593,12 @@ std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
             CloseHandle(hFile);
             Wh_Log(L"ReadFile failed (%u) for local path: %s", GetLastError(),
                    localPath.c_str());
+            std::lock_guard<std::mutex> lock(g_cacheMutex);
+            auto it = g_calendarCaches.find(pathOrUrl);
+            if (it != g_calendarCaches.end() && !it->second.cachedContent.empty()) {
+                outFromCache = true;
+                return it->second.cachedContent;
+            }
             return {};
         }
 
@@ -1397,10 +1612,10 @@ std::wstring FetchIcsContent(std::wstring const& pathOrUrl,
 
     if (!decodedContent.empty()) {
         std::lock_guard<std::mutex> lock(g_cacheMutex);
-        g_cachedIcsContent = decodedContent;
-        g_lastFetchedPath = pathOrUrl;
-        g_lastLocalFileWriteTime = newWriteTime;
-        g_lastSuccessfulFetchTick = GetTickCount64();
+        auto& entry = g_calendarCaches[pathOrUrl];
+        entry.cachedContent = decodedContent;
+        entry.lastLocalFileWriteTime = newWriteTime;
+        entry.lastSuccessfulFetchTick = GetTickCount64();
     }
 
     return decodedContent;
@@ -1489,14 +1704,175 @@ wuxm::Brush GetCardBorderBrush() {
 }
 
 
-std::wstring FormatFilterDate(SYSTEMTIME const& st) {
+inline std::wstring RemoveYearFromDateString(std::wstring str, int year) {
+    std::wstring yearStr = std::to_wstring(year);
+    size_t pos = str.find(yearStr);
+    if (pos == std::wstring::npos) {
+        return str;
+    }
+
+    size_t start = pos;
+    size_t end = pos + yearStr.length();
+
+    // Check for trailing characters/words associated with year in certain locales
+    if (end < str.length() && (str[end] == L'年' || str[end] == L'년')) {
+        end++;
+    } else if (end + 1 < str.length() && str[end] == L'.' && iswspace(str[end + 1])) {
+        end++;
+    } else if (end + 2 < str.length() && str.substr(end, 3) == L" г.") {
+        end += 3;
+    } else if (end + 1 < str.length() && str.substr(end, 2) == L" г") {
+        end += 2;
+    } else if (end + 2 < str.length() && str.substr(end, 3) == L" m.") {
+        end += 3;
+    } else if (end + 1 < str.length() && str.substr(end, 2) == L" m") {
+        end += 2;
+    }
+
+    bool atEnd = true;
+    for (size_t i = end; i < str.length(); ++i) {
+        if (!iswspace(str[i]) && str[i] != L'.' && str[i] != L',') {
+            atEnd = false;
+            break;
+        }
+    }
+
+    if (atEnd) {
+        while (start > 0 && (str[start - 1] == L' ' || str[start - 1] == L',' || str[start - 1] == L'.')) {
+            start--;
+        }
+        str.erase(start);
+    } else if (start == 0) {
+        while (end < str.length() && (iswspace(str[end]) || str[end] == L'.' || str[end] == L'-')) {
+            end++;
+        }
+        str.erase(0, end);
+    } else {
+        if (start >= 2 && str[start - 2] == L',' && str[start - 1] == L' ') {
+            start -= 2;
+        } else if (start > 0 && str[start - 1] == L' ') {
+            start--;
+        }
+        while (end < str.length() && (str[end] == L' ' || str[end] == L',')) {
+            end++;
+        }
+        str.erase(start, end - start);
+    }
+
+    while (!str.empty() && (str.back() == L' ' || str.back() == L',')) {
+        str.pop_back();
+    }
+    size_t lead = 0;
+    while (lead < str.length() && (str[lead] == L' ' || str[lead] == L',')) {
+        lead++;
+    }
+    if (lead > 0) {
+        str.erase(0, lead);
+    }
+
+    return str;
+}
+
+inline std::wstring FormatFilterDate(SYSTEMTIME const& st) {
     SYSTEMTIME validSt = st;
     if (validSt.wYear == 0) {
         GetLocalTime(&validSt);
     }
-    wchar_t dateBuf[128]{};
-    GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &validSt, L"dddd, MMMM d", dateBuf, ARRAYSIZE(dateBuf), nullptr);
-    return dateBuf;
+    wchar_t dateBuf[256]{};
+    if (GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, DATE_LONGDATE, &validSt, nullptr, dateBuf, ARRAYSIZE(dateBuf), nullptr) == 0) {
+        GetDateFormatEx(LOCALE_NAME_USER_DEFAULT, 0, &validSt, L"dddd, MMMM d", dateBuf, ARRAYSIZE(dateBuf), nullptr);
+    }
+    return RemoveYearFromDateString(dateBuf, validSt.wYear);
+}
+
+inline std::wstring GetCalendarDatePickerFormat() {
+    wchar_t patternBuf[128]{};
+    if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SLONGDATE, patternBuf, ARRAYSIZE(patternBuf)) == 0) {
+        return L"{dayofweek.full}, {month.full} {day.integer}";
+    }
+
+    std::wstring p = patternBuf;
+
+    size_t yPos = p.find_first_of(L"yY");
+    if (yPos != std::wstring::npos) {
+        size_t yEnd = p.find_last_of(L"yY") + 1;
+        if (yEnd < p.length() && p[yEnd] == L'\'') {
+            size_t qClose = p.find(L'\'', yEnd + 1);
+            if (qClose != std::wstring::npos) {
+                yEnd = qClose + 1;
+            }
+        }
+        if (yEnd < p.length() && (p[yEnd] == L'年' || p[yEnd] == L'년')) {
+            yEnd++;
+        }
+
+        bool atEnd = true;
+        for (size_t i = yEnd; i < p.length(); ++i) {
+            if (iswalpha(p[i])) { atEnd = false; break; }
+        }
+
+        if (atEnd) {
+            size_t yStart = yPos;
+            while (yStart > 0 && (p[yStart - 1] == L' ' || p[yStart - 1] == L',' || p[yStart - 1] == L'.' || p[yStart - 1] == L'\'')) {
+                yStart--;
+            }
+            p.erase(yStart);
+        } else if (yPos == 0) {
+            while (yEnd < p.length() && (p[yEnd] == L' ' || p[yEnd] == L'.' || p[yEnd] == L'-')) {
+                yEnd++;
+            }
+            p.erase(0, yEnd);
+        } else {
+            p.erase(yPos, yEnd - yPos);
+        }
+    }
+
+    std::wstring result;
+    for (size_t i = 0; i < p.length();) {
+        if (p.substr(i, 4) == L"dddd") {
+            result += L"{dayofweek.full}";
+            i += 4;
+        } else if (p.substr(i, 3) == L"ddd") {
+            result += L"{dayofweek.abbreviated}";
+            i += 3;
+        } else if (p.substr(i, 4) == L"MMMM") {
+            result += L"{month.full}";
+            i += 4;
+        } else if (p.substr(i, 3) == L"MMM") {
+            result += L"{month.abbreviated}";
+            i += 3;
+        } else if (p.substr(i, 2) == L"MM") {
+            result += L"{month.integer}";
+            i += 2;
+        } else if (p[i] == L'M') {
+            result += L"{month.integer}";
+            i += 1;
+        } else if (p.substr(i, 2) == L"dd") {
+            result += L"{day.integer}";
+            i += 2;
+        } else if (p[i] == L'd') {
+            result += L"{day.integer}";
+            i += 1;
+        } else if (p[i] == L'\'') {
+            i += 1;
+        } else {
+            result += p[i];
+            i += 1;
+        }
+    }
+
+    while (!result.empty() && (result.back() == L' ' || result.back() == L',')) {
+        result.pop_back();
+    }
+    size_t lead = 0;
+    while (lead < result.length() && (result[lead] == L' ' || result[lead] == L',')) {
+        lead++;
+    }
+    if (lead > 0) {
+        result.erase(0, lead);
+    }
+
+    return result.empty() ? L"{dayofweek.full}, {month.full} {day.integer}" : result;
 }
 
 namespace {
@@ -1511,6 +1887,7 @@ namespace {
     [[clang::no_destroy]] wuxc::TextBlock m_dateButtonText{nullptr};
     [[clang::no_destroy]] wuxc::CalendarView m_calendarView{nullptr};
     [[clang::no_destroy]] wuxc::CalendarDatePicker m_datePicker{nullptr};
+    [[clang::no_destroy]] wuxc::TextBlock m_datePickerText{nullptr};
     winrt::event_token m_datePickerLoadedToken{};
     winrt::event_token m_dateChangedToken{};
     [[clang::no_destroy]] wuxc::ScrollViewer m_eventsScrollViewer{nullptr};
@@ -1677,6 +2054,7 @@ void RestoreCalendarContent() {
     m_dateButtonText = nullptr;
     m_calendarView = nullptr;
     m_datePicker = nullptr;
+    m_datePickerText = nullptr;
     {
         std::lock_guard<std::mutex> lock(g_watcherMutex);
         m_prevDayAccel = nullptr;
@@ -1699,8 +2077,8 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
         border.BorderBrush(GetCardBorderBrush());
         border.BorderThickness(wux::Thickness{1, 1, 1, 1});
         auto tb = wuxc::TextBlock();
-        std::wstring icsPath = GetIcsPathSetting();
-        if (icsPath.empty()) {
+        auto paths = GetIcsPathsSetting();
+        if (paths.empty()) {
             tb.Text(L"Please set a calendar path or URL in the mod settings.");
         } else {
             SYSTEMTIME today;
@@ -1713,6 +2091,7 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
         tb.Opacity(0.7);
         tb.TextWrapping(wux::TextWrapping::Wrap);
         tb.HorizontalAlignment(wux::HorizontalAlignment::Center);
+        tb.IsTextSelectionEnabled(true);
         border.Child(tb);
         m_itemsControl.Items().Append(border);
         return;
@@ -1754,6 +2133,7 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
         auto startTimeTb = wuxc::TextBlock();
         startTimeTb.Margin(wux::Thickness{0, 0, 8, 0});
         startTimeTb.VerticalAlignment(wux::VerticalAlignment::Center);
+        startTimeTb.IsTextSelectionEnabled(true);
         wuxc::Grid::SetRow(startTimeTb, 0);
         wuxc::Grid::SetColumn(startTimeTb, 0);
         eventGrid.Children().Append(startTimeTb);
@@ -1763,6 +2143,7 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
         nameTb.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
         nameTb.TextWrapping(wux::TextWrapping::Wrap);
         nameTb.VerticalAlignment(wux::VerticalAlignment::Center);
+        nameTb.IsTextSelectionEnabled(true);
         wuxc::Grid::SetRow(nameTb, 0);
         wuxc::Grid::SetColumn(nameTb, 1);
         eventGrid.Children().Append(nameTb);
@@ -1770,6 +2151,7 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
         auto endTimeTb = wuxc::TextBlock();
         endTimeTb.Margin(wux::Thickness{0, 0, 8, 0});
         endTimeTb.VerticalAlignment(wux::VerticalAlignment::Center);
+        endTimeTb.IsTextSelectionEnabled(true);
         wuxc::Grid::SetRow(endTimeTb, 1);
         wuxc::Grid::SetColumn(endTimeTb, 0);
         eventGrid.Children().Append(endTimeTb);
@@ -1789,27 +2171,84 @@ void PopulateItemsControl(std::vector<CalendarEvent> const& events) {
             endTimeTb.Opacity(0.7);
         }
 
+        std::wstring displayLocation = ev.location;
+        if (!ev.url.empty() && displayLocation == ev.url) {
+            displayLocation.clear();
+        }
+
         std::wstring detailsText;
-        if (!ev.location.empty() && !ev.notes.empty()) {
-            detailsText = ev.location + L" - " + ev.notes;
-        } else if (!ev.location.empty()) {
-            detailsText = ev.location;
+        if (!displayLocation.empty() && !ev.notes.empty()) {
+            detailsText = displayLocation + L" - " + ev.notes;
+        } else if (!displayLocation.empty()) {
+            detailsText = displayLocation;
         } else if (!ev.notes.empty()) {
             detailsText = ev.notes;
         }
 
-        auto detailsTb = wuxc::TextBlock();
-        detailsTb.Text(winrt::hstring(detailsText));
-        detailsTb.Opacity(0.7);
-        detailsTb.TextWrapping(wux::TextWrapping::Wrap);
-        detailsTb.VerticalAlignment(wux::VerticalAlignment::Center);
-        if (detailsText.empty() && !ev.hasEnd && !ev.isAllDay) {
-            detailsTb.Visibility(wux::Visibility::Collapsed);
-            endTimeTb.Visibility(wux::Visibility::Collapsed);
+        auto createLinkButton = [&](const std::wstring& url, bool inSeparateRow) {
+            auto linkBtn = wuxc::HyperlinkButton();
+            linkBtn.Padding(wux::Thickness{0, 0, 0, 0});
+            linkBtn.Margin(inSeparateRow ? wux::Thickness{0, 2, 0, 0} : wux::Thickness{0, 0, 0, 0});
+            linkBtn.HorizontalAlignment(wux::HorizontalAlignment::Left);
+            linkBtn.VerticalAlignment(wux::VerticalAlignment::Center);
+
+            auto urlTb = wuxc::TextBlock();
+            urlTb.Text(winrt::hstring(url));
+            urlTb.TextWrapping(wux::TextWrapping::Wrap);
+            linkBtn.Content(urlTb);
+
+            try {
+                linkBtn.NavigateUri(winrt::Windows::Foundation::Uri{url});
+            } catch (...) {}
+
+            wuxc::ToolTipService::SetToolTip(linkBtn, winrt::box_value(winrt::hstring(url)));
+
+            auto flyout = wuxc::MenuFlyout();
+            auto copyItem = wuxc::MenuFlyoutItem();
+            copyItem.Text(L"Copy");
+            try {
+                copyItem.Icon(wuxc::SymbolIcon(wuxc::Symbol::Copy));
+            } catch (...) {}
+            copyItem.Click([url](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                CopyTextToClipboard(url);
+            });
+            flyout.Items().Append(copyItem);
+            linkBtn.ContextFlyout(flyout);
+
+            return linkBtn;
+        };
+
+        if (!detailsText.empty()) {
+            auto detailsTb = wuxc::TextBlock();
+            detailsTb.Text(winrt::hstring(detailsText));
+            detailsTb.Opacity(0.7);
+            detailsTb.TextWrapping(wux::TextWrapping::Wrap);
+            detailsTb.VerticalAlignment(wux::VerticalAlignment::Center);
+            detailsTb.IsTextSelectionEnabled(true);
+            wuxc::Grid::SetRow(detailsTb, 1);
+            wuxc::Grid::SetColumn(detailsTb, 1);
+            eventGrid.Children().Append(detailsTb);
+
+            if (!ev.url.empty()) {
+                wuxc::RowDefinition row2{};
+                row2.Height(wux::GridLength{0, wux::GridUnitType::Auto});
+                eventGrid.RowDefinitions().Append(row2);
+
+                auto linkBtn = createLinkButton(ev.url, true);
+                wuxc::Grid::SetRow(linkBtn, 2);
+                wuxc::Grid::SetColumn(linkBtn, 1);
+                eventGrid.Children().Append(linkBtn);
+            }
+        } else if (!ev.url.empty()) {
+            auto linkBtn = createLinkButton(ev.url, false);
+            wuxc::Grid::SetRow(linkBtn, 1);
+            wuxc::Grid::SetColumn(linkBtn, 1);
+            eventGrid.Children().Append(linkBtn);
+        } else {
+            if (!ev.hasEnd && !ev.isAllDay) {
+                endTimeTb.Visibility(wux::Visibility::Collapsed);
+            }
         }
-        wuxc::Grid::SetRow(detailsTb, 1);
-        wuxc::Grid::SetColumn(detailsTb, 1);
-        eventGrid.Children().Append(detailsTb);
 
         border.Child(eventGrid);
         m_itemsControl.Items().Append(border);
@@ -1823,6 +2262,11 @@ void UpdateDateDisplayAndCalendar(SYSTEMTIME const& st) {
     if (m_datePicker) {
         try {
             m_datePicker.Date(SystemTimeToWinRtDateTime(st));
+        } catch (...) {}
+    }
+    if (m_datePickerText) {
+        try {
+            m_datePickerText.Text(FormatFilterDate(st));
         } catch (...) {}
     }
     if (m_calendarView) {
@@ -1875,6 +2319,14 @@ void OnDatePickerDateChanged(wf::IReference<wf::DateTime> const& newDate) {
         selected.wDay == m_currentFilterDate.wDay) return;
 
     m_currentFilterDate = selected;
+    if (m_dateButtonText) {
+        m_dateButtonText.Text(FormatFilterDate(selected));
+    }
+    if (m_datePickerText) {
+        try {
+            m_datePickerText.Text(FormatFilterDate(selected));
+        } catch (...) {}
+    }
     std::vector<CalendarEvent> filtered;
     {
         std::lock_guard<std::mutex> lock(g_eventsMutex);
@@ -1910,6 +2362,11 @@ void OnCalendarViewSelectedDatesChanged(wf::IReference<wf::DateTime> const& newD
     m_currentFilterDate = selected;
     if (m_dateButtonText) {
         m_dateButtonText.Text(FormatFilterDate(selected));
+    }
+    if (m_datePickerText) {
+        try {
+            m_datePickerText.Text(FormatFilterDate(selected));
+        } catch (...) {}
     }
     std::vector<CalendarEvent> filtered;
     {
@@ -2033,6 +2490,7 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
                 m_dateButton.HorizontalContentAlignment(wux::HorizontalAlignment::Stretch);
                 m_dateButton.VerticalAlignment(wux::VerticalAlignment::Center);
                 m_dateButton.Margin(wux::Thickness{0, 0, 0, 6});
+                wuxc::ToolTipService::SetToolTip(m_dateButton, winrt::box_value(L"Show calendar"));
 
                 m_dateButtonText = wuxc::TextBlock();
                 m_dateButtonText.Text(FormatFilterDate(m_currentFilterDate));
@@ -2042,13 +2500,20 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
 
                 m_dateBtnClickToken = m_dateButton.Click([](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     if (!m_calendarView) return;
+                    bool isAbove = IsCalendarAboveAgenda();
                     if (m_calendarView.Visibility() == wux::Visibility::Visible) {
                         m_calendarView.Visibility(wux::Visibility::Collapsed);
-                        if (m_headerGrid) m_headerGrid.Margin(wux::Thickness{12, 10, 12, 0});
+                        wuxc::ToolTipService::SetToolTip(m_dateButton, winrt::box_value(L"Show calendar"));
+                        if (isAbove) {
+                            if (m_headerGrid) m_headerGrid.Margin(wux::Thickness{12, 10, 12, 0});
+                        }
                         UpdateMaxHeight(GetMaxHeightCollapsedSetting());
                     } else {
                         m_calendarView.Visibility(wux::Visibility::Visible);
-                        if (m_headerGrid) m_headerGrid.Margin(wux::Thickness{12, 2, 12, 0});
+                        wuxc::ToolTipService::SetToolTip(m_dateButton, winrt::box_value(L"Hide calendar"));
+                        if (isAbove) {
+                            if (m_headerGrid) m_headerGrid.Margin(wux::Thickness{12, 2, 12, 0});
+                        }
                         UpdateMaxHeight(GetMaxHeightExpandedSetting());
                     }
                 });
@@ -2078,7 +2543,7 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
                 m_datePicker.VerticalAlignment(wux::VerticalAlignment::Center);
                 m_datePicker.Margin(wux::Thickness{0, 0, 0, 6});
                 m_datePicker.IsTodayHighlighted(true);
-                m_datePicker.DateFormat(L"{dayofweek.full}, {month.full} {day.integer}");
+                m_datePicker.DateFormat(GetCalendarDatePickerFormat());
                 m_datePicker.Date(winrt::clock::now());
                 m_dateChangedToken = m_datePicker.DateChanged([](wuxc::CalendarDatePicker const&, wuxc::CalendarDatePickerDateChangedEventArgs const& args) {
                     OnDatePickerDateChanged(args.NewDate());
@@ -2107,7 +2572,13 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
                                         if (fe.Name() == L"CalendarGlyph") {
                                             fe.Visibility(wux::Visibility::Collapsed);
                                         } else if (fe.Name() == L"DateText") {
+                                            m_datePickerText = fe.try_as<wuxc::TextBlock>();
                                             wuxc::Grid::SetColumnSpan(fe, 2);
+                                            if (m_datePickerText) {
+                                                try {
+                                                    m_datePickerText.Text(FormatFilterDate(m_currentFilterDate));
+                                                } catch (...) {}
+                                            }
                                         }
                                     }
                                     queue.push_back(child);
@@ -2191,7 +2662,11 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
             m_headerGrid = wuxc::Grid();
             m_headerGrid.Name(L"CustomCalendarHeaderGrid");
             if (isInline) {
-                m_headerGrid.Margin(wux::Thickness{12, 10, 12, 0});
+                if (IsCalendarAboveAgenda()) {
+                    m_headerGrid.Margin(wux::Thickness{12, 10, 12, 0});
+                } else {
+                    m_headerGrid.Margin(wux::Thickness{12, 6, 12, 0});
+                }
             } else {
                 m_headerGrid.Margin(wux::Thickness{0, 6, 0, 0});
             }
@@ -2212,20 +2687,40 @@ void ReplaceCalendarContent(wuxc::ScrollViewer const& host) {
         if (!m_rootGrid) {
             m_rootGrid = wuxc::Grid();
             m_rootGrid.Name(L"CustomCalendarRootGrid");
+            bool isAbove = IsCalendarAboveAgenda();
             if (isInline) {
                 m_rootGrid.Margin(wux::Thickness{0, 0, 0, 4});
                 wuxc::RowDefinition row0{}; row0.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row0);
                 wuxc::RowDefinition row1{}; row1.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row1);
                 wuxc::RowDefinition row2{}; row2.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row2);
-                wuxc::Grid::SetRow(m_calendarView, 0); m_rootGrid.Children().Append(m_calendarView);
-                wuxc::Grid::SetRow(m_headerGrid, 1); m_rootGrid.Children().Append(m_headerGrid);
-                wuxc::Grid::SetRow(m_eventsScrollViewer, 2); m_rootGrid.Children().Append(m_eventsScrollViewer);
+                if (isAbove) {
+                    wuxc::Grid::SetRow(m_calendarView, 0); m_rootGrid.Children().Append(m_calendarView);
+                    wuxc::Grid::SetRow(m_headerGrid, 1); m_rootGrid.Children().Append(m_headerGrid);
+                    wuxc::Grid::SetRow(m_eventsScrollViewer, 2); m_rootGrid.Children().Append(m_eventsScrollViewer);
+                    m_eventsScrollViewer.Margin(wux::Thickness{12, 0, 12, 0});
+                } else {
+                    wuxc::Grid::SetRow(m_eventsScrollViewer, 0); m_rootGrid.Children().Append(m_eventsScrollViewer);
+                    wuxc::Grid::SetRow(m_headerGrid, 1); m_rootGrid.Children().Append(m_headerGrid);
+                    wuxc::Grid::SetRow(m_calendarView, 2); m_rootGrid.Children().Append(m_calendarView);
+                    m_eventsScrollViewer.Margin(wux::Thickness{12, 10, 12, 0});
+                    m_headerGrid.Margin(wux::Thickness{12, 6, 12, 0});
+                    m_calendarView.Margin(wux::Thickness{0, 0, 0, 4});
+                }
             } else {
                 m_rootGrid.Margin(wux::Thickness{12, 4, 12, 4});
                 wuxc::RowDefinition row0{}; row0.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row0);
                 wuxc::RowDefinition row1{}; row1.Height(wux::GridLength{0, wux::GridUnitType::Auto}); m_rootGrid.RowDefinitions().Append(row1);
-                wuxc::Grid::SetRow(m_headerGrid, 0); m_rootGrid.Children().Append(m_headerGrid);
-                wuxc::Grid::SetRow(m_eventsScrollViewer, 1); m_rootGrid.Children().Append(m_eventsScrollViewer);
+                if (isAbove) {
+                    wuxc::Grid::SetRow(m_headerGrid, 0); m_rootGrid.Children().Append(m_headerGrid);
+                    wuxc::Grid::SetRow(m_eventsScrollViewer, 1); m_rootGrid.Children().Append(m_eventsScrollViewer);
+                    m_headerGrid.Margin(wux::Thickness{0, 6, 0, 0});
+                    m_eventsScrollViewer.Margin(wux::Thickness{0, 0, 0, 0});
+                } else {
+                    wuxc::Grid::SetRow(m_eventsScrollViewer, 0); m_rootGrid.Children().Append(m_eventsScrollViewer);
+                    wuxc::Grid::SetRow(m_headerGrid, 1); m_rootGrid.Children().Append(m_headerGrid);
+                    m_eventsScrollViewer.Margin(wux::Thickness{0, 6, 0, 0});
+                    m_headerGrid.Margin(wux::Thickness{0, 6, 0, 0});
+                }
             }
         }
 
@@ -2332,8 +2827,8 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
         }
 
         bool forceFetch = g_workerForceFetch.exchange(false);
-        std::wstring icsPath = GetIcsPathSetting();
-        if (icsPath.empty()) {
+        auto icsPaths = GetIcsPathsSetting();
+        if (icsPaths.empty()) {
             Wh_Log(L"No ICS path configured in settings");
             {
                 std::lock_guard<std::mutex> lock(g_eventsMutex);
@@ -2343,36 +2838,48 @@ DWORD WINAPI WorkerThreadProc(LPVOID) {
             continue;
         }
 
-        Wh_Log(L"Fetching ICS from: %s (force=%d)", icsPath.c_str(),
-               forceFetch ? 1 : 0);
-
-        bool fromCache = false;
-        std::wstring content = FetchIcsContent(icsPath, forceFetch, fromCache);
-
-        if (HANDLE s = g_hStopEvent.load(); s && WaitForSingleObject(s, 0) == WAIT_OBJECT_0) {
-            break;
-        }
-
-        if (content.empty()) {
-            Wh_Log(
-                L"Failed to fetch ICS content (or empty), keeping existing "
-                L"content");
-            continue;
-        }
-
         std::vector<CalendarEvent> allEvents;
-        if (fromCache) {
-            std::lock_guard<std::mutex> lock(g_eventsMutex);
-            if (!g_allParsedEvents.empty()) {
-                allEvents = g_allParsedEvents;
-            }
-        }
+        std::unordered_set<std::wstring> seenKeys;
 
-        if (allEvents.empty()) {
-            allEvents = ParseIcs(content);
-            Wh_Log(L"Parsed %zu total events from ICS", allEvents.size());
-        } else {
-            Wh_Log(L"Reusing %zu parsed events from cache", allEvents.size());
+        for (const auto& icsPath : icsPaths) {
+            if (HANDLE s = g_hStopEvent.load(); s && WaitForSingleObject(s, 0) == WAIT_OBJECT_0) {
+                break;
+            }
+
+            Wh_Log(L"Processing calendar from: %s (force=%d)", icsPath.c_str(),
+                   forceFetch ? 1 : 0);
+
+            bool fromCache = false;
+            std::wstring content = FetchIcsContent(icsPath, forceFetch, fromCache);
+
+            if (content.empty()) {
+                Wh_Log(
+                    L"No content retrieved for %s, skipping", icsPath.c_str());
+                continue;
+            }
+
+            std::vector<CalendarEvent> calendarEvents;
+            {
+                std::lock_guard<std::mutex> lock(g_cacheMutex);
+                auto& entry = g_calendarCaches[icsPath];
+                if (fromCache && !entry.cachedEvents.empty()) {
+                    calendarEvents = entry.cachedEvents;
+                } else {
+                    calendarEvents = ParseIcs(content);
+                    entry.cachedEvents = calendarEvents;
+                    Wh_Log(L"Parsed %zu events from %s", calendarEvents.size(), icsPath.c_str());
+                }
+            }
+
+            for (auto& ev : calendarEvents) {
+                if (!ev.uid.empty()) {
+                    std::wstring key = ev.uid + L"#" + ev.recurrenceId;
+                    if (!seenKeys.insert(key).second) {
+                        continue;
+                    }
+                }
+                allEvents.push_back(std::move(ev));
+            }
         }
 
         if (HANDLE s = g_hStopEvent.load(); s && WaitForSingleObject(s, 0) == WAIT_OBJECT_0) {
@@ -2416,12 +2923,6 @@ void StopWorkerThread() {
 }
 
 void TriggerBackgroundFetch(bool force) {
-    ULONGLONG currentTick = GetTickCount64();
-    if (!force && currentTick - g_lastFetchTick < 1000) {
-        return;
-    }
-    g_lastFetchTick = currentTick;
-
     if (force) {
         g_workerForceFetch = true;
     }
@@ -2841,6 +3342,15 @@ void Wh_ModUninit() {
             }
         }
         g_pendingDispatcherActions.clear();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_cacheMutex);
+        g_calendarCaches.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_eventsMutex);
+        g_allParsedEvents.clear();
     }
 
     for (HWND hCoreWnd : GetCoreWnds()) {

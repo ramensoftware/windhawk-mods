@@ -20,10 +20,15 @@ const allowedAuthorNamePairs = [
 // current account.
 const allowedAuthorGithubPairs = [
     ['https://github.com/meteoni', 'https://github.com/meteony'],
+    ['https://github.com/getrektbynoob15', 'https://github.com/getrektbynoob20'],
 ];
 
 type ModAuthorData = {
     github: string;
+    // The numeric id of the github account, which, unlike the login, is never
+    // reused. Null if the account at the login isn't the author's. Kept from the
+    // last deploy once recorded.
+    githubId?: number | null;
     author: string;
     homepages: string[],
     twitter?: string;
@@ -106,6 +111,12 @@ class GitCache {
     }
 }
 
+class HttpError extends Error {
+    constructor(public statusCode: number | undefined, body: string) {
+        super('Request failed. status: ' + statusCode + ', body: ' + body);
+    }
+}
+
 // Inspired by https://gist.github.com/ktheory/df3440b01d4b9d3197180d5254d7fb65
 async function fetchJson(url: string, headers?: OutgoingHttpHeaders) {
     return new Promise<any>((resolve, reject) => {
@@ -119,7 +130,7 @@ async function fetchJson(url: string, headers?: OutgoingHttpHeaders) {
                     if (res.statusCode && res.statusCode >= 200 && res.statusCode <= 299) {
                         resolve(JSON.parse(body));
                     } else {
-                        reject('Request failed. status: ' + res.statusCode + ', body: ' + body);
+                        reject(new HttpError(res.statusCode, body));
                     }
                 });
             });
@@ -468,7 +479,14 @@ function generateChangelogEntry(modId: string, commit: string, lastCommit: strin
     return { changelogEntry, commitTime };
 }
 
-function generateModData(modId: string, changelogPath: string, modDir: string, modAuthorData: Record<string, ModAuthorData>, cache: GitCache) {
+function generateModData(
+    modId: string,
+    changelogPath: string,
+    modDir: string,
+    modAuthorData: Record<string, ModAuthorData>,
+    authorFirstSubmission: Map<string, number>,
+    cache: GitCache
+) {
     if (!fs.existsSync(modDir)) {
         fs.mkdirSync(modDir);
     }
@@ -501,6 +519,13 @@ function generateModData(modId: string, changelogPath: string, modDir: string, m
             homepage: metadata.homepage,
             twitter: metadata.twitter,
         }, modAuthorData);
+
+        const authorKey = metadata.github.toLowerCase();
+        const submissionTime = cache.getCommitMeta(commit).timestamp * 1000;
+        const firstSubmission = authorFirstSubmission.get(authorKey);
+        if (firstSubmission === undefined || submissionTime < firstSubmission) {
+            authorFirstSubmission.set(authorKey, submissionTime);
+        }
 
         const prerelease = metadata.version.includes('-');
         if (prerelease && sawReleaseVersion) {
@@ -543,8 +568,87 @@ function generateModData(modId: string, changelogPath: string, modDir: string, m
     fs.writeFileSync(versionsPath, JSON.stringify(versions));
 }
 
+async function fetchGithubUser(login: string): Promise<{ id: number; createdAt: number } | null> {
+    try {
+        const user = await fetchJson(`https://api.github.com/users/${encodeURIComponent(login)}`, {
+            Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+        });
+        return { id: user.id, createdAt: Date.parse(user.created_at) };
+    } catch (e) {
+        if (e instanceof HttpError && e.statusCode === 404) {
+            return null;
+        }
+        throw e;
+    }
+}
+
+// Ids are looked up only for accounts with no id recorded in the last deploy,
+// so that a deleted account whose login was registered again by someone else
+// keeps the id of its original owner. A login with no account, or with an
+// account created after the first submission under it, is recorded as null.
+async function assignGithubIds(
+    modAuthorData: Record<string, ModAuthorData>,
+    authorFirstSubmission: Map<string, number>
+) {
+    const lastDeployPath = process.env.WINDHAWK_MODS_LAST_DEPLOY_PATH;
+    if (!lastDeployPath) {
+        throw new Error('WINDHAWK_MODS_LAST_DEPLOY_PATH is not set');
+    }
+
+    const lastModAuthorDataPath = path.join(lastDeployPath, 'mod_author_data.json');
+    const lastModAuthorData: Record<string, ModAuthorData> = fs.existsSync(lastModAuthorDataPath)
+        ? JSON.parse(fs.readFileSync(lastModAuthorDataPath, 'utf8'))
+        : {};
+
+    // The login of a renamed account no longer belongs to the author.
+    const renamedGithubs = new Set(allowedAuthorGithubPairs.flatMap(pair => pair.slice(1)));
+
+    for (const [authorKey, data] of Object.entries(modAuthorData)) {
+        if (renamedGithubs.has(authorKey)) {
+            data.githubId = null;
+            continue;
+        }
+
+        const lastGithubId = lastModAuthorData[authorKey]?.githubId;
+        if (lastGithubId !== undefined) {
+            data.githubId = lastGithubId;
+            continue;
+        }
+
+        const match = data.github.match(/^https:\/\/github\.com\/([A-Za-z0-9-]+)$/);
+        if (!match) {
+            throw new Error(`Unexpected github URL '${data.github}'`);
+        }
+
+        const user = await fetchGithubUser(match[1]);
+        if (user === null) {
+            console.warn(`Github account ${data.github} doesn't exist, recording a null id`);
+            data.githubId = null;
+            continue;
+        }
+
+        const firstSubmission = authorFirstSubmission.get(authorKey);
+        if (firstSubmission === undefined) {
+            throw new Error(`No submissions found for ${data.github}`);
+        }
+
+        if (!(user.createdAt < firstSubmission)) {
+            console.warn(
+                `Github account ${data.github} (id ${user.id}) was created at` +
+                ` ${new Date(user.createdAt).toISOString()}, after its first submission at` +
+                ` ${new Date(firstSubmission).toISOString()}, recording a null id`);
+            data.githubId = null;
+            continue;
+        }
+
+        console.log(`Recording github id ${user.id} for ${data.github}`);
+        data.githubId = user.id;
+    }
+}
+
 function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
     const seenGithub = new Map<string, string>();
+    const seenGithubId = new Map<number, string>();
     const seenAuthor = new Map<string, string>();
     const seenHomepage = new Map<string, string>();
     const seenTwitter = new Map<string, string>();
@@ -555,6 +659,16 @@ function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
             throw new Error(`Duplicate github '${data.github}' found for authors '${authorKey}' and '${seenGithub.get(githubLower)}'`);
         }
         seenGithub.set(githubLower, authorKey);
+
+        if (data.githubId !== undefined && data.githubId !== null) {
+            const seenGithubIdKey = seenGithubId.get(data.githubId);
+            if (seenGithubIdKey !== undefined) {
+                throw new Error(
+                    `Duplicate github id ${data.githubId} found for authors '${authorKey}' and '${seenGithubIdKey}',` +
+                    ` a renamed account must be added to allowedAuthorGithubPairs`);
+            }
+            seenGithubId.set(data.githubId, authorKey);
+        }
 
         const authorLower = data.author.toLowerCase();
         const seenAuthorKey = seenAuthor.get(authorLower);
@@ -587,13 +701,14 @@ function validateModAuthorData(modAuthorData: Record<string, ModAuthorData>) {
     }
 }
 
-function generateModsData(cache: GitCache) {
+async function generateModsData(cache: GitCache) {
     const changelogDir = 'changelogs';
     if (!fs.existsSync(changelogDir)) {
         fs.mkdirSync(changelogDir);
     }
 
     const modAuthorData: Record<string, ModAuthorData> = {};
+    const authorFirstSubmission = new Map<string, number>();
 
     const modsSourceDir = fs.opendirSync('mods');
     try {
@@ -603,12 +718,14 @@ function generateModsData(cache: GitCache) {
                 const modId = modsSourceDirEntry.name.slice(0, -'.wh.cpp'.length);
                 const changelogPath = path.join(changelogDir, `${modId}.md`);
                 const modDir = path.join('mods', modId);
-                generateModData(modId, changelogPath, modDir, modAuthorData, cache);
+                generateModData(modId, changelogPath, modDir, modAuthorData, authorFirstSubmission, cache);
             }
         }
     } finally {
         modsSourceDir.closeSync();
     }
+
+    await assignGithubIds(modAuthorData, authorFirstSubmission);
 
     validateModAuthorData(modAuthorData);
 
@@ -909,7 +1026,7 @@ function generateRssFeed(feedType: 'updates' | 'releases', cache: GitCache) {
 async function main() {
     const cache = buildGitCache();
 
-    generateModsData(cache);
+    await generateModsData(cache);
 
     await generateModCatalogs(cache);
 
