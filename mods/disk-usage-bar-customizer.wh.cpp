@@ -4,7 +4,7 @@
 // @name:ro         Personalizator bară de utilizare discuri
 // @description     Customize everything about the disk usage bar from the This PC section in the File Explorer, including theme-aware colors, height, border, rounded corners and more.
 // @description:ro  Personalizează orice ține de bara de utilizare a discurilor din secțiunea Acest PC din Explorer, inclusiv culori în funcție de temă, înălțime, bordură, colțuri rotunjite și mai multe.
-// @version         1.2.0
+// @version         1.2.1
 // @author          Valer100
 // @github          https://github.com/Valer100
 // @include         explorer.exe
@@ -74,6 +74,9 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
       Use the warning progress color/style when the warning threshold (in percents) is reached (default: 90%).
     $description:ro: >-
       Folosește culoarea/stilul de progres pentru avertizare atunci când pragul de avertizare (în procente) este atins (prestabilit: 90%).
+    #! $format: slider
+    #! $min: 0
+    #! $max: 100
 
   - intermediatePercentageThreshold: 0
     $name: Intermediate percentage threshold
@@ -82,6 +85,9 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
       Use the intermediate progress color/style when the intermediate threshold (in percents) is reached. This threshold must be lower than the warning threshold for the intermediate state to be displayed. Setting this threshold to 0 will make the intermediate state not being displayed on the usage bar (default: 0%).
     $description:ro: >-
       Folosește culoarea de progres intermediară/stilul de progres intermediar atunci când pragul intermediar (în procente) este atins. Acest prag trebuie să fie mai mic decât pragul de avertizare pentru ca starea intermediară să fie afișată. Setarea acestui prag la 0 va face ca starea intermediară să nu fie afișată pe bara de utilizare (prestabilit: 0%).
+    #! $format: slider
+    #! $min: 0
+    #! $max: 100
 
   $name: General
   $name:ro: General
@@ -129,10 +135,12 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
       Render the usage bar using the dark mode parts from the "DarkMode_CopyEngine::Progress" class when dark mode is enabled. You must have Windows 11 build 26200.6899 or higher installed and the "Visual styles" rendering mode selected for this to work.
     $description:ro: >-
       Randează bara de utilizare folosind părți întunecate din clasa "DarkMode_CopyEngine::Progress" atunci când modul întunecat este activat. Trebuie să ai instalat Windows 11, build-ul 26200.6899 sau mai recent și modul de randare "Stiluri vizuale" selectat pentru ca această opțiune să funcționeze.
+    #! $showIf: {rendering.renderingMode: visualStyles}
 
   - winuiLikeRenderingCustomColors: false
     $name: Allow using custom colors when rendering using the WinUI style
     $name:ro: Permite folosirea de culori personalizate atunci când se randează folosind stilul WinUI
+    #! $showIf: {rendering.renderingMode: winuiLike}
 
   $name: Rendering
   $name:ro: Randare
@@ -146,6 +154,7 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
   - renderBarBorder: true
     $name: Render bar border
     $name:ro: Randează bordura barei
+    #! $hideIf: {rendering.renderingMode: winuiLike}
 
   - heightFactor: 100
     $name: Height factor
@@ -154,6 +163,10 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
       A factor that determines the height of the usage bar (in percents; default: 100%). The factor cannot be greater than 100%.
     $description:ro: >-
       Un factor care determină înălțimea barei de utilizare (în procente; prestabilit: 100%). Factorul nu poate să fie mai mare de 100%.
+    #! $format: slider
+    #! $min: 0
+    #! $max: 100
+    #! $hideIf: {rendering.renderingMode: winuiLike}
 
   - cornerRadiusFactor: 0
     $name: Corner radius factor
@@ -162,10 +175,15 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
       A factor that determines how rounded the bar's corners are (in percents; default: 0%). The factor cannot be greater than 100%.
     $description:ro: >-
       Un factor care determină cât de rotunjite sunt colțurile barei (în procente; prestabilit: 0%). Factorul nu poate să fie mai mare de 100%.
+    #! $format: slider
+    #! $min: 0
+    #! $max: 100
+    #! $hideIf: {rendering.renderingMode: winuiLike}
 
   - roundProgressRightCorners: true
     $name: Round progress' right corners
     $name:ro: Rotunjește colțurile din dreapta ale progresului
+    #! $hideIf: {rendering.renderingMode: winuiLike}
 
   - percentageLabel: dontShow
     $name: Percentage label
@@ -186,6 +204,8 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
   - percentageLabelFont: Segoe UI Semibold
     $name: Percentage label font
     $name:ro: Fontul etichetei pentru procentaj
+    #! $format: fontFamily
+    #! $hideIf: {customRendering.percentageLabel: dontShow}
 
   - percentageLabelSize: 70
     $name: Percentage label font size factor
@@ -194,32 +214,42 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
       Font size as a factor of the maximum bar's height (in percents; default: 70%). This is independent of the "Height factor" setting, so the label stays legible even if the bar's height is very thin.
     $description:ro: >-
       Dimensiunea fontului ca un factor al înălțimii maxime a barei (în procente; prestabilit: 70%). Această setare este independentă de setarea "Factor de înălțime" pentru ca eticheta să rămână lizibilă chiar și atunci când înălțimea barei este foarte subțire.
+    #! $format: slider
+    #! $min: 0
+    #! $max: 100
+    #! $hideIf: {customRendering.percentageLabel: dontShow}
 
 
   - lightModeColors:
     - barColor: "#E6E6E6"
       $name: Bar color
       $name:ro: Culoarea barei
+      #! $format: colorRgb
       
     - barBorderColor: "#BCBCBC"
       $name: Bar border color
       $name:ro: Culoarea bordurii barei
+      #! $format: colorRgb
       
     - progressColorNormal: "#0070CB"
       $name: Normal progress color
       $name:ro: Culoarea normală a progresului
+      #! $format: colorRgb
     
     - progressColorIntermediate: "#9D5D00"
       $name: Intermediate progress color
       $name:ro: Culoarea intermediară a progresului
+      #! $format: colorRgb
 
     - progressColorFull: "#C42B1C"
       $name: Warning progress color
       $name:ro: Culoarea de avertizare a progresului
+      #! $format: colorRgb
 
     - percentageLabelColor: "#000000"
       $name: Percentage label color
       $name:ro: Culoarea etichetei pentru procentaj
+      #! $format: colorRgb
         
     $name: Light mode colors
     $name:ro: Culori pentru modul luminos
@@ -229,26 +259,32 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
     - barColor: "#383838"
       $name: Bar color
       $name:ro: Culoarea barei
+      #! $format: colorRgb
       
     - barBorderColor: "#646464"
       $name: Bar border color
       $name:ro: Culoarea bordurii barei
+      #! $format: colorRgb
       
     - progressColorNormal: "#60CDFF"
       $name: Normal progress color
       $name:ro: Culoarea normală a progresului
+      #! $format: colorRgb
 
     - progressColorIntermediate: "#FCE100"
       $name: Intermediate progress color
       $name:ro: Culoarea intermediară a progresului
+      #! $format: colorRgb
       
     - progressColorFull: "#FF3D53"
       $name: Warning progress color
       $name:ro: Culoarea de avertizare a progresului
+      #! $format: colorRgb
 
     - percentageLabelColor: "#FFFFFF"
       $name: Percentage label color
       $name:ro: Culoarea etichetei pentru procentaj
+      #! $format: colorRgb
       
     $name: Dark mode colors
     $name:ro: Culori pentru modul întunecat
@@ -265,6 +301,7 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
 
 
     Dacă modul de randare "În stilul WinUI" este folosit, toate opțiunile din această secțiune vor fi ignorate, cu excepția celor care au legătură cu eticheta pentru procentaj. Dacă vrei să personalizezi culorile barei și să o randezi în continuare folosind stilul WinUI, activează opțiunea "Permite folosirea de culori personalizate atunci când se randează folosind stilul WinUI".
+  #! $showIf: {rendering.renderingMode: [custom, winuiLike]}
 */
 // ==/WindhawkModSettings==
 
@@ -274,6 +311,7 @@ This is a fork of the original [Disk Usage Bar Color](https://windhawk.net/mods/
 #include <vsstyle.h>
 #include <versionhelpers.h>
 #include <gdiplus.h>
+#include <string>
 
 using namespace Gdiplus;
 
@@ -445,6 +483,75 @@ static bool AreAppsUsingDarkTheme() {
 }
 
 
+static std::wstring GetModulePath(HMODULE module) {
+    if (!module) return L"<unknown>";
+
+    std::wstring path(MAX_PATH, L'\0');
+
+    while (true) {
+        DWORD len = GetModuleFileName(module, path.data(), path.size());
+        if (len == 0) return L"<unknown>";
+
+        // A result equal to the buffer size means the path was truncated.
+        if (len == path.size()) {
+            path.resize(len * 2);
+            continue;
+        }
+
+        path.resize(len);
+        return path;
+    }
+}
+
+
+static bool IsSystemModulePath(PCWSTR path) {
+    WCHAR windowsDir[MAX_PATH];
+    UINT len = GetSystemWindowsDirectory(windowsDir, ARRAYSIZE(windowsDir));
+
+    if (len == 0 || len >= ARRAYSIZE(windowsDir)) return false;
+
+    return _wcsnicmp(path, windowsDir, len) == 0 && path[len] == L'\\';
+}
+
+
+[[clang::noinline]] bool IsExpectedCallerModule(HMODULE expectedModule, void* address) {
+    HMODULE callerModule = nullptr;
+
+    if (
+        GetModuleHandleEx(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, 
+            (PCWSTR) address, &callerModule
+        ) && callerModule == expectedModule
+    ) {
+        return true;
+    }
+
+    std::wstring callerPath = GetModulePath(callerModule);
+    if (IsSystemModulePath(callerPath.c_str())) return false;
+
+    void* frames[4];
+    WORD count = CaptureStackBackTrace(3, ARRAYSIZE(frames), frames, nullptr);
+    
+    for (WORD i = 0; i < count; i++) {
+        callerModule = nullptr;
+
+        if (
+            GetModuleHandleEx(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, 
+                (PCWSTR) frames[i], &callerModule
+            ) && callerModule == expectedModule
+        ) {
+            return true;
+        }
+        
+        callerPath = GetModulePath(callerModule);
+        if (IsSystemModulePath(callerPath.c_str())) return false;
+    }
+
+    return false;
+}
+
+
 static COLORREF GetSystemAccentColorShade(int shade) {
     if (GetImmersiveColorFromColorSetEx && GetImmersiveUserColorSetPreference)
         return GetImmersiveColorFromColorSetEx(
@@ -541,7 +648,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
     // control drawing. From my inspection, Explorer seems to custom draw a 
     // progress bar like this only inside the drive list from the This PC section.
 
-    if ((iPartId != PP_FILL && iPartId != PP_TRANSPARENTBAR) || !pRect || pRect->left <= 0)
+    if ((iPartId != PP_FILL && iPartId != PP_TRANSPARENTBAR) || WindowFromDC(hdc) || !pRect || pRect->left <= 0)
         return DrawThemeBackground_orig(hTheme, hdc, iPartId, iStateId, pRect, pClipRect);
 
     WCHAR themeClass[256] = {};
@@ -552,15 +659,7 @@ HRESULT WINAPI HookedDrawThemeBackground(
     );
 
     if (isThemeClassValid) {
-        HMODULE callerModule = nullptr;
-        void* caller = __builtin_return_address(0);
-
-        BOOL isCallerShell32 = GetModuleHandleEx(
-            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, 
-            reinterpret_cast<LPCWSTR>(caller), &callerModule
-        ) && callerModule == g_shell32;
-
-        if (!isCallerShell32)
+        if (!IsExpectedCallerModule(g_shell32, __builtin_return_address(0)))
             return DrawThemeBackground_orig(hTheme, hdc, iPartId, iStateId, pRect, pClipRect);
 
         COLORREF color;
