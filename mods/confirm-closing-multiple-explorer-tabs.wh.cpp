@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              confirm-closing-multiple-explorer-tabs
 // @name            Confirm Closing Multiple Tabs in File Explorer
-// @description     Shows a confirmation dialog when closing a File Explorer window with multiple tabs open
-// @version         1.1
+// @description     Shows a confirmation dialog when attempting to close a File Explorer window with multiple tabs open
+// @version         1.1.1
 // @author          Kitsune
 // @github          https://github.com/AromaKitsune
 // @include         explorer.exe
@@ -12,15 +12,15 @@
 // ==WindhawkModReadme==
 /*
 # Confirm Closing Multiple Tabs in File Explorer
-This mod shows a confirmation dialog when you attempt to close a File Explorer
+This mod shows a confirmation dialog when attempting to close a File Explorer
 window with multiple tabs open, preventing accidental closure of all tabs.
 
-![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/confirm-closing-multiple-explorer-tabs_2026-06-20.png)
+![](https://raw.githubusercontent.com/AromaKitsune/My-Windhawk-Mods/main/screenshots/confirm-closing-multiple-explorer-tabs_2026-09-27.png)
 
 ## Configuration
 * **Tab count threshold:** The minimum number of open tabs required to show
   the confirmation dialog.
-* **Default button:** Choose whether "Close Tabs" or "Cancel" is the default
+* **Default button:** Choose whether "Close tabs" or "Cancel" is the default
   button in the confirmation dialog.
 */
 // ==/WindhawkModReadme==
@@ -34,10 +34,10 @@ window with multiple tabs open, preventing accidental closure of all tabs.
 - defaultButton: cancel
   $name: Default button
   $description: >-
-    Choose whether "Close Tabs" or "Cancel" is the default button in the
+    Choose whether "Close tabs" or "Cancel" is the default button in the
     confirmation dialog
   $options:
-    - closeTabs: Close Tabs
+    - closeTabs: Close tabs
     - cancel: Cancel
 */
 // ==/WindhawkModSettings==
@@ -95,7 +95,7 @@ LRESULT CALLBACK ExplorerSubclassProc(HWND hExplorerWnd, UINT uMsg,
             if (cTabs == 1)
             {
                 pszMainInstruction = L"Close 1 tab?";
-                pszCloseButtonText = L"Close Tab";
+                pszCloseButtonText = L"Close tab";
             }
             else
             {
@@ -103,7 +103,7 @@ LRESULT CALLBACK ExplorerSubclassProc(HWND hExplorerWnd, UINT uMsg,
                     ARRAYSIZE(szMainInstructionBuffer),
                     L"Close %d tabs?", cTabs);
                 pszMainInstruction = szMainInstructionBuffer;
-                pszCloseButtonText = L"Close Tabs";
+                pszCloseButtonText = L"Close tabs";
             }
 
             // Define custom buttons
