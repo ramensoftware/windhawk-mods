@@ -79,12 +79,9 @@ A highly customizable mouse cursor trail mod for Windhawk. Built on native D3D11
 
 Single / Flowing Gradient / Rainbow Flow / Warm Flow / Cool Flow / Neon Pulse / Velocity Color / Stripes / Fire / Aurora / Cursor Extract / Cursor Mix / Metallic Gold / Cyberpunk / Pastel / Hue Rotate / Dual Pulse / Sparkle / Heatmap / Phase Interference / Spectrum Split / Grain Jitter / Gradient Warp
 
-### Semantic Color System
+### Color Science
 
-* **Layered Tokens:** Every color resolves through `Default → Theme → Scene → User`. A layer overrides only the tokens it cares about; everything else falls through. 12 roles covering primary, secondary, accent, status (info/success/warning/error) and neutrals.
-* **Light & Dark Themes:** `Color Theme` picks the token tier; `Auto` follows the sampled desktop brightness.
-* **Scene Adaptation:** Desktop / Photo viewers / Game & fullscreen video / HDR, each retuning only its own tokens.
-* **WCAG 2.1 Accessibility:** `Accessibility Contrast` guarantees 3.0:1 (AA Large), 4.5:1 (AA) or 7.0:1 (AAA) against the sampled background, adjusting luminance without shifting hue.
+* **WCAG 2.1 Accessibility:** `Accessibility Contrast` guarantees 3.0:1 (AA Large), 4.5:1 (AA) or 7.0:1 (AAA) against the sampled background, adjusting luminance without shifting hue. Independent of Trail Adaptive Contrast.
 * **Chroma-Preserving Adjustments:** Lighten/darken scale Rec.709 luma instead of lerping toward white, so saturated colors stay saturated; only a gamut-limited residual falls back to mixing.
 * **Single Source of Truth:** The luma convention and the shared color helpers exist once and are mirrored by a shared HLSL prelude, eliminating the previously duplicated (comment-synced) shader copies.
 
@@ -359,7 +356,7 @@ All settings are organized into collapsible sections in the settings dialog. Hov
     $description:zh-CN: 移动速度和加速度影响拖尾宽度，快速移动时更宽。
     $description:zh-TW: 移動速度和加速度影響拖尾寬度，快速移動時更寬。
     $description:ja-JP: 速度と加速度に応じてトレイル幅が変化します。
-  - enable_frame_sync: false
+  - enable_frame_sync: true
     $name: Frame Sync (vsync)
     $name:zh-CN: 帧同步 (vsync)
     $name:zh-TW: 幀同步 (vsync)
@@ -616,60 +613,6 @@ All settings are organized into collapsible sections in the settings dialog. Hov
     $description:zh-CN: 自定义模式下的色相偏移角度，0-360度。
     $description:zh-TW: 自訂模式下的色相偏移角度，0-360度。
     $description:ja-JP: カスタムモードの色相シフト角度。0-360度。
-  - color_theme_mode: auto
-    $name: Color Theme
-    $name:zh-CN: 颜色主题
-    $name:zh-TW: 顏色主題
-    $name:ja-JP: カラーテーマ
-    $options:
-    - auto: Auto (follow background)
-    - light: Light background
-    - dark: Dark background
-    $options:zh-CN:
-    - auto: 自动（跟随背景）
-    - light: 浅色背景
-    - dark: 深色背景
-    $options:zh-TW:
-    - auto: 自動（跟隨背景）
-    - light: 淺色背景
-    - dark: 深色背景
-    $options:ja-JP:
-    - auto: 自動（背景に追従）
-    - light: 明るい背景
-    - dark: 暗い背景
-    $description: Which token tier the colour system resolves. Auto samples desktop brightness and switches automatically. Affects only token-derived colours such as the default neutral outline, never your explicit main colour.
-    $description:zh-CN: 颜色系统使用哪一套令牌。自动模式下采样桌面亮度并自动切换。仅影响由令牌派生的颜色（如默认中性描边色），不会覆盖你手动指定的主色。
-    $description:zh-TW: 顏色系統使用哪一套令牌。自動模式下採樣桌面亮度並自動切換。僅影響由令牌派生的顏色（如預設中性描邊色），不會覆蓋你手動指定的主色。
-    $description:ja-JP: カラーシステムが解決するトークン層。オートではデスクトップの明るさをサンプリングして自動切替します。トークン由来の色（既定の中性アウトライン色など）のみに影響し、明示的に指定した基本色は上書きしません。
-  - color_scene: desktop
-    $name: Color Scene
-    $name:zh-CN: 颜色场景
-    $name:zh-TW: 顏色場景
-    $name:ja-JP: カラーシーン
-    $options:
-    - desktop: Desktop
-    - photo: Photo and wallpaper viewers
-    - game: Game and fullscreen video
-    - hdr: HDR output
-    $options:zh-CN:
-    - desktop: 桌面
-    - photo: 看图软件与壁纸
-    - game: 游戏与全屏视频
-    - hdr: HDR 输出
-    $options:zh-TW:
-    - desktop: 桌面
-    - photo: 看圖軟體與桌布
-    - game: 遊戲與全螢幕影片
-    - hdr: HDR 輸出
-    $options:ja-JP:
-    - desktop: デスクトップ
-    - photo: 画像ビューアと壁紙
-    - game: ゲームと全画面動画
-    - hdr: HDR 出力
-    $description: Scene tier of the colour system. A scene adjusts only the tokens it cares about and leaves the rest to the theme below it.
-    $description:zh-CN: 颜色系统的场景层。每个场景只调整自己关心的令牌，其余令牌沿用下层主题的值。
-    $description:zh-TW: 顏色系統的場景層。每個場景只調整自己關心的令牌，其餘令牌沿用下層主題的值。
-    $description:ja-JP: カラーシステムのシーン層。各シーンは自身が関与するトークンのみを調整し、残りは下位のテーマに委ねます。
   - contrast_target: off
     $name: Accessibility Contrast
     $name:zh-CN: 无障碍对比度
@@ -2117,7 +2060,7 @@ All settings are organized into collapsible sections in the settings dialog. Hov
     $description:zh-CN: 将音频频段独立联动到物理：低频→引力，中频→磁场，高频→热噪声。
     $description:zh-TW: 將音訊頻段獨立聯動到物理：低頻→引力，中頻→磁場，高頻→熱噪聲。
     $description:ja-JP: オーディオ帯域を物理に連動：低音→重力、中音→磁場、高音→熱ノイズ。
-  - enable_music_reactive: true
+  - enable_music_reactive: false
     $name: Music Reactive
     $name:zh-CN: 音乐响应
     $name:zh-TW: 音樂回應
@@ -2275,7 +2218,7 @@ All settings are organized into collapsible sections in the settings dialog. Hov
   $name:ja-JP: クリック効果
 
 - System:
-  - super_performance_mode: true
+  - super_performance_mode: false
     $name: Super Performance Mode
     $name:zh-CN: 超级性能模式
     $name:zh-TW: 超級效能模式
@@ -2353,7 +2296,7 @@ All settings are organized into collapsible sections in the settings dialog. Hov
     - alt_ctrl: Alt + Ctrl
     - alt_shift: Alt + Shift
     - alt_ctrl_shift: Alt + Ctrl + Shift
-  - hotkey_toggle_key: Q
+  - hotkey_toggle_key: ""
     $name: Show / Hide Hotkey Key
     $name:zh-CN: 显示/消失热键按键
     $name:zh-TW: 顯示/消失熱鍵按鍵
@@ -2362,7 +2305,7 @@ All settings are organized into collapsible sections in the settings dialog. Hov
     $description:zh-CN: 与上方组合键同时按下以显示/隐藏整个特效的按键。可填：单个字符（A-Z、0-9）、F1-F24，或名称：space enter tab esc up down left right home end pgup pgdn ins del media_play media_next media_prev media_stop vol_up vol_down vol_mute browser_back browser_forward。Fn 组合键同样可用——笔记本会把 Fn 组合上报为多媒体键，用上面的名称绑定即可。留空=关闭。
     $description:zh-TW: 與上方組合鍵同時按下以顯示/隱藏整個特效的按鍵。可填：單一字元（A-Z、0-9）、F1-F24，或名稱：space enter tab esc up down left right home end pgup pgdn ins del media_play media_next media_prev media_stop vol_up vol_down vol_mute browser_back browser_forward。Fn 組合鍵同樣可用——筆電會把 Fn 組合上報為多媒體鍵，用上面的名稱綁定即可。留空=關閉。
     $description:ja-JP: 上の修飾キーと同時押しでエフェクト全体を表示/非表示にするキー。1文字(A-Z,0-9)、F1-F24、または名前(space enter tab esc up down left right home end pgup pgdn ins del media_play media_next media_prev media_stop vol_up vol_down vol_mute)を指定。Fn組み合わせも可能（メディアキーとして報告されます）。空=無効。
-  - hotkey_trail_key: Z
+  - hotkey_trail_key: ""
     $name: Hide Trail Hotkey Key
     $name:zh-CN: 隐藏拖尾热键按键
     $name:zh-TW: 隱藏拖尾熱鍵按鍵
@@ -2371,7 +2314,7 @@ All settings are organized into collapsible sections in the settings dialog. Hov
     $description:zh-CN: 与同一组合键同时按下以开关拖尾飘带。按键名称同上。留空=关闭。
     $description:zh-TW: 與同一組合鍵同時按下以開關拖尾飄帶。按鍵名稱同上。留空=關閉。
     $description:ja-JP: 同じ修飾キーと同時押しでトレイルを切り替えます。キー名は上と同じ。空=無効。
-  - hotkey_particles_key: E
+  - hotkey_particles_key: ""
     $name: Hide Particles Hotkey Key
     $name:zh-CN: 隐藏粒子热键按键
     $name:zh-TW: 隱藏粒子熱鍵按鍵
@@ -2641,46 +2584,22 @@ static D2D1_COLOR_F LerpColorOKLab(D2D1_COLOR_F a, D2D1_COLOR_F b, float t) {
     return OKLabtoRGB(ca.L + (cb.L - ca.L) * t, ca.a + (cb.a - ca.a) * t, ca.b + (cb.b - ca.b) * t);
 }
 
-// ===================== mtcolor：语义化颜色系统 / mtcolor: semantic colour system =====================
+// ===================== mtcolor：颜色科学工具 / mtcolor: colour science utilities =====================
 //
 // 存在目的：此前颜色逻辑是散落各处的裸值 —— 23 个颜色模式里内嵌 RGB/HSV 立即数、亮度权重 CPU 用 Rec.601
 // 而 GPU 用 Rec.709、同一个 SetLuma 在两段 HLSL 里一式两份靠注释「手动保持同步」。本命名空间把颜色
-// 收拢成一套有层次、有覆写规则、可被数值验证的系统。
+// 收拢成一套可被数值验证的纯函数工具集。
 // Why this exists: the colour logic used to be scattered raw literals — hand-written RGB/HSV constants across
 // 23 colour modes, Rec.601 luma weights on the CPU vs Rec.709 on the GPU, and two hand-synced copies of SetLuma.
-// mtcolor turns colour into a layered system with explicit override rules and numeric verification.
+// mtcolor turns colour into a verified set of pure functions with a single source of truth.
 //
 // ---- 三条硬约束 / three hard constraints ----
 //   C1 单一事实源：亮度口径、对比度算法、共用色学 helper 各只有一处定义，且 CPU 与 GPU 必须口径一致。
 //      Single source of truth for the luma convention, the contrast algorithm and the shared helpers; CPU/GPU agree.
-//   C2 语义先行：业务代码引用「角色令牌」，不再写裸 RGB 立即数。
-//      Call sites reference role tokens instead of raw RGB literals.
-//   C3 可验证：本层所有数值函数都是无副作用的纯函数，由 _color_system_test.cpp 覆盖。
-//      All numeric functions here are pure and covered by _color_system_test.cpp.
-//
-// ---- 分层 / layering ----
-//   Primitives → Tokens(Role) → Theme(Light|Dark) → Scene(Desktop|Photo|Game|HDR) → User override
-//
-// ---- 覆写规则（后者覆盖前者）/ override precedence (later wins) ----
-//   Default < Theme < Scene < User
-//   ① Default：随 Mod 内置的基准值。任意组合下都保证有可用值，绝不出现「未初始化」。
-//   ② Theme  ：按 Tone 给出针对该环境底色优化过的令牌值（见 Tone 注释：描述的是**背景**，不是前景）。
-//   ③ Scene  ：运行环境（桌面/图片/游戏/HDR）对**自己关心的**令牌做定向修正。
-//   ④ User   ：用户在设置里显式指定的值，优先级最高。
-//   规则：上层只允许覆写自己关心的令牌，未覆写的令牌自动落回下层（稀疏覆写，不做全量拷贝）。
-//   Rule: a layer overrides ONLY the tokens it cares about; unlisted tokens fall through to the layer below.
-//
-// ---- 扩展规则 / extension rules ----
-//   E1 新增角色：在 Role 枚举末尾（Count 之前）追加，并在 kDefaultTokens / kThemeLight / kThemeDark
-//      三张表的同一位置补齐初值。三张表共用 Role 做索引，下方的 static_assert 会在漏补时直接编译失败。
-//   E2 新增场景：在 Scene 枚举追加，并在 SceneOverrideTable 登记需要修正的令牌；**不允许**直接改 Default。
-//   E3 禁止：业务层不得用立即数替代令牌；不得绕过 Resolve 直接读 Theme 表。
-//   E4 改亮度口径必须先改 kLuma709 与其 HLSL 孪生实现（见 g_psShader 前导宏），并同步跑 test。
-//
-// MTCOLOR-EXTRACT-BEGIN —— _gen_color_test.py 会抽取这两个哨兵之间的整块源码，生成 _color_system_test.cpp。
-// MTCOLOR-EXTRACT-END   —— 颜色系统的真值只有这一份，测试因此不会退化成「复制一份、可能过期」的版本。
-// The generator lifts everything between these sentinels verbatim, so the test exercises the real definitions
-// rather than a hand-copied duplicate that can silently drift.
+//   C2 可验证：本层所有数值函数都是无副作用的纯函数。
+//      All numeric functions here are pure.
+//   C3 改亮度口径必须先改 kLuma709 与其 HLSL 孪生实现（见 g_psShader 前导宏）。
+//      Changing the luma convention requires updating kLuma709 and its HLSL twin together.
 namespace mtcolor {
 
 // ---------------- 第 1 层：原语 / primitives ----------------
@@ -2843,212 +2762,6 @@ inline D2D1_COLOR_F EnsureContrast(D2D1_COLOR_F fg, D2D1_COLOR_F bg, float targe
     return AdjustLumaForContrast(fg, bg, targetRatio);
 }
 
-// ---------------- 第 2 层：语义令牌 / semantic tokens ----------------
-
-// 角色语义。每个成员都回答「它承担什么职责」，而不是「它是什么颜色」。
-// Roles answer "what job does it do", not "which colour is it".
-enum class Role : int {
-    // 主色：拖尾/粒子的默认表达色 / primary expression colour
-    Primary = 0,
-    PrimaryVariant,
-    // 辅助色：与主色配合的第二、第三表达色 / supporting expression colours
-    Secondary,
-    Accent,
-    // 功能状态色：表达运行/健康状态，语义上不允许参与审美循环 / status colours: never part of an aesthetic cycle
-    StatusInfo,
-    StatusSuccess,
-    StatusWarning,
-    StatusError,
-    // 中性色：轮廓、承载面、禁用态与前景文字 / neutrals: outline, surface, disabled, foreground
-    NeutralOutline,
-    NeutralSurface,
-    NeutralDisabled,
-    NeutralOnSurface,
-    Count
-};
-constexpr int kRoleCount = static_cast<int>(Role::Count);
-
-inline const wchar_t* RoleName(Role r) {
-    switch (r) {
-        case Role::Primary:          return L"Primary";
-        case Role::PrimaryVariant:   return L"PrimaryVariant";
-        case Role::Secondary:        return L"Secondary";
-        case Role::Accent:           return L"Accent";
-        case Role::StatusInfo:       return L"StatusInfo";
-        case Role::StatusSuccess:    return L"StatusSuccess";
-        case Role::StatusWarning:    return L"StatusWarning";
-        case Role::StatusError:      return L"StatusError";
-        case Role::NeutralOutline:   return L"NeutralOutline";
-        case Role::NeutralSurface:   return L"NeutralSurface";
-        case Role::NeutralDisabled:  return L"NeutralDisabled";
-        case Role::NeutralOnSurface: return L"NeutralOnSurface";
-        default:                     return L"<unknown>";
-    }
-}
-
-// ① Default：Mod 内置基准色。取自既有默认调色板（custom_color / gradient_colors），
-//            保证系统在任何主题/场景组合下都不会出现未定义颜色。
-// Default tier: taken from the pre-existing default palette so no theme/scene combination yields an undefined colour.
-constexpr DWORD kDefaultTokens[kRoleCount] = {
-    0x00BFFF,  // Primary          —— 既有 custom_color 默认值
-    0x66D9FF,  // PrimaryVariant   —— 主色的内侧高光
-    0xFF6B35,  // Secondary        —— 既有 gradient[0]
-    0xFFD700,  // Accent           —— 既有 gradient[2]
-    0x00BFFF,  // StatusInfo
-    0x2FBF71,  // StatusSuccess
-    0xFFB020,  // StatusWarning
-    0xFF4D4F,  // StatusError
-    0x808090,  // NeutralOutline
-    0x1A1A1F,  // NeutralSurface
-    0x5A5A64,  // NeutralDisabled
-    0xF2F2F7,  // NeutralOnSurface
-};
-
-// ---------------- 第 3 层：明暗主题 / light & dark themes ----------------
-
-// Tone 描述的是**环境背景**的明暗，不是前景。这是本项目最容易搞反的语义，务必按此注释理解：
-// Tone::Light 表示「亮背景环境」，此时令牌会被替换为对浅色底更可见的取值。
-// Tone describes the AMBIENT BACKGROUND, not the foreground. This is the one semantic that is easy to invert:
-// Tone::Light means a bright backdrop, and tokens switch to values that stay visible against it.
-enum class Tone : int { Light = 0, Dark = 1, Count };
-constexpr int kToneCount = static_cast<int>(Tone::Count);
-
-// 自动判定：以采样到的背景亮度中值分界。0.5 与色学 gamma 中点对齐，也与既有 HLSL
-// 自适应对比度的判定中点（bgLuminance - 0.5）保持一致，避免 CPU/GPU 各说各话。
-// Auto-detect: split at the background-luma midpoint. 0.5 lines up with the existing HLSL adaptive-contrast
-// knee (bgLuminance - 0.5), so CPU and GPU never disagree about which side we are on.
-inline Tone ToneFromBackground(float bgLuminance) {
-    return (bgLuminance >= 0.5f) ? Tone::Light : Tone::Dark;
-}
-
-// ② Theme：针对特定背景优化过的令牌。0xFFFFFFFF 表示该角色**不覆写**，自动落回 Default（稀疏覆写）。
-// Theme tier: tokens tuned for a specific backdrop. 0xFFFFFFFF marks "no override" → falls through to Default.
-constexpr DWORD kNoOverride = 0xFFFFFFFFu;
-
-constexpr DWORD kThemeLightTokens[kRoleCount] = {
-    0x0090D8,  // Primary        —— 亮底上加深，拉高对比
-    0x4FC3F7,  // PrimaryVariant
-    0xE85D26,  // Secondary
-    0xE6BE00,  // Accent
-    0x0090D8,  // StatusInfo
-    0x1F9D5B,  // StatusSuccess
-    0xD98A00,  // StatusWarning
-    0xD93636,  // StatusError
-    0x4A4A55,  // NeutralOutline —— 亮底轮廓必须比 Default 更深
-    0xE8E8EE,  // NeutralSurface
-    0x9A9AA5,  // NeutralDisabled
-    0x1A1A1F,  // NeutralOnSurface
-};
-
-constexpr DWORD kThemeDarkTokens[kRoleCount] = {
-    0x33CCFF,  // Primary        —— 暗底上提亮
-    0x8ADCFF,  // PrimaryVariant
-    0xFF8A5C,  // Secondary
-    0xFFE04D,  // Accent
-    0x33CCFF,  // StatusInfo
-    0x4FD98A,  // StatusSuccess
-    0xFFC24D,  // StatusWarning
-    0xFF7875,  // StatusError
-    0xA0A0B0,  // NeutralOutline —— 暗底轮廓反过来要变浅
-    0x101014,  // NeutralSurface
-    0x4A4A55,  // NeutralDisabled
-    0xF2F2F7,  // NeutralOnSurface
-};
-
-// ---------------- 第 4 层：场景适配 / scene adaptation ----------------
-
-enum class Scene : int { Desktop = 0, Photo = 1, Game = 2, Hdr = 3, Count };
-constexpr int kSceneCount = static_cast<int>(Scene::Count);
-
-inline const wchar_t* SceneName(Scene s) {
-    switch (s) {
-        case Scene::Desktop: return L"Desktop";
-        case Scene::Photo:   return L"Photo";
-        case Scene::Game:    return L"Game";
-        case Scene::Hdr:     return L"Hdr";
-        default:             return L"<unknown>";
-    }
-}
-
-struct SceneOverride {
-    Scene scene;
-    Role role;
-    DWORD value;
-};
-
-// ③ Scene：只对真正需要偏离的角色登记条目。规则 E2 —— 扩展只动这张表，不许改 Default。
-// Scene tier: only genuinely deviating roles get an entry (extension rule E2 — extend this table, never Default).
-// Photo：壁纸/照片浏览，画面本身可能极亮且高频变化，收窄饱和、加深轮廓以保证可读。
-// Game ：全屏游戏/视频，内容高度动态且常偏暗，抬亮前景并加硬轮廓。
-// Hdr  ：宽色域输出，适度降低峰值避免过曝。
-constexpr SceneOverride kSceneOverrides[] = {
-    {Scene::Photo, Role::Primary,          0x0072B5},
-    {Scene::Photo, Role::Secondary,        0xC24E20},
-    {Scene::Photo, Role::NeutralOutline,   0x3A3A44},
-    {Scene::Game,  Role::Primary,          0x4FD6FF},
-    {Scene::Game,  Role::PrimaryVariant,   0x9CFFFF},
-    {Scene::Game,  Role::NeutralOutline,   0xB8B8C8},
-    {Scene::Hdr,   Role::Primary,          0x2AACE8},
-    {Scene::Hdr,   Role::Accent,           0xD9BE33},
-};
-constexpr int kSceneOverrideCount = static_cast<int>(sizeof(kSceneOverrides) / sizeof(kSceneOverrides[0]));
-
-// ---------------- 第 5 层：解析（覆写链求值）/ resolution ----------------
-
-// 稀疏令牌表：缺省标记表示该角色未被本层覆写 / sparse token table: default flag = this layer does not override
-struct TokenSet {
-    D2D1_COLOR_F value[kRoleCount];
-    bool present[kRoleCount];
-};
-
-// 覆写链求值：Default < Theme < Scene < User。后写入者优先，未登记者自动落回下层。
-// Resolve the chain Default < Theme < Scene < User: later writes win, unregistered roles fall through.
-inline TokenSet ResolveChain(Scene scene, Tone tone,
-                             const D2D1_COLOR_F* userColors = nullptr,
-                             const bool* userMask = nullptr) {
-    TokenSet out = {};
-    // ① Default：全量铺底，保证无空洞 / seed everything so no role is ever uninitialised
-    for (int i = 0; i < kRoleCount; i++) {
-        out.value[i] = FromHex(kDefaultTokens[i]);
-        out.present[i] = true;
-    }
-    // ② Theme
-    const DWORD* themeTable = (tone == Tone::Light) ? kThemeLightTokens : kThemeDarkTokens;
-    for (int i = 0; i < kRoleCount; i++) {
-        if (themeTable[i] != kNoOverride) {
-            out.value[i] = FromHex(themeTable[i]);
-            out.present[i] = true;
-        }
-    }
-    // ③ Scene
-    for (int k = 0; k < kSceneOverrideCount; k++) {
-        if (kSceneOverrides[k].scene != scene)
-            continue;
-        const int i = static_cast<int>(kSceneOverrides[k].role);
-        if (i < 0 || i >= kRoleCount)
-            continue;
-        out.value[i] = FromHex(kSceneOverrides[k].value);
-        out.present[i] = true;
-    }
-    // ④ User
-    if (userColors && userMask) {
-        for (int i = 0; i < kRoleCount; i++) {
-            if (userMask[i]) {
-                out.value[i] = userColors[i];
-                out.present[i] = true;
-            }
-        }
-    }
-    return out;
-}
-
-inline D2D1_COLOR_F TokenColor(const TokenSet& set, Role role) {
-    const int i = static_cast<int>(role);
-    if (i < 0 || i >= kRoleCount)
-        return kColorWhite;   // 越界一律退回白色，绝不返回未初始化内存 / never return uninitialised memory
-    return set.value[i];
-}
-
 // 可访问性目标档位：直接对齐 WCAG 2.1，不用「0.42」这种来路不明的系数。
 // Accessibility tiers map straight onto WCAG 2.1 instead of opaque magic factors.
 enum class ContrastLevel : int { Off = 0, AaLarge = 1, Aa = 2, Aaa = 3, Count };
@@ -3062,17 +2775,7 @@ inline float TargetRatioOf(ContrastLevel level) {
     }
 }
 
-// MTCOLOR-EXTRACT-END
 }  // namespace mtcolor
-
-// 编译期守卫：三张令牌表必须覆盖全部角色，漏补在编译器就炸，而不是运行时渲染出奇怪颜色。
-// E1 的兜底。/ Compile-time guard for E1: all three tables must cover every role or the build fails.
-static_assert(sizeof(mtcolor::kDefaultTokens) / sizeof(mtcolor::kDefaultTokens[0]) == mtcolor::kRoleCount,
-              "kDefaultTokens must have one entry per Role");
-static_assert(sizeof(mtcolor::kThemeLightTokens) / sizeof(mtcolor::kThemeLightTokens[0]) == mtcolor::kRoleCount,
-              "kThemeLightTokens must have one entry per Role");
-static_assert(sizeof(mtcolor::kThemeDarkTokens) / sizeof(mtcolor::kThemeDarkTokens[0]) == mtcolor::kRoleCount,
-              "kThemeDarkTokens must have one entry per Role");
 
 // 预计算256色渐变LUT（OKLab空间，多色点均匀分布）/ Precompute 256-entry gradient LUT (OKLab, evenly distributed color stops)
 // 仅在 g_gradientLUTDirty 时调用；每条路径都必须清掉脏标记，否则会退化为每次采样都重建。
@@ -3421,29 +3124,6 @@ constexpr float g_colorShiftSatBoost = 0.55f;  // 饱和度保底
 constexpr float g_colorShiftValBoost = 0.72f;  // 亮度保底
 static DWORD s_lastColorExtract = 0;
 
-// ---- mtcolor 运行时配置与解析结果 / mtcolor runtime configuration and resolved tokens ----
-int g_colorThemeMode = 0;    // 0=auto 1=light 2=dark   —— Colors.color_theme_mode
-int g_colorSceneMode = 0;    // 0=desktop 1=photo 2=game 3=hdr —— Colors.color_scene
-int g_contrastTarget = 0;    // 0=off 1=aa_large 2=aa 3=aaa    —— Colors.contrast_target
-// 解析后的令牌表采用双缓冲：写侧只更新「非活动」的那份、更新完再原子翻转索引，
-// 因此读侧永远不会看到半更新的表 —— TokenSet 是聚合体（多个 float + bool），整体写无法原子化，
-// 而给每个分量套 atomic_ref 又要写十几笔，两者都不如索引翻转干净。
-// Resolved tokens use a double buffer: the writer updates only the inactive slot then flips an atomic index,
-// so a reader never observes a half-written table. TokenSet is an aggregate whose whole-struct write cannot be
-// atomic, and per-component atomic_ref would need a dozen stores — index flipping is cleaner than both.
-mtcolor::TokenSet g_colorTokensBuf[2] = {};
-std::atomic<int> g_colorTokensIndex{0};
-// g_colorTokensValid 已删除：只被写、从未被读 —— 正是本项目此前踩过「后台发布但无人读取」的同一类坑。
-// g_colorTokensValid removed: written but never read, the same write-only-state trap hit earlier in this project.
-// 场景（Scene）完全由 Colors.color_scene 显式指定 —— 不做隐式自动推断。
-// 原因：此前曾经给「后台发布但无人读取」的全局变量留过坑；与其埋一个自己改全局､别人还得猜的规则，
-// 不如把选择权显式交给用户。需要自动感知时可在此接入，但必须有读取方。
-// Scene is selected explicitly via Colors.color_scene — no implicit inference. Implicit magic here would be a
-// write-only knob; extension points should only be added together with the code that reads them.
-
-// 读侧入口与各层覆写链的求值点定义在 g_bgLuminance 之后（auto 模式需要读它）。
-// Reader entry point and the chain evaluation live after g_bgLuminance (auto mode reads it).
-
 // ===================== 后台采样线程（GDI 回读剥离，避免阻塞渲染线程 vsync）=====================
 // GetDC(NULL)/BitBlt 在 DWM 下触发全屏 GPU→CPU 回读，放在独立低优先级线程执行
 static HANDLE g_bgSampleThread = NULL;
@@ -3568,37 +3248,11 @@ bool g_enableFrameSync = true;       // 帧同步开关（vsync / DWM 合成同�
 bool g_enhancedGlow = true;
 bool g_enableHeadHighlight = true;
 bool g_adaptiveContrast = false;   // 自适应对比度
+int g_contrastTarget = 0;    // 0=off 1=aa_large 2=aa 3=aaa —— Colors.contrast_target
     // 后台采样线程写、渲染线程（UpdateConstantBuffer/顶点构造）读，改为 atomic 消除数据竞争（UB）
     // Written by the background sampler thread and read by the render thread (UpdateConstantBuffer / vertex
     // building); atomic removes the data race (UB).
     std::atomic<float> g_bgLuminance{0.5f};  // 背景亮度缓存（0=暗，1=亮）/ cached bg luminance (0=dark, 1=bright)
-
-// 读侧入口：返回当前活动令牌表的只读引用。业务层一律经此取值。
-// Reader-side entry: const reference to the active token table. All callers go through here.
-inline const mtcolor::TokenSet& ActiveTokens() {
-    return g_colorTokensBuf[g_colorTokensIndex.load(std::memory_order_acquire)];
-}
-
-// 按当前 Theme / Scene / 用户设定重新解析令牌，并发布到另一份缓冲。
-// 这是覆写链（Default < Theme < Scene < User）唯一的求值点，业务层不允许自己拼方案。
-// auto 模式下 Tone 取自采样到的背景亮度，因此需要周期性调用本函数。
-// Sole evaluation point of the override chain; callers must not assemble their own token sets. In auto mode the
-// Tone comes from the sampled background luminance, so this must be refreshed periodically.
-void RefreshResolvedTokens() {
-    mtcolor::Tone tone;
-    switch (g_colorThemeMode) {
-        case 1:  tone = mtcolor::Tone::Light; break;
-        case 2:  tone = mtcolor::Tone::Dark;  break;
-        default: tone = mtcolor::ToneFromBackground(g_bgLuminance.load(std::memory_order_relaxed)); break;
-    }
-    const mtcolor::Scene scene = static_cast<mtcolor::Scene>(
-        (g_colorSceneMode >= 0 && g_colorSceneMode < mtcolor::kSceneCount) ? g_colorSceneMode : 0);
-    // 写侧只碰非活动缓冲 / write only into the inactive slot
-    const int cur = g_colorTokensIndex.load(std::memory_order_relaxed);
-    const int next = cur ^ 1;
-    g_colorTokensBuf[next] = mtcolor::ResolveChain(scene, tone);
-    g_colorTokensIndex.store(next, std::memory_order_release);
-}
 
 DWORD g_lastBgSample = 0;          // 上次背景采样时间
 bool g_enableTrailShadow = true;
@@ -9679,24 +9333,8 @@ void LoadSettings() {
     g_colorShiftAngle = Wh_GetIntSetting(L"Colors.color_shift_angle");
     if (g_colorShiftAngle < 0) g_colorShiftAngle = 0;
     if (g_colorShiftAngle > 360) g_colorShiftAngle = 360;
-    // ---- mtcolor 三层覆写：Theme / Scene / User ----
-    // ---- mtcolor override tiers: Theme / Scene / User ----
+    // ---- Accessibility contrast target ----
     {
-        PCWSTR themeStr = Wh_GetStringSetting(L"Colors.color_theme_mode");
-        if (themeStr) {
-            if (wcscmp(themeStr, L"light") == 0) g_colorThemeMode = 1;
-            else if (wcscmp(themeStr, L"dark") == 0) g_colorThemeMode = 2;
-            else g_colorThemeMode = 0;   // auto
-            Wh_FreeStringSetting(themeStr);
-        }
-        PCWSTR sceneStr = Wh_GetStringSetting(L"Colors.color_scene");
-        if (sceneStr) {
-            if (wcscmp(sceneStr, L"photo") == 0) g_colorSceneMode = 1;
-            else if (wcscmp(sceneStr, L"game") == 0) g_colorSceneMode = 2;
-            else if (wcscmp(sceneStr, L"hdr") == 0) g_colorSceneMode = 3;
-            else g_colorSceneMode = 0;   // desktop
-            Wh_FreeStringSetting(sceneStr);
-        }
         PCWSTR contrastStr = Wh_GetStringSetting(L"Colors.contrast_target");
         if (contrastStr) {
             if (wcscmp(contrastStr, L"aa_large") == 0) g_contrastTarget = 1;
@@ -9705,10 +9343,6 @@ void LoadSettings() {
             else g_contrastTarget = 0;   // off
             Wh_FreeStringSetting(contrastStr);
         }
-        // 立即求值一次，保证后续用到令牌的地方（如粒子描边兜底色）拿到的是本次设置的结果。
-        // Evaluate once now so anything reading tokens below (e.g. the particle-stroke fallback) sees this
-        // round's settings rather than the previous ones.
-        RefreshResolvedTokens();
     }
     str = Wh_GetStringSetting(L"Colors.custom_color");
     if (str) {
@@ -9764,12 +9398,9 @@ void LoadSettings() {
                 g_particleStrokeColorMode = 0;
             } else {
                 g_particleStrokeColorMode = 1;
-                // 解析失败时的兜底色改为走令牌系统（NeutralOutline），而不是写死的 0x101010：
-                // 这样它会跟随所选主题/场景变化，色域誓约由 mtcolor 统一维护。
-                // Fallback now comes from the token system (NeutralOutline) instead of a hardcoded 0x101010,
-                // so it follows the selected theme/scene and stays under mtcolor's single source of truth.
+                // Fallback on parse failure: neutral grey.
                 g_particleStrokeColor = ParseHexColor(
-                    psc, mtcolor::TokenColor(ActiveTokens(), mtcolor::Role::NeutralOutline));
+                    psc, D2D1::ColorF(0x808090));
             }
             Wh_FreeStringSetting(psc);
         }
@@ -9979,7 +9610,7 @@ static void ExtractCursorColor(POINT pt, DWORD dwTime) {
 // 沿拖尾路径、在路径法线两侧偏移采样屏幕像素（避开拖尾自身），计算平均亮度（0=暗，1=亮）/ Sample screen pixels offset along path normals (avoid self), compute avg luminance (0=dark, 1=bright)
 // 限制采样频率避免性能开销，采样结果用于自适应明度 / Throttle sampling to avoid perf cost, result used for adaptive brightness
 static void SampleBackgroundLuminance(const std::vector<D2D1_POINT_2F>& path, DWORD dwTime, int vX, int vY) {
-    if (!g_adaptiveContrast || path.size() < 2) return;
+    if (path.size() < 2) return;
     // 500ms 一次：GetDC(NULL) 在 DWM 下会触发全屏 GPU→CPU 回读，过于频繁会与渲染线程的 DwmFlush 互斥阻塞导致掉帧 / Every 500ms: GetDC(NULL) triggers full-screen GPU→CPU readback under DWM, too frequent causes mutex contention with render thread DwmFlush
     if (dwTime - g_lastBgSample < 500) return;
     g_lastBgSample = dwTime;
@@ -11867,7 +11498,6 @@ static void RenderFrame() {
         lastFsCheck = dwTime;
         // auto 主题随背景亮度刷新令牌（2Hz 低频重算，不在这里做就得每帧算）。
         // Refresh tokens for the auto theme at 2 Hz rather than every frame.
-        RefreshResolvedTokens();
     }
 
     // 点击检测（游戏中跳过，避免全屏游戏内生成不必要的效果）/ Click detection (skip in game to avoid unnecessary effects in fullscreen)
@@ -12089,7 +11719,7 @@ static void RenderFrame() {
     g_sampleCursor = pt; g_sampleTime = dwTime;
     g_sampleHasPath = havePath;
     g_sampleColorMode = g_colorMode;
-    g_sampleAdaptive = g_adaptiveContrast ? true : false;
+    g_sampleAdaptive = g_adaptiveContrast || (g_contrastTarget > 0);
     LeaveCriticalSection(&g_sampleCS);
 
     // ===== v3.4.2.2 热键：拖尾/粒子可见性状态切换时清理一次，避免关闭后残留 / Hotkey: clear trail/particle state once on toggle-off to avoid leftovers
@@ -13694,15 +13324,6 @@ DWORD WINAPI RenderThreadProc(LPVOID) {
         return 0;
     }
     Wh_Log(L"RenderThread: D2D1 DC created");
-    g_pD2DDC->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 1), &g_pSolidOuterBrush);
-    g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &g_pSolidInnerBrush);
-    g_pD2DDC->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0, 0.18f), &g_pShadowBrush);
-    if (g_pD2DFactory) {
-        CreateStarGeometry(g_pD2DFactory, &g_pStarGeom);
-        CreateHexagramGeometry(g_pD2DFactory, &g_pHexagramGeom);
-        CreateHeartGeometry(g_pD2DFactory, &g_pHeartGeom);
-    }
     // mesh 每帧动态创建（ID2D1Mesh 只写一次），此处不预创建
 
     // ---- D3D11 原生渲染初始化（v3）----
