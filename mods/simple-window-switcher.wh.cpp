@@ -4283,6 +4283,8 @@ static int s_rawGestureAnchorX = 0;
 static int s_rawGestureAnchorY = 0;
 static int s_rawAppliedX = 0; // entries applied across, from the gesture's start position
 static int s_rawAppliedY = 0; // rows applied, from the gesture's start position
+static int s_rawLastFrameX = 0;
+static int s_rawLastFrameY = 0;
 std::map<std::wstring, HICON> g_uwpIconCache;
 
 struct FindCoreWindowData { HWND coreHwnd; };
@@ -11565,6 +11567,11 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
         GetTickCount64() - s_rawTouchpadLastFrameTick < 600 && IsTaskViewWindow(hwnd)) {
         Wh_Log(L"SWS: hid Task View shown by a 3-finger swipe");
         ShowWindow(hwnd, SW_HIDE);
+        if (g_hSwitcher && (g_isVisible || g_isPendingShow)) {
+            // Hiding the island can hand the foreground to the shell; keep the switcher
+            // owned so the commit can still activate the selection afterwards.
+            SetForegroundWindow(g_hSwitcher);
+        }
         return;
     }
     if (!g_isVisible && !g_isPendingShow) return;
@@ -11731,6 +11738,10 @@ static void EndTouchpadGesture() {
 // a vertical swipe (and vice versa) cannot move the selection in the other direction.
 #define SWS_RAW_SWIPE_DOMINANCE_NUM 3
 #define SWS_RAW_SWIPE_DOMINANCE_DEN 2
+// A frame that moves further than this between two reports is a clamped or mirrored
+// position the pad emitted at an edge, not a finger: it restarts the gesture window
+// instead of navigating, otherwise the selection would fly through the grid.
+#define SWS_RAW_SWIPE_JUMP_TRAVEL (65535 / 4)
 
 static int RoundDiv(int value, int divisor) {
     return (value >= 0) ? (value + divisor / 2) / divisor : -((-value + divisor / 2) / divisor);
@@ -11752,6 +11763,24 @@ static void TouchpadNavigate(bool horizontalSwipe, int delta) {
             delta++;
         }
     }
+}
+
+// Whether the layout actually shows more than one line of entries: a single-line task list
+// has no rows to move through, and walking them would only churn the layout.
+static bool LayoutHasMultipleLines() {
+    bool haveFirst = false;
+    int firstCoord = 0;
+    for (int i = 0; i < (int)g_windows.size(); i++) {
+        if (IsWindowTruncated(i)) continue;
+        int coord = LayoutIsVertical() ? g_windows[i].rcCell.left : g_windows[i].rcCell.top;
+        if (!haveFirst) {
+            firstCoord = coord;
+            haveFirst = true;
+        } else if (coord != firstCoord) {
+            return true;
+        }
+    }
+    return false;
 }
 static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     s_rawTouchpadLastFrameTick = GetTickCount64();
@@ -11805,6 +11834,8 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         s_rawGestureAnchorY = y;
         s_rawAppliedX = 0;
         s_rawAppliedY = 0;
+        s_rawLastFrameX = x;
+        s_rawLastFrameY = y;
         return;
     }
 
@@ -11817,6 +11848,22 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     int adx = dx < 0 ? -dx : dx;
     int ady = dy < 0 ? -dy : dy;
     bool sessionOpen = g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow);
+
+    // A clamped or mirrored position (padding edges) arrives as a huge move between two
+    // reports; treat it as a fresh start so it cannot fly the selection across the grid.
+    int stepX = x - s_rawLastFrameX;
+    int stepY = y - s_rawLastFrameY;
+    s_rawLastFrameX = x;
+    s_rawLastFrameY = y;
+    if (stepX < 0) stepX = -stepX;
+    if (stepY < 0) stepY = -stepY;
+    if (stepX > SWS_RAW_SWIPE_JUMP_TRAVEL || stepY > SWS_RAW_SWIPE_JUMP_TRAVEL) {
+        s_rawGestureAnchorX = x;
+        s_rawGestureAnchorY = y;
+        s_rawAppliedX = 0;
+        s_rawAppliedY = 0;
+        return;
+    }
 
     if (adx * SWS_RAW_SWIPE_DOMINANCE_DEN >= ady * SWS_RAW_SWIPE_DOMINANCE_NUM) {
         // Across entries: the first entry of travel opens the session, then the selection
@@ -11832,7 +11879,18 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
             // foreground before opening, or the commit could not activate the selection.
             TapUnassignedKeyForForeground();
             BeginTouchpadGesture(0);
+            if (g_hSwitcher && GetForegroundWindow() != g_hSwitcher) {
+                // The tap did not land (seen in a capture): the switcher has to own the
+                // foreground, or the commit cannot activate the selection.
+                SwitchToThisWindow(g_hSwitcher, TRUE);
+            }
             Wh_Log(L"SWS: raw gesture opened (switcher foreground=%d)", GetForegroundWindow() == g_hSwitcher);
+            // A previous session can end with the fingers still down (idle backstop): the
+            // new session maps from where the hand is now.
+            s_rawGestureAnchorX = x;
+            s_rawGestureAnchorY = y;
+            s_rawAppliedX = 0;
+            s_rawAppliedY = 0;
         }
         if (g_settings.reverseScrollDirection) {
             delta = -delta;
@@ -11840,7 +11898,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         Wh_Log(L"SWS: raw touchpad move (dx=%d, entries=%d)", dx, delta);
         TouchpadNavigate(true, delta);
     } else if (ady * SWS_RAW_SWIPE_DOMINANCE_DEN >= adx * SWS_RAW_SWIPE_DOMINANCE_NUM &&
-               g_settings.suppressTaskView && sessionOpen) {
+               g_settings.suppressTaskView && sessionOpen && LayoutHasMultipleLines()) {
         // By rows: needs Task View suppression, because with it off the vertical swipes
         // belong to Windows, and an open session, so a vertical swipe never opens one.
         int want = RoundDiv(dy, SWS_RAW_SWIPE_ENTRY_PITCH);
