@@ -275,12 +275,17 @@ your hand only has to find the rest.
 | Action | `Hold modifier key while the pointer is here` |
 | Arguments | `Win` |
 | Pass-through guard override | `0`, if you want the key down the moment you arrive |
+| Cooldown override | `0`, if you dip in and out quickly |
 
 Things worth knowing:
 
 - Every trigger style still applies to the key going *down* — the pass-through
-  guard, a dwell, a knock, the fullscreen and excluded-app checks. Leaving
-  always lets go.
+  guard, a dwell, a knock, the cooldown, the fullscreen and excluded-app
+  checks. Leaving always lets go. With the default 300 ms cooldown, coming
+  straight back into the zone waits out the rest of it before the key goes
+  down again, which is what the cooldown override above is for.
+- The log and the dashboard name the keys, as in `Hold Win`, so two such zones
+  are easy to tell apart.
 - The key is let go on every way out, not only on leaving: turning the hot
   corners off, suspending them, a settings change, a display change and
   unloading the mod all release it first.
@@ -1065,6 +1070,13 @@ static std::deque<HitZone> g_queue;
 // a backlog means something went wrong. Dropping is safer than replaying a
 // pile of stale shell commands seconds after the user made the gesture.
 static constexpr size_t kMaxQueue = 2;
+
+// Hold modifier key releases queued but not yet sent. Until they are, the
+// modifier this mod pressed is still down, and GetAsyncKeyState cannot tell it
+// from one the user is holding - so a modifier-gated zone entered straight
+// from a hold zone would fire on the mod's own key. The gate waits on this.
+// Incremented by the detection thread, decremented by the worker.
+static std::atomic<int> g_pendingModifierReleases{0};
 
 // Detection state (detection thread only)
 static int g_activeZone = -1;
@@ -2838,6 +2850,10 @@ static std::shared_ptr<const ZoneSet> BuildZoneSet()
                                                 : L"";
             hz.label = mon.id + L" " + ZoneToString(z) + span + L" -> " +
                        ActionToString(zc->action);
+            // Which keys matters more than the action's name here: the log
+            // line is how you tell a corner holding Win from one holding Ctrl.
+            if (zc->action == CornerAction::HoldModifier)
+                hz.label += L" (" + TrimStr(zc->args) + L")";
             set->zones.push_back(std::move(hz));
         };
 
@@ -3103,6 +3119,10 @@ static void EnqueueRelease(const HitZone &hz)
     rel.label = hz.label + L"  (released)";
     rel.engagesHold = false;
     rel.isRelease = true;
+    // Counted before it is queued, so the worker can never decrement first.
+    // A release is never dropped, so every increment is matched.
+    if (rel.action == CornerAction::HoldModifier)
+        g_pendingModifierReleases++;
     EnqueueAction(rel);
 }
 
@@ -3177,6 +3197,8 @@ static DWORD WINAPI ActionWorkerThread(LPVOID)
                     // so there is nothing to undo. Releasing anyway is how a
                     // hold zone ends up *hiding* your windows on the way out.
                     Wh_Log(L"SKIP (nothing engaged): %s", job.label.c_str());
+                    if (job.action == CornerAction::HoldModifier)
+                        g_pendingModifierReleases--;
                     continue;
                 }
             }
@@ -3236,7 +3258,12 @@ static DWORD WINAPI ActionWorkerThread(LPVOID)
             // Recorded only now, past the gates and the execution, so a hold is
             // owed a release exactly when its entry half really happened.
             if (job.isRelease)
+            {
                 holdActive = false;
+                // Only now: the key-up has actually been sent.
+                if (job.action == CornerAction::HoldModifier)
+                    g_pendingModifierReleases--;
+            }
             else if (job.engagesHold)
                 holdActive = true;
         }
@@ -3399,6 +3426,16 @@ static DWORD DetectTick()
     if (!g_knockSatisfied)
     {
         gate(L"knock window - leave and re-enter to arm it");
+        return next;
+    }
+
+    // A modifier this mod pressed may still be down, waiting on the worker to
+    // let go of it; it would pass the check below as if the user held it.
+    // Checked every tick, so this only ever delays the zone by that long.
+    if (zones->zones[idx].modifier != kModifierNone &&
+        g_pendingModifierReleases.load() > 0)
+    {
+        gate(L"waiting for a held modifier key to be let go");
         return next;
     }
 
@@ -5223,7 +5260,13 @@ static void DashPaintDiagram(DashState *s, HDC hdc)
                                                : RGB(0, 0, 0))
                                : g_pal.accentText);
 
-        const wchar_t *name = ActionToString(zv.action);
+        // "Hold Win" says what the zone does; "Hold modifier key" does not,
+        // and every such zone would otherwise look the same in the picture.
+        std::wstring nameBuf = zv.action == CornerAction::HoldModifier &&
+                                       !zv.invalid
+                                   ? L"Hold " + TrimStr(zv.args)
+                                   : ActionToString(zv.action);
+        const wchar_t *name = nameBuf.c_str();
 
         if (ZoneIsVertical((Zone)z))
         {
