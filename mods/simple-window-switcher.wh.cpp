@@ -706,7 +706,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 - Touchpad:
     - inputMode: legacy
       $name: Touchpad Input Mode
-      $description: How touchpad gestures reach the switcher. "Legacy" keeps the Explorer native-switcher interception; "Raw HID" reads the precision touchpad's HID reports directly and drives the switcher from 3-finger horizontal swipes (2-finger panning stays with scrolling, and 4-finger is consumed by Windows). Swipe direction follows Accessibility - Reverse Scroll Direction.
+      $description: How touchpad gestures reach the switcher. "Legacy" keeps the Explorer native-switcher interception; "Raw HID" reads the precision touchpad's HID reports directly and drives the switcher from 3-finger horizontal swipes (2-finger panning stays with scrolling, and 4-finger is consumed by Windows). Swipe direction follows Accessibility - Reverse Scroll Direction. A 3-finger up swipe does not open Task View in this mode.
       $options:
       - legacy: Legacy (Explorer gesture interception)
       - raw: Raw HID (direct gesture handling)
@@ -9348,7 +9348,9 @@ static void StartExitAnimation(bool activateSelectedWindow) {
                 HWND hF = IsWindowVisible(hP) ? hP : hT;
                 RestoreWindowIfIconic(hT);
                 if (hF != hT) RestoreWindowIfIconic(hF);
-                if (!SetForegroundWindow(hF)) SwitchToThisWindow(hF, TRUE);
+                BOOL fgOk = SetForegroundWindow(hF);
+                Wh_Log(L"SWS: activate %p -> SetForegroundWindow=%d", hF, fgOk);
+                if (!fgOk) SwitchToThisWindow(hF, TRUE);
                 UpdateMruWindow(hT);
             }
         }
@@ -11528,9 +11530,32 @@ static void AddWindowEntry(HWND hWnd) {
     }
 }
 
+// Task View (the 3-finger up swipe) is an XAML island like the switcher, told apart by
+// its title; the OS shows it for its own gesture regardless of what the mod does, so it
+// is hidden again while raw frames are flowing. Win+Tab and the taskbar button do not
+// come with raw frames and are unaffected.
+static bool IsTaskViewWindow(HWND hWnd) {
+    WCHAR cls[64] = {0};
+    if (!GetClassNameW(hWnd, cls, ARRAYSIZE(cls))) return false;
+    if (wcscmp(cls, L"XamlExplorerHostIslandWindow") != 0 && wcscmp(cls, L"MultitaskingViewFrame") != 0) {
+        return false;
+    }
+    WCHAR title[64] = {0};
+    GetWindowTextW(hWnd, title, ARRAYSIZE(title));
+    return wcscmp(title, L"Task View") == 0;
+}
+
 static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
     if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
     if (!hwnd || !IsWindow(hwnd)) return;
+
+    if (event == EVENT_OBJECT_SHOW && wcscmp(g_settings.touchpadInputMode, L"raw") == 0 &&
+        g_settings.handleTouchpadGestures && GetTickCount64() - s_rawTouchpadLastFrameTick < 600 &&
+        IsTaskViewWindow(hwnd)) {
+        Wh_Log(L"SWS: hid Task View shown by a 3-finger swipe");
+        ShowWindow(hwnd, SW_HIDE);
+        return;
+    }
     if (!g_isVisible && !g_isPendingShow) return;
 
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
@@ -11679,13 +11704,13 @@ static void EndTouchpadGesture() {
 }
 
 // Raw-HID frames drive the switcher with a horizontal 3-finger swipe: one step per
-// quarter of the pad width of travel (the remainder is kept, so slow drifts are not
-// lost), commit on finger lift. Only exactly 3 fingers are handled: 2-finger panning
-// stays with the wheel/scroll path and 4-finger is consumed by Windows (never reported).
-// Lifting fingers can emit a last frame at the pad edge, which is why sub-3-tip frames
-// never navigate and only a full lift commits.
+// twelfth of the pad width (about one card of travel, so the selection tracks the fingers
+// at card scale), commit on finger lift. Only exactly 3 fingers are handled: 2-finger
+// panning stays with the wheel/scroll path and 4-finger is consumed by Windows (never
+// reported). Lifting fingers can emit a last frame at the pad edge, which is why
+// sub-3-tip frames never navigate and only a full lift commits.
 #define SWS_RAW_SWIPE_FINGERS 3
-#define SWS_RAW_SWIPE_STEP_TRAVEL (65535 / 4)
+#define SWS_RAW_SWIPE_STEP_TRAVEL (65535 / 12)
 static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     s_rawTouchpadLastFrameTick = GetTickCount64();
 
@@ -11712,6 +11737,14 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
                                : NULL;
             Wh_Log(L"SWS: raw touchpad lift -> committing (target=%p)", hTarget);
             EndTouchpadGesture();
+            // The shared path activates the target, but the raw path has no Explorer grant
+            // to lean on, so force the activation again if the foreground change did not
+            // take (a hidden switcher can leave the foreground momentarily empty).
+            if (hTarget && IsWindow(hTarget) && GetForegroundWindow() != hTarget) {
+                Wh_Log(L"SWS: raw commit activation retry for %p", hTarget);
+                SetForegroundWindow(hTarget);
+                SwitchToThisWindow(hTarget, TRUE);
+            }
             Wh_Log(L"SWS: raw touchpad commit done (foreground=%p, target=%p)", GetForegroundWindow(), hTarget);
         }
         return;
