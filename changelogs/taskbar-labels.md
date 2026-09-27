@@ -1,3 +1,11 @@
+## 1.5 ([Sep 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/5a826c2e4c0bdc6e5c5d06d32d57c7f09f1d63f9/mods/taskbar-labels.wh.cpp))
+
+* Made excluded program settings work for all four modes. Previously, they had no effect when combining was enabled.
+* Fixed misplaced badge positions.
+* Fixed labels disappearing when ellipsis are used and items are being dragged for reordering.
+* Fixed the label text appearing on top of the icon in some cases.
+* Fixed compatibility with recent Windows 11 preview builds.
+
 ## 1.4.5 ([Sep 12, 2026](https://github.com/ramensoftware/windhawk-mods/blob/cc00cec7e715c06c8242113ce8ce2fe117e120e1/mods/taskbar-labels.wh.cpp))
 
 * Improved compatibility with the new small taskbar.

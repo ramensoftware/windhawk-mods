@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-27T12:04:33.000Z</updated>
+    <updated>2026-09-27T18:32:19.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.5]]></title>
+        <id>https://windhawk.net/mods/taskbar-labels#5a826c2e4c0bdc6e5c5d06d32d57c7f09f1d63f9</id>
+        <link href="https://windhawk.net/mods/taskbar-labels"/>
+        <updated>2026-09-27T18:32:19.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Made excluded program settings work for all four modes. Previously, they had no effect when combining was enabled.</li>
+<li>Fixed misplaced badge positions.</li>
+<li>Fixed labels disappearing when ellipsis are used and items are being dragged for reordering.</li>
+<li>Fixed the label text appearing on top of the icon in some cases.</li>
+<li>Fixed compatibility with recent Windows 11 preview builds.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Disk Usage Bar Customizer 1.2.1]]></title>
         <id>https://windhawk.net/mods/disk-usage-bar-customizer#1233abdb504db4383993ca27139f940c41b5cb51</id>
@@ -713,25 +730,6 @@ those options in one mod only and leave it at Chrome default in the other.</li>
         <author>
             <name>ArvindSaini978</name>
             <uri>https://github.com/ArvindSaini978</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mouse Trail 3.4.2.2]]></title>
-        <id>https://windhawk.net/mods/mouse-trail#78e72a6fb982d2956daee2c013a1b355854ef9a1</id>
-        <link href="https://windhawk.net/mods/mouse-trail"/>
-        <updated>2026-09-25T07:03:10.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add：Frame sync toggle for tear-free presentation</li>
-<li>Add：Trail stroke with configurable width</li>
-<li>Add：Particle stroke with configurable width, alpha and color</li>
-<li>Add：Device loss recovery (GPU TDR, driver update, sleep/resume)</li>
-<li>Add：Global hotkeys for trail, particles and master toggle</li>
-<li>Fix：Overlay window z-order after system restart</li>
-<li>Fix：Settings hot-reload callback registration</li>
-</ul>]]></content>
-        <author>
-            <name>MCheng404</name>
-            <uri>https://github.com/MCheng404</uri>
         </author>
     </entry>
 </feed>
