@@ -354,14 +354,14 @@ LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReser
         if (lpType) *lpType = REG_DWORD;
 
         if (lpcbData)
-        {
+        { 
             DWORD cbBuffer = *lpcbData;
             *lpcbData = sizeof(DWORD);
             if (lpData)
             {
-                if (cbBuffer < sizeof(DWORD))
-                    return ERROR_MORE_DATA;
+                if (cbBuffer < sizeof(DWORD)) return ERROR_MORE_DATA;
                 *(DWORD*)lpData = g_settingDisplayMenuBar;
+                return ERROR_SUCCESS;
             }
         }
 
@@ -468,7 +468,7 @@ BOOL Wh_ModInit()
         }
     }
 
-    Wh_SetFunctionHook((void*)GetProcAddress(LoadLibrary(L"kernelbase.dll"), "RegQueryValueExW"), (void*)RegQueryValueExWHook, (void**)&pOriginalRegQueryValueExW);
+    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "RegQueryValueExW"), (void*)RegQueryValueExWHook, (void**)&pOriginalRegQueryValueExW);
 
 
     return TRUE;
