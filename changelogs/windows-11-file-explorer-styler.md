@@ -1,3 +1,15 @@
+## 1.7 ([Sep 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/51ade424ed357b916e17107b2200e91c6f73b30a/mods/windows-11-file-explorer-styler.wh.cpp))
+
+* Improved the translucent background effect option when applied to the entire window. Among the improvements, scrollbars and list headers are now translucent as well, text rendering is improved, and light mode is now supported.
+* Added a new translucent background effect: Blur (AccentBlurBehind).
+* "Entire window" is now the default option for the translucent background effect region.
+* Updated the MicaTabless theme.
+* Improved handling for remote images and added local caching. Internet connection is no longer needed once remote images are downloaded.
+* Added `skip()` which leaves the style unapplied, so the property keeps (or returns to) its original value, e.g. `{{width > 0 ? width : skip()}}` applies only once `width` is positive.
+* Improved handling for `NaN` and `Infinity` values in expressions.
+
+Many of the translucent effect improvements were inspired by [Translucent Windows](https://windhawk.net/mods/translucent-windows) and its implementation.
+
 ## 1.6 ([Aug 21, 2026](https://github.com/ramensoftware/windhawk-mods/blob/dddabf466ecd540485cb9ecb066964779a7bd7e8/mods/windows-11-file-explorer-styler.wh.cpp))
 
 * Updated themes for compatibility with recent Windows 11 changes (ViVeTool flag 61017737).
