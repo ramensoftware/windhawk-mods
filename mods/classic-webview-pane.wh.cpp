@@ -4,10 +4,11 @@
 // @description     Brings back the Windows 2000 WebView - the pane left of the file list with the icon and name of the folder or the selected item, a divider line, a description and See also links
 // @name:ru         Панель WebView как в Windows 2000
 // @description:ru  Возвращает панель WebView из Windows 2000 - панель слева от списка файлов со значком и именем папки или выбранного объекта, линией-разделителем, описанием и ссылками «Перейти к»
-// @version         2.13
+// @version         2.14
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         explorer.exe
+// @architecture    x86-64
 // @compilerOptions -lcomctl32 -lgdi32 -lmsimg32 -lole32 -lshlwapi -luuid
 // ==/WindhawkMod==
 
@@ -33,8 +34,12 @@
 - position: left
   $name: Position
   $name:ru: Расположение
-  $description: Which side of the file list the pane is put on.
-  $description:ru: С какой стороны от списка файлов размещается панель.
+  $description: >-
+    Which side of the file list the pane is put on. Applies to folders opened
+    after the change.
+  $description:ru: >-
+    С какой стороны от списка файлов размещается панель. Действует для папок,
+    открытых после изменения.
   $options:
   - left: Left of the file list
   - right: Right of the file list
@@ -280,10 +285,12 @@
   $name:ru: Скрыть панель сведений
   $description: >-
     Take the Windows details pane on the right out of the layout, so the new
-    pane is the only one. Windows 2000 had no details pane.
+    pane is the only one. Windows 2000 had no details pane. Applies to
+    folders opened after the change.
   $description:ru: >-
     Убрать из раскладки панель сведений Windows справа, чтобы новая панель
-    осталась единственной. В Windows 2000 панели сведений не было.
+    осталась единственной. В Windows 2000 панели сведений не было. Действует
+    для папок, открытых после изменения.
 - skipControlPanel: true
   $name: Leave the pages of Control Panel items alone
   $name:ru: Не показывать на страницах элементов панели управления
@@ -533,6 +540,8 @@ Windows 2000 на языке интерфейса Windows: в русской Win
 #include <windowsx.h>
 
 #include <algorithm>
+#include <atomic>
+#include <climits>
 #include <cmath>
 
 #include <mutex>
@@ -541,6 +550,11 @@ Windows 2000 на языке интерфейса Windows: в русской Win
 
 // The message SHELLDLL_DefView answers with the IShellBrowser of its folder.
 #define WM_GETISHELLBROWSER (WM_USER + 7)
+
+// Set first thing on unload. From then on no pane, spacer or subclass is added:
+// closing the panes resizes their views, and a view that is resized would
+// otherwise build its pane again.
+std::atomic<bool> g_unloading{false};
 
 
 // -----------------------------------------------------------------------------
@@ -949,7 +963,7 @@ HRESULT WINAPI SetXML_Hook(void* pThis,
                            const WCHAR* pszXML,
                            HINSTANCE hInst,
                            HINSTANCE hResInst) {
-    if (!pszXML) {
+    if (!pszXML || g_unloading) {
         return SetXML_Original(pThis, pszXML, hInst, hResInst);
     }
 
@@ -994,6 +1008,9 @@ constexpr int kSpacerRetries = 20;
 constexpr UINT WM_PANE_CLOSE = WM_APP + 1;
 // Posted to the pane to widen or collapse its DirectUI spacer, see SyncSpacer.
 constexpr UINT WM_PANE_SPACER = WM_APP + 2;
+// Posted to every pane after a settings change. The pane's own thread is the
+// only one that may use its state, and the only one its timers work on.
+constexpr UINT WM_PANE_SETTINGS = WM_APP + 3;
 
 // Sent to a folder view to make it build its pane on its own thread. Registered
 // rather than WM_APP based - it goes to a window of the shell, not of the mod.
@@ -1060,6 +1077,9 @@ std::vector<Subclass> g_subclasses;
 static bool AddSubclass(HWND hWnd,
                         WindhawkUtils::WH_SUBCLASSPROC proc,
                         DWORD_PTR data) {
+    if (g_unloading) {
+        return false;
+    }
     if (!WindhawkUtils::SetWindowSubclassFromAnyThread(hWnd, proc, data)) {
         return false;
     }
@@ -1158,80 +1178,32 @@ static int Scale(const Pane* pane, int value) {
 // -----------------------------------------------------------------------------
 
 // The browser behind a folder view is the way to both the folder and the
-// selection. A view of the shell answers WM_GETISHELLBROWSER with it directly;
-// where it does not, the open browsers are walked instead and the one whose
-// active view is this window wins - which is also what keeps tabs apart, since
-// every tab of a window has a view of its own.
+// selection. WM_GETISHELLBROWSER is answered by the window that hosts the view,
+// not by the view itself: the tab of an Explorer window (every tab has a
+// window, and a view, of its own, which keeps tabs apart), or the dialog for
+// the file dialogs Explorer shows. The pointer carries no reference of its
+// own; the browser outlives the view it belongs to.
 static IShellBrowser* GetShellBrowser(HWND defView) {
     if (!defView || !IsWindow(defView)) {
         return nullptr;
     }
 
-    DWORD_PTR result = 0;
-    if (SendMessageTimeoutW(defView, WM_GETISHELLBROWSER, 0, 0,
-                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &result) &&
-        result) {
-        return reinterpret_cast<IShellBrowser*>(result);
-    }
-
-    IShellWindows* windows = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL,
-                                IID_IShellWindows, (void**)&windows)) ||
-        !windows) {
-        return nullptr;
-    }
-
-    IShellBrowser* found = nullptr;
-
-    long count = 0;
-    windows->get_Count(&count);
-    for (long i = 0; i < count && !found; i++) {
-        VARIANT index = {};
-        index.vt = VT_I4;
-        index.lVal = i;
-
-        IDispatch* dispatch = nullptr;
-        if (windows->Item(index, &dispatch) != S_OK || !dispatch) {
+    for (HWND owner = GetParent(defView); owner; owner = GetParent(owner)) {
+        if (!IsClassName(owner, L"ShellTabWindowClass") &&
+            !IsClassName(owner, L"#32770")) {
             continue;
         }
 
-        IServiceProvider* provider = nullptr;
-        if (SUCCEEDED(dispatch->QueryInterface(IID_IServiceProvider,
-                                               (void**)&provider)) &&
-            provider) {
-            IShellBrowser* browser = nullptr;
-            if (SUCCEEDED(provider->QueryService(SID_STopLevelBrowser,
-                                                 IID_IShellBrowser,
-                                                 (void**)&browser)) &&
-                browser) {
-                IShellView* view = nullptr;
-                if (SUCCEEDED(browser->QueryActiveShellView(&view)) && view) {
-                    HWND viewWindow = nullptr;
-                    if (SUCCEEDED(view->GetWindow(&viewWindow)) &&
-                        viewWindow == defView) {
-                        found = browser;
-                        found->AddRef();
-                    }
-                    view->Release();
-                }
-                browser->Release();
-            }
-            provider->Release();
+        DWORD_PTR result = 0;
+        if (SendMessageTimeoutW(owner, WM_GETISHELLBROWSER, 0, 0,
+                                SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &result) &&
+            result) {
+            return reinterpret_cast<IShellBrowser*>(result);
         }
-
-        dispatch->Release();
+        return nullptr;
     }
 
-    windows->Release();
-
-    // The reference is dropped right away: the browser outlives the view it
-    // belongs to, and the pane only ever uses it while handling a message of
-    // that view.
-    if (found) {
-        found->Release();
-    }
-
-    return found;
+    return nullptr;
 }
 
 static IFolderView* GetFolderView(HWND defView) {
@@ -3026,7 +2998,25 @@ static LRESULT CALLBACK PaneWndProc(HWND hWnd,
         }
 
         case WM_PANE_CLOSE: {
+            // The spacer is part of the view's layout and stays when the mod
+            // goes; it is collapsed so that no empty band is left in its place.
+            if (pane && pane->host) {
+                if (void* spacer = FindSpacer(pane->host)) {
+                    g_dui.SetWidth(spacer, 0);
+                }
+            }
             DestroyWindow(hWnd);
+            return 0;
+        }
+
+        case WM_PANE_SETTINGS: {
+            if (pane) {
+                FreeFonts(pane);
+                ApplyViewBorder(pane->defView);
+                RefreshPane(pane);
+                LayOutPane(hWnd);
+                InvalidateRect(hWnd, nullptr, TRUE);
+            }
             return 0;
         }
 
@@ -3439,6 +3429,10 @@ LRESULT CALLBACK DefViewSubclassProc(HWND hWnd,
 }
 
 static void AttachToDefViewOnItsThread(HWND defView) {
+    if (g_unloading) {
+        return;
+    }
+
     HWND host = GetParent(defView);
     while (host && !IsClassName(host, L"DirectUIHWND")) {
         host = GetParent(host);
@@ -3534,11 +3528,10 @@ static void AdoptOpenWindows() {
     // no spacer in it, so the pane stays hidden until they are reopened, but
     // picking them up costs nothing and keeps the state consistent.
     struct Enumerator {
+        // EnumChildWindows already walks every descendant.
         static BOOL CALLBACK Child(HWND hWnd, LPARAM param) {
             if (IsClassName(hWnd, L"SHELLDLL_DefView")) {
                 AttachToDefView(hWnd);
-            } else {
-                EnumChildWindows(hWnd, Child, param);
             }
             return TRUE;
         }
@@ -3563,54 +3556,58 @@ static void ClosePanes() {
         panes = g_panes;
     }
 
+    // A plain SendMessage: the pane must be gone before the mod is, and its
+    // thread never waits on this one, so there is nothing to time out for.
     for (HWND pane : panes) {
         if (IsWindow(pane)) {
-            SendMessageTimeoutW(pane, WM_PANE_CLOSE, 0, 0,
-                                SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, nullptr);
+            SendMessageW(pane, WM_PANE_CLOSE, 0, 0);
         }
     }
 }
+
+HMODULE g_dui70;
 
 BOOL Wh_ModInit() {
     LoadSettings();
 
     g_adoptMessage = RegisterWindowMessageW(L"ClassicWebViewPane_Adopt");
 
-    if (!RegisterPaneClass()) {
-        Wh_Log(L"The pane window class could not be registered");
-        return FALSE;
-    }
-
-    HMODULE dui70 = LoadLibraryW(L"dui70.dll");
-    if (!dui70) {
+    g_dui70 = LoadLibraryExW(L"dui70.dll", nullptr,
+                             LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!g_dui70) {
         Wh_Log(L"dui70.dll could not be loaded");
         return FALSE;
     }
 
-    LoadDuiApi(dui70);
+    LoadDuiApi(g_dui70);
 
     // public: long __cdecl DirectUI::DUIXmlParser::SetXML(unsigned short const *,
     //     struct HINSTANCE__ *, struct HINSTANCE__ *)
-    void* setXml = (void*)GetProcAddress(
-        dui70, "?SetXML@DUIXmlParser@DirectUI@@QEAAJPEBGPEAUHINSTANCE__@@1@Z");
-    if (!setXml) {
-        // The 32 bit name, for a 32 bit host.
-        setXml = (void*)GetProcAddress(
-            dui70, "?SetXML@DUIXmlParser@DirectUI@@QAAJPBGPAUHINSTANCE__@@1@Z");
-    }
+    auto setXml = (SetXML_t)GetProcAddress(
+        g_dui70,
+        "?SetXML@DUIXmlParser@DirectUI@@QEAAJPEBGPEAUHINSTANCE__@@1@Z");
     if (!setXml) {
         Wh_Log(L"DUIXmlParser::SetXML was not found in dui70.dll");
+        FreeLibrary(g_dui70);
+        g_dui70 = nullptr;
         return FALSE;
     }
 
-    if (!Wh_SetFunctionHook(setXml, (void*)SetXML_Hook,
-                            (void**)&SetXML_Original)) {
+    if (!WindhawkUtils::SetFunctionHook(setXml, SetXML_Hook,
+                                        &SetXML_Original) ||
+        !WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
+                                        &CreateWindowExW_Original)) {
+        FreeLibrary(g_dui70);
+        g_dui70 = nullptr;
         return FALSE;
     }
 
-    if (!WindhawkUtils::SetFunctionHook(CreateWindowExW,
-                                            CreateWindowExW_Hook,
-                                            &CreateWindowExW_Original)) {
+    // Last, so that no failure above can leave the class registered: without
+    // Wh_ModUninit to unregister it, the next load could not register it again.
+    if (!RegisterPaneClass()) {
+        Wh_Log(L"The pane window class could not be registered");
+        FreeLibrary(g_dui70);
+        g_dui70 = nullptr;
         return FALSE;
     }
 
@@ -3634,25 +3631,18 @@ void Wh_ModSettingsChanged() {
         RestoreViewBorders();
     }
 
+    // Everything else - fonts, the border, the contents and the layout - is
+    // redone by each pane on its own thread.
     for (HWND paneWindow : panes) {
-        if (!IsWindow(paneWindow)) {
-            continue;
+        if (IsWindow(paneWindow)) {
+            PostMessageW(paneWindow, WM_PANE_SETTINGS, 0, 0);
         }
-
-        Pane* pane = (Pane*)GetWindowLongPtrW(paneWindow, GWLP_USERDATA);
-        if (pane) {
-            ApplyViewBorder(pane->defView);
-            // Re-query the current folder as well: this makes the system-folder
-            // description switch take effect immediately in either direction.
-            SetTimer(paneWindow, kRefreshTimer, 1, nullptr);
-        }
-
-        LayOutPane(paneWindow);
-        InvalidateRect(paneWindow, nullptr, TRUE);
     }
 }
 
 void Wh_ModUninit() {
+    g_unloading = true;
+
     // A window still carrying a subclass of the mod, or a window whose window
     // procedure is in it, calls into a DLL that is about to be gone.
     ClosePanes();
@@ -3667,5 +3657,10 @@ void Wh_ModUninit() {
     if (g_paneClass) {
         UnregisterClassW(kPaneClassName, GetModuleHandleW(nullptr));
         g_paneClass = 0;
+    }
+
+    if (g_dui70) {
+        FreeLibrary(g_dui70);
+        g_dui70 = nullptr;
     }
 }
