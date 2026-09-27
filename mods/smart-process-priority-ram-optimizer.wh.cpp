@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         3.4.0
+// @version         3.4.1
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -2287,6 +2287,20 @@ struct SystemActionArbiter {
         const std::unordered_map<DWORD, DWORD>* parentOf = nullptr,
         const std::unordered_map<DWORD, WindowState>* windowStates =
             nullptr) const noexcept {
+        if (action == ActionType::TrimWorkingSet) {
+            if (pid == foregroundPid || immuneFamilyPids.count(pid)) {
+                return {false, VetoReason::ForegroundOrFamily,
+                        L"Foreground Application or Family"};
+            }
+            if (windowStates) {
+                auto wsIt = windowStates->find(pid);
+                if (wsIt != windowStates->end() && wsIt->second.hasVisibleWindow &&
+                    !wsIt->second.isMinimized) {
+                    return {false, VetoReason::VisibleGuiWindow,
+                            L"Visible Non-Minimized GUI Window"};
+                }
+            }
+        }
         if (IsPackagedAppCached(pid, hProcess)) {
             return {false, VetoReason::PackagedApp,
                     L"UWP/MSIX App Managed by Windows PLM"};
@@ -2800,6 +2814,7 @@ struct TrimAttemptResult {
 
 static TrimAttemptResult
 TryTrimProcess(DWORD pid, const SystemActionArbiter& arbiter,
+               const std::unordered_map<DWORD, WindowState>* windowStates = nullptr,
                bool emergency = false,
                bool forceHardTrim = false) {
     TrimAttemptResult result;
@@ -2821,8 +2836,9 @@ TryTrimProcess(DWORD pid, const SystemActionArbiter& arbiter,
     }
 
     ProcessIoActivity ioAct = GetProcessIoActivity(pid, hProc);
-    auto postCheck =
-        arbiter.EvaluatePostOpen(pid, hProc, ActionType::TrimWorkingSet, ioAct);
+    auto postCheck = arbiter.EvaluatePostOpen(
+        pid, hProc, ActionType::TrimWorkingSet, ioAct, false, 0, 0.0, nullptr,
+        windowStates);
     if (!postCheck.isAllowed) {
         CloseHandle(hProc);
         return result;
@@ -2948,7 +2964,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
 
     auto tryTrimAndRecord = [&](DWORD pid, const std::wstring& name) {
         TrimAttemptResult attempt =
-            TryTrimProcess(pid, arbiter, emergency, forceHardTrim);
+            TryTrimProcess(pid, arbiter, &windowStates, emergency, forceHardTrim);
         if (attempt.trimmed) {
             stats.processesTrimmed++;
             stats.bytesReclaimed += attempt.freedBytes;
