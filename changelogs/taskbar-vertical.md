@@ -1,3 +1,10 @@
+## 1.4.1 ([Sep 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c8bed5f9ad6da06782e9857fb52bc36339dbc365/mods/taskbar-vertical.wh.cpp))
+
+* Using the native vertical taskbar is now optional, and can be disabled in the mod settings.
+* Fixed native vertical taskbar detection in old Windows 11 builds.
+* Fixed the action center location matching the Windows settings, not the actual taskbar location.
+* Fixed the taskbar border being misplaced on secondary taskbars.
+
 ## 1.4 ([Sep 27, 2026](https://github.com/ramensoftware/windhawk-mods/blob/012bba132d43ec1e2cfcc1b985bf7f46d16a4832/mods/taskbar-vertical.wh.cpp))
 
 * The mod now uses and customizes the native Windows vertical taskbar implementation, if available:
