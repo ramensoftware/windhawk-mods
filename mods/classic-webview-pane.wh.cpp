@@ -4,12 +4,12 @@
 // @description     Brings back the Windows 2000 WebView - the pane left of the file list with the icon and name of the folder or the selected item, a divider line, a description and See also links
 // @name:ru         Панель WebView как в Windows 2000
 // @description:ru  Возвращает панель WebView из Windows 2000 - панель слева от списка файлов со значком и именем папки или выбранного объекта, линией-разделителем, описанием и ссылками «Перейти к»
-// @version         2.14
+// @version         2.15
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lgdi32 -lmsimg32 -lole32 -lshlwapi -luuid
+// @compilerOptions -lcomctl32 -lgdi32 -lmsimg32 -lole32 -lshlwapi -luuid -lwindowscodecs
 // ==/WindhawkMod==
 
 // ==WindhawkModSettings==
@@ -183,19 +183,36 @@
   $description:ru: >-
     Держать ссылки подчёркнутыми, как в веб-виде Windows 2000, а не только под
     курсором.
-- imagePath: ''
+- picture: win2000
   $name: Picture
   $name:ru: Картинка
   $description: >-
-    Path to the picture in the corner of the pane - the clouds Windows 2000 drew
-    there, which live in %SystemRoot%\Web of a Windows 2000 install. BMP, GIF,
-    PNG, JPEG and ICO all work, and the path may contain environment variables.
-    Leave empty for no picture.
+    The picture in the corner of the pane. Both pictures of the Windows 2000
+    web view - the clouds and the coloured squares - come built into the mod.
+    A file of your own can be used instead, or no picture at all.
   $description:ru: >-
-    Путь к картинке в углу панели - облакам, которые рисовала там Windows 2000;
-    они лежат в %SystemRoot%\Web установленной Windows 2000. Подходят BMP, GIF,
-    PNG, JPEG и ICO, в пути можно использовать переменные среды. Пусто - без
-    картинки.
+    Картинка в углу панели. Обе картинки веб-вида Windows 2000 - облака и
+    цветные квадраты - встроены в мод. Вместо них можно взять свой файл или
+    обойтись без картинки.
+  $options:
+  - win2000: Windows 2000 clouds
+  - squares: Windows 2000 coloured squares
+  - file: The picture file below
+  - none: No picture
+  $options:ru:
+  - win2000: Облака Windows 2000
+  - squares: Цветные квадраты Windows 2000
+  - file: Файл картинки ниже
+  - none: Без картинки
+- imagePath: ''
+  $name: Picture file
+  $name:ru: Файл картинки
+  $description: >-
+    Used when the picture is set to a file. BMP, GIF, PNG, JPEG and ICO all
+    work, and the path may contain environment variables.
+  $description:ru: >-
+    Используется, если для картинки выбран файл. Подходят BMP, GIF, PNG, JPEG и
+    ICO, в пути можно использовать переменные среды.
 - imagePosition: background
   $name: Where the picture goes
   $name:ru: Где картинка
@@ -379,19 +396,34 @@
 - colorDivider: '#0000FF'
   $name: Custom divider colour
   $name:ru: Собственный цвет разделителя
-  $description: Only used when no divider picture is set.
-  $description:ru: Используется, только если не задана картинка разделителя.
-- dividerImagePath: ''
-  $name: Divider picture
-  $name:ru: Картинка разделителя
+  $description: Only used when the divider is drawn as a line.
+  $description:ru: Используется, только если разделитель рисуется линией.
+- divider: win2000
+  $name: Divider
+  $name:ru: Разделитель
   $description: >-
-    Path to the picture the line under the name is drawn from - the coloured bar
-    of Windows 2000, one pixel tall. It is stretched across the pane and keeps
-    the height it has. Leave empty to have the line drawn instead.
+    The line under the name. Windows 2000 drew it from a picture, a bar in the
+    four colours of the Windows logo, which comes built into the mod.
   $description:ru: >-
-    Путь к картинке, из которой рисуется линия под именем - цветной полоске
-    Windows 2000 высотой в один пиксель. Она растягивается на всю ширину панели
-    и сохраняет свою высоту. Пусто - линия рисуется сама.
+    Линия под именем. Windows 2000 рисовала её из картинки - полоски в четырёх
+    цветах логотипа Windows; она встроена в мод.
+  $options:
+  - win2000: Windows 2000 colour bar
+  - file: The divider picture file below
+  - drawn: A line in the divider colour
+  $options:ru:
+  - win2000: Цветная полоска Windows 2000
+  - file: Файл картинки разделителя ниже
+  - drawn: Линия цветом разделителя
+- dividerImagePath: ''
+  $name: Divider picture file
+  $name:ru: Файл картинки разделителя
+  $description: >-
+    Used when the divider is set to a file. It is stretched across the pane and
+    keeps its own height.
+  $description:ru: >-
+    Используется, если для разделителя выбран файл. Картинка растягивается на
+    всю ширину панели и сохраняет свою высоту.
 - dividerGradient: true
   $name: Fade the divider out
   $name:ru: Разделитель с переходом в фон
@@ -482,13 +514,15 @@ that the selection changed.
   folder tree and the file list whenever DirectUI moves, resizes or hides
   either, and keeps clear of the splitter next to the tree.
 
-- Windows 2000 drew a picture across the top of the pane, out of the images in
-  its `%SystemRoot%\Web`. Copy that file over and give the *Picture* setting its
-  path; nothing is drawn while the setting is empty. By default it is stretched
-  across the pane at its own height with the pixels left alone, and it can also
-  be given a width of its own, put above the name or at the bottom instead, and
-  smoothed when scaled. BMP, GIF, PNG, JPEG and ICO are all read - `LoadImage`
-  takes the BMPs and icons, the shell takes the rest.
+- The pictures of the Windows 2000 web view - the clouds or the coloured
+  squares in the corner, and the bar in the colours of the Windows logo under
+  the name - are built into the mod, and the clouds and the bar are shown by
+  default, so the pane looks right straight after installing. Both can be
+  switched off or come from a file of your own instead: BMP, GIF, PNG, JPEG and
+  ICO are all read - `LoadImage` takes the BMPs and icons, the shell takes the
+  rest. The picture is stretched across the pane at its own proportions with the
+  pixels left alone by default, and it can also be given a width of its own, put
+  above the name or at the bottom instead, and smoothed when scaled.
 - Two things in DirectUI markup take the whole window down with them - the file
   list, the folder tree and all - while `SetXML` still reports success: an
   attribute the element class does not know, and a value the parser cannot
@@ -530,9 +564,13 @@ Windows 2000 показывала слева от списка файлов па
 В узком окне панель, как и в Windows 2000, первой уступает место списку файлов.
 Скриншоты - выше, в английской части.
 
-Внешний вид настраивается: ширина и сторона панели, размер значка, картинка
-в углу (облака из `%SystemRoot%\Web` Windows 2000 - скопируйте файл и укажите
-путь), цвета, подписи и ссылки. Тексты по умолчанию берутся в формулировке
+Картинки веб-вида Windows 2000 - облака или цветные квадраты в углу и полоска
+в цветах логотипа Windows под именем - встроены в мод; облака и полоска
+включены по умолчанию, так что панель выглядит как надо сразу после установки.
+Вместо них можно указать свои файлы или выключить их.
+
+Внешний вид настраивается: ширина и сторона панели, размер значка, картинки,
+цвета, подписи и ссылки. Тексты по умолчанию берутся в формулировке
 Windows 2000 на языке интерфейса Windows: в русской Windows - «Выберите объект
 для просмотра его описания.», «Перейти к:», «Мои документы» и так далее.
 Изменённый вами текст показывается как есть.
@@ -556,6 +594,7 @@ Windows 2000 на языке интерфейса Windows: в русской Win
 #include <shlguid.h>
 #include <shlobj.h>
 #include <shlwapi.h>
+#include <wincodec.h>
 #include <windowsx.h>
 
 #include <algorithm>
@@ -787,6 +826,12 @@ static std::wstring LocalizedSetting(PCWSTR value) {
 }
 
 // A path out of the settings, with any environment variables in it filled in.
+// The pictures built into the mod are asked for by these names in place of a
+// path; a real path cannot start with an asterisk.
+constexpr WCHAR kBuiltInClouds[] = L"*win2000-clouds";
+constexpr WCHAR kBuiltInSquares[] = L"*win2000-squares";
+constexpr WCHAR kBuiltInDivider[] = L"*win2000-divider";
+
 static std::wstring PathSetting(PCWSTR name) {
     WindhawkUtils::StringSetting setting =
         WindhawkUtils::StringSetting::make(name);
@@ -899,8 +944,27 @@ static void LoadSettings() {
 
     g_settings.underlineLinks = Wh_GetIntSetting(L"underlineLinks");
 
-    g_settings.imagePath = PathSetting(L"imagePath");
-    g_settings.dividerImagePath = PathSetting(L"dividerImagePath");
+    WindhawkUtils::StringSetting picture =
+        WindhawkUtils::StringSetting::make(L"picture");
+    if (wcscmp(picture.get(), L"file") == 0) {
+        g_settings.imagePath = PathSetting(L"imagePath");
+    } else if (wcscmp(picture.get(), L"none") == 0) {
+        g_settings.imagePath.clear();
+    } else if (wcscmp(picture.get(), L"squares") == 0) {
+        g_settings.imagePath = kBuiltInSquares;
+    } else {
+        g_settings.imagePath = kBuiltInClouds;
+    }
+
+    WindhawkUtils::StringSetting divider =
+        WindhawkUtils::StringSetting::make(L"divider");
+    if (wcscmp(divider.get(), L"file") == 0) {
+        g_settings.dividerImagePath = PathSetting(L"dividerImagePath");
+    } else if (wcscmp(divider.get(), L"drawn") == 0) {
+        g_settings.dividerImagePath.clear();
+    } else {
+        g_settings.dividerImagePath = kBuiltInDivider;
+    }
 
     WindhawkUtils::StringSetting imagePosition =
         WindhawkUtils::StringSetting::make(L"imagePosition");
@@ -1684,10 +1748,11 @@ static void RefreshPane(Pane* pane) {
 // Painting
 // -----------------------------------------------------------------------------
 
-// Windows 2000 kept a watermark at the bottom of its web view, wvlogo.gif out of
-// %SystemRoot%\Web. The mod draws whatever file the settings point at, and lets
-// the shell load it - which is what makes GIF, PNG and JPEG work next to BMP
-// without dragging in an imaging library.
+// The web view of Windows 2000 was drawn with pictures out of its
+// %SystemRoot%\Web: clouds or coloured squares in the corner and a bar of colour
+// under the name. Those come built into the mod; a file from the
+// settings is loaded by the shell instead - which is what makes GIF, PNG and
+// JPEG work next to BMP without dragging in an imaging library.
 struct PaneImage {
     HBITMAP bitmap = nullptr;
     HICON icon = nullptr;
@@ -1697,7 +1762,7 @@ struct PaneImage {
 };
 
 // The pane draws two pictures: the one in its corner and the coloured line
-// under the name, both of which the settings can point anywhere.
+// under the name.
 struct CachedImage {
     PaneImage image;
     std::wstring path;
@@ -1778,7 +1843,281 @@ static bool HasExtension(const std::wstring& path, PCWSTR extension) {
            _wcsicmp(path.c_str() + dot, extension) == 0;
 }
 
+// The built-in pictures are the Windows 2000 ones, 8 bit BMPs stored as PNG.
+static const char kWin2000Clouds[] =
+    "iVBORw0KGgoAAAANSUhEUgAAALYAAADtCAMAAAAlZ38CAAADAFBMVEX////3///v///W7/e1"
+    "3u/e7/fG5/fn9/+93u+l1u+ExueUzu+MxufW7//O5/e13vet1u+czu+Exu97vefG3u+l1veM"
+    "xu+93ve11u+Eveet1velzu+Uxu+Mvefe7//W5/fO5//v9//G3ve91u+11vetzu+lzvecxu+M"
+    "ve+tzvfW5//G3v+91vfO3vfn7//39/8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB3"
+    "7CuGAAARkklEQVR42u2de3/ayM/FhyVgSLiYbcLFBByMA9s8YL//d/dIR5qLSdKmLU3s38ei"
+    "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";
+
+static const char kWin2000Squares[] =
+    "iVBORw0KGgoAAAANSUhEUgAAAH8AAAA4CAMAAADjPtf1AAADAFBMVEUAAACAAAAAgACAgAAA"
+    "AICAAIAAgIDAwMDA3MCmyvAEBAQICAgMDAwREREWFhYcHBwiIiIpKSlVVVVNTU1CQkI5OTn/"
+    "fID/UFDWAJPM7P/v1sbn59atqZAzAABmAACZAADMAAAAMwAzMwBmMwCZMwDMMwD/MwAAZgAz"
+    "ZgBmZgCZZgDMZgD/ZgAAmQAzmQBmmQCZmQDMmQD/mQAAzAAzzABmzACZzADMzAD/zABm/wCZ"
+    "/wDM/wAAADMzADNmADOZADPMADP/ADMAMzMzMzNmMzOZMzPMMzP/MzMAZjMzZjNmZjOZZjPM"
+    "ZjP/ZjMAmTMzmTNmmTOZmTPMmTP/mTMAzDMzzDNmzDOZzDPMzDP/zDMz/zNm/zOZ/zPM/zP/"
+    "/zMAAGYzAGZmAGaZAGbMAGb/AGYAM2YzM2ZmM2aZM2bMM2b/M2YAZmYzZmZmZmaZZmbMZmYA"
+    "mWYzmWZmmWaZmWbMmWb/mWYAzGYzzGaZzGbMzGb/zGYA/2Yz/2aZ/2bM/2b/AMzMAP8AmZmZ"
+    "M5mZAJnMAJkAAJkzM5lmAJnMM5n/AJkAZpkzZplmM5mZZpnMZpn/M5kzmZlmmZmZmZnMmZn/"
+    "mZkAzJkzzJlmzGaZzJnMzJn/zJkA/5kz/5lmzJmZ/5nM/5n//5kAAMwzAJlmAMyZAMzMAMwA"
+    "M5kzM8xmM8yZM8zMM8z/M8wAZswzZsxmZpmZZszMZsz/ZpkAmcwzmcxmmcyZmczMmcz/mcwA"
+    "zMwzzMxmzMyZzMzMzMz/zMwA/8wz/8xm/5mZ/8zM/8z//8wzAMxmAP+ZAP8AM8wzM/9mM/+Z"
+    "M//MM///M/8AZv8zZv9mZsyZZv/MZv//ZswAmf8zmf9mmf+Zmf/Mmf//mf8AzP8zzP9mzP+Z"
+    "zP/MzP//zP8z//9m/8yZ///M////ZmZm/2b//2ZmZv//Zv9m//+lACFfX193d3eGhoaWlpbL"
+    "y8uysrLX19fd3d3j4+Pq6urx8fH4+Pj/+/CgoKSAgID/AAAA/wD//wAAAP//AP8A//////9Y"
+    "Ik63AAAF9UlEQVR42uVZTW7jNhT20r7AABRzA/cozsZZ9B52DEi6RhayBaTwIZLNFN3IZ+hs"
+    "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";
+
+static const char kWin2000Divider[] =
+    "iVBORw0KGgoAAAANSUhEUgAAAKgAAAABCAMAAAB9hhWgAAADAFBMVEUAAACAAAAAgACAgAAA"
+    "AICAAIAAgIDAwMDA3MCmyvAEBAQICAgMDAwREREWFhYcHBwiIiIpKSlVVVVNTU1CQkI5OTn/"
+    "fID/UFDWAJPM7P/v1sbn59atqZAzAABmAACZAADMAAAAMwAzMwBmMwCZMwDMMwD/MwAAZgAz"
+    "ZgBmZgCZZgDMZgD/ZgAAmQAzmQBmmQCZmQDMmQD/mQAAzAAzzABmzACZzADMzAD/zABm/wCZ"
+    "/wDM/wAAADMzADNmADOZADPMADP/ADMAMzMzMzNmMzOZMzPMMzP/MzMAZjMzZjNmZjOZZjPM"
+    "ZjP/ZjMAmTMzmTNmmTOZmTPMmTP/mTMAzDMzzDNmzDOZzDPMzDP/zDMz/zNm/zOZ/zPM/zP/"
+    "/zMAAGYzAGZmAGaZAGbMAGb/AGYAM2YzM2ZmM2aZM2bMM2b/M2YAZmYzZmZmZmaZZmbMZmYA"
+    "mWYzmWZmmWaZmWbMmWb/mWYAzGYzzGaZzGbMzGb/zGYA/2Yz/2aZ/2bM/2b/AMzMAP8AmZmZ"
+    "M5mZAJnMAJkAAJkzM5lmAJnMM5n/AJkAZpkzZplmM5mZZpnMZpn/M5kzmZlmmZmZmZnMmZn/"
+    "mZkAzJkzzJlmzGaZzJnMzJn/zJkA/5kz/5lmzJmZ/5nM/5n//5kAAMwzAJlmAMyZAMzMAMwA"
+    "M5kzM8xmM8yZM8zMM8z/M8wAZswzZsxmZpmZZszMZsz/ZpkAmcwzmcxmmcyZmczMmcz/mcwA"
+    "zMwzzMxmzMyZzMzMzMz/zMwA/8wz/8xm/5mZ/8zM/8z//8wzAMxmAP+ZAP8AM8wzM/9mM/+Z"
+    "M//MM///M/8AZv8zZv9mZsyZZv/MZv//ZswAmf8zmf9mmf+Zmf/Mmf//mf8AzP8zzP9mzP+Z"
+    "zP/MzP//zP8z//9m/8yZ///M////ZmZm/2b//2ZmZv//Zv9m//+lACFfX193d3eGhoaWlpbL"
+    "y8uysrLX19fd3d3j4+Pq6urx8fH4+Pj/+/CgoKSAgID/AAAA/wD//wAAAP//AP8A//////9Y"
+    "Ik63AAAAFElEQVR42mNQIxJYkAbCiAaXiQMAgy4+es9dmycAAAAASUVORK5CYII=";
+
+static std::vector<BYTE> DecodeBase64(const char* text) {
+    std::vector<BYTE> bytes;
+    unsigned int buffer = 0;
+    int bits = 0;
+    for (; *text && *text != '='; text++) {
+        char c = *text;
+        int value = c >= 'A' && c <= 'Z'   ? c - 'A'
+                    : c >= 'a' && c <= 'z' ? c - 'a' + 26
+                    : c >= '0' && c <= '9' ? c - '0' + 52
+                    : c == '+'             ? 62
+                    : c == '/'             ? 63
+                                           : -1;
+        if (value < 0) {
+            continue;
+        }
+        buffer = (buffer << 6) | value;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            bytes.push_back((BYTE)(buffer >> bits));
+        }
+    }
+    return bytes;
+}
+
+// Decodes a built-in picture with WIC into a 32 bit DIB. Its fourth byte is
+// cleared, so the picture counts as one without an alpha channel of its own and
+// its white is let through like that of the original BMPs.
+static PaneImage LoadBuiltInImage(const std::wstring& name) {
+    PaneImage image;
+
+    const char* data = name == kBuiltInClouds    ? kWin2000Clouds
+                       : name == kBuiltInSquares ? kWin2000Squares
+                       : name == kBuiltInDivider ? kWin2000Divider
+                                                 : nullptr;
+    if (!data) {
+        return image;
+    }
+
+    std::vector<BYTE> png = DecodeBase64(data);
+    IStream* stream = SHCreateMemStream(png.data(), (UINT)png.size());
+    IWICImagingFactory* factory = nullptr;
+    IWICBitmapDecoder* decoder = nullptr;
+    IWICBitmapFrameDecode* frame = nullptr;
+    IWICFormatConverter* converter = nullptr;
+    UINT width = 0;
+    UINT height = 0;
+
+    if (stream &&
+        SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+                                   CLSCTX_INPROC_SERVER,
+                                   IID_PPV_ARGS(&factory))) &&
+        SUCCEEDED(factory->CreateDecoderFromStream(
+            stream, nullptr, WICDecodeMetadataCacheOnDemand, &decoder)) &&
+        SUCCEEDED(decoder->GetFrame(0, &frame)) &&
+        SUCCEEDED(factory->CreateFormatConverter(&converter)) &&
+        SUCCEEDED(converter->Initialize(frame, GUID_WICPixelFormat32bppBGR,
+                                        WICBitmapDitherTypeNone, nullptr, 0,
+                                        WICBitmapPaletteTypeCustom)) &&
+        SUCCEEDED(converter->GetSize(&width, &height)) && width > 0 &&
+        height > 0 && width <= 4096 && height <= 4096) {
+        BITMAPINFO info = {};
+        info.bmiHeader.biSize = sizeof(info.bmiHeader);
+        info.bmiHeader.biWidth = (LONG)width;
+        info.bmiHeader.biHeight = -(LONG)height;  // top down
+        info.bmiHeader.biPlanes = 1;
+        info.bmiHeader.biBitCount = 32;
+        info.bmiHeader.biCompression = BI_RGB;
+
+        BYTE* bits = nullptr;
+        HBITMAP bitmap = CreateDIBSection(nullptr, &info, DIB_RGB_COLORS,
+                                          (void**)&bits, nullptr, 0);
+        if (bitmap && SUCCEEDED(converter->CopyPixels(
+                          nullptr, width * 4, width * 4 * height, bits))) {
+            for (size_t i = 3; i < (size_t)width * height * 4; i += 4) {
+                bits[i] = 0;
+            }
+            image.bitmap = bitmap;
+            image.width = (int)width;
+            image.height = (int)height;
+        } else if (bitmap) {
+            DeleteObject(bitmap);
+        }
+    }
+
+    if (converter) {
+        converter->Release();
+    }
+    if (frame) {
+        frame->Release();
+    }
+    if (decoder) {
+        decoder->Release();
+    }
+    if (factory) {
+        factory->Release();
+    }
+    if (stream) {
+        stream->Release();
+    }
+
+    return image;
+}
+
 static PaneImage LoadPaneImage(const std::wstring& path) {
+    if (path[0] == L'*') {
+        return LoadBuiltInImage(path);
+    }
+
     PaneImage image;
 
     if (HasExtension(path, L".ico") || HasExtension(path, L".cur")) {
@@ -1986,6 +2325,45 @@ static int PaintDividerImage(HDC dc, int x, int y, int width, int dpi) {
     return height;
 }
 
+// Draws a loaded picture into the given rectangle: an icon as it is, a picture
+// with alpha by it, and one without either multiplied into the background or
+// copied over it.
+static void DrawPaneImage(HDC dc,
+                          const PaneImage& image,
+                          int x,
+                          int y,
+                          int width,
+                          int height) {
+    if (image.icon) {
+        DrawIconEx(dc, x, y, image.icon, width, height, 0, nullptr, DI_NORMAL);
+        return;
+    }
+
+    if (!image.alpha && g_settings.imageBlendWhite) {
+        MultiplyIntoBackground(dc, x, y, width, height, image.bitmap,
+                               image.width, image.height);
+        return;
+    }
+
+    HDC source = CreateCompatibleDC(dc);
+    HBITMAP old = (HBITMAP)SelectObject(source, image.bitmap);
+
+    if (image.alpha) {
+        BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+        AlphaBlend(dc, x, y, width, height, source, 0, 0, image.width,
+                   image.height, blend);
+    } else {
+        int mode = SetStretchBltMode(
+            dc, g_settings.imageSmooth ? HALFTONE : COLORONCOLOR);
+        StretchBlt(dc, x, y, width, height, source, 0, 0, image.width,
+                   image.height, SRCCOPY);
+        SetStretchBltMode(dc, mode);
+    }
+
+    SelectObject(source, old);
+    DeleteDC(source);
+}
+
 // Measures the picture, and draws it as well when a device context is given.
 // The lock is held across the drawing so that a settings change cannot free the
 // bitmap out from under a paint on another thread.
@@ -2016,42 +2394,13 @@ static SIZE PaintPaneImage(HDC dc, int x, int y, int dpi, int maxWidth) {
         return size;
     }
 
-    if (!dc) {
-        return size;
+    if (dc) {
+        DrawPaneImage(dc, g_image, x, y, size.cx, size.cy);
     }
-
-    if (g_image.icon) {
-        DrawIconEx(dc, x, y, g_image.icon, size.cx, size.cy, 0, nullptr,
-                   DI_NORMAL);
-        return size;
-    }
-
-    if (!g_image.alpha && g_settings.imageBlendWhite) {
-        MultiplyIntoBackground(dc, x, y, size.cx, size.cy, g_image.bitmap,
-                               g_image.width, g_image.height);
-        return size;
-    }
-
-    HDC source = CreateCompatibleDC(dc);
-    HBITMAP old = (HBITMAP)SelectObject(source, g_image.bitmap);
-
-    if (g_image.alpha) {
-        BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-        AlphaBlend(dc, x, y, size.cx, size.cy, source, 0, 0, g_image.width,
-                   g_image.height, blend);
-    } else {
-        int mode = SetStretchBltMode(
-            dc, g_settings.imageSmooth ? HALFTONE : COLORONCOLOR);
-        StretchBlt(dc, x, y, size.cx, size.cy, source, 0, 0, g_image.width,
-                   g_image.height, SRCCOPY);
-        SetStretchBltMode(dc, mode);
-    }
-
-    SelectObject(source, old);
-    DeleteDC(source);
 
     return size;
 }
+
 
 static void EnsureFonts(Pane* pane) {
     if (pane->font) {
