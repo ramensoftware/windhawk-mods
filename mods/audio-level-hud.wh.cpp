@@ -211,33 +211,6 @@ struct IAudioMeterInformation : public IUnknown {
 };
 #endif
 
-// Undocumented SetWindowCompositionAttribute definitions for native Windows
-// Fluent Acrylic blur
-typedef enum _ACCENT_STATE {
-  ACCENT_DISABLED = 0,
-  ACCENT_ENABLE_GRADIENT = 1,
-  ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
-  ACCENT_ENABLE_BLURBEHIND = 3,
-  ACCENT_ENABLE_ACRYLICBLURBEHIND = 4,
-  ACCENT_INVALID_STATE = 5
-} ACCENT_STATE;
-
-typedef struct _ACCENT_POLICY {
-  ACCENT_STATE AccentState;
-  DWORD AccentFlags;
-  DWORD GradientColor;
-  DWORD AnimationId;
-} ACCENT_POLICY;
-
-typedef struct _WINDOWCOMPOSITIONATTRIBDATA {
-  DWORD Attribute;
-  PVOID pvData;
-  SIZE_T cbData;
-} WINDOWCOMPOSITIONATTRIBDATA;
-
-typedef BOOL(WINAPI *pfnSetWindowCompositionAttribute)(
-    HWND, WINDOWCOMPOSITIONATTRIBDATA *);
-
 // Structure for Audio Endpoint metering
 struct AudioEndpointTracker {
   IMMDevice *pDevice = nullptr;
@@ -301,7 +274,6 @@ static HBRUSH g_hFlyoutBgBrush =
 static HFONT g_hFlyoutControlFont = NULL;
 static HANDLE g_hHudThread = NULL;
 static HANDLE g_hStopEvent = NULL;
-static DWORD g_dwThreadId = 0;
 static BOOL g_bHudVisible = TRUE;
 
 static IMMDeviceEnumerator *g_pEnumerator = nullptr;
@@ -377,16 +349,6 @@ static float LinearToMeterRatio(float linearLevel) {
   }
 }
 
-typedef enum PreferredAppMode {
-  Default,
-  AllowDark,
-  ForceDark,
-  ForceLight,
-  Max
-} PreferredAppMode;
-
-typedef PreferredAppMode(WINAPI *pfnSetPreferredAppMode)(
-    PreferredAppMode appMode);
 typedef BOOL(WINAPI *pfnAllowDarkModeForWindow)(HWND hWnd, BOOL allow);
 
 static void EnableDarkModeForControl(HWND hCtrl) {
@@ -424,7 +386,7 @@ static void ApplyCornerPreference(HWND hWnd) {
   // alongside DirectComposition causes the DWM to apply acrylic to the full
   // rectangular window bounds, bleeding opaque blur outside the D2D rounded
   // rect and producing visible square corner artifacts. DirectComposition
-  // handles compositing natively via premultiplied alpha Ã¢â‚¬â€ no accent policy
+  // handles compositing natively via premultiplied alpha; no accent policy
   // needed.
 }
 
@@ -554,7 +516,14 @@ static void InitAudioTracker(EDataFlow dataFlow,
 
     // Only a visible capture meter needs an active stream. Render endpoint
     // metering reports the output mix without creating a render stream.
-    if (dataFlow == eCapture && g_Settings.showMic && g_bHudVisible) {
+    EDataFlow actualFlow = eAll;
+    IMMEndpoint *endpoint = nullptr;
+    if (SUCCEEDED(pDevice->QueryInterface(__uuidof(IMMEndpoint),
+                                          (void **)&endpoint))) {
+      endpoint->GetDataFlow(&actualFlow);
+      endpoint->Release();
+    }
+    if (actualFlow == eCapture && g_Settings.showMic && g_bHudVisible) {
       IAudioClient *pAudioClient = nullptr;
       if (SUCCEEDED(pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL,
                                       (void **)&pAudioClient)) && pAudioClient) {
@@ -972,6 +941,10 @@ static void LoadModSettings() {
 
   // Visibility state
   g_bHudVisible = Wh_GetIntValue(L"rt_hudVisible", TRUE);
+  if (!g_Settings.toggleHotkey[0]) {
+    g_bHudVisible = TRUE;
+    Wh_SetIntValue(L"rt_hudVisible", TRUE);
+  }
 }
 
 // Position HUD according to monitor work area and settings
@@ -979,13 +952,10 @@ static void PositionHudWindow() {
   if (!g_hHudWnd)
     return;
 
-  float dpiScale = GetDpiForWindow(g_hHudWnd) / 96.0f;
-
   HMONITOR hMonitor = MonitorFromWindow(g_hHudWnd, MONITOR_DEFAULTTOPRIMARY);
   MONITORINFO mi = {sizeof(MONITORINFO)};
-  GetMonitorInfoW(hMonitor, &mi);
-
-  RECT workArea = mi.rcWork;
+  if (!GetMonitorInfoW(hMonitor, &mi))
+    return;
 
   BOOL isVertical = (_wcsicmp(g_Settings.layout, L"vertical") == 0);
   float scale = g_Settings.hudScale / 100.0f;
@@ -1000,6 +970,36 @@ static void PositionHudWindow() {
   int baseW = isVertical ? (activeChannels == 2 ? 136 : 76) : 500;
   int baseH = isVertical ? 420 : (activeChannels == 1 ? 62 : 104);
 
+  bool custom = _wcsicmp(g_Settings.position, L"custom") == 0;
+  int savedX = Wh_GetIntValue(L"custom_x", mi.rcWork.left + 24);
+  int savedY = Wh_GetIntValue(L"custom_y", mi.rcWork.top + 24);
+  if (custom) {
+    // Choose the saved destination before clamping, including at startup.
+    RECT saved = {savedX, savedY,
+                  savedX + (LONG)roundf(baseW * scale),
+                  savedY + (LONG)roundf(baseH * scale)};
+    hMonitor = MonitorFromRect(&saved, MONITOR_DEFAULTTONEAREST);
+    if (!GetMonitorInfoW(hMonitor, &mi))
+      return;
+  }
+
+  RECT workArea = mi.rcWork;
+  if (custom && MonitorFromWindow(g_hHudWnd, MONITOR_DEFAULTTONEAREST) != hMonitor) {
+    // Move to the saved monitor before querying DPI. GetDpiForWindow is the
+    // supported API for our per-monitor-aware thread (GetDpiForMonitor isn't).
+    RECT current;
+    GetWindowRect(g_hHudWnd, &current);
+    int targetX = std::clamp(savedX, (int)workArea.left,
+                            std::max((int)workArea.left,
+                                     (int)workArea.right - (int)(current.right - current.left)));
+    int targetY = std::clamp(savedY, (int)workArea.top,
+                            std::max((int)workArea.top,
+                                     (int)workArea.bottom - (int)(current.bottom - current.top)));
+    SetWindowPos(g_hHudWnd, NULL, targetX, targetY, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+  }
+  float dpiScale = GetDpiForWindow(g_hHudWnd) / 96.0f;
+
   int w = (int)roundf(baseW * scale * dpiScale);
   int h = (int)roundf(baseH * scale * dpiScale);
   int margin = (int)roundf(24 * dpiScale);
@@ -1007,9 +1007,9 @@ static void PositionHudWindow() {
   int x = workArea.right - w - margin;
   int y = workArea.top + margin;
 
-  if (_wcsicmp(g_Settings.position, L"custom") == 0) {
-    x = Wh_GetIntValue(L"custom_x", workArea.right - w - margin);
-    y = Wh_GetIntValue(L"custom_y", workArea.top + margin);
+  if (custom) {
+    x = savedX;
+    y = savedY;
   } else if (_wcsicmp(g_Settings.position, L"top-left") == 0) {
     x = workArea.left + margin;
     y = workArea.top + margin;
@@ -1031,7 +1031,7 @@ static void PositionHudWindow() {
                  std::max((int)workArea.top, (int)workArea.bottom - h));
 
   SetWindowPos(g_hHudWnd, HWND_TOPMOST, x, y, w, h,
-               SWP_NOACTIVATE | SWP_SHOWWINDOW);
+               SWP_NOACTIVATE);
 
   // Apply click-through styles dynamically
 
@@ -1517,7 +1517,7 @@ static void RenderHud() {
   float fontComp = (scale < 1.0f) ? (1.0f / sqrtf(scale)) : 1.0f;
 
   if (isVertical) {
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Vertical Orientation Renderer Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    // Vertical Orientation Renderer
     int colIndex = 0;
     float colWidth = size.width / (float)activeChannels;
 
@@ -1652,7 +1652,7 @@ static void RenderHud() {
       DrawVerticalChannel(g_SystemTracker, sysIconStr, L"System");
     }
   } else {
-    // Ã¢â€â‚¬Ã¢â€â‚¬ Horizontal Orientation Renderer Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    // Horizontal Orientation Renderer
     float rowHeight = size.height / (float)activeChannels;
     float currentY = 0.0f;
 
@@ -1785,7 +1785,7 @@ static void RenderHud() {
     }
   }
 
-  // Draw Settings overflow button (Ã¢â€¹Â®) if clickable
+  // Draw Settings overflow button if clickable
   if (!g_Settings.clickThrough && g_pIconFontFormat && pTextBrush) {
     WCHAR moreIconStr[2] = {L'\uE712', L'\0'};
 
@@ -1823,7 +1823,7 @@ static void RenderHud() {
   }
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Settings Flyout Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// Settings Flyout
 
 static void DismissFlyout() {
   if (g_hFlyoutWnd) {
@@ -1933,18 +1933,22 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hWnd, UINT message, WPARAM wParam,
         isChecked = (SendMessageW(pDIS->hwndItem, BM_GETCHECK, 0, 0) == BST_CHECKED);
       }
 
-      int circleX = rc.left + 2;
-      int circleY = rc.top + (rc.bottom - rc.top - 16) / 2;
+      UINT dpi = GetDpiForWindow(pDIS->hwndItem);
+      int diameter = MulDiv(16, dpi, 96);
+      int inset = MulDiv(3, dpi, 96);
+      int circleX = rc.left + MulDiv(2, dpi, 96);
+      int circleY = rc.top + (rc.bottom - rc.top - diameter) / 2;
 
       HBRUSH hDotBrush = CreateSolidBrush(RGB(0, 153, 255));
-      HPEN hRingPen = CreatePen(PS_SOLID, 2, isChecked ? RGB(0, 153, 255) : RGB(140, 145, 160));
+      HPEN hRingPen = CreatePen(PS_SOLID, MulDiv(2, dpi, 96), isChecked ? RGB(0, 153, 255) : RGB(140, 145, 160));
       HPEN hOldPen = (HPEN)SelectObject(hdc, hRingPen);
       HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
 
-      Ellipse(hdc, circleX, circleY, circleX + 16, circleY + 16);
+      Ellipse(hdc, circleX, circleY, circleX + diameter, circleY + diameter);
       if (isChecked) {
         SelectObject(hdc, hDotBrush);
-        Ellipse(hdc, circleX + 3, circleY + 3, circleX + 13, circleY + 13);
+        Ellipse(hdc, circleX + inset, circleY + inset,
+                circleX + diameter - inset, circleY + diameter - inset);
       }
 
       SelectObject(hdc, hOldPen);
@@ -1960,7 +1964,7 @@ static LRESULT CALLBACK FlyoutWndProc(HWND hWnd, UINT message, WPARAM wParam,
         hOldFont = (HFONT)SelectObject(hdc, hFont);
 
       RECT textRc = rc;
-      textRc.left += 24;
+      textRc.left += MulDiv(24, dpi, 96);
       DrawTextW(hdc, text, -1, &textRc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
       if (hOldFont)
@@ -2195,7 +2199,7 @@ static void ShowSettingsFlyout() {
       SendMessageW(hCtrl, WM_SETFONT, (WPARAM)g_hFlyoutControlFont, TRUE);
   };
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Opacity Row Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // Opacity Row
   HWND hSlider = CreateWindowExW(0, TRACKBAR_CLASS, L"",
                                  WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_NOTICKS,
                                  PAD_X + 80, SLIDER_Y, 102, 26, g_hFlyoutWnd,
@@ -2212,7 +2216,7 @@ static void ShowSettingsFlyout() {
                       (HMENU)FLYOUT_CTRL_OP_LBL, hInst, NULL);
   ApplyControlStyle(hOpLbl);
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ HUD Scale Row Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // HUD Scale Row
   HWND hScaleSlider = CreateWindowExW(
       0, TRACKBAR_CLASS, L"", WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_NOTICKS,
       PAD_X + 80, 58, 102, 26, g_hFlyoutWnd, (HMENU)FLYOUT_CTRL_SCALE, hInst,
@@ -2229,7 +2233,7 @@ static void ShowSettingsFlyout() {
                       (HMENU)FLYOUT_CTRL_SCALE_LBL, hInst, NULL);
   ApplyControlStyle(hScaleLbl);
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Orientation Row Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // Orientation Row
   HWND hRadHorz =
       CreateWindowExW(0, WC_BUTTON, L"Horizontal Bar (Default)",
                       WS_CHILD | WS_VISIBLE | BS_OWNERDRAW | WS_GROUP,
@@ -2250,7 +2254,7 @@ static void ShowSettingsFlyout() {
     SendMessageW(hRadHorz, BM_SETCHECK, BST_CHECKED, 0);
   }
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Display Row Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // Display Row
   HWND hRadBoth =
       CreateWindowExW(0, WC_BUTTON, L"Show Both Meters",
                       WS_CHILD | WS_VISIBLE | BS_OWNERDRAW | WS_GROUP,
@@ -2287,7 +2291,7 @@ static void ShowSettingsFlyout() {
     SendMessageW(hRadSys, BM_SETCHECK, BST_CHECKED, 0);
   }
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Input Device Row Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // Input Device Row
   HWND hMicCombo = CreateWindowExW(
       0, WC_COMBOBOX, L"",
       CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_CHILD | WS_OVERLAPPED |
@@ -2356,7 +2360,7 @@ static void ShowSettingsFlyout() {
     }
   }
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Behavior Row Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // Behavior Row
   HWND hCtChk = CreateWindowExW(
       0, WC_BUTTON, L"  Click-Through", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
       PAD_X + 2, 396, FLY_W - PAD_X * 2, ROW_H, g_hFlyoutWnd,
@@ -2426,6 +2430,7 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT message, WPARAM wParam,
     RegisterGlobalHotkey();
     ApplyCornerPreference(hWnd);
     RefreshAudioTrackers();
+    ShowWindow(hWnd, g_bHudVisible ? SW_SHOWNOACTIVATE : SW_HIDE);
     InitDirectComposition(hWnd);
     InvalidateRect(hWnd, NULL, FALSE);
     return 0;
@@ -2469,7 +2474,6 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT message, WPARAM wParam,
                    suggested->bottom - suggested->top,
                    SWP_NOZORDER | SWP_NOACTIVATE);
     }
-    PositionHudWindow();
     InitDirectComposition(hWnd);
     InvalidateRect(hWnd, NULL, FALSE);
     return 0;
@@ -2490,7 +2494,6 @@ static LRESULT CALLBACK HudWndProc(HWND hWnd, UINT message, WPARAM wParam,
     } else if (wParam == HUD_CLICKTHRU_HOTKEY_ID) {
       g_Settings.clickThrough = !g_Settings.clickThrough;
       Wh_SetIntValue(L"rt_clickThrough", g_Settings.clickThrough);
-      Wh_SetIntValue(L"rt_lastWhClickThrough", g_Settings.clickThrough);
       PositionHudWindow();
       if (g_hFlyoutWnd) {
         HWND hChk = GetDlgItem(g_hFlyoutWnd, FLYOUT_CTRL_CLICKTHRU);
@@ -2600,7 +2603,7 @@ static DWORD WINAPI HudThreadProc(LPVOID lpParam) {
     return 0;
   }
 
-  // Create Topmost Window in ZBID_UIACCESS System Band for DirectComposition
+  // Create a topmost window for DirectComposition
   float scale = g_Settings.hudScale / 100.0f;
   if (scale < 0.25f)
     scale = 0.25f;
@@ -2688,7 +2691,7 @@ BOOL WhTool_ModInit() {
     return FALSE;
 
   // Spawn dedicated UI message loop thread
-  g_hHudThread = CreateThread(NULL, 0, HudThreadProc, NULL, 0, &g_dwThreadId);
+  g_hHudThread = CreateThread(NULL, 0, HudThreadProc, NULL, 0, NULL);
   if (!g_hHudThread) {
     Wh_Log(L"Failed to create Audio Level HUD thread.");
     CloseHandle(g_hStopEvent);
