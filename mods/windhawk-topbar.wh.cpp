@@ -49,8 +49,8 @@ Themes are collections of styles that can be selected from the **Theme** dropdow
 
 | Theme | Preview |
 |-------|---------|
-| [GreenBar](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) | [![GreenBar](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/GreenBar/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) |
-| [NoIslands](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) | [![NoIslands](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/NoIslands/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) |
+| [GreenBar](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) | [![GreenBar](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/GreenBar/screenshot.png?v=2)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) |
+| [NoIslands](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) | [![NoIslands](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/NoIslands/screenshot.png?v=2)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) |
 | [OS27 GoldenGate](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) | [![OS27 GoldenGate](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/OS27%20GoldenGate/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) |
 
 More themes, stylings, etc can be found and contributed from:
@@ -1404,7 +1404,6 @@ static bool g_topBarPopupShowAtCalled = false;
 static HWND g_topBarPopupHwnd = nullptr;
 static int g_topBarPopupPinTicks = 0;
 static HWND g_subclassedPopupHwnd = nullptr;
-static WNDPROC g_prevPopupProc = nullptr;
 static std::atomic<bool> g_anyChildFlyoutOpen{false};
 static std::atomic<ULONGLONG> g_lastForeignClickTick{0};
 static std::atomic<bool> g_forceClosingFlyouts{false};
@@ -19631,16 +19630,9 @@ HWND FindOpenChildFlyoutHwnd() {
 
 static std::mutex g_childPopupMutex;
 static std::map<HWND, RECT> g_childPopupTargets;
-static std::map<HWND, WNDPROC> g_childPopupPrevProcs;
+static std::set<HWND> g_childPopupSubclassed;
 
-LRESULT CALLBACK ChildFlyoutPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    WNDPROC prev = nullptr;
-    {
-        std::lock_guard<std::mutex> lock(g_childPopupMutex);
-        auto it = g_childPopupPrevProcs.find(hwnd);
-        if (it != g_childPopupPrevProcs.end()) prev = it->second;
-    }
-
+LRESULT CALLBACK ChildFlyoutPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     if (msg == WM_WINDOWPOSCHANGING) {
         RECT target{};
         bool haveTarget = false;
@@ -19660,14 +19652,17 @@ LRESULT CALLBACK ChildFlyoutPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         }
     }
 
-    if (msg == WM_DESTROY) {
-        std::lock_guard<std::mutex> lock(g_childPopupMutex);
-        g_childPopupTargets.erase(hwnd);
-        g_childPopupPrevProcs.erase(hwnd);
+    if (msg == WM_NCDESTROY) {
+        {
+            std::lock_guard<std::mutex> lock(g_childPopupMutex);
+            g_childPopupTargets.erase(hwnd);
+            g_childPopupSubclassed.erase(hwnd);
+        }
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ChildFlyoutPopupProc, uIdSubclass);
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 
-    return prev ? CallWindowProc(prev, hwnd, msg, wParam, lParam)
-                : DefWindowProc(hwnd, msg, wParam, lParam);
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 void ClearChildPopupTargets() {
@@ -19688,18 +19683,14 @@ void RegisterChildPopupTarget(HWND hwnd, RECT target) {
     {
         std::lock_guard<std::mutex> lock(g_childPopupMutex);
         g_childPopupTargets[hwnd] = target;
-        if (g_childPopupPrevProcs.find(hwnd) == g_childPopupPrevProcs.end()) {
+        if (g_childPopupSubclassed.find(hwnd) == g_childPopupSubclassed.end()) {
             needSubclass = true;
+            g_childPopupSubclassed.insert(hwnd);
         }
     }
     if (needSubclass) {
-        WNDPROC prev = reinterpret_cast<WNDPROC>(
-            SetWindowLongPtr(hwnd, GWLP_WNDPROC,
-                             reinterpret_cast<LONG_PTR>(ChildFlyoutPopupProc)));
-        if (prev) {
-            std::lock_guard<std::mutex> lock(g_childPopupMutex);
-            g_childPopupPrevProcs[hwnd] = prev;
-        }
+        WindhawkUtils::SetWindowSubclassFromAnyThread(
+            hwnd, ChildFlyoutPopupProc, 0, 0);
     }
     SetWindowPos(hwnd, nullptr, target.left, target.top,
                  target.right - target.left, target.bottom - target.top,
@@ -21226,7 +21217,7 @@ void SyncSearchKeyHook() {
     }
 }
 
-LRESULT CALLBACK TopBarPopupSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK TopBarPopupSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     // Re-stamp the transparency kill on every message DWM or the theme
     // engine can use to re-apply a Mica/Acrylic sheet. WM_SETTINGCHANGE
     // fires when the user flips the Windows "Transparency effects" toggle,
@@ -21277,22 +21268,19 @@ LRESULT CALLBACK TopBarPopupSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
             return 0;
         }
     }
-    if (msg == WM_DESTROY) {
+    if (msg == WM_NCDESTROY) {
         if (g_subclassedPopupHwnd == hwnd) {
             g_subclassedPopupHwnd = nullptr;
-            g_prevPopupProc = nullptr;
         }
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TopBarPopupSubclassProc, uIdSubclass);
+        return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
-    return CallWindowProc(g_prevPopupProc, hwnd, msg, wParam, lParam);
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 void InstallPopupSubclass(HWND hwnd) {
     if (!hwnd || hwnd == g_subclassedPopupHwnd) return;
-    WNDPROC prev = reinterpret_cast<WNDPROC>(
-        SetWindowLongPtr(hwnd, GWLP_WNDPROC,
-                         reinterpret_cast<LONG_PTR>(TopBarPopupSubclassProc)));
-    if (prev) {
-        g_prevPopupProc = prev;
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TopBarPopupSubclassProc, 0, 0)) {
         g_subclassedPopupHwnd = hwnd;
         Wh_Log(L"TopBar: popup HWND subclassed: %p", hwnd);
     }
@@ -23406,7 +23394,6 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         g_topBarPopupShowAtCalled = false;
         g_topBarPopupHwnd = nullptr;
         g_subclassedPopupHwnd = nullptr;
-        g_prevPopupProc = nullptr;
         if (g_topBarPopup) {
             try {
                 g_topBarAllowClose = true;
