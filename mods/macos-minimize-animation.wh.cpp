@@ -2,7 +2,7 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize and restore (open) animations for every window.
-// @version         3.1.4
+// @version         3.1.5
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
@@ -941,11 +941,23 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
 
     if (g_d2dFactory) {
         D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
-            D2D1_RENDER_TARGET_TYPE_DEFAULT,
+            D2D1_RENDER_TARGET_TYPE_HARDWARE,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
             0, 0, D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE, D2D1_FEATURE_LEVEL_DEFAULT
         );
-        g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
+        HRESULT hrRt = g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
+        if (SUCCEEDED(hrRt) && rt) {
+            // DEFAULT already means "hardware if available, otherwise software",
+            // so log which path actually ran - otherwise a silent fallback (or a
+            // silent success) makes any perf claim unverifiable. This is the only
+            // Wh_Log in the mod, so every outcome must be distinguishable.
+            Wh_Log(L"D2D DC render target: hardware (0x%08X)", hrRt);
+        } else {
+            Wh_Log(L"Hardware DC render target failed (0x%08X), falling back to default", hrRt);
+            rtProps.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
+            hrRt = g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
+            Wh_Log(L"Default DC render target: 0x%08X", hrRt);
+        }
         if (rt) {
             // Potassiumuncher's v1.5: text AA fixed once at creation (the geometry
             // AA mode is set per frame in the draw loop below).

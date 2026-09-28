@@ -2,7 +2,7 @@
 // @id              explorer-frame-classic
 // @name            Classic Explorer navigation bar
 // @description     Restores the classic Explorer navigation bar to the version before the Windows 11 "Moments 4" update
-// @version         1.0.8
+// @version         1.0.9
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -535,7 +535,7 @@ std::optional<bool> IsOsFeatureEnabled(UINT32 featureId) {
     using RtlQueryFeatureConfiguration_t =
         int(NTAPI*)(UINT32, int, INT64*, RTL_FEATURE_CONFIGURATION*);
     static RtlQueryFeatureConfiguration_t pRtlQueryFeatureConfiguration = []() {
-        HMODULE hNtDll = LoadLibraryW(L"ntdll.dll");
+        HMODULE hNtDll = GetModuleHandle(L"ntdll.dll");
         return hNtDll ? (RtlQueryFeatureConfiguration_t)GetProcAddress(
                             hNtDll, "RtlQueryFeatureConfiguration")
                       : nullptr;
@@ -707,6 +707,36 @@ CachedExplorerExtensionState_IsModernNavBarAvailable_Hook(PVOID pThis) {
     return CachedExplorerExtensionState_IsModernNavBarAvailable_Original(pThis);
 }
 
+using CNavBar_Load_t = HRESULT(WINAPI*)(PVOID pThis, IStream* stream);
+CNavBar_Load_t CNavBar_Load_Original;
+HRESULT WINAPI CNavBar_Load_Hook(PVOID pThis, IStream* stream) {
+    Wh_Log(L">");
+
+    // The original disables redraw with WM_SETREDRAW, then "restores" it with
+    // the first call's return value, which is always zero. That leaves the bar
+    // without WS_VISIBLE. Usually a later ShowDW call shows it again, but not
+    // when a preloaded window is reused for a new launch.
+    HWND hWnd = nullptr;
+    winrt::com_ptr<IOleWindow> oleWindow;
+    if (SUCCEEDED(((IUnknown*)pThis)
+                      ->QueryInterface(IID_PPV_ARGS(oleWindow.put())))) {
+        oleWindow->GetWindow(&hWnd);
+    }
+
+    bool wasVisible = hWnd && (GetWindowLong(hWnd, GWL_STYLE) & WS_VISIBLE);
+
+    HRESULT ret = CNavBar_Load_Original(pThis, stream);
+
+    if (wasVisible && !(GetWindowLong(hWnd, GWL_STYLE) & WS_VISIBLE)) {
+        Wh_Log(L"Restoring redraw");
+        SendMessage(hWnd, WM_SETREDRAW, TRUE, 0);
+        RedrawWindow(hWnd, nullptr, nullptr,
+                     RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN);
+    }
+
+    return ret;
+}
+
 using CoCreateInstance_t = decltype(&CoCreateInstance);
 CoCreateInstance_t CoCreateInstance_Original;
 HRESULT WINAPI CoCreateInstance_Hook(REFCLSID rclsid,
@@ -751,6 +781,11 @@ bool HookExplorerFrameSymbols() {
             &CachedExplorerExtensionState_IsModernNavBarAvailable_Original,
             CachedExplorerExtensionState_IsModernNavBarAvailable_Hook,
             true,  // Since Win11 24H2.
+        },
+        {
+            {LR"(public: virtual long __cdecl CNavBar::Load(struct IStream *))"},
+            &CNavBar_Load_Original,
+            CNavBar_Load_Hook,
         },
     };
 
@@ -894,13 +929,13 @@ BOOL Wh_ModInit() {
         auto pKernelBaseLoadLibraryExW =
             (decltype(&LoadLibraryExW))GetProcAddress(kernelBaseModule,
                                                       "LoadLibraryExW");
-        WindhawkUtils::Wh_SetFunctionHookT(pKernelBaseLoadLibraryExW,
-                                           LoadLibraryExW_Hook,
-                                           &LoadLibraryExW_Original);
+        WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
+                                       LoadLibraryExW_Hook,
+                                       &LoadLibraryExW_Original);
     }
 
-    WindhawkUtils::Wh_SetFunctionHookT(CoCreateInstance, CoCreateInstance_Hook,
-                                       &CoCreateInstance_Original);
+    WindhawkUtils::SetFunctionHook(CoCreateInstance, CoCreateInstance_Hook,
+                                   &CoCreateInstance_Original);
 
     return TRUE;
 }
