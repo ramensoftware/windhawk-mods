@@ -24,16 +24,20 @@ Adds the remaining time and the percentage right next to the battery icon in
 the taskbar (the one in the network / volume / battery button). Windows 11
 only.
 
-- while **charging**: time until full, e.g. `99% 🔋 1H 21min`
-- while **on battery**: time until empty, e.g. `62% 🔋 2H 13min`
+![Screenshot](https://raw.githubusercontent.com/pantr1x/windhawk-mods/assets/taskbar-battery-time.png)
+
+_On battery, with the long time format_
+
+- while **charging**: time until full, e.g. `99% 🔋 1h 21min`
+- while **on battery**: time until empty, e.g. `62% 🔋 2h 13min`
 - when **full / plugged in**: nothing is added, the icon looks as usual
 
 In **Settings → Battery time position** you choose whether the time goes
-**after** the battery icon (`99% 🔋 1H 21min`) or **before** it
-(`1H 21min 🔋 99%`). The percentage always goes on the other side. Windows' own
+**after** the battery icon (`99% 🔋 1h 21min`) or **before** it
+(`1h 21min 🔋 99%`). The percentage always goes on the other side. Windows' own
 percentage is hidden meanwhile so it is not shown twice. The text slides in
 and out smoothly (can be turned off in the settings), and hovering it shows
-the long form, e.g. `1,25h remaining` or `13min until full`; **Time format →
+the long form, e.g. `1.25h remaining` or `13min until full`; **Time format →
 Long** shows the long form right in the taskbar.
 
 Plugging in or unplugging shows a time at once: Windows tells the mod about it
@@ -64,13 +68,13 @@ show what the battery reports and what the battery icon is made of.
   $name: Battery time position
   $description: Where the time goes relative to the battery icon. The percentage goes on the other side.
   $options:
-  - timeAfter: "After the battery (99% 🔋 1H 21min)"
-  - timeBefore: "Before the battery (1H 21min 🔋 99%)"
+  - timeAfter: "After the battery (99% 🔋 1h 21min)"
+  - timeBefore: "Before the battery (1h 21min 🔋 99%)"
 - Format: short
   $name: Time format
   $options:
-  - short: "Short (1H 15min)"
-  - long: "Long (1,25h remaining)"
+  - short: "Short (1h 15min)"
+  - long: "Long (1.25h remaining)"
 - Spacing: 4
   $name: Space next to the battery icon (pixels)
 - Animate: true
@@ -140,8 +144,8 @@ struct PowerInputs {
 struct BatteryView {
     int state = 0; // 1 charging, -1 on battery, 0 nothing to add
     int percent = 0;
-    std::wstring time;   // "1H 21min"
-    std::wstring detail; // "1,25h remaining" / "13min until full" (tooltip)
+    std::wstring time;   // "1h 21min"
+    std::wstring detail; // "1.25h remaining" / "13min until full" (tooltip)
     bool guess = false;  // only a rough guess from the percentage so far
 };
 
@@ -167,25 +171,27 @@ static double guessSec(int state, double percent) {
     return percent / 100.0 * 6 * 3600;
 }
 
-// formatTime gives "1H 21min", "2H" or "21min".
+// formatTime gives "1h 21min", "2h" or "21min".
 static std::wstring formatTime(long long sec) {
     long long total = (sec + 30) / 60;
     if (total < 1) total = 1;
     long long h = total / 60, m = total % 60;
     if (h == 0) return std::to_wstring(m) + L"min";
-    if (m == 0) return std::to_wstring(h) + L"H";
-    return std::to_wstring(h) + L"H " + std::to_wstring(m) + L"min";
+    if (m == 0) return std::to_wstring(h) + L"h";
+    return std::to_wstring(h) + L"h " + std::to_wstring(m) + L"min";
 }
 
-// formatLong gives "1,25h remaining", "2h until full" or "13min remaining".
-static std::wstring formatLong(long long sec, int state) {
+// formatLong gives "1.25h remaining", "2h until full" or "13min remaining",
+// with the user's decimal separator.
+static std::wstring formatLong(long long sec, int state,
+                               const std::wstring& decimal = L".") {
     std::wstring t;
     if (sec >= 3600) {
         long long hundredths = (sec * 100 + 1800) / 3600; // hours, 2 decimals
         std::wstring frac = std::to_wstring(hundredths % 100);
         if (frac.size() < 2) frac = L"0" + frac;
         while (!frac.empty() && frac.back() == L'0') frac.pop_back();
-        t = std::to_wstring(hundredths / 100) + (frac.empty() ? L"" : L"," + frac) + L"h";
+        t = std::to_wstring(hundredths / 100) + (frac.empty() ? L"" : decimal + frac) + L"h";
     } else {
         t = formatTime(sec);
     }
@@ -212,6 +218,7 @@ struct Estimator {
     double dischargeMemory = 0;   // mW (positive), last settled draw on battery
     bool live = false;            // this reading had a usable draw
     const wchar_t* source = L"-"; // where the last time came from (for the log)
+    std::wstring decimal = L".";  // decimal separator for the long form
 
     // Keeps one sample per 10 seconds from the last 15 minutes.
     void push(unsigned long long t, double v) {
@@ -408,14 +415,14 @@ static BatteryView estimate(const PowerInputs& in,
     if (sec > 0) {
         v.state = state;
         v.time = formatTime((long long)sec);
-        v.detail = formatLong((long long)sec, state);
+        v.detail = formatLong((long long)sec, state, e.decimal);
     } else if (inState < kGraceMs) {
         // Shown like any other time; it quietly turns exact once the battery
         // reports more.
         long long guessed = (long long)guessSec(state, percent);
         v.state = state;
         v.time = formatTime(guessed);
-        v.detail = formatLong(guessed, state);
+        v.detail = formatLong(guessed, state, e.decimal);
         v.guess = true;
         e.source = L"guess";
     } else {
@@ -616,10 +623,10 @@ static SRWLOCK g_lock = SRWLOCK_INIT;
 static BatteryView g_view;
 
 struct {
-    bool timeAfter = true; // "99% 🔋 1H 21min"; false = "1H 21min 🔋 99%"
+    bool timeAfter = true; // "99% 🔋 1h 21min"; false = "1h 21min 🔋 99%"
     int spacing = 4;
     bool animate = true;
-    bool longFormat = false; // "1,25h remaining" instead of "1H 15min"
+    bool longFormat = false; // "1.25h remaining" instead of "1h 15min"
 } g_settings;
 
 static void loadSettings() {
@@ -929,7 +936,10 @@ struct Fade {
     ULONGLONG started = 0;
     int ms = 0;
 };
-static Fade g_fadeTime, g_fadePct, g_fadeWinPct;
+// No automatic destructor: when Explorer exits, the mod isn't unloaded and the
+// XAML core is gone by the time global destructors would run. ForgetFades()
+// releases them explicitly, on the taskbar thread.
+[[clang::no_destroy]] static Fade g_fadeTime, g_fadePct, g_fadeWinPct;
 static winrt::weak_ref<Controls::StackPanel> g_shownStack;
 static winrt::weak_ref<Controls::TextBlock> g_hiddenPercent; // Windows' own
 static bool g_timeShown = false; // our time is shown (or on its way in)
@@ -1079,10 +1089,8 @@ static void LogStack(Controls::StackPanel stack) {
     }
 }
 
-// Puts everything back as Windows draws it (on unload).
-static void RestoreAll(Controls::StackPanel stack) {
-    ForgetFades();
-    g_shownStack = nullptr;
+// Removes our texts from the battery icon (on unload, after ForgetFades()).
+static void RemoveOurTexts(Controls::StackPanel stack) {
     if (!stack) return;
     auto children = stack.Children();
     for (uint32_t i = children.Size(); i-- > 0;) {
@@ -1271,10 +1279,16 @@ struct ApplyParam {
 static void WINAPI ApplyOnTaskbarThread(void* param) {
     auto& p = *(ApplyParam*)param;
     try {
+        if (p.remove) {
+            // Drop the animations first, here on the taskbar thread, even if
+            // finding the icon below fails.
+            ForgetFades();
+            g_shownStack = nullptr;
+        }
         XamlRoot root = GetTaskbarXamlRoot(p.hTaskbarWnd);
         Controls::StackPanel stack = root ? FindBatteryStack(root) : nullptr;
         if (p.remove) {
-            RestoreAll(stack); // stops the animations even without the icon
+            RemoveOurTexts(stack);
             return;
         }
         if (!root) {
@@ -1353,6 +1367,16 @@ static bool differs(double a, double b) {
     return d > 0.05 * (a > b ? a : b);
 }
 
+// The user's decimal separator ("." or "," ...) for "1.25h remaining".
+static std::wstring userDecimalSeparator() {
+    wchar_t sep[8] = {};
+    if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SDECIMAL, sep,
+                        ARRAYSIZE(sep)) > 1) {
+        return sep;
+    }
+    return L".";
+}
+
 static DWORD WINAPI worker(LPVOID) {
     Estimator est;
     loadMemory(est);
@@ -1365,6 +1389,7 @@ static DWORD WINAPI worker(LPVOID) {
     bool timeLogged = true, liveLogged = true;
     bool force = true;
     for (;;) {
+        if (force) est.decimal = userDecimalSeparator(); // at start, on settings change
         PowerInputs in = readInputs();
         ULONGLONG now = GetTickCount64();
         BatteryView v = estimate(in, now, est);
@@ -1425,8 +1450,11 @@ static DWORD WINAPI worker(LPVOID) {
             if (left < wait) wait = (DWORD)left + 1;
         }
         DWORD r = WaitForMultipleObjects(2, events, FALSE, wait);
-        if (r == WAIT_OBJECT_0) break;       // stop requested
-        force = r == WAIT_OBJECT_0 + 1;      // settings or power changed: apply now
+        if (r == WAIT_OBJECT_0) break; // stop requested
+        // Anything but a wake-up or the regular timeout (e.g. WAIT_FAILED):
+        // leave rather than spin.
+        if (r != WAIT_OBJECT_0 + 1 && r != WAIT_TIMEOUT) break;
+        force = r == WAIT_OBJECT_0 + 1; // settings or power changed: apply now
     }
     if (differs(est.chargeMemory, savedCharge) ||
         differs(est.dischargeMemory, savedDischarge)) {
@@ -1503,15 +1531,13 @@ static void UnregisterPowerNotifications() {
 static void StopWorker() {
     if (!g_thread) return;
     SetEvent(g_stopEvent);
-    // The worker may be waiting for the taskbar thread. In case this runs on
-    // that very thread, keep handling sent messages while waiting.
-    ULONGLONG deadline = GetTickCount64() + 10000;
+    // Wait until the worker has really ended - the mod must be unloadable once
+    // this returns. The worker may be waiting for the taskbar thread; in case
+    // this runs on that very thread, keep handling sent messages meanwhile.
     for (;;) {
-        ULONGLONG now = GetTickCount64();
-        if (now >= deadline) break;
-        DWORD r = MsgWaitForMultipleObjects(1, &g_thread, FALSE,
-                                            (DWORD)(deadline - now), QS_SENDMESSAGE);
-        if (r != WAIT_OBJECT_0 + 1) break; // worker ended, timeout or error
+        DWORD r = MsgWaitForMultipleObjects(1, &g_thread, FALSE, INFINITE,
+                                            QS_SENDMESSAGE);
+        if (r != WAIT_OBJECT_0 + 1) break; // worker ended (or error)
         MSG msg;
         PeekMessageW(&msg, NULL, 0, 0, PM_NOREMOVE); // delivers sent messages
     }
