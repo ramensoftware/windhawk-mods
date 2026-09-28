@@ -10,7 +10,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @include         sihost.exe
-// @architecture    x86-64
+// @architecture    amd64
 // @compilerOptions -lole32 -loleaut32 -lshell32 -luuid -lpsapi -lruntimeobject
 // ==/WindhawkMod==
 
@@ -18,7 +18,7 @@
 /*
 # Independent taskbar per monitor
 
-Makes each taskbar of a multi-monitor setup behave like its own main taskbar.
+Each taskbar behaves like its own main taskbar.
 
 ![Each taskbar shows only the windows of its own monitor](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ea374053f26cfbfe3865461bdd4adf86dce6b782/images/windows-per-monitor.png) \
 *Each taskbar shows only the windows of its own monitor*
@@ -26,37 +26,12 @@ Makes each taskbar of a multi-monitor setup behave like its own main taskbar.
 ![Separate pinned items for each taskbar](https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ea374053f26cfbfe3865461bdd4adf86dce6b782/images/pins-per-taskbar.png) \
 *Separate pinned items for each taskbar*
 
-* **Windows of its own monitor:** each taskbar shows only the windows that are
-  on its monitor. When a window is moved to another monitor, its button moves
-  to that monitor's taskbar.
-* **Pinned items per taskbar:** *Pin to taskbar* and *Unpin from taskbar* in
-  the jump list only apply to the taskbar they're used on. An app can be
-  pinned to one, several or all taskbars.
-* **Properties per taskbar:** *Properties* of a pinned item (right-click the
-  app name in the jump list) only apply to the taskbar they're opened from,
-  for example to start the same app with different command line arguments on
-  different monitors.
-* **Running apps:** clicking the pinned item of an app that's already running
-  brings its window to the front instead of starting another instance.
-  Shift+click or middle-click starts a new instance.
+* Pin/unpin from the jump list applies to that taskbar only.
+* Pin *Properties* can differ per taskbar.
+* Clicking the pin of a running app brings its window to the front.
 
-Pinned items that aren't assigned to a taskbar yet, for example items that were
-pinned before installing the mod, are shown on the primary taskbar.
-
-## Requirements
-
-* Windows 11 with the default taskbar. The Windows 10 taskbar (for example via
-  ExplorerPatcher) isn't supported.
-* *Show my taskbar on all displays* must be enabled in the taskbar settings.
-
-## Notes
-
-* While the mod is running, the taskbar treats *When using multiple displays,
-  show my taskbar apps on* as *All taskbars*. The setting itself isn't changed,
-  and the taskbar goes back to it when the mod is disabled.
-* Tested with *Combine taskbar buttons and hide labels: Never*.
-* *Disable grouping on the taskbar* changes the same parts of the taskbar and
-  isn't needed on Windows 11, it's not supported together with this mod.
+Requires Windows 11 and *Show my taskbar on all displays*. Tested with *Combine
+taskbar buttons: Never*. Not compatible with *Disable grouping on the taskbar*.
 */
 // ==/WindhawkModReadme==
 
@@ -67,47 +42,29 @@ pinned before installing the mod, are shown on the primary taskbar.
   $name:de-DE: Fenster auf jeder Taskleiste
   $options:
   - monitor: Only the windows of its own monitor
-  - primaryAll: Primary taskbar shows all windows, the others only their own
+  - primaryAll: Primary taskbar shows all windows
   - all: All windows on all taskbars
   $options:de-DE:
   - monitor: Nur die Fenster des eigenen Monitors
-  - primaryAll: Hauptleiste zeigt alle Fenster, die anderen nur ihre eigenen
+  - primaryAll: Hauptleiste zeigt alle Fenster
   - all: Alle Fenster auf allen Taskleisten
 - alwaysOnAllTaskbars: [""]
   $name: Programs shown on all taskbars
   $name:de-DE: Programme auf allen Taskleisten
-  $description: >-
-    Windows of these programs are shown on all taskbars. Entries can be process
-    names or paths, for example:
-
-    mspaint.exe
-
-    C:\Windows\System32\notepad.exe
-  $description:de-DE: >-
-    Fenster dieser Programme werden auf allen Taskleisten angezeigt. Einträge
-    können Prozessnamen oder Pfade sein, zum Beispiel:
-
-    mspaint.exe
-
-    C:\Windows\System32\notepad.exe
+  $description: Process name or path, e.g. mspaint.exe
+  $description:de-DE: Prozessname oder Pfad, z.B. mspaint.exe
 - pinMode: perTaskbar
   $name: Pinned items
   $name:de-DE: Angeheftete Apps
   $options:
-  - perTaskbar: Separate pinned items for each taskbar
-  - everywhere: Same pinned items on all taskbars
+  - perTaskbar: Separate for each taskbar
+  - everywhere: Same on all taskbars
   $options:de-DE:
-  - perTaskbar: Eigene angeheftete Apps pro Taskleiste
-  - everywhere: Dieselben angehefteten Apps auf allen Taskleisten
+  - perTaskbar: Eigene pro Taskleiste
+  - everywhere: Überall dieselben
 - unassignedPins: primary
   $name: Pinned items without an assigned taskbar
-  $name:de-DE: Angeheftete Apps ohne zugeordnete Taskleiste
-  $description: >-
-    Items that were pinned before the mod was installed, or pinned by Windows
-    or an installer
-  $description:de-DE: >-
-    Apps, die vor der Installation der Mod oder von Windows bzw. einem
-    Installationsprogramm angeheftet wurden
+  $name:de-DE: Angeheftete Apps ohne Zuordnung
   $options:
   - primary: Primary taskbar only
   - all: All taskbars
@@ -117,44 +74,23 @@ pinned before installing the mod, are shown on the primary taskbar.
 - foregroundFix: true
   $name: Bring running apps to the front
   $name:de-DE: Laufende Apps nach vorn holen
-  $description: >-
-    Clicking the pinned item of a running app brings its window to the front
-    instead of starting another instance
-  $description:de-DE: >-
-    Ein Klick auf die angeheftete App holt ihr laufendes Fenster nach vorn,
-    statt eine weitere Instanz zu starten
 - focusScope: anyMonitor
   $name: Windows that are brought to the front
   $name:de-DE: Fenster, die nach vorn geholt werden
   $options:
-  - anyMonitor: Windows on any monitor, including windows hidden in the tray
-  - thisMonitor: Only windows on the monitor of the clicked taskbar
+  - anyMonitor: Windows on any monitor
+  - thisMonitor: Only windows on the clicked taskbar's monitor
   $options:de-DE:
-  - anyMonitor: Fenster auf jedem Monitor, auch im Infobereich versteckte
-  - thisMonitor: Nur Fenster auf dem Monitor der angeklickten Taskleiste
+  - anyMonitor: Fenster auf jedem Monitor
+  - thisMonitor: Nur Fenster auf dem Monitor der Taskleiste
 - slideAnimation: true
-  $name: Slide animation
-  $name:de-DE: Gleit-Animation
-  $description: >-
-    When a window is moved to another monitor, its button slides in from the
-    side of the monitor it came from
-  $description:de-DE: >-
-    Wird ein Fenster auf einen anderen Monitor verschoben, gleitet sein Button
-    von der Seite des vorherigen Monitors herein
+  $name: Slide animation when a window moves to another monitor
+  $name:de-DE: Gleit-Animation beim Monitorwechsel
 - showAppsOnAllTaskbars: true
   $name: Show taskbar apps on all taskbars
   $name:de-DE: Taskleisten-Apps auf allen Taskleisten anzeigen
-  $description: >-
-    While the mod is running, the taskbar treats "When using multiple displays,
-    show my taskbar apps on" as "All taskbars", without changing the setting.
-    This is needed for pinned items per taskbar. When turned off, the Windows
-    setting is used as is, and it should be set to "All taskbars" manually.
-  $description:de-DE: >-
-    Solange die Mod läuft, behandelt die Taskleiste „Beim Verwenden mehrerer
-    Anzeigen Apps anzeigen auf“ als „Alle Taskleisten“, ohne die Einstellung zu
-    ändern. Das ist für eigene angeheftete Apps pro Taskleiste nötig. Ist es
-    aus, gilt die Windows-Einstellung, die dann von Hand auf „Alle
-    Taskleisten“ gestellt werden sollte.
+  $description: Applied while the mod runs, the Windows setting isn't changed
+  $description:de-DE: Gilt, solange die Mod läuft, die Windows-Einstellung bleibt unverändert
 */
 // ==/WindhawkModSettings==
 
@@ -164,7 +100,7 @@ pinned before installing the mod, are shown on the primary taskbar.
 #include <shobjidl.h>
 #include <propsys.h>
 #include <psapi.h>
-#include <cstdarg>
+#include <appmodel.h>
 #include <cstdio>
 #include <cwchar>
 #include <cwctype>
@@ -294,17 +230,15 @@ static std::wstring WindowAppId(HWND h) {
 
 // App ID of a packaged app (e.g. Windows Notepad) via its process
 static std::wstring PackageAppId(HWND h) {
-    using Fn = LONG(WINAPI*)(HANDLE, UINT32*, PWSTR);
-    static Fn fn = (Fn)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "GetApplicationUserModelId");
     std::wstring r;
     DWORD pid = 0;
     GetWindowThreadProcessId(h, &pid);
-    if (!fn || !pid) return r;
+    if (!pid) return r;
     HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!p) return r;
     wchar_t buf[512];
     UINT32 len = ARRAYSIZE(buf);
-    if (fn(p, &len, buf) == ERROR_SUCCESS) r = buf;
+    if (GetApplicationUserModelId(p, &len, buf) == ERROR_SUCCESS) r = buf;
     CloseHandle(p);
     return r;
 }
@@ -376,7 +310,6 @@ struct FindCtx {
     Target tgt;
     std::map<DWORD, std::wstring> pidPath;
     HWND visible = nullptr;
-    HWND hidden = nullptr;
 };
 
 static bool PathMatches(FindCtx* c, DWORD pid) {
@@ -394,7 +327,10 @@ static bool PathMatches(FindCtx* c, DWORD pid) {
 
 static BOOL CALLBACK EnumProc(HWND h, LPARAM lp) {
     auto* c = (FindCtx*)lp;
-    if (GetWindow(h, GW_OWNER)) return TRUE;
+    // Only visible windows: hidden ones (e.g. of tray apps) are left to the app itself, a normal
+    // launch of a single-instance app shows them
+    if (c->visible || !IsWindowVisible(h) || GetWindow(h, GW_OWNER)) return TRUE;
+    if (c->onlyMon && MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) != c->onlyMon) return TRUE;
     LONG ex = GetWindowLongW(h, GWL_EXSTYLE);
     LONG st = GetWindowLongW(h, GWL_STYLE);
     if (ex & WS_EX_TOOLWINDOW) return TRUE;
@@ -421,16 +357,7 @@ static BOOL CALLBACK EnumProc(HWND h, LPARAM lp) {
         GetWindowThreadProcessId(h, &pid);
         match = PathMatches(c, pid);
     }
-    if (!match) return TRUE;
-
-    if (IsWindowVisible(h)) {
-        if (c->onlyMon && MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) != c->onlyMon) return TRUE;
-        if (!c->visible) c->visible = h;
-    } else if (!c->onlyMon && !c->hidden) {  // hidden: prefer a normal launch
-        RECT r{};
-        GetWindowRect(h, &r);
-        if (r.right - r.left >= 300 && r.bottom - r.top >= 200) c->hidden = h;
-    }
+    if (match) c->visible = h;
     return TRUE;
 }
 
@@ -452,13 +379,11 @@ static bool TryActivateExisting(void* g, HMONITOR onlyMon = nullptr) {
         return false;
     }
     EnumWindows(EnumProc, (LPARAM)&ctx);
-    HWND h = ctx.visible ? ctx.visible : ctx.hidden;
-    Wh_Log(L"  Search: app=%ls lnk=%ls exe=%ls name=%ls -> visible=%p hidden=%p",
-         ctx.appId.c_str(), path, ctx.tgt.exactPath.c_str(),
-         ctx.tgt.name.c_str(), (void*)ctx.visible, (void*)ctx.hidden);
+    HWND h = ctx.visible;
+    Wh_Log(L"  Search: app=%ls lnk=%ls exe=%ls name=%ls -> window=%p", ctx.appId.c_str(), path,
+           ctx.tgt.exactPath.c_str(), ctx.tgt.name.c_str(), (void*)h);
     if (!h) return false;
 
-    if (!IsWindowVisible(h)) ShowWindow(h, SW_SHOW);
     if (IsIconic(h)) ShowWindow(h, SW_RESTORE);
     if (!SetForegroundWindow(h)) SwitchToThisWindow(h, TRUE);
     Wh_Log(L"  -> brought existing window %p to the front", (void*)h);
@@ -496,6 +421,7 @@ static HWINEVENTHOOK g_winEvent = nullptr;
 // unloaded DLL (crash).
 static HWND g_msgWnd = nullptr;
 static bool g_msgWndFailed = false;  // creating it failed, don't retry on every call
+static std::atomic<bool> g_unloading{false};  // set in Wh_ModBeforeUninit: don't create it again
 static const wchar_t kMsgClass[] = L"TaskbarIndependentPerMonitorMsg";
 static const UINT kMsgCleanup = WM_APP + 0x51;
 static const UINT_PTR kReevalTimerId = 1;
@@ -596,12 +522,12 @@ static bool IsExemptWindow(HWND h) {
     }
     DWORD pid = 0;
     GetWindowThreadProcessId(h, &pid);
-    std::wstring exe = FileName(ProcPath(pid));
+    std::wstring path = ProcPath(pid), exe = FileName(path);
     bool r = false;
     {
         std::lock_guard<std::mutex> l(g_rulesMx);
         for (auto& a : g_s.alwaysAll) {
-            if (a == exe) r = true;
+            if (a == (a.find(L'\\') != std::wstring::npos ? path : exe)) r = true;
         }
     }
     std::lock_guard<std::mutex> l(g_exemptMx);
@@ -1161,12 +1087,16 @@ static HINSTANCE ModInstance() {
 }
 
 static void EnsureWinEvent() {
-    if (g_msgWnd || g_msgWndFailed) return;
+    if (g_msgWnd || g_msgWndFailed || g_unloading) return;
     WNDCLASSW wc{};
     wc.lpfnWndProc = MsgWndProc;
     wc.hInstance = ModInstance();
     wc.lpszClassName = kMsgClass;
-    RegisterClassW(&wc);
+    if (!RegisterClassW(&wc)) {  // an existing class could belong to an unloaded version
+        g_msgWndFailed = true;
+        Wh_Log(L"-> Message window class FAILED (%lu)", GetLastError());
+        return;
+    }
     g_msgWnd = CreateWindowExW(0, kMsgClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE,
                                nullptr, wc.hInstance, nullptr);
     if (!g_msgWnd) {
@@ -1225,8 +1155,7 @@ static HMONITOR GetMonitor_hook(void* self) {
 static std::map<std::wstring, unsigned> LoadPinRules() {
     std::map<std::wstring, unsigned> r;
     std::vector<wchar_t> buf(16384);
-    if (!Wh_GetStringValue(L"pinRules", buf.data(), buf.size()))
-        Wh_GetStringValue(L"menuRules", buf.data(), buf.size());  // name used before 1.5
+    Wh_GetStringValue(L"pinRules", buf.data(), buf.size());
     std::wstring all = buf.data(), part;
     size_t pos = 0;
     while (pos < all.size()) {
@@ -1251,10 +1180,10 @@ static void SavePinRules(const std::map<std::wstring, unsigned>& r) {
         out += kv.first + L"|" + hex + L";";
     }
     Wh_SetStringValue(L"pinRules", out.c_str());
-    Wh_DeleteValue(L"menuRules");
 }
 
 static void LoadSettings();
+static void LoadRules();
 
 // ---------- Apply rules live - no Explorer restart
 
@@ -1262,7 +1191,7 @@ static void SetRule(const std::wstring& key, unsigned m) {
     auto rules = LoadPinRules();
     if (m) rules[key] = m; else rules.erase(key);
     SavePinRules(rules);
-    LoadSettings();
+    LoadRules();
 }
 
 // Align the pin buttons of a group on all taskbars with its rule
@@ -1574,6 +1503,28 @@ static bool FilesEqual(const std::wstring& a, const std::wstring& b) {
     std::string x, y;
     return read(a, x) && read(b, y) && x == y;
 }
+// The copies are made from the pinned shortcut. When the shortcut itself changes (for example
+// an app update rewrites it), the copies that weren't changed by the user are updated. A snapshot
+// of the shortcut at copy time (<storage>\TaskbarLinks\Original) tells them apart.
+static void RefreshLinkCopies(const std::wstring& orig) {
+    if (g_linkRoot.empty() || orig.empty()) return;
+    std::wstring name = FileName(orig);
+    std::wstring baseDir = g_linkRoot + L"\\Original", base = baseDir + L"\\" + name;
+    if (GetFileAttributesW(base.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        SHCreateDirectoryExW(nullptr, baseDir.c_str(), nullptr);
+        CopyFileW(orig.c_str(), base.c_str(), TRUE);
+        return;
+    }
+    if (FilesEqual(orig, base)) return;
+    for (int mon = 1; mon <= 8; mon++) {
+        std::wstring copy = BarLinkDir(mon) + L"\\" + name;
+        if (GetFileAttributesW(copy.c_str()) != INVALID_FILE_ATTRIBUTES && FilesEqual(copy, base))
+            CopyFileW(orig.c_str(), copy.c_str(), FALSE);
+    }
+    CopyFileW(orig.c_str(), base.c_str(), FALSE);
+    Wh_Log(L"-> Shortcut changed, unchanged per-taskbar copies updated: %ls", name.c_str());
+}
+
 using Launch_t = HRESULT (*)(void*, void*, const POINT*, int);
 static Launch_t Launch_orig;
 static HRESULT Launch_hook(void* self, void* g, const POINT* pt, int opt) {
@@ -1591,6 +1542,7 @@ static HRESULT Launch_hook(void* self, void* g, const POINT* pt, int opt) {
     if (g && Pinned(g) && pGroupSetShortcut) {
         int mon = MonNumber(clickMon);
         std::wstring orig = GroupLinkPath(g);
+        RefreshLinkCopies(orig);
         bool anyOwn = false;
         int cnt = std::min(GetSystemMetrics(SM_CMONITORS), 8);
         for (int m = 1; m <= cnt && !orig.empty(); m++) {
@@ -1800,6 +1752,7 @@ static HRESULT ShowJump_hook(void* self, void* g, void* item, bool b) {
     bool swapped = false;
     PIDLIST_ABSOLUTE saved = nullptr;
     if (tl && g && Pinned(g) && pGroupSetShortcut && pGroupGetShortcutIDList) {
+        RefreshLinkCopies(GroupLinkPath(g));
         std::wstring copy = BarLinkPath(g, MonNumber(GetMonitor_orig(tl)), true);
         PCIDLIST_ABSOLUTE cur = pGroupGetShortcutIDList(g);
         PIDLIST_ABSOLUTE sw = copy.empty() ? nullptr : ILCreateFromPathW(copy.c_str());
@@ -1849,29 +1802,28 @@ static HRESULT EnumPinned_hook(void* self, bool a, bool b, bool c) {
 
 // ---------- Init
 
+// Pin assignments (pin/unpin via the jump list), exact app ID
+static void LoadRules() {
+    std::vector<PinRule> rules;
+    for (auto& kv : LoadPinRules()) rules.push_back({kv.first, kv.second});
+    std::lock_guard<std::mutex> l(g_rulesMx);
+    g_s.rules = rules;
+}
+
 static void LoadSettings() {
     g_s.foregroundFix = Wh_GetIntSetting(L"foregroundFix") != 0;
     g_s.slideAnimation = Wh_GetIntSetting(L"slideAnimation") != 0;
     g_s.showAppsOnAllTaskbars = Wh_GetIntSetting(L"showAppsOnAllTaskbars") != 0;
-    PCWSTR up = Wh_GetStringSetting(L"unassignedPins");
-    g_s.pinsOnAll = up && _wcsicmp(up, L"all") == 0;
-    if (up) Wh_FreeStringSetting(up);
-    PCWSTR pm = Wh_GetStringSetting(L"pinMode");
-    g_s.pinsEverywhere = pm && _wcsicmp(pm, L"everywhere") == 0;
-    if (pm) Wh_FreeStringSetting(pm);
-    PCWSTR wm = Wh_GetStringSetting(L"windowMode");
-    g_s.windowMode = !wm ? 0 : !_wcsicmp(wm, L"all") ? 2 : !_wcsicmp(wm, L"primaryAll") ? 1 : 0;
-    if (wm) Wh_FreeStringSetting(wm);
-    PCWSTR fs = Wh_GetStringSetting(L"focusScope");
-    g_s.focusThisMonitor = fs && _wcsicmp(fs, L"thisMonitor") == 0;
-    if (fs) Wh_FreeStringSetting(fs);
+    g_s.pinsOnAll = _wcsicmp(WindhawkUtils::StringSetting::make(L"unassignedPins"), L"all") == 0;
+    g_s.pinsEverywhere = _wcsicmp(WindhawkUtils::StringSetting::make(L"pinMode"), L"everywhere") == 0;
+    auto windowMode = WindhawkUtils::StringSetting::make(L"windowMode");
+    g_s.windowMode = !_wcsicmp(windowMode, L"all") ? 2 : !_wcsicmp(windowMode, L"primaryAll") ? 1 : 0;
+    g_s.focusThisMonitor = _wcsicmp(WindhawkUtils::StringSetting::make(L"focusScope"), L"thisMonitor") == 0;
+    // "notepad.exe" matches the file name, a path matches the full path
     std::vector<std::wstring> always;
     for (int i = 0; i < 100; i++) {
-        PCWSTR a = Wh_GetStringSetting(L"alwaysOnAllTaskbars[%d]", i);
-        std::wstring s = a ? a : L"";
-        if (a) Wh_FreeStringSetting(a);
+        std::wstring s = Lower(WindhawkUtils::StringSetting::make(L"alwaysOnAllTaskbars[%d]", i).get());
         if (s.empty()) break;
-        s = Lower(FileName(s));  // accepts "discord.exe" or a full path
         if (s.find(L'.') == std::wstring::npos) s += L".exe";
         always.push_back(s);
     }
@@ -1879,13 +1831,11 @@ static void LoadSettings() {
         std::lock_guard<std::mutex> l(g_exemptMx);
         g_exemptCache.clear();
     }
-
-    // Pin assignments (pin/unpin via the jump list), exact app ID
-    std::vector<PinRule> rules;
-    for (auto& kv : LoadPinRules()) rules.push_back({kv.first, kv.second});
-    std::lock_guard<std::mutex> l(g_rulesMx);
-    g_s.rules = rules;
-    g_s.alwaysAll = always;
+    {
+        std::lock_guard<std::mutex> l(g_rulesMx);
+        g_s.alwaysAll = always;
+    }
+    LoadRules();
 }
 // ---------- "Show my taskbar apps on: All taskbars" while the mod runs
 // The mod needs Windows to create every button on every taskbar (MMTaskbarMode = 0) and filters
@@ -1955,7 +1905,7 @@ static void ApplyAppsMode() {
 static void InitAppsModeHook() {
     HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
     void* target = kernelBase ? (void*)GetProcAddress(kernelBase, "RegGetValueW") : nullptr;
-    if (!target || !Wh_SetFunctionHook(target, (void*)RegGetValueW_hook, (void**)&RegGetValueW_orig))
+    if (!target || !WindhawkUtils::SetFunctionHook((RegGetValueW_t)target, RegGetValueW_hook, &RegGetValueW_orig))
         Wh_Log(L"-> RegGetValueW hook FAILED - set \"Show my taskbar apps on\" to \"All taskbars\" manually");
 }
 
@@ -2003,7 +1953,17 @@ static HRESULT PinModify_hook(void* self, PCIDLIST_ABSOLUTE from, PCIDLIST_ABSOL
 }
 
 // ---------- Animation (Taskbar.View.dll)
-using Entrance_t = void (*)(void*, int, double, float*, long long, bool);
+// Taskbar.View.dll (ExplorerExtensions.dll in some builds) is loaded after Explorer starts
+static HMODULE TaskbarViewModule() {
+    HMODULE m = GetModuleHandleW(L"Taskbar.View.dll");
+    return m ? m : GetModuleHandleW(L"ExplorerExtensions.dll");
+}
+
+struct Float3 {  // same layout as winrt::Windows::Foundation::Numerics::float3
+    float x, y, z;
+};
+// The float3 is passed by value, so the compiler uses the right convention for the architecture
+using Entrance_t = void (*)(void*, int, double, Float3, long long, bool);
 static Entrance_t Entrance_orig;
 // Window moved to another taskbar: instead of "appearing from below", slide in
 // sideways - from the side the window came from
@@ -2011,14 +1971,14 @@ int g_moveDir = 0;        // -1 = came from the right, +1 = came from the left
 DWORD g_swapTick = 0;      // a pin <-> window button swap on the same taskbar follows
 DWORD g_swapHideTick = 0;  // plus: old button without exit animation
 DWORD g_moveTick = 0;
-static void Entrance_hook(void* self, int kind, double d, float* off, long long dur, bool b) {
-    if (g_s.slideAnimation && g_moveDir && GetTickCount() - g_moveTick < 400 && off) {
+static void Entrance_hook(void* self, int kind, double d, Float3 off, long long dur, bool b) {
+    if (g_s.slideAnimation && g_moveDir && GetTickCount() - g_moveTick < 400) {
         kind = 1;  // kind 1 = slide by the offset (kind 0 = from below, kind 2 = zoom)
-        off[0] = -48.0f * g_moveDir;
-        off[1] = 0.0f;
+        off.x = -48.0f * g_moveDir;
+        off.y = 0.0f;
         d = 0.0;  // no part from below - purely sideways
         g_moveDir = 0;
-        Wh_Log(L"-> Slide in sideways (x=%.0f)", off[0]);
+        Wh_Log(L"-> Slide in sideways (x=%.0f)", off.x);
     } else if (g_s.slideAnimation && g_swapTick && GetTickCount() - g_swapTick < 350) {
         // Pin turns into a window button (or vice versa) on the same taskbar: the icon stays
         // still instead of appearing from below (otherwise two icons overlap briefly)
@@ -2050,7 +2010,7 @@ static void ExitAnim_hook(void* self) {
 static IUnknown* ButtonUnknown(void* btn) {
     static uintptr_t lo = 0, hi = 0;
     if (!lo) {
-        HMODULE tv = GetModuleHandleW(L"Taskbar.View.dll");
+        HMODULE tv = TaskbarViewModule();
         MODULEINFO mi{};
         if (!tv || !GetModuleInformation(GetCurrentProcess(), tv, &mi, sizeof(mi))) return nullptr;
         lo = (uintptr_t)mi.lpBaseOfDll;
@@ -2084,35 +2044,26 @@ static void BtnPrepared_hook(void* s, bool v) {
     if (v) RemeasureButton(s);
 }
 
-// Taskbar.View.dll (ExplorerExtensions.dll in some builds) is loaded after Explorer starts
-static HMODULE TaskbarViewModule() {
-    HMODULE m = GetModuleHandleW(L"Taskbar.View.dll");
-    return m ? m : GetModuleHandleW(L"ExplorerExtensions.dll");
-}
 static std::atomic<bool> g_taskbarViewHooked{false};
 static std::atomic<bool> g_pinListHooked{false};
 
 static void InitAnimationHooks() {
     HMODULE tv = TaskbarViewModule();
     if (!tv || g_taskbarViewHooked.exchange(true)) return;
-    // Taskbar.View.dll
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // Taskbar.View.dll, ExplorerExtensions.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarViewHooks[] = {
         {{L"public: void __cdecl winrt::Taskbar::implementation::TaskListButton::PlayEntranceAnimation(enum winrt::Taskbar::implementation::TaskListButtonEntranceAnimationKind,double,struct winrt::Windows::Foundation::Numerics::float3,class std::chrono::duration<__int64,struct std::ratio<1,10000000> >,bool)"},
          (void**)&Entrance_orig, (void*)Entrance_hook, true},
         {{L"public: void __cdecl winrt::Taskbar::implementation::TaskListButton::StartExitAnimation(void)"},
          (void**)&ExitAnim_orig, (void*)ExitAnim_hook, true},
-    };
-    WindhawkUtils::HookSymbols(tv, hooks, ARRAYSIZE(hooks));
-    Wh_Log(L"-> Animation %ls", (Entrance_orig && ExitAnim_orig) ? L"active" : L"partial");
-    // Taskbar.View.dll
-    WindhawkUtils::SYMBOL_HOOK labelFix[] = {
         {{L"public: void __cdecl winrt::Taskbar::implementation::TaskListButton::HasLabel(bool)"},
          (void**)&BtnHasLabel_orig, (void*)BtnHasLabel_hook, true},
         {{L"public: void __cdecl winrt::Taskbar::implementation::TaskListButton::Prepared(bool)"},
          (void**)&BtnPrepared_orig, (void*)BtnPrepared_hook, true},
     };
-    WindhawkUtils::HookSymbols(tv, labelFix, ARRAYSIZE(labelFix));
-    Wh_Log(L"-> Label fix %ls", (BtnHasLabel_orig && BtnPrepared_orig) ? L"active" : L"partial");
+    WindhawkUtils::HookSymbols(tv, taskbarViewHooks, ARRAYSIZE(taskbarViewHooks));
+    Wh_Log(L"-> Animation %ls, label fix %ls", (Entrance_orig && ExitAnim_orig) ? L"active" : L"partial",
+           (BtnHasLabel_orig && BtnPrepared_orig) ? L"active" : L"partial");
 }
 
 // Pinning from the jump list (PinManager): if it's only "additionally on this taskbar", do it
@@ -2135,7 +2086,7 @@ static bool InitPinListHooks() {
     HMODULE tw = GetModuleHandleW(L"twinui.pcshell.dll");
     if (!tw || g_pinListHooked.exchange(true)) return false;
     // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    WindhawkUtils::SYMBOL_HOOK pinListHooks[] = {
         {{L"public: virtual long __cdecl CPinnedList::GetAppIDForPinnedItem(struct _ITEMIDLIST const __unaligned *,unsigned short * *)"},
          (void**)&pGetAppIDForPinned, nullptr, true},
         {{L"public: virtual long __cdecl CPinnedList::Modify(struct _ITEMIDLIST const __unaligned *,struct _ITEMIDLIST const __unaligned *,enum PINNEDLISTMODIFYCALLER)"},
@@ -2143,7 +2094,7 @@ static bool InitPinListHooks() {
         {{L"public: virtual long __cdecl winrt::Windows::Internal::Shell::implementation::PinManager::PinItemFromTrustedCaller(struct _ITEMIDLIST const __unaligned *,enum PINNEDLISTMODIFYCALLER)"},
          (void**)&PinTrusted_orig, (void*)PinTrusted_hook, true},
     };
-    WindhawkUtils::HookSymbols(tw, hooks, ARRAYSIZE(hooks));
+    WindhawkUtils::HookSymbols(tw, pinListHooks, ARRAYSIZE(pinListHooks));
     Wh_Log(L"-> Pin list (%ls) %ls, PinManager %ls", FileName(GetCommandLineW()).c_str(),
            PinModify_orig ? L"monitored" : L"NOT found", PinTrusted_orig ? L"yes" : L"no");
     return PinModify_orig != nullptr;
@@ -2170,7 +2121,7 @@ static HMODULE WINAPI LoadLibraryExW_hook(LPCWSTR name, HANDLE file, DWORD flags
 static void InitLoadLibraryHook() {
     HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
     void* target = kernelBase ? (void*)GetProcAddress(kernelBase, "LoadLibraryExW") : nullptr;
-    if (target) Wh_SetFunctionHook(target, (void*)LoadLibraryExW_hook, (void**)&LoadLibraryExW_orig);
+    if (target) WindhawkUtils::SetFunctionHook((LoadLibraryExW_t)target, LoadLibraryExW_hook, &LoadLibraryExW_orig);
 }
 
 BOOL Wh_ModInit() {
@@ -2191,8 +2142,9 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    g_tb = tb;
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
+        // required
         {{L"public: virtual unsigned short const * __cdecl CTaskGroup::GetAppID(void)"},
          (void**)&pGroupGetAppID},
         {{L"public: virtual unsigned long __cdecl CTaskGroup::GetFlags(void)const "},
@@ -2209,60 +2161,28 @@ BOOL Wh_ModInit() {
          (void**)&TaskDestroyed_orig, (void*)TaskDestroyed_hook},
         {{L"public: virtual struct HMONITOR__ * __cdecl CTaskListWnd::GetMonitor(void)"},
          (void**)&GetMonitor_orig, (void*)GetMonitor_hook},
-        {{L"protected: void __cdecl CTaskBand::_HandleMonitorChanged(struct HWND__ *)"},
-         (void**)&MonChanged_orig, (void*)MonChanged_hook, true},
         {{L"public: virtual bool __cdecl CTaskListWnd::IsTaskAllowed(struct ITaskItem *)"},
          (void**)&IsAllowed_orig, (void*)IsAllowed_hook},
         {{L"public: virtual long __cdecl CTaskBand::Launch(struct ITaskGroup *,struct tagPOINT const &,enum LaunchFromTaskbarOptions)"},
          (void**)&Launch_orig, (void*)Launch_hook},
-    };
-
-    if (!WindhawkUtils::HookSymbols(tb, hooks, ARRAYSIZE(hooks))) {
-        Wh_Log(L"HookSymbols failed");
-        return FALSE;
-    }
-
-    // Optional, lookup only - nothing is called
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK probe[] = {
+        // optional
+        {{L"protected: void __cdecl CTaskBand::_HandleMonitorChanged(struct HWND__ *)"},
+         (void**)&MonChanged_orig, (void*)MonChanged_hook, true},
         {{L"public: virtual struct HWND__ * __cdecl CWindowTaskItem::GetWindow(void)"},
          (void**)&pItemGetWindow, nullptr, true},
         {{L"const CWindowTaskItem::`vftable'{for `ITaskItem'}",
           L"const CWindowTaskItem::`vftable'"},
          (void**)&pWindowItemVft, nullptr, true},
-    };
-    WindhawkUtils::HookSymbols(tb, probe, ARRAYSIZE(probe));
-
-    g_tb = tb;
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK upd[] = {
         {{L"public: virtual long __cdecl CTaskGroup::UpdateFlags(unsigned long,unsigned long)"},
          (void**)&pGroupUpdateFlags, nullptr, true},
-    };
-    WindhawkUtils::HookSymbols(tb, upd, ARRAYSIZE(upd));
-
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK jump[] = {
         {{L"public: virtual long __cdecl CTaskGroup::SetShortcutIDList(struct _ITEMIDLIST_ABSOLUTE const *)"},
          (void**)&pGroupSetShortcut, nullptr, true},
         {{L"public: virtual long __cdecl CTaskListWnd::ShowJumpView(struct ITaskGroup *,struct ITaskItem *,bool)"},
          (void**)&ShowJump_orig, (void*)ShowJump_hook, true},
         {{L"protected: long __cdecl CTaskBand::_EnumPinnedItems(bool,bool,bool)"},
          (void**)&EnumPinned_orig, (void*)EnumPinned_hook, true},
-    };
-    WindhawkUtils::HookSymbols(tb, jump, ARRAYSIZE(jump));
-    Wh_Log(L"-> Jump list pins %ls", (pGroupUpdateFlags && ShowJump_orig && EnumPinned_orig)
-                                        ? L"active" : L"INCOMPLETE");
-
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK tbg[] = {
         {{L"protected: struct ITaskBtnGroup * __cdecl CTaskListWnd::_GetTBGroupFromGroup(struct ITaskGroup *,int *)"},
          (void**)&pGetTBGroup, nullptr, true},
-    };
-    WindhawkUtils::HookSymbols(tb, tbg, ARRAYSIZE(tbg));
-
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK sync[] = {
         {{L"const CTaskGroup::`vftable'{for `ITaskGroup'}"}, (void**)&pGroupVft, nullptr, true},
         {{L"const CTaskListWnd::`vftable'{for `ITaskListUI'}"}, (void**)&pTlVftUI, nullptr, true},
         {{L"const CTaskListWnd::`vftable'{for `CImpWndProc'}"}, (void**)&pTlVftWnd, nullptr, true},
@@ -2276,28 +2196,23 @@ BOOL Wh_ModInit() {
         {{L"public: virtual int __cdecl CTaskBtnGroup::GetNumItems(void)"}, (void**)&pBtnGetNumItems, nullptr, true},
         {{L"public: virtual struct ITaskItem * __cdecl CTaskBtnGroup::GetTaskItem(int)"}, (void**)&pBtnGetTaskItem, nullptr, true},
         {{L"public: virtual int __cdecl CTaskListWnd::GetButtonGroupCount(void)"}, (void**)&pGetButtonGroupCount, nullptr, true},
-    };
-    WindhawkUtils::HookSymbols(tb, sync, ARRAYSIZE(sync));
-    InitDpaOffset();
-    Wh_Log(L"-> Startup sync %ls", (g_dpaOffset > 0 && pGroupVft && pGroupItemFromWindow && pBtnGetNumItems && pBtnGetTaskItem) ? L"active" : L"MISSING");
-    if (pGetTBGroup) {
-        // taskbar.dll
-        WindhawkUtils::SYMBOL_HOOK order[] = {
-            {{L"public: virtual void __cdecl CTaskListWnd::SetRelativeTaskOrder(struct ITaskGroup *,int)"},
-             (void**)&SetOrder_orig, (void*)SetOrder_hook, true},
-        };
-        WindhawkUtils::HookSymbols(tb, order, ARRAYSIZE(order));
-    }
-    // taskbar.dll
-    WindhawkUtils::SYMBOL_HOOK pinEvt[] = {
+        // SetOrder_hook only acts if _GetTBGroupFromGroup was found
+        {{L"public: virtual void __cdecl CTaskListWnd::SetRelativeTaskOrder(struct ITaskGroup *,int)"},
+         (void**)&SetOrder_orig, (void*)SetOrder_hook, true},
         {{L"public: virtual void __cdecl CTaskListWnd::HandleTaskGroupPinned(struct ITaskGroup *)"},
          (void**)&PinnedEvt_orig, (void*)PinnedEvt_hook, true},
         {{L"public: virtual void __cdecl CTaskListWnd::HandleTaskGroupUnpinned(struct ITaskGroup *)"},
          (void**)&UnpinnedEvt_orig, (void*)UnpinnedEvt_hook, true},
     };
-    WindhawkUtils::HookSymbols(tb, pinEvt, ARRAYSIZE(pinEvt));
-    Wh_Log(L"-> Pin events %ls", (PinnedEvt_orig && UnpinnedEvt_orig) ? L"active" : L"MISSING");
-    Wh_Log(L"-> Order filter %ls", (pGetTBGroup && SetOrder_orig) ? L"active" : L"MISSING");
+    if (!WindhawkUtils::HookSymbols(tb, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
+        Wh_Log(L"HookSymbols failed");
+        return FALSE;
+    }
+    InitDpaOffset();
+    Wh_Log(L"-> Jump list pins %ls, startup sync %ls, pin events %ls",
+           (pGroupUpdateFlags && ShowJump_orig && EnumPinned_orig) ? L"active" : L"INCOMPLETE",
+           (g_dpaOffset > 0 && pGroupVft && pGroupItemFromWindow && pBtnGetNumItems && pBtnGetTaskItem) ? L"active" : L"MISSING",
+           (PinnedEvt_orig && UnpinnedEvt_orig) ? L"active" : L"MISSING");
 
     InitPinListHooks();
     InitAnimationHooks();
@@ -2329,6 +2244,10 @@ void Wh_ModSettingsChanged() {
 // the taskbar reads it; after the hooks are removed (Wh_ModUninit) it reads the real value and
 // rebuilds everything without the mod's filtering.
 void Wh_ModBeforeUninit() {
+    // Remove the message window with its timers and the WinEvent hook first, while the hooks are
+    // still installed - its work calls the original functions of the hooks
+    g_unloading = true;
+    if (g_msgWnd) SendMessageW(g_msgWnd, kMsgCleanup, 0, 0);
     if (!g_isExplorer) return;
     DWORD real = ReadAdvancedDword(L"MMTaskbarMode", 0);
     DWORD reported = g_s.showAppsOnAllTaskbars ? 0 : real;
