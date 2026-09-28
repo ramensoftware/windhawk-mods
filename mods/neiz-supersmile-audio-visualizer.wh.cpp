@@ -18592,11 +18592,19 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
         return 0;
     }
 
-    // Start the audio worker only after the desktop/taskbar ownership check.
-    // The SMTC worker is additionally gated by the tray-button setting, since
-    // Media & EQ is the only feature that consumes its media state.
+    // All shell-dependent workers start only after the desktop/taskbar
+    // ownership check. Secondary Explorer processes can load the mod too, but
+    // they must not create audio/album/lyrics/SMTC workers of their own.
     StartAudioCapture();
-    if (GetSettingsSnapshot().showMediaEqTrayButton)
+
+    const VisualizerSettings startupSettings = GetSettingsSnapshot();
+    if (IsAlbumColorMode())
+        StartAlbumColorCapture();
+    if (startupSettings.lyricsEnabled ||
+        EqIsLayoutWidgetPresent(EQ_LAYOUT_LYRICS)) {
+        StartLyricsCapture();
+    }
+    if (startupSettings.showMediaEqTrayButton)
         StartEqMediaCapture();
     g_shellServicesStarted.store(true, std::memory_order_release);
 
@@ -18815,12 +18823,16 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (IsAlbumColorMode()) {
-        StartAlbumColorCapture();
-    }
-    if (g_settings.lyricsEnabled ||
-        EqIsLayoutWidgetPresent(EQ_LAYOUT_LYRICS)) {
-        StartLyricsCapture();
+    // Wh_ModInit can run in secondary Explorer processes. Shell-dependent
+    // workers are started by OverlayThreadProc after it verifies desktop/taskbar
+    // ownership; keep these checks here as an additional lifecycle guard.
+    if (g_shellServicesStarted.load(std::memory_order_acquire)) {
+        if (IsAlbumColorMode())
+            StartAlbumColorCapture();
+        if (g_settings.lyricsEnabled ||
+            EqIsLayoutWidgetPresent(EQ_LAYOUT_LYRICS)) {
+            StartLyricsCapture();
+        }
     }
     return TRUE;
 }
@@ -18921,10 +18933,14 @@ void Wh_ModSettingsChanged() {
 
     if (oldAlbumColorMode != newAlbumColorMode ||
         audioSourceChanged) {
-        if (newAlbumColorMode)
-            StartAlbumColorCapture();
-        else
+        if (g_shellServicesStarted.load(std::memory_order_acquire)) {
+            if (newAlbumColorMode)
+                StartAlbumColorCapture();
+            else
+                StopAlbumColorCapture();
+        } else if (!newAlbumColorMode) {
             StopAlbumColorCapture();
+        }
     }
 
     const bool lyricsSourceChanged =
@@ -18937,10 +18953,14 @@ void Wh_ModSettingsChanged() {
     if (oldLyricsEnabled != newLyricsEnabled ||
         audioSourceChanged ||
         lyricsSourceChanged) {
-        if (newLyricsEnabled || newInteractiveLyrics)
-            StartLyricsCapture();
-        else
+        if (g_shellServicesStarted.load(std::memory_order_acquire)) {
+            if (newLyricsEnabled || newInteractiveLyrics)
+                StartLyricsCapture();
+            else
+                StopLyricsCapture();
+        } else if (!newLyricsEnabled && !newInteractiveLyrics) {
             StopLyricsCapture();
+        }
     }
 
     if (audioSourceChanged &&
