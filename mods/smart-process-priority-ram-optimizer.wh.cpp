@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         3.4.1
+// @version         3.4.3
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -539,6 +539,7 @@ typedef DWORD(WINAPI* pfnPowerSetActiveScheme)(HKEY UserRootPowerKey,
 
 static pfnPowerGetActiveScheme g_pfnPowerGetActiveScheme = nullptr;
 static pfnPowerSetActiveScheme g_pfnPowerSetActiveScheme = nullptr;
+static HMODULE g_hPowrProf = nullptr;
 
 static const GUID kGuidHighPerformance = {
     0x8c5e7fda, 0xe8bf, 0x4a96, {0x9a, 0x85, 0xa6, 0xe2, 0x3a, 0x8e, 0x63, 0x5c}};
@@ -702,6 +703,55 @@ static std::unordered_map<DWORD, std::chrono::steady_clock::time_point>
 // Game-sweep debounce; only touched by the hook thread.
 static DWORD g_lastGameSweepPid = 0;
 static std::chrono::steady_clock::time_point g_lastGameSweepTime{};
+static std::mutex g_gameSanctuaryMutex;
+static DWORD g_gameSanctuaryPid = 0;
+static HANDLE g_gameSanctuaryHandle = nullptr;
+
+static void SetGameSanctuary(DWORD pid) {
+    std::lock_guard<std::mutex> lock(g_gameSanctuaryMutex);
+    if (g_gameSanctuaryPid == pid && g_gameSanctuaryHandle &&
+        WaitForSingleObject(g_gameSanctuaryHandle, 0) == WAIT_TIMEOUT) {
+        return;
+    }
+    if (g_gameSanctuaryHandle) {
+        CloseHandle(g_gameSanctuaryHandle);
+        g_gameSanctuaryHandle = nullptr;
+    }
+    g_gameSanctuaryPid = 0;
+    if (pid == 0) {
+        return;
+    }
+    HANDLE handle = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+                                FALSE, pid);
+    if (handle && WaitForSingleObject(handle, 0) == WAIT_TIMEOUT) {
+        g_gameSanctuaryPid = pid;
+        g_gameSanctuaryHandle = handle;
+    } else if (handle) {
+        CloseHandle(handle);
+    }
+}
+
+static DWORD GetLiveGameSanctuaryPid() {
+    std::lock_guard<std::mutex> lock(g_gameSanctuaryMutex);
+    if (!g_gameSanctuaryHandle ||
+        WaitForSingleObject(g_gameSanctuaryHandle, 0) != WAIT_TIMEOUT) {
+        if (g_gameSanctuaryHandle) {
+            CloseHandle(g_gameSanctuaryHandle);
+            g_gameSanctuaryHandle = nullptr;
+        }
+        g_gameSanctuaryPid = 0;
+    }
+    return g_gameSanctuaryPid;
+}
+
+static void ClearGameSanctuary() {
+    std::lock_guard<std::mutex> lock(g_gameSanctuaryMutex);
+    if (g_gameSanctuaryHandle) {
+        CloseHandle(g_gameSanctuaryHandle);
+        g_gameSanctuaryHandle = nullptr;
+    }
+    g_gameSanctuaryPid = 0;
+}
 
 static std::chrono::steady_clock::time_point g_lastPeriodicCleanTime{};
 static std::chrono::steady_clock::time_point g_lastTriggerCleanTime{};
@@ -740,6 +790,7 @@ static std::chrono::steady_clock::time_point g_modStartTime{};
 static ULONGLONG g_sessionBytesReclaimed = 0;
 static DWORD g_sessionCleanupPasses = 0;
 static DWORD g_sessionProcessesTrimmedTotal = 0;
+static std::mutex g_sessionStatsMutex;
 static std::atomic<DWORD> g_sessionBoostTransitions{0};
 static std::atomic<DWORD> g_sessionThrottleTransitions{0};
 static std::atomic<ULONGLONG> g_lastResumeTick{0};
@@ -935,6 +986,7 @@ static std::wstring FormatUptime(std::chrono::steady_clock::time_point start,
 }
 
 static std::wstring BuildSessionStatsString() {
+    std::lock_guard<std::mutex> lock(g_sessionStatsMutex);
     auto now = std::chrono::steady_clock::now();
     std::wstring uptime = FormatUptime(g_modStartTime, now);
     ULONGLONG reclaimedMb = g_sessionBytesReclaimed / (1024ULL * 1024ULL);
@@ -1415,7 +1467,7 @@ static bool SetProcessMemoryPriorityHint(HANDLE hProcess, ULONG priority) {
     return SetProcessInformation(hProcess, ProcessMemoryPriority, &mpi, sizeof(mpi)) != 0;
 }
 
-static void SetProcessEcoQoS(HANDLE hProcess, bool enableThrottling) {
+static bool SetProcessEcoQoS(HANDLE hProcess, bool enableThrottling) {
     PROCESS_POWER_THROTTLING_STATE state{};
     state.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
     state.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED |
@@ -1424,20 +1476,20 @@ static void SetProcessEcoQoS(HANDLE hProcess, bool enableThrottling) {
         enableThrottling ? (PROCESS_POWER_THROTTLING_EXECUTION_SPEED |
                             PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION)
                          : 0;
-    SetProcessInformation(
-        hProcess, (PROCESS_INFORMATION_CLASS)ProcessPowerThrottlingInfoClass,
-        &state, sizeof(state));
+    return SetProcessInformation(hProcess,
+                                 (PROCESS_INFORMATION_CLASS)ProcessPowerThrottlingInfoClass,
+                                 &state, sizeof(state)) != 0;
 }
 
 // Restores default Windows power throttling (ControlMask = 0, StateMask = 0).
-static void ResetProcessEcoQoS(HANDLE hProcess) {
+static bool ResetProcessEcoQoS(HANDLE hProcess) {
     PROCESS_POWER_THROTTLING_STATE state{};
     state.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
     state.ControlMask = 0;
     state.StateMask = 0;
-    SetProcessInformation(
-        hProcess, (PROCESS_INFORMATION_CLASS)ProcessPowerThrottlingInfoClass,
-        &state, sizeof(state));
+    return SetProcessInformation(hProcess,
+                                 (PROCESS_INFORMATION_CLASS)ProcessPowerThrottlingInfoClass,
+                                 &state, sizeof(state)) != 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1531,10 +1583,7 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
         (settings.foregroundPriorityLevel == ForegroundPrioritySetting::High)
             ? HIGH_PRIORITY_CLASS
             : ABOVE_NORMAL_PRIORITY_CLASS;
-    ULONG targetIo =
-        (settings.foregroundPriorityLevel == ForegroundPrioritySetting::High)
-            ? IoPriorityHigh
-            : IoPriorityNormal;
+    constexpr ULONG targetIo = IoPriorityNormal;
 
     for (DWORD pid : pidsToBoost) {
         if (pid == 0 || pid == 4 || pid == currentPid)
@@ -1617,7 +1666,7 @@ static void UpdateForegroundBoost(DWORD newForegroundPid,
                          (itName != nameByPid.end()) ? itName->second.c_str() : L"process",
                          pid,
                          (targetPriority == HIGH_PRIORITY_CLASS) ? L"High" : L"AboveNormal",
-                         (targetIo == IoPriorityHigh) ? L"High" : L"Normal",
+                         L"Normal",
                          appliedCpuSets ? L" | P-Cores Assigned" : L"");
 
                 BoostedProcessEntry entry;
@@ -2428,6 +2477,18 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
         }
     }
 
+    DWORD gameSanctuaryPid = GetLiveGameSanctuaryPid();
+    auto sanctuaryRoot = procNames.find(gameSanctuaryPid);
+    if (sanctuaryRoot != procNames.end()) {
+        std::vector<DWORD> sanctuaryDescendants;
+        std::unordered_set<DWORD> visited;
+        CollectDescendants(gameSanctuaryPid, childrenOf, sanctuaryDescendants, visited);
+        visibleFamilyPids.insert(gameSanctuaryPid);
+        for (DWORD sanctuaryChild : sanctuaryDescendants) {
+            visibleFamilyPids.insert(sanctuaryChild);
+        }
+    }
+
     SystemActionArbiter arbiter{settings, currentPid, foregroundPid,
                                 activeAudioPids, visibleFamilyPids, now};
 
@@ -2495,12 +2556,9 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
             (cpuPercent < settings.backgroundCpuThrottleThresholdPercent / 2.0);
 
         if (isThrottled && (ioAct.isWritingDisk || ioAct.isTransferringNetworkOrIo)) {
-            // If an already-throttled process begins actively copying/writing files
-            // or transferring data, restore its normal I/O priority immediately.
-            SetProcessIoPriorityHint(hProc, IoPriorityNormal);
-            if (settings.enableEcoQosManagement) {
-                ResetProcessEcoQoS(hProc);
-            }
+            // Restore every mod-controlled resource before allowing active transfers.
+            RestoreAndEraseThrottledProcess(pid);
+            isThrottled = false;
         }
 
         if (isCpuHeavy && !isThrottled && systemUnderContention) {
@@ -2533,8 +2591,8 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
                                 if (!ioAct.isWritingDisk && !ioAct.isTransferringNetworkOrIo) {
                                     SetProcessIoPriorityHint(hProc, IoPriorityLow);
                                     if (settings.enableEcoQosManagement) {
-                                        SetProcessEcoQoS(hProc, /*enableThrottling=*/true);
-                                        appliedEcoQos = true;
+                                        appliedEcoQos =
+                                            SetProcessEcoQoS(hProc, /*enableThrottling=*/true);
                                     }
                                 }
 
@@ -2644,77 +2702,11 @@ static bool IsExcludedFromGameDetection(const std::wstring& name) {
     return kNonGames.count(name) != 0;
 }
 
-static bool IsProcessInGamingDirectory(DWORD pid) {
-    if (pid == 0 || pid == 4)
-        return false;
-    if (IsAccessDeniedImmune(pid))
-        return false;
-
-    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!hProc) {
-        if (GetLastError() == ERROR_ACCESS_DENIED) {
-            RecordAccessDeniedImmunity(pid);
-            g_accessDeniedCount.fetch_add(1, std::memory_order_relaxed);
-        }
-        return false;
-    }
-
-    WCHAR imagePath[MAX_PATH];
-    DWORD size = MAX_PATH;
-    bool isGame = false;
-    if (QueryFullProcessImageNameW(hProc, 0, imagePath, &size) && size > 0) {
-        std::wstring lowerPath = ToLower(imagePath);
-        static const std::vector<std::wstring> kGamingPaths = {
-            L"\\steamapps\\common\\",
-            L"\\epic games\\",
-            L"\\ubisoft game launcher\\",
-            L"\\gog galaxy\\games\\",
-            L"\\riot games\\",
-            L"\\xboxgames\\",
-            L"\\ea games\\",
-            L"\\battlenet\\",
-        };
-        for (const auto& gameDir : kGamingPaths) {
-            if (lowerPath.find(gameDir) != std::wstring::npos) {
-                isGame = true;
-                break;
-            }
-        }
-    }
-    CloseHandle(hProc);
-    return isGame;
-}
-
 static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
     if (!hwnd || !IsWindowVisible(hwnd) || pid == 0)
         return false;
 
-    RECT wndRect{};
-    // Query DWM extended frame bounds first for exact composited physical coordinates,
-    // falling back to GetWindowRect if DWM call is unavailable.
-    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &wndRect,
-                                     sizeof(wndRect)))) {
-        if (!GetWindowRect(hwnd, &wndRect))
-            return false;
-    }
-
-    HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi{};
-    mi.cbSize = sizeof(mi);
-    if (!GetMonitorInfoW(hMon, &mi))
-        return false;
-
-    // Allow a +/- 4 pixel tolerance margin to accommodate DWM sizing borders,
-    // drop shadow margins, and multi-monitor mixed DPI scaling boundaries on Windows 10/11.
-    bool coversMonitor =
-        (wndRect.left <= mi.rcMonitor.left + 4 &&
-         wndRect.top <= mi.rcMonitor.top + 4 &&
-         wndRect.right >= mi.rcMonitor.right - 4 &&
-         wndRect.bottom >= mi.rcMonitor.bottom - 4);
-    if (!coversMonitor)
-        return false;
-
-    // Exclusion check for media players, browsers, and terminals
+    // Exclusion check for media players, browsers, and terminals.
     std::vector<ProcessSnapshotEntry> snapshot = CaptureProcessSnapshotCached();
     for (const auto& entry : snapshot) {
         if (entry.pid == pid) {
@@ -2735,12 +2727,7 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
         }
     }
 
-    // Known gaming platform directory check
-    if (IsProcessInGamingDirectory(pid)) {
-        return true;
-    }
-
-    // Fallback borderless or popup window style check
+    // Borderless and popup window styles cover windowed and fullscreen games.
     LONG style = GetWindowLongW(hwnd, GWL_STYLE);
     bool borderless = (style & WS_CAPTION) == 0 && (style & WS_THICKFRAME) == 0;
 
@@ -2753,6 +2740,10 @@ static void MaybeRequestGameSweep(DWORD pid, HWND hwnd,
         return;
     if (!IsLikelyGameOrFullscreenWindow(hwnd, pid))
         return;
+
+    // Keep the detected game family protected after Alt-Tab while Unity continues
+    // streaming assets, compiling shaders, or writing save data in the background.
+    SetGameSanctuary(pid);
 
     if (pid == g_lastGameSweepPid)
         return;
@@ -2959,6 +2950,18 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
         }
     }
 
+    DWORD gameSanctuaryPid = GetLiveGameSanctuaryPid();
+    auto sanctuaryRoot = byPid.find(gameSanctuaryPid);
+    if (sanctuaryRoot != byPid.end()) {
+        std::vector<DWORD> sanctuaryDescendants;
+        std::unordered_set<DWORD> visited;
+        CollectDescendants(gameSanctuaryPid, childrenOf, sanctuaryDescendants, visited);
+        handledPids.insert(gameSanctuaryPid);
+        for (DWORD sanctuaryChild : sanctuaryDescendants) {
+            handledPids.insert(sanctuaryChild);
+        }
+    }
+
     SystemActionArbiter arbiter{settings, currentPid, foregroundPid,
                                 activeAudioPids, handledPids, now};
 
@@ -3115,7 +3118,7 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
                         isDormant = true;
                     }
                 } else {
-                    isDormant = true;
+                    g_processLastFocusedTime[pid] = now;
                 }
             }
 
@@ -3195,9 +3198,12 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
             ? (memAfter.ullAvailPhys - memBefore.ullAvailPhys)
             : trimStats.bytesReclaimed;
 
-    g_sessionCleanupPasses++;
-    g_sessionBytesReclaimed += freedTotalBytes;
-    g_sessionProcessesTrimmedTotal += trimStats.processesTrimmed;
+    {
+        std::lock_guard<std::mutex> lock(g_sessionStatsMutex);
+        g_sessionCleanupPasses++;
+        g_sessionBytesReclaimed += freedTotalBytes;
+        g_sessionProcessesTrimmedTotal += trimStats.processesTrimmed;
+    }
 
     if (settings.enableLogging) {
         double freedMb = freedTotalBytes / (1024.0 * 1024.0);
@@ -3418,7 +3424,10 @@ static void MemoryOptimizerWorker() {
            L"(0.00%% CPU passive wait).");
 
     HANDLE waitHandles[2] = {g_stopEvent, g_wakeEvent};
-    g_modStartTime = std::chrono::steady_clock::now();
+    {
+        std::lock_guard<std::mutex> lock(g_sessionStatsMutex);
+        g_modStartTime = std::chrono::steady_clock::now();
+    }
     g_lastPeriodicCleanTime = g_modStartTime;
     g_lastIdleCleanTime = g_modStartTime;
     g_lastTriggerCleanTime = g_modStartTime;
@@ -3852,12 +3861,12 @@ BOOL WhTool_ModInit() {
                 hShell32, "SHQueryUserNotificationState");
     }
 
-    HMODULE hPowrProf = LoadLibraryW(L"powrprof.dll");
-    if (hPowrProf) {
+    g_hPowrProf = LoadLibraryW(L"powrprof.dll");
+    if (g_hPowrProf) {
         g_pfnPowerGetActiveScheme = (pfnPowerGetActiveScheme)GetProcAddress(
-            hPowrProf, "PowerGetActiveScheme");
+            g_hPowrProf, "PowerGetActiveScheme");
         g_pfnPowerSetActiveScheme = (pfnPowerSetActiveScheme)GetProcAddress(
-            hPowrProf, "PowerSetActiveScheme");
+            g_hPowrProf, "PowerSetActiveScheme");
         CheckAndRecoverCrashedPowerScheme();
     }
 
@@ -3870,6 +3879,22 @@ BOOL WhTool_ModInit() {
     if (!g_stopEvent || !g_wakeEvent || !g_hookThreadReadyEvent) {
         Wh_Log(L"[SmartOptimizer] Fatal Error: Failed to create synchronization "
                L"events.");
+        if (g_stopEvent) {
+            CloseHandle(g_stopEvent);
+            g_stopEvent = nullptr;
+        }
+        if (g_wakeEvent) {
+            CloseHandle(g_wakeEvent);
+            g_wakeEvent = nullptr;
+        }
+        if (g_hookThreadReadyEvent) {
+            CloseHandle(g_hookThreadReadyEvent);
+            g_hookThreadReadyEvent = nullptr;
+        }
+        if (g_hPowrProf) {
+            FreeLibrary(g_hPowrProf);
+            g_hPowrProf = nullptr;
+        }
         return FALSE;
     }
 
@@ -3968,6 +3993,7 @@ void WhTool_ModUninit() {
         std::lock_guard<std::mutex> lock(g_classifyCacheMutex);
         g_processClassCache.clear();
     }
+    ClearGameSanctuary();
 
     if (g_stopEvent) {
         CloseHandle(g_stopEvent);
@@ -3980,6 +4006,10 @@ void WhTool_ModUninit() {
     if (g_hookThreadReadyEvent) {
         CloseHandle(g_hookThreadReadyEvent);
         g_hookThreadReadyEvent = nullptr;
+    }
+    if (g_hPowrProf) {
+        FreeLibrary(g_hPowrProf);
+        g_hPowrProf = nullptr;
     }
 
     {
