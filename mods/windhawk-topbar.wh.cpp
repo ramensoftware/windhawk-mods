@@ -1437,11 +1437,6 @@ static int  g_wideFlyoutTargetX = -1;
 static int  g_wideFlyoutTargetY = -1;
 static std::atomic<ULONGLONG> g_lastPromoteTick{0};
 
-static std::mutex g_popupCloakMutex;
-static std::map<HWND, int> g_popupCloakTicks;
-static constexpr UINT_PTR kPopupUncloakTimerId = 0x7BC1;
-static constexpr int kPopupUncloakTicks = 10;
-
 // Every open flyout / context menu is registered here so that
 // CloseAnyOpenChildFlyout can dismiss all of them, and so the topbar's
 // topmost re-assertion can back off while any of them is open. Without
@@ -1466,25 +1461,6 @@ void RegisterOpenPopup(wuxc::Primitives::FlyoutBase const& fb) {
     }
     g_openPopups.push_back(fb);
     g_anyChildFlyoutOpen = true;
-
-    {
-        static std::atomic<int> s_burstTicks{0};
-        static DispatcherTimer s_burstTimer{nullptr};
-        s_burstTicks.store(24);
-        if (!s_burstTimer) {
-            s_burstTimer = DispatcherTimer();
-            s_burstTimer.Interval(std::chrono::milliseconds(16));
-            s_burstTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
-                try { ApplyBlurToAllOpenPopups(); } catch (...) {}
-                if (--s_burstTicks <= 0) {
-                    s_burstTimer.Stop();
-                }
-            });
-        }
-        s_burstTimer.Stop();
-        s_burstTimer.Start();
-    }
-
     static std::set<void*> s_closingGuardInstalled;
     if (s_closingGuardInstalled.insert(winrt::get_abi(fb)).second) {
         try {
@@ -3608,48 +3584,7 @@ wuxm::SolidColorBrush MakeBrush(uint8_t a, uint8_t r, uint8_t g, uint8_t b) {
     return wuxm::SolidColorBrush(wui::ColorHelper::FromArgb(a, r, g, b));
 }
 
-void InjectTransparentPopupResources(FrameworkElement const& anyElement) {
-    if (!anyElement) return;
-    DependencyObject root = anyElement;
-    int guard = 0;
-    while (guard++ < 32) {
-        DependencyObject parent{nullptr};
-        try { parent = wuxm::VisualTreeHelper::GetParent(root); } catch (...) { break; }
-        if (!parent) break;
-        root = parent;
-    }
-    auto feRoot = root.try_as<FrameworkElement>();
-    if (!feRoot) return;
-    try {
-        auto resources = feRoot.Resources();
-        auto transparent = MakeBrush(0, 0, 0, 0);
-        auto set = [&](PCWSTR key, wf::IInspectable const& value) {
-            auto boxedKey = winrt::box_value(winrt::hstring(key));
-            if (resources.HasKey(boxedKey)) resources.Remove(boxedKey);
-            resources.Insert(boxedKey, value);
-        };
-        set(L"FlyoutPresenterBackground", transparent);
-        set(L"MenuFlyoutPresenterBackground", transparent);
-        set(L"FlyoutBackground", transparent);
-        set(L"MenuFlyoutBackground", transparent);
-        set(L"SystemControlTransientBackground", transparent);
-        set(L"SystemControlTransientBackgroundAlt", transparent);
-        set(L"FlyoutBorderThemeBrush", transparent);
-        set(L"SystemControlTransientBorderBrush", transparent);
-        set(L"SystemControlTransientBorderBrushAlt", transparent);
-        set(L"AcrylicBackgroundFillColorDefaultBrush", transparent);
-        set(L"AcrylicBackgroundFillColorBaseBrush", transparent);
-        set(L"AcrylicInAppFillColorDefaultBrush", transparent);
-        set(L"SolidBackgroundFillColorBase", transparent);
-        set(L"SolidBackgroundFillColorBaseAlt", transparent);
-        set(L"SolidBackgroundFillColorSecondary", transparent);
-        set(L"CardBackgroundFillColorDefaultBrush", transparent);
-        set(L"LayerFillColorDefaultBrush", transparent);
-        set(L"SystemControlAcrylicWindowBrush", transparent);
-        set(L"SystemControlAcrylicElementBrush", transparent);
-        set(L"SystemControlAcrylicElementMediumBrush", transparent);
-    } catch (...) {}
-}
+
 
 // Single source of truth for the user's chosen font colour. Everything that
 // renders text — labels, flyout rows, menu items, search box text, the
@@ -8128,30 +8063,6 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
                     }
                     presenter.Background(MakeBrush(0, 0, 0, 0));
 
-                    auto presenterFe = presenter.as<FrameworkElement>();
-                    try { InjectTransparentPopupResources(presenterFe); } catch (...) {}
-                    RunOnUiThread([presenterFe] {
-                        try { InjectTransparentPopupResources(presenterFe); } catch (...) {}
-                        RunOnUiThread([presenterFe] {
-                            try { InjectTransparentPopupResources(presenterFe); } catch (...) {}
-                        });
-                    });
-
-                    try { presenterFe.Opacity(0); } catch (...) {}
-                    RunOnUiThread([presenterFe] {
-                        RunOnUiThread([presenterFe] {
-                            RunOnUiThread([presenterFe] {
-                                try { presenterFe.Opacity(1); } catch (...) {}
-                            });
-                        });
-                    });
-
-                    g_lastPromoteTick.store(0);
-                    try { PromoteChildFlyoutPopups(); } catch (...) {}
-                    RunOnUiThread([] {
-                        try { PromoteChildFlyoutPopups(); } catch (...) {}
-                    });
-
                     if (std::find(g_detachedStyleRoots.begin(),
                                   g_detachedStyleRoots.end(),
                                   presenter.as<FrameworkElement>()) ==
@@ -9415,17 +9326,19 @@ void UpdateMediaFlyoutProgress() {
 void StartMediaProgressTimer() {
     if (!g_mediaProgressTimer) {
         g_mediaProgressTimer = DispatcherTimer();
-        g_mediaProgressTimer.Interval(std::chrono::seconds(1));
+        g_mediaProgressTimer.Interval(std::chrono::milliseconds(80));
         g_mediaProgressTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
             try {
                 if (!g_mediaFlyout || !g_mediaFlyout.IsOpen()) {
                     g_mediaProgressTimer.Stop();
                     return;
                 }
+                g_mediaProgressTimer.Interval(std::chrono::seconds(1));
                 UpdateMediaFlyoutProgress();
             } catch (...) {}
         });
     }
+    g_mediaProgressTimer.Interval(std::chrono::milliseconds(80));
     g_mediaProgressTimer.Stop();
     g_mediaProgressTimer.Start();
 }
@@ -10001,6 +9914,9 @@ void PopulateMediaPanel() {
             card.Child(body);
             ch.Append(card);
             StartMediaProgressTimer();
+            RunOnUiThread([] {
+                try { UpdateMediaFlyoutProgress(); } catch (...) {}
+            });
         });
     });
 }
@@ -12396,9 +12312,6 @@ void InstallGlobalMenuResources() {
     try {
         auto application = Application::Current();
         if (!application) {
-            if (g_rootElement) {
-                try { InjectTransparentPopupResources(g_rootElement); } catch (...) {}
-            }
             return;
         }
         auto resources = application.Resources();
@@ -12497,27 +12410,23 @@ Style MakeMenuPresenterStyle() {
         setters.Append(Setter(wuxc::Control::FontWeightProperty(),
                               winrt::box_value(winrt::Windows::UI::Text::FontWeights::Bold())));
     }
+    wui::Color menuInitialTint;
+    if (!ParseBarColor(g_settings.topBarBackgroundColor,
+                       g_settings.topBarBackgroundOpacity,
+                       &menuInitialTint)) {
+        menuInitialTint = wui::ColorHelper::FromArgb(128, 0, 0, 0);
+    }
     setters.Append(Setter(wuxc::Control::BackgroundProperty(),
-                          winrt::box_value(FlyoutBackgroundBrush())));
+                          winrt::box_value(wuxm::SolidColorBrush(menuInitialTint))));
     setters.Append(Setter(wuxc::Control::BorderBrushProperty(),
-                          winrt::box_value(MakeBrush(0x30, 0xFF, 0xFF, 0xFF))));
+                          winrt::box_value(MakeBrush(0, 0, 0, 0))));
     setters.Append(Setter(wuxc::Control::BorderThicknessProperty(),
-                          winrt::box_value(Thickness{1, 1, 1, 1})));
+                          winrt::box_value(Thickness{0, 0, 0, 0})));
     setters.Append(Setter(wuxc::Control::CornerRadiusProperty(),
                           winrt::box_value(MakeCorner(kMenuCorner))));
     setters.Append(
         Setter(wuxc::Control::PaddingProperty(), winrt::box_value(Thickness{4, 4, 4, 4})));
     setters.Append(Setter(FrameworkElement::MinWidthProperty(), winrt::box_value(200.0)));
-    {
-        wuxa::TransitionCollection transitions;
-        wuxa::EntranceThemeTransition entrance;
-        entrance.FromVerticalOffset(12.0);
-        entrance.FromHorizontalOffset(0.0);
-        entrance.IsStaggeringEnabled(false);
-        transitions.Append(entrance);
-        setters.Append(Setter(UIElement::TransitionsProperty(),
-                              winrt::box_value(transitions)));
-    }
     if (auto tmpl = BuildFlyoutShellTemplate(true)) {
         setters.Append(Setter(wuxc::Control::TemplateProperty(), winrt::box_value(tmpl)));
     }
@@ -12606,6 +12515,31 @@ void ApplyMenuItemLook(wuxc::MenuFlyoutItemBase const& item) {
             control.CornerRadius(MakeCorner(kMenuItemCorner));
             control.Padding(Thickness{12, 7, 12, 7});
         }
+
+        item.Loaded([](wf::IInspectable const& sender, RoutedEventArgs const&) {
+            if (g_settings.fontColor.empty()) return;
+            wui::Color fc{};
+            if (!TryParseHexColor(g_settings.fontColor, &fc) &&
+                !TryParseNamedColor(g_settings.fontColor, &fc)) {
+                return;
+            }
+            auto fgBrush = MakeBrush(fc.A, fc.R, fc.G, fc.B);
+            auto fe = sender.as<FrameworkElement>();
+            std::function<void(DependencyObject)> paint =
+                [&](DependencyObject node) {
+                    if (!node) return;
+                    try {
+                        if (auto tb = node.try_as<wuxc::TextBlock>()) {
+                            tb.Foreground(fgBrush);
+                        }
+                        int n = wuxm::VisualTreeHelper::GetChildrenCount(node);
+                        for (int i = 0; i < n; i++) {
+                            paint(wuxm::VisualTreeHelper::GetChild(node, i));
+                        }
+                    } catch (...) {}
+                };
+            paint(fe);
+        });
     } catch (...) {
     }
 }
@@ -12787,89 +12721,6 @@ void StyleMenuFlyout(wuxc::MenuFlyout const& menu) {
     menu.Opened([](auto&& sender, auto&&) {
         RegisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
         ApplyBlurToAllOpenPopups();
-
-        wuxc::MenuFlyoutPresenter menuPresenter{nullptr};
-        try {
-            auto fb = sender.template as<wuxc::Primitives::FlyoutBase>();
-            auto menuFlyout = fb.template try_as<wuxc::MenuFlyout>();
-            if (menuFlyout && menuFlyout.Items().Size() > 0) {
-                auto firstItem = menuFlyout.Items().GetAt(0);
-                auto itemFe = firstItem.template try_as<FrameworkElement>();
-                if (itemFe) {
-                    InjectTransparentPopupResources(itemFe);
-                    DependencyObject cur = itemFe;
-                    while (auto par = wuxm::VisualTreeHelper::GetParent(cur)) {
-                        if (auto p = par.try_as<wuxc::MenuFlyoutPresenter>()) {
-                            menuPresenter = p;
-                            break;
-                        }
-                        cur = par;
-                    }
-                }
-            }
-        } catch (...) {}
-
-        if (menuPresenter) {
-            try {
-                if (g_menuShellTemplate && menuPresenter.Template() != g_menuShellTemplate) {
-                    menuPresenter.Template(g_menuShellTemplate);
-                }
-                wui::Color tintColor;
-                if (!ParseBarColor(g_settings.topBarBackgroundColor,
-                                   g_settings.topBarBackgroundOpacity,
-                                   &tintColor)) {
-                    tintColor = wui::ColorHelper::FromArgb(128, 0, 0, 0);
-                }
-                auto isOurBlur = [](wf::IInspectable const& obj) {
-                    return obj && obj.try_as<wuxm::XamlCompositionBrushBase>() != nullptr;
-                };
-                auto blurBrush = winrt::make<XamlBlurBrush>(
-                    menuPresenter.as<UIElement>(),
-                    static_cast<float>(g_settings.globalBlurAmount),
-                    tintColor, tintColor.A);
-                if (!isOurBlur(menuPresenter.Background())) {
-                    menuPresenter.Background(blurBrush);
-                }
-                try {
-                    if (auto shellBorder = menuPresenter.FindName(L"PART_BackgroundBorder")
-                            .try_as<wuxc::Border>()) {
-                        if (!isOurBlur(shellBorder.Background())) {
-                            shellBorder.Background(blurBrush);
-                        }
-                    }
-                } catch (...) {}
-                auto presenterFe = menuPresenter.as<FrameworkElement>();
-                if (std::find(g_detachedStyleRoots.begin(), g_detachedStyleRoots.end(), presenterFe)
-                        == g_detachedStyleRoots.end()) {
-                    g_detachedStyleRoots.push_back(presenterFe);
-                }
-                try { presenterFe.Opacity(0); } catch (...) {}
-                RunOnUiThread([presenterFe] {
-                    RunOnUiThread([presenterFe] {
-                        RunOnUiThread([presenterFe] {
-                            try { presenterFe.Opacity(1); } catch (...) {}
-                        });
-                    });
-                });
-            } catch (...) {}
-        }
-
-        try {
-            g_lastPromoteTick.store(0);
-            PromoteChildFlyoutPopups();
-        } catch (...) {}
-        RunOnUiThread([] {
-            try {
-                g_lastPromoteTick.store(0);
-                PromoteChildFlyoutPopups();
-            } catch (...) {}
-            RunOnUiThread([] {
-                try {
-                    g_lastPromoteTick.store(0);
-                    PromoteChildFlyoutPopups();
-                } catch (...) {}
-            });
-        });
     });
     menu.Closed([](auto&& sender, auto&&) {
         UnregisterOpenPopup(sender.template as<wuxc::Primitives::FlyoutBase>());
@@ -17253,6 +17104,9 @@ void AddColorRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
             auto xamlRoot = swatch.XamlRoot();
             if (!xamlRoot) return;
 
+            if (g_colorDialogOpen.load() && g_openColorPickers.load() == 0) {
+                g_colorDialogOpen = false;
+            }
             if (g_colorDialogOpen.exchange(true)) return;
 
             wui::Color original = *curColor;
@@ -17288,7 +17142,7 @@ void AddColorRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
             auto header = wuxc::Grid();
             header.HorizontalAlignment(HorizontalAlignment::Right);
             header.VerticalAlignment(VerticalAlignment::Top);
-            header.Margin(Thickness{0, -22, -22, 0});
+            header.Margin(Thickness{0, 0, 0, 0});
             auto c0Col = wuxc::ColumnDefinition(); c0Col.Width(GridLength{0, GridUnitType::Auto});
             auto c1Col = wuxc::ColumnDefinition(); c1Col.Width(GridLength{0, GridUnitType::Auto});
             header.ColumnDefinitions().Append(c0Col);
@@ -17407,7 +17261,13 @@ void AddColorRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
                 g_colorDialogOpen = false;
             });
 
-            dlg->ShowAsync();
+            auto asyncOp = dlg->ShowAsync();
+            asyncOp.Completed([dlg](auto&&, auto&& status) {
+                if (status != winrt::Windows::Foundation::AsyncStatus::Completed) {
+                    g_openColorPickers.fetch_sub(1);
+                    g_colorDialogOpen = false;
+                }
+            });
         } catch (...) {
             g_colorDialogOpen = false;
         }
@@ -19969,58 +19829,6 @@ static std::map<HWND, RECT> g_childPopupTargets;
 static std::set<HWND> g_childPopupSubclassed;
 
 LRESULT CALLBACK ChildFlyoutPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
-    switch (msg) {
-        case WM_NCCALCSIZE:
-        case WM_WINDOWPOSCHANGING:
-        case WM_WINDOWPOSCHANGED:
-            ForceDisableWindowsTransparency(hwnd);
-            break;
-        case WM_SHOWWINDOW:
-            ForceDisableWindowsTransparency(hwnd);
-            if (wParam == TRUE) {
-                bool needTimer = false;
-                {
-                    std::lock_guard<std::mutex> lock(g_popupCloakMutex);
-                    auto it = g_popupCloakTicks.find(hwnd);
-                    if (it != g_popupCloakTicks.end() && it->second == 0) {
-                        needTimer = true;
-                    }
-                }
-                if (needTimer) {
-                    SetTimer(hwnd, kPopupUncloakTimerId, 16, nullptr);
-                }
-            }
-            break;
-        case WM_TIMER:
-            if (wParam == kPopupUncloakTimerId) {
-                bool release = false;
-                {
-                    std::lock_guard<std::mutex> lock(g_popupCloakMutex);
-                    auto it = g_popupCloakTicks.find(hwnd);
-                    if (it != g_popupCloakTicks.end()) {
-                        if (++it->second >= kPopupUncloakTicks) {
-                            g_popupCloakTicks.erase(it);
-                            release = true;
-                        }
-                    }
-                }
-                if (release) {
-                    KillTimer(hwnd, kPopupUncloakTimerId);
-                    try {
-                        BOOL cloakOff = FALSE;
-                        DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
-                    } catch (...) {}
-                    ForceDisableWindowsTransparency(hwnd);
-                }
-            }
-            break;
-        case WM_ERASEBKGND:
-            return 1;
-        case WM_NCPAINT:
-            return 0;
-        case WM_NCACTIVATE:
-            return TRUE;
-    }
     if (msg == WM_WINDOWPOSCHANGING) {
         RECT target{};
         bool haveTarget = false;
@@ -20046,11 +19854,6 @@ LRESULT CALLBACK ChildFlyoutPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             g_childPopupTargets.erase(hwnd);
             g_childPopupSubclassed.erase(hwnd);
         }
-        {
-            std::lock_guard<std::mutex> lock(g_popupCloakMutex);
-            g_popupCloakTicks.erase(hwnd);
-        }
-        KillTimer(hwnd, kPopupUncloakTimerId);
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ChildFlyoutPopupProc);
         return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
@@ -20657,66 +20460,6 @@ LRESULT CALLBACK ChildFlyoutMouseHookProc(int nCode, WPARAM wParam, LPARAM lPara
         }
     }
     return CallNextHookEx(g_childFlyoutMouseHook, nCode, wParam, lParam);
-}
-
-using CreateWindowExW_t = HWND(WINAPI*)(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
-static CreateWindowExW_t CreateWindowExW_Original = nullptr;
-
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
-                                 LPCWSTR lpWindowName, DWORD dwStyle,
-                                 int X, int Y, int nWidth, int nHeight,
-                                 HWND hWndParent, HMENU hMenu, HINSTANCE hInstance,
-                                 LPVOID lpParam) {
-    HWND hwnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName, dwStyle,
-                                         X, Y, nWidth, nHeight,
-                                         hWndParent, hMenu, hInstance, lpParam);
-    if (hwnd && lpClassName) {
-        std::wstring cls;
-        if (HIWORD(lpClassName) == 0) {
-            wchar_t atomName[256]{};
-            if (GetAtomNameW(static_cast<ATOM>(reinterpret_cast<ULONG_PTR>(lpClassName)),
-                             atomName, ARRAYSIZE(atomName))) {
-                cls = atomName;
-            }
-        } else {
-            cls = lpClassName;
-        }
-        if (!cls.empty() &&
-            cls.find(L"Xaml") != std::wstring::npos &&
-            cls.find(L"Popup") != std::wstring::npos) {
-            ForceDisableWindowsTransparency(hwnd);
-            try {
-                SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND,
-                                 reinterpret_cast<LONG_PTR>(nullptr));
-            } catch (...) {}
-            try {
-                BOOL cloakOn = TRUE;
-                DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &cloakOn, sizeof(cloakOn));
-                std::lock_guard<std::mutex> lock(g_popupCloakMutex);
-                g_popupCloakTicks[hwnd] = 0;
-            } catch (...) {}
-            {
-                std::lock_guard<std::mutex> lock(g_childPopupMutex);
-                if (g_childPopupSubclassed.insert(hwnd).second) {
-                    WindhawkUtils::SetWindowSubclassFromAnyThread(
-                        hwnd, ChildFlyoutPopupProc, 0);
-                }
-            }
-        }
-    }
-    return hwnd;
-}
-
-void InstallCreateWindowHook() {
-    if (CreateWindowExW_Original) return;
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) return;
-    void* target = reinterpret_cast<void*>(GetProcAddress(user32, "CreateWindowExW"));
-    if (!target) return;
-    Wh_SetFunctionHook(target,
-                       reinterpret_cast<void*>(CreateWindowExW_Hook),
-                       reinterpret_cast<void**>(&CreateWindowExW_Original));
-    Wh_Log(L"TopBar: CreateWindowExW hook installed");
 }
 
 void InstallChildFlyoutMouseHook() {
@@ -22288,42 +22031,6 @@ void SetTopBarContent(FrameworkElement content) {
         g_topBarPopup.FlyoutPresenterStyle(presenterStyle);
 
         g_desktopSource.Content(g_topBarPopupCanvas);
-
-        try {
-            auto res = g_topBarPopupCanvas.Resources();
-            auto transparent = MakeBrush(0, 0, 0, 0);
-            auto setKey = [&](PCWSTR key) {
-                auto boxedKey = winrt::box_value(winrt::hstring(key));
-                if (res.HasKey(boxedKey)) res.Remove(boxedKey);
-                res.Insert(boxedKey, transparent);
-            };
-            setKey(L"FlyoutPresenterBackground");
-            setKey(L"FlyoutPresenterBorderBrush");
-            setKey(L"MenuFlyoutPresenterBackground");
-            setKey(L"MenuFlyoutPresenterBorderBrush");
-            setKey(L"FlyoutBackground");
-            setKey(L"FlyoutBorderThemeBrush");
-            setKey(L"MenuFlyoutBackground");
-            setKey(L"SystemControlTransientBackground");
-            setKey(L"SystemControlTransientBackgroundAlt");
-            setKey(L"SystemControlTransientBorderBrush");
-            setKey(L"SystemControlTransientBorderBrushAlt");
-            setKey(L"AcrylicBackgroundFillColorDefaultBrush");
-            setKey(L"AcrylicBackgroundFillColorBaseBrush");
-            setKey(L"AcrylicBackgroundFillColorDefault");
-            setKey(L"AcrylicBackgroundFillColorBase");
-            setKey(L"AcrylicInAppFillColorDefaultBrush");
-            setKey(L"AcrylicInAppFillColorDefault");
-            setKey(L"SolidBackgroundFillColorBase");
-            setKey(L"SolidBackgroundFillColorBaseAlt");
-            setKey(L"SolidBackgroundFillColorSecondary");
-            setKey(L"SolidBackgroundFillColorTertiary");
-            setKey(L"SolidBackgroundFillColorQuarternary");
-            setKey(L"CardBackgroundFillColorDefaultBrush");
-            setKey(L"LayerFillColorDefaultBrush");
-            setKey(L"SystemControlBackgroundChromeMediumLowBrush");
-            setKey(L"SystemControlBackgroundAltHighBrush");
-        } catch (...) {}
     }
 
     content.Width(widthDip);
@@ -22466,7 +22173,7 @@ void ForceDisableWindowsTransparency(HWND hwnd) {
         std::lock_guard<std::mutex> lock(g_transparencyKilledMutex);
         ULONGLONG now = GetTickCount64();
         auto it = g_transparencyKilledAt.find(hwnd);
-        if (it != g_transparencyKilledAt.end() && (now - it->second) < 300) {
+        if (it != g_transparencyKilledAt.end() && (now - it->second) < 3000) {
             return;
         }
         g_transparencyKilledAt[hwnd] = now;
@@ -22629,17 +22336,7 @@ void ApplyBlurToAllOpenPopups() {
             return TRUE;
         }
         if (g_blurredPopupHwnds.insert(hwnd).second) {
-            ApplyBlurToWindow(hwnd);
             ApplyRoundedCornersToWindow(hwnd);
-        }
-        ForceDisableWindowsTransparency(hwnd);
-        {
-            std::lock_guard<std::mutex> lock(g_childPopupMutex);
-            if (g_childPopupSubclassed.find(hwnd) == g_childPopupSubclassed.end()) {
-                g_childPopupSubclassed.insert(hwnd);
-                WindhawkUtils::SetWindowSubclassFromAnyThread(
-                    hwnd, ChildFlyoutPopupProc, 0);
-            }
         }
         return TRUE;
     }, 0);
@@ -24293,8 +23990,6 @@ BOOL WhTool_ModInit() {
     g_prevDefaultStartMenu = g_settings.defaultStartMenu;
     g_prevDefaultSearch = g_settings.defaultSearch;
     g_prevStartButtonAction = g_settings.startButtonAction;
-
-    InstallCreateWindowHook();
 
     KillStaleShellHosts(true, true);
 
