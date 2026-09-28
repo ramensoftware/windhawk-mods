@@ -2,7 +2,7 @@
 // @id              windows-animations
 // @name            Windows Animations
 // @description     Smooth minimize, restore, close, switch animations for windows.
-// @version         1.3.5
+// @version         1.3.6
 // @author          ReDrag
 // @github          https://github.com/redrag2105
 // @donateUrl       https://ko-fi.com/redrag2105
@@ -12,6 +12,7 @@
 // @exclude         StartMenuExperienceHost.exe
 // @exclude         SearchHost.exe
 // @exclude         dwm.exe
+// @exclude         mmc.exe
 // @exclude         git.exe
 // @exclude         git-remote-https.exe
 // @exclude         AudioCaptureService.exe
@@ -23,9 +24,9 @@
 // ==/WindhawkMod==
 
 // The explicit process exclusions above are pre-injection fast paths for
-// known interactive-session helpers that never host an animatable top-level
-// window. The runtime session/command-line checks below cover generic helper
-// roles, but they run only after injection has already occurred.
+// unsupported window hosts and known interactive-session helpers. The runtime
+// session/command-line checks below cover generic helper roles, but they run
+// only after injection has already occurred.
 
 // ==WindhawkModReadme==
 /*
@@ -33,6 +34,7 @@
 > ⚠️ **NOTE:** 
 > * **Packaged & System Apps:** Many packaged apps can be animated when they expose a normal top-level window, but protected or system-hosted windows such as some Settings, Store, and shell surfaces can bypass interception and use their native transition instead.
 > * **Browsers & Tray Apps:** Some browsers and tray apps, including Chrome, Edge, Discord, and Windhawk, can keep running or hide their window when you click the 'X' button instead of exiting. To animate those hidden transitions, turn on **"Animate windows hidden to the tray"** in the settings.
+> * **MMC Consoles:** Services, Task Scheduler, Event Viewer, and other `mmc.exe` snap-ins are excluded and use native Windows transitions.
 
 Welcome to **Windows Animations**, a comprehensive window transition suite for your desktop. Built from the ground up to deliver cinematic window animations. 
 
@@ -77,7 +79,7 @@ When the corresponding **Hybrid GPU acceleration** option is enabled, the mod us
 |---|---|---|
 | Normal minimize | CPU layered window | Faster in every matched minimize test and avoids DirectComposition/native-taskbar flicker. |
 | Normal restore | D3D11 + DirectComposition | Consistently much faster because it avoids layered-window GPU readback and synchronization. The latency-sensitive Optimize Show Desktop batch path remains CPU. |
-| Animated launch | D3D11 + DirectComposition when warmed and compatible; otherwise CPU | Uses the restore animation path. The first launch in a process can use CPU while GPU resources warm safely in the background. |
+| Animated launch | D3D11 + DirectComposition when warmed and compatible; otherwise CPU | Uses the restore animation path. The first launch in a process can use CPU while GPU resources warm safely in the background. Firefox-family browsers such as Firefox and Waterfox use the alpha-only concealment sequence from v1.2.0 for their startup window to preserve session restore. |
 | Close: Thanos or Perlin, 1 px blocks, at least 1.5 million source pixels | D3D11 + layered window | This is the measured dense workload where GPU parallelism can outweigh the layered presentation cost. |
 | Every other close workload | CPU layered window | Faster for ordinary windows, larger blocks, Square Shatter, Cyber Glitch, Retro TV, and Pixel Melt in the matched tests. |
 | Alt+Tab switch | Native DWM thumbnail | Independent of both GPU settings. |
@@ -97,7 +99,7 @@ When the corresponding **Hybrid GPU acceleration** option is enabled, the mod us
 | **Window transitions** | Improved taskbar minimizes, support for taskbars on every screen edge, rounded-corner preservation, rapid reversals, Alt+Tab, backdrop windows, console capture, and Windows Terminal taskbar targeting. |
 | **Show Desktop** | Optional **Optimize Show Desktop** custom-animates only the foreground window, minimizes background windows immediately, and keeps their restore behavior native. |
 | **Shuffle mode** | Each animation group uses one session-wide cycle shared by every app, so every style plays once before reshuffling without process restarts causing repeats. Launch/restore and the following minimize remain paired. |
-| **Compatibility** | Automatic CPU fallback plus early skipping of non-interactive sessions and known background-only helper processes. |
+| **Compatibility** | Automatic CPU fallback plus early skipping of non-interactive sessions and known background-only helper processes. Transient Tauri show/hide normalization is not mistaken for a tray close. |
 
 &nbsp;
 
@@ -186,7 +188,7 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 * **Switch animation duration (ms):** Controls the snappy speed of the Alt+Tab scaling effect. (Default: 200ms)
 * **Shatter block size (px):** Determines the size of the dust/shatter particles.
   * *Performance Tip:* The 1 px setting uses specialized single-pixel paths, but maximized windows can still be demanding when an app must fall back to CPU rendering. Around 5 px is a better balance for those windows. Values from 2–4 create dense quad fields, while larger values (24, 32) yield a stylish retro pixelated effect and perform effortlessly on most hardware. (Clamped strictly to 1-100).
-* **Animate app launches:** Off by default. Enable it to use the restore effect when an application window first opens.
+* **Animate app launches:** Off by default. Enable it to use the restore effect when an application window first opens. Firefox-family browser startup windows remain animated through an alpha-only compatibility path that preserves session restore.
 * **Animate windows hidden to the tray:** Off by default. Enable it to animate apps such as Discord, Steam, and Telegram when they hide their window instead of closing it. This can also animate splash screens or windows hidden automatically by an app.
 * **Toggles:** Individually turn on/off Minimize, Restore, Close, Alt+Tab Switch, and Launch animations to suit your workflow.
 * **Taskbar placement:** Bottom, top, left, and right taskbars are supported, including taskbars on secondary monitors and auto-hidden taskbars. Genie bends toward the detected edge and targets the app button on that axis; Windows 10 scales toward the full button position. The other minimize/restore effects animate in place, while **None** continues to use Windows' native transition.
@@ -209,7 +211,10 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
     $description: Animate windows as they return from the taskbar.
   - launch_animation: false
     $name: Animate app launches
-    $description: Disabled by default. Enable to use the restore animation when an application window first opens.
+    $description: >-
+      Disabled by default. Enable to use the restore animation when an application window first
+      opens. Firefox-family browsers such as Firefox and Waterfox use an alpha-only compatibility
+      path for their startup window that preserves session restore while keeping the launch animation.
   - random_effect: false
     $name: Shuffle animation styles
     $description: >-
@@ -278,7 +283,8 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
       Disabled by default. Enable to animate apps such as Discord, Steam, and Telegram when they
       hide their window instead of closing it. This can also animate splash screens, such as the
       Discord updater, or windows hidden automatically by an app, such as the Google Chrome
-      profile picker.
+      profile picker. Brief Tauri show/hide normalization during startup or tray restoration is
+      excluded from close animation so it doesn't play a false close effect.
   - random_effect: false
     $name: Shuffle animation styles
     $description: >-
@@ -347,6 +353,7 @@ You can deeply customize the feel and pacing of every animation via the Windhawk
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <tlhelp32.h>
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <dcomp.h>
@@ -515,6 +522,7 @@ struct LaunchAnimData {
     LONG_PTR originalExStyle;
     ULONG_PTR snapshotToken;
     BOOL hiddenByCloak;
+    BOOL alphaOnlyCompatibility;
 };
 struct AsyncRestoreAnimData {
     HWND hWnd;
@@ -528,7 +536,11 @@ struct LocalShowDesktopCloakWatchData {
     HWND hWnd;
     ULONG_PTR token;
 };
-struct SwitchAnimData { HWND hWnd; int durationMs; };
+struct SwitchAnimData {
+    HWND hWnd;
+    int durationMs;
+    BOOL needsFullExplorerRepair;
+};
 struct SnapCache {
     HBITMAP hBmp;
     void* pBits;
@@ -571,6 +583,10 @@ namespace AnimConstants {
     constexpr int WaitSlackMs = 500;
     constexpr int NativeStateWaitMs = 2500;
     constexpr int EndpointAsyncSettleMs = 50;
+    // Tauri/WRY can synchronously show, hide, and show the same HWND while
+    // normalizing startup or tray-restored state. A user cannot meaningfully
+    // request a tray close inside this first-frame interval.
+    constexpr DWORD TransientTauriShowHideMs = 250;
     constexpr int MaximizedRestoreGuardMs = 3000;
     constexpr int AltTabPollMs = 16;
     constexpr int AltTabSessionMs = 500;
@@ -617,15 +633,25 @@ static constexpr std::wstring_view kAlwaysExcludedClasses[] = {
     L"Overlay",
     L"ToolTip"
 };
-static constexpr std::wstring_view kSafeCloseClasses[] = {
+// These classes can use DefWindowProc's close path without first asking the
+// application whether closing is allowed. Never add an app such as Notepad
+// which can veto the initial WM_CLOSE/SC_CLOSE to show an unsaved-work prompt;
+// those windows must animate only once their confirmed DestroyWindow or hide
+// operation is observed.
+static constexpr std::wstring_view kCloseMessageAnimationClasses[] = {
     L"ConsoleWindowClass",
     L"CASCADIA_HOSTING_WINDOW_CLASS",
-    L"Notepad",
     L"TaskManagerWindow",
     L"WinUIDesktopWin32WindowClass"
 };
 static constexpr PCWSTR kPropCloseBypass = L"windows-animations.CloseBypass";
 static constexpr PCWSTR kPropClosed = L"windows-animations.Closed";
+static constexpr PCWSTR kPropTrayHideCloak =
+    L"windows-animations.TrayHideCloakV1";
+static constexpr PCWSTR kPropTrayHideShowHandoff =
+    L"windows-animations.TrayHideShowHandoffV1";
+static constexpr PCWSTR kPropTransientTauriShowTick =
+    L"windows-animations.TransientTauriShowTickV1";
 static constexpr PCWSTR kPropMinRestorePair =
     L"windows-animations.MinRestorePairV1";
 static constexpr PCWSTR kPropMaximizedRestoreGuard =
@@ -684,6 +710,7 @@ std::atomic<ULONG_PTR> g_NextTaskbarDockIdentityToken{0};
 std::atomic<ULONG_PTR> g_NextShowDesktopMarkerToken{0};
 std::atomic<ULONG_PTR> g_NextShowDesktopAnimationToken{0};
 std::atomic<ULONG_PTR> g_NextAnimationSessionToken{0};
+std::atomic<ULONG_PTR> g_NextTrayHideCloakToken{0};
 struct TaskbarDockWindowIdentity {
     DWORD processId = 0;
     DWORD threadId = 0;
@@ -746,6 +773,7 @@ std::unordered_map<HWND, ShowDesktopMarkerCleanup>
 bool g_ShowDesktopMarkerCleanupWorkerRunning = false;
 uint64_t g_NextAsyncRestoreReservation = 0;
 std::mutex g_StateMutex;
+std::mutex g_TrayHideCloakMutex;
 std::atomic<HWINEVENTHOOK> g_hForegroundHook{NULL};
 std::atomic<HWINEVENTHOOK> g_hTaskbarLayoutHook{NULL};
 std::atomic<HWINEVENTHOOK> g_hTaskbarLocationHook{NULL};
@@ -1685,8 +1713,21 @@ static BOOL WindowRestoresMaximized(HWND hWnd) {
            ((placement.flags & WPF_RESTORETOMAXIMIZED) != 0 ||
             placement.showCmd == SW_SHOWMAXIMIZED);
 }
-static int StableRestoreShowCmd(BOOL restoreMaximized) {
-    return restoreMaximized ? SW_SHOWMAXIMIZED : SW_SHOWNOACTIVATE;
+static int StableRestoreShowCmd(HWND hWnd, BOOL restoreMaximized) {
+    if (restoreMaximized) return SW_SHOWMAXIMIZED;
+    using IsWindowArranged_t = BOOL(WINAPI*)(HWND);
+    static const auto isWindowArranged = []() -> IsWindowArranged_t {
+        HMODULE user32 = GetModuleHandleW(L"user32.dll");
+        return user32 ? reinterpret_cast<IsWindowArranged_t>(
+                            GetProcAddress(user32, "IsWindowArranged"))
+                      : nullptr;
+    }();
+    // SW_SHOWNOACTIVATE is similar to SW_SHOWNORMAL and can turn an already
+    // restored snapped window back into its unsnapped normal rectangle.
+    // SW_SHOWNA still queues the latest show intent without changing its layout.
+    return isWindowArranged && isWindowArranged(hWnd)
+               ? SW_SHOWNA
+               : SW_SHOWNOACTIVATE;
 }
 static bool HasReachedNativeShowState(HWND hWnd, bool rising,
                                       BOOL restoreMaximized) {
@@ -1726,7 +1767,7 @@ static void RestoreWindowUnderGhostAsync(HWND hWnd, LONG_PTR originalExStyle,
     // minimize can still be ahead of the current thread in the queue even when the sampled state currently
     // looks restored; the idempotent command makes the newest intent win.
     ShowWindowAsync_Original(hWnd,
-                             StableRestoreShowCmd(restoreMaximized));
+                             StableRestoreShowCmd(hWnd, restoreMaximized));
     RestoreZOrderAfterGhostAsync(hWnd, originalExStyle);
 }
 
@@ -2186,6 +2227,9 @@ static void FinalizeAsyncRestoreReservation(HWND hWnd, uint64_t generation,
 static void CleanupWindowData(HWND hWnd) {
     ClearMinRestorePair(hWnd);
     ClearMaximizedRestoreGuard(hWnd);
+    RemovePropW(hWnd, kPropTrayHideCloak);
+    RemovePropW(hWnd, kPropTrayHideShowHandoff);
+    RemovePropW(hWnd, kPropTransientTauriShowTick);
     RemovePropW(hWnd, kPropShowDesktopNativeMinimize);
     RemovePropW(hWnd, kPropClassicShowDesktopOwnerDispatch);
     RemovePropW(hWnd, kPropClassicShowDesktopOwnerPrepared);
@@ -2780,11 +2824,72 @@ static void UpdateDwmTransitions(HWND hWnd, BOOL enable) {
 static void SetWindowCloak(HWND hWnd, BOOL cloak) {
     DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak));
 }
+struct WindowCompositionAttributeData {
+    DWORD attribute;
+    void* data;
+    SIZE_T dataSize;
+};
+using GetWindowCompositionAttribute_t =
+    BOOL(WINAPI*)(HWND, WindowCompositionAttributeData*);
+
+static bool HasActiveWindowAccentPolicy(HWND hWnd) {
+    if (!hWnd) return false;
+    static const auto getWindowCompositionAttribute =
+        reinterpret_cast<GetWindowCompositionAttribute_t>(GetProcAddress(
+            GetModuleHandleW(L"user32.dll"),
+            "GetWindowCompositionAttribute"));
+    if (!getWindowCompositionAttribute) return false;
+
+    BOOL hasAccentPolicy = FALSE;
+    WindowCompositionAttributeData data{
+        34, &hasAccentPolicy,
+        sizeof(hasAccentPolicy)};  // WCA_HAS_ACCENT_POLICY
+    return getWindowCompositionAttribute(hWnd, &data) != FALSE &&
+           hasAccentPolicy;
+}
+static bool IsTranslucentWindowsModLoaded() {
+    HANDLE snapshot = CreateToolhelp32Snapshot(
+        TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
+    if (snapshot == INVALID_HANDLE_VALUE) return false;
+
+    MODULEENTRY32W module{};
+    module.dwSize = sizeof(module);
+    bool found = false;
+    if (Module32FirstW(snapshot, &module)) {
+        constexpr PCWSTR prefixes[] = {
+            L"translucent-windows_",
+            L"local@translucent-windows_",
+        };
+        do {
+            for (PCWSTR prefix : prefixes) {
+                if (_wcsnicmp(module.szModule, prefix, wcslen(prefix)) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+        } while (!found && Module32NextW(snapshot, &module));
+    }
+    CloseHandle(snapshot);
+    return found;
+}
 static bool IsExplorerFrameWindow(HWND hWnd) {
     WCHAR cls[64]{};
     return GetClassNameW(hWnd, cls, ARRAYSIZE(cls)) &&
            (_wcsicmp(cls, L"CabinetWClass") == 0 ||
             _wcsicmp(cls, L"ExploreWClass") == 0);
+}
+static bool HasModernExplorerTitleFrame(HWND hWnd) {
+    if (!IsExplorerFrameWindow(hWnd)) return false;
+
+    // Control Panel and modern File Explorer share CabinetWClass. Detect the
+    // latter by its WinUI title-bar children instead of its DWM backdrop:
+    // translucency mods can replace or clear the backdrop attribute while the
+    // Explorer frame still requires full-client extension after an uncloak.
+    return FindWindowExW(hWnd, nullptr,
+                         L"TITLE_BAR_SCAFFOLDING_WINDOW_CLASS", nullptr) ||
+           FindWindowExW(hWnd, nullptr,
+                         L"Microsoft.UI.Content.DesktopChildSiteBridge",
+                         nullptr);
 }
 static bool HasExplicitSystemBackdrop(HWND hWnd, UINT* backdropOut = nullptr) {
     UINT backdrop = 0;
@@ -2795,6 +2900,18 @@ static bool HasExplicitSystemBackdrop(HWND hWnd, UINT* backdropOut = nullptr) {
         backdrop >= 2;
     if (backdropOut) *backdropOut = backdrop;
     return present;
+}
+static bool IsTranslucentWindowsAccentBlurActive(HWND hWnd) {
+    if (!IsTranslucentWindowsModLoaded() ||
+        !HasActiveWindowAccentPolicy(hWnd)) {
+        return false;
+    }
+
+    UINT backdrop = 0;
+    return SUCCEEDED(DwmGetWindowAttribute(
+               hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop,
+               sizeof(backdrop))) &&
+           backdrop < 2;
 }
 static bool RequiresCpuClosePresentation(HWND hWnd) {
     // Preserve the already-proven CPU exception for Explorer and windows that
@@ -2817,15 +2934,44 @@ static bool RefreshDwmChromeAfterUncloak(HWND hWnd,
                                          bool lightweight = false) {
     if (!hWnd || !IsWindow(hWnd)) return false;
     const bool explorerFrame = IsExplorerFrameWindow(hWnd);
+    const bool modernExplorerFrame =
+        explorerFrame && HasModernExplorerTitleFrame(hWnd);
     UINT backdrop = 0;
     const bool explicitBackdrop =
         HasExplicitSystemBackdrop(hWnd, &backdrop);
     if (!explorerFrame && !explicitBackdrop) return false;
     if (explicitBackdrop) {
         DwmSetWindowAttribute(hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+        if (lightweight && modernExplorerFrame && backdrop >= 2) {
+            UINT reappliedBackdrop = backdrop;
+            if (SUCCEEDED(DwmGetWindowAttribute(
+                    hWnd, DWMWA_SYSTEMBACKDROP_TYPE, &reappliedBackdrop,
+                    sizeof(reappliedBackdrop))) &&
+                reappliedBackdrop < 2 &&
+                HasActiveWindowAccentPolicy(hWnd)) {
+                // AccentBlur compatibility mods can intercept the native
+                // Explorer backdrop reassertion and replace it with AUTO.
+                // That transition needs the complete frame repair below;
+                // returning through the lightweight path leaves the title
+                // surface black.
+                lightweight = false;
+                if (IsDiagnosticLoggingEnabled()) {
+                    Wh_Log(L"Explorer backdrop reassertion overridden "
+                           L"hwnd=%p requested=%u actual=%u",
+                           hWnd, backdrop, reappliedBackdrop);
+                }
+            }
+        }
     }
     if (explorerFrame && !lightweight) {
-        MARGINS margins = {-1, -1, -1, -1};
+        // CabinetWClass also hosts classic shell surfaces such as Control
+        // Panel. Keep their normal zero client-area extension, but preserve
+        // full-client extension for modern File Explorer even if another mod
+        // has changed its advertised system backdrop.
+        MARGINS margins{};
+        if (modernExplorerFrame || explicitBackdrop) {
+            margins = {-1, -1, -1, -1};
+        }
         DwmExtendFrameIntoClientArea(hWnd, &margins);
     }
     if (lightweight) {
@@ -2853,6 +2999,20 @@ static bool RefreshDwmChromeAfterUncloak(HWND hWnd,
                             SMTO_ABORTIFHUNG | SMTO_NORMAL, 50, nullptr);
     }
     return true;
+}
+static void RestoreSwitchTargetAfterUncloak(HWND hWnd,
+                                             BOOL needsFullExplorerRepair) {
+    if (!hWnd || !IsWindow(hWnd)) return;
+
+    SetWindowCloak(hWnd, FALSE);
+    // Accent-policy acrylic can retain its policy while its visual becomes
+    // stale across a cloak. Use the same frame/composition repair that already
+    // succeeds after restore, but only when the pre-cloak checks identified
+    // Translucent Windows' AccentBlur path. Default Explorer keeps the
+    // lightweight cleanup.
+    RefreshDwmChromeAfterUncloak(
+        hWnd, /*nonBlocking=*/true,
+        /*lightweight=*/!needsFullExplorerRepair);
 }
 static void RestoreLayeredOpacity(HWND hWnd, LONG_PTR originalExStyle) {
     SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
@@ -2964,7 +3124,7 @@ static void FinalizeAsyncRestoreReservation(HWND hWnd, uint64_t generation,
                                        : ShowWindowAsync_Original(
                                              hWnd,
                                              wantRising
-                                                 ? StableRestoreShowCmd(restoreMaximized)
+                                                 ? StableRestoreShowCmd(hWnd, restoreMaximized)
                                                  : SW_MINIMIZE);
             haveLastSubmission = true;
             lastSubmittedRising = wantRising;
@@ -3039,7 +3199,7 @@ static void AbortAsyncRestoreReservation(HWND hWnd, uint64_t generation,
         if (IsWindow(hWnd) && !g_unloading.load(std::memory_order_relaxed) &&
             (initialRestoreSubmitted || !wantRising)) {
             ShowWindowAsync_Original(
-                hWnd, wantRising ? StableRestoreShowCmd(restoreMaximized)
+                hWnd, wantRising ? StableRestoreShowCmd(hWnd, restoreMaximized)
                                  : SW_MINIMIZE);
         }
         if (wantRising) EraseSnapshotLocked(hWnd);
@@ -3121,8 +3281,12 @@ static bool NeedsLocalWinEventThread() {
     const bool needShowDesktopRestoreObserver =
         g_showDesktopTopWindowOnly.load(std::memory_order_relaxed) &&
         g_restoreAnimation.load(std::memory_order_relaxed);
+    const bool needTrayHideVisibilityObserver =
+        g_closeAnimation.load(std::memory_order_relaxed) &&
+        g_hideAsClose.load(std::memory_order_relaxed);
     return g_switchAnimation.load(std::memory_order_relaxed) ||
-           needTaskbarObserver || needShowDesktopRestoreObserver;
+           needTaskbarObserver || needShowDesktopRestoreObserver ||
+           needTrayHideVisibilityObserver;
 }
 
 void EnsureWinEventThreadStarted() {
@@ -3173,11 +3337,255 @@ static bool IsAppMainWindow(HWND hWnd, bool forSwitch = false) {
     bool isMain = GetWindowRect(hWnd, &r) && r.right - r.left >= 300 && r.bottom - r.top >= 300;
     return isMain;
 }
-static bool UseSafeClose(HWND hWnd) { return ContainsClass(GetClassNameStr(hWnd), kSafeCloseClasses); }
-static bool ShouldTreatHideAsClose(HWND hWnd) {
-    return g_hideAsClose.load(std::memory_order_relaxed) &&
-           g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && !UseSafeClose(hWnd);
+static bool CanAnimateCloseMessage(HWND hWnd) {
+    return ContainsClass(GetClassNameStr(hWnd),
+                         kCloseMessageAnimationClasses);
 }
+static bool NeedsPersistentTrayHideCloak(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return false;
+    WCHAR className[64]{};
+    if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+        _wcsicmp(className, L"Tauri Window") == 0) {
+        return true;
+    }
+    // Tauri normally uses the class above, but checking its WRY child keeps
+    // the workaround valid for applications that customize the root class.
+    return FindWindowExW(hWnd, nullptr, L"WRY_WEBVIEW", nullptr) != nullptr;
+}
+
+static constexpr bool IsWithinTransientTauriShowHideWindow(
+    DWORD shownAt, DWORD now) {
+    return static_cast<DWORD>(now - shownAt) <=
+           AnimConstants::TransientTauriShowHideMs;
+}
+static_assert(IsWithinTransientTauriShowHideWindow(100, 350));
+static_assert(!IsWithinTransientTauriShowHideWindow(100, 351));
+static_assert(IsWithinTransientTauriShowHideWindow(0xFFFFFFF0u, 0x20u));
+
+static void ArmTransientTauriShowHideGuard(HWND hWnd) {
+    const DWORD savedError = GetLastError();
+    if (!NeedsPersistentTrayHideCloak(hWnd) || !IsWindowVisible(hWnd)) {
+        SetLastError(savedError);
+        return;
+    }
+
+    DWORD shownAt = GetTickCount();
+    if (!shownAt) shownAt = 1;
+    SetPropW(hWnd, kPropTransientTauriShowTick,
+             reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(shownAt)));
+    SetLastError(savedError);
+}
+
+static bool ConsumeTransientTauriShowHideGuard(HWND hWnd) {
+    const DWORD savedError = GetLastError();
+    const DWORD shownAt = static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(
+        GetPropW(hWnd, kPropTransientTauriShowTick)));
+    if (!shownAt) {
+        SetLastError(savedError);
+        return false;
+    }
+
+    RemovePropW(hWnd, kPropTransientTauriShowTick);
+    const DWORD now = GetTickCount();
+    const bool transient =
+        IsWithinTransientTauriShowHideWindow(shownAt, now);
+    if (transient && IsDiagnosticLoggingEnabled()) {
+        Wh_Log(L"Close animation bypassed for transient Tauri show/hide "
+               L"hwnd=%p elapsed=%lu ms",
+               hWnd, static_cast<unsigned long>(now - shownAt));
+    }
+    SetLastError(savedError);
+    return transient;
+}
+
+static bool ShouldTreatHideAsClose(HWND hWnd) {
+    if (!g_hideAsClose.load(std::memory_order_relaxed) ||
+        !g_closeAnimation.load(std::memory_order_relaxed) ||
+        !IsAppMainWindow(hWnd) || CanAnimateCloseMessage(hWnd)) {
+        return false;
+    }
+    return !ConsumeTransientTauriShowHideGuard(hWnd);
+}
+
+static ULONG_PTR ReadTrayHideCloakToken(HWND hWnd) {
+    if (!hWnd) return 0;
+    std::lock_guard<std::mutex> lock(g_TrayHideCloakMutex);
+    return reinterpret_cast<ULONG_PTR>(
+        GetPropW(hWnd, kPropTrayHideCloak));
+}
+
+static ULONG_PTR RetainTrayHideCloak(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return 0;
+
+    // A retained cloak must have an actual-state observer even when this
+    // process had no qualifying window when the mod finished initializing.
+    EnsureWinEventThreadStarted();
+
+    ULONG_PTR serial =
+        g_NextTrayHideCloakToken.fetch_add(1, std::memory_order_relaxed) + 1;
+    ULONG_PTR token =
+        serial ^ reinterpret_cast<ULONG_PTR>(hWnd) ^
+        (static_cast<ULONG_PTR>(GetCurrentProcessId()) *
+         static_cast<ULONG_PTR>(0x27D4EB2Du)) ^
+        static_cast<ULONG_PTR>(GetTickCount());
+    if (!token) token = 1;
+
+    bool becameVisible = false;
+    {
+        std::lock_guard<std::mutex> lock(g_TrayHideCloakMutex);
+        if (!IsWindow(hWnd) || IsWindowVisible(hWnd)) return 0;
+
+        RemovePropW(hWnd, kPropTrayHideShowHandoff);
+        const BOOL cloak = TRUE;
+        if (FAILED(DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak,
+                                         sizeof(cloak)))) {
+            return 0;
+        }
+        if (!SetPropW(hWnd, kPropTrayHideCloak,
+                      reinterpret_cast<HANDLE>(token))) {
+            const BOOL uncloak = FALSE;
+            DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &uncloak,
+                                  sizeof(uncloak));
+            return 0;
+        }
+
+        // The app can race the animation thread after FinishClose observes
+        // the native hide. Never publish a retained cloak on an HWND which
+        // has already become visible again. Visibility observers cover a show
+        // which lands immediately after this final check.
+        becameVisible = IsWindowVisible(hWnd) != FALSE;
+        if (becameVisible) {
+            RemovePropW(hWnd, kPropTrayHideCloak);
+            const BOOL uncloak = FALSE;
+            DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &uncloak,
+                                  sizeof(uncloak));
+        }
+    }
+    if (becameVisible) {
+        UpdateDwmTransitions(hWnd, TRUE);
+        ArmTransientTauriShowHideGuard(hWnd);
+        return 0;
+    }
+    return token;
+}
+
+static bool BeginTrayHideShowHandoff(HWND hWnd, ULONG_PTR token) {
+    if (!hWnd || !token) return false;
+    std::lock_guard<std::mutex> lock(g_TrayHideCloakMutex);
+    if (reinterpret_cast<ULONG_PTR>(
+            GetPropW(hWnd, kPropTrayHideCloak)) != token) {
+        return false;
+    }
+    return SetPropW(hWnd, kPropTrayHideShowHandoff,
+                    reinterpret_cast<HANDLE>(token)) != FALSE;
+}
+
+static void EndTrayHideShowHandoffIfCurrent(HWND hWnd, ULONG_PTR token) {
+    if (!hWnd || !token) return;
+    std::lock_guard<std::mutex> lock(g_TrayHideCloakMutex);
+    if (reinterpret_cast<ULONG_PTR>(
+            GetPropW(hWnd, kPropTrayHideShowHandoff)) == token) {
+        RemovePropW(hWnd, kPropTrayHideShowHandoff);
+    }
+}
+
+static bool TransferTrayHideCloakToLaunch(HWND hWnd, ULONG_PTR token) {
+    if (!hWnd || !token) return false;
+    {
+        std::lock_guard<std::mutex> lock(g_TrayHideCloakMutex);
+        if (reinterpret_cast<ULONG_PTR>(
+                GetPropW(hWnd, kPropTrayHideCloak)) != token) {
+            return false;
+        }
+        RemovePropW(hWnd, kPropTrayHideCloak);
+        if (reinterpret_cast<ULONG_PTR>(
+                GetPropW(hWnd, kPropTrayHideShowHandoff)) == token) {
+            RemovePropW(hWnd, kPropTrayHideShowHandoff);
+        }
+    }
+    return true;
+}
+
+static bool ReleaseTrayHideCloakIfCurrent(HWND hWnd, ULONG_PTR token) {
+    if (!hWnd || !token || !IsWindow(hWnd)) return false;
+    {
+        std::lock_guard<std::mutex> lock(g_TrayHideCloakMutex);
+        if (reinterpret_cast<ULONG_PTR>(
+                GetPropW(hWnd, kPropTrayHideCloak)) != token) {
+            return false;
+        }
+        // A hooked show can intentionally transfer the retained cloak to a
+        // launch animation after the native visibility change. The generic
+        // state observers must not release it in the middle of that handoff.
+        if (reinterpret_cast<ULONG_PTR>(
+                GetPropW(hWnd, kPropTrayHideShowHandoff)) == token) {
+            return false;
+        }
+        // The native show has restored WS_VISIBLE while the stale surface is
+        // still protected. Commit that visible state before removing the
+        // retained cloak so WebView-backed windows resume from a real frame.
+        FlushDwmOrYield();
+        const BOOL cloak = FALSE;
+        if (FAILED(DwmSetWindowAttribute(hWnd, DWMWA_CLOAK, &cloak,
+                                         sizeof(cloak)))) {
+            return false;
+        }
+        RemovePropW(hWnd, kPropTrayHideCloak);
+    }
+    UpdateDwmTransitions(hWnd, TRUE);
+    if (IsWindowVisible(hWnd)) {
+        ArmTransientTauriShowHideGuard(hWnd);
+    }
+    return true;
+}
+
+static bool ReleaseVisibleTrayHideCloak(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd) || !IsWindowVisible(hWnd)) return false;
+    const ULONG_PTR token = ReadTrayHideCloakToken(hWnd);
+    return token && ReleaseTrayHideCloakIfCurrent(hWnd, token);
+}
+
+struct TrayHideCloakReleaseData {
+    HWND hWnd;
+    ULONG_PTR token;
+};
+
+static DWORD WINAPI TrayHideCloakReleaseThread(LPVOID lpParam) {
+    std::unique_ptr<TrayHideCloakReleaseData> releaseData(
+        static_cast<TrayHideCloakReleaseData*>(lpParam));
+    const DWORD deadline = GetTickCount() + 5000;
+    while (!g_unloading.load(std::memory_order_relaxed) &&
+           IsWindow(releaseData->hWnd) &&
+           ReadTrayHideCloakToken(releaseData->hWnd) ==
+               releaseData->token &&
+           static_cast<LONG>(GetTickCount() - deadline) < 0) {
+        if (IsWindowVisible(releaseData->hWnd)) {
+            ReleaseTrayHideCloakIfCurrent(releaseData->hWnd,
+                                          releaseData->token);
+            break;
+        }
+        Sleep(10);
+    }
+    return 0;
+}
+
+static void ReleaseTrayHideCloakAfterAsyncShow(HWND hWnd, ULONG_PTR token) {
+    if (!hWnd || !token) return;
+    if (IsWindowVisible(hWnd)) {
+        ReleaseTrayHideCloakIfCurrent(hWnd, token);
+        return;
+    }
+    auto* releaseData = new (std::nothrow)
+        TrayHideCloakReleaseData{hWnd, token};
+    if (!releaseData ||
+        !StartWorkerThread(TrayHideCloakReleaseThread, releaseData)) {
+        delete releaseData;
+        // A submitted show must not leave the application permanently
+        // invisible just because the short-lived observer couldn't start.
+        ReleaseTrayHideCloakIfCurrent(hWnd, token);
+    }
+}
+
 static bool ShouldAnimateWindow(HWND hWnd) {
     if (!hWnd || (GetWindowLongPtrW(hWnd, GWL_STYLE) & WS_CHILD)) return false;
     RECT r{};
@@ -3194,6 +3602,45 @@ static bool IsLaunchWindow(HWND hWnd) {
     const LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     return (style & WS_CAPTION) && !(exStyle & WS_EX_TOOLWINDOW) &&
            ShouldAnimateWindow(hWnd);
+}
+struct MozillaBrowserWindowSearch {
+    HWND excludedWindow;
+    DWORD processId;
+    bool found;
+};
+static BOOL CALLBACK FindOtherMozillaBrowserWindowProc(HWND hWnd,
+                                                        LPARAM lParam) {
+    auto* search =
+        reinterpret_cast<MozillaBrowserWindowSearch*>(lParam);
+    if (hWnd == search->excludedWindow ||
+        (!IsWindowVisible(hWnd) && !IsIconic(hWnd)) ||
+        GetAncestor(hWnd, GA_ROOT) != hWnd) {
+        return TRUE;
+    }
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hWnd, &processId);
+    if (processId != search->processId) return TRUE;
+
+    WCHAR className[64]{};
+    if (GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+        _wcsicmp(className, L"MozillaWindowClass") == 0) {
+        search->found = true;
+        return FALSE;
+    }
+    return TRUE;
+}
+static bool RequiresMozillaAlphaOnlyLaunchConcealment(HWND hWnd) {
+    WCHAR className[64]{};
+    if (!GetClassNameW(hWnd, className, ARRAYSIZE(className)) ||
+        _wcsicmp(className, L"MozillaWindowClass") != 0) {
+        return false;
+    }
+
+    MozillaBrowserWindowSearch search{
+        hWnd, GetCurrentProcessId(), false};
+    EnumWindows(FindOtherMozillaBrowserWindowProc,
+                reinterpret_cast<LPARAM>(&search));
+    return !search.found;
 }
 HWND FindTaskbarForMonitor(HMONITOR hMon) {
     HWND hMainTray = FindWindowW(L"Shell_TrayWnd", NULL);
@@ -4021,7 +4468,6 @@ POINT GetTaskbarButtonPositionAsync(
         haveHwndCache = false;
         lookupInFlight = false;
         negativeCacheActive = false;
-        positiveFallbackCacheActive = false;
         // Sync may have preserved the process fallback for a same-Explorer
         // reflow, or cleared all fallbacks for an Explorer restart. Reload the
         // actual post-sync state instead of retaining stale local copies.
@@ -4256,15 +4702,17 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
     SwitchAnimData* data = (SwitchAnimData*)lpParam;
     HWND hWnd = data->hWnd;
     int durationMs = data->durationMs;
+    const BOOL needsFullExplorerRepair =
+        data->needsFullExplorerRepair;
     delete data; 
     struct CleanupGuard {
         HWND h;
+        BOOL needsFullExplorerRepair;
         bool uncloaked = false; 
         ~CleanupGuard() {
             if (!uncloaked && IsWindow(h)) {
-                SetWindowCloak(h, FALSE);
-                RefreshDwmChromeAfterUncloak(
-                    h, /*nonBlocking=*/true, /*lightweight=*/true);
+                RestoreSwitchTargetAfterUncloak(
+                    h, needsFullExplorerRepair);
                 FlushDwmOrYield();
             }
             {
@@ -4276,7 +4724,7 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
                 RemovePropW(h, kPropSwitchAnimationActive);
             }
         }
-    } guard{ hWnd };
+    } guard{hWnd, needsFullExplorerRepair};
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
     RECT winRect;
     if (g_unloading.load(std::memory_order_relaxed) || !IsWindow(hWnd) || !IsAppMainWindow(hWnd, true) || !GetWindowRect(hWnd, &winRect)) {
@@ -4345,9 +4793,8 @@ DWORD WINAPI SwitchingAnimThread(LPVOID lpParam) {
         FlushDwmOrYield();
     }
     if (IsWindow(hWnd)) {
-        SetWindowCloak(hWnd, FALSE);
-        RefreshDwmChromeAfterUncloak(
-            hWnd, /*nonBlocking=*/true, /*lightweight=*/true);
+        RestoreSwitchTargetAfterUncloak(hWnd,
+                                        needsFullExplorerRepair);
         guard.uncloaked = true;
     }
     FlushDwmOrYield();
@@ -4371,18 +4818,23 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hWnd,
         g_AnimRestoreRequestForeground.erase(hWnd);
         g_AsyncRestoreReservations.erase(hWnd);
     }
+    const BOOL needsFullExplorerRepair =
+        HasModernExplorerTitleFrame(hWnd) &&
+        IsTranslucentWindowsAccentBlurActive(hWnd);
     if (IsDiagnosticLoggingEnabled()) {
-        Wh_Log(L"Switch animation start hwnd=%p", hWnd);
+        Wh_Log(L"Switch animation start hwnd=%p fullExplorerRepair=%d",
+               hWnd, needsFullExplorerRepair);
     }
     SetPropW(hWnd, kPropSwitchAnimationActive, reinterpret_cast<HANDLE>(1));
     SetWindowCloak(hWnd, TRUE);
     auto* data = new (std::nothrow)
-        SwitchAnimData{hWnd, g_switchDurationMs.load(std::memory_order_relaxed)};
+        SwitchAnimData{hWnd,
+                       g_switchDurationMs.load(std::memory_order_relaxed),
+                       needsFullExplorerRepair};
     if (!data || !StartWorkerThread(SwitchingAnimThread, data)) {
         Wh_Log(L"Switch animation worker failed hwnd=%p", hWnd);
-        SetWindowCloak(hWnd, FALSE);
-        RefreshDwmChromeAfterUncloak(
-            hWnd, /*nonBlocking=*/true, /*lightweight=*/true);
+        RestoreSwitchTargetAfterUncloak(hWnd,
+                                        needsFullExplorerRepair);
         RemovePropW(hWnd, kPropSwitchAnimationActive);
         delete data;
         std::lock_guard<std::mutex> lock(g_StateMutex);
@@ -4408,6 +4860,25 @@ void CALLBACK MinimizeEndVisibilityEventProc(HWINEVENTHOOK, DWORD event,
     // closes the gap left by frameworks that rebuild/decloak their DWM surface
     // after the shell's restore API has already returned.
     ReassertPreparedShowDesktopRestoreCloak(hWnd);
+}
+
+void CALLBACK TrayHideVisibilityEventProc(HWINEVENTHOOK, DWORD event,
+                                          HWND hWnd, LONG idObject,
+                                          LONG idChild, DWORD, DWORD) {
+    if (event != EVENT_OBJECT_SHOW || !hWnd || idObject != OBJID_WINDOW ||
+        idChild != CHILDID_SELF ||
+        g_unloading.load(std::memory_order_relaxed)) {
+        return;
+    }
+
+    DWORD windowProcessId = 0;
+    GetWindowThreadProcessId(hWnd, &windowProcessId);
+    if (windowProcessId != GetCurrentProcessId()) return;
+
+    // Observe the resulting HWND state rather than relying on a particular
+    // exported show API. This also covers DefWindowProc restores,
+    // DeferWindowPos/EndDeferWindowPos, AnimateWindow and late async shows.
+    ReleaseVisibleTrayHideCloak(hWnd);
 }
 
 static bool IsTaskbarEventWindow(HWND hWnd) {
@@ -4535,6 +5006,10 @@ DWORD WINAPI WinEventHookThread(LPVOID) {
         EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZEEND, nullptr,
         MinimizeEndVisibilityEventProc, GetCurrentProcessId(), 0,
         WINEVENT_OUTOFCONTEXT);
+    HWINEVENTHOOK trayHideVisibilityHook = SetWinEventHook(
+        EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr,
+        TrayHideVisibilityEventProc, GetCurrentProcessId(), 0,
+        WINEVENT_OUTOFCONTEXT);
 
     const bool observeTaskbar = explorerProcess;
     const DWORD explorerPid = observeTaskbar ? GetCurrentProcessId() : 0;
@@ -4591,7 +5066,8 @@ DWORD WINAPI WinEventHookThread(LPVOID) {
         }
     }
 
-    if (!hook && !minimizeEndHook && !observeTaskbar) {
+    if (!hook && !minimizeEndHook && !trayHideVisibilityHook &&
+        !observeTaskbar) {
         endpointContext.publish = false;
         EnumWindows(UpdateShowDesktopCloakEndpointEnumProc,
                     reinterpret_cast<LPARAM>(&endpointContext));
@@ -4651,6 +5127,7 @@ DWORD WINAPI WinEventHookThread(LPVOID) {
         UnhookWinEvent(oldHook);
     }
     if (minimizeEndHook) UnhookWinEvent(minimizeEndHook);
+    if (trayHideVisibilityHook) UnhookWinEvent(trayHideVisibilityHook);
     removeTaskbarHooks();
     endpointContext.publish = false;
     EnumWindows(UpdateShowDesktopCloakEndpointEnumProc,
@@ -5397,7 +5874,7 @@ float4 PSMain(VertexOutput input) : SV_TARGET
     return sourceTexture.Load(int3(sourcePixel, 0)) * input.opacity;
 }
 )hlsl";
-enum GpuPipeline : uint32_t {
+enum : uint32_t {
     GpuPipelineNone = 0,
     GpuPipelineQuad = 1u << 0,
     GpuPipelineGenie = 1u << 1,
@@ -8290,8 +8767,8 @@ public:
             // rectangle and final neck, plus a tiny edge-side safety pad.
             constexpr int genieBoundsSafetyPad = 2;
             constexpr int genieEdgePad = 40;
-            int boundRight = origLeft + W;
-            int boundBottom = origTop + H;
+            int boundRight;
+            int boundBottom;
             if (horizontalTaskbar) {
                 const int targetLeft = static_cast<int>(
                     floorf(dockXf - neckW * 0.5f));
@@ -9838,6 +10315,7 @@ public:
     void FinishClose() {
         if (!data->isClosing) return;
         const bool deferredHide = data->closeMsg == ANIM_DEFER_SW_HIDE;
+        ULONG_PTR retainedTrayHideCloak = 0;
         if (data->hWaitFinish) {
             SetEvent(data->hWaitFinish);
             CloseHandle(data->hWaitFinish);
@@ -9858,10 +10336,27 @@ public:
             }
             Sleep(10);
         }
+        if (deferredHide) {
+            if (!g_unloading.load(std::memory_order_relaxed) &&
+                IsWindow(data->hRealWnd) &&
+                !IsWindowVisible(data->hRealWnd) &&
+                NeedsPersistentTrayHideCloak(data->hRealWnd)) {
+                // A hidden Tauri/WebView2 HWND can keep its last compositor
+                // surface after DWMWA_CLOAK is removed, producing a blank,
+                // non-interactive window even though WS_VISIBLE is clear.
+                // Keep only this mod-owned cloak until the next native show;
+                // the show hooks and actual-state observers below transfer or
+                // release it after the real window becomes visible again.
+                retainedTrayHideCloak =
+                    RetainTrayHideCloak(data->hRealWnd);
+            }
+        }
         if (IsWindow(data->hRealWnd)) {
             RemovePropW(data->hRealWnd, kPropCloseBypass);
             RemovePropW(data->hRealWnd, kPropClosed);
-            SetAnimationWindowCloak(FALSE);
+            if (!retainedTrayHideCloak) {
+                SetAnimationWindowCloak(FALSE);
+            }
             UpdateDwmTransitions(data->hRealWnd, TRUE);
         }
     }
@@ -10091,7 +10586,8 @@ public:
                     if (data->nativeStateTimedOut && IsWindow(data->hRealWnd) &&
                         !g_unloading.load(std::memory_order_relaxed)) {
                         int finalShowCmd =
-                            StableRestoreShowCmd(data->restoreMaximized);
+                            StableRestoreShowCmd(data->hRealWnd,
+                                                 data->restoreMaximized);
                         if (!data->isRising) {
                             finalShowCmd =
                                 data->deferredShowCmd == SW_SHOWMINNOACTIVE ||
@@ -10573,7 +11069,7 @@ bool StartAnimation(HWND hWnd, BOOL rising, LONG_PTR originalExStyle, BOOL cloak
                                             restoreMaximized);
                 } else {
                     ShowWindowAsync_Original(
-                        hWnd, StableRestoreShowCmd(restoreMaximized));
+                        hWnd, StableRestoreShowCmd(hWnd, restoreMaximized));
                     RestoreZOrderAfterGhostAsync(hWnd, storedExStyle);
                 }
             }
@@ -12947,12 +13443,9 @@ static void RestoreClassicShowDesktopBatchBeforeShell() {
         if (!restoreSubmitted) {
             if (it->threadId == GetCurrentThreadId()) {
                 ShowWindow_Original(it->hWnd, SW_RESTORE);
-                restoreSubmitted = true;
             } else if (!ShowWindowAsync_Original(it->hWnd, SW_RESTORE)) {
                 ++failed;
                 continue;
-            } else {
-                restoreSubmitted = true;
             }
         }
         ++requested;
@@ -13160,9 +13653,11 @@ static void KeepLaunchWindowTransparent(HWND hWnd) {
 }
 
 static bool PrepareLaunchAnim(HWND hWnd, int nCmdShow, LONG_PTR* origExOut,
-                              ULONG_PTR* snapshotTokenOut,
-                              BOOL* hiddenByCloakOut) {
+                               ULONG_PTR* snapshotTokenOut,
+                               BOOL* hiddenByCloakOut,
+                               BOOL* alphaOnlyCompatibilityOut) {
     if (hiddenByCloakOut) *hiddenByCloakOut = FALSE;
+    if (alphaOnlyCompatibilityOut) *alphaOnlyCompatibilityOut = FALSE;
     if (g_unloading.load(std::memory_order_relaxed)) return false;
     if (!g_launchAnimation.load(std::memory_order_relaxed)) return false;
     if (!IsLaunchCommand(nCmdShow)) return false;
@@ -13176,14 +13671,28 @@ static bool PrepareLaunchAnim(HWND hWnd, int nCmdShow, LONG_PTR* origExOut,
     LONG_PTR exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
     if (exStyle & WS_EX_LAYERED) return false;
     { std::lock_guard<std::mutex> lock(g_StateMutex); if (!g_LaunchSeen.insert(hWnd).second) return false; }
+    const BOOL alphaOnlyCompatibility =
+        RequiresMozillaAlphaOnlyLaunchConcealment(hWnd);
     UpdateDwmTransitions(hWnd, FALSE);
     *origExOut = exStyle;
     if (snapshotTokenOut) *snapshotTokenOut = 0;
     KeepLaunchWindowTransparent(hWnd);
-    const BOOL cloak = TRUE;
-    if (SUCCEEDED(DwmSetWindowAttribute(
-            hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak)))) {
-        if (hiddenByCloakOut) *hiddenByCloakOut = TRUE;
+    if (alphaOnlyCompatibilityOut) {
+        *alphaOnlyCompatibilityOut = alphaOnlyCompatibility;
+    }
+    if (!alphaOnlyCompatibility) {
+        const BOOL cloak = TRUE;
+        if (SUCCEEDED(DwmSetWindowAttribute(
+                hWnd, DWMWA_CLOAK, &cloak, sizeof(cloak)))) {
+            if (hiddenByCloakOut) *hiddenByCloakOut = TRUE;
+        }
+    } else if (IsDiagnosticLoggingEnabled()) {
+        // The pre-show DWM cloak added after v1.2.0 can cross a Gecko browser's
+        // first-window/session-restore boundary and make Firefox-family apps
+        // create a second real window. Preserve the proven v1.2.0 alpha-only
+        // sequence, including its quiet post-show settling interval.
+        Wh_Log(L"Launch animation using Mozilla alpha-only compatibility "
+               L"hwnd=%p", hWnd);
     }
     return true;
 }
@@ -13250,7 +13759,8 @@ static bool CaptureLaunchSnapshot(HWND hWnd, ULONG_PTR* snapshotTokenOut) {
     return true;
 }
 static void CommitLaunchAnim(HWND hWnd, LONG_PTR originalExStyle,
-                             ULONG_PTR snapshotToken, BOOL hiddenByCloak) {
+                             ULONG_PTR snapshotToken, BOOL hiddenByCloak,
+                             BOOL alphaOnlyCompatibility) {
     if (!snapshotToken && !CaptureLaunchSnapshot(hWnd, &snapshotToken)) {
         if (hiddenByCloak) SetWindowCloak(hWnd, FALSE);
         RestoreLayeredOpacity(hWnd, originalExStyle);
@@ -13260,7 +13770,8 @@ static void CommitLaunchAnim(HWND hWnd, LONG_PTR originalExStyle,
         return;
     }
     auto* ld = new (std::nothrow) LaunchAnimData{
-        hWnd, originalExStyle, snapshotToken, hiddenByCloak};
+        hWnd, originalExStyle, snapshotToken, hiddenByCloak,
+        alphaOnlyCompatibility};
     if (!ld || !StartWorkerThread(LaunchAnimThread, ld)) {
         delete ld;
         {
@@ -13275,11 +13786,106 @@ static void CommitLaunchAnim(HWND hWnd, LONG_PTR originalExStyle,
         g_LaunchSeen.erase(hWnd);
     }
 }
+
+static bool IsTrayHideShowCommand(int showCmd) {
+    return IsShowCmdForWinEvent(showCmd) &&
+           !IsMinimizeCommand(showCmd);
+}
+
+static void AbortPreparedTrayHideLaunch(HWND hWnd,
+                                        LONG_PTR originalExStyle) {
+    RestoreLayeredOpacity(hWnd, originalExStyle);
+    UpdateDwmTransitions(hWnd, TRUE);
+    std::lock_guard<std::mutex> lock(g_StateMutex);
+    g_LaunchSeen.erase(hWnd);
+}
+
+template <typename NativeShow>
+static BOOL ShowPersistentlyCloakedTrayWindow(
+    HWND hWnd, int showCmd, bool asynchronousSubmission,
+    NativeShow&& nativeShow) {
+    const ULONG_PTR trayHideCloakToken = ReadTrayHideCloakToken(hWnd);
+    if (!trayHideCloakToken) return nativeShow();
+    if (!BeginTrayHideShowHandoff(hWnd, trayHideCloakToken)) {
+        // Property publication failure must favor a visible real window over
+        // retaining a cloak which no observer can safely coordinate.
+        EndTrayHideShowHandoffIfCurrent(hWnd, trayHideCloakToken);
+        ReleaseTrayHideCloakIfCurrent(hWnd, trayHideCloakToken);
+        return nativeShow();
+    }
+
+    LONG_PTR originalStyle = 0;
+    ULONG_PTR launchSnapshotToken = 0;
+    BOOL launchHiddenByCloak = FALSE;
+    BOOL launchAlphaOnlyCompatibility = FALSE;
+    const bool preparedLaunch = PrepareLaunchAnim(
+        hWnd, showCmd, &originalStyle, &launchSnapshotToken,
+        &launchHiddenByCloak, &launchAlphaOnlyCompatibility);
+
+    const BOOL result = nativeShow();
+    if (preparedLaunch) {
+        if (IsWindowVisible(hWnd) &&
+            TransferTrayHideCloakToLaunch(hWnd, trayHideCloakToken)) {
+            // The launch animation now owns the already-established cloak and
+            // will remove it only after its final frame is ready.
+            if (!launchAlphaOnlyCompatibility) {
+                if (launchHiddenByCloak) SetWindowCloak(hWnd, TRUE);
+                KeepLaunchWindowTransparent(hWnd);
+            }
+            CommitLaunchAnim(hWnd, originalStyle, launchSnapshotToken,
+                             launchHiddenByCloak,
+                             launchAlphaOnlyCompatibility);
+            return result;
+        }
+
+        // The asynchronous show hasn't landed yet, or a newer hide lifecycle
+        // replaced our token. Undo only the launch alpha guard; the retained
+        // tray cloak still owns visibility.
+        AbortPreparedTrayHideLaunch(hWnd, originalStyle);
+    }
+
+    EndTrayHideShowHandoffIfCurrent(hWnd, trayHideCloakToken);
+
+    if (IsWindowVisible(hWnd)) {
+        ReleaseTrayHideCloakIfCurrent(hWnd, trayHideCloakToken);
+    } else if (asynchronousSubmission && result) {
+        ReleaseTrayHideCloakAfterAsyncShow(hWnd, trayHideCloakToken);
+    }
+    return result;
+}
+
 static bool IsOurWindow(HWND hWnd) {
     DWORD pid = 0;
     GetWindowThreadProcessId(hWnd, &pid);
     return pid == GetCurrentProcessId();
 }
+
+// Tauri/WRY may briefly show a hidden window, hide it again, and immediately
+// issue the final show while restoring startup or tray state. Track only a
+// completed hidden-to-visible transition. The scope covers all early-return
+// paths in the show hooks without arming on a failed or still-pending show.
+struct TransientTauriShowScope {
+    HWND hWnd = nullptr;
+    bool track = false;
+
+    TransientTauriShowScope(HWND target, bool showRequested) : hWnd(target) {
+        const DWORD savedError = GetLastError();
+        track = showRequested && IsOurWindow(target) &&
+                !IsWindowVisible(target) &&
+                GetAncestor(target, GA_ROOT) == target &&
+                NeedsPersistentTrayHideCloak(target);
+        SetLastError(savedError);
+    }
+
+    ~TransientTauriShowScope() {
+        const DWORD savedError = GetLastError();
+        if (track && IsWindow(hWnd) && IsWindowVisible(hWnd)) {
+            ArmTransientTauriShowHideGuard(hWnd);
+        }
+        SetLastError(savedError);
+    }
+};
+
 static bool IsTaskbarSysCommand(HWND hWnd, LPARAM lParam) {
     if (lParam == static_cast<LPARAM>(MAKELPARAM(0, 1)) ||
         lParam == static_cast<LPARAM>(-1)) {
@@ -13301,7 +13907,17 @@ static bool IsShellTaskbarRestoreCall(HWND hWnd) {
     return hTray && IsCursorOverTaskbar(hTray);
 }
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
+    TransientTauriShowScope transientTauriShow(
+        hWnd, IsTrayHideShowCommand(cmd));
     PublishClassicShowDesktopOwnerProtocol(hWnd);
+    if (IsOurWindow(hWnd) && IsTrayHideShowCommand(cmd) &&
+        ReadTrayHideCloakToken(hWnd)) {
+        EnsureWinEventThreadStarted();
+        PublishShowDesktopCloakEndpointForWindow(hWnd);
+        return ShowPersistentlyCloakedTrayWindow(
+            hWnd, cmd, /*asynchronousSubmission=*/false,
+            [&]() { return ShowWindow_Original(hWnd, cmd); });
+    }
     const bool restoreCommand = cmd == SW_RESTORE || cmd == SW_SHOWNORMAL;
     if (restoreCommand && g_showDesktopNativeRestoreDepth) {
         return ShowWindow_Original(hWnd, cmd);
@@ -13404,23 +14020,38 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int cmd) {
     LONG_PTR originalStyle;
     ULONG_PTR launchSnapshotToken = 0;
     BOOL launchHiddenByCloak = FALSE;
+    BOOL launchAlphaOnlyCompatibility = FALSE;
     if (PrepareLaunchAnim(hWnd, cmd, &originalStyle,
-                          &launchSnapshotToken, &launchHiddenByCloak)) {
+                          &launchSnapshotToken, &launchHiddenByCloak,
+                          &launchAlphaOnlyCompatibility)) {
         BOOL result = ShowWindow_Original(hWnd, cmd);
         // Some frameworks rebuild their native surface or extended style while
         // processing the first show. Reassert the pre-show alpha guard before
         // snapshot capture so that surface can't become visible ahead of the
         // launch ghost.
-        if (launchHiddenByCloak) SetWindowCloak(hWnd, TRUE);
-        KeepLaunchWindowTransparent(hWnd);
+        if (!launchAlphaOnlyCompatibility) {
+            if (launchHiddenByCloak) SetWindowCloak(hWnd, TRUE);
+            KeepLaunchWindowTransparent(hWnd);
+        }
         CommitLaunchAnim(hWnd, originalStyle, launchSnapshotToken,
-                         launchHiddenByCloak);
+                         launchHiddenByCloak,
+                         launchAlphaOnlyCompatibility);
         return result;
     }
     return ShowWindow_Original(hWnd, cmd);
 }
 BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
+    TransientTauriShowScope transientTauriShow(
+        hWnd, IsTrayHideShowCommand(cmd));
     PublishClassicShowDesktopOwnerProtocol(hWnd);
+    if (IsOurWindow(hWnd) && IsTrayHideShowCommand(cmd) &&
+        ReadTrayHideCloakToken(hWnd)) {
+        EnsureWinEventThreadStarted();
+        PublishShowDesktopCloakEndpointForWindow(hWnd);
+        return ShowPersistentlyCloakedTrayWindow(
+            hWnd, cmd, /*asynchronousSubmission=*/true,
+            [&]() { return ShowWindowAsync_Original(hWnd, cmd); });
+    }
     const bool restoreCommand = cmd == SW_RESTORE || cmd == SW_SHOWNORMAL;
     if (restoreCommand && g_showDesktopNativeRestoreDepth) {
         return ShowWindowAsync_Original(hWnd, cmd);
@@ -13547,23 +14178,32 @@ BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int cmd) {
     }
     if (cmd == SW_HIDE) {
         if (GetPropW(hWnd, kPropCloseBypass)) return ShowWindowAsync_Original(hWnd, cmd);
-        if (ShouldTreatHideAsClose(hWnd) && RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
+        if (ShouldTreatHideAsClose(hWnd)) {
+            if (RunCloseAnimation(hWnd, ANIM_DEFER_SW_HIDE)) return TRUE;
+        }
     }
     LONG_PTR originalStyle;
     ULONG_PTR launchSnapshotToken = 0;
     BOOL launchHiddenByCloak = FALSE;
+    BOOL launchAlphaOnlyCompatibility = FALSE;
     if (PrepareLaunchAnim(hWnd, cmd, &originalStyle,
-                          &launchSnapshotToken, &launchHiddenByCloak)) {
+                          &launchSnapshotToken, &launchHiddenByCloak,
+                          &launchAlphaOnlyCompatibility)) {
         BOOL result = ShowWindowAsync_Original(hWnd, cmd);
-        if (launchHiddenByCloak) SetWindowCloak(hWnd, TRUE);
-        KeepLaunchWindowTransparent(hWnd);
+        if (!launchAlphaOnlyCompatibility) {
+            if (launchHiddenByCloak) SetWindowCloak(hWnd, TRUE);
+            KeepLaunchWindowTransparent(hWnd);
+        }
         CommitLaunchAnim(hWnd, originalStyle, launchSnapshotToken,
-                         launchHiddenByCloak);
+                         launchHiddenByCloak,
+                         launchAlphaOnlyCompatibility);
         return result;
     }
     return ShowWindowAsync_Original(hWnd, cmd);
 }
 BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx, int cy, UINT flags) {
+    TransientTauriShowScope transientTauriShow(
+        hWnd, (flags & SWP_SHOWWINDOW) && !(flags & SWP_HIDEWINDOW));
     if (!(flags & (SWP_HIDEWINDOW | SWP_SHOWWINDOW))) {
         return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
     }
@@ -13573,8 +14213,16 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx,
         EnsureWinEventThreadStarted();
         PublishShowDesktopCloakEndpointForWindow(hWnd);
     }
+    if ((flags & SWP_SHOWWINDOW) && !(flags & SWP_HIDEWINDOW) &&
+        ReadTrayHideCloakToken(hWnd)) {
+        return ShowPersistentlyCloakedTrayWindow(
+            hWnd, SW_SHOW, /*asynchronousSubmission=*/true,
+            [&]() {
+                return SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy,
+                                             flags);
+            });
+    }
     if ((flags & SWP_HIDEWINDOW) && !GetPropW(hWnd, kPropCloseBypass) && ShouldTreatHideAsClose(hWnd)) {
-        
         BOOL applied = SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags & ~SWP_HIDEWINDOW);
         if (!applied) return FALSE;
         
@@ -13586,13 +14234,18 @@ BOOL WINAPI SetWindowPos_Hook(HWND hWnd, HWND insertAfter, int x, int y, int cx,
         LONG_PTR originalStyle;
         ULONG_PTR launchSnapshotToken = 0;
         BOOL launchHiddenByCloak = FALSE;
+        BOOL launchAlphaOnlyCompatibility = FALSE;
         if (PrepareLaunchAnim(hWnd, SW_SHOW, &originalStyle,
-                              &launchSnapshotToken, &launchHiddenByCloak)) {
+                              &launchSnapshotToken, &launchHiddenByCloak,
+                              &launchAlphaOnlyCompatibility)) {
             BOOL result = SetWindowPos_Original(hWnd, insertAfter, x, y, cx, cy, flags);
-            if (launchHiddenByCloak) SetWindowCloak(hWnd, TRUE);
-            KeepLaunchWindowTransparent(hWnd);
+            if (!launchAlphaOnlyCompatibility) {
+                if (launchHiddenByCloak) SetWindowCloak(hWnd, TRUE);
+                KeepLaunchWindowTransparent(hWnd);
+            }
             CommitLaunchAnim(hWnd, originalStyle, launchSnapshotToken,
-                             launchHiddenByCloak);
+                             launchHiddenByCloak,
+                             launchAlphaOnlyCompatibility);
             return result;
         }
     }
@@ -13623,11 +14276,21 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     const bool classicShowDesktopOwnerDispatchMessage =
         g_classicShowDesktopOwnerDispatchMessage &&
         msg == g_classicShowDesktopOwnerDispatchMessage;
+    const bool trayHideVisibilityMessage =
+        msg == WM_WINDOWPOSCHANGED && lParam &&
+        (reinterpret_cast<const WINDOWPOS*>(lParam)->flags & SWP_SHOWWINDOW);
     if (msg != WM_DESTROY && msg != WM_CLOSE && msg != WM_SYSCOMMAND &&
-        !classicShowDesktopOwnerDispatchMessage) {
+        !classicShowDesktopOwnerDispatchMessage &&
+        !trayHideVisibilityMessage) {
         return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
     }
     if (!IsOurWindow(hWnd)) return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
+    if (trayHideVisibilityMessage) {
+        const LRESULT result =
+            DefWindowProcW_Original(hWnd, msg, wParam, lParam);
+        ReleaseVisibleTrayHideCloak(hWnd);
+        return result;
+    }
     if (classicShowDesktopOwnerDispatchMessage) {
         if (!wParam && lParam == kClassicShowDesktopOwnerProbe) {
             const bool probePending = GetPropW(
@@ -13689,7 +14352,8 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     }
     const bool closeMessage = msg == WM_CLOSE || (msg == WM_SYSCOMMAND && (wParam & 0xFFF0) == SC_CLOSE);
     if (closeMessage && !IsAnimating(hWnd) && !GetPropW(hWnd, kPropCloseBypass) && !GetPropW(hWnd, kPropClosed) &&
-        g_closeAnimation.load(std::memory_order_relaxed) && IsAppMainWindow(hWnd) && UseSafeClose(hWnd)) {
+        g_closeAnimation.load(std::memory_order_relaxed) &&
+        IsAppMainWindow(hWnd) && CanAnimateCloseMessage(hWnd)) {
         SetPropW(hWnd, kPropClosed, (HANDLE)1);
         const UINT repost = msg == WM_CLOSE ? WM_CLOSE : WM_SYSCOMMAND;
         if (RunCloseAnimation(hWnd, repost)) return 0;
@@ -13765,7 +14429,20 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
 }
 BOOL WINAPI SetWindowPlacement_Hook(HWND hWnd, const WINDOWPLACEMENT* placement) {
+    TransientTauriShowScope transientTauriShow(
+        hWnd, placement && IsTrayHideShowCommand(placement->showCmd));
     PublishClassicShowDesktopOwnerProtocol(hWnd);
+    if (placement && IsOurWindow(hWnd) &&
+        IsTrayHideShowCommand(placement->showCmd) &&
+        ReadTrayHideCloakToken(hWnd)) {
+        EnsureWinEventThreadStarted();
+        PublishShowDesktopCloakEndpointForWindow(hWnd);
+        return ShowPersistentlyCloakedTrayWindow(
+            hWnd, placement->showCmd, /*asynchronousSubmission=*/true,
+            [&]() {
+                return SetWindowPlacement_Original(hWnd, placement);
+            });
+    }
     const bool restoreCommand =
         placement && (placement->showCmd == SW_RESTORE ||
                       placement->showCmd == SW_SHOWNORMAL);
@@ -13879,25 +14556,33 @@ DWORD WINAPI LaunchAnimThread(LPVOID lpParam) {
     LONG_PTR originalExStyle = ld->originalExStyle;
     ULONG_PTR snapshotToken = ld->snapshotToken;
     const BOOL launchHiddenByCloak = ld->hiddenByCloak;
+    const BOOL launchAlphaOnlyCompatibility =
+        ld->alphaOnlyCompatibility;
     delete ld;
     if (!IsLaunchAnimationCurrent(hWnd, snapshotToken)) {
         std::lock_guard<std::mutex> lock(g_StateMutex);
         EraseSnapshotIfCurrentLocked(hWnd, snapshotToken);
         return 0;
     }
-    // Keep the alpha guard asserted while the framework finishes its first
-    // native show. Tauri/WebView2 can rebuild the top-level surface or style in
-    // this interval, which otherwise exposes the real window before the launch
-    // worker reaches StartAnimation.
-    for (int i = 0; i < 6; ++i) {
-        if (!IsWindow(hWnd) ||
-            !IsLaunchAnimationCurrent(hWnd, snapshotToken) ||
-            g_unloading.load(std::memory_order_relaxed)) {
-            break;
+    if (launchAlphaOnlyCompatibility) {
+        // Match the v1.2.0 Mozilla launch handoff: leave the one pre-show
+        // layered-alpha write alone while the first native show settles.
+        Sleep(60);
+    } else {
+        // Keep the alpha guard asserted while the framework finishes its first
+        // native show. Tauri/WebView2 can rebuild the top-level surface or
+        // style in this interval, which otherwise exposes the real window
+        // before the launch worker reaches StartAnimation.
+        for (int i = 0; i < 6; ++i) {
+            if (!IsWindow(hWnd) ||
+                !IsLaunchAnimationCurrent(hWnd, snapshotToken) ||
+                g_unloading.load(std::memory_order_relaxed)) {
+                break;
+            }
+            if (launchHiddenByCloak) SetWindowCloak(hWnd, TRUE);
+            KeepLaunchWindowTransparent(hWnd);
+            Sleep(10);
         }
-        if (launchHiddenByCloak) SetWindowCloak(hWnd, TRUE);
-        KeepLaunchWindowTransparent(hWnd);
-        Sleep(10);
     }
     for (int i = 0; !launchHiddenByCloak && i < 30; ++i) {
         if (!IsWindow(hWnd) ||
@@ -13930,7 +14615,9 @@ DWORD WINAPI LaunchAnimThread(LPVOID lpParam) {
         }
         return 0;
     }
-    KeepLaunchWindowTransparent(hWnd);
+    if (!launchAlphaOnlyCompatibility) {
+        KeepLaunchWindowTransparent(hWnd);
+    }
     if (launchHiddenByCloak) {
         // The cloak was installed before the native show. Reassert and commit
         // it before removing the temporary layered alpha. From this point the
@@ -14256,7 +14943,7 @@ static BOOL CALLBACK ClearPersistentAnimationPropertiesOnUninit(
     const ULONG_PTR showDesktopOwner = reinterpret_cast<ULONG_PTR>(
         GetPropW(hWnd, kPropShowDesktopAnimationOwner));
     const bool restoreAnimationCloak =
-        showDesktopOwner ||
+        showDesktopOwner || GetPropW(hWnd, kPropTrayHideCloak) ||
         GetPropW(hWnd, kPropShowDesktopRestorePrepared) ||
         GetPropW(hWnd, kPropShowDesktopOwnedSurfaceCloak) ||
         GetPropW(hWnd, kPropShowDesktopLocalCloakWatch) ||
@@ -14276,6 +14963,9 @@ static BOOL CALLBACK ClearPersistentAnimationPropertiesOnUninit(
     constexpr PCWSTR properties[] = {
         kPropCloseBypass,
         kPropClosed,
+        kPropTrayHideCloak,
+        kPropTrayHideShowHandoff,
+        kPropTransientTauriShowTick,
         kPropMinRestorePair,
         kPropMaximizedRestoreGuard,
         kPropLaunchAnimation,
