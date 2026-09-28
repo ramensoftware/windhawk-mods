@@ -807,7 +807,7 @@
         "ratingBreakdown": [0, 1, 0, 2, 18],
         "ratingUsers": 21,
         "reviews": 0,
-        "updated": 1790082443000,
+        "updated": 1790586314000,
         "users": 607
       },
       "metadata": {
@@ -822,7 +822,7 @@
         ],
         "license": "MIT",
         "name": "Better Volume Mixer",
-        "version": "1.4.2"
+        "version": "1.4.5"
       }
     },
     "block-smb-quick-access": {
@@ -5684,7 +5684,7 @@
         "ratingBreakdown": [6, 1, 1, 8, 80],
         "ratingUsers": 96,
         "reviews": 0,
-        "updated": 1788992538000,
+        "updated": 1790586309000,
         "users": 4442
       },
       "metadata": {
@@ -5700,7 +5700,7 @@
         ],
         "license": "GPL-3.0",
         "name": "File Operation Styler",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "files-2-folders": {
@@ -6470,6 +6470,29 @@
         "version": "1.0"
       }
     },
+    "hide-taskbar-only-on-desktop": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790586292000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790586292000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Sahil Dashoni",
+        "compilerOptions": "-ldwmapi",
+        "description": "Hides selected taskbars when their displays are desktop-only or in detected fullscreen",
+        "github": "https://github.com/Sahil-Dashoni",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Hide Taskbar Only on Desktop",
+        "version": "8.0.0"
+      }
+    },
     "hide-titlebar-elements": {
       "details": {
         "defaultSorting": 2480,
@@ -7228,6 +7251,30 @@
         ],
         "name": "Lines in MMC and Device Manager",
         "version": "1.0.1"
+      }
+    },
+    "live-video-wallpaper": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790586301000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790586301000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "AKS HAY",
+        "compilerOptions": "-lgdi32 -lshlwapi -lcomdlg32 -ldwmapi -lmfplat -lmfuuid -luuid -ld3d11 -ldxgi -lole32 -loleaut32 -lpsapi -lwtsapi32",
+        "description": "Play MP4 videos as your Windows desktop wallpaper using hardware-accelerated Media Foundation rendering with a built-in runtime performance profiler (`Ctrl+Alt+D` to toggle HUD).",
+        "github": "https://github.com/sysakshay",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Live Video Wallpaper",
+        "version": "1.1.1"
       }
     },
     "lm-close-windbg-file-changed": {
@@ -11877,6 +11924,33 @@
         "version": "1.2"
       }
     },
+    "taskbar-disk-space-label": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790586296000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790586296000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "allelimo",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
+        "description": "A simple disk space label integrated into the Windows taskbar",
+        "github": "https://github.com/allelimo",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Taskbar Disk Space Label",
+        "version": "0.72"
+      }
+    },
     "taskbar-dock-animation": {
       "details": {
         "defaultSorting": 3694698,
@@ -12571,6 +12645,30 @@
         "name": "Primary taskbar on secondary monitor",
         "twitter": "https://twitter.com/m417z",
         "version": "1.2.1"
+      }
+    },
+    "taskbar-quick-pin": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790586289000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790586289000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Ashix",
+        "compilerOptions": "-lshell32 -lole32 -loleaut32 -luuid -lshlwapi -lgdi32 -lmsimg32 -ldwmapi -lwinmm",
+        "description": "A persistent icon dock anchored left of the Start button. Drag any app to pin it. Left-click to launch or focus. Double-right-click to unpin. Drag within the dock to reorder.",
+        "github": "https://github.com/k-ashix",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Left Taskbar Quick Pin Dock",
+        "twitter": "https://x.com/k_ashix",
+        "version": "2.5.4"
       }
     },
     "taskbar-reorder-right-drag": {
@@ -15919,6 +16017,31 @@
         "license": "MIT",
         "name": "WinDraw - Screen Inking & Annotation",
         "version": "1.0.0"
+      }
+    },
+    "winduo": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790586304000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790586304000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Basel Ashraf",
+        "compilerOptions": "-ld3d11 -ldxgi -ldcomp -ld3dcompiler_47 -lmfplat -lmfreadwrite -lmf -lmfuuid -lole32 -luuid -lwtsapi32",
+        "description": "Lean the screen back as the laptop lid closes, using the webcam instead of a hinge sensor",
+        "github": "https://github.com/BaselAshraf81",
+        "homepage": "https://baselashraf.com/winduo",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "Apache-2.0",
+        "name": "WinDuo",
+        "version": "0.1.0"
       }
     },
     "winui-context-menu-animation": {

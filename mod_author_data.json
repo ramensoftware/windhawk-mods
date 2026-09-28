@@ -87,6 +87,12 @@
     "githubId": 192890501,
     "homepages": []
   },
+  "https://github.com/allelimo": {
+    "author": "allelimo",
+    "github": "https://github.com/allelimo",
+    "githubId": 22328170,
+    "homepages": []
+  },
   "https://github.com/almas-cp": {
     "author": "ALMAS CP",
     "github": "https://github.com/almas-cp",
@@ -199,6 +205,14 @@
     "github": "https://github.com/barrypp",
     "githubId": 4166765,
     "homepages": []
+  },
+  "https://github.com/baselashraf81": {
+    "author": "Basel Ashraf",
+    "github": "https://github.com/BaselAshraf81",
+    "githubId": 129132034,
+    "homepages": [
+      "https://baselashraf.com/winduo"
+    ]
   },
   "https://github.com/bawng": {
     "author": "bawNg",
@@ -736,6 +750,13 @@
     "githubId": 26241275,
     "homepages": []
   },
+  "https://github.com/k-ashix": {
+    "author": "Ashix",
+    "github": "https://github.com/k-ashix",
+    "githubId": 189425868,
+    "homepages": [],
+    "twitter": "https://x.com/k_ashix"
+  },
   "https://github.com/kawapure": {
     "author": "Isabella Lulamoon (kawapure)",
     "github": "https://github.com/kawapure",
@@ -1231,6 +1252,12 @@
     ],
     "twitter": "https://x.com/SaberNaeemi"
   },
+  "https://github.com/sahil-dashoni": {
+    "author": "Sahil Dashoni",
+    "github": "https://github.com/Sahil-Dashoni",
+    "githubId": 215362324,
+    "homepages": []
+  },
   "https://github.com/salyts": {
     "author": "Salyts",
     "github": "https://github.com/Salyts",
@@ -1327,6 +1354,12 @@
     "homepages": [
       "https://v0.hasanjws.com/user/hasanjws"
     ]
+  },
+  "https://github.com/sysakshay": {
+    "author": "AKS HAY",
+    "github": "https://github.com/sysakshay",
+    "githubId": 304082746,
+    "homepages": []
   },
   "https://github.com/takattowo": {
     "author": "takattowo",

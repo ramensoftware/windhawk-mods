@@ -2,12 +2,395 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-27T09:50:35.000Z</updated>
+    <updated>2026-09-28T09:05:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[WinDuo 0.1.0]]></title>
+        <id>https://windhawk.net/mods/winduo#bd025e4fcde71a615aa6f16071597a81f7dde19f</id>
+        <link href="https://windhawk.net/mods/winduo"/>
+        <updated>2026-09-28T09:05:04.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="winduo">WinDuo</h1>
+<p>As the laptop lid closes, the picture on screen leans back, blurs and dims, as
+though it were a sheet hinged at the bottom of the display that stays put in the
+room while the glass turns away from it. The top of the sheet tips forward a
+little, so content near the top edge stays legible for longer.</p>
+<p>There is no hinge sensor on most laptops, so the lid angle comes from the
+webcam: closing the lid pitches the camera down, the scene slides up the frame,
+and the size of that slide is the angle.</p>
+<p>This is the Windhawk edition of <a href="https://github.com/BaselAshraf81/winduo">WinDuo</a>.
+Its geometry, shader and state machine are ported from
+<a href="https://github.com/sumimakito/Mac-Duo">Mac Duo</a> (Apache 2.0, Copyright 2026
+Makito).
+It runs as its own process (a Windhawk <em>tool mod</em>), injects into nothing, and
+hooks nothing.</p>
+<p><img src="https://raw.githubusercontent.com/BaselAshraf81/winduo/main/docs/windhawk-preview.gif" alt="The screen leaning back as the lid closes" /></p>
+<h2 id="whattoexpect">What to expect</h2>
+<ul>
+<li><strong>The camera stays on while you are using the laptop</strong>, so its privacy light
+stays lit. It has to be watching before the lid starts to move. It turns off
+while the lid is shut, the display is off, the session is locked, or the
+built-in screen is not in use. Frames are measured in memory and never stored
+or sent anywhere. Disable the mod to turn the camera off entirely.</li>
+<li><strong>Battery.</strong> A streaming webcam costs roughly as much as a video call's
+camera does, which on most laptops is well under a watt but is not nothing.</li>
+<li><strong>Other camera apps.</strong> On many laptops, especially on Windows 10, only one
+app can use the camera at a time. While the mod is streaming, a video call or
+the Camera app started afterwards may report that the camera is in use:
+disable the mod for the call. If the other app has the camera first, the mod
+backs off and tries again later (every few seconds at first, then up to once
+a minute) until the camera is free.</li>
+<li><strong>Built-in screen only.</strong> The effect runs on the laptop's own panel, even
+when an external monitor is the main display, and does nothing while the
+laptop is docked with the lid shut.</li>
+<li><strong>Camera permission.</strong> The mod reads the camera as an ordinary desktop app
+(it runs inside <code>windhawk.exe</code>), so Windows shows no prompt. It needs
+<em>Settings > Privacy & security > Camera > Let desktop apps access your
+camera</em> turned on, and <code>windhawk.exe</code> then appears in that list while the
+mod runs. If the setting is off, the mod log says so.</li>
+<li>It needs Windows 10 version 2004 or later, so the overlay can keep itself out
+of its own screen capture.</li>
+<li>Accuracy depends on the room: a lit room with some detail in front of the
+camera tracks well; a dark room or a blank wall does not, and the effect then
+declines to run rather than guessing.</li>
+</ul>
+<h2 id="calibration">Calibration</h2>
+<p>The default assumes a typical laptop webcam (about a 75 degree field of view).
+If the effect starts too early or too late, adjust <strong>Degrees per pixel</strong>: raise
+it if a small close already triggers the effect, lower it if a large one does
+not. The desktop app has a calibration wizard that measures this exactly.</p>
+<h2 id="tryingitwithoutclosingthelid">Trying it without closing the lid</h2>
+<p>Turn on <strong>Play a preview</strong> and save. The effect plays one scripted close on
+whatever is on screen, then the switch can be turned back off.</p>]]></content>
+        <author>
+            <name>Basel Ashraf</name>
+            <uri>https://github.com/BaselAshraf81</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Live Video Wallpaper 1.1.1]]></title>
+        <id>https://windhawk.net/mods/live-video-wallpaper#08d0121ef8c059403359260816a6cca7a4c84746</id>
+        <link href="https://windhawk.net/mods/live-video-wallpaper"/>
+        <updated>2026-09-28T09:05:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="livevideowallpaper">Live Video Wallpaper</h1>
+<p><strong>Author:</strong> AKS HAY | <strong>GitHub:</strong> <a href="https://github.com/sysakshay">sysakshay</a> | <strong>License:</strong> GPL-3.0</p>
+<p>Play local MP4 videos directly on your Windows desktop as a live wallpaper using
+Media Foundation and Direct3D 11, featuring a built-in real-time hardware profiler.</p>
+<p>Unlike traditional animated wallpaper implementations, this mod renders video
+directly through the GPU, minimizing CPU usage while maintaining rock-solid 60 FPS
+playback.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Hardware-Accelerated Playback:</strong> Direct3D 11 rendering and Windows Media Foundation zero-copy video decoding directly onto the desktop window hierarchy.</li>
+<li><strong>Built-in Performance Profiler (<code>Ctrl + Alt + D</code>):</strong> Live HUD overlay displaying true wall-clock FPS, frame-time percentiles (<code>P95</code>/<code>P99</code>), VRAM/commit stats, and pipeline stage timings (<code>Decode</code>, <code>Transfer</code>, <code>Present</code>).</li>
+<li><strong>Smart Occlusion Detection:</strong> Automatically pauses video rendering when top-level or maximized application windows fully cover the desktop (<code>P95</code> CPU occlusion check &lt; 0.1ms). Uses zero-latency <code>EVENT_SYSTEM_FOREGROUND</code> event hooks.</li>
+<li><strong>Audio Volume Control & Stream Restoration:</strong> Integrated audio volume control (<code>0%</code> to <code>100%</code>) with automatic unmuting and volume restoration when resuming playback or switching apps.</li>
+<li><strong>Battery-Aware Power Saving:</strong> Configurable behavior (<code>Pause</code>, <code>Drop to 15 FPS</code>, or <code>Play normally</code>) when running on laptop battery power.</li>
+<li><strong>Instant First-Frame Presentation:</strong> Decodes and presents the initial video frame immediately upon loading so the wallpaper never gets stuck on a black screen when starting in paused/battery mode.</li>
+<li><strong>Scaling Modes & Aspect Ratio Fix:</strong> Support for <code>Fill</code> (stretch to fill screen), <code>Cover</code> (zoom &amp; crop edges without distortion), and <code>Fit</code> (letterbox with cinema-style black borders). Fixed aspect ratio scaling for wide, ultrawide, and 1:1 square monitors.</li>
+<li><strong>Multi-monitor layout:</strong> Span one video across the desktop, or show the same video on each monitor with independent scaling.</li>
+<li><strong>Async File Picker (<code>Ctrl + Alt + G</code>):</strong> Asynchronous background thread file picker for <code>.mp4</code>, <code>.m4v</code>, <code>.mov</code>, <code>.wmv</code>, and <code>.webm</code> files with zero frame drops during selection.</li>
+<li><strong>Zero Desktop Right-Click Menu Delay:</strong> Full input transparency (<code>HTTRANSPARENT</code>, <code>WS_EX_TRANSPARENT</code>, <code>WS_DISABLED</code>) ensures right-clicking desktop icons or background opens context menus with 0ms latency.</li>
+<li><strong>Auto-Recovery:</strong> Automatic D3D device-loss and Media Foundation decode stall recovery.</li>
+</ul>
+<h2 id="controlshotkeys">Controls &amp; Hotkeys</h2>
+<ul>
+<li><strong><code>Ctrl + Alt + G</code></strong> — Open the interactive file picker to load a new video (<code>.mp4</code>, <code>.m4v</code>, <code>.mov</code>, <code>.wmv</code>, <code>.webm</code>).</li>
+<li><strong><code>Ctrl + Alt + H</code></strong> — Hide and pause the wallpaper and its audio, or show and resume them.</li>
+<li><strong><code>Ctrl + Alt + D</code></strong> — Toggle Performance Profiler HUD (On / Off), if enabled in settings.</li>
+</ul>
+<h2 id="performanceprofilerhud">Performance Profiler HUD</h2>
+<p>When toggled via <code>Ctrl + Alt + D</code>, the on-screen profiler groups diagnostics into color-coded (<code>🟢 Good</code>, <code>🟡 Warning</code>, <code>🔴 Critical</code>) sections:</p>
+<ul>
+<li><strong>Performance:</strong> Real-clock <code>FPS</code> vs polling <code>Ticks</code>, rolling average <code>Frame Time</code>, <code>P95</code>/<code>P99</code> frame times, and overall CPU/GPU time.</li>
+<li><strong>Memory & Resources:</strong> <code>VRAM</code> usage, <code>Shared RAM</code>, working set, commit charge, and active D3D/MF object counts (<code>Textures</code>, <code>SwapChains</code>, <code>MediaEngines</code>, <code>Surfaces</code>).</li>
+<li><strong>Pipeline Breakdown:</strong> Precise microsecond timers for <code>Decode</code>, <code>TransferVideoFrame</code>, <code>CopyResource</code>, <code>Present</code>, and <code>Occlusion</code> checks.</li>
+<li><strong>Status & Bottlenecks:</strong> Live diagnosis showing exact bottlenecks (<code>GPU Idle</code>, <code>Bound by Decode</code>, <code>Present blocked by DWM</code>, etc.) and system state (<code>Battery</code>, <code>Paused</code>, <code>Recoveries</code>).</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<h3 id="videopath">Video Path</h3>
+<p>Full path to any local video file on your disk. Can also be updated dynamically via <code>Ctrl + Alt + G</code>.</p>
+<h3 id="fitmode">Fit Mode</h3>
+<ul>
+<li><strong>Fill:</strong> Stretch/scale video to fill the entire monitor.</li>
+<li><strong>Cover:</strong> Zoom and crop video edges to fill screen without aspect ratio distortion.</li>
+<li><strong>Fit:</strong> Letterbox video while preserving original aspect ratio.</li>
+</ul>
+<h3 id="batterysavingmode">Battery Saving Mode</h3>
+<ul>
+<li><strong>Pause video (maximum battery life):</strong> Stops video processing completely when unplugged from AC power.</li>
+<li><strong>Drop to 15 FPS (reduced power consumption):</strong> Throttles frame rate to save power while keeping background animation alive.</li>
+<li><strong>Play normally (ignore battery status):</strong> Maintains full 60 FPS playback on battery.</li>
+</ul>
+<h3 id="targetframerate">Target Frame Rate</h3>
+<p>Max frames per second (<code>60</code>, <code>30</code>, <code>15</code>) or <code>monitor</code> to sync exactly with monitor refresh rate (<code>VREFRESH</code>).</p>
+<h3 id="muteaudiovolumecontrol">Mute Audio &amp; Volume Control</h3>
+<ul>
+<li><strong>Mute Audio:</strong> Mute video audio track (<code>true</code> / <code>false</code>).</li>
+<li><strong>Audio Volume:</strong> Audio output volume percentage (<code>100%</code>, <code>90%</code>, …, <code>Muted</code>).</li>
+</ul>
+<h3 id="occlusioncheckinterval">Occlusion Check Interval</h3>
+<p>Frequency of background occlusion safety-net polling (<code>fast</code>: 100ms, <code>normal</code>: 250ms, <code>relaxed</code>: 500ms).</p>
+<h2 id="technicalhighlightsoptimizations">Technical Highlights &amp; Optimizations</h2>
+<ul>
+<li><strong>Zero-Copy Offscreen Target:</strong> Decodes to an offscreen <code>B8G8R8A8_UNORM</code> render target before copying to the flip-model swap chain (<code>DXGI_SWAP_EFFECT_FLIP_DISCARD</code>) to guarantee tear-free presentation without MF timing conflicts.</li>
+<li><strong>DXGI Flip-Model RTV Caching:</strong> Caches D3D11 render target views while handling DXGI swap-chain buffer rotation in <code>Fit</code> mode.</li>
+<li><strong>Zero Heap Allocations:</strong> Ring buffer percentile calculations use zero-allocation stack buffers at 60 Hz.</li>
+<li><strong>$O(1)$ Section Timers:</strong> Profiler queries bypass linear string comparisons via pooled pointer-equality checks inside hot rendering loops.</li>
+<li><strong>Kernel Resource Caching:</strong> GDI font handles (<code>HFONT</code>), desktop region guards (<code>HRGN</code>), and WorkerW window handles are cached across frames to eliminate handle churn.</li>
+<li><strong>Fast Occlusion Screening:</strong> Bounding-box intersection screening skips invisible, borderless system helpers, and non-overlapping windows before querying DWM or class attributes.</li>
+</ul>]]></content>
+        <author>
+            <name>AKS HAY</name>
+            <uri>https://github.com/sysakshay</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Disk Space Label 0.72]]></title>
+        <id>https://windhawk.net/mods/taskbar-disk-space-label#494cecad37227b5dc5cf0e112ee8bd91c350281b</id>
+        <link href="https://windhawk.net/mods/taskbar-disk-space-label"/>
+        <updated>2026-09-28T09:04:56.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbardiskspacelabel">Taskbar Disk Space Label</h1>
+<p>A lightweight free/available disk space label integrated directly into the
+Windows 11 taskbar. This is kind of a "remix" of the Taskbar Countdown Timer
+module by Richi (https://github.com/richilp) 
+The label is shown on the primary taskbar only, taskbars on secondary monitors don't show it.
+Windows 11 only.</p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Choose the disk to be checked via module settings (default to C)</li>
+<li>Choose the font size (Default to 12)</li>
+<li>Choose between user available free space or total free available space (Default to total free space)</li>
+<li>Choose the update interval (default to 60 seconds)</li>
+<li>Choose the description text on the first line of the label (default to "Free Space")</li>
+<li>Leave the description text empty to have a single-line label with no info text</li>
+<li>Choose the alignment of the label text</li>
+</ul>
+<p>When the label gets clipped, please lower the font size, or clear the description</p>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://i.imgur.com/Nwuevwf.png" alt="Screenshot" /></p>]]></content>
+        <author>
+            <name>allelimo</name>
+            <uri>https://github.com/allelimo</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Hide Taskbar Only on Desktop 8.0.0]]></title>
+        <id>https://windhawk.net/mods/hide-taskbar-only-on-desktop#222fe7db8466b63b488ee78695a9cee03145e3ed</id>
+        <link href="https://windhawk.net/mods/hide-taskbar-only-on-desktop"/>
+        <updated>2026-09-28T09:04:52.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="hidetaskbaronlyondesktop">Hide Taskbar Only on Desktop</h1>
+<p>Hides selected bottom-docked taskbars when their display has no relevant application. Detected borderless fullscreen windows are also treated as desktop-only display state, with explicit shell, keyboard, and hover reveals handled separately. Each display is evaluated independently.</p>
+<h2 id="demo">Demo</h2>
+<h3 id="multipledisplays">Multiple Displays</h3>
+<p><img src="https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/multiple-display.gif" alt="Multiple Display" /></p>
+<h3 id="singledisplay">Single Display</h3>
+<p><img src="https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/single-display.gif" alt="Single Display" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Per-display desktop-only hiding</li>
+<li>Independent bottom-edge hover reveal</li>
+<li>Multi-monitor and spanning-window support</li>
+<li>Keyboard taskbar interaction such as Win+T and Win+B</li>
+<li>Recognized shell UI, taskbar popups, and desktop shell surfaces handled separately</li>
+<li>Per-display borderless fullscreen tracking</li>
+<li>Recovery after taskbar recreation or tool-process restart</li>
+<li>Optional stable monitor interface-name mapping</li>
+</ul>
+<h2 id="settings">Settings</h2>
+<p><strong>Extra hover margin (px)</strong> adds to the taskbar-height-based bottom-edge reveal zone and is scaled for the display DPI.</p>
+<p><strong>Auto-hide delay after hover (ms)</strong> controls how long the revealed taskbar stays visible after the cursor leaves the bottom-edge hover zone. It only affects hover dismissal; desktop-only hides remain immediate.</p>
+<p><strong>Reveal taskbar on bottom-edge hover</strong> selects the displays where bottom-edge hover can reveal the taskbar.</p>
+<p><strong>Taskbars to hide on desktop</strong> selects the displays whose taskbars participate in desktop-only hiding.</p>
+<p><strong>Stable monitor interface names</strong> lets you pin a display slot to a specific physical monitor by selecting the slot and pasting its Windows monitor interface name returned by <code>EnumDisplayDevicesW</code> with <code>EDD_GET_DEVICE_INTERFACE_NAME</code>. Each mapping has its own display selector and text field, so a mapping for Display 10 can be added directly without creating mappings for Displays 1 through 9. Pinned monitors always use their configured display slots. Any monitors that are not pinned fill the remaining display slots in their current logical order. If multiple mappings target the same slot or physical monitor, the last matching mapping wins.</p>
+<p>To find the interface names on Windows, run this in PowerShell:</p>
+<pre><code class="powershell language-powershell">Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class DisplayDevices2 {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct DISPLAY_DEVICE {
+        public int cb;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceString;
+        public int StateFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceID;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceKey;
+    }
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "EnumDisplayDevicesW")]
+    public static extern bool EnumDisplayDevices(string lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
+}
+'@
+for ($i = 1; $i -le 16; $i++) {
+    $m = New-Object DisplayDevices2+DISPLAY_DEVICE
+    $m.cb = [Runtime.InteropServices.Marshal]::SizeOf($m)
+    if ([DisplayDevices2]::EnumDisplayDevices("\\.\DISPLAY$i", 0, [ref]$m, 1)) {
+        Write-Host "Display $i : $($m.DeviceString)"
+        Write-Host "Interface : $($m.DeviceID)"
+        Write-Host ""
+    }
+}
+</code></pre>
+<p>Paste the full value shown after <strong>Interface :</strong> into the mapping for the display slot you want to attach to that physical monitor.</p>
+<p>The mod intentionally supports up to 16 fixed logical display slots. Pinned monitors stay in their selected slots, while unpinned monitors fill the remaining slots in current logical order.</p>
+<h2 id="differencefromtaskbarfade">Difference from <code>taskbar-fade</code></h2>
+<p><code>taskbar-fade</code> and this mod both use layered taskbar transparency and can reveal the taskbar from the bottom edge, so they overlap in mechanism. This mod has a different primary state model: <strong>desktop-only state is evaluated independently for each display, and the taskbar becomes immediately eligible for hiding when that display has no relevant application, subject to explicit hover, shell, or keyboard reveals</strong>. It also carries the per-display fullscreen, shell-surface, keyboard, minimize, and recovery handling needed by that model.</p>
+<p>The two mods should not be used on the same taskbar because both modify the taskbar window's transparency/style state.</p>
+<h2 id="implementation">Implementation</h2>
+<p>The state logic runs in a dedicated Windhawk tool process. Taskbars are hidden with layered-window transparency plus click-through behavior instead of Windows' native taskbar auto-hide, so the normal desktop work area is intentionally unchanged.</p>
+<p>Fullscreen ownership is tracked per display for borderless monitor-sized windows. Foreground, move/size, per-owner location, and recognized shell-surface events update state promptly, including geometry changes while the owner is in the background. Cached fullscreen ownership tolerates transient visibility or cloak changes while focus moves between displays and remains active while the owner still matches fullscreen geometry. Short validation timers and a 5-second safety refresh cover transitions that do not produce a single reliable event. Taskbar control focus is tracked through out-of-context accessibility focus events, so keyboard navigation such as Win+T and Win+B can reveal a taskbar even when Windows has not yet made that taskbar the foreground window. A short release debounce keeps the taskbar visible across transient focus transitions between taskbar buttons. Mouse-button activity and shell-menu focus are excluded so ordinary mouse interaction is not misclassified as keyboard navigation.</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li><strong>Recovery:</strong> If the dedicated tool process terminates unexpectedly while a taskbar is hidden, disable and re-enable this mod in Windhawk or restart Windows Explorer to restore it. A later tool-process startup also performs ownership recovery. If the taskbar window itself no longer exists, restarting Windows Explorer recreates it.</li>
+<li>Desktop-only hiding and hover reveal apply to bottom-docked taskbars.</li>
+<li>The hidden taskbar remains part of the normal work area and is click-through.</li>
+<li>If a taskbar's monitor cannot be resolved during a state refresh, the mod fails safe by leaving that taskbar visible.</li>
+<li>Flashing taskbar buttons and tray notifications are not visible while the taskbar is transparent.</li>
+<li>Native Windows taskbar auto-hide remains separate from this mod; when it is enabled, this mod does not take over that taskbar.</li>
+<li>Other taskbar transparency/style mods can conflict when they modify the same taskbar.</li>
+<li>A visible, monitor-sized, captionless, non-resizable application may be treated as fullscreen. Cached fullscreen ownership can remain active through transient visibility or cloak changes while the owner still matches fullscreen geometry. During fullscreen detection, bottom-edge mouse hover does not reveal the taskbar; use <strong>Win+T</strong> or <strong>Start</strong> to access it.</li>
+<li>Windows shell classes/processes can change between Windows releases.</li>
+</ul>]]></content>
+        <author>
+            <name>Sahil Dashoni</name>
+            <uri>https://github.com/Sahil-Dashoni</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Left Taskbar Quick Pin Dock 2.5.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-quick-pin#b8bf716e6f97ed3c13dacc7ae7f68bfc615bea6c</id>
+        <link href="https://windhawk.net/mods/taskbar-quick-pin"/>
+        <updated>2026-09-28T09:04:49.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="lefttaskbarquickpindock">Left Taskbar Quick Pin Dock</h1>
+<h2 id="onlyforwindows11witha_centered_taskbar">⚠️ <strong>Only for Windows 11 with a <em>centered</em> taskbar</strong></h2>
+<p><strong>This mod supports Windows 11 only, and only when the taskbar is centered
+(the default). Left-aligned or otherwise repositioned taskbars are <em>not</em>
+supported.</strong> On an unsupported layout it does <strong>not</strong> crash or cause any
+issue -- the dock simply detects there's no room, stays hidden, and does
+nothing. It just won't work there.</p>
+<p><img src="https://raw.githubusercontent.com/k-ashix/taskbar-quick-pin/main/src/preview.gif" alt="Live preview of the Left Taskbar Quick Pin Dock" /></p>
+<p>A lightweight icon dock that sits just left of the Start button on the
+Windows 11 taskbar. Drag any app onto it to pin, click to launch or focus, and
+drag it off (or double-right-click) to unpin.</p>
+<h2 id="quickusage">Quick usage</h2>
+<p>| Action | Result |
+|---|---|
+| Drag an app window onto the dock | Pin it |
+| Left-click a pinned icon | Launch, or focus if it's already running |
+| Drag a pinned icon left / right | Reorder it |
+| Drag a pinned icon off the dock | Unpin it |
+| Double-right-click an icon | Unpin it (off by default) |
+| Hotkey (default Ctrl + Alt + P) | Pin or unpin the focused app |
+| Triple-tap <strong>L</strong> | Lock / unlock the dock |</p>
+<p>Two more gestures are available but <strong>off by default</strong> (enable them in Settings):
+the <strong>rapid-click unpin-all</strong> (three quick clicks on an icon clears the whole
+dock) and the <strong>bare-key taps</strong> (tap <strong>P</strong> / <strong>U</strong> three times to pin / unpin the
+focused app). They ship disabled because they can fire while you type in other
+apps; the Ctrl + Alt + P hotkey is the safe alternative. Every setting is
+documented in the <strong>Settings reference</strong> below.</p>
+<p><strong>Lock the dock:</strong> triple-tap the <strong>L</strong> key to lock it, triple-tap <strong>L</strong> again
+to unlock. While locked, the quick <em>gesture</em> unpins are refused (triple-tap
+<strong>U</strong>, the rapid-click unpin-all, double-right-click, and the hotkey's unpin) so
+a stray gesture can't drop a pin. A deliberate drag-off that breaks the rope
+still unpins, and pinning / reordering still work.</p>
+<h2 id="firstrunpleasebepatient">First run  --  please be patient</h2>
+<p>On the very first launch the dock needs a moment to detect the taskbar and
+settle, so it may not appear instantly. That's normal  --  it's working in the
+background, so please wait rather than reinstalling. If it still hasn't shown up
+after a few minutes, restarting Explorer (or, most reliably, your PC) sorts it
+out. You can also raise the <strong>Startup delay</strong> setting.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>A few apps with custom icon handlers may show a generic Windows icon. This is
+a shell limitation  --  no Win32 API resolves every icon reliably.</li>
+<li>Some UWP apps may occasionally resolve to their host process if their window
+isn't ready yet.</li>
+<li>English UI strings Only</li>
+</ul>
+<h2 id="v254">v2.5.4</h2>
+<ul>
+<li>Broadcast-safe lock glow -- the lock/unlock glow window now lives on the dock's
+message-pumping UI thread, so a system-wide broadcast (theme change,
+WM_SETTINGCHANGE, some app launches) can no longer stall on it.</li>
+<li>Correct placement on scaled / mixed-DPI displays -- the dock now sets its own
+per-monitor-v2 DPI awareness, so it lands in the right spot and stays crisp
+instead of being DWM-stretched.</li>
+<li>"Separator opacity" is now "Show workspace divider" (showWorkspaceDivider) -- the
+old 0-100 value behaved identically for every value 1-100, so it is now a simple
+on/off toggle for the golden divider between workspace pins and app pins.</li>
+</ul>
+<h2 id="v253">v2.5.3</h2>
+<ul>
+<li>🪶 <strong>Leaner tool-mod runtime.</strong> — General optimisation of the tool-mod process.</li>
+<li>✨ <strong>Drag-to-pin feedback layer.</strong> — A glow bloom shows GREEN ("there's room") or RED ("dock full") while you drag an app toward the dock.</li>
+<li>🖥️ <strong>Cleaner fullscreen & Snipping Tool handling.</strong> — The dock hides smoothly under fullscreen apps and the Windows native Snipping Tool overlay, with anti-flicker so it reappears seamlessly.</li>
+<li>🎯 <strong>Refined feedback behaviour.</strong> — Dragging or deleting an already-pinned icon near the dock now stays calm in BOTH pin-limit states (dock full or with room) — no false "dock full" flash for an app that is already pinned.</li>
+<li>🧱 <strong>New "Hide dock outline" toggle</strong> (<code>hideDockBorder</code>). — Turn off the thin grey Windows 11 outline drawn around the dock. Purely cosmetic; the dock, icons and rounded corners are unchanged.</li>
+<li>🎬 <strong>Two lock/unlock flash animations, with a toggle</strong> (<code>enableLockAnimation</code>). — OFF: a brief highlight on the dock's real edge. ON: a loading-style glow sweeps left→right across the whole dock. Colours unchanged (gold when locking, green when unlocking).</li>
+<li>🔧 <strong>Some more stability & polish improvements.</strong></li>
+</ul>
+<h2 id="v252">v2.5.2</h2>
+<ul>
+<li><strong>Architectural Change</strong> — Now it <code>@include windhawk.exe</code></li>
+<li><strong>Code optimised</strong></li>
+</ul>
+<h2 id="v251">v2.5.1</h2>
+<ul>
+<li>⚡ <strong>Code optimised & lower memory usage.</strong> — No behavioural change,
+just leaner and lighter.</li>
+<li>🪜 <strong>New 5-stage resolve pipeline to cut resource usage.</strong> App identity is now
+settled through five ordered stages.</li>
+</ul>
+<ol>
+<li><strong>Cache hit</strong> — Reuse the last resolved identity for the window/point (no work).</li>
+<li><strong>Fast window probe</strong> — Cheap <code>Get*</code>/class checks before any heavyweight call.</li>
+<li><strong>UIAutomation resolve</strong> — The authoritative taskbar-surface lookup, only if 1–2 miss.</li>
+<li><strong>Process fallback</strong> — Cursor-inside process match when UIA can't name the target.</li>
+<li><strong>Miss / sentinel</strong> — Give up cleanly (no pin) instead of guessing wrong.</li>
+</ol>
+<ul>
+<li>🔁 <strong>Workspace pins re-open every time.</strong> — A Pinned workspace dock icon now resolves to the <code>"Explorer workspace"</code>.</li>
+<li>⌨️ <strong>Bare-key P / U / L gestures now work when enabled.</strong> — These gestures act on the foreground window.</li>
+<li>🪟 <strong>Focus-if-running targets a real window.</strong> — Improved</li>
+<li>🆔 <strong>Collision-free workspace IDs.</strong> <code>MakeWorkspaceId</code> now uses <code>CoCreateGuid</code></li>
+</ul>
+<h2 id="settingsreference">Settings reference</h2>
+<p>Every option lives in the Windhawk <strong>Settings</strong> panel for this mod. Most apply
+live; the two noted below need a mod reload.</p>
+<p>| Setting | What it does | Default |
+|---|---|---|
+| Max pinned apps | How many apps can be pinned (1 - 20). The dock auto-sizes: min 5 slots, grows to 10, then extra pins scroll. | 5 |
+| Icon size | Icon size in px before DPI scaling (16 - 48). | 33 |
+| Dock gap from Start | Gap between the dock and the Start button (0 - 40 px). | 6 |
+| Show workspace divider | Show the gold divider between workspace pins and app pins (only when you have both). | on |
+| Drag to reorder | Drag icons left/right to rearrange; off = drag only unpins. | on |
+| Double-right-click to unpin | Unpin an icon with a double right-click (dust effect). | off |
+| Rapid-click unpin-all (opt-in) | Three quick clicks on an icon unpins EVERYTHING. Off so it can't fire by accident. | off |
+| Bare-key tap gestures (opt-in) | Triple-tap P / U / L to pin / unpin / lock, regardless of focus. Off (fires while typing). | off |
+| Scroll-wheel navigation | Hover + wheel moves the highlight across pins. | on |
+| Drag tether (rope) | Shows the stretchy thread while dragging an icon off. | on |
+| Drag tether - thickness | Rope thickness, 1 (hair) to 10 (cord). | 2 |
+| Drag tether - break length | How far you pull before the rope snaps (150 - 650 px). | 450 |
+| Drag tether - hue | Rope colour hue (0 - 359). | 30 |
+| Unpin trigger | Only when the rope BREAKS, or rope breaks OR released outside the dock. | ropeBreak |
+| Corner roundness | 0 = square, 1 - 40 = slight, 41 - 100 = full pill. | 40 |
+| Explorer workspace pins | Allow File Explorer to be dragged in as a workspace pin. | off |
+| Startup delay | Extra wait before the dock loads (0 - 3000 ms). | 0 |
+| Sync with taskbar auto-hide | Hide the dock when the taskbar auto-hides. | off |
+| Pin hotkey - modifiers | Modifier keys for the pin/unpin hotkey (or Disabled). | Ctrl + Alt |
+| Pin hotkey - key | Key pressed with the modifiers above. | P |</p>
+<h2 id="credits">Credits</h2>
+<p>Created with ❤️ by Ashix. Thanks to the <strong>Taskbar Dock Animation</strong>
+(<code>taskbar-dock-animation</code>) and <strong>Taskbar Dock Animation Plus</strong>
+(<code>taskbar-dock-animation-plus</code>) mods for animation refinements.</p>]]></content>
+        <author>
+            <name>Ashix</name>
+            <uri>https://github.com/k-ashix</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Edge Native UI Tweaks 1.0]]></title>
         <id>https://windhawk.net/mods/edge-native-ui-tweaks#1c29695bedd11217ed60ffc68edcbf3ee21b2d8b</id>
@@ -1478,391 +1861,6 @@ start.</li>
         <author>
             <name>Kismeria</name>
             <uri>https://github.com/Kismeria</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[System Tray Folders 1.0.0]]></title>
-        <id>https://windhawk.net/mods/system-tray-folders#a1190b6c1b631a725f6d628189886d410b3760f6</id>
-        <link href="https://windhawk.net/mods/system-tray-folders"/>
-        <updated>2026-09-22T16:22:32.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="systemtrayfolders">System Tray Folders</h1>
-<p>Adds folders to the Windows 11 tray overflow flyout (the "^" / "Show hidden
-icons" popup). Each folder appears as a tile in the icon grid with a preview of
-the icons inside. Clicking it shows the folder's icons in place, with a back
-tile to return.</p>
-<p><img src="https://raw.githubusercontent.com/RisPNG/windhawk-mods/assets/system-tray-folders/without-mod.png" alt="Without the mod" /><br />
-<em>Without the mod</em></p>
-<p><img src="https://raw.githubusercontent.com/RisPNG/windhawk-mods/assets/system-tray-folders/folders.png" alt="Folders" /><br />
-<em>With folders</em></p>
-<p><img src="https://raw.githubusercontent.com/RisPNG/windhawk-mods/assets/system-tray-folders/inside-folder.png" alt="Inside a folder" /><br />
-<em>Inside a folder</em></p>
-<p>Icons inside a folder are the real tray icons, so clicking, right clicking and
-tooltips keep working. Dragging icons between the taskbar and the flyout and
-reordering them work as usual, and an icon dragged back into the flyout returns
-to its folder. Which folder an icon belongs to comes from the settings, not
-from dragging.</p>
-<h2 id="choosingicons">Choosing icons</h2>
-<p>Each pattern is compared (case insensitive) with three names of every icon:</p>
-<ul>
-<li><strong>App name</strong>: the program name Windows keeps for the icon, usually the
-executable's description or file name, e.g. <code>RazerAppEngine</code>,
-<code>Docker Desktop</code> or <code>PowerToys.Runner</code>. It doesn't change, so it's the most
-reliable choice.</li>
-<li><strong>Tooltip</strong>: the text you see when hovering the icon, e.g. <code>NVIDIA Settings</code>.
-Some apps change it or leave it empty. A changed tooltip is picked up the
-next time the flyout opens.</li>
-<li><strong>Accessible name</strong>: a name Windows keeps for the icon for accessibility
-tools. It's usually the same as one of the other two names.</li>
-</ul>
-<p>A few icons aren't image icons; they have no tooltip or accessible name, so
-only their app name can match.</p>
-<p>A pattern without wildcards must match the whole name. Use <code>*</code> for any text
-and <code>?</code> for a single character, e.g. <code>Razer*</code> or <code>*Graphics Command Center</code>.</p>
-<p>An icon goes into the first folder with a matching pattern. Icons that match
-nothing stay in the main grid. Until a folder has icons (or <strong>Show empty
-folders</strong> is on), the mod unloads itself and leaves the flyout alone.</p>
-<p>An empty row in the <strong>Folders</strong> or <strong>Icons</strong> list is skipped, but two empty rows
-in a row end the list.</p>
-<p>To see the exact names of your icons, set <strong>Debug logging</strong> to <strong>Mod logs</strong> in
-the mod's <strong>Advanced</strong> tab, open the tray overflow once, then click <strong>Show log
-output</strong>.
-Each icon is listed as <code>Icon: app="..." tooltip="..." name="..." folder=N</code>,
-where <code>N</code> is the folder it went into, counting from 0, or -1 for none.</p>
-<p>Windows 11 only. Tested on build 26300, where the tray is hosted in
-<code>SystemTray.dll</code>. Older builds that host it in <code>Taskbar.View.dll</code> may work, but
-haven't been tested.</p>]]></content>
-        <author>
-            <name>Ris Peng</name>
-            <uri>https://github.com/RisPNG</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Tags 0.7.1]]></title>
-        <id>https://windhawk.net/mods/explorer-tags#5ed44affb201b349874dd33bc5276b47bda4320d</id>
-        <link href="https://windhawk.net/mods/explorer-tags"/>
-        <updated>2026-09-22T14:55:03.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorertags">Explorer Tags</h1>
-<p>Adds a <strong>Tags</strong> panel at the bottom of File Explorer's navigation pane, below
-"This PC" and "Network", and a <strong>Tags ▸</strong> submenu to the file context menu.</p>
-<p>Windows' own tags only work for file types with a property handler, so <code>.txt</code>,
-<code>.zip</code>, <code>.rar</code> and folders can't be tagged. These work for anything.</p>
-<p><img src="https://raw.githubusercontent.com/buedgik/explorer-tags/main/docs/panel.png" alt="The Tags panel at the bottom of the navigation pane" /></p>
-<p><img src="https://raw.githubusercontent.com/buedgik/explorer-tags/main/docs/menu.png" alt="The Tags submenu in the file context menu" /></p>
-<ul>
-<li><strong>Tag something:</strong> drag files or folders onto the tag.</li>
-<li><strong>See a tag's files:</strong> click it. The tab opens the tag's folder, with a
-shortcut for each file. Middle-click, or right-click ▸ "Open in new window",
-opens it in a window of its own.</li>
-<li><strong>Remove a tag:</strong> delete the shortcut inside the tag's folder. The original
-file is untouched.</li>
-<li><strong>Collapse the panel:</strong> click the "Tags" title.</li>
-<li><strong>Right-click menu:</strong> on selected files, a <strong>Tags ▸</strong> submenu appears, with
-one entry per tag. Checked means all selected items have it; picking it
-removes it from all of them. Unchecked adds it to all of them. "Remove all tags" appears
-when at least one already has tags. Works in the classic menu (for example
-with the "Classic context menu" mod); the new Windows 11 menu isn't
-changed.</li>
-</ul>
-<p>Tags are defined in the mod settings (name and color).</p>
-<h2 id="howfilesaretracked">How files are tracked</h2>
-<p>Each tagged file is recorded by its NTFS ID. If you rename it or move it
-within the same drive, the tag follows it and the shortcut is fixed. If it's
-overwritten by an editor (which changes the ID), it's recognized by path.
-Copied to another drive, the copy doesn't carry the tag.</p>
-<p>If you rename a tag in the settings, the old tag stops appearing; putting the
-old name back brings it back.</p>
-<p>The record of what is tagged is the mod's own bookkeeping, so it lives in the
-storage Windhawk keeps for the mod, in a folder per user. It stays outside the
-tags folder: deleting or moving the tags folder doesn't lose anything, the
-shortcuts are recreated.</p>
-<p>It works the other way round too: the shortcuts are enough to rebuild the
-record. A shortcut in a tag's folder that the record doesn't know about is
-taken in, so losing the record — uninstalling the mod takes its storage with
-it — costs nothing while the tag folders are there, and you can tag a file
-by putting a shortcut to it in a tag's folder yourself. A tag whose name is
-no longer in the settings can't be rebuilt: put the name back and its files
-come back with it.</p>
-<h2 id="worthknowing">Worth knowing</h2>
-<ul>
-<li><strong>Don't put the tags folder in a synced location</strong> (OneDrive, Dropbox, a
-network share). A shortcut that is missing while the folder syncs looks
-exactly like a shortcut you deleted, and the tag goes with it. For the same
-reason, keep it somewhere quiet: the whole folder tree is watched, so a busy
-folder means constant rechecking.</li>
-<li><strong>What is in the tag folders is what is tagged.</strong> Deleting a shortcut
-removes the tag; renaming one keeps it; moving one into another tag's
-folder moves the tag; restoring one from the Recycle Bin brings the tag
-back. A shortcut that points at nothing is left alone, never deleted.</li>
-<li><strong>A tagged file in the Recycle Bin keeps its tags.</strong> Its shortcut stays,
-pointing where the file used to be, so restoring the file makes it work
-again. Emptying the bin is what finally removes the tag.</li>
-<li><strong>The tags folder and the record stay after the mod is disabled</strong>, and so do
-your shortcuts. A tag's folder appears the first time you tag something with
-it, or the first time you click it in the panel; the record folder appears
-with the first tag.</li>
-<li><strong>Changing the tags folder in the settings leaves the old one behind.</strong> The
-shortcuts are rebuilt under the new folder; the old folders aren't deleted,
-in case something else lives there.</li>
-<li><strong>The desktop and file dialogs are left alone.</strong> The panel and the submenu
-are for Explorer windows; right-clicking a file on the desktop shows the
-usual menu, without Tags.</li>
-</ul>]]></content>
-        <author>
-            <name>buedgik</name>
-            <uri>https://github.com/buedgik</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Three Finger Drag 1.0.0]]></title>
-        <id>https://windhawk.net/mods/three-finger-drag#3be36182336cc873fa1e06bee5386bb4aa6de93a</id>
-        <link href="https://windhawk.net/mods/three-finger-drag"/>
-        <updated>2026-09-21T18:00:28.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="threefingerdrag">Three Finger Drag</h1>
-<p>Drag three fingers on a precision touchpad to move the window under the cursor,
-grabbing it from anywhere, not just the title bar. Lift your fingers to drop
-it. Inspired by three finger drag on macOS.</p>
-<p><img src="https://raw.githubusercontent.com/RodrigoThomazi/three-finger-drag-assets/main/windows_snap.gif" alt="Moving a window with three fingers and snapping it at the side of the screen" /></p>
-<p>Windows moves the window itself, so holding <strong>Shift</strong> hands the drag to
-PowerToys FancyZones, the way a title bar drag does:</p>
-<p><img src="https://raw.githubusercontent.com/RodrigoThomazi/three-finger-drag-assets/main/fancyzones_snap.gif" alt="Holding Shift while dragging, so that FancyZones takes the window" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Moves the windows of all programs, including programs running as
-administrator. The mod runs in a process of its own, and loads a small
-helper into programs running as administrator, which Windows doesn't let
-other programs move.</li>
-<li>Native move: windows are moved by Windows itself, the way a title bar drag
-moves them, so Snap Layouts, Aero Snap and PowerToys FancyZones work as
-usual. Programs the mod doesn't run in are moved by the mod instead.</li>
-<li>Snapping of its own, when native move is off or unavailable: drop a window
-with the cursor at the top edge of the screen to maximize it, at a side to
-fill half of the screen, or at a corner to fill a quarter. A preview shows
-where the window will go.</li>
-<li>A maximized or snapped window goes back to its previous size as you drag it,
-keeping the spot you grabbed under the cursor, the way a title bar drag does.</li>
-<li>Acceleration: faster finger movements take the cursor farther.</li>
-<li>Between monitors, the cursor stops at the shared edge for a moment, so that
-a window can be snapped there too.</li>
-<li>Press <strong>Esc</strong> while dragging to put the window back where it was.</li>
-<li>Optional: resize a window by grabbing it near one of its edges or corners.</li>
-<li>Optional: macOS drag mode, where the fingers hold the left mouse button
-instead, to select text, drag files or move a window by its title bar.</li>
-<li>Lifting and putting your fingers back within a configurable delay keeps
-dragging the same window.</li>
-</ul>
-<h2 id="windowstouchpadgestures">Windows touchpad gestures</h2>
-<p>Windows has its own three and four finger swipes (switch apps, show the desktop,
-switch desktops). While they're on, Windows responds to the same swipe as the
-mod. Programs can't change these settings: only the Settings app applies them
-right away.</p>
-<p>With <strong>Number of fingers</strong> set to <strong>Automatic</strong> (the default), the mod reads
-your touchpad settings and picks the gesture that's free:</p>
-<ul>
-<li>three fingers if the Windows three-finger swipes are off,</li>
-<li>otherwise four fingers if the Windows four-finger swipes are off.</li>
-</ul>
-<p>If both are on, the mod uses three fingers and, the first time you drag, shows
-a notice with a shortcut to the touchpad settings. The macOS setup works well:
-set <strong>Three-finger gestures → Swipes</strong> to <strong>Nothing</strong>, and give the four-finger
-swipes the actions you used with three.</p>
-<p>Swipes have to be off in all four directions: Windows picks a swipe by the
-direction the fingers start moving in, which a drag can start in too. Taps are
-free, so the three-finger tap can keep any action.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>Requires a precision touchpad.</li>
-<li>The touchpad is read in a dedicated process of the mod's own. Programs
-running as administrator get a helper, and with native move on the mod also
-loads into the other programs, where it only hooks message retrieval and
-stays idle until a drag.</li>
-<li>What works while a program running as administrator is in the foreground
-depends on Windhawk's own level. Running Windhawk as administrator, as it
-asks to be, leaves nothing out. Otherwise such a program's helper moves the
-cursor and its windows, but the window isn't brought to the front, Esc
-doesn't cancel a direct move, and macOS drag mode can't click. A helper only
-ever moves its program's windows, moves the cursor and presses the button on
-the mod's own overlay, so that it can't be used to control the program.</li>
-</ul>
-<h2 id="credits">Credits</h2>
-<p>Native move follows the approach <a href="https://windhawk.net/mods/alt-drag">AltDrag</a>
-takes: hooks on message retrieval turn a press into the move loop Windows
-itself runs. Both mods are under the GPL v3.</p>]]></content>
-        <author>
-            <name>rodrigothomazi</name>
-            <uri>https://github.com/RodrigoThomazi</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Separate System Tray Icons 1.0.0]]></title>
-        <id>https://windhawk.net/mods/separate-system-tray-icons#953bdd63123ce7146fb52a71e53e8261369f7a92</id>
-        <link href="https://windhawk.net/mods/separate-system-tray-icons"/>
-        <updated>2026-09-21T15:43:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="separatesystemtrayicons">Separate System Tray Icons</h1>
-<p>Replaces the grouped Windows 11 system tray button with separate sound,
-Bluetooth, network, Control Center, and battery buttons. The original grouped
-button is hidden while the mod is active and restored when it is unloaded.</p>
-<p><img src="https://raw.githubusercontent.com/Asteski/Windhawk-Mods/e02d89d70dfb0ad3815b806e3eb2a49e56cb86b8/img/separate-system-tray-icons/separate-system-tray-icons.gif" alt="Demonstration" /></p>
-<p>This mod injects real XAML <code>FontIcon</code> elements into the Windows 11 taskbar tray.
-That means icons are drawn as XAML text/vector glyphs instead of rasterized HICON bitmaps.</p>
-<p>Buttons:</p>
-<ul>
-<li>Bluetooth -&gt; Bluetooth flyout</li>
-<li>Network -&gt; Network flyout</li>
-<li>Sound -&gt; Control Center, sound output picker or volume mixer</li>
-<li>Control Center -&gt; Control Center or a custom action</li>
-<li>Battery -&gt; Control Center or a custom action</li>
-</ul>
-<p>Use <strong>Toggle buttons visibility</strong> to choose which buttons appear. Drag items in
-<strong>Button order</strong> to arrange the buttons, including Battery. Removing an entry
-hides that button; adding it back shows it when its visibility toggle is enabled. The battery
-button appears only when Windows reports a battery.</p>
-<p>Sound supports mouse-wheel volume adjustment (unmuting first) and middle-click
-muting. <strong>Volume scroll step</strong> selects Windows' default step or 1, 5, or 10
-percentage points per wheel notch.</p>
-<p>Partial movements from smooth-scrolling mice accumulate into full wheel notches;
-horizontal scrolling does not change volume. Reach the buttons through Windows'
-taskbar keyboard navigation, then use Enter or Space to activate, or Shift+F10
-or the Menu key to open a context menu. Buttons expose their current tooltip
-information as accessible names and use system keyboard-focus visuals.</p>
-<p>Sound can show currently playing media in its tooltip and use an output-device
-glyph. Muted audio uses the standard mute glyph. Bluetooth can show connected
-devices and their battery percentages (when reported by Windows) in its tooltip
-and change appearance when switched off. Network can
-show Wi-Fi signal strength and open a custom URL for <strong>Perform speed test</strong>.</p>
-<h2 id="actionformats">Action formats</h2>
-<p>The custom-action prefix scheme and action-format documentation are adapted from
-<a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/ultimate-custom-tray.wh.cpp">Ultimate Custom Tray</a>
-by <a href="https://github.com/Salyts">Salyts</a>, licensed under MIT.</p>
-<p>Select <strong>Custom action</strong> for <strong>Control Center action</strong> or <strong>Battery click action</strong>, then
-enter an action in that group's <strong>Custom action</strong> field.</p>
-<p>| Prefix | Example | Description |
-|--------|---------|-------------|
-| <code>" "</code> | <code>"C:\Program Files\app.exe"</code> | Opens a file or folder by absolute path. |
-| <code>~</code> | <code>~Downloads</code> | Opens a folder or file by name. |
-| <code>cmd:</code> | <code>cmd:control</code> | Runs a command through <code>cmd.exe</code>. |
-| <code>ps:</code> / <code>powershell:</code> | <code>ps:shutdown /r /f /t 0</code> | Runs through <code>powershell.exe</code>. |
-| <code>key:</code> / <code>hotkey:</code> | <code>key:Ctrl+Shift+Esc</code> | Simulates a keyboard shortcut with virtual key presses. |
-| <code>web:</code> | <code>web:https://windhawk.net/</code> | Opens a URL in the default browser. |
-| <code>ms-settings:</code> | <code>ms-settings:bluetooth</code> | Opens a Windows Settings page. |</p>
-<p>For shortcut actions, use <code>Modifier+Modifier+Key</code>.
-Supported modifiers: <code>Ctrl</code>, <code>Alt</code>, <code>Shift</code>, <code>Win</code>.
-Examples: <code>key:Ctrl+Alt+D</code>, <code>hotkey:Win+R</code>, <code>key:0x7B</code> (F12 by VK code).</p>
-<h2 id="taskbarstylertargets">Taskbar Styler targets</h2>
-<p>Status changes use Windows notifications where available, with a 60-second
-fallback refresh. The Wi-Fi connecting animation updates every 500 ms while
-Windows reports an active connection attempt.
-This version currently manages the primary taskbar; separate-monitor taskbars
-are not supported by the current implementation.</p>
-<p>The injected buttons normally use <code>SystemTray.OmniButton</code>. If a fallback is
-needed, the mod logs the actual control class; the button names stay the same.</p>
-<p>| Target | Description |
-| --- | --- |
-| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlBluetooth</code> | Bluetooth button and its native template/hit target. |
-| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlNetwork</code> | Network button. |
-| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlSound</code> | Sound button, including wheel and middle-click handling. |
-| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlControlCenter</code> | Separate Control Center button; the original grouped button is always hidden. |
-| <code>SystemTray.OmniButton#SeparateQuickSettingsXamlBattery</code> | Separate battery button, including its highlight and click handling. |
-| <code>TextBlock#SeparateTrayBatteryPercentage</code> | Battery percentage text. |
-| <code>Grid#SeparateTrayIconLayers</code> | Glyph host; battery uses natural dimensions, other buttons use a 16-by-16 host. |
-| <code>FontIcon#SeparateTrayIconPrimary</code> | Main status or output-device glyph. |
-| <code>FontIcon#SeparateTrayIconUnderlay</code> | Theme-aware grey underlying glyph, where applicable. |
-| <code>FontIcon#SeparateTrayIconOverlay</code> | Additional status layer, including Bluetooth's unavailable indicator and battery charge-level fill. |
-| <code>MenuFlyoutPresenter#SeparateTrayContextMenuPresenter</code> | WinUI context menu presenter, named when the menu opens. |</p>
-<p>The layer names are shared across buttons. An unqualified layer selector affects
-all matching buttons. For example:</p>
-<pre><code class="yaml language-yaml">controlStyles:
-  - target: FontIcon#SeparateTrayIconPrimary
-    styles:
-      - FontSize=16
-</code></pre>
-<h3 id="hoverhighlightsandgeneratedtemplates">Hover highlights and generated templates</h3>
-<p>The native button template contains <code>Border#BackgroundBorder</code> on the supported
-taskbar build. This is the existing hover-highlight element. Use the visual-tree
-paths in the mod logs to target it beneath a particular button. Template
-intermediate elements can vary between Windows builds: Taskbar Styler's <code>&gt;</code>
-requires a direct parent/child relationship, so do not assume the border or
-glyph host is a direct child of the button.</p>
-<h3 id="stylinglimitations">Styling limitations</h3>
-<p>The mod refreshes glyphs, foreground colors, visibility, overlay font sizes,
-and button dimensions as state changes. Styles for those properties can be
-overwritten by the next update. Stable names provide selectors, but external
-stylers may not observe every dynamically created element. In particular, the
-menu presenter receives its name after creation.</p>
-<h2 id="importantusagenote">⚠ Important usage note ⚠</h2>
-<p>In case if battery won't show properly on your system, System Battery (<em>Sysbatt.ttf</em>)
-font needs to be installed manually. It's part of <em>Windows.UI.ControlCenter</em>
-package, but is not actually installed by default. The missing font is stored in:</p>
-<pre><code>C:\Windows\SystemResources\Windows.UI.ControlCenter\Assets
-</code></pre>
-<p>In order to install the font, right-click the <em>Sysbatt.ttf</em> file, and choose <em>Install</em>
-from the context menu.</p>]]></content>
-        <author>
-            <name>Asteski</name>
-            <uri>https://github.com/Asteski</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Agenda in Calendar View 1.0]]></title>
-        <id>https://windhawk.net/mods/agenda-in-calendar-view#ef7c936660e01bd724df1a422cb3d4dc73f3fd0a</id>
-        <link href="https://windhawk.net/mods/agenda-in-calendar-view"/>
-        <updated>2026-09-21T15:43:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="agendaincalendar">Agenda in Calendar</h1>
-<p><img src="https://i.imgur.com/lQhwoAL.png" alt="Agenda in Calendar" /></p>
-<h2 id="bringbackthewindows10agendatowindows11">Bring back the Windows 10 Agenda to Windows 11</h2>
-<p>This mod brings the Windows 10-style agenda to Windows 11, allowing you to
-quickly and conveniently view your events from the Notification Centre.</p>
-<p>It supports <code>.ics</code> files from both local and remote locations.</p>
-<h2 id="details">Details</h2>
-<p><img src="https://i.imgur.com/EkWnp1c.png" alt="event" /></p>
-<p>The details shown include:</p>
-<ul>
-<li>Event name</li>
-<li>Event description</li>
-<li>Location</li>
-<li>Starting and ending time</li>
-</ul>
-<h2 id="additionalfeatures">Additional features</h2>
-<p><strong>Additional features include:</strong></p>
-<p>Keyboard navigation:</p>
-<ul>
-<li>You can move backward by a day or forward by a day using the left and right arrow keys.</li>
-</ul>
-<p>Hiding the focus panel:</p>
-<p><img src="https://i.imgur.com/xurxfJ9.png" alt="comparison" /></p>
-<p>Setting a maximum height (before it starts scrolling):</p>
-<p><img src="https://i.imgur.com/c9i40PA.png" alt="scrollViewer" /></p>
-<p>Checking events on other dates:</p>
-<p><img src="https://i.imgur.com/DM8tcj0.png" alt="calendar" /></p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Compatible with Windows 11 (both ShellExperienceHost.exe and ShellHost.exe).</li>
-<li>Supports recurring events (daily, weekly, monthly, yearly, including <code>BYDAY</code> ordinals such as "third Thursday" / <code>3TH</code> or "second Tuesday" / <code>2TU</code>, <code>BYMONTHDAY</code>, <code>WKST</code>, <code>EXDATE</code>, <code>RECURRENCE-ID</code>, and multi-day recurring events).</li>
-<li>Events are refreshed every time the notification pane is opened.<ul>
-<li>If events can't be fetched (e.g. no internet connection), previously-fetched events are shown.</li>
-<li>Smart caching avoids redundant fetches within the configured minimum fetch interval.</li>
-<li>You can click the Refresh button in the calendar header at any time to force an immediate refresh.</li></ul></li>
-<li>The mod resiliently accepts errors; if you have a problem, enable logging.</li>
-<li>Injection logic has been ported from m417z's <em>Start Menu Styler</em>.</li>
-<li>The creation of this mod was assisted by AI:<ul>
-<li>Sadly, I do not have experience with C++/Windhawk;</li>
-<li>However, I do have experience with WinUI (as I have created several WinUI apps in C#);</li>
-<li>As a result, the controls used <em>(inc. CalendarDatePicker, Border, Grid, TextBlock)</em> were manually structured, but the underlying implementation was generated using AI.</li></ul></li>
-</ul>
-<h2 id="faq">FAQ</h2>
-<ul>
-<li><strong>My local <code>.ics</code> file does not work!</strong></li>
-<li>First try going to its Properties in File Explorer, and ticking "Unblock".</li>
-<li>If that doesn't work, grant read permissions on your file to AppContainers by running:
-<code>icacls "C:\path\to\calendar.ics" /grant "*S-1-15-2-1:(R)"</code>
-in PowerShell.
-This allows <code>ShellExperienceHost.exe</code> and <code>ShellHost.exe</code>, which host the calendar pane, to access your calendar file.
-<em>Note: <code>*S-1-15-2-1</code> grants read permissions to ALL APPLICATION PACKAGES (all UWP/packaged apps).</em></li>
-<li><strong>The bottom corners of the <em>Notifications</em> pane (immediately above the agenda) are not rounded!</strong>
-Set a maximum height for the Agenda in the mod settings to stop it from clipping the <em>Notifications</em> pane.</li>
-</ul>]]></content>
-        <author>
-            <name>lonfro</name>
-            <uri>https://github.com/lonfro</uri>
         </author>
     </entry>
 </feed>
