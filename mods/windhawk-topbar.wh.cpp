@@ -49,8 +49,8 @@ Themes are collections of styles that can be selected from the **Theme** dropdow
 
 | Theme | Preview |
 |-------|---------|
-| [GreenBar](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) | [![GreenBar](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/GreenBar/screenshot.png?v=2)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) |
-| [NoIslands](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) | [![NoIslands](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/NoIslands/screenshot.png?v=2)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) |
+| [GreenBar](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) | [![GreenBar](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/HEAD/Themes/GreenBar/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) |
+| [NoIslands](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) | [![NoIslands](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/HEAD/Themes/NoIslands/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) |
 | [OS27 GoldenGate](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) | [![OS27 GoldenGate](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/OS27%20GoldenGate/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) |
 
 More themes, stylings, etc can be found and contributed from:
