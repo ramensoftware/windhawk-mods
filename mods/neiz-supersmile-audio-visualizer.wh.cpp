@@ -15003,8 +15003,9 @@ static BOOL CALLBACK FindCurrentProcessTaskbarWndProc(HWND hwnd, LPARAM lParam) 
     if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls)))
         return TRUE;
 
-    if (wcscmp(cls, L"Shell_TrayWnd") == 0 ||
-        wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0) {
+    // Always resolve the primary taskbar. Secondary taskbars are separate
+    // shell windows and must not become the owner of the Media & EQ button.
+    if (wcscmp(cls, L"Shell_TrayWnd") == 0) {
         *reinterpret_cast<HWND*>(lParam) = hwnd;
         return FALSE;
     }
