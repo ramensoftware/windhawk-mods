@@ -1,15 +1,15 @@
 // ==WindhawkMod==
-// @id              better-volume-mixer
-// @name            Better Volume Mixer
-// @description     Quickly control master and per-app volume from the system tray
-// @version         1.4.2
-// @author          0Allu
-// @github          https://github.com/0Allu
-// @homepage        https://github.com/0Allu/better-volume-mixer
-// @donateUrl       https://ko-fi.com/0allu
-// @include         windhawk.exe
+// @id           better-volume-mixer
+// @name         Better Volume Mixer
+// @description  Quickly control master and per-app volume from the system tray
+// @version      1.4.5
+// @author       0Allu
+// @github       https://github.com/0Allu
+// @homepage     https://github.com/0Allu/better-volume-mixer
+// @donateUrl    https://ko-fi.com/0allu
+// @include      windhawk.exe
 // @compilerOptions -lole32 -lshell32 -lgdi32 -luser32 -ldwmapi -ladvapi32 -lmsimg32 -loleaut32 -lgdiplus
-// @license         MIT
+// @license      MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -29,10 +29,14 @@ hidden, open the tray overflow menu and drag the icon onto the taskbar.
 * Master and per-app volume controls
 * Quick playback device switching
 * Mute buttons and middle-click mute
+* Muted master-volume indicator in the mixer and tray
+* Middle-click the tray icon to toggle master mute
 * Mouse-wheel volume adjustment
 * Exact volume entry
 * Keyboard controls
 * Pin apps to the top of the mixer
+* Right-click an app to copy its process name or hide it temporarily
+* Open the classic Sound control panel from the tray menu
 * Custom app names and default volumes
 * Hide selected applications
 * Full-name tooltips for shortened app and device names
@@ -40,6 +44,10 @@ hidden, open the tray overflow menu and drag the icon onto the taskbar.
 * Light, dark, and system themes
 * Background transparency, blur, and animations
 * Configurable apps per page
+
+Temporary hides last until the mod restarts. To undo them sooner, right-click
+the tray icon and choose **Restore temporarily hidden sources**. Hiding a source
+does not mute it.
 
 Most appearance and behavior options can be changed from the mod settings.
 
@@ -199,6 +207,8 @@ constexpr UINT WM_APP_RELOAD_SETTINGS = WM_APP + 2;
 constexpr UINT WM_APP_SHOW_MIXER = WM_APP + 3;
 constexpr UINT WM_APP_FINISH_VOLUME_ENTRY = WM_APP + 4;
 constexpr UINT WM_APP_AUDIO_CHANGED = WM_APP + 5;
+constexpr UINT WM_APP_MASTER_STATE_CHANGED = WM_APP + 6;
+constexpr UINT WM_APP_DEFAULT_OUTPUT_CHANGED = WM_APP + 7;
 constexpr UINT_PTR TIMER_METERS = 1;
 constexpr UINT_PTR TIMER_REFRESH = 2;
 constexpr UINT_PTR TIMER_CHECK_FOCUS = 3;
@@ -214,6 +224,10 @@ constexpr UINT MENU_OPEN = 1;
 constexpr UINT MENU_REFRESH = 2;
 constexpr UINT MENU_SOUND_SETTINGS = 3;
 constexpr UINT MENU_WINDOWS_MIXER = 4;
+constexpr UINT MENU_CLASSIC_SOUND = 5;
+constexpr UINT MENU_RESTORE_HIDDEN = 6;
+constexpr UINT MENU_SOURCE_COPY_PROCESS = 7;
+constexpr UINT MENU_SOURCE_HIDE = 8;
 
 constexpr int DRAG_NONE = -2;
 constexpr int DRAG_MASTER = -1;
@@ -314,8 +328,49 @@ struct AppSession {
     }
 };
 
+class EndpointVolumeNotification final : public IAudioEndpointVolumeCallback {
+public:
+    explicit EndpointVolumeNotification(HWND window) : m_window(window) {}
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
+        if (!object) return E_POINTER;
+        *object = nullptr;
+        if (iid != __uuidof(IUnknown) &&
+            iid != __uuidof(IAudioEndpointVolumeCallback)) {
+            return E_NOINTERFACE;
+        }
+        *object = static_cast<IAudioEndpointVolumeCallback*>(this);
+        AddRef();
+        return S_OK;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return static_cast<ULONG>(InterlockedIncrement(&m_references));
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG remaining = static_cast<ULONG>(InterlockedDecrement(&m_references));
+        if (!remaining) delete this;
+        return remaining;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA) override {
+        HWND window = m_window.load();
+        if (window) PostMessageW(window, WM_APP_MASTER_STATE_CHANGED, 0, 0);
+        return S_OK;
+    }
+
+    void SetWindow(HWND window) { m_window.store(window); }
+
+private:
+    ~EndpointVolumeNotification() = default;
+    LONG m_references = 1;
+    std::atomic<HWND> m_window{nullptr};
+};
+
 Settings g_settings;
 Theme g_theme;
+bool g_lightTheme;
 
 HANDLE g_thread;
 HANDLE g_windowReadyEvent;
@@ -357,6 +412,8 @@ bool g_frameHasAudio;
 UINT g_paintTimerInterval;
 
 IAudioEndpointVolume* g_endpointVolume;
+EndpointVolumeNotification* g_endpointVolumeCallback;
+bool g_masterIconMuted;
 std::wstring g_endpointName;
 // COM interfaces and icons must never be released by a process-exit destructor.
 // Refresh clears the contents; the UI thread resets storage on controlled exit.
@@ -377,6 +434,12 @@ HANDLE g_audioNotificationRebuildEvent;
 HANDLE g_audioNotificationSessionEvent;
 std::atomic<bool> g_audioUiRefreshPosted;
 
+// Lifetime IMMNotificationClient used on the UI thread. It exists for the
+// window's whole lifetime so default-output changes are always observed, even
+// while the mixer is hidden. It posts WM_APP_DEFAULT_OUTPUT_CHANGED.
+IMMDeviceEnumerator* g_uiDeviceEnumerator = nullptr;
+class EndpointNotification;
+
 int g_dpi = 96;
 int g_scrollRow;
 int g_availableAppRows = 15;
@@ -392,7 +455,10 @@ bool g_trayPressKnown;
 bool g_trayPressWasVisible;
 bool g_showingMixer;
 bool g_outputMenuOpen;
+bool g_sourceMenuOpen;
 bool g_outputHovered;
+bool g_pendingDefaultOutputChange;
+std::unordered_set<std::wstring> g_temporarilyHiddenSources;
 HWND g_nameTooltip;
 std::wstring g_nameTooltipText;
 RECT g_nameTooltipRect{};
@@ -608,6 +674,7 @@ void UpdateTheme() {
     ClearTextCache();
     bool light = g_settings.theme == L"light" ||
                  (g_settings.theme == L"system" && WindowsUsesLightTheme());
+    g_lightTheme = light;
 
     DWORD colorization = 0;
     BOOL opaque = FALSE;
@@ -834,12 +901,72 @@ std::wstring ReadEndpointName(IMMDevice* device) {
     return result;
 }
 
-void ReleaseAudioData() {
-    g_apps->clear();
+void ReleaseDefaultEndpointVolume() {
+    if (g_endpointVolumeCallback) {
+        g_endpointVolumeCallback->SetWindow(nullptr);
+        if (g_endpointVolume) {
+            g_endpointVolume->UnregisterControlChangeNotify(g_endpointVolumeCallback);
+        }
+        g_endpointVolumeCallback->Release();
+        g_endpointVolumeCallback = nullptr;
+    }
     if (g_endpointVolume) {
         g_endpointVolume->Release();
         g_endpointVolume = nullptr;
     }
+}
+
+// Binds the given endpoint, replacing any previous binding. Registers the
+// IAudioEndpointVolumeCallback against the supplied window so that mute and
+// volume changes propagate even when the mixer is hidden.
+bool BindDefaultEndpointVolumeFromDevice(IMMDevice* device, HWND hWnd) {
+    if (!device) return false;
+
+    g_endpointName = ReadEndpointName(device);
+
+    HRESULT hr = device->Activate(
+        __uuidof(IAudioEndpointVolume), CLSCTX_INPROC_SERVER, nullptr,
+        reinterpret_cast<void**>(&g_endpointVolume));
+    if (FAILED(hr) || !g_endpointVolume) {
+        g_endpointVolume = nullptr;
+        g_endpointName.clear();
+        return false;
+    }
+
+    auto* callback = new EndpointVolumeNotification(hWnd);
+    if (SUCCEEDED(g_endpointVolume->RegisterControlChangeNotify(callback))) {
+        g_endpointVolumeCallback = callback;
+    } else {
+        callback->Release();
+    }
+    return true;
+}
+
+// Resolves the current eRender/eMultimedia endpoint and binds it, releasing
+// any previous binding first. Safe to call while the mixer is hidden.
+bool BindDefaultEndpointVolume(HWND hWnd) {
+    ReleaseDefaultEndpointVolume();
+
+    IMMDeviceEnumerator* enumerator = nullptr;
+    HRESULT hr = CoCreateInstance(
+        __uuidof(MMDeviceEnumerator), nullptr, CLSCTX_INPROC_SERVER,
+        __uuidof(IMMDeviceEnumerator),
+        reinterpret_cast<void**>(&enumerator));
+    if (FAILED(hr) || !enumerator) return false;
+
+    IMMDevice* device = nullptr;
+    hr = enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &device);
+    enumerator->Release();
+    if (FAILED(hr) || !device) return false;
+
+    bool result = BindDefaultEndpointVolumeFromDevice(device, hWnd);
+    device->Release();
+    return result;
+}
+
+void ReleaseAudioData() {
+    g_apps->clear();
+    ReleaseDefaultEndpointVolume();
     g_endpointName.clear();
     g_audioAvailable = false;
 }
@@ -1077,9 +1204,15 @@ private:
     AudioNotificationContext* m_context;
 };
 
+// Generic IMMNotificationClient with two optional sinks: an event for the
+// background audio-notification thread, and a window for the UI thread.
+// Construct with either; the other sink stays unused.
 class EndpointNotification final : public IMMNotificationClient {
 public:
-    explicit EndpointNotification(HANDLE rebuildEvent) : m_rebuildEvent(rebuildEvent) {}
+    explicit EndpointNotification(HANDLE rebuildEvent)
+        : m_rebuildEvent(rebuildEvent) {}
+
+    void SetWindow(HWND window) { m_window.store(window); }
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
         if (!object) return E_POINTER;
@@ -1132,11 +1265,16 @@ private:
 
     void SignalRebuild() {
         if (m_rebuildEvent) SetEvent(m_rebuildEvent);
+        HWND window = m_window.load();
+        if (window) PostMessageW(window, WM_APP_DEFAULT_OUTPUT_CHANGED, 0, 0);
     }
 
     LONG m_references = 1;
-    HANDLE m_rebuildEvent;
+    HANDLE m_rebuildEvent = nullptr;
+    std::atomic<HWND> m_window{nullptr};
 };
+
+EndpointNotification* g_uiEndpointNotification = nullptr;
 
 struct AudioSessionWatcher {
     IAudioSessionManager2* manager = nullptr;
@@ -1481,7 +1619,8 @@ bool AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics,
         }
         if (instanceId.empty()) complete = false;
         else g_liveDefaultSessions.insert(instanceId);
-        bool hidden = IsAppHidden(processPath, displayName);
+        bool hidden = IsAppHidden(processPath, displayName) ||
+                      g_temporarilyHiddenSources.count(pinKey) != 0;
         const CustomApp* custom = FindCustomApp(processPath, displayName);
         ApplyDefaultVolume(custom, instanceId, volume);
         // Build identity before applying the alias, so renaming keeps pins and
@@ -1553,8 +1692,10 @@ bool AppendDeviceSessions(IMMDevice* device, bool isDefault, bool diagnostics,
 
 void ClampPageOffset();
 
+void RefreshMasterIcons(HWND hWnd, bool force = false);
+
 void RefreshAudioSessions(HWND hWnd, bool diagnostics = false) {
-    if (g_dragRow != DRAG_NONE || g_volumeEntry) {
+    if (g_dragRow != DRAG_NONE || g_volumeEntry || g_sourceMenuOpen) {
         return;
     }
 
@@ -1587,10 +1728,9 @@ void RefreshAudioSessions(HWND hWnd, bool diagnostics = false) {
             defaultId = id;
             CoTaskMemFree(id);
         }
-        g_endpointName = ReadEndpointName(defaultDevice);
-        defaultDevice->Activate(__uuidof(IAudioEndpointVolume),
-                                 CLSCTX_INPROC_SERVER, nullptr,
-                                 reinterpret_cast<void**>(&g_endpointVolume));
+        // The helper releases any previous binding (via ReleaseAudioData
+        // above) and re-registers the endpoint callback against this window.
+        BindDefaultEndpointVolumeFromDevice(defaultDevice, hWnd);
     }
 
     bool completeScan = true;
@@ -1643,12 +1783,22 @@ void RefreshAudioSessions(HWND hWnd, bool diagnostics = false) {
     RestoreSelectedRow();
     g_audioAvailable = g_endpointVolume != nullptr || !g_apps->empty();
     ClampPageOffset();
+    RefreshMasterIcons(hWnd);
     InvalidateRect(hWnd, nullptr, FALSE);
+}
+
+bool EnsureDefaultEndpointVolume() {
+    if (g_endpointVolume) {
+        return true;
+    }
+    // Fallback path: no live binding yet. Bind through the helper so the
+    // callback is registered against the current window.
+    return BindDefaultEndpointVolume(g_hWnd.load());
 }
 
 float GetMasterVolume() {
     float value = 0.0f;
-    if (g_endpointVolume) {
+    if (EnsureDefaultEndpointVolume()) {
         g_endpointVolume->GetMasterVolumeLevelScalar(&value);
     }
     return value;
@@ -1656,7 +1806,7 @@ float GetMasterVolume() {
 
 bool GetMasterMuted() {
     BOOL muted = FALSE;
-    if (g_endpointVolume) {
+    if (EnsureDefaultEndpointVolume()) {
         g_endpointVolume->GetMute(&muted);
     }
     return muted != FALSE;
@@ -1681,6 +1831,7 @@ void SetRowVolume(int row, float value) {
             if (value > 0.0f) {
                 g_endpointVolume->SetMute(FALSE, nullptr);
             }
+            RefreshMasterIcons(g_hWnd.load(), false);
         }
         return;
     }
@@ -1703,8 +1854,11 @@ void SetRowVolume(int row, float value) {
 
 void ToggleRowMute(int row) {
     if (row == DRAG_MASTER) {
-        if (g_endpointVolume) {
-            g_endpointVolume->SetMute(!GetMasterMuted(), nullptr);
+        if (EnsureDefaultEndpointVolume()) {
+            bool muted = GetMasterMuted();
+            g_endpointVolume->SetMute(!muted, nullptr);
+            RefreshMasterIcons(g_hWnd.load(), false);
+            InvalidateRect(g_hWnd.load(), nullptr, FALSE);
         }
         return;
     }
@@ -2256,12 +2410,19 @@ bool DrawSmoothLabel(HDC dc, const std::wstring& text, const RECT& rect,
     return blend(*cache.labels.back());
 }
 
+// allowSmooth lets a caller opt out of the cached GDI+ supersampled renderer
+// for text it knows will rarely repeat between frames (see the percentage
+// label of an actively dragged row below). Caching by exact string is only a
+// win when the string is likely to recur; when it isn't, every call would
+// still pay for a full supersampled rasterization, just to populate a cache
+// entry that is unlikely to ever be reused.
 void DrawLabel(HDC dc, const std::wstring& text, RECT rect, HFONT font,
-               COLORREF color, UINT format, bool percentage = false) {
+               COLORREF color, UINT format, bool percentage = false,
+               bool allowSmooth = true) {
     Gdiplus::Font* typography = font == g_titleFont ? g_titleTypography :
         font == g_bodyFont ? g_bodyTypography :
         font == g_smallFont ? g_smallTypography : nullptr;
-    if (typography && typography->GetLastStatus() == Gdiplus::Ok &&
+    if (allowSmooth && typography && typography->GetLastStatus() == Gdiplus::Ok &&
         DrawSmoothLabel(dc, text, rect, font, typography, color, format, percentage)) return;
     HGDIOBJ oldFont = SelectObject(dc, font);
     SetTextColor(dc, color);
@@ -2565,6 +2726,12 @@ COLORREF MixColor(COLORREF from, COLORREF to, float amount) {
         static_cast<int>(GetBValue(from) + (GetBValue(to) - GetBValue(from)) * amount));
 }
 
+COLORREF IconColor() {
+    return g_lightTheme
+        ? MixColor(g_theme.text, g_theme.secondaryText, 0.35f)
+        : g_theme.secondaryText;
+}
+
 void DrawSurface(HDC dc, const RECT& rect, int radius, COLORREF color) {
     if (g_paintMatte >= 0) {
         color = MixColor(g_paintMatte ? RGB(255, 255, 255) : RGB(0, 0, 0),
@@ -2643,12 +2810,25 @@ void DrawSlider(HDC dc, const RECT& rect, float volume, float peak,
 
     float thumbDiameter = 14.0f * density;
     float thumbRadius = thumbDiameter * 0.5f;
+    // Lift the outer thumb only slightly from the normal theme surfaces so it
+    // stays visible without becoming noticeably bright.
+    COLORREF thumbOutline = MixColor(g_theme.sliderOutline, g_theme.text, 0.12f);
+    COLORREF thumbSurface = MixColor(g_theme.panel, g_theme.text, 0.12f);
+    if (g_paintMatte >= 0) {
+        COLORREF matte = g_paintMatte ? RGB(255, 255, 255) : RGB(0, 0, 0);
+        // Keep only a slight translucency effect. The outer thumb should remain
+        // clearly visible even when the mixer background is very transparent.
+        float opacity = 0.96f +
+            (g_settings.backgroundOpacity / 100.0f) * 0.04f;
+        thumbOutline = MixColor(matte, thumbOutline, opacity);
+        thumbSurface = MixColor(matte, thumbSurface, opacity);
+    }
     capsule(thumbX - thumbRadius, centerY - thumbRadius,
-            thumbDiameter, thumbDiameter, g_theme.sliderOutline);
+            thumbDiameter, thumbDiameter, thumbOutline);
     float gripDiameter = thumbDiameter - 2.0f * density;
     capsule(thumbX - gripDiameter * 0.5f, centerY - gripDiameter * 0.5f,
-            gripDiameter, gripDiameter, g_theme.panel);
-    float insetDiameter = (8.0f + 2.0f * ClampVolume(hover)) * density;
+            gripDiameter, gripDiameter, thumbSurface);
+    float insetDiameter = (8.0f + 4.0f * ClampVolume(hover)) * density;
     capsule(thumbX - insetDiameter * 0.5f, centerY - insetDiameter * 0.5f,
             insetDiameter, insetDiameter, activeTrack);
 }
@@ -2659,7 +2839,7 @@ void DrawMuteButton(HDC dc, int visibleRow, int clientWidth, bool muted) {
         DrawSurface(dc, button, Scale(8), g_theme.hover);
     }
     DrawLabel(dc, muted ? L"\uE74F" : L"\uE767", button, g_symbolFont,
-              muted ? g_theme.accent : g_theme.secondaryText,
+              muted ? g_theme.accent : IconColor(),
               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 }
 
@@ -2726,7 +2906,7 @@ void DrawAudioRow(HDC dc, int visibleRow, int dataRow, int clientWidth) {
                    iconTile.top + (iconTile.bottom - iconTile.top - iconSize) / 2,
                    icon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
     } else {
-        DrawLabel(dc, L"\uE8D6", iconTile, g_symbolFont, g_theme.secondaryText,
+        DrawLabel(dc, L"\uE8D6", iconTile, g_symbolFont, IconColor(),
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
 
@@ -2738,9 +2918,15 @@ void DrawAudioRow(HDC dc, int visibleRow, int dataRow, int clientWidth) {
     swprintf_s(percent, L"%d%%",
                static_cast<int>(volume * 100.0f + 0.5f));
     RECT percentRect = PercentRectForRow(visibleRow, clientWidth);
+    // While this row's slider is being dragged, the percentage changes on
+    // almost every frame, so a cache keyed on the exact string is a
+    // guaranteed miss. Falling back to plain GDI text here avoids paying for
+    // a full supersampled GDI+ rasterization on every frame of the drag.
+    bool draggingThisRow = g_dragRow == dataRow;
     DrawLabel(dc, percent, percentRect, g_bodyFont,
               muted ? g_theme.secondaryText : g_theme.text,
-              DT_RIGHT | DT_VCENTER | DT_SINGLELINE, true);
+              DT_RIGHT | DT_VCENTER | DT_SINGLELINE, /*percentage=*/true,
+              /*allowSmooth=*/!draggingThisRow);
 
     DrawSlider(dc, SliderRectForRow(visibleRow, clientWidth), visual.volume,
                visual.peak, muted, visual.hover);
@@ -2749,7 +2935,7 @@ void DrawAudioRow(HDC dc, int visibleRow, int dataRow, int clientWidth) {
         RECT pin = PinRectForRow(visibleRow, clientWidth);
         bool pinned = (*g_apps)[dataRow].pinned;
         DrawLabel(dc, pinned ? L"\uE840" : L"\uE718", pin, g_symbolFont,
-                  pinned ? g_theme.accent : g_theme.secondaryText,
+                  pinned ? g_theme.accent : IconColor(),
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
 }
@@ -2774,7 +2960,7 @@ void RenderMixerContents(HDC dc, const RECT& client) {
     DrawSurface(dc, pickerRect, Scale(16), outputPickerColor);
     RECT deviceIconRect = {pickerRect.left + Scale(8), pickerRect.top,
                            pickerRect.left + Scale(34), pickerRect.bottom};
-    DrawLabel(dc, L"\uE7F5", deviceIconRect, g_symbolFont, g_theme.secondaryText,
+    DrawLabel(dc, L"\uE7F5", deviceIconRect, g_symbolFont, IconColor(),
               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     RECT deviceNameRect = DeviceNameRect(client.right);
     DrawLabel(dc, g_endpointName.empty() ? L"No output device" : g_endpointName,
@@ -2782,7 +2968,7 @@ void RenderMixerContents(HDC dc, const RECT& client) {
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     RECT arrowRect = {pickerRect.right - Scale(30), pickerRect.top,
                       pickerRect.right - Scale(8), pickerRect.bottom};
-    DrawLabel(dc, L"\uE70D", arrowRect, g_symbolFont, g_theme.secondaryText,
+    DrawLabel(dc, L"\uE70D", arrowRect, g_symbolFont, IconColor(),
               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
     RECT closeRect = CloseButtonRect(client.right);
@@ -2793,7 +2979,7 @@ void RenderMixerContents(HDC dc, const RECT& client) {
     }
     DrawSurface(dc, closeRect, Scale(8),
                     MixColor(g_theme.background, g_theme.hover, g_closeHoverAmount));
-    DrawLabel(dc, L"\uE8BB", closeRect, g_symbolFont, g_theme.secondaryText,
+    DrawLabel(dc, L"\uE8BB", closeRect, g_symbolFont, IconColor(),
               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
     if (!g_audioAvailable) {
@@ -2886,6 +3072,17 @@ struct PixelBuffer {
 PixelBuffer g_blackFrame, g_whiteFrame;
 
 DWORD RecoverPixelAlpha(DWORD black, DWORD white) {
+    // Only surfaces are drawn differently against the two mattes; opaque
+    // foreground content (text, icons, dividers, fully-covered pixels of
+    // antialiased edges) comes out byte-identical either way. That case is
+    // bit-for-bit equivalent to the general formula below (equal channels
+    // give zero transparency, so alpha is 255 and each output channel is
+    // just min(blackChannel, 255) == blackChannel), so skip straight to the
+    // answer instead of doing three shifts, two subtractions and two clamps
+    // per pixel for content that is going to end up fully opaque anyway.
+    if ((black & 0x00FFFFFFu) == (white & 0x00FFFFFFu)) {
+        return 0xFF000000u | (black & 0x00FFFFFFu);
+    }
     int transparency = 0;
     for (int shift : {0, 8, 16}) {
         int difference = static_cast<int>((white >> shift) & 255) -
@@ -3141,9 +3338,12 @@ void HideMixer(HWND hWnd) {
     ClearTextCache();
 }
 
-enum class TrayAction { None, Open, Menu };
+enum class TrayAction { None, Open, Menu, ToggleMute };
 
 TrayAction GetTrayAction(UINT event, bool version4) {
+    if (event == WM_MBUTTONUP) {
+        return TrayAction::ToggleMute;
+    }
     if (version4) {
         if (event == NIN_SELECT || event == NIN_KEYSELECT) {
             return TrayAction::Open;
@@ -3206,7 +3406,7 @@ void RemoveTrayIcon(HWND hWnd) {
     Shell_NotifyIconW(NIM_DELETE, &data);
 }
 
-bool SpeakerShapeContains(float x, float y) {
+bool SpeakerShapeContains(float x, float y, bool includeWaves = true) {
     constexpr float points[][2] = {
         {1.5f, 5.5f}, {4.5f, 5.5f}, {8.0f, 2.5f},
         {8.0f, 13.5f}, {4.5f, 10.5f}, {1.5f, 10.5f}};
@@ -3218,7 +3418,7 @@ bool SpeakerShapeContains(float x, float y) {
             inside = !inside;
         }
     }
-    if (inside) return true;
+    if (inside || !includeWaves) return inside;
     float dx = x - 6.8f, dy = y - 8.0f;
     float radius = std::sqrt(dx * dx + dy * dy);
     bool inner = dx > 2.2f && std::abs(dy) < 2.8f &&
@@ -3228,8 +3428,30 @@ bool SpeakerShapeContains(float x, float y) {
     return inner || outer;
 }
 
+bool SpeakerMuteMarkContains(float x, float y) {
+    auto segmentDistance = [](float px, float py, float ax, float ay,
+                              float bx, float by) {
+        float vx = bx - ax;
+        float vy = by - ay;
+        float wx = px - ax;
+        float wy = py - ay;
+        float lengthSquared = vx * vx + vy * vy;
+        float t = lengthSquared > 0.0f
+            ? std::max(0.0f, std::min(1.0f,
+                  (wx * vx + wy * vy) / lengthSquared))
+            : 0.0f;
+        float dx = px - (ax + t * vx);
+        float dy = py - (ay + t * vy);
+        return std::sqrt(dx * dx + dy * dy);
+    };
+
+    constexpr float thickness = 0.8f;
+    return segmentDistance(x, y, 10.0f, 6.0f, 14.0f, 10.0f) < thickness ||
+           segmentDistance(x, y, 10.0f, 10.0f, 14.0f, 6.0f) < thickness;
+}
+
 HICON CreateSpeakerIcon(int pixels, COLORREF color, float shapeScale = 1.0f,
-                        bool softenEdges = false) {
+                        bool softenEdges = false, bool muted = false) {
     pixels = ClampInt(pixels, 16, 256);
     BITMAPINFO info{};
     info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -3256,9 +3478,13 @@ HICON CreateSpeakerIcon(int pixels, COLORREF color, float shapeScale = 1.0f,
                     float offsetY = ((sy + 0.5f) / samples - 0.5f) * sampleSpan;
                     float designX = (x + 0.5f + offsetX) * 16.0f / pixels;
                     float designY = (y + 0.5f + offsetY) * 16.0f / pixels;
-                    covered += SpeakerShapeContains(
-                        8.0f + (designX - 8.0f) / shapeScale,
-                        8.0f + (designY - 8.0f) / shapeScale);
+                    float shapeX = 8.0f + (designX - 8.0f) / shapeScale;
+                    float shapeY = 8.0f + (designY - 8.0f) / shapeScale;
+                    bool inside = SpeakerShapeContains(shapeX, shapeY, !muted);
+                    if (muted && SpeakerMuteMarkContains(shapeX, shapeY)) {
+                        inside = true;
+                    }
+                    covered += inside;
                 }
             }
             DWORD alpha = (covered * 255 + samples * samples / 2) / (samples * samples);
@@ -3283,7 +3509,7 @@ HICON CreateSpeakerIcon(int pixels, COLORREF color, float shapeScale = 1.0f,
     return icon;
 }
 
-HICON LoadMixerIcon(int pixels, bool tray = false) {
+HICON LoadMixerIcon(int pixels, bool tray = false, bool muted = false) {
     COLORREF color = g_theme.text;
     if (tray) {
         DWORD light = 0, size = sizeof(light);
@@ -3292,7 +3518,7 @@ HICON LoadMixerIcon(int pixels, bool tray = false) {
             L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
         color = light ? RGB(30, 32, 36) : RGB(248, 249, 252);
     }
-    if (HICON icon = CreateSpeakerIcon(pixels, color, tray ? 1.12f : 1.0f, !tray)) {
+    if (HICON icon = CreateSpeakerIcon(pixels, color, tray ? 1.12f : 1.0f, !tray, muted)) {
         return icon;
     }
     WCHAR systemDirectory[MAX_PATH];
@@ -3314,8 +3540,9 @@ void RefreshIconSizes(HWND hWnd) {
     if (!trayDpi) {
         trayDpi = 96;
     }
+    bool muted = GetMasterMuted();
     int trayPixels = GetSystemMetricsForDpi(SM_CXSMICON, trayDpi);
-    HICON tray = LoadMixerIcon(std::max(16, trayPixels), true);
+    HICON tray = LoadMixerIcon(std::max(16, trayPixels), true, muted);
     if (tray) {
         if (g_hWnd.load() == hWnd) {
             NOTIFYICONDATAW data = {};
@@ -3334,13 +3561,14 @@ void RefreshIconSizes(HWND hWnd) {
         }
         g_trayIcon = tray;
     }
-    HICON master = LoadMixerIcon(Scale(24));
+    HICON master = LoadMixerIcon(Scale(24), false, muted);
     if (master) {
         if (g_masterIcon) {
             DestroyIcon(g_masterIcon);
         }
         g_masterIcon = master;
     }
+    g_masterIconMuted = muted;
     for (auto& app : *g_apps) {
         if (app.icon) {
             DestroyIcon(app.icon);
@@ -3349,32 +3577,218 @@ void RefreshIconSizes(HWND hWnd) {
     }
 }
 
+void RefreshMasterIcons(HWND hWnd, bool force) {
+    bool muted = GetMasterMuted();
+    if (!force && muted == g_masterIconMuted) {
+        return;
+    }
+
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    UINT trayDpi = taskbar ? GetDpiForWindow(taskbar) : 96;
+    if (!trayDpi) trayDpi = 96;
+    int trayPixels = GetSystemMetricsForDpi(SM_CXSMICON, trayDpi);
+    HICON tray = LoadMixerIcon(std::max(16, trayPixels), true, muted);
+    if (tray) {
+        if (g_hWnd.load() == hWnd) {
+            NOTIFYICONDATAW data = {};
+            data.cbSize = sizeof(data);
+            data.hWnd = hWnd;
+            data.uID = TRAY_ICON_ID;
+            if (g_trayUsesGuid) data.guidItem = MIXER_TRAY_GUID;
+            data.uFlags = NIF_ICON | (g_trayUsesGuid ? NIF_GUID : 0);
+            data.hIcon = tray;
+            Shell_NotifyIconW(NIM_MODIFY, &data);
+        }
+        if (g_trayIcon) DestroyIcon(g_trayIcon);
+        g_trayIcon = tray;
+    }
+
+    HICON master = LoadMixerIcon(Scale(24), false, muted);
+    if (master) {
+        if (g_masterIcon) DestroyIcon(g_masterIcon);
+        g_masterIcon = master;
+    }
+    g_masterIconMuted = muted;
+}
+
+std::wstring ProcessNameFromPath(const std::wstring& path) {
+    size_t separator = path.find_last_of(L"\\/");
+    return separator == std::wstring::npos ? path : path.substr(separator + 1);
+}
+
+bool CopyProcessName(HWND owner, const std::wstring& name) {
+    if (name.empty()) return false;
+    SIZE_T bytes = (name.size() + 1) * sizeof(wchar_t);
+    HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (!memory) return false;
+
+    auto* text = static_cast<wchar_t*>(GlobalLock(memory));
+    if (!text) {
+        GlobalFree(memory);
+        return false;
+    }
+
+    std::wmemcpy(text, name.c_str(), name.size() + 1);
+    GlobalUnlock(memory);
+
+    if (!OpenClipboard(owner)) {
+        GlobalFree(memory);
+        return false;
+    }
+
+    bool copied = EmptyClipboard() &&
+                  SetClipboardData(CF_UNICODETEXT, memory);
+    CloseClipboard();
+
+    if (!copied) GlobalFree(memory);
+    return copied;
+}
+
+void RefreshSourceList(HWND window) {
+    CancelNameTooltip(window);
+    g_hoverRow = DRAG_NONE;
+    RefreshAudioSessions(window);
+    g_rowVisuals.clear();
+    ResizeMixer(window);
+    if (IsWindowVisible(window)) PositionMixer(window);
+    InvalidateRect(window, nullptr, FALSE);
+}
+
+void ShowSourceMenu(HWND window, int row, POINT screenPoint) {
+    if (g_sourceMenuOpen || g_outputMenuOpen || g_dragRow != DRAG_NONE ||
+        row < 0 || row >= static_cast<int>(g_apps->size())) {
+        return;
+    }
+
+    const std::wstring key = (*g_apps)[row].pinKey;
+    const std::wstring processName =
+        ProcessNameFromPath((*g_apps)[row].executablePath);
+
+    FinishVolumeEntry(window, false, false);
+    CancelNameTooltip(window);
+    SelectRow(row);
+
+    HMENU menu = CreatePopupMenu();
+    if (!menu) return;
+
+    AppendMenuW(menu,
+                MF_STRING | (processName.empty() ? MF_GRAYED : 0),
+                MENU_SOURCE_COPY_PROCESS,
+                L"Copy process name");
+    AppendMenuW(menu, MF_STRING, MENU_SOURCE_HIDE, L"Hide temporarily");
+
+    g_sourceMenuOpen = true;
+    KillTimer(window, TIMER_CHECK_FOCUS);
+    SetForegroundWindow(window);
+
+    UINT command = TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
+        screenPoint.x, screenPoint.y, 0, window, nullptr);
+
+    DestroyMenu(menu);
+
+    if (IsWindow(window)) {
+        if (command == MENU_SOURCE_COPY_PROCESS && !processName.empty()) {
+            if (!CopyProcessName(window, processName)) {
+                Wh_Log(L"Mixer: could not copy the process name to the clipboard");
+                MessageBoxW(window,
+                            L"Could not copy the process name. Please try again.",
+                            L"Better Volume Mixer",
+                            MB_OK | MB_ICONWARNING);
+            }
+        } else if (command == MENU_SOURCE_HIDE) {
+            g_temporarilyHiddenSources.insert(key);
+        }
+    }
+
+    g_sourceMenuOpen = false;
+    if (g_pendingDefaultOutputChange) {
+        g_pendingDefaultOutputChange = false;
+        PostMessageW(window, WM_APP_DEFAULT_OUTPUT_CHANGED, 0, 0);
+    }
+    if (!IsWindow(window)) return;
+
+    if (command == MENU_SOURCE_HIDE) {
+        RefreshSourceList(window);
+    }
+
+    PostMessageW(window, WM_NULL, 0, 0);
+    InvalidateRect(window, nullptr, FALSE);
+
+    if (g_settings.closeWhenFocusIsLost && IsWindowVisible(window)) {
+        SetTimer(window, TIMER_CHECK_FOCUS, 150, nullptr);
+    }
+}
+
+void OpenClassicSound(HWND owner) {
+    wchar_t directory[MAX_PATH];
+    UINT length = GetSystemDirectoryW(directory, ARRAYSIZE(directory));
+    if (!length || length >= ARRAYSIZE(directory)) {
+        Wh_Log(L"Mixer: could not locate the Windows system directory");
+        return;
+    }
+
+    std::wstring control =
+        std::wstring(directory, length) + L"\\control.exe";
+    HINSTANCE result = ShellExecuteW(
+        owner, L"open", control.c_str(), L"/name Microsoft.Sound",
+        nullptr, SW_SHOWNORMAL);
+
+    if (reinterpret_cast<INT_PTR>(result) <= 32) {
+        Wh_Log(L"Mixer: could not open the classic Sound control panel");
+        MessageBoxW(owner,
+                    L"Windows could not open the Sound control panel.",
+                    L"Better Volume Mixer",
+                    MB_OK | MB_ICONWARNING);
+    }
+}
+
 void OpenSystemPage(PCWSTR uri) {
     ShellExecuteW(nullptr, L"open", uri, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 void ShowTrayMenu(HWND hWnd, int x, int y) {
+    if (g_sourceMenuOpen || g_outputMenuOpen) return;
+
     HMENU menu = CreatePopupMenu();
-    if (!menu) {
-        return;
+    if (!menu) return;
+
+    AppendMenuW(menu, MF_STRING,
+                MENU_REFRESH, L"Refresh applications");
+
+    if (!g_temporarilyHiddenSources.empty()) {
+        AppendMenuW(menu, MF_STRING,
+                    MENU_RESTORE_HIDDEN,
+                    L"Restore temporarily hidden sources");
     }
-    AppendMenuW(menu, MF_STRING | MF_DEFAULT, MENU_OPEN, L"Open volume mixer");
-    AppendMenuW(menu, MF_STRING, MENU_REFRESH, L"Refresh applications");
+
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, MENU_SOUND_SETTINGS, L"Sound settings");
-    AppendMenuW(menu, MF_STRING, MENU_WINDOWS_MIXER, L"Windows volume mixer");
+    AppendMenuW(menu, MF_STRING,
+                MENU_SOUND_SETTINGS, L"Sound settings");
+    AppendMenuW(menu, MF_STRING,
+                MENU_WINDOWS_MIXER, L"Windows volume mixer");
+    AppendMenuW(menu, MF_STRING,
+                MENU_CLASSIC_SOUND,
+                L"Sound control panel");
 
     SetForegroundWindow(hWnd);
-    UINT command = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY |
-                                           TPM_RIGHTBUTTON,
-                                  x, y, 0, hWnd, nullptr);
+    UINT command = TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON,
+        x, y, 0, hWnd, nullptr);
+
     PostMessageW(hWnd, WM_NULL, 0, 0);
     DestroyMenu(menu);
+
+    if (g_pendingDefaultOutputChange) {
+        g_pendingDefaultOutputChange = false;
+        PostMessageW(hWnd, WM_APP_DEFAULT_OUTPUT_CHANGED, 0, 0);
+    }
 
     switch (command) {
         case MENU_OPEN:
             QueueShowMixer(hWnd);
             break;
+
         case MENU_REFRESH:
             RefreshAudioSessions(hWnd, true);
             if (IsWindowVisible(hWnd)) {
@@ -3382,11 +3796,22 @@ void ShowTrayMenu(HWND hWnd, int x, int y) {
                 PositionMixer(hWnd);
             }
             break;
+
         case MENU_SOUND_SETTINGS:
             OpenSystemPage(L"ms-settings:sound");
             break;
+
+        case MENU_CLASSIC_SOUND:
+            OpenClassicSound(hWnd);
+            break;
+
         case MENU_WINDOWS_MIXER:
             OpenSystemPage(L"ms-settings:apps-volume");
+            break;
+
+        case MENU_RESTORE_HIDDEN:
+            g_temporarilyHiddenSources.clear();
+            RefreshSourceList(hWnd);
             break;
     }
 }
@@ -3544,6 +3969,10 @@ void ShowOutputPicker(HWND window) {
         PositionMixer(window);
     }
     g_outputMenuOpen = false;
+    if (g_pendingDefaultOutputChange) {
+        g_pendingDefaultOutputChange = false;
+        PostMessageW(window, WM_APP_DEFAULT_OUTPUT_CHANGED, 0, 0);
+    }
     InvalidateRect(window, nullptr, FALSE);
     if (g_settings.closeWhenFocusIsLost && IsWindowVisible(window))
         SetTimer(window, TIMER_CHECK_FOCUS, 150, nullptr);
@@ -3609,6 +4038,13 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             }
             CreateFonts(hWnd);
             UpdateTheme();
+
+            // Bind the master endpoint before anything queries its mute state.
+            // This registers the IAudioEndpointVolumeCallback immediately so
+            // the tray icon and middle-click mute stay accurate even while the
+            // mixer is hidden.
+            BindDefaultEndpointVolume(hWnd);
+
             RefreshIconSizes(hWnd);
             ApplyTransparencyStyle(hWnd);
             DWORD corner = 2;  // DWMWCP_ROUND.
@@ -3616,6 +4052,30 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             if (HasDefaultVolumeRules()) {
                 RefreshAudioSessions(hWnd);
                 StartDefaultVolumeNotifications(hWnd);
+            }
+            RefreshMasterIcons(hWnd, true);
+
+            // Lifetime watcher: react to default-output changes even when the
+            // mixer is hidden, so tray mute controls always target the current
+            // device. CoCreateInstance here runs on the UI thread and the
+            // notifications are marshalled through the window message below.
+            IMMDeviceEnumerator* uiEnumerator = nullptr;
+            if (SUCCEEDED(CoCreateInstance(
+                    __uuidof(MMDeviceEnumerator), nullptr,
+                    CLSCTX_INPROC_SERVER, __uuidof(IMMDeviceEnumerator),
+                    reinterpret_cast<void**>(&uiEnumerator))) &&
+                uiEnumerator) {
+                auto* uiNotification = new EndpointNotification(nullptr);
+                uiNotification->SetWindow(hWnd);
+                if (SUCCEEDED(uiEnumerator->RegisterEndpointNotificationCallback(
+                        uiNotification))) {
+                    g_uiDeviceEnumerator = uiEnumerator;
+                    g_uiEndpointNotification = uiNotification;
+                } else {
+                    Wh_Log(L"Mixer: default output notification registration failed");
+                    uiNotification->Release();
+                    uiEnumerator->Release();
+                }
             }
             return 0;
         }
@@ -3630,7 +4090,10 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             if (action != TrayAction::None) {
                 Wh_Log(L"Mixer: tray action event=0x%X", event);
             }
-            if (action == TrayAction::Open) {
+            if (action == TrayAction::ToggleMute) {
+                ToggleRowMute(DRAG_MASTER);
+                InvalidateRect(hWnd, nullptr, FALSE);
+            } else if (action == TrayAction::Open) {
                 QueueTrayToggle(hWnd, event == NIN_KEYSELECT);
             } else if (action == TrayAction::Menu) {
                 g_trayPressKnown = false;
@@ -3678,6 +4141,35 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             }
             return 0;
 
+        case WM_APP_MASTER_STATE_CHANGED:
+            RefreshMasterIcons(hWnd);
+            return 0;
+
+        case WM_APP_DEFAULT_OUTPUT_CHANGED: {
+            // A popup menu's modal loop delivers this message while the menu
+            // is on screen. Shell_NotifyIconW (via RefreshMasterIcons) talks
+            // to the taskbar and can demote the popup inside the topmost
+            // band; the STA COM calls in BindDefaultEndpointVolume re-enter
+            // the menu's message pump. Defer the whole update until the menu
+            // closes and re-post the message from the menu paths below.
+            if (g_sourceMenuOpen || g_outputMenuOpen) {
+                g_pendingDefaultOutputChange = true;
+                return 0;
+            }
+            bool canRefresh =
+                IsWindowVisible(hWnd) && g_dragRow == DRAG_NONE &&
+                !g_volumeEntry;
+            if (canRefresh) {
+                RefreshAudioSessions(hWnd);
+                PositionMixer(hWnd);
+            } else {
+                BindDefaultEndpointVolume(hWnd);
+            }
+            RefreshMasterIcons(hWnd, true);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+
         case WM_APP_RELOAD_SETTINGS:
             FinishVolumeEntry(hWnd, false, false);
             CancelNameTooltip(hWnd);
@@ -3714,7 +4206,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
                 bool mixerOwnsFocus = foreground == hWnd ||
                     (foreground && GetAncestor(foreground, GA_ROOTOWNER) == hWnd);
                 if (!g_showingMixer && !g_showRequestPending && !g_outputMenuOpen &&
-                    g_settings.closeWhenFocusIsLost && IsWindowVisible(hWnd) &&
+                    !g_sourceMenuOpen && g_settings.closeWhenFocusIsLost && IsWindowVisible(hWnd) &&
                     !mixerOwnsFocus && GetCapture() != hWnd) {
                     Wh_Log(L"Mixer: closing after confirmed focus loss");
                     HideMixer(hWnd);
@@ -3830,6 +4322,43 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             return 0;
         }
 
+        case WM_CONTEXTMENU: {
+            if (reinterpret_cast<HWND>(wParam) != hWnd) break;
+
+            POINT screenPoint{
+                GET_X_LPARAM(lParam),
+                GET_Y_LPARAM(lParam)
+            };
+            int row;
+
+            if (screenPoint.x == -1 && screenPoint.y == -1) {
+                row = g_selectedRow;
+                if (row < g_scrollRow ||
+                    row >= g_scrollRow + VisibleAppCount()) {
+                    return 0;
+                }
+
+                RECT client{};
+                GetClientRect(hWnd, &client);
+                RECT name =
+                    NameRectForRow(VisibleRowForDataRow(row), client.right);
+                screenPoint = {name.left, name.bottom};
+                ClientToScreen(hWnd, &screenPoint);
+            } else {
+                POINT clientPoint = screenPoint;
+                ScreenToClient(hWnd, &clientPoint);
+
+                RECT client{};
+                GetClientRect(hWnd, &client);
+                if (!PtInRect(&client, clientPoint)) return 0;
+
+                row = RowFromPoint(clientPoint);
+            }
+
+            ShowSourceMenu(hWnd, row, screenPoint);
+            return 0;
+        }
+
         case WM_MBUTTONDOWN: {
             CancelNameTooltip(hWnd);
             if (g_dragRow != DRAG_NONE) return 0;
@@ -3891,7 +4420,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
         case WM_ACTIVATE:
             if (LOWORD(wParam) != WA_INACTIVE) {
                 KillTimer(hWnd, TIMER_CHECK_FOCUS);
-            } else if (!g_showingMixer && !g_showRequestPending && !g_outputMenuOpen &&
+            } else if (!g_showingMixer && !g_showRequestPending && !g_outputMenuOpen && !g_sourceMenuOpen &&
                 g_settings.closeWhenFocusIsLost && IsWindowVisible(hWnd)) {
                 // Capture intent even if activation arrives before the tray's
                 // mouse-down callback. Focus dismissal remains independent.
@@ -3908,17 +4437,28 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             }
             break;
 
-        case WM_SETTINGCHANGE:
+        case WM_DWMCOLORIZATIONCOLORCHANGED:
+            // The slider and other accent-colored controls use g_theme.accent.
+            // Refresh it immediately when Windows changes the system accent,
+            // even when the mixer itself is forced to the light or dark theme.
+            UpdateTheme();
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+
+        case WM_SETTINGCHANGE: {
             UpdateMotionPreference(hWnd);
-            if (g_settings.theme == L"system") {
+            bool immersiveColorChanged =
+                lParam && wcscmp(reinterpret_cast<PCWSTR>(lParam),
+                                 L"ImmersiveColorSet") == 0;
+            if (g_settings.theme == L"system" || immersiveColorChanged) {
                 UpdateTheme();
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
-            if (lParam && wcscmp(reinterpret_cast<PCWSTR>(lParam),
-                                  L"ImmersiveColorSet") == 0) {
+            if (immersiveColorChanged) {
                 RefreshIconSizes(hWnd);
             }
             break;
+        }
 
         case WM_DISPLAYCHANGE:
             FinishVolumeEntry(hWnd, false, false);
@@ -3946,6 +4486,20 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             FinishVolumeEntry(hWnd, false, false);
             CancelNameTooltip(hWnd);
             StopDefaultVolumeNotifications();
+
+            if (g_uiDeviceEnumerator && g_uiEndpointNotification) {
+                g_uiDeviceEnumerator->UnregisterEndpointNotificationCallback(
+                    g_uiEndpointNotification);
+            }
+            if (g_uiEndpointNotification) {
+                g_uiEndpointNotification->Release();
+                g_uiEndpointNotification = nullptr;
+            }
+            if (g_uiDeviceEnumerator) {
+                g_uiDeviceEnumerator->Release();
+                g_uiDeviceEnumerator = nullptr;
+            }
+
             if (g_nameTooltip) {
                 DestroyWindow(g_nameTooltip);
                 g_nameTooltip = nullptr;
@@ -3960,6 +4514,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam,
             ReleaseAudioData();
             g_activatedSessions.clear();
             g_liveSessions.clear();
+            g_temporarilyHiddenSources.clear();
             AcquireSRWLockExclusive(&g_defaultVolumeLock);
             g_appliedDefaultVolumes.clear();
             ReleaseSRWLockExclusive(&g_defaultVolumeLock);
