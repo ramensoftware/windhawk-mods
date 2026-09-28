@@ -4307,6 +4307,32 @@
         "version": "1.1.0"
       }
     },
+    "enlarged-icons-without-thumbnail-frames": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790615006000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790615006000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "appEW",
+        "compilerOptions": "-lole32 -lgdi32 -lcomctl32",
+        "description": "Takes small icons out of the white thumbnail frame of Explorer's large icon views and enlarges them to the size of the view without blur (classic SysListView32 file list); folders and shortcuts get icons instead of thumbnails",
+        "github": "https://github.com/appEW",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Enlarged Icons Without Thumbnail Frames",
+        "version": "2.9.2"
+      }
+    },
     "ep-taskbar-button-width": {
       "details": {
         "defaultSorting": 522,
@@ -9862,6 +9888,32 @@
         ],
         "name": "3D buttons on Quick Launch bar",
         "version": "1.0.0"
+      }
+    },
+    "recycle-bin-original-names": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790615011000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790615011000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "appEW",
+        "compilerOptions": "-lshlwapi -lshell32",
+        "description": "Companion to Pre-Vista File Operation Dialogs: its XP-style prompts for deleting from the Recycle Bin show the file's real name instead of the internal $R name the Recycle Bin keeps it under",
+        "github": "https://github.com/appEW",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Real Names in Pre-Vista Recycle Bin Prompts",
+        "version": "1.3"
       }
     },
     "regedit-auto-trim-whitespace-on-navigation-bar": {
