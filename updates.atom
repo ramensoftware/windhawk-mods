@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-28T10:01:26.000Z</updated>
+    <updated>2026-09-28T11:02:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Quick translator & Layout-switcher 1.0.1]]></title>
+        <id>https://windhawk.net/mods/quick-translator-layout-switcher#1b1974185df3c2e3efd977b64b7f7d6a0bac18e4</id>
+        <link href="https://windhawk.net/mods/quick-translator-layout-switcher"/>
+        <updated>2026-09-28T11:02:30.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="selectionlayoutswitchertranslator">Selection Layout Switcher &amp; Translator</h1>
+<p>A lightweight Windows utility that bridges communication between English and Russian speakers. Eliminates mistyped keyboard layout errors and allows instant two-way translation without breaking workflow.</p>
+<blockquote>
+  <p><strong>Privacy Notice</strong>: This mod optionally connects to Google Translate (<code>translate.googleapis.com</code>) over HTTPS to perform translations. Selected text is transmitted only when a translation hotkey is triggered. This feature is strictly <strong>opt-in and disabled by default</strong>.</p>
+</blockquote>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://i.imgur.com/GHEgOIK.png" alt="HUD Tooltip Preview" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Layout Correction (<code>Ctrl + Alt + L</code>)</strong>: Fixes mistyped text (<code>ghbdtn</code> -&gt; <code>привет</code> or vice versa) with full punctuation mapping and automatically updates the active system input layout.</li>
+<li><strong>In-Place Translation (<code>Ctrl + Alt + T</code>)</strong>: Replaces selected text directly inside any editable input field using HTTPS POST requests. Supports multi-line paragraphs.</li>
+<li><strong>Floating HUD Tooltip (<code>Ctrl + Alt + Q</code>)</strong>: Translates read-only incoming messages in a sleek DPI-aware dark tooltip positioned near your cursor.</li>
+<li><strong>Smart Auto-Dismiss</strong>: The tooltip remains visible until you click anywhere, scroll the mouse wheel, or press navigation keys (Esc / Arrows).</li>
+<li><strong>Clipboard Preservation</strong>: Automatically restores previous clipboard contents after performing operations.</li>
+</ul>
+<h2 id="defaulthotkeys">Default Hotkeys</h2>
+<ul>
+<li><code>Ctrl + Alt + L</code> - Switch mistyped layout (US <-> RU)</li>
+<li><code>Ctrl + Alt + T</code> - In-place translation (Requires enabling online translation in Settings)</li>
+<li><code>Ctrl + Alt + Q</code> - Floating HUD Tooltip translation (Requires enabling online translation in Settings)</li>
+</ul>]]></content>
+        <author>
+            <name>zed712969-crypto</name>
+            <uri>https://github.com/zed712969-crypto</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Mouse Trail 3.4.4.0]]></title>
         <id>https://windhawk.net/mods/mouse-trail#bfcbf010b49005e0b230d4dee351ccc4975d1143</id>
@@ -634,67 +665,6 @@ live; the two noted below need a mod reload.</p>
         <updated>2026-09-26T17:32:56.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed the preview images on this page showing an older version.</li>
-</ul>]]></content>
-        <author>
-            <name>Himanshu</name>
-            <uri>https://github.com/devcode90</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Dynamic Island for Windows 1.3.0]]></title>
-        <id>https://windhawk.net/mods/dynamic-island-for-windows#0ea4c30d36a16f1e5e5579eebf6fd6a953ce7d98</id>
-        <link href="https://windhawk.net/mods/dynamic-island-for-windows"/>
-        <updated>2026-09-26T15:02:34.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="resolvedissues">Resolved Issues</h3>
-<ul>
-<li>Fixes #4352 — Caps Lock indicator can now be switched off, and wind direction shows as an arrow</li>
-<li>Fixes #4738 — playing media no longer keeps the island on screen permanently</li>
-<li>Fixes #5086 — the idle island hugs the clock instead of leaving empty space</li>
-</ul>
-<h3 id="fixes">Fixes</h3>
-<ul>
-<li>Media previous and next buttons now work. They used to open the player instead of changing track.</li>
-<li>The orange microphone dot no longer stays lit after you stop using the mic.</li>
-<li>VLC playback now shows up on the island.</li>
-<li>Playing music no longer keeps the island on screen the whole time. It appears briefly on a track change, then hides again.</li>
-<li>Weather text is properly centred.</li>
-<li>Custom background colours now apply, including see-through ones written as <code>#RRGGBBAA</code>.</li>
-<li>Album art no longer has a clipped corner at larger sizes.</li>
-<li>Weather no longer shows "0°" before the forecast has loaded.</li>
-<li>The island no longer gets buried behind other always-on-top windows, such as the PowerToys bar.</li>
-<li>The idle island now fits its clock instead of leaving empty space, and no longer cuts off longer time formats at larger text sizes.</li>
-<li>Fixed a rare crash when changing settings while the island was on screen.</li>
-<li>Six-row months are no longer cut off at the bottom of the calendar.</li>
-</ul>
-<h3 id="newfeatures">New Features</h3>
-<ul>
-<li><strong>Eight new themes:</strong> Obsidian, Graphite, Slate, Nord, Evergreen, Espresso, Plum, and Porcelain (light). Pick one from the Theme submenu when you right-click the island. If you were using one of the old themes, your choice carries over automatically.</li>
-<li><strong>File Tray:</strong> drag files onto the island to park them, then click a row to open one. Files are only referenced, never copied or moved.</li>
-<li><strong>12 languages</strong>, following your Windows display language by default.</li>
-<li><strong>Real Windows blur or acrylic</strong> behind the island, if you want it.</li>
-<li><strong>Focus timer</strong> with a live countdown, started from the right-click menu.</li>
-<li><strong>Hide and show the island with a keyboard shortcut.</strong></li>
-<li><strong>Auto-hide when an app is fullscreen</strong>, so the island stays out of games and videos.</li>
-<li><strong>Clock and date controls:</strong> 12 or 24 hour, optional seconds, custom date formats such as <code>yyyy年MM月dd日</code>, and date above time.</li>
-<li><strong>Independent text size</strong>, so you can make labels bigger without growing the whole island.</li>
-<li><strong>Bluetooth battery level</strong> shown when a device connects, where the device reports it.</li>
-<li><strong>Do Not Disturb integration</strong>, so notifications respect Windows Focus Assist.</li>
-<li><strong>Clipboard image previews</strong>, so copying an image shows a thumbnail.</li>
-<li><strong>Media waveform</strong>, which reacts to whatever is playing.</li>
-<li><strong>Ctrl+hover click-through</strong>, to click whatever is underneath the island.</li>
-<li><strong>Media blocklist</strong>, so short-form video feeds stop expanding the island on every track change.</li>
-<li><strong>Higher frame rate support</strong> up to 500 FPS, matching your monitor automatically.</li>
-<li><strong>Caps Lock and Num Lock indicator can be turned off.</strong></li>
-<li><strong>Per-metric toggles and a compact mode</strong> for the game overlay.</li>
-<li><strong>Separate vertical positions</strong> for the collapsed and expanded island.</li>
-</ul>
-<h3 id="visualredesign">Visual Redesign</h3>
-<ul>
-<li>Removed the lit edges. Surfaces now use soft shading and contrast instead of bright outlines.</li>
-<li>Weather, hardware monitor, game overlay and calendar rebuilt on one card style with one icon set, so the same reading looks the same everywhere.</li>
-<li>Load colour now means something: normal below 75%, amber from 75%, red from 90%.</li>
-<li>Wind direction is an arrow rather than a compass abbreviation like WSW.</li>
-<li>Accent colours are checked for contrast against the island background, which is what makes the light theme readable.</li>
 </ul>]]></content>
         <author>
             <name>Himanshu</name>

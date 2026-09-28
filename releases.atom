@@ -2,12 +2,43 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-28T09:05:04.000Z</updated>
+    <updated>2026-09-28T11:02:30.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Quick translator & Layout-switcher 1.0.1]]></title>
+        <id>https://windhawk.net/mods/quick-translator-layout-switcher#1b1974185df3c2e3efd977b64b7f7d6a0bac18e4</id>
+        <link href="https://windhawk.net/mods/quick-translator-layout-switcher"/>
+        <updated>2026-09-28T11:02:30.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="selectionlayoutswitchertranslator">Selection Layout Switcher &amp; Translator</h1>
+<p>A lightweight Windows utility that bridges communication between English and Russian speakers. Eliminates mistyped keyboard layout errors and allows instant two-way translation without breaking workflow.</p>
+<blockquote>
+  <p><strong>Privacy Notice</strong>: This mod optionally connects to Google Translate (<code>translate.googleapis.com</code>) over HTTPS to perform translations. Selected text is transmitted only when a translation hotkey is triggered. This feature is strictly <strong>opt-in and disabled by default</strong>.</p>
+</blockquote>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://i.imgur.com/GHEgOIK.png" alt="HUD Tooltip Preview" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Layout Correction (<code>Ctrl + Alt + L</code>)</strong>: Fixes mistyped text (<code>ghbdtn</code> -&gt; <code>привет</code> or vice versa) with full punctuation mapping and automatically updates the active system input layout.</li>
+<li><strong>In-Place Translation (<code>Ctrl + Alt + T</code>)</strong>: Replaces selected text directly inside any editable input field using HTTPS POST requests. Supports multi-line paragraphs.</li>
+<li><strong>Floating HUD Tooltip (<code>Ctrl + Alt + Q</code>)</strong>: Translates read-only incoming messages in a sleek DPI-aware dark tooltip positioned near your cursor.</li>
+<li><strong>Smart Auto-Dismiss</strong>: The tooltip remains visible until you click anywhere, scroll the mouse wheel, or press navigation keys (Esc / Arrows).</li>
+<li><strong>Clipboard Preservation</strong>: Automatically restores previous clipboard contents after performing operations.</li>
+</ul>
+<h2 id="defaulthotkeys">Default Hotkeys</h2>
+<ul>
+<li><code>Ctrl + Alt + L</code> - Switch mistyped layout (US <-> RU)</li>
+<li><code>Ctrl + Alt + T</code> - In-place translation (Requires enabling online translation in Settings)</li>
+<li><code>Ctrl + Alt + Q</code> - Floating HUD Tooltip translation (Requires enabling online translation in Settings)</li>
+</ul>]]></content>
+        <author>
+            <name>zed712969-crypto</name>
+            <uri>https://github.com/zed712969-crypto</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[WinDuo 0.1.0]]></title>
         <id>https://windhawk.net/mods/winduo#bd025e4fcde71a615aa6f16071597a81f7dde19f</id>
@@ -1806,61 +1837,6 @@ is delivered.</p>]]></content>
         <author>
             <name>luizgununes</name>
             <uri>https://github.com/luizgununes</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Withered Foxy Jumpscare 1.0]]></title>
-        <id>https://windhawk.net/mods/withered-foxy-jumpscare#352025ef42578f1658857bf3f6d2b7c2c6db6b0b</id>
-        <link href="https://windhawk.net/mods/withered-foxy-jumpscare"/>
-        <updated>2026-09-22T16:38:23.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="witheredfoxyjumpscare">Withered Foxy Jumpscare</h1>
-<blockquote>
-  <p><strong>Warning:</strong> this mod is a prank by design. At a random moment it shows a
-  loud fullscreen jumpscare with sudden flashing images. It interrupts whatever
-  you are doing, and exclusive fullscreen games are minimized while it plays.
-  Don't use it if startle or flashing content is a problem for you.</p>
-</blockquote>
-<p>Every check interval (1 second by default) the mod rolls a die. With the
-default chance of <strong>1 in 100000</strong>, the jumpscare happens about once every 28
-hours of uptime.</p>
-<p>The jumpscare is drawn in a transparent always-on-top window on the monitor
-of the active window. Press <strong>Esc</strong> to close it early. With "Steal focus" off,
-the Esc key also reaches the app underneath.</p>
-<h2 id="files">Files</h2>
-<p>If "Image" or "Sound" is empty, the mod downloads the default file once and
-keeps it in the mod's own storage folder. Windhawk deletes that folder when
-the mod is removed. The default files are hosted in the
-<a href="https://github.com/Kismeria/WindHawk-Foxy-Jumpscare">WindHawk-Foxy-Jumpscare</a>
-repository.</p>
-<p>Turn off "Auto download" to never contact the network. In that case, set
-"Image" and "Sound" to your own files, otherwise the mod does nothing. If the
-download fails, turn "Auto download" off and on again to retry.</p>
-<p>You can use your own files instead:</p>
-<ul>
-<li><strong>Image</strong> - animated <code>.gif</code>, static <code>.png</code>, or a folder of <code>.png</code> frames
-(sorted by name). Turn off "Green screen" for images that already have
-transparency.</li>
-<li><strong>Sound</strong> - <code>.wav</code> or <code>.mp3</code>.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Windowed and borderless games: the jumpscare is drawn on top.</li>
-<li>Exclusive fullscreen games don't allow other windows on top. For them, keep
-"Steal focus" on: the game is minimized during the jumpscare and the mod
-tries to give focus back afterwards.</li>
-<li>While "Steal focus" is on, keys typed during the jumpscare are ignored.
-Mouse clicks pass through.</li>
-</ul>
-<h2 id="testing">Testing</h2>
-<ul>
-<li>Turn on "Test on save" and save the settings. It doesn't fire on Windhawk
-start.</li>
-<li>Or set a "Test hotkey", for example <code>Ctrl+Alt+F</code>.</li>
-</ul>
-<p><img src="https://raw.githubusercontent.com/Kismeria/WindHawk-Foxy-Jumpscare/8b94f89250a280ea926bd90cf3692d5175d14927/assets/preview.png" alt="Preview" /></p>]]></content>
-        <author>
-            <name>Kismeria</name>
-            <uri>https://github.com/Kismeria</uri>
         </author>
     </entry>
 </feed>
