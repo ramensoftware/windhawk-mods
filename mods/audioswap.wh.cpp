@@ -585,6 +585,9 @@ namespace AudioSwapGui {
             Wh_GetStringValue(kPth, s.slots[i].customPath, MAX_PATH);
             s.slots[i].hPreviewIcon = LoadSlotPreview(s.slots[i].iconKey, s.slots[i].customPath);
             s.slots[i].isOffline = false;
+        }
+
+        for (int i = 0; i < 6; i++) {
             if (!s.slots[i].id.empty()) {
                 bool found = false;
                 for (auto& dev : s.activeDevices) {
@@ -615,6 +618,7 @@ namespace AudioSwapGui {
                         if (!usedElsewhere) {
                             found = true;
                             s.slots[i].id = candId;
+                            s.slots[i].name = s.activeDevices[matchIdx].name;
                         }
                     }
                 }
@@ -709,9 +713,9 @@ namespace AudioSwapGui {
                         sel = idx;
                 }
                 if (s->slots[i].isOffline) {
-                    if (s->slots[i].name.empty()) s->slots[i].name = L"Unknown Device";
+                    const WCHAR* displayName = !s->slots[i].name.empty() ? s->slots[i].name.c_str() : L"Unknown Device";
                     WCHAR offLabel[320];
-                    swprintf_s(offLabel, L"%s (Disconnected)", s->slots[i].name.c_str());
+                    swprintf_s(offLabel, L"%s (Disconnected)", displayName);
                     int idx = (int)SendMessageW(s->slots[i].hDevCombo, CB_ADDSTRING,
                                                 0, (LPARAM)offLabel);
                     sel = idx;
@@ -749,9 +753,9 @@ namespace AudioSwapGui {
                     if (s->prioSlots[i].id == s->activeDevices[j].id) psel = idx;
                 }
                 if (s->prioSlots[i].isOffline) {
-                    if (s->prioSlots[i].name.empty()) s->prioSlots[i].name = L"Unknown Device";
+                    const WCHAR* displayName = !s->prioSlots[i].name.empty() ? s->prioSlots[i].name.c_str() : L"Unknown Device";
                     WCHAR offLabel[320];
-                    swprintf_s(offLabel, L"%s (offline)", s->prioSlots[i].name.c_str());
+                    swprintf_s(offLabel, L"%s (offline)", displayName);
                     int idx = (int)SendMessageW(s->prioSlots[i].hDevCombo, CB_ADDSTRING,
                                                 0, (LPARAM)offLabel);
                     psel = idx;
@@ -1202,7 +1206,9 @@ namespace AudioSwapGui {
                     s->slots[i].id   = oldDevices[oldSel].id;
                     s->slots[i].name = oldDevices[oldSel].name;
                 }
+            }
 
+            for (int i = 0; i < 6; i++) {
                 bool found = false;
                 int foundIdx = -1;
                 if (!s->slots[i].id.empty()) {
@@ -1236,6 +1242,7 @@ namespace AudioSwapGui {
                                 found = true;
                                 foundIdx = (int)matchIdx;
                                 s->slots[i].id = candId;
+                                s->slots[i].name = s->activeDevices[matchIdx].name;
                             }
                         }
                     }
@@ -1250,9 +1257,9 @@ namespace AudioSwapGui {
                     if (found && j == foundIdx) newSel = idx;
                 }
                 if (s->slots[i].isOffline) {
-                    if (s->slots[i].name.empty()) s->slots[i].name = L"Unknown Device";
+                    const WCHAR* displayName = !s->slots[i].name.empty() ? s->slots[i].name.c_str() : L"Unknown Device";
                     WCHAR offLabel[320];
-                    swprintf_s(offLabel, L"%s (Disconnected)", s->slots[i].name.c_str());
+                    swprintf_s(offLabel, L"%s (Disconnected)", displayName);
                     int idx = (int)SendMessageW(s->slots[i].hDevCombo, CB_ADDSTRING, 0,
                                                 (LPARAM)offLabel);
                     newSel = idx;
@@ -1298,9 +1305,9 @@ namespace AudioSwapGui {
                     if (prioFound && j == prioFoundIdx) newSel = idx;
                 }
                 if (s->prioSlots[i].isOffline) {
-                    if (s->prioSlots[i].name.empty()) s->prioSlots[i].name = L"Unknown Device";
+                    const WCHAR* displayName = !s->prioSlots[i].name.empty() ? s->prioSlots[i].name.c_str() : L"Unknown Device";
                     WCHAR offLabel[320];
-                    swprintf_s(offLabel, L"%s (offline)", s->prioSlots[i].name.c_str());
+                    swprintf_s(offLabel, L"%s (offline)", displayName);
                     int idx = (int)SendMessageW(s->prioSlots[i].hDevCombo, CB_ADDSTRING, 0,
                                                 (LPARAM)offLabel);
                     newSel = idx;
@@ -2894,13 +2901,18 @@ static void HandlePriorityDeviceConnected(HWND hWnd, const WCHAR* devId) {
     WCHAR updateDevId[512] = {};
     WCHAR updateDevName[256] = {};
 
-    EnterCriticalSection(&g_stateLock);
-    int slotCount = g_deviceSlotCount;
+    WCHAR snapIds[MAX_DEVICE_SLOTS][512] = {};
+    WCHAR snapNames[MAX_DEVICE_SLOTS][256] = {};
+    int slotCount = 0;
     int exactMatch = -1;
+
+    EnterCriticalSection(&g_stateLock);
+    slotCount = g_deviceSlotCount;
     for (int s = 0; s < slotCount; s++) {
-        if (g_cachedDevId[s][0] && wcscmp(g_cachedDevId[s], devId) == 0) {
+        lstrcpynW(snapIds[s], g_cachedDevId[s], 512);
+        lstrcpynW(snapNames[s], g_cachedDevName[s], 256);
+        if (snapIds[s][0] && wcscmp(snapIds[s], devId) == 0) {
             exactMatch = s;
-            break;
         }
     }
 
@@ -2911,31 +2923,29 @@ static void HandlePriorityDeviceConnected(HWND hWnd, const WCHAR* devId) {
             lstrcpynW(updateDevName, activeFriendlyName, 256);
         }
         slotUpdated = true;
-    } else if (activeFriendlyName[0]) {
-        // Name rematch fallback: only if the slot's stored ID is inactive, matches uniquely,
-        // and devId is not already used by another slot.
-        bool devIdInUse = false;
-        for (int s = 0; s < slotCount; s++) {
-            if (g_cachedDevId[s][0] && wcscmp(g_cachedDevId[s], devId) == 0) {
-                devIdInUse = true;
-                break;
-            }
-        }
+        LeaveCriticalSection(&g_stateLock);
+    } else {
+        LeaveCriticalSection(&g_stateLock);
 
-        if (!devIdInUse) {
+        if (activeFriendlyName[0]) {
+            // Name rematch fallback: only if the slot's stored ID is inactive and matches uniquely.
+            // (devId is already known not to be in use because exactMatch < 0).
             int matchIdx = -1;
             int matchCount = 0;
             for (int s = 0; s < slotCount; s++) {
-                if (g_cachedDevName[s][0] && wcscmp(g_cachedDevName[s], activeFriendlyName) == 0) {
-                    if (!pEnum || !IsDeviceActive(pEnum, g_cachedDevId[s])) {
+                if (snapNames[s][0] && wcscmp(snapNames[s], activeFriendlyName) == 0) {
+                    if (!pEnum || !IsDeviceActive(pEnum, snapIds[s])) {
                         matchCount++;
                         matchIdx = s;
                     }
                 }
             }
             if (matchCount == 1 && matchIdx >= 0) {
+                EnterCriticalSection(&g_stateLock);
                 lstrcpynW(g_cachedDevId[matchIdx], devId, 512);
                 lstrcpynW(g_cachedDevName[matchIdx], activeFriendlyName, 256);
+                LeaveCriticalSection(&g_stateLock);
+
                 updateSlotIdx = matchIdx;
                 lstrcpynW(updateDevId, devId, 512);
                 lstrcpynW(updateDevName, activeFriendlyName, 256);
@@ -2943,7 +2953,6 @@ static void HandlePriorityDeviceConnected(HWND hWnd, const WCHAR* devId) {
             }
         }
     }
-    LeaveCriticalSection(&g_stateLock);
 
     if (pEnum) pEnum->Release();
 
