@@ -164,6 +164,8 @@ When a fullscreen or borderless-fullscreen application occupies a monitor, only 
 
 For multi-monitor setups, `0` renders separate overlay windows across all available monitors. A positive value selects one monitor. If a selected monitor is unavailable, the overlay falls back to the primary monitor.
 
+The Media & EQ SMTC worker runs only while the Media & EQ tray button is enabled, avoiding repeated cross-process media polling when that feature is disabled.
+
 Actual CPU/GPU usage depends on display resolution, effects, visualization style, lyrics, frame rate, number of monitors and other enabled features.
 
 ## Windows compatibility
@@ -1121,24 +1123,20 @@ Please report bugs and feature requests through the repository issue tracker: [R
       $name: Desktop placement
       $name:ru-RU: Размещение на рабочем столе
       $description: >-
-        Where the visualizer sits relative to the desktop icons. Automatic puts it
-        behind the icons. On Windows 11 24H2 and newer this uses an opaque layer
-        that redraws the wallpaper under the visualizer. "Behind icons,
-        transparent" is an experimental alternative for Windows 11 24H2 and newer.
+        Where the visualizer sits relative to the desktop icons.
+        "Behind icons, opaque layer" uses an opaque layer on Windows 11 24H2 and newer.
+        "Behind icons, transparent" is an experimental alternative for Windows 11 24H2 and newer.
         "Above icons" is the original placement and works everywhere.
       $description:ru-RU: >-
         Где находится визуализатор относительно значков рабочего стола.
-        Автоматически: за значками. В Windows 11 24H2 и новее используется
-        непрозрачный слой, который сам рисует обои под визуализатором.
-        "За значками, прозрачно" — экспериментальный вариант для Windows 11 24H2
-        и новее. "Поверх значков" — исходное размещение, работает везде.
+        "За значками, непрозрачный слой" использует непрозрачный слой в Windows 11 24H2 и новее.
+        "За значками, прозрачно" — экспериментальный вариант для Windows 11 24H2 и новее.
+        "Поверх значков" — исходное размещение, работает везде.
       $options:
-        - "auto": Automatic (behind icons)
         - "behind_icons_opaque": Behind icons, opaque layer (Windows 11 24H2+)
         - "behind_icons_transparent": Behind icons, transparent (experimental, Windows 11 24H2+)
         - "above_icons": Above icons (original)
       $options:ru-RU:
-        - "auto": Автоматически (за значками)
         - "behind_icons_opaque": За значками, непрозрачный слой (Windows 11 24H2+)
         - "behind_icons_transparent": За значками, прозрачно (эксперимент, Windows 11 24H2+)
         - "above_icons": Поверх значков (исходный вариант)
@@ -1303,7 +1301,6 @@ using winrt::Windows::UI::Xaml::Controls::ToolTip;
 // using winrt::Windows::UI::Xaml::Controls::Primitives::FlyoutBase;
 
 // Advanced.desktopPlacement values.
-static constexpr int DESKTOP_PLACEMENT_AUTO = 0;
 static constexpr int DESKTOP_PLACEMENT_OPAQUE = 1;       // raised desktop: opaque holder
 static constexpr int DESKTOP_PLACEMENT_TRANSPARENT = 2;  // raised desktop: DirectComposition
 static constexpr int DESKTOP_PLACEMENT_ABOVE_ICONS = 3;  // original DefView child
@@ -1699,8 +1696,10 @@ static HANDLE g_hOverlayStopEvent = nullptr;
 static DWORD g_overlayThreadId = 0;
 static std::atomic<bool> g_overlayIdle{false};
 static std::atomic<HWND> g_overlayWakeHwnd{nullptr};
+static std::atomic<bool> g_shellServicesStarted{false};
 static constexpr UINT WM_VIZ_AUDIO_WAKE = WM_APP + 0x2A1;
 static constexpr UINT WM_VIZ_REBUILD_OVERLAYS = WM_APP + 0x2A2;
+static constexpr UINT WM_VIZ_OPEN_LAYOUT_EDITOR = WM_APP + 0x2A4;
 static ULONG_PTR g_gdiplusToken = 0;
 
 static HDC g_renderMemDC = nullptr;
@@ -3359,16 +3358,36 @@ static bool InitProcessAudioClient(
         return false;
     }
 
-    for (;;) {
-        const DWORD waitResult = WaitForSingleObject(completedEvent, 50);
-        if (waitResult == WAIT_OBJECT_0)
-            break;
-        if (g_audioRunning.load(std::memory_order_acquire) == false) {
+    // The async activation holds a COM reference to the handler until the
+    // completion callback has finished. Do not abandon the handler when the
+    // audio worker is stopping: unloading the mod while the callback is still
+    // pending would leave its vtable/code in an unloaded module.
+    constexpr DWORD kActivationWaitTimeoutMs = 10000;
+    const DWORD waitResult =
+        WaitForSingleObject(completedEvent, kActivationWaitTimeoutMs);
+
+    if (waitResult == WAIT_TIMEOUT) {
+        // Activation is expected to complete. The timeout is only a diagnostic
+        // guard; it is not safe to release the handler while the callback is
+        // still pending, so finish waiting before touching its lifetime.
+        Wh_Log(L"Process loopback activation is taking longer than expected; waiting for completion (pid=%lu)",
+               static_cast<unsigned long>(processId));
+
+        if (WaitForSingleObject(completedEvent, INFINITE) != WAIT_OBJECT_0) {
+            Wh_Log(L"Process loopback activation completion wait failed (pid=%lu)",
+                   static_cast<unsigned long>(processId));
             handler->DisableEvent();
             handler->Release();
             CloseHandle(completedEvent);
             return false;
         }
+    } else if (waitResult != WAIT_OBJECT_0) {
+        Wh_Log(L"Process loopback activation completion wait failed (pid=%lu)",
+               static_cast<unsigned long>(processId));
+        handler->DisableEvent();
+        handler->Release();
+        CloseHandle(completedEvent);
+        return false;
     }
 
     const HRESULT activationResult = handler->Result();
@@ -14399,10 +14418,17 @@ static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             {
                 const RECT layoutButton = EqGetDesktopLayoutButtonRect();
                 if (PtInRect(&layoutButton, POINT{bx, by})) {
-                    // The editor covers the desktop; the popup would only be
-                    // in the way. Both live on this thread.
+                    // The popup is owned by the taskbar/XAML thread on Windows 11,
+                    // but the layout editor must be owned by the overlay thread so
+                    // its timer, rendering and cleanup stay on one thread.
                     DestroyEqPopup();
-                    LayoutEditBegin();
+                    HWND overlay = g_overlayWakeHwnd.load(std::memory_order_acquire);
+                    if (overlay && IsWindow(overlay)) {
+                        if (!PostMessageW(overlay, WM_VIZ_OPEN_LAYOUT_EDITOR, 0, 0))
+                            Wh_Log(L"EqPopupProc: failed to post layout editor request");
+                    } else {
+                        Wh_Log(L"EqPopupProc: overlay window unavailable for layout editor");
+                    }
                     return 0;
                 }
             }
@@ -14964,6 +14990,33 @@ static bool EqIsReadableMemoryRange(const void* address, size_t size) {
            size <= regionEnd - start;
 }
 
+static BOOL CALLBACK FindCurrentProcessTaskbarWndProc(HWND hwnd, LPARAM lParam) {
+    if (!hwnd || !lParam)
+        return TRUE;
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != GetCurrentProcessId())
+        return TRUE;
+
+    wchar_t cls[64]{};
+    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls)))
+        return TRUE;
+
+    if (wcscmp(cls, L"Shell_TrayWnd") == 0 ||
+        wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0) {
+        *reinterpret_cast<HWND*>(lParam) = hwnd;
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+static HWND FindCurrentProcessTaskbarWnd() {
+    HWND taskbar = nullptr;
+    EnumWindows(FindCurrentProcessTaskbarWndProc, reinterpret_cast<LPARAM>(&taskbar));
+    return taskbar;
+}
 static XamlRoot EqGetTaskbarXamlRoot(HWND hTaskbarWnd) {
     if (!hTaskbarWnd) {
         Wh_Log(L"EqGetTaskbarXamlRoot: taskbar window is null");
@@ -15334,7 +15387,7 @@ static void EqShowPopupForNativeTrayButton() {
     if (!EqGetNativeTrayButtonScreenRect(&buttonRect))
         return;
 
-    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    HWND taskbar = FindCurrentProcessTaskbarWnd();
     if (!taskbar || !IsWindow(taskbar))
         return;
 
@@ -15955,7 +16008,7 @@ static void EqEnsureXamlButton() {
     const bool showTrayButton =
         GetSettingsSnapshot().showMediaEqTrayButton;
 
-    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    HWND taskbar = FindCurrentProcessTaskbarWnd();
     if (!taskbar || !IsWindow(taskbar))
         return;
 
@@ -16041,7 +16094,7 @@ static void WINAPI EqTrayUIStartTaskbarHook(void* pThis) {
     if (!g_eqIsWindows11 || !g_running.load(std::memory_order_acquire))
         return;
 
-    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    HWND taskbar = FindCurrentProcessTaskbarWnd();
     if (!taskbar)
         return;
 
@@ -16150,6 +16203,10 @@ static bool RebuildOverlayWindows(
     HWND desktopParent);
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
+    case WM_VIZ_OPEN_LAYOUT_EDITOR:
+        LayoutEditBegin();
+        return 0;
+
     case WM_VIZ_REBUILD_OVERLAYS: {
         // A settings change while editing invalidates the edit session.
         if (g_layoutEditActive.load(std::memory_order_acquire))
@@ -18454,50 +18511,77 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
         return 0;
     }
 
-    // The taskbar helper is optional. If its small native windows cannot be
-    // registered, the core visualizer continues normally rather than failing
-    // the entire mod because of a UI convenience feature.
+    // Register the EQ window classes now, but do not create process-owned tray
+    // windows or worker threads until this Explorer process actually owns the
+    // desktop and its taskbar. Secondary folder Explorers can otherwise stay
+    // alive without a desktop and steal the Win10 tray icon from the real shell.
     RegisterEqWindowClasses(wc.hInstance);
+
+    HWND hParent = nullptr;
+    HWND taskbar = nullptr;
+    MSG startupMsg{};
+    bool startupAborted = false;
+
+    // Explorer can load the injected module before the desktop shell hierarchy
+    // exists. Wait for both the real desktop and this process's taskbar. Pumping
+    // the queue here prevents the startup wait from blocking sent messages.
+    for (;;) {
+        HANDLE stopEvent = g_hOverlayStopEvent;
+        DWORD waitResult = MsgWaitForMultipleObjects(
+            stopEvent ? 1 : 0, stopEvent ? &stopEvent : nullptr,
+            FALSE, 250, QS_ALLINPUT);
+
+        if (stopEvent && waitResult == WAIT_OBJECT_0) {
+            startupAborted = true;
+            break;
+        }
+
+        if (waitResult == WAIT_OBJECT_0 + (stopEvent ? 1 : 0)) {
+            while (PeekMessageW(&startupMsg, nullptr, 0, 0, PM_REMOVE)) {
+                if (startupMsg.message == WM_QUIT) {
+                    g_running.store(false, std::memory_order_release);
+                    startupAborted = true;
+                    break;
+                }
+                TranslateMessage(&startupMsg);
+                DispatchMessageW(&startupMsg);
+            }
+            if (startupAborted)
+                break;
+        }
+
+        hParent = ResolveOverlayDesktopParent(GetSettingsSnapshot().desktopPlacement);
+        taskbar = FindCurrentProcessTaskbarWnd();
+        if (hParent && taskbar)
+            break;
+    }
+
+    if (startupAborted) {
+        EqCleanupIntegration();
+        if (classRegistered)
+            UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        Gdiplus::GdiplusShutdown(g_gdiplusToken);
+        g_gdiplusToken = 0;
+        return 0;
+    }
+
+    g_eqTaskbarHwnd = taskbar;
+
     if (!g_eqIsWindows11) {
         if (!EqCreateNativeTrayMessageWindow(wc.hInstance)) {
             Wh_Log(L"OverlayThreadProc: failed to create Win10 EQ tray message window");
         } else {
             EqEnsureNativeTrayIcon();
         }
-    }
-
-    HWND hParent = nullptr;
-    // Explorer can load the injected module before the desktop shell hierarchy
-    // exists. Creating a popup here is unsafe: it can render into an incomplete
-    // desktop and can also keep a stale surface after Explorer rebuilds itself.
-    // Wait for the real desktop instead; the wait is stoppable and uses the
-    // same child-window model as the normal desktop path.
-    for (;;) {
-        if (g_hOverlayStopEvent &&
-            WaitForSingleObject(g_hOverlayStopEvent, 0) == WAIT_OBJECT_0) {
-            EqCleanupIntegration();
-            if (classRegistered)
-                UnregisterClassW(wc.lpszClassName, wc.hInstance);
-            Gdiplus::GdiplusShutdown(g_gdiplusToken);
-            g_gdiplusToken = 0;
-            return 0;
-        }
-
-        hParent = ResolveOverlayDesktopParent(GetSettingsSnapshot().desktopPlacement);
-        if (hParent) {
-            break;
-        }
-
-        if (g_hOverlayStopEvent)
-            WaitForSingleObject(g_hOverlayStopEvent, 250);
-        else
-            Sleep(250);
+    } else {
+        EqEnsureXamlButton();
     }
 
     const VisualizerSettings initialSettings = GetSettingsSnapshot();
     if (!CreateOverlayWindowsForSettings(
             initialSettings, wc.hInstance, wc.lpszClassName, hParent)) {
         Wh_Log(L"OverlayThreadProc: initial overlay creation failed");
+        EqCleanupIntegration();
         ReleaseOverlayGraphics();
         UnregisterOverlayHostClass(wc.hInstance);
         if (classRegistered)
@@ -18507,8 +18591,13 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
         return 0;
     }
 
-    if (!g_eqIsWindows11)
-        EqEnsureNativeTrayIcon();
+    // Start the audio worker only after the desktop/taskbar ownership check.
+    // The SMTC worker is additionally gated by the tray-button setting, since
+    // Media & EQ is the only feature that consumes its media state.
+    StartAudioCapture();
+    if (GetSettingsSnapshot().showMediaEqTrayButton)
+        StartEqMediaCapture();
+    g_shellServicesStarted.store(true, std::memory_order_release);
 
     {
         g_currentOverlayTimerMs = GetOverlayTimerIntervalMs(initialSettings);
@@ -18611,6 +18700,7 @@ static DWORD WINAPI OverlayThreadProc(LPVOID) {
     }
 
 overlay_exit:
+    g_shellServicesStarted.store(false, std::memory_order_release);
     if (g_layoutEditActive.load(std::memory_order_acquire))
         LayoutEditEnd(false);
     LayoutEditUnregisterClass(wc.hInstance);
@@ -18699,6 +18789,7 @@ BOOL Wh_ModInit() {
                g_eqWindowsBuildNumber);
     }
     RegisterEqWindowClasses(GetCurrentModModuleHandle());
+    g_shellServicesStarted.store(false, std::memory_order_release);
     g_running.store(true, std::memory_order_release);
 
     BuildHannWindow();
@@ -18712,15 +18803,10 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    StartAudioCapture();
-    StartEqMediaCapture();
-
     g_hOverlayThread = CreateThread(
         nullptr, 0, OverlayThreadProc, nullptr, 0, &g_overlayThreadId);
 
     if (!g_hOverlayThread) {
-        StopEqMediaCapture();
-        StopAudioCapture();
         g_running.store(false, std::memory_order_release);
         CloseHandle(g_hOverlayStopEvent);
         g_hOverlayStopEvent = nullptr;
@@ -18740,12 +18826,10 @@ BOOL Wh_ModInit() {
 
 void Wh_ModUninit() {
     g_running.store(false, std::memory_order_release);
-    EqCleanupIntegration();
-    StopLyricsCapture();
-    StopAlbumColorCapture();
-    StopEqMediaCapture();
-    StopAudioCapture();
 
+    // The overlay thread owns the Win10 tray message window and the overlay
+    // cleanup path. Signal and join it before stopping workers or unregistering
+    // classes, so Win10 cleanup never SendMessage's into a thread stuck in startup.
     if (g_hOverlayStopEvent)
         SetEvent(g_hOverlayStopEvent);
 
@@ -18756,6 +18840,11 @@ void Wh_ModUninit() {
     }
 
     g_overlayThreadId = 0;
+
+    StopLyricsCapture();
+    StopAlbumColorCapture();
+    StopEqMediaCapture();
+    StopAudioCapture();
 
     if (g_hOverlayStopEvent) {
         CloseHandle(g_hOverlayStopEvent);
@@ -18816,6 +18905,13 @@ void Wh_ModSettingsChanged() {
             EqEnsureXamlButton();
         else
             EqEnsureNativeTrayIcon();
+
+        if (g_shellServicesStarted.load(std::memory_order_acquire)) {
+            if (newShowMediaEqTrayButton)
+                StartEqMediaCapture();
+            else
+                StopEqMediaCapture();
+        }
     }
 
     const bool audioSourceChanged =
@@ -18846,7 +18942,8 @@ void Wh_ModSettingsChanged() {
             StopLyricsCapture();
     }
 
-    if (audioSourceChanged) {
+    if (audioSourceChanged &&
+        g_shellServicesStarted.load(std::memory_order_acquire)) {
         StopAudioCapture();
         StartAudioCapture();
     }
