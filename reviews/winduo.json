@@ -1,0 +1,14 @@
+{
+  "modId": "winduo",
+  "reviews": [
+    {
+      "authorName": "Andrew",
+      "content": "Not working at all on Asus Zenbook A16 (Snapdrago x2 CPU)",
+      "id": 27,
+      "modVersion": "0.1.0",
+      "parentId": null,
+      "timestamp": 1790604877,
+      "votes": 0
+    }
+  ]
+}

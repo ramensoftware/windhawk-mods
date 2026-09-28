@@ -2,12 +2,62 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-09-28T11:02:30.000Z</updated>
+    <updated>2026-09-28T15:01:18.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Window Cards 1.3]]></title>
+        <id>https://windhawk.net/mods/desktop-window-cards#651e01908512da9fa4935a9ef2859741c7e69240</id>
+        <link href="https://windhawk.net/mods/desktop-window-cards"/>
+        <updated>2026-09-28T15:01:18.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopwindowcards">Desktop Window Cards</h1>
+<p>When you minimize a window, a copy of it "falls" onto the desktop: it drops
+away, tilts back, loses its shadow and dims, until it lands as a small card
+underneath all other windows.
+<img src="https://i.imgur.com/jo794nO.gif" alt="Showcase" />
+<a href="https://i.imgur.com/YmIrKAd.mp4">Watch the full-quality video</a></p>
+<ul>
+<li><strong>Click the thumbnail:</strong> the card rises back to the window's original
+position and the real window is restored in its place.</li>
+<li><strong>Top bar:</strong> drag it to move the card around the desktop. With the option
+enabled, the position is remembered: the next time you minimize that window,
+its card lands where you left it.</li>
+<li><strong>X button:</strong> closes the window (or only removes the card, depending on the
+settings).</li>
+<li><strong>Smooth reveal:</strong> on restore, a snapshot of the card stays on top of the
+window while Windows rebuilds its transparency effects (Mica/Acrylic), then
+fades out to reveal the real window, hiding the initial flicker.</li>
+</ul>
+<p>Cards use DWM thumbnails, the same ones used by taskbar previews. The content
+stays live as long as the app keeps drawing while minimized; many apps stop
+doing so and show their last frame.</p>
+<p>The mod runs in a dedicated Windhawk tool process. Cards remain available
+across Explorer restarts.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Native Windows animation: in "Off only when restoring from a card" mode
+(default), Windows animations stay enabled (maximize, snap and other mods
+relying on them keep working) and are switched off only for the moment a
+card restores its window. When minimizing, Windows' own animation towards
+the taskbar therefore remains visible as well. "Always off" disables it while
+the mod is active: no double animation, but no maximize animation either.
+These changes only apply to the current session.</li>
+<li>If the mod's process ends unexpectedly while the native animation is
+switched off, the mod switches it back on the next time it starts.</li>
+<li>Cards don't follow virtual desktops.</li>
+<li>Windows running as administrator can be shown as cards, but restoring or
+closing them from a card may fall back to a plain restore, since a
+non-elevated process can't send them commands.</li>
+<li>Apps that hide to the notification area when minimized don't get a card.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Quick translator & Layout-switcher 1.0.1]]></title>
         <id>https://windhawk.net/mods/quick-translator-layout-switcher#1b1974185df3c2e3efd977b64b7f7d6a0bac18e4</id>
@@ -1795,48 +1845,6 @@ published at
         <author>
             <name>akilluminati47</name>
             <uri>https://github.com/akilluminati47</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Middle Click New Tab in Explorer 1.0.0]]></title>
-        <id>https://windhawk.net/mods/explorer-no-middle-click-new-tab#0c15586bc221bc0da3f5aaa26cc655ea24878d20</id>
-        <link href="https://windhawk.net/mods/explorer-no-middle-click-new-tab"/>
-        <updated>2026-09-22T16:39:07.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="disablemiddleclicknewtabinexplorer">Disable Middle Click New Tab in Explorer</h1>
-<p>In Windows 11, middle-clicking a folder in File Explorer opens it in a new tab.
-This mod drops the middle button inside Explorer so nothing happens at all.</p>
-<p>Only File Explorer windows are affected. The desktop, the taskbar and every
-other application keep their normal middle-click behavior: the mod runs inside
-explorer.exe alone, and there it only drops clicks aimed at the file list or
-the folder tree.</p>
-<h2 id="scope">Scope</h2>
-<p>Each of the two surfaces has its own switch in the settings:</p>
-<ul>
-<li><strong>File list</strong> - the main pane with the files and folders.</li>
-<li><strong>Navigation pane</strong> - the folder tree on the left.</li>
-</ul>
-<h2 id="whyitworksthisway">Why it works this way</h2>
-<p>The middle-button messages are dropped on their way to the window procedure,
-by hooking <code>DispatchMessageW</code> and returning without calling the original.
-<code>PeekMessageW</code> is hooked as well, rewriting the same messages to <code>WM_NULL</code>,
-because Explorer runs inner modal loops - drag detection after a button press,
-for one - that pull messages straight out of the queue instead of going
-through the main pump.</p>
-<p><code>GetMessageW</code> is deliberately <em>not</em> hooked. It blocks until a message arrives,
-so a hook frame would sit on the stack of every idle message loop in
-explorer.exe for as long as it waits, and Windhawk could not unmap the mod
-while that is true - disabling or updating the mod would hang in the
-"unloading" state.</p>
-<h2 id="interactionwithothermods">Interaction with other mods</h2>
-<p>Because the clicks are dropped before the window procedure runs, other mods
-that act on the middle button in these two surfaces stop seeing it while this
-mod is enabled - <code>autoscroll-win32</code>, for example. Mods keyed off
-<code>WM_PARENTNOTIFY</code>, such as <code>click-on-empty-explorer</code>, still fire, since the
-system sends that notification when the message is queued rather than when it
-is delivered.</p>]]></content>
-        <author>
-            <name>luizgununes</name>
-            <uri>https://github.com/luizgununes</uri>
         </author>
     </entry>
 </feed>

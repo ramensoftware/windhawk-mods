@@ -3419,6 +3419,30 @@
         "version": "1.0.0"
       }
     },
+    "desktop-window-cards": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790607678000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790607678000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "HaVeN80",
+        "compilerOptions": "-ldwmapi -lgdi32 -lshell32",
+        "description": "Minimized windows fall onto the desktop as dimmed thumbnail cards you can restore or close",
+        "github": "https://github.com/haven80",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "GPL-3.0-only",
+        "name": "Desktop Window Cards",
+        "version": "1.3"
+      }
+    },
     "disable-feedback-hub-hotkey": {
       "details": {
         "defaultSorting": 39501,
@@ -4069,7 +4093,7 @@
         "rating": 9,
         "ratingBreakdown": [18, 17, 46, 158, 627],
         "ratingUsers": 866,
-        "reviews": 1,
+        "reviews": 2,
         "updated": 1790443976000,
         "users": 21956
       },
@@ -16105,7 +16129,7 @@
         "rating": 0,
         "ratingBreakdown": [0, 0, 0, 0, 0],
         "ratingUsers": 0,
-        "reviews": 0,
+        "reviews": 1,
         "updated": 1790586304000,
         "users": 0
       },
