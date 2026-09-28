@@ -10701,6 +10701,29 @@
         "version": "1.1"
       }
     },
+    "shake-to-find-cursor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790625660000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790625660000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Darius Varnelis",
+        "compilerOptions": "-luser32 -lgdi32 -lshell32 -ladvapi32 -lshcore",
+        "description": "Temporarily enlarges the mouse cursor when you shake the mouse, like macOS \"Shake to locate\"",
+        "github": "https://github.com/Darius-Varnelis",
+        "include": [
+          "windhawk.exe"
+        ],
+        "name": "Shake to Find Cursor",
+        "version": "1.3"
+      }
+    },
     "shell-animation-disabler": {
       "details": {
         "defaultSorting": 2048,
