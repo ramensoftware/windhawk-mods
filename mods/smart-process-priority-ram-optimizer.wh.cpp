@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         3.4.3
+// @version         3.4.4
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -706,26 +706,42 @@ static std::chrono::steady_clock::time_point g_lastGameSweepTime{};
 static std::mutex g_gameSanctuaryMutex;
 static DWORD g_gameSanctuaryPid = 0;
 static HANDLE g_gameSanctuaryHandle = nullptr;
+static FILETIME g_gameSanctuaryCreateTime{};
 
 static void SetGameSanctuary(DWORD pid) {
     std::lock_guard<std::mutex> lock(g_gameSanctuaryMutex);
-    if (g_gameSanctuaryPid == pid && g_gameSanctuaryHandle &&
-        WaitForSingleObject(g_gameSanctuaryHandle, 0) == WAIT_TIMEOUT) {
-        return;
+    if (g_gameSanctuaryPid == pid && g_gameSanctuaryHandle) {
+        // Validate that the handle still points to the same process instance
+        // by checking both liveness and creation-time signature.
+        if (WaitForSingleObject(g_gameSanctuaryHandle, 0) == WAIT_TIMEOUT) {
+            FILETIME ct{}, x{}, y{}, z{};
+            if (GetProcessTimes(g_gameSanctuaryHandle, &ct, &x, &y, &z) &&
+                ct.dwLowDateTime == g_gameSanctuaryCreateTime.dwLowDateTime &&
+                ct.dwHighDateTime == g_gameSanctuaryCreateTime.dwHighDateTime) {
+                return; // Same PID, same process instance — keep sanctuary.
+            }
+        }
     }
     if (g_gameSanctuaryHandle) {
         CloseHandle(g_gameSanctuaryHandle);
         g_gameSanctuaryHandle = nullptr;
     }
     g_gameSanctuaryPid = 0;
+    g_gameSanctuaryCreateTime = {};
     if (pid == 0) {
         return;
     }
     HANDLE handle = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
                                 FALSE, pid);
     if (handle && WaitForSingleObject(handle, 0) == WAIT_TIMEOUT) {
-        g_gameSanctuaryPid = pid;
-        g_gameSanctuaryHandle = handle;
+        FILETIME ct{}, x{}, y{}, z{};
+        if (GetProcessTimes(handle, &ct, &x, &y, &z)) {
+            g_gameSanctuaryPid = pid;
+            g_gameSanctuaryHandle = handle;
+            g_gameSanctuaryCreateTime = ct;
+        } else {
+            CloseHandle(handle);
+        }
     } else if (handle) {
         CloseHandle(handle);
     }
@@ -740,6 +756,21 @@ static DWORD GetLiveGameSanctuaryPid() {
             g_gameSanctuaryHandle = nullptr;
         }
         g_gameSanctuaryPid = 0;
+        g_gameSanctuaryCreateTime = {};
+        return 0;
+    }
+    // Verify creation-time signature to guard against PID reuse.
+    FILETIME ct{}, x{}, y{}, z{};
+    if (GetProcessTimes(g_gameSanctuaryHandle, &ct, &x, &y, &z)) {
+        if (ct.dwLowDateTime != g_gameSanctuaryCreateTime.dwLowDateTime ||
+            ct.dwHighDateTime != g_gameSanctuaryCreateTime.dwHighDateTime) {
+            // PID was reused by a different process — clear sanctuary.
+            CloseHandle(g_gameSanctuaryHandle);
+            g_gameSanctuaryHandle = nullptr;
+            g_gameSanctuaryPid = 0;
+            g_gameSanctuaryCreateTime = {};
+            return 0;
+        }
     }
     return g_gameSanctuaryPid;
 }
@@ -751,6 +782,7 @@ static void ClearGameSanctuary() {
         g_gameSanctuaryHandle = nullptr;
     }
     g_gameSanctuaryPid = 0;
+    g_gameSanctuaryCreateTime = {};
 }
 
 static std::chrono::steady_clock::time_point g_lastPeriodicCleanTime{};
@@ -787,10 +819,9 @@ static void PruneAccessDeniedImmunity(const std::unordered_set<DWORD>& alivePids
 
 // Session stats.
 static std::chrono::steady_clock::time_point g_modStartTime{};
-static ULONGLONG g_sessionBytesReclaimed = 0;
-static DWORD g_sessionCleanupPasses = 0;
-static DWORD g_sessionProcessesTrimmedTotal = 0;
-static std::mutex g_sessionStatsMutex;
+static std::atomic<ULONGLONG> g_sessionBytesReclaimed{0};
+static std::atomic<DWORD> g_sessionCleanupPasses{0};
+static std::atomic<DWORD> g_sessionProcessesTrimmedTotal{0};
 static std::atomic<DWORD> g_sessionBoostTransitions{0};
 static std::atomic<DWORD> g_sessionThrottleTransitions{0};
 static std::atomic<ULONGLONG> g_lastResumeTick{0};
@@ -986,10 +1017,9 @@ static std::wstring FormatUptime(std::chrono::steady_clock::time_point start,
 }
 
 static std::wstring BuildSessionStatsString() {
-    std::lock_guard<std::mutex> lock(g_sessionStatsMutex);
     auto now = std::chrono::steady_clock::now();
     std::wstring uptime = FormatUptime(g_modStartTime, now);
-    ULONGLONG reclaimedMb = g_sessionBytesReclaimed / (1024ULL * 1024ULL);
+    ULONGLONG reclaimedMb = g_sessionBytesReclaimed.load(std::memory_order_relaxed) / (1024ULL * 1024ULL);
 
     wchar_t buf[512];
     swprintf_s(buf, _countof(buf),
@@ -999,10 +1029,10 @@ static std::wstring BuildSessionStatsString() {
                L"  ProBalance boosts: %u transitions\n"
                L"  Background throttles: %u transitions\n"
                L"  Processes trimmed: %u total",
-               uptime.c_str(), reclaimedMb, g_sessionCleanupPasses,
+               uptime.c_str(), reclaimedMb, g_sessionCleanupPasses.load(std::memory_order_relaxed),
                g_sessionBoostTransitions.load(std::memory_order_relaxed),
                g_sessionThrottleTransitions.load(std::memory_order_relaxed),
-               g_sessionProcessesTrimmedTotal);
+               g_sessionProcessesTrimmedTotal.load(std::memory_order_relaxed));
     return buf;
 }
 
@@ -1481,12 +1511,14 @@ static bool SetProcessEcoQoS(HANDLE hProcess, bool enableThrottling) {
                                  &state, sizeof(state)) != 0;
 }
 
-// Restores default Windows power throttling (ControlMask = 0, StateMask = 0).
+// Explicitly disables EcoQoS on Windows 11 22H2+. ControlMask must specify
+// which mechanisms to control; passing 0 is a no-op on modern kernels.
 static bool ResetProcessEcoQoS(HANDLE hProcess) {
     PROCESS_POWER_THROTTLING_STATE state{};
     state.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
-    state.ControlMask = 0;
-    state.StateMask = 0;
+    state.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED |
+                        PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
+    state.StateMask = 0; // Disable all controlled mechanisms
     return SetProcessInformation(hProcess,
                                  (PROCESS_INFORMATION_CLASS)ProcessPowerThrottlingInfoClass,
                                  &state, sizeof(state)) != 0;
@@ -2428,9 +2460,6 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
         (systemCpuPercent >= 0.0) &&
         (systemCpuPercent < settings.systemCpuContentionThresholdPercent * 0.7);
 
-    bool isMultiTasking =
-        settings.enableMultitaskingAdaptation && IsActiveMultiTaskingMode();
-
     std::vector<ProcessSnapshotEntry> snapshot = CaptureProcessSnapshotCached();
     std::unordered_set<DWORD> alivePids;
     std::unordered_map<DWORD, std::wstring> procNames;
@@ -2567,11 +2596,11 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
                     PriorityClassToRank(IDLE_PRIORITY_CLASS) &&
                 PriorityClassToRank(prevPriority) <=
                     PriorityClassToRank(NORMAL_PRIORITY_CLASS)) {
+                // BUG-04: Floor at BELOW_NORMAL to prevent priority inversion.
+                // IDLE_PRIORITY_CLASS risks deadlocking the foreground app when
+                // the throttled process holds a shared mutex, IPC pipe, RPC DCOM,
+                // audio subsystem lock, or UI component.
                 DWORD targetThrottlePrio = BELOW_NORMAL_PRIORITY_CLASS;
-                if (!isMultiTasking && settings.backgroundThrottlePriorityLevel ==
-                                           ThrottlePrioritySetting::Idle) {
-                    targetThrottlePrio = IDLE_PRIORITY_CLASS;
-                }
 
                 if (PriorityClassToRank(prevPriority) >
                     PriorityClassToRank(targetThrottlePrio)) {
@@ -2706,6 +2735,23 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
     if (!hwnd || !IsWindowVisible(hwnd) || pid == 0)
         return false;
 
+    // BUG-01: Exclude system window classes that carry WS_POPUP but are never games.
+    // Menus (#32768), tooltips, shell desktop, tray, and IME candidates would
+    // otherwise trigger a false Pre-Game Sweep on every right-click.
+    wchar_t className[64]{};
+    GetClassNameW(hwnd, className, _countof(className));
+    static const std::unordered_set<std::wstring> kSystemClasses = {
+        L"Shell_TrayWnd", L"Progman", L"WorkerW",
+        L"#32768", // Win32 menu
+        L"#32769", // Desktop
+        L"tooltips_class32",
+        L"IME",
+        L"MSCTFIME UI",
+        L"Windows.UI.Core.CoreWindow" // UWP shell overlays
+    };
+    if (kSystemClasses.count(className) != 0)
+        return false;
+
     // Exclusion check for media players, browsers, and terminals.
     std::vector<ProcessSnapshotEntry> snapshot = CaptureProcessSnapshotCached();
     for (const auto& entry : snapshot) {
@@ -2717,7 +2763,7 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
         }
     }
 
-    // Direct3D exclusive fullscreen check
+    // Direct3D exclusive fullscreen check (fast-path, works on older Windows too).
     if (g_pfnSHQueryUserNotificationState) {
         QUERY_USER_NOTIFICATION_STATE quns = QUNS_NOT_PRESENT;
         if (SUCCEEDED(g_pfnSHQueryUserNotificationState(&quns))) {
@@ -2727,7 +2773,32 @@ static bool IsLikelyGameOrFullscreenWindow(HWND hwnd, DWORD pid) {
         }
     }
 
-    // Borderless and popup window styles cover windowed and fullscreen games.
+    // W11-02: Use DWM extended frame bounds to get the actual rendered rect
+    // without the transparent shadow margins (7-9 px bias on Windows 11).
+    RECT rcBounds{};
+    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS,
+                                     &rcBounds, sizeof(rcBounds)))) {
+        GetWindowRect(hwnd, &rcBounds);
+    }
+
+    HMONITOR hMon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfoW(hMon, &mi))
+        return false;
+
+    // RVW-03: Borderless/popup windows must cover the monitor to qualify.
+    // This prevents menus, dropdowns, and small tool windows from triggering
+    // game detection. The 2-pixel tolerance handles DWM rounding.
+    bool coversMonitor = (rcBounds.left <= mi.rcMonitor.left + 2 &&
+                          rcBounds.top <= mi.rcMonitor.top + 2 &&
+                          rcBounds.right >= mi.rcMonitor.right - 2 &&
+                          rcBounds.bottom >= mi.rcMonitor.bottom - 2);
+
+    if (!coversMonitor)
+        return false;
+
+    // Window covers the entire monitor — check if it looks like a game.
     LONG style = GetWindowLongW(hwnd, GWL_STYLE);
     bool borderless = (style & WS_CAPTION) == 0 && (style & WS_THICKFRAME) == 0;
 
@@ -3198,18 +3269,15 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
             ? (memAfter.ullAvailPhys - memBefore.ullAvailPhys)
             : trimStats.bytesReclaimed;
 
-    {
-        std::lock_guard<std::mutex> lock(g_sessionStatsMutex);
-        g_sessionCleanupPasses++;
-        g_sessionBytesReclaimed += freedTotalBytes;
-        g_sessionProcessesTrimmedTotal += trimStats.processesTrimmed;
-    }
+    g_sessionCleanupPasses.fetch_add(1, std::memory_order_relaxed);
+    g_sessionBytesReclaimed.fetch_add(static_cast<ULONGLONG>(freedTotalBytes), std::memory_order_relaxed);
+    g_sessionProcessesTrimmedTotal.fetch_add(trimStats.processesTrimmed, std::memory_order_relaxed);
 
     if (settings.enableLogging) {
         double freedMb = freedTotalBytes / (1024.0 * 1024.0);
         double availAfterGb = memAfter.ullAvailPhys / (1024.0 * 1024.0 * 1024.0);
         double totalGb = memBefore.ullTotalPhys / (1024.0 * 1024.0 * 1024.0);
-        double sessionGb = g_sessionBytesReclaimed / (1024.0 * 1024.0 * 1024.0);
+        double sessionGb = g_sessionBytesReclaimed.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0);
         std::wstring uptime =
             FormatUptime(g_modStartTime, std::chrono::steady_clock::now());
 
@@ -3217,7 +3285,7 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
                  L"%s -> +%.1f MB freed (Avail: %.2f/%.1f GB | %u trimmed, %u kept warm) | Session: %.2f GB over %u passes (%u procs), %s uptime",
                  triggerReason, freedMb, availAfterGb, totalGb,
                  trimStats.processesTrimmed, trimStats.processesSkippedRecent,
-                 sessionGb, g_sessionCleanupPasses, g_sessionProcessesTrimmedTotal,
+                 sessionGb, g_sessionCleanupPasses.load(std::memory_order_relaxed), g_sessionProcessesTrimmedTotal.load(std::memory_order_relaxed),
                  uptime.c_str());
 
         bool gainWorthLogging =
@@ -3424,10 +3492,7 @@ static void MemoryOptimizerWorker() {
            L"(0.00%% CPU passive wait).");
 
     HANDLE waitHandles[2] = {g_stopEvent, g_wakeEvent};
-    {
-        std::lock_guard<std::mutex> lock(g_sessionStatsMutex);
-        g_modStartTime = std::chrono::steady_clock::now();
-    }
+    g_modStartTime = std::chrono::steady_clock::now();
     g_lastPeriodicCleanTime = g_modStartTime;
     g_lastIdleCleanTime = g_modStartTime;
     g_lastTriggerCleanTime = g_modStartTime;
@@ -4013,7 +4078,7 @@ void WhTool_ModUninit() {
     }
 
     {
-        double sessionGb = g_sessionBytesReclaimed / (1024.0 * 1024.0 * 1024.0);
+        double sessionGb = g_sessionBytesReclaimed.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0);
         std::wstring uptime =
             FormatUptime(g_modStartTime, std::chrono::steady_clock::now());
         size_t immuneCount = 0;
@@ -4026,7 +4091,7 @@ void WhTool_ModUninit() {
         Wh_Log(L"[SmartOptimizer::Shutdown] Session Summary Report:");
         Wh_Log(L"[SmartOptimizer::Shutdown]   • Total Uptime: %s", uptime.c_str());
         Wh_Log(L"[SmartOptimizer::Shutdown]   • Total RAM Reclaimed: %.2f GB across %u passes (%u process trimmings)",
-               sessionGb, g_sessionCleanupPasses, g_sessionProcessesTrimmedTotal);
+               sessionGb, g_sessionCleanupPasses.load(std::memory_order_relaxed), g_sessionProcessesTrimmedTotal.load(std::memory_order_relaxed));
         Wh_Log(L"[SmartOptimizer::Shutdown]   • ProBalance Boost Transitions: %u",
                g_sessionBoostTransitions.load());
         Wh_Log(L"[SmartOptimizer::Shutdown]   • Background Throttle Transitions: %u",
