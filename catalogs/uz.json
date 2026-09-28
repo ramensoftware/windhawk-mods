@@ -7956,7 +7956,7 @@
         "ratingBreakdown": [0, 0, 0, 3, 40],
         "ratingUsers": 43,
         "reviews": 0,
-        "updated": 1790319790000,
+        "updated": 1790589686000,
         "users": 541
       },
       "metadata": {
@@ -7969,7 +7969,7 @@
         ],
         "license": "MIT",
         "name": "Mouse Trail",
-        "version": "3.4.2.2"
+        "version": "3.4.4.0"
       }
     },
     "move-quietly": {
