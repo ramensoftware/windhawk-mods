@@ -1306,9 +1306,49 @@ namespace AudioSwapGui {
         return 0;
     }
 
+    void BringToForeground(HWND hWnd) {
+        if (!hWnd || !IsWindow(hWnd)) return;
+
+        if (IsIconic(hWnd)) {
+            ShowWindow(hWnd, SW_RESTORE);
+        } else {
+            ShowWindow(hWnd, SW_SHOW);
+        }
+
+        HWND hFore = GetForegroundWindow();
+        DWORD foreThread = hFore ? GetWindowThreadProcessId(hFore, nullptr) : 0;
+        DWORD curThread = GetCurrentThreadId();
+        DWORD targetThread = GetWindowThreadProcessId(hWnd, nullptr);
+
+        if (foreThread && foreThread != curThread) {
+            AttachThreadInput(curThread, foreThread, TRUE);
+        }
+        if (targetThread && targetThread != curThread) {
+            AttachThreadInput(curThread, targetThread, TRUE);
+        }
+
+        BringWindowToTop(hWnd);
+        SetForegroundWindow(hWnd);
+        SetActiveWindow(hWnd);
+        SetFocus(hWnd);
+
+        if (targetThread && targetThread != curThread) {
+            AttachThreadInput(curThread, targetThread, FALSE);
+        }
+        if (foreThread && foreThread != curThread) {
+            AttachThreadInput(curThread, foreThread, FALSE);
+        }
+    }
+
     HANDLE LaunchDashboard(HWND hTrayHwnd) {
-        if (InterlockedCompareExchange(&g_guiRunning, 1, 0) != 0)
+        if (InterlockedCompareExchange(&g_guiRunning, 1, 0) != 0) {
+            HWND hDash = (HWND)InterlockedCompareExchangePointer(
+                (volatile PVOID*)&g_dashboardHwnd, nullptr, nullptr);
+            if (hDash && IsWindow(hDash)) {
+                BringToForeground(hDash);
+            }
             return nullptr;
+        }
         HANDLE h = CreateThread(nullptr, 0, GuiThreadProc,
                                 reinterpret_cast<LPVOID>(hTrayHwnd), 0, nullptr);
         if (!h) InterlockedExchange(&g_guiRunning, 0);
@@ -2394,10 +2434,16 @@ void BuildAndShowContextMenu(HWND hWnd) {
     DestroyMenu(hMenu);
 
     if (cmd == MENU_OPEN_SETTINGS) {
-        HANDLE h = AudioSwapGui::LaunchDashboard(hWnd);
-        if (h) {
-            if (g_guiThread) CloseHandle(g_guiThread);
-            g_guiThread = h;
+        HWND hDash = (HWND)InterlockedCompareExchangePointer(
+            (volatile PVOID*)&g_dashboardHwnd, nullptr, nullptr);
+        if (hDash && IsWindow(hDash)) {
+            AudioSwapGui::BringToForeground(hDash);
+        } else {
+            HANDLE h = AudioSwapGui::LaunchDashboard(hWnd);
+            if (h) {
+                if (g_guiThread) CloseHandle(g_guiThread);
+                g_guiThread = h;
+            }
         }
     } else if (cmd == MENU_SOUND_SETTINGS) {
         ShellExecuteW(nullptr, L"open", L"control.exe", L"mmsys.cpl,,0", nullptr, SW_SHOWNORMAL);
