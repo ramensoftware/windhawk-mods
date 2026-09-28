@@ -765,21 +765,23 @@ namespace MicSwitchGui {
             s->hPersistMuteBtn = CreateWindowExW(0, L"BUTTON", L"Persistent Mute",
                 WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, 0, 0, 10, 10,
                 hWnd, (HMENU)IDC_PERSISTENT_MUTE, hInst, nullptr);
+            s->hSoundCues = CreateWindowExW(0, L"BUTTON", L"Sound cues for mute changes",
+                WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, 0, 0, 10, 10,
+                hWnd, (HMENU)IDC_SOUND_CUES, hInst, nullptr);
             {
                 HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
                 if (ux) {
                     using Fn = HRESULT(WINAPI*)(HWND, LPCWSTR, LPCWSTR);
                     auto fn = (Fn)GetProcAddress(ux, "SetWindowTheme");
-                    if (fn) fn(s->hPersistMuteBtn, L"", L"");
+                    if (fn) {
+                        fn(s->hPersistMuteBtn, L"", L"");
+                        fn(s->hSoundCues, L"", L"");
+                    }
                 }
             }
             if (g_persistentMute) {
                 SendMessageW(s->hPersistMuteBtn, BM_SETCHECK, BST_CHECKED, 0);
             }
-
-            s->hSoundCues = CreateWindowExW(0, L"BUTTON", L"Sound cues for mute changes",
-                WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, 0, 0, 10, 10,
-                hWnd, (HMENU)IDC_SOUND_CUES, hInst, nullptr);
             SendMessageW(s->hSoundCues, BM_SETCHECK, ReadSoundCues() ? BST_CHECKED : BST_UNCHECKED, 0);
 
             EnumChildWindows(hWnd, ApplyFontProc, reinterpret_cast<LPARAM>(s->hFont));
@@ -897,7 +899,7 @@ namespace MicSwitchGui {
         // ── Dark theming for child controls ───────────────────────────────────
         case WM_CTLCOLORSTATIC:
             if (s) {
-                SetTextColor((HDC)wParam, (HWND)lParam == s->hPersistMuteBtn ? kClrText : kClrDim);
+                SetTextColor((HDC)wParam, ((HWND)lParam == s->hPersistMuteBtn || (HWND)lParam == s->hSoundCues) ? kClrText : kClrDim);
                 SetBkColor((HDC)wParam, kClrBg);
                 return (LRESULT)s->hBgBrush;
             }
@@ -912,7 +914,7 @@ namespace MicSwitchGui {
             break;
         case WM_CTLCOLORBTN:
             if (s) {
-                if ((HWND)lParam == s->hPersistMuteBtn) {
+                if ((HWND)lParam == s->hPersistMuteBtn || (HWND)lParam == s->hSoundCues) {
                     SetTextColor((HDC)wParam, kClrText);
                     SetBkColor((HDC)wParam, kClrBg);
                 }
