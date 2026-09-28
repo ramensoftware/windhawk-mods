@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-28T21:48:06.000Z</updated>
+    <updated>2026-09-28T23:29:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar on top for Windows 11 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-on-top#d0da8ec90f989ede5626b5ab38e8f786d72af270</id>
+        <link href="https://windhawk.net/mods/taskbar-on-top"/>
+        <updated>2026-09-28T23:29:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><p>The mod now uses and customizes the native Windows top taskbar implementation, if available:</p></li>
+<li><p>A different location for secondary monitors.</p></li>
+<li><p>Running indicators on top.</p>
+<p>Using the native top taskbar is optional, and can be disabled in the mod settings.</p></li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.4.1]]></title>
         <id>https://windhawk.net/mods/taskbar-vertical#c8bed5f9ad6da06782e9857fb52bc36339dbc365</id>
@@ -828,23 +844,6 @@ live; the two noted below need a mod reload.</p>
         <updated>2026-09-28T00:13:13.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed compatibility with recent Windows 11 updates.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-vertical#012bba132d43ec1e2cfcc1b985bf7f46d16a4832</id>
-        <link href="https://windhawk.net/mods/taskbar-vertical"/>
-        <updated>2026-09-27T23:45:21.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>The mod now uses and customizes the native Windows vertical taskbar implementation, if available:</li>
-<li>Custom taskbar width.</li>
-<li>Different sides for different monitors.</li>
-<li>Jump list vertical alignment.</li>
-<li>Start menu vertical alignment.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

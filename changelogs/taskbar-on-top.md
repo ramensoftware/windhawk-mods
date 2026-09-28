@@ -1,3 +1,11 @@
+## 1.2 ([Sep 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/d0da8ec90f989ede5626b5ab38e8f786d72af270/mods/taskbar-on-top.wh.cpp))
+
+* The mod now uses and customizes the native Windows top taskbar implementation, if available:
+  * A different location for secondary monitors.
+  * Running indicators on top.
+
+  Using the native top taskbar is optional, and can be disabled in the mod settings.
+
 ## 1.1.8 ([Sep 18, 2026](https://github.com/ramensoftware/windhawk-mods/blob/a6ca3ccb45e4efc76e546d1704ef2fbe6c7f1370/mods/taskbar-on-top.wh.cpp))
 
 * Fixed the jump lists (context menus) of task items not opening in the latest Windows version.

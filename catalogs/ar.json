@@ -12720,7 +12720,7 @@
         "ratingBreakdown": [23, 16, 20, 46, 527],
         "ratingUsers": 632,
         "reviews": 0,
-        "updated": 1789691787000,
+        "updated": 1790638180000,
         "users": 25608
       },
       "featured": true,
@@ -12735,11 +12735,13 @@
         "homepage": "https://m417z.com/",
         "include": [
           "explorer.exe",
-          "StartMenuExperienceHost.exe"
+          "StartMenuExperienceHost.exe",
+          "ShellExperienceHost.exe",
+          "ShellHost.exe"
         ],
         "name": "Taskbar on top for Windows 11",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.1.8"
+        "version": "1.2"
       }
     },
     "taskbar-primary-on-secondary-monitor": {
