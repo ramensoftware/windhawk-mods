@@ -1,3 +1,13 @@
+## 1.3.0 ([Sep 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bd465cf91976360394dd11f5b58ed083080b1c33/mods/disable-windows-shortcuts.wh.cpp))
+
+* Added new shortcuts: `Win+Shift+C` (Charms Menu in Windows 10) and `Win+Shift+R` (Snipping Tool screen recording).
+* Added numpad `+` and `-` support for Magnifier zoom (`Win+Plus` / `Win+Minus`).
+* Fixed modifier keys occasionally getting stuck when keys are held during workstation lock or desktop switch.
+* Fixed premature/redundant Explorer restart prompts by tracking blocked state per Explorer PID in Windhawk storage.
+* Fixed race condition in uninit prompt thread cleanup and bounded prompt wait timeout.
+* Dynamically load `TaskDialogIndirect` from `comctl32.dll`, removing the `-lcomctl32` compiler dependency.
+* Preserved the 3-tier options for Special Shortcuts (`Off`, `Disable hotkey`, `Block hotkey`) to keep `dwm.exe` optional for standard users.
+
 ## 1.2.1 ([Jul 15, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bc9c9d57104d5081e9e70a507664872a0d4378e4/mods/disable-windows-shortcuts.wh.cpp))
 
 - Add `Win+F1` shortcut to block windows help from opening in default browser

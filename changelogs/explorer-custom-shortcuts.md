@@ -1,3 +1,12 @@
+## 1.4.0 ([Sep 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/df7220d83c639d849596a50f9d074f8576bcce74/mods/explorer-custom-shortcuts.wh.cpp))
+
+- **Added Action Toast Notifications**: Displays a brief floating OSD notification upon completing actions like copying paths/names or emptying the Recycle Bin. Automatically adapts to Windows light/dark mode, active system accent colors, and per-monitor DPI scaling.
+- **Added Notification Toggle Setting**: Added the `showActionToasts` option in mod settings to enable or disable toast notifications.
+- **Improved `internal:copyPath`**: Automatically falls back to copying the active folder path when no items are selected.
+- **Aligned Recycle Bin Confirmation**: Switched confirmation dialog default focus to OK (`MB_DEFBUTTON1`) to align with native Windows Explorer deletion behavior.
+- **Robust Mod Lifecycle & Safety**: Runs notifications directly on background worker threads to avoid unjoined threads during mod unloading, properly scopes GDI+ measurement objects, and ensures valid hook verification during initialization.
+- **Enhanced Logging**: Added structured diagnostic logging for shortcut matching, command execution, and internal operations.
+
 ## 1.3.0 ([Sep 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7146805e48b73f481404dd1d80808c88f0fc7dc0/mods/explorer-custom-shortcuts.wh.cpp))
 
 * Added `internal:openParentFolder` command to navigate the active Explorer tab to its parent folder.

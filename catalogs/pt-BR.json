@@ -3758,12 +3758,11 @@
         "ratingBreakdown": [2, 0, 0, 0, 10],
         "ratingUsers": 12,
         "reviews": 0,
-        "updated": 1784103428000,
+        "updated": 1790582630000,
         "users": 221
       },
       "metadata": {
         "author": "Lone",
-        "compilerOptions": "-lcomctl32",
         "description": "Selectively disable Windows keyboard shortcuts with individual toggles",
         "github": "https://github.com/Louis047",
         "include": [
@@ -3771,7 +3770,7 @@
           "dwm.exe"
         ],
         "name": "Disable Windows Shortcuts",
-        "version": "1.2.1"
+        "version": "1.3.0"
       }
     },
     "discord-balloon-notifs": {
@@ -4541,7 +4540,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 2],
         "ratingUsers": 2,
         "reviews": 0,
-        "updated": 1790319794000,
+        "updated": 1790582633000,
         "users": 18
       },
       "metadata": {
@@ -4549,7 +4548,7 @@
           "x86-64"
         ],
         "author": "ArvindSaini978",
-        "compilerOptions": "-lole32 -loleaut32 -lshlwapi",
+        "compilerOptions": "-lole32 -loleaut32 -lshlwapi -lgdiplus -lgdi32",
         "description": "Adds app-style keyboard shortcuts to File Explorer with dynamic tokens, selection modes, and internal commands.",
         "github": "https://github.com/ArvindSaini978",
         "include": [
@@ -4557,7 +4556,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Custom Shortcuts",
-        "version": "1.3.0"
+        "version": "1.4.0"
       }
     },
     "explorer-details-better-file-sizes": {
