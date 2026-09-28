@@ -1,5 +1,5 @@
 // ==WindhawkMod==
-// @id              windhawk-topbar-beta
+// @id              windhawk-topbar
 // @name            TopBar for Windows
 // @donateUrl       https://www.patreon.com/WasiXGamer/join
 // @description     A working TopBar with Flyouts for Windows through Windhawk.
@@ -17,7 +17,7 @@
 ## Note: 
 ### Settings for this mod were shifted to a separate settings app. It can be accessed either by settings icon in the topbar, OR from the context menus. 
 ![TopBar screenshot](https://i.imgur.com/BgmSodU.png)
-![Flyouts screenshot](https://i.imgur.com/6CPvpmT.jpeg)
+![Flyouts screenshot](https://i.imgur.com/KWm5pwX.jpeg)
 Adds a fully customizable **TopBar** at the top of your screen — task list,
 control-centre flyouts, media player, resource monitor, Start menu and
 Spotlight-style search — hosted in a dedicated `explorer.exe` tool process.
