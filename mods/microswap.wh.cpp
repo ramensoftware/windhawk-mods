@@ -65,7 +65,7 @@ Enable **Advanced Mode** in the Windhawk settings panel (gear icon → Settings 
 ## Changelog
 
 ### v2.1.0
-- **Live input meter:** Added a live microphone level meter inside the volume slider popup.
+- **Live input meter:** Added a live microphone level meter inside the volume slider popup (reflects active mic levels while an application is using the microphone).
 - **Mute sound cues:** Optional Windows sound cues when toggling mute state.
 - **Actual endpoint mute state:** Accurately reflects endpoint mute state directly from WASAPI notifications.
 - **Settings focus restoration:** Re-opening Mod Settings while already running brings the existing window to the foreground.
@@ -164,7 +164,6 @@ __CRT_UUID_DECL(IAudioMeterInformation,
 
 #include <propkey.h>
 #include <mmdeviceapi.h>
-#include <audioclient.h>
 #include <propidl.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <commdlg.h>
@@ -1472,6 +1471,80 @@ void LoadDeviceSelections() {
         Wh_GetStringValue(keyName, tmpNames[i], 256);
     }
 
+    // In-memory name re-match for offline slots at startup or reload.
+    HRESULT hrCo = CoInitialize(nullptr);
+    bool needsUninit = SUCCEEDED(hrCo);
+    IMMDeviceEnumerator* pEnum = nullptr;
+    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                   CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                                   (void**)&pEnum))) {
+        IMMDeviceCollection* pColl = nullptr;
+        if (SUCCEEDED(pEnum->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &pColl))) {
+            UINT count = 0;
+            pColl->GetCount(&count);
+            struct ActiveDev { std::wstring id, name; };
+            std::vector<ActiveDev> activeDevs;
+            for (UINT i = 0; i < count; i++) {
+                IMMDevice* pDev = nullptr;
+                if (SUCCEEDED(pColl->Item(i, &pDev))) {
+                    LPWSTR pId = nullptr;
+                    if (SUCCEEDED(pDev->GetId(&pId))) {
+                        IPropertyStore* pStore = nullptr;
+                        if (SUCCEEDED(pDev->OpenPropertyStore(STGM_READ, &pStore))) {
+                            PROPVARIANT v; PropVariantInit(&v);
+                            if (SUCCEEDED(pStore->GetValue(PKEY_Device_FriendlyName, &v)) && v.pwszVal) {
+                                activeDevs.push_back({pId, v.pwszVal});
+                            }
+                            PropVariantClear(&v);
+                            pStore->Release();
+                        }
+                        CoTaskMemFree(pId);
+                    }
+                    pDev->Release();
+                }
+            }
+            pColl->Release();
+
+            // Re-match inactive slots if friendly name matches uniquely among active endpoints
+            for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
+                if (tmpIds[i][0] && tmpNames[i][0]) {
+                    bool isActive = false;
+                    for (const auto& dev : activeDevs) {
+                        if (dev.id == tmpIds[i]) {
+                            isActive = true;
+                            break;
+                        }
+                    }
+                    if (!isActive) {
+                        int matchCount = 0;
+                        size_t matchIdx = 0;
+                        for (size_t d = 0; d < activeDevs.size(); d++) {
+                            if (activeDevs[d].name == tmpNames[i]) {
+                                matchCount++;
+                                matchIdx = d;
+                            }
+                        }
+                        if (matchCount == 1) {
+                            const auto& candId = activeDevs[matchIdx].id;
+                            bool usedElsewhere = false;
+                            for (int k = 0; k < MAX_DEVICE_SLOTS; k++) {
+                                if (k != i && wcscmp(tmpIds[k], candId.c_str()) == 0) {
+                                    usedElsewhere = true;
+                                    break;
+                                }
+                            }
+                            if (!usedElsewhere) {
+                                lstrcpynW(tmpIds[i], candId.c_str(), 512);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        pEnum->Release();
+    }
+    if (needsUninit) CoUninitialize();
+
     EnterCriticalSection(&g_stateLock);
     for (int i = 0; i < MAX_DEVICE_SLOTS; i++) {
         lstrcpynW(g_cachedDevId[i],   tmpIds[i],   512);
@@ -2345,9 +2418,6 @@ static bool   g_dragging = false;
 static bool   g_hover    = false;
 static HFONT  g_font     = nullptr;
 static IAudioMeterInformation* g_meter = nullptr;
-static IAudioClient*          g_audioClient   = nullptr;
-static IAudioCaptureClient*   g_captureClient = nullptr;
-static WAVEFORMATEX*          g_pwfx          = nullptr;
 static int g_peak = -1;
 
 static int ValueToThumbX() {
@@ -2402,17 +2472,6 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             if (SUCCEEDED(g_notifEnum->GetDefaultAudioEndpoint(eCapture, eMultimedia, &device)) && device) {
                 device->Activate(__uuidof(IAudioMeterInformation), CLSCTX_ALL, nullptr,
                                  reinterpret_cast<void**>(&g_meter));
-                if (SUCCEEDED(device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr,
-                                              reinterpret_cast<void**>(&g_audioClient))) && g_audioClient) {
-                    if (SUCCEEDED(g_audioClient->GetMixFormat(&g_pwfx)) && g_pwfx) {
-                        if (SUCCEEDED(g_audioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0,
-                                                               10000000, 0, g_pwfx, nullptr))) {
-                            g_audioClient->GetService(__uuidof(IAudioCaptureClient),
-                                                      reinterpret_cast<void**>(&g_captureClient));
-                            g_audioClient->Start();
-                        }
-                    }
-                }
                 device->Release();
             }
         }
@@ -2610,19 +2669,6 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 
     case WM_TIMER:
         if (wParam == kVolTimerId) {
-            if (g_captureClient) {
-                UINT32 packetLength = 0;
-                while (SUCCEEDED(g_captureClient->GetNextPacketSize(&packetLength)) && packetLength > 0) {
-                    BYTE* pData = nullptr;
-                    UINT32 numFrames = 0;
-                    DWORD flags = 0;
-                    if (SUCCEEDED(g_captureClient->GetBuffer(&pData, &numFrames, &flags, nullptr, nullptr))) {
-                        g_captureClient->ReleaseBuffer(numFrames);
-                    } else {
-                        break;
-                    }
-                }
-            }
             float rawPeak = 0.0f;
             int rawVal = -1;
             if (g_meter && SUCCEEDED(g_meter->GetPeakValue(&rawPeak))) {
@@ -2672,21 +2718,6 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 
     case WM_DESTROY:
         KillTimer(hWnd, kVolTimerId);
-        if (g_audioClient) {
-            g_audioClient->Stop();
-        }
-        if (g_captureClient) {
-            g_captureClient->Release();
-            g_captureClient = nullptr;
-        }
-        if (g_audioClient) {
-            g_audioClient->Release();
-            g_audioClient = nullptr;
-        }
-        if (g_pwfx) {
-            CoTaskMemFree(g_pwfx);
-            g_pwfx = nullptr;
-        }
         if (g_meter) {
             g_meter->Release();
             g_meter = nullptr;
