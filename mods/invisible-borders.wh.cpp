@@ -2,7 +2,7 @@
 // @id              invisible-borders
 // @name            Invisible Window Borders
 // @description     Makes window borders invisible while keeping rounded corners
-// @version         1.0.0
+// @version         1.1.0
 // @author          Bo0ii
 // @github          https://github.com/Bo0ii
 // @homepage        https://github.com/Bo0ii/windhawk-mods
@@ -17,7 +17,7 @@
 
 Makes window borders invisible while preserving rounded corners.
 
-![Comparison](https://raw.githubusercontent.com/Bo0ii/windhawk-mods/main/invisible-borders/onoff.png)
+![Comparison](onoff.png)
 
 ## Features
 
@@ -47,11 +47,20 @@ MIT License - Feel free to modify and distribute
 - SpecialWindows: false
   $name: Apply to Special Windows
   $description: Also apply to special windows like dialogs
+- ExcludeList: ""
+  $name: Exclude processes
+  $description: >-
+    Comma-separated list of process names to exclude (e.g., msedge.exe,chrome.exe).
+    Useful for apps like Edge that render their own borders.
 */
 // ==/WindhawkModSettings==
 
 #include <dwmapi.h>
 #include <windhawk_api.h>
+
+#include <algorithm>
+#include <string>
+#include <vector>
 
 // Special DWM color values
 #ifndef DWMWA_COLOR_NONE
@@ -62,8 +71,52 @@ const COLORREF BorderInvisible = DWMWA_COLOR_NONE;  // No border color
 const COLORREF ColorDefault = DWMWA_COLOR_DEFAULT;
 
 bool SpecialWindows = false;
+bool g_isExcludedProcess = false;
+
+void ParseExcludeList(LPCWSTR rawList, std::vector<std::wstring>& out) {
+    out.clear();
+    if (!rawList || !*rawList) return;
+
+    std::wstring list(rawList);
+    size_t start = 0;
+    while (start < list.size()) {
+        size_t end = list.find(L',', start);
+        if (end == std::wstring::npos) end = list.size();
+
+        std::wstring item = list.substr(start, end - start);
+        size_t first = item.find_first_not_of(L" \t");
+        size_t last = item.find_last_not_of(L" \t");
+        if (first != std::wstring::npos) {
+            item = item.substr(first, last - first + 1);
+            std::transform(item.begin(), item.end(), item.begin(), ::towlower);
+            out.push_back(item);
+        }
+
+        start = end + 1;
+    }
+}
+
+bool CheckExcludedProcess(const std::vector<std::wstring>& excludeList) {
+    if (excludeList.empty()) return false;
+
+    WCHAR exePath[MAX_PATH];
+    if (!GetModuleFileNameW(NULL, exePath, MAX_PATH)) return false;
+
+    WCHAR* fileName = wcsrchr(exePath, L'\\');
+    if (!fileName) fileName = exePath; else fileName++;
+
+    std::wstring name(fileName);
+    std::transform(name.begin(), name.end(), name.begin(), ::towlower);
+
+    for (const auto& excluded : excludeList) {
+        if (name == excluded) return true;
+    }
+    return false;
+}
 
 BOOL IsValidWindow(HWND hWnd) {
+    if (g_isExcludedProcess) return FALSE;
+
     DWORD dwStyle = GetWindowLongPtr(hWnd, GWL_STYLE);
     // Better exclude context menus
     return (dwStyle & WS_THICKFRAME) == WS_THICKFRAME ||
@@ -184,6 +237,17 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Init - Invisible Borders");
 
     SpecialWindows = Wh_GetIntSetting(L"SpecialWindows");
+
+    std::vector<std::wstring> excludeList;
+    LPCWSTR excludeStr = Wh_GetStringSetting(L"ExcludeList");
+    ParseExcludeList(excludeStr, excludeList);
+    Wh_FreeStringSetting(excludeStr);
+    g_isExcludedProcess = CheckExcludedProcess(excludeList);
+
+    if (g_isExcludedProcess) {
+        Wh_Log(L"Process excluded from invisible borders");
+        return FALSE;
+    }
 
     Wh_SetFunctionHook(
         (void *)DwmSetWindowAttribute,
