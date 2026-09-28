@@ -1033,6 +1033,10 @@ ARCHIVED_README_PATTERN = r'^//[ \t]+==WindhawkModReadme==[ \t]*$\s*/\*\s*([\s\S
 ARCHIVED_IMAGE_URL_PATTERN = r'!\[[^\]]*\]\(\s*([^)]+?)\s*\)'
 ARCHIVED_IMAGE_HOSTS = ['i.imgur.com', 'raw.githubusercontent.com']
 
+# Images under this prefix are shown from their original URL instead of the
+# archived copy, so they may change after being archived.
+DIRECTLY_SERVED_IMAGE_URL_PREFIX = 'https://raw.githubusercontent.com/ramensoftware/'
+
 # The archive runs on Windows, and the images folder is several directories
 # deep, so the path is kept well within MAX_PATH.
 ARCHIVED_IMAGE_MAX_PATH_LENGTH = 200
@@ -1067,8 +1071,21 @@ def get_archived_image_path_error(path: str) -> Optional[str]:
     return None
 
 
+def get_archived_image(path: str) -> Optional[bytes]:
+    """Return the archived image at the path relative to the images folder, or
+    None if it isn't archived."""
+    try:
+        url = f'https://raw.githubusercontent.com/ramensoftware/windhawk-mods/refs/heads/pages/images/{urllib.parse.quote(path)}'
+        return fetch_url(url)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+
 def validate_readme_images(path: Path, mod_source: str) -> int:
-    """Validate that the README images can be archived."""
+    """Validate that the README images can be archived, and that the already
+    archived ones are unchanged."""
     readme_match = re.search(ARCHIVED_README_PATTERN, mod_source, re.MULTILINE)
     if not readme_match:
         return 0
@@ -1113,10 +1130,24 @@ def validate_readme_images(path: Path, mod_source: str) -> int:
             continue
 
         try:
-            fetch_url(url, headers={'User-Agent': 'Mozilla/5.0'})
+            image = fetch_url(url, headers={'User-Agent': 'Mozilla/5.0'})
         except urllib.error.HTTPError as e:
             warnings += add_warning(
                 path, line, f'Image URL returned HTTP {e.code}: "{url}"'
+            )
+            continue
+
+        if url.startswith(DIRECTLY_SERVED_IMAGE_URL_PREFIX):
+            continue
+
+        archived_image = get_archived_image(image_path)
+        if archived_image is not None and archived_image != image:
+            warnings += add_warning(
+                path,
+                line,
+                'Image differs from its archived copy. Images are archived once'
+                ' and are not updated, to have the image updated, use a'
+                f' different URL: "{url}"',
             )
 
     return warnings

@@ -2,7 +2,7 @@
 // @id              taskbar-labels
 // @name            Taskbar Labels for Windows 11
 // @description     Customize text labels and combining for running programs on the taskbar (Windows 11 only)
-// @version         1.4.5
+// @version         1.5.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -100,16 +100,14 @@ Labels can also be shown or hidden per-program in the settings.
   - sameAsRunningIndicatorStyle: Same as running indicator style
   - centerDynamic: Centered, dynamic size
   - fullWidth: Full width
-- excludedPrograms: [excluded1.exe]
+- excludedPrograms: [""]
   $name: Excluded programs
   $description: >-
-    If the "Show labels, don't combine taskbar buttons" mode is used, labels
-    won't be shown for these programs
+    If one of the "Show labels" modes is used, labels won't be shown for these
+    programs
 
-    If the "Hide labels, don't combine taskbar buttons" mode is used, labels
-    will be shown for these programs
-
-    If another mode is used, this list is ignored
+    If one of the "Hide labels" modes is used, labels will be shown for these
+    programs
 
     Entries can be process names, paths or application IDs, for example:
 
@@ -177,10 +175,13 @@ Labels can also be shown or hidden per-program in the settings.
 
 #include <windhawk_utils.h>
 
+#include <inspectable.h>
+
 #undef GetCurrentTime
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.Numerics.h>
+#include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Interop.h>
 #include <winrt/Windows.UI.Xaml.Markup.h>
@@ -248,13 +249,6 @@ double g_initialTaskbarItemWidth;
 UINT_PTR g_invalidateTaskListButtonTimer;
 std::unordered_set<FrameworkElement> g_taskListButtonsWithLabelMissing;
 
-#if __cplusplus < 202302L
-// Missing in older MinGW headers.
-DECLARE_HANDLE(CO_MTA_USAGE_COOKIE);
-WINOLEAPI CoIncrementMTAUsage(CO_MTA_USAGE_COOKIE* pCookie);
-WINOLEAPI CoDecrementMTAUsage(CO_MTA_USAGE_COOKIE Cookie);
-#endif
-
 WINUSERAPI UINT WINAPI GetDpiForWindow(HWND hwnd);
 
 FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
@@ -317,67 +311,56 @@ HWND FindCurrentProcessTaskbarWnd() {
     return hTaskbarWnd;
 }
 
-// https://gist.github.com/m417z/451dfc2dad88d7ba88ed1814779a26b4
-std::wstring GetWindowAppId(HWND hWnd) {
-    // {c8900b66-a973-584b-8cae-355b7f55341b}
-    constexpr winrt::guid CLSID_StartMenuCacheAndAppResolver{
-        0x660b90c8,
-        0x73a9,
-        0x4b58,
-        {0x8c, 0xae, 0x35, 0x5b, 0x7f, 0x55, 0x34, 0x1b}};
+using RunFromWindowThreadProc_t = void(WINAPI*)(PVOID parameter);
 
-    // {de25675a-72de-44b4-9373-05170450c140}
-    constexpr winrt::guid IID_IAppResolver_8{
-        0xde25675a,
-        0x72de,
-        0x44b4,
-        {0x93, 0x73, 0x05, 0x17, 0x04, 0x50, 0xc1, 0x40}};
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         PVOID procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
-    struct IAppResolver_8 : public IUnknown {
-       public:
-        virtual HRESULT STDMETHODCALLTYPE GetAppIDForShortcut() = 0;
-        virtual HRESULT STDMETHODCALLTYPE GetAppIDForShortcutObject() = 0;
-        virtual HRESULT STDMETHODCALLTYPE
-        GetAppIDForWindow(HWND hWnd,
-                          WCHAR** pszAppId,
-                          void* pUnknown1,
-                          void* pUnknown2,
-                          void* pUnknown3) = 0;
-        virtual HRESULT STDMETHODCALLTYPE
-        GetAppIDForProcess(DWORD dwProcessId,
-                           WCHAR** pszAppId,
-                           void* pUnknown1,
-                           void* pUnknown2,
-                           void* pUnknown3) = 0;
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        PVOID procParam;
     };
 
-    HRESULT hr;
-    std::wstring result;
-
-    CO_MTA_USAGE_COOKIE cookie;
-    bool mtaUsageIncreased = SUCCEEDED(CoIncrementMTAUsage(&cookie));
-
-    winrt::com_ptr<IAppResolver_8> appResolver;
-    hr = CoCreateInstance(CLSID_StartMenuCacheAndAppResolver, nullptr,
-                          CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER,
-                          IID_IAppResolver_8, appResolver.put_void());
-    if (SUCCEEDED(hr)) {
-        WCHAR* pszAppId;
-        hr = appResolver->GetAppIDForWindow(hWnd, &pszAppId, nullptr, nullptr,
-                                            nullptr);
-        if (SUCCEEDED(hr)) {
-            result = pszAppId;
-            CoTaskMemFree(pszAppId);
-        }
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
     }
 
-    appResolver = nullptr;
-
-    if (mtaUsageIncreased) {
-        CoDecrementMTAUsage(cookie);
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
     }
 
-    return result;
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    RUN_FROM_WINDOW_THREAD_PARAM* param =
+                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return true;
 }
 
 void RecalculateLabels() {
@@ -405,8 +388,6 @@ void RecalculateLabels() {
 
     g_applyingSettings = false;
 }
-
-void* TaskbarSettings_GroupingMode_Original;
 
 using TaskListButton_get_IsRunning_t = HRESULT(WINAPI*)(void* pThis,
                                                         bool* running);
@@ -931,7 +912,14 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
     }
 
     double taskListButtonWidth = taskListButtonElement.ActualWidth();
-    double iconWidth = iconElement.ActualWidth();
+
+    // The icon is collapsed while the default icon placeholder is shown, and
+    // this runs before layout when the icon size changes, so the actual width
+    // can't be relied on.
+    double iconWidth = iconElement.Width();
+    if (!(iconWidth > 0)) {
+        iconWidth = iconElement.ActualWidth();
+    }
 
     auto columnDefinitions = iconPanelElement.ColumnDefinitions();
 
@@ -1067,9 +1055,8 @@ void UpdateTaskListButtonWithLabelStyle(FrameworkElement taskListButtonElement,
             badgeElement.Margin(Thickness{
                 .Right = (g_unloading || !labelControlElement)
                              ? 0.0
-                             : firstColumnWidthPixels -
-                                   g_settings.leftAndRightPaddingSize -
-                                   iconWidth,
+                             : (firstColumnWidthPixels - iconWidth) / 2 -
+                                   g_settings.leftAndRightPaddingSize,
             });
         }
     }
@@ -1542,21 +1529,195 @@ HRESULT ITaskbarButton_get_MinScalableWidth_Hook(void* pThis, float* minWidth) {
     return ret;
 }
 
-bool g_inITaskbarAppItemViewModel_HasLabels;
-
-using ITaskbarAppItemViewModel_HasLabels_t = bool(WINAPI*)(void* pThis);
-ITaskbarAppItemViewModel_HasLabels_t
-    ITaskbarAppItemViewModel_HasLabels_Original;
-bool WINAPI ITaskbarAppItemViewModel_HasLabels_Hook(void* pThis) {
+using TaskbarCollapsibleLayout_ArrangeOverride_t =
+    HRESULT(WINAPI*)(void* pThis,
+                     void* context,
+                     winrt::Windows::Foundation::Size finalSize,
+                     winrt::Windows::Foundation::Size* resultSize);
+TaskbarCollapsibleLayout_ArrangeOverride_t
+    TaskbarCollapsibleLayout_ArrangeOverride_Original;
+HRESULT WINAPI TaskbarCollapsibleLayout_ArrangeOverride_Hook(
+    void* pThis,
+    void* context,
+    winrt::Windows::Foundation::Size finalSize,
+    winrt::Windows::Foundation::Size* resultSize) {
     Wh_Log(L">");
 
-    g_inITaskbarAppItemViewModel_HasLabels = true;
+    HRESULT ret = TaskbarCollapsibleLayout_ArrangeOverride_Original(
+        pThis, context, finalSize, resultSize);
+    if (FAILED(ret)) {
+        return ret;
+    }
 
-    bool ret = ITaskbarAppItemViewModel_HasLabels_Original(pThis);
+    // The layout skips dragged items, which are moved with a translation, so
+    // layout changes inside them stay pending until the drop. A label with
+    // ellipsis trimming isn't rendered while its layout is pending, so arrange
+    // the items in their current slots.
+    winrt::Microsoft::UI::Xaml::Controls::VirtualizingLayoutContext
+        layoutContext{nullptr};
+    winrt::copy_from_abi(layoutContext, context);
+    if (layoutContext.ItemCount() == 0) {
+        return ret;
+    }
 
-    g_inITaskbarAppItemViewModel_HasLabels = false;
+    auto repeaterElement = Media::VisualTreeHelper::GetParent(
+        layoutContext.GetOrCreateElementAt(0));
+    if (!repeaterElement) {
+        return ret;
+    }
+
+    int childrenCount =
+        Media::VisualTreeHelper::GetChildrenCount(repeaterElement);
+    for (int i = 0; i < childrenCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(repeaterElement, i)
+                         .try_as<FrameworkElement>();
+        if (child && child.Name() == L"TaskListButton") {
+            child.Arrange(
+                Controls::Primitives::LayoutInformation::GetLayoutSlot(child));
+        }
+    }
 
     return ret;
+}
+
+bool IsAppIdExcluded(PCWSTR appId) {
+    std::wstring appIdUpper = appId;
+    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE, appIdUpper.data(),
+                  static_cast<int>(appIdUpper.length()), appIdUpper.data(),
+                  static_cast<int>(appIdUpper.length()), nullptr, nullptr, 0);
+    if (!g_settings.excludedPrograms.contains(appIdUpper)) {
+        return false;
+    }
+
+    Wh_Log(L"Excluding %s", appId);
+    return true;
+}
+
+bool IsWindowProcessExcluded(HWND hWnd) {
+    DWORD resolvedWindowProcessPathLen = 0;
+    WCHAR resolvedWindowProcessPath[MAX_PATH];
+    WCHAR resolvedWindowProcessPathUpper[MAX_PATH];
+
+    DWORD dwProcessId = 0;
+    if (GetWindowThreadProcessId(hWnd, &dwProcessId)) {
+        HANDLE hProcess =
+            OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, dwProcessId);
+        if (hProcess) {
+            DWORD dwSize = ARRAYSIZE(resolvedWindowProcessPath);
+            if (QueryFullProcessImageName(hProcess, 0,
+                                          resolvedWindowProcessPath, &dwSize)) {
+                resolvedWindowProcessPathLen = dwSize;
+            }
+
+            CloseHandle(hProcess);
+        }
+    }
+
+    if (resolvedWindowProcessPathLen == 0) {
+        return false;
+    }
+
+    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
+                  resolvedWindowProcessPath, resolvedWindowProcessPathLen + 1,
+                  resolvedWindowProcessPathUpper,
+                  resolvedWindowProcessPathLen + 1, nullptr, nullptr, 0);
+
+    bool excluded =
+        g_settings.excludedPrograms.contains(resolvedWindowProcessPathUpper);
+
+    if (!excluded) {
+        if (PCWSTR programFileNameUpper =
+                wcsrchr(resolvedWindowProcessPathUpper, L'\\')) {
+            programFileNameUpper++;
+            if (*programFileNameUpper &&
+                g_settings.excludedPrograms.contains(programFileNameUpper)) {
+                excluded = true;
+            }
+        }
+    }
+
+    if (excluded) {
+        Wh_Log(L"Excluding %s", resolvedWindowProcessPath);
+    }
+
+    return excluded;
+}
+
+// WindowsUdk.UI.Shell interfaces, declared up to the last used method. A WinRT
+// interface doesn't change once published, so a successful query by IID
+// guarantees the layout.
+
+// {b081d9d6-9b45-5363-8a4d-854add6abe7e}
+constexpr winrt::guid IID_ITaskItem{
+    0xb081d9d6,
+    0x9b45,
+    0x5363,
+    {0x8a, 0x4d, 0x85, 0x4a, 0xdd, 0x6a, 0xbe, 0x7e}};
+
+struct ITaskItem : public IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_AppId(void** value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_UniqueId() = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_WindowId(HWND* value) = 0;
+};
+
+// {a152e779-93df-5be2-af2c-d342452b0ce0}
+constexpr winrt::guid IID_ITaskGroup{
+    0xa152e779,
+    0x93df,
+    0x5be2,
+    {0xaf, 0x2c, 0xd3, 0x42, 0x45, 0x2b, 0x0c, 0xe0}};
+
+struct ITaskGroup : public IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_AppId(void** value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_UniqueId() = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_DisplayName() = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_AccessibleName() = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_Icon() = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_OverlayIcon() = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_OverlayIconDescription() = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_Badge() = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_IsRequestingAttention() = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_Progress() = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_VisualState() = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_VisualState() = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_Bounds() = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_Bounds() = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_Items(void** value) = 0;
+};
+
+HWND GetTaskItemWindow(IUnknown* taskItemUnknown) {
+    winrt::com_ptr<ITaskItem> taskItem;
+    HRESULT hr =
+        taskItemUnknown->QueryInterface(IID_ITaskItem, taskItem.put_void());
+    if (FAILED(hr)) {
+        return nullptr;
+    }
+
+    HWND hWnd = nullptr;
+    if (FAILED(taskItem->get_WindowId(&hWnd))) {
+        return nullptr;
+    }
+
+    return hWnd;
+}
+
+bool IsTaskItemExcluded(IUnknown* taskItemUnknown) {
+    winrt::com_ptr<ITaskItem> taskItem;
+    HRESULT hr =
+        taskItemUnknown->QueryInterface(IID_ITaskItem, taskItem.put_void());
+    if (FAILED(hr)) {
+        return false;
+    }
+
+    winrt::hstring appId;
+    hr = taskItem->get_AppId(winrt::put_abi(appId));
+    if (SUCCEEDED(hr) && IsAppIdExcluded(appId.c_str())) {
+        return true;
+    }
+
+    HWND hWnd = nullptr;
+    hr = taskItem->get_WindowId(&hWnd);
+    return SUCCEEDED(hr) && hWnd && IsWindowProcessExcluded(hWnd);
 }
 
 void* ITaskListWindowViewModel_vftable;
@@ -1578,8 +1739,7 @@ TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook(
     HRESULT ret =
         TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original(
             pThis, hasLabels);
-    if (g_unloading || !g_inITaskbarAppItemViewModel_HasLabels || FAILED(ret) ||
-        !*hasLabels) {
+    if (g_unloading || FAILED(ret) || !*hasLabels) {
         return ret;
     }
 
@@ -1597,90 +1757,11 @@ TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook(
             pITaskListWindowViewModel = (PVOID*)pITaskListWindowViewModel - 1;
         }
 
-        HWND hWnd = nullptr;
-
         winrt::com_ptr<IUnknown> taskItem;
         HRESULT hr = ITaskListWindowViewModel_get_TaskItem(
             pITaskListWindowViewModel, taskItem.put_void());
-        if (SUCCEEDED(hr) && taskItem) {
-            // public: virtual int __cdecl winrt::impl::produce<struct
-            // winrt::WindowsUdk::UI::Shell::implementation::TaskItem, struct
-            // winrt::WindowsUdk::UI::Shell::ITaskItem>::get_WindowId(unsigned
-            // __int64 *)
-            using ITaskItem_get_WindowId_t =
-                HRESULT(WINAPI*)(void* pThis, HWND* hWnd);
-
-            void** vtable = *(void***)taskItem.get();
-            auto ITaskItem_get_WindowId = (ITaskItem_get_WindowId_t)vtable[8];
-
-            hr = ITaskItem_get_WindowId(taskItem.get(), &hWnd);
-        }
-
-        if (SUCCEEDED(hr) && hWnd) {
-            DWORD resolvedWindowProcessPathLen = 0;
-            WCHAR resolvedWindowProcessPath[MAX_PATH];
-            WCHAR resolvedWindowProcessPathUpper[MAX_PATH];
-
-            DWORD dwProcessId = 0;
-            if (GetWindowThreadProcessId(hWnd, &dwProcessId)) {
-                HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
-                                              FALSE, dwProcessId);
-                if (hProcess) {
-                    DWORD dwSize = ARRAYSIZE(resolvedWindowProcessPath);
-                    if (QueryFullProcessImageName(
-                            hProcess, 0, resolvedWindowProcessPath, &dwSize)) {
-                        resolvedWindowProcessPathLen = dwSize;
-                    }
-
-                    CloseHandle(hProcess);
-                }
-            }
-
-            if (resolvedWindowProcessPathLen > 0) {
-                LCMapStringEx(
-                    LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
-                    resolvedWindowProcessPath, resolvedWindowProcessPathLen + 1,
-                    resolvedWindowProcessPathUpper,
-                    resolvedWindowProcessPathLen + 1, nullptr, nullptr, 0);
-            } else {
-                *resolvedWindowProcessPath = L'\0';
-                *resolvedWindowProcessPathUpper = L'\0';
-            }
-
-            bool excluded = false;
-
-            if (!excluded && resolvedWindowProcessPathLen > 0 &&
-                g_settings.excludedPrograms.contains(
-                    resolvedWindowProcessPathUpper)) {
-                excluded = true;
-            }
-
-            if (!excluded) {
-                if (PCWSTR programFileNameUpper =
-                        wcsrchr(resolvedWindowProcessPathUpper, L'\\')) {
-                    programFileNameUpper++;
-                    if (*programFileNameUpper &&
-                        g_settings.excludedPrograms.contains(
-                            programFileNameUpper)) {
-                        excluded = true;
-                    }
-                }
-            }
-
-            if (!excluded) {
-                std::wstring appId = GetWindowAppId(hWnd);
-                LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE,
-                              appId.data(), appId.length(), appId.data(),
-                              appId.length(), nullptr, nullptr, 0);
-                if (g_settings.excludedPrograms.contains(appId.c_str())) {
-                    excluded = true;
-                }
-            }
-
-            if (excluded) {
-                Wh_Log(L"Excluding %s", resolvedWindowProcessPath);
-                hideLabels = !hideLabels;
-            }
+        if (SUCCEEDED(hr) && taskItem && IsTaskItemExcluded(taskItem.get())) {
+            hideLabels = !hideLabels;
         }
     }
 
@@ -1689,6 +1770,52 @@ TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook(
     }
 
     return ret;
+}
+
+using TaskListGroupViewModel_ITaskbarAppItemViewModel_get_TaskGroup_t =
+    HRESULT(WINAPI*)(void* pThis, void** taskGroup);
+TaskListGroupViewModel_ITaskbarAppItemViewModel_get_TaskGroup_t
+    TaskListGroupViewModel_ITaskbarAppItemViewModel_get_TaskGroup;
+
+// The windows of a group share its app ID, so only the process of the first
+// window is checked in addition to it.
+bool IsTaskGroupExcluded(void* pITaskbarAppItemViewModel, bool requireWindows) {
+    winrt::com_ptr<IUnknown> taskGroupUnknown;
+    HRESULT hr = TaskListGroupViewModel_ITaskbarAppItemViewModel_get_TaskGroup(
+        pITaskbarAppItemViewModel, taskGroupUnknown.put_void());
+    if (FAILED(hr) || !taskGroupUnknown) {
+        return false;
+    }
+
+    winrt::com_ptr<ITaskGroup> taskGroup;
+    hr = taskGroupUnknown->QueryInterface(IID_ITaskGroup, taskGroup.put_void());
+    if (FAILED(hr)) {
+        return false;
+    }
+
+    // An IVectorView<TaskItem>, which has the same ABI.
+    winrt::Windows::Foundation::Collections::IVectorView<
+        winrt::Windows::Foundation::IInspectable>
+        items;
+    hr = taskGroup->get_Items(winrt::put_abi(items));
+
+    HWND hWnd = nullptr;
+    if (SUCCEEDED(hr) && items && items.Size() > 0) {
+        auto item = items.GetAt(0);
+        hWnd = GetTaskItemWindow(static_cast<IUnknown*>(winrt::get_abi(item)));
+    }
+
+    if (!hWnd && requireWindows) {
+        return false;
+    }
+
+    winrt::hstring appId;
+    hr = taskGroup->get_AppId(winrt::put_abi(appId));
+    if (SUCCEEDED(hr) && IsAppIdExcluded(appId.c_str())) {
+        return true;
+    }
+
+    return hWnd && IsWindowProcessExcluded(hWnd);
 }
 
 using TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_t =
@@ -1704,7 +1831,7 @@ TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook(
     HRESULT ret =
         TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original(
             pThis, hasLabels);
-    if (g_unloading || !g_inITaskbarAppItemViewModel_HasLabels || FAILED(ret)) {
+    if (g_unloading || FAILED(ret)) {
         return ret;
     }
 
@@ -1714,7 +1841,130 @@ TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook(
         *hasLabels = false;
     }
 
+    // Labels are only added to groups with windows, leaving the labels of
+    // pinned items to Windows.
+    bool excludedHasLabels = g_settings.mode == Mode::noLabelsWithCombining ||
+                             g_settings.mode == Mode::noLabelsWithoutCombining;
+    if (*hasLabels != excludedHasLabels &&
+        !g_settings.excludedPrograms.empty() &&
+        TaskListGroupViewModel_ITaskbarAppItemViewModel_get_TaskGroup &&
+        IsTaskGroupExcluded(pThis, /*requireWindows=*/excludedHasLabels)) {
+        *hasLabels = excludedHasLabels;
+    }
+
     return ret;
+}
+
+void* TaskListWindowViewModel_ITaskbarAppItemViewModel_vftable;
+void* TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable;
+
+void** g_taskListWindowViewModelHasLabelSlot;
+void** g_taskListGroupViewModelHasLabelSlot;
+
+// Leaves the slot intact if it doesn't hold the expected value, e.g. if another
+// mod patched it.
+bool SetVtableSlot(void** slot, void* expected, void* value) {
+    DWORD oldProtect;
+    if (!VirtualProtect(slot, sizeof(*slot), PAGE_READWRITE, &oldProtect)) {
+        return false;
+    }
+
+    bool set =
+        InterlockedCompareExchangePointer(slot, value, expected) == expected;
+    VirtualProtect(slot, sizeof(*slot), oldProtect, &oldProtect);
+    return set;
+}
+
+// The HasLabel getters are hooked in their vtable slots, since the linker can
+// fold a getter with other identical ones. For example, get_HasLabel and
+// get_IsRunning of TaskListWindowViewModel both return true, and hooking the
+// shared code would hide the running indicator along with the label.
+void HookHasLabelVtableSlots() {
+    auto windowVtable =
+        (void**)TaskListWindowViewModel_ITaskbarAppItemViewModel_vftable;
+    auto groupVtable =
+        (void**)TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable;
+    auto windowGetHasLabel = (void*)
+        TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original;
+    auto groupGetHasLabel = (void*)
+        TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original;
+    if (!windowVtable || !groupVtable || !windowGetHasLabel ||
+        !groupGetHasLabel) {
+        return;
+    }
+
+    auto windowHook = (void*)
+        TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook;
+    auto groupHook = (void*)
+        TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook;
+
+    // Both vtables are of the same interface. The group getter reads a field,
+    // so its address is unique in its vtable, unlike the window getter's. The
+    // first 6 slots are of IInspectable.
+    for (int i = 6; i < 64; i++) {
+        if (groupVtable[i] != groupGetHasLabel) {
+            continue;
+        }
+
+        if (!SetVtableSlot(&windowVtable[i], windowGetHasLabel, windowHook) ||
+            !SetVtableSlot(&groupVtable[i], groupGetHasLabel, groupHook)) {
+            Wh_Log(L"Failed to set HasLabel vtable slot %d", i);
+            SetVtableSlot(&windowVtable[i], windowHook, windowGetHasLabel);
+            return;
+        }
+
+        g_taskListWindowViewModelHasLabelSlot = &windowVtable[i];
+        g_taskListGroupViewModelHasLabelSlot = &groupVtable[i];
+        return;
+    }
+
+    Wh_Log(L"HasLabel vtable slot not found");
+}
+
+void UnhookHasLabelVtableSlots() {
+    if (g_taskListWindowViewModelHasLabelSlot) {
+        SetVtableSlot(
+            g_taskListWindowViewModelHasLabelSlot,
+            (void*)
+                TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook,
+            (void*)
+                TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original);
+        g_taskListWindowViewModelHasLabelSlot = nullptr;
+    }
+
+    if (g_taskListGroupViewModelHasLabelSlot) {
+        SetVtableSlot(
+            g_taskListGroupViewModelHasLabelSlot,
+            (void*)
+                TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook,
+            (void*)
+                TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original);
+        g_taskListGroupViewModelHasLabelSlot = nullptr;
+    }
+}
+
+using TaskListGroupViewModel_OnPropertyChanged_t =
+    void(WINAPI*)(void* pThis, const std::wstring_view& propertyName);
+TaskListGroupViewModel_OnPropertyChanged_t
+    TaskListGroupViewModel_OnPropertyChanged;
+
+using TaskListGroupViewModel_OnTaskItemsCollectionChanged_t =
+    void(WINAPI*)(void* pThis, void* args);
+TaskListGroupViewModel_OnTaskItemsCollectionChanged_t
+    TaskListGroupViewModel_OnTaskItemsCollectionChanged_Original;
+void WINAPI
+TaskListGroupViewModel_OnTaskItemsCollectionChanged_Hook(void* pThis,
+                                                         void* args) {
+    Wh_Log(L">");
+
+    TaskListGroupViewModel_OnTaskItemsCollectionChanged_Original(pThis, args);
+
+    // Excluded programs are matched by the group's windows, but a change of
+    // the windows isn't followed by a native HasLabel notification.
+    if (!g_unloading && !g_settings.excludedPrograms.empty() &&
+        TaskListGroupViewModel_OnPropertyChanged) {
+        TaskListGroupViewModel_OnPropertyChanged(pThis, L"HasLabel");
+    }
 }
 
 using RegGetValueW_t = decltype(&RegGetValueW);
@@ -1926,12 +2176,6 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] =  //
         {
             {
-                {LR"(public: __cdecl winrt::impl::consume_WindowsUdk_UI_Shell_ITaskbarSettings5<struct winrt::WindowsUdk::UI::Shell::TaskbarSettings>::GroupingMode(void)const )"},
-                &TaskbarSettings_GroupingMode_Original,
-                nullptr,
-                true,
-            },
-            {
                 {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListButton,struct winrt::Taskbar::ITaskListButton>::get_IsRunning(bool *))"},
                 &TaskListButton_get_IsRunning_Original,
             },
@@ -1967,10 +2211,10 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 true,
             },
             {
-                {LR"(public: __cdecl winrt::impl::consume_Taskbar_ITaskbarAppItemViewModel<struct winrt::Taskbar::ITaskbarAppItemViewModel>::HasLabel(void)const )"},
-                &ITaskbarAppItemViewModel_HasLabels_Original,
-                ITaskbarAppItemViewModel_HasLabels_Hook,
-                true,
+                {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskbarCollapsibleLayout,struct winrt::Microsoft::UI::Xaml::Controls::IVirtualizingLayoutOverrides>::ArrangeOverride(void *,struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
+                &TaskbarCollapsibleLayout_ArrangeOverride_Original,
+                TaskbarCollapsibleLayout_ArrangeOverride_Hook,
+                true,  // From 10.0.22621.2361.
             },
             {
                 {LR"(const winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskListWindowViewModel>::`vftable')"},
@@ -1987,16 +2231,44 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
             {
                 {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_HasLabel(bool *))"},
                 &TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original,
-
-                TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook,
-                true,
+                nullptr,
+                true,  // From 10.0.22621.2361.
             },
             {
                 {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_HasLabel(bool *))"},
                 &TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original,
-
-                TaskListGroupViewModel_ITaskbarAppItemViewModel_get_HasLabel_Hook,
-                true,
+                nullptr,
+                true,  // From 10.0.22621.2361.
+            },
+            {
+                {LR"(const winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListWindowViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::`vftable')"},
+                &TaskListWindowViewModel_ITaskbarAppItemViewModel_vftable,
+                nullptr,
+                true,  // From 10.0.22621.2361.
+            },
+            {
+                {LR"(const winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::`vftable')"},
+                &TaskListGroupViewModel_ITaskbarAppItemViewModel_vftable,
+                nullptr,
+                true,  // From 10.0.22621.2361.
+            },
+            {
+                {LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::Taskbar::implementation::TaskListGroupViewModel,struct winrt::Taskbar::ITaskbarAppItemViewModel>::get_TaskGroup(void * *))"},
+                &TaskListGroupViewModel_ITaskbarAppItemViewModel_get_TaskGroup,
+                nullptr,
+                true,  // From 10.0.22621.2361.
+            },
+            {
+                {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListGroupViewModel::OnPropertyChanged(class std::basic_string_view<wchar_t,struct std::char_traits<wchar_t> > const &))"},
+                &TaskListGroupViewModel_OnPropertyChanged,
+                nullptr,
+                true,  // From 10.0.22621.2361.
+            },
+            {
+                {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskListGroupViewModel::OnTaskItemsCollectionChanged(struct winrt::WindowsUdk::UI::Shell::TaskItemCollectionChangedEventArgs const &))"},
+                &TaskListGroupViewModel_OnTaskItemsCollectionChanged_Original,
+                TaskListGroupViewModel_OnTaskItemsCollectionChanged_Hook,
+                true,  // From 10.0.22621.2361.
             },
             {
                 {
@@ -2020,7 +2292,7 @@ bool HookTaskbarViewDllSymbols(HMODULE module) {
                 nullptr,
                 true,
             },
-        };
+    };
 
     if (!HookSymbols(module, symbolHooks, ARRAYSIZE(symbolHooks))) {
         Wh_Log(L"HookSymbols failed");
@@ -2161,7 +2433,7 @@ BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
                 wil_Feature_GetImpl_Original);
     } else {
         g_hasNativeLabelsImplementation =
-            !!TaskbarSettings_GroupingMode_Original;
+            !!TaskListWindowViewModel_ITaskbarAppItemViewModel_get_HasLabel_Original;
     }
 
     if (!g_hasNativeLabelsImplementation) {
@@ -2179,6 +2451,10 @@ BOOL ModInitWithTaskbarView(HMODULE taskbarViewModule) {
         WindhawkUtils::SetFunctionHook(
             pKernelBaseRegGetValueW, RegGetValueW_Hook, &RegGetValueW_Original);
     }
+
+    // Last, so that a failed init doesn't leave the slots pointing to the
+    // hooks.
+    HookHasLabelVtableSlots();
 
     return TRUE;
 }
@@ -2233,6 +2509,9 @@ void Wh_ModBeforeUninit() {
 
     g_unloading = true;
 
+    // Before the unload, to let calls which already read the slots return.
+    UnhookHasLabelVtableSlots();
+
     if (g_taskbarViewDllLoaded) {
         ApplySettings();
 
@@ -2249,7 +2528,13 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    LoadSettings();
+    // The hooks read the settings on the taskbar thread.
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!hTaskbarWnd ||
+        !RunFromWindowThread(
+            hTaskbarWnd, [](PVOID) { LoadSettings(); }, nullptr)) {
+        LoadSettings();
+    }
 
     if (g_taskbarViewDllLoaded) {
         ApplySettings();
