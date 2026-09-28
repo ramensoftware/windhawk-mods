@@ -19632,7 +19632,7 @@ static std::mutex g_childPopupMutex;
 static std::map<HWND, RECT> g_childPopupTargets;
 static std::set<HWND> g_childPopupSubclassed;
 
-LRESULT CALLBACK ChildFlyoutPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+LRESULT CALLBACK ChildFlyoutPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     if (msg == WM_WINDOWPOSCHANGING) {
         RECT target{};
         bool haveTarget = false;
@@ -21217,7 +21217,7 @@ void SyncSearchKeyHook() {
     }
 }
 
-LRESULT CALLBACK TopBarPopupSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+LRESULT CALLBACK TopBarPopupSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
     // Re-stamp the transparency kill on every message DWM or the theme
     // engine can use to re-apply a Mica/Acrylic sheet. WM_SETTINGCHANGE
     // fires when the user flips the Windows "Transparency effects" toggle,
