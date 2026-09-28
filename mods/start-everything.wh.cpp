@@ -3287,8 +3287,18 @@ static bool CheckSearchShownWithoutStart() {
     HWND start = CachedStartWindow();
     HWND fg = GetForegroundWindow();
     if (!g_searchAloneArmed || !search || !start || (fg != search && fg != start) || IsCloaked(search) ||
-        OpeningStartJustAsked() || ++g_searchAloneTotalTicks > kSearchAloneMaxTicks) {
+        OpeningStartJustAsked()) {
         return true;  // the user moved on, Search is not showing, or Start is on its way
+    }
+    if (fg == start && !IsCloaked(start)) {
+        return true;  // Start is open and has the keyboard
+    }
+    if (++g_searchAloneTotalTicks > kSearchAloneMaxTicks) {
+        // What is left is an invisible Search holding the keyboard. Worth a
+        // trace: the checks above assume timings that may not hold everywhere.
+        Wh_Log(L"[Explorer] Search still in front after %d checks, Start %ls; giving up",
+               kSearchAloneMaxTicks, IsCloaked(start) ? L"closed" : L"open");
+        return true;
     }
     if (!IsCloaked(start)) {
         g_searchAloneClosedTicks = 0;  // Start is open, opening, or still closing
@@ -3618,27 +3628,54 @@ static BOOL AllowStartToTakeForeground() {
     return ok;
 }
 
-static bool g_addedLayeredStyle = false;  // SearchHost's UI thread only
+// What SetNeutralized changed, kept on each window so every one is restored
+// to exactly what it had: whether it was layered already and, if so, its
+// layered attributes (color key, alpha, LWA_ flags), packed into the value.
+constexpr wchar_t kOriginalLayeringProp[] = L"StartEverything_OriginalLayering";
+constexpr ULONG_PTR kLayeringRecorded = ULONG_PTR{1} << 41;  // never 0, so "no prop" is unambiguous
+constexpr ULONG_PTR kWasLayered = ULONG_PTR{1} << 40;
 
-// Takes SearchHost's CoreWindow out of the picture (on) or puts it back (off).
+// Takes a SearchHost CoreWindow out of the picture (on) or puts it back (off).
+// Runs on the window's own thread.
 static void SetNeutralized(HWND hWnd, bool on) {
     // DWM refuses an app cloak (DWMWA_CLOAK) on a CoreWindow, and a window
     // region does not clip its composition content. Layered alpha 0 does:
     // nothing is drawn, and clicks pass through. The shell still shows, hides
     // and activates the window through its own cloak exactly as before.
     LONG ex = GetWindowLongW(hWnd, GWL_EXSTYLE);
+    auto saved = reinterpret_cast<ULONG_PTR>(GetPropW(hWnd, kOriginalLayeringProp));
     if (on) {
-        if (!(ex & WS_EX_LAYERED)) {
-            SetWindowLongW(hWnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
-            g_addedLayeredStyle = true;
+        if (saved) {
+            return;  // already done
         }
+        ULONG_PTR record = kLayeringRecorded;
+        if (ex & WS_EX_LAYERED) {
+            COLORREF key = 0;
+            BYTE alpha = 0;
+            DWORD flags = 0;
+            if (!GetLayeredWindowAttributes(hWnd, &key, &alpha, &flags)) {
+                // Layered through UpdateLayeredWindow: there would be nothing
+                // to restore it to, so it is left alone.
+                Wh_Log(L"[SearchHost] CoreWindow %p uses UpdateLayeredWindow; left visible", hWnd);
+                return;
+            }
+            record |= kWasLayered | (static_cast<ULONG_PTR>(key & 0xFFFFFF) << 16) |
+                      (static_cast<ULONG_PTR>(flags & 0xFF) << 8) | alpha;
+        } else {
+            SetWindowLongW(hWnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
+        }
+        SetPropW(hWnd, kOriginalLayeringProp, reinterpret_cast<HANDLE>(record));
         SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
     } else {
-        if (g_addedLayeredStyle) {
-            SetWindowLongW(hWnd, GWL_EXSTYLE, ex & ~WS_EX_LAYERED);
-            g_addedLayeredStyle = false;
+        if (!saved) {
+            return;  // never changed
+        }
+        RemovePropW(hWnd, kOriginalLayeringProp);
+        if (saved & kWasLayered) {
+            SetLayeredWindowAttributes(hWnd, static_cast<COLORREF>((saved >> 16) & 0xFFFFFF),
+                                       static_cast<BYTE>(saved & 0xFF), static_cast<DWORD>((saved >> 8) & 0xFF));
         } else {
-            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+            SetWindowLongW(hWnd, GWL_EXSTYLE, ex & ~WS_EX_LAYERED);
         }
     }
     Wh_Log(L"[SearchHost] %ls CoreWindow %p", on ? L"hid" : L"restored", hWnd);
@@ -4381,6 +4418,13 @@ std::atomic<ULONGLONG> g_lastAppIndexRebuildTick{0};
 
 void RequestAppIndexRefresh();
 
+// SearchHost answers the foreground request on its UI thread. If it does not
+// answer in time it is busy -- typically just woken -- and asking again on
+// every retry would stall Start's UI thread 200ms at a time while it opens.
+// So after an unanswered request, requests pause for a moment.
+std::atomic<ULONGLONG> g_foregroundRequestsPausedUntil{0};
+constexpr ULONGLONG kForegroundRequestPauseMs = 1000;
+
 void TakeForeground(bool force = false) {
     try {
         if (!force && g_suppressRefocus.load()) {
@@ -4398,13 +4442,15 @@ void TakeForeground(bool force = false) {
         }
 
         BOOL ok = SetForegroundWindow(ours);
-        if (!ok && IsSearchHostWindow(current)) {
+        if (!ok && IsSearchHostWindow(current) && GetTickCount64() >= g_foregroundRequestsPausedUntil.load()) {
             // The shell gives SearchHost the foreground when Start opens, and
             // only the foreground process can pass it on. Ask SearchHost to.
             DWORD_PTR granted = 0;
-            if (SendMessageTimeoutW(current, StartForegroundRequestMessage(), 0, 0, SMTO_ABORTIFHUNG,
-                                    200, &granted) &&
-                granted) {
+            if (!SendMessageTimeoutW(current, StartForegroundRequestMessage(), 0, 0, SMTO_ABORTIFHUNG, 200,
+                                     &granted)) {
+                g_foregroundRequestsPausedUntil.store(GetTickCount64() + kForegroundRequestPauseMs);
+                Wh_Log(L"focus: SearchHost did not answer the foreground request; pausing requests");
+            } else if (granted) {
                 ok = SetForegroundWindow(ours);
             }
         }
@@ -4822,7 +4868,9 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
             SetPropW(tray, L"WindhawkStartMenuHwnd", hWnd);
             Wh_Log(L"subclass: TaskbarCreated -> re-published WindhawkStartMenuHwnd %p", hWnd);
         }
-        return 0;
+        // Observed only: Start itself, and anything subclassed before this
+        // mod, needs the broadcast too.
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
     if (uMsg == WM_ACTIVATE) {
@@ -5170,6 +5218,29 @@ void OpenFileLocation(std::wstring path) {
     });
 }
 
+// Every explorer.exe hosts a relay window (StartExplorerHelperHost). The one in
+// the taskbar's process is used when it exists: that is the process the
+// Properties click lets take the foreground, so the dialog opens in front.
+HWND FindExplorerHelperWindow() {
+    DWORD trayPid = 0;
+    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        GetWindowThreadProcessId(tray, &trayPid);
+    }
+    HWND any = nullptr;
+    for (HWND hwnd = FindWindowExW(nullptr, nullptr, kExplorerHelperClassName, kExplorerHelperWindowName); hwnd;
+         hwnd = FindWindowExW(nullptr, hwnd, kExplorerHelperClassName, kExplorerHelperWindowName)) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid == trayPid) {
+            return hwnd;
+        }
+        if (!any) {
+            any = hwnd;
+        }
+    }
+    return any;
+}
+
 void ShowPropertiesDialog(std::wstring path) {
     SpawnTrackedLaunch([path = std::move(path)] {
         // Give Start a moment to close first (DismissStartMenu asks the shell
@@ -5189,7 +5260,7 @@ void ShowPropertiesDialog(std::wstring path) {
         // 1. Relay to Explorer host window (runs at Medium integrity desktop shell)
         HWND hHost = nullptr;
         for (int retry = 0; retry < 3 && !hHost; ++retry) {
-            hHost = FindWindowW(kExplorerHelperClassName, kExplorerHelperWindowName);
+            hHost = FindExplorerHelperWindow();
             if (!hHost) Sleep(50);
         }
 
