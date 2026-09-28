@@ -2,7 +2,7 @@
 // @id              restore-folder-menubar-25h2
 // @name            ExplorerFrame and menubar fixes fork
 // @description     Fixes explorer problems: menu bar, listview redraw, classic background color, Control Panel header/sidebar color for dark themes
-// @version         3.0.0
+// @version         3.1.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         explorer.exe
@@ -71,8 +71,15 @@ Can be disabled in the mod settings.
 #include <uxtheme.h>
 #include <shdeprecated.h>
 #include <vector>
+#include <algorithm>
+#include <mutex>
 #include <vssym32.h>
 #include <windhawk_api.h>
+#include <windows.h>
+
+typedef LONG (WINAPI *REGQUERYVALUEEXW)(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData);
+
+REGQUERYVALUEEXW pOriginalRegQueryValueExW;
 
 // ---------------------------------------------------------------------------
 // Globals
@@ -81,6 +88,7 @@ Can be disabled in the mod settings.
 bool g_settingDisplayMenuBar;
 bool g_settingControlPanelColorFix;
 
+std::mutex g_subclassedMutex;
 std::vector<HWND> g_subclassedRebars;
 std::vector<HWND> g_subclassedListviews;
 
@@ -123,9 +131,12 @@ LRESULT CALLBACK RebarSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg,
 {
     if (uMsg == WM_DESTROY)
     {
-        g_subclassedRebars.erase(
-            std::remove(g_subclassedRebars.begin(), g_subclassedRebars.end(), hWnd),
-            g_subclassedRebars.end());
+        {
+            std::lock_guard<std::mutex> lock(g_subclassedMutex);
+            g_subclassedRebars.erase(
+                std::remove(g_subclassedRebars.begin(), g_subclassedRebars.end(), hWnd),
+                g_subclassedRebars.end());
+        }
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
@@ -176,9 +187,12 @@ LRESULT CALLBACK ListviewSubclassProc(_In_ HWND hWnd, _In_ UINT uMsg,
 {
     if (uMsg == WM_DESTROY)
     {
-        g_subclassedListviews.erase(
-            std::remove(g_subclassedListviews.begin(), g_subclassedListviews.end(), hWnd),
-            g_subclassedListviews.end());
+        {
+            std::lock_guard<std::mutex> lock(g_subclassedMutex);
+            g_subclassedListviews.erase(
+                std::remove(g_subclassedListviews.begin(), g_subclassedListviews.end(), hWnd),
+                g_subclassedListviews.end());
+        }
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
@@ -205,6 +219,7 @@ long __cdecl CBSInitializeHook(void* pThis, HWND hWnd)
         if (rb != NULL)
         {
             WindhawkUtils::SetWindowSubclassFromAnyThread(rb, RebarSubclassProc, NULL);
+            std::lock_guard<std::mutex> lock(g_subclassedMutex);
             g_subclassedRebars.push_back(rb);
         }
     }
@@ -231,6 +246,7 @@ long __cdecl CLVHCreateControlHook(void* pThis, HWND hWnd, void* a, void* b)
         if (lstrcmpW(name, L"SysListView32") == 0)
         {
             WindhawkUtils::SetWindowSubclassFromAnyThread(listview, ListviewSubclassProc, NULL);
+            std::lock_guard<std::mutex> lock(g_subclassedMutex);
             g_subclassedListviews.push_back(listview);
         }
     }
@@ -336,6 +352,35 @@ VOID __cdecl Element_PaintBgHook(
 }
 
 // ---------------------------------------------------------------------------
+// Also hook registry query for greater reliability
+// ---------------------------------------------------------------------------
+
+LONG WINAPI RegQueryValueExWHook(HKEY hKey, LPCWSTR lpValueName, LPDWORD lpReserved, LPDWORD lpType, LPBYTE lpData, LPDWORD lpcbData)
+{   
+
+    if (lpValueName && !lstrcmpiW(lpValueName, L"AlwaysShowMenus")) {
+        if (lpData && !lpcbData) return ERROR_INVALID_PARAMETER;
+
+        if (lpType) *lpType = REG_DWORD;
+
+        if (lpcbData)
+        {
+            DWORD cbBuffer = *lpcbData;
+            *lpcbData = sizeof(DWORD);
+            if (lpData)
+            {
+                if (cbBuffer < sizeof(DWORD)) return ERROR_MORE_DATA;
+                *(DWORD*)lpData = g_settingDisplayMenuBar;
+            }
+        }  
+        return ERROR_SUCCESS;
+    }
+    return pOriginalRegQueryValueExW(hKey, lpValueName, lpReserved, lpType, lpData, lpcbData);
+}
+
+
+
+// ---------------------------------------------------------------------------
 // Mod lifecycle
 // ---------------------------------------------------------------------------
 
@@ -431,6 +476,9 @@ BOOL Wh_ModInit()
         }
     }
 
+    Wh_SetFunctionHook((void*)GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "RegQueryValueExW"), (void*)RegQueryValueExWHook, (void**)&pOriginalRegQueryValueExW);
+
+
     return TRUE;
 }
 
@@ -438,12 +486,25 @@ void Wh_ModUninit()
 {
     Wh_Log(L"Explorer Frame Fixes + Control Panel Color Fix Uninit");
 
-    Wh_Log(L"Removing subclasses from %zu rebars.", g_subclassedRebars.size());
-    for (HWND h : g_subclassedRebars)
+    // Take a snapshot of the vectors under the lock and clear the globals,
+    // then remove the subclasses outside the lock. This is important because
+    // RemoveWindowSubclassFromAnyThread sends a message to the target
+    // window's thread, which could be blocked waiting on g_subclassedMutex
+    // (e.g. in a WM_DESTROY handler) — locking around it could deadlock.
+    std::vector<HWND> rebars;
+    std::vector<HWND> listviews;
+    {
+        std::lock_guard<std::mutex> lock(g_subclassedMutex);
+        rebars.swap(g_subclassedRebars);
+        listviews.swap(g_subclassedListviews);
+    }
+
+    Wh_Log(L"Removing subclasses from %zu rebars.", rebars.size());
+    for (HWND h : rebars)
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, RebarSubclassProc);
 
-    Wh_Log(L"Removing subclasses from %zu listviews.", g_subclassedListviews.size());
-    for (HWND h : g_subclassedListviews)
+    Wh_Log(L"Removing subclasses from %zu listviews.", listviews.size());
+    for (HWND h : listviews)
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(h, ListviewSubclassProc);
 }
 
