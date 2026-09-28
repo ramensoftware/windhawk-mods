@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              start-everything
 // @name            Everything & Power Tools in the Start Menu
-// @description     Native Everything search inside the Start menu, complete SearchHost disconnection, and seamless focus management.
+// @description     Search files, apps and settings from the Start menu with voidtools Everything, in place of Windows Search.
 // @version         1.0
 // @author          bardelyne
 // @github          https://github.com/bardelyne
@@ -17,37 +17,36 @@
 /*
 # Everything & Power Tools in the Start Menu
 
-A high-performance, native replacement for Windows 11 Start Menu search powered directly by voidtools Everything. Completely severs SearchHost background telemetry, Bing web queries, and Edge WebView2 processes, replacing them with instantaneous sub-millisecond local file, application, and settings search directly inside the Start Menu.
+A native replacement for Windows 11 Start Menu search, powered by voidtools Everything. Type in the Start Menu to search files, apps, and settings instantly. Windows Search stays out of the way: its window is never shown, and it cannot start the Edge WebView2 process behind its Bing-backed search panel. Win+S and the taskbar search icon open this search too.
 
 ![Everything & Power Tools in the Start Menu](https://raw.githubusercontent.com/bardelyne/start-everything/main/screenshot.png)
 
 ## Key Features
 
-- Instant Everything Search: Sub-millisecond file querying directly through the voidtools Everything Win32 IPC interface. Instant results across millions of files without background indexing lag or disk thrashing.
+- Instant Everything Search: Queries voidtools Everything directly through its IPC interface for fast results across millions of files. The mod keeps no index of its own.
 - Smart Apps and Settings Search: Fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, and Windows Settings URIs (ms-settings:) with high-resolution shell icons.
-- On-Demand Animated Palette: The Start Menu stays completely clean and uncluttered when idle. The search palette smoothly reveals with a 140ms ease-out animation the moment you type or click the top search trigger, and collapses on empty or Escape.
-- Complete SearchHost Disconnection: Prevents background Bing web queries, Edge WebView2 child processes, and indexing CPU spikes via process, database file, and COM interception.
+- On-Demand Animated Palette: The Start Menu stays completely clean and uncluttered when idle. The search palette slides in with a short ease-out animation the moment you type or click the search box, and collapses when emptied or on Escape.
+- Windows Search Out of the Way: SearchHost keeps running for the shell, but its window is never shown and it cannot launch Edge WebView2, the web view behind its Bing-backed search panel.
 - Inline Calculator: Type /c <expression> (e.g. /c 100 * 5, /c sqrt(144), /c 15% of 200, /c 2^10) to evaluate math expressions instantly. Press Enter to copy the result.
 - Configurable Unit Conversions: Type /c <number> [unit] to convert units using formulas configured in Mod Settings. Users can add, edit, or delete conversion items individually from the settings UI.
 - Network Interface Inspector: Type /ip to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
 - Full Right-Click Context Menu: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal (folders), Properties, Create desktop shortcut, Cut/Copy (files), Copy path, or Open file location.
-- Explorer Shell Property Relay: Seamlessly bridges the AppContainer isolation boundary to display native Win32 properties dialogs hosted directly by explorer.exe.
+- Native Properties Dialogs: Properties opens through explorer.exe, the same dialog as in File Explorer.
 - Explicit Web Search: Trigger web searches on demand using the '?' prefix (e.g. '?query'). Includes customizable keyword shortcuts such as '?yt' (YouTube), '?gh' (GitHub), '?w' (Wikipedia), and '?r' (Reddit).
 - Start Menu Styler Compatibility: Automatically syncs background styles (Tinted Glass, Acrylic, custom theme colors) in real time without restarting the mod.
-- Robust Win32 Key Listener: Combines a WH_GETMESSAGE UI thread hook, HWND subclassing, and XAML CoreWindow handling to ensure zero dropped keystrokes.
-- Shell Focus Protection: Intercepts explorer.exe foreground redirection to prevent SearchHost from stealing focus away from the Start Menu.
+- Type Anywhere: Typing anywhere in the open Start Menu goes to the search box.
+- Win+S and the Search Icon: Win+S and the taskbar search icon open the Start Menu with this search instead of the Windows search panel.
 
 ## Requirements
 
 1. Windows 11 (version 22H2+ x86-64).
 2. voidtools Everything (version 1.4 or 1.5a) running in the background.
 
-## Recommended Setup: Hide Taskbar Search
+## Taskbar Search
 
-In Windows 11, clicking or typing into the taskbar search box opens the standalone SearchHost flyout rather than the Start Menu. Because this mod replaces Start Menu search and disconnects SearchHost background queries, it is strongly recommended to hide the search icon/box from your taskbar:
+The Windows key, the Start button, Win+S, and the taskbar search icon all open this search. The full taskbar search box is not supported, so set Search to "Search icon only" or "Hide":
 1. Right-click the Taskbar and select Taskbar settings (or Settings > Personalization > Taskbar).
-2. Under Taskbar items, set Search to Hide.
-All searches will now seamlessly route through the native Start Menu (Windows Key or Start button).
+2. Under Taskbar items, set Search to "Search icon only" or "Hide".
 
 ## Keyboard Shortcuts
 
@@ -2987,125 +2986,104 @@ TargetProcess IdentifyCurrentProcess() {
 }
 
 // ===========================================================================
-// Domain: explorer.exe (Shell Focus Redirection)
+// Domain: explorer.exe (Start and Search window lookup)
 // ===========================================================================
+//
+// Explorer's foreground calls are not hooked. Explorer only holds the right to
+// change the foreground because it received the click or keypress, and
+// AllowSetForegroundWindow hands that right over: a grant made before
+// Explorer's own SetForegroundWindow left Explorer unable to make the switch,
+// so with another app in front, clicking Start did nothing. Explorer switches
+// to SearchHost exactly as it does without this mod, and SearchHost -- then
+// the foreground process -- is what lets Start take over.
 
-using Explorer_SetForegroundWindow_t = BOOL(WINAPI*)(HWND);
-static Explorer_SetForegroundWindow_t pOriginalExplorerSetForegroundWindow = nullptr;
-
-static bool IsProcessNamed(DWORD pid, const wchar_t* name) {
-    if (!pid || pid == GetCurrentProcessId()) return false;
-    HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!hProcess) return false;
-    wchar_t path[MAX_PATH] = {};
-    DWORD size = MAX_PATH;
-    bool match = false;
-    if (QueryFullProcessImageNameW(hProcess, 0, path, &size)) {
-        const wchar_t* exeName = wcsrchr(path, L'\\');
-        exeName = exeName ? (exeName + 1) : path;
-        match = (_wcsicmp(exeName, name) == 0);
+// Start publishes its CoreWindow on the taskbar when it attaches. Reading it
+// back is a property lookup, and the PID comes from GetWindowThreadProcessId,
+// which opens no process handle -- cheap enough to call on any activation.
+static HWND CachedStartWindow() {
+    static std::atomic<HWND> s_start{nullptr};
+    HWND h = s_start.load(std::memory_order_relaxed);
+    if (h && IsWindow(h)) {
+        return h;
     }
-    CloseHandle(hProcess);
-    return match;
-}
-
-static HWND FindStartMenuCoreWindow() {
     HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-    if (tray) {
-        HWND h = reinterpret_cast<HWND>(GetPropW(tray, L"WindhawkStartMenuHwnd"));
-        if (h && IsWindow(h)) return h;
+    h = tray ? static_cast<HWND>(GetPropW(tray, L"WindhawkStartMenuHwnd")) : nullptr;
+    if (h && !IsWindow(h)) {
+        h = nullptr;
     }
-
-    HWND hStart = FindWindowW(L"Windows.UI.Core.CoreWindow", L"Start");
-    if (hStart && IsWindow(hStart)) {
-        if (tray) {
-            SetPropW(tray, L"WindhawkStartMenuHwnd", hStart);
+    if (!h) {
+        HWND hStart = FindWindowW(L"Windows.UI.Core.CoreWindow", L"Start");
+        if (hStart && IsWindow(hStart)) {
+            h = hStart;
+            if (tray) {
+                SetPropW(tray, L"WindhawkStartMenuHwnd", hStart);
+            }
         }
-        return hStart;
     }
-
-    HWND found = nullptr;
-    EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
-        if (GetPropW(hwnd, L"WindhawkStartMenuWindow")) {
-            *reinterpret_cast<HWND*>(lParam) = hwnd;
-            return FALSE;
-        }
-        wchar_t cls[64] = {};
-        GetClassNameW(hwnd, cls, ARRAYSIZE(cls));
-        if (wcscmp(cls, L"Windows.UI.Core.CoreWindow") == 0) {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(hwnd, &pid);
-            if (IsProcessNamed(pid, L"StartMenuExperienceHost.exe")) {
+    if (!h) {
+        EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
+            if (GetPropW(hwnd, L"WindhawkStartMenuWindow")) {
                 *reinterpret_cast<HWND*>(lParam) = hwnd;
                 return FALSE;
             }
+            return TRUE;
+        }, reinterpret_cast<LPARAM>(&h));
+        if (h && IsWindow(h) && tray) {
+            SetPropW(tray, L"WindhawkStartMenuHwnd", h);
         }
-        return TRUE;
-    }, reinterpret_cast<LPARAM>(&found));
+    }
+    s_start.store(h, std::memory_order_relaxed);
+    return h;
+}
 
-    if (found && IsWindow(found)) {
-        if (tray) {
-            SetPropW(tray, L"WindhawkStartMenuHwnd", found);
+static inline HWND FindStartMenuCoreWindow() {
+    return CachedStartWindow();
+}
+
+// Whether `hwnd` is SearchHost's CoreWindow. Called only on this mod's helper
+// thread in Explorer and on Start's UI thread, never inside Explorer's own
+// foreground path, so identifying a new SearchHost process by name once is
+// fine.
+static bool IsSearchHostWindow(HWND hwnd) {
+    static std::atomic<DWORD> s_searchPid{0};
+    static std::atomic<DWORD> s_otherPid{0};
+    if (!hwnd) {
+        return false;
+    }
+    wchar_t cls[32];
+    if (!GetClassNameW(hwnd, cls, ARRAYSIZE(cls)) ||
+        wcscmp(cls, L"Windows.UI.Core.CoreWindow") != 0) {
+        return false;
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (!pid || pid == s_otherPid.load(std::memory_order_relaxed)) {
+        return false;
+    }
+    if (pid == s_searchPid.load(std::memory_order_relaxed)) {
+        return true;
+    }
+    bool match = false;
+    if (HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid)) {
+        wchar_t path[MAX_PATH];
+        DWORD size = ARRAYSIZE(path);
+        if (QueryFullProcessImageNameW(process, 0, path, &size)) {
+            const wchar_t* name = wcsrchr(path, L'\\');
+            match = _wcsicmp(name ? name + 1 : path, L"SearchHost.exe") == 0;
         }
-        return found;
+        CloseHandle(process);
     }
-
-    return nullptr;
+    (match ? s_searchPid : s_otherPid).store(pid, std::memory_order_relaxed);
+    return match;
 }
 
-static BOOL WINAPI Hook_Explorer_SetForegroundWindow(HWND hWnd) {
-    if (!hWnd) {
-        return pOriginalExplorerSetForegroundWindow(hWnd);
-    }
-
-    // Explicitly authorize StartMenuExperienceHost and any child window to gain foreground
-    AllowSetForegroundWindow(ASFW_ANY);
-
-    DWORD targetPid = 0;
-    GetWindowThreadProcessId(hWnd, &targetPid);
-
-    if (IsProcessNamed(targetPid, L"SearchHost.exe")) {
-        Wh_Log(L"[Explorer] SetForegroundWindow to SearchHost.exe (0x%p) -> allowing SearchHost focus for soft handoff", hWnd);
-        return pOriginalExplorerSetForegroundWindow(hWnd);
-    }
-
-    return pOriginalExplorerSetForegroundWindow(hWnd);
+// Start sends this to SearchHost's CoreWindow when SearchHost holds the
+// foreground and Start cannot take it. See SearchHostSubclassProc.
+static UINT StartForegroundRequestMessage() {
+    static const UINT message = RegisterWindowMessageW(L"StartEverything_StartForegroundRequest");
+    return message;
 }
 
-using Explorer_BringWindowToTop_t = BOOL(WINAPI*)(HWND);
-static Explorer_BringWindowToTop_t pOriginalExplorerBringWindowToTop = nullptr;
-
-static BOOL WINAPI Hook_Explorer_BringWindowToTop(HWND hWnd) {
-    if (!hWnd) return pOriginalExplorerBringWindowToTop(hWnd);
-    AllowSetForegroundWindow(ASFW_ANY);
-    DWORD targetPid = 0;
-    GetWindowThreadProcessId(hWnd, &targetPid);
-    if (IsProcessNamed(targetPid, L"SearchHost.exe")) {
-        return pOriginalExplorerBringWindowToTop(hWnd);
-    }
-    return pOriginalExplorerBringWindowToTop(hWnd);
-}
-
-using Explorer_SwitchToThisWindow_t = void(WINAPI*)(HWND, BOOL);
-static Explorer_SwitchToThisWindow_t pOriginalExplorerSwitchToThisWindow = nullptr;
-
-static void WINAPI Hook_Explorer_SwitchToThisWindow(HWND hWnd, BOOL fAltTab) {
-    if (!hWnd) return;
-    AllowSetForegroundWindow(ASFW_ANY);
-    DWORD targetPid = 0;
-    GetWindowThreadProcessId(hWnd, &targetPid);
-    if (IsProcessNamed(targetPid, L"SearchHost.exe")) {
-        if (pOriginalExplorerSwitchToThisWindow) {
-            pOriginalExplorerSwitchToThisWindow(hWnd, fAltTab);
-        } else {
-            SetForegroundWindow(hWnd);
-        }
-        return;
-    }
-    if (pOriginalExplorerSwitchToThisWindow) {
-        pOriginalExplorerSwitchToThisWindow(hWnd, fAltTab);
-    }
-}
 
 // Tracked launch threads for clean unload synchronization across processes
 static std::mutex g_launchHandlesMutex;
@@ -3169,6 +3147,160 @@ static DWORD g_explorerHelperThreadId = 0;
 static HWND g_hExplorerHelperWnd = nullptr;
 static HANDLE g_hExplorerHelperReadyEvent = nullptr;
 
+// ---------------------------------------------------------------------------
+// Search is never left showing without Start
+//
+// SearchHost is invisible under this mod, so whenever the shell shows Search
+// on its own, the user sees nothing at all. Two things make it do that:
+//
+//   - Win+S and the taskbar search button, which ask for Search alone;
+//   - a key typed in the few milliseconds after the Win key, before Start
+//     holds the keyboard: SearchHost takes it as the start of a native search,
+//     and the shell swaps Start out for Search -- Start vanishes mid-typing.
+//
+// Either way, once Search is showing, Start is closed and the user is still on
+// one of the two, Start is opened -- and its search box is this mod's. The
+// shell's hotkey, button and type-ahead handling are internal, so this watches
+// what is public instead: the foreground moving to Search, and Start being
+// cloaked (closed). A normal close never qualifies: by the time Start is
+// cloaked the foreground is back on another app, and Search was cloaked first.
+//
+// Opening Start is a toggle, so it is sent only once Start is known to be
+// closed, not on its way up or down. The Win key and the Start button open
+// Start alongside Search, uncloaking it within ~30ms, so normally Start has to
+// stay closed across several checks. Win+S, though, opens Search while the
+// Win key is still held, and the Win key on its own opens Start only once it
+// is released: under a held Win key one check is enough -- none at all if
+// Start was already closed. If Start was open (Win+S over Start), this waits
+// for it to finish closing first. When Start has just been cloaked, it is
+// already closed, and one check is enough too.
+//
+// Start is opened with WM_SYSCOMMAND/SC_TASKLIST, the documented "activate the
+// Start menu" command, from this helper thread: no injected keystrokes, and
+// nothing runs in Explorer's own foreground path.
+// ---------------------------------------------------------------------------
+static const UINT_PTR kSearchAloneTimerId = 1;
+static const UINT kSearchAloneTickMs = 80;
+static const int kSearchAloneTicks = 3;
+static const int kSearchAloneMaxTicks = 15;
+static HWINEVENTHOOK g_searchForegroundHook = nullptr;
+static HWINEVENTHOOK g_startCloakedHook = nullptr;
+static bool g_searchAloneArmed = false;
+static int g_searchAloneTicksNeeded = 0;
+static int g_searchAloneClosedTicks = 0;  // consecutive checks with Start closed
+static int g_searchAloneTotalTicks = 0;
+
+static bool IsCloaked(HWND hwnd) {
+    DWORD cloaked = 0;
+    return hwnd && SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+           cloaked;
+}
+
+static bool IsStartMenuClosed() {
+    return IsCloaked(CachedStartWindow());
+}
+
+// SearchHost's CoreWindow, found by process: its title is localized.
+static HWND FindSearchHostCoreWindow() {
+    static HWND s_search = nullptr;  // helper thread only
+    if (s_search && IsSearchHostWindow(s_search)) {
+        return s_search;
+    }
+    s_search = nullptr;
+    for (HWND hwnd = FindWindowExW(nullptr, nullptr, L"Windows.UI.Core.CoreWindow", nullptr); hwnd;
+         hwnd = FindWindowExW(nullptr, hwnd, L"Windows.UI.Core.CoreWindow", nullptr)) {
+        if (IsSearchHostWindow(hwnd)) {
+            s_search = hwnd;
+            break;
+        }
+    }
+    return s_search;
+}
+
+// Opening Start puts Search in front first, as every opening does, and Start
+// is still cloaked at that moment -- which looks exactly like what this
+// watches for. So for a moment after asking, nothing is asked again: a second
+// SC_TASKLIST would toggle Start closed.
+static const ULONGLONG kOpenStartSettleMs = 600;
+static ULONGLONG g_openStartTick = 0;  // helper thread only
+
+static bool OpeningStartJustAsked() {
+    return g_openStartTick && GetTickCount64() - g_openStartTick < kOpenStartSettleMs;
+}
+
+static void OpenStartInsteadOfSearch() {
+    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        Wh_Log(L"[Explorer] Search showing without Start -> opening Start");
+        g_openStartTick = GetTickCount64();
+        PostMessageW(tray, WM_SYSCOMMAND, SC_TASKLIST, 0);
+    }
+}
+
+// There can be several explorer.exe processes, each running this helper. Only
+// the one running the taskbar acts, or Start would be toggled once per process.
+static bool IsTaskbarProcess() {
+    DWORD pid = 0;
+    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        GetWindowThreadProcessId(tray, &pid);
+    }
+    return pid == GetCurrentProcessId();
+}
+
+static void ArmSearchAloneCheck(int ticksNeeded) {
+    g_searchAloneArmed = true;
+    g_searchAloneTicksNeeded = ticksNeeded;
+    g_searchAloneClosedTicks = 0;
+    g_searchAloneTotalTicks = 0;
+    SetTimer(g_hExplorerHelperWnd, kSearchAloneTimerId, kSearchAloneTickMs, nullptr);
+}
+
+static void CALLBACK ShellWindowEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
+                                          LONG idChild, DWORD, DWORD) {
+    if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !g_hExplorerHelperWnd ||
+        OpeningStartJustAsked()) {
+        return;
+    }
+    if (event == EVENT_OBJECT_CLOAKED) {
+        // Start's cloak is the last step of a close, never a transition to
+        // wait out: one confirming check is enough.
+        if (hwnd == CachedStartWindow() && IsTaskbarProcess()) {
+            ArmSearchAloneCheck(1);
+        }
+        return;
+    }
+    if (event != EVENT_SYSTEM_FOREGROUND || !IsSearchHostWindow(hwnd) || !IsTaskbarProcess()) {
+        return;
+    }
+    bool winKeyDown = ((GetAsyncKeyState(VK_LWIN) | GetAsyncKeyState(VK_RWIN)) & 0x8000) != 0;
+    if (winKeyDown && IsStartMenuClosed()) {
+        KillTimer(g_hExplorerHelperWnd, kSearchAloneTimerId);
+        g_searchAloneArmed = false;
+        OpenStartInsteadOfSearch();
+        return;
+    }
+    ArmSearchAloneCheck(winKeyDown ? 1 : kSearchAloneTicks);
+}
+
+// Returns true once there is nothing left to wait for.
+static bool CheckSearchShownWithoutStart() {
+    HWND search = FindSearchHostCoreWindow();
+    HWND start = CachedStartWindow();
+    HWND fg = GetForegroundWindow();
+    if (!g_searchAloneArmed || !search || !start || (fg != search && fg != start) || IsCloaked(search) ||
+        OpeningStartJustAsked() || ++g_searchAloneTotalTicks > kSearchAloneMaxTicks) {
+        return true;  // the user moved on, Search is not showing, or Start is on its way
+    }
+    if (!IsCloaked(start)) {
+        g_searchAloneClosedTicks = 0;  // Start is open, opening, or still closing
+        return false;
+    }
+    if (++g_searchAloneClosedTicks < g_searchAloneTicksNeeded) {
+        return false;
+    }
+    OpenStartInsteadOfSearch();
+    return true;
+}
+
 static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_COPYDATA: {
@@ -3214,8 +3346,6 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
             SpawnTrackedLaunch([path = std::move(targetPath)]() {
                 HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
-                AllowSetForegroundWindow(ASFW_ANY);
-
                 // Attempt 1: SHObjectProperties (Dedicated Win32 Shell Properties API)
                 BOOL ok = SHObjectProperties(nullptr, 0x00000002 /* SHOP_FILEPATH */, path.c_str(), nullptr);
                 Wh_Log(L"[Explorer] SHObjectProperties returned %d, err=%lu for %ls", ok, GetLastError(), path.c_str());
@@ -3260,6 +3390,15 @@ static LRESULT CALLBACK ExplorerHelperWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
         }
         break;
     }
+    case WM_TIMER:
+        if (wParam == kSearchAloneTimerId) {
+            if (CheckSearchShownWithoutStart()) {
+                KillTimer(hWnd, kSearchAloneTimerId);
+                g_searchAloneArmed = false;
+            }
+            return 0;
+        }
+        break;
     case WM_CLOSE:
         DestroyWindow(hWnd);
         return 0;
@@ -3294,6 +3433,14 @@ static DWORD WINAPI ExplorerHelperThreadProc(LPVOID) {
         ChangeWindowMessageFilterEx(hWnd, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
         g_hExplorerHelperWnd = hWnd;
         Wh_Log(L"[Explorer] Helper host window created: %p", hWnd);
+        // Out of context: delivered to this thread's message loop, never run
+        // inside the thread that changed the foreground.
+        g_searchForegroundHook = SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+            ShellWindowEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+        g_startCloakedHook = SetWinEventHook(
+            EVENT_OBJECT_CLOAKED, EVENT_OBJECT_CLOAKED, nullptr,
+            ShellWindowEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     } else {
         Wh_Log(L"[Explorer] Failed to create helper host window, err=%lu", GetLastError());
     }
@@ -3308,6 +3455,16 @@ static DWORD WINAPI ExplorerHelperThreadProc(LPVOID) {
         DispatchMessageW(&msg);
     }
 
+    if (g_searchForegroundHook) {
+        UnhookWinEvent(g_searchForegroundHook);
+        g_searchForegroundHook = nullptr;
+    }
+    if (g_startCloakedHook) {
+        UnhookWinEvent(g_startCloakedHook);
+        g_startCloakedHook = nullptr;
+    }
+    g_searchAloneArmed = false;
+
     if (hWnd && IsWindow(hWnd)) {
         DestroyWindow(hWnd);
     }
@@ -3320,13 +3477,13 @@ static DWORD WINAPI ExplorerHelperThreadProc(LPVOID) {
     return 0;
 }
 
+// Every explorer.exe hosts one: File Explorer windows can run in processes of
+// their own, and which process loads this mod first is not fixed, so "only the
+// first" could leave the taskbar's process without one. Extra hosts are
+// harmless: the properties relay sends to whichever FindWindow returns, and
+// only the taskbar's process acts on Start and Search (IsTaskbarProcess).
 static void StartExplorerHelperHost() {
     if (g_hExplorerHelperThread) return;
-
-    if (FindWindowW(kExplorerHelperClassName, kExplorerHelperWindowName)) {
-        Wh_Log(L"[Explorer] Helper host window already active in another explorer instance");
-        return;
-    }
 
     g_hExplorerHelperReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_hExplorerHelperThread = CreateThread(nullptr, 0, ExplorerHelperThreadProc, nullptr, 0, &g_explorerHelperThreadId);
@@ -3356,31 +3513,36 @@ static void StopExplorerHelperHost() {
 }
 
 void InitExplorer() {
-    Wh_Log(L"=== start-everything: initializing explorer.exe shell hooks ===");
-    WindhawkUtils::SetFunctionHook(SetForegroundWindow, Hook_Explorer_SetForegroundWindow,
-                                   &pOriginalExplorerSetForegroundWindow);
-    WindhawkUtils::SetFunctionHook(BringWindowToTop, Hook_Explorer_BringWindowToTop,
-                                   &pOriginalExplorerBringWindowToTop);
-    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
-    if (hUser32) {
-        auto pSwitch = (Explorer_SwitchToThisWindow_t)GetProcAddress(hUser32, "SwitchToThisWindow");
-        if (pSwitch) {
-            WindhawkUtils::SetFunctionHook(pSwitch, Hook_Explorer_SwitchToThisWindow,
-                                           &pOriginalExplorerSwitchToThisWindow);
-        }
-    }
-
+    Wh_Log(L"=== start-everything: starting explorer.exe helper ===");
     StartExplorerHelperHost();
 }
 
 // ===========================================================================
-// Domain: SearchHost.exe (SearchHost Disconnect & Suppression)
+// Domain: SearchHost.exe (kept invisible, no WebView2)
 // ===========================================================================
+//
+// Windows hands the foreground to SearchHost whenever Start or Search opens:
+// Explorer activates SearchHost's CoreWindow first (~16ms after the Win key or
+// a Start-button click) and Start after that. Earlier versions fought this --
+// every SearchHost window subclassed, its activation and focus swallowed,
+// every show forced to a hide, every foreground call redirected -- and the
+// fight is what made the focus workarounds elsewhere necessary.
+//
+// Now SearchHost does what the shell asks of it, with three differences:
+//
+//   1. Its CoreWindow is drawn at zero alpha (SetNeutralized). The shell
+//      still shows, hides and activates it exactly as before; it just never
+//      appears, and clicks pass through it to Start.
+//   2. When Start cannot take the foreground from it, Start asks, and it
+//      grants it (AllowStartToTakeForeground). It is the foreground process
+//      at that moment, the only process in the chain entitled to, and Start
+//      then takes the foreground itself.
+//   3. WebView2 and the indexer are not launched: that is the disconnect.
 
-struct DisconnectRecursionGuard {
+struct HookReentryGuard {
     bool& flag;
-    explicit DisconnectRecursionGuard(bool& f) : flag(f) { flag = true; }
-    ~DisconnectRecursionGuard() { flag = false; }
+    explicit HookReentryGuard(bool& f) : flag(f) { flag = true; }
+    ~HookReentryGuard() { flag = false; }
 };
 
 using CreateProcessW_t = decltype(&CreateProcessW);
@@ -3411,7 +3573,7 @@ static BOOL WINAPI Hook_SearchHost_CreateProcessW(
                                       inheritHandles, creationFlags, environment,
                                       currentDirectory, startupInfo, processInformation);
     }
-    DisconnectRecursionGuard guard(inHook);
+    HookReentryGuard guard(inHook);
 
     if (IsWebViewProcess(applicationName) || IsWebViewProcess(commandLine)) {
         Wh_Log(L"[SearchHost] Blocked WebView2 launch: app=%ls, cmd=%ls",
@@ -3427,120 +3589,112 @@ static BOOL WINAPI Hook_SearchHost_CreateProcessW(
                                   currentDirectory, startupInfo, processInformation);
 }
 
+// Neutralizes SearchHost's CoreWindow (wParam TRUE) or restores it (FALSE).
+// Sent by the watchdog and by uninit; applied on the window's own thread.
+static UINT SearchNeutralizeMessage() {
+    static const UINT message = RegisterWindowMessageW(L"StartEverything_SearchNeutralize");
+    return message;
+}
+
+// Start's CoreWindow while it is open, else null.
+static HWND OpenStartWindow() {
+    HWND start = CachedStartWindow();
+    DWORD cloaked = 0;
+    if (start && SUCCEEDED(DwmGetWindowAttribute(start, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+        !cloaked) {
+        return start;
+    }
+    return nullptr;
+}
+
+// Lets Start take the foreground from SearchHost, while Start is open.
+static BOOL AllowStartToTakeForeground() {
+    DWORD pid = 0;
+    if (HWND start = OpenStartWindow()) {
+        GetWindowThreadProcessId(start, &pid);
+    }
+    BOOL ok = pid && AllowSetForegroundWindow(pid);
+    Wh_Log(L"[SearchHost] foreground requested by Start -> %d", ok);
+    return ok;
+}
+
+static bool g_addedLayeredStyle = false;  // SearchHost's UI thread only
+
+// Takes SearchHost's CoreWindow out of the picture (on) or puts it back (off).
+static void SetNeutralized(HWND hWnd, bool on) {
+    // DWM refuses an app cloak (DWMWA_CLOAK) on a CoreWindow, and a window
+    // region does not clip its composition content. Layered alpha 0 does:
+    // nothing is drawn, and clicks pass through. The shell still shows, hides
+    // and activates the window through its own cloak exactly as before.
+    LONG ex = GetWindowLongW(hWnd, GWL_EXSTYLE);
+    if (on) {
+        if (!(ex & WS_EX_LAYERED)) {
+            SetWindowLongW(hWnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
+            g_addedLayeredStyle = true;
+        }
+        SetLayeredWindowAttributes(hWnd, 0, 0, LWA_ALPHA);
+    } else {
+        if (g_addedLayeredStyle) {
+            SetWindowLongW(hWnd, GWL_EXSTYLE, ex & ~WS_EX_LAYERED);
+            g_addedLayeredStyle = false;
+        } else {
+            SetLayeredWindowAttributes(hWnd, 0, 255, LWA_ALPHA);
+        }
+    }
+    Wh_Log(L"[SearchHost] %ls CoreWindow %p", on ? L"hid" : L"restored", hWnd);
+}
+
 static LRESULT CALLBACK SearchHostSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
-    if (uMsg == WM_ACTIVATE) {
-        if (LOWORD(wParam) != WA_INACTIVE) {
-            Wh_Log(L"[SearchHost] WM_ACTIVATE (active) on 0x%p -> redirecting foreground to StartMenu", hWnd);
-            AllowSetForegroundWindow(ASFW_ANY);
-            HWND hStart = FindStartMenuCoreWindow();
-            if (hStart && IsWindow(hStart)) {
-                SetForegroundWindow(hStart);
-                BringWindowToTop(hStart);
-            }
-            ShowWindow(hWnd, SW_HIDE);
-            return 0;
-        }
-    } else if (uMsg == WM_SETFOCUS) {
-        Wh_Log(L"[SearchHost] WM_SETFOCUS on 0x%p -> redirecting foreground to StartMenu", hWnd);
-        AllowSetForegroundWindow(ASFW_ANY);
-        HWND hStart = FindStartMenuCoreWindow();
-        if (hStart && IsWindow(hStart)) {
-            SetForegroundWindow(hStart);
-            BringWindowToTop(hStart);
-        }
-        ShowWindow(hWnd, SW_HIDE);
-        return 0;
-    } else if (uMsg == WM_WINDOWPOSCHANGING) {
-        WINDOWPOS* wp = reinterpret_cast<WINDOWPOS*>(lParam);
-        if (wp) {
-            wp->flags |= SWP_HIDEWINDOW;
-            wp->flags &= ~SWP_SHOWWINDOW;
-        }
+    UINT requestMessage = StartForegroundRequestMessage();
+    UINT neutralizeMessage = SearchNeutralizeMessage();
+    if (uMsg == requestMessage && requestMessage) {
+        return AllowStartToTakeForeground();
+    }
+    if (uMsg == neutralizeMessage && neutralizeMessage) {
+        SetNeutralized(hWnd, wParam != 0);
+        return TRUE;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
-using SetForegroundWindow_t = BOOL(WINAPI*)(HWND);
-static SetForegroundWindow_t pOrigSearchHostSetForegroundWindow = nullptr;
-static BOOL WINAPI Hook_SearchHost_SetForegroundWindow(HWND hWnd) {
-    Wh_Log(L"[SearchHost] SetForegroundWindow called for 0x%p", hWnd);
-    AllowSetForegroundWindow(ASFW_ANY);
-    HWND hStart = FindStartMenuCoreWindow();
-    if (hStart && IsWindow(hStart)) {
-        Wh_Log(L"[SearchHost] Redirecting SetForegroundWindow to StartMenu 0x%p", hStart);
-        pOrigSearchHostSetForegroundWindow(hStart);
-        BringWindowToTop(hStart);
-    }
-    return TRUE;
-}
-
-using BringWindowToTop_t = BOOL(WINAPI*)(HWND);
-static BringWindowToTop_t pOrigSearchHostBringWindowToTop = nullptr;
-static BOOL WINAPI Hook_SearchHost_BringWindowToTop(HWND hWnd) {
-    Wh_Log(L"[SearchHost] BringWindowToTop called for 0x%p", hWnd);
-    AllowSetForegroundWindow(ASFW_ANY);
-    HWND hStart = FindStartMenuCoreWindow();
-    if (hStart && IsWindow(hStart)) {
-        pOrigSearchHostBringWindowToTop(hStart);
-    }
-    return TRUE;
-}
-
-using ShowWindow_t = BOOL(WINAPI*)(HWND, int);
-static ShowWindow_t pOrigSearchHostShowWindow = nullptr;
-static BOOL WINAPI Hook_SearchHost_ShowWindow(HWND hWnd, int nCmdShow) {
-    if (nCmdShow == SW_SHOW || nCmdShow == SW_SHOWNORMAL || nCmdShow == SW_RESTORE || nCmdShow == SW_SHOWDEFAULT) {
-        Wh_Log(L"[SearchHost] Redirected SearchHost ShowWindow to SW_HIDE with foreground return");
-        AllowSetForegroundWindow(ASFW_ANY);
-        HWND hStart = FindStartMenuCoreWindow();
-        if (hStart && IsWindow(hStart)) {
-            SetForegroundWindow(hStart);
-            BringWindowToTop(hStart);
-        }
-        nCmdShow = SW_HIDE;
-    }
-    return pOrigSearchHostShowWindow(hWnd, nCmdShow);
-}
-
-using SetWindowPos_t = BOOL(WINAPI*)(HWND, HWND, int, int, int, int, UINT);
-static SetWindowPos_t pOrigSearchHostSetWindowPos = nullptr;
-static BOOL WINAPI Hook_SearchHost_SetWindowPos(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags) {
-    if (uFlags & SWP_SHOWWINDOW) {
-        uFlags &= ~SWP_SHOWWINDOW;
-        uFlags |= SWP_HIDEWINDOW;
-    }
-    return pOrigSearchHostSetWindowPos(hWnd, hWndInsertAfter, X, Y, cx, cy, uFlags);
+static void SetSearchWindowNeutralized(HWND hwnd, BOOL on) {
+    DWORD_PTR done = 0;
+    SendMessageTimeoutW(hwnd, SearchNeutralizeMessage(), on, 0, SMTO_ABORTIFHUNG, 1000, &done);
 }
 
 void InitSearchHost() {
-    Wh_Log(L"=== start-everything: initializing SearchHost disconnect & suppression hooks ===");
+    Wh_Log(L"=== start-everything: initializing SearchHost disconnect ===");
     WindhawkUtils::SetFunctionHook(CreateProcessW, Hook_SearchHost_CreateProcessW, &pOriginalCreateProcessW);
-    WindhawkUtils::SetFunctionHook(SetForegroundWindow, Hook_SearchHost_SetForegroundWindow, &pOrigSearchHostSetForegroundWindow);
-    WindhawkUtils::SetFunctionHook(BringWindowToTop, Hook_SearchHost_BringWindowToTop, &pOrigSearchHostBringWindowToTop);
-    WindhawkUtils::SetFunctionHook(ShowWindow, Hook_SearchHost_ShowWindow, &pOrigSearchHostShowWindow);
-    WindhawkUtils::SetFunctionHook(SetWindowPos, Hook_SearchHost_SetWindowPos, &pOrigSearchHostSetWindowPos);
 }
 
+// SearchHost's CoreWindow can appear after this mod loads, and the shell can
+// recreate it, so it is looked for for as long as the mod runs: every 500ms
+// for the first minute, then every 5s. Only CoreWindows are touched; the
+// process's other top-level windows (IME windows, a zero-size IE host) never
+// show.
 [[clang::no_destroy]] static std::optional<std::thread> g_searchHostWatchdog;
+static std::vector<HWND> g_searchWindows;  // watchdog thread, then uninit after the join
+
 static void StartSearchHostWatchdog() {
     g_searchHostWatchdog.emplace([] {
-        std::vector<HWND> hooked;
-        for (int i = 0; i < 120 && !g_quit.load(); ++i) {
-            EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
-                auto* done = reinterpret_cast<std::vector<HWND>*>(lp);
-                if (std::find(done->begin(), done->end(), hwnd) != done->end()) {
-                    return TRUE;
-                }
+        for (int i = 0; !g_quit.load(); ++i) {
+            // A destroyed window's handle can be reused by a new one.
+            std::erase_if(g_searchWindows, [](HWND hwnd) { return !IsWindow(hwnd); });
+            for (HWND hwnd = FindWindowExW(nullptr, nullptr, L"Windows.UI.Core.CoreWindow", nullptr); hwnd;
+                 hwnd = FindWindowExW(nullptr, hwnd, L"Windows.UI.Core.CoreWindow", nullptr)) {
                 DWORD pid = 0;
                 GetWindowThreadProcessId(hwnd, &pid);
-                if (pid == GetCurrentProcessId()) {
-                    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc, 0)) {
-                        done->push_back(hwnd);
-                    }
+                if (pid != GetCurrentProcessId() ||
+                    std::find(g_searchWindows.begin(), g_searchWindows.end(), hwnd) != g_searchWindows.end()) {
+                    continue;
                 }
-                return TRUE;
-            }, reinterpret_cast<LPARAM>(&hooked));
-            for (int s = 0; s < 10 && !g_quit.load(); ++s) {
+                if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc, 0)) {
+                    SetSearchWindowNeutralized(hwnd, TRUE);
+                    g_searchWindows.push_back(hwnd);
+                }
+            }
+            int slices = i < 120 ? 10 : 100;  // 50ms each, so unload never waits long
+            for (int s = 0; s < slices && !g_quit.load(); ++s) {
                 Sleep(50);
             }
         }
@@ -3811,6 +3965,7 @@ inline UINT GetTeardownMessage() {
 [[clang::no_destroy]] wuxc::TextBox::TextChanged_revoker g_ourBoxChanged;
 [[clang::no_destroy]] wux::UIElement::LostFocus_revoker g_ourBoxLost;
 [[clang::no_destroy]] wux::DispatcherTimer g_openFocus{nullptr};
+[[clang::no_destroy]] wux::DispatcherTimer g_shownFocus{nullptr};
 
 inline wuxm::SolidColorBrush MakeBrush(uint8_t a, uint8_t r, uint8_t g, uint8_t b) {
     return wuxm::SolidColorBrush{winrt::Windows::UI::ColorHelper::FromArgb(a, r, g, b)};
@@ -4238,11 +4393,21 @@ void TakeForeground(bool force = false) {
         }
 
         HWND current = GetForegroundWindow();
-        if (current == ours) {
-            return;
+        if (current == ours || IsOurWindowCloaked()) {
+            return;  // already there, or Start is closed: nothing to show
         }
 
         BOOL ok = SetForegroundWindow(ours);
+        if (!ok && IsSearchHostWindow(current)) {
+            // The shell gives SearchHost the foreground when Start opens, and
+            // only the foreground process can pass it on. Ask SearchHost to.
+            DWORD_PTR granted = 0;
+            if (SendMessageTimeoutW(current, StartForegroundRequestMessage(), 0, 0, SMTO_ABORTIFHUNG,
+                                    200, &granted) &&
+                granted) {
+                ok = SetForegroundWindow(ours);
+            }
+        }
         BringWindowToTop(ours);
         Wh_Log(L"focus: TakeForeground -> SetForegroundWindow result=%d, prev=0x%p, ours=0x%p",
                ok ? 1 : 0, current, ours);
@@ -4312,12 +4477,163 @@ void TriggerMenuOpenFocus() {
     }
 }
 
+// Takes the foreground as soon as the shell has shown Start, and keeps it
+// from SearchHost while Start settles.
+//
+// The shell shows Start ~16-50ms after the Win key or a Start-button click
+// but activates it only ~200ms later, and until Start holds the foreground,
+// keys go to SearchHost -- which takes them as a native search, grabs the
+// foreground back, and has the shell swap Start for Search (Explorer then
+// reopens Start; see "Search is never left showing without Start").
+// VisibilityChanged arrives before the shell lifts its cloak, so for ~300ms
+// this checks every 10ms and, whenever Start is open and SearchHost has the
+// foreground, takes it (TakeForeground asks SearchHost for it). Only
+// SearchHost is taken from: once any other window is in front -- a quick
+// Escape, a click elsewhere -- the check stops.
+void TakeForegroundWhenShown() {
+    try {
+        if (g_shownFocus) {
+            g_shownFocus.Stop();
+            g_shownFocus = nullptr;
+        }
+        auto t = wux::DispatcherTimer();
+        t.Interval(std::chrono::milliseconds(10));
+        auto ticks = std::make_shared<int>(0);
+        t.Tick([ticks](wf::IInspectable const& sender, wf::IInspectable const&) {
+            HWND ours = GetOurCoreWindow();
+            HWND fg = GetForegroundWindow();  // null while the foreground changes hands
+            bool done = !ours || ++(*ticks) > 30 || (fg && fg != ours && !IsSearchHostWindow(fg));
+            if (!done && fg != ours && !IsOurWindowCloaked()) {
+                TakeForeground(true);
+            }
+            if (done) {
+                if (auto timer = sender.try_as<wux::DispatcherTimer>()) {
+                    timer.Stop();
+                }
+            }
+        });
+        t.Start();
+        g_shownFocus = t;
+    } catch (...) {
+    }
+}
+
+// Closes Start the way pressing the Start button a second time does.
+//
+// SC_TASKLIST to the taskbar is the documented "activate the Start menu"
+// command. Sent while Start is open it closes it, and the shell hands the
+// foreground back to whatever had it before -- what the injected Escape used
+// to achieve, with no synthesized input. Measured on 26100: foreground back to
+// the previous app ~16ms after the message, Start cloaked ~200ms later.
+//
+// It toggles, so it is sent only while Start is open and active: the
+// foreground must still be in this process or in SearchHost. Once it has
+// moved elsewhere Start is already closing, and because the cloak lags the
+// foreground change by ~200ms, a toggle in that gap would reopen it.
+void CloseStartMenu() {
+    HWND ours = GetOurCoreWindow();
+    if (!ours || !IsWindow(ours) || IsOurWindowCloaked()) {
+        return;
+    }
+    HWND fg = GetForegroundWindow();
+    DWORD fgPid = 0;
+    GetWindowThreadProcessId(fg, &fgPid);
+    if (fgPid != GetCurrentProcessId() && !IsSearchHostWindow(fg)) {
+        Wh_Log(L"CloseStartMenu: foreground already moved to %p, leaving Start to close", fg);
+        return;
+    }
+    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        PostMessageW(tray, WM_SYSCOMMAND, SC_TASKLIST, 0);
+        Wh_Log(L"CloseStartMenu: asked the shell to close Start");
+    }
+}
+
+// SearchHost taking the foreground while Start stays open.
+//
+// A click on an empty part of Start makes the shell activate Search -- on
+// stock Windows so that typing goes into its search -- and a key typed before
+// Start holds the keyboard does the same. Under this mod that must not count
+// as leaving Start: it would hide the results and clear what was typed, and
+// the next key would reach SearchHost and swap Start out. Start takes the
+// foreground back instead (TakeForeground asks SearchHost for it). Losing it
+// to anything else -- Escape, another app, a launch -- is left alone; closing
+// Start hands the foreground to the previous app, never to SearchHost.
+bool SearchHostTookForegroundFromOpenStart() {
+    return !IsOurWindowCloaked() && IsSearchHostWindow(GetForegroundWindow());
+}
+
+void ReclaimForegroundFromSearchHost() {
+    try {
+        if (!g_ourBox) {
+            return;
+        }
+        g_ourBox.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal, [] {
+            if (SearchHostTookForegroundFromOpenStart()) {
+                TakeForeground(true);
+            }
+        });
+    } catch (...) {
+    }
+}
+
+// What was typed, kept across Start being swapped out and reopened.
+//
+// A key that reaches SearchHost before Start holds the keyboard makes the
+// shell swap Start out for Search, and Explorer then opens Start again (see
+// "Search is never left showing without Start"). The keys typed meanwhile
+// still arrive in this box, but reopening briefly activates SearchHost, and
+// losing activation clears the box. Start is already cloaked by then -- in a
+// normal close it is still visible when it loses activation -- so the text is
+// set aside and put back if Start is activated again straight away.
+static std::wstring g_swappedOutText;
+static ULONGLONG g_swappedOutTick = 0;
+static const ULONGLONG kSwappedOutTextLifetimeMs = 1500;
+
+void StashTextIfSwappedOut() {
+    try {
+        if (!g_ourBox || !IsOurWindowCloaked()) {
+            return;
+        }
+        std::wstring text{g_ourBox.Text()};
+        if (text.empty()) {
+            return;
+        }
+        g_swappedOutText = std::move(text);
+        g_swappedOutTick = GetTickCount64();
+        Wh_Log(L"focus: Start was swapped out; keeping '%ls' for its reopen", g_swappedOutText.c_str());
+    } catch (...) {
+    }
+}
+
+void RestoreSwappedOutText() {
+    if (g_swappedOutText.empty()) {
+        return;
+    }
+    std::wstring text = std::move(g_swappedOutText);
+    g_swappedOutText.clear();
+    if (!g_ourBox || GetTickCount64() - g_swappedOutTick > kSwappedOutTextLifetimeMs) {
+        return;
+    }
+    try {
+        g_ourBox.Text(text);
+        RevealOverlayAnimated();
+        g_ourBox.Focus(wux::FocusState::Programmatic);
+        g_ourBox.SelectionStart(static_cast<int32_t>(text.size()));
+        g_ourBox.SelectionLength(0);
+    } catch (...) {
+    }
+}
+
 void DismissStartMenu() {
     try {
         g_suppressRefocus.store(true);
         if (g_openFocus) {
             g_openFocus.Stop();
             g_openFocus = nullptr;
+        }
+        if (g_shownFocus) {
+            g_shownFocus.Stop();
+            g_shownFocus = nullptr;
         }
         if (g_ourBox) {
             g_ourBox.Text(L"");
@@ -4333,19 +4649,7 @@ void DismissStartMenu() {
         if (g_revealAnim) g_revealAnim.Stop();
         if (g_hideAnim) g_hideAnim.Stop();
 
-        HWND ours = GetOurCoreWindow();
-        if (ours && IsWindow(ours)) {
-            SetForegroundWindow(ours);
-            BringWindowToTop(ours);
-            if (GetForegroundWindow() == ours) {
-                keybd_event(VK_ESCAPE, 0, 0, 0);
-                keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, 0);
-                Wh_Log(L"DismissStartMenu: sent Escape to foreground (CoreWindow %p)", ours);
-            } else {
-                Wh_Log(L"DismissStartMenu: could not foreground CoreWindow %p (current=%p), skipped Escape",
-                    ours, GetForegroundWindow());
-            }
-        }
+        CloseStartMenu();
     } catch (...) {
     }
 }
@@ -4370,6 +4674,7 @@ static HHOOK g_hGetMsgHook = nullptr;
 static winrt::event_token g_charReceivedToken{};
 static winrt::event_token g_keyDownToken{};
 static winrt::event_token g_activatedToken{};
+static winrt::event_token g_visibilityToken{};
 static bool g_coreEventsHooked = false;
 
 static DWORD s_lastCharTick = 0;
@@ -4506,6 +4811,20 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
         TeardownStartMenuUi();
         return 0;
     }
+
+    static UINT s_uMsgTaskbarCreated = 0;
+    if (s_uMsgTaskbarCreated == 0) {
+        s_uMsgTaskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    }
+    if (uMsg && uMsg == s_uMsgTaskbarCreated) {
+        HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (tray && hWnd) {
+            SetPropW(tray, L"WindhawkStartMenuHwnd", hWnd);
+            Wh_Log(L"subclass: TaskbarCreated -> re-published WindhawkStartMenuHwnd %p", hWnd);
+        }
+        return 0;
+    }
+
     if (uMsg == WM_ACTIVATE) {
         HWND otherHwnd = reinterpret_cast<HWND>(lParam);
         DWORD otherPid = 0;
@@ -4524,6 +4843,7 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                 if (g_resultsTranslate) g_resultsTranslate.Y(-8.0);
                 SyncOverlayBackground();
             }
+            RestoreSwappedOutText();
             TriggerMenuOpenFocus();
         } else {
             // If the other window is in our own process (e.g. context menu, flyout, tooltip), don't suppress refocus!
@@ -4532,6 +4852,12 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
                 return DefSubclassProc(hWnd, uMsg, wParam, lParam);
             }
 
+            if (SearchHostTookForegroundFromOpenStart()) {
+                Wh_Log(L"subclass: WM_ACTIVATE (inactive) to SearchHost while open -> taking it back");
+                ReclaimForegroundFromSearchHost();
+                return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+            }
+            StashTextIfSwappedOut();
             g_suppressRefocus.store(true);
             Wh_Log(L"subclass: WM_ACTIVATE (inactive, other=%p pid=%lu) -> suppressing refocus", otherHwnd, otherPid);
             if (g_resultsHost) {
@@ -4846,7 +5172,8 @@ void OpenFileLocation(std::wstring path) {
 
 void ShowPropertiesDialog(std::wstring path) {
     SpawnTrackedLaunch([path = std::move(path)] {
-        // Sleep briefly to let DismissStartMenu()'s VK_ESCAPE pass through
+        // Give Start a moment to close first (DismissStartMenu asks the shell
+        // for it), so the dialog does not open underneath it.
         Sleep(150);
 
         std::wstring cleanPath = path;
@@ -5931,7 +6258,6 @@ void RenderResults() try {
                     shortcutIcon.Glyph(L"\uE7C5");
                     shortcutItem.Icon(shortcutIcon);
                     shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        DismissStartMenu();
                         tools::CreateDesktopShortcut(locTarget, appTitle);
                     });
                     flyout.Items().Append(shortcutItem);
@@ -5945,6 +6271,13 @@ void RenderResults() try {
                     propIcon.Glyph(L"\uE946");
                     propItem.Icon(propIcon);
                     propItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+                            DWORD explorerPid = 0;
+                            GetWindowThreadProcessId(tray, &explorerPid);
+                            if (explorerPid) {
+                                AllowSetForegroundWindow(explorerPid);
+                            }
+                        }
                         DismissStartMenu();
                         ShowPropertiesDialog(locTarget);
                     });
@@ -5959,7 +6292,6 @@ void RenderResults() try {
                     shortcutIcon.Glyph(L"\uE7C5");
                     shortcutItem.Icon(shortcutIcon);
                     shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        DismissStartMenu();
                         tools::CreateDesktopShortcut(L"shell:AppsFolder\\" + locTarget, appTitle);
                     });
                     flyout.Items().Append(shortcutItem);
@@ -6311,7 +6643,6 @@ void RenderResults() try {
             shortcutIcon.Glyph(L"\uE7C5");
             shortcutItem.Icon(shortcutIcon);
             shortcutItem.Click([target, title = item.title](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                DismissStartMenu();
                 tools::CreateDesktopShortcut(target, title);
             });
             flyout.Items().Append(shortcutItem);
@@ -6325,6 +6656,13 @@ void RenderResults() try {
             propIcon.Glyph(L"\uE946");
             propItem.Icon(propIcon);
             propItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+                    DWORD explorerPid = 0;
+                    GetWindowThreadProcessId(tray, &explorerPid);
+                    if (explorerPid) {
+                        AllowSetForegroundWindow(explorerPid);
+                    }
+                }
                 DismissStartMenu();
                 ShowPropertiesDialog(target);
             });
@@ -7365,8 +7703,12 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
                                     if (g_resultsTranslate) g_resultsTranslate.Y(-8.0);
                                     SyncOverlayBackground();
                                 }
+                                RestoreSwappedOutText();
                                 TriggerMenuOpenFocus();
+                            } else if (SearchHostTookForegroundFromOpenStart()) {
+                                // Taken back by the subclass (WM_ACTIVATE); nothing to reset.
                             } else {
+                                StashTextIfSwappedOut();
                                 g_suppressRefocus.store(true);
                                 if (g_resultsHost) {
                                     g_resultsHost.Visibility(wux::Visibility::Visible);
@@ -7387,6 +7729,15 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
                                 }
                             }
                         });
+                    }
+                    if (!g_visibilityToken) {
+                        g_visibilityToken = core.VisibilityChanged(
+                            [](wuc::CoreWindow const&, wuc::VisibilityChangedEventArgs const& args) {
+                                Wh_Log(L"focus: VisibilityChanged visible=%d", args.Visible() ? 1 : 0);
+                                if (args.Visible()) {
+                                    TakeForegroundWhenShown();
+                                }
+                            });
                     }
                     g_coreEventsHooked = true;
                 }
@@ -7416,6 +7767,10 @@ void TeardownStartMenuUi() {
         g_openFocus.Stop();
         g_openFocus = nullptr;
     }
+    if (g_shownFocus) {
+        g_shownFocus.Stop();
+        g_shownFocus = nullptr;
+    }
     if (g_revealAnim) {
         g_revealAnim.Stop();
         g_revealAnim = nullptr;
@@ -7439,6 +7794,10 @@ void TeardownStartMenuUi() {
             if (g_activatedToken) {
                 core.Activated(g_activatedToken);
                 g_activatedToken = {};
+            }
+            if (g_visibilityToken) {
+                core.VisibilityChanged(g_visibilityToken);
+                g_visibilityToken = {};
             }
         }
     } catch (...) {}
@@ -7587,14 +7946,16 @@ void Wh_ModUninit() {
             g_searchHostWatchdog->join();
             g_searchHostWatchdog.reset();
         }
-        EnumWindows([](HWND hwnd, LPARAM) -> BOOL {
-            DWORD pid = 0;
-            GetWindowThreadProcessId(hwnd, &pid);
-            if (pid == GetCurrentProcessId()) {
+        // Put SearchHost back as the shell left it: no subclass, and no zero
+        // alpha -- left behind, it would keep native search invisible after
+        // the mod is disabled.
+        for (HWND hwnd : g_searchWindows) {
+            if (IsWindow(hwnd)) {
+                SetSearchWindowNeutralized(hwnd, FALSE);  // through the subclass: first
                 WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, SearchHostSubclassProc);
             }
-            return TRUE;
-        }, 0);
+        }
+        g_searchWindows.clear();
         Wh_Log(L"uninit: SearchHost cleanup complete");
         return;
     }
