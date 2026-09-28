@@ -20,21 +20,19 @@ New in 1.2.0
 - separate disk bar and text customization toggles
 - updated text formatting to support any subset of stats in any order
 - added used percentage (%p) and free percentage (%fp) stats
-- added unit normalization (ex show 1.71TB as 1710GB, or 710GB as 0.71TB)
-- custom number of decimals in displayed units (0-6, 0 being integer numbers only)
+- added unit normalization (ex show 1.5TB as 1536GB, or 512GB as 0.5TB)
+- optional custom number of decimals in displayed units (0-6, 0 being integer numbers only)
 
 Features
-- custom colors with transparency for disk usage, track (background/unused), and outline
+- follow system accent color, or set custom colors with transparency for disk usage, track (background/unused), and outline
 - separate disk colors for when drive is near full
 - linear gradient support with configurable direction
 - rounded corners
 - glossy overlay toggle option (for a more Windows Aero-ish looking aesthetic)
-- height/width controls (inset) controls for disk bar and track
+- height/width (inset) controls for disk bar and track
 - custom disk usage text with font size adjustment, multi-line support, line-height adjustment, and more
-- independent switches for disk bar customization and text customization
 - named stat placeholders (%f for free, %u for used, %t for total, %p for used percentage, %fp for free percentage)
-- unit granularity matching (e.g. matching all stats to largest/smallest/total unit like GB or TB)
-- optional decimal precision (0 to 6 places) for sizes and percentages
+
 
 Named placeholders can appear in any order or be repeated. Legacy `%s` placeholders
 still insert free, used, and total space in that order. Use `%%` for a literal
