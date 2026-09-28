@@ -711,7 +711,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
       - raw: Raw HID (direct gesture handling)
     - suppressTaskView: true
       $name: Suppress Task View for Touchpad Swipes
-      $description: Hide Task View when a 3-finger up swipe opens it. While the switcher is open, vertical swipes move through its rows (or pages) and the Show desktop action the OS runs for a downward swipe is dropped, so the gesture belongs to the switcher until the fingers are lifted. When off, Windows keeps the vertical swipes (Task View, Show desktop) and the switcher only navigates cyclically.
+      $description: Hand the 3-finger touchpad swipes to the switcher while it is visible, so the gesture navigates it (rows or pages for vertical swipes) instead of the OS acting on it. Task View is suppressed, and the Show desktop action the OS runs for a downward swipe is performed by the mod itself (a downward swipe with no switcher session still shows the desktop). When off, Windows keeps the vertical swipes (Task View, Show desktop) and the switcher only navigates cyclically.
   $name: Touchpad
   $description: Precision touchpad input. Raw HID requires a precision touchpad; if the reports are unavailable, Legacy behavior is used instead.
 - ExcludedWindows:
@@ -754,6 +754,7 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 #include <knownfolders.h>
 #include <windowsx.h>
 #include <commctrl.h>
+#include <inspectable.h>
 #include <appmodel.h>
 #include <hidusage.h>
 #include <hidpi.h>
@@ -4285,7 +4286,9 @@ static int s_rawGestureAnchorY = 0;
 static int s_rawGestureAxis = 0;  // 0 = none yet, 1 = across entries, 2 = rows
 static int s_rawAppliedX = 0;     // entries applied since the current direction started
 static ULONGLONG s_rawRowTick = 0; // pacing for the vertical axis
-static ULONGLONG s_rawSwipePublishTick = 0; // last publish of the raw session marker
+static ULONGLONG s_rawSwipePublishTick = 0; // last publish of the raw 3-finger swipe marker
+static ULONGLONG s_rawForegroundTick = 0;   // pacing for the session foreground re-assert
+static bool s_rawSwipeDesktopSent = false;  // show desktop already sent for this swipe
 static int s_rawLastFrameX = 0;
 static int s_rawLastFrameY = 0;
 std::map<std::wstring, HICON> g_uwpIconCache;
@@ -11703,6 +11706,11 @@ static void CloseSwitcherEntry(int idx) {
 
 // Diagnostics for the raw-HID touchpad refactor, defined in the tool-mod section.
 static void LogPrecisionTouchpadConfig();
+
+// Touchpad 3-finger take-over (defined with the switcher thread below). The settings-changed
+// handler is compiled earlier, so it needs these declarations up front.
+static bool TouchpadGestureTakeoverWanted();
+static bool UpdateTouchpadGestureTakeover(bool want);
 static void LogProcessIntegrityLevel(const WCHAR* tag);
 
 // The raw path has no hotkey and no Explorer grant for the foreground (the legacy path
@@ -11722,6 +11730,27 @@ static void TapUnassignedKeyForForeground() {
     inputs[1] = inputs[0];
     inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
     SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
+}
+
+// The native Show desktop shortcut (Win+D). The mod owns the 3-finger downward swipe while
+// Task View suppression is on - the OS action for it is dropped on the Explorer side so a
+// Task View opened by an earlier swipe can never swallow it - so the mod runs the action
+// itself for a swipe that happens with no switcher session (see the raw frame handler).
+static void InjectShowDesktopShortcut() {
+    INPUT inputs[4] = {};
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = VK_LWIN;
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = 'D';
+    inputs[2].type = INPUT_KEYBOARD;
+    inputs[2].ki.wVk = 'D';
+    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    inputs[3].type = INPUT_KEYBOARD;
+    inputs[3].ki.wVk = VK_LWIN;
+    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+    if (!SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT))) {
+        Wh_Log(L"SWS: show desktop injection failed (%u)", GetLastError());
+    }
 }
 
 // Touchpad gesture sessions, shared by the Explorer-interception path (legacy) and the
@@ -11783,10 +11812,10 @@ static void EndTouchpadGesture() {
 // property, so the Explorer side can read it without a cross-process call), and Explorer
 // drops the shell's 'show desktop' swipe action for that gesture (see RaiseDesktop_Hook).
 #define SWS_RAW_SWIPE_PROP L"WindhawkSWSRawSwipe"
-// The published value is the low 32 bits of GetTickCount64, so this window stays far below
-// the 32-bit wrap and long enough to cover the finger lift, where the shell can still run
-// the action it recognised for the swipe.
-#define SWS_RAW_SWIPE_OWNER_MS 1200
+// The published value is the low 32 bits of GetTickCount64 and it is refreshed as long as
+// three fingers are down, so this window only has to cover the gap between reports plus the
+// moment the fingers lift, where the shell can still run the action it recognised.
+#define SWS_RAW_SWIPE_OWNER_MS 600
 // Pacing for the vertical axis: one row (or page) per this interval, which keeps a long drag
 // from walking the layout through itself while still covering several rows when needed.
 #define SWS_RAW_SWIPE_ROW_INTERVAL_MS 140
@@ -11848,6 +11877,23 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     int y = (int)((packedPos >> 16) & 0xFFFF);
     int prevTips = s_rawGestureTips;
     s_rawGestureTips = (int)tips;
+
+    if (tips != SWS_RAW_SWIPE_FINGERS) {
+        // Each swipe starts fresh: the show desktop fired for the previous one must not stop
+        // the next downward swipe from reaching the desktop again.
+        s_rawSwipeDesktopSent = false;
+    } else if (g_hSwitcher && g_settings.suppressTaskView) {
+        // A physical 3-finger swipe is in flight. Publish it for the Explorer side, which
+        // drops the shell's Show desktop action for it (see RaiseDesktop_Hook): the block is
+        // tied to the swipe itself, so Win+D and the taskbar button are never affected, and
+        // the shell action cannot fire under the switcher while it navigates. Refreshing
+        // every 150 ms follows the frames without touching the server per report.
+        ULONGLONG swipeNow = GetTickCount64();
+        if (swipeNow - s_rawSwipePublishTick >= 150) {
+            s_rawSwipePublishTick = swipeNow;
+            SetPropW(g_hSwitcher, SWS_RAW_SWIPE_PROP, (HANDLE)(ULONG_PTR)(DWORD)swipeNow);
+        }
+    }
 
     if (tips == 0) {
         s_rawGestureArmed = false;
@@ -11946,17 +11992,18 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     }
 
     bool sessionOpen = g_isTouchpadGestureActive && (g_isVisible || g_isPendingShow);
-    if (sessionOpen && g_settings.suppressTaskView && g_hSwitcher) {
-        // Publish the session for the Explorer side, which drops the OS 'show desktop' swipe
-        // action while this gesture belongs to the switcher. Refreshing every 150 ms keeps
-        // the marker live through the whole drag (and its tail covers the finger lift, when
-        // the shell may still run its own action) without touching the server per report.
-        // Publishing only with suppression on keeps the setting's meaning: with it off the
-        // vertical swipes stay with Windows, Show desktop included.
-        ULONGLONG publishNow = GetTickCount64();
-        if (publishNow - s_rawSwipePublishTick >= 150) {
-            s_rawSwipePublishTick = publishNow;
-            SetPropW(g_hSwitcher, SWS_RAW_SWIPE_PROP, (HANDLE)(ULONG_PTR)(DWORD)publishNow);
+    if (sessionOpen && g_hSwitcher) {
+        // The OS can still act on the same physical gesture (Task View), and a session that
+        // loses the foreground cannot commit its selection: take it back while the fingers
+        // are down. Throttled, and only logged when it actually has to fight for it.
+        ULONGLONG fgNow = GetTickCount64();
+        if (fgNow - s_rawForegroundTick >= 400) {
+            s_rawForegroundTick = fgNow;
+            HWND hFg = GetForegroundWindow();
+            if (hFg != g_hSwitcher) {
+                Wh_Log(L"SWS: raw session re-taking the foreground (fg=%p)", hFg);
+                SetForegroundWindow(g_hSwitcher);
+            }
         }
     }
     if (axis == 1) {
@@ -11998,13 +12045,31 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         TouchpadNavigate(true, delta);
     } else {
         // Vertical: rows when the grid has them, pages when a single line overflows and has
-        // no rows, so the gesture is never dead. One move per SWS_RAW_SWIPE_ROW_INTERVAL_MS
-        // keeps a long drag from walking the layout through itself (a row walk reflows the
-        // layout, and doing that per report is what kept breaking the flow), while still
-        // covering several rows or pages when the hand keeps going. It needs Task View
-        // suppression, because without it the vertical swipes belong to Windows, and an open
-        // session, so a vertical swipe never opens one.
-        if (!sessionOpen || !g_settings.suppressTaskView || ady < SWS_RAW_SWIPE_ENTRY_PITCH) {
+        // none, and a jump to the ends when a single line holds everything, so a vertical
+        // swipe is never dead in any layout. One move per SWS_RAW_SWIPE_ROW_INTERVAL_MS keeps
+        // a long drag from walking the layout through itself (a row walk reflows the layout,
+        // and doing that per report is what kept breaking the flow), while still covering
+        // several rows or pages when the hand keeps going. It needs Task View suppression,
+        // because without it the vertical swipes belong to Windows.
+        if (!g_settings.suppressTaskView || ady < SWS_RAW_SWIPE_ENTRY_PITCH) {
+            return;
+        }
+        int delta = dy > 0 ? 1 : -1;
+        if (g_settings.reverseScrollDirection) {
+            delta = -delta;
+        }
+        if (!sessionOpen) {
+            // No switcher session: the shell's action for this swipe is dropped on the
+            // Explorer side (so a Task View opened by an earlier swipe can never swallow it),
+            // which means the mod has to run the action itself. Only a downward swipe does
+            // anything - the upward one is the Task View gesture this setting suppresses -
+            // and only once per swipe, so the desktop cannot flip back and forth while the
+            // hand keeps moving.
+            if (delta > 0 && !s_rawSwipeDesktopSent) {
+                s_rawSwipeDesktopSent = true;
+                Wh_Log(L"SWS: raw touchpad downward swipe with no session -> show desktop");
+                InjectShowDesktopShortcut();
+            }
             return;
         }
         ULONGLONG now = GetTickCount64();
@@ -12012,15 +12077,26 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
             return;
         }
         s_rawRowTick = now;
-        int delta = dy > 0 ? 1 : -1;
-        if (g_settings.reverseScrollDirection) {
-            delta = -delta;
-        }
         bool rows = LayoutHasMultipleLines();
-        Wh_Log(L"SWS: raw touchpad move (dy=%d, rows=%d, pages=%d)", dy, rows ? delta : 0,
-               rows ? 0 : delta);
+        bool ends = false;
+        if (!rows && !g_isPaginatedView && !g_windows.empty()) {
+            // A single line that fits every entry has no rows and no pages to move through:
+            // jump to the end the swipe points at, so the gesture always has a visible
+            // effect (up reaches the first entry, down the last).
+            int target = delta > 0 ? (int)g_windows.size() - 1 : 0;
+            int jumpDelta = target - g_selectedIndex;
+            if (jumpDelta == 0) {
+                return; // already at the end the swipe points at
+            }
+            delta = jumpDelta;
+            ends = true;
+        }
+        Wh_Log(L"SWS: raw touchpad move (dy=%d, %s=%d)", dy,
+               rows ? L"rows" : (ends ? L"ends" : L"pages"), delta);
         if (rows) {
             TouchpadNavigate(false, delta);
+        } else if (ends) {
+            CycleLinear(delta);
         } else {
             CyclePage(delta);
         }
@@ -12682,6 +12758,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         ResetScrollWheelAccumulators();
         SWS_UnregisterHotkeys();
         LoadSettings();
+        UpdateTouchpadGestureTakeover(TouchpadGestureTakeoverWanted());
         if (g_hSwitcher) ApplyThemeToWindow(g_hSwitcher);
         SWS_RegisterHotkeys();
         return 0;
@@ -13731,9 +13808,18 @@ static bool SwitcherOwnsRawSwipe() {
 }
 
 static void __cdecl RaiseDesktop_Hook(void* pThis, int flags) {
-    if (SwitcherOwnsRawSwipe()) {
+    // flags 2 and 3 are the touchpad swipe paths (as documented by the win-d-per-monitor
+    // mod, which hooks this function for the same gesture); the Win+D hotkey and the
+    // taskbar button use other values and always pass through. The block additionally
+    // requires the physical 3-finger swipe to be in flight (published by the switcher), so a
+    // hotkey pressed during a gesture is never affected either.
+    bool isTouchpadSwipe = (flags == 2 || flags == 3);
+    if (isTouchpadSwipe && SwitcherOwnsRawSwipe()) {
         Wh_Log(L"SWS: dropped show desktop from a 3-finger swipe (flags=%d)", flags);
         return;
+    }
+    if (isTouchpadSwipe) {
+        Wh_Log(L"SWS: show desktop from a 3-finger swipe passed through (flags=%d)", flags);
     }
     RaiseDesktop_Original(pThis, flags);
 }
@@ -13768,6 +13854,130 @@ static bool TryHookRaiseDesktop() {
 #endif
 
 // Background thread for tool mod process
+
+// --- Taking over the global 3-finger gestures while the switcher is up -------------------
+// Windows.UI.Input.TouchpadGesturesController is the documented way for the *foreground*
+// application to receive global (three or more finger) touchpad gestures instead of the
+// system's own handler. Registered from the switcher process, the system routes 3-finger
+// swipes to it while this process owns the foreground - which is exactly while the switcher
+// is visible - so the OS performs none of its own actions for those swipes (Task View, Show
+// desktop, Switch apps) and nothing it does can interrupt a session: the gesture belongs to
+// the switcher until the fingers are lifted. Outside the switcher this process is not the
+// foreground one, so Windows keeps its gestures as always.
+//
+// The compiler's copy of windows.ui.input.h predates the class, so the ABI is declared here.
+// The layout is not guessed: it was read from the Windows.UI.winmd shipped with the system:
+// ITouchpadGesturesControllerStatics is IsSupported, CreateForProcess, and
+// ITouchpadGesturesController (IID 28c13cdd-e068-549f-89c6-1a440c6fc327) starts with
+// get_Enabled, put_Enabled, get_SupportedGestures, put_SupportedGestures, followed by the
+// events this mod does not subscribe to.
+static const GUID SWS_IID_TouchpadGesturesControllerStatics =
+    {0x207ef171, 0x1a73, 0x51cd, {0xa6, 0x94, 0x88, 0x40, 0xe0, 0x9d, 0xba, 0xfa}};
+
+struct SwsTouchpadGestureStatics : IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE IsSupported(BOOL* supported) = 0;
+    virtual HRESULT STDMETHODCALLTYPE CreateForProcess(IInspectable** controller) = 0;
+};
+
+struct SwsTouchpadGestureController : IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_Enabled(BOOL* value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_Enabled(BOOL value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_SupportedGestures(UINT* value) = 0;
+    virtual HRESULT STDMETHODCALLTYPE put_SupportedGestures(UINT value) = 0;
+};
+
+// TouchpadGlobalGestureKinds::ThreeFingerManipulations
+#define SWS_TOUCHPAD_THREE_FINGER_MANIPULATIONS 0x1
+
+static SwsTouchpadGestureController* g_touchpadGestureController = nullptr;
+
+// Whether the current settings want the mod to own the touchpad swipes.
+static bool TouchpadGestureTakeoverWanted() {
+    return wcscmp(g_settings.touchpadInputMode, L"raw") == 0 &&
+           LoadBoolSetting(L"Accessibility.handleTouchpadGestures", true) &&
+           g_settings.suppressTaskView;
+}
+
+static void ReleaseTouchpadGestureTakeover() {
+    if (!g_touchpadGestureController) return;
+    g_touchpadGestureController->put_Enabled(FALSE);
+    g_touchpadGestureController->Release();
+    g_touchpadGestureController = nullptr;
+    Wh_Log(L"SWS: released the 3-finger gesture takeover");
+}
+
+// Creates the controller on first use, or toggles the one that exists. False means the
+// take-over is not possible and Windows keeps handling the swipes.
+static bool UpdateTouchpadGestureTakeover(bool want) {
+    if (!want) {
+        ReleaseTouchpadGestureTakeover();
+        return true;
+    }
+    if (g_touchpadGestureController) {
+        return SUCCEEDED(g_touchpadGestureController->put_Enabled(TRUE));
+    }
+
+    HMODULE hCombase = GetModuleHandleW(L"combase.dll");
+    if (!hCombase) hCombase = LoadLibraryW(L"combase.dll");
+    if (!hCombase) {
+        Wh_Log(L"SWS: combase.dll not available, 3-finger gestures stay with Windows");
+        return false;
+    }
+    using WindowsCreateString_t = HRESULT(WINAPI*)(PCWSTR, UINT32, void**);
+    using WindowsDeleteString_t = HRESULT(WINAPI*)(void*);
+    using RoGetActivationFactory_t = HRESULT(WINAPI*)(void*, REFIID, void**);
+    auto createString = (WindowsCreateString_t)GetProcAddress(hCombase, "WindowsCreateString");
+    auto deleteString = (WindowsDeleteString_t)GetProcAddress(hCombase, "WindowsDeleteString");
+    auto getActivationFactory =
+        (RoGetActivationFactory_t)GetProcAddress(hCombase, "RoGetActivationFactory");
+    if (!createString || !deleteString || !getActivationFactory) {
+        Wh_Log(L"SWS: WinRT activation is not available, 3-finger gestures stay with Windows");
+        return false;
+    }
+
+    const WCHAR* className = L"Windows.UI.Input.TouchpadGesturesController";
+    void* hClassName = nullptr;
+    HRESULT hr = createString(className, (UINT32)wcslen(className), &hClassName);
+    if (FAILED(hr) || !hClassName) {
+        Wh_Log(L"SWS: could not create the WinRT class name (0x%08X)", hr);
+        return false;
+    }
+    SwsTouchpadGestureStatics* statics = nullptr;
+    hr = getActivationFactory(hClassName, SWS_IID_TouchpadGesturesControllerStatics,
+                              (void**)&statics);
+    deleteString(hClassName);
+    if (FAILED(hr) || !statics) {
+        Wh_Log(L"SWS: TouchpadGesturesController is not available on this system (0x%08X)", hr);
+        return false;
+    }
+
+    BOOL supported = FALSE;
+    hr = statics->IsSupported(&supported);
+    if (FAILED(hr) || !supported) {
+        Wh_Log(L"SWS: TouchpadGesturesController not supported (hr=0x%08X supported=%d)",
+               hr, supported);
+        statics->Release();
+        return false;
+    }
+
+    IInspectable* controller = nullptr;
+    hr = statics->CreateForProcess(&controller);
+    statics->Release();
+    if (FAILED(hr) || !controller) {
+        Wh_Log(L"SWS: could not create the gesture controller (0x%08X)", hr);
+        return false;
+    }
+    // CreateForProcess returns ITouchpadGesturesController, whose IInspectable head matches
+    // the declaration above (see the layout note); the two methods used are the ones that
+    // matter, the events stay unsubscribed.
+    g_touchpadGestureController = (SwsTouchpadGestureController*)controller;
+    HRESULT hrGestures = g_touchpadGestureController->put_SupportedGestures(
+        SWS_TOUCHPAD_THREE_FINGER_MANIPULATIONS);
+    HRESULT hrEnabled = g_touchpadGestureController->put_Enabled(TRUE);
+    Wh_Log(L"SWS: took over the 3-finger gestures for the switcher (gestures=0x%08X enabled=0x%08X)",
+           hrGestures, hrEnabled);
+    return SUCCEEDED(hrGestures) && SUCCEEDED(hrEnabled);
+}
 
 static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     Wh_Log(L"SwitcherThread starting");
@@ -13864,6 +14074,11 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     if (g_hDwmCornerWatchStopEvent) {
         g_hDwmCornerWatchThread = CreateThread(NULL, 0, DwmCornerWatchThread, NULL, 0, NULL);
     }
+
+    // Own the 3-finger swipes while the mod is set up to handle them: from here on the
+    // system routes them to this process whenever the switcher holds the foreground, so the
+    // OS runs none of its own swipe actions under a session (see the takeover above).
+    UpdateTouchpadGestureTakeover(TouchpadGestureTakeoverWanted());
 
     Wh_Log(L"Simple Window Switcher initialized, entering message loop");
 
@@ -14471,6 +14686,9 @@ BOOL WhTool_ModInit() {
 
 void WhTool_ModUninit() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModUninit");
+    // Hand the 3-finger gestures back to Windows before the switcher thread (owner of the
+    // controller's window) goes away.
+    ReleaseTouchpadGestureTakeover();
     // The reader owns a window class and a raw input registration: stop and join it
     // before anything else is torn down.
     StopTouchpadReader();
