@@ -2,7 +2,7 @@
 // @id              taskbar-vertical
 // @name            Vertical Taskbar for Windows 11
 // @description     Finally, the missing vertical taskbar option for Windows 11! Move the taskbar to the left or right side of the screen.
-// @version         1.4
+// @version         1.4.1
 // @author          m417z
 // @github          https://github.com/m417z
 // @twitter         https://twitter.com/m417z
@@ -115,6 +115,12 @@ With labels:
     Set to zero to use the default height value, setting a custom height can be
     useful for a customized clock with a non-standard size. Not used with the
     native vertical taskbar.
+- useNativeTaskbar: true
+  $name: Use the native taskbar when possible
+  $description: >-
+    Newer Windows 11 builds include a native vertical taskbar. If disabled, the
+    mod's own implementation is used instead, and the taskbar position in
+    Windows settings should be kept at Bottom.
 */
 // ==/WindhawkModSettings==
 
@@ -178,6 +184,7 @@ struct {
     StartMenuAlignment startMenuAlignment;
     bool startMenuAnimationAdjust;
     int clockContainerHeight;
+    bool useNativeTaskbar;
 } g_settings;
 
 constexpr int kDefaultClockContainerHeight = 40;
@@ -186,7 +193,7 @@ enum class Target {
     Explorer,
     StartMenuExperienceHost,
     ShellExperienceHost,
-    ShellHost,  // Win11 24H2.
+    ShellHost,  // From Win11 24H2.
 };
 
 Target g_target;
@@ -596,9 +603,9 @@ constexpr WCHAR kTaskbarLocationSubKey[] =
 constexpr WCHAR kTaskbarLocationValueName[] = L"TaskbarLocation";
 
 // The taskbar windows read the location from the registry, the primary one
-// when it's created, and the secondary ones for themselves. Other readers,
-// such as the taskbar settings, get the stored location, which is what's
-// restored when the mod is unloaded.
+// when it's created, and the secondary ones for themselves. Other readers in
+// explorer.exe, such as the taskbar settings, get the stored location, which is
+// what's restored when the mod is unloaded.
 thread_local bool g_inTrayUI__GetSaveStateAndInitRects;
 thread_local bool g_inCSecondaryTray__LoadSettings;
 
@@ -628,6 +635,17 @@ HRESULT WINAPI CSecondaryTray__LoadSettings_Hook(void* pThis) {
     return ret;
 }
 
+bool ShouldOverrideTaskbarLocation() {
+    // Quick Settings and the notification center, in other processes, read the
+    // primary taskbar location from the registry too.
+    if (g_target != Target::Explorer) {
+        return g_nativeVerticalTaskbar == NativeVerticalTaskbar::available;
+    }
+
+    return g_inTrayUI__GetSaveStateAndInitRects ||
+           g_inCSecondaryTray__LoadSettings;
+}
+
 using RegGetValueW_t = decltype(&RegGetValueW);
 RegGetValueW_t RegGetValueW_Original;
 LONG WINAPI RegGetValueW_Hook(HKEY hkey,
@@ -642,9 +660,7 @@ LONG WINAPI RegGetValueW_Hook(HKEY hkey,
     LONG ret = RegGetValueW_Original(hkey, lpSubKey, lpValue, dwFlags, pdwType,
                                      pvData, pcbData);
 
-    if (g_unloading ||
-        (!g_inTrayUI__GetSaveStateAndInitRects &&
-         !g_inCSecondaryTray__LoadSettings) ||
+    if (g_unloading || !ShouldOverrideTaskbarLocation() ||
         hkey != HKEY_CURRENT_USER || !lpSubKey ||
         _wcsicmp(lpSubKey, kTaskbarLocationSubKey) != 0 || !lpValue ||
         _wcsicmp(lpValue, kTaskbarLocationValueName) != 0 ||
@@ -667,6 +683,14 @@ LONG WINAPI RegGetValueW_Hook(HKEY hkey,
     }
 
     return ERROR_SUCCESS;
+}
+
+void HookRegGetValueW() {
+    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
+    auto pKernelBaseRegGetValueW = (decltype(&RegGetValueW))GetProcAddress(
+        kernelBaseModule, "RegGetValueW");
+    WindhawkUtils::SetFunctionHook(pKernelBaseRegGetValueW, RegGetValueW_Hook,
+                                   &RegGetValueW_Original);
 }
 
 DWORD GetStoredTaskbarLocation() {
@@ -2072,23 +2096,37 @@ void UpdateNativeSystemTrayFrameWidths() {
 }
 
 bool IsSecondaryTaskbar(XamlRoot xamlRoot) {
-    FrameworkElement controlCenterButton = nullptr;
+    FrameworkElement systemIconsPresenter = nullptr;
 
     FrameworkElement child = xamlRoot.Content().try_as<FrameworkElement>();
     if (child &&
         (child = FindChildByClassName(child, L"SystemTray.SystemTrayFrame")) &&
         (child = FindChildByName(child, L"SystemTrayFrameGrid")) &&
-        (child = FindChildByName(child, L"ControlCenterButton"))) {
-        controlCenterButton = child;
+        (child = FindChildByName(child, L"ControlCenterButton")) &&
+        (child =
+             FindChildByClassName(child, L"Windows.UI.Xaml.Controls.Grid")) &&
+        (child = FindChildByName(child, L"ContentPresenter")) &&
+        (child = FindChildByClassName(
+             child, L"Windows.UI.Xaml.Controls.ItemsPresenter"))) {
+        systemIconsPresenter = child;
     }
 
-    if (!controlCenterButton) {
+    if (!systemIconsPresenter) {
         return false;
     }
 
-    // On secondary taskbars, the element that holds the system icons is empty
-    // and has the width of 2.
-    return controlCenterButton.ActualWidth() < 5;
+    // Secondary taskbars have no system icons. The presenter is either left
+    // without any children, or has an empty panel.
+    if (Media::VisualTreeHelper::GetChildrenCount(systemIconsPresenter) == 0) {
+        return true;
+    }
+
+    auto systemIconsPanel =
+        EnumChildElements(systemIconsPresenter, [](FrameworkElement child) {
+            return !!child.try_as<Controls::Panel>();
+        });
+    return systemIconsPanel &&
+           Media::VisualTreeHelper::GetChildrenCount(systemIconsPanel) == 0;
 }
 
 bool ApplyStyle(XamlRoot xamlRoot) {
@@ -3206,6 +3244,145 @@ void WINAPI TaskListButton_UpdateVisualStates_Hook(void* pThis) {
             }
         }
     }
+}
+
+// With the native vertical taskbar, taskbar backgrounds get the location of the
+// primary taskbar, and lay out their stroke for it. Secondary taskbars at
+// another location get their own location instead. The backgrounds are kept
+// to be updated when the settings are applied, since only a change of the
+// taskbar location updates them.
+struct NativeTaskbarBackground {
+    winrt::weak_ref<FrameworkElement> element;
+    // Valid as long as the element is alive.
+    void* taskbarBackground;
+    // The location the taskbar gave the background.
+    int location;
+};
+
+std::vector<NativeTaskbarBackground> g_nativeTaskbarBackgrounds;
+
+std::list<FrameworkElementLoadedEventRevoker>
+    g_nativeTaskbarBackgroundAutoRevokerList;
+
+using TaskbarBackground_Location_t = void(WINAPI*)(void* pThis, int location);
+TaskbarBackground_Location_t TaskbarBackground_Location_Original;
+
+int GetNativeTaskbarBackgroundLocation(FrameworkElement element, int location) {
+    if (g_unloading) {
+        return location;
+    }
+
+    auto xamlRoot = element.XamlRoot();
+    if (!xamlRoot || !IsSecondaryTaskbar(xamlRoot)) {
+        return location;
+    }
+
+    return TaskbarLocationToEdge(g_settings.taskbarLocationSecondary);
+}
+
+void UpdateNativeTaskbarBackground(const NativeTaskbarBackground& background) {
+    if (auto element = background.element.get()) {
+        TaskbarBackground_Location_Original(
+            background.taskbarBackground,
+            GetNativeTaskbarBackgroundLocation(element, background.location));
+    }
+}
+
+void UpdateNativeTaskbarBackgrounds() {
+    for (const auto& background : g_nativeTaskbarBackgrounds) {
+        UpdateNativeTaskbarBackground(background);
+    }
+}
+
+// A secondary taskbar is detected by its system tray, which can be loaded after
+// the background gets its location.
+void UpdateNativeTaskbarBackgroundWhenLoaded(FrameworkElement element) {
+    FrameworkElement pendingElement = element;
+    if (element.IsLoaded()) {
+        auto xamlRoot = element.XamlRoot();
+        auto content =
+            xamlRoot ? xamlRoot.Content().try_as<FrameworkElement>() : nullptr;
+        pendingElement = content ? FindChildByClassName(
+                                       content, L"SystemTray.SystemTrayFrame")
+                                 : nullptr;
+        if (!pendingElement || pendingElement.IsLoaded()) {
+            return;
+        }
+    }
+
+    g_nativeTaskbarBackgroundAutoRevokerList.emplace_back();
+    auto autoRevokerIt = g_nativeTaskbarBackgroundAutoRevokerList.end();
+    --autoRevokerIt;
+
+    *autoRevokerIt = pendingElement.Loaded(
+        winrt::auto_revoke_t{},
+        [autoRevokerIt, elementWeak = winrt::make_weak(element)](
+            winrt::Windows::Foundation::IInspectable const& sender,
+            RoutedEventArgs const& e) {
+            Wh_Log(L">");
+
+            auto element = elementWeak.get();
+
+            g_nativeTaskbarBackgroundAutoRevokerList.erase(autoRevokerIt);
+
+            if (!element) {
+                return;
+            }
+
+            try {
+                auto it =
+                    FindTrackedElement(g_nativeTaskbarBackgrounds, element);
+                if (it != g_nativeTaskbarBackgrounds.end()) {
+                    UpdateNativeTaskbarBackground(*it);
+                }
+
+                UpdateNativeTaskbarBackgroundWhenLoaded(element);
+            } catch (...) {
+                HRESULT hr = winrt::to_hresult();
+                Wh_Log(L"Error %08X", hr);
+            }
+        });
+}
+
+int TrackNativeTaskbarBackground(void* taskbarBackground, int location) {
+    void* taskbarBackgroundIUnknownPtr = (void**)taskbarBackground + 3;
+    winrt::Windows::Foundation::IUnknown taskbarBackgroundIUnknown;
+    winrt::copy_from_abi(taskbarBackgroundIUnknown,
+                         taskbarBackgroundIUnknownPtr);
+
+    auto element = taskbarBackgroundIUnknown.try_as<FrameworkElement>();
+    if (!element) {
+        return location;
+    }
+
+    auto it = FindTrackedElement(g_nativeTaskbarBackgrounds, element);
+    if (it != g_nativeTaskbarBackgrounds.end()) {
+        it->location = location;
+        return GetNativeTaskbarBackgroundLocation(element, location);
+    }
+
+    g_nativeTaskbarBackgrounds.push_back({
+        .element = winrt::make_weak(element),
+        .taskbarBackground = taskbarBackground,
+        .location = location,
+    });
+
+    UpdateNativeTaskbarBackgroundWhenLoaded(element);
+
+    return GetNativeTaskbarBackgroundLocation(element, location);
+}
+
+void WINAPI TaskbarBackground_Location_Hook(void* pThis, int location) {
+    Wh_Log(L"> %d", location);
+
+    try {
+        location = TrackNativeTaskbarBackground(pThis, location);
+    } catch (...) {
+        HRESULT hr = winrt::to_hresult();
+        Wh_Log(L"Error %08X", hr);
+    }
+
+    TaskbarBackground_Location_Original(pThis, location);
 }
 
 using TaskListButton_UpdateBadge_t = void(WINAPI*)(void* pThis);
@@ -4486,13 +4663,17 @@ HRESULT WINAPI DwmSetWindowAttribute_Hook(HWND hwnd,
         return original();
     }
 
+    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+
+    // Windows places the Start menu for the primary taskbar location.
     if (g_hasNativeVerticalTaskbar &&
         g_settings.startMenuAlignment == StartMenuAlignment::windowsDefault &&
-        (target == DwmTarget::StartMenu || target == DwmTarget::SearchHost)) {
+        (target == DwmTarget::SearchHost ||
+         (target == DwmTarget::StartMenu &&
+          GetTaskbarLocationForMonitor(monitor) ==
+              g_settings.taskbarLocation))) {
         return original();
     }
-
-    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
 
     UINT monitorDpiX = 96;
     UINT monitorDpiY = 96;
@@ -4748,10 +4929,18 @@ HWND GetCoreWnd() {
 
 void ApplyStyle();
 
+// The part of the Start menu position set by the mod, the rest is left to
+// Windows.
+enum class StartMenuAdjustment {
+    none,
+    horizontal,
+    full,
+};
+
 void ApplyStyleClassicStartMenu(FrameworkElement content,
                                 TaskbarLocation taskbarLocation,
                                 HMONITOR monitor,
-                                bool restore) {
+                                StartMenuAdjustment adjustment) {
     FrameworkElement startSizingFrame =
         FindChildByClassName(content, L"StartDocked.StartSizingFrame");
     if (!startSizingFrame) {
@@ -4759,7 +4948,8 @@ void ApplyStyleClassicStartMenu(FrameworkElement content,
         return;
     }
 
-    bool adjustAnimation = !restore && g_settings.startMenuAnimationAdjust;
+    bool adjustAnimation = adjustment == StartMenuAdjustment::full &&
+                           g_settings.startMenuAnimationAdjust;
     if (adjustAnimation || g_startMenuAnimationAdjusted) {
         g_startMenuAnimationAdjusted = adjustAnimation;
 
@@ -4838,7 +5028,7 @@ void ApplyStyleClassicStartMenu(FrameworkElement content,
     Wh_Log(L"Invalidating measure");
     startSizingFrame.InvalidateMeasure();
 
-    if (restore) {
+    if (adjustment == StartMenuAdjustment::none) {
         g_canvasTopOverride.Restore();
         g_canvasLeftOverride.Restore();
     } else {
@@ -4852,21 +5042,29 @@ void ApplyStyleClassicStartMenu(FrameworkElement content,
 
         constexpr int kStartMenuMargin = 12;
 
-        double newTop;
-        switch (g_settings.startMenuAlignment) {
-            case StartMenuAlignment::windowsDefault:
-            case StartMenuAlignment::top:
-                newTop = kStartMenuMargin;
-                break;
+        if (adjustment == StartMenuAdjustment::full) {
+            double newTop;
+            switch (g_settings.startMenuAlignment) {
+                case StartMenuAlignment::windowsDefault:
+                case StartMenuAlignment::top:
+                    newTop = kStartMenuMargin;
+                    break;
 
-            case StartMenuAlignment::center:
-                newTop = (canvasHeight - startSizingFrame.ActualHeight()) / 2;
-                break;
+                case StartMenuAlignment::center:
+                    newTop =
+                        (canvasHeight - startSizingFrame.ActualHeight()) / 2;
+                    break;
 
-            case StartMenuAlignment::bottom:
-                newTop = canvasHeight - startSizingFrame.ActualHeight() -
-                         kStartMenuMargin;
-                break;
+                case StartMenuAlignment::bottom:
+                    newTop = canvasHeight - startSizingFrame.ActualHeight() -
+                             kStartMenuMargin;
+                    break;
+            }
+
+            Wh_Log(L"Setting Canvas.Top to %f", newTop);
+            g_canvasTopOverride.Set(startSizingFrame, newTop);
+        } else {
+            g_canvasTopOverride.Restore();
         }
 
         double newLeft;
@@ -4881,8 +5079,7 @@ void ApplyStyleClassicStartMenu(FrameworkElement content,
                 break;
         }
 
-        Wh_Log(L"Setting Canvas.Top to %f, Canvas.Left to %f", newTop, newLeft);
-        g_canvasTopOverride.Set(startSizingFrame, newTop);
+        Wh_Log(L"Setting Canvas.Left to %f", newLeft);
         g_canvasLeftOverride.Set(startSizingFrame, newLeft);
 
         // Subscribe to Canvas.Top and Canvas.Left property changes to apply
@@ -4924,8 +5121,8 @@ void ApplyStyleClassicStartMenu(FrameworkElement content,
 
 void ApplyStyleRedesignedStartMenu(FrameworkElement content,
                                    TaskbarLocation taskbarLocation,
-                                   bool restore) {
-    if (restore) {
+                                   StartMenuAdjustment adjustment) {
+    if (adjustment == StartMenuAdjustment::none) {
         g_verticalAlignmentOverride.Restore();
         g_horizontalAlignmentOverride.Restore();
         g_marginOverride.Restore();
@@ -4938,30 +5135,43 @@ void ApplyStyleRedesignedStartMenu(FrameworkElement content,
         return;
     }
 
+    // Adjust the margin set by Windows.
+    g_marginOverride.Restore();
     auto margin = frameRoot.Margin();
-    auto marginVertical = margin.Top + margin.Bottom;
+    margin.Left = 0;
+    margin.Right = 0;
 
-    VerticalAlignment verticalAlignment;
-    switch (g_settings.startMenuAlignment) {
-        case StartMenuAlignment::windowsDefault:
-        case StartMenuAlignment::top:
-            verticalAlignment = VerticalAlignment::Top;
-            margin.Top = 0;
-            margin.Bottom = marginVertical;
-            break;
+    if (adjustment == StartMenuAdjustment::full) {
+        auto marginVertical = margin.Top + margin.Bottom;
 
-        case StartMenuAlignment::center:
-            verticalAlignment = VerticalAlignment::Center;
-            margin.Top = marginVertical / 2;
-            margin.Bottom = marginVertical / 2;
-            break;
+        VerticalAlignment verticalAlignment;
+        switch (g_settings.startMenuAlignment) {
+            case StartMenuAlignment::windowsDefault:
+            case StartMenuAlignment::top:
+                verticalAlignment = VerticalAlignment::Top;
+                margin.Top = 0;
+                margin.Bottom = marginVertical;
+                break;
 
-        case StartMenuAlignment::bottom:
-            verticalAlignment = VerticalAlignment::Bottom;
-            margin.Top = marginVertical;
-            margin.Bottom = 0;
-            break;
+            case StartMenuAlignment::center:
+                verticalAlignment = VerticalAlignment::Center;
+                margin.Top = marginVertical / 2;
+                margin.Bottom = marginVertical / 2;
+                break;
+
+            case StartMenuAlignment::bottom:
+                verticalAlignment = VerticalAlignment::Bottom;
+                margin.Top = marginVertical;
+                margin.Bottom = 0;
+                break;
+        }
+
+        g_verticalAlignmentOverride.Set(frameRoot, verticalAlignment);
+    } else {
+        g_verticalAlignmentOverride.Restore();
     }
+
+    g_marginOverride.Set(frameRoot, margin);
 
     HorizontalAlignment horizontalAlignment;
     switch (taskbarLocation) {
@@ -4974,9 +5184,7 @@ void ApplyStyleRedesignedStartMenu(FrameworkElement content,
             break;
     }
 
-    g_verticalAlignmentOverride.Set(frameRoot, verticalAlignment);
     g_horizontalAlignmentOverride.Set(frameRoot, horizontalAlignment);
-    g_marginOverride.Set(frameRoot, margin);
 
     if (!g_frameRootWeakRef.get()) {
         auto frameRootDo = frameRoot.as<DependencyObject>();
@@ -5011,15 +5219,36 @@ void ApplyStyleRedesignedStartMenu(FrameworkElement content,
     }
 }
 
-void ApplyStyle() {
+StartMenuAdjustment GetStartMenuAdjustment(TaskbarLocation taskbarLocation) {
+    if (g_unloading) {
+        return StartMenuAdjustment::none;
+    }
+
+    if (g_settings.startMenuAlignment != StartMenuAlignment::windowsDefault) {
+        return StartMenuAdjustment::full;
+    }
+
     // The Windows default alignment leaves the Start menu to Windows with the
     // native vertical taskbar, and until explorer.exe determines whether it's
-    // available.
-    bool restore =
-        g_unloading ||
-        (g_settings.startMenuAlignment == StartMenuAlignment::windowsDefault &&
-         g_nativeVerticalTaskbar != NativeVerticalTaskbar::unavailable);
+    // available. Windows places it for the primary taskbar location, so it's
+    // moved horizontally on monitors with a different location.
+    switch (g_nativeVerticalTaskbar) {
+        case NativeVerticalTaskbar::unknown:
+            return StartMenuAdjustment::none;
 
+        case NativeVerticalTaskbar::unavailable:
+            return StartMenuAdjustment::full;
+
+        case NativeVerticalTaskbar::available:
+            return taskbarLocation == g_settings.taskbarLocation
+                       ? StartMenuAdjustment::none
+                       : StartMenuAdjustment::horizontal;
+    }
+
+    return StartMenuAdjustment::none;
+}
+
+void ApplyStyle() {
     g_inApplyStyle = true;
 
     HWND coreWnd = GetCoreWnd();
@@ -5028,6 +5257,7 @@ void ApplyStyle() {
     Wh_Log(L"Applying Start menu style for monitor %p", monitor);
 
     TaskbarLocation taskbarLocation = GetTaskbarLocationForMonitor(monitor);
+    StartMenuAdjustment adjustment = GetStartMenuAdjustment(taskbarLocation);
 
     auto window = Window::Current();
     FrameworkElement content = window.Content().as<FrameworkElement>();
@@ -5036,9 +5266,10 @@ void ApplyStyle() {
     Wh_Log(L"Start menu content class name: %s", contentClassName.c_str());
 
     if (contentClassName == L"Windows.UI.Xaml.Controls.Canvas") {
-        ApplyStyleClassicStartMenu(content, taskbarLocation, monitor, restore);
+        ApplyStyleClassicStartMenu(content, taskbarLocation, monitor,
+                                   adjustment);
     } else if (contentClassName == L"StartMenu.StartBlendedFlexFrame") {
-        ApplyStyleRedesignedStartMenu(content, taskbarLocation, restore);
+        ApplyStyleRedesignedStartMenu(content, taskbarLocation, adjustment);
     } else {
         Wh_Log(L"Error: Unsupported Start menu content class name");
     }
@@ -5405,6 +5636,8 @@ void LoadSettings() {
         Wh_GetIntSetting(L"startMenuAnimationAdjust");
 
     g_settings.clockContainerHeight = Wh_GetIntSetting(L"clockContainerHeight");
+
+    g_settings.useNativeTaskbar = Wh_GetIntSetting(L"useNativeTaskbar");
 }
 
 void ApplySettingsNative(HWND hTaskbarWnd) {
@@ -5415,6 +5648,7 @@ void ApplySettingsNative(HWND hTaskbarWnd) {
                 UpdateNativeFrameWidths(g_nativeTaskbarFrames);
                 UpdateNativeTaskListButtonFrameSizes();
                 UpdateNativeSystemTrayFrameWidths();
+                UpdateNativeTaskbarBackgrounds();
             } catch (...) {
                 HRESULT hr = winrt::to_hresult();
                 Wh_Log(L"Error %08X", hr);
@@ -5674,6 +5908,11 @@ bool HookTaskbarViewDllSymbolsNative(HMODULE module) {
             {LR"(private: void __cdecl winrt::Taskbar::implementation::TaskListButton::UpdateVisualStates(void))"},
             &TaskListButton_UpdateVisualStates_Original,
             TaskListButton_UpdateVisualStates_Hook,
+        },
+        {
+            {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskbarBackground::Location(enum winrt::WindowsUdk::UI::Shell::TaskbarLocation))"},
+            &TaskbarBackground_Location_Original,
+            TaskbarBackground_Location_Hook,
         },
     };
 
@@ -6019,7 +6258,8 @@ using WilFeatureImpl_IsEnabled_t = bool(WINAPI*)(void* pThis,
                                                  int reportingKind);
 WilFeatureImpl_IsEnabled_t WilFeatureImpl_59213768_IsEnabled;
 
-void* TaskbarHost_IsHorizontalOrientation;
+void* TrayUI_VerifySize_WithoutMonitor;
+void* TrayUI__HandleSizing_WithoutMonitor;
 
 bool IsNativeVerticalTaskbarEnabled() {
     if (wil_Feature_59213768_GetImpl_impl &&
@@ -6029,9 +6269,10 @@ bool IsNativeVerticalTaskbarEnabled() {
             wil_Feature_59213768_GetImpl_impl, kReportingKindNone);
     }
 
-    // Once the feature flag is gone, the native vertical taskbar is always
-    // available.
-    return !!TaskbarHost_IsHorizontalOrientation;
+    // The feature added a monitor parameter to these functions, so builds
+    // without the flag and without the old overloads always have the feature.
+    return !TrayUI_VerifySize_WithoutMonitor &&
+           !TrayUI__HandleSizing_WithoutMonitor;
 }
 
 bool HookTaskbarDllSymbols() {
@@ -6132,10 +6373,16 @@ bool HookTaskbarDllSymbols() {
             true,
         },
         {
-            {LR"(private: bool __cdecl TaskbarHost::IsHorizontalOrientation(void))"},
-            &TaskbarHost_IsHorizontalOrientation,
+            {LR"(public: virtual void __cdecl TrayUI::VerifySize(bool,bool))"},
+            &TrayUI_VerifySize_WithoutMonitor,
             nullptr,
-            true,  // Only in builds with the native vertical taskbar.
+            true,  // Only in builds from before the native vertical taskbar.
+        },
+        {
+            {LR"(public: int __cdecl TrayUI::_HandleSizing(unsigned __int64,struct tagRECT *,unsigned int,bool))"},
+            &TrayUI__HandleSizing_WithoutMonitor,
+            nullptr,
+            true,  // Only in builds from before the native vertical taskbar.
         },
         {
             {LR"(public: void __cdecl TrayUI::_GetSaveStateAndInitRects(void))"},
@@ -6171,9 +6418,10 @@ bool HookTaskbarDllSymbols() {
     g_hasNativeVerticalTaskbar = IsNativeVerticalTaskbarEnabled();
     Wh_Log(L"Native vertical taskbar: %d", g_hasNativeVerticalTaskbar);
 
-    g_nativeVerticalTaskbar = g_hasNativeVerticalTaskbar
-                                  ? NativeVerticalTaskbar::available
-                                  : NativeVerticalTaskbar::unavailable;
+    if (g_hasNativeVerticalTaskbar && !g_settings.useNativeTaskbar) {
+        Wh_Log(L"Not using native vertical taskbar due to settings");
+        g_hasNativeVerticalTaskbar = false;
+    }
 
     if (g_hasNativeVerticalTaskbar &&
         (!TrayUI__GetSaveStateAndInitRects_Original ||
@@ -6182,6 +6430,10 @@ bool HookTaskbarDllSymbols() {
         Wh_Log(L"Error: Missing native vertical taskbar symbols");
         return false;
     }
+
+    g_nativeVerticalTaskbar = g_hasNativeVerticalTaskbar
+                                  ? NativeVerticalTaskbar::available
+                                  : NativeVerticalTaskbar::unavailable;
 
     return true;
 }
@@ -6238,6 +6490,7 @@ BOOL Wh_ModInit() {
         WindhawkUtils::SetFunctionHook(SetWindowPos,
                                        CoreWindowUI::SetWindowPos_Hook,
                                        &SetWindowPos_Original);
+        HookRegGetValueW();
         return TRUE;
     }
 
@@ -6294,11 +6547,7 @@ BOOL Wh_ModInit() {
     }
 
     if (g_hasNativeVerticalTaskbar) {
-        HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-        auto pKernelBaseRegGetValueW = (decltype(&RegGetValueW))GetProcAddress(
-            kernelBaseModule, "RegGetValueW");
-        WindhawkUtils::SetFunctionHook(
-            pKernelBaseRegGetValueW, RegGetValueW_Hook, &RegGetValueW_Original);
+        HookRegGetValueW();
     } else {
         if (HMODULE user32Module = LoadLibraryEx(
                 L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)) {
@@ -6439,12 +6688,20 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
+
+    bool prevUseNativeTaskbar = g_settings.useNativeTaskbar;
 
     LoadSettings();
 
     if (g_target == Target::Explorer) {
+        // The taskbar implementation is chosen when the mod is initialized.
+        if (g_settings.useNativeTaskbar != prevUseNativeTaskbar) {
+            *bReload = TRUE;
+            return TRUE;
+        }
+
         ApplySettings(/*settingsChanged=*/true);
     } else if (g_target == Target::StartMenuExperienceHost) {
         HWND hCoreWnd = StartMenuUI::GetCoreWnd();
@@ -6458,4 +6715,6 @@ void Wh_ModSettingsChanged() {
                g_target == Target::ShellHost) {
         CoreWindowUI::ApplySettings();
     }
+
+    return TRUE;
 }
