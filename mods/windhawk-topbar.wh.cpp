@@ -19658,7 +19658,7 @@ LRESULT CALLBACK ChildFlyoutPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             g_childPopupTargets.erase(hwnd);
             g_childPopupSubclassed.erase(hwnd);
         }
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ChildFlyoutPopupProc, uIdSubclass);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, ChildFlyoutPopupProc);
         return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
 
@@ -19690,7 +19690,7 @@ void RegisterChildPopupTarget(HWND hwnd, RECT target) {
     }
     if (needSubclass) {
         WindhawkUtils::SetWindowSubclassFromAnyThread(
-            hwnd, ChildFlyoutPopupProc, 0, 0);
+            hwnd, ChildFlyoutPopupProc, 0);
     }
     SetWindowPos(hwnd, nullptr, target.left, target.top,
                  target.right - target.left, target.bottom - target.top,
@@ -21272,7 +21272,7 @@ LRESULT CALLBACK TopBarPopupSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
         if (g_subclassedPopupHwnd == hwnd) {
             g_subclassedPopupHwnd = nullptr;
         }
-        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TopBarPopupSubclassProc, uIdSubclass);
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(hwnd, TopBarPopupSubclassProc);
         return DefSubclassProc(hwnd, msg, wParam, lParam);
     }
     return DefSubclassProc(hwnd, msg, wParam, lParam);
@@ -21280,7 +21280,7 @@ LRESULT CALLBACK TopBarPopupSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
 
 void InstallPopupSubclass(HWND hwnd) {
     if (!hwnd || hwnd == g_subclassedPopupHwnd) return;
-    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TopBarPopupSubclassProc, 0, 0)) {
+    if (WindhawkUtils::SetWindowSubclassFromAnyThread(hwnd, TopBarPopupSubclassProc, 0)) {
         g_subclassedPopupHwnd = hwnd;
         Wh_Log(L"TopBar: popup HWND subclassed: %p", hwnd);
     }
