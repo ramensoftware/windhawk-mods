@@ -2640,19 +2640,19 @@
         "ratingBreakdown": [0, 0, 0, 3, 12],
         "ratingUsers": 15,
         "reviews": 0,
-        "updated": 1782244038000,
+        "updated": 1790611342000,
         "users": 356
       },
       "metadata": {
         "author": "Kitsune",
         "compilerOptions": "-lcomctl32 -luser32",
-        "description": "Shows a confirmation dialog when closing a File Explorer window with multiple tabs open",
+        "description": "Shows a confirmation dialog when attempting to close a File Explorer window with multiple tabs open",
         "github": "https://github.com/AromaKitsune",
         "include": [
           "explorer.exe"
         ],
         "name": "Confirm Closing Multiple Tabs in File Explorer",
-        "version": "1.1"
+        "version": "1.1.1"
       }
     },
     "console-error-to-ding": {
