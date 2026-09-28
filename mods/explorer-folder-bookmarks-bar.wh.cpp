@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              explorer-folder-bookmarks-bar
 // @name            Explorer Folder Bookmarks Bar
-// @description     Adds a scrollable, adaptive folder bookmarks bar below the address bar in Windows 11 File Explorer.
-// @version         0.7.1
+// @description     Adds an adaptive folder bookmarks bar to newly opened Windows 11 File Explorer windows.
+// @version         0.7.3
 // @author          Maxim Fomin
 // @github          https://github.com/MaxITService
 // @include         explorer.exe
@@ -24,6 +24,10 @@ target folder.
 
 ![Explorer Folder Bookmarks Bar in File Explorer](https://raw.githubusercontent.com/MaxITService/EXPLORER-bookmarks-bar-windhawk/main/Promo/How-it-works.gif)
 
+After enabling or updating the mod, open a new File Explorer window to use the
+bar. Windows that were already open may remain unchanged. Opening a new window
+is the supported way to activate the bar without relying on live window updates.
+
 The bar expands from one to four rows as the window narrows. If bookmarks
 still exceed the fourth row, the bar can pan sideways.
 Left-click **FX**, next to **+**, for the profile (**~**), Desktop, Documents,
@@ -31,11 +35,11 @@ Downloads, Temp, and the custom folders listed in this mod's Windhawk settings.
 Custom shortcuts are empty by default. Add a folder path and optional label in
 **Settings → FX custom folders**; blank entries are ignored. Paths must be
 absolute, and `%NAME%` environment variables are expanded. Unavailable folders
-are hidden from FX until they exist again. Network paths are checked in the
-background and can appear after the next bar refresh. New settings take effect
-in newly opened Explorer windows. Right-click **FX** for accessible drives
-with volume labels. The list updates each time the menu opens. Ctrl+click a menu
-entry to open it in a new tab.
+are hidden from FX until they exist again. UNC paths and folders on mapped
+network drives stay saved in Settings but are not shown in FX. New settings take
+effect in newly opened Explorer windows. Right-click **FX** for accessible
+non-network drives with volume labels. The list updates each time the menu
+opens. Ctrl+click a menu entry to open it in a new tab.
 
 Right-click **+** for **Save bookmarks** and **Load bookmarks**. The commands
 open a file dialog so you can choose the JSON backup. The profile folder is
@@ -63,7 +67,7 @@ visible, disable the mod and check the Windhawk log before trying it again.
         $description: Optional text shown in the left-click FX menu; the folder name is used if blank.
       - path: ''
         $name: Folder path
-        $description: Absolute folder path; leave blank to omit this entry. Missing folders are hidden from FX. Environment variables such as %USERPROFILE% are supported.
+        $description: Absolute folder path; leave blank to omit this entry. Missing and network folders are hidden from FX. Environment variables such as %USERPROFILE% are supported.
   $name: FX custom folders
   $description: Extra folders in the left-click FX menu. Add or edit entries here; blank paths are ignored and the five standard locations remain available.
 */
@@ -98,17 +102,20 @@ visible, disable the mod and check the Windhawk log before trying it again.
 #include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Microsoft.UI.Xaml.Media.Imaging.h>
-#include <winrt/Windows.UI.Input.h>
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
+#include <cstring>
 #include <cwctype>
 #include <cwchar>
 #include <functional>
 #include <iterator>
 #include <list>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -166,10 +173,17 @@ std::mutex g_storageMutex;
 std::atomic<bool> g_unloading = false;
 std::atomic<bool> g_extensionHooked = false;
 std::atomic<bool> g_frameHooked = false;
+std::atomic<bool> g_extensionHookAttempted = false;
+std::atomic<bool> g_frameHookAttempted = false;
+std::mutex g_dialogMutex;
+std::condition_variable g_dialogFinished;
+unsigned g_activeDialogOperations = 0;
+thread_local IFileDialog* g_threadFileDialog = nullptr;
 
 struct BarState {
     winrt::weak_ref<muxc::CommandBar> commandBar;
     winrt::event_token loadedToken{};
+    winrt::event_token unloadedToken{};
     winrt::weak_ref<muxc::Grid> grid;
     winrt::weak_ref<muxc::Grid> hostGrid;
     winrt::weak_ref<mux::FrameworkElement> navControl;
@@ -180,6 +194,8 @@ struct BarState {
     winrt::event_token stripLoadedToken{};
     std::vector<std::function<void()>> panelHandlers;
     std::vector<std::function<void()>> driveHandlers;
+    // Keep row definitions strong: they are not UIElements, and XAML can
+    // discard an unreferenced wrapper so a weak reference no longer resolves.
     muxc::RowDefinition addedRow{nullptr};
     muxc::RowDefinition commandRow{nullptr};
     mux::GridLength oldCommandRowHeight{1.0, mux::GridUnitType::Star};
@@ -204,7 +220,6 @@ struct BarState {
     std::wstring suppressClick;
     double dragOldOpacity = 1.0;
     winrt::weak_ref<muxc::Button> dropTarget;
-    muxm::Brush dropOldBrush{nullptr};
     mux::Thickness dropOldThickness{};
     bool dropAfter = false;
 };
@@ -216,7 +231,6 @@ thread_local std::list<BarState> g_bars;
 // Explorer's XAML window and its size hook run on the same UI thread. Use the
 // largest active bar on that thread so another tab cannot be clipped.
 thread_local unsigned g_frameRows = 0;
-thread_local bool g_frameRelayoutInProgress = false;
 
 void RevokeHandlers(std::vector<std::function<void()>>& handlers) {
     auto pending = std::move(handlers);
@@ -267,9 +281,16 @@ void TrackPointer(std::vector<std::function<void()>>& handlers,
         }
     });
 }
+struct IconPixels {
+    int width = 0;
+    int height = 0;
+    std::vector<BYTE> bytes;
+};
+
 struct IconCacheEntry {
     std::wstring path;
-    muxmi::WriteableBitmap bitmap{nullptr};
+    std::optional<IconPixels> pixels;
+    winrt::weak_ref<muxmi::WriteableBitmap> bitmap;
     bool attempted = false;
     ULONGLONG loadedAt = 0;
     ULONGLONG usedAt = 0;
@@ -336,7 +357,6 @@ struct NetworkProbeState {
     std::vector<NetworkProbeEntry> entries;
     HANDLE wake = nullptr;
     HANDLE thread = nullptr;
-    HMODULE module = nullptr;
     bool stopping = false;
 };
 
@@ -347,7 +367,6 @@ constexpr size_t kMaxNetworkProbes = 64;
 DWORD WINAPI NetworkProbeThreadProc(void* context) {
     auto* state = static_cast<NetworkProbeState*>(context);
     HANDLE wake = state->wake;
-    HMODULE module = state->module;
     while (WaitForSingleObject(wake, INFINITE) == WAIT_OBJECT_0) {
         for (;;) {
             std::wstring path;
@@ -370,8 +389,7 @@ DWORD WINAPI NetworkProbeThreadProc(void* context) {
                 }
             }
             if (stopRequested) {
-                CloseHandle(wake);
-                FreeLibraryAndExitThread(module, 0);
+                return 0;
             }
             DWORD attributes = GetFileAttributesW(path.c_str());
             FolderStatus result = attributes != INVALID_FILE_ATTRIBUTES &&
@@ -393,8 +411,7 @@ DWORD WINAPI NetworkProbeThreadProc(void* context) {
             }
         }
     }
-    CloseHandle(wake);
-    FreeLibraryAndExitThread(module, 0);
+    return 0;
 }
 
 bool EnsureNetworkProbeWorker() {
@@ -406,25 +423,16 @@ bool EnsureNetworkProbeWorker() {
         return true;
     }
     HANDLE wake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    HMODULE module = nullptr;
-    if (!wake || !GetModuleHandleExW(
-                     GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                     reinterpret_cast<LPCWSTR>(&g_networkProbes), &module)) {
-        if (wake) {
-            CloseHandle(wake);
-        }
+    if (!wake) {
         return false;
     }
     g_networkProbes.wake = wake;
-    g_networkProbes.module = module;
     g_networkProbes.thread =
         CreateThread(nullptr, 0, NetworkProbeThreadProc, &g_networkProbes,
                      0, nullptr);
     if (!g_networkProbes.thread) {
         g_networkProbes.wake = nullptr;
-        g_networkProbes.module = nullptr;
         CloseHandle(wake);
-        FreeLibrary(module);
         return false;
     }
     return true;
@@ -472,18 +480,24 @@ FolderStatus CheckFolderStatusInBackground(const std::wstring& path) {
 
 void StopNetworkProbeWorker() {
     HANDLE thread = nullptr;
+    HANDLE wake = nullptr;
     {
         std::lock_guard lock(g_networkProbes.mutex);
         g_networkProbes.stopping = true;
         if (g_networkProbes.wake) {
             SetEvent(g_networkProbes.wake);
         }
-        thread = g_networkProbes.thread;
-        g_networkProbes.thread = nullptr;
+        thread = std::exchange(g_networkProbes.thread, nullptr);
+        wake = std::exchange(g_networkProbes.wake, nullptr);
     }
     if (thread) {
-        CancelSynchronousIo(thread);
+        while (WaitForSingleObject(thread, 100) == WAIT_TIMEOUT) {
+            CancelSynchronousIo(thread);
+        }
         CloseHandle(thread);
+    }
+    if (wake) {
+        CloseHandle(wake);
     }
 }
 
@@ -623,6 +637,17 @@ bool IsAbsoluteFolderPath(const std::wstring& path) {
            std::none_of(path.begin(), path.end(), [](wchar_t ch) {
                return ch < 32;
            });
+}
+
+bool IsFxNetworkPath(const std::wstring& path) {
+    if (path.size() >= 2 && path[0] == L'\\' && path[1] == L'\\') {
+        return true;
+    }
+    if (path.size() < 3 || path[1] != L':' || path[2] != L'\\') {
+        return false;
+    }
+    wchar_t root[] = {path[0], L':', L'\\', L'\0'};
+    return GetDriveTypeW(root) == DRIVE_REMOTE;
 }
 
 bool ValidateImportedFolders(const std::vector<std::wstring>& folders) {
@@ -873,10 +898,8 @@ std::wstring TrimSetting(std::wstring value) {
 std::wstring ReadFxSetting(int index, const wchar_t* field) {
     std::wstring name = L"fxCustomFolders[" + std::to_wstring(index) +
                         L"]." + field;
-    const wchar_t* value = Wh_GetStringSetting(name.c_str());
-    std::wstring result = value ? value : L"";
-    Wh_FreeStringSetting(value);
-    return TrimSetting(std::move(result));
+    auto value = WindhawkUtils::StringSetting::make(name.c_str());
+    return TrimSetting(value.get() ? value.get() : L"");
 }
 
 std::wstring ExpandFxPath(const std::wstring& raw) {
@@ -909,6 +932,11 @@ std::vector<FxFolder> LoadFxCustomFolders() {
         auto path = ExpandFxPath(rawPath);
         if (path.empty()) {
             Wh_Log(L"Skipping invalid FX folder setting at index %d", index);
+            continue;
+        }
+        // Keep network shortcuts in Settings without probing them or adding
+        // nonworking items to the FX menu.
+        if (IsFxNetworkPath(path)) {
             continue;
         }
         // Keep saved shortcuts, but do not show targets that cannot currently
@@ -951,6 +979,24 @@ struct ComScope {
     }
 };
 
+struct DialogOperationScope {
+    bool active = false;
+    DialogOperationScope() {
+        std::lock_guard lock(g_dialogMutex);
+        if (!g_unloading) {
+            ++g_activeDialogOperations;
+            active = true;
+        }
+    }
+    ~DialogOperationScope() {
+        if (active) {
+            std::lock_guard lock(g_dialogMutex);
+            --g_activeDialogOperations;
+            g_dialogFinished.notify_all();
+        }
+    }
+};
+
 std::wstring ChooseBackupPath(HWND owner, bool save,
                               const std::wstring& suggestedPath) {
     ComScope com;
@@ -984,7 +1030,13 @@ std::wstring ChooseBackupPath(HWND owner, bool save,
             dialog->SetDefaultFolder(folder.get());
         }
     }
-    if (FAILED(dialog->Show(owner))) {
+    if (g_unloading) {
+        return {};
+    }
+    g_threadFileDialog = dialog.get();
+    HRESULT showResult = dialog->Show(owner);
+    g_threadFileDialog = nullptr;
+    if (FAILED(showResult)) {
         return {};
     }
     winrt::com_ptr<IShellItem> selected;
@@ -1188,6 +1240,26 @@ void RelayoutThreadFrames() {
         0);
 }
 
+// A native WM_SIZE has no callback into the mod and runs after the current
+// XAML layout pass, so row changes do not reenter Explorer's layout code.
+void PostFrameRelayout() {
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND window, LPARAM) -> BOOL {
+            if (IsExplorerFrame(window) && !IsIconic(window)) {
+                RECT client{};
+                if (GetClientRect(window, &client)) {
+                    PostMessageW(window, WM_SIZE,
+                                 IsZoomed(window) ? SIZE_MAXIMIZED
+                                                  : SIZE_RESTORED,
+                                 MAKELPARAM(client.right, client.bottom));
+                }
+            }
+            return TRUE;
+        },
+        0);
+}
+
 void ClearDrag(BarState& state);
 
 // A mouse press can end without PointerReleased when Alt+Tab or a system
@@ -1210,7 +1282,11 @@ bool DragInProgress(BarState& state) {
 void ClearDropTarget(BarState& state) {
     if (auto button = state.dropTarget.get()) {
         try {
-            button.BorderBrush(state.dropOldBrush);
+            // These bookmark buttons are ours; Tag holds the original brush
+            // on the button itself instead of in thread-local state.
+            auto oldBrush = button.Tag().try_as<muxm::Brush>();
+            button.BorderBrush(oldBrush);
+            button.Tag(nullptr);
             button.BorderThickness(state.dropOldThickness);
         } catch (...) {
             Wh_Log(L"Could not restore bookmark drag border: %08X",
@@ -1218,7 +1294,6 @@ void ClearDropTarget(BarState& state) {
         }
     }
     state.dropTarget = nullptr;
-    state.dropOldBrush = nullptr;
     state.dropAfter = false;
 }
 
@@ -1249,10 +1324,8 @@ void UpdateFrameRowCount() {
     rows = std::min(rows, kMaxRows);
     if (rows != g_frameRows) {
         g_frameRows = rows;
-        if (!g_unloading && !g_frameRelayoutInProgress) {
-            g_frameRelayoutInProgress = true;
-            RelayoutThreadFrames();
-            g_frameRelayoutInProgress = false;
+        if (!g_unloading) {
+            PostFrameRelayout();
         }
     }
 }
@@ -1428,7 +1501,7 @@ void ShowInsertionMark(BarState& state, const muxc::StackPanel& panel,
     ClearDropTarget(state);
     try {
         state.dropTarget = winrt::make_weak(button);
-        state.dropOldBrush = button.BorderBrush();
+        button.Tag(button.BorderBrush());
         state.dropOldThickness = button.BorderThickness();
         state.dropAfter = after;
         button.BorderBrush(muxm::SolidColorBrush(
@@ -1464,11 +1537,11 @@ struct ScopedIcon {
 
 // Ask Shell for this particular folder's icon. It applies desktop.ini icon
 // customizations and the user's icon cache; USEFILEATTRIBUTES would skip them.
-muxmi::WriteableBitmap FolderBitmap(const std::wstring& path) {
+std::optional<IconPixels> FolderIconPixels(const std::wstring& path) {
     SHFILEINFOW info{};
     if (!SHGetFileInfoW(path.c_str(), 0, &info, sizeof(info),
                         SHGFI_ICON | SHGFI_LARGEICON) || !info.hIcon) {
-        return nullptr;
+        return std::nullopt;
     }
     ScopedIcon shellIcon{info.hIcon};
     try {
@@ -1477,18 +1550,18 @@ muxmi::WriteableBitmap FolderBitmap(const std::wstring& path) {
         if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
                                     CLSCTX_INPROC_SERVER,
                                     IID_PPV_ARGS(factory.put())))) {
-            return nullptr;
+            return std::nullopt;
         }
         winrt::com_ptr<IWICBitmap> source;
         if (FAILED(factory->CreateBitmapFromHICON(shellIcon.value,
                                                   source.put()))) {
-            return nullptr;
+            return std::nullopt;
         }
         UINT width = 0;
         UINT height = 0;
         if (FAILED(source->GetSize(&width, &height)) || width == 0 ||
             height == 0 || width > 256 || height > 256) {
-            return nullptr;
+            return std::nullopt;
         }
         winrt::com_ptr<IWICFormatConverter> converter;
         if (FAILED(factory->CreateFormatConverter(converter.put())) ||
@@ -1496,30 +1569,41 @@ muxmi::WriteableBitmap FolderBitmap(const std::wstring& path) {
                                          GUID_WICPixelFormat32bppBGRA,
                                          WICBitmapDitherTypeNone, nullptr, 0,
                                          WICBitmapPaletteTypeCustom))) {
-            return nullptr;
+            return std::nullopt;
         }
-        muxmi::WriteableBitmap bitmap(static_cast<int>(width),
-                                      static_cast<int>(height));
-        auto buffer = bitmap.PixelBuffer();
         UINT byteCount = width * height * 4;
-        if (buffer.Length() < byteCount) {
-            return nullptr;
+        IconPixels result{static_cast<int>(width), static_cast<int>(height),
+                          std::vector<BYTE>(byteCount)};
+        if (FAILED(converter->CopyPixels(nullptr, width * 4, byteCount,
+                                         result.bytes.data()))) {
+            return std::nullopt;
         }
-        auto access =
-            buffer.as<::Windows::Storage::Streams::IBufferByteAccess>();
-        BYTE* pixels = nullptr;
-        if (FAILED(access->Buffer(&pixels)) || !pixels ||
-            FAILED(converter->CopyPixels(nullptr, width * 4, byteCount,
-                                         pixels))) {
-            return nullptr;
-        }
-        bitmap.Invalidate();
-        return bitmap;
+        return result;
     } catch (...) {
         Wh_Log(L"Failed to load bookmark folder icon: %08X",
                winrt::to_hresult().value);
+        return std::nullopt;
+    }
+}
+
+muxmi::WriteableBitmap BitmapFromPixels(const IconPixels& pixels) try {
+    muxmi::WriteableBitmap bitmap(pixels.width, pixels.height);
+    auto buffer = bitmap.PixelBuffer();
+    if (buffer.Length() < pixels.bytes.size()) {
         return nullptr;
     }
+    auto access = buffer.as<::Windows::Storage::Streams::IBufferByteAccess>();
+    BYTE* destination = nullptr;
+    if (FAILED(access->Buffer(&destination)) || !destination) {
+        return nullptr;
+    }
+    std::memcpy(destination, pixels.bytes.data(), pixels.bytes.size());
+    bitmap.Invalidate();
+    return bitmap;
+} catch (...) {
+    Wh_Log(L"Failed to create bookmark icon bitmap: %08X",
+           winrt::to_hresult().value);
+    return nullptr;
 }
 
 void ForgetCachedIcon(const std::wstring& path) {
@@ -1548,14 +1632,25 @@ muxmi::WriteableBitmap CachedFolderBitmap(const std::wstring& path) {
         it->path = path;
     }
     it->usedAt = now;
-    ULONGLONG lifetime = it->bitmap ? kIconCacheLifetimeMs
-                                    : kFailedIconCacheLifetimeMs;
+    ULONGLONG lifetime = it->pixels ? kIconCacheLifetimeMs
+                                   : kFailedIconCacheLifetimeMs;
     if (!it->attempted || now - it->loadedAt >= lifetime) {
-        it->bitmap = FolderBitmap(path);
+        it->pixels = FolderIconPixels(path);
+        it->bitmap = {};
         it->attempted = true;
         it->loadedAt = now;
     }
-    return it->bitmap;
+    if (!it->pixels) {
+        return nullptr;
+    }
+    if (auto bitmap = it->bitmap.get()) {
+        return bitmap;
+    }
+    auto bitmap = BitmapFromPixels(*it->pixels);
+    if (bitmap) {
+        it->bitmap = winrt::make_weak(bitmap);
+    }
+    return bitmap;
 }
 
 mux::UIElement FolderIcon(const std::wstring& path, FolderStatus status) {
@@ -1639,7 +1734,8 @@ void RefreshPanel(const muxc::StackPanel& panel) {
     TrackClick(state->panelHandlers, saveItem, [backupPath, weakPanel](
                        const winrt::Windows::Foundation::IInspectable& sender,
                        const mux::RoutedEventArgs&) {
-        if (g_unloading) {
+        DialogOperationScope operation;
+        if (!operation.active) {
             return;
         }
         auto panel = weakPanel.get();
@@ -1669,7 +1765,8 @@ void RefreshPanel(const muxc::StackPanel& panel) {
     TrackClick(state->panelHandlers, loadItem, [backupPath, weakPanel](
                        const winrt::Windows::Foundation::IInspectable& sender,
                        const mux::RoutedEventArgs&) {
-        if (g_unloading) {
+        DialogOperationScope operation;
+        if (!operation.active) {
             return;
         }
         auto panel = weakPanel.get();
@@ -1739,7 +1836,7 @@ void RefreshPanel(const muxc::StackPanel& panel) {
                               const std::wstring& label,
                               const std::wstring& path,
                               bool driveItem = false) {
-        if (path.empty()) {
+        if (path.empty() || IsFxNetworkPath(path)) {
             return;
         }
         muxc::MenuFlyoutItem item;
@@ -1798,6 +1895,9 @@ void RefreshPanel(const muxc::StackPanel& panel) {
                 continue;
             }
             wchar_t drive[] = {static_cast<wchar_t>(L'A' + index), L':', L'\\', L'\0'};
+            if (GetDriveTypeW(drive) == DRIVE_REMOTE) {
+                continue;
+            }
             FolderStatus status = CheckFolderStatus(drive);
             if (status == FolderStatus::Unknown) {
                 status = CheckFolderStatusInBackground(drive);
@@ -2288,6 +2388,38 @@ void TrackCommandBar(const muxc::CommandBar& commandBar) try {
             TryInstallBar(bar);
         }
     });
+    state.unloadedToken = commandBar.Unloaded(
+        [weakBar](auto const&, auto const&) {
+            auto bar = weakBar.get();
+            // WinUI can raise Unloaded after a quick re-add has already raised
+            // Loaded; keep the bar while its command bar is in the tree.
+            if (!bar || bar.IsLoaded()) {
+                return;
+            }
+            for (auto& state : g_bars) {
+                if (state.commandBar.get() == bar) {
+                    // Another tab's command bar can share a header that stays
+                    // on screen; keep the bar there instead of removing it.
+                    if (auto strip = state.strip.get();
+                        strip && strip.IsLoaded()) {
+                        break;
+                    }
+                    try {
+                        RemoveBarVisuals(state);
+                    } catch (...) {
+                        Wh_Log(L"Bookmarks bar unload cleanup failed: %08X",
+                               winrt::to_hresult().value);
+                    }
+                    break;
+                }
+            }
+            if (std::none_of(g_bars.begin(), g_bars.end(),
+                             [](const BarState& state) {
+                                 return !!state.strip.get();
+                             })) {
+                g_iconCache.clear();
+            }
+        });
     TryInstallBar(commandBar);
 } catch (...) {
     Wh_Log(L"Bookmarks bar tracking failed: %08X",
@@ -2389,9 +2521,11 @@ bool HookExplorerFrame(bool apply) {
     if (!module) {
         return true;
     }
+    // Bound symbol resolution to one attempt for this Explorer process;
+    // repeated failures would invalidate Windhawk's symbol cache.
     bool expected = false;
-    if (!g_frameHooked.compare_exchange_strong(expected, true)) {
-        return true;
+    if (!g_frameHookAttempted.compare_exchange_strong(expected, true)) {
+        return g_frameHooked;
     }
     // Windows.UI.FileExplorer.dll
     WindhawkUtils::SYMBOL_HOOK hook[] = {{
@@ -2399,10 +2533,10 @@ bool HookExplorerFrame(bool apply) {
         &g_desiredSizeOriginal, DesiredSizeHook}};
     if (!WindhawkUtils::HookSymbols(module, hook, ARRAYSIZE(hook)) ||
         !g_desiredSizeOriginal) {
-        g_frameHooked = false;
         Wh_Log(L"File Explorer frame size symbol unavailable");
         return false;
     }
+    g_frameHooked = true;
     if (apply) {
         Wh_ApplyHookOperations();
     }
@@ -2417,9 +2551,10 @@ bool HookExplorerExtension(bool apply) {
     if (!module) {
         return true;
     }
+    // Bound symbol resolution to one attempt for this Explorer process.
     bool expected = false;
-    if (!g_extensionHooked.compare_exchange_strong(expected, true)) {
-        return true;
+    if (!g_extensionHookAttempted.compare_exchange_strong(expected, true)) {
+        return g_extensionHooked;
     }
     // FileExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK hook[] = {{
@@ -2428,10 +2563,10 @@ bool HookExplorerExtension(bool apply) {
         &g_commandBarSetterOriginal, CommandBarSetterHook}};
     if (!WindhawkUtils::HookSymbols(module, hook, ARRAYSIZE(hook)) ||
         !g_commandBarSetterOriginal) {
-        g_extensionHooked = false;
         Wh_Log(L"File Explorer command bar symbol unavailable");
         return false;
     }
+    g_extensionHooked = true;
     if (apply) {
         Wh_ApplyHookOperations();
     }
@@ -2443,7 +2578,7 @@ LoadLibraryExW_t g_loadLibraryOriginal = nullptr;
 HMODULE WINAPI LoadLibraryExWHook(LPCWSTR file, HANDLE handle, DWORD flags) {
     HMODULE module = g_loadLibraryOriginal(file, handle, flags);
     if (module && file && !g_unloading &&
-        (!g_extensionHooked || !g_frameHooked)) {
+        (!g_extensionHookAttempted || !g_frameHookAttempted)) {
         const wchar_t* base = file;
         for (const wchar_t* p = file; *p; ++p) {
             if (*p == L'\\' || *p == L'/') {
@@ -2467,6 +2602,7 @@ void CleanupCurrentThread() {
         try {
             if (auto commandBar = state.commandBar.get()) {
                 commandBar.Loaded(state.loadedToken);
+                commandBar.Unloaded(state.unloadedToken);
             }
             RemoveBarVisuals(state);
         } catch (...) {
@@ -2543,6 +2679,17 @@ void ForExplorerWindows(void (*callback)()) {
         reinterpret_cast<LPARAM>(callback));
 }
 
+void BeginUnloading() {
+    std::lock_guard lock(g_dialogMutex);
+    g_unloading = true;
+}
+
+void CloseActiveDialogCurrentThread() {
+    if (g_threadFileDialog) {
+        g_threadFileDialog->Close(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+    }
+}
+
 BOOL Wh_ModInit() {
     HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
     auto loadLibraryExW = kernelBase
@@ -2574,12 +2721,20 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModBeforeUninit() {
-    g_unloading = true;
+    BeginUnloading();
     StopNetworkProbeWorker();
 }
 
 void Wh_ModUninit() {
-    g_unloading = true;
+    BeginUnloading();
+    StopNetworkProbeWorker();
+    for (;;) {
+        ForExplorerWindows(CloseActiveDialogCurrentThread);
+        std::unique_lock lock(g_dialogMutex);
+        if (g_activeDialogOperations == 0) {
+            break;
+        }
+        g_dialogFinished.wait_for(lock, std::chrono::milliseconds(100));
+    }
     ForExplorerWindows(CleanupCurrentThread);
-    CleanupCurrentThread();
 }
