@@ -155,7 +155,7 @@ static std::wstring Lower(std::wstring s) {
     return s;
 }
 
-// ---------- Monitor numbers: sorted by X position, 1 = leftmost
+// ---------- Monitor numbers
 
 static BOOL CALLBACK MonEnum(HMONITOR m, HDC, LPRECT r, LPARAM lp) {
     auto* v = (std::vector<std::pair<LONG, HMONITOR>>*)lp;
@@ -163,15 +163,89 @@ static BOOL CALLBACK MonEnum(HMONITOR m, HDC, LPRECT r, LPARAM lp) {
     return TRUE;
 }
 
-static int MonNumber(HMONITOR m) {
-    std::vector<std::pair<LONG, HMONITOR>> v;
-    EnumDisplayMonitors(nullptr, nullptr, MonEnum, (LPARAM)&v);
-    std::sort(v.begin(), v.end(),
-              [](auto& a, auto& b) { return a.first < b.first; });
-    for (size_t i = 0; i < v.size(); i++) {
-        if (v[i].second == m) return (int)i + 1;
+// Taskbar number (1..kMaxMon) per physical monitor, kept in "monitorSlots" so that pins stay on
+// their monitor when the layout changes. First run: numbered from left to right.
+constexpr int kMaxMon = 32;
+static std::mutex g_slotMx;
+static std::map<std::wstring, int> g_slots;
+static bool g_slotsLoaded = false;
+static std::map<HMONITOR, std::pair<RECT, int>> g_slotCache;
+static DWORD g_slotCacheTick = 0;
+
+static std::wstring MonitorId(HMONITOR m) {
+    MONITORINFOEXW mi{};
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfoW(m, &mi)) return L"";
+    DISPLAY_DEVICEW dd{.cb = sizeof(dd)};
+    if (EnumDisplayDevicesW(mi.szDevice, 0, &dd, EDD_GET_DEVICE_INTERFACE_NAME) && dd.DeviceID[0])
+        return Lower(dd.DeviceID);
+    return Lower(mi.szDevice);
+}
+
+static void LoadSlots() {
+    std::vector<wchar_t> buf(8192);
+    Wh_GetStringValue(L"monitorSlots", buf.data(), buf.size());
+    std::wstring s = buf.data();
+    for (size_t pos = 0; pos < s.size();) {
+        size_t end = s.find(L';', pos);
+        if (end == std::wstring::npos) end = s.size();
+        std::wstring e = s.substr(pos, end - pos);
+        size_t bar = e.rfind(L'|');
+        if (bar != std::wstring::npos) {
+            int n = _wtoi(e.c_str() + bar + 1);
+            if (n >= 1 && n <= kMaxMon) g_slots[e.substr(0, bar)] = n;
+        }
+        pos = end + 1;
     }
-    return 0;
+}
+
+static void SaveSlots() {
+    std::wstring out;
+    for (auto& [id, n] : g_slots) out += id + L"|" + std::to_wstring(n) + L";";
+    Wh_SetStringValue(L"monitorSlots", out.c_str());
+}
+
+static int MonNumber(HMONITOR m) {
+    if (!m) return 0;
+    MONITORINFO mi{.cbSize = sizeof(mi)};
+    if (!GetMonitorInfoW(m, &mi)) return 0;
+    std::lock_guard<std::mutex> l(g_slotMx);
+    DWORD now = GetTickCount();
+    if (now - g_slotCacheTick > 2000) {
+        g_slotCache.clear();
+        g_slotCacheTick = now;
+    }
+    auto c = g_slotCache.find(m);
+    if (c != g_slotCache.end() && EqualRect(&c->second.first, &mi.rcMonitor)) return c->second.second;
+
+    if (!g_slotsLoaded) {
+        g_slotsLoaded = true;
+        LoadSlots();
+    }
+    std::wstring id = MonitorId(m);
+    if (id.empty()) return 0;
+    auto it = g_slots.find(id);
+    if (it == g_slots.end()) {
+        std::vector<std::pair<LONG, HMONITOR>> v;
+        EnumDisplayMonitors(nullptr, nullptr, MonEnum, (LPARAM)&v);
+        std::sort(v.begin(), v.end(), [](auto& a, auto& b) { return a.first < b.first; });
+        std::set<int> used;
+        for (auto& [k, n] : g_slots) used.insert(n);
+        for (auto& [x, hm] : v) {  // new monitors get the lowest free numbers, left to right
+            std::wstring vid = MonitorId(hm);
+            if (vid.empty() || g_slots.count(vid)) continue;
+            int n = 1;
+            while (n <= kMaxMon && used.count(n)) n++;
+            if (n > kMaxMon) break;
+            g_slots[vid] = n;
+            used.insert(n);
+        }
+        SaveSlots();
+        it = g_slots.find(id);
+        if (it == g_slots.end()) return 0;
+    }
+    g_slotCache[m] = {mi.rcMonitor, it->second};
+    return it->second;
 }
 
 static bool MonIsPrimary(HMONITOR m) {
@@ -181,7 +255,7 @@ static bool MonIsPrimary(HMONITOR m) {
 
 
 static bool InMask(unsigned mask, int mon) {
-    return mon >= 1 && mon <= 8 && (mask & (1u << (mon - 1)));
+    return mon >= 1 && mon <= kMaxMon && (mask & (1u << (mon - 1)));
 }
 
 // 0 = no rule (default Windows behavior), otherwise a monitor bit mask
@@ -418,10 +492,8 @@ struct WinInfo {
     std::set<HMONITOR> bars;   // taskbars (by monitor) the button is on
 };
 static std::map<HWND, WinInfo> g_wins;
-static HWINEVENTHOOK g_winEvent = nullptr;
-// Message window on the taskbar thread. The WinEvent hook and the timers belong to this
-// thread and must be removed there too - otherwise Windows calls WinEventProc in the
-// unloaded DLL (crash).
+// Message window on the taskbar thread. The timers belong to this thread and must be removed
+// there too - otherwise Windows calls the timer procedures in the unloaded DLL (crash).
 static HWND g_msgWnd = nullptr;
 static bool g_msgWndFailed = false;  // creating it failed, don't retry on every call
 static std::atomic<bool> g_unloading{false};  // set in Wh_ModBeforeUninit: don't create it again
@@ -438,10 +510,10 @@ static void SetFakeGroup(void* g);
 static void SetJumpGroup(void* g);
 static LRESULT HandleUnpinOne(const wchar_t* app);
 static bool HandleExtraPin(const wchar_t* app, const wchar_t* path);
-extern void* g_fakeGroup;
-extern DWORD g_jumpTick;
-extern std::wstring g_swallowAddKey;
-extern DWORD g_swallowAddTick;
+static DWORD g_jumpTick = 0;
+static void* g_fakeGroup = nullptr;  // jump list showed "Pin" although pinned globally (AddRef)
+static std::wstring g_swallowAddKey;
+static DWORD g_swallowAddTick = 0;
 
 // Window of a button - only if it is definitely a CWindowTaskItem
 static HWND ItemWindow(void* item) {
@@ -565,17 +637,17 @@ static bool ShouldShow(void* tl, void* g, void* item) {
 }
 
 static void QueueReeval(HWND h);
-static void EnsureWinEvent();
+static void EnsureMsgWnd();
 static bool OnTrayThread();
-extern int g_moveDir;
-extern DWORD g_moveTick;
-extern DWORD g_swapTick;
-extern DWORD g_swapHideTick;
+static int g_moveDir = 0;        // -1 = came from the right, +1 = came from the left
+static DWORD g_moveTick = 0;
+static DWORD g_swapTick = 0;      // a pin <-> window button swap on the same taskbar follows
+static DWORD g_swapHideTick = 0;  // plus: old button without exit animation
 
 static bool AddBar(void* tl);
 
 static HRESULT TaskCreated_hook(void* self, void* g, void* item) {
-    if (!g_unloading && !g_msgWnd && !g_msgWndFailed && OnTrayThread()) EnsureWinEvent();  // taskbar thread only
+    if (!g_unloading && !g_msgWnd && !g_msgWndFailed && OnTrayThread()) EnsureMsgWnd();  // taskbar thread only
     if (!AddBar(self)) return TaskCreated_orig(self, g, item);  // unknown layout: don't filter
     if (item && g) {
         if (HWND h = ItemWindow(item)) TrackWindow(h, g);
@@ -994,46 +1066,33 @@ static void QueueReeval(HWND h) {
 }
 
 
-// Windows reports a monitor change itself before it shows the button on the new taskbar -
-// remember the direction for the sideways slide-in here
+// Windows reports a monitor change itself before it shows the button on the new taskbar:
+// remember the direction for the sideways slide-in and re-evaluate the window
 using MonChanged_t = void (*)(void*, HWND);
 static MonChanged_t MonChanged_orig;
 static void MonChanged_hook(void* self, HWND h) {
-    HMONITOR now = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+    HMONITOR now = h ? MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) : nullptr;
     HMONITOR old = nullptr;
-    {
+    bool moved = false;
+    if (now) {
         std::lock_guard<std::mutex> l(g_mx);
         auto it = g_wins.find(h);
-        if (it != g_wins.end()) old = it->second.mon;
+        if (it != g_wins.end() && it->second.mon != now) {
+            old = it->second.mon;
+            it->second.mon = now;
+            moved = true;
+        }
     }
     MONITORINFO a{.cbSize = sizeof(a)}, b{.cbSize = sizeof(b)};
-    if (old && now && old != now && GetMonitorInfoW(old, &a) && GetMonitorInfoW(now, &b)) {
+    if (old && GetMonitorInfoW(old, &a) && GetMonitorInfoW(now, &b)) {
         g_moveDir = b.rcMonitor.left > a.rcMonitor.left ? 1 : -1;
         g_moveTick = GetTickCount();
     }
     MonChanged_orig(self, h);
-}
-static void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD, HWND h, LONG idObj, LONG idChild,
-                                  DWORD, DWORD) {
-    if (!h || idObj != OBJID_WINDOW || idChild != CHILDID_SELF) return;
-    HMONITOR now = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
-    HMONITOR old = nullptr;
-    {
-        std::lock_guard<std::mutex> l(g_mx);
-        auto it = g_wins.find(h);
-        if (it == g_wins.end() || it->second.mon == now) return;
-        old = it->second.mon;
-        it->second.mon = now;
+    if (moved && !g_unloading) {
+        QueueReeval(h);
+        Wh_Log(L"-> Window %p moved to monitor %d", (void*)h, MonNumber(now));
     }
-    if (old && now) {  // direction for the entrance animation
-        MONITORINFO a{.cbSize = sizeof(a)}, b{.cbSize = sizeof(b)};
-        if (GetMonitorInfoW(old, &a) && GetMonitorInfoW(now, &b)) {
-            g_moveDir = b.rcMonitor.left > a.rcMonitor.left ? 1 : -1;
-            g_moveTick = GetTickCount();
-        }
-    }
-    QueueReeval(h);
-    Wh_Log(L"-> Window %p moved to monitor %d", (void*)h, MonNumber(now));
 }
 
 static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
@@ -1071,6 +1130,7 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                     HandleExtraPin(aumid.c_str(), path.c_str())) ? 1 : 0;
         }
         if (cd->dwData == 0x534B4131) {  // "SKA1": re-append after HandleExtraPin?
+            if (g_fakeGroup && _wcsicmp(app.c_str(), AppOf(g_fakeGroup)) != 0) SetFakeGroup(nullptr);  // another app was pinned
             return !g_swallowAddKey.empty() && GetTickCount() - g_swallowAddTick < 3000 && Lower(app) == g_swallowAddKey
                        ? (g_swallowAddKey.clear(), 1) : 0;
         }
@@ -1078,8 +1138,6 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     if (msg == kMsgCleanup) {  // runs on the taskbar thread
-        if (g_winEvent) UnhookWinEvent(g_winEvent);
-        g_winEvent = nullptr;
         KillTimer(h, kReevalTimerId);
         KillTimer(h, kApplyTimerId);
         KillTimer(h, kSyncTimerId);
@@ -1105,7 +1163,7 @@ static HINSTANCE ModInstance() {
     return m;
 }
 
-static void EnsureWinEvent() {
+static void EnsureMsgWnd() {
     if (g_msgWnd || g_msgWndFailed || g_unloading) return;
     WNDCLASSW wc{};
     wc.lpfnWndProc = MsgWndProc;
@@ -1123,10 +1181,6 @@ static void EnsureWinEvent() {
         Wh_Log(L"-> Message window FAILED (%lu)", GetLastError());
         return;
     }
-    g_winEvent = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
-                                 nullptr, WinEventProc, 0, 0,
-                                 WINEVENT_OUTOFCONTEXT);  // File Explorer windows are in this process
-    Wh_Log(L"-> Window monitoring %ls", g_winEvent ? L"active" : L"FAILED");
     SetTimer(g_msgWnd, kSyncTimerId, 3000, nullptr);  // sync once startup is done
 }
 
@@ -1164,7 +1218,7 @@ static bool OnTrayThread() {
 static HMONITOR GetMonitor_hook(void* self) {
     AddBar(self);
     // Mod loaded late / reloaded: start even without new buttons
-    if (!g_unloading && !g_msgWnd && !g_msgWndFailed && OnTrayThread()) EnsureWinEvent();
+    if (!g_unloading && !g_msgWnd && !g_msgWndFailed && OnTrayThread()) EnsureMsgWnd();
     return GetMonitor_orig(self);
 }
 
@@ -1489,7 +1543,7 @@ static std::wstring GroupLinkPath(void* g) {
 }
 
 static std::wstring BarLinkPath(void* g, int mon, bool create) {
-    if (mon < 1 || mon > 8) return L"";
+    if (mon < 1 || mon > kMaxMon) return L"";
     std::wstring orig = GroupLinkPath(g);
     std::wstring dir = BarLinkDir(mon);
     if (orig.empty() || dir.empty() || Lower(orig).find(Lower(g_linkRoot)) == 0) return L"";
@@ -1535,7 +1589,7 @@ static void RefreshLinkCopies(const std::wstring& orig) {
         return;
     }
     if (FilesEqual(orig, base)) return;
-    for (int mon = 1; mon <= 8; mon++) {
+    for (int mon = 1; mon <= kMaxMon; mon++) {
         std::wstring copy = BarLinkDir(mon) + L"\\" + name;
         if (GetFileAttributesW(copy.c_str()) != INVALID_FILE_ATTRIBUTES && FilesEqual(copy, base))
             CopyFileW(orig.c_str(), copy.c_str(), FALSE);
@@ -1563,8 +1617,7 @@ static HRESULT Launch_hook(void* self, void* g, const POINT* pt, int opt) {
         std::wstring orig = GroupLinkPath(g);
         RefreshLinkCopies(orig);
         bool anyOwn = false;
-        int cnt = std::min(GetSystemMetrics(SM_CMONITORS), 8);
-        for (int m = 1; m <= cnt && !orig.empty(); m++) {
+        for (int m = 1; m <= kMaxMon && !orig.empty(); m++) {
             std::wstring c = BarLinkPath(g, m, false);
             if (!c.empty() && !FilesEqual(c, orig)) anyOwn = true;
         }
@@ -1618,11 +1671,18 @@ static int PrimaryNumber() {
 static unsigned MaskOf(void* g) {
     unsigned m = AssignedMonitor(g);
     if (m) return m;
-    if (g_s.pinsOnAll) {
-        int c = GetSystemMetrics(SM_CMONITORS);
-        return c >= 8 ? 0xFF : (1u << c) - 1;
+    if (g_s.pinsOnAll) {  // all connected taskbars
+        std::vector<std::pair<LONG, HMONITOR>> v;
+        EnumDisplayMonitors(nullptr, nullptr, MonEnum, (LPARAM)&v);
+        unsigned all = 0;
+        for (auto& [x, hm] : v) {
+            int n = MonNumber(hm);
+            if (n >= 1) all |= 1u << (n - 1);
+        }
+        return all;
     }
-    return 1u << (PrimaryNumber() - 1);
+    int p = PrimaryNumber();
+    return p >= 1 ? 1u << (p - 1) : 0;
 }
 
 // Real user actions only: not right after startup, not during our own flag toggle,
@@ -1644,8 +1704,6 @@ static bool TakePinEvent(void* g, bool pin, std::wstring& key) {
 
 // Most recently opened jump list (taskbar + group)
 static HMONITOR g_jumpMon = nullptr;
-DWORD g_jumpTick = 0;
-void* g_fakeGroup = nullptr;  // jump list showed "Pin" although pinned globally (AddRef)
 
 // Monitor of the action: jump list of the last 20 s, otherwise the mouse cursor (e.g. Start menu)
 static int ActionMonitor() {
@@ -1679,7 +1737,7 @@ static void PinnedEvt_hook(void* self, void* g) {
         return;
     }
     int mon = ActionMonitor();
-    if (mon >= 1 && mon <= 8) {
+    if (mon >= 1 && mon <= kMaxMon) {
         SetRule(key, 1u << (mon - 1));  // before Windows rebuilds, so that the filter already applies
         Wh_Log(L"-> Pinned on monitor %d: %ls", mon, key.c_str());
     }
@@ -1712,8 +1770,6 @@ static void SetJumpGroup(void* g) {
 // "Pin to taskbar" in a trick jump list (app already pinned on another taskbar):
 // Windows' PinManager removes the app from the pin list and appends it again - which moves
 // it to the end on all taskbars. Instead: just add this taskbar, list unchanged.
-std::wstring g_swallowAddKey;
-DWORD g_swallowAddTick = 0;
 
 static bool SamePinTarget(const std::wstring& path, void* g) {
     std::wstring link = GroupLinkPath(g);
@@ -1734,7 +1790,7 @@ static bool HandleExtraPin(const wchar_t* app, const wchar_t* path) {
         return false;
     }
     int mon = MonNumber(g_jumpMon);
-    if (mon < 1 || mon > 8) return false;
+    if (mon < 1 || mon > kMaxMon) return false;
     unsigned m = MaskOf(g) | (1u << (mon - 1));
     SetRule(KeyOf(g), m);
     Wh_Log(L"-> Additionally pinned on monitor %d (mask 0x%X, order kept): %ls", mon, m, AppOf(g));
@@ -1754,7 +1810,7 @@ static LRESULT HandleUnpinOne(const wchar_t* app) {
     if (!g || GetTickCount() - g_jumpTick > 20000 || !Pinned(g)) return 0;
     int mon = MonNumber(g_jumpMon);
     unsigned mask = MaskOf(g);
-    if (mon < 1 || mon > 8 || !InMask(mask, mon)) return 0;
+    if (mon < 1 || mon > kMaxMon || !InMask(mask, mon)) return 0;
     unsigned rest = mask & ~(1u << (mon - 1));
     if (!rest) return 0;  // last taskbar: let it unpin normally
     SetRule(KeyOf(g), rest);
@@ -1822,7 +1878,7 @@ static HRESULT EnumPinned_hook(void* self, bool a, bool b, bool c) {
     DWORD now = GetTickCount();
     if (g && now - g_jumpTick < 20000 && GetLastInputInfo(&li) && now - li.dwTime < 8000 && Pinned(g)) {
         int mon = MonNumber(g_jumpMon);
-        if (mon >= 1 && mon <= 8) {
+        if (mon >= 1 && mon <= kMaxMon) {
             unsigned m = MaskOf(g) | (1u << (mon - 1));
             SetRule(KeyOf(g), m);
             Wh_Log(L"-> Additionally pinned on monitor %d (mask 0x%X): %ls", mon, m, AppOf(g));
@@ -2000,10 +2056,6 @@ using Entrance_t = void (*)(void*, int, double, Float3, long long, bool);
 static Entrance_t Entrance_orig;
 // Window moved to another taskbar: instead of "appearing from below", slide in
 // sideways - from the side the window came from
-int g_moveDir = 0;        // -1 = came from the right, +1 = came from the left
-DWORD g_swapTick = 0;      // a pin <-> window button swap on the same taskbar follows
-DWORD g_swapHideTick = 0;  // plus: old button without exit animation
-DWORD g_moveTick = 0;
 static void Entrance_hook(void* self, int kind, double d, Float3 off, long long dur, bool b) {
     if (g_s.slideAnimation && g_moveDir && GetTickCount() - g_moveTick < 400) {
         kind = 1;  // kind 1 = slide by the offset (kind 0 = from below, kind 2 = zoom)
@@ -2270,7 +2322,7 @@ BOOL Wh_ModInit() {
     InitAppsModeHook();
     g_initTick = GetTickCount();
     // Taskbar is already up (mod update / loaded late): start right away, sync follows
-    if (RunOnTrayThread(EnsureWinEvent)) Wh_Log(L"-> Taskbar already running - sync scheduled");
+    if (RunOnTrayThread(EnsureMsgWnd)) Wh_Log(L"-> Taskbar already running - sync scheduled");
     Wh_Log(L"v%ls active", WH_MOD_VERSION);
     return TRUE;
 }
@@ -2294,7 +2346,7 @@ void Wh_ModSettingsChanged() {
 // the taskbar reads it; after the hooks are removed (Wh_ModUninit) it reads the real value and
 // rebuilds everything without the mod's filtering.
 void Wh_ModBeforeUninit() {
-    // Remove the message window with its timers and the WinEvent hook first, while the hooks are
+    // Remove the message window with its timers first, while the hooks are
     // still installed - its work calls the original functions of the hooks
     g_unloading = true;
     if (g_msgWnd) SendMessageW(g_msgWnd, kMsgCleanup, 0, 0);
