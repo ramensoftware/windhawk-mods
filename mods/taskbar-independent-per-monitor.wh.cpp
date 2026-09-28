@@ -28,7 +28,8 @@ Each taskbar behaves like its own main taskbar.
 
 * Pin/unpin from the jump list applies to that taskbar only.
 * Pin *Properties* can differ per taskbar.
-* Clicking the pin of a running app brings its window to the front.
+* Clicking the pin of a running app brings its window to the front (Shift+click
+  or middle-click starts a new instance).
 
 Requires Windows 11 and *Show my taskbar on all displays*. Tested with *Combine
 taskbar buttons: Never*. Not compatible with *Disable grouping on the taskbar*.
@@ -65,6 +66,8 @@ taskbar buttons: Never*. Not compatible with *Disable grouping on the taskbar*.
 - unassignedPins: primary
   $name: Pinned items without an assigned taskbar
   $name:de-DE: Angeheftete Apps ohne Zuordnung
+  $description: Pinned before the mod was installed, or by Windows or an installer
+  $description:de-DE: Vor der Mod oder von Windows bzw. einem Installer angeheftet
   $options:
   - primary: Primary taskbar only
   - all: All taskbars
@@ -89,8 +92,8 @@ taskbar buttons: Never*. Not compatible with *Disable grouping on the taskbar*.
 - showAppsOnAllTaskbars: true
   $name: Show taskbar apps on all taskbars
   $name:de-DE: Taskleisten-Apps auf allen Taskleisten anzeigen
-  $description: Applied while the mod runs, the Windows setting isn't changed
-  $description:de-DE: Gilt, solange die Mod läuft, die Windows-Einstellung bleibt unverändert
+  $description: Required for separate pinned items per taskbar. Applied while the mod runs, the Windows setting isn't changed. If off, set it to "All taskbars" manually
+  $description:de-DE: Nötig für eigene angeheftete Apps pro Taskleiste. Gilt, solange die Mod läuft, die Windows-Einstellung bleibt unverändert. Wenn aus, von Hand auf „Alle Taskleisten“ stellen
 */
 // ==/WindhawkModSettings==
 
@@ -434,7 +437,7 @@ static void ReleasePending();
 static void SetFakeGroup(void* g);
 static void SetJumpGroup(void* g);
 static LRESULT HandleUnpinOne(const wchar_t* app);
-static bool HandleExtraPin(const wchar_t* app);
+static bool HandleExtraPin(const wchar_t* app, const wchar_t* path);
 extern void* g_fakeGroup;
 extern DWORD g_jumpTick;
 extern std::wstring g_swallowAddKey;
@@ -572,7 +575,7 @@ extern DWORD g_swapHideTick;
 static bool AddBar(void* tl);
 
 static HRESULT TaskCreated_hook(void* self, void* g, void* item) {
-    if (!g_msgWnd && !g_msgWndFailed && OnTrayThread()) EnsureWinEvent();  // taskbar thread only
+    if (!g_unloading && !g_msgWnd && !g_msgWndFailed && OnTrayThread()) EnsureWinEvent();  // taskbar thread only
     if (!AddBar(self)) return TaskCreated_orig(self, g, item);  // unknown layout: don't filter
     if (item && g) {
         if (HWND h = ItemWindow(item)) TrackWindow(h, g);
@@ -1050,7 +1053,7 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         }
         Wh_Log(L"-> Request from the pin list: %lX", (unsigned long)cd->dwData);
         if (cd->dwData == 0x534B5032)  // "SKP2": PinManager wants to pin
-            return (g_fakeGroup && GetTickCount() - g_jumpTick < 10000 && HandleExtraPin(nullptr)) ? 1 : 0;
+            return (g_fakeGroup && GetTickCount() - g_jumpTick < 10000 && HandleExtraPin(nullptr, app.c_str())) ? 1 : 0;
         if (cd->dwData == 0x534B4131) {  // "SKA1": re-append after HandleExtraPin?
             return !g_swallowAddKey.empty() && GetTickCount() - g_swallowAddTick < 3000 && Lower(app) == g_swallowAddKey
                        ? (g_swallowAddKey.clear(), 1) : 0;
@@ -1145,7 +1148,7 @@ static bool OnTrayThread() {
 static HMONITOR GetMonitor_hook(void* self) {
     AddBar(self);
     // Mod loaded late / reloaded: start even without new buttons
-    if (!g_msgWnd && !g_msgWndFailed && OnTrayThread()) EnsureWinEvent();
+    if (!g_unloading && !g_msgWnd && !g_msgWndFailed && OnTrayThread()) EnsureWinEvent();
     return GetMonitor_orig(self);
 }
 
@@ -1528,7 +1531,7 @@ static void RefreshLinkCopies(const std::wstring& orig) {
 using Launch_t = HRESULT (*)(void*, void*, const POINT*, int);
 static Launch_t Launch_orig;
 static HRESULT Launch_hook(void* self, void* g, const POINT* pt, int opt) {
-    // App is running somewhere (also on another monitor or in the tray): bring the window instead of relaunching
+    // App has a visible window: bring it to the front instead of relaunching
     bool wantNew = opt != 0 || (GetAsyncKeyState(VK_SHIFT) & 0x8000) ||
                    (GetAsyncKeyState(VK_MBUTTON) & 0x8000);
     // This taskbar's pin has its own (modified) shortcut -> launch it. If the app has its own
@@ -1696,10 +1699,21 @@ static void SetJumpGroup(void* g) {
 std::wstring g_swallowAddKey;
 DWORD g_swallowAddTick = 0;
 
-static bool HandleExtraPin(const wchar_t* app) {
+static bool SamePinTarget(const std::wstring& path, void* g) {
+    std::wstring link = GroupLinkPath(g);
+    if (link.empty() || !_wcsicmp(path.c_str(), link.c_str())) return true;
+    Target a, b;
+    ResolveTarget(path, a);
+    ResolveTarget(link, b);
+    if (a.exactPath.empty() || b.exactPath.empty()) return true;  // can't tell (e.g. Squirrel apps)
+    return a.exactPath == b.exactPath;
+}
+
+static bool HandleExtraPin(const wchar_t* app, const wchar_t* path) {
     void* g = g_fakeGroup;
     if (!g || GetTickCount() - g_jumpTick > 20000 || !Pinned(g)) return false;
     if (app && *app && _wcsicmp(app, AppOf(g)) != 0) return false;
+    if (path && *path && !SamePinTarget(path, g)) return false;  // another app was pinned
     int mon = MonNumber(g_jumpMon);
     if (mon < 1 || mon > 8) return false;
     unsigned m = MaskOf(g) | (1u << (mon - 1));
@@ -1714,7 +1728,7 @@ static bool HandleExtraPin(const wchar_t* app) {
 
 static LRESULT HandleUnpinOne(const wchar_t* app) {
     if (g_s.pinsEverywhere) return 0;  // pins are global: unpin normally
-    if (HandleExtraPin(app)) return 1;
+    if (HandleExtraPin(app, nullptr)) return 1;
     void* g = g_jumpGroup;
     Wh_Log(L"-> Unpin request app=%ls jump=%.40ls age=%lu ms pinned=%d mask=0x%X mon=%d", app ? app : L"?",
          g ? AppOf(g) : L"-", GetTickCount() - g_jumpTick, g ? Pinned(g) : 0, g ? MaskOf(g) : 0, MonNumber(g_jumpMon));
@@ -2075,7 +2089,9 @@ static HRESULT PinTrusted_hook(void* self, PCIDLIST_ABSOLUTE pidl, int caller) {
     DWORD_PTR r = 0;
     bool extra = false;
     if (w) {
-        COPYDATASTRUCT cd{0x534B5032, sizeof(wchar_t), (PVOID)L""};  // "SKP2"
+        wchar_t path[MAX_PATH] = {};
+        if (pidl) SHGetPathFromIDListW(pidl, path);
+        COPYDATASTRUCT cd{0x534B5032, (DWORD)((wcslen(path) + 1) * sizeof(wchar_t)), path};  // "SKP2"
         extra = SendMessageTimeoutW(w, WM_COPYDATA, 0, (LPARAM)&cd, SMTO_ABORTIFHUNG, 1500, &r) && r == 1;
     }
     Wh_Log(L"-> PinManager: pin (caller %d)%ls", caller, extra ? L" - additional taskbar only" : L"");
