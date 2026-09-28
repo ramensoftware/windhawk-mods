@@ -164,10 +164,16 @@ static BOOL CALLBACK MonEnum(HMONITOR m, HDC, LPRECT r, LPARAM lp) {
 }
 
 // Taskbar number (1..kMaxMon) per physical monitor, kept in "monitorSlots" so that pins stay on
-// their monitor when the layout changes. First run: numbered from left to right.
+// their monitor when the layout changes. First run: numbered from left to right. When all
+// numbers are taken, the monitor that was assigned longest ago and isn't connected gives up its number.
 constexpr int kMaxMon = 32;
+struct MonSlot {
+    int n;
+    unsigned seq;  // assignment order
+};
 static std::mutex g_slotMx;
-static std::map<std::wstring, int> g_slots;
+static std::map<std::wstring, MonSlot> g_slots;
+static unsigned g_slotSeq = 0;
 static bool g_slotsLoaded = false;
 static std::map<HMONITOR, std::pair<RECT, int>> g_slotCache;
 static DWORD g_slotCacheTick = 0;
@@ -182,34 +188,38 @@ static std::wstring MonitorId(HMONITOR m) {
     return Lower(mi.szDevice);
 }
 
+// "id|number|seq;..."
 static void LoadSlots() {
-    std::vector<wchar_t> buf(8192);
+    std::vector<wchar_t> buf(16384);
     Wh_GetStringValue(L"monitorSlots", buf.data(), buf.size());
     std::wstring s = buf.data();
     for (size_t pos = 0; pos < s.size();) {
         size_t end = s.find(L';', pos);
         if (end == std::wstring::npos) end = s.size();
         std::wstring e = s.substr(pos, end - pos);
-        size_t bar = e.rfind(L'|');
-        if (bar != std::wstring::npos) {
-            int n = _wtoi(e.c_str() + bar + 1);
-            if (n >= 1 && n <= kMaxMon) g_slots[e.substr(0, bar)] = n;
-        }
         pos = end + 1;
+        size_t b2 = e.rfind(L'|');
+        if (b2 == std::wstring::npos || b2 == 0) continue;
+        size_t b1 = e.rfind(L'|', b2 - 1);
+        if (b1 == std::wstring::npos) continue;
+        int n = _wtoi(e.c_str() + b1 + 1);
+        unsigned seq = wcstoul(e.c_str() + b2 + 1, nullptr, 10);
+        if (n < 1 || n > kMaxMon) continue;
+        g_slots[e.substr(0, b1)] = {n, seq};
+        g_slotSeq = std::max(g_slotSeq, seq + 1);
     }
 }
 
 static void SaveSlots() {
     std::wstring out;
-    for (auto& [id, n] : g_slots) out += id + L"|" + std::to_wstring(n) + L";";
+    for (auto& [id, s] : g_slots)
+        out += id + L"|" + std::to_wstring(s.n) + L"|" + std::to_wstring(s.seq) + L";";
     Wh_SetStringValue(L"monitorSlots", out.c_str());
 }
 
-static int MonNumber(HMONITOR m) {
-    if (!m) return 0;
-    MONITORINFO mi{.cbSize = sizeof(mi)};
-    if (!GetMonitorInfoW(m, &mi)) return 0;
-    std::lock_guard<std::mutex> l(g_slotMx);
+static void ForgetMonitor(int n);
+
+static int MonNumberLocked(HMONITOR m, const MONITORINFO& mi, std::vector<int>& freed) {
     DWORD now = GetTickCount();
     if (now - g_slotCacheTick > 2000) {
         g_slotCache.clear();
@@ -229,23 +239,48 @@ static int MonNumber(HMONITOR m) {
         std::vector<std::pair<LONG, HMONITOR>> v;
         EnumDisplayMonitors(nullptr, nullptr, MonEnum, (LPARAM)&v);
         std::sort(v.begin(), v.end(), [](auto& a, auto& b) { return a.first < b.first; });
-        std::set<int> used;
-        for (auto& [k, n] : g_slots) used.insert(n);
+        std::set<std::wstring> connected;
+        for (auto& [x, hm] : v) connected.insert(MonitorId(hm));
         for (auto& [x, hm] : v) {  // new monitors get the lowest free numbers, left to right
             std::wstring vid = MonitorId(hm);
             if (vid.empty() || g_slots.count(vid)) continue;
+            std::set<int> used;
+            for (auto& [k, s] : g_slots) used.insert(s.n);
             int n = 1;
             while (n <= kMaxMon && used.count(n)) n++;
-            if (n > kMaxMon) break;
-            g_slots[vid] = n;
-            used.insert(n);
+            if (n > kMaxMon) {
+                auto old = g_slots.end();
+                for (auto i = g_slots.begin(); i != g_slots.end(); ++i) {
+                    if (!connected.count(i->first) && (old == g_slots.end() || i->second.seq < old->second.seq))
+                        old = i;
+                }
+                if (old == g_slots.end()) break;
+                n = old->second.n;
+                g_slots.erase(old);
+                freed.push_back(n);
+            }
+            g_slots[vid] = {n, g_slotSeq++};
         }
         SaveSlots();
         it = g_slots.find(id);
         if (it == g_slots.end()) return 0;
     }
-    g_slotCache[m] = {mi.rcMonitor, it->second};
-    return it->second;
+    g_slotCache[m] = {mi.rcMonitor, it->second.n};
+    return it->second.n;
+}
+
+static int MonNumber(HMONITOR m) {
+    if (!m) return 0;
+    MONITORINFO mi{.cbSize = sizeof(mi)};
+    if (!GetMonitorInfoW(m, &mi)) return 0;
+    std::vector<int> freed;
+    int n;
+    {
+        std::lock_guard<std::mutex> l(g_slotMx);
+        n = MonNumberLocked(m, mi, freed);
+    }
+    for (int f : freed) ForgetMonitor(f);
+    return n;
 }
 
 static bool MonIsPrimary(HMONITOR m) {
@@ -1526,6 +1561,26 @@ static std::wstring BarLinkDir(int mon) {
     return g_linkRoot + d;
 }
 
+// A number that goes to a new monitor: drop the old monitor's pins and shortcut copies
+static void ForgetMonitor(int n) {
+    auto rules = LoadPinRules();
+    for (auto& [key, mask] : rules) mask &= ~(1u << (n - 1));
+    std::erase_if(rules, [](auto& kv) { return kv.second == 0; });
+    SavePinRules(rules);
+    LoadRules();
+    std::wstring dir = BarLinkDir(n);
+    if (!dir.empty()) {
+        WIN32_FIND_DATAW fd;
+        HANDLE h = FindFirstFileW((dir + L"\\*.lnk").c_str(), &fd);
+        if (h != INVALID_HANDLE_VALUE) {
+            do DeleteFileW((dir + L"\\" + fd.cFileName).c_str()); while (FindNextFileW(h, &fd));
+            FindClose(h);
+        }
+        RemoveDirectoryW(dir.c_str());
+    }
+    Wh_Log(L"-> Taskbar number %d reused for a new monitor", n);
+}
+
 static void InitLinkRoot() {
     wchar_t b[MAX_PATH] = {};
     if (!Wh_GetModStoragePath(b, MAX_PATH) || !*b) return;
@@ -2267,9 +2322,9 @@ BOOL Wh_ModInit() {
          (void**)&IsAllowed_orig, (void*)IsAllowed_hook},
         {{L"public: virtual long __cdecl CTaskBand::Launch(struct ITaskGroup *,struct tagPOINT const &,enum LaunchFromTaskbarOptions)"},
          (void**)&Launch_orig, (void*)Launch_hook},
-        // optional
         {{L"protected: void __cdecl CTaskBand::_HandleMonitorChanged(struct HWND__ *)"},
-         (void**)&MonChanged_orig, (void*)MonChanged_hook, true},
+         (void**)&MonChanged_orig, (void*)MonChanged_hook},
+        // optional
         {{L"public: virtual struct HWND__ * __cdecl CWindowTaskItem::GetWindow(void)"},
          (void**)&pItemGetWindow, nullptr, true},
         {{L"const CWindowTaskItem::`vftable'{for `ITaskItem'}",
