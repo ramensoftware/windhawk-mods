@@ -14,6 +14,7 @@
 // ==WindhawkModReadme==
 /*
 # TopBar For Windhawk
+## Note: 
 ### Settings for this mod were shifted to a separate settings app. It can be accessed either by settings icon in the topbar, OR from the context menus. 
 ![TopBar screenshot](https://i.imgur.com/BgmSodU.png)
 ![Flyouts screenshot](https://i.imgur.com/KWm5pwX.jpeg)
