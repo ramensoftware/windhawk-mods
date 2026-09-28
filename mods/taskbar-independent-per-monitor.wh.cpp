@@ -1713,7 +1713,10 @@ static bool HandleExtraPin(const wchar_t* app, const wchar_t* path) {
     void* g = g_fakeGroup;
     if (!g || GetTickCount() - g_jumpTick > 20000 || !Pinned(g)) return false;
     if (app && *app && _wcsicmp(app, AppOf(g)) != 0) return false;
-    if (path && *path && !SamePinTarget(path, g)) return false;  // another app was pinned
+    if (path && *path && !SamePinTarget(path, g)) {  // another app was pinned
+        SetFakeGroup(nullptr);
+        return false;
+    }
     int mon = MonNumber(g_jumpMon);
     if (mon < 1 || mon > 8) return false;
     unsigned m = MaskOf(g) | (1u << (mon - 1));
