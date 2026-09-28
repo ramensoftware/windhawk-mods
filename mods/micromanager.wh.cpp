@@ -2,12 +2,12 @@
 // @id              micromanager
 // @name            MicroManager
 // @description     Mini task manager tray icon showing CPU, GPU and RAM usage with top consumers.
-// @version         1.1.0
+// @version         1.2.0
 // @author          BlackPaw
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
 // @include         windhawk.exe
-// @compilerOptions -lpdh -lshell32 -lgdi32 -luser32 -lole32 -luuid -ladvapi32 -ldwmapi
+// @compilerOptions -lpdh -lshell32 -lgdi32 -luser32 -lole32 -luuid -ladvapi32 -ldwmapi -ffp-exception-behavior=maytrap
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -35,6 +35,16 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 
 ## Changelog
 
+# 1.2.0
+- **Live Activity Graphs:** Added a 16-sample history graph to the popup. Click any row or the graph canvas to cycle between live CPU, GPU, and RAM trends.
+- **Process Tree Termination:** "End Task" now terminates the entire process tree, cleanly closing multi-process apps (Firefox, Chrome, Electron) without leaving orphaned crashed tabs.
+- **Open File Location:** Added a quick action to reveal and select the top consumer's executable in File Explorer.
+- **Safety & Identity Protection:** Confirms termination targets, validates process creation times against PID reuse, and blocks critical Windows system processes.
+- **High-Contrast Readability:** Pure white text across popup labels, graph titles, and context menus for excellent readability with dark and custom themes.
+- **Top Taskbar Placement:** Automatically detects top-aligned taskbars and flips the popup below the tray icon so it never renders off-screen.
+- **System Process Display:** Correctly identifies and labels "System Idle Process" and the NT Kernel (PID 4) when they consume resources.
+- **Tray & Navigation Fixes:** Fixed popup flicker on rapid tray clicks, added keyboard navigation (Up / Down / Esc), and improved reload stability.
+
 # 1.1.0
 - **Fixed:** Tooltip now displays correctly when hovering the tray icon.
 - **Fixed:** Ghost window prevention — popup no longer flickers on rapid open/close.
@@ -52,13 +62,17 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 
 #define NOMINMAX
 #include <windows.h>
+#include <tlhelp32.h>
 #include <shellapi.h>
 #include <shobjidl.h>
+#include <shlobj.h>
 #include <propkey.h>
 #include <dwmapi.h>
 #include <pdh.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <vector>
+#include <algorithm>
 // PDH constants that may not be defined in all SDK versions
 #ifndef PDH_MORE_DATA
 #define PDH_MORE_DATA ((PDH_STATUS)0x800007D2L)
@@ -86,9 +100,16 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 #define WM_TRAY_CALLBACK    (WM_USER + 1)
 #define WM_TIMER_ID         1
 
+#ifndef NIN_SELECT
+#define NIN_SELECT          (WM_USER + 0)
+#endif
+#ifndef NIN_KEYSELECT
+#define NIN_KEYSELECT       (WM_USER + 1)
+#endif
+
 // Base (96-DPI) popup geometry — scaled at runtime via Sc().
 #define POPUP_WIDTH         360
-#define POPUP_HEIGHT        112
+#define POPUP_HEIGHT        164
 #define POPUP_ROWS          3
 
 #define MAX_PROCESSES       1024
@@ -99,6 +120,11 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 #define GPU_RETRY_TICKS     30
 
 #define MENU_OPEN_WINDHAWK   9000
+#define MENU_GRAPH_CPU       9001
+#define MENU_GRAPH_GPU       9002
+#define MENU_GRAPH_RAM       9003
+#define MENU_PROC_END        9200
+#define MENU_PROC_LOCATION   9201
 #define MENU_INTERVAL_300MS  9100
 #define MENU_INTERVAL_500MS  9101
 #define MENU_INTERVAL_1S     9102
@@ -168,6 +194,7 @@ static HANDLE              g_trayThread   = nullptr;
 static HWND       g_trayHwnd     = nullptr;
 static HWND                g_popupHwnd    = nullptr;
 static ULONGLONG           g_lastPopupCloseTime = 0;
+static ULONGLONG           g_lastPopupOpenTime  = 0;
 static HINSTANCE           g_hInstance    = nullptr;
 static WCHAR               g_windhawkPath[MAX_PATH] = {};
 static WCHAR               g_ddoresDllPath[MAX_PATH] = {};
@@ -186,6 +213,21 @@ static WCHAR               g_topGpuName[64] = {};
 static int                 g_totalRam     = -1;
 static int                 g_topRamPct    = 0;
 static WCHAR               g_topRamName[64] = {};
+struct ProcessTarget { DWORD pid = 0; LONGLONG created = 0; WCHAR name[64] = {}; };
+static ProcessTarget g_topCpuTarget, g_topGpuTarget, g_topRamTarget;
+static int g_actionRow = 0; // Row selected in popup (0: CPU, 1: GPU, 2: RAM)
+// The popup keeps short histories for CPU, GPU, and RAM. -1 is a failed read.
+static int g_graphMetric = 0;  // 0: CPU, 1: GPU, 2: RAM
+static int g_graphSamples[POPUP_ROWS][16] = {};
+static int g_graphCount[POPUP_ROWS] = {};
+static int g_graphNext[POPUP_ROWS] = {};
+
+static void AppendGraphSample(int metric, int value) {
+    if (metric < 0 || metric >= POPUP_ROWS) return;
+    g_graphSamples[metric][g_graphNext[metric]] = value;
+    g_graphNext[metric] = (g_graphNext[metric] + 1) % 16;
+    if (g_graphCount[metric] < 16) g_graphCount[metric]++;
+}
 
 // GPU PDH handles
 static PDH_HQUERY          g_gpuQuery     = nullptr;
@@ -205,6 +247,7 @@ static FILETIME            g_prevKernel   = {};
 static FILETIME            g_prevUser     = {};
 static struct {
     DWORD  pid;
+    LONGLONG created;
     LONGLONG time;
     WCHAR  name[64];
 } g_prevProcs[MAX_PROCESSES], g_curProcs[MAX_PROCESSES];
@@ -272,6 +315,23 @@ static int CollectProcessInfo(MY_SYSTEM_PROCESS_INFO** outBuf) {
     return 0;
 }
 
+// Helper to retrieve display name for a process, gracefully handling Idle and System PIDs
+static void GetProcessDisplayName(MY_SYSTEM_PROCESS_INFO* p, WCHAR* outBuf, size_t maxLen) {
+    if (p->ImageName.Buffer && p->ImageName.Length > 0) {
+        wcsncpy_s(outBuf, maxLen, p->ImageName.Buffer,
+            MIN(p->ImageName.Length / sizeof(WCHAR), maxLen - 1));
+        outBuf[maxLen - 1] = L'\0';
+    } else {
+        DWORD pid = (DWORD)(ULONG_PTR)p->UniqueProcessId;
+        if (pid == 0)
+            wcscpy_s(outBuf, maxLen, L"System Idle Process");
+        else if (pid == 4)
+            wcscpy_s(outBuf, maxLen, L"System");
+        else
+            swprintf_s(outBuf, maxLen, L"PID %u", pid);
+    }
+}
+
 // ─── GPU Sampling (PDH) ───────────────────────────────────────────────────────
 
 static void InitGpuQuery() {
@@ -300,10 +360,11 @@ static void InitGpuQuery() {
     PdhCollectQueryData(g_gpuQuery);
 }
 
-static void CollectGpuStats(int* outTotal, int* outTopPct, WCHAR* outTopName, int nameLen) {
+static void CollectGpuStats(int* outTotal, int* outTopPct, WCHAR* outTopName, int nameLen, ProcessTarget* outTopTarget = nullptr) {
     *outTotal = -1;
     *outTopPct = 0;
     outTopName[0] = L'\0';
+    if (outTopTarget) *outTopTarget = {};
 
     // Lazy init with bounded retry (no permanent "GPU disabled" latch).
     if (!g_gpuQuery) {
@@ -371,11 +432,36 @@ static void CollectGpuStats(int* outTotal, int* outTopPct, WCHAR* outTopName, in
     if (topVal > 100.0) topVal = 100.0;
     if (topIdx >= 0) {
         *outTopPct = (int)(topVal + 0.5);
+        DWORD topPid = g_gpuProcs[topIdx].pid;
+        if (outTopTarget) outTopTarget->pid = topPid;
 
         for (int i = 0; i < g_prevProcCount; i++) {
-            if (g_prevProcs[i].pid == g_gpuProcs[topIdx].pid) {
+            if (g_prevProcs[i].pid == topPid) {
                 wcscpy_s(outTopName, nameLen, g_prevProcs[i].name);
+                if (outTopTarget) {
+                    outTopTarget->created = g_prevProcs[i].created;
+                    wcscpy_s(outTopTarget->name, g_prevProcs[i].name);
+                }
                 break;
+            }
+        }
+        if (outTopName[0] == L'\0') {
+            swprintf_s(outTopName, nameLen, L"PID %u", topPid);
+            if (outTopTarget) {
+                wcscpy_s(outTopTarget->name, outTopName);
+            }
+        }
+        if (outTopTarget && outTopTarget->created == 0 && topPid != 0) {
+            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, topPid);
+            if (hProc) {
+                FILETIME ct, et, kt, ut;
+                if (GetProcessTimes(hProc, &ct, &et, &kt, &ut)) {
+                    ULARGE_INTEGER stamp;
+                    stamp.LowPart = ct.dwLowDateTime;
+                    stamp.HighPart = ct.dwHighDateTime;
+                    outTopTarget->created = (LONGLONG)stamp.QuadPart;
+                }
+                CloseHandle(hProc);
             }
         }
     }
@@ -384,6 +470,9 @@ static void CollectGpuStats(int* outTotal, int* outTopPct, WCHAR* outTopName, in
 // ─── Data Refresh ─────────────────────────────────────────────────────────────
 
 static void RefreshData() {
+    g_topCpuTarget = {};
+    g_topGpuTarget = {};
+    g_topRamTarget = {};
     int newTotalCpu = -1, newTopCpuPct = 0;
     WCHAR newTopCpuName[64] = {};
     int newTotalGpu = -1, newTopGpuPct = 0;
@@ -396,8 +485,8 @@ static void RefreshData() {
     if (GlobalMemoryStatusEx(&mem)) newTotalRam = (int)mem.dwMemoryLoad;
 
     // Collect CPU
-    FILETIME nowIdle, nowKernel, nowUser;
-    GetSystemTimes(&nowIdle, &nowKernel, &nowUser);
+    FILETIME nowIdle = {}, nowKernel = {}, nowUser = {};
+    BOOL systemTimesValid = GetSystemTimes(&nowIdle, &nowKernel, &nowUser);
 
     ULARGE_INTEGER ui, uk, uu, pi, pk, pu;
     ui.LowPart = nowIdle.dwLowDateTime;     ui.HighPart = nowIdle.dwHighDateTime;
@@ -410,7 +499,9 @@ static void RefreshData() {
     double totalDelta = (double)(uk.QuadPart - pk.QuadPart) + (double)(uu.QuadPart - pu.QuadPart);
     double idleDelta = (double)(ui.QuadPart - pi.QuadPart);
 
-    if (g_hasPrevSample && totalDelta > 0) {
+    if (systemTimesValid && g_hasPrevSample &&
+        uk.QuadPart >= pk.QuadPart && uu.QuadPart >= pu.QuadPart &&
+        ui.QuadPart >= pi.QuadPart && totalDelta > 0 && idleDelta <= totalDelta) {
         newTotalCpu = (int)(100.0 - 100.0 * idleDelta / totalDelta + 0.5);
 
         MY_SYSTEM_PROCESS_INFO* buf = nullptr;
@@ -418,17 +509,20 @@ static void RefreshData() {
             MY_SYSTEM_PROCESS_INFO* p = buf;
             LONGLONG bestTime = 0;
             WCHAR bestCpuName[64] = {};
+            ProcessTarget bestCpuTarget;
             ULONGLONG bestWs = 0;
             WCHAR bestRamName[64] = {};
+            ProcessTarget bestRamTarget;
             int count = 0;
 
             while (true) {
+                DWORD pid = (DWORD)(ULONG_PTR)p->UniqueProcessId;
                 LONGLONG curTime = p->KernelTime.QuadPart + p->UserTime.QuadPart;
 
                 LONGLONG prevTime = 0;
                 BOOL foundInPrev = FALSE;
                 for (int i = 0; i < g_prevProcCount; i++) {
-                    if (g_prevProcs[i].pid == (DWORD)(ULONG_PTR)p->UniqueProcessId) {
+                    if (g_prevProcs[i].pid == pid && g_prevProcs[i].created == p->CreateTime.QuadPart) {
                         prevTime = g_prevProcs[i].time;
                         foundInPrev = TRUE;
                         break;
@@ -436,32 +530,30 @@ static void RefreshData() {
                 }
                 // Only count delta for processes seen last tick; new/overflow processes
                 // would otherwise show their entire boot-time CPU as a single-tick spike.
-                LONGLONG delta = foundInPrev ? (curTime - prevTime) : 0;
-                if (delta > bestTime && p->ImageName.Buffer) {
+                // Also skip System Idle Process (PID 0) so idle CPU is not treated as consumer.
+                LONGLONG delta = (foundInPrev && pid != 0 && curTime >= prevTime) ? (curTime - prevTime) : 0;
+                if (delta > bestTime) {
                     bestTime = delta;
-                    wcsncpy_s(bestCpuName, p->ImageName.Buffer,
-                        MIN(p->ImageName.Length / sizeof(WCHAR), 63));
-                    bestCpuName[63] = L'\0';
+                    GetProcessDisplayName(p, bestCpuName, 64);
+                    bestCpuTarget.pid = pid;
+                    bestCpuTarget.created = p->CreateTime.QuadPart;
+                    wcscpy_s(bestCpuTarget.name, bestCpuName);
                 }
 
-                // Top RAM consumer by working set (absolute — no prior sample needed).
-                if (p->ImageName.Buffer && (ULONGLONG)p->WorkingSetSize > bestWs) {
+                // Top RAM consumer by working set (absolute — skip PID 0).
+                if (pid != 0 && (ULONGLONG)p->WorkingSetSize > bestWs) {
                     bestWs = (ULONGLONG)p->WorkingSetSize;
-                    wcsncpy_s(bestRamName, p->ImageName.Buffer,
-                        MIN(p->ImageName.Length / sizeof(WCHAR), 63));
-                    bestRamName[63] = L'\0';
+                    GetProcessDisplayName(p, bestRamName, 64);
+                    bestRamTarget.pid = pid;
+                    bestRamTarget.created = p->CreateTime.QuadPart;
+                    wcscpy_s(bestRamTarget.name, bestRamName);
                 }
 
                 if (count < MAX_PROCESSES) {
-                    g_curProcs[count].pid = (DWORD)(ULONG_PTR)p->UniqueProcessId;
+                    g_curProcs[count].pid = pid;
+                    g_curProcs[count].created = p->CreateTime.QuadPart;
                     g_curProcs[count].time = curTime;
-                    if (p->ImageName.Buffer) {
-                        wcsncpy_s(g_curProcs[count].name, p->ImageName.Buffer,
-                            MIN(p->ImageName.Length / sizeof(WCHAR), 63));
-                        g_curProcs[count].name[63] = L'\0';
-                    } else {
-                        g_curProcs[count].name[0] = L'\0';
-                    }
+                    GetProcessDisplayName(p, g_curProcs[count].name, 64);
                     count++;
                 }
 
@@ -476,23 +568,30 @@ static void RefreshData() {
                 if (pct >= 0.5) {
                     newTopCpuPct = (int)(pct + 0.5);
                     wcscpy_s(newTopCpuName, bestCpuName);
+                    g_topCpuTarget = bestCpuTarget;
                 }
             }
 
             if (bestWs > 0 && g_totalPhys > 0) {
                 int pct = (int)((bestWs * 100ULL) / g_totalPhys);
                 newTopRamPct = pct < 1 ? 1 : pct;  // the top consumer is always shown
-                wcscpy_s(newTopRamName, bestRamName);
+            wcscpy_s(newTopRamName, bestRamName);
+            g_topRamTarget = bestRamTarget;
             }
 
             free(buf);
         }
     }
 
-    g_prevIdle = nowIdle; g_prevKernel = nowKernel; g_prevUser = nowUser;
-    g_hasPrevSample = TRUE;
+    if (systemTimesValid) {
+        g_prevIdle = nowIdle; g_prevKernel = nowKernel; g_prevUser = nowUser;
+        g_hasPrevSample = TRUE;
+    } else {
+        g_hasPrevSample = FALSE;
+    }
 
-    CollectGpuStats(&newTotalGpu, &newTopGpuPct, newTopGpuName, 64);
+    ProcessTarget newTopGpuTarget = {};
+    CollectGpuStats(&newTotalGpu, &newTopGpuPct, newTopGpuName, 64, &newTopGpuTarget);
 
     g_totalCpu = newTotalCpu;
     g_topCpuPct = newTopCpuPct;
@@ -500,9 +599,13 @@ static void RefreshData() {
     g_totalGpu = newTotalGpu;
     g_topGpuPct = newTopGpuPct;
     wcscpy_s(g_topGpuName, newTopGpuName);
+    g_topGpuTarget = newTopGpuTarget;
     g_totalRam = newTotalRam;
     g_topRamPct = newTopRamPct;
     wcscpy_s(g_topRamName, newTopRamName);
+    AppendGraphSample(0, newTotalCpu);
+    AppendGraphSample(1, newTotalGpu);
+    AppendGraphSample(2, newTotalRam);
 
     if (g_popupHwnd && IsWindowVisible(g_popupHwnd)) {
         InvalidateRect(g_popupHwnd, nullptr, TRUE);
@@ -524,12 +627,207 @@ static void RefreshData() {
             nid.uFlags   = NIF_TIP | NIF_GUID | NIF_SHOWTIP;
             nid.guidItem = MICROMANAGER_TRAY_GUID;
             lstrcpynW(nid.szTip, tip, 128);
-            Shell_NotifyIconW(NIM_MODIFY, &nid);
+            if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
+                g_lastTip[0] = L'\0';
+            }
         }
     }
 }
 
 // ─── Popup Window Procedure ───────────────────────────────────────────────────
+
+static HANDLE OpenSampledProcess(const ProcessTarget& target, DWORD rights) {
+    if (!target.pid || !target.created || target.pid == GetCurrentProcessId()) return nullptr;
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | rights, FALSE, target.pid);
+    if (!process) return nullptr;
+    FILETIME created, exited, kernel, user;
+    ULARGE_INTEGER stamp;
+    if (!GetProcessTimes(process, &created, &exited, &kernel, &user)) {
+        CloseHandle(process);
+        return nullptr;
+    }
+    stamp.LowPart = created.dwLowDateTime;
+    stamp.HighPart = created.dwHighDateTime;
+    if (stamp.QuadPart != (ULONGLONG)target.created ||
+        WaitForSingleObject(process, 0) != WAIT_TIMEOUT) {
+        CloseHandle(process);
+        return nullptr;
+    }
+    return process;
+}
+
+static bool IsProtectedProcess(HANDLE process) {
+    BOOL critical = FALSE;
+    if (!IsProcessCritical(process, &critical) || critical) return true;
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(process, TOKEN_QUERY, &token)) return true;
+    BYTE storage[512];
+    DWORD needed = 0;
+    bool protectedAccount = true;
+    if (GetTokenInformation(token, TokenUser, storage, sizeof(storage), &needed)) {
+        PSID sid = reinterpret_cast<TOKEN_USER*>(storage)->User.Sid;
+        protectedAccount = IsWellKnownSid(sid, WinLocalSystemSid) ||
+            IsWellKnownSid(sid, WinLocalServiceSid) ||
+            IsWellKnownSid(sid, WinNetworkServiceSid);
+    }
+    CloseHandle(token);
+    return protectedAccount;
+}
+
+static bool IsProtectedPid(DWORD pid) {
+    if (pid == 0 || pid == 4 || pid == GetCurrentProcessId()) return true;
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!h) return true;
+    bool prot = IsProtectedProcess(h);
+    if (!prot && g_windhawkPath[0] != L'\0') {
+        WCHAR path[MAX_PATH];
+        DWORD len = ARRAYSIZE(path);
+        if (QueryFullProcessImageNameW(h, 0, path, &len)) {
+            if (_wcsicmp(path, g_windhawkPath) == 0) {
+                prot = true;
+            }
+        }
+    }
+    CloseHandle(h);
+    return prot;
+}
+
+static void TerminateProcessTree(HANDLE retainedHandle, DWORD targetPid, PCWSTR targetName) {
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) {
+        if (!IsProtectedProcess(retainedHandle)) {
+            TerminateProcess(retainedHandle, 1);
+        }
+        return;
+    }
+
+    struct ProcItem {
+        DWORD pid;
+        DWORD parentPid;
+        WCHAR name[MAX_PATH];
+    };
+    std::vector<ProcItem> allProcs;
+    PROCESSENTRY32W pe = { sizeof(pe) };
+    if (Process32FirstW(snap, &pe)) {
+        do {
+            ProcItem item;
+            item.pid = pe.th32ProcessID;
+            item.parentPid = pe.th32ParentProcessID;
+            wcscpy_s(item.name, pe.szExeFile);
+            allProcs.push_back(item);
+        } while (Process32NextW(snap, &pe));
+    }
+    CloseHandle(snap);
+
+    // 1. Walk up the parent chain if parent shares the same executable name
+    DWORD rootPid = targetPid;
+    bool movedUp = true;
+    while (movedUp) {
+        movedUp = false;
+        for (const auto& item : allProcs) {
+            if (item.pid == rootPid && item.parentPid != 0 && item.parentPid != rootPid) {
+                for (const auto& parent : allProcs) {
+                    if (parent.pid == item.parentPid && _wcsicmp(parent.name, targetName) == 0) {
+                        rootPid = parent.pid;
+                        movedUp = true;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+    }
+
+    // 2. Collect all descendant PIDs under rootPid
+    std::vector<DWORD> treePids;
+    treePids.push_back(rootPid);
+    bool added = true;
+    while (added) {
+        added = false;
+        for (const auto& item : allProcs) {
+            if (item.pid == 0 || item.pid == 4 || item.pid == GetCurrentProcessId()) continue;
+            bool parentIn = (std::find(treePids.begin(), treePids.end(), item.parentPid) != treePids.end());
+            bool alreadyIn = (std::find(treePids.begin(), treePids.end(), item.pid) != treePids.end());
+            if (parentIn && !alreadyIn) {
+                treePids.push_back(item.pid);
+                added = true;
+            }
+        }
+    }
+    if (std::find(treePids.begin(), treePids.end(), targetPid) == treePids.end()) {
+        treePids.push_back(targetPid);
+    }
+
+    // 3. Terminate bottom-up (descendants first, root last)
+    for (auto it = treePids.rbegin(); it != treePids.rend(); ++it) {
+        DWORD pid = *it;
+        if (pid == 0 || pid == 4 || pid == GetCurrentProcessId()) continue;
+        if (pid == targetPid) {
+            if (!IsProtectedProcess(retainedHandle)) {
+                TerminateProcess(retainedHandle, 1);
+            }
+            continue;
+        }
+        if (IsProtectedPid(pid)) continue;
+        HANDLE hChild = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid);
+        if (hChild) {
+            TerminateProcess(hChild, 1);
+            WaitForSingleObject(hChild, 500);
+            CloseHandle(hChild);
+        }
+    }
+}
+
+static void RunProcessAction(HWND popup, const ProcessTarget& target, UINT action) {
+    DWORD rights = action == MENU_PROC_END ? PROCESS_TERMINATE | SYNCHRONIZE : SYNCHRONIZE;
+    HANDLE process = OpenSampledProcess(target, rights);
+    if (!process) {
+        MessageBoxW(popup, L"The selected process has exited, changed identity, or denied access.",
+                    L"MicroManager", MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    if (action == MENU_PROC_END) {
+        if (IsProtectedProcess(process)) {
+            MessageBoxW(popup, L"This process is protected or its protection status is unavailable.",
+                        L"MicroManager", MB_OK | MB_ICONWARNING);
+        } else {
+            WCHAR prompt[256];
+            swprintf_s(prompt, L"End %s (PID %lu) and its process tree? Unsaved work may be lost.", target.name, target.pid);
+            if (MessageBoxW(popup, prompt, L"Confirm End Task", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) == IDYES &&
+                WaitForSingleObject(process, 0) == WAIT_TIMEOUT) {
+                TerminateProcessTree(process, target.pid, target.name);
+            }
+        }
+    } else if (action == MENU_PROC_LOCATION) {
+        WCHAR path[32768];
+        DWORD length = ARRAYSIZE(path);
+        PIDLIST_ABSOLUTE item = nullptr;
+        if (!QueryFullProcessImageNameW(process, 0, path, &length) ||
+            FAILED(SHParseDisplayName(path, nullptr, &item, 0, nullptr)) || !item ||
+            FAILED(SHOpenFolderAndSelectItems(item, 0, nullptr, 0)))
+            MessageBoxW(popup, L"The executable location is unavailable.", L"MicroManager", MB_OK | MB_ICONINFORMATION);
+        if (item) CoTaskMemFree(item);
+    }
+    CloseHandle(process);
+}
+
+static void ShowProcessMenu(HWND popup, int row, POINT point) {
+    const ProcessTarget target = (row == 2) ? g_topRamTarget : (row == 1) ? g_topGpuTarget : g_topCpuTarget;
+    if (!target.pid || !target.created) return;
+    HMENU menu = CreatePopupMenu();
+    if (!menu) return;
+    WCHAR heading[128];
+    swprintf_s(heading, L"%s (PID %lu)", target.name, target.pid);
+    AppendMenuW(menu, MF_STRING, 0, heading);
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, MENU_PROC_END, L"End Task...");
+    AppendMenuW(menu, MF_STRING, MENU_PROC_LOCATION, L"Open file location");
+    SetForegroundWindow(popup);
+    UINT action = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, point.x, point.y, 0, popup, nullptr);
+    PostMessageW(popup, WM_NULL, 0, 0);
+    DestroyMenu(menu);
+    if (action) RunProcessAction(popup, target, action);
+}
 
 static LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -577,15 +875,21 @@ static LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
 
             SetBkMode(hdc, TRANSPARENT);
             EnsureFont();
-            SelectObject(hdc, g_hPopupFont);
+            HFONT oldFont = (HFONT)SelectObject(hdc, g_hPopupFont);
 
             for (int row = 0; row < POPUP_ROWS; row++) {
                 int y = Sc(12) + row * Sc(32);
+                if (row == g_actionRow) {
+                    RECT selected = {Sc(8), y - Sc(3), rc.right - Sc(8), y + Sc(26)};
+                    HBRUSH outline = CreateSolidBrush(RGB(78, 100, 120));
+                    FrameRect(hdc, &selected, outline);
+                    DeleteObject(outline);
+                }
                 int totalVal = totals[row];
                 int topPctVal = topPcts[row];
                 PCWSTR topName = topNames[row];
 
-                SetTextColor(hdc, RGB(140, 140, 140));
+                SetTextColor(hdc, RGB(255, 255, 255));
                 WCHAR labelBuf[16];
                 swprintf_s(labelBuf, L"%s:", kLabels[row]);
                 TextOutW(hdc, Sc(12), y, labelBuf, (int)wcslen(labelBuf));
@@ -598,7 +902,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                     swprintf_s(totalBuf, L"%d%%", totalVal);
                 TextOutW(hdc, Sc(60), y, totalBuf, (int)wcslen(totalBuf));
 
-                SetTextColor(hdc, RGB(220, 220, 220));
+                SetTextColor(hdc, RGB(255, 255, 255));
                 if (topName[0] != L'\0' && topPctVal > 0) {
                     WCHAR lineBuf[256];
                     swprintf_s(lineBuf, L"%s  %d%%", topName, topPctVal);
@@ -611,18 +915,93 @@ static LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 }
             }
 
+            static const PCWSTR kGraphLabels[POPUP_ROWS] = { L"CPU history", L"GPU history", L"RAM history" };
+            PCWSTR graphLabel = (g_graphMetric >= 0 && g_graphMetric < POPUP_ROWS) ? kGraphLabels[g_graphMetric] : L"";
+            SetTextColor(hdc, RGB(255, 255, 255));
+            TextOutW(hdc, Sc(12), Sc(118), graphLabel, (int)wcslen(graphLabel));
+            const int graphX = Sc(110), graphY = Sc(112);
+            const int graphWidth = Sc(235), graphHeight = Sc(40);
+            HBRUSH graphBg = CreateSolidBrush(RGB(44, 44, 44));
+            RECT graphRect = {graphX, graphY, graphX + graphWidth, graphY + graphHeight};
+            FillRect(hdc, &graphRect, graphBg);
+            DeleteObject(graphBg);
+            COLORREF barColor = (g_graphMetric >= 0 && g_graphMetric < POPUP_ROWS) ? kTotalColors[g_graphMetric] : RGB(0, 200, 255);
+            HBRUSH barBrush = CreateSolidBrush(barColor);
+            int m = g_graphMetric;
+            if (m >= 0 && m < POPUP_ROWS) {
+                int count = g_graphCount[m];
+                int next = g_graphNext[m];
+                for (int i = 0; i < count; i++) {
+                    int value = g_graphSamples[m][(next + 16 - count + i) % 16];
+                    if (value < 0) continue;  // failed reads remain visible gaps
+                    int x1 = graphX + i * graphWidth / 16;
+                    int x2 = graphX + (i + 1) * graphWidth / 16 - Sc(2);
+                    int height = std::max(1, std::min(100, value) * graphHeight / 100);
+                    RECT bar = {x1, graphY + graphHeight - height, x2, graphY + graphHeight};
+                    FillRect(hdc, &bar, barBrush);
+                }
+            }
+            DeleteObject(barBrush);
+
+            SelectObject(hdc, oldFont);
             EndPaint(hWnd, &ps);
             return 0;
         }
 
         case WM_NCHITTEST: {
-            LRESULT hit = DefWindowProcW(hWnd, msg, wParam, lParam);
-            if (hit == HTCLIENT) return HTCAPTION;
-            return hit;
+            return DefWindowProcW(hWnd, msg, wParam, lParam);
+        }
+
+        case WM_LBUTTONDOWN: {
+            int y = (short)HIWORD(lParam);
+            if (y < Sc(12)) return 0;
+            int row = (y - Sc(12)) / Sc(32);
+            if (row >= 0 && row < POPUP_ROWS) {
+                g_actionRow = row;
+                g_graphMetric = row;
+                InvalidateRect(hWnd, nullptr, FALSE);
+            } else if (y >= Sc(110) && y <= Sc(155)) {
+                g_graphMetric = (g_graphMetric + 1) % POPUP_ROWS;
+                g_actionRow = g_graphMetric;
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            return 0;
+        }
+
+        case WM_CONTEXTMENU: {
+            POINT point = {(short)LOWORD(lParam), (short)HIWORD(lParam)};
+            int row = g_actionRow;
+            if (lParam == -1) {
+                RECT rect; GetWindowRect(hWnd, &rect);
+                point.x = rect.left + Sc(160);
+                point.y = rect.top + Sc(12 + row * 32);
+            } else {
+                POINT client = point; ScreenToClient(hWnd, &client);
+                if (client.y < Sc(12)) return 0;
+                int hit = (client.y - Sc(12)) / Sc(32);
+                if (hit < 0 || hit >= POPUP_ROWS) return 0;
+                row = hit;
+            }
+            g_actionRow = row;
+            g_graphMetric = row;
+            InvalidateRect(hWnd, nullptr, FALSE);
+            ShowProcessMenu(hWnd, row, point);
+            return 0;
         }
 
         case WM_KEYDOWN:
             if (wParam == VK_ESCAPE) ShowWindow(hWnd, SW_HIDE);
+            if (wParam == VK_UP) {
+                g_actionRow = (g_actionRow + POPUP_ROWS - 1) % POPUP_ROWS;
+                g_graphMetric = g_actionRow;
+                InvalidateRect(hWnd, nullptr, FALSE);
+            } else if (wParam == VK_DOWN) {
+                g_actionRow = (g_actionRow + 1) % POPUP_ROWS;
+                g_graphMetric = g_actionRow;
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            if (wParam == VK_APPS || (wParam == VK_F10 && (GetKeyState(VK_SHIFT) & 0x8000)))
+                SendMessageW(hWnd, WM_CONTEXTMENU, (WPARAM)hWnd, -1);
             break;
 
         case WM_DESTROY:
@@ -670,11 +1049,12 @@ static void ShowPopup(HWND hTrayWnd) {
     nii.hWnd = nullptr;
     nii.uID = 0;
     nii.guidItem = MICROMANAGER_TRAY_GUID;  // icon is registered with NIF_GUID
-    RECT iconRect;
+    RECT iconRect = {};
     int w = Sc(POPUP_WIDTH), h = Sc(POPUP_HEIGHT);
-    int x, y;
+    int x = 0, y = 0;
 
-    if (SUCCEEDED(Shell_NotifyIconGetRect(&nii, &iconRect))) {
+    bool hasIconRect = SUCCEEDED(Shell_NotifyIconGetRect(&nii, &iconRect));
+    if (hasIconRect) {
         x = iconRect.left - w + (iconRect.right - iconRect.left) / 2;
         y = iconRect.top - h - Sc(4);
     } else {
@@ -684,6 +1064,21 @@ static void ShowPopup(HWND hTrayWnd) {
         y = pt.y - h - Sc(4);
     }
 
+    // Clamp to monitor work area and flip below icon if taskbar is at the top
+    POINT ptCenter = { x + w / 2, y + h / 2 };
+    HMONITOR hm = MonitorFromPoint(ptCenter, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    if (GetMonitorInfoW(hm, &mi)) {
+        const RECT& wa = mi.rcWork;
+        if (x < wa.left)       x = wa.left + Sc(4);
+        if (x + w > wa.right)  x = wa.right - w - Sc(4);
+        if (y < wa.top) {
+            y = hasIconRect ? (iconRect.bottom + Sc(4)) : (wa.top + Sc(4));
+        }
+        if (y + h > wa.bottom) y = wa.bottom - h - Sc(4);
+    }
+
+    g_actionRow = g_graphMetric;
     SetWindowPos(g_popupHwnd, HWND_TOPMOST, x, y, w, h, SWP_SHOWWINDOW);
 
     // Rounded corners on Windows 11 (silently ignored on Windows 10).
@@ -701,6 +1096,8 @@ static void ShowPopup(HWND hTrayWnd) {
 
 // ─── System Theme + Context Menu ─────────────────────────────────────────────
 
+static HMODULE g_hUxTheme = nullptr;
+
 static bool IsSystemDarkMode() {
     DWORD value = 1, size = sizeof(value);
     RegGetValueW(HKEY_CURRENT_USER,
@@ -710,14 +1107,16 @@ static bool IsSystemDarkMode() {
 }
 
 static void ApplyContextMenuTheme(HWND hWnd, bool dark) {
-    HMODULE ux = GetModuleHandleW(L"uxtheme.dll");
-    if (!ux) return;
+    if (!g_hUxTheme) {
+        g_hUxTheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    }
+    if (!g_hUxTheme) return;
     using Fn135 = int(WINAPI*)(int);
     using Fn133 = bool(WINAPI*)(HWND, bool);
     using Fn136 = void(WINAPI*)();
-    if (auto f = (Fn135)GetProcAddress(ux, MAKEINTRESOURCEA(135))) f(dark ? 2 : 0);
-    if (auto f = (Fn133)GetProcAddress(ux, MAKEINTRESOURCEA(133))) f(hWnd, dark);
-    if (auto f = (Fn136)GetProcAddress(ux, MAKEINTRESOURCEA(136))) f();
+    if (auto f = (Fn135)GetProcAddress(g_hUxTheme, MAKEINTRESOURCEA(135))) f(dark ? 2 : 0);
+    if (auto f = (Fn133)GetProcAddress(g_hUxTheme, MAKEINTRESOURCEA(133))) f(hWnd, dark);
+    if (auto f = (Fn136)GetProcAddress(g_hUxTheme, MAKEINTRESOURCEA(136))) f();
 }
 
 static void SaveIntervalMs(DWORD ms) {
@@ -748,17 +1147,24 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
         case WM_TRAY_CALLBACK:
             switch (LOWORD(lParam)) {
                 case WM_LBUTTONUP:
+                case NIN_SELECT:
+                case NIN_KEYSELECT: {
+                    ULONGLONG now = GetTickCount64();
                     if (g_popupHwnd && IsWindowVisible(g_popupHwnd)) {
+                        // A version-4 tray click can deliver both mouse-up and selection.
+                        if (now - g_lastPopupOpenTime < 250) break;
                         ShowWindow(g_popupHwnd, SW_HIDE);
-                        g_lastPopupCloseTime = GetTickCount64();
-                    } else {
-                        if (GetTickCount64() - g_lastPopupCloseTime > 200) {
-                            ShowPopup(hWnd);
-                        }
+                        g_lastPopupCloseTime = now;
+                    } else if (now - g_lastPopupCloseTime > 200) {
+                        ShowPopup(hWnd);
+                        if (g_popupHwnd && IsWindowVisible(g_popupHwnd))
+                            g_lastPopupOpenTime = now;
                     }
                     break;
+                }
 
-                case WM_RBUTTONUP: {
+                case WM_RBUTTONUP:
+                case WM_CONTEXTMENU: {
                     HMENU hMenu = CreatePopupMenu();
 
                     WCHAR statusText[128];
@@ -770,7 +1176,7 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                         swprintf_s(statusText, L"CPU: %d%%  GPU: %d%%  RAM: %d%%", cpu, gpu, ram);
                     else
                         lstrcpyW(statusText, L"Collecting...");
-                    AppendMenuW(hMenu, MF_STRING | MF_GRAYED, 0, statusText);
+                    AppendMenuW(hMenu, MF_STRING, 0, statusText);
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
                     UINT chk300 = (g_updateMs == 300)  ? (MF_STRING | MF_CHECKED) : MF_STRING;
@@ -781,6 +1187,10 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                     AppendMenuW(hMenu, chk500, MENU_INTERVAL_500MS, L"Refresh: 0.5s");
                     AppendMenuW(hMenu, chk1s,  MENU_INTERVAL_1S,    L"Refresh: 1s");
                     AppendMenuW(hMenu, chk3s,  MENU_INTERVAL_3S,    L"Refresh: 3s");
+                    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+                    AppendMenuW(hMenu, MF_STRING | (g_graphMetric == 0 ? MF_CHECKED : 0), MENU_GRAPH_CPU, L"Graph: CPU");
+                    AppendMenuW(hMenu, MF_STRING | (g_graphMetric == 1 ? MF_CHECKED : 0), MENU_GRAPH_GPU, L"Graph: GPU");
+                    AppendMenuW(hMenu, MF_STRING | (g_graphMetric == 2 ? MF_CHECKED : 0), MENU_GRAPH_RAM, L"Graph: RAM");
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                     AppendMenuW(hMenu, MF_STRING, MENU_OPEN_WINDHAWK, L"Open Windhawk");
 
@@ -795,20 +1205,33 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                     PostMessageW(hWnd, WM_NULL, 0, 0);
                     DestroyMenu(hMenu);
 
+                    if (cmd == MENU_GRAPH_CPU || cmd == MENU_GRAPH_GPU || cmd == MENU_GRAPH_RAM) {
+                        int metric = (cmd == MENU_GRAPH_GPU) ? 1 : (cmd == MENU_GRAPH_RAM) ? 2 : 0;
+                        if (metric != g_graphMetric) {
+                            g_graphMetric = metric;
+                            g_actionRow = metric;
+                            if (g_popupHwnd) InvalidateRect(g_popupHwnd, nullptr, FALSE);
+                        }
+                    }
+
                     DWORD newMs = 0;
                     if      (cmd == MENU_INTERVAL_300MS) newMs = 300;
                     else if (cmd == MENU_INTERVAL_500MS) newMs = 500;
                     else if (cmd == MENU_INTERVAL_1S)    newMs = 1000;
                     else if (cmd == MENU_INTERVAL_3S)    newMs = 3000;
                     else if (cmd == MENU_OPEN_WINDHAWK) {
-                        SHELLEXECUTEINFOW sei = {sizeof(sei)};
-                        sei.lpFile = g_windhawkPath;
-                        sei.nShow  = SW_SHOWNORMAL;
-                        ShellExecuteExW(&sei);
+                        if (g_windhawkPath[0] != L'\0') {
+                            SHELLEXECUTEINFOW sei = {sizeof(sei)};
+                            sei.lpFile = g_windhawkPath;
+                            sei.nShow  = SW_SHOWNORMAL;
+                            ShellExecuteExW(&sei);
+                        }
                     }
 
                     if (newMs > 0 && newMs != g_updateMs) {
                         g_updateMs = newMs;
+                        memset(g_graphCount, 0, sizeof(g_graphCount));
+                        memset(g_graphNext, 0, sizeof(g_graphNext));
                         KillTimer(hWnd, WM_TIMER_ID);
                         SetTimer(hWnd, WM_TIMER_ID, newMs, nullptr);
                         SaveIntervalMs(newMs);
@@ -851,15 +1274,17 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
         if (!g_iconEnabled)
             ExtractIconExW(g_ddoresDllPath, 28, nullptr, &g_iconEnabled, 1);
         nid.hIcon = g_iconEnabled ? g_iconEnabled : LoadIconW(nullptr, IDI_APPLICATION);
-        if (Shell_NotifyIconW(NIM_ADD, &nid)) {
-            NOTIFYICONDATAW nidVer = {sizeof(nidVer)};
-            nidVer.hWnd     = hWnd;
-            nidVer.uID      = TRAY_ICON_ID;
-            nidVer.uFlags   = NIF_GUID;
-            nidVer.guidItem = MICROMANAGER_TRAY_GUID;
-            nidVer.uVersion = NOTIFYICON_VERSION_4;
-            Shell_NotifyIconW(NIM_SETVERSION, &nidVer);
+        if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
+            Shell_NotifyIconW(NIM_DELETE, &nid);
+            Shell_NotifyIconW(NIM_ADD, &nid);
         }
+        NOTIFYICONDATAW nidVer = {sizeof(nidVer)};
+        nidVer.hWnd     = hWnd;
+        nidVer.uID      = TRAY_ICON_ID;
+        nidVer.uFlags   = NIF_GUID;
+        nidVer.guidItem = MICROMANAGER_TRAY_GUID;
+        nidVer.uVersion = NOTIFYICON_VERSION_4;
+        Shell_NotifyIconW(NIM_SETVERSION, &nidVer);
         return 0;
     }
 
@@ -903,16 +1328,14 @@ static DWORD WINAPI TrayThreadProc(LPVOID) {
     // Unique AUMID so the OS doesn't group this icon with Windhawk's main window
     IPropertyStore* pps = nullptr;
     if (SUCCEEDED(SHGetPropertyStoreForWindow(g_trayHwnd, IID_PPV_ARGS(&pps)))) {
+        wchar_t aumid[] = L"BlackPaw.MicroManager";
         PROPVARIANT var;
         PropVariantInit(&var);
-        var.vt      = VT_LPWSTR;
-        var.pwszVal = (LPWSTR)CoTaskMemAlloc(MAX_PATH * sizeof(WCHAR));
-        if (var.pwszVal) {
-            lstrcpyW(var.pwszVal, L"BlackPaw.MicroManager");
-            pps->SetValue(PKEY_AppUserModel_ID, var);
-            CoTaskMemFree(var.pwszVal);
+        var.vt = VT_LPWSTR;
+        var.pwszVal = aumid;
+        if (SUCCEEDED(pps->SetValue(PKEY_AppUserModel_ID, var))) {
+            pps->Commit();
         }
-        pps->Commit();
         pps->Release();
     }
 
@@ -924,15 +1347,17 @@ static DWORD WINAPI TrayThreadProc(LPVOID) {
     nid.uCallbackMessage = WM_TRAY_CALLBACK;
     lstrcpynW(nid.szTip, L"MicroManager", 128);
     nid.hIcon = g_iconEnabled ? g_iconEnabled : LoadIconW(nullptr, IDI_APPLICATION);
-    if (Shell_NotifyIconW(NIM_ADD, &nid)) {
-        NOTIFYICONDATAW nidVer = {sizeof(nidVer)};
-        nidVer.hWnd     = g_trayHwnd;
-        nidVer.uID      = TRAY_ICON_ID;
-        nidVer.uFlags   = NIF_GUID;
-        nidVer.guidItem = MICROMANAGER_TRAY_GUID;
-        nidVer.uVersion = NOTIFYICON_VERSION_4;
-        Shell_NotifyIconW(NIM_SETVERSION, &nidVer);
+    if (!Shell_NotifyIconW(NIM_ADD, &nid)) {
+        Shell_NotifyIconW(NIM_DELETE, &nid);
+        Shell_NotifyIconW(NIM_ADD, &nid);
     }
+    NOTIFYICONDATAW nidVer = {sizeof(nidVer)};
+    nidVer.hWnd     = g_trayHwnd;
+    nidVer.uID      = TRAY_ICON_ID;
+    nidVer.uFlags   = NIF_GUID;
+    nidVer.guidItem = MICROMANAGER_TRAY_GUID;
+    nidVer.uVersion = NOTIFYICON_VERSION_4;
+    Shell_NotifyIconW(NIM_SETVERSION, &nidVer);
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0)) {
@@ -947,7 +1372,12 @@ static DWORD WINAPI TrayThreadProc(LPVOID) {
 
 // ─── Windhawk Callbacks ───────────────────────────────────────────────────────
 
+static LONG g_initComplete = FALSE;
+
 BOOL WhTool_ModInit() {
+    if (InterlockedCompareExchange(&g_initComplete, TRUE, FALSE))
+        return TRUE;
+
     Wh_Log(L"MicroManager Init");
 
     g_updateMs = LoadIntervalMs();
@@ -960,6 +1390,7 @@ BOOL WhTool_ModInit() {
         case 0:
         case ARRAYSIZE(g_windhawkPath):
             Wh_Log(L"GetModuleFileNameW failed");
+            g_windhawkPath[0] = L'\0';
             break;
     }
 
@@ -982,14 +1413,9 @@ BOOL WhTool_ModInit() {
         int count = 0;
         while (count < MAX_PROCESSES) {
             g_prevProcs[count].pid = (DWORD)(ULONG_PTR)p->UniqueProcessId;
+            g_prevProcs[count].created = p->CreateTime.QuadPart;
             g_prevProcs[count].time = p->KernelTime.QuadPart + p->UserTime.QuadPart;
-            if (p->ImageName.Buffer) {
-                wcsncpy_s(g_prevProcs[count].name, p->ImageName.Buffer,
-                    MIN(p->ImageName.Length / sizeof(WCHAR), 63));
-                g_prevProcs[count].name[63] = L'\0';
-            } else {
-                g_prevProcs[count].name[0] = L'\0';
-            }
+            GetProcessDisplayName(p, g_prevProcs[count].name, ARRAYSIZE(g_prevProcs[count].name));
             count++;
             if (p->NextEntryOffset == 0) break;
             p = (MY_SYSTEM_PROCESS_INFO*)((BYTE*)p + p->NextEntryOffset);
@@ -1007,6 +1433,9 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
+    if (!InterlockedCompareExchange(&g_initComplete, FALSE, TRUE))
+        return;
+
     Wh_Log(L"MicroManager Mod Uninit");
 
     // WM_CLOSE handler on the tray thread destroys g_popupHwnd before the tray
@@ -1027,6 +1456,7 @@ void WhTool_ModUninit() {
     if (g_iconEnabled) { DestroyIcon(g_iconEnabled); g_iconEnabled = nullptr; }
     if (g_hPopupFont) { DeleteObject(g_hPopupFont); g_hPopupFont = nullptr; }
     if (g_gpuQuery) { PdhCloseQuery(g_gpuQuery); g_gpuQuery = nullptr; g_gpuCounter = nullptr; }
+    if (g_hUxTheme) { FreeLibrary(g_hUxTheme); g_hUxTheme = nullptr; }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1062,7 +1492,7 @@ BOOL Wh_ModInit() {
     bool isToolModProcess = false;
     bool isCurrentToolModProcess = false;
     int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
     if (!argv) {
         Wh_Log(L"CommandLineToArgvW failed");
         return FALSE;
@@ -1095,7 +1525,7 @@ BOOL Wh_ModInit() {
 
     if (isCurrentToolModProcess) {
         g_toolModProcessMutex =
-            CreateMutexW(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
         if (!g_toolModProcessMutex) {
             Wh_Log(L"CreateMutex failed");
             ExitProcess(1);
@@ -1111,7 +1541,7 @@ BOOL Wh_ModInit() {
         }
 
         IMAGE_DOS_HEADER* dosHeader =
-            (IMAGE_DOS_HEADER*)GetModuleHandleW(nullptr);
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
         IMAGE_NT_HEADERS* ntHeaders =
             (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
 
@@ -1136,8 +1566,8 @@ void Wh_ModAfterInit() {
     }
 
     WCHAR currentProcessPath[MAX_PATH];
-    switch (GetModuleFileNameW(nullptr, currentProcessPath,
-                               ARRAYSIZE(currentProcessPath))) {
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
         case 0:
         case ARRAYSIZE(currentProcessPath):
             Wh_Log(L"GetModuleFileName failed");
@@ -1150,9 +1580,9 @@ void Wh_ModAfterInit() {
     swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
                WH_MOD_ID);
 
-    HMODULE kernelModule = GetModuleHandleW(L"kernelbase.dll");
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
     if (!kernelModule) {
-        kernelModule = GetModuleHandleW(L"kernel32.dll");
+        kernelModule = GetModuleHandle(L"kernel32.dll");
         if (!kernelModule) {
             Wh_Log(L"No kernelbase.dll/kernel32.dll");
             return;
@@ -1175,8 +1605,8 @@ void Wh_ModAfterInit() {
         return;
     }
 
-    STARTUPINFOW si{
-        .cb = sizeof(STARTUPINFOW),
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
         .dwFlags = STARTF_FORCEOFFFEEDBACK,
     };
     PROCESS_INFORMATION pi;
