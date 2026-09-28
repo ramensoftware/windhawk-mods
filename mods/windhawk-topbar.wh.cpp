@@ -17,7 +17,7 @@
 ## Note: 
 ### Settings for this mod were shifted to a separate settings app. It can be accessed either by settings icon in the topbar, OR from the context menus. 
 ![TopBar screenshot](https://i.imgur.com/BgmSodU.png)
-![Flyouts screenshot](https://i.imgur.com/KWm5pwX.jpeg)
+![Flyouts screenshot](https://i.imgur.com/MVUKR21.jpeg)
 Adds a fully customizable **TopBar** at the top of your screen — task list,
 control-centre flyouts, media player, resource monitor, Start menu and
 Spotlight-style search — hosted in a dedicated `explorer.exe` tool process.
@@ -131,7 +131,7 @@ Run **[UWPSpy](https://github.com/m417z/UWPSpy/releases/)** on the TopBar's
 | `TopBarRoot` | Root `Grid` spanning the whole bar |
 | `LeftPanel` | Left strip holding Start and Search |
 | `StartButton` / `StartIcon` | Start button and its logo |
-| `SearchButton` / `SearchIcon` | Search button (opens native Search) |
+| `SearchButton` / `SearchIcon` | Search button (opens TopBar Search by default) |
 | `TaskListPanel` / `TaskButton` | Task strip, and every task button |
 | `TaskButtonIcon` / `TaskButtonText` | Icon and label inside a task button |
 | `DisplayButton` `SoundButton` `WifiButton` `BluetoothButton`  `BatteryButton` | ControlCenter buttons |
@@ -148,9 +148,9 @@ Run **[UWPSpy](https://github.com/m417z/UWPSpy/releases/)** on the TopBar's
 
 ## Global transparency, Tint, and Blur
 
-The tint color is configured in **Global background color** and Tint Opacity is configured in: **Global Tint opacity**.
+The tint color and opacity are configured in the TopBar settings window under **Appearance** (`Global Background Tint` / `Global Tint Opacity`).
 It is applied on the top bar, flyouts, and all context menus. 
-Any style rule that sets `Background:=<WindhawkBlur .../>` on one of those elements overrides the one configured in Mod Settings.
+Any style rule that sets `Background:=<WindhawkBlur .../>` on one of those elements overrides the one configured in the settings window.
 
 ## Never auto-close flyouts
 
@@ -160,7 +160,7 @@ Clicks that land on the TopBar itself, or on another TopBar flyout, still
 dismiss the open flyout — only clicks going to other applications or the
 desktop are ignored.
 
-## Never auto-close flyouts
+## Known Limitations
 - Some Font Families can misalign the text in topbar buttons, and some can also compress or stretch the ui of flyouts. 
 
 */
@@ -1020,6 +1020,12 @@ void HideOrphanXamlPopups();
 void InstallLightDismissGuard(wuxc::Primitives::FlyoutBase const& fb);
 bool CloseAnyOpenChildFlyout();
 LRESULT CALLBACK ChildFlyoutPopupProc(HWND, UINT, WPARAM, LPARAM, UINT_PTR);
+
+extern UINT g_shellHookMessage;
+extern HHOOK g_searchKeyHook;
+void ScheduleTaskListRefresh();
+void InstallShellHook(HWND hwnd);
+void UninstallShellHook(HWND hwnd);
 
 extern wuxc::Flyout g_startMenuFlyout;
 extern wuxc::Flyout g_searchFlyout;
@@ -4175,24 +4181,7 @@ void EnsureTopBarHasKeyboardFocus() {
 
     BOOL sfw = SetForegroundWindow(target);
 
-    if (!sfw) {
-        // Windows' foreground lock refuses a steal from a background
-        // process. Simulating an Alt tap is the documented way to clear
-        // that lock — after the injected Alt, SetForegroundWindow
-        // succeeds against any window we're entitled to. Reached only on
-        // the sfw-fail path here, which the WiFi/Weather GotFocus
-        // handlers never hit (they short-circuit earlier when our own
-        // process is already foreground), so the XAML disturbance those
-        // used to cause doesn't reproduce.
-        INPUT alt[2] = {};
-        alt[0].type = INPUT_KEYBOARD;
-        alt[0].ki.wVk = VK_MENU;
-        alt[1].type = INPUT_KEYBOARD;
-        alt[1].ki.wVk = VK_MENU;
-        alt[1].ki.dwFlags = KEYEVENTF_KEYUP;
-        SendInput(2, alt, sizeof(INPUT));
-        sfw = SetForegroundWindow(target);
-    }
+
 
     HWND  sw  = nullptr;
     HWND  sf  = nullptr;
@@ -4437,30 +4426,6 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
         }
     } catch (...) {}
 
-    // Apps like Windhawk's compiler editor reclaim the OS foreground the
-    // moment we take it — either via a WM_KILLFOCUS handler that calls
-    // SetForegroundWindow on itself, or by reading input through RawInput
-    // with RIDEV_INPUTSINK, which delivers keys even when their window is
-    // not the foreground. While one of our top-level flyouts (start menu,
-    // search) is open, re-steal on every foreign foreground event so the
-    // keystrokes actually reach the flyout. Rate-limited to 200 ms so a
-    // reclaim loop on the other side can't turn into a hot focus war.
-    bool flyoutOpen = false;
-    try {
-        if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) flyoutOpen = true;
-        if (g_searchFlyout && g_searchFlyout.IsOpen()) flyoutOpen = true;
-    } catch (...) {}
-    if (flyoutOpen) {
-        static std::atomic<ULONGLONG> s_lastRestake{0};
-        ULONGLONG now = GetTickCount64();
-        if (now - s_lastRestake.load() >= 200) {
-            s_lastRestake.store(now);
-            RunOnUiThread([] {
-                try { EnsureTopBarHasKeyboardFocus(); } catch (...) {}
-            });
-        }
-    }
-
     if (g_settings.centerContent == L"applicationButtons") {
         RunOnUiThread([] {
             try { RefreshApplicationButtons(); } catch (...) {}
@@ -4484,7 +4449,8 @@ void CALLBACK ForegroundEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG id
                 }
                 BOOL cloaked = FALSE;
                 if (SUCCEEDED(DwmGetWindowAttribute(g_topBarHwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) {
-                    DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
+                    BOOL cloakOff = FALSE;
+                    DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
                 }
                 // Force topmost so the desktop can't cover the bar
                 SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
@@ -9581,7 +9547,9 @@ FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
             g_mediaButtonBars.push_back(bar);
         }
         row.Children().Append(viz);
-        StartMediaVisualizer();
+        if (snapshot.playing) {
+            StartMediaVisualizer();
+        }
     } else {
         g_mediaButtonBars.clear();
     }
@@ -9597,6 +9565,9 @@ void ApplyMediaSnapshot(const media::Snapshot& snapshot) {
     g_mediaPlaying = playing;
     g_mediaSessionExists = sessionExists;
     if (playing) g_cachedMediaSnapshot = snapshot;
+    if (!playing && wasPlaying) {
+        StopMediaVisualizer();
+    }
 
     if (sessionExists && !snapshot.thumbnailBytes.empty() && !snapshot.title.empty()) {
         g_lastGoodThumbnailTitle = snapshot.title;
@@ -9775,7 +9746,9 @@ void PopulateMediaPanel() {
                 viz.Clip(clipGeom);
                 wuxc::Grid::SetColumn(viz, 2);
                 header.Children().Append(viz);
-                StartMediaVisualizer();
+                if (snapshot.playing) {
+                    StartMediaVisualizer();
+                }
             } else {
                 g_visualizerBars.clear();
             }
@@ -18075,8 +18048,78 @@ static bool ParseSettingsJson(
 
 static void ApplySettingsPairs(
         const std::vector<std::pair<std::wstring, std::wstring>>& pairs) {
-    for (auto& kv : pairs) {
-        Wh_SetStringValue(kv.first.c_str(), kv.second.c_str());
+    static const std::set<std::wstring> kAllowedKeys = {
+        L"topBarScaleMode", L"topBarScale", L"barHeight", L"cornerRadius",
+        L"topBarBackgroundColor", L"topBarBackgroundOpacity",
+        L"iconColor", L"fontColor", L"fontFamily", L"fontBold",
+        L"globalBlurAmount", L"showStartButton", L"showSearchButton",
+        L"centerContent", L"taskButtonWidth", L"taskIconSize",
+        L"taskButtonContent", L"showDisplayButton", L"showSoundButton",
+        L"showWifiButton", L"showBluetoothButton", L"showBatteryButton",
+        L"showSettingsButton", L"showWeatherButton", L"showRecycleBinButton",
+        L"leftItems", L"centerItems", L"rightItems",
+        L"showCpuUsage", L"showRamUsage", L"showGpuUsage",
+        L"labelCpu", L"labelRam", L"labelGpu",
+        L"showMediaButton", L"showMediaVisualizer",
+        L"mediaButtonShowIcon", L"mediaButtonShowName",
+        L"mediaButtonShowControls", L"mediaButtonShowVisualizer",
+        L"disableFlyoutAutoClose", L"defaultStartMenu", L"defaultSearch",
+        L"startButtonAction", L"searchButtonAction",
+        L"showClock", L"timeFormat", L"showDate", L"dateFormat",
+        L"weatherLocationName", L"weatherLatitude", L"weatherLongitude",
+        L"weatherUnit",
+    };
+    static const std::map<std::wstring, std::pair<int, int>> kIntRanges = {
+        { L"topBarScale",               {  50, 150 } },
+        { L"barHeight",                 {  20, 120 } },
+        { L"cornerRadius",              {   0,  30 } },
+        { L"topBarBackgroundOpacity",   {   0, 100 } },
+        { L"globalBlurAmount",          {   1,  50 } },
+        { L"taskButtonWidth",           {  40, 250 } },
+        { L"taskIconSize",              {  12,  40 } },
+        { L"showStartButton",           {   0,   1 } },
+        { L"showSearchButton",          {   0,   1 } },
+        { L"showDisplayButton",         {   0,   1 } },
+        { L"showSoundButton",           {   0,   1 } },
+        { L"showWifiButton",            {   0,   1 } },
+        { L"showBluetoothButton",       {   0,   1 } },
+        { L"showBatteryButton",         {   0,   1 } },
+        { L"showSettingsButton",        {   0,   1 } },
+        { L"showWeatherButton",         {   0,   1 } },
+        { L"showRecycleBinButton",      {   0,   1 } },
+        { L"showCpuUsage",              {   0,   1 } },
+        { L"showRamUsage",              {   0,   1 } },
+        { L"showGpuUsage",              {   0,   1 } },
+        { L"showMediaButton",           {   0,   1 } },
+        { L"showMediaVisualizer",       {   0,   1 } },
+        { L"mediaButtonShowIcon",       {   0,   1 } },
+        { L"mediaButtonShowName",       {   0,   1 } },
+        { L"mediaButtonShowControls",   {   0,   1 } },
+        { L"mediaButtonShowVisualizer", {   0,   1 } },
+        { L"disableFlyoutAutoClose",    {   0,   1 } },
+        { L"defaultStartMenu",          {   0,   1 } },
+        { L"defaultSearch",             {   0,   1 } },
+        { L"showClock",                 {   0,   1 } },
+        { L"showDate",                  {   0,   1 } },
+        { L"fontBold",                  {   0,   1 } },
+    };
+    for (const auto& kv : pairs) {
+        if (kAllowedKeys.find(kv.first) == kAllowedKeys.end()) {
+            Wh_Log(L"ApplySettingsPairs: skipping unknown key %s", kv.first.c_str());
+            continue;
+        }
+        std::wstring value = kv.second;
+        auto rangeIt = kIntRanges.find(kv.first);
+        if (rangeIt != kIntRanges.end()) {
+            try {
+                int v = std::stoi(kv.second);
+                v = std::clamp(v, rangeIt->second.first, rangeIt->second.second);
+                value = std::to_wstring(v);
+            } catch (...) {
+                continue;
+            }
+        }
+        Wh_SetStringValue(kv.first.c_str(), value.c_str());
     }
     ScheduleReload();
 }
@@ -20203,6 +20246,84 @@ static winrt::com_ptr<IUIAutomation> GetCachedUIA() {
 
 // Returns true if the click was on the Start or Search button and was
 // consumed. Called from the mouse hook on left-down.
+std::mutex g_taskbarButtonRectMutex;
+RECT g_startButtonScreenRect{};
+RECT g_searchButtonScreenRect{};
+std::atomic<bool> g_taskbarButtonRectsValid{false};
+
+void RefreshTaskbarButtonRectsAsync() {
+    RunInBackground([] {
+        RECT startRect{};
+        RECT searchRect{};
+        bool foundStart = false;
+        bool foundSearch = false;
+        try {
+            auto uia = GetCachedUIA();
+            HWND tray = GetShellTrayWnd();
+            if (uia && tray) {
+                winrt::com_ptr<IUIAutomationElement> trayEl;
+                if (SUCCEEDED(uia->ElementFromHandle(tray, trayEl.put())) && trayEl) {
+                    auto findById = [&](PCWSTR id, RECT* out) -> bool {
+                        VARIANT v;
+                        VariantInit(&v);
+                        v.vt = VT_BSTR;
+                        v.bstrVal = SysAllocString(id);
+                        winrt::com_ptr<IUIAutomationCondition> cond;
+                        HRESULT hr = uia->CreatePropertyCondition(
+                            UIA_AutomationIdPropertyId, v, cond.put());
+                        VariantClear(&v);
+                        if (FAILED(hr) || !cond) return false;
+                        winrt::com_ptr<IUIAutomationElement> el;
+                        if (FAILED(trayEl->FindFirst(TreeScope_Descendants,
+                                                     cond.get(), el.put())) || !el) {
+                            return false;
+                        }
+                        RECT r{};
+                        if (FAILED(el->get_CurrentBoundingRectangle(&r))) return false;
+                        if (r.right <= r.left || r.bottom <= r.top) return false;
+                        *out = r;
+                        return true;
+                    };
+                    foundStart  = findById(L"StartButton",  &startRect);
+                    foundSearch = findById(L"SearchButton", &searchRect);
+                    if (!foundSearch) {
+                        foundSearch = findById(L"SearchBox", &searchRect);
+                    }
+                }
+            }
+        } catch (...) {}
+
+        {
+            std::lock_guard<std::mutex> lock(g_taskbarButtonRectMutex);
+            if (foundStart)  g_startButtonScreenRect  = startRect;
+            if (foundSearch) g_searchButtonScreenRect = searchRect;
+            g_taskbarButtonRectsValid = foundStart || foundSearch;
+        }
+        Wh_Log(L"Taskbar rect cache: start=%d search=%d (tray=%p)",
+               foundStart ? 1 : 0, foundSearch ? 1 : 0,
+               reinterpret_cast<void*>(GetShellTrayWnd()));
+    });
+}
+
+void ScheduleTaskbarRectRefreshRetries() {
+    if (!g_topBarHwnd || !IsWindow(g_topBarHwnd)) return;
+    static std::vector<UINT_PTR> s_retryTimers;
+    for (UINT_PTR id : s_retryTimers) {
+        KillTimer(g_topBarHwnd, id);
+    }
+    s_retryTimers.clear();
+    const UINT delays[] = { 500, 1500, 3000, 6000 };
+    for (UINT delay : delays) {
+        UINT_PTR id = SetTimer(g_topBarHwnd, 0, delay,
+            [](HWND, UINT msg, UINT_PTR timerId, DWORD) {
+                KillTimer(g_topBarHwnd, timerId);
+                if (g_taskbarButtonRectsValid.load()) return;
+                RefreshTaskbarButtonRectsAsync();
+            });
+        if (id) s_retryTimers.push_back(id);
+    }
+}
+
 static bool TaskbarClickRemap(POINT pt) {
     // Cheap path first: is the click even inside the taskbar's rect?
     HWND tray = GetShellTrayWnd();
@@ -20250,6 +20371,43 @@ static bool TaskbarClickRemap(POINT pt) {
             return true;
         }
         if (_wcsicmp(cls, L"SearchBox") == 0 && g_settings.defaultSearch && g_settings.remapTaskbarSearch) {
+            RunOnUiThread([] {
+                try {
+                    if (g_searchFlyout && g_searchFlyout.IsOpen()) {
+                        g_searchFlyout.Hide();
+                    } else {
+                        ShowSearchFlyout();
+                    }
+                } catch (...) {}
+            });
+            return true;
+        }
+    }
+
+    if (g_taskbarButtonRectsValid.load()) {
+        RECT sr{};
+        RECT qr{};
+        {
+            std::lock_guard<std::mutex> lock(g_taskbarButtonRectMutex);
+            sr = g_startButtonScreenRect;
+            qr = g_searchButtonScreenRect;
+        }
+        if (g_settings.defaultStartMenu && g_settings.remapTaskbarStart &&
+            PtInRect(&sr, pt)) {
+            RunOnUiThread([] {
+                try {
+                    CloseNativeStartMenuIfOpen();
+                    if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) {
+                        g_startMenuFlyout.Hide();
+                    } else {
+                        ShowStartMenuFlyout();
+                    }
+                } catch (...) {}
+            });
+            return true;
+        }
+        if (g_settings.defaultSearch && g_settings.remapTaskbarSearch &&
+            PtInRect(&qr, pt)) {
             RunOnUiThread([] {
                 try {
                     if (g_searchFlyout && g_searchFlyout.IsOpen()) {
@@ -20475,15 +20633,95 @@ LRESULT CALLBACK ChildFlyoutMouseHookProc(int nCode, WPARAM wParam, LPARAM lPara
     return CallNextHookEx(g_childFlyoutMouseHook, nCode, wParam, lParam);
 }
 
-void InstallChildFlyoutMouseHook() {
-    if (g_childFlyoutMouseHook) return;
-    HMODULE hookModule = g_modModule ? g_modModule : GetModuleHandle(nullptr);
-    g_childFlyoutMouseHook =
-        SetWindowsHookExW(WH_MOUSE_LL, ChildFlyoutMouseHookProc, hookModule, 0);
-    if (!g_childFlyoutMouseHook) {
-        Wh_Log(L"TopBar: SetWindowsHookEx(WH_MOUSE_LL) failed: %u",
-               GetLastError());
+LRESULT CALLBACK SearchKeyHookProc(int nCode, WPARAM wParam, LPARAM lParam);
+
+HANDLE g_hookThread = nullptr;
+DWORD  g_hookThreadId = 0;
+
+constexpr UINT WM_HOOK_THREAD_INSTALL_MOUSE = WM_APP + 0x500;
+constexpr UINT WM_HOOK_THREAD_REMOVE_MOUSE  = WM_APP + 0x501;
+constexpr UINT WM_HOOK_THREAD_INSTALL_KB    = WM_APP + 0x502;
+constexpr UINT WM_HOOK_THREAD_REMOVE_KB     = WM_APP + 0x503;
+
+DWORD WINAPI HookThreadProc(LPVOID) {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    HMODULE hMod = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&HookThreadProc), &hMod);
+
+    MSG msg;
+    while (GetMessage(&msg, nullptr, 0, 0)) {
+        switch (msg.message) {
+            case WM_HOOK_THREAD_INSTALL_MOUSE:
+                if (!g_childFlyoutMouseHook) {
+                    g_childFlyoutMouseHook = SetWindowsHookExW(
+                        WH_MOUSE_LL, ChildFlyoutMouseHookProc, hMod, 0);
+                    if (!g_childFlyoutMouseHook) {
+                        Wh_Log(L"HookThread: WH_MOUSE_LL install failed: %u",
+                               GetLastError());
+                    }
+                }
+                break;
+            case WM_HOOK_THREAD_REMOVE_MOUSE:
+                if (g_childFlyoutMouseHook) {
+                    UnhookWindowsHookEx(g_childFlyoutMouseHook);
+                    g_childFlyoutMouseHook = nullptr;
+                }
+                break;
+            case WM_HOOK_THREAD_INSTALL_KB:
+                if (!g_searchKeyHook) {
+                    g_searchKeyHook = SetWindowsHookExW(
+                        WH_KEYBOARD_LL, SearchKeyHookProc, hMod, 0);
+                    if (!g_searchKeyHook) {
+                        Wh_Log(L"HookThread: WH_KEYBOARD_LL install failed: %u",
+                               GetLastError());
+                    }
+                }
+                break;
+            case WM_HOOK_THREAD_REMOVE_KB:
+                if (g_searchKeyHook) {
+                    UnhookWindowsHookEx(g_searchKeyHook);
+                    g_searchKeyHook = nullptr;
+                }
+                break;
+        }
     }
+
+    if (g_childFlyoutMouseHook) {
+        UnhookWindowsHookEx(g_childFlyoutMouseHook);
+        g_childFlyoutMouseHook = nullptr;
+    }
+    if (g_searchKeyHook) {
+        UnhookWindowsHookEx(g_searchKeyHook);
+        g_searchKeyHook = nullptr;
+    }
+    CoUninitialize();
+    return 0;
+}
+
+void StartHookThread() {
+    if (g_hookThread) return;
+    g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, &g_hookThreadId);
+    if (!g_hookThread) {
+        Wh_Log(L"StartHookThread: CreateThread failed: %u", GetLastError());
+    }
+}
+
+void StopHookThread() {
+    if (!g_hookThread) return;
+    if (g_hookThreadId) {
+        PostThreadMessage(g_hookThreadId, WM_QUIT, 0, 0);
+    }
+    WaitForSingleObject(g_hookThread, 5000);
+    CloseHandle(g_hookThread);
+    g_hookThread = nullptr;
+    g_hookThreadId = 0;
+}
+
+void InstallChildFlyoutMouseHook() {
+    if (!g_hookThreadId) return;
+    PostThreadMessage(g_hookThreadId, WM_HOOK_THREAD_INSTALL_MOUSE, 0, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -20503,7 +20741,7 @@ void InstallChildFlyoutMouseHook() {
 // fires normally — the search runs exactly as if the user had typed into it.
 // ---------------------------------------------------------------------------
 
-static HHOOK g_searchKeyHook = nullptr;
+HHOOK g_searchKeyHook = nullptr;
 
 static wchar_t SearchKeyVkToChar(DWORD vk) {
     bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -21405,37 +21643,21 @@ void CloseNativeSearchIfOpen() {
 }
 
 void InstallSearchKeyHook() {
-    if (g_searchKeyHook) return;
-    // hMod must be the DLL that contains the callback for system-wide LL
-    // hooks. Passing nullptr silently succeeds but Windows then looks for
-    // the callback in explorer.exe's main module — where it isn't — and
-    // never invokes it. That is why "hook installed" logged but no keys
-    // ever reached the callback.
-    HMODULE hookModule = g_modModule ? g_modModule : GetModuleHandle(nullptr);
-    g_searchKeyHook = SetWindowsHookExW(WH_KEYBOARD_LL, SearchKeyHookProc,
-                                        hookModule, 0);
-    if (g_searchKeyHook) {
-        Wh_Log(L"TopBar: search keyboard hook installed (hMod=%p)", hookModule);
-    } else {
-        Wh_Log(L"TopBar: SetWindowsHookEx(WH_KEYBOARD_LL) failed: %u", GetLastError());
-    }
+    if (!g_hookThreadId) return;
+    PostThreadMessage(g_hookThreadId, WM_HOOK_THREAD_INSTALL_KB, 0, 0);
 }
 
 void SyncSearchKeyHook() {
     bool wantHook = g_settings.defaultStartMenu || g_settings.defaultSearch;
-    Wh_Log(L"TopBar: SyncSearchKeyHook defaultStart=%d defaultSearch=%d want=%d installed=%d",
+    Wh_Log(L"TopBar: SyncSearchKeyHook defaultStart=%d defaultSearch=%d want=%d",
            g_settings.defaultStartMenu ? 1 : 0,
            g_settings.defaultSearch ? 1 : 0,
-           wantHook ? 1 : 0,
-           g_searchKeyHook ? 1 : 0);
-    if (wantHook && !g_searchKeyHook) {
-        InstallSearchKeyHook();
-        Wh_Log(L"TopBar: keyboard hook installed (remap active)");
-    } else if (!wantHook && g_searchKeyHook) {
-        UnhookWindowsHookEx(g_searchKeyHook);
-        g_searchKeyHook = nullptr;
-        Wh_Log(L"TopBar: keyboard hook removed (no remap active)");
-    }
+           wantHook ? 1 : 0);
+    if (!g_hookThreadId) return;
+    PostThreadMessage(g_hookThreadId,
+                      wantHook ? WM_HOOK_THREAD_INSTALL_KB
+                               : WM_HOOK_THREAD_REMOVE_KB,
+                      0, 0);
 }
 
 LRESULT CALLBACK TopBarPopupSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass) {
@@ -21737,7 +21959,8 @@ void EnsureTopBarPopupShown() {
         if (SUCCEEDED(DwmGetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAKED,
                                             &cloakNow, sizeof(cloakNow))) && cloakNow) {
             wasCloaked = true;
-            DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
+            BOOL cloakOff = FALSE;
+            DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
         }
         if (!IsWindowVisible(g_topBarPopupHwnd)) {
             ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
@@ -22465,11 +22688,26 @@ void UpdateClockText() {
 }
 
 LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (g_shellHookMessage != 0 && message == g_shellHookMessage) {
+        switch (wParam) {
+            case HSHELL_WINDOWCREATED:
+            case HSHELL_WINDOWDESTROYED:
+            case HSHELL_WINDOWACTIVATED:
+            case HSHELL_RUDEAPPACTIVATED:
+            case HSHELL_REDRAW:
+                ScheduleTaskListRefresh();
+                break;
+        }
+        return 0;
+    }
     if (message == g_taskbarCreatedMsg && g_taskbarCreatedMsg != 0) {
         // Explorer restarted and dropped every AppBar registration with it.
         g_appBarRegistered = false;
         RegisterAppBar(hwnd);
         PositionAppBar(hwnd, g_barHeightPx);
+        g_taskbarButtonRectsValid = false;
+        RefreshTaskbarButtonRectsAsync();
+        ScheduleTaskbarRectRefreshRetries();
         return 0;
     }
 
@@ -22554,6 +22792,8 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             RepositionTopBarPopup();
             RefreshTaskList(true);
         RefreshBluetoothRadioState(); // initial radio state
+            g_taskbarButtonRectsValid = false;
+            RefreshTaskbarButtonRectsAsync();
             return 0;
 
         case WM_SETTINGCHANGE:
@@ -22656,7 +22896,8 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                     break;
                 }
                 ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-                DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, FALSE, sizeof(BOOL));
+                BOOL cloakOff = FALSE;
+                DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
                 // Immediately reapply topmost
                 SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                              SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -22695,6 +22936,42 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
     return DefWindowProc(hwnd, message, wParam, lParam);
 }
 
+UINT g_shellHookMessage = 0;
+
+void InstallShellHook(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    if (g_shellHookMessage == 0) {
+        g_shellHookMessage = RegisterWindowMessageW(L"SHELLHOOK");
+        if (g_shellHookMessage == 0) {
+            Wh_Log(L"RegisterWindowMessage(SHELLHOOK) failed");
+            return;
+        }
+    }
+    if (!RegisterShellHookWindow(hwnd)) {
+        Wh_Log(L"RegisterShellHookWindow failed: %u", GetLastError());
+    }
+}
+
+void UninstallShellHook(HWND hwnd) {
+    if (g_shellHookMessage != 0 && hwnd && IsWindow(hwnd)) {
+        DeregisterShellHookWindow(hwnd);
+    }
+    g_shellHookMessage = 0;
+}
+
+void ScheduleTaskListRefresh() {
+    if (!g_taskRefreshTimer) {
+        g_taskRefreshTimer = DispatcherTimer();
+        g_taskRefreshTimer.Interval(std::chrono::milliseconds(200));
+        g_taskRefreshTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+            g_taskRefreshTimer.Stop();
+            try { RefreshTaskList(false); } catch (...) {}
+        });
+    }
+    g_taskRefreshTimer.Stop();
+    g_taskRefreshTimer.Start();
+}
+
 void ForegroundEventProcInstall() {
     if (g_foregroundHook) {
         return;
@@ -22705,19 +22982,6 @@ void ForegroundEventProcInstall() {
     if (!g_foregroundHook) {
         Wh_Log(L"SetWinEventHook failed; click-to-minimize will not work");
     }
-
-    // Additional hook for window creation/destruction/rename to refresh the
-    // task list, and to catch the shell's own Start menu / Search windows
-    // the moment they become visible so they can be closed while ours is
-    // open. EVENT_OBJECT_SHOW (0x8002) is inside the
-    // EVENT_OBJECT_CREATE..EVENT_OBJECT_HIDE range, so the show event is
-    // already delivered by this hook.
-    g_windowEventHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE,
-                                        nullptr, WindowEventProc, 0, 0,
-                                        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
-    g_windowEventNameHook = SetWinEventHook(EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_NAMECHANGE,
-                                            nullptr, WindowEventProc, 0, 0,
-                                            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
 }
 
 void ShowElementTargetUnderCursor() {
@@ -22982,6 +23246,9 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         SetWindowPos(g_topBarHwnd, HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         UpdateWindow(g_topBarHwnd);
+        InstallShellHook(g_topBarHwnd);
+        RefreshTaskbarButtonRectsAsync();
+        ScheduleTaskbarRectRefreshRetries();
         // Re-apply backdrop after window becomes visible (fixes blur on top bar)
         ApplyWindowBackdrop(g_topBarHwnd);
         RegisterAppBar(g_topBarHwnd);
@@ -23128,8 +23395,9 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                     if (SUCCEEDED(DwmGetWindowAttribute(g_topBarHwnd, DWMWA_CLOAKED,
                                                         &cloaked, sizeof(cloaked))) &&
                         cloaked) {
+                        BOOL cloakOff = FALSE;
                         DwmSetWindowAttribute(g_topBarHwnd, DWMWA_CLOAK,
-                                              FALSE, sizeof(BOOL));
+                                              &cloakOff, sizeof(cloakOff));
                     }
                     if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
                         BOOL popupCloaked = FALSE;
@@ -23138,8 +23406,9 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                                                             &popupCloaked,
                                                             sizeof(popupCloaked))) &&
                             popupCloaked) {
+                            BOOL cloakOff = FALSE;
                             DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
-                                                  FALSE, sizeof(BOOL));
+                                                  &cloakOff, sizeof(cloakOff));
                             DwmFlush();
                         }
                     }
@@ -23353,7 +23622,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                 // input via RawInput RIDEV_INPUTSINK so focus doesn't
                 // matter, leave the flyout visible but keystroke-starved.
                 // The periodic check here closes that gap.
-                {
+                if (!g_settings.disableFlyoutAutoClose) {
                     bool oursOpen = false;
                     try {
                         if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) oursOpen = true;
@@ -23564,20 +23833,13 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         // Message loop ended — tear the settings window down on this same thread
         // (its WndProc runs here too, so this is safe and synchronous).
         topbar_settings_window::DestroySettingsWindowNow();
+        UninstallShellHook(g_topBarHwnd);
         if (g_startMenuFlyout) {
             try { g_startMenuFlyout.Hide(); } catch (...) {}
             g_startMenuFlyout = nullptr;
         }
 
         // The topbar has been closed. Stop the foreground hook first (same thread).
-        if (g_childFlyoutMouseHook) {
-            UnhookWindowsHookEx(g_childFlyoutMouseHook);
-            g_childFlyoutMouseHook = nullptr;
-        }
-        if (g_searchKeyHook) {
-            UnhookWindowsHookEx(g_searchKeyHook);
-            g_searchKeyHook = nullptr;
-        }
         if (g_foregroundHook) {
             UnhookWinEvent(g_foregroundHook);
             g_foregroundHook = nullptr;
@@ -24033,6 +24295,8 @@ BOOL WhTool_ModInit() {
 
     g_taskbarCreatedMsg = RegisterWindowMessage(L"TaskbarCreated");
 
+    StartHookThread();
+
     // Create the stop event for clean shutdown
     g_stopEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
 
@@ -24161,7 +24425,10 @@ void WhTool_ModUninit() {
     for (HANDLE h : handles) {
         CloseHandle(h);
     }
-    g_workerThreads.clear();
+    {
+        std::lock_guard<std::mutex> lock(g_workerThreadsMutex);
+        g_workerThreads.clear();
+    }
 
     // Wait for the main UI thread to exit.
     if (g_topBarThread) {
@@ -24169,6 +24436,8 @@ void WhTool_ModUninit() {
         CloseHandle(g_topBarThread);
         g_topBarThread = nullptr;
     }
+
+    StopHookThread();
 
     // Now it's safe to close the stop event (all workers have exited).
     if (g_stopEvent) {
