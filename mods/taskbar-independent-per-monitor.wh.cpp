@@ -10,7 +10,7 @@
 // @license         MIT
 // @include         explorer.exe
 // @include         sihost.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lshell32 -luuid -lpsapi -lruntimeobject
 // ==/WindhawkMod==
 
@@ -625,7 +625,7 @@ static int (*pBtnGetNumItems)(void*) = nullptr;       // CTaskBtnGroup::GetNumIt
 static void* (*pBtnGetTaskItem)(void*, int) = nullptr;  // CTaskBtnGroup::GetTaskItem
 
 // All button groups of a taskbar: CDPA<ITaskBtnGroup> in CTaskListWnd. The offset is taken
-// from the code of GetButtonGroupCount ("mov rdx,[rcx+disp32]") and read at runtime.
+// from the code of GetButtonGroupCount ("mov rdx,[rcx+disp32]" / "ldr xN,[x0,#imm]") at runtime.
 // With "never combine" every window has its own group - _GetTBGroupFromGroup only finds
 // the first one.
 static HMODULE g_tb = nullptr;
@@ -633,11 +633,22 @@ static void* pGetButtonGroupCount = nullptr;
 static int g_dpaOffset = -1;                    // from tl; -1 = unknown/disabled
 
 static void InitDpaOffset() {
+#if defined(__aarch64__)
+    const DWORD* p = (const DWORD*)pGetButtonGroupCount;
+    for (int i = 0; p && i < 4 && Readable(p + i, 4); i++) {
+        if ((p[i] & 0xFFC003E0) == 0xF9400000) {  // ldr xN,[x0,#imm]
+            int d = ((p[i] >> 10) & 0xFFF) * 8;
+            if (d > 0 && d < 0x1000) g_dpaOffset = d;
+            break;
+        }
+    }
+#else
     const unsigned char* p = (const unsigned char*)pGetButtonGroupCount;
     if (p && Readable(p, 8) && p[0] == 0x48 && p[1] == 0x8B && p[2] == 0x91) {
         int d = *(const int*)(p + 3);
         if (d > 0 && d < 0x1000) g_dpaOffset = d;
     }
+#endif
     Wh_Log(L"-> Button group list %ls (0x%X)", g_dpaOffset > 0 ? L"found" : L"NOT found", g_dpaOffset);
 }
 
@@ -1052,8 +1063,13 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             app.resize(wcsnlen(app.c_str(), app.size()));
         }
         Wh_Log(L"-> Request from the pin list: %lX", (unsigned long)cd->dwData);
-        if (cd->dwData == 0x534B5032)  // "SKP2": PinManager wants to pin
-            return (g_fakeGroup && GetTickCount() - g_jumpTick < 10000 && HandleExtraPin(nullptr, app.c_str())) ? 1 : 0;
+        if (cd->dwData == 0x534B5032) {  // "SKP2": PinManager wants to pin ("path|aumid")
+            size_t sep = app.find(L'|');
+            std::wstring path = app.substr(0, sep);
+            std::wstring aumid = sep == std::wstring::npos ? L"" : app.substr(sep + 1);
+            return (g_fakeGroup && GetTickCount() - g_jumpTick < 10000 &&
+                    HandleExtraPin(aumid.c_str(), path.c_str())) ? 1 : 0;
+        }
         if (cd->dwData == 0x534B4131) {  // "SKA1": re-append after HandleExtraPin?
             return !g_swallowAddKey.empty() && GetTickCount() - g_swallowAddTick < 3000 && Lower(app) == g_swallowAddKey
                        ? (g_swallowAddKey.clear(), 1) : 0;
@@ -1712,8 +1728,8 @@ static bool SamePinTarget(const std::wstring& path, void* g) {
 static bool HandleExtraPin(const wchar_t* app, const wchar_t* path) {
     void* g = g_fakeGroup;
     if (!g || GetTickCount() - g_jumpTick > 20000 || !Pinned(g)) return false;
-    if (app && *app && _wcsicmp(app, AppOf(g)) != 0) return false;
-    if (path && *path && !SamePinTarget(path, g)) {  // another app was pinned
+    if ((app && *app && _wcsicmp(app, AppOf(g)) != 0) ||
+        (path && *path && !SamePinTarget(path, g))) {  // another app was pinned
         SetFakeGroup(nullptr);
         return false;
     }
@@ -2093,8 +2109,23 @@ static HRESULT PinTrusted_hook(void* self, PCIDLIST_ABSOLUTE pidl, int caller) {
     bool extra = false;
     if (w) {
         wchar_t path[MAX_PATH] = {};
-        if (pidl) SHGetPathFromIDListW(pidl, path);
-        COPYDATASTRUCT cd{0x534B5032, (DWORD)((wcslen(path) + 1) * sizeof(wchar_t)), path};  // "SKP2"
+        std::wstring data;
+        if (pidl) {
+            SHGetPathFromIDListW(pidl, path);
+            data = path;
+            IPropertyStore* ps = nullptr;
+            if (SUCCEEDED(SHGetPropertyStoreFromIDList(pidl, GPS_DEFAULT, IID_PPV_ARGS(&ps))) && ps) {
+                PROPVARIANT pv;
+                PropVariantInit(&pv);
+                if (SUCCEEDED(ps->GetValue(kAumid, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal) {
+                    data += L'|';
+                    data += pv.pwszVal;
+                }
+                PropVariantClear(&pv);
+                ps->Release();
+            }
+        }
+        COPYDATASTRUCT cd{0x534B5032, (DWORD)((data.size() + 1) * sizeof(wchar_t)), (void*)data.c_str()};  // "SKP2"
         extra = SendMessageTimeoutW(w, WM_COPYDATA, 0, (LPARAM)&cd, SMTO_ABORTIFHUNG, 1500, &r) && r == 1;
     }
     Wh_Log(L"-> PinManager: pin (caller %d)%ls", caller, extra ? L" - additional taskbar only" : L"");
