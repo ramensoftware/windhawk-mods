@@ -1,3 +1,7 @@
+## 3.1.0 ([Sep 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8a375d54f96fe347d9224f6a4154a40d102855e8/mods/restore-folder-menubar-25h2.wh.cpp))
+
+* Also hook registry query for greater reliability
+
 ## 3.0.0 ([Jun 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e011233788cb0248cb78e4d2eb93692310dd7931/mods/restore-folder-menubar-25h2.wh.cpp))
 
 Add code from the mod Control Panel Color Fix version 1.0 because the version 1.0.1 breaks the compatibility with Classic theme and the author is not going to fix it.

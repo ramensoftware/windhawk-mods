@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-28T17:03:31.000Z</updated>
+    <updated>2026-09-28T18:04:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[ExplorerFrame and menubar fixes fork 3.1.0]]></title>
+        <id>https://windhawk.net/mods/restore-folder-menubar-25h2#8a375d54f96fe347d9224f6a4154a40d102855e8</id>
+        <link href="https://windhawk.net/mods/restore-folder-menubar-25h2"/>
+        <updated>2026-09-28T18:04:16.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Also hook registry query for greater reliability</li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Real Names in Pre-Vista Recycle Bin Prompts 1.3]]></title>
         <id>https://windhawk.net/mods/recycle-bin-original-names#8d182407fc4554abe9d11208031a46747b4ff3f3</id>
@@ -785,23 +798,6 @@ live; the two noted below need a mod reload.</p>
         <updated>2026-09-27T19:22:30.000Z</updated>
         <content type="html"><![CDATA[<ul>
 <li>Fixed the classic navigation bar disappearing when window preloading is enabled in Explorer's settings.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Labels for Windows 11 1.5]]></title>
-        <id>https://windhawk.net/mods/taskbar-labels#5a826c2e4c0bdc6e5c5d06d32d57c7f09f1d63f9</id>
-        <link href="https://windhawk.net/mods/taskbar-labels"/>
-        <updated>2026-09-27T18:32:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Made excluded program settings work for all four modes. Previously, they had no effect when combining was enabled.</li>
-<li>Fixed misplaced badge positions.</li>
-<li>Fixed labels disappearing when ellipsis are used and items are being dragged for reordering.</li>
-<li>Fixed the label text appearing on top of the icon in some cases.</li>
-<li>Fixed compatibility with recent Windows 11 preview builds.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

@@ -1,0 +1,14 @@
+{
+  "modId": "auto-theme-switcher",
+  "reviews": [
+    {
+      "authorName": "kal0uf",
+      "content": "I wanted Windows to follow a light theme during the day and a dark one at night without toggling it by hand, and this mod does that. You set a schedule and it switches the appearance for you. It can also swap wallpapers and full themes, not just the light/dark setting, so the desktop stays consistent.\n\nWhat I liked:\n\nSchedule-based switching. Set it once and forget it.\nHotkey support. If you want to switch manually, say for a bright room at night, one key press does it.\nCustom script support. This is handy if you want to trigger other things when the theme changes.\nRuns through Windhawk. It installs in a couple of clicks, and you can disable or remove it without leaving anything behind.",
+      "id": 28,
+      "modVersion": "1.3.2",
+      "parentId": null,
+      "timestamp": 1790614624,
+      "votes": 0
+    }
+  ]
+}

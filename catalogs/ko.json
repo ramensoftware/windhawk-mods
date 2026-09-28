@@ -628,7 +628,7 @@
         "rating": 9,
         "ratingBreakdown": [0, 0, 4, 1, 22],
         "ratingUsers": 27,
-        "reviews": 0,
+        "reviews": 1,
         "updated": 1782335252000,
         "users": 779
       },
@@ -10393,7 +10393,7 @@
         "ratingBreakdown": [0, 0, 0, 0, 4],
         "ratingUsers": 4,
         "reviews": 0,
-        "updated": 1782369499000,
+        "updated": 1790618656000,
         "users": 382
       },
       "metadata": {
@@ -10408,7 +10408,7 @@
           "explorer.exe"
         ],
         "name": "ExplorerFrame and menubar fixes fork",
-        "version": "3.0.0"
+        "version": "3.1.0"
       }
     },
     "ribbon-caption-icon-fix": {
