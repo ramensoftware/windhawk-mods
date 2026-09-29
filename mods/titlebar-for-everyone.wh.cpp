@@ -588,7 +588,8 @@ HANDLE WINAPI CreateFileW_hook(
 
     DWORD dwAttrib = GetFileAttributesW(steamIndexHtmlModded);
 
-    if (dwAttrib != INVALID_FILE_ATTRIBUTES && !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY) && wcsicmp(compareFileName, steamIndexHtml) == 0) {
+    if (dwAttrib != INVALID_FILE_ATTRIBUTES && !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY) &&
+        wcsicmp(compareFileName, steamIndexHtml) == 0 && !tb4e_settings.noSteamHtmlInject) {
         Wh_Log(L"lpFileName = %s", compareFileName);
         Wh_Log(L"=>");
         Wh_Log(L"lpFileName = %s", steamIndexHtmlModded);
