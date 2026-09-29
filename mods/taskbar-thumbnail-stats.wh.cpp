@@ -2,7 +2,7 @@
 // @id              taskbar-thumbnail-stats
 // @name            Taskbar Thumbnail Stats
 // @description     Shows RAM, CPU and version of the program on the Windows 11 taskbar thumbnails
-// @version         1.1
+// @version         1.2
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @license         GPL-3.0
@@ -195,7 +195,10 @@ struct ThumbnailMapping {
 };
 
 std::mutex g_mappingMutex;
-std::vector<ThumbnailMapping> g_thumbnailMapping;
+// Holds WinRT weak references: not destroyed at process exit (see
+// https://github.com/ramensoftware/windhawk/wiki/Global-objects-and-process-shutdown),
+// cleared in Wh_ModUninit instead.
+[[clang::no_destroy]] std::vector<ThumbnailMapping> g_thumbnailMapping;
 
 void* GetIdentity(IUnknown* object) {
     if (!object) {
@@ -763,7 +766,7 @@ std::condition_variable g_statsCondition;
 std::unordered_map<HWND, StatsEntry> g_statsEntries;
 bool g_statsStop = false;
 bool g_statsNewRequest = false;
-std::thread g_statsThread;
+[[clang::no_destroy]] std::optional<std::thread> g_statsThread;
 
 // Number of thumbnail timers currently running (diagnostics).
 std::atomic<int> g_activeTimers;
@@ -868,7 +871,7 @@ void StartStatsThread() {
         std::lock_guard<std::mutex> lock(g_statsMutex);
         g_statsStop = false;
     }
-    g_statsThread = std::thread(StatsThreadProc);
+    g_statsThread.emplace(StatsThreadProc);
 }
 
 void StopStatsThread() {
@@ -877,8 +880,9 @@ void StopStatsThread() {
         g_statsStop = true;
     }
     g_statsCondition.notify_all();
-    if (g_statsThread.joinable()) {
-        g_statsThread.join();
+    if (g_statsThread) {
+        g_statsThread->join();
+        g_statsThread.reset();
     }
 }
 
@@ -887,7 +891,8 @@ void StopStatsThread() {
 // ===========================================================================
 
 std::mutex g_uiSettingsMutex;
-winrt::Windows::UI::ViewManagement::UISettings g_uiSettings{nullptr};
+[[clang::no_destroy]] winrt::Windows::UI::ViewManagement::UISettings
+    g_uiSettings{nullptr};
 winrt::event_token g_colorValuesChangedToken{};
 
 std::optional<Color> GetAccentColor() {
@@ -928,7 +933,7 @@ void ReleaseAccentColorWatcher() {
 
 struct ViewState {
     winrt::weak_ref<FrameworkElement> element;
-    winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
+    DWORD threadId = 0;  // The UI thread owning the view.
 
     // Injected elements.
     winrt::weak_ref<Controls::Grid> grid;
@@ -949,7 +954,10 @@ struct ViewState {
 };
 
 std::mutex g_viewStatesMutex;
-std::vector<std::shared_ptr<ViewState>> g_viewStates;
+// Holds strong XAML references: not destroyed at process exit, released on
+// the owning UI threads in Wh_ModUninit.
+[[clang::no_destroy]] std::optional<std::vector<std::shared_ptr<ViewState>>>
+    g_viewStates{std::in_place};
 
 // Breadth-first search in the visual tree, limited depth.
 DependencyObject FindDescendant(
@@ -1305,19 +1313,130 @@ void StartTimer(const std::shared_ptr<ViewState>& state) {
     }
 }
 
+// ===========================================================================
+// Running code on a given UI thread (synchronously)
+// ===========================================================================
+
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND result = nullptr;
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD pid = 0;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &pid) &&
+                pid == GetCurrentProcessId() &&
+                GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&result));
+    return result;
+}
+
+HWND GetTaskbarUiWnd() {
+    HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (!taskbarWnd) {
+        return nullptr;
+    }
+
+    return FindWindowExW(taskbarWnd, nullptr,
+                         L"Windows.UI.Composition.DesktopWindowContentBridge",
+                         nullptr);
+}
+
+// Any window of the given thread, to send it a message.
+HWND FindThreadWindow(DWORD threadId) {
+    if (GetWindowThreadProcessId(GetTaskbarUiWnd(), nullptr) == threadId) {
+        return GetTaskbarUiWnd();
+    }
+
+    HWND result = nullptr;
+    EnumThreadWindows(
+        threadId,
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            *reinterpret_cast<HWND*>(lParam) = hWnd;
+            return FALSE;
+        },
+        reinterpret_cast<LPARAM>(&result));
+    return result;
+}
+
+using RunFromWindowThreadProc_t = void (*)(void* param);
+
+// Runs proc on the thread of hWnd and returns only after it has finished.
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         void* procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessageW(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        void* procParam;
+    };
+
+    DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (threadId == 0) {
+        return false;
+    }
+
+    if (threadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    auto* param = (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, threadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessageW(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return true;
+}
+
 void SetupThumbnailView(FrameworkElement element) {
     std::shared_ptr<ViewState> state;
 
     {
         std::lock_guard<std::mutex> lock(g_viewStatesMutex);
 
-        // States with a timer are kept until the timer is released on its
-        // own thread (see the Tick handler).
-        std::erase_if(g_viewStates, [](const auto& s) {
-            return !s->element.get() && !s->timer;
+        if (!g_viewStates) {
+            return;
+        }
+
+        // Drop the states of destroyed views. Only the ones of this thread:
+        // their XAML references must be released on their own thread. States
+        // with a timer are kept until the timer is released (see the Tick
+        // and Unloaded handlers).
+        DWORD currentThreadId = GetCurrentThreadId();
+        std::erase_if(*g_viewStates, [currentThreadId](const auto& s) {
+            return s->threadId == currentThreadId && !s->element.get() &&
+                   !s->timer;
         });
 
-        for (const auto& s : g_viewStates) {
+        for (const auto& s : *g_viewStates) {
             if (s->element.get() == element) {
                 state = s;
                 break;
@@ -1327,9 +1446,16 @@ void SetupThumbnailView(FrameworkElement element) {
         if (!state) {
             state = std::make_shared<ViewState>();
             state->element = winrt::make_weak(element);
-            state->dispatcher = element.Dispatcher();
-            g_viewStates.push_back(state);
+            state->threadId = currentThreadId;
+            g_viewStates->push_back(state);
         }
+    }
+
+    static std::atomic<bool> loggedThread;
+    if (!loggedThread.exchange(true)) {
+        Wh_Log(L"Thumbnail view thread: %u, taskbar UI thread: %u",
+               GetCurrentThreadId(),
+               GetWindowThreadProcessId(GetTaskbarUiWnd(), nullptr));
     }
 
     InjectStats(*state);
@@ -1349,8 +1475,11 @@ void SetupThumbnailView(FrameworkElement element) {
             }
         });
         state->unloadedToken = element.Unloaded([weakState](auto&&, auto&&) {
+            // Release (not just stop) the timer: a stopped timer never ticks,
+            // so it could never notice that the view was destroyed. It's
+            // created again on the next Loaded event.
             if (auto s = weakState.lock()) {
-                StopTimer(*s);
+                ReleaseTimer(*s);
             }
         });
     }
@@ -1684,49 +1813,66 @@ void Wh_ModUninit() {
     StopStatsThread();
     ReleaseAccentColorWatcher();
 
-    std::vector<std::shared_ptr<ViewState>> states;
     {
-        std::lock_guard<std::mutex> lock(g_viewStatesMutex);
-        states.swap(g_viewStates);
+        std::lock_guard<std::mutex> lock(g_mappingMutex);
+        g_thumbnailMapping.clear();
     }
 
-    // Remove the injected elements and release the timers on their UI
-    // threads. No mod code may run after unloading, so wait for each cleanup
-    // to complete.
-    for (const auto& state : states) {
-        auto dispatcher = state->dispatcher;
-        if (!dispatcher) {
+    // Group the views by their UI thread.
+    std::unordered_map<DWORD, std::vector<std::shared_ptr<ViewState>>>
+        statesByThread;
+    {
+        std::lock_guard<std::mutex> lock(g_viewStatesMutex);
+        if (g_viewStates) {
+            for (auto& state : *g_viewStates) {
+                statesByThread[state->threadId].push_back(std::move(state));
+            }
+            g_viewStates.reset();
+        }
+    }
+
+    // Remove the injected elements, release the timers and all the XAML
+    // references on the owning thread, synchronously: when RunFromWindowThread
+    // returns, no mod code runs on that thread anymore.
+    int cleaned = 0;
+    for (auto& [threadId, states] : statesByThread) {
+        HWND hWnd = FindThreadWindow(threadId);
+        if (!hWnd) {
+            // The thread has no window (it's probably gone): retain the
+            // states rather than releasing XAML references from this thread.
+            Wh_Log(L"No window for thread %u, retaining %d views", threadId,
+                   (int)states.size());
+            new std::vector<std::shared_ptr<ViewState>>(std::move(states));
             continue;
         }
 
-        try {
-            if (dispatcher.HasThreadAccess()) {
-                CleanupViewState(state);
-                continue;
-            }
-
-            auto operation = dispatcher.RunAsync(
-                winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
-                [state] {
+        bool ran = RunFromWindowThread(
+            hWnd,
+            [](void* param) {
+                auto& states =
+                    *(std::vector<std::shared_ptr<ViewState>>*)param;
+                for (const auto& state : states) {
                     try {
                         CleanupViewState(state);
                     } catch (...) {
+                        HRESULT hr = winrt::to_hresult();
+                        Wh_Log(L"Cleanup error %08X", hr);
                     }
-                });
-
-            // Wait as long as needed: unloading with a pending cleanup would
-            // crash explorer. Log if it takes unusually long.
-            while (operation.wait_for(std::chrono::seconds(5)) ==
-                   winrt::Windows::Foundation::AsyncStatus::Started) {
-                Wh_Log(L"Still waiting for a taskbar thread to clean up");
-            }
-        } catch (...) {
-            HRESULT hr = winrt::to_hresult();
-            Wh_Log(L"Cleanup error %08X", hr);
+                }
+                // Last references: the states are destroyed on this thread.
+                states.clear();
+            },
+            &states);
+        if (!ran) {
+            Wh_Log(L"Couldn't run on thread %u, retaining %d views", threadId,
+                   (int)states.size());
+            new std::vector<std::shared_ptr<ViewState>>(std::move(states));
+            continue;
         }
+        cleaned++;
     }
 
-    Wh_Log(L"Cleaned up %d thumbnail views", (int)states.size());
+    Wh_Log(L"Cleaned up the views of %d UI threads", cleaned);
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
