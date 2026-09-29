@@ -29,7 +29,7 @@ snapped.
 - The size the window had before it was snapped is no longer remembered.
 - Works with the maximize button, double-clicking the title bar and the
   window menu (including dialogs and MDI frame windows), and with programs that
-  maximize through `ShowWindow` or `ShowWindowAsync`.
+  maximize their own windows through `ShowWindow` or `ShowWindowAsync`.
 */
 // ==/WindhawkModReadme==
 
