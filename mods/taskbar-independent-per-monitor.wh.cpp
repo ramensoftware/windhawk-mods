@@ -173,6 +173,7 @@ struct MonSlot {
 };
 static std::mutex g_slotMx;
 static std::map<std::wstring, MonSlot> g_slots;
+static std::set<std::wstring> g_connected;  // monitors connected at the last check
 static unsigned g_slotSeq = 0;
 static bool g_slotsLoaded = false;
 static std::map<HMONITOR, std::pair<RECT, int>> g_slotCache;
@@ -232,32 +233,39 @@ static void SaveSlots() {
     Wh_SetStringValue(L"monitorSlots", out.c_str());
 }
 
+// Monitors connected or disconnected since the last check: both count as seen now
+static void UpdateConnected() {
+    std::set<std::wstring> cur = ConnectedIds();
+    if (cur == g_connected) return;
+    TouchSlots(g_connected);
+    TouchSlots(cur);
+    g_connected = std::move(cur);
+    SaveSlots();
+}
+
 static void ForgetMonitor(int n);
 
 static int MonNumberLocked(HMONITOR m, const MONITORINFO& mi, std::vector<int>& freed) {
     DWORD now = GetTickCount();
+    if (!g_slotsLoaded) {
+        g_slotsLoaded = true;
+        LoadSlots();
+    }
     if (now - g_slotCacheTick > 2000) {
         g_slotCache.clear();
         g_slotCacheTick = now;
+        UpdateConnected();
     }
     auto c = g_slotCache.find(m);
     if (c != g_slotCache.end() && EqualRect(&c->second.first, &mi.rcMonitor)) return c->second.second;
 
-    if (!g_slotsLoaded) {
-        g_slotsLoaded = true;
-        LoadSlots();
-        TouchSlots(ConnectedIds());
-        SaveSlots();
-    }
     std::wstring id = MonitorId(m);
-    if (id.empty()) return 0;
-    auto it = g_slots.find(id);
-    if (it == g_slots.end()) {
+    auto it = id.empty() ? g_slots.end() : g_slots.find(id);
+    if (!id.empty() && it == g_slots.end()) {
         std::vector<std::pair<LONG, HMONITOR>> v;
         EnumDisplayMonitors(nullptr, nullptr, MonEnum, (LPARAM)&v);
         std::sort(v.begin(), v.end(), [](auto& a, auto& b) { return a.first < b.first; });
-        std::set<std::wstring> connected = ConnectedIds();
-        TouchSlots(connected);
+        UpdateConnected();
         for (auto& [x, hm] : v) {  // new monitors get the lowest free numbers, left to right
             std::wstring vid = MonitorId(hm);
             if (vid.empty() || g_slots.count(vid)) continue;
@@ -268,7 +276,7 @@ static int MonNumberLocked(HMONITOR m, const MONITORINFO& mi, std::vector<int>& 
             if (n > kMaxMon) {
                 auto old = g_slots.end();
                 for (auto i = g_slots.begin(); i != g_slots.end(); ++i) {
-                    if (!connected.count(i->first) && (old == g_slots.end() || i->second.seq < old->second.seq))
+                    if (!g_connected.count(i->first) && (old == g_slots.end() || i->second.seq < old->second.seq))
                         old = i;
                 }
                 if (old == g_slots.end()) break;
@@ -280,10 +288,10 @@ static int MonNumberLocked(HMONITOR m, const MONITORINFO& mi, std::vector<int>& 
         }
         SaveSlots();
         it = g_slots.find(id);
-        if (it == g_slots.end()) return 0;
     }
-    g_slotCache[m] = {mi.rcMonitor, it->second.n};
-    return it->second.n;
+    int n = it != g_slots.end() ? it->second.n : 0;
+    g_slotCache[m] = {mi.rcMonitor, n};  // also a miss, so it isn't retried on every call
+    return n;
 }
 
 static int MonNumber(HMONITOR m) {
