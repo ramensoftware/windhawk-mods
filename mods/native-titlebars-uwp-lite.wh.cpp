@@ -2,7 +2,7 @@
 // @id              native-titlebars-uwp-lite
 // @name            Remove UWP titlebars Lite
 // @description     Enables native titlebars in UWP apps
-// @version         1.2.1
+// @version         1.3.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         ApplicationFrameHost.exe
@@ -458,6 +458,21 @@ HWND WINAPI CreateWindowInBandEx_hook(
     DWORD dwBand,
     DWORD dwTypeFlags)
 {
+    // Only UWP frames get the native frame. Explorer creates its shell
+    // surfaces (Alt+Tab host, ForegroundStaging, ThumbnailDeviceHelperWnd)
+    // through this same API; they must keep their original styles. A class
+    // passed as an atom is left untouched too.
+    if (IS_INTRESOURCE(lpClassName) ||
+        _wcsicmp(lpClassName, L"ApplicationFrameWindow") != 0)
+    {
+        return CreateWindowInBandEx_orig(
+            dwExStyle, lpClassName, lpWindowName, dwStyle,
+            x, y, nWidth, nHeight,
+            hWndParent, hMenu, hInstance, lpParam,
+            dwBand, dwTypeFlags);
+    }
+
+
     dwExStyle &= ~WS_EX_DLGMODALFRAME;
     dwExStyle &= ~0x00200000L;
     dwStyle = WS_OVERLAPPEDWINDOW | WS_DLGFRAME;
