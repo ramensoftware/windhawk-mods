@@ -22,73 +22,67 @@
 
 // ==WindhawkModReadme==
 /*
-# Место на диске на панели задач
+# Taskbar Disk Space
 
-При отображаемом имени — две строки; при скрытом имени — одна компактная строка:
+Displays the selected local drive's volume label, free space and total capacity
+on the Windows 11 taskbar. With the drive name visible the indicator uses two
+lines; with the name hidden it uses one compact line:
 
 ```
-Данные (D:)
-Свободно 128,4 из 931,5 ГиБ
+Data (D:)
+Free 128.4 of 931.5 GiB
 ```
 
-- Нажмите на индикатор, чтобы открыть список дисков прямо на панели задач.
-  Выбранный диск сохраняется в локальном хранилище мода.
-- В настройках можно задать начальный диск. По умолчанию — C:.
-- Имя берётся из метки тома. Поле «Своё имя диска» позволяет его заменить.
-- Настройка «Скрывать имя диска» выключена по умолчанию. При включении верхняя
-  строка содержит только букву, например `(E:)`.
-- При отображаемом имени используются две строки: имя сверху, объём снизу.
-  При скрытом имени используется одна компактная строка: **(E:) X / Y ГиБ**,
-  без слов «Свободно» и «из».
-- При наведении бледная полоса показывает долю свободного и занятого места.
-  Доступны десять заранее заготовленных пар цветов; по умолчанию используются
-  зелёный для свободного и красный для занятого места.
-- Значения обновляются автоматически, по умолчанию каждые 10 минут
-  (600 секунд); интервал можно изменить в настройках.
-- Проверка диска только читает метаданные и не записывает данные на накопитель.
-- ГиБ = 1024³ байт, как при расчёте размеров в Проводнике.
-- Недоступный, заблокированный или отсутствующий диск отображается как
-  «Диск недоступен», а не как диск с нулевым свободным местом.
+- Click the indicator to open a native Windows 11 menu and switch drives without
+  opening the settings page. The selection is kept in mod storage.
+- The settings page provides an initial drive, an optional custom label, ten
+  free/used hover color pairs, an update interval (10 minutes by default), a
+  maximum width and a left offset.
+- The default hover palette is green for free space and red for used space.
+- When **Hide drive name** is enabled, the compact text is `(E:) 12.3 / 100.0 GiB`.
+- The indicator height follows the Start button frame. The Windows 11 Fluent
+  taskbar supplies the native rounded surface, hover animation and menu style.
+- Capacity checks read volume metadata only. They do not write user data to the
+  drive. GiB means 1024³ bytes, matching Windows Explorer's calculation.
+- Only local fixed volumes are listed; network shares and removable flash drives
+  are excluded. A missing or inaccessible drive is reported as **Drive unavailable**.
 
-## Совместимость
+## Why this is a separate mod
 
-Windhawk 1.7.3 и 2.0 используют один исходник. В 1.7.3 доступен список букв
-A:–Z:. В 2.0 обнаруженные локальные диски дополнительно подписаны именами,
-а ширина и отступ настраиваются ползунками. Новые аннотации помечены `#! `.
-Неиспользуемые буквы остаются в списке, чтобы можно было выбрать временно
-отключённый диск. Список имён обновляется раз в 30 секунд.
+`taskbar-disk-space-label` is a useful compact free-space label. This mod keeps a
+different interaction and presentation: it shows free **and total** capacity,
+uses the Windows volume label, provides a click-to-switch drive menu, draws a
+free/used hover bar, supports a two-line/one-line layout, and matches the Start
+button frame height. Users who only need a simple free-space label should use the
+existing mod; this one is intended for the richer drive indicator.
 
-Штатная панель Windows 11 22H2 и новее. На сборках с изменёнными внутренними
-символами панели задач может потребоваться обновление мода. Для первого
-запуска Windhawk может загрузить отладочные символы Microsoft.
-ExplorerPatcher и StartAllBack не поддерживаются.
+## Compatibility and placement
 
-## Размещение
+The same source works with Windhawk 1.7.3 and 2.0. Windows 11 22H2 or newer with
+the native taskbar is required. ExplorerPatcher and StartAllBack are not supported.
+The indicator is placed on the left side of the primary taskbar; adjust **Left
+offset** when Widgets or another taskbar mod occupies that area. **Reserve space**
+is disabled by default for compatibility with the original layout and can be
+enabled when the indicator overlaps Start or app buttons.
 
-Индикатор находится слева на основной панели задач. Нажатие по нему открывает
-штатное XAML-меню со списком доступных локальных фиксированных дисков; остальные
-области панели задач работают как обычно.
-По умолчанию оставлен отступ 160, чтобы разместить его после «Виджетов».
-Если «Виджеты» отключены, уменьшите отступ до 12.
-При наложении на погоду увеличьте отступ. Настройка «Зарезервировать место»
-добавляет отступ перед кнопками приложений; отключение мода его убирает.
-Высота рамки совпадает с высотой рамки кнопки «Пуск»; режим с именем использует
-две строки, а режим со скрытым именем — одну компактную строку.
-Другие моды, меняющие отступы панели, могут потребовать ручной настройки.
+## Русский
 
-Поддерживаются тома с буквами, которые Windows определяет как локальные
-фиксированные диски, включая внешние SSD с таким типом. Сетевые диски и
-съёмные флешки не включаются. При дисковых квотах показывается объём,
-доступный текущему пользователю. Изменения настроек применяются без
-перезапуска Проводника.
+Мод показывает имя выбранного локального диска, свободное и общее место на
+панели задач Windows 11. Нажатие открывает список фиксированных дисков прямо на
+панели. При отображаемом имени используются две строки, при скрытом — одна.
+Доступны десять пар цветов для бледной полосы свободного/занятого места.
+По умолчанию обновление выполняется раз в 10 минут, а резервирование места
+перед кнопками приложений выключено.
 */
 // ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
 - Drive: "C:"
-  $name: Диск
-  $description: Начальный диск. После запуска диск можно менять нажатием по индикатору на панели задач. В Windhawk 2.0 также видны метки обнаруженных томов.
+  $name: Drive
+  $name:ru-RU: Диск
+  $description: Initial drive. After startup, click the taskbar indicator to switch drives. Windhawk 2.0 also shows detected volume labels.
+  $description:ru-RU: Начальный диск. После запуска диск можно менять нажатием по индикатору на панели задач. В Windhawk 2.0 также видны метки обнаруженных томов.
   #! $dynamicSelect: true
   $options:
     - "A:": "A:"
@@ -117,55 +111,109 @@ ExplorerPatcher и StartAllBack не поддерживаются.
     - "X:": "X:"
     - "Y:": "Y:"
     - "Z:": "Z:"
+  $options:ru-RU:
+    - "A:": "A:"
+    - "B:": "B:"
+    - "C:": "C:"
+    - "D:": "D:"
+    - "E:": "E:"
+    - "F:": "F:"
+    - "G:": "G:"
+    - "H:": "H:"
+    - "I:": "I:"
+    - "J:": "J:"
+    - "K:": "K:"
+    - "L:": "L:"
+    - "M:": "M:"
+    - "N:": "N:"
+    - "O:": "O:"
+    - "P:": "P:"
+    - "Q:": "Q:"
+    - "R:": "R:"
+    - "S:": "S:"
+    - "T:": "T:"
+    - "U:": "U:"
+    - "V:": "V:"
+    - "W:": "W:"
+    - "X:": "X:"
+    - "Y:": "Y:"
+    - "Z:": "Z:"
 - DisplayName: ""
-  $name: Своё имя диска
-  $description: Оставьте пустым, чтобы использовать метку тома из Windows. Буква диска отображается всегда.
+  $name: Custom drive name
+  $name:ru-RU: Своё имя диска
+  $description: Leave empty to use the Windows volume label. The drive letter is always shown.
+  $description:ru-RU: Оставьте пустым, чтобы использовать метку тома из Windows. Буква диска отображается всегда.
 - HideDriveName: false
-  $name: Скрывать имя диска
-  $description: Оставляет только букву диска в верхней строке, например (E:). По умолчанию выключено.
+  $name: Hide drive name
+  $name:ru-RU: Скрывать имя диска
+  $description: Shows only the drive letter in the first line, for example (E:). Disabled by default.
+  $description:ru-RU: Оставляет только букву диска в верхней строке, например (E:). По умолчанию выключено.
 - FreeColor: "green-red"
-  $name: Цвета свободно/всего
-  $description: Заранее заготовленная пара цветов для свободного и занятого места при наведении.
+  $name: Free/used colors
+  $name:ru-RU: Цвета свободно/всего
+  $description: Preset colors for free and used space on hover.
+  $description:ru-RU: Заранее заготовленная пара цветов для свободного и занятого места при наведении.
   $options:
-    - "green-red": "Зелёный / красный — Green / Red"
-    - "blue-orange": "Синий / оранжевый — Blue / Orange"
-    - "cyan-purple": "Бирюзовый / фиолетовый — Cyan / Purple"
-    - "violet-yellow": "Фиолетовый / жёлтый — Violet / Yellow"
-    - "teal-pink": "Бирюзовый / розовый — Teal / Pink"
-    - "lime-indigo": "Лаймовый / индиго — Lime / Indigo"
-    - "amber-navy": "Янтарный / тёмно-синий — Amber / Navy"
-    - "mint-coral": "Мятный / коралловый — Mint / Coral"
-    - "sky-magenta": "Небесный / пурпурный — Sky / Magenta"
-    - "white-gray": "Белый / серый — White / Gray"
+    - "green-red": "Green / Red"
+    - "blue-orange": "Blue / Orange"
+    - "cyan-purple": "Cyan / Purple"
+    - "violet-yellow": "Violet / Yellow"
+    - "teal-pink": "Teal / Pink"
+    - "lime-indigo": "Lime / Indigo"
+    - "amber-navy": "Amber / Navy"
+    - "mint-coral": "Mint / Coral"
+    - "sky-magenta": "Sky / Magenta"
+    - "white-gray": "White / Gray"
+  $options:ru-RU:
+    - "green-red": "Зелёный / красный"
+    - "blue-orange": "Синий / оранжевый"
+    - "cyan-purple": "Бирюзовый / фиолетовый"
+    - "violet-yellow": "Фиолетовый / жёлтый"
+    - "teal-pink": "Бирюзовый / розовый"
+    - "lime-indigo": "Лаймовый / индиго"
+    - "amber-navy": "Янтарный / тёмно-синий"
+    - "mint-coral": "Мятный / коралловый"
+    - "sky-magenta": "Небесный / пурпурный"
+    - "white-gray": "Белый / серый"
 - UpdateInterval: 600
-  $name: Интервал обновления (секунды)
+  $name: Update interval (seconds)
+  $name:ru-RU: Интервал обновления (секунды)
+  $description: How often to refresh the disk reading. The default is 600 seconds (10 minutes).
+  $description:ru-RU: Как часто обновлять данные о диске. По умолчанию 600 секунд (10 минут).
   #! $min: 1
   #! $max: 3600
 - Width: 260
-  $name: Максимальная ширина индикатора
+  $name: Maximum indicator width
+  $name:ru-RU: Максимальная ширина индикатора
   #! $min: 180
   #! $max: 600
   #! $format: slider
 - LeftOffset: 160
-  $name: Отступ от левого края
-  $description: При включённой погоде оставьте место для неё. Если погода отключена, можно указать 12.
+  $name: Left offset
+  $name:ru-RU: Отступ от левого края
+  $description: Leave room for Widgets or other taskbar content. With Widgets disabled, 12 is usually enough.
+  $description:ru-RU: При включённой погоде оставьте место для неё. Если погода отключена, можно указать 12.
   #! $min: 0
   #! $max: 1200
   #! $format: slider
 - ReserveSpace: false
-  $name: Зарезервировать место перед кнопками приложений
-  $description: Добавляет отступ, чтобы кнопки Пуск и приложений не перекрывали индикатор.
+  $name: Reserve space before app buttons
+  $name:ru-RU: Зарезервировать место перед кнопками приложений
+  $description: Add a taskbar margin so Start and app buttons do not overlap the indicator. Disabled by default.
+  $description:ru-RU: Добавляет отступ, чтобы кнопки Пуск и приложений не перекрывали индикатор. По умолчанию выключено.
 */
 // ==/WindhawkModSettings==
 
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cwctype>
 #include <limits>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -190,6 +238,7 @@ namespace {
 constexpr wchar_t kWidgetName[] = L"WindhawkTaskbarDiskSpace";
 struct Settings {
     std::wstring drive;
+    std::wstring configuredDrive;
     std::wstring displayName;
     bool hideDriveName = false;
     std::wstring colorScheme = L"green-red";
@@ -260,6 +309,47 @@ std::wstring StringSetting(PCWSTR name) {
     return result;
 }
 
+bool IsRussianUi() {
+    return PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN;
+}
+
+std::wstring UiText(bool russian, PCWSTR english, PCWSTR russianText) {
+    return russian ? std::wstring(russianText) : std::wstring(english);
+}
+
+std::wstring FormatGiB(double value, bool russian) {
+    std::wstring input = std::to_wstring(value);
+    wchar_t localeName[LOCALE_NAME_MAX_LENGTH]{};
+    wchar_t output[64]{};
+    const bool localeAvailable = russian
+        ? (wcscpy_s(localeName, ARRAYSIZE(localeName), L"ru-RU") == 0)
+        : (GetUserDefaultLocaleName(localeName, ARRAYSIZE(localeName)) != 0);
+    wchar_t decimalSeparator[8]{};
+    wchar_t thousandSeparator[8]{};
+    NUMBERFMTW numberFormat{};
+    numberFormat.NumDigits = 1;
+    numberFormat.LeadingZero = 1;
+    numberFormat.Grouping = 0;
+    numberFormat.lpDecimalSep = decimalSeparator;
+    numberFormat.lpThousandSep = thousandSeparator;
+    if (localeAvailable &&
+        GetLocaleInfoEx(localeName, LOCALE_SDECIMAL, decimalSeparator,
+                        ARRAYSIZE(decimalSeparator)) &&
+        GetLocaleInfoEx(localeName, LOCALE_STHOUSAND, thousandSeparator,
+                        ARRAYSIZE(thousandSeparator)) &&
+        GetNumberFormatEx(localeName, 0, input.c_str(), &numberFormat, output,
+                          ARRAYSIZE(output)) &&
+        output[0] != L'\0') {
+        std::wstring formatted(output);
+        return formatted;
+    }
+    const size_t decimal = input.find(L'.');
+    if (decimal != std::wstring::npos) input.resize(decimal + 2);
+    std::wstring fallback(input);
+    if (russian) std::replace(fallback.begin(), fallback.end(), L'.', L',');
+    return fallback;
+}
+
 std::wstring LocalStringValue(PCWSTR name) {
     wchar_t value[32]{};
     if (!Wh_GetStringValue(name, value, ARRAYSIZE(value))) return {};
@@ -293,6 +383,7 @@ void LoadSettings() {
         Wh_SetStringValue(kSelectedDriveValue, selectedDrive.c_str());
     }
     settings.drive = std::move(selectedDrive);
+    settings.configuredDrive = configuredDrive;
     settings.displayName = StringSetting(L"DisplayName");
     settings.hideDriveName = Wh_GetIntSetting(L"HideDriveName") != 0;
     const std::wstring colorScheme = StringSetting(L"FreeColor");
@@ -340,18 +431,31 @@ std::wstring VolumeName(const std::wstring& root) {
     return result;
 }
 
-std::wstring CapacityText(ULONGLONG freeBytes, ULONGLONG totalBytes, bool compact = false) {
+std::wstring CapacityText(ULONGLONG freeBytes, ULONGLONG totalBytes, bool compact,
+                          bool russian) {
     constexpr double gib = 1024.0 * 1024.0 * 1024.0;
-    wchar_t text[128];
-    swprintf_s(text, compact ? L"%.1f / %.1f ГиБ" : L"Свободно %.1f из %.1f ГиБ",
-               freeBytes / gib, totalBytes / gib);
-    std::wstring result(text);
-    std::replace(result.begin(), result.end(), L'.', L',');
-    return result;
+    const std::wstring free = FormatGiB(freeBytes / gib, russian);
+    const std::wstring total = FormatGiB(totalBytes / gib, russian);
+    if (compact) {
+        return free + L" / " + total + (russian ? L" ГиБ" : L" GiB");
+    }
+    return (russian ? L"Свободно " : L"Free ") + free +
+           (russian ? L" из " : L" of ") + total +
+           (russian ? L" ГиБ" : L" GiB");
 }
 
-Reading ReadDisk(const Settings& settings) {
-    if (settings.drive.empty()) return {L"Выберите диск", L"Некорректная буква диска"};
+// Keep the test helper's historical Russian output while production uses the
+// user's Windows UI language.
+[[maybe_unused]] std::wstring CapacityText(ULONGLONG freeBytes, ULONGLONG totalBytes,
+                                           bool compact = false) {
+    return CapacityText(freeBytes, totalBytes, compact, true);
+}
+
+Reading ReadDisk(const Settings& settings, bool russian = true) {
+    if (settings.drive.empty()) {
+        return {UiText(russian, L"Select a drive", L"Выберите диск"),
+                UiText(russian, L"Invalid drive letter", L"Некорректная буква диска")};
+    }
     std::wstring root = settings.drive + L"\\";
     const bool fixed = GetDriveTypeW(root.c_str()) == DRIVE_FIXED;
     std::wstring title;
@@ -359,17 +463,22 @@ Reading ReadDisk(const Settings& settings) {
         // Только буква диска / Drive letter only.
         title = L"(" + settings.drive + L")";
     } else {
-        std::wstring label = settings.displayName;
-        if (label.empty() && fixed) label = VolumeName(root);
-        if (label.empty()) label = L"Локальный диск";
+        std::wstring label;
+        if (!settings.displayName.empty() &&
+            (settings.configuredDrive.empty() || settings.drive == settings.configuredDrive)) {
+            label = settings.displayName;
+        } else if (fixed) {
+            label = VolumeName(root);
+        }
+        if (label.empty()) label = UiText(russian, L"Local Disk", L"Локальный диск");
         title = label + L" (" + settings.drive + L")";
     }
-    Reading result{title, L"Диск недоступен"};
+    Reading result{title, UiText(russian, L"Drive unavailable", L"Диск недоступен")};
     if (!fixed) return result;
     ULARGE_INTEGER available{}, total{};
     if (GetDiskFreeSpaceExW(root.c_str(), &available, &total, nullptr)) {
         result.capacity = CapacityText(available.QuadPart, total.QuadPart,
-                                       settings.hideDriveName);
+                                       settings.hideDriveName, russian);
         if (total.QuadPart != 0) {
             result.freeRatio = std::clamp(
                 static_cast<double>(available.QuadPart) /
@@ -409,13 +518,14 @@ void SelectDrive(const std::wstring& drive) {
 
 void ShowDriveMenu() {
     if (!g_ui.surface) return;
+    const bool russian = IsRussianUi();
     const auto drives = FixedDrives();
     const Settings settings = CurrentSettings();
     MenuFlyout menu;
     for (const auto& drive : drives) {
         MenuFlyoutItem item;
         std::wstring label = VolumeName(drive + L"\\");
-        if (label.empty()) label = L"Локальный диск";
+        if (label.empty()) label = UiText(russian, L"Local Disk", L"Локальный диск");
         std::wstring text = (drive == settings.drive ? L"✓ " : L"  ") +
                             label + L" (" + drive + L")";
         item.Text(text);
@@ -427,7 +537,8 @@ void ShowDriveMenu() {
     }
     if (drives.empty()) {
         MenuFlyoutItem item;
-        item.Text(L"Нет доступных локальных дисков");
+        item.Text(UiText(russian, L"No local fixed drives available",
+                         L"Нет доступных локальных дисков"));
         item.IsEnabled(false);
         menu.Items().Append(item);
     }
@@ -543,21 +654,24 @@ void ApplyHoverBackground() {
     g_ui.usedStop.Color(usedColor);
 }
 
-void PublishDrives() {
+void PublishDrives(std::array<std::optional<std::wstring>, 26>& published,
+                  bool russian) {
     DWORD mask = GetLogicalDrives();
     if (!mask) return;  // Do not discard the previous list on enumeration error.
     for (int i = 0; i < 26; ++i) {
         std::wstring drive{static_cast<wchar_t>(L'A' + i), L':'};
         std::wstring key = L"::wh_select_option::Drive::" + drive;
         std::wstring root = drive + L"\\";
+        std::wstring label;
         if ((mask & (1u << i)) && GetDriveTypeW(root.c_str()) == DRIVE_FIXED) {
-            std::wstring label = VolumeName(root);
-            if (label.empty()) label = L"Локальный диск";
+            label = VolumeName(root);
+            if (label.empty()) label = UiText(russian, L"Local Disk", L"Локальный диск");
             label += L" (" + drive + L")";
-            Wh_SetStringValue(key.c_str(), label.c_str());
-        } else {
-            Wh_DeleteValue(key.c_str());
         }
+        if (published[i].has_value() && published[i].value() == label) continue;
+        if (label.empty()) Wh_DeleteValue(key.c_str());
+        else Wh_SetStringValue(key.c_str(), label.c_str());
+        published[i] = std::move(label);
     }
 }
 
@@ -758,7 +872,8 @@ void UpdateUi(HWND window, const Settings& settings, const Reading& reading) {
         g_ui.lastMargin = desired;
     }
     // No theme event handlers or timers are retained in Explorer's XAML tree.
-    // The worker dispatch refreshes the theme, layout and text once per second.
+    // The worker dispatches on new readings, settings changes and a five-second
+    // probe that detects a recreated taskbar without polling every second.
     HIGHCONTRASTW contrast{sizeof(contrast)};
     SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0);
     COLORREF rgb = (contrast.dwFlags & HCF_HIGHCONTRASTON) ? GetSysColor(COLOR_WINDOWTEXT) :
@@ -773,7 +888,8 @@ void UpdateUi(HWND window, const Settings& settings, const Reading& reading) {
     auto accessible = reading.title + L". " + reading.capacity;
     Automation::AutomationProperties::SetName(g_ui.surface, accessible);
     Automation::AutomationProperties::SetHelpText(
-        g_ui.surface, L"Нажмите для выбора локального диска");
+        g_ui.surface, UiText(IsRussianUi(), L"Click to choose a local drive",
+                             L"Нажмите для выбора локального диска"));
 }
 
 struct Dispatch {
@@ -841,29 +957,54 @@ HWND PrimaryTaskbar() {
 DWORD WINAPI Worker(void*) {
     SetThreadErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX, nullptr);
     HWND lastWindow = nullptr;
-    ULONGLONG nextRead = 0, nextEnumeration = 0;
+    constexpr ULONGLONG uiProbeInterval = 5000;
+    ULONGLONG nextRead = 0, nextEnumeration = 0, nextUiProbe = 0;
     Reading reading;
+    bool uiDirty = true;
+    std::array<std::optional<std::wstring>, 26> published;
     HANDLE events[] = {g_stop, g_changed};
     try {
         while (WaitForSingleObject(g_stop, 0) != WAIT_OBJECT_0) {
             auto settings = CurrentSettings();
             auto now = GetTickCount64();
             if (now >= nextRead) {
-                reading = ReadDisk(settings);
+                reading = ReadDisk(settings, IsRussianUi());
                 nextRead = now + settings.interval * 1000ULL;
+                uiDirty = true;
             }
             if (now >= nextEnumeration) {
-                PublishDrives();
+                PublishDrives(published, IsRussianUi());
                 nextEnumeration = now + 30000;
             }
-            HWND window = PrimaryTaskbar();
-            if (window) {
-                Dispatch call{window, &settings, &reading, false};
-                if (RunOnTaskbar(call)) lastWindow = window;
+            if (now >= nextUiProbe) {
+                // A taskbar can be recreated without a settings or disk event.
+                // Probe it every few seconds instead of dispatching every second.
+                uiDirty = true;
+                nextUiProbe = now + uiProbeInterval;
             }
-            DWORD wait = WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE, 1000);
+            if (uiDirty) {
+                HWND window = PrimaryTaskbar();
+                if (window) {
+                    Dispatch call{window, &settings, &reading, false};
+                    if (RunOnTaskbar(call)) {
+                        lastWindow = window;
+                        uiDirty = false;
+                    }
+                }
+            }
+            const auto nextDue = std::min(nextRead, std::min(nextEnumeration, nextUiProbe));
+            DWORD timeout = 5000;
+            if (nextDue > now) {
+                timeout = static_cast<DWORD>(std::min<ULONGLONG>(timeout, nextDue - now));
+            } else {
+                timeout = 0;
+            }
+            DWORD wait = WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE, timeout);
             if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
-            if (wait == WAIT_OBJECT_0 + 1) nextRead = nextEnumeration = 0;
+            if (wait == WAIT_OBJECT_0 + 1) {
+                nextRead = 0;
+                uiDirty = true;
+            }
         }
     } catch (...) {
         Wh_Log(L"Disk space worker failed: %08X", static_cast<unsigned>(winrt::to_hresult()));
