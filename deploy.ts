@@ -157,7 +157,14 @@ function JSONcompactNumberArrays(json: string) {
 }
 
 function gitExec(args: string[]) {
-    const result = child_process.spawnSync('git', args, { encoding: 'utf8' });
+    const result = child_process.spawnSync('git', args, {
+        encoding: 'utf8',
+        maxBuffer: 512 * 1024 * 1024,
+    });
+    if (result.error) {
+        throw new Error('git ' + args.join(' ') + ' failed: ' + result.error.message);
+    }
+
     if (result.status !== 0) {
         throw new Error('git ' + args.join(' ') + ' failed with status ' + result.status + ' and stderr ' + result.stderr);
     }
