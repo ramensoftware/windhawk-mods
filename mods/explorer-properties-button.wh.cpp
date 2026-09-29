@@ -143,6 +143,7 @@ PrimaryCommands；按钮在切换标签页、导航、新窗口后自动恢复�
 #include <shlobj.h>
 #include <shobjidl.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <functional>
@@ -269,8 +270,28 @@ struct TrackedRevoker {
 
 thread_local std::vector<TrackedRevoker> g_revokers;
 
+constexpr size_t kRevokersPruneMin = 64;
+thread_local size_t g_revokersPruneAt = kRevokersPruneMin;
+
 template <typename T, typename Revoker>
 void TrackRevoker(T const& source, Revoker&& revoker) {
+    // Entries whose element is gone can go: XAML released their delegates
+    // together with the element itself, so they'd otherwise accumulate for
+    // the whole Explorer session - every rebuilt command bar adds one. Only
+    // when the vector has grown past the threshold, though: resolving a
+    // weak_ref is a COM call each, so pruning on every append would cost as
+    // much as it saves.
+    if (g_revokers.size() >= g_revokersPruneAt) {
+        std::erase_if(g_revokers,
+                      [](TrackedRevoker const& tracked) {
+                          return !tracked.source.get();
+                      });
+
+        // Prune again once the survivors have doubled, so the work stays
+        // proportional to what's actually being added.
+        g_revokersPruneAt = std::max(kRevokersPruneMin, g_revokers.size() * 2);
+    }
+
     auto held =
         std::make_shared<std::decay_t<Revoker>>(std::forward<Revoker>(revoker));
     g_revokers.push_back({winrt::weak_ref<wf::IInspectable>{source},
@@ -280,6 +301,7 @@ void TrackRevoker(T const& source, Revoker&& revoker) {
 void RevokeHandlersForCurrentThread() {
     std::vector<TrackedRevoker> taken;
     taken.swap(g_revokers);
+    g_revokersPruneAt = kRevokersPruneMin;
 
     for (auto const& tracked : taken) {
         try {
@@ -311,10 +333,16 @@ std::vector<HANDLE> g_launchThreads;
 void TrackLaunchThread(HANDLE thread) {
     std::lock_guard<std::mutex> lock(g_launchThreadsMutex);
 
-    // Opportunistic cleanup of finished threads.
-    std::erase_if(g_launchThreads, [](HANDLE thread) {
-        return WaitForSingleObject(thread, 0) == WAIT_OBJECT_0;
-    });
+    // Opportunistic cleanup of finished threads, handles closed so they
+    // don't leak until unload.
+    for (auto it = g_launchThreads.begin(); it != g_launchThreads.end();) {
+        if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+            CloseHandle(*it);
+            it = g_launchThreads.erase(it);
+        } else {
+            ++it;
+        }
+    }
 
     g_launchThreads.push_back(thread);
 }
@@ -627,9 +655,10 @@ void OpenPropertiesForWindow(HWND hExplorerWnd) {
         HMENU hMenu = CreatePopupMenu();
         if (hMenu) {
             // Some context menu handlers only accept InvokeCommand after
-            // QueryContextMenu initialized them.
-            if (SUCCEEDED(contextMenu->QueryContextMenu(
-                    hMenu, 0, 1, 0x7FFF, CMF_NORMAL))) {
+            // QueryContextMenu initialized them. The result is kept in hr so
+            // the log below reports the actual failure.
+            hr = contextMenu->QueryContextMenu(hMenu, 0, 1, 0x7FFF, CMF_NORMAL);
+            if (SUCCEEDED(hr)) {
                 CMINVOKECOMMANDINFOEX info{};
                 info.cbSize = sizeof(info);
                 info.fMask = CMIC_MASK_UNICODE;
