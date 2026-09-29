@@ -56,7 +56,7 @@ Windhawk controls whether log entries are emitted. The mod logs settings, taskba
 ### Known issues
 *Those are problems that are identified and will be fixed in future updates*
 - [ ] Items that other mods inject into the tray strip aren't duplicated
-- [ ] The system icons (pen menu, touchpad, emoji, IME) *will* work on the primary monitor but are not duplicated (*yet*, work has been done in https://github.com/saratna/taskbar-multi-tray-ime and will be merged later)
+- [ ] System-icon duplication is incomplete. Version 1.3.0 shares the `MainStack` and `NonActivatableStack` models, but language/IME, touch keyboard, pen, touchpad, emoji and privacy indicators can still be missing or nonfunctional on copies. Further work from https://github.com/saratna/taskbar-multi-tray-ime remains to be integrated.
 
 ---
 
@@ -104,7 +104,7 @@ The per-glyph network/volume/battery menus were the 1.0.7 crash saga, and each o
 The notification/date-time button and the secondary-taskbar clock are untouched, apart from placing the control center before that clock : Windows gives every taskbar its own items for them and already opens that flyout on the clicked monitor. Tray icon right clicks travel the notify-icon message pipeline to the owning apps, which is island-safe, with the anchor mapped from the clicked island. ShellHost surfaces outside an armed flyout context, including Windows Search, keep their native placement.
 
 ### Lifecycle and safety
-Unload is strictly ordered : the unloading flag flips every hook to pass-through, pending retries are cancelled, contexts and caches cleared, and then, on the taskbar's own thread, subclasses are removed, native styles and the ownership of every shared menu surface are restored, copied system icon stacks are hidden again, the secondary clock order is put back, and borrowed proxy items returned before the mod's code can vanish. No low timer ids are ever used on Explorer's windows (small ids collide with native taskbar timers, a confirmed past crash source). WinRT references live in heap-backed holders cleared only on normal reload/settings paths, never during process detach, so COM releases cannot run at an unsafe time. The SystemTray hooks only replace an answer they can compute from a known taskbar island, and fall back to the native computation otherwise.
+Unload first stops redirection, then waits synchronously for the taskbar thread to cancel retries, return borrowed proxy items, remove subclasses, restore the properties and bindings changed by the mod, restore child order and native menu ownership, and finally release cached XAML references. Properties whose current value or binding differs from the mod's last write are left alone; originally unset properties are cleared instead of pinned to guessed defaults. Explorer's own monitor choice passes through during the final display refresh. Cleanup has no timeout, so a busy or hung taskbar can delay disable/update. If the taskbar thread is unavailable, tracked subclasses are removed through Windhawk's synchronous helper and heap-backed XAML references are retained instead of released on the wrong thread. No low timer ids are used on Explorer's windows. Startup retries only reapply XAML state; they do not send display-change notifications that can dismiss an app menu. WinRT references are never released during process detach. The SystemTray hooks replace an answer only when they can compute it from a known taskbar island, and otherwise use the native computation. The free-function rectangle hook returns RECT by value so the compiler selects the correct x64 or ARM64 ABI.
 
 ---
 
@@ -426,8 +426,6 @@ EnumDisplayDevicesW_t EnumDisplayDevicesW_Original;
 using DispatchMessageW_t = decltype(&DispatchMessageW);
 DispatchMessageW_t DispatchMessageW_Original;
 
-bool g_restoringNativeTaskbars = false;
-HMONITOR g_nativePrimaryRestoreMonitor = nullptr;
 std::atomic<LONG> g_deferredApplyGeneration{0};
 std::atomic<LONG> g_modUnloading{0};
 std::atomic<LONG> g_activeFlyoutRedirectionSuppressionDepth{0};
@@ -1040,12 +1038,8 @@ HMONITOR GetSingleSelectedMonitorForPrimaryTray() {
     return monitor;
 }
 
-/// Monitor the real (singleton) tray surface should live on right now : the pre-unload monitor while restoring, otherwise the first selected monitor (null in all-monitors mode, where the surface is never moved)
+/// Monitor the real (singleton) tray surface should live on while the mod is active (null in all-monitors mode, where the surface is never moved)
 HMONITOR GetRealPrimaryTrayTargetMonitor() {
-    if (g_restoringNativeTaskbars) {
-        return g_nativePrimaryRestoreMonitor;
-    }
-
     return GetSingleSelectedMonitorForPrimaryTray();
 }
 
@@ -2141,6 +2135,125 @@ bool HasAnyBinding(const CachedXamlBinding& binding) {
     return binding.dataContext || binding.itemsSource || binding.content;
 }
 
+/// Remember only properties this mod actually writes. Weak element references let rebuilt templates go away, the saved local values/bindings are released on the taskbar thread.
+struct TrayPropertyChange {
+    winrt::weak_ref<DependencyObject> element;
+    DependencyProperty property{nullptr};
+    winrt::Windows::Foundation::IInspectable originalValue{nullptr};
+    Data::Binding originalBinding{nullptr};
+    winrt::Windows::Foundation::IInspectable appliedValue{nullptr};
+    Data::Binding appliedBinding{nullptr};
+};
+
+std::vector<TrayPropertyChange>& g_trayPropertyChanges = *new std::vector<TrayPropertyChange>();
+
+Data::Binding GetTrayPropertyBinding(DependencyObject const& element, DependencyProperty const& property) {
+    auto frameworkElement = element.try_as<FrameworkElement>();
+    auto expression = frameworkElement ? frameworkElement.GetBindingExpression(property) : nullptr;
+
+    return expression ? expression.ParentBinding() : nullptr;
+}
+
+/// Captures the value before its first write, retaining the latest write for an ownership check at restore time
+template <typename Writer>
+void WriteTrayProperty(DependencyObject const& element, DependencyProperty const& property, Writer writer) {
+    auto& changes = g_trayPropertyChanges;
+    size_t index = changes.size();
+
+    for (size_t i = 0; i < changes.size(); i++) {
+        if (changes[i].element.get() == element && changes[i].property == property) {
+            index = i;
+            break;
+        }
+    }
+
+    if (index == changes.size()) {
+        changes.push_back({winrt::make_weak(element), property, element.ReadLocalValue(property), GetTrayPropertyBinding(element, property)});
+    }
+
+    writer();
+    // The write can invoke XAML callbacks. Use an index instead of retaining a vector reference across it.
+    changes[index].appliedValue = element.ReadLocalValue(property);
+    changes[index].appliedBinding = GetTrayPropertyBinding(element, property);
+}
+
+template <typename Value>
+void SetTrayProperty(DependencyObject const& element, DependencyProperty const& property, Value const& value) {
+    WriteTrayProperty(element, property, [&] { element.SetValue(property, winrt::box_value(value)); });
+}
+
+/// XAML can box a scalar afresh on each read. Compare values for the scalar properties we write, and identity for bindings and shared objects.
+bool SameTrayPropertyValue(winrt::Windows::Foundation::IInspectable const& left, winrt::Windows::Foundation::IInspectable const& right) {
+    if (left == right) {
+        return true;
+    }
+
+    if (!left || !right) {
+        return false;
+    }
+
+    auto leftVisibility = left.try_as<winrt::Windows::Foundation::IReference<Visibility>>();
+    auto rightVisibility = right.try_as<winrt::Windows::Foundation::IReference<Visibility>>();
+
+    if (leftVisibility && rightVisibility) {
+        return leftVisibility.Value() == rightVisibility.Value();
+    }
+
+    auto leftValue = left.try_as<winrt::Windows::Foundation::IPropertyValue>();
+    auto rightValue = right.try_as<winrt::Windows::Foundation::IPropertyValue>();
+
+    if (!leftValue || !rightValue || leftValue.Type() != rightValue.Type()) {
+        return false;
+    }
+
+    using winrt::Windows::Foundation::PropertyType;
+    switch (leftValue.Type()) {
+        case PropertyType::Boolean:
+            return leftValue.GetBoolean() == rightValue.GetBoolean();
+        case PropertyType::Int32:
+            return leftValue.GetInt32() == rightValue.GetInt32();
+        case PropertyType::Double: {
+            double a = leftValue.GetDouble();
+            double b = rightValue.GetDouble();
+            return a == b || (std::isnan(a) && std::isnan(b));
+        }
+        default:
+            return false;
+    }
+}
+
+/// Restores bindings/local values instead of pinning guessed native defaults. A property changed subsequently by Windows or another mod is left alone.
+void RestoreTrayProperties() {
+    auto changes = std::move(g_trayPropertyChanges);
+    g_trayPropertyChanges.clear();
+
+    for (auto it = changes.rbegin(); it != changes.rend(); ++it) {
+        try {
+            auto element = it->element.get();
+
+            if (!element) {
+                continue;
+            }
+
+            auto binding = GetTrayPropertyBinding(element, it->property);
+
+            if (binding != it->appliedBinding || (!binding && !SameTrayPropertyValue(element.ReadLocalValue(it->property), it->appliedValue))) {
+                continue;
+            }
+
+            if (it->originalBinding) {
+                element.as<FrameworkElement>().SetBinding(it->property, it->originalBinding);
+            } else if (it->originalValue == DependencyProperty::UnsetValue()) {
+                element.ClearValue(it->property);
+            } else {
+                element.SetValue(it->property, it->originalValue);
+            }
+        } catch (...) {
+            Wh_Log(L"failed to restore a modified tray property");
+        }
+    }
+}
+
 /// Caches the element's DataContext/ItemsSource/Content when present and different from what is already cached
 /// @return true when the cache changed
 bool CaptureBindingIfPresent(FrameworkElement element, CachedXamlBinding& binding, bool includeItemsSource, bool includeContent) {
@@ -2222,17 +2335,17 @@ bool SharePrimaryElementBindingIfUseful(FrameworkElement element, HWND taskbarWn
         bool changed = false;
 
         if (binding.dataContext && InspectableAbi(dataContext) != InspectableAbi(binding.dataContext)) {
-            element.DataContext(binding.dataContext);
+            SetTrayProperty(element, FrameworkElement::DataContextProperty(), binding.dataContext);
             changed = true;
         }
 
         if (includeItemsSource && itemsControl && binding.itemsSource && InspectableAbi(itemsSource) != InspectableAbi(binding.itemsSource)) {
-            itemsControl.ItemsSource(binding.itemsSource);
+            SetTrayProperty(itemsControl, Controls::ItemsControl::ItemsSourceProperty(), binding.itemsSource);
             changed = true;
         }
 
         if (includeContent && contentControl && binding.content && !IsXamlUiElement(binding.content) && InspectableAbi(content) != InspectableAbi(binding.content)) {
-            contentControl.Content(binding.content);
+            SetTrayProperty(contentControl, Controls::ContentControl::ContentProperty(), binding.content);
             changed = true;
         }
 
@@ -2346,17 +2459,17 @@ bool ForceVisibleDescendants(FrameworkElement element, const std::wstring& label
             );
 
             if (child.Visibility() != Visibility::Visible) {
-                child.Visibility(Visibility::Visible);
+                SetTrayProperty(child, UIElement::VisibilityProperty(), Visibility::Visible);
                 changed = true;
             }
 
             if (child.Opacity() != 1.0) {
-                child.Opacity(1.0);
+                SetTrayProperty(child, UIElement::OpacityProperty(), 1.0);
                 changed = true;
             }
 
             if (!child.IsHitTestVisible()) {
-                child.IsHitTestVisible(true);
+                SetTrayProperty(child, UIElement::IsHitTestVisibleProperty(), true);
                 changed = true;
             }
 
@@ -2523,7 +2636,7 @@ bool ResetExplicitWidth(FrameworkElement element) {
     double width = element.Width();
 
     if (width == width) {
-        element.Width(std::numeric_limits<double>::quiet_NaN());
+        SetTrayProperty(element, FrameworkElement::WidthProperty(), std::numeric_limits<double>::quiet_NaN());
 
         return true;
     }
@@ -2546,17 +2659,17 @@ bool ForceVisible(FrameworkElement element, PCWSTR debugName, bool resetExplicit
         bool changed = false;
 
         if (element.Visibility() != Visibility::Visible) {
-            element.Visibility(Visibility::Visible);
+            SetTrayProperty(element, UIElement::VisibilityProperty(), Visibility::Visible);
             changed = true;
         }
 
         if (element.Opacity() != 1.0) {
-            element.Opacity(1.0);
+            SetTrayProperty(element, UIElement::OpacityProperty(), 1.0);
             changed = true;
         }
 
         if (!element.IsHitTestVisible()) {
-            element.IsHitTestVisible(true);
+            SetTrayProperty(element, UIElement::IsHitTestVisibleProperty(), true);
             changed = true;
         }
 
@@ -2593,17 +2706,17 @@ bool SetElementVisibility(FrameworkElement element, PCWSTR debugName, bool visib
         Visibility targetVisibility = visible ? Visibility::Visible : Visibility::Collapsed;
 
         if (element.Visibility() != targetVisibility) {
-            element.Visibility(targetVisibility);
+            SetTrayProperty(element, UIElement::VisibilityProperty(), targetVisibility);
             changed = true;
         }
 
         if (element.Opacity() != 1.0) {
-            element.Opacity(1.0);
+            SetTrayProperty(element, UIElement::OpacityProperty(), 1.0);
             changed = true;
         }
 
         if (element.IsHitTestVisible() != visible) {
-            element.IsHitTestVisible(visible);
+            SetTrayProperty(element, UIElement::IsHitTestVisibleProperty(), visible);
             changed = true;
         }
 
@@ -2611,14 +2724,14 @@ bool SetElementVisibility(FrameworkElement element, PCWSTR debugName, bool visib
             changed |= ResetExplicitWidth(element);
         } else {
             if (element.MinWidth() != 0.0) {
-                element.MinWidth(0.0);
+                SetTrayProperty(element, FrameworkElement::MinWidthProperty(), 0.0);
                 changed = true;
             }
 
             double width = element.Width();
 
             if (!(width == 0.0)) {
-                element.Width(0.0);
+                SetTrayProperty(element, FrameworkElement::WidthProperty(), 0.0);
                 changed = true;
             }
         }
@@ -2646,7 +2759,7 @@ bool ForceVisibleWithMinWidth(FrameworkElement element, PCWSTR debugName, double
 
     try {
         if (element.MinWidth() != minWidth) {
-            element.MinWidth(minWidth);
+            SetTrayProperty(element, FrameworkElement::MinWidthProperty(), minWidth);
             changed = true;
         }
 
@@ -2888,8 +3001,19 @@ bool ReattachItemsControlItemsSource(FrameworkElement element, PCWSTR debugName,
             return false;
         }
 
+        auto property = Controls::ItemsControl::ItemsSourceProperty();
+        auto binding = GetTrayPropertyBinding(itemsControl, property);
+        auto localValue = itemsControl.ReadLocalValue(property);
         itemsControl.ItemsSource(nullptr);
-        itemsControl.ItemsSource(itemsSource);
+
+        // Recreate the containers without replacing a native binding or template value with a local ItemsSource pin
+        if (binding) {
+            itemsControl.SetBinding(property, binding);
+        } else if (localValue == DependencyProperty::UnsetValue()) {
+            itemsControl.ClearValue(property);
+        } else {
+            itemsControl.SetValue(property, localValue);
+        }
 
         return true;
     } catch (...) {
@@ -2965,7 +3089,7 @@ bool MirrorSourceVisibility(FrameworkElement element, FrameworkElement source, P
         binding.Source(source);
         binding.Path(PropertyPath(L"Visibility"));
         binding.Mode(Data::BindingMode::OneWay);
-        element.SetBinding(UIElement::VisibilityProperty(), binding);
+        WriteTrayProperty(element, UIElement::VisibilityProperty(), [&] { element.SetBinding(UIElement::VisibilityProperty(), binding); });
         Wh_Log(L"mirrored %s visibility from the real tray owner", debugName);
 
         return true;
@@ -3084,7 +3208,7 @@ bool ApplyNonTargetStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
     }
 }
 
-/// Restores one taskbar to its native primary state during unload : every surface visible, forced min-widths cleared, gestures enabled, and control-center menu ownership handed back to this taskbar. Property writes are batched into a single layout update.
+/// Finishes primary-taskbar restoration after the tracked properties are restored : releases legacy pins, restores child order, and hands tray/menu ownership back to the native island
 /// @return true when the tray structure was found and processed
 bool ApplyNativePrimaryStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
     Wh_Log(
@@ -3105,15 +3229,7 @@ bool ApplyNativePrimaryStyle(XamlRoot xamlRoot, HWND taskbarWnd) {
         changed |= ReleaseLegacyFrameMinWidth(view.systemTrayFrame, L"SystemTrayFrame");
         changed |= ReleaseLegacyFrameMinWidth(view.systemTrayFrameGrid, L"SystemTrayFrameGrid");
 
-        UpdateSharedSurfaceContextGestures(view.notifyIconStack, taskbarWnd, L"NotifyIconStack");
-        UpdateSharedSurfaceContextGestures(view.notificationAreaIcons, taskbarWnd, L"NotificationAreaIcons");
-        UpdateSharedSurfaceContextGestures(view.controlCenterButton, taskbarWnd, L"ControlCenterButton");
-
-        changed |= ForceVisible(view.notifyIconStack, L"NotifyIconStack");
-        changed |= ForceVisible(FirstChildElement(view.notifyIconStack), L"NotifyIconStackChild");
-        changed |= ForceVisible(FindDescendantByClassName(view.notifyIconStack, L"SystemTray.StackListView"), L"NotifyIconStackListView");
-        changed |= ForceVisible(view.notificationAreaIcons, L"NotificationAreaIcons");
-        changed |= ForceVisible(view.controlCenterButton, L"ControlCenterButton");
+        // RestoreTrayProperties already returned the native values/bindings. Do not write new Visibility/Width/MinWidth pins during unload.
         changed |= UpdateSecondaryClockOrder(taskbarWnd, view, false);
         changed |= ReleaseLegacyNotificationCenterPins(view.notificationCenterButton);
 
@@ -3168,11 +3284,11 @@ ContextGestureCounts SetContextGesturesRecursive(DependencyObject element, bool 
     try {
         if (UIElement uiElement = element.try_as<UIElement>()) {
             if (uiElement.IsRightTapEnabled() != enable) {
-                uiElement.IsRightTapEnabled(enable);
+                SetTrayProperty(uiElement, UIElement::IsRightTapEnabledProperty(), enable);
             }
 
             if (uiElement.IsHoldingEnabled() != enable) {
-                uiElement.IsHoldingEnabled(enable);
+                SetTrayProperty(uiElement, UIElement::IsHoldingEnabledProperty(), enable);
             }
 
             counts.elements++;
@@ -4049,6 +4165,10 @@ bool PrepareControlCenterFlyoutShowAt(void* flyoutAbi, void* targetAbi, PCWSTR s
         FrameworkElement targetElementFe = targetElement.try_as<FrameworkElement>();
         bool shownViaProxy = ShowControlCenterMenuViaProxy(flyout, targetElementFe, targetRoot);
 
+        if (!shownViaProxy) {
+            Wh_Log(L"suppressed cross-island flyout class=%s target=%s: no compatible MenuFlyout proxy; native ShowAt would be unsafe", winrt::get_class_name(flyout).c_str(), targetElementFe ? targetElementFe.Name().c_str() : L"<unknown>");
+        }
+
         Wh_Log(
             L"control center flyout %s "
             L"result=locked viaProxy=%d suppress=1",
@@ -4699,7 +4819,7 @@ void HandleDeferredApplySettingsTimer(HWND taskbarWnd) {
         delayMs, g_deferredApplyTimerGeneration, taskbarWnd
     );
 
-    NotifyTaskbarDisplayChange(taskbarWnd);
+    // Startup retries wait for XAML content, a synthetic display change on every retry can dismiss an app's open menu even when the layout already matches
     ApplySettingsFromTaskbarThread(nullptr);
 
     g_deferredApplyRetryIndex++;
@@ -5063,8 +5183,8 @@ NotificationAreaIconsDataModel_GetInvocationPointRelativeToScreen_t Notification
 using NotificationAreaIconsDataModel_GetIconBoundsRelativeToScreen_t = winrt::Windows::Foundation::Rect*(WINAPI*)(void* pThis, winrt::Windows::Foundation::Rect* result, const winrt::Windows::Foundation::Rect* rect);
 NotificationAreaIconsDataModel_GetIconBoundsRelativeToScreen_t NotificationAreaIconsDataModel_GetIconBoundsRelativeToScreen_Original;
 
-// The FrameworkElement is passed by value : a pointer to a caller temporary that the callee destroys
-using GetScreenRectFromXamlElement_t = RECT*(WINAPI*)(RECT* result, void** element, HWND hWnd);
+// The FrameworkElement is passed by value : a pointer to a caller temporary that the callee destroys. A free function returns RECT through a hidden first parameter on x64, but in x0:x1 on ARM64. Let the compiler choose the return ABI.
+using GetScreenRectFromXamlElement_t = RECT(WINAPI*)(void** element, HWND hWnd);
 GetScreenRectFromXamlElement_t GetScreenRectFromXamlElement_Original;
 
 using DragDropManager_ScreenRectForElement_t = RECT*(WINAPI*)(void* pThis, RECT* result, void* const* element, HWND hWnd);
@@ -5280,7 +5400,7 @@ bool TryGetPreferredTrayElementScreenRect(FrameworkElement const& element, HWND 
 }
 
 /// SystemTray.dll hook behind Shell_NotifyIconGetRect (and the chevron fallback for icons hidden in overflow) : returns the rectangle of the icon on the taskbar the user is interacting with instead of mapping whichever copy registered last through the primary taskbar
-RECT* WINAPI GetScreenRectFromXamlElement_Hook(RECT* result, void** element, HWND hWnd) {
+RECT WINAPI GetScreenRectFromXamlElement_Hook(void** element, HWND hWnd) {
     FrameworkElement frameworkElement{nullptr};
 
     if (!IsModUnloading() && element && *element) {
@@ -5288,10 +5408,10 @@ RECT* WINAPI GetScreenRectFromXamlElement_Hook(RECT* result, void** element, HWN
     }
 
     // The original destroys its by-value element argument, so it always runs, and the answer is corrected afterwards
-    RECT* returned = GetScreenRectFromXamlElement_Original(result, element, hWnd);
+    RECT rect = GetScreenRectFromXamlElement_Original(element, hWnd);
 
-    if (!frameworkElement || !returned) {
-        return returned;
+    if (!frameworkElement) {
+        return rect;
     }
 
     const void* elementIdentity = winrt::get_abi(frameworkElement);
@@ -5316,17 +5436,17 @@ RECT* WINAPI GetScreenRectFromXamlElement_Hook(RECT* result, void** element, HWN
             Wh_Log(
                 L"answered tray icon rectangle (%ld,%ld,%ld,%ld) instead of (%ld,%ld,%ld,%ld) on monitor %d",
                 correctedRect.left, correctedRect.top, correctedRect.right, correctedRect.bottom,
-                returned -> left, returned -> top, returned -> right, returned -> bottom,
+                rect.left, rect.top, rect.right, rect.bottom,
                 GetMonitorIndexForWindow(preferredTaskbarWnd)
             );
         }
     }
 
     if (answer.corrected) {
-        *returned = answer.rect;
+        rect = answer.rect;
     }
 
-    return returned;
+    return rect;
 }
 
 /// Screen rectangle of an element from its own island : the taskbar window hosting it (the native window for other islands, the overflow popup), scaled by that island's rasterization scale instead of the single per-thread display scale
@@ -5553,6 +5673,7 @@ void RestoreNativeTaskbarsFromTaskbarThread(void*) {
     ActiveFlyoutRedirectionSuppressor suppressActiveFlyoutRedirection;
 
     Wh_Log(L"restoring native taskbar XAML state from " L"thread %lu", GetCurrentThreadId());
+    RestoreTrayProperties();
 
     EnumThreadWindows(
         GetCurrentThreadId(),
@@ -5587,7 +5708,14 @@ void RestoreNativeTaskbarsFromTaskbarThread(void*) {
             if (primaryTaskbar) {
                 ApplyNativePrimaryStyle(xamlRoot, hWnd);
             } else {
-                ApplyNonTargetStyle(xamlRoot, hWnd);
+                try {
+                    TrayElementsView view;
+                    if (CollectTrayElements(xamlRoot, hWnd, &view, L"native secondary restore") && UpdateSecondaryClockOrder(hWnd, view, false)) {
+                        UpdateLayoutBestEffort(view.systemTrayFrameGrid, L"native secondary restore");
+                    }
+                } catch (...) {
+                    Wh_Log(L"native secondary restore failed with a XAML exception");
+                }
             }
 
             return TRUE;
@@ -5598,13 +5726,15 @@ void RestoreNativeTaskbarsFromTaskbarThread(void*) {
 
 using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
 
-/// Runs a callback synchronously on a window's owning thread : a WH_CALLWNDPROC hook intercepts a registered message sent with SendMessageTimeout(SMTO_ABORTIFHUNG), so a hung Explorer can never deadlock the unload path. Runs inline when already on the right thread.
+/// Runs a callback synchronously on a window's owning thread. The sender must wait until the callback finishes : a timeout can outlive the stack parameter and, on unload, leave callbacks pointing into the unloaded DLL. Runs inline when already on the right thread.
 bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procParam) {
     static const UINT runFromWindowThreadRegisteredMsg = RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
 
     struct RunFromWindowThreadParam {
         RunFromWindowThreadProc_t proc;
         void* procParam;
+        bool started = false;
+        bool completed = false;
     };
 
     DWORD threadId = GetWindowThreadProcessId(hWnd, nullptr);
@@ -5630,7 +5760,12 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procPa
 
                 if (cwp->message == runFromWindowThreadRegisteredMsg) {
                     auto* param = reinterpret_cast<RunFromWindowThreadParam*>(cwp->lParam);
-                    param->proc(param->procParam);
+                    // Concurrent callers can install the same hook more than once. Only one callback may consume this request, including during reentrant sends.
+                    if (!param->started) {
+                        param->started = true;
+                        param->proc(param->procParam);
+                        param->completed = true;
+                    }
                 }
             }
 
@@ -5653,21 +5788,18 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procPa
     Wh_Log(L"dispatching to taskbar thread %lu", threadId);
 
     RunFromWindowThreadParam param{proc, procParam};
-    LRESULT messageResult = SendMessageTimeout(
+    SendMessageW(
         hWnd,
         runFromWindowThreadRegisteredMsg,
         0,
-        reinterpret_cast<LPARAM>(&param),
-        SMTO_ABORTIFHUNG,
-        2000,
-        nullptr
+        reinterpret_cast<LPARAM>(&param)
     );
 
     UnhookWindowsHookEx(hook);
 
-    if (!messageResult) {
+    if (!param.completed) {
         Wh_Log(
-            L"SendMessageTimeout failed for taskbar thread %lu hwnd=0x%p error=%lu",
+            L"taskbar callback did not complete for thread %lu hwnd=0x%p error=%lu",
             threadId,
             hWnd,
             GetLastError()
@@ -5679,23 +5811,23 @@ bool RunFromWindowThread(HWND hWnd, RunFromWindowThreadProc_t proc, void* procPa
     return true;
 }
 
-/// Taskbar-thread trampoline for ClearCachedXamlBindings.
+/// Cancels retries and clears interaction/binding state on the taskbar thread before a settings reapply
 void ClearCachedXamlBindingsFromTaskbarThread(void*) {
+    CancelDeferredApplySettings();
+    ClearProxyRuntimeState();
     ClearCachedXamlBindings();
 }
 
 /// Releases cached XAML/view-model references on the taskbar thread when Explorer is active, so UI-thread-affine COM objects are not released from Windhawk's arbitrary settings/unload callback thread.
 void ClearCachedXamlBindingsSafely() {
     if (!IsExplorerTarget()) {
-        ClearCachedXamlBindings();
-
         return;
     }
 
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
 
     if (!taskbarWnd || !RunFromWindowThread(taskbarWnd, ClearCachedXamlBindingsFromTaskbarThread, nullptr)) {
-        ClearCachedXamlBindings();
+        Wh_Log(L"keeping XAML references because the taskbar thread is unavailable");
     }
 }
 
@@ -5731,11 +5863,20 @@ void QueueDeferredApplySettings() {
         return;
     }
 
-    CancelDeferredApplySettings();
-    g_deferredApplyTimerWnd = taskbarWnd;
-    g_deferredApplyTimerGeneration = g_deferredApplyGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
-    g_deferredApplyRetryIndex = 0;
-    ScheduleNextDeferredApplySettingsTimer(taskbarWnd);
+    if (!RunFromWindowThread(taskbarWnd, [](void* parameter) {
+        if (IsModUnloading()) {
+            return;
+        }
+
+        HWND taskbarWnd = static_cast<HWND>(parameter);
+        CancelDeferredApplySettings();
+        g_deferredApplyTimerWnd = taskbarWnd;
+        g_deferredApplyTimerGeneration = g_deferredApplyGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+        g_deferredApplyRetryIndex = 0;
+        ScheduleNextDeferredApplySettingsTimer(taskbarWnd);
+    }, taskbarWnd)) {
+        Wh_Log(L"failed to queue deferred apply on the taskbar thread");
+    }
 }
 
 using TrayUI_StartTaskbar_t = void(WINAPI*)(void* pThis);
@@ -5801,7 +5942,7 @@ void WINAPI CSecondaryTray_InitModelAndHost_Hook(void* pThis, void* taskbarModel
 
 /// taskbar.dll hook : whenever Explorer re-evaluates where the primary taskbar lives, selected mode retargets the singleton real-tray surface to the preferred monitor (and the restore path sends it back)
 HRESULT WINAPI TrayUI__SetStuckMonitor_Hook(void* pThis, HMONITOR monitor) {
-    if (IsModUnloading() && !g_restoringNativeTaskbars) {
+    if (IsModUnloading()) {
         return TrayUI__SetStuckMonitor_Original(pThis, monitor);
     }
 
@@ -5809,8 +5950,7 @@ HRESULT WINAPI TrayUI__SetStuckMonitor_Hook(void* pThis, HMONITOR monitor) {
 
     if (targetMonitor) {
         Wh_Log(
-            L"%s real primary tray to monitor %d",
-            g_restoringNativeTaskbars ? L"restoring" : L"moving",
+            L"moving real primary tray to monitor %d",
             GetMonitorIndex(targetMonitor)
         );
 
@@ -5868,6 +6008,7 @@ bool HookSystemTrayViewSymbols(HMODULE module) {
         return false;
     }
 
+    // SystemTray.dll, Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK systemTrayHooks[] = {
         {
             {LR"(private: struct winrt::Windows::Foundation::Point __cdecl winrt::SystemTray::implementation::NotificationAreaIconsDataModel::GetInvocationPointRelativeToScreen(struct winrt::Windows::Foundation::Point const &))"},
@@ -6107,50 +6248,48 @@ void Wh_ModAfterInit() {
     }
 }
 
-/// Ordered teardown : flags unloading so every hook goes pass-through, cancels retries, clears state, then removes subclasses and restores native taskbar state from the taskbar's own thread
+/// Complete UI cleanup as one synchronous operation, before clearing the caches it needs. No taskbar-affine state is released by the Windhawk thread.
+void UninitFromTaskbarThread(void* parameter) {
+    HWND taskbarWnd = static_cast<HWND>(parameter);
+    CancelDeferredApplySettings();
+    ClearProxyRuntimeState();
+    RemoveTaskbarSubclassesFromTaskbarThread(nullptr);
+    RestoreNativeTaskbarsFromTaskbarThread(nullptr);
+    // The unloading hook passes Explorer's chosen monitor through, undoing selected-monitor retargeting.
+    SendMessageW(taskbarWnd, 0x5B8, 0, 0);
+    RemoveTaskbarSubclassesFromTaskbarThread(nullptr);
+    ClearCachedXamlBindings();
+}
+
+/// Ordered teardown : stop redirection, then wait for all taskbar-thread cleanup before the DLL can unload
 void Wh_ModBeforeUninit() {
     Wh_Log(L"before uninit");
     g_modUnloading.store(1, std::memory_order_release);
-    CancelDeferredApplySettings();
+    ClearSharedProxyFlyoutMonitorState();
 
     if (!IsExplorerTarget()) {
-        ClearProxyRuntimeState();
-        ClearCachedXamlBindingsSafely();
-
         return;
     }
 
     HWND taskbarWnd = FindCurrentProcessTaskbarWnd();
 
     if (!taskbarWnd) {
-        ClearProxyRuntimeState();
-        ClearCachedXamlBindingsSafely();
-
+        // No taskbar thread is available to release UI objects. Keep the heap-backed references alive rather than releasing them from this thread.
+        WindhawkUtils::RemoveAllWindowSubclasses();
         return;
     }
 
-    ClearProxyRuntimeState();
-    ClearCachedXamlBindingsSafely();
-
-    g_restoringNativeTaskbars = true;
-    g_nativePrimaryRestoreMonitor = GetActualMonitorFromWindow(taskbarWnd, MONITOR_DEFAULTTONEAREST);
-
-    Wh_Log(L"native restore target monitor=%d", GetMonitorIndex(g_nativePrimaryRestoreMonitor));
-    RunFromWindowThread(taskbarWnd, RemoveTaskbarSubclassesFromTaskbarThread, nullptr);
-    NotifyTaskbarDisplayChange(taskbarWnd);
-    RunFromWindowThread(taskbarWnd, RestoreNativeTaskbarsFromTaskbarThread, nullptr);
-    RunFromWindowThread(taskbarWnd, RemoveTaskbarSubclassesFromTaskbarThread, nullptr);
-
-    g_restoringNativeTaskbars = false;
-    g_nativePrimaryRestoreMonitor = nullptr;
+    if (!RunFromWindowThread(taskbarWnd, UninitFromTaskbarThread, taskbarWnd)) {
+        Wh_Log(L"taskbar cleanup could not run; removing subclasses synchronously and retaining XAML references");
+        WindhawkUtils::RemoveAllWindowSubclasses();
+    }
 }
 
 /// Settings change : reload, reset caches and interaction state, then re-apply
 void Wh_ModSettingsChanged() {
     Wh_Log(L"settings changed");
     LoadSettings();
-    CancelDeferredApplySettings();
-    ClearProxyRuntimeState();
+    ClearSharedProxyFlyoutMonitorState();
     ClearCachedXamlBindingsSafely();
 
     if (IsExplorerTarget()) {
