@@ -5,6 +5,7 @@
 // @version         0.6.1
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
+// @homepage        https://github.com/DavidHiFi/davids-windhawk-mods
 // @exclude         discord*.exe
 // @exclude         Voicemeeter*.exe
 // @exclude         Matrix*.exe
