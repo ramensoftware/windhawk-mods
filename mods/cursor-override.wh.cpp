@@ -28,13 +28,15 @@
 
 Replaces common additional cursors with custom `.cur` or `.ani` files.
 
-![Grab-Cursor vorher und nachher](https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-grab.png)
+![Grab cursor before and after](https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-grab.png)
 
-![Plus-Cursor vorher und nachher](https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-cell.png)
+![Cell cursor before and after](https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-cell.png)
 
 ## How it works
 
-Identifies supported Mozilla, Chromium and RichEdit cursors based on their image, size and click point.
+Identifies supported Mozilla, Chromium and RichEdit cursors based on their image and hotspot.
+Resource cursors are compared at a fixed size when their source resource is available; known bitmap signatures provide a fallback.
+Recognition can require an update when an application changes its cursor artwork.
 Supports `Grab`, `Grabbing`, `Cell`, `Copy`, `Alias`, `ZoomIn`, `ZoomOut`, `ColResize`, `RowResize`, `VerticalText` and `SelectionBar`.
 Standard Windows cursors remain unchanged.
 
@@ -42,7 +44,15 @@ Standard Windows cursors remain unchanged.
 
 Under Settings, enter the full local path to each `.cur` or `.ani` file you want to change.
 Leave a field empty to keep the original cursor.
-Keep the cursor files in a permanent local folder.
+Keep the cursor files in a permanent local folder. Network paths and mapped network drives are not supported.
+If a file cannot be loaded, the original cursor stays active. Check the path and save the settings again to retry.
+Windhawk debug logging reports the affected setting and error code without logging the file path.
+With all fields empty, the mod installs no hooks.
+
+## Compatibility
+
+This mod overlaps with [Chromium Cursor Remap](https://windhawk.net/mods/chromium-cursor-remap) for Chromium-based applications and additionally recognizes Mozilla and RichEdit cursors.
+Do not enable both mods in the same applications.
 
 ## Optional cursor pack
 
@@ -55,41 +65,53 @@ For an optional cursor pack, check out [Galaxy Cursor](https://github.com/sebast
 /*
 - grabPath: ""
   $name: Grab
+  $description: Full local path to a .cur or .ani file. Leave empty to keep the original cursor.
 
 - grabbingPath: ""
   $name: Grabbing
+  $description: Full local path to a .cur or .ani file. Leave empty to keep the original cursor.
 
 - selectionBarPath: ""
-  $name: SelectionBar
+  $name: Selection bar (RichEdit left margin)
+  $description: Full local path to a .cur or .ani file. Leave empty to keep the original cursor.
 
 - copyPath: ""
   $name: Copy
+  $description: Full local path to a .cur or .ani file. Leave empty to keep the original cursor.
 
 - aliasPath: ""
   $name: Alias
+  $description: Full local path to a .cur or .ani file. Leave empty to keep the original cursor.
 
 - rowResizePath: ""
-  $name: RowResize
+  $name: Row resize
+  $description: Full local path to a .cur or .ani file. Leave empty to keep the original cursor.
 
 - colResizePath: ""
-  $name: ColResize
+  $name: Column resize
+  $description: Full local path to a .cur or .ani file. Leave empty to keep the original cursor.
 
 - verticalTextPath: ""
-  $name: VerticalText
+  $name: Vertical text
+  $description: Full local path to a .cur or .ani file. Leave empty to keep the original cursor.
 
 - zoomOutPath: ""
-  $name: ZoomOut
+  $name: Zoom out
+  $description: Full local path to a .cur or .ani file. Leave empty to keep the original cursor.
 
 - zoomInPath: ""
-  $name: ZoomIn
+  $name: Zoom in
+  $description: Full local path to a .cur or .ani file. Leave empty to keep the original cursor.
 
 - cellPath: ""
   $name: Cell
+  $description: Full local path to a .cur or .ani file. Leave empty to keep the original cursor.
 
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+#include <windhawk_utils.h>
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
@@ -109,7 +131,6 @@ static constexpr PCWSTR kSettingNames[] = {
 };
 static constexpr size_t kRoleCount = static_cast<size_t>(Role::Count);
 static constexpr size_t kPoolSize = 22;
-static constexpr DWORD kSessionUserLimit = 30000;
 static constexpr DWORD kProcessUserLimit = 6000;
 static constexpr DWORD kOwnedUserLimit = 4096;
 static_assert(ARRAYSIZE(kSettingNames) == kRoleCount);
@@ -424,7 +445,7 @@ struct OwnedCursor {
 struct CachedRole {
     HCURSOR cursor = nullptr;
     Role role = Role::Unknown;
-    ULONGLONG expires = 0;
+    uint64_t generation = 0;
 };
 
 struct ThreadCursor {
@@ -440,10 +461,12 @@ static OwnedCursor g_pool[kPoolSize];
 static std::atomic<HCURSOR> g_owned[kPoolSize]{};
 static CachedRole g_cache[256];
 static ThreadCursor g_threads[128];
-static ULONGLONG g_retryAfter[kRoleCount]{};
+static bool g_loadAttempted[kRoleCount]{};
 static size_t g_cacheNext = 0;
 static bool g_needsPrune = false;
-static HANDLE g_resourceGate = nullptr;
+static std::atomic<uint64_t> g_cacheGeneration{1};
+static std::atomic<unsigned> g_destroying{0};
+static HCURSOR g_systemCursors[18]{};
 static std::atomic<bool> g_stopping{false};
 static std::atomic<bool> g_hasPaths{false};
 static thread_local bool g_inHook = false;
@@ -536,13 +559,48 @@ ThreadCursor* FindThread(bool create) {
 
 Role IdentifyCursor(HCURSOR cursor) {
     if (!cursor || IsOwned(cursor)) return Role::Unknown;
-    ULONGLONG now = GetTickCount64();
-    for (const auto& cached : g_cache) {
-        if (cached.cursor == cursor && now < cached.expires) return cached.role;
+    for (HCURSOR standard : g_systemCursors) {
+        if (cursor == standard) return Role::Unknown;
     }
-    Fingerprint hash;
-    Role role = GetFingerprint(cursor, hash) ? RecognizeFingerprint(hash) : Role::Unknown;
-    g_cache[g_cacheNext++ % ARRAYSIZE(g_cache)] = {cursor, role, now + 5000};
+    uint64_t generation = g_cacheGeneration.load();
+    if (g_destroying.load()) return Role::Unknown;
+    for (const auto& cached : g_cache) {
+        if (cached.cursor == cursor && cached.generation == generation) return cached.role;
+    }
+    Role role = Role::Unknown;
+    ICONINFOEXW info{};
+    info.cbSize = sizeof(info);
+    if (GetIconInfoExW(cursor, &info)) {
+        if (info.hbmMask) DeleteObject(info.hbmMask);
+        if (info.hbmColor) DeleteObject(info.hbmColor);
+        if (!info.fIcon && info.szModName[0] && (info.wResID || info.szResName[0])) {
+            HMODULE module = nullptr;
+            if (GetModuleHandleExW(0, info.szModName, &module)) {
+                PCWSTR resource = info.wResID ? MAKEINTRESOURCEW(info.wResID) : info.szResName;
+                HCURSOR normalized = static_cast<HCURSOR>(LoadImageW(module, resource, IMAGE_CURSOR, 32, 32, 0));
+                if (normalized) {
+                    Fingerprint hash;
+                    if (GetFingerprint(normalized, hash)) {
+                        role = RecognizeFingerprint(hash);
+                        if (role == Role::Unknown) {
+                            Wh_Log(L"Unrecognized resource cursor: %016llx %016llx",
+                                   static_cast<unsigned long long>(hash.first),
+                                   static_cast<unsigned long long>(hash.second));
+                        }
+                    }
+                    if (DestroyCursor_Original) DestroyCursor_Original(normalized);
+                    else DestroyCursor(normalized);
+                }
+                FreeLibrary(module);
+            }
+        }
+    }
+    if (role == Role::Unknown) {
+        Fingerprint hash;
+        if (GetFingerprint(cursor, hash)) role = RecognizeFingerprint(hash);
+    }
+    if (g_destroying.load() || generation != g_cacheGeneration.load()) return Role::Unknown;
+    g_cache[g_cacheNext++ % ARRAYSIZE(g_cache)] = {cursor, role, generation};
     return role;
 }
 
@@ -553,11 +611,24 @@ bool ReadGuiCount(HANDLE process, DWORD& count) {
 }
 
 bool InspectCursorFile(PCWSTR path, DWORD& cost) {
-    if (!path || !*path || (path[0] == L'\\' && path[1] == L'\\')) return false;
+    if (!path || wcslen(path) < 3 || path[1] != L':' ||
+        (path[2] != L'\\' && path[2] != L'/')) {
+        SetLastError(ERROR_BAD_PATHNAME);
+        return false;
+    }
+    WCHAR root[] = {path[0], L':', L'\\', 0};
+    UINT driveType = GetDriveTypeW(root);
+    if (driveType != DRIVE_FIXED && driveType != DRIVE_REMOVABLE && driveType != DRIVE_RAMDISK) {
+        SetLastError(ERROR_NOT_SUPPORTED);
+        return false;
+    }
     WIN32_FILE_ATTRIBUTE_DATA attributes{};
-    if (!GetFileAttributesExW(path, GetFileExInfoStandard, &attributes) ||
-        attributes.nFileSizeHigh || attributes.nFileSizeLow > 16 * 1024 * 1024 ||
-        (attributes.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_OFFLINE))) return false;
+    if (!GetFileAttributesExW(path, GetFileExInfoStandard, &attributes)) return false;
+    if (attributes.nFileSizeHigh || attributes.nFileSizeLow > 16 * 1024 * 1024 ||
+        (attributes.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_OFFLINE))) {
+        SetLastError(ERROR_INVALID_DATA);
+        return false;
+    }
     HANDLE file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return false;
@@ -594,6 +665,7 @@ bool InspectCursorFile(PCWSTR path, DWORD& cost) {
         ok = false;
     }
     CloseHandle(file);
+    if (!ok) SetLastError(ERROR_INVALID_DATA);
     return ok;
 }
 
@@ -604,22 +676,13 @@ HCURSOR GetReplacement(Role role) {
     for (const auto& owned : g_pool) {
         if (owned.cursor && _wcsicmp(owned.path.c_str(), path.c_str()) == 0) return owned.cursor;
     }
-    ULONGLONG now = GetTickCount64();
-    if (now < g_retryAfter[index]) return nullptr;
-    g_retryAfter[index] = now + 5000;
+    if (g_loadAttempted[index]) return nullptr;
+    g_loadAttempted[index] = true;
     std::wstring storedPath;
     try {
         storedPath = path;
     } catch (...) {
-        return nullptr;
-    }
-    if (!g_resourceGate) {
-        g_resourceGate = CreateMutexW(nullptr, FALSE, L"Local\\GalaxyCursorOverride.ResourceGate.v2");
-    }
-    if (!g_resourceGate) return nullptr;
-    DWORD wait = WaitForSingleObject(g_resourceGate, 0);
-    if (wait != WAIT_OBJECT_0 && wait != WAIT_ABANDONED) {
-        g_retryAfter[index] = now + 100;
+        Wh_Log(L"Replacement unavailable: %s; insufficient memory. Save settings to retry.", kSettingNames[index]);
         return nullptr;
     }
     PrunePool();
@@ -629,30 +692,37 @@ HCURSOR GetReplacement(Role role) {
         ownedCost += g_pool[i].cost;
         if (!g_pool[i].cursor && freeIndex == kPoolSize) freeIndex = i;
     }
-    DWORD expected = 0, globalBefore = 0, processBefore = 0;
+    DWORD expected = 0, processBefore = 0;
+    SetLastError(ERROR_SUCCESS);
     HCURSOR cursor = nullptr;
     if (freeIndex < kPoolSize && InspectCursorFile(path.c_str(), expected) &&
-        ReadGuiCount(GR_GLOBAL, globalBefore) && ReadGuiCount(GetCurrentProcess(), processBefore) &&
-        globalBefore + expected < kSessionUserLimit && processBefore + expected < kProcessUserLimit &&
+        ReadGuiCount(GetCurrentProcess(), processBefore) &&
+        processBefore + expected < kProcessUserLimit &&
         ownedCost + expected <= kOwnedUserLimit) {
         cursor = static_cast<HCURSOR>(LoadImageW(nullptr, path.c_str(), IMAGE_CURSOR, 0, 0,
                                                 LR_LOADFROMFILE | LR_DEFAULTSIZE));
         if (cursor) {
-            DWORD globalAfter = 0, processAfter = 0;
-            bool measured = ReadGuiCount(GR_GLOBAL, globalAfter) && ReadGuiCount(GetCurrentProcess(), processAfter);
+            DWORD processAfter = 0;
+            bool measured = ReadGuiCount(GetCurrentProcess(), processAfter);
             DWORD actual = processAfter > processBefore ? processAfter - processBefore : expected;
             actual = (std::max)(actual, expected);
-            if (!measured || globalAfter >= kSessionUserLimit || processAfter >= kProcessUserLimit ||
+            if (!measured || processAfter >= kProcessUserLimit ||
                 ownedCost + actual > kOwnedUserLimit) {
+                DWORD error = measured ? ERROR_NOT_ENOUGH_MEMORY : GetLastError();
                 DestroyCursor_Original(cursor);
                 cursor = nullptr;
+                SetLastError(error);
             } else {
                 g_pool[freeIndex] = {cursor, std::move(storedPath), actual};
                 g_owned[freeIndex].store(cursor, std::memory_order_release);
             }
         }
     }
-    ReleaseMutex(g_resourceGate);
+    if (!cursor) {
+        DWORD error = GetLastError();
+        Wh_Log(L"Replacement unavailable: %s; Windows error %lu. Save settings to retry.",
+               kSettingNames[index], error ? error : ERROR_NOT_ENOUGH_MEMORY);
+    }
     return cursor;
 }
 
@@ -712,6 +782,7 @@ HCURSOR WINAPI GetCursor_Hook() {
 }
 
 void ForgetCursor(HCURSOR cursor) {
+    ++g_cacheGeneration;
     if (TryAcquireSRWLockExclusive(&g_lock)) {
         for (auto& cached : g_cache) {
             if (cached.cursor == cursor) cached = {};
@@ -728,9 +799,15 @@ BOOL WINAPI DestroyCursor_Hook(HCURSOR cursor) {
         SetLastError(ERROR_ACCESS_DENIED);
         return FALSE;
     }
+    ++g_destroying;
     ForgetCursor(cursor);
     SetLastError(error);
-    return DestroyCursor_Original(cursor);
+    BOOL result = DestroyCursor_Original(cursor);
+    DWORD resultError = GetLastError();
+    ++g_cacheGeneration;
+    --g_destroying;
+    SetLastError(resultError);
+    return result;
 }
 
 BOOL WINAPI DestroyIcon_Hook(HICON icon) {
@@ -742,31 +819,28 @@ BOOL WINAPI DestroyIcon_Hook(HICON icon) {
         SetLastError(ERROR_ACCESS_DENIED);
         return FALSE;
     }
+    ++g_destroying;
     ForgetCursor(cursor);
     SetLastError(error);
-    return DestroyIcon_Original(icon);
+    BOOL result = DestroyIcon_Original(icon);
+    DWORD resultError = GetLastError();
+    ++g_cacheGeneration;
+    --g_destroying;
+    SetLastError(resultError);
+    return result;
 }
 
 void LoadSettings() {
     Settings settings;
     for (size_t i = 0; i < kRoleCount; ++i) {
-        PCWSTR path = Wh_GetStringSetting(kSettingNames[i]);
-        if (path) {
-            try {
-                settings.paths[i] = path;
-            } catch (...) {
-                Wh_FreeStringSetting(path);
-                throw;
-            }
-            Wh_FreeStringSetting(path);
-        }
+        settings.paths[i] = WindhawkUtils::StringSetting::make(kSettingNames[i]).get();
     }
     AcquireSRWLockExclusive(&g_lock);
     bool any = false;
     bool changed = false;
     for (size_t i = 0; i < kRoleCount; ++i) {
+        g_loadAttempted[i] = false;
         if (settings.paths[i] != g_settings.paths[i]) {
-            g_retryAfter[i] = 0;
             changed = true;
         }
         any = any || !settings.paths[i].empty();
@@ -777,49 +851,34 @@ void LoadSettings() {
     ReleaseSRWLockExclusive(&g_lock);
 }
 
-bool IsExcludedProcess() {
-    WCHAR path[32768]{};
-    DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
-    if (!length || length >= ARRAYSIZE(path)) return true;
-    PCWSTR name = wcsrchr(path, L'\\');
-    name = name ? name + 1 : path;
-    constexpr PCWSTR excluded[] = {
-        L"dwm.exe", L"LogonUI.exe", L"consent.exe", L"winlogon.exe", L"csrss.exe",
-        L"lsass.exe", L"services.exe", L"smss.exe", L"wininit.exe", L"fontdrvhost.exe",
-        L"windhawk.exe", L"windhawk-x64-helper.exe"
-    };
-    for (PCWSTR entry : excluded) {
-        if (_wcsicmp(name, entry) == 0) return true;
-    }
-    return false;
-}
-
-template <typename T>
-bool Hook(T target, T replacement, T* original) {
-    return Wh_SetFunctionHook(reinterpret_cast<void*>(target), reinterpret_cast<void*>(replacement),
-                              reinterpret_cast<void**>(original));
-}
-
 BOOL Wh_ModInit() {
-    if (IsExcludedProcess()) return FALSE;
     try {
         LoadSettings();
     } catch (...) {
         return FALSE;
     }
+    if (!g_hasPaths.load()) return FALSE;
+    const PCWSTR systemIds[] = {
+        IDC_ARROW, IDC_IBEAM, IDC_WAIT, IDC_CROSS, IDC_UPARROW, IDC_SIZE,
+        IDC_ICON, IDC_SIZENWSE, IDC_SIZENESW, IDC_SIZEWE, IDC_SIZENS,
+        IDC_SIZEALL, IDC_NO, IDC_HAND, IDC_APPSTARTING, IDC_HELP, MAKEINTRESOURCEW(32671), MAKEINTRESOURCEW(32672)
+    };
+    static_assert(ARRAYSIZE(systemIds) == ARRAYSIZE(g_systemCursors));
+    for (size_t i = 0; i < ARRAYSIZE(systemIds); ++i) {
+        g_systemCursors[i] = LoadCursorW(nullptr, systemIds[i]);
+    }
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     auto destroyCursor = reinterpret_cast<DestroyCursor_t>(GetProcAddress(user32, "DestroyCursor"));
     auto destroyIcon = reinterpret_cast<DestroyIcon_t>(GetProcAddress(user32, "DestroyIcon"));
     if (!destroyCursor || !destroyIcon ||
-        !Hook(SetCursor, SetCursor_Hook, &SetCursor_Original) ||
-        !Hook(GetCursor, GetCursor_Hook, &GetCursor_Original) ||
-        !Hook(destroyCursor, DestroyCursor_Hook, &DestroyCursor_Original)) {
+        !WindhawkUtils::SetFunctionHook(SetCursor, SetCursor_Hook, &SetCursor_Original) ||
+        !WindhawkUtils::SetFunctionHook(GetCursor, GetCursor_Hook, &GetCursor_Original) ||
+        !WindhawkUtils::SetFunctionHook(destroyCursor, DestroyCursor_Hook, &DestroyCursor_Original)) {
         Wh_Log(L"Initialization failed while registering cursor hooks");
         return FALSE;
     }
-    if (reinterpret_cast<void*>(destroyCursor) == reinterpret_cast<void*>(destroyIcon)) {
-        DestroyIcon_Original = reinterpret_cast<DestroyIcon_t>(DestroyCursor_Original);
-    } else if (!Hook(destroyIcon, DestroyIcon_Hook, &DestroyIcon_Original)) {
+    if (reinterpret_cast<void*>(destroyCursor) != reinterpret_cast<void*>(destroyIcon) &&
+        !WindhawkUtils::SetFunctionHook(destroyIcon, DestroyIcon_Hook, &DestroyIcon_Original)) {
         Wh_Log(L"Initialization failed while registering DestroyIcon hook");
         return FALSE;
     }
@@ -847,7 +906,5 @@ void Wh_ModUninit() {
         if (state.thread) CloseHandle(state.thread);
         state = {};
     }
-    if (g_resourceGate) CloseHandle(g_resourceGate);
-    g_resourceGate = nullptr;
     ReleaseSRWLockExclusive(&g_lock);
 }
