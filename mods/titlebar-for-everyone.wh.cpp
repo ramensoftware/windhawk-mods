@@ -377,11 +377,7 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
             SetWinUICustomControlsVisibility(hWnd, false);
         // Steam
         } else if (wcscmp(className, L"SDL_app") == 0) {
-            wchar_t title[256];
-            GetWindowText(hWnd, title, 256);
-            if (wcsncmp(title, L"Steam Big Picture", 17) != 0) {
-                isTarget = true;
-            }
+            isTarget = true;
         // Microsoft 365 Copilot
         } else if (wcscmp(className, L"OfficeApp-Frame") == 0) {
             isTarget = true;
