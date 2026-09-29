@@ -71,7 +71,7 @@ The two processes coordinate through a `.shared` PE section (`SharedProxyState`)
 Each taskbar window (`Shell_TrayWnd`, `Shell_SecondaryTrayWnd`) hosts a XAML island, and no public API maps an HWND to its `XamlRoot`. The mod follows Explorer's own objects instead : the window's `CTaskBand`/`CSecondaryTaskBand` is located by matching the `ITaskListWndSite` vtable pointer across the window-long slots, its `GetTaskbarHost()` returns a `std::shared_ptr<TaskbarHost>` by value, the offset of the hosted XAML element inside `TaskbarHost` is read out of the compiled prologue of `TaskbarHost::FrameHeight` (x64 `add rcx, imm8`/ARM64 `ldr x8, [x0, #imm]` encodings, so no hardcoded struct layout can silently rot), and the temporary `shared_ptr` is released through `std::_Ref_count_base::_Decref`. From the hosted element, `XamlRoot.Content -> SystemTray.SystemTrayFrame -> SystemTrayFrameGrid` is the container under which every tray surface the mod touches lives. Its children are, in template order, `NotifyIconStack` (chevron), `NotificationAreaIcons`, `MainStack` (system icons), `NonActivatableStack` (privacy indicators), `SecondaryClockStack`, `ControlCenterButton`, `NotificationCenterButton` and `ShowDesktopStack`, in a `Grid` with one `Auto` column each on the classic template and a horizontal `StackPanel` on the newer one.
 
 ### The apply pass
-`ApplyStyle` runs per taskbar, always on the taskbar thread : at startup from the `TrayUI::StartTaskbar` hook, on demand through `RunFromWindowThread` (a `WH_CALLWNDPROC` hook plus `SendMessageTimeout(SMTO_ABORTIFHUNG)`, so a hung Explorer cannot deadlock the caller), for hot-plugged taskbars from `CSecondaryTray::InitModelAndHost`, and through a bounded retry schedule on a mod-unique timer id for Explorer startups or secondary-taskbar creation where the XAML tree appears late. The secondary init hook installs the taskbar subclass immediately, then schedules that full retry pass if the XAML root or `SystemTrayFrameGrid` is not ready yet. The pass collects every tray element in a single child walk (`CollectTrayElements`), forces the configured surfaces (`NotifyIconStack`, `NotificationAreaIcons`, `ControlCenterButton`) visible and hit-testable, shares the system icon stacks, resets non-selected taskbars to the default secondary look, lets every surface keep its natural content width, and then measures the live rectangle of every tray surface for click hit-testing and the menu-ownership pre-arm. `NotificationCenterButton` and the frame width stay native : up to 1.2.2 the mod forced them, which produced an empty 78 px button and an empty strip at the right edge on builds whose secondary taskbars draw their clock through `SecondaryClockStack`, and the pins older versions left behind are released on the next pass. Every property write is read-compare-write and one batched layout update runs per taskbar only when something actually changed, so a steady-state pass dirties nothing, and the measurements happen after that layout so the hit-test always sees this pass's geometry. The whole pass sits inside an exception boundary : XAML structure drift degrades to a logged skip instead of letting an exception escape into Explorer's window procedure. The real-tray owner is processed first so its bindings are cached before any copy consumes them.
+`ApplyStyle` runs per taskbar, always on the taskbar thread : at startup from the `TrayUI::StartTaskbar` hook, on demand through `RunFromWindowThread` (a `WH_CALLWNDPROC` hook plus synchronous `SendMessage`, so the caller waits until the callback has finished), for hot-plugged taskbars from `CSecondaryTray::InitModelAndHost`, and through a bounded retry schedule on a mod-unique timer id for Explorer startups or secondary-taskbar creation where the XAML tree appears late. The secondary init hook installs the taskbar subclass immediately, then schedules that full retry pass if the XAML root or `SystemTrayFrameGrid` is not ready yet. The pass collects every tray element in a single child walk (`CollectTrayElements`), forces the configured surfaces (`NotifyIconStack`, `NotificationAreaIcons`, `ControlCenterButton`) visible and hit-testable, shares the system icon stacks, resets non-selected taskbars to the default secondary look, lets every surface keep its natural content width, and then measures the live rectangle of every tray surface for click hit-testing and the menu-ownership pre-arm. `NotificationCenterButton` and the frame width stay native : up to 1.2.2 the mod forced them, which produced an empty 78 px button and an empty strip at the right edge on builds whose secondary taskbars draw their clock through `SecondaryClockStack`, and the pins older versions left behind are released on the next pass. Every property write is read-compare-write and one batched layout update runs per taskbar only when something actually changed, so a steady-state pass dirties nothing, and the measurements happen after that layout so the hit-test always sees this pass's geometry. The whole pass sits inside an exception boundary : XAML structure drift degrades to a logged skip instead of letting an exception escape into Explorer's window procedure. The real-tray owner is processed first so its bindings are cached before any copy consumes them.
 
 ### Content : sharing the singleton bindings
 Windows keeps exactly one real notification-area model, and the mod never duplicates the native icon manager or its `std::shared_ptr` ownership. Instead, the real-tray owner's elements act as a binding source : their `DataContext`/`ItemsSource`/(non-UIElement) `Content` are cached in heap-backed holders and applied to the matching elements of every other taskbar, which then render the singleton content through ordinary XAML data binding. `UIElement` content is never shared, a XAML element cannot live in two trees. The system icon stacks follow the same pattern (stack `DataContext` plus the inner `IconStack` list `ItemsSource`), and each copy's stack `Visibility` is bound one-way to the owner's element, so an indicator appearing on the primary appears everywhere without an apply pass. On builds that show the secondary-taskbar clock through `SecondaryClockStack`, that stack sits right before `ControlCenterButton` in the template, so copies swap the two (Grid columns or panel order, only from the exact template order) to read like the primary. In selected-monitor mode, the first configured monitor additionally becomes the preferred owner of the real tray surface : the `TrayUI::_SetStuckMonitor` hook retargets Explorer's own primary-taskbar placement logic there, re-triggered through Explorer's display-change message (`0x5B8`).
@@ -104,7 +104,7 @@ The per-glyph network/volume/battery menus were the 1.0.7 crash saga, and each o
 The notification/date-time button and the secondary-taskbar clock are untouched, apart from placing the control center before that clock : Windows gives every taskbar its own items for them and already opens that flyout on the clicked monitor. Tray icon right clicks travel the notify-icon message pipeline to the owning apps, which is island-safe, with the anchor mapped from the clicked island. ShellHost surfaces outside an armed flyout context, including Windows Search, keep their native placement.
 
 ### Lifecycle and safety
-Unload first stops redirection, then waits synchronously for the taskbar thread to cancel retries, return borrowed proxy items, remove subclasses, restore the properties and bindings changed by the mod, restore child order and native menu ownership, and finally release cached XAML references. Properties whose current value or binding differs from the mod's last write are left alone; originally unset properties are cleared instead of pinned to guessed defaults. Explorer's own monitor choice passes through during the final display refresh. Cleanup has no timeout, so a busy or hung taskbar can delay disable/update. If the taskbar thread is unavailable, tracked subclasses are removed through Windhawk's synchronous helper and heap-backed XAML references are retained instead of released on the wrong thread. No low timer ids are used on Explorer's windows. Startup retries only reapply XAML state; they do not send display-change notifications that can dismiss an app menu. WinRT references are never released during process detach. The SystemTray hooks replace an answer only when they can compute it from a known taskbar island, and otherwise use the native computation. The free-function rectangle hook returns RECT by value so the compiler selects the correct x64 or ARM64 ABI.
+Unload first stops redirection, then waits synchronously for the taskbar thread to cancel retries, return borrowed proxy items, remove subclasses, restore the properties and bindings changed by the mod, restore child order and native menu ownership, and finally release cached XAML references. Properties whose current value or binding differs from the mod's last write are left alone; originally unset properties are cleared instead of pinned to guessed defaults. Ordinary bindings are restored as bindings; internal template expressions that cannot be reapplied through SetValue are restored as their resolved base values, without animation overrides. Explorer's own monitor choice passes through during the final display refresh. Cleanup has no timeout, so a busy or hung taskbar can delay disable/update. If the taskbar thread is unavailable, taskbar windows in this process are enumerated and their subclasses are removed through Windhawk's synchronous per-window helper, available in 1.6.1 and 1.7.3. Heap-backed XAML references are retained instead of released on the wrong thread. No low timer ids are used on Explorer's windows. Startup retries only reapply XAML state; they do not send display-change notifications that can dismiss an app menu. WinRT references are never released during process detach. The SystemTray hooks replace an answer only when they can compute it from a known taskbar island, and otherwise use the native computation. The free-function rectangle hook returns RECT by value so the compiler selects the correct x64 or ARM64 ABI.
 
 ---
 
@@ -2158,23 +2158,33 @@ Data::Binding GetTrayPropertyBinding(DependencyObject const& element, Dependency
 template <typename Writer>
 void WriteTrayProperty(DependencyObject const& element, DependencyProperty const& property, Writer writer) {
     auto& changes = g_trayPropertyChanges;
-    size_t index = changes.size();
+    std::erase_if(changes, [](TrayPropertyChange const& change) { return !change.element.get(); });
 
-    for (size_t i = 0; i < changes.size(); i++) {
-        if (changes[i].element.get() == element && changes[i].property == property) {
-            index = i;
-            break;
+    auto findChange = [&] {
+        return std::find_if(changes.begin(), changes.end(), [&](TrayPropertyChange const& change) {
+            return change.element.get() == element && change.property == property;
+        });
+    };
+
+    if (findChange() == changes.end()) {
+        auto originalValue = element.ReadLocalValue(property);
+
+        // ReadLocalValue can return an internal TemplateBinding expression that SetValue cannot accept as a property value. Keep the unset marker, otherwise save the resolved value without animation overrides; ordinary bindings are restored separately.
+        if (originalValue != DependencyProperty::UnsetValue()) {
+            originalValue = element.GetAnimationBaseValue(property);
         }
-    }
 
-    if (index == changes.size()) {
-        changes.push_back({winrt::make_weak(element), property, element.ReadLocalValue(property), GetTrayPropertyBinding(element, property)});
+        changes.push_back({winrt::make_weak(element), property, originalValue, GetTrayPropertyBinding(element, property)});
     }
 
     writer();
-    // The write can invoke XAML callbacks. Use an index instead of retaining a vector reference across it.
-    changes[index].appliedValue = element.ReadLocalValue(property);
-    changes[index].appliedBinding = GetTrayPropertyBinding(element, property);
+    auto appliedValue = element.ReadLocalValue(property);
+    auto appliedBinding = GetTrayPropertyBinding(element, property);
+    // XAML callbacks can append or prune records during the write. Re-find this entry instead of retaining an index or iterator across it.
+    if (auto it = findChange(); it != changes.end()) {
+        it->appliedValue = std::move(appliedValue);
+        it->appliedBinding = std::move(appliedBinding);
+    }
 }
 
 template <typename Value>
@@ -3006,13 +3016,19 @@ bool ReattachItemsControlItemsSource(FrameworkElement element, PCWSTR debugName,
         auto localValue = itemsControl.ReadLocalValue(property);
         itemsControl.ItemsSource(nullptr);
 
-        // Recreate the containers without replacing a native binding or template value with a local ItemsSource pin
+        // Preserve ordinary bindings and style values when possible. A TemplateBinding can expose an internal expression through ReadLocalValue, so use the resolved collection for the remaining local-value case.
         if (binding) {
             itemsControl.SetBinding(property, binding);
         } else if (localValue == DependencyProperty::UnsetValue()) {
             itemsControl.ClearValue(property);
         } else {
-            itemsControl.SetValue(property, localValue);
+            itemsControl.ItemsSource(itemsSource);
+        }
+
+        // Keep the previous collection if restoring an unbound native value left this previously populated control empty. Ordinary bindings may resolve to null legitimately and are left intact.
+        if (!binding && !itemsControl.ItemsSource()) {
+            itemsControl.ItemsSource(itemsSource);
+            Wh_Log(L"restored %s items source after native value reattachment left it empty (%s)", debugName, reason);
         }
 
         return true;
@@ -6261,6 +6277,23 @@ void UninitFromTaskbarThread(void* parameter) {
     ClearCachedXamlBindings();
 }
 
+/// Fallback when the taskbar thread couldn't run UninitFromTaskbarThread. Only use the per-window helper available in Windhawk 1.6.1 and 1.7.3, and leave XAML state on its owning thread.
+void RemoveTaskbarSubclassesFromAnyThread() {
+    EnumWindows(
+        [](HWND hWnd, LPARAM) -> BOOL {
+            DWORD processId = 0;
+
+            if (GetWindowThreadProcessId(hWnd, &processId) && processId == GetCurrentProcessId() && IsTaskbarWindow(hWnd)) {
+                KillTimer(hWnd, kDeferredApplySettingsTimerId);
+                WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, TaskbarSubclassProc);
+            }
+
+            return TRUE;
+        },
+        0
+    );
+}
+
 /// Ordered teardown : stop redirection, then wait for all taskbar-thread cleanup before the DLL can unload
 void Wh_ModBeforeUninit() {
     Wh_Log(L"before uninit");
@@ -6275,13 +6308,13 @@ void Wh_ModBeforeUninit() {
 
     if (!taskbarWnd) {
         // No taskbar thread is available to release UI objects. Keep the heap-backed references alive rather than releasing them from this thread.
-        WindhawkUtils::RemoveAllWindowSubclasses();
+        RemoveTaskbarSubclassesFromAnyThread();
         return;
     }
 
     if (!RunFromWindowThread(taskbarWnd, UninitFromTaskbarThread, taskbarWnd)) {
         Wh_Log(L"taskbar cleanup could not run; removing subclasses synchronously and retaining XAML references");
-        WindhawkUtils::RemoveAllWindowSubclasses();
+        RemoveTaskbarSubclassesFromAnyThread();
     }
 }
 
