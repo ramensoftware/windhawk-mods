@@ -2,9 +2,9 @@
 // @id              startup-app-delay-fix
 // @name            Startup App Delay Fix
 // @description     Removes the delay Windows applies to startup applications after sign-in
-// @version         1.4
+// @version         1.4.1
 // @author          meteoni
-// @github          https://github.com/Meteony
+// @github          https://github.com/Meteoni
 // @include         explorer.exe
 // @compilerOptions -ladvapi32 -lntdll
 // ==/WindhawkMod==
@@ -14,7 +14,7 @@ Windows intentionally delays startup applications after sign-in to reduce
 system load, which can cause apps to open minutes after startup.
 
 Common fix (which the mod intends to emulate): 
-![Common Fix](https://raw.githubusercontent.com/Meteony/meteoni-assets/main/startup-app-delay-fix/startup-app-delay-fix.png)
+![Common Fix](https://raw.githubusercontent.com/Meteoni/meteoni-assets/main/startup-app-delay-fix/startup-app-delay-fix.png)
 
 This mod redirects Explorer's startup-serialization key to a dedicated,
 volatile key where both `WaitforIdleState` and `StartupDelayInMSec` are zero.

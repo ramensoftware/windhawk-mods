@@ -2,7 +2,7 @@
 // @id              win11-accent-border
 // @name            Windows 11 Accent Window Border
 // @description     Show the accent color on the border but not on the titlebar
-// @version         1.0.4
+// @version         1.0.5
 // @author          Guerra24
 // @github          https://github.com/Guerra24
 // @include         *
@@ -37,6 +37,9 @@ You can use `AccentColorInactive` in `HKEY_CURRENT_USER\Software\Microsoft\Windo
 - SpecialWindows: false
   $name: Target special windows
   $description: Allows the mod to work properly with some applications that customize their windows (e.g. Flow Launcher)
+- AdditionalEvents: false
+  $name: Hook additional activation events
+  $description: Allows the mod to work properly with some applications that handle activation events (e.g. UnigetUI)
 */
 // ==/WindhawkModSettings==
 
@@ -48,6 +51,7 @@ COLORREF BorderInactive = 0x000000;
 const COLORREF ColorDefault = DWMWA_COLOR_DEFAULT;
 
 bool SpecialWindows = false;
+bool AdditionalEvents = false;
 
 void LoadColors() {
     DWORD color;
@@ -101,6 +105,10 @@ LRESULT WINAPI DefWindowProcA_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     LRESULT result = DefWindowProcA_orig(hWnd, uMsg, wParam, lParam);
 
     switch (uMsg) {
+        case WM_ACTIVATEAPP:
+            if (AdditionalEvents)
+                SetBorderColor(hWnd, wParam && GetForegroundWindow() == hWnd);
+            break;
         case WM_ACTIVATE:
         case WM_NCACTIVATE:
             SetBorderColor(hWnd, wParam);
@@ -121,6 +129,10 @@ LRESULT WINAPI DefWindowProcW_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     LRESULT result = DefWindowProcW_orig(hWnd, uMsg, wParam, lParam);
 
     switch (uMsg) {
+        case WM_ACTIVATEAPP:
+            if (AdditionalEvents)
+                SetBorderColor(hWnd, wParam && GetForegroundWindow() == hWnd);
+            break;
         case WM_ACTIVATE:
         case WM_NCACTIVATE:
             SetBorderColor(hWnd, wParam);
@@ -194,6 +206,7 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
     SpecialWindows = Wh_GetIntSetting(L"SpecialWindows");
+    AdditionalEvents = Wh_GetIntSetting(L"AdditionalEvents");
 
     LoadColors();
 
@@ -242,5 +255,6 @@ void Wh_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
     EnumWindows(DisableEnumWindowsCallback, GetCurrentProcessId());
     SpecialWindows = Wh_GetIntSetting(L"SpecialWindows");
+    AdditionalEvents = Wh_GetIntSetting(L"AdditionalEvents");
     EnumWindows(EnableEnumWindowsCallback, GetCurrentProcessId());
 }
