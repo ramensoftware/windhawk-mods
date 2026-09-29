@@ -2,7 +2,7 @@
 // @id              titlebar-for-everyone
 // @name            Titlebar For Everyone
 // @description     Force native title bars and frames for various programs
-// @version         0.4
+// @version         0.6
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
@@ -31,7 +31,8 @@
 // @include         Photos.exe
 // @include         MuseScore*.exe
 // @include         ms-teams.exe
-// @compilerOptions -lcomctl32 -luxtheme -lgdi32 -lshlwapi
+// @license         MIT
+// @compilerOptions -lcomctl32 -luxtheme -lgdi32 -lshlwapi -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -50,11 +51,12 @@
     * Vivaldi does work but is intentionally excluded from the default inclusion list. Use the built-in option to use native title bars instead
 * Steam (non-VGUI)
     * Known issues: In the Basic style, the window control hover effects do not show
+    * You must put `steamwebhelper.exe` in the global inclusion list for this to work (or disable the well-known game exclusion option)
 * WinUI apps
     * PowerToys apps
     * New Photos app
 * WPF apps
-    * Visual Studio (tested: 2022)
+    * Visual Studio (tested: 2022, 2026)
     * PowerToys Workspaces
 * Office apps
     * Word, Excel, PowerPoint, OneNote, Access, Outlook, and Publisher
@@ -130,12 +132,18 @@
 - notoolwinsteam: true
   $name: Steam - Hide tool window frames
   $name:ko-KR: Steam - 도구 창 테두리 숨기기
+- nosteamhtmlinject: false
+  $name: Steam - Disable script injection
+  $name:ko-KR: Steam - 스크립트 삽입 안함
+  $description: Enable this if you are using the "Change Window Parameters" Millennium extension
+  $description:ko-KR: "\"Change Window Parameters\" Millennium 확장 프로그램을 사용중인 경우 이 옵션을 켜십시오"
 */
 // ==/WindhawkModSettings==
 
-#include <shlwapi.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
+#include <dwmapi.h>
+#include <shlwapi.h>
 #include <windows.h>
 #include <uxtheme.h>
 #include <cwchar>
@@ -161,18 +169,19 @@ enum ClientEdgeSetting {
 };
 
 struct tb4e_settings {
-    BOOL btnFaceChrome = FALSE;
+    bool btnFaceChrome = false;
     ClientEdgeSetting clientEdgeSetting = CE_KEEP;
-    BOOL noToolWinSteam = FALSE;
+    bool noToolWinSteam = false;
+    bool noSteamHtmlInject = false;
 } tb4e_settings;
 
 WorkingMode mode = MODE_DEFAULT;
 
-BOOL isSteam = FALSE;
+bool isSteam = false;
 wchar_t steamIndexHtml[MAX_PATH];
 wchar_t steamIndexHtmlModded[MAX_PATH];
 
-BOOL isBrave = FALSE;
+bool isBrave = false;
 
 #pragma region Subclassing
 LRESULT CALLBACK HideSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
@@ -223,8 +232,17 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                 DefSubclassProc(hWnd, uMsg, wParam, lParam);
             }
         }
-        case WM_NCACTIVATE:
         case WM_NCPAINT:
+        {
+            if (mode == MODE_CHROMIUM) {
+                BOOL dwmEnabled;
+                DwmIsCompositionEnabled(&dwmEnabled);
+                if (dwmEnabled) { // Potentially fix Aero Glass issues with Chromium browsers that still support it
+                    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+                }
+            }
+        }
+        case WM_NCACTIVATE:
         case WM_NCHITTEST:
         case WM_NCLBUTTONDOWN:
             return DefWindowProc(hWnd, uMsg, wParam, lParam);
@@ -264,9 +282,9 @@ void ProcessWindow(HWND hWnd, bool onlyUpdateStyle = false) {
         return;
     }
 
-    // Fix a specific issue with Visual Studio's "Show/Hide debug targets" window
+    // Fix a specific issue with Visual Studio's some windows
     // It simply renders nothing when WM_NCCALCSIZE is subclassed
-    if (mode == MODE_VS && (style & 0x60C0000) != 0 && exStyle == 0x80101) {
+    if (mode == MODE_VS && (exStyle & WS_EX_DLGMODALFRAME) != 0) {
         return;
     }
 
@@ -294,7 +312,7 @@ void ProcessWindow(HWND hWnd, bool onlyUpdateStyle = false) {
     SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
 }
 
-void SetWinUICustomControlsVisibility(HWND parent, BOOL visible) {
+void SetWinUICustomControlsVisibility(HWND parent, bool visible) {
     HWND ncInputSrcHwnd = FindWindowExW(parent, NULL, L"InputNonClientPointerSource", NULL);
     HWND windowControlHwnd = FindWindowExW(parent, NULL, L"ReunionWindowingCaptionControls", NULL);
     HWND teamsOverlayHwnd = FindWindowExW(parent, NULL, L"TeamsOverlay", NULL);
@@ -313,10 +331,10 @@ void SetWinUICustomControlsVisibility(HWND parent, BOOL visible) {
         ShowWindow(windowControlHwnd, visible);
         if (visible) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(windowControlHwnd, HideSubclassProc);
-            Wh_Log(L"Restored TeamsOverlay");
+            Wh_Log(L"Restored ReunionWindowingCaptionControls");
         } else {
             if (WindhawkUtils::SetWindowSubclassFromAnyThread(windowControlHwnd, HideSubclassProc, 0)) {
-                Wh_Log(L"Hid TeamsOverlay (%p)", windowControlHwnd);
+                Wh_Log(L"Hid ReunionWindowingCaptionControls (%p)", windowControlHwnd);
             }
         }
     }
@@ -324,10 +342,10 @@ void SetWinUICustomControlsVisibility(HWND parent, BOOL visible) {
         ShowWindow(teamsOverlayHwnd, visible);
         if (visible) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(teamsOverlayHwnd, HideSubclassProc);
-            Wh_Log(L"Restored ReunionWindowingCaptionControls");
+            Wh_Log(L"Restored TeamsOverlay");
         } else {
             if (WindhawkUtils::SetWindowSubclassFromAnyThread(teamsOverlayHwnd, HideSubclassProc, 0)) {
-                Wh_Log(L"Hid ReunionWindowingCaptionControls (%p)", teamsOverlayHwnd);
+                Wh_Log(L"Hid TeamsOverlay (%p)", teamsOverlayHwnd);
             }
         }
     }
@@ -356,10 +374,14 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
         // WinUI
         } else if (wcsncmp(className, L"WinUIDesktopWin32WindowClass", 28) == 0) {
             isTarget = true;
-            SetWinUICustomControlsVisibility(hWnd, FALSE);
+            SetWinUICustomControlsVisibility(hWnd, false);
         // Steam
         } else if (wcscmp(className, L"SDL_app") == 0) {
-            isTarget = true;
+            wchar_t title[256];
+            GetWindowText(hWnd, title, 256);
+            if (wcsncmp(title, L"Steam Big Picture", 17) != 0) {
+                isTarget = true;
+            }
         // Microsoft 365 Copilot
         } else if (wcscmp(className, L"OfficeApp-Frame") == 0) {
             isTarget = true;
@@ -386,7 +408,7 @@ BOOL CALLBACK InitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
         // New Teams
         } else if (wcsstr(className, L"TeamsWebView") != 0) {
             isTarget = true;
-            SetWinUICustomControlsVisibility(hWnd, FALSE);
+            SetWinUICustomControlsVisibility(hWnd, false);
         }
 
         if (isTarget) {
@@ -402,7 +424,7 @@ BOOL CALLBACK UninitEnumWindowsProc(HWND hWnd, LPARAM lParam) {
     // Unsubclass all windows belonging to this process
     if (pid == GetCurrentProcessId()) {
         WindhawkUtils::RemoveWindowSubclassFromAnyThread(hWnd, SubclassProc);
-        SetWinUICustomControlsVisibility(hWnd, TRUE);
+        SetWinUICustomControlsVisibility(hWnd, true);
         if (lParam == 1) {
             SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE);
         }
@@ -452,7 +474,7 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
         } else if (wcsncmp(className, L"WinUIDesktopWin32WindowClass", 28) == 0) {
             if (dwStyle & WS_CAPTION) {
                 isTarget = true;
-                SetWinUICustomControlsVisibility(hWnd, FALSE);
+                SetWinUICustomControlsVisibility(hWnd, false);
             }
         // Steam with workarounds
         } else if (isSteam && wcscmp(className, L"Chrome_RenderWidgetHostHWND") == 0) {
@@ -473,7 +495,7 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
         // New Teams
         } else if (wcsstr(className, L"TeamsWebView") != 0) {
             isTarget = true;
-            SetWinUICustomControlsVisibility(hWnd, FALSE);
+            SetWinUICustomControlsVisibility(hWnd, false);
         // WinUI / Teams custom controls
         } else if (wcsstr(className, L"InputNonClientPointerSource") != 0 ||
             wcsstr(className, L"ReunionWindowingCaptionControls") != 0 ||
@@ -494,7 +516,7 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
 // Subclassic VS windows in CreateWindowExW doesn't work for some reason, so we have to do it in ShowWindow
 using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_original;
-BOOL WINAPI ShowWindow_hook(HWND hWnd, int nCmdShow) {
+bool WINAPI ShowWindow_hook(HWND hWnd, int nCmdShow) {
     wchar_t className[256];
     GetClassName(hWnd, className, 256);
     Wh_Log(L"ShowWindow_hook: %s", className);
@@ -568,7 +590,9 @@ HANDLE WINAPI CreateFileW_hook(
         compareFileName += 4;
     }
 
-    if (wcsicmp(compareFileName, steamIndexHtml) == 0) {
+    DWORD dwAttrib = GetFileAttributesW(steamIndexHtmlModded);
+
+    if (dwAttrib != INVALID_FILE_ATTRIBUTES && !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY) && wcsicmp(compareFileName, steamIndexHtml) == 0) {
         Wh_Log(L"lpFileName = %s", compareFileName);
         Wh_Log(L"=>");
         Wh_Log(L"lpFileName = %s", steamIndexHtmlModded);
@@ -586,17 +610,17 @@ HANDLE WINAPI CreateFileW_hook(
     );
 }
 
-BOOL PrepareSteamIndexHtml() {
+bool PrepareSteamIndexHtml() {
     wchar_t tempPath[MAX_PATH];
-    if (!GetTempPathW(MAX_PATH, tempPath))
-        return FALSE;
+    if (!Wh_GetModStoragePath(tempPath, MAX_PATH))
+        return false;
 
     if (!PathCombineW(steamIndexHtmlModded, tempPath, L"tb4e-steam-index.html"))
-        return FALSE;
+        return false;
 
     std::ifstream inFile(steamIndexHtml, std::ios::binary);
     if (!inFile)
-        return FALSE;
+        return false;
 
     std::ostringstream buffer;
     buffer << inFile.rdbuf();
@@ -605,24 +629,36 @@ BOOL PrepareSteamIndexHtml() {
 
     // Hook window.open to override browserType to 3
     const char* injectScript =
-        "<script>window.open=(()=>{const o=window.open;return(s,t,f)=>{const u=new URL(s);u.searchParams.set('browserType','3');return o(u.toString(),t,f);};})();</script>";
+        "<script>"
+            "window.open = (() => {"
+                "const o = window.open;"
+                "return (s, t, f) => {"
+                    "const u = new URL(s);"
+                    "const a = typeof t === 'string' && t.startsWith('desktopoverlay_'),"
+                        "b = u.searchParams.has('pid') && u.searchParams.get('pid') !== '0';"
+                    "if (a || b) return o(s, t, f);" // exclude in-game overlay windows
+                    "u.searchParams.set('browserType', '3');"
+                    "return o(u.toString(), t, f);"
+                "};"
+            "})();"
+        "</script>";
 
     // Look for the first <script tag
     size_t insertPos = html.find("<script");
     if (insertPos == std::string::npos)
-        return FALSE;
+        return false;
 
     html.insert(insertPos, injectScript);
 
     std::ofstream outFile(steamIndexHtmlModded, std::ios::binary);
     if (!outFile)
-        return FALSE;
+        return false;
 
     outFile.write(html.data(), html.size());
     outFile.close();
 
     Wh_Log(L"Modified steam index.html written to: %s", steamIndexHtmlModded);
-    return TRUE;
+    return true;
 }
 #pragma endregion
 
@@ -636,6 +672,7 @@ void LoadSettings() {
     }
     Wh_FreeStringSetting(ceSetting);
     tb4e_settings.noToolWinSteam = Wh_GetIntSetting(L"notoolwinsteam");
+    tb4e_settings.noSteamHtmlInject = Wh_GetIntSetting(L"nosteamhtmlinject");
 }
 
 // The mod is being initialized, load settings, hook functions, and do other
@@ -658,7 +695,7 @@ BOOL Wh_ModInit() {
     wchar_t modulePath[MAX_PATH];
     GetModuleFileName(NULL, modulePath, MAX_PATH);
     isSteam = wcsstr(_wcsupr(modulePath), L"STEAMWEBHELPER.EXE") != NULL;
-    BOOL steamPrepared = FALSE;
+    bool steamPrepared = false;
     if (isSteam) {
         Wh_Log(L"Steam detected");
         PathRemoveFileSpecW(modulePath);
@@ -687,7 +724,7 @@ BOOL Wh_ModInit() {
                        (void**)&ShowWindow_original);
     Wh_SetFunctionHook((void*)SetParent, (void*)SetParent_hook,
                        (void**)&SetParent_original);
-    if (isSteam && steamPrepared) {
+    if (isSteam && steamPrepared && !tb4e_settings.noSteamHtmlInject) {
         Wh_SetFunctionHook((void*)CreateFileW, (void*)CreateFileW_hook,
                            (void**)&CreateFileW_original);
     }
