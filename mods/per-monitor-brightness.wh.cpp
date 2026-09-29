@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              per-monitor-brightness
-// @name            Per-monitor brightness in Quick Settings
-// @description     Adds a titled brightness slider for every connected monitor to the Windows 11 Quick Settings panel
-// @version         2.1
+// @name            Per-monitor brightness and more in Quick Settings
+// @description     Brightness, contrast, volume, input and power controls for every connected monitor, plus sliders for all of them at once, in the Windows 11 Quick Settings panel
+// @version         3.0
 // @author          bardelyne
 // @github          https://github.com/bardelyne
 // @include         ShellHost.exe
@@ -21,12 +21,14 @@
 
 // ==WindhawkModReadme==
 /*
-# Per-monitor brightness in Quick Settings
+# Per-monitor brightness and more in Quick Settings
 
 Windows gives you exactly one brightness slider no matter how many monitors you
 have, and on a desktop it gives you none at all. This mod adds a labelled slider
 for every connected display, right in the Quick Settings panel, each showing its
-current level and carrying the shell's own animated brightness icon.
+current level and carrying the shell's own animated brightness icon -- plus
+contrast and power where the monitor supports them, and sliders that set every
+display at once.
 
 ![Per-monitor brightness sliders in Quick Settings](https://raw.githubusercontent.com/bardelyne/per-monitor-brightness/main/screenshot.png)
 
@@ -41,9 +43,35 @@ current level and carrying the shell's own animated brightness icon.
 A display that answers neither is listed as uncontrollable rather than being
 silently dropped.
 
+**Contrast** (VCP `0x12`), **power** (`0xD6`), **volume** (`0x62`) and
+**input** (`0x60`) are DDC/CI as well, and each is offered only for monitors
+that answer it: many answer brightness but not power, and a laptop panel has
+none of them over WMI. Which inputs a monitor has comes from its capabilities
+string, which takes a second or so to read -- so it is read once per session,
+in the background, and the input buttons appear a moment after the rest.
+
 ## Features
 
-- One titled slider per display, showing the live percentage.
+- One titled slider per display. The title shows the live percentage of every
+  slider under it, in order -- "Samsung · 80% · 50% · 30%" for brightness,
+  contrast and volume -- leaving out any folded into a closed dropdown.
+- A contrast slider for each monitor that supports it.
+- "All displays" brightness and contrast sliders that set every display to the
+  same level, shown once there are two or more displays to drive -- or with
+  just one, when its own slider is hidden.
+- A power button at the end of the brightness slider of monitors that support
+  it.
+- A volume slider for monitors with audio, with the shell's own animated
+  speaker icon.
+- Input buttons (HDMI 1, HDMI 2, DP 1...) that switch a monitor's input.
+- Two layouts: each display's extra controls in a dropdown (the default), or
+  everything visible.
+- The mouse wheel moves whichever slider is under the pointer.
+- Optionally, clicking a slider's icon jumps to a level: left, middle and right
+  button each have their own.
+- Per-display settings: a name of your own, hiding a display altogether, or
+  hiding just some of its controls. Two monitors of the same model, which
+  report the same name, are numbered left to right.
 - Sliders ordered left to right to match how the monitors sit on your desk.
 - Displays identified by EDID device path, so the right slider follows the right
   monitor across hotplug, reordering and reboots.
@@ -61,6 +89,9 @@ silently dropped.
 - Displays that cannot be controlled can be hidden.
 
 ## Settings
+
+Everything this mod adds can be shown or hidden on its own, so the panel only
+carries what you use.
 
 - **Where to put the sliders** -- below the Windows sliders by default, which
   puts the panel on the same card as the volume and stock brightness rows and
@@ -84,6 +115,30 @@ silently dropped.
   also write to every external monitor. Unlike everything else this mod does,
   that write survives turning the setting off: the monitor stores the value
   itself.
+- **Layout** -- `dropdown` (default) shows each display's brightness and tucks
+  its other controls behind a chevron; `expanded` shows everything.
+- **Show brightness sliders**, **Show brightness for all displays**, **Show
+  contrast sliders**, **Show contrast for all displays**, **Show power
+  buttons**, **Show volume sliders**, **Show input buttons** -- all on by
+  default, each covering only what it names. **Show brightness sliders** is
+  each display's own brightness slider: turned off, brightness is set with
+  the all-displays slider alone, while contrast, volume and input stay (the
+  power button, which sits at the end of the brightness slider, goes with
+  it). The all-displays rows appear with two or more displays to drive, or
+  when the per-display sliders they would duplicate are hidden; contrast,
+  volume, input and power appear only on monitors that support them.
+- **Mouse wheel step** -- 5 percentage points per notch by default; 0 leaves
+  the wheel to the flyout.
+- **Click an icon to jump to a level** -- off by default; the three levels are
+  settings of their own (0, 50 and 100 by default).
+- **Per-display settings** -- text to look for in a display's name or device
+  id, then a name to show instead, and whether to hide the display or its
+  contrast, volume, input or power controls. To tell two monitors of the same
+  model apart,
+  hover over a display's name to see its device id and use the part that
+  differs between them, at the end (for example `UID4352`). That part follows
+  the video output the monitor is plugged into, so swapping cables between
+  ports swaps the names too.
 
 ## Compatibility
 
@@ -117,6 +172,14 @@ include stays off.
   misbehaves shows up as writes reporting `ok=0`. Either way, turn on logging
   for this mod in Windhawk (the mod's **Advanced** settings -> **Logging**) to
   see which.
+- The power button turns a monitor off over DDC/CI ("DPM off"). Most monitors
+  still listen in that state and come back when the button is pressed again,
+  but not all do; one that does not has to be switched on with its own power
+  button. The button is only offered while another display is connected, so
+  there is always a screen left to see.
+- Switching a monitor to another input hands it to whatever is on that input.
+  Some monitors keep answering DDC/CI on the input they left, so you can
+  switch back from here; others do not, and need their own buttons.
 - A monitor that was asleep, switched to another input, or behind a dock that
   was still enumerating when you signed in will fail that first check through
   no fault of its own. It is retried rather than written off for the session:
@@ -179,6 +242,108 @@ include stays off.
   - "off": Leave other monitors alone
   - relative: Shift other monitors by the same amount (keeps their offset)
   - match: Set other monitors to the same percentage
+- layoutStyle: dropdown
+  $name: Layout
+  $description: >-
+    "Dropdown" shows each display's brightness slider and tucks its other
+    controls, such as contrast, behind a chevron at the end of its title.
+    "Everything visible" shows all of them at once. With the brightness
+    sliders turned off there is nothing to keep out, so the other controls
+    are shown either way.
+  $options:
+  - dropdown: Dropdown per display
+  - expanded: Everything visible
+- showPerMonitor: true
+  $name: Show brightness sliders
+  $description: >-
+    A brightness slider for each display. Turn this off to set brightness only
+    with the all-displays slider; each display's other controls (contrast,
+    volume, input) stay. Power buttons sit at the end of these sliders, so
+    they go with them.
+- showMasterBrightness: true
+  $name: Show brightness for all displays
+  $description: >-
+    One slider that sets every display to the same brightness. Appears when
+    there are two or more displays to drive, or when the brightness sliders
+    are hidden.
+- showContrast: true
+  $name: Show contrast sliders
+  $description: >-
+    For monitors that support contrast over DDC/CI. A laptop panel has no
+    contrast control, so it never gets one.
+- showMasterContrast: true
+  $name: Show contrast for all displays
+  $description: >-
+    One slider that sets every monitor that supports contrast to the same
+    value. Appears when two or more monitors support it, or when the
+    per-display contrast sliders are hidden.
+- showPowerButton: true
+  $name: Show power buttons
+  $description: >-
+    A button at the end of the brightness slider that turns a monitor off over
+    DDC/CI, for monitors that report a power state -- many do not. Pressing
+    it again turns the monitor back on, which most monitors allow; one that
+    stops listening once off has to be switched on with its own button. Only
+    offered while another display is connected, so there is always a screen
+    left to see.
+- showVolume: true
+  $name: Show volume sliders
+  $description: >-
+    For monitors with speakers or a headphone jack that report volume over
+    DDC/CI. Its speaker icon takes clicks like the other icons.
+- showInputSwitcher: true
+  $name: Show input buttons
+  $description: >-
+    A button for each input a monitor lists (HDMI 1, HDMI 2, DP 1...), the
+    current one highlighted. Pressing another switches the monitor to it --
+    which, if this PC is not on that input, hands the monitor to whatever is.
+    Switch back with the monitor's own buttons, or from here if the monitor
+    still answers on the input it left.
+- scrollStep: 5
+  $name: Mouse wheel step
+  $description: >-
+    How far one notch of the mouse wheel moves the slider under the pointer,
+    in percentage points. 0 turns the wheel off, leaving it to scroll the
+    flyout.
+- iconClicks: false
+  $name: Click an icon to jump to a level
+  $description: >-
+    Clicking a slider's icon sets it to a fixed level, one for each mouse
+    button. Off by default, so a stray click never dims a screen.
+- iconClickLeft: 0
+  $name: Left click level
+- iconClickMiddle: 50
+  $name: Middle click level
+- iconClickRight: 100
+  $name: Right click level
+- displaySettings:
+  - - match: ""
+      $name: Text to look for
+      $description: >-
+        Part of the display's name as the panel shows it (for example
+        LS27F32xG), or of its device id -- hover over a display's name in the
+        panel to see it.
+    - name: ""
+      $name: Name to show
+      $description: Leave empty to keep the display's own name.
+    - hide: false
+      $name: Hide this display
+    - hideContrast: false
+      $name: Hide its contrast slider
+    - hideVolume: false
+      $name: Hide its volume slider
+    - hideInput: false
+      $name: Hide its input buttons
+    - hidePower: false
+      $name: Hide its power button
+  $name: Per-display settings
+  $description: >-
+    Settings for individual displays: a name of your own, or what to hide.
+    The first entry whose text appears in a display's name or device id
+    applies; case does not matter. Two monitors of the same model report the
+    same name: hover over a display's name in the panel to see its device id,
+    and use the part at the end that differs between them (for example
+    UID4352). It follows the video output the monitor is plugged into.
 */
 // ==/WindhawkModSettings==
 
@@ -198,6 +363,10 @@ include stays off.
 #include <winrt/Windows.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.Input.h>
+#include <winrt/Windows.UI.Xaml.Interop.h>
+#include <winrt/Windows.UI.Input.h>
+#include <winrt/Windows.UI.h>
 
 #pragma pop_macro("GetCurrentTime")
 
@@ -210,6 +379,7 @@ include stays off.
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -283,6 +453,12 @@ constexpr wchar_t kAnimatedIconClass[] = L"Microsoft.UI.Xaml.Controls.AnimatedIc
 //   * DDC/CI  (external monitors) -- low-level VCP 0x10 over I2C. ~56 ms/write.
 //   * WMI     (internal laptop panels) -- WmiMonitorBrightnessMethods.
 //
+// DDC/CI displays can also carry contrast (VCP 0x12), power (0xD6), speaker
+// volume (0x62) and input selection (0x60), each probed separately: a monitor
+// that answers brightness does not necessarily answer any of them. Which
+// inputs exist only the monitor's capabilities string says, so that is read
+// too -- once, and in the background, because it is slow.
+//
 // Every hardware call happens on one worker thread. Callers post a target
 // percentage and return immediately; the worker coalesces, so a slider drag
 // that posts 200 values only puts as many on the wire as the bus can carry.
@@ -341,6 +517,28 @@ struct Display {
     // DdcCi
     HANDLE hPhysical = nullptr;
     DWORD vcpMax = 100;  // raw scale; a Samsung G32 reports 50, not 100
+
+    // Contrast, VCP 0x12. DDC/CI only; contrastMax stays 0 for a display that
+    // does not answer it, and contrast stays -1 until it is read.
+    int contrast = -1;
+    DWORD contrastMax = 0;
+
+    // Power, VCP 0xD6. Only a display that reports an actual power state gets
+    // a button: plenty of monitors answer the read with 0, which is no state
+    // at all, and ignore writes to it.
+    bool hasPower = false;
+    bool poweredOff = false;
+
+    // Speaker volume, VCP 0x62, for monitors with audio.
+    int volume = -1;
+    DWORD volumeMax = 0;
+
+    // Input source, VCP 0x60: the values the monitor lists in its
+    // capabilities, and which of them is current -- -1 when that is not known,
+    // since some monitors answer the read with a value their own list does
+    // not contain.
+    std::vector<int> inputs;
+    int input = -1;
 
     // Wmi
     std::wstring wmiPath;  // __RELPATH of the WmiMonitorBrightnessMethods instance
@@ -719,6 +917,81 @@ class Engine {
         SetPercentInternal(stableId, percent, /*rebaseFollow=*/true);
     }
 
+    // Contrast, coalesced exactly like brightness. Displays without contrast
+    // ignore it.
+    void SetContrast(const std::wstring& stableId, int percent) {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            bool known = false;
+            for (auto& d : displays_) {
+                if (d.stableId == stableId && d.contrastMax > 0) {
+                    d.contrast = std::clamp(percent, 0, 100);
+                    known = true;
+                }
+            }
+            if (!known) {
+                return;
+            }
+            pendingContrast_[stableId] = std::clamp(percent, 0, 100);
+        }
+        work_.notify_all();
+    }
+
+    // Speaker volume, coalesced like brightness.
+    void SetVolume(const std::wstring& stableId, int percent) {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            Display* d = FindLocked(stableId);
+            if (!d || d->volumeMax == 0) {
+                return;
+            }
+            d->volume = std::clamp(percent, 0, 100);
+            pendingVcp_[{stableId, kVcpVolume}] =
+                static_cast<DWORD>((d->volume * d->volumeMax + 50) / 100);
+        }
+        work_.notify_all();
+    }
+
+    // Switches the monitor to one of the inputs it lists. Switching away from
+    // the one this PC is on hands the monitor to whatever is on the other
+    // input; whether it still answers DDC/CI from here afterwards depends on
+    // the monitor.
+    void SetInput(const std::wstring& stableId, int value) {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            Display* d = FindLocked(stableId);
+            if (!d || std::find(d->inputs.begin(), d->inputs.end(), value) == d->inputs.end()) {
+                return;
+            }
+            d->input = value;
+            pendingVcp_[{stableId, kVcpInput}] = static_cast<DWORD>(value);
+        }
+        work_.notify_all();
+    }
+
+    // Turns a display off (DPM off) or back on. Off is 0x04 rather than 0x05:
+    // 0x05 is the monitor's own power button, after which many monitors stop
+    // listening on DDC/CI altogether, whereas one in DPM off usually still
+    // answers the 0x01 that turns it back on. Usually -- some do not, and then
+    // only the monitor's own button brings it back.
+    void SetPower(const std::wstring& stableId, bool on) {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            bool known = false;
+            for (auto& d : displays_) {
+                if (d.stableId == stableId && d.hasPower) {
+                    d.poweredOff = !on;
+                    known = true;
+                }
+            }
+            if (!known) {
+                return;
+            }
+            pendingPower_[stableId] = on;
+        }
+        work_.notify_all();
+    }
+
    private:
     void SetPercentInternal(const std::wstring& stableId, int percent,
                             bool rebaseFollow) {
@@ -772,6 +1045,159 @@ class Engine {
 
    private:
     static constexpr BYTE kVcpLuminance = 0x10;
+    static constexpr BYTE kVcpContrast = 0x12;
+    static constexpr BYTE kVcpPower = 0xD6;
+    static constexpr DWORD kPowerOn = 0x01;
+    static constexpr DWORD kPowerOff = 0x04;  // DPM off; see SetPower
+    static constexpr BYTE kVcpVolume = 0x62;
+    static constexpr BYTE kVcpInput = 0x60;
+
+    // Caller holds mutex_.
+    Display* FindLocked(const std::wstring& stableId) {
+        for (auto& d : displays_) {
+            if (d.stableId == stableId) {
+                return &d;
+            }
+        }
+        return nullptr;
+    }
+
+    // What a monitor's capabilities string says about the VCP codes it
+    // implements: each code, and the values it lists for it, if any.
+    struct Capabilities {
+        bool loaded = false;
+        std::map<int, std::vector<int>> vcp;
+    };
+
+    static int HexDigit(char c) {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    }
+
+    // "...vcp(02 04 10 12 14(05 08 0B) 60(11 12 ) 62 8D)..." -> {0x02: {},
+    // ..., 0x14: {5, 8, 11}, 0x60: {0x11, 0x12}, ...}. Codes are read two hex
+    // digits at a time, which also covers the monitors that pack the list
+    // with no spaces at all.
+    static Capabilities ParseCapabilities(const std::string& text) {
+        Capabilities caps;
+        std::string lower = text;
+        std::transform(lower.begin(), lower.end(), lower.begin(),
+                       [](char c) { return static_cast<char>(tolower(static_cast<unsigned char>(c))); });
+        size_t at = lower.find("vcp(");
+        if (at == std::string::npos) {
+            return caps;
+        }
+        size_t i = at + 4;
+        auto readByte = [&](size_t& k) -> int {
+            while (k < text.size() && text[k] == ' ') ++k;
+            if (k + 1 < text.size() && HexDigit(text[k]) >= 0 && HexDigit(text[k + 1]) >= 0) {
+                int v = HexDigit(text[k]) * 16 + HexDigit(text[k + 1]);
+                k += 2;
+                return v;
+            }
+            return -1;
+        };
+        while (i < text.size()) {
+            while (i < text.size() && text[i] == ' ') ++i;
+            if (i >= text.size() || text[i] == ')') {
+                break;
+            }
+            int code = readByte(i);
+            if (code < 0) {
+                ++i;  // something unexpected; skip it rather than stop
+                continue;
+            }
+            std::vector<int>& values = caps.vcp[code];
+            while (i < text.size() && text[i] == ' ') ++i;
+            if (i < text.size() && text[i] == '(') {
+                ++i;
+                int depth = 1;
+                while (i < text.size() && depth > 0) {
+                    while (i < text.size() && text[i] == ' ') ++i;
+                    if (i >= text.size()) break;
+                    if (text[i] == '(') {
+                        ++depth;
+                        ++i;
+                    } else if (text[i] == ')') {
+                        --depth;
+                        ++i;
+                    } else {
+                        int v = readByte(i);
+                        if (v < 0) {
+                            ++i;
+                        } else if (depth == 1) {
+                            values.push_back(v);
+                        }
+                    }
+                }
+            }
+        }
+        caps.loaded = true;
+        return caps;
+    }
+
+    static Capabilities ReadCapabilities(HANDLE hPhysical) {
+        DWORD length = 0;
+        if (!GetCapabilitiesStringLength(hPhysical, &length) || length == 0 ||
+            length > 16384) {
+            return {};
+        }
+        std::string text(length, '\0');
+        if (!CapabilitiesRequestAndCapabilitiesReply(hPhysical, text.data(), length)) {
+            return {};
+        }
+        text.resize(strnlen(text.c_str(), length));
+        return ParseCapabilities(text);
+    }
+
+    // Caller holds mutex_, or owns d outright (Rescan, before publishing).
+    static void ApplyCapabilities(Display& d, const Capabilities& caps) {
+        auto input = caps.vcp.find(0x60);
+        if (input != caps.vcp.end() && input->second.size() >= 2) {
+            d.inputs = input->second;
+        }
+    }
+
+    // The capabilities string takes a second or more per monitor, so it is
+    // read once per display per session, after the displays are already up,
+    // rather than as part of enumerating them. Worker thread; returns whether
+    // any display changed.
+    bool LoadCapabilities() {
+        std::vector<std::pair<std::wstring, HANDLE>> todo;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            for (const auto& d : displays_) {
+                if (d.transport == Transport::DdcCi && d.hPhysical &&
+                    !caps_.count(d.stableId)) {
+                    todo.emplace_back(d.stableId, d.hPhysical);
+                }
+            }
+        }
+        bool changed = false;
+        for (const auto& entry : todo) {
+            if (stopping_.load()) {
+                break;
+            }
+            std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+            Capabilities caps = ReadCapabilities(entry.second);
+            caps_[entry.first] = caps;
+            long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now() - start)
+                               .count();
+            Log(L"capabilities %ls: %ls, %zu code(s) (%lld ms)", entry.first.c_str(),
+                caps.loaded ? L"read" : L"unavailable", caps.vcp.size(), ms);
+            if (caps.loaded) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                if (Display* d = FindLocked(entry.first)) {
+                    ApplyCapabilities(*d, caps);
+                    changed = true;
+                }
+            }
+        }
+        return changed;
+    }
 
     void Log(const wchar_t* fmt, ...) {
         if (!log_) {
@@ -810,6 +1236,11 @@ class Engine {
         ready_.notify_all();
         NotifyChanged(true);
 
+        // After the panel has its rows, not before: this is the slow part.
+        if (LoadCapabilities()) {
+            NotifyChanged(true);
+        }
+
         // Only worth a thread if something here reports brightness events;
         // DDC/CI has no equivalent, so this is the internal panel only.
         bool haveWmiPanel = false;
@@ -834,23 +1265,32 @@ class Engine {
 
         for (;;) {
             std::map<std::wstring, int> batch;
+            std::map<std::wstring, int> contrastBatch;
+            std::map<std::wstring, bool> powerBatch;
+            std::map<std::pair<std::wstring, BYTE>, DWORD> vcpBatch;
             bool doRescan = false;
             bool doRefresh = false;
             {
                 std::unique_lock<std::mutex> lock(mutex_);
                 work_.wait(lock, [this] {
-                    return quit_ || rescan_ || refresh_ || !pending_.empty();
+                    return quit_ || rescan_ || refresh_ || !pending_.empty() ||
+                           !pendingContrast_.empty() || !pendingPower_.empty() ||
+                           !pendingVcp_.empty();
                 });
                 if (quit_) {
                     break;
                 }
                 doRescan = std::exchange(rescan_, false);
                 batch.swap(pending_);
+                contrastBatch.swap(pendingContrast_);
+                powerBatch.swap(pendingPower_);
+                vcpBatch.swap(pendingVcp_);
                 // Never read back while writes are still queued: the value in
                 // flight has not reached the panel yet, so reading now would
                 // yank the slider backwards under the user's finger. refresh_
                 // stays set and we come back to it once the queue drains.
-                doRefresh = batch.empty() && refresh_;
+                doRefresh = batch.empty() && contrastBatch.empty() &&
+                            powerBatch.empty() && vcpBatch.empty() && refresh_;
                 if (doRefresh) {
                     refresh_ = false;
                 }
@@ -859,14 +1299,34 @@ class Engine {
             if (doRescan) {
                 Rescan();
                 NotifyChanged(true);
+                if (LoadCapabilities()) {
+                    NotifyChanged(true);
+                }
             }
 
             // Each write blocks for tens of ms. Anything the UI posts while
             // we are on the wire lands in pending_ and overwrites its
             // predecessor, so we always resume with the newest value.
             bool wroteDdc = false;
+            // Power first, so a display being switched back on is on before
+            // anything else is written to it.
+            for (const auto& entry : powerBatch) {
+                if (ApplyPower(entry.first, entry.second)) {
+                    wroteDdc = true;
+                }
+            }
             for (const auto& entry : batch) {
                 if (Apply(entry.first, entry.second) == Transport::DdcCi) {
+                    wroteDdc = true;
+                }
+            }
+            for (const auto& entry : contrastBatch) {
+                if (ApplyContrast(entry.first, entry.second)) {
+                    wroteDdc = true;
+                }
+            }
+            for (const auto& entry : vcpBatch) {
+                if (ApplyVcp(entry.first.first, entry.first.second, entry.second)) {
                     wroteDdc = true;
                 }
             }
@@ -944,6 +1404,10 @@ class Engine {
             Transport transport;
             HANDLE hPhysical;
             std::wstring wmiKey;
+            bool hasContrast;
+            bool hasPower;
+            bool hasVolume;
+            std::vector<int> inputs;
         };
 
         std::vector<Target> targets;
@@ -952,7 +1416,9 @@ class Engine {
             std::lock_guard<std::mutex> lock(mutex_);
             for (const auto& d : displays_) {
                 targets.push_back({d.stableId, d.transport, d.hPhysical,
-                                   detail::ToLower(d.stableId)});
+                                   detail::ToLower(d.stableId),
+                                   d.contrastMax > 0, d.hasPower,
+                                   d.volumeMax > 0, d.inputs});
                 if (d.transport == Transport::Wmi) {
                     needWmi = true;
                 }
@@ -965,6 +1431,10 @@ class Engine {
         }
 
         std::vector<std::pair<std::wstring, int>> updates;
+        std::vector<std::pair<std::wstring, int>> contrastUpdates;
+        std::vector<std::pair<std::wstring, bool>> powerUpdates;
+        std::vector<std::pair<std::wstring, int>> volumeUpdates;
+        std::vector<std::pair<std::wstring, int>> inputUpdates;
         for (const Target& target : targets) {
             int percent = -1;
             switch (target.transport) {
@@ -977,6 +1447,48 @@ class Engine {
                         maximum > 0) {
                         percent = static_cast<int>((current * 100 + maximum / 2) /
                                                    maximum);
+                    }
+                    if (target.hasContrast) {
+                        current = maximum = 0;
+                        if (GetVCPFeatureAndVCPFeatureReply(
+                                target.hPhysical, kVcpContrast, &type, &current,
+                                &maximum) &&
+                            maximum > 0) {
+                            contrastUpdates.emplace_back(
+                                target.id,
+                                static_cast<int>((current * 100 + maximum / 2) /
+                                                 maximum));
+                        }
+                    }
+                    if (target.hasPower) {
+                        current = maximum = 0;
+                        if (GetVCPFeatureAndVCPFeatureReply(
+                                target.hPhysical, kVcpPower, &type, &current,
+                                &maximum) &&
+                            current >= 1 && current <= 5) {
+                            powerUpdates.emplace_back(target.id, current >= 4);
+                        }
+                    }
+                    if (target.hasVolume) {
+                        current = maximum = 0;
+                        if (GetVCPFeatureAndVCPFeatureReply(target.hPhysical, kVcpVolume,
+                                                            &type, &current, &maximum) &&
+                            maximum > 0) {
+                            volumeUpdates.emplace_back(
+                                target.id,
+                                static_cast<int>((current * 100 + maximum / 2) / maximum));
+                        }
+                    }
+                    if (!target.inputs.empty()) {
+                        current = maximum = 0;
+                        // A value outside the monitor's own list (the Samsung
+                        // G32 answers 5) is not an input; keep what was set.
+                        if (GetVCPFeatureAndVCPFeatureReply(target.hPhysical, kVcpInput,
+                                                            &type, &current, &maximum) &&
+                            std::find(target.inputs.begin(), target.inputs.end(),
+                                      static_cast<int>(current)) != target.inputs.end()) {
+                            inputUpdates.emplace_back(target.id, static_cast<int>(current));
+                        }
                     }
                     break;
                 }
@@ -1003,6 +1515,29 @@ class Engine {
                         d.percent = update.second;
                         break;
                     }
+                }
+            }
+            for (const auto& update : contrastUpdates) {
+                for (auto& d : displays_) {
+                    if (d.stableId == update.first) {
+                        d.contrast = update.second;
+                        break;
+                    }
+                }
+            }
+            for (const auto& update : powerUpdates) {
+                if (Display* d = FindLocked(update.first)) {
+                    d->poweredOff = update.second;
+                }
+            }
+            for (const auto& update : volumeUpdates) {
+                if (Display* d = FindLocked(update.first)) {
+                    d->volume = update.second;
+                }
+            }
+            for (const auto& update : inputUpdates) {
+                if (Display* d = FindLocked(update.first)) {
+                    d->input = update.second;
                 }
             }
         }
@@ -1481,6 +2016,7 @@ class Engine {
                 d->vcpMax = maximum;
                 d->percent =
                     static_cast<int>((current * 100 + maximum / 2) / maximum);
+                ProbeExtras(d);
                 attached = true;
                 continue;  // keep this handle alive
             }
@@ -1488,6 +2024,106 @@ class Engine {
         }
 
         return attached;
+    }
+
+    // Contrast and power are extras on the handle that answered brightness.
+    // A monitor that does not implement one fails the read (or answers it
+    // with nothing usable), which costs one I2C round trip and leaves that
+    // extra off.
+    void ProbeExtras(Display* d) {
+        MC_VCP_CODE_TYPE type{};
+        DWORD current = 0, maximum = 0;
+        if (GetVCPFeatureAndVCPFeatureReply(d->hPhysical, kVcpContrast, &type,
+                                            &current, &maximum) &&
+            maximum > 0) {
+            d->contrastMax = maximum;
+            d->contrast =
+                static_cast<int>((current * 100 + maximum / 2) / maximum);
+        }
+        // 1 on, 2 standby, 3 suspend, 4 off, 5 off by the power button. A
+        // monitor that answers 0 -- the Samsung G32 does -- has no power
+        // control to offer, however willingly it answers the read.
+        current = maximum = 0;
+        if (GetVCPFeatureAndVCPFeatureReply(d->hPhysical, kVcpPower, &type,
+                                            &current, &maximum) &&
+            current >= 1 && current <= 5) {
+            d->hasPower = true;
+            d->poweredOff = current >= 4;
+        }
+        current = maximum = 0;
+        if (GetVCPFeatureAndVCPFeatureReply(d->hPhysical, kVcpVolume, &type, &current,
+                                            &maximum) &&
+            maximum > 0) {
+            d->volumeMax = maximum;
+            d->volume = static_cast<int>((current * 100 + maximum / 2) / maximum);
+        }
+        // Capabilities already read this session carry over to a rescan.
+        auto caps = caps_.find(d->stableId);
+        if (caps != caps_.end() && caps->second.loaded) {
+            ApplyCapabilities(*d, caps->second);
+        }
+    }
+
+    // Looks up the DDC/CI handle for a display that has the given extra.
+    // Worker thread.
+    HANDLE DdcHandleFor(const std::wstring& stableId, DWORD* contrastMax,
+                        bool* hasPower) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (const auto& d : displays_) {
+            if (d.stableId == stableId && d.transport == Transport::DdcCi) {
+                *contrastMax = d.contrastMax;
+                *hasPower = d.hasPower;
+                return d.hPhysical;
+            }
+        }
+        return nullptr;
+    }
+
+    // Returns whether anything went on the wire, for the DDC/CI cooldown.
+    bool ApplyContrast(const std::wstring& stableId, int percent) {
+        DWORD contrastMax = 0;
+        bool hasPower = false;
+        HANDLE hPhysical = DdcHandleFor(stableId, &contrastMax, &hasPower);
+        if (!hPhysical || contrastMax == 0) {
+            return false;
+        }
+        std::chrono::steady_clock::time_point start =
+            std::chrono::steady_clock::now();
+        DWORD raw = static_cast<DWORD>(
+            (static_cast<DWORD>(percent) * contrastMax + 50) / 100);
+        bool ok = SetVCPFeature(hPhysical, kVcpContrast, raw) != FALSE;
+        long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::steady_clock::now() - start)
+                           .count();
+        Log(L"contrast %ls -> %d%% ok=%d (%lld ms)", stableId.c_str(), percent,
+            ok ? 1 : 0, ms);
+        return true;
+    }
+
+    bool ApplyVcp(const std::wstring& stableId, BYTE code, DWORD raw) {
+        DWORD contrastMax = 0;
+        bool hasPower = false;
+        HANDLE hPhysical = DdcHandleFor(stableId, &contrastMax, &hasPower);
+        if (!hPhysical) {
+            return false;
+        }
+        bool ok = SetVCPFeature(hPhysical, code, raw) != FALSE;
+        Log(L"vcp %02X %ls -> %lu ok=%d", code, stableId.c_str(), raw, ok ? 1 : 0);
+        return true;
+    }
+
+    bool ApplyPower(const std::wstring& stableId, bool on) {
+        DWORD contrastMax = 0;
+        bool hasPower = false;
+        HANDLE hPhysical = DdcHandleFor(stableId, &contrastMax, &hasPower);
+        if (!hPhysical || !hasPower) {
+            return false;
+        }
+        bool ok = SetVCPFeature(hPhysical, kVcpPower, on ? kPowerOn : kPowerOff) !=
+                  FALSE;
+        Log(L"power %ls -> %ls ok=%d", stableId.c_str(), on ? L"on" : L"off",
+            ok ? 1 : 0);
+        return true;
     }
 
     Transport Apply(const std::wstring& stableId, int percent) {
@@ -1556,6 +2192,11 @@ class Engine {
     std::condition_variable work_;
     std::condition_variable ready_;
     std::map<std::wstring, int> pending_;
+    std::map<std::wstring, int> pendingContrast_;
+    std::map<std::wstring, bool> pendingPower_;
+    std::map<std::pair<std::wstring, BYTE>, DWORD> pendingVcp_;
+    // Capabilities read this session, by display. Worker thread only.
+    std::map<std::wstring, Capabilities> caps_;
 
     // Where relative following thinks each display would be if brightness had
     // no end stops. Guarded by mutex_.
@@ -1645,6 +2286,9 @@ std::atomic<bool> g_dumpedTree{false};
 // mod can put that tree back the way we found it. This is not cosmetic: the
 // slider's ValueChanged handler is code inside this DLL, so a slider left
 // behind after unload would call into freed memory the moment it is dragged.
+struct PanelLinks;
+struct RowTitle;
+
 struct Injection {
     // Weak, so a closed Control Center can still be collected.
     winrt::weak_ref<wuxc::Grid> grid;
@@ -1655,6 +2299,9 @@ struct Injection {
     // still sitting in the collection. Holding it does not root the grid.
     wuxc::RowDefinition row{nullptr};
     std::vector<wuxc::Primitives::RangeBase::ValueChanged_revoker> revokers;
+    std::vector<wux::UIElement::PointerWheelChanged_revoker> wheelRevokers;
+    std::vector<wux::UIElement::PointerPressed_revoker> pressRevokers;
+    std::vector<wuxc::Primitives::ButtonBase::Click_revoker> clickRevokers;
 
     // Per-display controls, so a refresh can update values in place instead of
     // rebuilding the whole panel.
@@ -1663,9 +2310,28 @@ struct Injection {
         std::wstring name;
         winrt::weak_ref<wuxc::Slider> slider;
         winrt::weak_ref<wux::FrameworkElement> icon;
-        winrt::weak_ref<wuxc::TextBlock> title;
+        std::shared_ptr<RowTitle> title;
+        // Null when the row has none.
+        winrt::weak_ref<wuxc::Slider> contrast;
+        winrt::weak_ref<wux::FrameworkElement> contrastIcon;
+        winrt::weak_ref<wuxc::Button> power;
+        winrt::weak_ref<wuxc::Slider> volume;
+        winrt::weak_ref<wux::FrameworkElement> volumeIcon;
+        std::vector<std::pair<int, winrt::weak_ref<wuxc::Primitives::ToggleButton>>> inputs;
     };
     std::vector<Binding> bindings;
+
+    // The all-displays rows and what they drive; see PanelLinks.
+    std::shared_ptr<PanelLinks> links;
+
+    // Everything that points into this DLL from the panel's controls.
+    void DetachHandlers() {
+        revokers.clear();
+        wheelRevokers.clear();
+        pressRevokers.clear();
+        clickRevokers.clear();
+        links.reset();
+    }
 
     // The display ids this panel's rows were built from, in order, including
     // the ones that got a "not supported" label rather than a slider. Compared
@@ -1766,6 +2432,48 @@ bool g_hideStockBrightness = true;
 // unsupported.
 bool g_hideUnsupported = false;
 
+// How each display's rows are laid out. Dropdown keeps a display to its
+// brightness row and tucks the rest (contrast) behind a chevron; Expanded
+// shows everything.
+enum class LayoutStyle {
+    Dropdown,
+    Expanded,
+};
+LayoutStyle g_layoutStyle = LayoutStyle::Dropdown;
+// Each display's own brightness slider (setting showPerMonitor, a name kept
+// from before there were other per-display controls). The rest of a display's
+// controls have their own switches.
+bool g_showPerMonitor = true;
+bool g_showMasterBrightness = true;
+bool g_showContrast = true;
+bool g_showMasterContrast = true;
+bool g_showPowerButton = true;
+bool g_showVolume = true;
+bool g_showInputSwitcher = true;
+// Percentage points per mouse-wheel notch over a slider; 0 leaves the wheel
+// to the flyout.
+int g_scrollStep = 5;
+// Clicking a slider's icon jumps it to a level: left, middle, right button.
+bool g_iconClicks = false;
+int g_iconClickLevels[3] = {0, 50, 100};
+// Settings for individual displays. The first rule whose text appears in a
+// display's name or device id applies to it. Written only while no panel
+// exists -- a settings change reloads the mod rather than editing this live.
+struct DisplayRule {
+    std::wstring match;  // lowercased
+    std::wstring name;   // empty keeps the display's own name
+    bool hide = false;
+    bool hideContrast = false;
+    bool hideVolume = false;
+    bool hideInput = false;
+    bool hidePower = false;
+    bool operator==(const DisplayRule&) const = default;
+};
+std::vector<DisplayRule> g_displayRules;
+// Which displays have their dropdown open, by stable id, for the session.
+// XAML thread only.
+std::set<std::wstring> g_expanded;
+
 
 // The stock brightness row we collapsed and the group we shrank to close the
 // gap. Kept outside Injection because the sliders are virtualized: the row may
@@ -1789,6 +2497,15 @@ bool g_loggedHideMiss = false;
 // handlers can tell our own writes apart from the user's. UI thread only.
 bool g_suppressValueChanged = false;
 
+// Scoped, and restoring rather than clearing: the all-displays rows move the
+// per-display ones while a refresh may already hold it, and a throw from
+// Value() must not leave it stuck on, or every drag after that is ignored.
+struct SuppressValueChanged {
+    bool previous = g_suppressValueChanged;
+    SuppressValueChanged() { g_suppressValueChanged = true; }
+    ~SuppressValueChanged() { g_suppressValueChanged = previous; }
+};
+
 // The shell's own brightness Lottie, borrowed off its AnimatedIcon so our
 // sliders can show the real animated sun rather than an imitation. WinUI2
 // exposes no brightness visual source publicly, so lifting the live one is the
@@ -1796,6 +2513,32 @@ bool g_suppressValueChanged = false;
 [[clang::no_destroy]] winrt::com_ptr<::IInspectable> g_brightnessSource;
 [[clang::no_destroy]] winrt::com_ptr<IAnimatedIconStaticsAbi> g_animatedIconStatics;
 bool g_capturedSource = false;
+
+// The shell's volume Lottie, for the volume rows. Unlike the sun it is a state
+// machine -- Mute and Volume_00/01/33/66, with a marker pair for every
+// transition between them -- so it is driven by state name rather than by
+// progress. The shell's AnimatedIcon for it has no name, so it is found by
+// the source's class instead.
+[[clang::no_destroy]] winrt::com_ptr<::IInspectable> g_volumeSource;
+bool g_capturedVolume = false;
+
+// The shell draws its speaker smaller than its sun: read off its AnimatedIcon
+// when the source is captured, so ours matches rather than looking bigger.
+// The icon still sits in the same slot as every other row's.
+double g_volumeIconSize = 16;
+
+// How many opens may retry borrowing from the shell before giving up. A
+// desktop has no brightness Lottie to borrow, ever, and walking the shell's
+// tree on every open for the rest of the session would be waste.
+constexpr int kMaxLookRetries = 30;
+int g_lookRetries = 0;
+
+// The shell's own slider style, set on ours explicitly. Left to implicit
+// lookup, an injected row can resolve to the plain system slider -- a tall
+// rectangular thumb -- instead of the round WinUI one the shell's rows use,
+// depending on where the lookup happens to start. Borrowed off a native
+// slider, released on the XAML thread in RemoveInjections.
+[[clang::no_destroy]] wux::Style g_sliderStyle{nullptr};
 
 // The shell's Lottie carries two markers, Brightness_at_0 and
 // Brightness_at_100, sitting at progress 0 and 1. So it is progress-driven
@@ -2089,10 +2832,61 @@ void TryCaptureBrightnessSource(wux::FrameworkElement const& l1Grid) {
            g_progressMax);
 }
 
+// The first native Slider under root, skipping nothing: callers pass a subtree
+// that holds only the shell's own rows.
+wuxc::Slider FindFirstSlider(wux::DependencyObject const& root, int maxDepth) {
+    if (maxDepth < 0 || !root) {
+        return nullptr;
+    }
+    if (auto slider = root.try_as<wuxc::Slider>()) {
+        return slider;
+    }
+    int count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < count; ++i) {
+        if (auto found = FindFirstSlider(wuxm::VisualTreeHelper::GetChild(root, i),
+                                         maxDepth - 1)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+// The implicit Slider style in effect for `from`: the first dictionary up the
+// tree, then the application's, that has one.
+wux::Style LookupImplicitSliderStyle(wux::DependencyObject const& from) {
+    auto key = winrt::box_value(winrt::xaml_typename<wuxc::Slider>());
+    auto lookup = [&](wux::ResourceDictionary const& resources) -> wux::Style {
+        if (!resources) {
+            return nullptr;
+        }
+        try {
+            return resources.Lookup(key).try_as<wux::Style>();
+        } catch (...) {
+            return nullptr;  // Lookup throws when the key is absent
+        }
+    };
+    for (wux::DependencyObject current = from; current;
+         current = wuxm::VisualTreeHelper::GetParent(current)) {
+        if (auto element = current.try_as<wux::FrameworkElement>()) {
+            if (auto style = lookup(element.Resources())) {
+                return style;
+            }
+        }
+    }
+    try {
+        if (auto app = wux::Application::Current()) {
+            return lookup(app.Resources());
+        }
+    } catch (...) {
+    }
+    return nullptr;
+}
+
 // Either the shell's real AnimatedIcon, or the Segoe Fluent brightness glyph
 // when the Lottie could not be borrowed or cannot be driven by level.
 // Both icon variants are built to this, and the row arithmetic uses the
-// constant rather than reading Width() back off the element.
+// constant rather than reading Width() back off the element. It is also the
+// icon slot every row reserves, whatever size the icon in it is drawn at.
 //
 // The fallback glyph had no Width at all, so Width() returned NaN -- XAML's
 // spelling of Auto -- and the icon-to-track gap computed from it was NaN,
@@ -2101,8 +2895,121 @@ void TryCaptureBrightnessSource(wux::FrameworkElement const& l1Grid) {
 // borrow.
 inline constexpr double kIconSize = 20;
 
-wux::FrameworkElement MakeBrightnessIcon() {
-    if (g_brightnessSource) {
+// The source of the first AnimatedIcon under root whose source is of the given
+// class, or null. The icon itself goes to *iconOut.
+winrt::com_ptr<::IInspectable> FindAnimatedSource(wux::DependencyObject const& root,
+                                                  std::wstring_view sourceClass, int maxDepth,
+                                                  wux::FrameworkElement* iconOut) {
+    if (!root || maxDepth < 0) {
+        return nullptr;
+    }
+    try {
+        if (std::wstring{winrt::get_class_name(root)} == kAnimatedIconClass) {
+            winrt::com_ptr<IAnimatedIconAbi> icon;
+            winrt::com_ptr<::IInspectable> source;
+            if (SUCCEEDED(winrt::get_unknown(root)->QueryInterface(kIID_AnimatedIcon,
+                                                                   icon.put_void())) &&
+                SUCCEEDED(icon->get_Source(source.put_void())) && source) {
+                wf::IInspectable inspectable{nullptr};
+                winrt::copy_from_abi(inspectable, source.get());
+                if (std::wstring{winrt::get_class_name(inspectable)} == sourceClass) {
+                    *iconOut = root.try_as<wux::FrameworkElement>();
+                    return source;
+                }
+            }
+        }
+    } catch (...) {
+        // An element we cannot inspect is simply not the one.
+    }
+    int count = wuxm::VisualTreeHelper::GetChildrenCount(root);
+    for (int i = 0; i < count; ++i) {
+        if (auto found = FindAnimatedSource(wuxm::VisualTreeHelper::GetChild(root, i),
+                                            sourceClass, maxDepth - 1, iconOut)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+void TryCaptureVolumeSource(wux::FrameworkElement const& l1Grid) {
+    if (g_capturedVolume) {
+        return;
+    }
+    if (!g_animatedIconStatics) {
+        winrt::hstring className{kAnimatedIconClass};
+        RoGetActivationFactory(static_cast<HSTRING>(winrt::get_abi(className)),
+                               kIID_AnimatedIconStatics, g_animatedIconStatics.put_void());
+    }
+    auto group = FindDescendant(
+        l1Grid, L"Windows.UI.Xaml.Controls.ContentControl#SlidersGroup", 6);
+    if (!group) {
+        return;
+    }
+    wux::FrameworkElement native{nullptr};
+    if (auto source = FindAnimatedSource(group, L"ControlCenter.QA_Volume", 40, &native)) {
+        g_volumeSource = source;
+        g_capturedVolume = true;
+        // Laid out by now, since it is on screen; its Width is the fallback
+        // for a row that has not been measured yet.
+        double size = native ? native.ActualWidth() : 0;
+        if (!(size > 0) && native) {
+            size = native.Width();
+        }
+        if (size > 0) {
+            g_volumeIconSize = std::min(size, kIconSize);
+        }
+        Wh_Log(L"Captured the shell's volume source (icon %.0f px)", g_volumeIconSize);
+    }
+}
+
+// Returns whether the style was newly captured.
+bool TryCaptureSliderStyle(wux::FrameworkElement const& l1Grid) {
+    if (g_sliderStyle) {
+        return false;
+    }
+    auto group = FindDescendant(
+        l1Grid, L"Windows.UI.Xaml.Controls.ContentControl#SlidersGroup", 6);
+    if (!group) {
+        return false;
+    }
+    wuxc::Slider native = FindFirstSlider(group, 40);
+    if (!native) {
+        return false;  // virtualized away; the next open retries
+    }
+    wux::Style style = native.Style();
+    const wchar_t* how = L"explicit";
+    if (!style) {
+        style = LookupImplicitSliderStyle(native);
+        how = L"implicit";
+    }
+    if (!style) {
+        Wh_Log(L"Native slider %s has no style to borrow", ElementLabel(native).c_str());
+        return false;
+    }
+    g_sliderStyle = style;
+    Wh_Log(L"Borrowed the shell's slider style (%s, from %s)", how,
+           ElementLabel(native).c_str());
+    return true;
+}
+
+// Everything borrowed from the shell's own rows. The rows it comes from are
+// virtualized, so any of it can be missing the first time; this is retried on
+// every open. Returns whether anything was newly captured, which means the
+// panel's rows were built without it and should be rebuilt.
+bool TryCaptureShellLook(wux::FrameworkElement const& l1Grid) {
+    const bool hadSource = g_capturedSource;
+    const bool hadVolume = g_capturedVolume;
+    TryCaptureBrightnessSource(l1Grid);
+    TryCaptureVolumeSource(l1Grid);
+    const bool gotStyle = TryCaptureSliderStyle(l1Grid);
+    return gotStyle || (!hadSource && g_brightnessSource) || (!hadVolume && g_volumeSource);
+}
+
+// One of the shell's own AnimatedIcons playing the given Lottie, or the glyph
+// when there is no Lottie to borrow.
+wux::FrameworkElement MakeAnimatedIcon(winrt::com_ptr<::IInspectable> const& source,
+                                       const wchar_t* glyph) {
+    if (source) {
         try {
             winrt::hstring className{kAnimatedIconClass};
 
@@ -2125,7 +3032,7 @@ wux::FrameworkElement MakeBrightnessIcon() {
             if (SUCCEEDED(hr) && instance &&
                 SUCCEEDED(instance->QueryInterface(kIID_AnimatedIcon,
                                                    iconAbi.put_void())) &&
-                SUCCEEDED(iconAbi->put_Source(g_brightnessSource.get()))) {
+                SUCCEEDED(iconAbi->put_Source(source.get()))) {
                 wux::FrameworkElement element{nullptr};
                 if (SUCCEEDED(instance->QueryInterface(
                         winrt::guid_of<wux::FrameworkElement>(),
@@ -2143,10 +3050,47 @@ wux::FrameworkElement MakeBrightnessIcon() {
 
     wuxc::FontIcon font;
     font.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
-    font.Glyph(L"");  // Brightness
+    font.Glyph(glyph);
     font.Width(kIconSize);
     font.Height(kIconSize);
     return font;
+}
+
+wux::FrameworkElement MakeBrightnessIcon() {
+    return MakeAnimatedIcon(g_brightnessSource, L"\xE706");  // Brightness
+}
+
+wux::FrameworkElement MakeVolumeIcon() {
+    wux::FrameworkElement icon = MakeAnimatedIcon(g_volumeSource, L"\xE767");  // Volume
+    if (g_volumeSource) {
+        icon.Width(g_volumeIconSize);
+        icon.Height(g_volumeIconSize);
+    }
+    return icon;
+}
+
+// The volume Lottie's states, picked the way the shell's own row picks them:
+// no waves at 0, then one, two and three. Mute is never used -- 0 is it.
+void SetVolumeIconLevel(wux::FrameworkElement const& icon, double percent) {
+    if (auto font = icon.try_as<wuxc::FontIcon>()) {
+        font.Opacity(0.40 + 0.60 * std::clamp(percent, 0.0, 100.0) / 100.0);
+        return;
+    }
+    if (!g_animatedIconStatics) {
+        return;
+    }
+    const long level = std::lround(percent);
+    const wchar_t* state = level <= 0    ? L"Volume_00"
+                           : level < 33  ? L"Volume_01"
+                           : level < 66  ? L"Volume_33"
+                                         : L"Volume_66";
+    try {
+        if (auto depObj = icon.try_as<wux::DependencyObject>()) {
+            winrt::hstring name{state};
+            g_animatedIconStatics->SetState(winrt::get_abi(depObj), winrt::get_abi(name));
+        }
+    } catch (...) {
+    }
 }
 
 void SetIconLevel(wux::FrameworkElement const& icon, double percent) {
@@ -2185,11 +3129,482 @@ void SetIconLevel(wux::FrameworkElement const& icon, double percent) {
     }
 }
 
-winrt::hstring FormatRowTitle(const std::wstring& name, int percent) {
-    if (percent < 0) {
-        return winrt::hstring{name};
+// A row title that carries the value of every slider shown under it, in the
+// order they are shown: "Samsung  ·  80%  ·  50%  ·  30%". A slider folded into
+// a closed dropdown is left out, so each number still lines up with a row in
+// view. Held by the handlers that update it, and released with them.
+//
+// The title and the dropdown are held strongly, the sliders weakly. A weak
+// ref to a XAML element only resolves while XAML keeps that element's
+// wrapper alive, and it keeps it for elements with handlers attached -- the
+// sliders -- but lets it go for a plain TextBlock or StackPanel once nothing
+// else holds it, though the element itself stays on screen. Held weakly, the
+// title stopped updating a moment after the panel was built, stuck at
+// whatever it said then. Holding these two makes no cycle: neither refers
+// back to anything here. The sliders stay weak for the opposite reason --
+// their own handlers hold this.
+struct RowTitle {
+    std::wstring name;
+    wuxc::TextBlock text{nullptr};
+    struct Entry {
+        winrt::weak_ref<wuxc::Slider> slider;
+        bool inDetails;
+    };
+    std::vector<Entry> sliders;
+    // The dropdown the details sliders are in; null when there is none.
+    wuxc::StackPanel details{nullptr};
+};
+
+// XAML thread. Reads the values off the sliders, so it is right whether it
+// runs from a drag, a refresh, or the dropdown opening.
+void UpdateRowTitle(RowTitle const& row) {
+    if (!row.text) {
+        return;
     }
-    return winrt::hstring{name + L"  ·  " + std::to_wstring(percent) + L"%"};
+    bool detailsShown = true;
+    if (row.details) {
+        detailsShown = row.details.Visibility() == wux::Visibility::Visible;
+    }
+    std::wstring out = row.name;
+    for (const RowTitle::Entry& entry : row.sliders) {
+        if (entry.inDetails && !detailsShown) {
+            continue;
+        }
+        if (auto slider = entry.slider.get()) {
+            out += L"  ·  " + std::to_wstring(std::lround(slider.Value())) + L"%";
+        }
+    }
+    row.text.Text(out);
+}
+
+// The per-display settings that apply to a display: the first rule whose
+// text appears in its own name or device id, if any.
+const DisplayRule* RuleFor(const brightness::Display& d) {
+    std::wstring name = brightness::detail::ToLower(d.name);
+    std::wstring id = brightness::detail::ToLower(d.stableId);
+    for (const DisplayRule& rule : g_displayRules) {
+        if (name.find(rule.match) != std::wstring::npos ||
+            id.find(rule.match) != std::wstring::npos) {
+            return &rule;
+        }
+    }
+    return nullptr;
+}
+
+std::wstring DisplayLabel(const brightness::Display& d) {
+    const DisplayRule* rule = RuleFor(d);
+    return (rule && !rule->name.empty()) ? rule->name : d.name;
+}
+
+bool IsHidden(const brightness::Display& d) {
+    const DisplayRule* rule = RuleFor(d);
+    return rule && rule->hide;
+}
+
+bool Contains(const std::vector<std::wstring>& ids, const std::wstring& id) {
+    return std::find(ids.begin(), ids.end(), id) != ids.end();
+}
+
+// What every all-displays row is set to on open: the mean of the displays it
+// drives. Moving it then sets them all to the same value.
+int AverageBrightness(const std::vector<brightness::Display>& displays,
+                      const std::vector<std::wstring>& ids) {
+    int sum = 0, count = 0;
+    for (const brightness::Display& d : displays) {
+        if (Contains(ids, d.stableId) && d.percent >= 0) {
+            sum += d.percent;
+            ++count;
+        }
+    }
+    return count ? (sum + count / 2) / count : -1;
+}
+
+int AverageContrast(const std::vector<brightness::Display>& displays,
+                    const std::vector<std::wstring>& ids) {
+    int sum = 0, count = 0;
+    for (const brightness::Display& d : displays) {
+        if (Contains(ids, d.stableId) && d.contrast >= 0) {
+            sum += d.contrast;
+            ++count;
+        }
+    }
+    return count ? (sum + count / 2) / count : -1;
+}
+
+// MCCS input source values, as short as the row has room for.
+std::wstring InputName(int value) {
+    switch (value) {
+        case 0x01: return L"VGA 1";
+        case 0x02: return L"VGA 2";
+        case 0x03: return L"DVI 1";
+        case 0x04: return L"DVI 2";
+        case 0x0F: return L"DP 1";
+        case 0x10: return L"DP 2";
+        case 0x11: return L"HDMI 1";
+        case 0x12: return L"HDMI 2";
+        case 0x1B: return L"USB-C";
+        default: {
+            wchar_t buffer[16];
+            swprintf(buffer, 16, L"Input %02X", value);
+            return buffer;
+        }
+    }
+}
+
+// The glyph stand-in for contrast; there is no animated one to borrow.
+wux::FrameworkElement MakeContrastIcon() {
+    wuxc::FontIcon font;
+    font.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
+    font.Glyph(L"\xE7A1");  // Contrast
+    font.Width(kIconSize);
+    font.Height(kIconSize);
+    return font;
+}
+
+// The trailing slot a slider row keeps for the power button. Reserved on
+// every row once any display has one, so every track still ends at the same x.
+inline constexpr double kTrailingWidth = 36;
+
+// The panel's margins, which depend on whether rows carry a trailing slot:
+// inside the card the track has to end where the shell's own tracks end, so
+// the slot comes out of the right margin rather than out of the track.
+wux::Thickness PanelMargin(double trailing) {
+    if (UseNativeMetrics()) {
+        // Left and right come from the native row so the icon column and the
+        // far end of the track line up with it; the panel used to be 6px left
+        // of the icons and 42px past the end of the sliders.
+        //
+        // The seam goes on whichever edge touches the group, and the other
+        // edge gets a plain gap -- these rows carry titles, so they are a
+        // group of their own rather than more of the same list.
+        const bool above = g_panelPosition == PanelPosition::AboveSliders;
+        const double right =
+            std::max(0.0, g_metrics.groupWidth - g_metrics.sliderRight - trailing);
+        return wux::ThicknessHelper::FromLengths(
+            g_metrics.iconLeft, above ? 8 : g_metrics.gapBelow, right,
+            above ? g_metrics.gapAbove : 8);
+    }
+    return wux::ThicknessHelper::FromLengths(kOwnMargin, 4, kOwnMargin, 8);
+}
+
+// Links between the rows of one panel build, so the all-displays sliders and
+// the per-display ones can keep each other current. Held by the handlers that
+// need it; weak refs only, so it roots none of the controls.
+struct PanelLinks {
+    winrt::weak_ref<wuxc::Slider> masterBrightness;
+    winrt::weak_ref<wux::FrameworkElement> masterBrightnessIcon;
+    winrt::weak_ref<wuxc::Slider> masterContrast;
+    winrt::weak_ref<wux::FrameworkElement> masterContrastIcon;
+    std::vector<std::pair<std::wstring, winrt::weak_ref<wuxc::Slider>>> brightness;
+    std::vector<std::pair<std::wstring, winrt::weak_ref<wuxc::Slider>>> contrast;
+    // What the all-displays rows drive: every display that can take the
+    // value, whether or not it has a row of its own.
+    std::vector<std::wstring> brightnessIds;
+    std::vector<std::wstring> contrastIds;
+};
+
+// Brings the all-displays rows back to the mean of what they drive, after a
+// per-display change or a refresh. XAML thread.
+void SyncMasters(PanelLinks& links) {
+    if (!g_engine) {
+        return;
+    }
+    std::vector<brightness::Display> displays = g_engine->GetDisplays();
+    SuppressValueChanged guard;
+    if (auto slider = links.masterBrightness.get()) {
+        const int value = AverageBrightness(displays, links.brightnessIds);
+        if (value >= 0 && std::lround(slider.Value()) != value) {
+            slider.Value(value);
+        }
+    }
+    if (auto slider = links.masterContrast.get()) {
+        const int value = AverageContrast(displays, links.contrastIds);
+        if (value >= 0 && std::lround(slider.Value()) != value) {
+            slider.Value(value);
+        }
+    }
+}
+
+wuxc::Slider MakeSlider(double value, double step) {
+    wuxc::Slider slider;
+    if (g_sliderStyle) {
+        slider.Style(g_sliderStyle);
+    }
+    slider.Minimum(0);
+    slider.Maximum(100);
+    slider.Value(value);
+    slider.IsThumbToolTipEnabled(true);
+    slider.VerticalAlignment(wux::VerticalAlignment::Center);
+    if (UseNativeMetrics()) {
+        // Matched to the shell's row so the track sits at the same height
+        // and the hit target is the same size. The default template is
+        // shorter, which reads as a thinner control next to the real ones.
+        slider.Height(g_metrics.rowHeight);
+    }
+    slider.StepFrequency(step);
+    slider.SnapsTo(wuxc::Primitives::SliderSnapsTo::StepValues);
+    return slider;
+}
+
+// Mouse wheel over a slider moves it by the configured step (issue #5647),
+// and keeps the flyout from scrolling underneath it.
+void AttachWheel(wuxc::Slider const& slider, Injection& injection) {
+    if (g_scrollStep <= 0) {
+        return;
+    }
+    injection.wheelRevokers.push_back(slider.PointerWheelChanged(
+        winrt::auto_revoke,
+        [weak = winrt::make_weak(slider)](
+            wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const& args) {
+            auto target = weak.get();
+            if (!target) {
+                return;
+            }
+            auto props = args.GetCurrentPoint(target).Properties();
+            const int delta = props.MouseWheelDelta();
+            if (props.IsHorizontalMouseWheel() || delta == 0) {
+                return;
+            }
+            // A step finer than the monitor can represent would snap straight
+            // back to where it was.
+            const double step =
+                std::max(static_cast<double>(g_scrollStep), target.StepFrequency());
+            target.Value(std::clamp(target.Value() + (delta > 0 ? step : -step),
+                                    target.Minimum(), target.Maximum()));
+            args.Handled(true);
+        }));
+}
+
+// Clicking a slider's icon jumps it to a level: left, middle and right
+// button each have their own (issue #5697). The icon sits in a Border with a
+// transparent background, since a glyph only hit-tests where it has ink.
+wux::FrameworkElement MakeIconHost(wux::FrameworkElement const& icon,
+                                   wuxc::Slider const& slider, Injection& injection) {
+    wuxc::Border host;
+    host.Background(wuxm::SolidColorBrush(winrt::Windows::UI::Colors::Transparent()));
+    host.VerticalAlignment(wux::VerticalAlignment::Center);
+    // A fixed slot, so an icon drawn smaller than the rest (the speaker) is
+    // centred under the others and its track still starts where theirs do.
+    host.Width(kIconSize);
+    host.Height(kIconSize);
+    icon.HorizontalAlignment(wux::HorizontalAlignment::Center);
+    icon.VerticalAlignment(wux::VerticalAlignment::Center);
+    host.Child(icon);
+    if (g_iconClicks) {
+        injection.pressRevokers.push_back(host.PointerPressed(
+            winrt::auto_revoke,
+            [weakHost = winrt::make_weak(host), weakSlider = winrt::make_weak(slider)](
+                wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const& args) {
+                auto h = weakHost.get();
+                auto s = weakSlider.get();
+                if (!h || !s) {
+                    return;
+                }
+                auto props = args.GetCurrentPoint(h).Properties();
+                int level = -1;
+                if (props.IsLeftButtonPressed()) {
+                    level = g_iconClickLevels[0];
+                } else if (props.IsMiddleButtonPressed()) {
+                    level = g_iconClickLevels[1];
+                } else if (props.IsRightButtonPressed()) {
+                    level = g_iconClickLevels[2];
+                }
+                if (level >= 0) {
+                    s.Value(std::clamp(level, 0, 100));
+                    args.Handled(true);
+                }
+            }));
+    }
+    return host;
+}
+
+// Icon, track, and a trailing slot. trailingWidth reserves the slot even when
+// there is nothing in it, so every track in the panel ends at the same x.
+wuxc::Grid MakeSliderRow(wux::FrameworkElement const& iconHost,
+                         wuxc::Slider const& slider,
+                         wux::FrameworkElement const& trailing, double trailingWidth) {
+    wuxc::Grid row;
+    wuxc::ColumnDefinition iconColumn;
+    iconColumn.Width(wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
+    wuxc::ColumnDefinition sliderColumn;
+    sliderColumn.Width(wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star));
+    row.ColumnDefinitions().Append(iconColumn);
+    row.ColumnDefinitions().Append(sliderColumn);
+    if (trailingWidth > 0) {
+        wuxc::ColumnDefinition trailingColumn;
+        trailingColumn.Width(wux::GridLengthHelper::FromValueAndType(
+            trailingWidth, wux::GridUnitType::Pixel));
+        row.ColumnDefinitions().Append(trailingColumn);
+    }
+
+    // The gap the shell leaves between its icon and its track, derived
+    // rather than guessed: the panel already starts at the icon's left
+    // edge, so what is left over after the icon is the gap.
+    const double iconGap = UseNativeMetrics()
+                               ? g_metrics.sliderLeft - g_metrics.iconLeft - kIconSize
+                               : kOwnIconGap;
+    iconHost.Margin(wux::ThicknessHelper::FromLengths(0, 0, iconGap, 0));
+    wuxc::Grid::SetColumn(iconHost, 0);
+    row.Children().Append(iconHost);
+
+    wuxc::Grid::SetColumn(slider, 1);
+    row.Children().Append(slider);
+
+    if (trailing && trailingWidth > 0) {
+        wuxc::Grid::SetColumn(trailing, 2);
+        row.Children().Append(trailing);
+    }
+    return row;
+}
+
+wuxc::TextBlock MakeRowTitle(winrt::hstring const& text) {
+    wuxc::TextBlock title;
+    title.Text(text);
+    title.FontSize(12);
+    title.Margin(wux::ThicknessHelper::FromLengths(0, 6, 0, 0));
+    title.Opacity(0.85);
+    title.VerticalAlignment(wux::VerticalAlignment::Center);
+    return title;
+}
+
+// A small glyph button in the style of the shell's own row buttons: no
+// chrome until hovered.
+wuxc::Button MakeGlyphButton(const wchar_t* glyph, double glyphSize, double width,
+                             double height) {
+    wuxc::FontIcon icon;
+    icon.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
+    icon.Glyph(glyph);
+    icon.FontSize(glyphSize);
+
+    wuxc::Button button;
+    button.Content(icon);
+    button.Background(wuxm::SolidColorBrush(winrt::Windows::UI::Colors::Transparent()));
+    button.BorderThickness(wux::ThicknessHelper::FromUniformLength(0));
+    button.Padding(wux::ThicknessHelper::FromUniformLength(0));
+    button.MinWidth(0);
+    button.MinHeight(0);
+    button.Width(width);
+    button.Height(height);
+    button.HorizontalAlignment(wux::HorizontalAlignment::Right);
+    button.VerticalAlignment(wux::VerticalAlignment::Center);
+    return button;
+}
+
+void ShowPowerState(wuxc::Button const& button, const std::wstring& name, bool off) {
+    button.Opacity(off ? 0.45 : 1.0);
+    wuxc::ToolTipService::SetToolTip(
+        button, winrt::box_value(winrt::hstring{(off ? L"Turn on " : L"Turn off ") + name}));
+}
+
+// The per-display power button. It only exists for displays that report a
+// power state over DDC/CI, and only while there is another display to see
+// the result on.
+wuxc::Button MakePowerButton(const brightness::Display& d, const std::wstring& label,
+                             Injection& injection) {
+    wuxc::Button button = MakeGlyphButton(L"\xE7E8", 14, 32, 32);  // PowerButton
+    ShowPowerState(button, label, d.poweredOff);
+    std::wstring id = d.stableId;
+    injection.clickRevokers.push_back(button.Click(
+        winrt::auto_revoke,
+        [id, label, weak = winrt::make_weak(button)](wf::IInspectable const&,
+                                                     wux::RoutedEventArgs const&) {
+            if (!g_engine) {
+                return;
+            }
+            bool off = false;
+            for (const brightness::Display& current : g_engine->GetDisplays()) {
+                if (current.stableId == id) {
+                    off = current.poweredOff;
+                }
+            }
+            // Off -> on, on -> off. The engine reflects it at once, and a
+            // refresh corrects it if the monitor did something else.
+            g_engine->SetPower(id, off);
+            if (auto b = weak.get()) {
+                ShowPowerState(b, label, !off);
+            }
+        }));
+    return button;
+}
+
+// One toggle per input the monitor lists, the current one pressed. Buttons
+// rather than a dropdown: a dropdown's popup inside the flyout is one more
+// thing that can close it.
+wuxc::Grid MakeInputRow(const brightness::Display& d, double trailing, Injection& injection,
+                        Injection::Binding& binding) {
+    wuxc::FontIcon icon;
+    icon.FontFamily(wuxm::FontFamily(L"Segoe Fluent Icons"));
+    icon.Glyph(L"\xE7F4");  // TVMonitor
+    icon.Width(kIconSize);
+    icon.Height(kIconSize);
+    icon.VerticalAlignment(wux::VerticalAlignment::Center);
+
+    wuxc::StackPanel buttons;
+    buttons.Orientation(wuxc::Orientation::Horizontal);
+    buttons.VerticalAlignment(wux::VerticalAlignment::Center);
+    if (UseNativeMetrics()) {
+        buttons.Height(g_metrics.rowHeight);
+    }
+
+    auto group = std::make_shared<
+        std::vector<std::pair<int, winrt::weak_ref<wuxc::Primitives::ToggleButton>>>>();
+    for (int value : d.inputs) {
+        wuxc::Primitives::ToggleButton toggle;
+        toggle.Content(winrt::box_value(winrt::hstring{InputName(value)}));
+        toggle.FontSize(12);
+        toggle.Padding(wux::ThicknessHelper::FromLengths(10, 3, 10, 3));
+        toggle.MinWidth(0);
+        toggle.MinHeight(0);
+        toggle.Margin(wux::ThicknessHelper::FromLengths(0, 0, 6, 0));
+        toggle.VerticalAlignment(wux::VerticalAlignment::Center);
+        toggle.IsChecked(value == d.input);
+        buttons.Children().Append(toggle);
+        group->emplace_back(value, winrt::make_weak(toggle));
+
+        std::wstring id = d.stableId;
+        injection.clickRevokers.push_back(toggle.Click(
+            winrt::auto_revoke,
+            [id, value, group](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                // Pressing the current input keeps it pressed; pressing
+                // another moves the highlight and switches the monitor.
+                for (auto& entry : *group) {
+                    if (auto t = entry.second.get()) {
+                        t.IsChecked(entry.first == value);
+                    }
+                }
+                if (g_engine) {
+                    g_engine->SetInput(id, value);
+                }
+            }));
+    }
+    binding.inputs = *group;
+
+    wuxc::Border iconHost;
+    iconHost.Child(icon);
+    iconHost.VerticalAlignment(wux::VerticalAlignment::Center);
+
+    wuxc::Grid row;
+    wuxc::ColumnDefinition iconColumn;
+    iconColumn.Width(wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
+    wuxc::ColumnDefinition buttonColumn;
+    buttonColumn.Width(wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star));
+    row.ColumnDefinitions().Append(iconColumn);
+    row.ColumnDefinitions().Append(buttonColumn);
+    if (trailing > 0) {
+        wuxc::ColumnDefinition trailingColumn;
+        trailingColumn.Width(
+            wux::GridLengthHelper::FromValueAndType(trailing, wux::GridUnitType::Pixel));
+        row.ColumnDefinitions().Append(trailingColumn);
+    }
+    const double iconGap = UseNativeMetrics()
+                               ? g_metrics.sliderLeft - g_metrics.iconLeft - kIconSize
+                               : kOwnIconGap;
+    iconHost.Margin(wux::ThicknessHelper::FromLengths(0, 0, iconGap, 0));
+    wuxc::Grid::SetColumn(iconHost, 0);
+    row.Children().Append(iconHost);
+    wuxc::Grid::SetColumn(buttons, 1);
+    row.Children().Append(buttons);
+    return row;
 }
 
 void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
@@ -2209,31 +3624,271 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
     // A panel with nothing in it still carries its margin, which inside the
     // card is a blank strip under the sliders. That happens before the first
     // enumeration -- the early-inject path injects on purpose before the
-    // displays are known -- and permanently when hideUnsupported hides every
-    // one of them.
+    // displays are known -- and permanently when everything is hidden.
     panel.Visibility(wux::Visibility::Collapsed);
 
+    auto links = std::make_shared<PanelLinks>();
+    injection.links = links;
     for (const brightness::Display& d : displays) {
+        // A hidden display is left out everywhere, all-displays rows included.
+        if (IsHidden(d)) {
+            continue;
+        }
+        if (d.transport != brightness::Transport::None) {
+            links->brightnessIds.push_back(d.stableId);
+        }
+        if (d.contrastMax > 0) {
+            links->contrastIds.push_back(d.stableId);
+        }
+    }
+
+    // A power button needs another display to be seen from: turning off the
+    // only screen leaves nothing to turn it back on with.
+    const bool powerAllowed = g_showPowerButton && displays.size() >= 2;
+    bool anyPower = false;
+    if (g_showPerMonitor && powerAllowed) {
+        for (const brightness::Display& d : displays) {
+            const DisplayRule* rule = RuleFor(d);
+            if (d.hasPower && d.transport == brightness::Transport::DdcCi && !IsHidden(d) &&
+                !(rule && rule->hidePower)) {
+                anyPower = true;
+            }
+        }
+    }
+    const double trailing = anyPower ? kTrailingWidth : 0;
+    panel.Margin(PanelMargin(trailing));
+
+    // All-displays rows, where they drive more than one display -- or where
+    // the per-display row they would duplicate is hidden, since then they
+    // are the only way to reach that display at all.
+    const bool perDisplayBrightness = g_showPerMonitor;
+    const bool perDisplayContrast = g_showContrast;
+    const bool masterBrightness =
+        g_showMasterBrightness &&
+        (links->brightnessIds.size() >= 2 ||
+         (!perDisplayBrightness && !links->brightnessIds.empty()));
+    const bool masterContrast =
+        g_showMasterContrast &&
+        (links->contrastIds.size() >= 2 ||
+         (!perDisplayContrast && !links->contrastIds.empty()));
+    if (masterBrightness || masterContrast) {
+        const int average = AverageBrightness(displays, links->brightnessIds);
+        wuxc::TextBlock title = MakeRowTitle(L"All displays");
+        panel.Children().Append(title);
+        auto rowTitle = std::make_shared<RowTitle>();
+        rowTitle->name = L"All displays";
+        rowTitle->text = title;
+
+        if (masterBrightness) {
+            wux::FrameworkElement icon = MakeBrightnessIcon();
+            wuxc::Slider slider = MakeSlider(average < 0 ? 50 : average, 1.0);
+            SetIconLevel(icon, slider.Value());
+            panel.Children().Append(
+                MakeSliderRow(MakeIconHost(icon, slider, injection), slider, nullptr, trailing));
+            links->masterBrightness = winrt::make_weak(slider);
+            links->masterBrightnessIcon = winrt::make_weak(icon);
+            rowTitle->sliders.push_back({winrt::make_weak(slider), false});
+            AttachWheel(slider, injection);
+            injection.revokers.push_back(slider.ValueChanged(
+                winrt::auto_revoke,
+                [links, icon, rowTitle](
+                    wf::IInspectable const&,
+                    wuxc::Primitives::RangeBaseValueChangedEventArgs const& args) {
+                    const int value = static_cast<int>(std::lround(args.NewValue()));
+                    SetIconLevel(icon, value);
+                    UpdateRowTitle(*rowTitle);
+                    if (g_suppressValueChanged || !g_engine) {
+                        return;
+                    }
+                    for (const std::wstring& id : links->brightnessIds) {
+                        g_engine->SetPercent(id, value);
+                    }
+                    // Carry the per-display rows along without writing them a
+                    // second time.
+                    SuppressValueChanged guard;
+                    for (auto& entry : links->brightness) {
+                        if (auto s = entry.second.get()) {
+                            s.Value(value);
+                        }
+                    }
+                }));
+        }
+
+        if (masterContrast) {
+            const int average = AverageContrast(displays, links->contrastIds);
+            wux::FrameworkElement icon = MakeContrastIcon();
+            wuxc::Slider slider = MakeSlider(average < 0 ? 50 : average, 1.0);
+            SetIconLevel(icon, slider.Value());
+            panel.Children().Append(
+                MakeSliderRow(MakeIconHost(icon, slider, injection), slider, nullptr, trailing));
+            links->masterContrast = winrt::make_weak(slider);
+            links->masterContrastIcon = winrt::make_weak(icon);
+            rowTitle->sliders.push_back({winrt::make_weak(slider), false});
+            AttachWheel(slider, injection);
+            injection.revokers.push_back(slider.ValueChanged(
+                winrt::auto_revoke,
+                [links, icon, rowTitle](
+                    wf::IInspectable const&,
+                    wuxc::Primitives::RangeBaseValueChangedEventArgs const& args) {
+                    const int value = static_cast<int>(std::lround(args.NewValue()));
+                    SetIconLevel(icon, value);
+                    UpdateRowTitle(*rowTitle);
+                    if (g_suppressValueChanged || !g_engine) {
+                        return;
+                    }
+                    for (const std::wstring& id : links->contrastIds) {
+                        g_engine->SetContrast(id, value);
+                    }
+                    SuppressValueChanged guard;
+                    for (auto& entry : links->contrast) {
+                        if (auto s = entry.second.get()) {
+                            s.Value(value);
+                        }
+                    }
+                }));
+        }
+        UpdateRowTitle(*rowTitle);
+    }
+
+    // Which of a display's other controls it gets: each needs its setting on,
+    // the monitor to support it, and no per-display rule hiding it.
+    struct Extras {
+        bool contrast = false;
+        bool volume = false;
+        bool input = false;
+        bool any() const { return contrast || volume || input; }
+    };
+    auto extrasFor = [](const brightness::Display& d) {
+        const DisplayRule* rule = RuleFor(d);
+        Extras extras;
+        extras.contrast = g_showContrast && d.contrastMax > 0 && !(rule && rule->hideContrast);
+        extras.volume = g_showVolume && d.volumeMax > 0 && !(rule && rule->hideVolume);
+        extras.input =
+            g_showInputSwitcher && d.inputs.size() >= 2 && !(rule && rule->hideInput);
+        return extras;
+    };
+
+    // A display gets a section for its brightness slider -- or, with those
+    // turned off, for whatever other controls it has. "Brightness control not
+    // supported" is about brightness, so that note goes with the sliders.
+    auto hasRow = [&](const brightness::Display& d) {
+        if (IsHidden(d)) {
+            return false;
+        }
         const bool controllable = d.transport != brightness::Transport::None;
-        if (!controllable && g_hideUnsupported) {
+        if (g_showPerMonitor) {
+            return controllable || !g_hideUnsupported;
+        }
+        return controllable && extrasFor(d).any();
+    };
+
+    // The names rows are shown under, with identical ones numbered left to
+    // right. Two monitors of the same model report the same name, and a
+    // custom name whose text matches both gives them the same one again;
+    // without a number the rows could not be told apart. Only displays that
+    // get a row are counted, so a hidden one does not leave a gap.
+    std::vector<std::wstring> labels(displays.size());
+    std::map<std::wstring, int> labelCount;
+    for (size_t i = 0; i < displays.size(); ++i) {
+        if (hasRow(displays[i])) {
+            labels[i] = DisplayLabel(displays[i]);
+            ++labelCount[labels[i]];
+        }
+    }
+    std::map<std::wstring, int> labelSeen;
+    for (size_t i = 0; i < displays.size(); ++i) {
+        if (hasRow(displays[i]) && labelCount[labels[i]] > 1) {
+            const int number = ++labelSeen[labels[i]];
+            labels[i] += L" " + std::to_wstring(number);
+        }
+    }
+
+    for (size_t index = 0; index < displays.size(); ++index) {
+        const brightness::Display& d = displays[index];
+        const bool controllable = d.transport != brightness::Transport::None;
+        if (!hasRow(d)) {
             continue;
         }
 
-        std::wstring displayName = d.name;
+        const std::wstring displayName = labels[index];
         // The 50 is a placeholder for a value not read *yet*, and only a
         // controllable display has one coming -- the first refresh replaces
         // it. An uncontrollable one has no value and never will, so showing
-        // it "50%" directly above "Brightness control not supported" invents a
-        // reading that does not exist. FormatRowTitle omits the percentage
-        // when given a negative, which is exactly this case.
-        const int shownPercent =
-            controllable ? (d.percent < 0 ? 50 : d.percent) : -1;
-        wuxc::TextBlock title;
-        title.Text(FormatRowTitle(displayName, shownPercent));
-        title.FontSize(12);
-        title.Margin(wux::ThicknessHelper::FromLengths(0, 6, 0, 0));
-        title.Opacity(0.85);
-        panel.Children().Append(title);
+        // it "50%" directly above "Brightness control not supported" would
+        // invent a reading that does not exist; it gets no slider, and so no
+        // percentage in its title either.
+        const int shownPercent = d.percent < 0 ? 50 : d.percent;
+        const DisplayRule* rule = RuleFor(d);
+        const Extras extras = extrasFor(d);
+        const bool hasContrast = extras.contrast;
+        const bool hasVolume = extras.volume;
+        const bool hasInput = extras.input;
+        // The dropdown keeps the brightness slider out and folds the rest
+        // away. With no brightness slider, it would fold away everything and
+        // leave a bare title, so the rest is shown instead.
+        const bool dropdown =
+            g_layoutStyle == LayoutStyle::Dropdown && g_showPerMonitor && extras.any();
+        const bool expanded = !dropdown || g_expanded.count(d.stableId) > 0;
+
+        // Title, with the dropdown's chevron at the far end when there is
+        // anything to drop down.
+        wuxc::TextBlock title = MakeRowTitle(winrt::hstring{displayName});
+        auto rowTitle = std::make_shared<RowTitle>();
+        rowTitle->name = displayName;
+        rowTitle->text = title;
+        // The device id, for telling identical monitors apart when naming
+        // them: the part after the last "&" names the output it is plugged
+        // into.
+        wuxc::ToolTipService::SetToolTip(title, winrt::box_value(winrt::hstring{d.stableId}));
+        wuxc::StackPanel details{nullptr};
+        if (dropdown && controllable) {
+            wuxc::Grid titleRow;
+            wuxc::ColumnDefinition textColumn;
+            textColumn.Width(wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star));
+            wuxc::ColumnDefinition chevronColumn;
+            chevronColumn.Width(wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
+            titleRow.ColumnDefinitions().Append(textColumn);
+            titleRow.ColumnDefinitions().Append(chevronColumn);
+            wuxc::Grid::SetColumn(title, 0);
+            titleRow.Children().Append(title);
+
+            wuxc::Button chevron = MakeGlyphButton(expanded ? L"\xE70E" : L"\xE70D", 10,
+                                                   trailing > 0 ? trailing : 28, 22);
+            chevron.Margin(wux::ThicknessHelper::FromLengths(0, 6, 0, 0));
+            wuxc::ToolTipService::SetToolTip(chevron, winrt::box_value(L"More controls"));
+            wuxc::Grid::SetColumn(chevron, 1);
+            titleRow.Children().Append(chevron);
+            panel.Children().Append(titleRow);
+
+            details = wuxc::StackPanel();
+            rowTitle->details = details;
+            std::wstring id = d.stableId;
+            injection.clickRevokers.push_back(chevron.Click(
+                winrt::auto_revoke,
+                [id, rowTitle, weakChevron = winrt::make_weak(chevron),
+                 weakDetails = winrt::make_weak(details)](wf::IInspectable const&,
+                                                          wux::RoutedEventArgs const&) {
+                    const bool open = g_expanded.count(id) == 0;
+                    if (open) {
+                        g_expanded.insert(id);
+                    } else {
+                        g_expanded.erase(id);
+                    }
+                    if (auto panelOfDetails = weakDetails.get()) {
+                        panelOfDetails.Visibility(open ? wux::Visibility::Visible
+                                                       : wux::Visibility::Collapsed);
+                    }
+                    if (auto c = weakChevron.get()) {
+                        if (auto glyph = c.Content().try_as<wuxc::FontIcon>()) {
+                            glyph.Glyph(open ? L"\xE70E" : L"\xE70D");
+                        }
+                    }
+                    // The dropdown's values join the title, or leave it.
+                    UpdateRowTitle(*rowTitle);
+                }));
+        } else {
+            panel.Children().Append(title);
+        }
 
         if (!controllable) {
             // Say so rather than showing a slider that does nothing.
@@ -2245,88 +3900,139 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
             continue;
         }
 
-        // Icon column + stretching slider column, so each row reads like the
-        // shell's own slider rows.
-        wuxc::Grid sliderRow;
-        wuxc::ColumnDefinition iconColumn;
-        iconColumn.Width(
-            wux::GridLengthHelper::FromValueAndType(0, wux::GridUnitType::Auto));
-        wuxc::ColumnDefinition sliderColumn;
-        sliderColumn.Width(
-            wux::GridLengthHelper::FromValueAndType(1, wux::GridUnitType::Star));
-        sliderRow.ColumnDefinitions().Append(iconColumn);
-        sliderRow.ColumnDefinitions().Append(sliderColumn);
-
-        wux::FrameworkElement icon = MakeBrightnessIcon();
-        icon.VerticalAlignment(wux::VerticalAlignment::Center);
-        // The gap the shell leaves between its icon and its track, derived
-        // rather than guessed: the panel already starts at the icon's left
-        // edge, so what is left over after the icon is the gap.
-        const double iconGap =
-            UseNativeMetrics()
-                ? g_metrics.sliderLeft - g_metrics.iconLeft - kIconSize
-                : kOwnIconGap;
-        icon.Margin(wux::ThicknessHelper::FromLengths(0, 0, iconGap, 0));
-        wuxc::Grid::SetColumn(icon, 0);
-        sliderRow.Children().Append(icon);
-
-        wuxc::Slider slider;
-        slider.Minimum(0);
-        slider.Maximum(100);
-        slider.Value(shownPercent);
-        slider.IsThumbToolTipEnabled(true);
-        slider.VerticalAlignment(wux::VerticalAlignment::Center);
-        if (UseNativeMetrics()) {
-            // Matched to the shell's row so the track sits at the same height
-            // and the hit target is the same size. The default template is
-            // shorter, which reads as a thinner control next to the real ones.
-            slider.Height(g_metrics.rowHeight);
-        }
-        wuxc::Grid::SetColumn(slider, 1);
-
-        SetIconLevel(icon, slider.Value());
-
-        // Snap to what the hardware can actually represent. A monitor whose
-        // VCP range is 0-50 has 2% granularity, so offering 1% steps just
-        // means three slider positions that all round to the same raw value.
-        double step = 1.0;
-        if (d.transport == brightness::Transport::DdcCi && d.vcpMax > 0) {
-            step = 100.0 / static_cast<double>(d.vcpMax);
-        }
-        if (step < 1.0) {
-            step = 1.0;  // finer than the slider is worth showing
-        }
-        slider.StepFrequency(step);
-        slider.SnapsTo(wuxc::Primitives::SliderSnapsTo::StepValues);
-
         std::wstring id = d.stableId;
-        // auto_revoke so the handler can be detached on unload; a dangling
-        // registration into an unloaded DLL is a crash, not a leak.
-        injection.revokers.push_back(slider.ValueChanged(
-            winrt::auto_revoke,
-            [id, icon, title, displayName](
-                wf::IInspectable const&,
-                wuxc::Primitives::RangeBaseValueChangedEventArgs const& args) {
-                SetIconLevel(icon, args.NewValue());
-                title.Text(FormatRowTitle(displayName,
-                                          static_cast<int>(std::lround(args.NewValue()))));
-                if (g_suppressValueChanged) {
-                    // Echo of a refresh we just wrote into the slider; writing
-                    // it back to the hardware would be a pointless round trip.
-                    return;
-                }
-                if (g_engine) {
-                    // Returns immediately; the worker coalesces and writes.
-                    g_engine->SetPercent(id, static_cast<int>(std::lround(args.NewValue())));
-                }
-            }));
+        Injection::Binding binding{id, displayName, {}, {}, rowTitle};
 
-        sliderRow.Children().Append(slider);
-        panel.Children().Append(sliderRow);
+        // The brightness row, and the power button that sits at its end.
+        if (g_showPerMonitor) {
+            wux::FrameworkElement icon = MakeBrightnessIcon();
+            // Snap to what the hardware can actually represent. A monitor whose
+            // VCP range is 0-50 has 2% granularity, so offering 1% steps just
+            // means three slider positions that all round to the same raw value.
+            double step = 1.0;
+            if (d.transport == brightness::Transport::DdcCi && d.vcpMax > 0) {
+                step = std::max(1.0, 100.0 / static_cast<double>(d.vcpMax));
+            }
+            wuxc::Slider slider = MakeSlider(shownPercent, step);
+            SetIconLevel(icon, slider.Value());
 
-        injection.bindings.push_back({id, displayName, winrt::make_weak(slider),
-                                      winrt::make_weak(icon),
-                                      winrt::make_weak(title)});
+            wuxc::Button power{nullptr};
+            if (powerAllowed && d.hasPower && d.transport == brightness::Transport::DdcCi &&
+                !(rule && rule->hidePower)) {
+                power = MakePowerButton(d, displayName, injection);
+            }
+            panel.Children().Append(MakeSliderRow(MakeIconHost(icon, slider, injection), slider,
+                                                  power, trailing));
+            AttachWheel(slider, injection);
+
+            // auto_revoke so the handler can be detached on unload; a dangling
+            // registration into an unloaded DLL is a crash, not a leak.
+            rowTitle->sliders.push_back({winrt::make_weak(slider), false});
+            injection.revokers.push_back(slider.ValueChanged(
+                winrt::auto_revoke,
+                [id, icon, rowTitle, links](
+                    wf::IInspectable const&,
+                    wuxc::Primitives::RangeBaseValueChangedEventArgs const& args) {
+                    SetIconLevel(icon, args.NewValue());
+                    UpdateRowTitle(*rowTitle);
+                    if (g_suppressValueChanged) {
+                        // Echo of a refresh or an all-displays move we just wrote
+                        // into the slider; writing it back to the hardware would
+                        // be a pointless round trip.
+                        return;
+                    }
+                    if (g_engine) {
+                        // Returns immediately; the worker coalesces and writes.
+                        g_engine->SetPercent(id, static_cast<int>(std::lround(args.NewValue())));
+                    }
+                    SyncMasters(*links);
+                }));
+            links->brightness.emplace_back(id, winrt::make_weak(slider));
+
+            binding.slider = winrt::make_weak(slider);
+            binding.icon = winrt::make_weak(icon);
+            if (power) {
+                binding.power = winrt::make_weak(power);
+            }
+        }
+
+        // The extra rows go into the dropdown when there is one, straight into
+        // the panel otherwise.
+        auto appendExtra = [&](wux::UIElement const& row) {
+            if (details) {
+                details.Children().Append(row);
+            } else {
+                panel.Children().Append(row);
+            }
+        };
+
+        if (hasContrast) {
+            wux::FrameworkElement contrastIcon = MakeContrastIcon();
+            double contrastStep = std::max(1.0, 100.0 / static_cast<double>(d.contrastMax));
+            wuxc::Slider contrast =
+                MakeSlider(d.contrast < 0 ? 50 : d.contrast, contrastStep);
+            SetIconLevel(contrastIcon, contrast.Value());
+            appendExtra(MakeSliderRow(MakeIconHost(contrastIcon, contrast, injection), contrast,
+                                      nullptr, trailing));
+            rowTitle->sliders.push_back({winrt::make_weak(contrast), details != nullptr});
+            AttachWheel(contrast, injection);
+            injection.revokers.push_back(contrast.ValueChanged(
+                winrt::auto_revoke,
+                [id, contrastIcon, rowTitle, links](
+                    wf::IInspectable const&,
+                    wuxc::Primitives::RangeBaseValueChangedEventArgs const& args) {
+                    SetIconLevel(contrastIcon, args.NewValue());
+                    UpdateRowTitle(*rowTitle);
+                    if (g_suppressValueChanged) {
+                        return;
+                    }
+                    if (g_engine) {
+                        g_engine->SetContrast(id, static_cast<int>(std::lround(args.NewValue())));
+                    }
+                    SyncMasters(*links);
+                }));
+            links->contrast.emplace_back(id, winrt::make_weak(contrast));
+            binding.contrast = winrt::make_weak(contrast);
+            binding.contrastIcon = winrt::make_weak(contrastIcon);
+        }
+
+        if (hasVolume) {
+            double volumeStep = std::max(1.0, 100.0 / static_cast<double>(d.volumeMax));
+            wuxc::Slider volume = MakeSlider(d.volume < 0 ? 50 : d.volume, volumeStep);
+            wux::FrameworkElement volumeIcon = MakeVolumeIcon();
+            SetVolumeIconLevel(volumeIcon, volume.Value());
+            appendExtra(MakeSliderRow(MakeIconHost(volumeIcon, volume, injection), volume,
+                                      nullptr, trailing));
+            rowTitle->sliders.push_back({winrt::make_weak(volume), details != nullptr});
+            AttachWheel(volume, injection);
+            injection.revokers.push_back(volume.ValueChanged(
+                winrt::auto_revoke,
+                [id, volumeIcon, rowTitle](
+                    wf::IInspectable const&,
+                    wuxc::Primitives::RangeBaseValueChangedEventArgs const& args) {
+                    SetVolumeIconLevel(volumeIcon, args.NewValue());
+                    UpdateRowTitle(*rowTitle);
+                    if (g_suppressValueChanged || !g_engine) {
+                        return;
+                    }
+                    g_engine->SetVolume(id, static_cast<int>(std::lround(args.NewValue())));
+                }));
+            binding.volume = winrt::make_weak(volume);
+            binding.volumeIcon = winrt::make_weak(volumeIcon);
+        }
+
+        if (hasInput) {
+            appendExtra(MakeInputRow(d, trailing, injection, binding));
+        }
+
+        if (details) {
+            details.Visibility(expanded ? wux::Visibility::Visible
+                                        : wux::Visibility::Collapsed);
+            panel.Children().Append(details);
+        }
+        UpdateRowTitle(*rowTitle);
+
+        injection.bindings.push_back(std::move(binding));
     }
 
     if (panel.Children().Size() > 0) {
@@ -2338,23 +4044,7 @@ wuxc::StackPanel BuildSliderPanel(Injection& injection) {
     wuxc::StackPanel panel;
     panel.Name(L"WindhawkPerMonitorBrightness");
     panel.Orientation(wuxc::Orientation::Vertical);
-    if (UseNativeMetrics()) {
-        // Left and right come from the native row so the icon column and the
-        // far end of the track line up with it; the panel used to be 6px left
-        // of the icons and 42px past the end of the sliders.
-        //
-        // The seam goes on whichever edge touches the group, and the other
-        // edge gets a plain gap -- these rows carry titles, so they are a
-        // group of their own rather than more of the same list.
-        const bool above = g_panelPosition == PanelPosition::AboveSliders;
-        panel.Margin(wux::ThicknessHelper::FromLengths(
-            g_metrics.iconLeft, above ? 8 : g_metrics.gapBelow,
-            g_metrics.groupWidth - g_metrics.sliderRight,
-            above ? g_metrics.gapAbove : 8));
-    } else {
-        panel.Margin(
-            wux::ThicknessHelper::FromLengths(kOwnMargin, 4, kOwnMargin, 8));
-    }
+    panel.Margin(PanelMargin(0));
     PopulateSliderPanel(panel, injection);
     return panel;
 }
@@ -2773,8 +4463,9 @@ bool InjectInto(wux::FrameworkElement const& l1Grid) {
     }
 
     // Before building the panel: the icons need the shell's Lottie, and it has
-    // to be read while the stock row is still visible.
-    TryCaptureBrightnessSource(l1Grid);
+    // to be read while the stock row is still visible. The slider style comes
+    // from the same rows. Either may not exist yet; see TryCaptureShellLook.
+    TryCaptureShellLook(l1Grid);
 
     // Likewise before building: the rows are laid out from these.
     MeasureNativeSliderMetrics(l1Grid);
@@ -2866,9 +4557,13 @@ void RemoveInjections() {
     }
     g_stockSlider = StockSliderState{};
 
-    // Release the borrowed Lottie here, on the XAML thread, rather than letting
-    // a global destructor drop it after the DLL is gone.
+    // Release the borrowed Lottie and slider style here, on the XAML thread,
+    // rather than letting a global destructor drop them after the DLL is gone.
     g_brightnessSource = nullptr;
+    g_volumeSource = nullptr;
+    g_capturedVolume = false;
+    g_lookRetries = 0;
+    g_sliderStyle = nullptr;
     g_animatedIconStatics = nullptr;
     g_capturedSource = false;
     g_progressMin = 0.0;
@@ -2878,7 +4573,7 @@ void RemoveInjections() {
         try {
             // Detach handlers before anything else, so nothing can fire at a
             // half-removed panel.
-            injection.revokers.clear();
+            injection.DetachHandlers();
 
             auto grid = injection.grid.get();
             auto panel = injection.panel.get();
@@ -3062,7 +4757,7 @@ bool RebuildOneInjection(Injection& injection) {
         return false;
     }
     // Detach before discarding the controls the handlers point at.
-    injection.revokers.clear();
+    injection.DetachHandlers();
     injection.bindings.clear();
     panel.Children().Clear();
     PopulateSliderPanel(panel, injection);
@@ -3083,6 +4778,34 @@ void ApplyRefreshedValues() try {
     }
 
     std::lock_guard<std::mutex> lock(g_injectionsMutex);
+
+    // Every open refreshes, which makes this the place to retry what could not
+    // be borrowed from the shell when the rows were built: its brightness
+    // Lottie and its slider style both come off rows that are virtualized, and
+    // are often not there yet the first time. Rows built without them keep
+    // the fallback glyph and whatever slider style lookup found, so once
+    // either turns up the rows are built again.
+    if ((!g_capturedSource || !g_capturedVolume || !g_sliderStyle) &&
+        g_lookRetries < kMaxLookRetries) {
+        ++g_lookRetries;
+        bool captured = false;
+        for (Injection& injection : *g_injections) {
+            if (auto grid = injection.grid.get()) {
+                captured = TryCaptureShellLook(grid) || captured;
+            }
+        }
+        if (captured) {
+            size_t rebuilt = 0;
+            for (Injection& injection : *g_injections) {
+                if (RebuildOneInjection(injection)) {
+                    ++rebuilt;
+                }
+            }
+            Wh_Log(L"Borrowed from the shell late; rebuilt %zu panel(s)", rebuilt);
+            return;
+        }
+    }
+
     for (Injection& injection : *g_injections) {
         // A panel whose rows do not match the current displays never got its
         // structural rebuild, and no amount of refreshing will fix that: this
@@ -3109,35 +4832,79 @@ void ApplyRefreshedValues() try {
         }
 
         for (Injection::Binding& binding : injection.bindings) {
-            auto slider = binding.slider.get();
-            if (!slider) {
+            const brightness::Display* d = nullptr;
+            for (const brightness::Display& candidate : displays) {
+                if (candidate.stableId == binding.id) {
+                    d = &candidate;
+                    break;
+                }
+            }
+            if (!d) {
                 continue;
             }
-            for (const brightness::Display& d : displays) {
-                if (d.stableId != binding.id || d.percent < 0) {
-                    continue;
-                }
-                if (std::lround(slider.Value()) == d.percent) {
-                    break;  // already correct, leave the thumb alone
-                }
-                // Scoped: if Value() throws, the outer catch would otherwise
-                // swallow it with the flag stuck true, and from then on every
-                // drag is silently ignored until the mod is reloaded.
+
+            // Only what differs, so a thumb that is already right is left
+            // alone. Scoped suppression: if Value() throws, the outer catch
+            // would otherwise swallow it with the flag stuck true, and from
+            // then on every drag is silently ignored until the mod is
+            // reloaded.
+            auto slider = binding.slider.get();
+            if (slider && d->percent >= 0 && std::lround(slider.Value()) != d->percent) {
                 {
-                    struct Suppress {
-                        Suppress() { g_suppressValueChanged = true; }
-                        ~Suppress() { g_suppressValueChanged = false; }
-                    } guard;
-                    slider.Value(d.percent);
+                    SuppressValueChanged guard;
+                    slider.Value(d->percent);
                 }
                 if (auto icon = binding.icon.get()) {
-                    SetIconLevel(icon, d.percent);
+                    SetIconLevel(icon, d->percent);
                 }
-                if (auto title = binding.title.get()) {
-                    title.Text(FormatRowTitle(binding.name, d.percent));
-                }
-                break;
             }
+
+            auto contrast = binding.contrast.get();
+            if (contrast && d->contrast >= 0 &&
+                std::lround(contrast.Value()) != d->contrast) {
+                {
+                    SuppressValueChanged guard;
+                    contrast.Value(d->contrast);
+                }
+                if (auto icon = binding.contrastIcon.get()) {
+                    SetIconLevel(icon, d->contrast);
+                }
+            }
+
+            if (auto power = binding.power.get()) {
+                ShowPowerState(power, binding.name, d->poweredOff);
+            }
+
+            auto volume = binding.volume.get();
+            if (volume && d->volume >= 0 && std::lround(volume.Value()) != d->volume) {
+                {
+                    SuppressValueChanged guard;
+                    volume.Value(d->volume);
+                }
+                if (auto icon = binding.volumeIcon.get()) {
+                    SetVolumeIconLevel(icon, d->volume);
+                }
+            }
+            // An unknown current input leaves the highlight where it is.
+            if (d->input >= 0) {
+                for (auto& entry : binding.inputs) {
+                    if (auto toggle = entry.second.get()) {
+                        toggle.IsChecked(entry.first == d->input);
+                    }
+                }
+            }
+
+            // The sliders' own handlers keep it current as they move; this
+            // covers a title that was built before its values were read.
+            if (binding.title) {
+                UpdateRowTitle(*binding.title);
+            }
+        }
+
+        // The all-displays rows show the mean of what they drive, so they
+        // follow the refreshed values too.
+        if (injection.links) {
+            SyncMasters(*injection.links);
         }
     }
 } catch (...) {
@@ -3883,47 +5650,149 @@ void RecheckControlCenterModule() {
 // Windhawk lifecycle
 // ===========================================================================
 
-void LoadSettings() {
-    g_hideStockBrightness = Wh_GetIntSetting(L"hideStockBrightness") != 0;
-    g_hideUnsupported = Wh_GetIntSetting(L"hideUnsupported") != 0;
+// Everything the settings say, read in one go so a change can be compared
+// against what the mod is running with before anything live is touched.
+struct ModSettings {
+    bool hideStockBrightness = true;
+    bool hideUnsupported = false;
+    PanelPosition panelPosition = PanelPosition::BelowSliders;
+    brightness::FollowMode followMode = brightness::FollowMode::Off;
+    LayoutStyle layoutStyle = LayoutStyle::Dropdown;
+    bool showPerMonitor = true;
+    bool showMasterBrightness = true;
+    bool showContrast = true;
+    bool showMasterContrast = true;
+    bool showPowerButton = true;
+    bool showVolume = true;
+    bool showInputSwitcher = true;
+    int scrollStep = 5;
+    bool iconClicks = false;
+    int iconClickLevels[3] = {0, 50, 100};
+    std::vector<DisplayRule> displayRules;
 
-    // No truthiness test: StringSetting converts through operator PCWSTR(),
-    // and Wh_GetStringSetting returns L"" rather than NULL, so the check that
-    // used to wrap this was always taken.
-    g_panelPosition = PanelPosition::BelowSliders;
+    // Everything but the follow mode changes what is in the shell's visual
+    // tree, which is put right by reloading rather than by patching it live.
+    bool SameUi(const ModSettings& other) const {
+        return hideStockBrightness == other.hideStockBrightness &&
+               hideUnsupported == other.hideUnsupported &&
+               panelPosition == other.panelPosition &&
+               layoutStyle == other.layoutStyle &&
+               showPerMonitor == other.showPerMonitor &&
+               showMasterBrightness == other.showMasterBrightness &&
+               showContrast == other.showContrast &&
+               showMasterContrast == other.showMasterContrast &&
+               showPowerButton == other.showPowerButton &&
+               showVolume == other.showVolume &&
+               showInputSwitcher == other.showInputSwitcher &&
+               scrollStep == other.scrollStep && iconClicks == other.iconClicks &&
+               std::equal(std::begin(iconClickLevels), std::end(iconClickLevels),
+                          std::begin(other.iconClickLevels)) &&
+               displayRules == other.displayRules;
+    }
+};
+
+// What the mod is running with. Heap-only members, so no no_destroy needed.
+ModSettings g_settings;
+
+ModSettings ReadSettings() {
+    ModSettings out;
+    out.hideStockBrightness = Wh_GetIntSetting(L"hideStockBrightness") != 0;
+    out.hideUnsupported = Wh_GetIntSetting(L"hideUnsupported") != 0;
+
+    // No truthiness tests on string settings: StringSetting converts through
+    // operator PCWSTR(), and Wh_GetStringSetting returns L"" rather than NULL,
+    // so such a check is always taken.
     WindhawkUtils::StringSetting position =
         WindhawkUtils::StringSetting::make(L"panelPosition");
-    std::wstring_view positionValue{position.get()};
-    if (positionValue == L"aboveSliders") {
-        g_panelPosition = PanelPosition::AboveSliders;
-    } else if (positionValue == L"bottom") {
-        g_panelPosition = PanelPosition::Bottom;
+    if (wcscmp(position.get(), L"aboveSliders") == 0) {
+        out.panelPosition = PanelPosition::AboveSliders;
+    } else if (wcscmp(position.get(), L"bottom") == 0) {
+        out.panelPosition = PanelPosition::Bottom;
     }
 
-    // Wh_GetStringSetting returns L"" rather than NULL on failure, so a
-    // pointer check would be meaningless; the RAII wrapper also removes the
-    // manual Wh_FreeStringSetting.
     // Off unless asked for: following writes to monitors that keep the value
     // in their own settings, and Windows cannot distinguish a brightness key
     // from power-plan or idle dimming.
-    brightness::FollowMode followMode = brightness::FollowMode::Off;
     WindhawkUtils::StringSetting follow =
         WindhawkUtils::StringSetting::make(L"followInternalBrightness");
     if (wcscmp(follow.get(), L"relative") == 0) {
-        followMode = brightness::FollowMode::Relative;
+        out.followMode = brightness::FollowMode::Relative;
     } else if (wcscmp(follow.get(), L"match") == 0) {
-        followMode = brightness::FollowMode::Match;
+        out.followMode = brightness::FollowMode::Match;
     }
 
+    WindhawkUtils::StringSetting layout = WindhawkUtils::StringSetting::make(L"layoutStyle");
+    if (wcscmp(layout.get(), L"expanded") == 0) {
+        out.layoutStyle = LayoutStyle::Expanded;
+    }
+    out.showPerMonitor = Wh_GetIntSetting(L"showPerMonitor") != 0;
+    out.showMasterBrightness = Wh_GetIntSetting(L"showMasterBrightness") != 0;
+    out.showContrast = Wh_GetIntSetting(L"showContrast") != 0;
+    out.showMasterContrast = Wh_GetIntSetting(L"showMasterContrast") != 0;
+    out.showPowerButton = Wh_GetIntSetting(L"showPowerButton") != 0;
+    out.showVolume = Wh_GetIntSetting(L"showVolume") != 0;
+    out.showInputSwitcher = Wh_GetIntSetting(L"showInputSwitcher") != 0;
+    out.scrollStep = std::clamp(Wh_GetIntSetting(L"scrollStep"), 0, 100);
+    out.iconClicks = Wh_GetIntSetting(L"iconClicks") != 0;
+    out.iconClickLevels[0] = std::clamp(Wh_GetIntSetting(L"iconClickLeft"), 0, 100);
+    out.iconClickLevels[1] = std::clamp(Wh_GetIntSetting(L"iconClickMiddle"), 0, 100);
+    out.iconClickLevels[2] = std::clamp(Wh_GetIntSetting(L"iconClickRight"), 0, 100);
+
+    // A fixed bound rather than stopping at the first empty entry, so an
+    // entry left blank in the middle of the list does not hide the ones after.
+    for (int i = 0; i < 32; ++i) {
+        WindhawkUtils::StringSetting match =
+            WindhawkUtils::StringSetting::make(L"displaySettings[%d].match", i);
+        DisplayRule rule;
+        rule.match = brightness::detail::ToLower(match.get());
+        if (rule.match.empty()) {
+            continue;  // an entry that matches nothing does nothing
+        }
+        WindhawkUtils::StringSetting name =
+            WindhawkUtils::StringSetting::make(L"displaySettings[%d].name", i);
+        rule.name = name.get();
+        rule.hide = Wh_GetIntSetting(L"displaySettings[%d].hide", i) != 0;
+        rule.hideContrast = Wh_GetIntSetting(L"displaySettings[%d].hideContrast", i) != 0;
+        rule.hideVolume = Wh_GetIntSetting(L"displaySettings[%d].hideVolume", i) != 0;
+        rule.hideInput = Wh_GetIntSetting(L"displaySettings[%d].hideInput", i) != 0;
+        rule.hidePower = Wh_GetIntSetting(L"displaySettings[%d].hidePower", i) != 0;
+        out.displayRules.push_back(std::move(rule));
+    }
+    return out;
+}
+
+void ApplySettings(const ModSettings& settings) {
+    g_hideStockBrightness = settings.hideStockBrightness;
+    g_hideUnsupported = settings.hideUnsupported;
+    g_panelPosition = settings.panelPosition;
+    g_layoutStyle = settings.layoutStyle;
+    g_showPerMonitor = settings.showPerMonitor;
+    g_showMasterBrightness = settings.showMasterBrightness;
+    g_showContrast = settings.showContrast;
+    g_showMasterContrast = settings.showMasterContrast;
+    g_showPowerButton = settings.showPowerButton;
+    g_showVolume = settings.showVolume;
+    g_showInputSwitcher = settings.showInputSwitcher;
+    g_scrollStep = settings.scrollStep;
+    g_iconClicks = settings.iconClicks;
+    std::copy(std::begin(settings.iconClickLevels), std::end(settings.iconClickLevels),
+              std::begin(g_iconClickLevels));
+    g_displayRules = settings.displayRules;
     if (g_engine) {
-        g_engine->SetFollowMode(followMode);
+        g_engine->SetFollowMode(settings.followMode);
     }
 
-    Wh_Log(L"hideStockBrightness=%d followInternalBrightness=%d "
-           L"panelPosition=%s hideUnsupported=%d",
-           g_hideStockBrightness ? 1 : 0, static_cast<int>(followMode),
-           positionValue.empty() ? L"belowSliders" : position.get(),
-           g_hideUnsupported ? 1 : 0);
+    Wh_Log(L"settings: hideStock=%d follow=%d position=%d hideUnsupported=%d "
+           L"layout=%d perMonitor=%d masterBrightness=%d contrast=%d "
+           L"masterContrast=%d power=%d volume=%d inputs=%d wheel=%d iconClicks=%d "
+           L"displayRules=%zu",
+           g_hideStockBrightness ? 1 : 0, static_cast<int>(settings.followMode),
+           static_cast<int>(g_panelPosition), g_hideUnsupported ? 1 : 0,
+           static_cast<int>(g_layoutStyle), g_showPerMonitor ? 1 : 0,
+           g_showMasterBrightness ? 1 : 0, g_showContrast ? 1 : 0,
+           g_showMasterContrast ? 1 : 0, g_showPowerButton ? 1 : 0, g_showVolume ? 1 : 0,
+           g_showInputSwitcher ? 1 : 0, g_scrollStep, g_iconClicks ? 1 : 0,
+           g_displayRules.size());
 }
 
 BOOL Wh_ModInit() {
@@ -3933,7 +5802,8 @@ BOOL Wh_ModInit() {
     g_engine->SetLogger(&EngineLog);
     g_engine->SetOnChanged(&OnEngineChanged);
 
-    LoadSettings();
+    g_settings = ReadSettings();
+    ApplySettings(g_settings);
 
     // In Wh_ModInit so that Windhawk arms the hook itself when it returns, and
     // so it is in place before the host can build the view.
@@ -3959,21 +5829,24 @@ void Wh_ModAfterInit() {
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     Wh_Log(L">");
 
-    const bool previouslyHidden = g_hideStockBrightness;
-    const bool previouslyHidUnsupported = g_hideUnsupported;
-    const PanelPosition previousPosition = g_panelPosition;
-    LoadSettings();
+    // Read into a copy and compared before anything live is touched: the XAML
+    // thread reads these while building rows, and a reload is the clean way
+    // to change what is in somebody else's visual tree anyway -- hiding the
+    // stock slider touches an element we do not own, the position moves the
+    // shell's own children between rows, and the rest change which rows
+    // exist at all.
+    ModSettings next = ReadSettings();
+    if (!next.SameUi(g_settings)) {
+        *bReload = TRUE;
+        return TRUE;
+    }
 
     // Follow mode is engine state and takes effect at once.
-    //
-    // The other three changed what was put into somebody else's visual tree,
-    // and each needs that undone and redone rather than patched: hiding the
-    // stock slider touches an element we do not own, the position moved the
-    // shell's own children between rows, and hiding unsupported displays
-    // changes which rows exist at all.
-    *bReload = (g_hideStockBrightness != previouslyHidden) ||
-               (g_hideUnsupported != previouslyHidUnsupported) ||
-               (g_panelPosition != previousPosition);
+    g_settings.followMode = next.followMode;
+    if (g_engine) {
+        g_engine->SetFollowMode(next.followMode);
+    }
+    *bReload = FALSE;
     return TRUE;
 }
 
