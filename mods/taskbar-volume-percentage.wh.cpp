@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.7.1
+// @version         1.7.3
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -47,20 +47,14 @@ level, updated in real time.
   - Native mute icon and 0%
   - Custom text
 - **Custom mute text**: Text used when the "Custom text" or "Native mute icon and text" mute style is selected (default: `Mute`).
-- **Icon spacing**: Spacing in device-independent pixels (DIPs) between the native icon and the text in dual-display styles (default: `4`, set to `-1` for Taskbar Styler compatibility).
-- **Container width**: Width in device-independent pixels (DIPs) of the volume container to prevent adjacent icons from shifting when digit count changes (`0` for dynamic auto-calculation, `-1` for Windows default).
+- **Icon spacing**: Space between the icon and the text (default: `-1` for automatic, `0` to disable, or any other number for a fixed size in pixels).
+- **Container width**: Width of the volume area (default: `-1` for automatic, `0` to disable, or any other number for a fixed size in pixels).
 
 ## Compatibility
 
 - Only Windows 11 is supported.
 - If the mod is enabled while Explorer is already running, the text appears
   after the next volume change.
-
-## Changelog
-
-- 1.7.1: Text-only styles now render in a dedicated Segoe UI Variable text
-  block instead of the native icon-font text block, fixing the vertical
-  misalignment with the other tray icons.
 
 ## Credits
 
@@ -107,19 +101,16 @@ level, updated in real time.
   $description: >-
     Used with the "Custom text" and "Native mute icon and text" mute display
     styles.
-- iconSpacing: 4
+- iconSpacing: -1
   $name: Icon spacing
   $description: >-
-    Spacing in device-independent pixels (DIPs) between the native icon and the
-    text in dual-display styles. Set to -1 to disable hardcoded spacing and let
-    Taskbar Styler or custom XAML rules control it.
-- fixedContainerWidth: 0
+    Space between the icon and the text. Set to -1 for automatic spacing, or
+    to 0 to disable it. Any other number sets the space in pixels.
+- fixedContainerWidth: -1
   $name: Container width
   $description: >-
-    Width in device-independent pixels (DIPs) of the volume icon container to
-    keep adjacent icons from shifting when the number of digits changes. Set to
-    0 for an automatic width dynamically adapted to the text, or to -1 to leave
-    the width to Windows.
+    Width of the volume area. Set to -1 for automatic width, or to 0 to
+    disable it. Any other number sets the width in pixels.
 */
 // ==/WindhawkModSettings==
 
@@ -141,6 +132,7 @@ level, updated in real time.
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Data.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 
@@ -184,6 +176,10 @@ struct {
 
 std::atomic<bool> g_unloading;
 std::atomic<bool> g_systemTrayModuleHooked;
+
+// Incremented on every settings load. Layouts configured under an older
+// generation are redone, without touching the snapshot of the original values.
+std::atomic<int> g_settingsGeneration;
 
 // The state below is only touched on the taskbar UI thread: the hooks run
 // there, and the mod callbacks marshal to it.
@@ -253,8 +249,6 @@ struct TrackedVolumeContent {
     winrt::weak_ref<Controls::TextBlock> subBlock;
     bool isCustomLayoutConfigured = false;
     bool lastDualBoxMode = false;
-    ElementPosition lastElementPosition = ElementPosition::right;
-    int lastIconSpacing = 4;
     winrt::Windows::Foundation::IInspectable origUnderlayVisibility{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseVisibility{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayAlignment{nullptr};
@@ -268,6 +262,8 @@ struct TrackedVolumeContent {
     // True when the native (icon font) text block is the one displayed, i.e.
     // for the native mute glyph. Otherwise our own text block is displayed.
     bool lastNativeGlyph = false;
+    // Settings generation the current layout was built for.
+    int layoutSettingsGeneration = -1;
 };
 [[clang::no_destroy]] std::optional<std::vector<TrackedVolumeContent>>
     g_trackedVolumeContents{std::in_place};
@@ -474,9 +470,9 @@ double CalculateAutoWidth() {
     // Compact padding (~8 DIPs) + Segoe UI Variable character metrics (~7.0 DIPs/char)
     double estimatedWidth = 8.0 + (static_cast<double>(maxLen) * 7.0);
     if (IsDualBoxStyle()) {
-        double gap = (g_settings.iconSpacing >= 0)
-                         ? static_cast<double>(g_settings.iconSpacing)
-                         : 4.0;
+        double gap = (g_settings.iconSpacing < 0)
+                         ? 4.0
+                         : static_cast<double>(g_settings.iconSpacing);
         estimatedWidth += 16.0 + gap;
     }
 
@@ -492,7 +488,7 @@ double CalculateAutoWidth() {
 
 // Zero means leaving the width to Windows.
 double GetContainerWidth() {
-    if (g_unloading || g_settings.fixedContainerWidth < 0) {
+    if (g_unloading || g_settings.fixedContainerWidth == 0) {
         return 0;
     }
 
@@ -726,6 +722,20 @@ void RestoreAllVolumeLayouts() {
     }
 }
 
+// Makes the sub-block follow the native text block's brush and weight through
+// bindings rather than one-time copies, so theme changes are picked up.
+void BindSubBlockTextStyle(Controls::TextBlock const& subBlock,
+                           Controls::TextBlock const& source) {
+    auto bind = [&](DependencyProperty const& dp, PCWSTR path) {
+        Data::Binding binding;
+        binding.Source(source);
+        binding.Path(PropertyPath(path));
+        subBlock.SetBinding(dp, binding);
+    };
+    bind(Controls::TextBlock::ForegroundProperty(), L"Foreground");
+    bind(Controls::TextBlock::FontWeightProperty(), L"FontWeight");
+}
+
 void SetupVolumeLayout(FrameworkElement const& textIconContent) {
     if (g_unloading) {
         return;
@@ -763,8 +773,6 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
             nullptr,
             false,
             false,
-            ElementPosition::right,
-            4,
         });
         tracked = &g_trackedVolumeContents->back();
     } else {
@@ -832,10 +840,9 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
     // configured, update only the text without touching margins or columns.
     // This preserves custom XAML styling (e.g. from Taskbar Styler) on volume changes.
     if (tracked->isCustomLayoutConfigured &&
+        tracked->layoutSettingsGeneration == g_settingsGeneration &&
         tracked->lastDualBoxMode == showDualBox &&
-        tracked->lastNativeGlyph == useNativeGlyph &&
-        tracked->lastElementPosition == g_settings.elementPosition &&
-        tracked->lastIconSpacing == g_settings.iconSpacing) {
+        tracked->lastNativeGlyph == useNativeGlyph) {
         if (!useNativeGlyph) {
             if (auto subBlock = tracked->subBlock.get()) {
                 subBlock.Text(g_volumeText);
@@ -877,8 +884,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         if (textBlockEl) {
             if (auto innerTextBlock =
                     textBlockEl.try_as<Controls::TextBlock>()) {
-                subBlock.Foreground(innerTextBlock.Foreground());
-                subBlock.FontWeight(innerTextBlock.FontWeight());
+                BindSubBlockTextStyle(subBlock, innerTextBlock);
             }
         }
 
@@ -918,8 +924,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
 
         tracked->lastDualBoxMode = false;
         tracked->lastNativeGlyph = useNativeGlyph;
-        tracked->lastElementPosition = g_settings.elementPosition;
-        tracked->lastIconSpacing = g_settings.iconSpacing;
+        tracked->layoutSettingsGeneration = g_settingsGeneration;
         tracked->isCustomLayoutConfigured = true;
         return;
     }
@@ -953,8 +958,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
     if (textBlockEl) {
         if (auto innerTextBlock =
                 textBlockEl.try_as<Controls::TextBlock>()) {
-            subBlock.Foreground(innerTextBlock.Foreground());
-            subBlock.FontWeight(innerTextBlock.FontWeight());
+            BindSubBlockTextStyle(subBlock, innerTextBlock);
         }
     }
 
@@ -967,10 +971,11 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         containerGrid.ColumnDefinitions().Append(col1);
     }
 
-    double spacing = (g_settings.iconSpacing >= 0)
-                         ? static_cast<double>(g_settings.iconSpacing)
-                         : 0.0;
-    bool applySpacing = (g_settings.iconSpacing >= 0);
+    // -1: automatic (4 DIPs), 0: no spacing set by the mod, other: fixed size.
+    double spacing = (g_settings.iconSpacing < 0)
+                         ? 4.0
+                         : static_cast<double>(g_settings.iconSpacing);
+    bool applySpacing = (g_settings.iconSpacing != 0);
     Thickness col0Margin = applySpacing ? Thickness{0.0, 0.0, spacing, 0.0}
                                         : Thickness{0.0, 0.0, 0.0, 0.0};
     Thickness zeroMargin = Thickness{0.0, 0.0, 0.0, 0.0};
@@ -1003,8 +1008,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
 
     tracked->lastDualBoxMode = true;
     tracked->lastNativeGlyph = false;
-    tracked->lastElementPosition = g_settings.elementPosition;
-    tracked->lastIconSpacing = g_settings.iconSpacing;
+    tracked->layoutSettingsGeneration = g_settingsGeneration;
     tracked->isCustomLayoutConfigured = true;
 }
 
@@ -1527,16 +1531,12 @@ void LoadSettings() {
     g_settings.customMuteText =
         WindhawkUtils::StringSetting::make(L"customMuteText");
 
-    PCWSTR iconSpacingSetting = Wh_GetStringSetting(L"iconSpacing");
-    if (iconSpacingSetting && *iconSpacingSetting) {
-        g_settings.iconSpacing = Wh_GetIntSetting(L"iconSpacing");
-        Wh_FreeStringSetting(iconSpacingSetting);
-    } else {
-        g_settings.iconSpacing = 4;
-    }
+    g_settings.iconSpacing = Wh_GetIntSetting(L"iconSpacing");
 
     g_settings.fixedContainerWidth = Wh_GetIntSetting(L"fixedContainerWidth");
     g_maxObservedWidth = 0.0;
+
+    g_settingsGeneration++;
 }
 
 BOOL Wh_ModInit() {
@@ -1656,13 +1656,6 @@ void Wh_ModSettingsChanged() {
             LoadSettings();
 
             SafeXamlCall([] {
-                if (g_trackedVolumeContents) {
-                    for (auto& tracked : *g_trackedVolumeContents) {
-                        tracked.lastDualBoxMode = false;
-                        tracked.lastNativeGlyph = false;
-                        tracked.isCustomLayoutConfigured = false;
-                    }
-                }
                 UpdateAllVolumeLayouts();
                 RefreshVolumeIcons();
                 ApplyVolumeIconViewsWidth();
