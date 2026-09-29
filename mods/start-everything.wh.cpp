@@ -52,8 +52,11 @@ The Windows key, the Start button, Win+S, and the taskbar search icon all open t
 
 - Type any key: Automatically reveals the search palette, focuses the search box, and queries apps and files.
 - Up / Down: Navigate through application, calculation, conversion, and file results.
+- Tab / Shift + Tab: Move to the next / previous result, through the apps and on into the files.
+- Left / Right: Switch between the Apps and Files columns. Right switches only with the cursor at the end of the query, so the arrows still move the cursor while you edit.
 - Enter: Launch the selected application, copy calculation/conversion/IP result, or open item.
 - Ctrl + Enter: Run the selected application or file as Administrator (triggers UAC).
+- Shift + Enter: Open the selected result's context menu, the same one a right-click opens; navigate it with the arrow keys and Enter.
 - Escape: Clear the current query and smoothly collapse the search palette back to pinned apps.
 - Right-Click: Context menu with Open, Run as Administrator, Open in terminal, Properties, Create desktop shortcut, Cut/Copy (files), Copy path, and Open file location.
 
@@ -78,12 +81,12 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 - maxFileResults: 12
   $name: Max File Results
   $description: Number of file matches to display in the Files column (default 12).
-- searchDebounceMs: 25
+- searchDebounceMs: 0
   $name: Search Debounce Delay (ms)
-  $description: Delay in milliseconds to settle input during rapid typing before executing search (default 25ms, 0 for instant).
+  $description: Extra delay in milliseconds before searching, to let typing settle (default 0, instant). Rarely needed - while a search runs, new keystrokes already wait and only the latest text is searched.
 - showKeyHints: true
   $name: Show Keyboard Shortcuts Bar
-  $description: Display the keyboard shortcut hints ([Up/Down] Select, [Enter] Open, [Ctrl+Enter] Admin, [Esc] Close) in the bottom bar.
+  $description: Display the keyboard shortcut hints ([Up/Down] Select, [Tab] Next, [Enter] Open, [Ctrl+Enter] Admin, [Shift+Enter] Menu, [Esc] Close) in the bottom bar.
 - filterNoisyPaths: true
   $name: Filter Noisy Paths
   $description: Filter out deep build caches, version control internals, and temporary directories from file search results unless no other matches exist.
@@ -137,6 +140,9 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
         $name: Service Name
       - url: "https://www.reddit.com/search/?q={q}"
         $name: Search URL
+  $name: Web Search Shortcuts
+  $description: >-
+    Keywords that send a query to a specific site instead of the default search engine, typed as "?keyword query" (for example "?yt music").
 - unitConversions:
     - - fromUnit: "km"
         $name: Source Unit
@@ -939,12 +945,14 @@ inline ULONGLONG Descending(ULONGLONG v) {
 
 }  // namespace detail
 
-// Reorders a pool in place and truncates it to limit.
-inline void Rank(std::vector<everything::Result>* pool,
-                 const std::wstring& query, size_t limit,
-                 const std::vector<std::wstring>* excludedPaths = nullptr) {
+// Reorders a pool in place and truncates it to limit. Returns how many of the
+// results kept are clean (not under an excluded path); when that is zero, all
+// that was left was noise and the pool holds it.
+inline size_t Rank(std::vector<everything::Result>* pool,
+                   const std::wstring& query, size_t limit,
+                   const std::vector<std::wstring>* excludedPaths = nullptr) {
     if (!pool || pool->empty()) {
-        return;
+        return 0;
     }
     const std::wstring q = ToLower(query);
 
@@ -980,6 +988,41 @@ inline void Rank(std::vector<everything::Result>* pool,
         ranked.push_back(std::move((*pool)[keys[i].index]));
     }
     *pool = std::move(ranked);
+    return hasCleanMatches ? pool->size() : 0;
+}
+
+// The excluded paths as Everything search terms, appended to the query, for
+// when Rank alone cannot help: it can only demote what the query returned,
+// the first kDefaultPool matches by name, and for a broad query those can all
+// be noise (a one-letter search starts with "-x-..." folders under .gradle).
+//
+// `!path:"<pattern>"` rules out the pattern anywhere in the full path, as
+// IsNoise does -- but only single-folder patterns are sent. Measured on this
+// machine for "c" (700k matches, 19 ms as typed), one like \.gradle\ adds
+// about 10 ms, while one spanning folders like \appdata\local\temp\ adds 60-80
+// ms, all six of the defaults together about 380 ms. Those stay with IsNoise,
+// which applies every pattern exactly to whatever comes back. A pattern the
+// query itself names is left out, as IsNoise leaves it undemoted.
+inline std::wstring WithExclusions(const std::wstring& query,
+                                   const std::vector<std::wstring>* excludedPaths) {
+    if (!excludedPaths || excludedPaths->empty()) {
+        return query;
+    }
+    const std::wstring q = ToLower(query);
+    std::wstring out = query;
+    for (const auto& n : *excludedPaths) {
+        std::wstring raw = detail::TrimSlashes(n);
+        if (raw.empty() || raw.find(L'\\') != std::wstring::npos ||
+            q.find(raw) != std::wstring::npos) {
+            continue;
+        }
+        std::wstring term;
+        for (wchar_t c : n) {
+            if (c != L'"') term.push_back(c);
+        }
+        out += L" !path:\"" + term + L"\"";
+    }
+    return out;
 }
 
 }  // namespace ranker
@@ -1900,11 +1943,17 @@ inline int ScoreApp(const App& app, const std::wstring& q) {
             return p == pattern.size();
         };
 
+        // Letters the query leaves unmatched count against it too, so a typo
+        // of a short name beats the same letters strewn through a long one:
+        // "setings" is Settings, not File Converter Settings.
+        auto spare = [&q](const std::wstring& text) {
+            return static_cast<int>((text.size() - q.size()) / 4);
+        };
         int gaps = 0;
         if (q.size() >= 2 && isSubsequence(q, app.nameLower, gaps)) {
-            s = 80 + std::min(gaps, 30);
+            s = 80 + std::min(gaps + spare(app.nameLower), 30);
         } else if (q.size() >= 2 && !app.exeNameLower.empty() && isSubsequence(q, app.exeNameLower, gaps)) {
-            s = 85 + std::min(gaps, 30);
+            s = 85 + std::min(gaps + spare(app.exeNameLower), 30);
         }
     }
 
@@ -2118,10 +2167,44 @@ class Index {
                              }
                              return x.app->name.size() < y.app->name.size();
                          });
-        if (hits.size() > limit) {
-            hits.resize(limit);
+
+        // What is shown:
+        //  - one entry per name: many things are indexed twice, typically a
+        //    Settings page and the Control Panel applet or app behind it
+        //    (Display, Sound, Device Manager), and a second row with the same
+        //    name only takes a slot from something else;
+        //  - with a real match (below the fuzzy tiers at 80), no fuzzy ones:
+        //    "calc" is Calculator, not Local Computer Policy;
+        //  - with only fuzzy or typo matches, just those close to the best.
+        const int kFuzzy = 80;
+        const int best = hits.empty() ? 0 : hits.front().score;
+        const int cutoff = best < kFuzzy ? kFuzzy : best + 12;
+        std::vector<Match> shown;
+        shown.reserve(std::min(limit, hits.size()));
+        for (const Match& m : hits) {
+            if (shown.size() >= limit || m.score >= cutoff) {
+                break;
+            }
+            bool seen = false;
+            for (const Match& kept : shown) {
+                if (kept.app->nameLower == m.app->nameLower) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen) {
+                shown.push_back(m);
+            }
         }
-        return hits;
+        return shown;
+    }
+
+    // The app at position i, for work that walks the whole index (the icon
+    // prefetch). Valid until the next Rebuild, which only the search thread
+    // calls -- the same thread that walks it.
+    const App* At(size_t i) const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return i < apps_.size() ? &apps_[i] : nullptr;
     }
 
    private:
@@ -3764,7 +3847,7 @@ struct Settings {
     std::vector<std::wstring> excludedPaths;
     int maxAppResults = 6;
     int maxFileResults = 12;
-    int searchDebounceMs = 25;
+    int searchDebounceMs = 0;
     bool showKeyHints = true;
     bool filterNoisyPaths = true;
 };
@@ -3975,6 +4058,8 @@ struct AppCardUI {
 
 [[clang::no_destroy]] static std::optional<std::vector<wuxc::Button>> g_appButtonsOpt;
 [[clang::no_destroy]] static std::optional<std::vector<AppCardUI>> g_activeAppsOpt;
+// The Files column's rows, in order, for keyboard selection there.
+[[clang::no_destroy]] static std::optional<std::vector<wuxc::Button>> g_fileButtonsOpt;
 
 [[clang::no_destroy]] wuxc::Border g_appsHeaderHolder{nullptr};
 [[clang::no_destroy]] wuxc::Border g_filesHeaderHolder{nullptr};
@@ -4225,6 +4310,7 @@ void HideOverlayAnimated() {
                 if (g_appsList) g_appsList.Children().Clear();
                 if (g_activeAppsOpt) g_activeAppsOpt->clear();
                 if (g_appButtonsOpt) g_appButtonsOpt->clear();
+                if (g_fileButtonsOpt) g_fileButtonsOpt->clear();
             }
         });
 
@@ -4714,7 +4800,12 @@ void DisarmScrollTabStops(wux::DependencyObject const& root, int depth = 15) {
     }
 }
 
-void HandleNavigationKey(winrt::Windows::System::VirtualKey key, bool ctrl);
+bool IsNavigationKey(winrt::Windows::System::VirtualKey key);
+bool HandleNavigationKey(winrt::Windows::System::VirtualKey key, bool ctrl);
+bool ContextMenuHasFocus();
+bool EscapeBelongsToContextMenu();
+void NoteContextMenuOpened();
+void NoteContextMenuClosed();
 
 static HHOOK g_hGetMsgHook = nullptr;
 static winrt::event_token g_charReceivedToken{};
@@ -4771,6 +4862,11 @@ bool ProcessKeyCommand(WPARAM vk) {
     if (!g_ourBox || !g_resultsHost) return false;
 
     if (vk == VK_ESCAPE) {
+        // With a result's context menu open, Escape closes the menu and
+        // leaves the query alone.
+        if (EscapeBelongsToContextMenu()) {
+            return false;
+        }
         if (g_isOverlayVisible.load() || g_isHiding.load()) {
             Wh_Log(L"key listener: intercepted Escape -> hiding overlay");
             try {
@@ -4782,13 +4878,15 @@ bool ProcessKeyCommand(WPARAM vk) {
         return false;
     }
 
-    if (vk == VK_DOWN || vk == VK_UP || vk == VK_RETURN) {
+    auto navKey = static_cast<winrt::Windows::System::VirtualKey>(vk);
+    if (IsNavigationKey(navKey)) {
         if (g_isOverlayVisible.load()) {
             bool ctrl = (GetKeyState(VK_CONTROL) < 0) || ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
+            bool used = true;
             try {
-                HandleNavigationKey(static_cast<winrt::Windows::System::VirtualKey>(vk), ctrl);
+                used = HandleNavigationKey(navKey, ctrl);
             } catch (...) {}
-            return true;
+            return used;
         }
         return false;
     }
@@ -5207,15 +5305,37 @@ void OpenResult(std::wstring path, bool asAdmin = false) {
     });
 }
 
-void OpenFileLocation(std::wstring path) {
-    SpawnTrackedLaunch([path = std::move(path)] {
-        HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        std::wstring args = L"/select,\"" + path + L"\"";
-        ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
-        if (SUCCEEDED(comHr)) {
-            CoUninitialize();
+// Lets the taskbar's explorer.exe, where the Properties relay runs, bring the
+// sheet it opens for us to the front. Only a process that just got user input
+// may hand that right on, and Start stops being one once it closes, so this
+// is called from the click handler, before DismissStartMenu.
+void AllowExplorerForeground() {
+    if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+        DWORD explorerPid = 0;
+        GetWindowThreadProcessId(tray, &explorerPid);
+        if (explorerPid) {
+            AllowSetForegroundWindow(explorerPid);
         }
-    });
+    }
+}
+
+// Opens a folder window with the file selected, through the shell rather than
+// by starting explorer.exe /select. Which explorer.exe gets the window is not
+// ours to know -- a started one hands the request on and exits, and the window
+// lands in another it never met -- but the shell's own call reaches that
+// process over COM and hands it our right to the foreground on the way. Called
+// from the click handler, before DismissStartMenu, since that right lasts only
+// while Start still has the click.
+void OpenFileLocation(const std::wstring& path) {
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    HRESULT hr = SHParseDisplayName(path.c_str(), nullptr, &pidl, 0, nullptr);
+    if (SUCCEEDED(hr) && pidl) {
+        hr = SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+        CoTaskMemFree(pidl);
+    }
+    if (FAILED(hr)) {
+        Wh_Log(L"open location failed (%08X): %ls", static_cast<unsigned>(hr), path.c_str());
+    }
 }
 
 // Every explorer.exe hosts a relay window (StartExplorerHelperHost). The one in
@@ -5505,27 +5625,25 @@ inline ResolvedWebQuery ResolveWebSearch(const std::wstring& input) {
 void QueueQuery(std::wstring text);
 
 std::vector<Row> g_currentAppRows;
+std::vector<Row> g_currentFileRows;
 static int g_selectedApp = -1;
+static int g_selectedFile = -1;
+// Which column Up, Down and Enter act on.
+static bool g_filesColumnActive = false;
 static uint64_t g_lastNavTick = 0;
 
-void SetAppSelection(int index) {
-    if (!g_appButtonsOpt || g_appButtonsOpt->empty()) {
-        g_selectedApp = -1;
+// Highlights the selected button of a column and clears the rest; -1 clears
+// them all.
+void PaintColumnSelection(const std::optional<std::vector<wuxc::Button>>& buttons, int selected) {
+    if (!buttons) {
         return;
     }
-    if (index < 0) index = 0;
-    if (index >= static_cast<int>(g_appButtonsOpt->size())) {
-        index = static_cast<int>(g_appButtonsOpt->size()) - 1;
-    }
-    g_selectedApp = index;
-
     bool isLight = IsLightTheme();
-
-    for (size_t i = 0; i < g_appButtonsOpt->size(); ++i) {
-        auto& btn = (*g_appButtonsOpt)[i];
+    for (size_t i = 0; i < buttons->size(); ++i) {
+        const auto& btn = (*buttons)[i];
         if (!btn) continue;
 
-        if (static_cast<int>(i) == index) {
+        if (static_cast<int>(i) == selected) {
             if (isLight) {
                 btn.Background(MakeBrush(0x14, 0x00, 0x5F, 0xB8));
                 btn.BorderBrush(MakeBrush(0x80, 0x00, 0x5F, 0xB8));
@@ -5540,6 +5658,112 @@ void SetAppSelection(int index) {
             btn.Background(MakeBrush(0, 0, 0, 0));
             btn.BorderBrush(MakeBrush(0, 0, 0, 0));
         }
+    }
+}
+
+// Selects an app card, which makes Apps the active column.
+void SetAppSelection(int index) {
+    if (!g_appButtonsOpt || g_appButtonsOpt->empty()) {
+        g_selectedApp = -1;
+        return;
+    }
+    if (index < 0) index = 0;
+    if (index >= static_cast<int>(g_appButtonsOpt->size())) {
+        index = static_cast<int>(g_appButtonsOpt->size()) - 1;
+    }
+    g_selectedApp = index;
+    g_filesColumnActive = false;
+    PaintColumnSelection(g_appButtonsOpt, index);
+    PaintColumnSelection(g_fileButtonsOpt, -1);
+}
+
+// Selects a file row, which makes Files the active column.
+void SetFileSelection(int index) {
+    if (!g_fileButtonsOpt || g_fileButtonsOpt->empty()) {
+        g_selectedFile = -1;
+        return;
+    }
+    if (index < 0) index = 0;
+    if (index >= static_cast<int>(g_fileButtonsOpt->size())) {
+        index = static_cast<int>(g_fileButtonsOpt->size()) - 1;
+    }
+    g_selectedFile = index;
+    g_filesColumnActive = true;
+    PaintColumnSelection(g_fileButtonsOpt, index);
+    PaintColumnSelection(g_appButtonsOpt, -1);
+}
+
+// File types "Run as administrator" is offered for.
+bool CanElevatePath(const std::wstring& path) {
+    std::wstring lower = path;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
+    return lower.ends_with(L".exe") || lower.ends_with(L".bat") ||
+           lower.ends_with(L".cmd") || lower.ends_with(L".ps1") ||
+           lower.ends_with(L".msc") || lower.ends_with(L".lnk");
+}
+
+void OpenSelectedFile(int index, bool asAdmin) {
+    if (index < 0 || index >= static_cast<int>(g_currentFileRows.size())) {
+        return;
+    }
+    const std::wstring& path = g_currentFileRows[index].openPath;
+    if (path.empty()) {
+        return;
+    }
+    if (asAdmin && !CanElevatePath(path)) {
+        asAdmin = false;
+    }
+    DismissStartMenu();
+    OpenResult(path, asAdmin);
+    Wh_Log(L"open file: index %d ('%ls'), asAdmin=%d", index, path.c_str(), asAdmin ? 1 : 0);
+}
+
+// Opens the selected result's context menu, as a right-click on it would.
+// Shown in standard mode it takes the keyboard, so the arrows and Enter work
+// in it (see ContextMenuHasFocus) and Escape hands focus back to the search
+// box. Queued rather than shown here: the key usually arrives inside the
+// message hook, which is no place to open a popup.
+void OpenSelectedContextMenu() {
+    wuxc::Button target{nullptr};
+    if (g_filesColumnActive && g_fileButtonsOpt && g_selectedFile >= 0 &&
+        g_selectedFile < static_cast<int>(g_fileButtonsOpt->size())) {
+        target = (*g_fileButtonsOpt)[g_selectedFile];
+    } else if (!g_filesColumnActive && g_appButtonsOpt && g_selectedApp >= 0 &&
+               g_selectedApp < static_cast<int>(g_appButtonsOpt->size())) {
+        target = (*g_appButtonsOpt)[g_selectedApp];
+    }
+    if (!target || !target.ContextFlyout()) {
+        return;
+    }
+    try {
+        target.Dispatcher().RunAsync(
+            wuc::CoreDispatcherPriority::Normal,
+            [weak = winrt::make_weak(target)] {
+                auto button = weak.get();
+                if (!button) return;
+                auto flyout = button.ContextFlyout();
+                if (!flyout) return;
+                try {
+                    wuxc::Primitives::FlyoutShowOptions options;
+                    options.ShowMode(wuxc::Primitives::FlyoutShowMode::Standard);
+                    options.Placement(wuxc::Primitives::FlyoutPlacementMode::BottomEdgeAlignedLeft);
+                    flyout.ShowAt(button, options);
+                } catch (...) {}
+            });
+    } catch (...) {}
+}
+
+// Whether the caret sits at the end of the query, with nothing selected, so
+// Right has no text left to move over.
+bool CaretAtEndOfQuery() {
+    if (!g_ourBox) {
+        return true;
+    }
+    try {
+        return g_ourBox.SelectionLength() == 0 &&
+               g_ourBox.SelectionStart() >= static_cast<int32_t>(g_ourBox.Text().size());
+    } catch (...) {
+        return true;
     }
 }
 
@@ -5576,30 +5800,144 @@ void LaunchSelectedApp(int index, bool asAdmin) {
     }
 }
 
-void HandleNavigationKey(winrt::Windows::System::VirtualKey key, bool ctrl) {
-    uint64_t now = GetTickCount64();
-    if (now - g_lastNavTick < 60) return;
-    g_lastNavTick = now;
+bool IsNavigationKey(winrt::Windows::System::VirtualKey key) {
+    using VK = winrt::Windows::System::VirtualKey;
+    return key == VK::Down || key == VK::Up || key == VK::Enter || key == VK::Tab ||
+           key == VK::Left || key == VK::Right;
+}
 
-    if (key == winrt::Windows::System::VirtualKey::Down) {
-        if (g_appButtonsOpt && !g_appButtonsOpt->empty()) {
-            int next = (g_selectedApp < 0) ? 0 : g_selectedApp + 1;
-            if (next >= static_cast<int>(g_appButtonsOpt->size())) {
-                next = static_cast<int>(g_appButtonsOpt->size()) - 1;
-            }
-            SetAppSelection(next);
-        }
-    } else if (key == winrt::Windows::System::VirtualKey::Up) {
-        if (g_appButtonsOpt && !g_appButtonsOpt->empty()) {
-            int prev = (g_selectedApp <= 0) ? 0 : g_selectedApp - 1;
-            SetAppSelection(prev);
-        }
-    } else if (key == winrt::Windows::System::VirtualKey::Enter) {
-        if (!g_currentAppRows.empty()) {
-            int target = (g_selectedApp >= 0) ? g_selectedApp : 0;
-            LaunchSelectedApp(target, ctrl);
-        }
+// A result's context menu is open and has the keyboard: the arrows, Tab and
+// Enter are its own (Right opens its submenus).
+bool ContextMenuHasFocus() {
+    try {
+        auto focused = wux::Input::FocusManager::GetFocusedElement();
+        return focused && (focused.try_as<wuxc::MenuFlyoutItemBase>() ||
+                           focused.try_as<wuxc::MenuFlyoutPresenter>());
+    } catch (...) {
+        return false;
     }
+}
+
+// Escape reaches the CoreWindow's KeyDown only after XAML has used it to
+// close an open menu, by which time the menu no longer has focus. So a
+// menu still closing, or closed a moment ago, counts as open, and the
+// query is kept.
+static bool g_contextMenuOpen = false;
+static uint64_t g_contextMenuClosedTick = 0;
+
+void NoteContextMenuOpened() {
+    g_contextMenuOpen = true;
+}
+
+void NoteContextMenuClosed() {
+    g_contextMenuOpen = false;
+    g_contextMenuClosedTick = GetTickCount64();
+}
+
+bool EscapeBelongsToContextMenu() {
+    return g_contextMenuOpen || ContextMenuHasFocus() ||
+           GetTickCount64() - g_contextMenuClosedTick < 250;
+}
+
+// Keyboard selection. Up and Down move within the active column and Enter
+// opens what is selected there; Shift+Enter opens its context menu. Tab and Shift+Tab step through every result
+// as one list, the apps and then the files, so Tab past the last app lands on
+// the first file. Left and Right switch between the columns, but still edit
+// the query while they have text to move over: Right switches only with the
+// caret at the end, and Left only from the Files column. Returns whether the
+// key was used; a key that was not goes on to the search box.
+bool HandleNavigationKey(winrt::Windows::System::VirtualKey key, bool ctrl) {
+    using VK = winrt::Windows::System::VirtualKey;
+
+    if (ContextMenuHasFocus()) {
+        return false;
+    }
+
+    // One keypress can arrive by several routes (the message hook, the box,
+    // the CoreWindow). Act on it once, and give the other routes the same
+    // answer, so that none of them lets a used Left through to the caret.
+    static VK s_lastKey = VK::None;
+    static bool s_lastUsed = false;
+    uint64_t now = GetTickCount64();
+    if (key == s_lastKey && now - g_lastNavTick < 60) {
+        return s_lastUsed;
+    }
+
+    const bool haveApps = g_appButtonsOpt && !g_appButtonsOpt->empty();
+    const bool haveFiles = g_fileButtonsOpt && !g_fileButtonsOpt->empty();
+    const bool inFiles = g_filesColumnActive && haveFiles;
+    auto toApps = [&] { SetAppSelection(g_selectedApp < 0 ? 0 : g_selectedApp); };
+    auto toFiles = [&] { SetFileSelection(g_selectedFile < 0 ? 0 : g_selectedFile); };
+
+    bool used = true;
+    switch (key) {
+        case VK::Down:
+            if (inFiles) {
+                SetFileSelection(g_selectedFile < 0 ? 0 : g_selectedFile + 1);
+            } else if (haveApps) {
+                SetAppSelection(g_selectedApp < 0 ? 0 : g_selectedApp + 1);
+            }
+            break;
+        case VK::Up:
+            if (inFiles) {
+                SetFileSelection(g_selectedFile - 1);
+            } else if (haveApps) {
+                SetAppSelection(g_selectedApp - 1);
+            }
+            break;
+        case VK::Enter:
+            if (GetKeyState(VK_SHIFT) < 0) {
+                OpenSelectedContextMenu();
+            } else if (inFiles) {
+                OpenSelectedFile(g_selectedFile < 0 ? 0 : g_selectedFile, ctrl);
+            } else if (!g_currentAppRows.empty()) {
+                LaunchSelectedApp(g_selectedApp < 0 ? 0 : g_selectedApp, ctrl);
+            }
+            break;
+        case VK::Tab: {
+            // Used even at either end of the list, so focus never tabs out of
+            // the search box.
+            const int appCount = haveApps ? static_cast<int>(g_appButtonsOpt->size()) : 0;
+            if (GetKeyState(VK_SHIFT) >= 0) {
+                if (inFiles) {
+                    SetFileSelection(g_selectedFile + 1);
+                } else if (haveApps && g_selectedApp < appCount - 1) {
+                    SetAppSelection(g_selectedApp < 0 ? 0 : g_selectedApp + 1);
+                } else if (haveFiles) {
+                    SetFileSelection(0);
+                }
+            } else {
+                if (inFiles && g_selectedFile > 0) {
+                    SetFileSelection(g_selectedFile - 1);
+                } else if (inFiles && haveApps) {
+                    SetAppSelection(appCount - 1);
+                } else if (!inFiles && haveApps) {
+                    SetAppSelection(g_selectedApp - 1);
+                }
+            }
+            break;
+        }
+        case VK::Right:
+            used = !inFiles && haveFiles && CaretAtEndOfQuery();
+            if (used) {
+                toFiles();
+            }
+            break;
+        case VK::Left:
+            used = inFiles && haveApps;
+            if (used) {
+                toApps();
+            }
+            break;
+        default:
+            used = false;
+            break;
+    }
+
+    s_lastKey = key;
+    s_lastUsed = used;
+    g_lastNavTick = now;
+    return used;
 }
 
 // Results palette:
@@ -5613,6 +5951,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
 
     if (!g_activeAppsOpt) g_activeAppsOpt.emplace();
     if (!g_appButtonsOpt) g_appButtonsOpt.emplace();
+    if (!g_fileButtonsOpt) g_fileButtonsOpt.emplace();
 
     wuxc::Grid root;
     root.Name(L"WindhawkEverythingResults");
@@ -5729,7 +6068,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     box.PreviewKeyDown([](wf::IInspectable const&, wux::Input::KeyRoutedEventArgs const& args) {
         try {
             auto key = args.Key();
-            if (key == winrt::Windows::System::VirtualKey::Escape) {
+            if (key == winrt::Windows::System::VirtualKey::Escape && !EscapeBelongsToContextMenu()) {
                 if (g_isOverlayVisible.load() || g_isHiding.load()) {
                     if (g_ourBox) g_ourBox.Text(L"");
                     HideOverlayAnimated();
@@ -5737,12 +6076,9 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
                     return;
                 }
             }
-            if (key == winrt::Windows::System::VirtualKey::Down ||
-                key == winrt::Windows::System::VirtualKey::Up ||
-                key == winrt::Windows::System::VirtualKey::Enter) {
-                if (g_isOverlayVisible.load()) {
-                    bool ctrl = (GetKeyState(VK_CONTROL) < 0) || ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
-                    HandleNavigationKey(key, ctrl);
+            if (IsNavigationKey(key) && g_isOverlayVisible.load()) {
+                bool ctrl = (GetKeyState(VK_CONTROL) < 0) || ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
+                if (HandleNavigationKey(key, ctrl)) {
                     args.Handled(true);
                 }
             }
@@ -5916,8 +6252,10 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
     };
 
     rightHints.Children().Append(makeKeyCap(L"\u2191\u2193", L"Select"));
+    rightHints.Children().Append(makeKeyCap(L"Tab", L"Next"));
     rightHints.Children().Append(makeKeyCap(L"\u21B5", L"Open"));
     rightHints.Children().Append(makeKeyCap(L"Ctrl+\u21B5", L"Admin"));
+    rightHints.Children().Append(makeKeyCap(L"\u21E7\u21B5", L"Menu"));
     rightHints.Children().Append(makeKeyCap(L"Esc", L"Close"));
 
     wuxc::Grid::SetColumn(rightHints, 1);
@@ -5976,7 +6314,10 @@ void RenderResults() try {
 
     if (files.empty() && appNames.empty() && g_ourBox && g_ourBox.Text().empty()) {
         g_currentAppRows.clear();
+        g_currentFileRows.clear();
         g_selectedApp = -1;
+        g_selectedFile = -1;
+        g_filesColumnActive = false;
         HideOverlayAnimated();
         Wh_Log(L"render: nothing to show; menu restored");
         return;
@@ -6213,8 +6554,12 @@ void RenderResults() try {
         button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushFocused"),
             MakeBrush(0, 0, 0, 0));
 
-        button.PointerEntered([btn = button](wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const&) {
-            if (!g_activeAppsOpt) return;
+        // Weak: the button holds these handlers, and a strong self-reference
+        // would keep every card ever built alive.
+        button.PointerEntered([weakBtn = winrt::make_weak(button)](wf::IInspectable const&,
+                                                                   wux::Input::PointerRoutedEventArgs const&) {
+            auto btn = weakBtn.get();
+            if (!btn || !g_activeAppsOpt) return;
             for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
                 if ((*g_activeAppsOpt)[i].button == btn) {
                     SetAppSelection(static_cast<int>(i));
@@ -6223,8 +6568,9 @@ void RenderResults() try {
             }
         });
 
-        button.Click([btn = button](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-            if (!g_activeAppsOpt) return;
+        button.Click([weakBtn = winrt::make_weak(button)](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+            auto btn = weakBtn.get();
+            if (!btn || !g_activeAppsOpt) return;
             for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
                 if ((*g_activeAppsOpt)[i].button == btn) {
                     LaunchSelectedApp(static_cast<int>(i), false);
@@ -6233,144 +6579,152 @@ void RenderResults() try {
             }
         });
 
-        wuxc::MenuFlyout flyout;
-        if (!item.copyText.empty()) {
-            wuxc::MenuFlyoutItem copyItem;
-            copyItem.Text(L"Copy to clipboard");
-            wuxc::FontIcon copyIcon;
-            copyIcon.Glyph(L"\uE8C8");
-            copyItem.Icon(copyIcon);
-            copyItem.Click([txt = item.copyText](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                tools::CopyTextToClipboard(txt);
-            });
-            flyout.Items().Append(copyItem);
-        } else {
-            bool isWebItem = item.openPath.starts_with(L"http:") || item.openPath.starts_with(L"https:");
-            bool isSettingItem = item.isSetting;
+        wuxc::MenuFlyout menu;
+        menu.Opened([](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuOpened(); });
+        menu.Closed([](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuClosed(); });
+        // Filled in when first opened, not with the card (see the file rows).
+        // What it needs of the row is copied, less the icon pixels; the card
+        // is held weakly, since it owns this menu.
+        Row menuItem = item;
+        menuItem.icon.clear();
+        menu.Opening([item = std::move(menuItem), weakBtn = winrt::make_weak(button)](
+                         wf::IInspectable const& sender, wf::IInspectable const&) {
+            auto flyout = sender.as<wuxc::MenuFlyout>();
+            if (flyout.Items().Size() > 0) return;
+            if (!item.copyText.empty()) {
+                wuxc::MenuFlyoutItem copyItem;
+                copyItem.Text(L"Copy to clipboard");
+                wuxc::FontIcon copyIcon;
+                copyIcon.Glyph(L"\uE8C8");
+                copyItem.Icon(copyIcon);
+                copyItem.Click([txt = item.copyText](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    tools::CopyTextToClipboard(txt);
+                });
+                flyout.Items().Append(copyItem);
+            } else {
+                bool isWebItem = item.openPath.starts_with(L"http:") || item.openPath.starts_with(L"https:");
+                bool isSettingItem = item.isSetting;
 
-            wuxc::MenuFlyoutItem openItem;
-            openItem.Text(isWebItem ? L"Search in browser" : L"Open");
-            wuxc::FontIcon openIcon;
-            openIcon.Glyph(isWebItem ? L"\uE774" : L"\uE8A7");
-            openItem.Icon(openIcon);
-            openItem.Click([btn = button](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                if (!g_activeAppsOpt) return;
-                for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
-                    if ((*g_activeAppsOpt)[i].button == btn) {
-                        LaunchSelectedApp(static_cast<int>(i), false);
-                        return;
-                    }
-                }
-            });
-            flyout.Items().Append(openItem);
-
-            if (item.canRunAsAdmin && !isWebItem && !isSettingItem) {
-                wuxc::MenuFlyoutItem adminItem;
-                adminItem.Text(L"Run as administrator");
-                wuxc::FontIcon adminIcon;
-                adminIcon.Glyph(L"\uE7EF");
-                adminItem.Icon(adminIcon);
-                adminItem.Click([btn = button](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    if (!g_activeAppsOpt) return;
+                wuxc::MenuFlyoutItem openItem;
+                openItem.Text(isWebItem ? L"Search in browser" : L"Open");
+                wuxc::FontIcon openIcon;
+                openIcon.Glyph(isWebItem ? L"\uE774" : L"\uE8A7");
+                openItem.Icon(openIcon);
+                openItem.Click([weakBtn](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    auto btn = weakBtn.get();
+                    if (!btn || !g_activeAppsOpt) return;
                     for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
                         if ((*g_activeAppsOpt)[i].button == btn) {
-                            LaunchSelectedApp(static_cast<int>(i), true);
+                            LaunchSelectedApp(static_cast<int>(i), false);
                             return;
                         }
                     }
                 });
-                flyout.Items().Append(adminItem);
-            }
+                flyout.Items().Append(openItem);
 
-            if (isWebItem) {
-                std::wstring webUrl = item.openPath;
-                wuxc::MenuFlyoutItem copyUrlItem;
-                copyUrlItem.Text(L"Copy search link");
-                wuxc::FontIcon copyIcon;
-                copyIcon.Glyph(L"\uE8C8");
-                copyUrlItem.Icon(copyIcon);
-                copyUrlItem.Click([webUrl](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    CopyTextToClipboard(webUrl);
-                });
-                flyout.Items().Append(copyUrlItem);
-            } else if (!isSettingItem && !item.openPath.empty()) {
-                std::wstring locTarget = item.openPath;
-                std::wstring appTitle = item.title;
-                bool isFile = item.isFile;
-
-                if (isFile) {
-                    wuxc::MenuFlyoutSeparator sep1;
-                    flyout.Items().Append(sep1);
-
-                    wuxc::MenuFlyoutItem locItem;
-                    locItem.Text(L"Open file location");
-                    wuxc::FontIcon locIcon;
-                    locIcon.Glyph(L"\uE838");
-                    locItem.Icon(locIcon);
-                    locItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        DismissStartMenu();
-                        OpenFileLocation(locTarget);
-                    });
-                    flyout.Items().Append(locItem);
-
-                    wuxc::MenuFlyoutItem copyPathItem;
-                    copyPathItem.Text(L"Copy path");
-                    wuxc::FontIcon copyPathIcon;
-                    copyPathIcon.Glyph(L"\uE71B");
-                    copyPathItem.Icon(copyPathIcon);
-                    copyPathItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        tools::CopyTextToClipboard(locTarget);
-                    });
-                    flyout.Items().Append(copyPathItem);
-
-                    wuxc::MenuFlyoutItem shortcutItem;
-                    shortcutItem.Text(L"Create desktop shortcut");
-                    wuxc::FontIcon shortcutIcon;
-                    shortcutIcon.Glyph(L"\uE7C5");
-                    shortcutItem.Icon(shortcutIcon);
-                    shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        tools::CreateDesktopShortcut(locTarget, appTitle);
-                    });
-                    flyout.Items().Append(shortcutItem);
-
-                    wuxc::MenuFlyoutSeparator sep2;
-                    flyout.Items().Append(sep2);
-
-                    wuxc::MenuFlyoutItem propItem;
-                    propItem.Text(L"Properties");
-                    wuxc::FontIcon propIcon;
-                    propIcon.Glyph(L"\uE946");
-                    propItem.Icon(propIcon);
-                    propItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-                            DWORD explorerPid = 0;
-                            GetWindowThreadProcessId(tray, &explorerPid);
-                            if (explorerPid) {
-                                AllowSetForegroundWindow(explorerPid);
+                if (item.canRunAsAdmin && !isWebItem && !isSettingItem) {
+                    wuxc::MenuFlyoutItem adminItem;
+                    adminItem.Text(L"Run as administrator");
+                    wuxc::FontIcon adminIcon;
+                    adminIcon.Glyph(L"\uE7EF");
+                    adminItem.Icon(adminIcon);
+                    adminItem.Click([weakBtn](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        auto btn = weakBtn.get();
+                        if (!btn || !g_activeAppsOpt) return;
+                        for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
+                            if ((*g_activeAppsOpt)[i].button == btn) {
+                                LaunchSelectedApp(static_cast<int>(i), true);
+                                return;
                             }
                         }
-                        DismissStartMenu();
-                        ShowPropertiesDialog(locTarget);
                     });
-                    flyout.Items().Append(propItem);
-                } else if (!locTarget.starts_with(L"ms-settings:") && !locTarget.starts_with(L"http:") && !locTarget.starts_with(L"https:")) {
-                    wuxc::MenuFlyoutSeparator sep1;
-                    flyout.Items().Append(sep1);
+                    flyout.Items().Append(adminItem);
+                }
 
-                    wuxc::MenuFlyoutItem shortcutItem;
-                    shortcutItem.Text(L"Create desktop shortcut");
-                    wuxc::FontIcon shortcutIcon;
-                    shortcutIcon.Glyph(L"\uE7C5");
-                    shortcutItem.Icon(shortcutIcon);
-                    shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        tools::CreateDesktopShortcut(L"shell:AppsFolder\\" + locTarget, appTitle);
+                if (isWebItem) {
+                    std::wstring webUrl = item.openPath;
+                    wuxc::MenuFlyoutItem copyUrlItem;
+                    copyUrlItem.Text(L"Copy search link");
+                    wuxc::FontIcon copyIcon;
+                    copyIcon.Glyph(L"\uE8C8");
+                    copyUrlItem.Icon(copyIcon);
+                    copyUrlItem.Click([webUrl](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        CopyTextToClipboard(webUrl);
                     });
-                    flyout.Items().Append(shortcutItem);
+                    flyout.Items().Append(copyUrlItem);
+                } else if (!isSettingItem && !item.openPath.empty()) {
+                    std::wstring locTarget = item.openPath;
+                    std::wstring appTitle = item.title;
+                    bool isFile = item.isFile;
+
+                    if (isFile) {
+                        wuxc::MenuFlyoutSeparator sep1;
+                        flyout.Items().Append(sep1);
+
+                        wuxc::MenuFlyoutItem locItem;
+                        locItem.Text(L"Open file location");
+                        wuxc::FontIcon locIcon;
+                        locIcon.Glyph(L"\uE838");
+                        locItem.Icon(locIcon);
+                        locItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                            OpenFileLocation(locTarget);
+                            DismissStartMenu();
+                        });
+                        flyout.Items().Append(locItem);
+
+                        wuxc::MenuFlyoutItem copyPathItem;
+                        copyPathItem.Text(L"Copy path");
+                        wuxc::FontIcon copyPathIcon;
+                        copyPathIcon.Glyph(L"\uE71B");
+                        copyPathItem.Icon(copyPathIcon);
+                        copyPathItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                            tools::CopyTextToClipboard(locTarget);
+                        });
+                        flyout.Items().Append(copyPathItem);
+
+                        wuxc::MenuFlyoutItem shortcutItem;
+                        shortcutItem.Text(L"Create desktop shortcut");
+                        wuxc::FontIcon shortcutIcon;
+                        shortcutIcon.Glyph(L"\uE7C5");
+                        shortcutItem.Icon(shortcutIcon);
+                        shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                            tools::CreateDesktopShortcut(locTarget, appTitle);
+                        });
+                        flyout.Items().Append(shortcutItem);
+
+                        wuxc::MenuFlyoutSeparator sep2;
+                        flyout.Items().Append(sep2);
+
+                        wuxc::MenuFlyoutItem propItem;
+                        propItem.Text(L"Properties");
+                        wuxc::FontIcon propIcon;
+                        propIcon.Glyph(L"\uE946");
+                        propItem.Icon(propIcon);
+                        propItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                            AllowExplorerForeground();
+                            DismissStartMenu();
+                            ShowPropertiesDialog(locTarget);
+                        });
+                        flyout.Items().Append(propItem);
+                    } else if (!locTarget.starts_with(L"ms-settings:") && !locTarget.starts_with(L"http:") && !locTarget.starts_with(L"https:")) {
+                        wuxc::MenuFlyoutSeparator sep1;
+                        flyout.Items().Append(sep1);
+
+                        wuxc::MenuFlyoutItem shortcutItem;
+                        shortcutItem.Text(L"Create desktop shortcut");
+                        wuxc::FontIcon shortcutIcon;
+                        shortcutIcon.Glyph(L"\uE7C5");
+                        shortcutItem.Icon(shortcutIcon);
+                        shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                            tools::CreateDesktopShortcut(L"shell:AppsFolder\\" + locTarget, appTitle);
+                        });
+                        flyout.Items().Append(shortcutItem);
+                    }
                 }
             }
-        }
 
-        button.ContextFlyout(flyout);
+        });
+        button.ContextFlyout(menu);
 
         return AppCardUI{item.appIndex, item.title, item.openPath, button, item.canRunAsAdmin, item.isSetting, item.isFile};
     };
@@ -6596,6 +6950,21 @@ void RenderResults() try {
         button.Resources().Insert(winrt::box_value(L"ButtonBorderBrushFocused"),
             MakeBrush(0, 0, 0, 0));
 
+        // Hovering a row selects it, as it does an app card, so the pointer's
+        // highlight and the keyboard's are the same one. Weak: the button
+        // holds this handler.
+        button.PointerEntered([weak = winrt::make_weak(button)](wf::IInspectable const&,
+                                                                wux::Input::PointerRoutedEventArgs const&) {
+            auto btn = weak.get();
+            if (!btn || !g_fileButtonsOpt) return;
+            for (size_t i = 0; i < g_fileButtonsOpt->size(); ++i) {
+                if ((*g_fileButtonsOpt)[i] == btn) {
+                    SetFileSelection(static_cast<int>(i));
+                    break;
+                }
+            }
+        });
+
         if (!item.openPath.empty()) {
             std::wstring target = item.openPath;
             button.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
@@ -6603,148 +6972,150 @@ void RenderResults() try {
                 OpenResult(target);
             });
 
-            wuxc::MenuFlyout flyout;
-            wuxc::MenuFlyoutItem openItem;
-            openItem.Text(L"Open");
-            wuxc::FontIcon openIcon;
-            openIcon.Glyph(L"\uE8A7");
-            openItem.Icon(openIcon);
-            openItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                DismissStartMenu();
-                OpenResult(target);
-            });
-            flyout.Items().Append(openItem);
-
-            std::wstring lower = target;
-            std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
-            bool canElevate = lower.ends_with(L".exe") || lower.ends_with(L".bat") ||
-                              lower.ends_with(L".cmd") || lower.ends_with(L".ps1") ||
-                              lower.ends_with(L".msc") || lower.ends_with(L".lnk");
-            if (canElevate) {
-                wuxc::MenuFlyoutItem adminItem;
-                adminItem.Text(L"Run as administrator");
-                wuxc::FontIcon adminIcon;
-                adminIcon.Glyph(L"\uE7EF");
-                adminItem.Icon(adminIcon);
-                adminItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+            wuxc::MenuFlyout menu;
+            menu.Opened([](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuOpened(); });
+            menu.Closed([](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuClosed(); });
+            // Filled in when first opened, not with the row: every keystroke
+            // builds every row, and hardly any of their menus are ever opened.
+            menu.Opening([target, isFolder = item.isFolder, title = item.title](
+                             wf::IInspectable const& sender, wf::IInspectable const&) {
+                auto flyout = sender.as<wuxc::MenuFlyout>();
+                if (flyout.Items().Size() > 0) return;
+                wuxc::MenuFlyoutItem openItem;
+                openItem.Text(L"Open");
+                wuxc::FontIcon openIcon;
+                openIcon.Glyph(L"\uE8A7");
+                openItem.Icon(openIcon);
+                openItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     DismissStartMenu();
-                    OpenResult(target, true /* asAdmin */);
+                    OpenResult(target);
                 });
-                flyout.Items().Append(adminItem);
-            }
+                flyout.Items().Append(openItem);
 
-            if (item.isFolder) {
-                wuxc::MenuFlyoutSubItem termSub;
-                termSub.Text(L"Open in terminal");
-                wuxc::FontIcon termIcon;
-                termIcon.Glyph(L"\uE756");
-                termSub.Icon(termIcon);
-
-                auto addTermItem = [&](const wchar_t* label, bool isPowerShell, bool asAdmin) {
-                    wuxc::MenuFlyoutItem termItem;
-                    termItem.Text(winrt::hstring{label});
-                    wuxc::FontIcon icon;
-                    icon.Glyph(asAdmin ? L"\uE7EF" : L"\uE756");
-                    termItem.Icon(icon);
-                    termItem.Click([target, isPowerShell, asAdmin](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                if (CanElevatePath(target)) {
+                    wuxc::MenuFlyoutItem adminItem;
+                    adminItem.Text(L"Run as administrator");
+                    wuxc::FontIcon adminIcon;
+                    adminIcon.Glyph(L"\uE7EF");
+                    adminItem.Icon(adminIcon);
+                    adminItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                         DismissStartMenu();
-                        LaunchTerminal(target, isPowerShell, asAdmin);
+                        OpenResult(target, true /* asAdmin */);
                     });
-                    termSub.Items().Append(termItem);
-                };
-
-                addTermItem(L"Command Prompt", false, false);
-                addTermItem(L"Command Prompt (Administrator)", false, true);
-                addTermItem(L"PowerShell", true, false);
-                addTermItem(L"PowerShell (Administrator)", true, true);
-
-                flyout.Items().Append(termSub);
-            }
-
-            wuxc::MenuFlyoutSeparator sep1;
-            flyout.Items().Append(sep1);
-
-            wuxc::MenuFlyoutItem cutItem;
-            cutItem.Text(L"Cut");
-            wuxc::FontIcon cutIcon;
-            cutIcon.Glyph(L"\uE8C6");
-            cutItem.Icon(cutIcon);
-            cutItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                tools::CopyOrCutFileToClipboard(target, true /* isCut */);
-            });
-            flyout.Items().Append(cutItem);
-
-            wuxc::MenuFlyoutItem copyItem;
-            copyItem.Text(L"Copy");
-            wuxc::FontIcon copyIcon;
-            copyIcon.Glyph(L"\uE8C8");
-            copyItem.Icon(copyIcon);
-            copyItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                tools::CopyOrCutFileToClipboard(target, false /* isCut */);
-            });
-            flyout.Items().Append(copyItem);
-
-            wuxc::MenuFlyoutItem copyPathItem;
-            copyPathItem.Text(L"Copy path");
-            wuxc::FontIcon copyPathIcon;
-            copyPathIcon.Glyph(L"\uE71B");
-            copyPathItem.Icon(copyPathIcon);
-            copyPathItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                tools::CopyTextToClipboard(target);
-            });
-            flyout.Items().Append(copyPathItem);
-
-            wuxc::MenuFlyoutSeparator sep2;
-            flyout.Items().Append(sep2);
-
-            wuxc::MenuFlyoutItem locItem;
-            locItem.Text(L"Open file location");
-            wuxc::FontIcon locIcon;
-            locIcon.Glyph(L"\uE838");
-            locItem.Icon(locIcon);
-            locItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                DismissStartMenu();
-                OpenFileLocation(target);
-            });
-            flyout.Items().Append(locItem);
-
-            wuxc::MenuFlyoutItem shortcutItem;
-            shortcutItem.Text(L"Create desktop shortcut");
-            wuxc::FontIcon shortcutIcon;
-            shortcutIcon.Glyph(L"\uE7C5");
-            shortcutItem.Icon(shortcutIcon);
-            shortcutItem.Click([target, title = item.title](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                tools::CreateDesktopShortcut(target, title);
-            });
-            flyout.Items().Append(shortcutItem);
-
-            wuxc::MenuFlyoutSeparator sep3;
-            flyout.Items().Append(sep3);
-
-            wuxc::MenuFlyoutItem propItem;
-            propItem.Text(L"Properties");
-            wuxc::FontIcon propIcon;
-            propIcon.Glyph(L"\uE946");
-            propItem.Icon(propIcon);
-            propItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-                    DWORD explorerPid = 0;
-                    GetWindowThreadProcessId(tray, &explorerPid);
-                    if (explorerPid) {
-                        AllowSetForegroundWindow(explorerPid);
-                    }
+                    flyout.Items().Append(adminItem);
                 }
-                DismissStartMenu();
-                ShowPropertiesDialog(target);
-            });
-            flyout.Items().Append(propItem);
 
-            button.ContextFlyout(flyout);
+                if (isFolder) {
+                    wuxc::MenuFlyoutSubItem termSub;
+                    termSub.Text(L"Open in terminal");
+                    wuxc::FontIcon termIcon;
+                    termIcon.Glyph(L"\uE756");
+                    termSub.Icon(termIcon);
+
+                    auto addTermItem = [&](const wchar_t* label, bool isPowerShell, bool asAdmin) {
+                        wuxc::MenuFlyoutItem termItem;
+                        termItem.Text(winrt::hstring{label});
+                        wuxc::FontIcon icon;
+                        icon.Glyph(asAdmin ? L"\uE7EF" : L"\uE756");
+                        termItem.Icon(icon);
+                        termItem.Click([target, isPowerShell, asAdmin](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                            DismissStartMenu();
+                            LaunchTerminal(target, isPowerShell, asAdmin);
+                        });
+                        termSub.Items().Append(termItem);
+                    };
+
+                    addTermItem(L"Command Prompt", false, false);
+                    addTermItem(L"Command Prompt (Administrator)", false, true);
+                    addTermItem(L"PowerShell", true, false);
+                    addTermItem(L"PowerShell (Administrator)", true, true);
+
+                    flyout.Items().Append(termSub);
+                }
+
+                wuxc::MenuFlyoutSeparator sep1;
+                flyout.Items().Append(sep1);
+
+                wuxc::MenuFlyoutItem cutItem;
+                cutItem.Text(L"Cut");
+                wuxc::FontIcon cutIcon;
+                cutIcon.Glyph(L"\uE8C6");
+                cutItem.Icon(cutIcon);
+                cutItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    tools::CopyOrCutFileToClipboard(target, true /* isCut */);
+                });
+                flyout.Items().Append(cutItem);
+
+                wuxc::MenuFlyoutItem copyItem;
+                copyItem.Text(L"Copy");
+                wuxc::FontIcon copyIcon;
+                copyIcon.Glyph(L"\uE8C8");
+                copyItem.Icon(copyIcon);
+                copyItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    tools::CopyOrCutFileToClipboard(target, false /* isCut */);
+                });
+                flyout.Items().Append(copyItem);
+
+                wuxc::MenuFlyoutItem copyPathItem;
+                copyPathItem.Text(L"Copy path");
+                wuxc::FontIcon copyPathIcon;
+                copyPathIcon.Glyph(L"\uE71B");
+                copyPathItem.Icon(copyPathIcon);
+                copyPathItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    tools::CopyTextToClipboard(target);
+                });
+                flyout.Items().Append(copyPathItem);
+
+                wuxc::MenuFlyoutSeparator sep2;
+                flyout.Items().Append(sep2);
+
+                wuxc::MenuFlyoutItem locItem;
+                locItem.Text(L"Open file location");
+                wuxc::FontIcon locIcon;
+                locIcon.Glyph(L"\uE838");
+                locItem.Icon(locIcon);
+                locItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    OpenFileLocation(target);
+                    DismissStartMenu();
+                });
+                flyout.Items().Append(locItem);
+
+                wuxc::MenuFlyoutItem shortcutItem;
+                shortcutItem.Text(L"Create desktop shortcut");
+                wuxc::FontIcon shortcutIcon;
+                shortcutIcon.Glyph(L"\uE7C5");
+                shortcutItem.Icon(shortcutIcon);
+                shortcutItem.Click([target, title](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    tools::CreateDesktopShortcut(target, title);
+                });
+                flyout.Items().Append(shortcutItem);
+
+                wuxc::MenuFlyoutSeparator sep3;
+                flyout.Items().Append(sep3);
+
+                wuxc::MenuFlyoutItem propItem;
+                propItem.Text(L"Properties");
+                wuxc::FontIcon propIcon;
+                propIcon.Glyph(L"\uE946");
+                propItem.Icon(propIcon);
+                propItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    AllowExplorerForeground();
+                    DismissStartMenu();
+                    ShowPropertiesDialog(target);
+                });
+                flyout.Items().Append(propItem);
+
+            });
+            button.ContextFlyout(menu);
         }
         return button;
     };
 
     // Files on the right.
+    g_currentFileRows = files;
+    g_selectedFile = -1;
+    if (!g_fileButtonsOpt) g_fileButtonsOpt.emplace();
+    g_fileButtonsOpt->clear();
     if (files.empty()) {
         wuxc::Border emptyCard;
         emptyCard.CornerRadius(wux::CornerRadius{8, 8, 8, 8});
@@ -6786,8 +7157,18 @@ void RenderResults() try {
         g_resultsList.Children().Append(emptyCard);
     } else {
         for (const Row& file : files) {
-            g_resultsList.Children().Append(makeFileRow(file));
+            wuxc::Button row = makeFileRow(file);
+            g_resultsList.Children().Append(row);
+            g_fileButtonsOpt->push_back(row);
         }
+    }
+
+    // New results start the keyboard selection over: on the first app, or on
+    // the first file when there are no apps.
+    if (g_appButtonsOpt->empty() && !g_fileButtonsOpt->empty()) {
+        SetFileSelection(0);
+    } else {
+        g_filesColumnActive = false;
     }
 
     if (g_ourBox && g_ourBox.Text().empty()) {
@@ -7114,6 +7495,24 @@ void SearchThreadMain() {
     // an entry across index rebuilds.
     std::map<std::wstring, std::vector<BYTE>> appIconCache;
 
+    // An app's icon is the slow part of showing it the first time -- about
+    // 10 ms each through the shell, 20-50 ms for a keystroke that brings up a
+    // few new ones -- so they are fetched ahead, while there is nothing to
+    // search, one at a time so a keystroke never waits for more than one.
+    // Walks the index once, and again after a rebuild.
+    size_t prefetchNext = 0;
+    auto prefetchIcon = [&] {
+        const apps::App* app = appIndex.At(prefetchNext++);
+        if (!app || appIconCache.count(app->name)) {
+            return;
+        }
+        std::vector<BYTE> pixels;
+        if (!app->isSetting || app->pidl) {
+            FetchAppIcon(app, kIconSize, &pixels);
+        }
+        appIconCache.emplace(app->name, std::move(pixels));
+    };
+
     everything::Client client;
     if (!client.Init()) {
         Wh_Log(L"search: could not create the reply window");
@@ -7130,9 +7529,15 @@ void SearchThreadMain() {
         std::wstring query;
         {
             std::unique_lock<std::mutex> lock(g_queryMutex);
-            g_queryWake.wait(lock, [] {
+            auto hasWork = [] {
                 return g_queryDirty.load() || g_searchQuit.load() || (g_launchRequest.load() >= 0) || g_appIndexNeedsRefresh.load();
-            });
+            };
+            if (!hasWork() && prefetchNext < appIndex.Count()) {
+                lock.unlock();
+                prefetchIcon();
+                continue;
+            }
+            g_queryWake.wait(lock, hasWork);
             if (g_searchQuit.load()) {
                 if (SUCCEEDED(comHr)) {
                     CoUninitialize();
@@ -7169,6 +7574,7 @@ void SearchThreadMain() {
                 lock.lock();
                 if (rebuilt) {
                     lastHits.clear();
+                    prefetchNext = 0;
                     g_launchRequest.store(-1);
                     last.clear();
                     g_queryDirty.store(true);
@@ -7182,10 +7588,13 @@ void SearchThreadMain() {
             query = g_pendingQuery;
         }
 
-        // Settle: if starting a fresh query from empty, search immediately with
-        // zero delay so results are ready before overlay reveals.
-        // For subsequent typing bursts, settle for searchDebounceMs so we search the newer text.
-        int debounceMs = 25;
+        // Optional settle (searchDebounceMs, off by default). Not needed to keep
+        // up with typing: this thread takes the latest text each time round,
+        // so keystrokes that land during a search are folded into the next
+        // one. A delay here would only be added to every keystroke -- 25 ms of
+        // the ~110 it took, when that was the default. A fresh query from
+        // empty never waits, so results are ready before the overlay reveals.
+        int debounceMs = 0;
         {
             std::lock_guard<std::mutex> lock(g_settingsMutex);
             debounceMs = g_settings.searchDebounceMs;
@@ -7255,6 +7664,36 @@ void SearchThreadMain() {
         static const std::vector<std::wstring> s_disabledNoise;
         const std::vector<std::wstring>* noisePtr = filterNoise ? &excludedPaths : &s_disabledNoise;
 
+        // Queries and ranks the files. The query as typed is the fast one and
+        // is usually enough: Rank takes the excluded paths out of what it
+        // returns. Only when that leaves too few clean results while
+        // Everything has more matches than it sent is the query run again
+        // with the excluded paths left out at the source (WithExclusions) --
+        // it costs more, and most queries never need it. Noise still shows
+        // when it is all there is.
+        auto queryFiles = [&](const std::wstring& text) {
+            const size_t limit = static_cast<size_t>(maxFiles);
+            if (!client.Query(text, ranker::kDefaultPool, &pool, &total)) {
+                return false;
+            }
+            size_t clean = ranker::Rank(&pool, text, limit, noisePtr);
+            if (clean >= limit || total <= ranker::kDefaultPool) {
+                return true;
+            }
+            const std::wstring filtered = ranker::WithExclusions(text, noisePtr);
+            if (filtered == text) {
+                return true;
+            }
+            std::vector<everything::Result> more;
+            DWORD moreTotal = 0;
+            if (client.Query(filtered, ranker::kDefaultPool, &more, &moreTotal) &&
+                ranker::Rank(&more, text, limit, noisePtr) > clean) {
+                pool = std::move(more);
+                total = moreTotal;
+            }
+            return true;
+        };
+
         if (isIpCommand || isCCommand) {
             pool.clear();
             total = 0;
@@ -7262,16 +7701,14 @@ void SearchThreadMain() {
         } else if (isExplicitWeb) {
             if (!explicitWeb.queryTerm.empty()) {
                 auto start = std::chrono::steady_clock::now();
-                if (client.Query(explicitWeb.queryTerm, ranker::kDefaultPool, &pool, &total)) {
-                    ranker::Rank(&pool, explicitWeb.queryTerm, static_cast<size_t>(maxFiles), noisePtr);
-                }
+                queryFiles(explicitWeb.queryTerm);
                 ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                          std::chrono::steady_clock::now() - start)
                          .count();
             }
         } else {
             auto start = std::chrono::steady_clock::now();
-            bool ok = client.Query(query, ranker::kDefaultPool, &pool, &total);
+            bool ok = queryFiles(query);
             ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                           std::chrono::steady_clock::now() - start)
                           .count();
@@ -7279,8 +7716,6 @@ void SearchThreadMain() {
                 Wh_Log(L"search: '%ls' failed (Everything running?)", query.c_str());
                 pool.clear();
                 total = 0;
-            } else {
-                ranker::Rank(&pool, query, static_cast<size_t>(maxFiles), noisePtr);
             }
         }
 
@@ -7671,6 +8106,7 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
         g_resultsList = nullptr;
         if (g_activeAppsOpt) g_activeAppsOpt->clear();
         if (g_appButtonsOpt) g_appButtonsOpt->clear();
+        if (g_fileButtonsOpt) g_fileButtonsOpt->clear();
         g_appsHeaderHolder = nullptr;
         g_filesHeaderHolder = nullptr;
         g_searchBarBorder = nullptr;
@@ -7716,7 +8152,7 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
                                 if (!g_ourBox) return;
                                 auto key = args.VirtualKey();
 
-                                if (key == winrt::Windows::System::VirtualKey::Escape) {
+                                if (key == winrt::Windows::System::VirtualKey::Escape && !EscapeBelongsToContextMenu()) {
                                     if (g_isOverlayVisible.load() || g_isHiding.load()) {
                                         if (g_ourBox) g_ourBox.Text(L"");
                                         HideOverlayAnimated();
@@ -7725,12 +8161,9 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
                                     }
                                 }
 
-                                if (key == winrt::Windows::System::VirtualKey::Down ||
-                                    key == winrt::Windows::System::VirtualKey::Up ||
-                                    key == winrt::Windows::System::VirtualKey::Enter) {
-                                    if (g_isOverlayVisible.load()) {
-                                        bool ctrl = (GetKeyState(VK_CONTROL) < 0) || ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
-                                        HandleNavigationKey(key, ctrl);
+                                if (IsNavigationKey(key) && g_isOverlayVisible.load()) {
+                                    bool ctrl = (GetKeyState(VK_CONTROL) < 0) || ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0);
+                                    if (HandleNavigationKey(key, ctrl)) {
                                         args.Handled(true);
                                         return;
                                     }
@@ -7904,6 +8337,7 @@ void TeardownStartMenuUi() {
 
     g_activeAppsOpt.reset();
     g_appButtonsOpt.reset();
+    g_fileButtonsOpt.reset();
     g_resultsTranslate = nullptr;
     g_resultsHost = nullptr;
     g_ourBox = nullptr;
@@ -7917,6 +8351,7 @@ void TeardownStartMenuUi() {
     g_footerStatus = nullptr;
     g_footerHints = nullptr;
     g_currentAppRows.clear();
+    g_currentFileRows.clear();
     g_isOverlayVisible.store(false);
     g_isHiding.store(false);
     g_stockButton = nullptr;
