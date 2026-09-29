@@ -2,12 +2,12 @@
 // @id              desktop-icon-section-autohide
 // @name            Desktop Icon Section Auto-Hide & Fluent Hover Reveal
 // @description     Auto-hides desktop icons with zero wallpaper dimming. Features 60 FPS Fluent alpha fade, per-app pinning whitelist, 4-state modes, multi-anchor detection, middle-click toggle, peek mode, and drag/rename shields.
-// @version         1.3.3
+// @version         1.3.4
 // @author          Piyush Das
 // @github          https://github.com/Piyushdas1624
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lole32 -lshell32 -luser32 -lgdi32 -lmsimg32 -lwinmm -luuid
+// @compilerOptions -lcomctl32 -lole32 -lshell32 -luser32 -lgdi32 -lwinmm -luuid
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -47,9 +47,9 @@ In the mod settings, you can enable built-in pinning for the **Recycle Bin** and
 ## Credits & Attribution
 
 This mod builds upon and refines ideas and code patterns established in the Windhawk community:
-- [zen-desktop-toggle-icons](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/zen-desktop-toggle-icons.wh.cpp) by m417z — Desktop window subclassing, window creation hook, property tracking, and clean lifecycle management.
+- [zen-desktop-toggle-icons](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/zen-desktop-toggle-icons.wh.cpp) by Lanbo (Liset999) — Desktop window subclassing, window creation hook, property tracking, and clean lifecycle management.
 - [desktop-icons-transparency](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icons-transparency.wh.cpp) by zed712969-crypto — GDI icon and text alpha blending hooks enabling transparency without wallpaper dimming.
-- [transparent-desktop-icons-spotlight](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/transparent-desktop-icons-spotlight.wh.cpp) by anan521 — Desktop hover-reveal interaction concepts.
+- [transparent-desktop-icons-spotlight](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/transparent-desktop-icons-spotlight.wh.cpp) by drgutman — Desktop hover-reveal interaction concepts.
 
 ### Why this is a standalone mod
 While related mods focus either on full-desktop toggle hiding or uniform transparency, this mod introduces:
@@ -164,6 +164,7 @@ While related mods focus either on full-desktop toggle hiding or uniform transpa
 // Registered Window Messages
 // ─────────────────────────────────────────────────────────────────────────────
 static UINT g_msgRefreshSettings   = 0;
+static UINT g_msgSetupDesktop      = 0;
 static UINT g_msgModeCycle         = 0;
 static UINT g_msgMiddleClickToggle = 0;
 static UINT g_msgAutoHide          = 0;
@@ -222,6 +223,7 @@ struct WhitelistedItem {
     std::wstring name;
 };
 static std::vector<WhitelistedItem> g_whitelistedItems;
+static std::vector<bool>            g_isIndexWhitelisted;
 
 struct UnpinnedBounds {
     RECT rcBoundingBox;
@@ -255,8 +257,9 @@ static void RepaintDesktop(HWND hListView);
 static void StartFadeTransition(HWND hwndShellView, int targetOpacity);
 static bool IsCursorInTriggerSection(HWND hwndShell, HWND hwndListView);
 static void RefreshDesktopItemsCache(HWND hListView);
-static bool IsItemWhitelisted(HWND hListView, int itemIndex);
+static bool IsItemWhitelisted(int itemIndex);
 static bool IsTextWhitelisted(LPCWSTR pszText, int cch);
+static void LoadSettings();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DPI Scaling Helpers
@@ -283,34 +286,42 @@ static int ScaleForDpi(int px, int dpi)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Resolve System Display Names for Known Folders
+// Resolve System Display Names for Known Folders (Cached once)
 // ─────────────────────────────────────────────────────────────────────────────
 static void InitWhitelistNames()
 {
+    if (g_szRecycleBinName[0] != L'\0' && g_szThisPCName[0] != L'\0') {
+        return;
+    }
+
     bool coInit = SUCCEEDED(CoInitialize(NULL));
 
-    PIDLIST_ABSOLUTE pidlRecycle = NULL;
-    if (SUCCEEDED(SHGetKnownFolderIDList(FOLDERID_RecycleBinFolder, 0, NULL, &pidlRecycle)) && pidlRecycle) {
-        SHFILEINFOW sfi = {};
-        if (SHGetFileInfoW((LPCWSTR)pidlRecycle, 0, &sfi, sizeof(sfi), SHGFI_PIDL | SHGFI_DISPLAYNAME)) {
-            wcsncpy_s(g_szRecycleBinName, sfi.szDisplayName, _TRUNCATE);
-        }
-        CoTaskMemFree(pidlRecycle);
-    }
     if (g_szRecycleBinName[0] == L'\0') {
-        wcscpy_s(g_szRecycleBinName, L"Recycle Bin");
+        PIDLIST_ABSOLUTE pidlRecycle = NULL;
+        if (SUCCEEDED(SHGetKnownFolderIDList(FOLDERID_RecycleBinFolder, 0, NULL, &pidlRecycle)) && pidlRecycle) {
+            SHFILEINFOW sfi = {};
+            if (SHGetFileInfoW((LPCWSTR)pidlRecycle, 0, &sfi, sizeof(sfi), SHGFI_PIDL | SHGFI_DISPLAYNAME)) {
+                wcsncpy_s(g_szRecycleBinName, sfi.szDisplayName, _TRUNCATE);
+            }
+            CoTaskMemFree(pidlRecycle);
+        }
+        if (g_szRecycleBinName[0] == L'\0') {
+            wcscpy_s(g_szRecycleBinName, L"Recycle Bin");
+        }
     }
 
-    PIDLIST_ABSOLUTE pidlComputer = NULL;
-    if (SUCCEEDED(SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, NULL, &pidlComputer)) && pidlComputer) {
-        SHFILEINFOW sfi = {};
-        if (SHGetFileInfoW((LPCWSTR)pidlComputer, 0, &sfi, sizeof(sfi), SHGFI_PIDL | SHGFI_DISPLAYNAME)) {
-            wcsncpy_s(g_szThisPCName, sfi.szDisplayName, _TRUNCATE);
-        }
-        CoTaskMemFree(pidlComputer);
-    }
     if (g_szThisPCName[0] == L'\0') {
-        wcscpy_s(g_szThisPCName, L"This PC");
+        PIDLIST_ABSOLUTE pidlComputer = NULL;
+        if (SUCCEEDED(SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, NULL, &pidlComputer)) && pidlComputer) {
+            SHFILEINFOW sfi = {};
+            if (SHGetFileInfoW((LPCWSTR)pidlComputer, 0, &sfi, sizeof(sfi), SHGFI_PIDL | SHGFI_DISPLAYNAME)) {
+                wcsncpy_s(g_szThisPCName, sfi.szDisplayName, _TRUNCATE);
+            }
+            CoTaskMemFree(pidlComputer);
+        }
+        if (g_szThisPCName[0] == L'\0') {
+            wcscpy_s(g_szThisPCName, L"This PC");
+        }
     }
 
     if (coInit) CoUninitialize();
@@ -412,7 +423,6 @@ static bool MatchPattern(const std::wstring& text, const std::wstring& pattern)
     if (pattern.empty() || text.empty()) return false;
     if (_wcsicmp(text.c_str(), pattern.c_str()) == 0) return true;
 
-    // Wildcard matching if pattern contains * or ?
     if (pattern.find_first_of(L"*?") != std::wstring::npos) {
         return WildcardMatch(pattern.c_str(), text.c_str());
     }
@@ -424,12 +434,13 @@ static bool MatchPattern(const std::wstring& text, const std::wstring& pattern)
 
     if (textLower == patLower) return true;
 
-    // Whole-word / token matching: pattern must appear with word boundaries
-    size_t pos = textLower.find(patLower);
-    if (pos != std::wstring::npos) {
-        bool leftOk = (pos == 0) || !iswalnum(textLower[pos - 1]);
+    // Whole-word / token matching across all occurrences in the label
+    size_t pos = 0;
+    while ((pos = textLower.find(patLower, pos)) != std::wstring::npos) {
+        bool leftOk  = (pos == 0) || !iswalnum(textLower[pos - 1]);
         bool rightOk = (pos + patLower.length() == textLower.length()) || !iswalnum(textLower[pos + patLower.length()]);
         if (leftOk && rightOk) return true;
+        pos++;
     }
 
     return false;
@@ -486,8 +497,12 @@ static void RefreshDesktopItemsCache(HWND hListView)
     SetRectEmpty(&g_unpinnedBounds.rcBoundingBox);
 
     int totalCount = (int)SendMessageW(hListView, LVM_GETITEMCOUNT, 0, 0);
-    if (totalCount <= 0) return;
+    if (totalCount <= 0) {
+        g_isIndexWhitelisted.clear();
+        return;
+    }
 
+    g_isIndexWhitelisted.assign(totalCount, false);
     bool firstUnpinned = true;
 
     for (int i = 0; i < totalCount; ++i) {
@@ -516,6 +531,7 @@ static void RefreshDesktopItemsCache(HWND hListView)
         bool isPinned = g_settings.whitelistPinned && IsTextWhitelisted(text);
 
         if (isPinned) {
+            g_isIndexWhitelisted[i] = true;
             WhitelistedItem wItem;
             wItem.index = i;
             wItem.rcBounds = rcBounds;
@@ -538,27 +554,12 @@ static void RefreshDesktopItemsCache(HWND hListView)
     }
 }
 
-static bool IsItemWhitelisted(HWND hListView, int itemIndex)
+static bool IsItemWhitelisted(int itemIndex)
 {
-    if (!g_settings.whitelistPinned || itemIndex < 0) return false;
-
-    for (const auto& item : g_whitelistedItems) {
-        if (item.index == itemIndex) return true;
+    if (!g_settings.whitelistPinned || itemIndex < 0 || itemIndex >= (int)g_isIndexWhitelisted.size()) {
+        return false;
     }
-
-    if (hListView && IsWindow(hListView)) {
-        WCHAR text[MAX_PATH] = {};
-        LVITEMW item = {};
-        item.mask = LVIF_TEXT;
-        item.iItem = itemIndex;
-        item.iSubItem = 0;
-        item.pszText = text;
-        item.cchTextMax = MAX_PATH;
-        if (SendMessageW(hListView, LVM_GETITEMTEXTW, itemIndex, (LPARAM)&item) > 0 || text[0] != L'\0') {
-            return IsTextWhitelisted(text);
-        }
-    }
-    return false;
+    return g_isIndexWhitelisted[itemIndex];
 }
 
 static bool IsCursorOverOrNearPinnedItem(POINT ptClient, int margin)
@@ -583,8 +584,6 @@ static void LogWhitelistedItemsAudit(HWND hListView)
 {
     if (!hListView || !IsWindow(hListView)) return;
 
-    RefreshDesktopItemsCache(hListView);
-
     int totalCount  = (int)SendMessageW(hListView, LVM_GETITEMCOUNT, 0, 0);
     int pinnedCount = (int)g_whitelistedItems.size();
 
@@ -607,13 +606,7 @@ static void LogWhitelistedItemsAudit(HWND hListView)
             SendMessageW(hListView, LVM_GETITEMW, 0, (LPARAM)&item);
         }
 
-        bool isPinned = false;
-        for (const auto& wItem : g_whitelistedItems) {
-            if (wItem.index == i) {
-                isPinned = true;
-                break;
-            }
-        }
+        bool isPinned = IsItemWhitelisted(i);
 
         if (isPinned) {
             Wh_Log(L"  [#%02d] [PINNED]    \"%s\"", i + 1, text);
@@ -1053,22 +1046,26 @@ static void CycleDesktopMode(HWND hwndShellView)
         }
         else {
             PlayDesktopSound(2);
-            bool inside = IsCursorInTriggerSection(hwndShellView, hwndListView);
-            if (inside) {
-                g_currentState = STATE_AUTO_REVEALED;
-                DWORD now = GetTickCount();
-                SetPropW(hwndShellView, L"ZenLastInsideTick", UlongToHandle(now));
-                SetPropW(hwndShellView, L"ZenLastActiveTick", UlongToHandle(now));
+            if (!g_settings.enableAutoHide) {
+                g_currentState = STATE_PINNED_VISIBLE;
                 StartFadeTransition(hwndShellView, 100);
-                if (g_settings.enableAutoHide) {
-                    SetTimer(hwndShellView, TIMER_TRACK_CURSOR, TIMER_TRACK_INTERVAL_MS, NULL);
-                }
+                Wh_Log(L"Mode -> SHOW_ALL (auto-hide disabled)");
             } else {
-                g_currentState = STATE_AUTO_HIDDEN;
-                StartFadeTransition(hwndShellView, 0);
-                KillTimer(hwndShellView, TIMER_TRACK_CURSOR);
+                bool inside = IsCursorInTriggerSection(hwndShellView, hwndListView);
+                if (inside) {
+                    g_currentState = STATE_AUTO_REVEALED;
+                    DWORD now = GetTickCount();
+                    SetPropW(hwndShellView, L"ZenLastInsideTick", UlongToHandle(now));
+                    SetPropW(hwndShellView, L"ZenLastActiveTick", UlongToHandle(now));
+                    StartFadeTransition(hwndShellView, 100);
+                    SetTimer(hwndShellView, TIMER_TRACK_CURSOR, TIMER_TRACK_INTERVAL_MS, NULL);
+                } else {
+                    g_currentState = STATE_AUTO_HIDDEN;
+                    StartFadeTransition(hwndShellView, 0);
+                    KillTimer(hwndShellView, TIMER_TRACK_CURSOR);
+                }
+                Wh_Log(L"Mode -> AUTO (inside=%d)", (int)inside);
             }
-            Wh_Log(L"Mode -> AUTO (inside=%d)", (int)inside);
         }
     } else {
         if (g_currentState == STATE_PINNED_VISIBLE || g_currentState == STATE_AUTO_REVEALED || g_currentOpacity > 0) {
@@ -1183,7 +1180,6 @@ BOOL WINAPI ImageList_DrawIndirect_Hook(IMAGELISTDRAWPARAMS* pimldp)
         if (!(params.fState & ILS_ALPHA)) {
             params.Frame = 255;
         }
-        params.fState |= ILS_ALPHA;
         params.Frame = (DWORD)((params.Frame * g_currentOpacity) / 100);
 
         g_inDirectHook = true;
@@ -1232,6 +1228,11 @@ int WINAPI DrawShadowText_Hook(
     COLORREF crText, COLORREF crShadow, int ixOffset, int iyOffset
 ) {
     if (g_inDesktopPaint) {
+        // Measurement call pass-through must precede opacity suppression
+        if (dwFlags & DT_CALCRECT) {
+            return DrawShadowText_Original(hdc, pszText, cch, prc, dwFlags, crText, crShadow, ixOffset, iyOffset);
+        }
+
         if (g_isWhitelistedItemDrawing) {
             return DrawShadowText_Original(hdc, pszText, cch, prc, dwFlags, crText, crShadow, ixOffset, iyOffset);
         }
@@ -1244,9 +1245,10 @@ int WINAPI DrawShadowText_Hook(
         }
 
         RECT rc = *prc;
-        if (dwFlags & DT_CALCRECT) {
-            return DrawShadowText_Original(hdc, pszText, cch, prc, dwFlags, crText, crShadow, ixOffset, iyOffset);
-        }
+        int padX = std::max(4, std::abs(ixOffset) + 2);
+        int padY = std::max(4, std::abs(iyOffset) + 2);
+        rc.right  += padX;
+        rc.bottom += padY;
 
         int w = rc.right - rc.left;
         int h = rc.bottom - rc.top;
@@ -1260,9 +1262,9 @@ int WINAPI DrawShadowText_Hook(
 
         BitBlt(hdcMem, 0, 0, w, h, hdc, rc.left, rc.top, SRCCOPY);
 
-        RECT rcMem = { 0, 0, w, h };
+        RECT rcMem = { 0, 0, w - padX, h - padY };
         g_inTextHook = true;
-        DrawShadowText_Original(hdcMem, pszText, cch, &rcMem, dwFlags, crText, crShadow, ixOffset, iyOffset);
+        int result = DrawShadowText_Original(hdcMem, pszText, cch, &rcMem, dwFlags, crText, crShadow, ixOffset, iyOffset);
         g_inTextHook = false;
 
         BLENDFUNCTION bf = {};
@@ -1274,7 +1276,7 @@ int WINAPI DrawShadowText_Hook(
         GdiAlphaBlend_Original(hdc, rc.left, rc.top, w, h, hdcMem, 0, 0, w, h, bf);
 
         SelectObject(hdcMem, hOldFont);
-        return 1;
+        return result;
     }
     return DrawShadowText_Original(hdc, pszText, cch, prc, dwFlags, crText, crShadow, ixOffset, iyOffset);
 }
@@ -1286,6 +1288,11 @@ int WINAPI DrawTextW_Hook(
     HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, UINT format
 ) {
     if (g_inDesktopPaint && !g_inTextHook) {
+        // Measurement call pass-through must precede opacity suppression
+        if (format & DT_CALCRECT) {
+            return DrawTextW_Original(hdc, lpchText, cchText, lprc, format);
+        }
+
         if (g_isWhitelistedItemDrawing) {
             return DrawTextW_Original(hdc, lpchText, cchText, lprc, format);
         }
@@ -1294,10 +1301,6 @@ int WINAPI DrawTextW_Hook(
             return 1;
         }
         if (g_currentOpacity >= 100) {
-            return DrawTextW_Original(hdc, lpchText, cchText, lprc, format);
-        }
-
-        if (format & DT_CALCRECT) {
             return DrawTextW_Original(hdc, lpchText, cchText, lprc, format);
         }
 
@@ -1319,7 +1322,7 @@ int WINAPI DrawTextW_Hook(
 
         RECT rcMem = { 0, 0, w, h };
         g_inTextHook = true;
-        DrawTextW_Original(hdcMem, lpchText, cchText, &rcMem, format);
+        int result = DrawTextW_Original(hdcMem, lpchText, cchText, &rcMem, format);
         g_inTextHook = false;
 
         BLENDFUNCTION bf = {};
@@ -1331,7 +1334,7 @@ int WINAPI DrawTextW_Hook(
         GdiAlphaBlend_Original(hdc, rc.left, rc.top, w, h, hdcMem, 0, 0, w, h, bf);
 
         SelectObject(hdcMem, hOldFont);
-        return 1;
+        return result;
     }
     return DrawTextW_Original(hdc, lpchText, cchText, lprc, format);
 }
@@ -1377,6 +1380,7 @@ BOOL WINAPI ExtTextOutW_Hook(
         BitBlt(hdcMem, 0, 0, w, h, hdc, rc.left, rc.top, SRCCOPY);
 
         SetTextColor(hdcMem, GetTextColor(hdc));
+        SetTextAlign(hdcMem, GetTextAlign(hdc));
         SetBkMode(hdcMem, TRANSPARENT);
 
         g_inTextHook = true;
@@ -1461,7 +1465,7 @@ LRESULT CALLBACK DesktopListViewSubclassProc(
             SendMessageW(hWnd, LVM_HITTEST, 0, (LPARAM)&ht);
 
             bool onEmptySpace = (ht.iItem == -1) ||
-                                (g_currentOpacity == 0 && (!g_settings.whitelistPinned || !IsItemWhitelisted(hWnd, ht.iItem)));
+                                (g_currentOpacity == 0 && (!g_settings.whitelistPinned || !IsItemWhitelisted(ht.iItem)));
             if (onEmptySpace) {
                 return 0; // Prevent middle-click scroll anchor
             }
@@ -1472,7 +1476,7 @@ LRESULT CALLBACK DesktopListViewSubclassProc(
             SendMessageW(hWnd, LVM_HITTEST, 0, (LPARAM)&ht);
 
             bool onEmptySpace = (ht.iItem == -1) ||
-                                (g_currentOpacity == 0 && (!g_settings.whitelistPinned || !IsItemWhitelisted(hWnd, ht.iItem)));
+                                (g_currentOpacity == 0 && (!g_settings.whitelistPinned || !IsItemWhitelisted(ht.iItem)));
             if (onEmptySpace) {
                 if (hwndParent) {
                     PostMessageW(hwndParent, g_msgMiddleClickToggle, 0, 0);
@@ -1488,7 +1492,7 @@ LRESULT CALLBACK DesktopListViewSubclassProc(
         ht.pt = ptMouseClient;
         SendMessageW(hWnd, LVM_HITTEST, 0, (LPARAM)&ht);
 
-        bool isOverWhitelisted = (ht.iItem != -1 && g_settings.whitelistPinned && IsItemWhitelisted(hWnd, ht.iItem));
+        bool isOverWhitelisted = (ht.iItem != -1 && g_settings.whitelistPinned && IsItemWhitelisted(ht.iItem));
         if (isOverWhitelisted || isOverPinned) {
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
         }
@@ -1573,6 +1577,56 @@ LRESULT CALLBACK DesktopListViewSubclassProc(
 LRESULT CALLBACK DesktopShellViewSubclassProc(
     HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR)
 {
+    if (uMsg == g_msgSetupDesktop) {
+        HWND hwndListView = FindWindowExW(hWnd, NULL, L"SysListView32", NULL);
+        if (!hwndListView) return 0;
+
+        InitWhitelistNames();
+        g_desktopItemsCacheDirty = false;
+        RefreshDesktopItemsCache(hwndListView);
+        LogWhitelistedItemsAudit(hwndListView);
+
+        if (!g_settings.enableAutoHide) {
+            g_currentState   = STATE_PINNED_VISIBLE;
+            g_currentOpacity = 100;
+            g_targetOpacity  = 100;
+            KillTimer(hWnd, TIMER_TRACK_CURSOR);
+            RepaintDesktop(hwndListView);
+            return 0;
+        }
+
+        if (g_settings.initialMode == 1) {
+            g_currentState   = STATE_PINNED_VISIBLE;
+            g_currentOpacity = 100;
+            g_targetOpacity  = 100;
+            KillTimer(hWnd, TIMER_TRACK_CURSOR);
+            RepaintDesktop(hwndListView);
+        } else if (g_settings.initialMode == 2) {
+            g_currentState   = STATE_PINNED_HIDDEN;
+            g_currentOpacity = 0;
+            g_targetOpacity  = 0;
+            KillTimer(hWnd, TIMER_TRACK_CURSOR);
+            RepaintDesktop(hwndListView);
+        } else {
+            bool inside = IsCursorInTriggerSection(hWnd, hwndListView);
+            if (inside) {
+                g_currentState   = STATE_AUTO_REVEALED;
+                g_currentOpacity = 100;
+                g_targetOpacity  = 100;
+                DWORD now = GetTickCount();
+                SetPropW(hWnd, L"ZenLastInsideTick", UlongToHandle(now));
+                SetPropW(hWnd, L"ZenLastActiveTick", UlongToHandle(now));
+                SetTimer(hWnd, TIMER_TRACK_CURSOR, TIMER_TRACK_INTERVAL_MS, NULL);
+            } else {
+                g_currentState   = STATE_AUTO_HIDDEN;
+                g_currentOpacity = 0;
+                g_targetOpacity  = 0;
+            }
+            RepaintDesktop(hwndListView);
+        }
+        return 0;
+    }
+
     if (uMsg == g_msgUninit) {
         KillTimer(hWnd, TIMER_TRACK_CURSOR);
         KillTimer(hWnd, TIMER_FADE_ANIMATION);
@@ -1645,9 +1699,10 @@ LRESULT CALLBACK DesktopShellViewSubclassProc(
     }
 
     if (uMsg == g_msgRefreshSettings) {
+        LoadSettings();
         HWND hwndListView = FindWindowExW(hWnd, NULL, L"SysListView32", NULL);
         if (hwndListView) {
-            g_desktopItemsCacheDirty = true;
+            g_desktopItemsCacheDirty = false;
             RefreshDesktopItemsCache(hwndListView);
             LogWhitelistedItemsAudit(hwndListView);
         }
@@ -1679,8 +1734,7 @@ LRESULT CALLBACK DesktopShellViewSubclassProc(
             }
             if ((pnmcd->dwDrawStage & CDDS_ITEMPREPAINT) == CDDS_ITEMPREPAINT) {
                 int itemIdx = (int)pnmcd->dwItemSpec;
-                HWND hwndListView = pnm->hwndFrom ? pnm->hwndFrom : g_hDesktopListView;
-                g_isWhitelistedItemDrawing = IsItemWhitelisted(hwndListView, itemIdx);
+                g_isWhitelistedItemDrawing = IsItemWhitelisted(itemIdx);
                 return lr | CDRF_NOTIFYPOSTPAINT;
             }
             if ((pnmcd->dwDrawStage & CDDS_ITEMPOSTPAINT) == CDDS_ITEMPOSTPAINT) {
@@ -1903,7 +1957,7 @@ LRESULT CALLBACK DesktopShellViewSubclassProc(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shared Desktop View Setup (Strictly in-process)
+// Shared Desktop View Setup (Strictly in-process, dispatched to UI thread)
 // ─────────────────────────────────────────────────────────────────────────────
 static void SetupDesktopView(HWND hwndShell, HWND hwndListView)
 {
@@ -1920,40 +1974,9 @@ static void SetupDesktopView(HWND hwndShell, HWND hwndListView)
     WindhawkUtils::SetWindowSubclassFromAnyThread(hwndShell, DesktopShellViewSubclassProc, 0);
     WindhawkUtils::SetWindowSubclassFromAnyThread(hwndListView, DesktopListViewSubclassProc, 0);
 
-    g_desktopItemsCacheDirty = true;
-    RefreshDesktopItemsCache(hwndListView);
-    LogWhitelistedItemsAudit(hwndListView);
-
-    if (g_settings.initialMode == 1) {
-        g_currentState = STATE_PINNED_VISIBLE;
-        g_currentOpacity = 100;
-        g_targetOpacity  = 100;
-        KillTimer(hwndShell, TIMER_TRACK_CURSOR);
-        RepaintDesktop(hwndListView);
-    } else if (g_settings.initialMode == 2) {
-        g_currentState = STATE_PINNED_HIDDEN;
-        g_currentOpacity = 0;
-        g_targetOpacity  = 0;
-        KillTimer(hwndShell, TIMER_TRACK_CURSOR);
-        RepaintDesktop(hwndListView);
-    } else {
-        bool inside = IsCursorInTriggerSection(hwndShell, hwndListView);
-        if (inside) {
-            g_currentState = STATE_AUTO_REVEALED;
-            g_currentOpacity = 100;
-            g_targetOpacity  = 100;
-            DWORD now = GetTickCount();
-            SetPropW(hwndShell, L"ZenLastInsideTick", UlongToHandle(now));
-            SetPropW(hwndShell, L"ZenLastActiveTick", UlongToHandle(now));
-            if (g_settings.enableAutoHide) {
-                SetTimer(hwndShell, TIMER_TRACK_CURSOR, TIMER_TRACK_INTERVAL_MS, NULL);
-            }
-        } else {
-            g_currentState = STATE_AUTO_HIDDEN;
-            g_currentOpacity = 0;
-            g_targetOpacity  = 0;
-        }
-        RepaintDesktop(hwndListView);
+    // Dispatch cache build, initial mode application, and timers to the desktop UI thread
+    if (g_msgSetupDesktop) {
+        SendMessageW(hwndShell, g_msgSetupDesktop, 0, 0);
     }
 }
 
@@ -2052,19 +2075,20 @@ HWND WINAPI Hook_CreateWindowExW(
 // ─────────────────────────────────────────────────────────────────────────────
 BOOL Wh_ModInit()
 {
-    Wh_Log(L"=== Wh_ModInit v1.3.3 ===");
+    Wh_Log(L"=== Wh_ModInit v1.3.4 ===");
 
     QueryPerformanceFrequency(&g_qpcFreq);
 
     g_msgRefreshSettings   = RegisterWindowMessageW(L"Windhawk.SectionAutoHide.DesktopIcon.RefreshSettings");
+    g_msgSetupDesktop      = RegisterWindowMessageW(L"Windhawk.SectionAutoHide.DesktopIcon.SetupDesktop");
     g_msgModeCycle         = RegisterWindowMessageW(L"Windhawk.SectionAutoHide.DesktopIcon.ModeCycle");
     g_msgMiddleClickToggle = RegisterWindowMessageW(L"Windhawk.SectionAutoHide.DesktopIcon.MiddleClickToggle");
     g_msgAutoHide          = RegisterWindowMessageW(L"Windhawk.SectionAutoHide.DesktopIcon.AutoHide");
     g_msgAutoRestore       = RegisterWindowMessageW(L"Windhawk.SectionAutoHide.DesktopIcon.AutoRestore");
     g_msgUninit            = RegisterWindowMessageW(L"Windhawk.SectionAutoHide.DesktopIcon.Uninit");
 
-    if (!g_msgRefreshSettings || !g_msgModeCycle || !g_msgMiddleClickToggle ||
-        !g_msgAutoHide || !g_msgAutoRestore || !g_msgUninit) {
+    if (!g_msgRefreshSettings || !g_msgSetupDesktop || !g_msgModeCycle ||
+        !g_msgMiddleClickToggle || !g_msgAutoHide || !g_msgAutoRestore || !g_msgUninit) {
         Wh_Log(L"FAILED to register private window messages");
         return FALSE;
     }
@@ -2132,13 +2156,11 @@ void Wh_ModUninit()
 void Wh_ModSettingsChanged()
 {
     Wh_Log(L"=== Settings changed ===");
-    LoadSettings();
-
     if (g_hDesktopDefView && IsWindow(g_hDesktopDefView)) {
         DWORD pid = 0;
         GetWindowThreadProcessId(g_hDesktopDefView, &pid);
         if (pid == GetCurrentProcessId() && g_msgRefreshSettings) {
-            PostMessageW(g_hDesktopDefView, g_msgRefreshSettings, 0, 0);
+            SendMessageW(g_hDesktopDefView, g_msgRefreshSettings, 0, 0);
         }
     }
 }
