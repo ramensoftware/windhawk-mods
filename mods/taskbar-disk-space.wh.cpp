@@ -62,8 +62,8 @@ The same source works with Windhawk 1.7.3 and 2.0. Windows 11 22H2 or newer with
 the native taskbar is required. ExplorerPatcher and StartAllBack are not supported.
 The indicator is placed on the left side of the primary taskbar; adjust **Left
 offset** when Widgets or another taskbar mod occupies that area. **Reserve space**
-is disabled by default for compatibility with the original layout and can be
-enabled when the indicator overlaps Start or app buttons.
+uses **Auto** by default: it reserves room only when Windows is configured with
+left-aligned taskbar buttons. **Always** and **Never** are also available.
 
 ## Русский
 
@@ -72,7 +72,8 @@ enabled when the indicator overlaps Start or app buttons.
 панели. При отображаемом имени используются две строки, при скрытом — одна.
 Доступны десять пар цветов для бледной полосы свободного/занятого места.
 По умолчанию обновление выполняется раз в 10 минут, а резервирование места
-перед кнопками приложений выключено.
+работает в режиме «Автоматически»: место добавляется только при левом
+выравнивании кнопок панели. Доступны также режимы «Всегда» и «Никогда».
 */
 // ==/WindhawkModReadme==
 
@@ -196,11 +197,19 @@ enabled when the indicator overlaps Start or app buttons.
   #! $min: 0
   #! $max: 1200
   #! $format: slider
-- ReserveSpace: false
+- ReserveSpace: "auto"
   $name: Reserve space before app buttons
   $name:ru-RU: Зарезервировать место перед кнопками приложений
-  $description: Add a taskbar margin so Start and app buttons do not overlap the indicator. Disabled by default.
-  $description:ru-RU: Добавляет отступ, чтобы кнопки Пуск и приложений не перекрывали индикатор. По умолчанию выключено.
+  $description: Automatically reserve room for left-aligned taskbar buttons. Choose Always or Never to override it.
+  $description:ru-RU: Автоматически резервирует место при левом выравнивании кнопок панели. Режимы «Всегда» и «Никогда» позволяют переопределить это.
+  $options:
+    - "auto": "Auto"
+    - "always": "Always"
+    - "never": "Never"
+  $options:ru-RU:
+    - "auto": "Автоматически"
+    - "always": "Всегда"
+    - "never": "Никогда"
 */
 // ==/WindhawkModSettings==
 
@@ -245,7 +254,7 @@ struct Settings {
     int interval = 600;
     int width = 260;
     int offset = 160;
-    bool reserve = false;
+    std::wstring reserveMode = L"auto";
 };
 struct Reading {
     std::wstring title;
@@ -311,6 +320,26 @@ std::wstring StringSetting(PCWSTR name) {
 
 bool IsRussianUi() {
     return PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN;
+}
+
+bool TaskbarIconsLeftAligned() {
+    HKEY key = nullptr;
+    constexpr wchar_t keyPath[] =
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, keyPath, 0, KEY_READ, &key) !=
+        ERROR_SUCCESS) {
+        return false;
+    }
+    DWORD alignment = 1;
+    DWORD type = 0;
+    DWORD size = sizeof(alignment);
+    const LONG result = RegQueryValueExW(key, L"TaskbarAl", nullptr, &type,
+                                         reinterpret_cast<BYTE*>(&alignment), &size);
+    RegCloseKey(key);
+    // Windows uses 0 for left and 1 for centered. Missing or malformed values
+    // are treated as centered, which avoids changing the user's layout.
+    return result == ERROR_SUCCESS && type == REG_DWORD && size == sizeof(alignment) &&
+           alignment == 0;
 }
 
 std::wstring UiText(bool russian, PCWSTR english, PCWSTR russianText) {
@@ -410,7 +439,14 @@ void LoadSettings() {
     settings.interval = std::clamp(Wh_GetIntSetting(L"UpdateInterval"), 1, 3600);
     settings.width = std::clamp(Wh_GetIntSetting(L"Width"), 180, 600);
     settings.offset = std::clamp(Wh_GetIntSetting(L"LeftOffset"), 0, 1200);
-    settings.reserve = Wh_GetIntSetting(L"ReserveSpace") != 0;
+    settings.reserveMode = StringSetting(L"ReserveSpace");
+    // Migrate installations that used the old boolean setting. Windhawk
+    // keeps the same setting key when its type changes, so accept both forms.
+    if (settings.reserveMode != L"auto" && settings.reserveMode != L"always" &&
+        settings.reserveMode != L"never") {
+        settings.reserveMode = (settings.reserveMode == L"true" ||
+                                settings.reserveMode == L"1") ? L"always" : L"never";
+    }
     std::lock_guard lock(g_settingsMutex);
     g_settings = std::move(settings);
 }
@@ -444,14 +480,7 @@ std::wstring CapacityText(ULONGLONG freeBytes, ULONGLONG totalBytes, bool compac
            (russian ? L" ГиБ" : L" GiB");
 }
 
-// Keep the test helper's historical Russian output while production uses the
-// user's Windows UI language.
-[[maybe_unused]] std::wstring CapacityText(ULONGLONG freeBytes, ULONGLONG totalBytes,
-                                           bool compact = false) {
-    return CapacityText(freeBytes, totalBytes, compact, true);
-}
-
-Reading ReadDisk(const Settings& settings, bool russian = true) {
+Reading ReadDisk(const Settings& settings, bool russian) {
     if (settings.drive.empty()) {
         return {UiText(russian, L"Select a drive", L"Выберите диск"),
                 UiText(russian, L"Invalid drive letter", L"Некорректная буква диска")};
@@ -862,13 +891,16 @@ void UpdateUi(HWND window, const Settings& settings, const Reading& reading) {
         auto margin = g_ui.repeater.Margin();
         double base = margin.Left;
         if (g_ui.marginApplied && std::abs(base - g_ui.lastMargin) < 0.01) base -= g_ui.reserved;
-        g_ui.reserved = settings.reserve ? settings.offset + width + 12 : 0;
+        const bool reserve = settings.reserveMode == L"always" ||
+                             (settings.reserveMode == L"auto" &&
+                              TaskbarIconsLeftAligned());
+        g_ui.reserved = reserve ? settings.offset + width + 12 : 0;
         double desired = base + g_ui.reserved;
         if (std::abs(margin.Left - desired) > 0.01) {
             margin.Left = desired;
             g_ui.repeater.Margin(margin);
         }
-        g_ui.marginApplied = settings.reserve;
+        g_ui.marginApplied = reserve;
         g_ui.lastMargin = desired;
     }
     // No theme event handlers or timers are retained in Explorer's XAML tree.
