@@ -84,14 +84,14 @@ official windhawk-mods repository.
 
 // ==WindhawkModSettings==
 /*
-- buttonLabel: "属性"
+- buttonLabel: Properties
   $name: Button label
   $name:zh-CN: 按钮文字
   $description: >-
     The tooltip shown when hovering the button; with "Show label" enabled, it
     is also displayed next to the icon.
   $description:zh-CN: >-
-    鼠标悬停在按钮上时显示的提示文字；勾选"显示文字"后也会显示在图标旁。
+    鼠标悬停在按钮上时显示的提示文字；勾选"显示文字"后也会显示在图标旁，例如可改为"属性"。
 - showLabel: false
   $name: Show label
   $name:zh-CN: 显示文字
@@ -184,11 +184,12 @@ namespace muxm = winrt::Microsoft::UI::Xaml::Media;
 // found again on removal.
 constexpr PCWSTR kPropertiesButtonName = L"WindhawkPropertiesButton";
 
-// The primary command bar is where all the visible buttons live; the secondary
-// one only holds the Details pane toggle.
+// The glyph used when the iconGlyph setting doesn't parse, matching the
+// setting's default (circled i, the properties dialog icon).
+constexpr wchar_t kDefaultIconGlyph = 0xE946;
+
+// The primary command bar is where all the visible buttons live.
 constexpr std::wstring_view kPrimaryCommandBarName = L"FileExplorerCommandBar";
-constexpr std::wstring_view kSecondaryCommandBarName =
-    L"FileExplorerSecondaryCommandBar";
 
 // Built-in buttons we anchor to, identified by their SVG icon file name, which
 // is stable across languages. The delete button's icon is where our button
@@ -209,7 +210,7 @@ constexpr GUID kSID_STopLevelBrowser = {
 
 struct {
     std::mutex mutex;
-    std::wstring buttonLabel = L"属性";
+    std::wstring buttonLabel = L"Properties";
     bool showLabel = false;
     std::wstring iconGlyph = L"E946";
     bool noSelectionFolder = true;  // folder = true, none = false.
@@ -516,11 +517,20 @@ std::wstring GetFolderPath(winrt::com_ptr<IShellView> const& shellView) {
         return std::wstring();
     }
 
-    WCHAR path[MAX_PATH];
-    BOOL ok = SHGetPathFromIDListEx(pidl, path, ARRAYSIZE(path), GPFIDL_DEFAULT);
+    // SIGDN_FILESYSPATH via SHGetNameFromIDList has no length limit, unlike
+    // SHGetPathFromIDListEx with a MAX_PATH buffer, so long folder paths
+    // take the fast path too.
+    PWSTR path = nullptr;
+    HRESULT hr = SHGetNameFromIDList(pidl, SIGDN_FILESYSPATH, &path);
     CoTaskMemFree(pidl);
 
-    return ok ? path : std::wstring();
+    if (FAILED(hr) || !path) {
+        return std::wstring();
+    }
+
+    std::wstring result = path;
+    CoTaskMemFree(path);
+    return result;
 }
 
 void OpenPropertiesForWindow(HWND hExplorerWnd) {
@@ -751,13 +761,17 @@ muxc::AppBarButton CreatePropertiesButton() {
     }
 
     wchar_t glyphChar = (wchar_t)wcstoul(glyph.c_str(), nullptr, 16);
-    if (glyphChar) {
-        muxc::FontIcon icon;
-        icon.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons"));
-        std::wstring glyphString(1, glyphChar);
-        icon.Glyph(glyphString.c_str());
-        button.Icon(icon);
+    if (!glyphChar) {
+        // A glyph which doesn't parse (e.g. a typo) would otherwise leave an
+        // icon-only button blank.
+        glyphChar = kDefaultIconGlyph;
     }
+
+    muxc::FontIcon icon;
+    icon.FontFamily(muxm::FontFamily(L"Segoe Fluent Icons"));
+    std::wstring glyphString(1, glyphChar);
+    icon.Glyph(glyphString.c_str());
+    button.Icon(icon);
 
     if (!label.empty()) {
         muxc::ToolTipService::SetToolTip(
@@ -967,6 +981,12 @@ void QueueCommandBarUpdate(
 }
 
 void OnCommandBarAdded(muxc::CommandBar const& commandBar) {
+    // Only the primary command bar is tracked; this mod never touches the
+    // secondary one (the Details pane toggle).
+    if (commandBar.Name() != kPrimaryCommandBarName) {
+        return;
+    }
+
     // Prune entries whose command bar is gone. Only this thread's, since
     // g_entries is thread_local.
     for (auto it = g_entries.begin(); it != g_entries.end();) {
@@ -1062,6 +1082,42 @@ void RemoveButtonsForCurrentThread() {
     g_threadScanned = false;
 }
 
+// Removes the buttons of the calling thread and enqueues a sentinel into its
+// dispatcher queue. The sentinel runs at Low priority, so it only fires after
+// every Normal-priority item queued before it - all our deferred work is
+// Normal - which proves the queue holds no callback of ours anymore once the
+// event is set. Runs on a window's UI thread via RunFromWindowThread; the
+// unload path waits on the event before the DLL is unmapped.
+void WINAPI RemoveButtonsAndDrainCurrentThread(PVOID parameter) {
+    // The sentinel has to be enqueued after this, so that nothing of ours
+    // can be queued behind it anymore.
+    RemoveButtonsForCurrentThread();
+
+    HANDLE drainEvent = (HANDLE)parameter;
+    if (!drainEvent) {
+        return;
+    }
+
+    bool enqueued = false;
+    try {
+        auto dispatcherQueue =
+            winrt::Microsoft::UI::Dispatching::DispatcherQueue::
+                GetForCurrentThread();
+        if (dispatcherQueue) {
+            enqueued = dispatcherQueue.TryEnqueue(
+                winrt::Microsoft::UI::Dispatching::DispatcherQueuePriority::Low,
+                [drainEvent]() { SetEvent(drainEvent); });
+        }
+    } catch (...) {
+        Wh_Log(L"Error %08X", winrt::to_hresult().value);
+    }
+    if (!enqueued) {
+        // No dispatcher queue on this thread, or the enqueue failed: nothing
+        // of ours can be pending in one.
+        SetEvent(drainEvent);
+    }
+}
+
 // Settings changed: take the buttons down and put them back with the new
 // label/icon. The command bars are kept around: after removal there may be no
 // element left to re-find them from on an unfocused window.
@@ -1103,9 +1159,7 @@ void CollectCommandBars(mux::DependencyObject const& root,
     for (int i = 0; i < count; i++) {
         auto child = muxm::VisualTreeHelper::GetChild(root, i);
         if (auto commandBar = child.try_as<muxc::CommandBar>();
-            commandBar &&
-            (commandBar.Name() == kPrimaryCommandBarName ||
-             commandBar.Name() == kSecondaryCommandBarName)) {
+            commandBar && commandBar.Name() == kPrimaryCommandBarName) {
             commandBars->push_back(std::move(commandBar));
             // No need to descend into a command bar we already found.
             continue;
@@ -1153,29 +1207,6 @@ void ScanXamlRootForCommandBars(mux::UIElement const& element) try {
         // hook doesn't have to keep looking.
         g_threadScanned = true;
     }
-} catch (...) {
-    Wh_Log(L"Error %08X", winrt::to_hresult().value);
-}
-
-// Same as above, but deferred, for the cases where the command bar isn't in
-// the tree yet by the time our hook runs.
-void ScheduleXamlRootScan(mux::UIElement const& element) try {
-    if (g_unloading || !element) {
-        return;
-    }
-
-    auto dispatcherQueue =
-        winrt::Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
-    if (!dispatcherQueue) {
-        ScanXamlRootForCommandBars(element);
-        return;
-    }
-
-    dispatcherQueue.TryEnqueue([weakElement = winrt::make_weak(element)]() {
-        if (auto element = weakElement.get()) {
-            ScanXamlRootForCommandBars(element);
-        }
-    });
 } catch (...) {
     Wh_Log(L"Error %08X", winrt::to_hresult().value);
 }
@@ -1251,12 +1282,6 @@ void WINAPI CommandBarManager_CommandBar_Hook(void* pThis, void* commandBar) {
         }
 
         OnCommandBarAdded(element);
-
-        // The command bar isn't necessarily attached to the tree yet, so also
-        // scan the island once the current layout pass is done; that's where
-        // a second command bar of the same island (the secondary one) is
-        // found.
-        ScheduleXamlRootScan(element);
     } catch (...) {
         Wh_Log(L"Error %08X", winrt::to_hresult().value);
     }
@@ -1580,23 +1605,20 @@ std::vector<HWND> GetFileExplorerWnds() {
 // Initialization plumbing.
 
 void LoadSettings() {
-    PCWSTR buttonLabel = Wh_GetStringSetting(L"buttonLabel");
-    PCWSTR iconGlyph = Wh_GetStringSetting(L"iconGlyph");
-    PCWSTR noSelectionBehavior = Wh_GetStringSetting(L"noSelectionBehavior");
-    bool showLabel = Wh_GetIntSetting(L"showLabel");
+    auto buttonLabel = WindhawkUtils::StringSetting::make(L"buttonLabel");
+    auto iconGlyph = WindhawkUtils::StringSetting::make(L"iconGlyph");
+    auto noSelectionBehavior =
+        WindhawkUtils::StringSetting::make(L"noSelectionBehavior");
+    bool showLabel = Wh_GetIntSetting(L"showLabel") != 0;
 
     {
         std::lock_guard<std::mutex> lock(g_settings.mutex);
-        g_settings.buttonLabel = buttonLabel;
-        g_settings.iconGlyph = iconGlyph;
+        g_settings.buttonLabel = buttonLabel.get();
+        g_settings.iconGlyph = iconGlyph.get();
         g_settings.showLabel = showLabel;
         g_settings.noSelectionFolder =
-            noSelectionBehavior && _wcsicmp(noSelectionBehavior, L"none") != 0;
+            _wcsicmp(noSelectionBehavior.get(), L"none") != 0;
     }
-
-    Wh_FreeStringSetting(buttonLabel);
-    Wh_FreeStringSetting(iconGlyph);
-    Wh_FreeStringSetting(noSelectionBehavior);
 }
 
 // The mod is being initialized, load settings, hook functions, and do other
@@ -1657,14 +1679,32 @@ void Wh_ModUninit() {
 
     g_unloading = true;
 
+    std::vector<HANDLE> drainEvents;
+
     for (HWND hWnd : GetFileExplorerWnds()) {
         Wh_Log(L"Removing the button for window %08X", (DWORD)(ULONG_PTR)hWnd);
-        if (!RunFromWindowThread(
-                hWnd, [](PVOID) { RemoveButtonsForCurrentThread(); },
-                nullptr)) {
+        HANDLE drainEvent = CreateEvent(nullptr, TRUE, FALSE, nullptr);
+        if (!RunFromWindowThread(hWnd, RemoveButtonsAndDrainCurrentThread,
+                                 drainEvent)) {
             Wh_Log(L"Couldn't reach the thread of window %08X",
                    (DWORD)(ULONG_PTR)hWnd);
+            if (drainEvent) {
+                CloseHandle(drainEvent);
+            }
+        } else if (drainEvent) {
+            drainEvents.push_back(drainEvent);
         }
+    }
+
+    // The timeout covers a UI thread which stopped pumping messages; the
+    // event is then deliberately not closed, since the sentinel may still
+    // signal it after we're gone and a reused handle value would be set
+    // instead.
+    for (HANDLE drainEvent : drainEvents) {
+        if (WaitForSingleObject(drainEvent, 5000) != WAIT_OBJECT_0) {
+            continue;
+        }
+        CloseHandle(drainEvent);
     }
 
     // The DLL can't be unmapped while a worker thread is still running our
