@@ -60,33 +60,23 @@ official windhawk-mods repository.
 
 # 资源管理器属性按钮（中文说明）
 
-在 Windows 11 文件资源管理器的命令栏（工具栏）上，"删除"和"排序"按钮之间
-添加一个"属性"按钮，点击后打开当前选中项目的属性对话框：
+在 Windows 11 文件资源管理器的命令栏（工具栏）上，"删除"和"排序"按钮之间添加一个"属性"按钮，点击后打开当前选中项目的属性对话框：
 
 - 支持多选：多选时与右键菜单里的"属性"一样，打开合并的属性对话框。
-- 支持虚拟位置：此电脑、回收站、Quick Access 等没有文件系统路径的项目
-  也能正确打开属性。
+- 支持虚拟位置：此电脑、回收站、Quick Access 等没有文件系统路径的项目也能正确打开属性。
 - 没有选中项时（可配置）：显示当前文件夹的属性，或什么都不做。
 
-属性对话框通过快速 Shell API（SHObjectProperties / SHMultiFileProperties）
-直接打开，不构建右键菜单，避免了加载 shell 扩展带来的延迟；右键菜单的
-"属性"动词仅作为特殊位置的兜底。
+属性对话框通过快速 Shell API（SHObjectProperties / SHMultiFileProperties）直接打开，不构建右键菜单，避免了加载 shell 扩展带来的延迟；右键菜单的"属性"动词仅作为特殊位置的兜底。
 
 # 系统要求
 
-适用于 Windows 11 24H2 / 25H2 及以上使用 WinAppSDK (WinUI 3) 命令栏的
-文件资源管理器。旧版本（Windows 10、Windows 11 23H2 及更早）使用完全
-不同的命令栏实现，本 mod 会在其中安静地保持不启用状态。
+适用于 Windows 11 24H2 / 25H2 及以上使用 WinAppSDK (WinUI 3) 命令栏的文件资源管理器。旧版本（Windows 10、Windows 11 23H2 及更早）使用完全不同的命令栏实现，本 mod 会在其中安静地保持不启用状态。
 
 # 工作原理
 
-本 mod hook 了文件资源管理器自身的 WinUI 3 代码（FileExplorerExtensions.dll）
-中的若干函数，从那里拿到命令栏，并把一个用 WinRT 构造的 AppBarButton 插入
-PrimaryCommands；按钮在切换标签页、导航、新窗口后自动恢复，禁用 mod 时
-被干净移除。点击在独立工作线程上处理，不会阻塞资源管理器 UI 线程。
+本 mod hook 了文件资源管理器自身的 WinUI 3 代码（FileExplorerExtensions.dll）中的若干函数，从那里拿到命令栏，并把一个用 WinRT 构造的 AppBarButton 插入 PrimaryCommands；按钮在切换标签页、导航、新窗口后自动恢复，禁用 mod 时被干净移除。点击在独立工作线程上处理，不会阻塞资源管理器 UI 线程。
 
-注意：禁用 mod 时请先关闭已打开的属性对话框——卸载流程会等待正在显示
-属性对话框的工作线程结束。
+注意：禁用 mod 时请先关闭已打开的属性对话框——卸载流程会等待正在显示属性对话框的工作线程结束。
 
 实现参考了官方仓库的 Explorer Command Bar mod（DanRotaru），在此致谢。
 */
