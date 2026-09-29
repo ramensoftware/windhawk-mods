@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-29T00:24:08.000Z</updated>
+    <updated>2026-09-29T01:11:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar tray icon spacing and grid 1.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#acaf719bf04c2d02a48e3be37b2fcd23411231de</id>
+        <link href="https://windhawk.net/mods/taskbar-notification-icon-spacing"/>
+        <updated>2026-09-29T01:11:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added support for the native vertical taskbar.</li>
+<li>Improved ARM64 support.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.4.2]]></title>
         <id>https://windhawk.net/mods/taskbar-vertical#3f34e7e3836a762a8b18dd683a781476c8bf2208</id>
@@ -830,25 +844,6 @@ live; the two noted below need a mod reload.</p>
         <author>
             <name>ArvindSaini978</name>
             <uri>https://github.com/ArvindSaini978</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Disable Windows Shortcuts 1.3.0]]></title>
-        <id>https://windhawk.net/mods/disable-windows-shortcuts#bd465cf91976360394dd11f5b58ed083080b1c33</id>
-        <link href="https://windhawk.net/mods/disable-windows-shortcuts"/>
-        <updated>2026-09-28T08:03:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added new shortcuts: <code>Win+Shift+C</code> (Charms Menu in Windows 10) and <code>Win+Shift+R</code> (Snipping Tool screen recording).</li>
-<li>Added numpad <code>+</code> and <code>-</code> support for Magnifier zoom (<code>Win+Plus</code> / <code>Win+Minus</code>).</li>
-<li>Fixed modifier keys occasionally getting stuck when keys are held during workstation lock or desktop switch.</li>
-<li>Fixed premature/redundant Explorer restart prompts by tracking blocked state per Explorer PID in Windhawk storage.</li>
-<li>Fixed race condition in uninit prompt thread cleanup and bounded prompt wait timeout.</li>
-<li>Dynamically load <code>TaskDialogIndirect</code> from <code>comctl32.dll</code>, removing the <code>-lcomctl32</code> compiler dependency.</li>
-<li>Preserved the 3-tier options for Special Shortcuts (<code>Off</code>, <code>Disable hotkey</code>, <code>Block hotkey</code>) to keep <code>dwm.exe</code> optional for standard users.</li>
-</ul>]]></content>
-        <author>
-            <name>Lone</name>
-            <uri>https://github.com/Louis047</uri>
         </author>
     </entry>
 </feed>

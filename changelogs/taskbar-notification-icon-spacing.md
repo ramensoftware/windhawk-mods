@@ -1,3 +1,8 @@
+## 1.4 ([Sep 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/acaf719bf04c2d02a48e3be37b2fcd23411231de/mods/taskbar-notification-icon-spacing.wh.cpp))
+
+* Added support for the native vertical taskbar.
+* Improved ARM64 support.
+
 ## 1.3.1 ([Apr 25, 2026](https://github.com/ramensoftware/windhawk-mods/blob/924426711ad95bf5c6947842def94e251177dd15/mods/taskbar-notification-icon-spacing.wh.cpp))
 
 * Added an option for column-first, bottom-to-top, right-to-left grid arrangement.
