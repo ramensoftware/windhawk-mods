@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-29T01:11:29.000Z</updated>
+    <updated>2026-09-29T10:02:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Folder Bookmarks Bar 0.7.8]]></title>
+        <id>https://windhawk.net/mods/explorer-folder-bookmarks-bar#0c9eded5a005f4645d1e834b11a5fd94fc3159c2</id>
+        <link href="https://windhawk.net/mods/explorer-folder-bookmarks-bar"/>
+        <updated>2026-09-29T10:02:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerfolderbookmarksbar">Explorer Folder Bookmarks Bar</h1>
+<p>For the Windows 11 WinUI File Explorer. A scrollable bookmark bar appears below
+the address bar. Click <strong>+</strong> to bookmark the current filesystem folder. Click a
+bookmark to navigate the active tab to it. Ctrl+click asks Explorer to open it
+in a new tab. Drag a bookmark onto another to reorder the row. Middle-click a
+bookmark to remove it from the bar. Removing a bookmark never deletes its
+target folder.</p>
+<p><img src="https://raw.githubusercontent.com/MaxITService/EXPLORER-bookmarks-bar-windhawk/main/Promo/How-it-works.gif" alt="Explorer Folder Bookmarks Bar in File Explorer" /></p>
+<p>After enabling or updating the mod, open a new File Explorer window to use the
+bar. Windows that were already open may remain unchanged. Opening a new window
+is the supported way to activate the bar without relying on live window updates.</p>
+<p>The bar expands from one to four rows as the window narrows. If bookmarks
+still exceed the fourth row, the bar can pan sideways.
+Left-click <strong>FX</strong>, next to <strong>+</strong>, for the profile (<strong>~</strong>), Desktop, Documents,
+Downloads, and the custom folders listed in this mod's Windhawk settings.
+Custom shortcuts are empty by default. Add a folder path and optional label in
+<strong>Settings → FX custom folders</strong>; blank entries are ignored. Paths must be
+absolute, and <code>%NAME%</code> environment variables are expanded. Local, network
+(UNC or mapped drive) and removable-drive folders all work. A folder missing
+from a local disk is hidden from FX until it exists again. Like bookmarks,
+network and removable entries are shown without being checked; if one is
+unavailable, Explorer reports it when you click it. New settings take effect in
+newly opened Explorer windows. Right-click <strong>FX</strong> for all drives with their
+labels. The list updates each time the menu opens. Ctrl+click a menu entry to
+open it in a new tab.</p>
+<p>Right-click <strong>+</strong> for <strong>Save bookmarks</strong> and <strong>Load bookmarks</strong>. The commands
+open a file dialog so you can choose the JSON backup. The profile folder is
+suggested initially. Loading replaces the current list only after the entire
+UTF-8 JSON file passes validation.</p>
+<p>The bookmark list lives in this mod's Windhawk local storage. This version
+supports up to 32 folders and uses the folder name as the button label. Icons
+come from Windows Shell, including desktop.ini custom folder icons. Hovering a
+bookmark shows its full path. Virtual locations such as Home are ignored by
+<strong>+</strong>. Bookmark removal never touches the target folder or its contents.
+Missing folders on local fixed drives show a yellow warning icon. Icons are
+cached for up to five minutes and refreshed when the bar redraws.</p>
+<p>The XAML insertion point can change in a Windows update. If the bar is not
+visible, disable the mod and check the Windhawk log before trying it again.</p>]]></content>
+        <author>
+            <name>Maxim Fomin</name>
+            <uri>https://github.com/MaxITService</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar tray icon spacing and grid 1.4]]></title>
         <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#acaf719bf04c2d02a48e3be37b2fcd23411231de</id>
@@ -826,24 +874,6 @@ live; the two noted below need a mod reload.</p>
         <author>
             <name>Ashix</name>
             <uri>https://github.com/k-ashix</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Custom Shortcuts 1.4.0]]></title>
-        <id>https://windhawk.net/mods/explorer-custom-shortcuts#df7220d83c639d849596a50f9d074f8576bcce74</id>
-        <link href="https://windhawk.net/mods/explorer-custom-shortcuts"/>
-        <updated>2026-09-28T08:03:53.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Added Action Toast Notifications</strong>: Displays a brief floating OSD notification upon completing actions like copying paths/names or emptying the Recycle Bin. Automatically adapts to Windows light/dark mode, active system accent colors, and per-monitor DPI scaling.</li>
-<li><strong>Added Notification Toggle Setting</strong>: Added the <code>showActionToasts</code> option in mod settings to enable or disable toast notifications.</li>
-<li><strong>Improved <code>internal:copyPath</code></strong>: Automatically falls back to copying the active folder path when no items are selected.</li>
-<li><strong>Aligned Recycle Bin Confirmation</strong>: Switched confirmation dialog default focus to OK (<code>MB_DEFBUTTON1</code>) to align with native Windows Explorer deletion behavior.</li>
-<li><strong>Robust Mod Lifecycle & Safety</strong>: Runs notifications directly on background worker threads to avoid unjoined threads during mod unloading, properly scopes GDI+ measurement objects, and ensures valid hook verification during initialization.</li>
-<li><strong>Enhanced Logging</strong>: Added structured diagnostic logging for shortcut matching, command execution, and internal operations.</li>
-</ul>]]></content>
-        <author>
-            <name>ArvindSaini978</name>
-            <uri>https://github.com/ArvindSaini978</uri>
         </author>
     </entry>
 </feed>
