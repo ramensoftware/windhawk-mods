@@ -131,14 +131,15 @@ carries what you use.
   the wheel to the flyout.
 - **Click an icon to jump to a level** -- off by default; the three levels are
   settings of their own (0, 50 and 100 by default).
-- **Per-display settings** -- text to look for in a display's name or device
-  id, then a name to show instead, and whether to hide the display or its
-  contrast, volume, input or power controls. To tell two monitors of the same
-  model apart,
-  hover over a display's name to see its device id and use the part that
-  differs between them, at the end (for example `UID4352`). That part follows
-  the video output the monitor is plugged into, so swapping cables between
-  ports swaps the names too.
+- **Per-display settings** -- text to look for in a monitor's own name (its
+  model, not a name you gave it or the number added to identical models) or
+  in its device id, then a name to show instead, and whether to hide the
+  display or its contrast, volume, input or power controls. Hiding a
+  monitor's contrast also keeps the all-displays contrast slider off it. To
+  tell two monitors of the same model apart, hover over a display's name to
+  see its device id and use the part that differs between them, at the end
+  (for example `UID4352`). That part follows the video output the monitor is
+  plugged into, so swapping cables between ports swaps the names too.
 
 ## Compatibility
 
@@ -175,8 +176,13 @@ include stays off.
 - The power button turns a monitor off over DDC/CI ("DPM off"). Most monitors
   still listen in that state and come back when the button is pressed again,
   but not all do; one that does not has to be switched on with its own power
-  button. The button is only offered while another display is connected, so
-  there is always a screen left to see.
+  button. The button is only offered while another display is connected, and
+  it will not turn off the last screen that is still on, so there is always a
+  screen left to see.
+- Many DisplayPort monitors drop off the connection once turned off this way.
+  Windows then treats them as unplugged and moves their windows away, and
+  their row -- with its button to turn them back on -- leaves the panel until
+  they are switched on with their own power button.
 - Switching a monitor to another input hands it to whatever is on that input.
   Some monitors keep answering DDC/CI on the input they left, so you can
   switch back from here; others do not, and need their own buttons.
@@ -284,8 +290,8 @@ include stays off.
     DDC/CI, for monitors that report a power state -- many do not. Pressing
     it again turns the monitor back on, which most monitors allow; one that
     stops listening once off has to be switched on with its own button. Only
-    offered while another display is connected, so there is always a screen
-    left to see.
+    offered while another display is connected, and never turns off the last
+    screen that is still on, so there is always a screen left to see.
 - showVolume: true
   $name: Show volume sliders
   $description: >-
@@ -320,9 +326,10 @@ include stays off.
   - - match: ""
       $name: Text to look for
       $description: >-
-        Part of the display's name as the panel shows it (for example
-        LS27F32xG), or of its device id -- hover over a display's name in the
-        panel to see it.
+        Part of the monitor's own name -- its model, for example LS27F32xG,
+        as the panel shows it before you rename it and without the number
+        added to identical models -- or part of its device id. Hover over a
+        display's name in the panel to see its device id.
     - name: ""
       $name: Name to show
       $description: Leave empty to keep the display's own name.
@@ -1162,15 +1169,22 @@ class Engine {
 
     // The capabilities string takes a second or more per monitor, so it is
     // read once per display per session, after the displays are already up,
-    // rather than as part of enumerating them. Worker thread; returns whether
-    // any display changed.
+    // rather than as part of enumerating them.
+    //
+    // Only a read that worked is kept. One that fails -- a monitor still
+    // waking, a dock still enumerating -- is tried again on the next rescan,
+    // up to kCapsAttempts times per connection, so a monitor that never
+    // answers it costs no more than that. Unplugging a monitor forgets both
+    // (see Rescan), so plugging it back in starts over. Worker thread; returns
+    // whether any display changed.
     bool LoadCapabilities() {
         std::vector<std::pair<std::wstring, HANDLE>> todo;
         {
             std::lock_guard<std::mutex> lock(mutex_);
             for (const auto& d : displays_) {
                 if (d.transport == Transport::DdcCi && d.hPhysical &&
-                    !caps_.count(d.stableId)) {
+                    !caps_.count(d.stableId) &&
+                    capsAttempts_[d.stableId] < kCapsAttempts) {
                     todo.emplace_back(d.stableId, d.hPhysical);
                 }
             }
@@ -1182,7 +1196,11 @@ class Engine {
             }
             std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
             Capabilities caps = ReadCapabilities(entry.second);
-            caps_[entry.first] = caps;
+            if (caps.loaded) {
+                caps_[entry.first] = caps;
+            } else {
+                ++capsAttempts_[entry.first];
+            }
             long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                                std::chrono::steady_clock::now() - start)
                                .count();
@@ -1952,19 +1970,25 @@ class Engine {
                       return a.rect.top < b.rect.top;
                   });
 
-        // A display that is gone takes its DDC/CI verdict with it, so
-        // unplugging and replugging a monitor that failed its first probe
-        // gets a fresh one rather than inheriting the old answer.
-        for (auto it = ddcAnswered_.begin(); it != ddcAnswered_.end();) {
-            bool present = false;
-            for (const Display& d : found) {
-                if (d.stableId == it->first) {
-                    present = true;
-                    break;
+        // A display that is gone takes its DDC/CI verdict and capabilities
+        // with it, so unplugging and replugging a monitor that failed its
+        // first probe, or its first capabilities read, gets a fresh one
+        // rather than inheriting the old answer.
+        auto dropMissing = [&found](auto& byDisplay) {
+            for (auto it = byDisplay.begin(); it != byDisplay.end();) {
+                bool present = false;
+                for (const Display& d : found) {
+                    if (d.stableId == it->first) {
+                        present = true;
+                        break;
+                    }
                 }
+                it = present ? std::next(it) : byDisplay.erase(it);
             }
-            it = present ? std::next(it) : ddcAnswered_.erase(it);
-        }
+        };
+        dropMissing(ddcAnswered_);
+        dropMissing(caps_);
+        dropMissing(capsAttempts_);
 
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -2064,26 +2088,25 @@ class Engine {
         }
     }
 
-    // Looks up the DDC/CI handle for a display that has the given extra.
-    // Worker thread.
-    HANDLE DdcHandleFor(const std::wstring& stableId, DWORD* contrastMax,
-                        bool* hasPower) {
+    // The DDC/CI handle of a display, or null. Worker thread.
+    HANDLE DdcHandleFor(const std::wstring& stableId) {
         std::lock_guard<std::mutex> lock(mutex_);
-        for (const auto& d : displays_) {
-            if (d.stableId == stableId && d.transport == Transport::DdcCi) {
-                *contrastMax = d.contrastMax;
-                *hasPower = d.hasPower;
-                return d.hPhysical;
-            }
-        }
-        return nullptr;
+        const Display* d = FindLocked(stableId);
+        return d && d->transport == Transport::DdcCi ? d->hPhysical : nullptr;
+    }
+
+    // One field of a display, read under the lock; fallback if it is gone.
+    template <typename T>
+    T DisplayField(const std::wstring& stableId, T Display::*field, T fallback) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        const Display* d = FindLocked(stableId);
+        return d ? d->*field : fallback;
     }
 
     // Returns whether anything went on the wire, for the DDC/CI cooldown.
     bool ApplyContrast(const std::wstring& stableId, int percent) {
-        DWORD contrastMax = 0;
-        bool hasPower = false;
-        HANDLE hPhysical = DdcHandleFor(stableId, &contrastMax, &hasPower);
+        HANDLE hPhysical = DdcHandleFor(stableId);
+        const DWORD contrastMax = DisplayField<DWORD>(stableId, &Display::contrastMax, 0);
         if (!hPhysical || contrastMax == 0) {
             return false;
         }
@@ -2101,9 +2124,7 @@ class Engine {
     }
 
     bool ApplyVcp(const std::wstring& stableId, BYTE code, DWORD raw) {
-        DWORD contrastMax = 0;
-        bool hasPower = false;
-        HANDLE hPhysical = DdcHandleFor(stableId, &contrastMax, &hasPower);
+        HANDLE hPhysical = DdcHandleFor(stableId);
         if (!hPhysical) {
             return false;
         }
@@ -2113,10 +2134,8 @@ class Engine {
     }
 
     bool ApplyPower(const std::wstring& stableId, bool on) {
-        DWORD contrastMax = 0;
-        bool hasPower = false;
-        HANDLE hPhysical = DdcHandleFor(stableId, &contrastMax, &hasPower);
-        if (!hPhysical || !hasPower) {
+        HANDLE hPhysical = DdcHandleFor(stableId);
+        if (!hPhysical || !DisplayField(stableId, &Display::hasPower, false)) {
             return false;
         }
         bool ok = SetVCPFeature(hPhysical, kVcpPower, on ? kPowerOn : kPowerOff) !=
@@ -2195,8 +2214,11 @@ class Engine {
     std::map<std::wstring, int> pendingContrast_;
     std::map<std::wstring, bool> pendingPower_;
     std::map<std::pair<std::wstring, BYTE>, DWORD> pendingVcp_;
-    // Capabilities read this session, by display. Worker thread only.
+    // Capabilities read this session, by display, and how many reads have
+    // failed for the ones not read yet. Worker thread only.
+    static constexpr int kCapsAttempts = 3;
     std::map<std::wstring, Capabilities> caps_;
+    std::map<std::wstring, int> capsAttempts_;
 
     // Where relative following thinks each display would be if brightness had
     // no end stops. Guarded by mutex_.
@@ -2314,7 +2336,6 @@ struct Injection {
         // Null when the row has none.
         winrt::weak_ref<wuxc::Slider> contrast;
         winrt::weak_ref<wux::FrameworkElement> contrastIcon;
-        winrt::weak_ref<wuxc::Button> power;
         winrt::weak_ref<wuxc::Slider> volume;
         winrt::weak_ref<wux::FrameworkElement> volumeIcon;
         std::vector<std::pair<int, winrt::weak_ref<wuxc::Primitives::ToggleButton>>> inputs;
@@ -3292,15 +3313,21 @@ wux::Thickness PanelMargin(double trailing) {
 // need it; weak refs only, so it roots none of the controls.
 struct PanelLinks {
     winrt::weak_ref<wuxc::Slider> masterBrightness;
-    winrt::weak_ref<wux::FrameworkElement> masterBrightnessIcon;
     winrt::weak_ref<wuxc::Slider> masterContrast;
-    winrt::weak_ref<wux::FrameworkElement> masterContrastIcon;
     std::vector<std::pair<std::wstring, winrt::weak_ref<wuxc::Slider>>> brightness;
     std::vector<std::pair<std::wstring, winrt::weak_ref<wuxc::Slider>>> contrast;
     // What the all-displays rows drive: every display that can take the
     // value, whether or not it has a row of its own.
     std::vector<std::wstring> brightnessIds;
     std::vector<std::wstring> contrastIds;
+    // The power buttons, so that using one updates the others: turning a
+    // display off can leave another as the last screen on.
+    struct PowerButton {
+        std::wstring id;
+        std::wstring label;
+        winrt::weak_ref<wuxc::Button> button;
+    };
+    std::vector<PowerButton> power;
 };
 
 // Brings the all-displays rows back to the mean of what they drive, after a
@@ -3348,13 +3375,19 @@ wuxc::Slider MakeSlider(double value, double step) {
 
 // Mouse wheel over a slider moves it by the configured step (issue #5647),
 // and keeps the flyout from scrolling underneath it.
+//
+// One step per notch -- WHEEL_DELTA, 120 -- not per event: a precision
+// touchpad sends a swipe as many events of a few units each, and stepping
+// on every one of them would slam the slider to an end in a single swipe.
+// The remainder carries over, so a mouse (one event of 120 per notch) moves
+// exactly as before.
 void AttachWheel(wuxc::Slider const& slider, Injection& injection) {
     if (g_scrollStep <= 0) {
         return;
     }
     injection.wheelRevokers.push_back(slider.PointerWheelChanged(
         winrt::auto_revoke,
-        [weak = winrt::make_weak(slider)](
+        [weak = winrt::make_weak(slider), pending = std::make_shared<int>(0)](
             wf::IInspectable const&, wux::Input::PointerRoutedEventArgs const& args) {
             auto target = weak.get();
             if (!target) {
@@ -3365,13 +3398,24 @@ void AttachWheel(wuxc::Slider const& slider, Injection& injection) {
             if (props.IsHorizontalMouseWheel() || delta == 0) {
                 return;
             }
+            args.Handled(true);
+            // A swipe that turns back starts over rather than first paying
+            // off what was left from the other direction.
+            if ((*pending > 0) != (delta > 0)) {
+                *pending = 0;
+            }
+            *pending += delta;
+            const int notches = *pending / WHEEL_DELTA;
+            if (notches == 0) {
+                return;
+            }
+            *pending -= notches * WHEEL_DELTA;
             // A step finer than the monitor can represent would snap straight
             // back to where it was.
             const double step =
                 std::max(static_cast<double>(g_scrollStep), target.StepFrequency());
-            target.Value(std::clamp(target.Value() + (delta > 0 ? step : -step),
-                                    target.Minimum(), target.Maximum()));
-            args.Handled(true);
+            target.Value(std::clamp(target.Value() + notches * step, target.Minimum(),
+                                    target.Maximum()));
         }));
 }
 
@@ -3490,29 +3534,79 @@ wuxc::Button MakeGlyphButton(const wchar_t* glyph, double glyphSize, double widt
     return button;
 }
 
-void ShowPowerState(wuxc::Button const& button, const std::wstring& name, bool off) {
+// Whether turning this display off would leave no screen on. Every other
+// display counts as on unless it reports being off -- a laptop panel, or a
+// monitor with no power control at all, is a screen to see by.
+bool IsLastScreenOn(const std::vector<brightness::Display>& displays,
+                    const std::wstring& id) {
+    bool off = false;
+    int othersOn = 0;
+    for (const brightness::Display& d : displays) {
+        if (d.stableId == id) {
+            off = d.poweredOff;
+        } else if (!d.poweredOff) {
+            ++othersOn;
+        }
+    }
+    return !off && othersOn == 0;
+}
+
+void ShowPowerState(wuxc::Button const& button, const std::wstring& name, bool off,
+                    bool lastOn) {
     button.Opacity(off ? 0.45 : 1.0);
+    // The last screen still on stays on: nothing would be left to turn it
+    // back on from. Disabled rather than just unresponsive, so it is visible.
+    button.IsEnabled(!lastOn);
     wuxc::ToolTipService::SetToolTip(
         button, winrt::box_value(winrt::hstring{(off ? L"Turn on " : L"Turn off ") + name}));
 }
 
+// Brings every power button of a panel in line with the displays' power
+// states. XAML thread.
+void SyncPowerButtons(PanelLinks& links) {
+    if (!g_engine || links.power.empty()) {
+        return;
+    }
+    std::vector<brightness::Display> displays = g_engine->GetDisplays();
+    for (const PanelLinks::PowerButton& p : links.power) {
+        auto button = p.button.get();
+        if (!button) {
+            continue;
+        }
+        bool off = false;
+        for (const brightness::Display& d : displays) {
+            if (d.stableId == p.id) {
+                off = d.poweredOff;
+            }
+        }
+        ShowPowerState(button, p.label, off, IsLastScreenOn(displays, p.id));
+    }
+}
+
 // The per-display power button. It only exists for displays that report a
 // power state over DDC/CI, and only while there is another display to see
-// the result on.
+// the result on -- and it never turns off the last screen still on.
 wuxc::Button MakePowerButton(const brightness::Display& d, const std::wstring& label,
-                             Injection& injection) {
+                             Injection& injection,
+                             const std::shared_ptr<PanelLinks>& links) {
     wuxc::Button button = MakeGlyphButton(L"\xE7E8", 14, 32, 32);  // PowerButton
-    ShowPowerState(button, label, d.poweredOff);
+    ShowPowerState(button, label, d.poweredOff, false);  // SyncPowerButtons corrects it
+    links->power.push_back({d.stableId, label, winrt::make_weak(button)});
     std::wstring id = d.stableId;
     injection.clickRevokers.push_back(button.Click(
         winrt::auto_revoke,
-        [id, label, weak = winrt::make_weak(button)](wf::IInspectable const&,
-                                                     wux::RoutedEventArgs const&) {
+        [id, links](wf::IInspectable const&, wux::RoutedEventArgs const&) {
             if (!g_engine) {
                 return;
             }
+            std::vector<brightness::Display> displays = g_engine->GetDisplays();
+            // Checked here as well as shown: the state the button was drawn
+            // from may be older than this click.
+            if (IsLastScreenOn(displays, id)) {
+                return;
+            }
             bool off = false;
-            for (const brightness::Display& current : g_engine->GetDisplays()) {
+            for (const brightness::Display& current : displays) {
                 if (current.stableId == id) {
                     off = current.poweredOff;
                 }
@@ -3520,9 +3614,7 @@ wuxc::Button MakePowerButton(const brightness::Display& d, const std::wstring& l
             // Off -> on, on -> off. The engine reflects it at once, and a
             // refresh corrects it if the monitor did something else.
             g_engine->SetPower(id, off);
-            if (auto b = weak.get()) {
-                ShowPowerState(b, label, !off);
-            }
+            SyncPowerButtons(*links);
         }));
     return button;
 }
@@ -3637,7 +3729,10 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
         if (d.transport != brightness::Transport::None) {
             links->brightnessIds.push_back(d.stableId);
         }
-        if (d.contrastMax > 0) {
+        // "Hide its contrast slider" leaves the monitor's contrast alone, so
+        // the all-displays contrast row does not drive it or count it either.
+        const DisplayRule* rule = RuleFor(d);
+        if (d.contrastMax > 0 && !(rule && rule->hideContrast)) {
             links->contrastIds.push_back(d.stableId);
         }
     }
@@ -3686,7 +3781,6 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
             panel.Children().Append(
                 MakeSliderRow(MakeIconHost(icon, slider, injection), slider, nullptr, trailing));
             links->masterBrightness = winrt::make_weak(slider);
-            links->masterBrightnessIcon = winrt::make_weak(icon);
             rowTitle->sliders.push_back({winrt::make_weak(slider), false});
             AttachWheel(slider, injection);
             injection.revokers.push_back(slider.ValueChanged(
@@ -3722,7 +3816,6 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
             panel.Children().Append(
                 MakeSliderRow(MakeIconHost(icon, slider, injection), slider, nullptr, trailing));
             links->masterContrast = winrt::make_weak(slider);
-            links->masterContrastIcon = winrt::make_weak(icon);
             rowTitle->sliders.push_back({winrt::make_weak(slider), false});
             AttachWheel(slider, injection);
             injection.revokers.push_back(slider.ValueChanged(
@@ -3919,7 +4012,7 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
             wuxc::Button power{nullptr};
             if (powerAllowed && d.hasPower && d.transport == brightness::Transport::DdcCi &&
                 !(rule && rule->hidePower)) {
-                power = MakePowerButton(d, displayName, injection);
+                power = MakePowerButton(d, displayName, injection, links);
             }
             panel.Children().Append(MakeSliderRow(MakeIconHost(icon, slider, injection), slider,
                                                   power, trailing));
@@ -3951,9 +4044,6 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
 
             binding.slider = winrt::make_weak(slider);
             binding.icon = winrt::make_weak(icon);
-            if (power) {
-                binding.power = winrt::make_weak(power);
-            }
         }
 
         // The extra rows go into the dropdown when there is one, straight into
@@ -4034,6 +4124,9 @@ void PopulateSliderPanel(wuxc::StackPanel const& panel, Injection& injection) {
 
         injection.bindings.push_back(std::move(binding));
     }
+
+    // Now that every power button exists, the last screen on can be told.
+    SyncPowerButtons(*links);
 
     if (panel.Children().Size() > 0) {
         panel.Visibility(wux::Visibility::Visible);
@@ -4871,10 +4964,6 @@ void ApplyRefreshedValues() try {
                 }
             }
 
-            if (auto power = binding.power.get()) {
-                ShowPowerState(power, binding.name, d->poweredOff);
-            }
-
             auto volume = binding.volume.get();
             if (volume && d->volume >= 0 && std::lround(volume.Value()) != d->volume) {
                 {
@@ -4905,6 +4994,7 @@ void ApplyRefreshedValues() try {
         // follow the refreshed values too.
         if (injection.links) {
             SyncMasters(*injection.links);
+            SyncPowerButtons(*injection.links);
         }
     }
 } catch (...) {
