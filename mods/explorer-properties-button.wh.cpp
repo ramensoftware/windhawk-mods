@@ -47,11 +47,12 @@ The mod hooks a couple of functions of File Explorer's own WinUI 3 code
 (FileExplorerExtensions.dll), gets the command bar from there, and inserts a
 WinRT-constructed AppBarButton into its PrimaryCommands. The button survives
 tab switches, navigation and new windows, and is cleanly removed when the mod
-is disabled. Clicks are handled on a worker thread, so the Explorer UI never
-blocks.
+is disabled. Clicks drive the shell lookups from a worker thread, so the
+Explorer UI stays responsive.
 
-Note: close open properties dialogs before disabling the mod - unloading
-waits for the worker thread that shows the dialog.
+File Explorer windows which were already open when the mod is enabled are
+handled too, but if the button doesn't show up in one of them right away,
+opening a new tab or navigating to another folder makes it appear.
 
 Implementation follows the Explorer Command Bar mod by DanRotaru from the
 official windhawk-mods repository.
@@ -74,9 +75,9 @@ official windhawk-mods repository.
 
 # 工作原理
 
-本 mod hook 了文件资源管理器自身的 WinUI 3 代码（FileExplorerExtensions.dll）中的若干函数，从那里拿到命令栏，并把一个用 WinRT 构造的 AppBarButton 插入 PrimaryCommands；按钮在切换标签页、导航、新窗口后自动恢复，禁用 mod 时被干净移除。点击在独立工作线程上处理，不会阻塞资源管理器 UI 线程。
+本 mod hook 了文件资源管理器自身的 WinUI 3 代码（FileExplorerExtensions.dll）中的若干函数，从那里拿到命令栏，并把一个用 WinRT 构造的 AppBarButton 插入 PrimaryCommands；按钮在切换标签页、导航、新窗口后自动恢复，禁用 mod 时被干净移除。点击的 Shell 查询由独立工作线程驱动，资源管理器界面保持响应。
 
-注意：禁用 mod 时请先关闭已打开的属性对话框——卸载流程会等待正在显示属性对话框的工作线程结束。
+启用本 mod 时已经打开的文件资源管理器窗口也会被处理；若某个已有窗口中按钮没有立即出现，打开一个新标签页或导航到其他文件夹即可让它出现。
 
 实现参考了官方仓库的 Explorer Command Bar mod（DanRotaru），在此致谢。
 */
@@ -312,11 +313,10 @@ void RevokeHandlersForCurrentThread() {
 thread_local std::unordered_set<void*> g_pendingUpdates;
 
 ////////////////////////////////////////////////////////////////////////////////
-// Worker threads for shell work. Everything which must not happen on the
-// Explorer UI thread - building a context menu can load every registered shell
-// extension, and the properties dialog runs a modal loop - happens on a thread
-// of its own. The shell objects involved are owned by the Explorer UI thread,
-// so the calls marshal back to it; only the waiting happens elsewhere.
+// Worker threads for shell work. The shell work - building a context menu can
+// load every registered shell extension - is driven from a thread of its own.
+// The shell objects involved are owned by the Explorer UI thread, so the
+// calls marshal back to it; only the waiting happens elsewhere.
 
 std::mutex g_launchThreadsMutex;
 std::vector<HANDLE> g_launchThreads;
@@ -539,9 +539,10 @@ void OpenPropertiesForWindow(HWND hExplorerWnd) {
     }
 
     // Elapsed-since-entry for the log lines below. The properties APIs are
-    // modal, so "returned" includes however long the dialog stayed open;
-    // "invoked" is the click-to-open measurement. Steady clock so the
-    // numbers aren't affected by wall-clock changes.
+    // not modal: they return once the dialog is up and the sheet runs on a
+    // thread of the shell's own, so "returned" measures the hand-off cost,
+    // not the dialog lifetime. Steady clock so the numbers aren't affected
+    // by wall-clock changes.
     auto startTime = std::chrono::steady_clock::now();
     auto elapsedMs = [startTime]() {
         return (int)std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -735,8 +736,9 @@ void OnPropertiesInvoked(mux::FrameworkElement const& element) {
     HWND hWnd = GetExplorerWindowForElement(element);
     Wh_Log(L"Properties button clicked, window %08X", (DWORD)(ULONG_PTR)hWnd);
 
-    // Off the UI thread: the context menu construction and the modal
-    // properties dialog must not block the Explorer UI thread.
+    // Off the UI thread: the shell lookups - which can be slow and marshal
+    // back to the Explorer UI thread - are driven and awaited from a worker
+    // thread.
     RunShellWorkOnWorkerThread(
         [hWnd]() { OpenPropertiesForWindow(hWnd); });
 }
@@ -1708,9 +1710,10 @@ void Wh_ModUninit() {
     }
 
     // The DLL can't be unmapped while a worker thread is still running our
-    // code. The wait has no timeout, and a thread can be inside a modal
-    // properties dialog, which blocks it until the user closes the dialog -
-    // hence the note in the readme about closing those before disabling.
+    // code. The wait has no timeout, but the properties APIs return as soon
+    // as the dialog is up - the sheet runs on a thread of the shell's own -
+    // so what's being waited for here is shell work still in flight, not
+    // open dialogs.
     WaitForLaunchThreads();
 }
 
