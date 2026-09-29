@@ -516,7 +516,7 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
 // Subclassic VS windows in CreateWindowExW doesn't work for some reason, so we have to do it in ShowWindow
 using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_original;
-bool WINAPI ShowWindow_hook(HWND hWnd, int nCmdShow) {
+BOOL WINAPI ShowWindow_hook(HWND hWnd, int nCmdShow) {
     wchar_t className[256];
     GetClassName(hWnd, className, 256);
     Wh_Log(L"ShowWindow_hook: %s", className);
