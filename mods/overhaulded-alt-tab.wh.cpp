@@ -2,7 +2,7 @@
 // @id              overhaulded-alt-tab
 // @name            OverhauldedWin Alt+Tab
 // @description     Replaces the boring Windows Alt+Tab with a modern and elegant window switcher.
-// @version         1.2.19
+// @version         1.1.19
 // @author          IMiloDev
 // @github          https://github.com/IMiloDev
 // @homepage        https://github.com/IMiloDev/OverhauldedWin-Task-Switcher
@@ -16,7 +16,7 @@
 
 A modern, fluid and highly visual replacement for the native Windows Alt+Tab experience.
 
-Built from scratch in native C++ as a project to explore Windows APIs, graphics, animation systems and desktop customization.
+Built from scratch in native C++ as a project to explore Windows APIs, graphics, animation systems and desktop customization. 
 
 > Ofc, made as a C++ practice project. Hope you enjoy it as much as I enjoy developing it.
 
@@ -2436,6 +2436,19 @@ static RECT ScaleRectAroundCenter(const RECT& rect, float scale)
     return result;
 }
 
+static RECT ScaleRectAroundPoint(const RECT& rect, float scale,
+                                 float pivotX, float pivotY)
+{
+    if (fabsf(scale - 1.0f) < 0.0001f)
+        return rect;
+    RECT result = {};
+    result.left = static_cast<LONG>(roundf(pivotX + (rect.left - pivotX) * scale));
+    result.right = static_cast<LONG>(roundf(pivotX + (rect.right - pivotX) * scale));
+    result.top = static_cast<LONG>(roundf(pivotY + (rect.top - pivotY) * scale));
+    result.bottom = static_cast<LONG>(roundf(pivotY + (rect.bottom - pivotY) * scale));
+    return result;
+}
+
 static CardSlotGeometry GetInterpolatedSlotGeometry(float virtualSlot)
 {
     int k0 = static_cast<int>(floorf(virtualSlot));
@@ -2505,8 +2518,8 @@ static RECT GetSlotHeaderRect(int slot)
     header.right = static_cast<int>(roundf(g.right)) - pad;
     header.top = static_cast<int>(roundf(g.top)) + pad;
     header.bottom = header.top + static_cast<int>(roundf(g.headerHeight));
-    if (slot == 2)
-        header = ScaleRectAroundCenter(header, g_cardSnapScale);
+    // El título se mantiene en su geometría normal. El bounce se separa
+    // lógicamente y se aplica únicamente al icono en PaintSlotHeader*.
     if (g_cardExitActive && slot == g_cardExitSlot)
     {
         int offset = static_cast<int>(roundf(GetCardExitOffsetY()));
@@ -3253,6 +3266,14 @@ static void PaintSlotHeaderD2D(int slot, int groupIndex, bool selected, float di
     int iconX = rc.left + paddingLeft;
     int iconY = rc.top + (rc.bottom - rc.top - iconSize) / 2;
     int textX = iconX + iconSize + ScaleLayoutPx(8.0f);
+    RECT iconRect = { iconX, iconY, iconX + iconSize, iconY + iconSize };
+    if (slot == 2)
+    {
+        RECT cardRect = GetSlotCardRect(slot);
+        float pivotX = (static_cast<float>(cardRect.left) + cardRect.right) * 0.5f;
+        float pivotY = (static_cast<float>(cardRect.top) + cardRect.bottom) * 0.5f;
+        iconRect = ScaleRectAroundPoint(iconRect, g_cardSnapScale, pivotX, pivotY);
+    }
 
     // El encabezado es deliberadamente transparente: no crea una superficie
     // oscura independiente sobre el gradiente Dynamic Obsidian de la card.
@@ -3262,10 +3283,10 @@ static void PaintSlotHeaderD2D(int slot, int groupIndex, bool selected, float di
     if (group.iconBitmap)
     {
         D2D1_RECT_F iconDest = D2D1::RectF(
-            static_cast<float>(iconX),
-            static_cast<float>(iconY),
-            static_cast<float>(iconX + iconSize),
-            static_cast<float>(iconY + iconSize));
+            static_cast<float>(iconRect.left),
+            static_cast<float>(iconRect.top),
+            static_cast<float>(iconRect.right),
+            static_cast<float>(iconRect.bottom));
         g_d2dDCRenderTarget->DrawBitmap(
             group.iconBitmap, &iconDest, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
     }
@@ -3319,6 +3340,14 @@ static void PaintSlotHeaderGDI(HDC hdc, int slot, int groupIndex, bool selected,
     int iconX = rc.left + paddingLeft;
     int iconY = rc.top + (rc.bottom - rc.top - iconSize) / 2;
     int textX = iconX + iconSize + ScaleLayoutPx(8.0f);
+    RECT iconRect = { iconX, iconY, iconX + iconSize, iconY + iconSize };
+    if (slot == 2)
+    {
+        RECT cardRect = GetSlotCardRect(slot);
+        float pivotX = (static_cast<float>(cardRect.left) + cardRect.right) * 0.5f;
+        float pivotY = (static_cast<float>(cardRect.top) + cardRect.bottom) * 0.5f;
+        iconRect = ScaleRectAroundPoint(iconRect, g_cardSnapScale, pivotX, pivotY);
+    }
 
     // Sin panel, relleno ni borde propio: el encabezado deja ver la card.
 
@@ -3336,7 +3365,9 @@ static void PaintSlotHeaderGDI(HDC hdc, int slot, int groupIndex, bool selected,
 
     if (group.icon)
     {
-        DrawIconEx(hdc, iconX, iconY, group.icon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
+        DrawIconEx(hdc, iconRect.left, iconRect.top, group.icon,
+                   iconRect.right - iconRect.left, iconRect.bottom - iconRect.top,
+                   0, nullptr, DI_NORMAL);
     }
 }
 
@@ -5068,7 +5099,7 @@ static bool StartWorkerThread(LPTHREAD_START_ROUTINE proc, HANDLE* outThread,
 
 // TOOL MOD
 
-static BOOL WhTool_ModInit()
+BOOL WhTool_ModInit()
 {
     LoadAnimationSettings();
 
@@ -5109,14 +5140,14 @@ static BOOL WhTool_ModInit()
     return TRUE;
 }
 
-static void WhTool_ModSettingsChanged()
+void WhTool_ModSettingsChanged()
 {
     LoadAnimationSettings();
     // Los timers pertenecen al UI thread; se le pide que los reprograme.
     PostUiCommand(WM_UI_SETTINGS, 0, 0);
 }
 
-static void WhTool_ModUninit()
+void WhTool_ModUninit()
 {
     InterlockedExchange(&g_shutdownRequested, 1);
 
