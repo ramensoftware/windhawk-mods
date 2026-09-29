@@ -135,8 +135,8 @@
 - nosteamhtmlinject: false
   $name: Steam - Disable script injection
   $name:ko-KR: Steam - 스크립트 삽입 안함
-  $description: Enable this if you are using the "Change Window Parameters" Millennium extension
-  $description:ko-KR: "\"Change Window Parameters\" Millennium 확장 프로그램을 사용중인 경우 이 옵션을 켜십시오"
+  $description: Only enable this if you are using the "Change Window Parameters" Millennium extension. Requires a Steam restart to apply
+  $description:ko-KR: "\"Change Window Parameters\" Millennium 확장 프로그램을 사용중인 경우에만 이 옵션을 켜십시오. Steam 재시작이 필요합니다"
 */
 // ==/WindhawkModSettings==
 
@@ -150,10 +150,6 @@
 #include <string>
 #include <fstream>
 #include <sstream>
-
-#ifndef WS_EX_NOREDIRECTIONBITMAP // WH 1.4
-#define WS_EX_NOREDIRECTIONBITMAP 0x00200000L
-#endif
 
 enum WorkingMode {
     MODE_DEFAULT,
@@ -212,7 +208,6 @@ LRESULT CALLBACK HideSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
 LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, DWORD_PTR dwRefData) {
     switch (uMsg) {
         case WM_PAINT:
-        {
             if (tb4e_settings.btnFaceChrome && mode == MODE_CHROMIUM && FindWindowExW(hWnd, NULL, L"Intermediate D3D Window", NULL))
             {
                 PAINTSTRUCT ps;
@@ -224,24 +219,27 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                 return 0;
             }
             return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-        }
         break;
         case WM_NCCALCSIZE:
-        {
             if (mode == MODE_OUTLOOK) {
                 DefSubclassProc(hWnd, uMsg, wParam, lParam);
             }
-        }
+            return DefWindowProc(hWnd, uMsg, wParam, lParam);
         case WM_NCPAINT:
-        {
             if (mode == MODE_CHROMIUM) {
-                BOOL dwmEnabled;
+                BOOL dwmEnabled = FALSE;
                 DwmIsCompositionEnabled(&dwmEnabled);
-                if (dwmEnabled) { // Potentially fix Aero Glass issues with Chromium browsers that still support it
-                    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+                if (dwmEnabled) {
+                    BOOL dwmFrameEnabled = FALSE;
+                    if (dwmEnabled) {
+                        HRESULT hr = DwmGetWindowAttribute(hWnd, DWMWA_NCRENDERING_ENABLED, &dwmFrameEnabled, sizeof(dwmFrameEnabled));
+                        if (!SUCCEEDED(hr) || dwmFrameEnabled) { // Potentially fix Aero Glass issues with Chromium browsers that still support it
+                            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+                        }
+                    }
                 }
+                // If not, apply Chromium Basic/Classic NC paint fix from https://windhawk.net/mods/chromium-ncpaint-fix 
             }
-        }
         case WM_NCACTIVATE:
         case WM_NCHITTEST:
         case WM_NCLBUTTONDOWN:
@@ -509,7 +507,7 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
     return hWnd;
 }
 
-// Subclassic VS windows in CreateWindowExW doesn't work for some reason, so we have to do it in ShowWindow
+// Subclassing VS windows in CreateWindowExW doesn't work for some reason, so we have to do it in ShowWindow
 using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_original;
 BOOL WINAPI ShowWindow_hook(HWND hWnd, int nCmdShow) {
@@ -521,11 +519,11 @@ BOOL WINAPI ShowWindow_hook(HWND hWnd, int nCmdShow) {
         ProcessWindow(hWnd);
     // Microsoft Office apps
     } else if (wcscmp(className, L"OpusApp") == 0 || // Word
-        wcscmp(className, L"XLMAIN") == 0 || // Excel
-        wcscmp(className, L"PPTFrameClass") == 0 || // PowerPoint
-        wcscmp(className, L"OMain") == 0 || // Access
+        wcscmp(className, L"XLMAIN") == 0 ||         // Excel
+        wcscmp(className, L"PPTFrameClass") == 0 ||  // PowerPoint
+        wcscmp(className, L"OMain") == 0 ||          // Access
         wcscmp(className, L"rctrl_renwnd32") == 0 || // Outlook
-        wcscmp(className, L"MSWinPub") == 0 // Publisher
+        wcscmp(className, L"MSWinPub") == 0          // Publisher
     ) {
         ProcessWindow(hWnd);
     // OneNote with workarounds
@@ -586,14 +584,12 @@ HANDLE WINAPI CreateFileW_hook(
         compareFileName += 4;
     }
 
-    DWORD dwAttrib = GetFileAttributesW(steamIndexHtmlModded);
-
-    if (dwAttrib != INVALID_FILE_ATTRIBUTES && !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY) &&
-        wcsicmp(compareFileName, steamIndexHtml) == 0 && !tb4e_settings.noSteamHtmlInject) {
-        Wh_Log(L"lpFileName = %s", compareFileName);
-        Wh_Log(L"=>");
-        Wh_Log(L"lpFileName = %s", steamIndexHtmlModded);
-        lpFileName = steamIndexHtmlModded;
+    if (!tb4e_settings.noSteamHtmlInject && wcsicmp(compareFileName, steamIndexHtml) == 0) {
+        DWORD dwAttrib = GetFileAttributesW(steamIndexHtmlModded);
+        if (dwAttrib != INVALID_FILE_ATTRIBUTES && !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY)) {
+            Wh_Log(L"lpFileName = %s => %s", compareFileName, steamIndexHtmlModded);
+            lpFileName = steamIndexHtmlModded;
+        }
     }
 
     return CreateFileW_original(
@@ -624,18 +620,23 @@ bool PrepareSteamIndexHtml() {
     std::string html = buffer.str();
     inFile.close();
 
-    // Hook window.open to override browserType to 3
+    // Hook window.open to override browserType to 3, to enable Steam's built-in native frame mod for a window
+    // The mode is so buggy on Windows so this mod's subclass fixes them
     const char* injectScript =
         "<script>"
             "window.open = (() => {"
                 "const o = window.open;"
                 "return (s, t, f) => {"
-                    "const u = new URL(s);"
-                    "const a = typeof t === 'string' && t.startsWith('desktopoverlay_'),"
-                        "b = u.searchParams.has('pid') && u.searchParams.get('pid') !== '0';"
-                    "if (a || b) return o(s, t, f);" // exclude in-game overlay windows
-                    "u.searchParams.set('browserType', '3');"
-                    "return o(u.toString(), t, f);"
+                    "try {"
+                        "const u = new URL(s);"
+                        "const a = typeof t === 'string' && t.startsWith('desktopoverlay_'),"
+                            "b = u.searchParams.has('pid') && u.searchParams.get('pid') !== '0';"
+                        "if (a || b) return o(s, t, f);" // exclude in-game overlay windows
+                        "u.searchParams.set('browserType', '3');"
+                        "return o(u.toString(), t, f);"
+                    "} catch {"
+                        "return o(s, t, f);"
+                    "}"
                 "};"
             "})();"
         "</script>";
@@ -661,13 +662,16 @@ bool PrepareSteamIndexHtml() {
 
 void LoadSettings() {
     tb4e_settings.btnFaceChrome = Wh_GetIntSetting(L"btnfacechrome");
-    LPCWSTR ceSetting = Wh_GetStringSetting(L"clientedge");
-    if (wcscmp(ceSetting, L"add") == 0) {
-        tb4e_settings.clientEdgeSetting = CE_ADD;
-    } else if (wcscmp(ceSetting, L"remove") == 0) {
-        tb4e_settings.clientEdgeSetting = CE_REMOVE;
+    auto ceSetting = WindhawkUtils::StringSetting::make(L"clientedge");
+    if (*ceSetting) {
+        if (wcscmp(ceSetting, L"add") == 0) {
+            tb4e_settings.clientEdgeSetting = CE_ADD;
+        } else if (wcscmp(ceSetting, L"remove") == 0) {
+            tb4e_settings.clientEdgeSetting = CE_REMOVE;
+        } else {
+            tb4e_settings.clientEdgeSetting = CE_KEEP;
+        }
     }
-    Wh_FreeStringSetting(ceSetting);
     tb4e_settings.noToolWinSteam = Wh_GetIntSetting(L"notoolwinsteam");
     tb4e_settings.noSteamHtmlInject = Wh_GetIntSetting(L"nosteamhtmlinject");
 }
@@ -688,6 +692,8 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    LoadSettings();
+
     // Check if the app is Steam
     wchar_t modulePath[MAX_PATH];
     GetModuleFileName(NULL, modulePath, MAX_PATH);
@@ -695,13 +701,21 @@ BOOL Wh_ModInit() {
     bool steamPrepared = false;
     if (isSteam) {
         Wh_Log(L"Steam detected");
-        PathRemoveFileSpecW(modulePath);
 
-        wchar_t temp[MAX_PATH];
-        PathCombineW(temp, modulePath, L"..\\..\\..\\steamui\\index.html");
-        GetFullPathNameW(temp, MAX_PATH, steamIndexHtml, NULL);
+        if (wcsstr(args, L"--type=gpu-process") != NULL) { // Not used for handling Steam
+            Wh_Log(L"Auxiliary process detected, skipping");
+            return FALSE;
+        }
 
-        steamPrepared = PrepareSteamIndexHtml();
+        if (!tb4e_settings.noSteamHtmlInject) {
+            PathRemoveFileSpecW(modulePath);
+
+            wchar_t temp[MAX_PATH];
+            PathCombineW(temp, modulePath, L"..\\..\\..\\steamui\\index.html");
+            GetFullPathNameW(temp, MAX_PATH, steamIndexHtml, NULL);
+
+            steamPrepared = PrepareSteamIndexHtml();
+        }
     }
 
     isBrave = wcsstr(modulePath, L"BRAVE.EXE") != NULL;
@@ -711,7 +725,6 @@ BOOL Wh_ModInit() {
         mode = MODE_VS;
     }
 
-    LoadSettings();
 
     Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_hook,
                        (void**)&CreateWindowExW_original);
