@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.7.0
+// @version         1.7.1
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -55,6 +55,12 @@ level, updated in real time.
 - Only Windows 11 is supported.
 - If the mod is enabled while Explorer is already running, the text appears
   after the next volume change.
+
+## Changelog
+
+- 1.7.1: Text-only styles now render in a dedicated Segoe UI Variable text
+  block instead of the native icon-font text block, fixing the vertical
+  misalignment with the other tray icons.
 
 ## Credits
 
@@ -259,6 +265,9 @@ struct TrackedVolumeContent {
     winrt::Windows::Foundation::IInspectable origTextIconContentAlignment{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseMargin{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayMargin{nullptr};
+    // True when the native (icon font) text block is the one displayed, i.e.
+    // for the native mute glyph. Otherwise our own text block is displayed.
+    bool lastNativeGlyph = false;
 };
 [[clang::no_destroy]] std::optional<std::vector<TrackedVolumeContent>>
     g_trackedVolumeContents{std::in_place};
@@ -702,6 +711,7 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
     }
 
     tracked.lastDualBoxMode = false;
+    tracked.lastNativeGlyph = false;
     tracked.isCustomLayoutConfigured = false;
 }
 
@@ -811,18 +821,22 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
                           g_settings.muteStyle == MuteStyle::glyphZero);
     bool showDualBox = isDualBoxRequested && (!g_isMuted || isMuteDualBox);
 
+    // The native mute glyph is the only case that needs the native text block
+    // (Segoe Fluent Icons). Every other text is rendered in our own text block
+    // (Segoe UI Variable), like the other tray texts. The native block uses
+    // icon-font vertical metrics, which shifts digits by a pixel or two.
+    bool useNativeGlyph =
+        g_isMuted && g_settings.muteStyle == MuteStyle::glyph;
+
     // Fast-path: when layout structure, mode, position, and spacing are already
     // configured, update only the text without touching margins or columns.
     // This preserves custom XAML styling (e.g. from Taskbar Styler) on volume changes.
     if (tracked->isCustomLayoutConfigured &&
         tracked->lastDualBoxMode == showDualBox &&
+        tracked->lastNativeGlyph == useNativeGlyph &&
         tracked->lastElementPosition == g_settings.elementPosition &&
         tracked->lastIconSpacing == g_settings.iconSpacing) {
-        if (showDualBox) {
-            if (auto subBlock = tracked->subBlock.get()) {
-                subBlock.Text(g_volumeText);
-            }
-        } else if (IsDualBoxStyle() && g_settings.muteStyle != MuteStyle::glyph) {
+        if (!useNativeGlyph) {
             if (auto subBlock = tracked->subBlock.get()) {
                 subBlock.Text(g_volumeText);
             }
@@ -831,51 +845,9 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
     }
 
     if (!showDualBox) {
-        if (!IsDualBoxStyle()) {
-            if (auto subBlock = tracked->subBlock.get()) {
-                uint32_t index = 0;
-                if (containerGrid.Children().IndexOf(subBlock, index)) {
-                    containerGrid.Children().RemoveAt(index);
-                }
-                tracked->subBlock = nullptr;
-            }
-
-            if (containerGrid.ColumnDefinitions().Size() > 0) {
-                containerGrid.ColumnDefinitions().Clear();
-            }
-
-            if (GetContainerWidth() > 0) {
-                applyLayout(baseElement, 0, Visibility::Visible,
-                            Thickness{0.0, 0.0, 0.0, 0.0});
-                applyLayout(underlayElement, 0, Visibility::Visible,
-                            Thickness{0.0, 0.0, 0.0, 0.0});
-                if (FrameworkElement textBlockEl =
-                        FindChildByName(baseElement, L"InnerTextBlock")) {
-                    if (auto tb = textBlockEl.try_as<Controls::TextBlock>()) {
-                        tb.TextAlignment(TextAlignment::Center);
-                        tb.HorizontalAlignment(HorizontalAlignment::Center);
-                    }
-                }
-                if (FrameworkElement underlayTextBlockEl =
-                        FindChildByName(underlayElement, L"InnerTextBlock")) {
-                    if (auto tb =
-                            underlayTextBlockEl.try_as<Controls::TextBlock>()) {
-                        tb.TextAlignment(TextAlignment::Center);
-                        tb.HorizontalAlignment(HorizontalAlignment::Center);
-                    }
-                }
-            }
-
-            tracked->lastDualBoxMode = false;
-            tracked->lastElementPosition = g_settings.elementPosition;
-            tracked->lastIconSpacing = g_settings.iconSpacing;
-            tracked->isCustomLayoutConfigured = true;
-            return;
-        }
-
-        // Single-element indicator in mute state (either glyph only or text only)
+        // Single-element indicator: either our text block alone (text styles,
+        // text mute styles) or the native glyph alone (native mute icon).
         containerGrid.ColumnDefinitions().Clear();
-        bool isMuteGlyph = (g_settings.muteStyle == MuteStyle::glyph);
 
         Controls::TextBlock subBlock = nullptr;
         if (auto existingSubBlock = tracked->subBlock.get()) {
@@ -910,7 +882,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
             }
         }
 
-        if (isMuteGlyph) {
+        if (useNativeGlyph) {
             subBlock.Text(L"");
             subBlock.Visibility(Visibility::Collapsed);
             if (textBlockEl) {
@@ -939,12 +911,13 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         }
 
         Visibility baseVis =
-            isMuteGlyph ? Visibility::Visible : Visibility::Collapsed;
+            useNativeGlyph ? Visibility::Visible : Visibility::Collapsed;
         applyLayout(baseElement, 0, baseVis, Thickness{0.0, 0.0, 0.0, 0.0});
         applyLayout(underlayElement, 0, baseVis,
                     Thickness{0.0, 0.0, 0.0, 0.0});
 
         tracked->lastDualBoxMode = false;
+        tracked->lastNativeGlyph = useNativeGlyph;
         tracked->lastElementPosition = g_settings.elementPosition;
         tracked->lastIconSpacing = g_settings.iconSpacing;
         tracked->isCustomLayoutConfigured = true;
@@ -1029,6 +1002,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
     }
 
     tracked->lastDualBoxMode = true;
+    tracked->lastNativeGlyph = false;
     tracked->lastElementPosition = g_settings.elementPosition;
     tracked->lastIconSpacing = g_settings.iconSpacing;
     tracked->isCustomLayoutConfigured = true;
@@ -1310,6 +1284,11 @@ void WINAPI TextIconContentViewModel_UpdateStyles_Hook(void* pThis,
                 return;
             }
         } else {
+            // The text is set on the native view model so that the volume
+            // TextIconContent can still be recognized (see
+            // IsVolumeTextIconContent). It is displayed by our own text block,
+            // the native one being hidden by SetupVolumeLayout (except for the
+            // native mute glyph).
             winrt::hstring baseText{g_volumeText};
             TextIconContentViewModel_BaseText_Original(pThis, &baseText);
             (void)winrt::detach_abi(baseText);
@@ -1680,6 +1659,7 @@ void Wh_ModSettingsChanged() {
                 if (g_trackedVolumeContents) {
                     for (auto& tracked : *g_trackedVolumeContents) {
                         tracked.lastDualBoxMode = false;
+                        tracked.lastNativeGlyph = false;
                         tracked.isCustomLayoutConfigured = false;
                     }
                 }
