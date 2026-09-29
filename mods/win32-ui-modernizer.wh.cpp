@@ -15654,8 +15654,9 @@ static bool ListRenameQueueDuiHook(HMODULE dui70, bool* queued)
     return false;
 }
 
-#undef LIST_RENAME_DUI_CALL
-#undef LIST_RENAME_DUI_SSTDCALL
+// LIST_RENAME_DUI_SSTDCALL stays defined: the windhawk-mods symbol extractor
+// expands a SYMBOL_HOOK string with the macros as they stand at the end of
+// the file, so an #undef here leaves it unexpanded.
 
 static void CbdLoadAPIs()
 {
@@ -16960,16 +16961,15 @@ static void MenuAdjustUahPopupItemHeight(HWND hwnd, LPARAM lParam)
     }
 }
 
+// The string form stays defined for the rest of the file: the windhawk-mods
+// symbol extractor expands a SYMBOL_HOOK string with the macros as they
+// stand at the end of the file.
 #ifdef _WIN64
 #define MENU_IMMERSIVE_CALL __cdecl
-static constexpr PCWSTR kMenuImmersiveSymbol =
-    L"bool __cdecl ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu("
-    L"struct HMENU__ *,struct HWND__ *)";
+#define MENU_IMMERSIVE_SCALL L"__cdecl"
 #else
 #define MENU_IMMERSIVE_CALL __stdcall
-static constexpr PCWSTR kMenuImmersiveSymbol =
-    L"bool __stdcall ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu("
-    L"struct HMENU__ *,struct HWND__ *)";
+#define MENU_IMMERSIVE_SCALL L"__stdcall"
 #endif
 
 using MenuCanApplyOwnerDraw_t =
@@ -17042,7 +17042,10 @@ static bool MenuInstallImmersiveHook(
     // SecurityHealthSystray.exe, shell32.dll, SndVolSSO.dll, Taskmgr.exe,
     // twinui.dll, twinui.pcshell.dll, usoapi.dll
     WindhawkUtils::SYMBOL_HOOK immersive_menu_module_hooks[] = {{
-        {kMenuImmersiveSymbol}, original, hook, true
+        {L"bool " MENU_IMMERSIVE_SCALL
+         L" ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu("
+         L"struct HMENU__ *,struct HWND__ *)"},
+        original, hook, true
     }};
     WindhawkUtils::HookSymbols(module, immersive_menu_module_hooks,
         ARRAYSIZE(immersive_menu_module_hooks));
@@ -55372,8 +55375,9 @@ void RefreshVisuals()
 }  // namespace NavCollapse
 
 #undef NAV_DUI_CALL
-#undef NAV_DUI_CALL_TEXT
-#undef NAV_DUI_FREE_CALL_TEXT
+// NAV_DUI_CALL_TEXT and NAV_DUI_FREE_CALL_TEXT stay defined: the
+// windhawk-mods symbol extractor expands SYMBOL_HOOK strings with the macros
+// as they stand at the end of the file.
 
 static Settings LoadSettings()
 {
@@ -61326,7 +61330,9 @@ static void ShortcutOverlayUninit()
 }
 
 #undef SHORTCUT_RENDERER_CALL
-#undef SHORTCUT_RENDERER_CALL_TEXT
+// SHORTCUT_RENDERER_CALL_TEXT stays defined: the windhawk-mods symbol
+// extractor expands SYMBOL_HOOK strings with the macros as they stand at the
+// end of the file.
 
 static bool ShellIconDrawPart(ID2D1RenderTarget* rt,
                               const ShellIconPart& part,
