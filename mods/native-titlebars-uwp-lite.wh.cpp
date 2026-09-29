@@ -66,68 +66,6 @@ INT64 __fastcall CTitleBar__PaintButton_hook(
     return 0;
 }
 
-struct FindAppFrameData
-{
-    DWORD processId;
-    HWND hAppFrame;
-};
-
-BOOL CALLBACK FindAppFrameProc(HWND hWnd, LPARAM lParam)
-{
-    FindAppFrameData *pData = (FindAppFrameData *)lParam;
-
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hWnd, &pid);
-    if (pid != pData->processId)
-        return TRUE;
-
-    WCHAR wszClassName[64] = {0};
-    GetClassNameW(hWnd, wszClassName, ARRAYSIZE(wszClassName));
-    if (wcscmp(wszClassName, L"ApplicationFrameWindow") == 0)
-    {
-        pData->hAppFrame = hWnd;
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-HWND FindApplicationFrameWindow()
-{
-    FindAppFrameData data = {0};
-    data.processId = GetCurrentProcessId();
-    EnumWindows(FindAppFrameProc, (LPARAM)&data);
-    return data.hAppFrame;
-}
-
-HWND FindOwningApplicationFrameWindow(HWND hWnd)
-{
-    HWND hCandidate = hWnd;
-
-    for (int i = 0; i < 16 && hCandidate; i++)
-    {
-        WCHAR wszClassName[64] = {0};
-        GetClassNameW(hCandidate, wszClassName, ARRAYSIZE(wszClassName));
-        if (wcscmp(wszClassName, L"ApplicationFrameWindow") == 0)
-        {
-            return hCandidate;
-        }
-
-        HWND hNext = GetWindow(hCandidate, GW_OWNER);
-        if (!hNext)
-        {
-            hNext = GetParent(hCandidate);
-        }
-        if (hNext == hCandidate)
-        {
-            break;
-        }
-        hCandidate = hNext;
-    }
-
-    return FindApplicationFrameWindow();
-}
-
 static ULONG_PTR g_gdiplusToken = 0;
 
 static CRITICAL_SECTION g_csSubclassedWindows;
@@ -184,7 +122,6 @@ HICON LoadPngAsIconSized(const WCHAR *szFile, int targetSize)
     WCHAR *pngPos = wcsstr(stem, L".png");
     if (pngPos) *pngPos = L'\0';
 
-    // Для крупных значков ищем крупные ресурсы в первую очередь
     const WCHAR *priorities_large[] = {
         L"targetsize-256",
         L"targetsize-96",
@@ -340,7 +277,6 @@ HICON GetIconForWindow(HWND hWnd, int size)
                     pei->Release();
                 }
 
-                // Запасной вариант — SHGetFileInfoW
                 if (!hIcon)
                 {
                     SHFILEINFOW sfi = {0};
@@ -362,12 +298,10 @@ HICON GetIconForWindow(HWND hWnd, int size)
     return hIcon;
 }
 
-void SetTitlebarIcon(HWND hWnd, HWND hAppFrame)
+void SetTitlebarIcon(HWND hWnd)
 {
-    HICON hSmall = GetIconForWindow(hAppFrame, 16);
-    // Для Alt+Tab запрашиваем 256px — LoadPngAsIconSized найдёт
-    // targetsize-256 / scale-400 и т.д.
-    HICON hBig   = GetIconForWindow(hAppFrame, 256);
+    HICON hSmall = GetIconForWindow(hWnd, 16);
+    HICON hBig   = GetIconForWindow(hWnd, 256);
 
     if (hSmall)
     {
@@ -404,7 +338,6 @@ void DestroyTitlebarIcons(HWND hWnd)
     RemovePropW(hWnd, L"NativeTitlebarIconSet");
 }
 
-// 5-параметровая сигнатура для WindhawkUtils::SetWindowSubclassFromAnyThread
 LRESULT CALLBACK SubclassProc(
     HWND hWnd,
     UINT uMsg,
@@ -414,7 +347,6 @@ LRESULT CALLBACK SubclassProc(
 {
     if (uMsg == WM_NCDESTROY)
     {
-        // Обёртка сама снимет subclass; мы только чистим за собой
         DestroyTitlebarIcons(hWnd);
         ForgetSubclassedWindow(hWnd);
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -429,11 +361,7 @@ LRESULT CALLBACK SubclassProc(
     {
         if (!GetPropW(hWnd, L"NativeTitlebarIconSet"))
         {
-            HWND hAppFrame = FindOwningApplicationFrameWindow(hWnd);
-            if (hAppFrame)
-            {
-                SetTitlebarIcon(hWnd, hAppFrame);
-            }
+            SetTitlebarIcon(hWnd);
         }
     }
 
@@ -458,10 +386,6 @@ HWND WINAPI CreateWindowInBandEx_hook(
     DWORD dwBand,
     DWORD dwTypeFlags)
 {
-    // Only UWP frames get the native frame. Explorer creates its shell
-    // surfaces (Alt+Tab host, ForegroundStaging, ThumbnailDeviceHelperWnd)
-    // through this same API; they must keep their original styles. A class
-    // passed as an atom is left untouched too.
     if (IS_INTRESOURCE(lpClassName) ||
         _wcsicmp(lpClassName, L"ApplicationFrameWindow") != 0)
     {
@@ -471,7 +395,6 @@ HWND WINAPI CreateWindowInBandEx_hook(
             hWndParent, hMenu, hInstance, lpParam,
             dwBand, dwTypeFlags);
     }
-
 
     dwExStyle &= ~WS_EX_DLGMODALFRAME;
     dwExStyle &= ~0x00200000L;
@@ -487,12 +410,7 @@ HWND WINAPI CreateWindowInBandEx_hook(
     {
         WindhawkUtils::SetWindowSubclassFromAnyThread(res, SubclassProc, 0);
         RememberSubclassedWindow(res);
-
-        HWND hAppFrame = FindOwningApplicationFrameWindow(res);
-        if (hAppFrame != NULL)
-        {
-            SetTitlebarIcon(res, hAppFrame);
-        }
+        SetTitlebarIcon(res);
     }
 
     return res;
