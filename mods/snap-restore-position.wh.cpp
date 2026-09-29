@@ -12,6 +12,8 @@
 /*
 # Restore to Snap Position
 
+![Demo](https://i.imgur.com/XqdsB0w.gif)
+
 In Windows, when a window snapped with Snap (for example, to the left half of
 the screen) is maximized and then restored, it goes back to the position and
 size it had **before** it was snapped.
@@ -198,7 +200,8 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
 }
 
 BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int nCmdShow) {
-    if (nCmdShow == SW_MAXIMIZE) {
+    if (nCmdShow == SW_MAXIMIZE &&
+        GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentThreadId()) {
         UseSnappedRectAsNormal(hWnd);
     }
     return ShowWindowAsync_Original(hWnd, nCmdShow);
