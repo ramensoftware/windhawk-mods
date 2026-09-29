@@ -2,58 +2,65 @@
 // @id              overhaulded-alt-tab
 // @name            OverhauldedWin Alt+Tab
 // @description     Replaces the boring Windows Alt+Tab with a modern and elegant window switcher.
-// @version         1.0.0
+// @version         1.2.11
 // @author          IMiloDev
-// @github          IMiloDev
+// @github          https://github.com/IMiloDev
 // @homepage        https://github.com/IMiloDev/OverhauldedWin-Task-Switcher
 // @include         explorer.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
- * # Overhaulded Task Switcher
- *
- * A modern, fluid and highly visual replacement for the Windows Alt+Tab experience 🫩.
- *
- * `Ofc, made as a practice of cpp. Hope you all enjoy this as me developing this.`
- *
- * ## Screenshot
- *
- * # ![OverhauldedWin-Task-Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/TaskManager.png)
- *
- * ## Features
- *
- * - Modern horizontal task switcher interface
- * - App grouping by application/process
- * - Real DWM window previews
- * - Dynamic Obsidian visual system
- * - CPU-based desktop blur
- * - Fluid Pop opening animation
- * - Smooth horizontal navigation
- * - Hover interactions and window closing
- * - Resolution-aware UI scaling
- * - Configurable animation FPS
- * - AltGr + Tab support
- * - Alt + Tab support
- * - Lightweight native C++ implementation
- *
- * ## Design
- *
- * Overhaulded focuses on a dark, minimal interface inspired by modern desktop UI design while keeping the selector feeling native to Windows.
- *
- * The visual system uses a Black Obsidian surface with subtle content-based illumination, rounded cards, restrained shadows and smooth transitions.
- *
- * ## Requirements
- *
- * - Windows (11 Only)
- *
- * ## License
- *
- * This project is licensed under the **MIT License**.
- *
- * See the [LICENSE](LICENSE) file for the complete license text.
- *
- * `Current ver: 1.0.0`
+# Overhaulded Task Switcher
+ 
+A modern, fluid and highly visual replacement for the Windows Alt+Tab experience 🫩. 
+
+`Ofc, made as a practice of cpp. Hope you all enjoy this as me developing this.`
+
+## Screenshot
+
+# ![OverhauldedWin-Task-Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Task2.png)
+
+## Features
+
+- Modern horizontal task switcher interface
+- App grouping by application/process
+- Real DWM window previews
+- Dynamic Obsidian visual system
+- CPU-based desktop blur
+- Fluid Pop opening animation
+- Smooth horizontal navigation
+- Hover interactions and window closing
+- Resolution-aware UI scaling
+- Configurable animation FPS
+- AltGr + Tab support
+- Alt + Tab support
+- Lightweight native C++ implementation
+
+## Design
+
+Overhaulded focuses on a dark, minimal interface inspired by modern desktop UI design while keeping the selector feeling native to Windows.
+
+The visual system uses a Black Obsidian surface with subtle content-based illumination, rounded cards, restrained shadows and smooth transitions.
+
+## Smooth Animations
+### Open
+## ![OverhauldedWin](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/task-switcher.webp)
+### Slide
+## ![OverhauldedWin](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Desplazamiento-sexy.webp)
+
+
+## Requirements
+
+- Windows (11 Only)
+
+## License
+
+This project is licensed under the **MIT License**.
+
+See the [LICENSE](LICENSE) file for the complete license text.
+
+`Current ver: 1.2.11 (PUBLIC-RELEASE)`
 */
 // ==/WindhawkModReadme==
 
@@ -143,6 +150,8 @@ static int g_runtimeSelectorHeight = kSelectorHeight;
 static float g_sceneScaleX = 1.0f;
 static float g_sceneScaleY = 1.0f;
 static float g_sceneOpacity = 1.0f;
+static float g_sceneTiltDegrees = 0.0f;
+static float g_selectionTiltDirection = 0.0f;
 
 static int ScaleLayoutPx(float value)
 {
@@ -282,6 +291,7 @@ enum class ModifierSession
 {
     None,
     LeftAlt,
+    RightAlt,
     AltGr
 };
 
@@ -360,6 +370,7 @@ static ULONGLONG g_selectorAnimationStart = 0;
 static float g_selectionStartScaleX = 1.0f;
 static float g_selectionStartScaleY = 1.0f;
 static float g_selectionStartOpacity = 1.0f;
+static float g_selectionStartTiltDegrees = 0.0f;
 static float g_closeStartScaleX = 1.0f;
 static float g_closeStartScaleY = 1.0f;
 static float g_closeStartOpacity = 1.0f;
@@ -411,6 +422,7 @@ static IDWriteTextFormat* g_dwriteCloseFormat = nullptr;
 
 typedef HFONT (WINAPI* CreateFontIndirectWFn)(const LOGFONTW*);
 typedef BOOL (WINAPI* DeleteObjectFn)(HGDIOBJ);
+typedef HRGN (WINAPI* CreateRoundRectRgnFn)(int, int, int, int, int, int);
 typedef HGDIOBJ (WINAPI* GetStockObjectFn)(int);
 typedef int (WINAPI* SetBkModeFn)(HDC, int);
 typedef COLORREF (WINAPI* SetTextColorFn)(HDC, COLORREF);
@@ -431,6 +443,7 @@ typedef BOOL (WINAPI* DeleteDCFn)(HDC);
 static HMODULE g_gdiApi = nullptr;
 static CreateFontIndirectWFn g_createFontIndirectW = nullptr;
 static DeleteObjectFn g_deleteObject = nullptr;
+static CreateRoundRectRgnFn g_createRoundRectRgn = nullptr;
 static GetStockObjectFn g_getStockObject = nullptr;
 static SetBkModeFn g_setBkMode = nullptr;
 static SetTextColorFn g_setTextColor = nullptr;
@@ -483,6 +496,8 @@ static float GetCardExitProgress();
 static float GetCardExitOpacity();
 static float GetCardExitOffsetY();
 static void DestroySelector();
+static bool InitializePersistentSelector();
+static void HideSelectorForSession();
 static void ActivateWindow(HWND target);
 static void StartSlide(int steps);
 static void SelectNextSmooth(int steps = 1);
@@ -523,6 +538,9 @@ static bool g_rightCtrlSeen = false;
 static bool g_rightAltSeen = false;
 static bool g_altGrActive = false;
 static bool g_tabSuppressed = false;
+// Se arma únicamente cuando AltGr+Tab pertenece a nuestro selector; permite
+// bloquear Ctrl+Alt+Flecha antes de que el selector termine de mostrarse.
+static bool g_altGrTaskSwitcherArmed = false;
 
 // UTILIDADES DE ESTADO
 
@@ -558,6 +576,7 @@ static void ResetKeyboardState()
     g_rightAltSeen = false;
     g_altGrActive = false;
     g_tabSuppressed = false;
+    g_altGrTaskSwitcherArmed = false;
     g_sessionModifier = ModifierSession::None;
     g_cleanupInProgress = false;
     g_selectorOpening = false;
@@ -571,6 +590,7 @@ static void ClearSelectorKeyboardSession()
     g_altGrActive = false;
     g_rightCtrlSeen = false;
     g_rightAltSeen = false;
+    g_altGrTaskSwitcherArmed = false;
     g_sessionModifier = ModifierSession::None;
 
     g_altLeftDown = (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0;
@@ -590,6 +610,7 @@ static void CleanupKeyboardState()
     g_altGrActive = false;
     g_rightCtrlSeen = false;
     g_rightAltSeen = false;
+    g_altGrTaskSwitcherArmed = false;
     g_sessionModifier = ModifierSession::None;
 
     // Solo se reconcilia el estado interno; nunca se sintetizan KeyUp.
@@ -1445,7 +1466,7 @@ static void UnloadD2DAndDWrite()
 
 static bool LoadGdiFunctions()
 {
-    if (g_createFontIndirectW && g_deleteObject && g_getStockObject &&
+    if (g_createFontIndirectW && g_deleteObject && g_createRoundRectRgn && g_getStockObject &&
         g_setBkMode && g_setTextColor && g_createSolidBrush &&
         g_createPen && g_selectObject && g_roundRect && g_getTextFaceW &&
         g_getDIBits && g_getObjectW && g_createCompatibleDC &&
@@ -1461,6 +1482,8 @@ static bool LoadGdiFunctions()
         GetProcAddress(g_gdiApi, "CreateFontIndirectW"));
     g_deleteObject = reinterpret_cast<DeleteObjectFn>(
         GetProcAddress(g_gdiApi, "DeleteObject"));
+    g_createRoundRectRgn = reinterpret_cast<CreateRoundRectRgnFn>(
+        GetProcAddress(g_gdiApi, "CreateRoundRectRgn"));
     g_getStockObject = reinterpret_cast<GetStockObjectFn>(
         GetProcAddress(g_gdiApi, "GetStockObject"));
     g_setBkMode = reinterpret_cast<SetBkModeFn>(
@@ -1492,7 +1515,7 @@ static bool LoadGdiFunctions()
     g_deleteDC = reinterpret_cast<DeleteDCFn>(
         GetProcAddress(g_gdiApi, "DeleteDC"));
 
-    if (!g_createFontIndirectW || !g_deleteObject || !g_getStockObject ||
+    if (!g_createFontIndirectW || !g_deleteObject || !g_createRoundRectRgn || !g_getStockObject ||
         !g_setBkMode || !g_setTextColor || !g_createSolidBrush ||
         !g_createPen || !g_selectObject || !g_roundRect ||
         !g_getDIBits || !g_getObjectW || !g_createCompatibleDC ||
@@ -1576,7 +1599,7 @@ static MediaAccent ExtractMediaAccentFromImage(HICON icon)
             if (maximum > 0 && maximum - minimum >= 8)
             {
                 // La card sigue siendo Obsidian: el color solo ilumina su borde.
-                const float scale = 0.55f;
+                const float scale = 0.78f;
                 result.color = RGB(static_cast<BYTE>(r * scale),
                                    static_cast<BYTE>(g * scale),
                                    static_cast<BYTE>(b * scale));
@@ -1748,7 +1771,8 @@ static void ApplyBlurToPixels(unsigned char* pixels, int width, int height, int 
         int sumB = 0, sumG = 0, sumR = 0, sumA = 0;
         for (int k = -radius; k <= radius; ++k)
         {
-            int sx = std::max(0, std::min(width - 1, k));
+            // Initialize the sliding window at x == 0 using x + k.
+            int sx = std::max(0, std::min(width - 1, 0 + k));
             const unsigned char* p = pixels + (static_cast<size_t>(y) * width + sx) * 4;
             sumB += p[0]; sumG += p[1]; sumR += p[2]; sumA += p[3];
         }
@@ -1777,7 +1801,8 @@ static void ApplyBlurToPixels(unsigned char* pixels, int width, int height, int 
         int sumB = 0, sumG = 0, sumR = 0, sumA = 0;
         for (int k = -radius; k <= radius; ++k)
         {
-            int sy = std::max(0, std::min(height - 1, k));
+            // Initialize the vertical sliding window at y == 0 using y + k.
+            int sy = std::max(0, std::min(height - 1, 0 + k));
             const unsigned char* p = horizontal.data() + (static_cast<size_t>(sy) * width + x) * 4;
             sumB += p[0]; sumG += p[1]; sumR += p[2]; sumA += p[3];
         }
@@ -1869,7 +1894,7 @@ static void CreateBlurBackground(int captureX, int captureY)
     for (int i = 0; i < g_blurWidth * g_blurHeight; ++i)
         g_blurPixels[i * 4 + 3] = 255;
 
-    ApplyBlurToPixels(g_blurPixels, g_blurWidth, g_blurHeight, 3);
+    ApplyBlurToPixels(g_blurPixels, g_blurWidth, g_blurHeight, 4);
 
     // Tinte gris azulado oscuro sutil; no convierte el fondo en negro opaco.
     for (int i = 0; i < g_blurWidth * g_blurHeight * 4; i += 4)
@@ -2030,6 +2055,20 @@ static CardSlotGeometry GetInterpolatedSlotGeometry(float virtualSlot)
     res.cornerRadius *= g_uiScale.value;
     res.headerHeight *= g_uiScale.value;
     res.padding *= g_uiScale.value;
+
+    // Inclinación sutil del carrusel durante la navegación. Se aplica como
+    // una deformación geométrica vertical alrededor del eje central, no como
+    // un bitmap rotado; así los DWM thumbnails reciben exactamente la misma
+    // trayectoria y no se desacoplan visualmente de las cards.
+    if (fabsf(g_sceneTiltDegrees) > 0.001f)
+    {
+        const float selectorCenterX = static_cast<float>(g_runtimeSelectorWidth) * 0.5f;
+        const float slotCenterX = (res.left + res.right) * 0.5f;
+        const float radians = g_sceneTiltDegrees * 3.14159265358979323846f / 180.0f;
+        const float verticalOffset = tanf(radians) * (slotCenterX - selectorCenterX);
+        res.top += verticalOffset;
+        res.bottom += verticalOffset;
+    }
     return res;
 }
 
@@ -2396,6 +2435,32 @@ static void UpdateThumbnailProperties(int slot, const RECT& area, HWND source)
     properties.rcDestination = clipped;
     if (!visible)
         properties.rcDestination = RECT{ 0, 0, 0, 0 };
+    else
+    {
+        // Crop the matching source pixels when a card crosses the selector
+        // edge. Without rcSource, DWM scales the complete source into the
+        // remaining destination rectangle and deforms the preview.
+        int destinationWidth = destination.right - destination.left;
+        int destinationHeight = destination.bottom - destination.top;
+        RECT sourceClip = {
+            static_cast<LONG>((static_cast<long long>(clipped.left - destination.left) * sourceWidth) /
+                              destinationWidth),
+            static_cast<LONG>((static_cast<long long>(clipped.top - destination.top) * sourceHeight) /
+                              destinationHeight),
+            static_cast<LONG>((static_cast<long long>(clipped.right - destination.left) * sourceWidth) /
+                              destinationWidth),
+            static_cast<LONG>((static_cast<long long>(clipped.bottom - destination.top) * sourceHeight) /
+                              destinationHeight)
+        };
+        sourceClip.left = std::max<LONG>(0, std::min<LONG>(sourceWidth, sourceClip.left));
+        sourceClip.top = std::max<LONG>(0, std::min<LONG>(sourceHeight, sourceClip.top));
+        sourceClip.right = std::max<LONG>(sourceClip.left + 1,
+                                          std::min<LONG>(sourceWidth, sourceClip.right));
+        sourceClip.bottom = std::max<LONG>(sourceClip.top + 1,
+                                           std::min<LONG>(sourceHeight, sourceClip.bottom));
+        properties.dwFlags |= kDwmTnpRectSource;
+        properties.rcSource = sourceClip;
+    }
     properties.fVisible = visible ? TRUE : FALSE;
     // Previews DWM siempre nítidas; la translucidez solo pertenece a la card.
     float thumbnailOpacity = g_sceneOpacity;
@@ -2461,8 +2526,11 @@ static void StopCarouselAnimation()
     g_sceneScaleX = 1.0f;
     g_sceneScaleY = 1.0f;
     g_sceneOpacity = 1.0f;
+    g_sceneTiltDegrees = 0.0f;
+    g_selectionTiltDirection = 0.0f;
     g_selectionStartScaleX = 1.0f;
     g_selectionStartScaleY = 1.0f;
+    g_selectionStartTiltDegrees = 0.0f;
     g_cardExitActive = false;
     g_cardExitSlot = -1;
     g_cardExitGroupIndex = -1;
@@ -2487,6 +2555,7 @@ static void StartSelectorClose(HWND target)
     {
         g_sceneScaleX = 1.0f;
         g_sceneScaleY = 1.0f;
+        g_sceneTiltDegrees = 0.0f;
     }
     g_selectorAnimation = SelectorAnimationState::Closing;
     g_selectorAnimationStart = GetTickCount64();
@@ -2608,10 +2677,17 @@ static void UpdateSelectorMotion()
                         (1.0f - g_selectionStartScaleY) * ease;
         g_sceneOpacity = g_selectionStartOpacity +
                          (1.0f - g_selectionStartOpacity) * ease;
+
+        // Impulso angular corto: alcanza el máximo hacia la mitad del
+        // desplazamiento y vuelve a cero al asentarse.
+        float tiltEnvelope = sinf(3.14159265358979323846f * t);
+        g_sceneTiltDegrees = g_selectionStartTiltDegrees * (1.0f - t) +
+                             g_selectionTiltDirection * 0.70f * tiltEnvelope;
         if (t >= 1.0f)
         {
             g_sceneScaleX = 1.0f;
             g_sceneScaleY = 1.0f;
+            g_sceneTiltDegrees = 0.0f;
             g_selectorAnimation = SelectorAnimationState::Open;
             KillTimer(g_selector, kSelectorMotionTimerId);
         }
@@ -2633,6 +2709,7 @@ static void UpdateSelectorMotion()
             g_pendingActivationTarget = nullptr;
             g_sceneScaleX = 1.0f;
             g_sceneScaleY = 1.0f;
+            g_sceneTiltDegrees = 0.0f;
             g_selectorAnimation = SelectorAnimationState::None;
             KillTimer(g_selector, kSelectorMotionTimerId);
             g_cleanupInProgress = true;
@@ -2696,9 +2773,9 @@ static ID2D1LinearGradientBrush* EnsureSurfaceGradientBrush(int groupIndex,
     // influencia moderada y los extremos recuperan Black Obsidian.
     D2D1_COLOR_F edge = base;
     D2D1_COLOR_F soft = AddMediaAccent(base, group.mediaAccent,
-                                         selected ? 0.080f : 0.065f);
+                                         selected ? 0.145f : 0.115f);
     D2D1_COLOR_F center = AddMediaAccent(base, group.mediaAccent,
-                                           selected ? 0.160f : 0.130f);
+                                           selected ? 0.300f : 0.235f);
 
     D2D1_GRADIENT_STOP stops[5] = {};
     stops[0].position = 0.0f;
@@ -2870,6 +2947,45 @@ static void PaintCounterGDI(HDC hdc)
     if (oldFont && g_selectObject) g_selectObject(hdc, oldFont);
 }
 
+static void PaintCenterAccentMarginD2D(const RECT& cardRect, int groupIndex, float radius)
+{
+    if (!g_d2dDCRenderTarget || !g_d2dBrush || groupIndex < 0 ||
+        groupIndex >= static_cast<int>(g_groups.size()))
+        return;
+
+    COLORREF accent = g_groups[groupIndex].mediaAccent.valid
+        ? g_groups[groupIndex].mediaAccent.color
+        : RGB(18, 22, 28);
+    float r = GetRValue(accent) / 255.0f;
+    float g = GetGValue(accent) / 255.0f;
+    float b = GetBValue(accent) / 255.0f;
+
+    const float margin = static_cast<float>(ScaleLayoutPx(5.0f));
+    D2D1_ROUNDED_RECT outer = D2D1::RoundedRect(
+        D2D1::RectF(static_cast<float>(cardRect.left) - margin,
+                    static_cast<float>(cardRect.top) - margin,
+                    static_cast<float>(cardRect.right) + margin,
+                    static_cast<float>(cardRect.bottom) + margin),
+        radius + margin, radius + margin);
+
+    // Marco vectorial: no es un bitmap ni una sombra rasterizada. Sigue
+    // exactamente el contorno redondeado de la card central y toma el color
+    // dominante extraído de su contenido.
+    g_d2dBrush->SetColor(D2D1::ColorF(r, g, b, 0.34f));
+    g_d2dDCRenderTarget->DrawRoundedRectangle(&outer, g_d2dBrush,
+                                               static_cast<float>(ScaleLayoutPx(2.0f)));
+
+    D2D1_ROUNDED_RECT inner = D2D1::RoundedRect(
+        D2D1::RectF(static_cast<float>(cardRect.left) - ScaleLayoutPx(2.0f),
+                    static_cast<float>(cardRect.top) - ScaleLayoutPx(2.0f),
+                    static_cast<float>(cardRect.right) + ScaleLayoutPx(2.0f),
+                    static_cast<float>(cardRect.bottom) + ScaleLayoutPx(2.0f)),
+        radius + ScaleLayoutPx(2.0f), radius + ScaleLayoutPx(2.0f));
+    g_d2dBrush->SetColor(D2D1::ColorF(r, g, b, 0.18f));
+    g_d2dDCRenderTarget->DrawRoundedRectangle(&inner, g_d2dBrush,
+                                               static_cast<float>(ScaleLayoutPx(1.0f)));
+}
+
 static void PaintSelectorScene(HWND hwnd, HDC hdc)
 {
     RECT clientRect = {};
@@ -2959,6 +3075,17 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
             g_d2dDCRenderTarget->FillRectangle(&bgRect, g_d2dBrush);
         }
 
+        // Borde vectorial sutil del contenedor. La región real de la ventana
+        // ya recorta las esquinas, por lo que no queda un rectángulo cuadrado.
+        const float containerRadius = static_cast<float>(ScaleLayoutPx(22.0f));
+        D2D1_ROUNDED_RECT containerRect = D2D1::RoundedRect(
+            D2D1::RectF(0.75f, 0.75f,
+                        static_cast<float>(clientRect.right) - 0.75f,
+                        static_cast<float>(clientRect.bottom) - 0.75f),
+            containerRadius, containerRadius);
+        g_d2dBrush->SetColor(D2D1::ColorF(0.32f, 0.36f, 0.43f, 0.30f));
+        g_d2dDCRenderTarget->DrawRoundedRectangle(&containerRect, g_d2dBrush, 1.0f);
+
         RECT containerShadow = {
             ScaleLayoutPx(12.0f),
             clientRect.bottom - ScaleLayoutPx(8.0f),
@@ -2995,6 +3122,8 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
             float radius = selected ? static_cast<float>(g_cardStyle.selectedCornerRadius) * g_uiScale.value
                                     : static_cast<float>(g_cardStyle.cornerRadius) * g_uiScale.value;
             PaintBottomShadowD2D(cardRect, radius, selected ? 0.28f : 0.20f);
+            if (selected && slot == 2)
+                PaintCenterAccentMarginD2D(cardRect, index, radius);
 
             D2D1_COLOR_F bgCol = selected
                 ? D2D1::ColorF(0.035f, 0.040f, 0.045f, kCardSurfaceOpacity)
@@ -3362,17 +3491,73 @@ static void UnregisterSelectorClasses()
     g_classesRegistered = false;
 }
 
+static void ApplySelectorRoundedRegion(HWND hwnd)
+{
+    if (!hwnd || !IsWindow(hwnd) || !LoadGdiFunctions() || !g_createRoundRectRgn)
+        return;
+
+    RECT rc = {};
+    GetClientRect(hwnd, &rc);
+    int width = rc.right - rc.left;
+    int height = rc.bottom - rc.top;
+    if (width <= 0 || height <= 0)
+        return;
+
+    int radius = std::max(ScaleLayoutPx(22.0f), 16);
+    radius = std::min(radius, std::min(width, height) / 2);
+    HRGN region = g_createRoundRectRgn(0, 0, width + 1, height + 1, radius, radius);
+    if (region)
+        SetWindowRgn(hwnd, region, TRUE);
+}
+
+static bool InitializePersistentSelector()
+{
+    if (g_selector && IsWindow(g_selector))
+        return true;
+
+    if (g_selectorAnimation == SelectorAnimationState::Closing)
+        g_selectorAnimation = SelectorAnimationState::None;
+
+    if (!RegisterSelectorClasses())
+        return false;
+
+    HWND selector = CreateWindowExW(
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+        kWindowClassName, L"",
+        WS_POPUP,
+        0, 0, 1, 1,
+        nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+
+    if (!selector)
+        return false;
+
+    g_selector = selector;
+    RemoveNativeSelectorFrame(g_selector);
+    ApplySelectorVisuals(g_selector);
+
+    // Precalentar el renderer mientras el selector está oculto. Esto elimina
+    // la creación de D2D/DWrite/fonts del camino crítico de AltGr+Tab.
+    LoadD2DAndDWrite();
+    CreateUiFonts();
+    UpdateSelectorControls();
+    ShowWindow(g_selector, SW_HIDE);
+    return true;
+}
+
 static bool CreateSelector()
 {
-    if (g_selectorAnimation == SelectorAnimationState::Closing)
-        EmergencyCloseSelector();
-    if (g_selector || g_selectorOpening || g_state != SelectorState::SelectorActive ||
-        !RegisterSelectorClasses())
+    if (g_state != SelectorState::SelectorActive || g_cleanupInProgress)
+        return false;
+
+    // El selector se crea y precalienta únicamente durante la inicialización
+    // del hilo del hook. Nunca se crea ni se carga en el camino de Alt+Tab.
+    if (!g_selector || !IsWindow(g_selector))
         return false;
 
     g_selectorOpening = true;
     g_selectorOriginWindow = GetForegroundWindow();
     MarkSelectorActivity();
+
     RefreshWindowList();
     if (g_groups.empty())
     {
@@ -3380,8 +3565,8 @@ static bool CreateSelector()
         return false;
     }
 
-    // Usar el monitor de la ventana activa; no asumir 1920x1080 ni el monitor primario.
-    HMONITOR monitor = MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTONEAREST);
+    HMONITOR monitor = MonitorFromWindow(g_selectorOriginWindow,
+                                         MONITOR_DEFAULTTONEAREST);
     MONITORINFO monitorInfo = {};
     monitorInfo.cbSize = sizeof(monitorInfo);
     if (!monitor || !GetMonitorInfoW(monitor, &monitorInfo))
@@ -3396,54 +3581,105 @@ static bool CreateSelector()
     int y = work.top + ((work.bottom - work.top) - g_runtimeSelectorHeight) / 2;
 
     StopCarouselAnimation();
+    ReleaseBlurBackground();
 
-    // Capturar/procesar antes de crear y mostrar la ventana, evitando capturarla a sí misma.
+    // El blur se genera con el selector todavía oculto. Solo se recalcula al
+    // comenzar una nueva sesión visible; nunca durante Tab/Shift+Tab.
     CreateBlurBackground(x, y);
 
-    g_selector = CreateWindowExW(
-        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        kWindowClassName, L"",
-        WS_POPUP,
-        x, y, g_runtimeSelectorWidth, g_runtimeSelectorHeight,
-        nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    SetWindowPos(g_selector, HWND_TOPMOST, x, y,
+                 g_runtimeSelectorWidth, g_runtimeSelectorHeight,
+                 SWP_NOACTIVATE | SWP_HIDEWINDOW);
+    ApplySelectorRoundedRegion(g_selector);
 
-    if (!g_selector)
-    {
-        g_selectorOpening = false;
-        return false;
-    }
+    // RefreshWindowList coloca la ventana que estaba en foreground en índice 0.
+    // La primera pulsación respeta Shift: Alt+Tab avanza y Alt+Shift+Tab
+    // retrocede desde la ventana actualmente activa.
+    bool shiftHeld = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    if (g_groups.size() > 1)
+        g_selected = shiftHeld ? static_cast<int>(g_groups.size()) - 1 : 1;
+    else
+        g_selected = 0;
+    g_animOffset = 0.0f;
+    g_animStartOffset = 0.0f;
+    g_animActive = false;
+    g_sceneScaleX = 0.94f;
+    g_sceneScaleY = 0.94f;
+    g_sceneOpacity = 0.05f;
+    g_sceneTiltDegrees = 0.0f;
+    g_selectorAnimation = SelectorAnimationState::Opening;
+    g_selectorAnimationStart = GetTickCount64();
 
-    g_selectorOpening = false;
-    RemoveNativeSelectorFrame(g_selector);
-    ApplySelectorVisuals(g_selector);
     UpdateSelectorControls();
     ShowWindow(g_selector, SW_SHOWNOACTIVATE);
     UpdateWindow(g_selector);
     SetWindowPos(g_selector, HWND_TOPMOST, x, y,
                  g_runtimeSelectorWidth, g_runtimeSelectorHeight,
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
-    g_selectorAnimation = SelectorAnimationState::Opening;
-    g_selectorAnimationStart = GetTickCount64();
-    g_sceneScaleX = 0.94f;
-    g_sceneScaleY = 0.94f;
-    g_sceneOpacity = 0.05f;
-    SetTimer(g_selector, kSelectorMotionTimerId, GetAnimationTimerInterval(), nullptr);
+
+    g_selectorOpening = false;
+    SetTimer(g_selector, kSelectorMotionTimerId,
+             GetAnimationTimerInterval(), nullptr);
     return true;
+}
+
+static void HideSelectorForSession()
+{
+    if (!g_selector || !IsWindow(g_selector))
+        return;
+
+    KillTimer(g_selector, kAnimTimerId);
+    KillTimer(g_selector, kTabRepeatTimerId);
+    KillTimer(g_selector, kSelectorMotionTimerId);
+    g_tabRepeatStarted = false;
+
+    // Los thumbnails permanecen registrados mientras el HWND persistente está
+    // oculto. En la siguiente sesión UpdateThumbnailSlots reutiliza los que aún
+    // apuntan a la misma ventana y reemplaza únicamente los que hayan cambiado.
+    ShowWindow(g_selector, SW_HIDE);
+    g_selectorAnimation = SelectorAnimationState::None;
+    g_sceneScaleX = 1.0f;
+    g_sceneScaleY = 1.0f;
+    g_sceneOpacity = 1.0f;
+    g_sceneTiltDegrees = 0.0f;
+    g_selectionTiltDirection = 0.0f;
+    g_animActive = false;
+    g_animOffset = 0.0f;
+    g_animStartOffset = 0.0f;
+    g_cardExitActive = false;
+    g_cardExitSlot = -1;
+    g_cardExitGroupIndex = -1;
+    g_cardExitTarget = nullptr;
+    g_hoveredSlot = -1;
+    g_hoveredCloseButton = false;
+    g_selectorOpening = false;
+    g_lastSelectorActivity = 0;
+    g_pendingActivationTarget = nullptr;
+    g_selectorOriginWindow = nullptr;
+
+    // El fondo depende del escritorio actual; se libera al terminar la sesión
+    // para que la siguiente apertura capture una imagen fresca.
+    ReleaseBlurBackground();
 }
 
 static void DestroySelector()
 {
-    // El selector no utiliza captura ni clipping, pero estas llamadas hacen
-    // la salida defensiva e idempotente ante una interrupción externa.
+    // Esta función mantiene el HWND y el renderer vivos entre sesiones. El
+    // desmontaje real ocurre únicamente durante Wh_ModUninit().
     ReleaseCapture();
     ClipCursor(nullptr);
-    StopCarouselAnimation();
+    HideSelectorForSession();
+    ClearSelectorKeyboardSession();
+}
+
+static void ShutdownPersistentSelector()
+{
     if (g_selector && IsWindow(g_selector))
-        KillTimer(g_selector, kTabRepeatTimerId);
-    g_tabRepeatStarted = false;
-    UnregisterAllThumbnails();
-    if (g_selector)
     {
+        KillTimer(g_selector, kAnimTimerId);
+        KillTimer(g_selector, kTabRepeatTimerId);
+        KillTimer(g_selector, kSelectorMotionTimerId);
+        UnregisterAllThumbnails();
         HWND selector = g_selector;
         g_selector = nullptr;
         DestroyWindow(selector);
@@ -3508,17 +3744,20 @@ static void StartSlide(int steps)
 {
     if (steps == 0 || g_groups.empty())
         return;
-    if (g_selectorAnimation == SelectorAnimationState::Opening ||
-        g_selectorAnimation == SelectorAnimationState::SelectionChange)
+    if (g_selectorAnimation != SelectorAnimationState::Closing &&
+        g_selectorAnimation != SelectorAnimationState::CardExit)
     {
         g_selectionStartScaleX = g_sceneScaleX;
         g_selectionStartScaleY = g_sceneScaleY;
         g_selectionStartOpacity = g_sceneOpacity;
+        g_selectionStartTiltDegrees = g_sceneTiltDegrees;
         g_selectorAnimation = SelectorAnimationState::SelectionChange;
         g_selectorAnimationStart = GetTickCount64();
         if (g_selector && IsWindow(g_selector))
             SetTimer(g_selector, kSelectorMotionTimerId, GetAnimationTimerInterval(), nullptr);
     }
+    g_selectionTiltDirection = steps > 0 ? -1.0f : 1.0f;
+
     int count = static_cast<int>(g_groups.size());
     g_selected = (g_selected + steps) % count;
     while (g_selected < 0)
@@ -3656,6 +3895,9 @@ static bool SessionModifierReleased()
     if (g_sessionModifier == ModifierSession::LeftAlt)
         return !g_altLeftDown;
 
+    if (g_sessionModifier == ModifierSession::RightAlt)
+        return !g_altRightDown;
+
     if (g_sessionModifier == ModifierSession::AltGr)
         return !g_altLeftDown && !g_altRightDown &&
                !g_ctrlLeftDown && !g_ctrlRightDown;
@@ -3763,6 +4005,25 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
         return 1;
     }
 
+    // AltGr se representa como Ctrl derecho + Alt derecho. Cuando AltGr+Tab
+    // ya armó nuestro selector, nunca dejamos que Ctrl+Alt+Flecha alcance al
+    // sistema y active, por ejemplo, la rotación de pantalla. El bloqueo está
+    // limitado a esta sesión; Ctrl+Alt+Flecha normal fuera del selector sigue intacto.
+    if (g_altGrTaskSwitcherArmed &&
+        (vk == VK_LEFT || vk == VK_RIGHT || vk == VK_UP || vk == VK_DOWN))
+    {
+        if (IsSelectorActive() && down)
+        {
+            if (vk == VK_LEFT)
+                SelectPrevious();
+            else if (vk == VK_RIGHT)
+                SelectNext();
+        }
+        // Up/Down and any key-up are simply consumed so Ctrl+Alt+Arrow
+        // never reaches the Windows display-rotation shortcut.
+        return 1;
+    }
+
     if (IsSelectorActive() && down && vk == VK_LEFT)
     {
         SelectPrevious();
@@ -3786,10 +4047,9 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
 
     if (vk == VK_TAB)
     {
-        bool altHeld = g_altLeftDown || g_altRightDown ||
-                       ((key->flags & LLKHF_ALTDOWN) != 0) ||
-                       ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0);
         bool altGrHeld = IsAltGrPhysicallyDown() || g_altGrActive;
+        bool altHeld = g_altLeftDown ||
+                       ((GetAsyncKeyState(VK_LMENU) & 0x8000) != 0);
 
         if (down)
         {
@@ -3797,24 +4057,33 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
             {
                 if (altHeld || altGrHeld)
                 {
-                    g_sessionModifier = altGrHeld ? ModifierSession::AltGr : ModifierSession::LeftAlt;
+                    g_sessionModifier = altGrHeld
+                        ? ModifierSession::AltGr
+                        : (g_altLeftDown ? ModifierSession::LeftAlt
+                                          : ModifierSession::RightAlt);
                     g_state = SelectorState::SelectorActive;
                     g_tabDown = true;
                     g_tabSuppressed = true;
                     g_altGrActive = altGrHeld;
+                    g_altGrTaskSwitcherArmed = altGrHeld;
 
                     if (CreateSelector())
                     {
-                        SelectNext();
+                        // CreateSelector solo revela/reconfigura el HWND ya
+                        // precargado y posiciona el carrusel directamente.
                         g_tabRepeatStarted = false;
                         SetTimer(g_selector, kTabRepeatTimerId, kTabRepeatInitialDelayMs, nullptr);
+                        return 1;
                     }
-                    else
-                    {
-                        g_state = SelectorState::Idle;
-                        g_sessionModifier = ModifierSession::None;
-                    }
-                    return 1;
+
+                    // Si la precarga no está disponible, no bloquear esta
+                    // pulsación: Windows conserva su comportamiento normal.
+                    g_state = SelectorState::Idle;
+                    g_sessionModifier = ModifierSession::None;
+                    g_tabDown = false;
+                    g_tabSuppressed = false;
+                    g_altGrTaskSwitcherArmed = false;
+                    return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
                 }
             }
             else
@@ -3953,6 +4222,12 @@ static DWORD WINAPI HookThreadProc(LPVOID)
     PeekMessageW(&initialMessage, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
     g_hookThreadId = GetCurrentThreadId();
+
+    // Preparar primero la única ventana del selector. El hook se publica
+    // después de esta precarga para que Alt+Tab nunca entre en una ruta que
+    // cree la ventana o cargue el renderer de forma perezosa.
+    InitializePersistentSelector();
+
     g_keyboardHook = SetWindowsHookExW(
         WH_KEYBOARD_LL, KeyboardHook, GetModuleHandleW(nullptr), 0);
     g_mouseHook = SetWindowsHookExW(
@@ -4002,6 +4277,7 @@ static DWORD WINAPI HookThreadProc(LPVOID)
         EmergencyCloseSelector();
     else
         CleanupKeyboardState();
+    ShutdownPersistentSelector();
 
     if (g_keyboardHook)
     {
@@ -4089,12 +4365,10 @@ void Wh_ModUninit()
 
     g_keyboardHook = nullptr;
     g_mouseHook = nullptr;
-    g_selector = nullptr;
 
-    ReleaseBlurBackground();
-    ReleaseGroupResources();
-    g_groups.clear();
+    ShutdownPersistentSelector();
     g_userWindows.clear();
+    g_groups.clear();
     g_selected = 0;
     g_state = SelectorState::Idle;
     CleanupKeyboardState();
