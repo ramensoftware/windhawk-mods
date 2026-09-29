@@ -2,12 +2,26 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-28T23:29:40.000Z</updated>
+    <updated>2026-09-29T00:24:08.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.4.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-vertical#3f34e7e3836a762a8b18dd683a781476c8bf2208</id>
+        <link href="https://windhawk.net/mods/taskbar-vertical"/>
+        <updated>2026-09-29T00:24:08.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added the ability to move secondary taskbars to the top/bottom (similar to how the Taskbar on top mod can move secondary taskbars to the left/right).</li>
+<li>Improved the layout of tray icons in some cases.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar on top for Windows 11 1.2]]></title>
         <id>https://windhawk.net/mods/taskbar-on-top#d0da8ec90f989ede5626b5ab38e8f786d72af270</id>
@@ -835,19 +849,6 @@ live; the two noted below need a mod reload.</p>
         <author>
             <name>Lone</name>
             <uri>https://github.com/Louis047</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar classic context menu 1.0.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-classic-menu#cac04c0482ddfe09cf10168111f659fa3a4e0d6b</id>
-        <link href="https://windhawk.net/mods/taskbar-classic-menu"/>
-        <updated>2026-09-28T00:13:13.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fixed compatibility with recent Windows 11 updates.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

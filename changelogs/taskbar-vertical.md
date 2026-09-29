@@ -1,3 +1,8 @@
+## 1.4.2 ([Sep 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/3f34e7e3836a762a8b18dd683a781476c8bf2208/mods/taskbar-vertical.wh.cpp))
+
+* Added the ability to move secondary taskbars to the top/bottom (similar to how the Taskbar on top mod can move secondary taskbars to the left/right).
+* Improved the layout of tray icons in some cases.
+
 ## 1.4.1 ([Sep 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c8bed5f9ad6da06782e9857fb52bc36339dbc365/mods/taskbar-vertical.wh.cpp))
 
 * Using the native vertical taskbar is now optional, and can be disabled in the mod settings.
