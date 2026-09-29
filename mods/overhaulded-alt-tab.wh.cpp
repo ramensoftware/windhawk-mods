@@ -2,24 +2,27 @@
 // @id              overhaulded-alt-tab
 // @name            OverhauldedWin Alt+Tab
 // @description     Replaces the boring Windows Alt+Tab with a modern and elegant window switcher.
-// @version         1.2.11
+// @version         1.2.19
 // @author          IMiloDev
 // @github          https://github.com/IMiloDev
 // @homepage        https://github.com/IMiloDev/OverhauldedWin-Task-Switcher
-// @include         explorer.exe
+// @include         windhawk.exe
+// @compilerOptions -lshell32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Overhaulded Task Switcher
- 
-A modern, fluid and highly visual replacement for the Windows Alt+Tab experience 🫩. 
 
-`Ofc, made as a practice of cpp. Hope you all enjoy this as me developing this.`
+A modern, fluid and highly visual replacement for the native Windows Alt+Tab experience.
+
+Built from scratch in native C++ as a project to explore Windows APIs, graphics, animation systems and desktop customization.
+
+> Ofc, made as a C++ practice project. Hope you enjoy it as much as I enjoy developing it.
 
 ## Screenshot
 
-# ![OverhauldedWin-Task-Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Task2.png)
+![OverhauldedWin Task Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Task2.png)
 
 ## Features
 
@@ -28,39 +31,142 @@ A modern, fluid and highly visual replacement for the Windows Alt+Tab experience
 - Real DWM window previews
 - Dynamic Obsidian visual system
 - CPU-based desktop blur
-- Fluid Pop opening animation
+- Rounded cards with subtle downward shadows
+- Floating task switcher surface
+- Fluid opening animation
 - Smooth horizontal navigation
-- Hover interactions and window closing
+- Interruptible navigation animations
+- Subtle center-card snap animation
+- Hover interactions
+- Window closing
 - Resolution-aware UI scaling
-- Configurable animation FPS
-- AltGr + Tab support
+- High-DPI support
 - Alt + Tab support
+- Alt + Shift + Tab support
+- AltGr + Tab support
 - Lightweight native C++ implementation
+- Background execution for fast activation
+
+### Another Features
+
+- Visual continuity between selections
+- Smooth carousel-style navigation 
+- Real window previews
+- Application-aware grouping
+- Subtle depth and lighting
+- Fast activation through background execution
+
+Overhaulded also aims to remain visually distinct from other Windows task-switcher projects while exploring its own interaction and visual language.
 
 ## Design
 
 Overhaulded focuses on a dark, minimal interface inspired by modern desktop UI design while keeping the selector feeling native to Windows.
 
-The visual system uses a Black Obsidian surface with subtle content-based illumination, rounded cards, restrained shadows and smooth transitions.
+The visual system uses a Black Obsidian surface with:
+
+- Rounded cards
+- Subtle downward shadows
+- Content-based illumination
+- Soft depth separation
+- Smooth transitions
+- A fixed central visualizer
+
+The central visualizer remains fixed while the cards move through the carousel, creating the impression of navigating through a physical stack of windows rather than moving the entire interface.
 
 ## Smooth Animations
-### Open
-## ![OverhauldedWin](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/task-switcher.webp)
-### Slide
-## ![OverhauldedWin](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Desplazamiento-sexy.webp)
 
+### Open
+
+![OverhauldedWin Open Animation](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/task-switcher.webp)
+
+### Navigation
+
+![OverhauldedWin Navigation Animation](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Desplazamiento-sexy.webp)
+
+### Close
+
+![OverhauldedWin Close Animation](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/close.webp)
+
+## Background Execution
+
+Overhaulded remains prepared in the background instead of creating the entire task-switcher interface from scratch every time Alt+Tab is pressed.
+
+This allows the selector to appear immediately while keeping the visual opening animation smooth.
+
+The architecture separates global input handling from the UI/rendering system so that heavy graphics and window-management operations do not run directly inside low-level keyboard hooks.
 
 ## Requirements
 
-- Windows (11 Only)
+- Windows 11 only
+- Windhawk
+
+## Installation
+
+1. Install Windhawk.
+2. Open the Overhaulded Win Task Switcher mod.
+3. Install or compile the latest release.
+4. Enable the mod.
+5. Press `Alt + Tab` to open Overhaulded.
+
+## Controls
+
+| Shortcut                                            | Action                        |
+| --------------------------------------------------- | ----------------------------- |
+| `Alt + Tab`                                         | Move to the next window       |
+| `Alt + Shift + Tab`                                 | Move to the previous window   |
+| `Alt + Tab` + release `Alt`                         | Activate the selected window  |
+| `Esc`                                               | Cancel the switcher           |
+| `Ctrl + Alt + Tab + Arrow` `Alt + Tab Arrow`        | Additional navigation/control |
+
+## Compatibility
+
+Overhaulded is currently designed specifically for Windows 11.
+
+The project is still under active development, so behavior may vary depending on:
+
+- Display scaling
+- Multiple-monitor configurations
+- Windows configuration
+- Application window types
+- Other Alt+Tab/task-switcher modifications
+
+Running multiple applications that replace the native Windows task switcher at the same time may cause conflicts.
+
+## Known Limitations
+
+Overhaulded is still a pre-release project.
+
+Some applications may behave differently from standard desktop windows, particularly applications that use unusual window structures, custom rendering or multiple processes.
+
+Additional compatibility improvements are planned as development continues.
+
+## Development
+
+Overhaulded is primarily a C++ project focused on exploring:
+
+- Win32 APIs
+- Windows hooks
+- DWM
+- Direct2D
+- DirectWrite
+- GDI
+- Window management
+- High-DPI rendering
+- Desktop animation systems
+- Native Windows UI
+
+The project is continuously evolving as new ideas and technical improvements are explored.
 
 ## License
 
 This project is licensed under the **MIT License**.
 
-See the [LICENSE](LICENSE) file for the complete license text.
+See the [LICENSE](https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE) file for the complete license text.
 
-`Current ver: 1.2.11 (PUBLIC-RELEASE)`
+---
+
+**Overhaulded Task Switcher**
+Native C++ • Windows 11 • Windhawk
 */
 // ==/WindhawkModReadme==
 
@@ -86,6 +192,10 @@ See the [LICENSE](LICENSE) file for the complete license text.
 #include <algorithm>
 #include <cmath>
 
+#ifndef WH_MOD_ID
+#define WH_MOD_ID L"overhaulded-alt-tab"
+#endif
+
 // CONFIGURACIÓN
 
 static const wchar_t kWindowClassName[] = L"OverhauldedAltTabSelector";
@@ -98,11 +208,12 @@ static const int kCounterHeight = 28;
 static const int kCounterTop = 378;
 // Opacidad común de las superficies Black Obsidian; los textos y thumbnails no se alteran.
 static const float kCardSurfaceOpacity = 0.75f;
+// Timer del failsafe: solo existe mientras el selector está abierto.
 static const UINT_PTR kActivityTimerId = 77;
 static const UINT_PTR kAnimTimerId = 88;
 static const UINT_PTR kTabRepeatTimerId = 89;
 static const UINT_PTR kSelectorMotionTimerId = 90;
-static const int kAnimDurationMs = 140;
+static const float kNavigationDuration = 150.0f;
 static const int kDefaultAnimationFps = 90;
 static int g_animationFps = kDefaultAnimationFps;
 
@@ -152,20 +263,36 @@ static float g_sceneScaleY = 1.0f;
 static float g_sceneOpacity = 1.0f;
 static float g_sceneTiltDegrees = 0.0f;
 static float g_selectionTiltDirection = 0.0f;
+static float g_cardSnapScale = 1.0f;
+static float g_cardSnapStartScale = 1.0f;
 
 static int ScaleLayoutPx(float value)
 {
     return static_cast<int>(roundf(value * g_uiScale.value));
 }
 
-static void UpdateUIScaleForWorkArea(const RECT& work)
+// Constantes fijas en píxeles (bordes, radios pequeños) que deben crecer con el
+// DPI del monitor pero no con el ajuste "fit" por resolución. A 100% DPI es 1:1.
+static float DpiPx(float value)
 {
+    return value * g_uiScale.dpiScale;
+}
+
+// El UI thread es Per-Monitor-V2: todo el layout está en píxeles físicos. La
+// escala final combina el DPI real del monitor con el ajuste por área de trabajo
+// (medida en DIPs), de modo que a 100% el resultado es idéntico al anterior.
+static void UpdateUIScaleForWorkArea(const RECT& work, float dpiScale)
+{
+    dpiScale = std::max(0.5f, std::min(8.0f, dpiScale));
     g_uiScale.screenWidth = std::max(1, static_cast<int>(work.right - work.left));
     g_uiScale.screenHeight = std::max(1, static_cast<int>(work.bottom - work.top));
-    g_uiScale.dpiScale = 1.0f;
-    float scaleX = static_cast<float>(g_uiScale.screenWidth) / kReferenceScreenWidth;
-    float scaleY = static_cast<float>(g_uiScale.screenHeight) / kReferenceScreenHeight;
-    g_uiScale.value = std::max(kMinimumUiScale, std::min(1.0f, std::min(scaleX, scaleY)));
+    g_uiScale.dpiScale = dpiScale;
+    float dipWidth = static_cast<float>(g_uiScale.screenWidth) / dpiScale;
+    float dipHeight = static_cast<float>(g_uiScale.screenHeight) / dpiScale;
+    float scaleX = dipWidth / kReferenceScreenWidth;
+    float scaleY = dipHeight / kReferenceScreenHeight;
+    float fit = std::max(kMinimumUiScale, std::min(1.0f, std::min(scaleX, scaleY)));
+    g_uiScale.value = fit * dpiScale;
     g_runtimeSelectorWidth = ScaleLayoutPx(static_cast<float>(kSelectorWidth));
     g_runtimeSelectorHeight = ScaleLayoutPx(static_cast<float>(kSelectorHeight));
 }
@@ -326,16 +453,70 @@ struct UserWindowInfo
     ULONGLONG lastActivated;
 };
 
+// ARQUITECTURA DE HILOS
+//
+//  Input thread : dueño de WH_KEYBOARD_LL y WH_MOUSE_LL. Los callbacks solo
+//                 actualizan estado atómico/local y publican comandos al UI
+//                 thread con PostThreadMessage. Nada más.
+//  UI thread    : dueño del HWND del selector, D2D/DWrite/GDI/DWM, blur,
+//                 animaciones, timers, WinEvent hook, enumeración de ventanas,
+//                 iconos, información de procesos y activación de ventanas.
+//
+// Variables de un solo dueño: las "input" solo las toca el input thread y las
+// "ui" solo las toca el UI thread. Lo compartido usa Interlocked*.
+
+static HMODULE g_hModule = nullptr;
+
+// Workers (creados/cerrados por WhTool_ModInit / WhTool_ModUninit).
+static HANDLE g_inputThread = nullptr;
+static HANDLE g_uiThread = nullptr;
+static HANDLE g_inputReadyEvent = nullptr;
+static HANDLE g_uiReadyEvent = nullptr;
+static DWORD g_inputThreadId = 0;
+static volatile DWORD g_uiThreadId = 0;
+static volatile LONG g_inputInitOk = 0;
+static volatile LONG g_uiInitOk = 0;
+static volatile LONG g_shutdownRequested = 0;
+
+// Solo input thread.
 static HHOOK g_keyboardHook = nullptr;
 static HHOOK g_mouseHook = nullptr;
-static HANDLE g_hookThread = nullptr;
-static DWORD g_hookThreadId = 0;
-static HANDLE g_hookReadyEvent = nullptr;
-static volatile LONG g_shutdownRequested = 0;
-static volatile LONG g_hookInstalled = 0;
+static HWND volatile g_inputControlWnd = nullptr;   // ventana message-only
 
+// Estado compartido entre hooks y UI.
+static volatile LONG g_nextSessionId = 0;
+// Id de la sesión de selector actualmente activa (0 = ninguna). Lo publica el
+// input thread al abrir; el UI thread solo lo limpia con CAS sobre su propio id.
+static volatile LONG g_sessionActive = 0;
+// 1 mientras el selector acepta interacción de ratón (el UI thread lo gobierna).
+static volatile LONG g_uiSelectorOpen = 0;
+static volatile LONG64 g_lastMousePt = 0;
+static volatile LONG g_mouseMovePending = 0;
+
+// Comandos input -> UI (PostThreadMessage) y UI -> input (ventana de control).
+static const UINT WM_UI_OPEN = WM_APP + 1;         // wParam=sessionId, lParam=shift
+static const UINT WM_UI_TAB_DOWN = WM_APP + 2;     // wParam=sessionId, lParam=shift
+static const UINT WM_UI_TAB_UP = WM_APP + 3;       // wParam=sessionId
+static const UINT WM_UI_NAVIGATE = WM_APP + 4;     // wParam=sessionId, lParam=+1/-1
+static const UINT WM_UI_CONFIRM = WM_APP + 5;      // wParam=sessionId
+static const UINT WM_UI_CANCEL = WM_APP + 6;       // wParam=sessionId
+static const UINT WM_UI_MOUSE_MOVE = WM_APP + 7;   // posición en g_lastMousePt
+static const UINT WM_UI_MOUSE_BUTTON = WM_APP + 8; // wParam=mensaje, lParam=pt (16 bit)
+static const UINT WM_UI_MOUSE_WHEEL = WM_APP + 9;  // wParam=delta (short)
+static const UINT WM_UI_SETTINGS = WM_APP + 10;
+static const UINT WM_IN_MOUSEHOOK = WM_APP + 20;   // wParam=1 instalar, 0 quitar
+
+// Solo UI thread.
 static HWND g_selector = nullptr;
 static bool g_classesRegistered = false;
+static LONG g_uiSessionId = 0;
+static bool g_uiTabDown = false;
+static HWINEVENTHOOK g_winEventHook = nullptr;
+static HWND g_foregroundRetryWindow = nullptr;
+static UINT_PTR g_foregroundRetryTimer = 0;
+static HMODULE g_shcoreApi = nullptr;
+typedef HRESULT (WINAPI* GetDpiForMonitorFn)(HMONITOR, int, UINT*, UINT*);
+static GetDpiForMonitorFn g_getDpiForMonitor = nullptr;
 
 // Colección visual estable: una ranura = un thumbnail DWM reutilizado.
 struct ThumbnailSlot
@@ -419,6 +600,9 @@ static IDWriteTextFormat* g_dwriteSelectedFormat = nullptr;
 static IDWriteTextFormat* g_dwriteNormalFormat = nullptr;
 static IDWriteTextFormat* g_dwriteCounterFormat = nullptr;
 static IDWriteTextFormat* g_dwriteCloseFormat = nullptr;
+// Escala con la que se construyeron los TextFormat / fuentes GDI actuales.
+static float g_dwriteFormatsScale = 0.0f;
+static float g_gdiFontsScale = 0.0f;
 
 typedef HFONT (WINAPI* CreateFontIndirectWFn)(const LOGFONTW*);
 typedef BOOL (WINAPI* DeleteObjectFn)(HGDIOBJ);
@@ -468,7 +652,6 @@ static std::vector<AppGroup> g_groups;
 static std::vector<UserWindowInfo> g_userWindows;
 static int g_selected = 0;
 static SelectorState g_state = SelectorState::Idle;
-static ModifierSession g_sessionModifier = ModifierSession::None;
 
 // Variables para el blur del fondo
 static HDC g_blurDC = nullptr;
@@ -491,6 +674,7 @@ static void CleanupKeyboardState();
 static void EmergencyCloseSelector();
 static void StartSelectorClose(HWND target);
 static void UpdateSelectorMotion();
+static float EaseOutCubic(float t);
 static void UpdateCarouselAnimation(HWND hwnd);
 static float GetCardExitProgress();
 static float GetCardExitOpacity();
@@ -528,14 +712,18 @@ static void ApplyBlurToPixels(unsigned char* pixels, int width, int height, int 
 static MediaAccent ExtractMediaAccentFromImage(HICON icon);
 static D2D1_COLOR_F AddMediaAccent(const D2D1_COLOR_F& base,
                                    const MediaAccent& accent, float influence);
+static void UiEndSession();
+static void LeaveActiveState(SelectorState newState);
 
+// ESTADO DEL TECLADO (solo input thread)
+
+static ModifierSession g_sessionModifier = ModifierSession::None;
+static LONG g_inputSessionId = 0;
 static bool g_altLeftDown = false;
 static bool g_altRightDown = false;
 static bool g_ctrlLeftDown = false;
 static bool g_ctrlRightDown = false;
 static bool g_tabDown = false;
-static bool g_rightCtrlSeen = false;
-static bool g_rightAltSeen = false;
 static bool g_altGrActive = false;
 static bool g_tabSuppressed = false;
 // Se arma únicamente cuando AltGr+Tab pertenece a nuestro selector; permite
@@ -544,9 +732,49 @@ static bool g_altGrTaskSwitcherArmed = false;
 
 // UTILIDADES DE ESTADO
 
-static bool IsAltGrPhysicallyDown()
+// Los hooks nunca llaman a las APIs de ventana desde aquí: solo publican.
+static bool PostUiCommand(UINT message, WPARAM wParam, LPARAM lParam)
 {
-    return g_altRightDown && (g_ctrlLeftDown || g_ctrlRightDown);
+    if (InterlockedCompareExchange(&g_shutdownRequested, 0, 0) != 0)
+        return false;
+    DWORD threadId = g_uiThreadId;
+    if (!threadId)
+        return false;
+    return PostThreadMessageW(threadId, message, wParam, lParam) != FALSE;
+}
+
+static void PostInputControl(UINT message, WPARAM wParam)
+{
+    if (InterlockedCompareExchange(&g_shutdownRequested, 0, 0) != 0)
+        return;
+    HWND control = g_inputControlWnd;
+    if (control)
+        PostMessageW(control, message, wParam, 0);
+}
+
+// El UI thread activa/desactiva la interacción de ratón; el input thread
+// instala el WH_MOUSE_LL solo mientras el selector acepta interacción.
+static void UiSetInteractive(bool on)
+{
+    LONG next = on ? 1 : 0;
+    LONG previous = InterlockedExchange(&g_uiSelectorOpen, next);
+    if (previous != next)
+        PostInputControl(WM_IN_MOUSEHOOK, static_cast<WPARAM>(next));
+}
+
+// Termina la sesión desde el lado UI. CAS: nunca pisa una sesión más nueva.
+static void UiEndSession()
+{
+    UiSetInteractive(false);
+    LONG id = g_uiSessionId;
+    if (id != 0)
+        InterlockedCompareExchange(&g_sessionActive, 0, id);
+}
+
+static void LeaveActiveState(SelectorState newState)
+{
+    g_state = newState;
+    UiEndSession();
 }
 
 static bool IsSelectorActuallyActive()
@@ -565,60 +793,47 @@ static void MarkSelectorActivity()
     g_lastSelectorActivity = GetTickCount64();
 }
 
-static void ResetKeyboardState()
+// Estado del teclado del input thread. Se sincroniza de GetAsyncKeyState solo al
+// iniciar; después se mantiene únicamente con los eventos del hook.
+static void InputResetKeyboardState()
 {
     g_altLeftDown = (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0;
     g_altRightDown = (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0;
     g_ctrlLeftDown = (GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0;
     g_ctrlRightDown = (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
     g_tabDown = false;
-    g_rightCtrlSeen = false;
-    g_rightAltSeen = false;
     g_altGrActive = false;
     g_tabSuppressed = false;
     g_altGrTaskSwitcherArmed = false;
     g_sessionModifier = ModifierSession::None;
-    g_cleanupInProgress = false;
-    g_selectorOpening = false;
-    g_lastSelectorActivity = 0;
+    g_inputSessionId = 0;
+}
+
+static bool IsAltGrPhysicallyDown()
+{
+    return g_altRightDown && (g_ctrlLeftDown || g_ctrlRightDown);
 }
 
 static void ClearSelectorKeyboardSession()
 {
     g_tabDown = false;
     g_tabSuppressed = false;
-    g_altGrActive = false;
-    g_rightCtrlSeen = false;
-    g_rightAltSeen = false;
-    g_altGrTaskSwitcherArmed = false;
     g_sessionModifier = ModifierSession::None;
-
-    g_altLeftDown = (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0;
-    g_altRightDown = (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0;
-    g_ctrlLeftDown = (GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0;
-    g_ctrlRightDown = (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
+    g_inputSessionId = 0;
+    g_altGrActive = IsAltGrPhysicallyDown();
+    // Si AltGr sigue físicamente pulsado, Ctrl+Alt+Flecha debe seguir bloqueado
+    // hasta soltarlo (p. ej. tras Esc); se desarma en el keyup del modificador.
+    g_altGrTaskSwitcherArmed = g_altGrTaskSwitcherArmed && g_altGrActive;
 }
 
+// Solo UI thread: reconcilia el estado visual/temporizado al cerrar.
 static void CleanupKeyboardState()
 {
     if (g_cleanupInProgress)
         return;
 
     g_cleanupInProgress = true;
-    g_tabDown = false;
-    g_tabSuppressed = false;
-    g_altGrActive = false;
-    g_rightCtrlSeen = false;
-    g_rightAltSeen = false;
-    g_altGrTaskSwitcherArmed = false;
-    g_sessionModifier = ModifierSession::None;
-
-    // Solo se reconcilia el estado interno; nunca se sintetizan KeyUp.
-    g_altLeftDown = (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0;
-    g_altRightDown = (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0;
-    g_ctrlLeftDown = (GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0;
-    g_ctrlRightDown = (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
-
+    g_uiTabDown = false;
     g_tabRepeatStarted = false;
     g_lastSelectorActivity = 0;
     g_cleanupInProgress = false;
@@ -770,6 +985,47 @@ static int FindAppGroup(DWORD processId)
     return -1;
 }
 
+// Ventanas legítimas que Windows/host marcan como owned o ToolWindow y que el
+// filtro estricto descartaba (consolas, terminales, visor/editor de Windhawk).
+// Solo se consulta para ventanas que ya iban a ser rechazadas por GW_OWNER o
+// WS_EX_TOOLWINDOW: no convierte todas las ToolWindow en aplicaciones.
+static bool IsConsoleOrWindhawkViewerWindow(HWND hwnd, DWORD processId,
+                                            const std::wstring& appName,
+                                            const std::wstring& windowClass)
+{
+    // Nunca ventanas de nuestro propio proceso (selector, ventanas internas).
+    if (processId == GetCurrentProcessId())
+        return false;
+
+    std::wstring name = LowerAscii(appName);
+    std::wstring cls = LowerAscii(windowClass);
+
+    // Consolas clásicas (cmd/PowerShell en conhost) y Windows Terminal.
+    if (cls == L"consolewindowclass" || cls == L"cascadia_hosting_window_class")
+        return true;
+
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+    bool hasNormalFrame = (style & (WS_CAPTION | WS_THICKFRAME |
+                                    WS_MINIMIZEBOX | WS_MAXIMIZEBOX |
+                                    WS_SYSMENU)) != 0;
+    bool hasApplicationStyle = (exStyle & WS_EX_APPWINDOW) != 0;
+    // Exigir marco/AppWindow descarta ventanas auxiliares (IME, tooltips...)
+    // que pertenezcan al mismo proceso.
+    if (!hasNormalFrame && !hasApplicationStyle)
+        return false;
+
+    if (name == L"cmd" || name == L"powershell" || name == L"pwsh" ||
+        name == L"openconsole" || name == L"windowsterminal" || name == L"wt")
+        return true;
+
+    // Visor/editor de código de Windhawk (ventana Chromium del proceso UI).
+    if (name == L"windhawk" && cls == L"chrome_widgetwin_1")
+        return true;
+
+    return false;
+}
+
 static bool IsRealUserApplicationWindow(HWND hwnd, DWORD* processId,
                                         std::wstring* processPath,
                                         std::wstring* appName)
@@ -778,14 +1034,14 @@ static bool IsRealUserApplicationWindow(HWND hwnd, DWORD* processId,
         return false;
     if (hwnd == g_selector || IsShellWindow(hwnd))
         return false;
-    if (GetWindow(hwnd, GW_OWNER) != nullptr)
-        return false;
-
     LONG_PTR exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-    if ((exStyle & WS_EX_TOOLWINDOW) != 0)
-        return false;
     if ((exStyle & WS_EX_NOACTIVATE) != 0)
         return false;
+
+    // Owned / ToolWindow: rechazo por defecto, salvo la allowlist de abajo.
+    const bool ownedOrToolWindow =
+        GetWindow(hwnd, GW_OWNER) != nullptr ||
+        (exStyle & WS_EX_TOOLWINDOW) != 0;
 
     wchar_t title[512] = {};
     GetWindowTextW(hwnd, title, ARRAYSIZE(title) - 1);
@@ -798,6 +1054,27 @@ static bool IsRealUserApplicationWindow(HWND hwnd, DWORD* processId,
     DWORD pid = 0;
     if (!GetWindowThreadProcessId(hwnd, &pid) || pid == 0)
         return false;
+
+    if (ownedOrToolWindow)
+    {
+        std::wstring allowPath;
+        std::wstring allowName;
+        GetProcessDetails(pid, &allowPath, &allowName);
+        if (!IsConsoleOrWindhawkViewerWindow(hwnd, pid, allowName, windowClass))
+            return false;
+
+        // Allowlist: se acepta directamente. El resto de filtros (que exigen
+        // ventana sin owner) no aplican a estas ventanas.
+        if (allowName.empty())
+            allowName = title;
+        if (processId)
+            *processId = pid;
+        if (processPath)
+            *processPath = allowPath;
+        if (appName)
+            *appName = allowName;
+        return true;
+    }
 
     std::wstring path;
     std::wstring name;
@@ -838,13 +1115,14 @@ static bool IsRealUserApplicationWindow(HWND hwnd, DWORD* processId,
     return true;
 }
 
-static void RegisterUserWindow(HWND hwnd, bool activity)
+// Devuelve true si la ventana quedó (o ya estaba) en el registro MRU.
+static bool RegisterUserWindow(HWND hwnd, bool activity)
 {
     DWORD processId = 0;
     std::wstring processPath;
     std::wstring appName;
     if (!IsRealUserApplicationWindow(hwnd, &processId, &processPath, &appName))
-        return;
+        return false;
 
     ULONGLONG now = GetTickCount64();
     for (size_t i = 0; i < g_userWindows.size(); ++i)
@@ -854,7 +1132,7 @@ static void RegisterUserWindow(HWND hwnd, bool activity)
         {
             if (activity)
                 item.lastActivated = now;
-            return;
+            return true;
         }
     }
 
@@ -865,6 +1143,7 @@ static void RegisterUserWindow(HWND hwnd, bool activity)
     item.appName = appName;
     item.lastActivated = activity ? now : 0;
     g_userWindows.push_back(item);
+    return true;
 }
 
 static void PruneUserWindowRegistry()
@@ -885,6 +1164,36 @@ static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM)
 {
     RegisterUserWindow(hwnd, false);
     return TRUE;
+}
+
+// MRU por evento: reemplaza el polling de GetForegroundWindow cada 250 ms.
+static void CALLBACK ForegroundRetryProc(HWND, UINT, UINT_PTR id, DWORD)
+{
+    KillTimer(nullptr, id);
+    g_foregroundRetryTimer = 0;
+    HWND target = g_foregroundRetryWindow;
+    g_foregroundRetryWindow = nullptr;
+    if (target && IsWindow(target) && GetForegroundWindow() == target)
+        RegisterUserWindow(target, true);
+}
+
+static void CALLBACK ForegroundWinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
+                                            LONG idObject, LONG, DWORD, DWORD)
+{
+    if (event != EVENT_SYSTEM_FOREGROUND || !hwnd || idObject != OBJID_WINDOW)
+        return;
+    if (InterlockedCompareExchange(&g_shutdownRequested, 0, 0) != 0)
+        return;
+
+    PruneUserWindowRegistry();
+    if (RegisterUserWindow(hwnd, true))
+        return;
+
+    // Algunas ventanas llegan a primer plano antes de tener título/estilos
+    // finales. Un único reintento diferido (no es polling permanente).
+    g_foregroundRetryWindow = hwnd;
+    if (!g_foregroundRetryTimer)
+        g_foregroundRetryTimer = SetTimer(nullptr, 0, 250, ForegroundRetryProc);
 }
 
 static void RefreshWindowList()
@@ -1033,6 +1342,54 @@ static std::wstring MakeCounterText()
     wchar_t buffer[64] = {};
     wsprintfW(buffer, L"%d / %d", g_selected + 1, static_cast<int>(g_groups.size()));
     return buffer;
+}
+
+// DPI POR MONITOR
+
+// DPI efectivo del monitor (shcore.dll, resuelto dinámicamente). 1.0 = 100%.
+static float GetMonitorDpiScale(HMONITOR monitor)
+{
+    if (!g_shcoreApi)
+        g_shcoreApi = LoadLibraryW(L"shcore.dll");
+    if (g_shcoreApi && !g_getDpiForMonitor)
+        g_getDpiForMonitor = reinterpret_cast<GetDpiForMonitorFn>(
+            GetProcAddress(g_shcoreApi, "GetDpiForMonitor"));
+
+    UINT dpiX = 96, dpiY = 96;
+    const int kMdtEffectiveDpi = 0;
+    if (monitor && g_getDpiForMonitor &&
+        SUCCEEDED(g_getDpiForMonitor(monitor, kMdtEffectiveDpi, &dpiX, &dpiY)) &&
+        dpiX > 0)
+        return static_cast<float>(dpiX) / 96.0f;
+    return 1.0f;
+}
+
+static void UpdateUIScaleForMonitor(HMONITOR monitor)
+{
+    MONITORINFO info = {};
+    info.cbSize = sizeof(info);
+    if (monitor && GetMonitorInfoW(monitor, &info))
+        UpdateUIScaleForWorkArea(info.rcWork, GetMonitorDpiScale(monitor));
+}
+
+// Marca el hilo actual como Per-Monitor-V2 (solo afecta a este hilo).
+static void SetThreadPerMonitorAwareV2()
+{
+    typedef HANDLE (WINAPI* SetThreadDpiAwarenessContextFn)(HANDLE);
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32)
+        return;
+    SetThreadDpiAwarenessContextFn pSetThreadDpiAwarenessContext =
+        reinterpret_cast<SetThreadDpiAwarenessContextFn>(
+            GetProcAddress(user32, "SetThreadDpiAwarenessContext"));
+    if (!pSetThreadDpiAwarenessContext)
+        return;
+#ifdef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+    HANDLE context = reinterpret_cast<HANDLE>(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+#else
+    HANDLE context = reinterpret_cast<HANDLE>(static_cast<INT_PTR>(-4));
+#endif
+    pSetThreadDpiAwarenessContext(context);
 }
 
 // DWM Y EFECTOS DE FONDO
@@ -1189,9 +1546,21 @@ static HICON GetApplicationIcon(HWND hwnd, const std::wstring& processPath, bool
 
 // GESTIÓN DE DIRECT2D Y DIRECTWRITE
 
+static void ReleaseDWriteFormats()
+{
+    if (g_dwriteCounterFormat) { g_dwriteCounterFormat->Release(); g_dwriteCounterFormat = nullptr; }
+    if (g_dwriteCloseFormat) { g_dwriteCloseFormat->Release(); g_dwriteCloseFormat = nullptr; }
+    if (g_dwriteNormalFormat) { g_dwriteNormalFormat->Release(); g_dwriteNormalFormat = nullptr; }
+    if (g_dwriteSelectedFormat) { g_dwriteSelectedFormat->Release(); g_dwriteSelectedFormat = nullptr; }
+    g_dwriteFormatsScale = 0.0f;
+}
+
 static bool LoadD2DAndDWrite()
 {
-    if (g_d2dFactory && g_d2dDCRenderTarget && g_dwriteFactory)
+    // Los TextFormat dependen de g_uiScale: si la escala cambió (otro monitor /
+    // otro DPI) se reconstruyen en lugar de reutilizar formatos obsoletos.
+    if (g_d2dFactory && g_d2dDCRenderTarget && g_dwriteFactory &&
+        g_dwriteFormatsScale == g_uiScale.value)
         return true;
 
     if (!g_d2dApi)
@@ -1213,10 +1582,12 @@ static bool LoadD2DAndDWrite()
 
     if (g_d2dFactory && !g_d2dDCRenderTarget)
     {
+        // El layout está expresado en píxeles físicos: el render target debe
+        // trabajar a 96 DPI (1 DIP = 1 px) y no heredar el DPI del sistema.
         D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
             D2D1_RENDER_TARGET_TYPE_DEFAULT,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
-            0.0f, 0.0f, D2D1_RENDER_TARGET_USAGE_NONE, D2D1_FEATURE_LEVEL_DEFAULT
+            96.0f, 96.0f, D2D1_RENDER_TARGET_USAGE_NONE, D2D1_FEATURE_LEVEL_DEFAULT
         );
         if (SUCCEEDED(g_d2dFactory->CreateDCRenderTarget(&props, &g_d2dDCRenderTarget)))
         {
@@ -1236,8 +1607,11 @@ static bool LoadD2DAndDWrite()
         }
     }
 
-    if (g_dwriteFactory && !g_dwriteSelectedFormat)
+    if (g_dwriteFactory && (!g_dwriteSelectedFormat ||
+                            g_dwriteFormatsScale != g_uiScale.value))
     {
+        ReleaseDWriteFormats();
+
         g_dwriteFactory->CreateTextFormat(
             L"Segoe UI Variable Text", nullptr,
             DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
@@ -1280,6 +1654,7 @@ static bool LoadD2DAndDWrite()
             g_dwriteCloseFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
             g_dwriteCloseFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         }
+        g_dwriteFormatsScale = g_uiScale.value;
     }
 
     return (g_d2dFactory != nullptr && g_d2dDCRenderTarget != nullptr);
@@ -1449,10 +1824,7 @@ static void UnloadD2DAndDWrite()
 {
     ReleaseGroupResources();
 
-    if (g_dwriteCounterFormat) { g_dwriteCounterFormat->Release(); g_dwriteCounterFormat = nullptr; }
-    if (g_dwriteCloseFormat) { g_dwriteCloseFormat->Release(); g_dwriteCloseFormat = nullptr; }
-    if (g_dwriteNormalFormat) { g_dwriteNormalFormat->Release(); g_dwriteNormalFormat = nullptr; }
-    if (g_dwriteSelectedFormat) { g_dwriteSelectedFormat->Release(); g_dwriteSelectedFormat = nullptr; }
+    ReleaseDWriteFormats();
     if (g_dwriteFactory) { g_dwriteFactory->Release(); g_dwriteFactory = nullptr; }
 
     if (g_closeAccentBrush) { g_closeAccentBrush->Release(); g_closeAccentBrush = nullptr; }
@@ -1696,20 +2068,7 @@ static HFONT CreateModernFont(const wchar_t* preferredFace, const wchar_t* fallb
     return g_createFontIndirectW(&font);
 }
 
-static void CreateUiFonts()
-{
-    if (g_nameFont || g_selectedNameFont || g_secondaryFont)
-        return;
-
-    g_selectedNameFont = CreateModernFont(L"Segoe UI Variable Text", L"Segoe UI",
-                                          -std::max(10, ScaleLayoutPx(16.0f)), FW_SEMIBOLD);
-    g_nameFont = CreateModernFont(L"Segoe UI Variable Text", L"Segoe UI",
-                                  -std::max(9, ScaleLayoutPx(13.0f)), 500);
-    g_secondaryFont = CreateModernFont(L"Segoe UI Variable Text", L"Segoe UI",
-                                       -std::max(9, ScaleLayoutPx(13.0f)), 500);
-}
-
-static void DestroyUiFonts()
+static void ReleaseUiFontObjects()
 {
     if (g_deleteObject)
     {
@@ -1723,6 +2082,31 @@ static void DestroyUiFonts()
     g_nameFont = nullptr;
     g_selectedNameFont = nullptr;
     g_secondaryFont = nullptr;
+    g_gdiFontsScale = 0.0f;
+}
+
+static void CreateUiFonts()
+{
+    if (g_nameFont || g_selectedNameFont || g_secondaryFont)
+    {
+        // Las fuentes GDI del fallback también dependen de la escala.
+        if (g_gdiFontsScale == g_uiScale.value)
+            return;
+        ReleaseUiFontObjects();
+    }
+
+    g_selectedNameFont = CreateModernFont(L"Segoe UI Variable Text", L"Segoe UI",
+                                          -std::max(10, ScaleLayoutPx(16.0f)), FW_SEMIBOLD);
+    g_nameFont = CreateModernFont(L"Segoe UI Variable Text", L"Segoe UI",
+                                  -std::max(9, ScaleLayoutPx(13.0f)), 500);
+    g_secondaryFont = CreateModernFont(L"Segoe UI Variable Text", L"Segoe UI",
+                                       -std::max(9, ScaleLayoutPx(13.0f)), 500);
+    g_gdiFontsScale = g_uiScale.value;
+}
+
+static void DestroyUiFonts()
+{
+    ReleaseUiFontObjects();
     g_getTextFaceW = nullptr;
     g_getDIBits = nullptr;
     g_getObjectW = nullptr;
@@ -2031,6 +2415,27 @@ static inline float LerpFloat(float a, float b, float t)
     return a + (b - a) * t;
 }
 
+static float EaseOutCubic(float t)
+{
+    t = std::max(0.0f, std::min(1.0f, t));
+    float inverse = 1.0f - t;
+    return 1.0f - inverse * inverse * inverse;
+}
+
+static RECT ScaleRectAroundCenter(const RECT& rect, float scale)
+{
+    if (fabsf(scale - 1.0f) < 0.0001f)
+        return rect;
+    float cx = (static_cast<float>(rect.left) + static_cast<float>(rect.right)) * 0.5f;
+    float cy = (static_cast<float>(rect.top) + static_cast<float>(rect.bottom)) * 0.5f;
+    RECT result = {};
+    result.left = static_cast<LONG>(roundf(cx + (rect.left - cx) * scale));
+    result.right = static_cast<LONG>(roundf(cx + (rect.right - cx) * scale));
+    result.top = static_cast<LONG>(roundf(cy + (rect.top - cy) * scale));
+    result.bottom = static_cast<LONG>(roundf(cy + (rect.bottom - cy) * scale));
+    return result;
+}
+
 static CardSlotGeometry GetInterpolatedSlotGeometry(float virtualSlot)
 {
     int k0 = static_cast<int>(floorf(virtualSlot));
@@ -2080,6 +2485,8 @@ static RECT GetSlotCardRect(int slot)
     rc.top = static_cast<int>(roundf(g.top));
     rc.right = static_cast<int>(roundf(g.right));
     rc.bottom = static_cast<int>(roundf(g.bottom));
+    if (slot == 2)
+        rc = ScaleRectAroundCenter(rc, g_cardSnapScale);
     if (g_cardExitActive && slot == g_cardExitSlot)
     {
         int offset = static_cast<int>(roundf(GetCardExitOffsetY()));
@@ -2098,6 +2505,8 @@ static RECT GetSlotHeaderRect(int slot)
     header.right = static_cast<int>(roundf(g.right)) - pad;
     header.top = static_cast<int>(roundf(g.top)) + pad;
     header.bottom = header.top + static_cast<int>(roundf(g.headerHeight));
+    if (slot == 2)
+        header = ScaleRectAroundCenter(header, g_cardSnapScale);
     if (g_cardExitActive && slot == g_cardExitSlot)
     {
         int offset = static_cast<int>(roundf(GetCardExitOffsetY()));
@@ -2120,6 +2529,8 @@ static RECT GetSlotPreviewRect(int slot)
     preview.right = static_cast<int>(roundf(g.right)) - pad;
     preview.top = static_cast<int>(roundf(g.top)) + pad + hHeight + gap;
     preview.bottom = static_cast<int>(roundf(g.bottom)) - pad;
+    if (slot == 2)
+        preview = ScaleRectAroundCenter(preview, g_cardSnapScale);
     if (g_cardExitActive && slot == g_cardExitSlot)
     {
         int offset = static_cast<int>(roundf(GetCardExitOffsetY()));
@@ -2146,7 +2557,7 @@ static RECT GetCloseButtonRect(int slot)
     RECT card = GetSlotCardRect(slot);
     const int hitSize = ScaleLayoutPx(28.0f);
     RECT rc = {};
-    rc.right = card.right - 5;
+    rc.right = card.right - static_cast<int>(roundf(DpiPx(5.0f)));
     rc.left = rc.right - hitSize;
     rc.top = card.top + ScaleLayoutPx(3.0f);
     rc.bottom = rc.top + hitSize;
@@ -2528,6 +2939,8 @@ static void StopCarouselAnimation()
     g_sceneOpacity = 1.0f;
     g_sceneTiltDegrees = 0.0f;
     g_selectionTiltDirection = 0.0f;
+    g_cardSnapScale = 1.0f;
+    g_cardSnapStartScale = 1.0f;
     g_selectionStartScaleX = 1.0f;
     g_selectionStartScaleY = 1.0f;
     g_selectionStartTiltDegrees = 0.0f;
@@ -2620,7 +3033,7 @@ static void UpdateSelectorMotion()
             RefreshWindowList();
             if (g_groups.empty())
             {
-                g_state = SelectorState::Canceling;
+                LeaveActiveState(SelectorState::Canceling);
                 StartSelectorClose(nullptr);
                 return;
             }
@@ -2668,28 +3081,23 @@ static void UpdateSelectorMotion()
     }
     else if (g_selectorAnimation == SelectorAnimationState::SelectionChange)
     {
-        const float duration = 110.0f;
+        const float duration = kNavigationDuration;
         float t = std::min(1.0f, static_cast<float>(elapsed) / duration);
-        float ease = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
-        g_sceneScaleX = g_selectionStartScaleX +
-                        (1.0f - g_selectionStartScaleX) * ease;
-        g_sceneScaleY = g_selectionStartScaleY +
-                        (1.0f - g_selectionStartScaleY) * ease;
-        g_sceneOpacity = g_selectionStartOpacity +
-                         (1.0f - g_selectionStartOpacity) * ease;
-
-        // Impulso angular corto: alcanza el máximo hacia la mitad del
-        // desplazamiento y vuelve a cero al asentarse.
-        float tiltEnvelope = sinf(3.14159265358979323846f * t);
-        g_sceneTiltDegrees = g_selectionStartTiltDegrees * (1.0f - t) +
-                             g_selectionTiltDirection * 0.70f * tiltEnvelope;
+        // La navegación se anima exclusivamente mediante g_animOffset. No
+        // escalamos ni inclinamos la escena completa: el visualizer y el
+        // centro de referencia permanecen perfectamente fijos.
+        g_sceneScaleX = 1.0f;
+        g_sceneScaleY = 1.0f;
+        g_sceneOpacity = 1.0f;
+        g_sceneTiltDegrees = 0.0f;
         if (t >= 1.0f)
         {
             g_sceneScaleX = 1.0f;
             g_sceneScaleY = 1.0f;
             g_sceneTiltDegrees = 0.0f;
             g_selectorAnimation = SelectorAnimationState::Open;
-            KillTimer(g_selector, kSelectorMotionTimerId);
+            if (!g_animActive)
+                KillTimer(g_selector, kSelectorMotionTimerId);
         }
     }
     else if (g_selectorAnimation == SelectorAnimationState::Closing)
@@ -3077,14 +3485,15 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
 
         // Borde vectorial sutil del contenedor. La región real de la ventana
         // ya recorta las esquinas, por lo que no queda un rectángulo cuadrado.
-        const float containerRadius = static_cast<float>(ScaleLayoutPx(22.0f));
+        const float containerRadius = static_cast<float>(ScaleLayoutPx(27.0f));
+        const float containerInset = DpiPx(0.75f);
         D2D1_ROUNDED_RECT containerRect = D2D1::RoundedRect(
-            D2D1::RectF(0.75f, 0.75f,
-                        static_cast<float>(clientRect.right) - 0.75f,
-                        static_cast<float>(clientRect.bottom) - 0.75f),
+            D2D1::RectF(containerInset, containerInset,
+                        static_cast<float>(clientRect.right) - containerInset,
+                        static_cast<float>(clientRect.bottom) - containerInset),
             containerRadius, containerRadius);
         g_d2dBrush->SetColor(D2D1::ColorF(0.32f, 0.36f, 0.43f, 0.30f));
-        g_d2dDCRenderTarget->DrawRoundedRectangle(&containerRect, g_d2dBrush, 1.0f);
+        g_d2dDCRenderTarget->DrawRoundedRectangle(&containerRect, g_d2dBrush, DpiPx(1.0f));
 
         RECT containerShadow = {
             ScaleLayoutPx(12.0f),
@@ -3155,13 +3564,14 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
                 ? D2D1::ColorF(0.080f, 0.085f, 0.095f, 0.92f)
                 : D2D1::ColorF(0.035f, 0.040f, 0.050f, 0.82f);
             g_d2dBrush->SetColor(borderCol);
-            g_d2dDCRenderTarget->DrawRoundedRectangle(&cr, g_d2dBrush, selected ? 1.5f : 1.0f);
+            g_d2dDCRenderTarget->DrawRoundedRectangle(&cr, g_d2dBrush,
+                                                      DpiPx(selected ? 1.5f : 1.0f));
 
             RECT prevRect = GetSlotPreviewRect(slot);
             D2D1_ROUNDED_RECT pr = D2D1::RoundedRect(
                 D2D1::RectF(static_cast<float>(prevRect.left) + 0.5f, static_cast<float>(prevRect.top) + 0.5f,
                             static_cast<float>(prevRect.right) - 0.5f, static_cast<float>(prevRect.bottom) - 0.5f),
-                6.0f, 6.0f);
+                DpiPx(6.0f), DpiPx(6.0f));
             // No se pinta un panel opaco detrás del thumbnail. El thumbnail
             // DWM permanece nítido y con opacity=255; los huecos dejan ver la
             // superficie translúcida de la card.
@@ -3169,7 +3579,7 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
                 ? D2D1::ColorF(0.080f, 0.085f, 0.095f, 0.60f)
                 : D2D1::ColorF(0.035f, 0.040f, 0.050f, 0.50f);
             g_d2dBrush->SetColor(prevBorder);
-            g_d2dDCRenderTarget->DrawRoundedRectangle(&pr, g_d2dBrush, 1.0f);
+            g_d2dDCRenderTarget->DrawRoundedRectangle(&pr, g_d2dBrush, DpiPx(1.0f));
 
             if (g_groups[index].representativeWindow &&
                 IsIconic(g_groups[index].representativeWindow) &&
@@ -3197,18 +3607,19 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
 
             if (g_hoveredSlot == slot)
             {
+                const float hoverOffset = DpiPx(3.0f);
                 D2D1_ROUNDED_RECT hoverRect = D2D1::RoundedRect(
-                    D2D1::RectF(static_cast<float>(cardRect.left) - 3.0f,
-                                static_cast<float>(cardRect.top) - 3.0f,
-                                static_cast<float>(cardRect.right) + 3.0f,
-                                static_cast<float>(cardRect.bottom) + 3.0f),
-                    radius + 2.0f, radius + 2.0f);
+                    D2D1::RectF(static_cast<float>(cardRect.left) - hoverOffset,
+                                static_cast<float>(cardRect.top) - hoverOffset,
+                                static_cast<float>(cardRect.right) + hoverOffset,
+                                static_cast<float>(cardRect.bottom) + hoverOffset),
+                    radius + DpiPx(2.0f), radius + DpiPx(2.0f));
                 COLORREF accent = g_groups[index].mediaAccent.valid
                     ? g_groups[index].mediaAccent.color : RGB(110, 116, 130);
                 g_d2dBrush->SetColor(D2D1::ColorF(
                     GetRValue(accent) / 255.0f, GetGValue(accent) / 255.0f,
                     GetBValue(accent) / 255.0f, 0.42f));
-                g_d2dDCRenderTarget->DrawRoundedRectangle(&hoverRect, g_d2dBrush, 1.25f);
+                g_d2dDCRenderTarget->DrawRoundedRectangle(&hoverRect, g_d2dBrush, DpiPx(1.25f));
 
                 if (g_hoveredCloseButton)
                 {
@@ -3261,7 +3672,7 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
                         g_d2dBrush->SetColor(D2D1::ColorF(0.035f, 0.018f, 0.022f, 0.75f));
                         g_d2dDCRenderTarget->FillGeometry(closeGeometry, g_d2dBrush);
                         g_d2dBrush->SetColor(D2D1::ColorF(0.45f, 0.10f, 0.12f, 0.62f));
-                        g_d2dDCRenderTarget->DrawGeometry(closeGeometry, g_d2dBrush, 1.0f);
+                        g_d2dDCRenderTarget->DrawGeometry(closeGeometry, g_d2dBrush, DpiPx(1.0f));
                         closeGeometry->Release();
                     }
                 }
@@ -3379,7 +3790,7 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
     {
         if (wParam == kTabRepeatTimerId)
         {
-            if (!IsSelectorActive() || !g_tabDown)
+            if (!IsSelectorActive() || !g_uiTabDown)
             {
                 KillTimer(hwnd, kTabRepeatTimerId);
                 g_tabRepeatStarted = false;
@@ -3391,6 +3802,28 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
             if (shiftDown) SelectPrevious();
             else SelectNext();
             SetTimer(hwnd, kTabRepeatTimerId, kTabRepeatIntervalMs, nullptr);
+            return 0;
+        }
+
+        if (wParam == kActivityTimerId)
+        {
+            // Failsafe: existe únicamente mientras el selector está abierto.
+            if (g_state == SelectorState::SelectorActive)
+            {
+                ULONGLONG now = GetTickCount64();
+                bool invalidWindow = !g_selector || !IsWindow(g_selector);
+                bool modifiersDown =
+                    (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0 ||
+                    (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0 ||
+                    (GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0 ||
+                    (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
+                bool staleWithoutPhysicalSession =
+                    g_lastSelectorActivity != 0 &&
+                    now - g_lastSelectorActivity > kSelectorFailsafeMs &&
+                    !g_uiTabDown && !modifiersDown;
+                if (invalidWindow || staleWithoutPhysicalSession)
+                    EmergencyCloseSelector();
+            }
             return 0;
         }
 
@@ -3411,7 +3844,7 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
 
             ULONGLONG now = GetTickCount64();
             ULONGLONG elapsed = now - g_animStartTime;
-            if (elapsed >= static_cast<ULONGLONG>(kAnimDurationMs))
+            if (elapsed >= static_cast<ULONGLONG>(kNavigationDuration))
             {
                 g_animActive = false;
                 g_animOffset = 0.0f;
@@ -3420,8 +3853,8 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
             }
             else
             {
-                float t = static_cast<float>(elapsed) / static_cast<float>(kAnimDurationMs);
-                float ease = 1.0f - (1.0f - t) * (1.0f - t);
+                float t = static_cast<float>(elapsed) / kNavigationDuration;
+                float ease = EaseOutCubic(t);
                 g_animOffset = g_animStartOffset * (1.0f - ease);
             }
             UpdateSelectorControls();
@@ -3445,6 +3878,11 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
     case WM_COMMAND:
         return 0;
 
+    case WM_DPICHANGED:
+        // El tamaño y la posición los fija CreateSelector en píxeles físicos
+        // para el monitor de destino; no se acepta el rectángulo sugerido.
+        return 0;
+
     case WM_SIZE:
         UpdateThumbnailSlots();
         return 0;
@@ -3454,6 +3892,7 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
 
     case WM_DESTROY:
         StopCarouselAnimation();
+        KillTimer(hwnd, kActivityTimerId);
         UnregisterAllThumbnails();
         if (g_selector == hwnd)
             g_selector = nullptr;
@@ -3468,15 +3907,17 @@ static bool RegisterSelectorClasses()
     if (g_classesRegistered)
         return true;
 
-    HINSTANCE hInst = GetModuleHandleW(nullptr);
-
     WNDCLASSW wc = {};
     wc.lpfnWndProc = SelectorWndProc;
-    wc.hInstance = hInst;
+    wc.hInstance = g_hModule;
     wc.lpszClassName = kWindowClassName;
     wc.hCursor = LoadCursorW(nullptr, MAKEINTRESOURCEW(32512));
     wc.hbrBackground = nullptr;
-    RegisterClassW(&wc);
+    if (!RegisterClassW(&wc))
+    {
+        Wh_Log(L"RegisterClassW failed: %lu", GetLastError());
+        return false;
+    }
 
     g_classesRegistered = true;
     return true;
@@ -3486,8 +3927,7 @@ static void UnregisterSelectorClasses()
 {
     if (!g_classesRegistered)
         return;
-    HINSTANCE hInst = GetModuleHandleW(nullptr);
-    UnregisterClassW(kWindowClassName, hInst);
+    UnregisterClassW(kWindowClassName, g_hModule);
     g_classesRegistered = false;
 }
 
@@ -3503,7 +3943,7 @@ static void ApplySelectorRoundedRegion(HWND hwnd)
     if (width <= 0 || height <= 0)
         return;
 
-    int radius = std::max(ScaleLayoutPx(22.0f), 16);
+    int radius = std::max(ScaleLayoutPx(27.0f), 16);
     radius = std::min(radius, std::min(width, height) / 2);
     HRGN region = g_createRoundRectRgn(0, 0, width + 1, height + 1, radius, radius);
     if (region)
@@ -3521,22 +3961,26 @@ static bool InitializePersistentSelector()
     if (!RegisterSelectorClasses())
         return false;
 
+    // Creada por el UI thread (Per-Monitor-V2) con el HMODULE del mod.
     HWND selector = CreateWindowExW(
         WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         kWindowClassName, L"",
         WS_POPUP,
         0, 0, 1, 1,
-        nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+        nullptr, nullptr, g_hModule, nullptr);
 
     if (!selector)
+    {
+        Wh_Log(L"CreateWindowExW failed: %lu", GetLastError());
         return false;
+    }
 
     g_selector = selector;
     RemoveNativeSelectorFrame(g_selector);
     ApplySelectorVisuals(g_selector);
 
     // Precalentar el renderer mientras el selector está oculto. Esto elimina
-    // la creación de D2D/DWrite/fonts del camino crítico de AltGr+Tab.
+    // la creación de D2D/DWrite/fonts del camino crítico de Alt+Tab.
     LoadD2DAndDWrite();
     CreateUiFonts();
     UpdateSelectorControls();
@@ -3544,13 +3988,14 @@ static bool InitializePersistentSelector()
     return true;
 }
 
-static bool CreateSelector()
+// Se ejecuta siempre en el UI thread, nunca en un hook.
+static bool CreateSelector(bool shiftHeld)
 {
     if (g_state != SelectorState::SelectorActive || g_cleanupInProgress)
         return false;
 
     // El selector se crea y precalienta únicamente durante la inicialización
-    // del hilo del hook. Nunca se crea ni se carga en el camino de Alt+Tab.
+    // del UI thread. Nunca se crea ni se carga en el camino de Alt+Tab.
     if (!g_selector || !IsWindow(g_selector))
         return false;
 
@@ -3576,7 +4021,11 @@ static bool CreateSelector()
     }
 
     const RECT& work = monitorInfo.rcWork;
-    UpdateUIScaleForWorkArea(work);
+    UpdateUIScaleForWorkArea(work, GetMonitorDpiScale(monitor));
+    // Si el monitor tiene otra escala, reconstruir TextFormat y fuentes GDI
+    // antes de mostrar (no reutilizar formatos de otra escala).
+    LoadD2DAndDWrite();
+    CreateUiFonts();
     int x = work.left + ((work.right - work.left) - g_runtimeSelectorWidth) / 2;
     int y = work.top + ((work.bottom - work.top) - g_runtimeSelectorHeight) / 2;
 
@@ -3595,7 +4044,6 @@ static bool CreateSelector()
     // RefreshWindowList coloca la ventana que estaba en foreground en índice 0.
     // La primera pulsación respeta Shift: Alt+Tab avanza y Alt+Shift+Tab
     // retrocede desde la ventana actualmente activa.
-    bool shiftHeld = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     if (g_groups.size() > 1)
         g_selected = shiftHeld ? static_cast<int>(g_groups.size()) - 1 : 1;
     else
@@ -3620,6 +4068,8 @@ static bool CreateSelector()
     g_selectorOpening = false;
     SetTimer(g_selector, kSelectorMotionTimerId,
              GetAnimationTimerInterval(), nullptr);
+    // Failsafe solo mientras el selector está abierto (sin polling permanente).
+    SetTimer(g_selector, kActivityTimerId, 250, nullptr);
     return true;
 }
 
@@ -3631,18 +4081,23 @@ static void HideSelectorForSession()
     KillTimer(g_selector, kAnimTimerId);
     KillTimer(g_selector, kTabRepeatTimerId);
     KillTimer(g_selector, kSelectorMotionTimerId);
+    KillTimer(g_selector, kActivityTimerId);
     g_tabRepeatStarted = false;
+    g_uiTabDown = false;
 
     // Los thumbnails permanecen registrados mientras el HWND persistente está
     // oculto. En la siguiente sesión UpdateThumbnailSlots reutiliza los que aún
     // apuntan a la misma ventana y reemplaza únicamente los que hayan cambiado.
     ShowWindow(g_selector, SW_HIDE);
+    UiSetInteractive(false);
     g_selectorAnimation = SelectorAnimationState::None;
     g_sceneScaleX = 1.0f;
     g_sceneScaleY = 1.0f;
     g_sceneOpacity = 1.0f;
     g_sceneTiltDegrees = 0.0f;
     g_selectionTiltDirection = 0.0f;
+    g_cardSnapScale = 1.0f;
+    g_cardSnapStartScale = 1.0f;
     g_animActive = false;
     g_animOffset = 0.0f;
     g_animStartOffset = 0.0f;
@@ -3665,13 +4120,13 @@ static void HideSelectorForSession()
 static void DestroySelector()
 {
     // Esta función mantiene el HWND y el renderer vivos entre sesiones. El
-    // desmontaje real ocurre únicamente durante Wh_ModUninit().
+    // desmontaje real ocurre únicamente al terminar el UI thread. No se toca
+    // ClipCursor ni ningún estado global que Overhaulded no haya creado.
     ReleaseCapture();
-    ClipCursor(nullptr);
     HideSelectorForSession();
-    ClearSelectorKeyboardSession();
 }
 
+// Solo UI thread, al terminar el hilo.
 static void ShutdownPersistentSelector()
 {
     if (g_selector && IsWindow(g_selector))
@@ -3679,6 +4134,7 @@ static void ShutdownPersistentSelector()
         KillTimer(g_selector, kAnimTimerId);
         KillTimer(g_selector, kTabRepeatTimerId);
         KillTimer(g_selector, kSelectorMotionTimerId);
+        KillTimer(g_selector, kActivityTimerId);
         UnregisterAllThumbnails();
         HWND selector = g_selector;
         g_selector = nullptr;
@@ -3695,6 +4151,7 @@ static void ShutdownPersistentSelector()
     g_hoveredSlot = -1;
     g_hoveredCloseButton = false;
     g_tabRepeatStarted = false;
+    g_uiTabDown = false;
     g_selectorOpening = false;
     g_lastSelectorActivity = 0;
     g_pendingActivationTarget = nullptr;
@@ -3707,7 +4164,7 @@ static void EmergencyCloseSelector()
         return;
 
     g_cleanupInProgress = true;
-    g_state = SelectorState::Canceling;
+    LeaveActiveState(SelectorState::Canceling);
     if (g_selector && IsWindow(g_selector))
         KillTimer(g_selector, kTabRepeatTimerId);
     DestroySelector();
@@ -3725,17 +4182,28 @@ static void UpdateCarouselAnimation(HWND hwnd)
     }
     ULONGLONG now = GetTickCount64();
     ULONGLONG elapsed = now - g_animStartTime;
-    if (elapsed >= static_cast<ULONGLONG>(kAnimDurationMs))
+    float progress = std::min(1.0f,
+        static_cast<float>(elapsed) / kNavigationDuration);
+    float eased = EaseOutCubic(progress);
+    g_animOffset = g_animStartOffset * (1.0f - eased);
+
+    // Snap sutil de la card que llega al centro; no se aplica al contenedor,
+    // al fondo ni al visualizer, que permanecen inmóviles.
+    float snapT = progress <= 0.64f ? 0.0f :
+        std::min(1.0f, (progress - 0.64f) / 0.36f);
+    float targetSnapScale = 1.0f + 0.045f * sinf(
+        snapT * 3.14159265358979323846f);
+    g_cardSnapScale = g_cardSnapStartScale +
+        (targetSnapScale - g_cardSnapStartScale) * eased;
+
+    if (progress >= 1.0f)
     {
         g_animActive = false;
         g_animOffset = 0.0f;
         g_animStartOffset = 0.0f;
-    }
-    else
-    {
-        float t = static_cast<float>(elapsed) / static_cast<float>(kAnimDurationMs);
-        float ease = 1.0f - (1.0f - t) * (1.0f - t);
-        g_animOffset = g_animStartOffset * (1.0f - ease);
+        g_cardSnapScale = 1.0f;
+        g_cardSnapStartScale = 1.0f;
+        KillTimer(hwnd, kAnimTimerId);
     }
     UpdateSelectorControls();
 }
@@ -3747,16 +4215,21 @@ static void StartSlide(int steps)
     if (g_selectorAnimation != SelectorAnimationState::Closing &&
         g_selectorAnimation != SelectorAnimationState::CardExit)
     {
-        g_selectionStartScaleX = g_sceneScaleX;
-        g_selectionStartScaleY = g_sceneScaleY;
-        g_selectionStartOpacity = g_sceneOpacity;
-        g_selectionStartTiltDegrees = g_sceneTiltDegrees;
+        g_selectionStartScaleX = 1.0f;
+        g_selectionStartScaleY = 1.0f;
+        g_selectionStartOpacity = 1.0f;
+        g_selectionStartTiltDegrees = 0.0f;
+        g_sceneScaleX = 1.0f;
+        g_sceneScaleY = 1.0f;
+        g_sceneOpacity = 1.0f;
+        g_sceneTiltDegrees = 0.0f;
         g_selectorAnimation = SelectorAnimationState::SelectionChange;
         g_selectorAnimationStart = GetTickCount64();
         if (g_selector && IsWindow(g_selector))
             SetTimer(g_selector, kSelectorMotionTimerId, GetAnimationTimerInterval(), nullptr);
     }
     g_selectionTiltDirection = steps > 0 ? -1.0f : 1.0f;
+    g_cardSnapStartScale = g_cardSnapScale;
 
     int count = static_cast<int>(g_groups.size());
     g_selected = (g_selected + steps) % count;
@@ -3797,6 +4270,8 @@ static void SelectPrevious()
     SelectPreviousSmooth(1);
 }
 
+// Activación de la ventana elegida (UI thread). Sin AllowSetForegroundWindow
+// global; solo el attach al hilo foreground necesario para SetForegroundWindow.
 static void ActivateWindow(HWND target)
 {
     if (!target || !IsWindow(target))
@@ -3808,7 +4283,7 @@ static void ActivateWindow(HWND target)
     DWORD targetThread = GetWindowThreadProcessId(target, nullptr);
 
     if (IsIconic(target))
-        ShowWindow(target, SW_RESTORE);
+        ShowWindowAsync(target, SW_RESTORE);
 
     bool attachedForeground = false;
     bool attachedTarget = false;
@@ -3818,7 +4293,6 @@ static void ActivateWindow(HWND target)
     if (targetThread && targetThread != currentThread && targetThread != foregroundThread)
         attachedTarget = AttachThreadInput(currentThread, targetThread, TRUE) != FALSE;
 
-    AllowSetForegroundWindow(ASFW_ANY);
     BringWindowToTop(target);
     SetForegroundWindow(target);
     SetActiveWindow(target);
@@ -3834,7 +4308,7 @@ static void ConfirmSelection()
     if (!IsSelectorActuallyActive() || g_cleanupInProgress)
         return;
 
-    g_state = SelectorState::Confirming;
+    LeaveActiveState(SelectorState::Confirming);
     HWND target = nullptr;
     if (g_selected >= 0 && g_selected < static_cast<int>(g_groups.size()))
     {
@@ -3856,7 +4330,7 @@ static void ConfirmSelection()
 
     if (target && target == g_selectorOriginWindow)
     {
-        g_state = SelectorState::Canceling;
+        LeaveActiveState(SelectorState::Canceling);
         StartSelectorClose(nullptr);
         return;
     }
@@ -3876,8 +4350,209 @@ static void CancelSelection()
     if ((!IsSelectorActuallyActive() && !g_selector) || g_cleanupInProgress)
         return;
 
-    g_state = SelectorState::Canceling;
+    LeaveActiveState(SelectorState::Canceling);
     StartSelectorClose(nullptr);
+}
+
+// COMANDOS EN EL UI THREAD
+
+static bool UiCommandMatchesSession(WPARAM sessionId)
+{
+    return static_cast<LONG>(sessionId) == g_uiSessionId && IsSelectorActive();
+}
+
+static void UiOpen(LONG sessionId, bool shiftHeld)
+{
+    g_uiSessionId = sessionId;
+    g_uiTabDown = false;
+    g_state = SelectorState::SelectorActive;
+
+    if (!CreateSelector(shiftHeld))
+    {
+        // Nada que mostrar (o precarga no disponible): terminar la sesión.
+        g_state = SelectorState::Idle;
+        UiEndSession();
+        return;
+    }
+
+    UiSetInteractive(true);
+    g_uiTabDown = true;
+    g_tabRepeatStarted = false;
+    SetTimer(g_selector, kTabRepeatTimerId, kTabRepeatInitialDelayMs, nullptr);
+}
+
+static void UiHandleMouseMove()
+{
+    InterlockedExchange(&g_mouseMovePending, 0);
+    LONG64 packed = InterlockedCompareExchange64(&g_lastMousePt, 0, 0);
+    POINT pt = {};
+    pt.x = static_cast<LONG>(static_cast<ULONG>(static_cast<ULONG64>(packed) & 0xFFFFFFFFULL));
+    pt.y = static_cast<LONG>(static_cast<ULONG>((static_cast<ULONG64>(packed) >> 32) & 0xFFFFFFFFULL));
+
+    if (!IsSelectorActive() || !g_selector || !IsWindow(g_selector))
+        return;
+    ScreenToClient(g_selector, &pt);
+    UpdateHoveredSlot(pt);
+    MarkSelectorActivity();
+}
+
+static void UiHandleMouseButton(UINT message, POINT screenPt)
+{
+    if (!IsSelectorActive() || !g_selector || !IsWindow(g_selector))
+        return;
+    MarkSelectorActivity();
+
+    RECT selRect = {};
+    GetWindowRect(g_selector, &selRect);
+
+    if (!PtInRect(&selRect, screenPt))
+    {
+        g_hoveredSlot = -1;
+        g_hoveredCloseButton = false;
+        CancelSelection();
+        return;
+    }
+
+    if (message == WM_LBUTTONDOWN)
+    {
+        POINT clientPt = screenPt;
+        ScreenToClient(g_selector, &clientPt);
+        int clickedSlot = GetSlotAtPoint(clientPt);
+        if (clickedSlot >= 0)
+        {
+            RECT closeRect = GetCloseHoverButtonRect(clickedSlot);
+            if (g_hoveredSlot == clickedSlot && g_hoveredCloseButton &&
+                PtInRect(&closeRect, clientPt))
+            {
+                CloseWindowForSlot(clickedSlot);
+            }
+            else if (clickedSlot == 2)
+            {
+                ConfirmSelection();
+            }
+            else
+            {
+                StartSlide(clickedSlot - 2);
+            }
+        }
+    }
+}
+
+static void UiHandleSettingsChanged()
+{
+    if (g_selector && IsWindow(g_selector))
+    {
+        if (g_selectorAnimation != SelectorAnimationState::None &&
+            g_selectorAnimation != SelectorAnimationState::Open)
+            SetTimer(g_selector, kSelectorMotionTimerId,
+                     GetAnimationTimerInterval(), nullptr);
+        if (g_animActive)
+            SetTimer(g_selector, kSelectorMotionTimerId,
+                     GetAnimationTimerInterval(), nullptr);
+    }
+}
+
+static void HandleUiCommand(const MSG& msg)
+{
+    switch (msg.message)
+    {
+    case WM_UI_OPEN:
+        UiOpen(static_cast<LONG>(msg.wParam), msg.lParam != 0);
+        break;
+
+    case WM_UI_TAB_DOWN:
+        if (!UiCommandMatchesSession(msg.wParam))
+            break;
+        MarkSelectorActivity();
+        if (msg.lParam != 0) SelectPrevious();
+        else SelectNext();
+        g_uiTabDown = true;
+        g_tabRepeatStarted = false;
+        SetTimer(g_selector, kTabRepeatTimerId, kTabRepeatInitialDelayMs, nullptr);
+        break;
+
+    case WM_UI_TAB_UP:
+        if (static_cast<LONG>(msg.wParam) != g_uiSessionId)
+            break;
+        g_uiTabDown = false;
+        g_tabRepeatStarted = false;
+        if (g_selector && IsWindow(g_selector))
+            KillTimer(g_selector, kTabRepeatTimerId);
+        break;
+
+    case WM_UI_NAVIGATE:
+        if (!UiCommandMatchesSession(msg.wParam))
+            break;
+        MarkSelectorActivity();
+        if (msg.lParam < 0) SelectPrevious();
+        else SelectNext();
+        break;
+
+    case WM_UI_CONFIRM:
+        if (static_cast<LONG>(msg.wParam) == g_uiSessionId)
+            ConfirmSelection();
+        break;
+
+    case WM_UI_CANCEL:
+        if (static_cast<LONG>(msg.wParam) == g_uiSessionId)
+            CancelSelection();
+        break;
+
+    case WM_UI_MOUSE_MOVE:
+        UiHandleMouseMove();
+        break;
+
+    case WM_UI_MOUSE_BUTTON:
+    {
+        POINT pt = {};
+        pt.x = static_cast<short>(LOWORD(msg.lParam));
+        pt.y = static_cast<short>(HIWORD(msg.lParam));
+        UiHandleMouseButton(static_cast<UINT>(msg.wParam), pt);
+        break;
+    }
+
+    case WM_UI_MOUSE_WHEEL:
+    {
+        if (!IsSelectorActive())
+            break;
+        MarkSelectorActivity();
+        short delta = static_cast<short>(LOWORD(msg.wParam));
+        if (delta > 0)
+            SelectNextSmooth(1);
+        else if (delta < 0)
+            SelectPreviousSmooth(1);
+        break;
+    }
+
+    case WM_UI_SETTINGS:
+        UiHandleSettingsChanged();
+        break;
+    }
+}
+
+// HOOKS (input thread). Callbacks mínimos: estado local/atómico + PostThreadMessage.
+
+static bool InputSessionActive()
+{
+    return g_inputSessionId != 0 &&
+           InterlockedCompareExchange(&g_sessionActive, 0, 0) == g_inputSessionId;
+}
+
+// Si el UI cerró la sesión (clic, timeout, ventana inválida), reconciliar.
+static void SyncInputSession()
+{
+    if (g_inputSessionId != 0 && !InputSessionActive())
+        ClearSelectorKeyboardSession();
+}
+
+static void InputEndSession(UINT command)
+{
+    LONG id = g_inputSessionId;
+    if (id == 0)
+        return;
+    InterlockedCompareExchange(&g_sessionActive, 0, id);
+    ClearSelectorKeyboardSession();
+    PostUiCommand(command, static_cast<WPARAM>(id), 0);
 }
 
 static bool IsKeyDownMessage(WPARAM message)
@@ -3905,21 +4580,36 @@ static bool SessionModifierReleased()
     return false;
 }
 
+// Al soltar modificadores: confirmar si termina la sesión y desarmar el bloqueo
+// de Ctrl+Alt+Flecha cuando AltGr ya no está pulsado.
+static void OnModifierReleased()
+{
+    if (InputSessionActive() && SessionModifierReleased())
+        InputEndSession(WM_UI_CONFIRM);
+    g_altGrActive = IsAltGrPhysicallyDown();
+    if (!InputSessionActive() && !g_altGrActive)
+        g_altGrTaskSwitcherArmed = false;
+}
+
 static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
 {
     if (nCode != HC_ACTION || !lParam)
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
 
     KBDLLHOOKSTRUCT* key = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
-    if ((key->flags & LLKHF_INJECTED) != 0)
+
+    // En layouts con AltGr el sistema genera un Ctrl izquierdo "falso" (scancode
+    // 0x21D). Se procesa aunque venga marcado como inyectado para no perder el
+    // estado de AltGr; el resto de teclas inyectadas se ignoran.
+    const bool fakeAltGrCtrl = key->vkCode == VK_LCONTROL && key->scanCode == 0x21D;
+    if ((key->flags & LLKHF_INJECTED) != 0 && !fakeAltGrCtrl)
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
+
+    SyncInputSession();
 
     bool up = IsKeyUpMessage(wParam) || ((key->flags & LLKHF_UP) != 0);
     bool down = !up && IsKeyDownMessage(wParam);
     DWORD vk = key->vkCode;
-
-    if (IsSelectorActuallyActive())
-        MarkSelectorActivity();
 
     bool isLeftAlt = (vk == VK_LMENU) || (vk == VK_MENU && (key->flags & LLKHF_EXTENDED) == 0);
     bool isRightAlt = (vk == VK_RMENU) || (vk == VK_MENU && (key->flags & LLKHF_EXTENDED) != 0);
@@ -3933,155 +4623,153 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
         if (up)
         {
             g_altLeftDown = false;
-            if (IsSelectorActive() && g_sessionModifier == ModifierSession::LeftAlt)
-            {
-                ConfirmSelection();
-            }
+            OnModifierReleased();
         }
+        else
+            g_altGrActive = IsAltGrPhysicallyDown();
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
     }
 
     if (isRightAlt)
     {
         if (down)
-        {
             g_altRightDown = true;
-            g_rightAltSeen = true;
-            g_altGrActive = IsAltGrPhysicallyDown() || g_rightCtrlSeen;
-        }
         if (up)
         {
             g_altRightDown = false;
-            if (IsSelectorActive() && SessionModifierReleased())
-            {
-                ConfirmSelection();
-            }
-            g_rightAltSeen = false;
+            OnModifierReleased();
         }
+        else
+            g_altGrActive = IsAltGrPhysicallyDown();
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
     }
 
     if (isRightCtrl)
     {
         if (down)
-        {
             g_ctrlRightDown = true;
-            g_rightCtrlSeen = true;
-            g_altGrActive = IsAltGrPhysicallyDown() || g_rightAltSeen;
-        }
         if (up)
         {
             g_ctrlRightDown = false;
-            if (IsSelectorActive() && SessionModifierReleased())
-            {
-                ConfirmSelection();
-            }
-            g_rightCtrlSeen = false;
+            OnModifierReleased();
         }
+        else
+            g_altGrActive = IsAltGrPhysicallyDown();
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
     }
 
     if (isLeftCtrl)
     {
         if (down)
-        {
             g_ctrlLeftDown = true;
-            g_altGrActive = IsAltGrPhysicallyDown();
-        }
         if (up)
         {
             g_ctrlLeftDown = false;
-            if (IsSelectorActive() && SessionModifierReleased())
-            {
-                ConfirmSelection();
-            }
+            OnModifierReleased();
         }
+        else
+            g_altGrActive = IsAltGrPhysicallyDown();
         return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
     }
 
-    if (vk == VK_ESCAPE && down && IsSelectorActive())
+    const bool sessionActive = InputSessionActive();
+
+    if (vk == VK_ESCAPE && down && sessionActive)
     {
-        CancelSelection();
+        InputEndSession(WM_UI_CANCEL);
         return 1;
     }
 
-    // AltGr se representa como Ctrl derecho + Alt derecho. Cuando AltGr+Tab
-    // ya armó nuestro selector, nunca dejamos que Ctrl+Alt+Flecha alcance al
-    // sistema y active, por ejemplo, la rotación de pantalla. El bloqueo está
-    // limitado a esta sesión; Ctrl+Alt+Flecha normal fuera del selector sigue intacto.
+    // AltGr se representa como Ctrl + Alt derecho. Cuando AltGr+Tab ya armó
+    // nuestro selector, nunca dejamos que Ctrl+Alt+Flecha alcance al sistema
+    // y active, por ejemplo, la rotación de pantalla. El bloqueo está limitado
+    // a esta sesión; Ctrl+Alt+Flecha normal fuera del selector sigue intacto.
     if (g_altGrTaskSwitcherArmed &&
         (vk == VK_LEFT || vk == VK_RIGHT || vk == VK_UP || vk == VK_DOWN))
     {
-        if (IsSelectorActive() && down)
+        if (sessionActive && down)
         {
             if (vk == VK_LEFT)
-                SelectPrevious();
+                PostUiCommand(WM_UI_NAVIGATE, static_cast<WPARAM>(g_inputSessionId),
+                              static_cast<LPARAM>(-1));
             else if (vk == VK_RIGHT)
-                SelectNext();
+                PostUiCommand(WM_UI_NAVIGATE, static_cast<WPARAM>(g_inputSessionId),
+                              static_cast<LPARAM>(1));
         }
         // Up/Down and any key-up are simply consumed so Ctrl+Alt+Arrow
         // never reaches the Windows display-rotation shortcut.
         return 1;
     }
 
-    if (IsSelectorActive() && down && vk == VK_LEFT)
+    if (sessionActive && down && vk == VK_LEFT)
     {
-        SelectPrevious();
+        PostUiCommand(WM_UI_NAVIGATE, static_cast<WPARAM>(g_inputSessionId),
+                      static_cast<LPARAM>(-1));
         return 1;
     }
 
-    if (IsSelectorActive() && down && vk == VK_RIGHT)
+    if (sessionActive && down && vk == VK_RIGHT)
     {
-        SelectNext();
+        PostUiCommand(WM_UI_NAVIGATE, static_cast<WPARAM>(g_inputSessionId),
+                      static_cast<LPARAM>(1));
         return 1;
     }
 
-    if (vk == VK_RETURN && IsSelectorActive())
+    if (vk == VK_RETURN && sessionActive)
     {
         if (down)
-        {
-            ConfirmSelection();
-        }
+            InputEndSession(WM_UI_CONFIRM);
         return 1;
     }
 
     if (vk == VK_TAB)
     {
-        bool altGrHeld = IsAltGrPhysicallyDown() || g_altGrActive;
-        bool altHeld = g_altLeftDown ||
-                       ((GetAsyncKeyState(VK_LMENU) & 0x8000) != 0);
-
         if (down)
         {
-            if (!IsSelectorActive())
+            if (!sessionActive)
             {
-                if (altHeld || altGrHeld)
+                // Alt izquierdo, Alt derecho y AltGr se distinguen a partir del
+                // estado rastreado por eventos (más GetAsyncKeyState como
+                // respaldo para modificadores pulsados antes del hook). Ya no
+                // se usa un flag AltGr "pegajoso": AltGr+otras teclas no abre
+                // el selector ni deja estado residual.
+                bool leftAlt = g_altLeftDown ||
+                               ((GetAsyncKeyState(VK_LMENU) & 0x8000) != 0);
+                bool rightAlt = g_altRightDown ||
+                                ((GetAsyncKeyState(VK_RMENU) & 0x8000) != 0);
+                bool ctrlHeld = g_ctrlLeftDown || g_ctrlRightDown ||
+                                ((GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0) ||
+                                ((GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0);
+                bool altGrHeld = rightAlt && ctrlHeld;
+
+                if (leftAlt || rightAlt)
                 {
+                    LONG id = InterlockedIncrement(&g_nextSessionId);
+                    if (id == 0)
+                        id = InterlockedIncrement(&g_nextSessionId);
+                    bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+
+                    g_inputSessionId = id;
+                    InterlockedExchange(&g_sessionActive, id);
                     g_sessionModifier = altGrHeld
                         ? ModifierSession::AltGr
-                        : (g_altLeftDown ? ModifierSession::LeftAlt
-                                          : ModifierSession::RightAlt);
-                    g_state = SelectorState::SelectorActive;
+                        : (leftAlt ? ModifierSession::LeftAlt
+                                   : ModifierSession::RightAlt);
                     g_tabDown = true;
                     g_tabSuppressed = true;
                     g_altGrActive = altGrHeld;
                     g_altGrTaskSwitcherArmed = altGrHeld;
 
-                    if (CreateSelector())
-                    {
-                        // CreateSelector solo revela/reconfigura el HWND ya
-                        // precargado y posiciona el carrusel directamente.
-                        g_tabRepeatStarted = false;
-                        SetTimer(g_selector, kTabRepeatTimerId, kTabRepeatInitialDelayMs, nullptr);
+                    // El UI thread abre el selector ya precargado. El hook no
+                    // enumera ventanas ni toca D2D/DWM: solo publica el comando.
+                    if (PostUiCommand(WM_UI_OPEN, static_cast<WPARAM>(id),
+                                      shift ? 1 : 0))
                         return 1;
-                    }
 
-                    // Si la precarga no está disponible, no bloquear esta
-                    // pulsación: Windows conserva su comportamiento normal.
-                    g_state = SelectorState::Idle;
-                    g_sessionModifier = ModifierSession::None;
-                    g_tabDown = false;
-                    g_tabSuppressed = false;
+                    // Sin UI disponible no se bloquea la pulsación: Windows
+                    // conserva su comportamiento normal.
+                    InterlockedCompareExchange(&g_sessionActive, 0, id);
+                    ClearSelectorKeyboardSession();
                     g_altGrTaskSwitcherArmed = false;
                     return CallNextHookEx(g_keyboardHook, nCode, wParam, lParam);
                 }
@@ -4090,14 +4778,10 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
             {
                 if (!g_tabDown)
                 {
-                    bool shiftDown = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-                    if (shiftDown)
-                        SelectPrevious();
-                    else
-                        SelectNext();
+                    bool shift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
                     g_tabDown = true;
-                    g_tabRepeatStarted = false;
-                    SetTimer(g_selector, kTabRepeatTimerId, kTabRepeatInitialDelayMs, nullptr);
+                    PostUiCommand(WM_UI_TAB_DOWN, static_cast<WPARAM>(g_inputSessionId),
+                                  shift ? 1 : 0);
                 }
                 return 1;
             }
@@ -4105,10 +4789,9 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
         else if (up)
         {
             g_tabDown = false;
-            g_tabRepeatStarted = false;
-            if (g_selector && IsWindow(g_selector))
-                KillTimer(g_selector, kTabRepeatTimerId);
-            if (IsSelectorActive() || g_tabSuppressed)
+            if (sessionActive)
+                PostUiCommand(WM_UI_TAB_UP, static_cast<WPARAM>(g_inputSessionId), 0);
+            if (sessionActive || g_tabSuppressed)
             {
                 g_tabSuppressed = false;
                 return 1;
@@ -4116,7 +4799,7 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
         }
     }
 
-    if (IsSelectorActive())
+    if (sessionActive)
     {
         if (vk == VK_LWIN || vk == VK_RWIN || vk == VK_APPS)
             return 1;
@@ -4131,154 +4814,111 @@ static LRESULT CALLBACK KeyboardHook(int nCode, WPARAM wParam, LPARAM lParam)
 
 static LRESULT CALLBACK MouseHook(int nCode, WPARAM wParam, LPARAM lParam)
 {
-    if (nCode != HC_ACTION || !lParam)
+    // Solo interviene mientras el UI thread declara el selector interactivo.
+    if (nCode != HC_ACTION || !lParam ||
+        InterlockedCompareExchange(&g_uiSelectorOpen, 0, 0) == 0)
         return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 
-    MSLLHOOKSTRUCT* mouse = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
+    const MSLLHOOKSTRUCT* mouse = reinterpret_cast<const MSLLHOOKSTRUCT*>(lParam);
 
-    if (IsSelectorActive() && g_selector && IsWindow(g_selector))
+    if (wParam == WM_MOUSEMOVE)
     {
-        if (wParam == WM_MOUSEMOVE)
+        LONG64 packed = static_cast<LONG64>(
+            (static_cast<ULONG64>(static_cast<ULONG>(mouse->pt.y)) << 32) |
+            static_cast<ULONG64>(static_cast<ULONG>(mouse->pt.x)));
+        InterlockedExchange64(&g_lastMousePt, packed);
+        // Coalescencia: como máximo un WM_UI_MOUSE_MOVE pendiente. El hook
+        // observa el movimiento pero no lo suprime.
+        if (InterlockedExchange(&g_mouseMovePending, 1) == 0)
         {
-            POINT hoverPoint = mouse->pt;
-            ScreenToClient(g_selector, &hoverPoint);
-            UpdateHoveredSlot(hoverPoint);
-            MarkSelectorActivity();
-            // El hook observa el movimiento, pero no lo suprime: devolver 1
-            // aquí congelaba el cursor y evitaba que Windows entregara
-            // WM_MOUSEMOVE normalmente.
+            if (!PostUiCommand(WM_UI_MOUSE_MOVE, 0, 0))
+                InterlockedExchange(&g_mouseMovePending, 0);
+        }
+        return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+    }
+
+    if (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
+        wParam == WM_MBUTTONDOWN || wParam == WM_NCLBUTTONDOWN ||
+        wParam == WM_NCRBUTTONDOWN || wParam == WM_NCMBUTTONDOWN)
+    {
+        LPARAM packedPt = MAKELPARAM(static_cast<WORD>(static_cast<short>(mouse->pt.x)),
+                                     static_cast<WORD>(static_cast<short>(mouse->pt.y)));
+        if (!PostUiCommand(WM_UI_MOUSE_BUTTON, wParam, packedPt))
             return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
-        }
+        return 1;
+    }
 
-        if (wParam == WM_LBUTTONDOWN || wParam == WM_RBUTTONDOWN ||
-            wParam == WM_MBUTTONDOWN || wParam == WM_NCLBUTTONDOWN ||
-            wParam == WM_NCRBUTTONDOWN || wParam == WM_NCMBUTTONDOWN)
-        {
-            RECT selRect = {};
-            GetWindowRect(g_selector, &selRect);
+    if (wParam == WM_LBUTTONUP || wParam == WM_RBUTTONUP ||
+        wParam == WM_MBUTTONUP || wParam == WM_NCLBUTTONUP ||
+        wParam == WM_NCRBUTTONUP || wParam == WM_NCMBUTTONUP)
+    {
+        return 1;
+    }
 
-            if (!PtInRect(&selRect, mouse->pt))
-            {
-                g_hoveredSlot = -1;
-                g_hoveredCloseButton = false;
-                CancelSelection();
-                return 1;
-            }
-            else if (wParam == WM_LBUTTONDOWN)
-            {
-                POINT clientPt = mouse->pt;
-                ScreenToClient(g_selector, &clientPt);
-                int clickedSlot = GetSlotAtPoint(clientPt);
-                if (clickedSlot >= 0)
-                {
-                    RECT closeRect = GetCloseHoverButtonRect(clickedSlot);
-                    if (g_hoveredSlot == clickedSlot && g_hoveredCloseButton &&
-                        PtInRect(&closeRect, clientPt))
-                    {
-                        CloseWindowForSlot(clickedSlot);
-                    }
-                    else if (clickedSlot == 2)
-                    {
-                        ConfirmSelection();
-                    }
-                    else
-                    {
-                        int steps = clickedSlot - 2;
-                        StartSlide(steps);
-                    }
-                }
-                return 1;
-            }
-            else
-            {
-                return 1;
-            }
-        }
-
-        if (wParam == WM_LBUTTONUP || wParam == WM_RBUTTONUP ||
-            wParam == WM_MBUTTONUP || wParam == WM_NCLBUTTONUP ||
-            wParam == WM_NCRBUTTONUP || wParam == WM_NCMBUTTONUP)
-        {
-            return 1;
-        }
-
-        if (wParam == WM_MOUSEWHEEL)
-        {
-            short delta = static_cast<short>(HIWORD(mouse->mouseData));
-            if (delta > 0)
-                SelectNextSmooth(1);
-            else if (delta < 0)
-                SelectPreviousSmooth(1);
-            return 1;
-        }
+    if (wParam == WM_MOUSEWHEEL)
+    {
+        short delta = static_cast<short>(HIWORD(mouse->mouseData));
+        if (!PostUiCommand(WM_UI_MOUSE_WHEEL,
+                           static_cast<WPARAM>(static_cast<USHORT>(delta)), 0))
+            return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+        return 1;
     }
 
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
 }
 
-static DWORD WINAPI HookThreadProc(LPVOID)
+// HILOS
+
+static DWORD WINAPI InputThreadProc(LPVOID)
 {
-    MSG initialMessage = {};
-    PeekMessageW(&initialMessage, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    SetThreadPerMonitorAwareV2();
 
-    g_hookThreadId = GetCurrentThreadId();
+    // Crear la cola de mensajes antes de publicar la disponibilidad.
+    MSG message = {};
+    PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
-    // Preparar primero la única ventana del selector. El hook se publica
-    // después de esta precarga para que Alt+Tab nunca entre en una ruta que
-    // cree la ventana o cargue el renderer de forma perezosa.
-    InitializePersistentSelector();
+    InputResetKeyboardState();
 
-    g_keyboardHook = SetWindowsHookExW(
-        WH_KEYBOARD_LL, KeyboardHook, GetModuleHandleW(nullptr), 0);
-    g_mouseHook = SetWindowsHookExW(
-        WH_MOUSE_LL, MouseHook, GetModuleHandleW(nullptr), 0);
-
-    if (g_keyboardHook)
-        InterlockedExchange(&g_hookInstalled, 1);
-
-    if (g_hookReadyEvent)
-        SetEvent(g_hookReadyEvent);
-
-    SetTimer(nullptr, kActivityTimerId, 250, nullptr);
-
-    MSG message;
-    while (InterlockedCompareExchange(&g_shutdownRequested, 0, 0) == 0 &&
-           GetMessageW(&message, nullptr, 0, 0) > 0)
+    bool ok = false;
+    HWND control = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0,
+                                   HWND_MESSAGE, nullptr, g_hModule, nullptr);
+    if (control)
     {
-        if (message.message == WM_TIMER && message.wParam == kActivityTimerId)
-        {
-            RegisterUserWindow(GetForegroundWindow(), true);
-            PruneUserWindowRegistry();
+        g_inputControlWnd = control;
+        g_keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardHook, g_hModule, 0);
+        ok = g_keyboardHook != nullptr;
+    }
+    if (!ok)
+        Wh_Log(L"Input thread initialization failed: %lu", GetLastError());
 
-            if (g_state == SelectorState::SelectorActive)
-            {
-                ULONGLONG now = GetTickCount64();
-                bool invalidWindow = !g_selector || !IsWindow(g_selector);
-                bool staleWithoutPhysicalSession =
-                    g_lastSelectorActivity != 0 &&
-                    now - g_lastSelectorActivity > kSelectorFailsafeMs &&
-                    !g_tabDown && !g_altLeftDown && !g_altRightDown &&
-                    !g_ctrlLeftDown && !g_ctrlRightDown;
-                if (invalidWindow || staleWithoutPhysicalSession)
-                    EmergencyCloseSelector();
-            }
-        }
-        else
+    InterlockedExchange(&g_inputInitOk, ok ? 1 : 0);
+    SetEvent(g_inputReadyEvent);
+
+    if (ok)
+    {
+        while (GetMessageW(&message, nullptr, 0, 0) > 0)
         {
+            if (message.message == WM_IN_MOUSEHOOK)
+            {
+                if (message.wParam != 0)
+                {
+                    if (!g_mouseHook)
+                        g_mouseHook = SetWindowsHookExW(WH_MOUSE_LL, MouseHook,
+                                                        g_hModule, 0);
+                }
+                else if (g_mouseHook)
+                {
+                    UnhookWindowsHookEx(g_mouseHook);
+                    g_mouseHook = nullptr;
+                }
+                continue;
+            }
             TranslateMessage(&message);
             DispatchMessageW(&message);
         }
     }
 
-    KillTimer(nullptr, kActivityTimerId);
-
-    InterlockedExchange(&g_shutdownRequested, 1);
-    if (g_selector || g_state != SelectorState::Idle)
-        EmergencyCloseSelector();
-    else
-        CleanupKeyboardState();
-    ShutdownPersistentSelector();
-
+    // El propio hilo retira sus hooks y destruye su ventana.
     if (g_keyboardHook)
     {
         UnhookWindowsHookEx(g_keyboardHook);
@@ -4289,88 +4929,393 @@ static DWORD WINAPI HookThreadProc(LPVOID)
         UnhookWindowsHookEx(g_mouseHook);
         g_mouseHook = nullptr;
     }
-    InterlockedExchange(&g_hookInstalled, 0);
-
-    UnregisterSelectorClasses();
-    g_hookThreadId = 0;
+    g_inputControlWnd = nullptr;
+    if (control)
+        DestroyWindow(control);
     return 0;
 }
 
-BOOL Wh_ModInit()
+static bool InitializeUiThreadState()
 {
-    LoadAnimationSettings();
-    ResetKeyboardState();
-    g_state = SelectorState::Idle;
-    InterlockedExchange(&g_shutdownRequested, 0);
-    InterlockedExchange(&g_hookInstalled, 0);
+    if (!RegisterSelectorClasses())
+        return false;
 
-    g_hookReadyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-    if (!g_hookReadyEvent)
-        return FALSE;
+    // Escala del monitor principal para que el precalentado (D2D/DWrite/fuentes)
+    // ya use la escala correcta en el caso habitual.
+    POINT origin = { 0, 0 };
+    UpdateUIScaleForMonitor(MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY));
 
-    g_hookThread = CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, nullptr);
-    if (!g_hookThread)
+    if (!InitializePersistentSelector())
+        return false;
+
+    RegisterUserWindow(GetForegroundWindow(), true);
+
+    // MRU por evento, sin polling. OUTOFCONTEXT: se entrega en este hilo.
+    g_winEventHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+                                     nullptr, ForegroundWinEventProc, 0, 0,
+                                     WINEVENT_OUTOFCONTEXT);
+    if (!g_winEventHook)
+        Wh_Log(L"SetWinEventHook failed: %lu", GetLastError());
+    return true;
+}
+
+static void ShutdownUiThreadState()
+{
+    if (g_winEventHook)
     {
-        CloseHandle(g_hookReadyEvent);
-        g_hookReadyEvent = nullptr;
-        return FALSE;
+        UnhookWinEvent(g_winEventHook);
+        g_winEventHook = nullptr;
+    }
+    if (g_foregroundRetryTimer)
+    {
+        KillTimer(nullptr, g_foregroundRetryTimer);
+        g_foregroundRetryTimer = 0;
+    }
+    g_foregroundRetryWindow = nullptr;
+
+    if (g_selector || g_state != SelectorState::Idle)
+        EmergencyCloseSelector();
+    else
+        CleanupKeyboardState();
+
+    // El hilo propietario destruye la ventana y libera D2D/DWrite/GDI/DWM.
+    ShutdownPersistentSelector();
+    UnregisterSelectorClasses();
+
+    g_userWindows.clear();
+    g_groups.clear();
+    g_selected = 0;
+    g_state = SelectorState::Idle;
+
+    g_getDpiForMonitor = nullptr;
+    if (g_shcoreApi)
+    {
+        FreeLibrary(g_shcoreApi);
+        g_shcoreApi = nullptr;
+    }
+}
+
+static DWORD WINAPI UiThreadProc(LPVOID)
+{
+    // Debe hacerse antes de crear cualquier ventana de este hilo.
+    SetThreadPerMonitorAwareV2();
+
+    MSG message = {};
+    PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+
+    bool ok = InitializeUiThreadState();
+    InterlockedExchange(&g_uiInitOk, ok ? 1 : 0);
+    SetEvent(g_uiReadyEvent);
+
+    if (ok)
+    {
+        while (GetMessageW(&message, nullptr, 0, 0) > 0)
+        {
+            if (message.hwnd == nullptr &&
+                message.message >= WM_UI_OPEN && message.message <= WM_UI_SETTINGS)
+            {
+                HandleUiCommand(message);
+                continue;
+            }
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
     }
 
-    WaitForSingleObject(g_hookReadyEvent, 3000);
-    CloseHandle(g_hookReadyEvent);
-    g_hookReadyEvent = nullptr;
+    ShutdownUiThreadState();
+    return 0;
+}
 
-    if (InterlockedCompareExchange(&g_hookInstalled, 0, 0) == 0)
+// Arranca un hilo y espera sin timeout a que esté listo o haya terminado.
+// El evento no se cierra mientras el hilo pueda seguir usándolo.
+static bool StartWorkerThread(LPTHREAD_START_ROUTINE proc, HANDLE* outThread,
+                              DWORD* outThreadId, HANDLE* outEvent,
+                              volatile LONG* okFlag)
+{
+    HANDLE readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!readyEvent)
+        return false;
+    *outEvent = readyEvent;
+
+    DWORD threadId = 0;
+    HANDLE thread = CreateThread(nullptr, 0, proc, nullptr, 0, &threadId);
+    if (!thread)
+    {
+        CloseHandle(readyEvent);
+        *outEvent = nullptr;
+        return false;
+    }
+
+    HANDLE waits[2] = { readyEvent, thread };
+    DWORD result = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+    bool ok = (result == WAIT_OBJECT_0) &&
+              InterlockedCompareExchange(okFlag, 0, 0) == 1;
+    if (!ok)
+    {
+        // El hilo ya terminó o está terminando por sí mismo: esperar su fin
+        // antes de cerrar handles.
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+        CloseHandle(readyEvent);
+        *outEvent = nullptr;
+        return false;
+    }
+
+    *outThread = thread;
+    *outThreadId = threadId;
+    return true;
+}
+
+// TOOL MOD
+
+static BOOL WhTool_ModInit()
+{
+    LoadAnimationSettings();
+
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&SelectorWndProc), &g_hModule);
+    if (!g_hModule)
+        return FALSE;
+
+    InterlockedExchange(&g_shutdownRequested, 0);
+    InterlockedExchange(&g_sessionActive, 0);
+    InterlockedExchange(&g_uiSelectorOpen, 0);
+    InterlockedExchange(&g_mouseMovePending, 0);
+    g_state = SelectorState::Idle;
+
+    // 1) UI thread: crea el selector y precalienta el renderer.
+    DWORD uiThreadId = 0;
+    if (!StartWorkerThread(UiThreadProc, &g_uiThread, &uiThreadId,
+                           &g_uiReadyEvent, &g_uiInitOk))
+        return FALSE;
+    g_uiThreadId = uiThreadId;
+
+    // 2) Input thread: solo hooks. Se publica cuando el selector ya existe.
+    if (!StartWorkerThread(InputThreadProc, &g_inputThread, &g_inputThreadId,
+                           &g_inputReadyEvent, &g_inputInitOk))
     {
         InterlockedExchange(&g_shutdownRequested, 1);
-        if (g_hookThreadId)
-            PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
-        WaitForSingleObject(g_hookThread, 3000);
-        CloseHandle(g_hookThread);
-        g_hookThread = nullptr;
+        PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_uiThread, INFINITE);
+        CloseHandle(g_uiThread);
+        g_uiThread = nullptr;
+        CloseHandle(g_uiReadyEvent);
+        g_uiReadyEvent = nullptr;
+        g_uiThreadId = 0;
         return FALSE;
     }
 
     return TRUE;
 }
 
-void Wh_ModSettingsChanged()
+static void WhTool_ModSettingsChanged()
 {
     LoadAnimationSettings();
-    if (g_selector && IsWindow(g_selector))
-    {
-        if (g_selectorAnimation != SelectorAnimationState::None &&
-            g_selectorAnimation != SelectorAnimationState::Open)
-            SetTimer(g_selector, kSelectorMotionTimerId,
-                     GetAnimationTimerInterval(), nullptr);
-        if (g_animActive)
-            SetTimer(g_selector, kSelectorMotionTimerId,
-                     GetAnimationTimerInterval(), nullptr);
-    }
+    // Los timers pertenecen al UI thread; se le pide que los reprograme.
+    PostUiCommand(WM_UI_SETTINGS, 0, 0);
 }
 
-void Wh_ModUninit()
+static void WhTool_ModUninit()
 {
     InterlockedExchange(&g_shutdownRequested, 1);
 
-    if (g_hookThreadId)
-        PostThreadMessageW(g_hookThreadId, WM_QUIT, 0, 0);
-
-    if (g_hookThread)
+    // 1) Input thread: retira sus hooks, destruye su ventana y termina.
+    if (g_inputThread)
     {
-        WaitForSingleObject(g_hookThread, 5000);
-        CloseHandle(g_hookThread);
-        g_hookThread = nullptr;
+        PostThreadMessageW(g_inputThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_inputThread, INFINITE);
+        CloseHandle(g_inputThread);
+        g_inputThread = nullptr;
     }
 
-    g_keyboardHook = nullptr;
-    g_mouseHook = nullptr;
+    // 2) UI thread: retira el WinEvent hook, destruye la ventana y libera
+    //    D2D/DWrite/GDI/DWM antes de terminar.
+    if (g_uiThread)
+    {
+        PostThreadMessageW(g_uiThreadId, WM_QUIT, 0, 0);
+        WaitForSingleObject(g_uiThread, INFINITE);
+        CloseHandle(g_uiThread);
+        g_uiThread = nullptr;
+    }
 
-    ShutdownPersistentSelector();
-    g_userWindows.clear();
-    g_groups.clear();
-    g_selected = 0;
-    g_state = SelectorState::Idle;
-    CleanupKeyboardState();
-    ResetKeyboardState();
+    // Ningún hilo puede usar ya los eventos: cerrarlos ahora es seguro.
+    if (g_inputReadyEvent)
+    {
+        CloseHandle(g_inputReadyEvent);
+        g_inputReadyEvent = nullptr;
+    }
+    if (g_uiReadyEvent)
+    {
+        CloseHandle(g_uiReadyEvent);
+        g_uiReadyEvent = nullptr;
+    }
+    g_inputThreadId = 0;
+    g_uiThreadId = 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod launcher (estructura oficial de Tool Mods)
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD_PTR entryPoint =
+            (DWORD_PTR)dosHeader + ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        Wh_SetFunctionHook((void*)entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment,
+        LPCWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si = {};
+    si.cb = sizeof(STARTUPINFO);
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
