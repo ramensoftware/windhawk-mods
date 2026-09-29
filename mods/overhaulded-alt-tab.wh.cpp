@@ -2,7 +2,7 @@
 // @id              overhaulded-alt-tab
 // @name            OverhauldedWin Alt+Tab
 // @description     Replaces the boring Windows Alt+Tab with a modern and elegant window switcher.
-// @version         1.2.21
+// @version         1.2.22
 // @author          IMiloDev
 // @github          https://github.com/IMiloDev
 // @homepage        https://github.com/IMiloDev/OverhauldedWin-Task-Switcher
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Overhaulded Task Switcher  
+# Overhaulded Task Switcher
 
 A modern, fluid and highly visual replacement for the native Windows Alt+Tab experience.
 
@@ -193,9 +193,14 @@ Native C++ • Windows 11 • Windhawk
 #include <cmath>
 #include <utility>
 
+
 #ifndef WH_MOD_ID
 #define WH_MOD_ID L"overhaulded-alt-tab"
 #endif
+
+typedef DWORD (WINAPI* GetFileVersionInfoSizeWFn)(LPCWSTR, LPDWORD);
+typedef BOOL (WINAPI* GetFileVersionInfoWFn)(LPCWSTR, DWORD, DWORD, LPVOID);
+typedef BOOL (WINAPI* VerQueryValueWFn)(LPCVOID, LPCWSTR, LPVOID*, PUINT);
 
 // CONFIGURACIÓN
 
@@ -654,6 +659,9 @@ static HFONT g_secondaryFont = nullptr;
 
 static std::vector<AppGroup> g_groups;
 static std::vector<UserWindowInfo> g_userWindows;
+// UI thread only. A window remains here after WM_CLOSE is posted until it
+// actually disappears, so a synchronous refresh cannot re-add its card.
+static std::vector<HWND> g_pendingCloseWindows;
 static std::vector<std::pair<DWORD, size_t>> g_groupWindowCursors;
 static int g_selected = 0;
 static SelectorState g_state = SelectorState::Idle;
@@ -890,6 +898,99 @@ static bool ContainsInsensitive(const std::wstring& value, const wchar_t* fragme
     return LowerAscii(value).find(LowerAscii(fragment)) != std::wstring::npos;
 }
 
+static std::wstring TrimDisplayName(const std::wstring& value)
+{
+    size_t first = 0;
+    while (first < value.size() && (value[first] == L' ' || value[first] == L'\t' ||
+                                    value[first] == L'\r' || value[first] == L'\n'))
+        ++first;
+    size_t last = value.size();
+    while (last > first && (value[last - 1] == L' ' || value[last - 1] == L'\t' ||
+                            value[last - 1] == L'\r' || value[last - 1] == L'\n'))
+        --last;
+    return value.substr(first, last - first);
+}
+
+static std::wstring GetFileDescription(const std::wstring& path)
+{
+    if (path.empty())
+        return std::wstring();
+
+    HMODULE version = LoadLibraryW(L"version.dll");
+    if (!version)
+        return std::wstring();
+    GetFileVersionInfoSizeWFn getSize = reinterpret_cast<GetFileVersionInfoSizeWFn>(
+        GetProcAddress(version, "GetFileVersionInfoSizeW"));
+    GetFileVersionInfoWFn getInfo = reinterpret_cast<GetFileVersionInfoWFn>(
+        GetProcAddress(version, "GetFileVersionInfoW"));
+    VerQueryValueWFn query = reinterpret_cast<VerQueryValueWFn>(
+        GetProcAddress(version, "VerQueryValueW"));
+    if (!getSize || !getInfo || !query)
+    {
+        FreeLibrary(version);
+        return std::wstring();
+    }
+
+    DWORD handle = 0;
+    DWORD size = getSize(path.c_str(), &handle);
+    if (size == 0 || size > 1024 * 1024)
+    {
+        FreeLibrary(version);
+        return std::wstring();
+    }
+    std::vector<BYTE> data(size);
+    std::wstring description;
+    if (getInfo(path.c_str(), 0, size, data.data()))
+    {
+        struct Translation { WORD language; WORD codePage; };
+        Translation* translations = nullptr;
+        UINT translationBytes = 0;
+        if (query(data.data(), L"\\VarFileInfo\\Translation",
+                  reinterpret_cast<LPVOID*>(&translations), &translationBytes) &&
+            translationBytes >= sizeof(Translation))
+        {
+            const UINT count = translationBytes / sizeof(Translation);
+            for (UINT i = 0; i < count && description.empty(); ++i)
+            {
+                wchar_t subBlock[128] = {};
+                wsprintfW(subBlock, L"\\StringFileInfo\\%04x%04x\\FileDescription",
+                          translations[i].language, translations[i].codePage);
+                LPWSTR value = nullptr;
+                UINT valueChars = 0;
+                if (query(data.data(), subBlock, reinterpret_cast<LPVOID*>(&value), &valueChars) &&
+                    value && valueChars > 0)
+                    description.assign(value, valueChars > 0 && value[valueChars - 1] == L'\0' ? valueChars - 1 : valueChars);
+            }
+        }
+        if (description.empty())
+        {
+            LPWSTR value = nullptr;
+            UINT valueChars = 0;
+            if (query(data.data(), L"\\StringFileInfo\\040904b0\\FileDescription",
+                      reinterpret_cast<LPVOID*>(&value), &valueChars) &&
+                value && valueChars > 0)
+                description.assign(value, valueChars > 0 && value[valueChars - 1] == L'\0' ? valueChars - 1 : valueChars);
+        }
+    }
+    FreeLibrary(version);
+    return TrimDisplayName(description);
+}
+
+static std::wstring GetHumanApplicationName(const std::wstring& path)
+{
+    static std::vector<std::pair<std::wstring, std::wstring>> nameCache;
+    for (size_t i = 0; i < nameCache.size(); ++i)
+    {
+        if (nameCache[i].first == path)
+            return nameCache[i].second;
+    }
+
+    std::wstring description = GetFileDescription(path);
+    std::wstring result = description.empty() ? BaseNameWithoutExtension(path) : description;
+    nameCache.push_back(std::make_pair(path, result));
+    return result;
+}
+
 static bool GetProcessDetails(DWORD processId, std::wstring* path, std::wstring* appName)
 {
     if (path)
@@ -912,7 +1013,7 @@ static bool GetProcessDetails(DWORD processId, std::wstring* path, std::wstring*
     if (path)
         *path = fullPath;
     if (appName)
-        *appName = BaseNameWithoutExtension(fullPath);
+        *appName = GetHumanApplicationName(fullPath);
     return true;
 }
 
@@ -930,9 +1031,9 @@ static WindowClassification ClassifyApplicationWindow(
     bool isCodeProcess)
 {
     (void)processId;
-    (void)processPath;
 
     std::wstring name = LowerAscii(appName);
+    std::wstring executableName = LowerAscii(BaseNameWithoutExtension(processPath));
     std::wstring cls = LowerAscii(windowClass);
 
     if (isCodeProcess)
@@ -948,14 +1049,15 @@ static WindowClassification ClassifyApplicationWindow(
             return WindowClassification::RealApplication;
     }
 
-    if (name == L"textinputhost" ||
-        name == L"spotifyxboxgamebarweb" ||
-        name == L"searchhost" ||
-        name == L"startmenuexperiencehost" ||
-        name == L"shellexperiencehost" ||
-        name == L"runtimebroker" ||
-        name == L"lockapp" ||
-        name == L"xboxgamebar" || name == L"gamebar")
+    if (name == L"textinputhost" || executableName == L"textinputhost" ||
+        name == L"spotifyxboxgamebarweb" || executableName == L"spotifyxboxgamebarweb" ||
+        name == L"searchhost" || executableName == L"searchhost" ||
+        name == L"startmenuexperiencehost" || executableName == L"startmenuexperiencehost" ||
+        name == L"shellexperiencehost" || executableName == L"shellexperiencehost" ||
+        name == L"runtimebroker" || executableName == L"runtimebroker" ||
+        name == L"lockapp" || executableName == L"lockapp" ||
+        name == L"xboxgamebar" || executableName == L"xboxgamebar" ||
+        name == L"gamebar" || executableName == L"gamebar")
         return WindowClassification::SystemWindow;
 
     if (cls == L"windows.ui.core.corewindow" ||
@@ -999,6 +1101,7 @@ static int FindAppGroup(DWORD processId)
 // Solo se consulta para ventanas que ya iban a ser rechazadas por GW_OWNER o
 // WS_EX_TOOLWINDOW: no convierte todas las ToolWindow en aplicaciones.
 static bool IsConsoleOrWindhawkViewerWindow(HWND hwnd, DWORD processId,
+                                            const std::wstring& processPath,
                                             const std::wstring& appName,
                                             const std::wstring& windowClass)
 {
@@ -1007,6 +1110,7 @@ static bool IsConsoleOrWindhawkViewerWindow(HWND hwnd, DWORD processId,
         return false;
 
     std::wstring name = LowerAscii(appName);
+    std::wstring executableName = LowerAscii(BaseNameWithoutExtension(processPath));
     std::wstring cls = LowerAscii(windowClass);
 
     // Consolas clásicas (cmd/PowerShell en conhost) y Windows Terminal.
@@ -1024,12 +1128,16 @@ static bool IsConsoleOrWindhawkViewerWindow(HWND hwnd, DWORD processId,
     if (!hasNormalFrame && !hasApplicationStyle)
         return false;
 
-    if (name == L"cmd" || name == L"powershell" || name == L"pwsh" ||
-        name == L"openconsole" || name == L"windowsterminal" || name == L"wt")
+    if (name == L"cmd" || executableName == L"cmd" ||
+        name == L"powershell" || executableName == L"powershell" ||
+        name == L"pwsh" || executableName == L"pwsh" ||
+        name == L"openconsole" || executableName == L"openconsole" ||
+        name == L"windowsterminal" || executableName == L"windowsterminal" ||
+        name == L"wt" || executableName == L"wt")
         return true;
 
     // Visor/editor de código de Windhawk (ventana Chromium del proceso UI).
-    if (name == L"windhawk" && cls == L"chrome_widgetwin_1")
+    if ((name == L"windhawk" || executableName == L"windhawk") && cls == L"chrome_widgetwin_1")
         return true;
 
     return false;
@@ -1078,7 +1186,7 @@ static bool IsRealUserApplicationWindow(HWND hwnd, DWORD* processId,
         std::wstring allowPath;
         std::wstring allowName;
         GetProcessDetails(pid, &allowPath, &allowName);
-        if (!IsConsoleOrWindhawkViewerWindow(hwnd, pid, allowName, windowClass))
+        if (!IsConsoleOrWindhawkViewerWindow(hwnd, pid, allowPath, allowName, windowClass))
             return false;
 
         // Allowlist: se acepta directamente. El resto de filtros (que exigen
@@ -1124,18 +1232,32 @@ static bool IsRealUserApplicationWindow(HWND hwnd, DWORD* processId,
     if (classification != WindowClassification::RealApplication)
         return false;
 
+    std::wstring displayName = name;
+    if (LowerAscii(BaseNameWithoutExtension(path)) == L"applicationframehost")
+    {
+        std::wstring titleName = TrimDisplayName(title);
+        if (!titleName.empty())
+            displayName = titleName;
+    }
+
     if (processId)
         *processId = pid;
     if (processPath)
         *processPath = path;
     if (appName)
-        *appName = name;
+        *appName = displayName;
     return true;
 }
+
+static bool IsWindowPendingClose(HWND hwnd);
+static void MarkWindowPendingClose(HWND hwnd);
 
 // Devuelve true si la ventana quedó (o ya estaba) en el registro MRU.
 static bool RegisterUserWindow(HWND hwnd, bool activity)
 {
+    if (IsWindowPendingClose(hwnd))
+        return false;
+
     DWORD processId = 0;
     std::wstring processPath;
     std::wstring appName;
@@ -1164,12 +1286,44 @@ static bool RegisterUserWindow(HWND hwnd, bool activity)
     return true;
 }
 
+static bool IsWindowPendingClose(HWND hwnd)
+{
+    for (size_t i = 0; i < g_pendingCloseWindows.size(); ++i)
+    {
+        if (g_pendingCloseWindows[i] == hwnd)
+            return true;
+    }
+    return false;
+}
+
+static void MarkWindowPendingClose(HWND hwnd)
+{
+    if (!hwnd || IsWindowPendingClose(hwnd))
+        return;
+    g_pendingCloseWindows.push_back(hwnd);
+}
+
+static void PrunePendingCloseWindows()
+{
+    for (size_t i = 0; i < g_pendingCloseWindows.size();)
+    {
+        if (!g_pendingCloseWindows[i] || !IsWindow(g_pendingCloseWindows[i]))
+        {
+            g_pendingCloseWindows.erase(g_pendingCloseWindows.begin() + i);
+            continue;
+        }
+        ++i;
+    }
+}
+
 static void PruneUserWindowRegistry()
 {
+    PrunePendingCloseWindows();
     for (size_t i = 0; i < g_userWindows.size();)
     {
         HWND hwnd = g_userWindows[i].hwnd;
-        if (!hwnd || !IsWindow(hwnd) || hwnd == g_selector)
+        if (!hwnd || !IsWindow(hwnd) || hwnd == g_selector ||
+            IsWindowPendingClose(hwnd))
         {
             g_userWindows.erase(g_userWindows.begin() + i);
             continue;
@@ -3055,8 +3209,8 @@ static void UpdateSelectorMotion()
             g_cardExitGroupIndex = -1;
             g_cardExitTarget = nullptr;
             g_selectorAnimation = SelectorAnimationState::Open;
-            if (target && IsWindow(target))
-                PostMessageW(target, WM_CLOSE, 0, 0);
+            if (target && IsWindow(target) && PostMessageW(target, WM_CLOSE, 0, 0))
+                MarkWindowPendingClose(target);
             for (size_t i = 0; i < g_userWindows.size(); ++i)
             {
                 if (g_userWindows[i].hwnd == target)
