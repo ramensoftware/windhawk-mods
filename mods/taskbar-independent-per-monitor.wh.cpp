@@ -165,11 +165,11 @@ static BOOL CALLBACK MonEnum(HMONITOR m, HDC, LPRECT r, LPARAM lp) {
 
 // Taskbar number (1..kMaxMon) per physical monitor, kept in "monitorSlots" so that pins stay on
 // their monitor when the layout changes. First run: numbered from left to right. When all
-// numbers are taken, the monitor that was assigned longest ago and isn't connected gives up its number.
+// numbers are taken, the monitor that has been disconnected longest gives up its number.
 constexpr int kMaxMon = 32;
 struct MonSlot {
     int n;
-    unsigned seq;  // assignment order
+    unsigned seq;  // last seen (higher = more recent)
 };
 static std::mutex g_slotMx;
 static std::map<std::wstring, MonSlot> g_slots;
@@ -210,6 +210,21 @@ static void LoadSlots() {
     }
 }
 
+static std::set<std::wstring> ConnectedIds() {
+    std::vector<std::pair<LONG, HMONITOR>> v;
+    EnumDisplayMonitors(nullptr, nullptr, MonEnum, (LPARAM)&v);
+    std::set<std::wstring> r;
+    for (auto& [x, hm] : v) r.insert(MonitorId(hm));
+    return r;
+}
+
+static void TouchSlots(const std::set<std::wstring>& connected) {
+    for (auto& id : connected) {
+        auto i = g_slots.find(id);
+        if (i != g_slots.end()) i->second.seq = g_slotSeq++;
+    }
+}
+
 static void SaveSlots() {
     std::wstring out;
     for (auto& [id, s] : g_slots)
@@ -231,6 +246,8 @@ static int MonNumberLocked(HMONITOR m, const MONITORINFO& mi, std::vector<int>& 
     if (!g_slotsLoaded) {
         g_slotsLoaded = true;
         LoadSlots();
+        TouchSlots(ConnectedIds());
+        SaveSlots();
     }
     std::wstring id = MonitorId(m);
     if (id.empty()) return 0;
@@ -239,8 +256,8 @@ static int MonNumberLocked(HMONITOR m, const MONITORINFO& mi, std::vector<int>& 
         std::vector<std::pair<LONG, HMONITOR>> v;
         EnumDisplayMonitors(nullptr, nullptr, MonEnum, (LPARAM)&v);
         std::sort(v.begin(), v.end(), [](auto& a, auto& b) { return a.first < b.first; });
-        std::set<std::wstring> connected;
-        for (auto& [x, hm] : v) connected.insert(MonitorId(hm));
+        std::set<std::wstring> connected = ConnectedIds();
+        TouchSlots(connected);
         for (auto& [x, hm] : v) {  // new monitors get the lowest free numbers, left to right
             std::wstring vid = MonitorId(hm);
             if (vid.empty() || g_slots.count(vid)) continue;
