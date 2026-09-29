@@ -879,13 +879,15 @@ DWORD WINAPI Worker(void*) {
 bool ResolveTaskbar() {
     g_taskbarModule = LoadLibraryExW(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!g_taskbarModule) return false;
-    WindhawkUtils::SYMBOL_HOOK symbols[] = {
+    // taskbar.dll
+    WindhawkUtils::SYMBOL_HOOK taskbarSymbols[] = {
         {{LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"}, &g_siteVtable},
         {{LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"}, &g_getHost},
         {{LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"}, &g_frameHeight},
         {{LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"}, &g_decref},
     };
-    if (!WindhawkUtils::HookSymbols(g_taskbarModule, symbols, ARRAYSIZE(symbols))) return false;
+    if (!WindhawkUtils::HookSymbols(g_taskbarModule, taskbarSymbols,
+                                    ARRAYSIZE(taskbarSymbols))) return false;
     // Validate the implementation before extracting the FrameworkElement field.
 #if defined(_M_X64)
     const BYTE* code = reinterpret_cast<const BYTE*>(g_frameHeight);
