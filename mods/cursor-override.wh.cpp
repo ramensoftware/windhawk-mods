@@ -28,13 +28,15 @@
 
 Replaces common additional cursors with custom `.cur` or `.ani` files.
 
-![Grab-Cursor vorher und nachher](https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-grab.png)
+![Grab cursor before and after](https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-grab.png)
 
-![Plus-Cursor vorher und nachher](https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-cell.png)
+![Cell cursor before and after](https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-cell.png)
 
 ## How it works
 
-Identifies supported Mozilla, Chromium and RichEdit cursors based on their image, size and click point.
+Identifies supported Mozilla, Chromium and RichEdit cursors based on their image and hotspot.
+Resource cursors are compared at a fixed size when their source resource is available; known bitmap signatures provide a fallback.
+Recognition can require an update when an application changes its cursor artwork.
 Supports `Grab`, `Grabbing`, `Cell`, `Copy`, `Alias`, `ZoomIn`, `ZoomOut`, `ColResize`, `RowResize`, `VerticalText` and `SelectionBar`.
 Standard Windows cursors remain unchanged.
 
@@ -42,7 +44,15 @@ Standard Windows cursors remain unchanged.
 
 Under Settings, enter the full local path to each `.cur` or `.ani` file you want to change.
 Leave a field empty to keep the original cursor.
-Keep the cursor files in a permanent local folder.
+Keep the cursor files in a permanent local folder. Network paths and mapped network drives are not supported.
+If a file cannot be loaded, the original cursor stays active. Check the path and save the settings again to retry.
+Windhawk debug logging reports the affected setting and error code without logging the file path.
+With all fields empty, the mod installs no hooks.
+
+## Compatibility
+
+This mod overlaps with [Chromium Cursor Remap](https://windhawk.net/mods/chromium-cursor-remap) for Chromium-based applications and additionally recognizes Mozilla and RichEdit cursors.
+Do not enable both mods in the same applications.
 
 ## Optional cursor pack
 
