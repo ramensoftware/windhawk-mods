@@ -2,12 +2,32 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-29T10:02:37.000Z</updated>
+    <updated>2026-09-29T21:04:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[AudioSwap 2.4.0]]></title>
+        <id>https://windhawk.net/mods/audioswap#073c3b60d072f548e05d713317ed9714dabb234e</id>
+        <link href="https://windhawk.net/mods/audioswap"/>
+        <updated>2026-09-29T21:04:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Numeric volume tray badge:</strong> Added an optional numeric output-volume badge on the tray icon (switchable in the dashboard; off by default).</li>
+<li><strong>Audio & mute verification:</strong> Verified default-device and mute operations before reporting success; automatic mute cleanup now tracks only changes made during the active session.</li>
+<li><strong>Bluetooth auto-reconnect:</strong> Automatically reconnects Bluetooth headphones and audio devices when powered back on without requiring manual re-selection in settings.</li>
+<li><strong>Persistent disconnected devices:</strong> Disconnected audio devices are preserved in settings instead of being removed or unselected on save.</li>
+<li><strong>Explorer restart recovery:</strong> Tray icon reliably restores after Windows Explorer restarts or taskbar recreation.</li>
+<li><strong>Multi-monitor volume slider:</strong> Volume slider popup is properly clamped to the work area bounds of secondary monitors.</li>
+<li><strong>Settings window focus:</strong> Clicking "Mod Settings" when the dashboard is already open reliably restores it from minimized state and brings it to the foreground.</li>
+<li><strong>Security:</strong> Hardened DLL search paths to prevent library hijacking.</li>
+</ul>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Folder Bookmarks Bar 0.7.8]]></title>
         <id>https://windhawk.net/mods/explorer-folder-bookmarks-bar#0c9eded5a005f4645d1e834b11a5fd94fc3159c2</id>
@@ -742,138 +762,6 @@ for ($i = 1; $i -le 16; $i++) {
         <author>
             <name>Sahil Dashoni</name>
             <uri>https://github.com/Sahil-Dashoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Left Taskbar Quick Pin Dock 2.5.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-quick-pin#b8bf716e6f97ed3c13dacc7ae7f68bfc615bea6c</id>
-        <link href="https://windhawk.net/mods/taskbar-quick-pin"/>
-        <updated>2026-09-28T09:04:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="lefttaskbarquickpindock">Left Taskbar Quick Pin Dock</h1>
-<h2 id="onlyforwindows11witha_centered_taskbar">⚠️ <strong>Only for Windows 11 with a <em>centered</em> taskbar</strong></h2>
-<p><strong>This mod supports Windows 11 only, and only when the taskbar is centered
-(the default). Left-aligned or otherwise repositioned taskbars are <em>not</em>
-supported.</strong> On an unsupported layout it does <strong>not</strong> crash or cause any
-issue -- the dock simply detects there's no room, stays hidden, and does
-nothing. It just won't work there.</p>
-<p><img src="https://raw.githubusercontent.com/k-ashix/taskbar-quick-pin/main/src/preview.gif" alt="Live preview of the Left Taskbar Quick Pin Dock" /></p>
-<p>A lightweight icon dock that sits just left of the Start button on the
-Windows 11 taskbar. Drag any app onto it to pin, click to launch or focus, and
-drag it off (or double-right-click) to unpin.</p>
-<h2 id="quickusage">Quick usage</h2>
-<p>| Action | Result |
-|---|---|
-| Drag an app window onto the dock | Pin it |
-| Left-click a pinned icon | Launch, or focus if it's already running |
-| Drag a pinned icon left / right | Reorder it |
-| Drag a pinned icon off the dock | Unpin it |
-| Double-right-click an icon | Unpin it (off by default) |
-| Hotkey (default Ctrl + Alt + P) | Pin or unpin the focused app |
-| Triple-tap <strong>L</strong> | Lock / unlock the dock |</p>
-<p>Two more gestures are available but <strong>off by default</strong> (enable them in Settings):
-the <strong>rapid-click unpin-all</strong> (three quick clicks on an icon clears the whole
-dock) and the <strong>bare-key taps</strong> (tap <strong>P</strong> / <strong>U</strong> three times to pin / unpin the
-focused app). They ship disabled because they can fire while you type in other
-apps; the Ctrl + Alt + P hotkey is the safe alternative. Every setting is
-documented in the <strong>Settings reference</strong> below.</p>
-<p><strong>Lock the dock:</strong> triple-tap the <strong>L</strong> key to lock it, triple-tap <strong>L</strong> again
-to unlock. While locked, the quick <em>gesture</em> unpins are refused (triple-tap
-<strong>U</strong>, the rapid-click unpin-all, double-right-click, and the hotkey's unpin) so
-a stray gesture can't drop a pin. A deliberate drag-off that breaks the rope
-still unpins, and pinning / reordering still work.</p>
-<h2 id="firstrunpleasebepatient">First run  --  please be patient</h2>
-<p>On the very first launch the dock needs a moment to detect the taskbar and
-settle, so it may not appear instantly. That's normal  --  it's working in the
-background, so please wait rather than reinstalling. If it still hasn't shown up
-after a few minutes, restarting Explorer (or, most reliably, your PC) sorts it
-out. You can also raise the <strong>Startup delay</strong> setting.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>A few apps with custom icon handlers may show a generic Windows icon. This is
-a shell limitation  --  no Win32 API resolves every icon reliably.</li>
-<li>Some UWP apps may occasionally resolve to their host process if their window
-isn't ready yet.</li>
-<li>English UI strings Only</li>
-</ul>
-<h2 id="v254">v2.5.4</h2>
-<ul>
-<li>Broadcast-safe lock glow -- the lock/unlock glow window now lives on the dock's
-message-pumping UI thread, so a system-wide broadcast (theme change,
-WM_SETTINGCHANGE, some app launches) can no longer stall on it.</li>
-<li>Correct placement on scaled / mixed-DPI displays -- the dock now sets its own
-per-monitor-v2 DPI awareness, so it lands in the right spot and stays crisp
-instead of being DWM-stretched.</li>
-<li>"Separator opacity" is now "Show workspace divider" (showWorkspaceDivider) -- the
-old 0-100 value behaved identically for every value 1-100, so it is now a simple
-on/off toggle for the golden divider between workspace pins and app pins.</li>
-</ul>
-<h2 id="v253">v2.5.3</h2>
-<ul>
-<li>🪶 <strong>Leaner tool-mod runtime.</strong> — General optimisation of the tool-mod process.</li>
-<li>✨ <strong>Drag-to-pin feedback layer.</strong> — A glow bloom shows GREEN ("there's room") or RED ("dock full") while you drag an app toward the dock.</li>
-<li>🖥️ <strong>Cleaner fullscreen & Snipping Tool handling.</strong> — The dock hides smoothly under fullscreen apps and the Windows native Snipping Tool overlay, with anti-flicker so it reappears seamlessly.</li>
-<li>🎯 <strong>Refined feedback behaviour.</strong> — Dragging or deleting an already-pinned icon near the dock now stays calm in BOTH pin-limit states (dock full or with room) — no false "dock full" flash for an app that is already pinned.</li>
-<li>🧱 <strong>New "Hide dock outline" toggle</strong> (<code>hideDockBorder</code>). — Turn off the thin grey Windows 11 outline drawn around the dock. Purely cosmetic; the dock, icons and rounded corners are unchanged.</li>
-<li>🎬 <strong>Two lock/unlock flash animations, with a toggle</strong> (<code>enableLockAnimation</code>). — OFF: a brief highlight on the dock's real edge. ON: a loading-style glow sweeps left→right across the whole dock. Colours unchanged (gold when locking, green when unlocking).</li>
-<li>🔧 <strong>Some more stability & polish improvements.</strong></li>
-</ul>
-<h2 id="v252">v2.5.2</h2>
-<ul>
-<li><strong>Architectural Change</strong> — Now it <code>@include windhawk.exe</code></li>
-<li><strong>Code optimised</strong></li>
-</ul>
-<h2 id="v251">v2.5.1</h2>
-<ul>
-<li>⚡ <strong>Code optimised & lower memory usage.</strong> — No behavioural change,
-just leaner and lighter.</li>
-<li>🪜 <strong>New 5-stage resolve pipeline to cut resource usage.</strong> App identity is now
-settled through five ordered stages.</li>
-</ul>
-<ol>
-<li><strong>Cache hit</strong> — Reuse the last resolved identity for the window/point (no work).</li>
-<li><strong>Fast window probe</strong> — Cheap <code>Get*</code>/class checks before any heavyweight call.</li>
-<li><strong>UIAutomation resolve</strong> — The authoritative taskbar-surface lookup, only if 1–2 miss.</li>
-<li><strong>Process fallback</strong> — Cursor-inside process match when UIA can't name the target.</li>
-<li><strong>Miss / sentinel</strong> — Give up cleanly (no pin) instead of guessing wrong.</li>
-</ol>
-<ul>
-<li>🔁 <strong>Workspace pins re-open every time.</strong> — A Pinned workspace dock icon now resolves to the <code>"Explorer workspace"</code>.</li>
-<li>⌨️ <strong>Bare-key P / U / L gestures now work when enabled.</strong> — These gestures act on the foreground window.</li>
-<li>🪟 <strong>Focus-if-running targets a real window.</strong> — Improved</li>
-<li>🆔 <strong>Collision-free workspace IDs.</strong> <code>MakeWorkspaceId</code> now uses <code>CoCreateGuid</code></li>
-</ul>
-<h2 id="settingsreference">Settings reference</h2>
-<p>Every option lives in the Windhawk <strong>Settings</strong> panel for this mod. Most apply
-live; the two noted below need a mod reload.</p>
-<p>| Setting | What it does | Default |
-|---|---|---|
-| Max pinned apps | How many apps can be pinned (1 - 20). The dock auto-sizes: min 5 slots, grows to 10, then extra pins scroll. | 5 |
-| Icon size | Icon size in px before DPI scaling (16 - 48). | 33 |
-| Dock gap from Start | Gap between the dock and the Start button (0 - 40 px). | 6 |
-| Show workspace divider | Show the gold divider between workspace pins and app pins (only when you have both). | on |
-| Drag to reorder | Drag icons left/right to rearrange; off = drag only unpins. | on |
-| Double-right-click to unpin | Unpin an icon with a double right-click (dust effect). | off |
-| Rapid-click unpin-all (opt-in) | Three quick clicks on an icon unpins EVERYTHING. Off so it can't fire by accident. | off |
-| Bare-key tap gestures (opt-in) | Triple-tap P / U / L to pin / unpin / lock, regardless of focus. Off (fires while typing). | off |
-| Scroll-wheel navigation | Hover + wheel moves the highlight across pins. | on |
-| Drag tether (rope) | Shows the stretchy thread while dragging an icon off. | on |
-| Drag tether - thickness | Rope thickness, 1 (hair) to 10 (cord). | 2 |
-| Drag tether - break length | How far you pull before the rope snaps (150 - 650 px). | 450 |
-| Drag tether - hue | Rope colour hue (0 - 359). | 30 |
-| Unpin trigger | Only when the rope BREAKS, or rope breaks OR released outside the dock. | ropeBreak |
-| Corner roundness | 0 = square, 1 - 40 = slight, 41 - 100 = full pill. | 40 |
-| Explorer workspace pins | Allow File Explorer to be dragged in as a workspace pin. | off |
-| Startup delay | Extra wait before the dock loads (0 - 3000 ms). | 0 |
-| Sync with taskbar auto-hide | Hide the dock when the taskbar auto-hides. | off |
-| Pin hotkey - modifiers | Modifier keys for the pin/unpin hotkey (or Disabled). | Ctrl + Alt |
-| Pin hotkey - key | Key pressed with the modifiers above. | P |</p>
-<h2 id="credits">Credits</h2>
-<p>Created with ❤️ by Ashix. Thanks to the <strong>Taskbar Dock Animation</strong>
-(<code>taskbar-dock-animation</code>) and <strong>Taskbar Dock Animation Plus</strong>
-(<code>taskbar-dock-animation-plus</code>) mods for animation refinements.</p>]]></content>
-        <author>
-            <name>Ashix</name>
-            <uri>https://github.com/k-ashix</uri>
         </author>
     </entry>
 </feed>

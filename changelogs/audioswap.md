@@ -1,3 +1,14 @@
+## 2.4.0 ([Sep 29, 2026](https://github.com/ramensoftware/windhawk-mods/blob/073c3b60d072f548e05d713317ed9714dabb234e/mods/audioswap.wh.cpp))
+
+* **Numeric volume tray badge:** Added an optional numeric output-volume badge on the tray icon (switchable in the dashboard; off by default).
+* **Audio & mute verification:** Verified default-device and mute operations before reporting success; automatic mute cleanup now tracks only changes made during the active session.
+* **Bluetooth auto-reconnect:** Automatically reconnects Bluetooth headphones and audio devices when powered back on without requiring manual re-selection in settings.
+* **Persistent disconnected devices:** Disconnected audio devices are preserved in settings instead of being removed or unselected on save.
+* **Explorer restart recovery:** Tray icon reliably restores after Windows Explorer restarts or taskbar recreation.
+* **Multi-monitor volume slider:** Volume slider popup is properly clamped to the work area bounds of secondary monitors.
+* **Settings window focus:** Clicking "Mod Settings" when the dashboard is already open reliably restores it from minimized state and brings it to the foreground.
+* **Security:** Hardened DLL search paths to prevent library hijacking.
+
 ## 2.3.0 ([Jul 8, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e350c1e0948c12e73f5b4f68fd7f1cf1b3880376/mods/audioswap.wh.cpp))
 
 added Persistent Mute option 

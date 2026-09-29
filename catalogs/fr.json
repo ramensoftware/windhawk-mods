@@ -576,7 +576,7 @@
         "ratingBreakdown": [0, 0, 0, 5, 60],
         "ratingUsers": 65,
         "reviews": 0,
-        "updated": 1783498055000,
+        "updated": 1790715890000,
         "users": 919
       },
       "metadata": {
@@ -590,7 +590,7 @@
         ],
         "license": "MIT",
         "name": "AudioSwap",
-        "version": "2.3.0"
+        "version": "2.4.0"
       }
     },
     "auto-custom-titlebar-colors": {
