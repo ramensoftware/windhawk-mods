@@ -25,12 +25,14 @@ snapped.
 - After being restored, the window comes back as a regular window, not as a
   snapped one, so it is no longer part of a Snap Group.
 - The size the window had before it was snapped is no longer remembered.
-- Works with the maximize button, double-clicking the title bar, the window
-  menu, and programs that maximize through `ShowWindow`.
+- Works with the maximize button, double-clicking the title bar and the
+  window menu (including dialogs and MDI frame windows), and with programs that
+  maximize through `ShowWindow` or `ShowWindowAsync`.
 */
 // ==/WindhawkModReadme==
 
 #include <windows.h>
+#include <windhawk_utils.h>
 
 using IsWindowArranged_t = BOOL(WINAPI*)(HWND);
 IsWindowArranged_t pIsWindowArranged = nullptr;
@@ -41,8 +43,23 @@ DefWindowProcW_t DefWindowProcW_Original = nullptr;
 using DefWindowProcA_t = decltype(&DefWindowProcA);
 DefWindowProcA_t DefWindowProcA_Original = nullptr;
 
+using DefDlgProcW_t = decltype(&DefDlgProcW);
+DefDlgProcW_t DefDlgProcW_Original = nullptr;
+
+using DefDlgProcA_t = decltype(&DefDlgProcA);
+DefDlgProcA_t DefDlgProcA_Original = nullptr;
+
+using DefFrameProcW_t = decltype(&DefFrameProcW);
+DefFrameProcW_t DefFrameProcW_Original = nullptr;
+
+using DefFrameProcA_t = decltype(&DefFrameProcA);
+DefFrameProcA_t DefFrameProcA_Original = nullptr;
+
 using ShowWindow_t = decltype(&ShowWindow);
 ShowWindow_t ShowWindow_Original = nullptr;
+
+using ShowWindowAsync_t = decltype(&ShowWindowAsync);
+ShowWindowAsync_t ShowWindowAsync_Original = nullptr;
 
 thread_local bool g_inApply = false;
 
@@ -92,14 +109,11 @@ static bool GetSnappedRect(HWND hWnd, RECT* snappedRect) {
         return false;
     }
 
-    bool arranged;
-    if (pIsWindowArranged) {
-        arranged = pIsWindowArranged(hWnd) != FALSE;
-    } else {
-        arranged = !EqualRect(&rc, &wp.rcNormalPosition);
+    if (EqualRect(&rc, &wp.rcNormalPosition)) {
+        return false;
     }
 
-    if (!arranged || EqualRect(&rc, &wp.rcNormalPosition)) {
+    if (pIsWindowArranged && !pIsWindowArranged(hWnd)) {
         return false;
     }
 
@@ -134,24 +148,46 @@ static void UseSnappedRectAsNormal(HWND hWnd) {
     Wh_Log(L"Saved snap position for window %p", hWnd);
 }
 
-static bool IsMaximizeCommand(UINT msg, WPARAM wParam) {
-    return msg == WM_SYSCOMMAND && (wParam & 0xFFF0) == SC_MAXIMIZE;
+static void OnMessage(HWND hWnd, UINT msg, WPARAM wParam) {
+    if (msg == WM_SYSCOMMAND && (wParam & 0xFFF0) == SC_MAXIMIZE) {
+        UseSnappedRectAsNormal(hWnd);
+    }
 }
 
 LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam,
                                    LPARAM lParam) {
-    if (IsMaximizeCommand(msg, wParam)) {
-        UseSnappedRectAsNormal(hWnd);
-    }
+    OnMessage(hWnd, msg, wParam);
     return DefWindowProcW_Original(hWnd, msg, wParam, lParam);
 }
 
 LRESULT WINAPI DefWindowProcA_Hook(HWND hWnd, UINT msg, WPARAM wParam,
                                    LPARAM lParam) {
-    if (IsMaximizeCommand(msg, wParam)) {
-        UseSnappedRectAsNormal(hWnd);
-    }
+    OnMessage(hWnd, msg, wParam);
     return DefWindowProcA_Original(hWnd, msg, wParam, lParam);
+}
+
+LRESULT WINAPI DefDlgProcW_Hook(HWND hWnd, UINT msg, WPARAM wParam,
+                                LPARAM lParam) {
+    OnMessage(hWnd, msg, wParam);
+    return DefDlgProcW_Original(hWnd, msg, wParam, lParam);
+}
+
+LRESULT WINAPI DefDlgProcA_Hook(HWND hWnd, UINT msg, WPARAM wParam,
+                                LPARAM lParam) {
+    OnMessage(hWnd, msg, wParam);
+    return DefDlgProcA_Original(hWnd, msg, wParam, lParam);
+}
+
+LRESULT WINAPI DefFrameProcW_Hook(HWND hWnd, HWND hWndMDIClient, UINT msg,
+                                  WPARAM wParam, LPARAM lParam) {
+    OnMessage(hWnd, msg, wParam);
+    return DefFrameProcW_Original(hWnd, hWndMDIClient, msg, wParam, lParam);
+}
+
+LRESULT WINAPI DefFrameProcA_Hook(HWND hWnd, HWND hWndMDIClient, UINT msg,
+                                  WPARAM wParam, LPARAM lParam) {
+    OnMessage(hWnd, msg, wParam);
+    return DefFrameProcA_Original(hWnd, hWndMDIClient, msg, wParam, lParam);
 }
 
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
@@ -161,31 +197,35 @@ BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     return ShowWindow_Original(hWnd, nCmdShow);
 }
 
+BOOL WINAPI ShowWindowAsync_Hook(HWND hWnd, int nCmdShow) {
+    if (nCmdShow == SW_MAXIMIZE) {
+        UseSnappedRectAsNormal(hWnd);
+    }
+    return ShowWindowAsync_Original(hWnd, nCmdShow);
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
-    HMODULE user32 = GetModuleHandleW(L"user32.dll");
-    if (!user32) {
-        user32 = LoadLibraryW(L"user32.dll");
-    }
-    if (!user32) {
-        return FALSE;
-    }
+    pIsWindowArranged = (IsWindowArranged_t)(void*)GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "IsWindowArranged");
 
-    pIsWindowArranged =
-        (IsWindowArranged_t)(void*)GetProcAddress(user32, "IsWindowArranged");
-
-    Wh_SetFunctionHook((void*)GetProcAddress(user32, "DefWindowProcW"),
-                       (void*)DefWindowProcW_Hook,
-                       (void**)&DefWindowProcW_Original);
-
-    Wh_SetFunctionHook((void*)GetProcAddress(user32, "DefWindowProcA"),
-                       (void*)DefWindowProcA_Hook,
-                       (void**)&DefWindowProcA_Original);
-
-    Wh_SetFunctionHook((void*)GetProcAddress(user32, "ShowWindow"),
-                       (void*)ShowWindow_Hook,
-                       (void**)&ShowWindow_Original);
+    WindhawkUtils::SetFunctionHook(DefWindowProcW, DefWindowProcW_Hook,
+                                   &DefWindowProcW_Original);
+    WindhawkUtils::SetFunctionHook(DefWindowProcA, DefWindowProcA_Hook,
+                                   &DefWindowProcA_Original);
+    WindhawkUtils::SetFunctionHook(DefDlgProcW, DefDlgProcW_Hook,
+                                   &DefDlgProcW_Original);
+    WindhawkUtils::SetFunctionHook(DefDlgProcA, DefDlgProcA_Hook,
+                                   &DefDlgProcA_Original);
+    WindhawkUtils::SetFunctionHook(DefFrameProcW, DefFrameProcW_Hook,
+                                   &DefFrameProcW_Original);
+    WindhawkUtils::SetFunctionHook(DefFrameProcA, DefFrameProcA_Hook,
+                                   &DefFrameProcA_Original);
+    WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindow_Hook,
+                                   &ShowWindow_Original);
+    WindhawkUtils::SetFunctionHook(ShowWindowAsync, ShowWindowAsync_Hook,
+                                   &ShowWindowAsync_Original);
 
     return TRUE;
 }
