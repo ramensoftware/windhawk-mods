@@ -559,10 +559,12 @@ static bool g_msgWndFailed = false;  // creating it failed, don't retry on every
 static std::atomic<bool> g_unloading{false};  // set in Wh_ModBeforeUninit: don't create it again
 static const wchar_t kMsgClass[] = L"TaskbarIndependentPerMonitorMsg";
 static const UINT kMsgCleanup = WM_APP + 0x51;
+static const UINT kMsgSync = WM_APP + 0x52;  // posted: re-apply all pins on the taskbar thread
 static const UINT_PTR kReevalTimerId = 1;
 static const UINT_PTR kApplyTimerId = 2;
 static const UINT_PTR kSyncTimerId = 3;
 static void SyncTimerProc();
+static void SyncAll();
 static const ULONG_PTR kCopyUnpinOne = 0x534B5031;  // WM_COPYDATA from the jump list ("SKP1")
 static void ApplyTimerProc();
 static void ReleasePending();
@@ -1197,6 +1199,10 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (cd->dwData == kCopyUnpinOne) return HandleUnpinOne(app.c_str());
         return 0;
     }
+    if (msg == kMsgSync) {
+        if (!g_unloading) SyncAll();
+        return 0;
+    }
     if (msg == kMsgCleanup) {  // runs on the taskbar thread
         KillTimer(h, kReevalTimerId);
         KillTimer(h, kApplyTimerId);
@@ -1603,6 +1609,7 @@ static void ForgetMonitor(int n) {
         }
         RemoveDirectoryW(dir.c_str());
     }
+    if (g_msgWnd) PostMessageW(g_msgWnd, kMsgSync, 0, 0);  // pins that lost their taskbar
     Wh_Log(L"-> Taskbar number %d reused for a new monitor", n);
 }
 
