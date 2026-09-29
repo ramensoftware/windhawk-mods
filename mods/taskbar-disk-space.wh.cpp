@@ -33,6 +33,8 @@ Data (D:)
 Free 128.4 of 931.5 GiB
 ```
 
+![Taskbar Disk Space preview](https://raw.githubusercontent.com/Fatalko/windhawk-mods/add-taskbar-disk-space/screenshots/taskbar-disk-space.svg)
+
 - Click the indicator to open a native Windows 11 menu and switch drives without
   opening the settings page. The selection is kept in mod storage.
 - The settings page provides an initial drive, an optional custom label, ten
