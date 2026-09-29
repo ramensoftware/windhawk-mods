@@ -8,7 +8,7 @@
 // @include         ApplicationFrameHost.exe
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -luser32 -lcomctl32 -ldwmapi -lshell32 -lole32 -lpropsys -lgdiplus -lshlwapi
+// @compilerOptions -luser32 -lcomctl32 -ldwmapi -lshell32 -lole32 -lpropsys -lgdiplus
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -30,7 +30,6 @@ This mod is focused on the Classic theme, so may produce sub-optimal results in 
 #include <propsys.h>
 #include <propkey.h>
 #include <shlobj.h>
-#include <shlwapi.h>
 #include <gdiplus.h>
 #include <vector>
 
@@ -464,7 +463,7 @@ BOOL Wh_ModInit()
     };
 
     return WindhawkUtils::HookSymbols(
-        LoadLibraryW(L"ApplicationFrame.dll"),
+        LoadLibraryExW(L"ApplicationFrame.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32),
         ApplicationFrame_dll_hooks,
         ARRAYSIZE(ApplicationFrame_dll_hooks));
 }
