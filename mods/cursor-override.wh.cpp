@@ -28,15 +28,13 @@
 
 Replaces common additional cursors with custom `.cur` or `.ani` files.
 
-![Grab cursor before and after](https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-grab.png)
+![Grab-Cursor vorher und nachher](https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-grab.png)
 
-![Cell cursor before and after](https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-cell.png)
+![Plus-Cursor vorher und nachher](https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-cell.png)
 
 ## How it works
 
-Identifies supported Mozilla, Chromium and RichEdit cursors based on their image and hotspot.
-Resource cursors are compared at a fixed size when their source resource is available; known bitmap signatures provide a fallback.
-Recognition can require an update when an application changes its cursor artwork.
+Identifies supported Mozilla, Chromium and RichEdit cursors based on their image, size and click point.
 Supports `Grab`, `Grabbing`, `Cell`, `Copy`, `Alias`, `ZoomIn`, `ZoomOut`, `ColResize`, `RowResize`, `VerticalText` and `SelectionBar`.
 Standard Windows cursors remain unchanged.
 
@@ -44,15 +42,7 @@ Standard Windows cursors remain unchanged.
 
 Under Settings, enter the full local path to each `.cur` or `.ani` file you want to change.
 Leave a field empty to keep the original cursor.
-Keep the cursor files in a permanent local folder. Network paths and mapped network drives are not supported.
-If a file cannot be loaded, the original cursor stays active. Check the path and save the settings again to retry.
-Windhawk debug logging reports the affected setting and error code without logging the file path.
-With all fields empty, the mod installs no hooks.
-
-## Compatibility
-
-This mod overlaps with [Chromium Cursor Remap](https://windhawk.net/mods/chromium-cursor-remap) for Chromium-based applications and additionally recognizes Mozilla and RichEdit cursors.
-Do not enable both mods in the same applications.
+Keep the cursor files in a permanent local folder.
 
 ## Optional cursor pack
 
@@ -446,6 +436,7 @@ struct CachedRole {
     HCURSOR cursor = nullptr;
     Role role = Role::Unknown;
     uint64_t generation = 0;
+    bool ready = false;
 };
 
 struct ThreadCursor {
@@ -464,8 +455,14 @@ static ThreadCursor g_threads[128];
 static bool g_loadAttempted[kRoleCount]{};
 static size_t g_cacheNext = 0;
 static bool g_needsPrune = false;
-static std::atomic<uint64_t> g_cacheGeneration{1};
-static std::atomic<unsigned> g_destroying{0};
+struct CursorDestruction {
+    HCURSOR cursor;
+    CursorDestruction* next;
+};
+
+static SRWLOCK g_cacheLock = SRWLOCK_INIT;
+static uint64_t g_cacheGeneration = 0;
+static CursorDestruction* g_destroying = nullptr;
 static HCURSOR g_systemCursors[18]{};
 static std::atomic<bool> g_stopping{false};
 static std::atomic<bool> g_hasPaths{false};
@@ -562,11 +559,24 @@ Role IdentifyCursor(HCURSOR cursor) {
     for (HCURSOR standard : g_systemCursors) {
         if (cursor == standard) return Role::Unknown;
     }
-    uint64_t generation = g_cacheGeneration.load();
-    if (g_destroying.load()) return Role::Unknown;
-    for (const auto& cached : g_cache) {
-        if (cached.cursor == cursor && cached.generation == generation) return cached.role;
+    AcquireSRWLockExclusive(&g_cacheLock);
+    for (auto* pending = g_destroying; pending; pending = pending->next) {
+        if (pending->cursor == cursor) {
+            ReleaseSRWLockExclusive(&g_cacheLock);
+            return Role::Unknown;
+        }
     }
+    for (const auto& cached : g_cache) {
+        if (cached.cursor == cursor && cached.ready) {
+            Role result = cached.role;
+            ReleaseSRWLockExclusive(&g_cacheLock);
+            return result;
+        }
+    }
+    size_t slot = g_cacheNext++ % ARRAYSIZE(g_cache);
+    uint64_t generation = ++g_cacheGeneration;
+    g_cache[slot] = {cursor, Role::Unknown, generation, false};
+    ReleaseSRWLockExclusive(&g_cacheLock);
     Role role = Role::Unknown;
     ICONINFOEXW info{};
     info.cbSize = sizeof(info);
@@ -599,8 +609,15 @@ Role IdentifyCursor(HCURSOR cursor) {
         Fingerprint hash;
         if (GetFingerprint(cursor, hash)) role = RecognizeFingerprint(hash);
     }
-    if (g_destroying.load() || generation != g_cacheGeneration.load()) return Role::Unknown;
-    g_cache[g_cacheNext++ % ARRAYSIZE(g_cache)] = {cursor, role, generation};
+    AcquireSRWLockExclusive(&g_cacheLock);
+    auto& cached = g_cache[slot];
+    if (cached.cursor == cursor && cached.generation == generation) {
+        cached.role = role;
+        cached.ready = true;
+    } else {
+        role = Role::Unknown;
+    }
+    ReleaseSRWLockExclusive(&g_cacheLock);
     return role;
 }
 
@@ -782,13 +799,26 @@ HCURSOR WINAPI GetCursor_Hook() {
 }
 
 void ForgetCursor(HCURSOR cursor) {
-    ++g_cacheGeneration;
-    if (TryAcquireSRWLockExclusive(&g_lock)) {
-        for (auto& cached : g_cache) {
-            if (cached.cursor == cursor) cached = {};
-        }
-        ReleaseSRWLockExclusive(&g_lock);
+    for (auto& cached : g_cache) {
+        if (cached.cursor == cursor) cached = {};
     }
+}
+
+void BeginCursorDestruction(CursorDestruction& pending, HCURSOR cursor) {
+    AcquireSRWLockExclusive(&g_cacheLock);
+    pending = {cursor, g_destroying};
+    g_destroying = &pending;
+    ForgetCursor(cursor);
+    ReleaseSRWLockExclusive(&g_cacheLock);
+}
+
+void EndCursorDestruction(CursorDestruction& pending) {
+    AcquireSRWLockExclusive(&g_cacheLock);
+    auto** link = &g_destroying;
+    while (*link && *link != &pending) link = &(*link)->next;
+    if (*link) *link = pending.next;
+    ForgetCursor(pending.cursor);
+    ReleaseSRWLockExclusive(&g_cacheLock);
 }
 
 BOOL WINAPI DestroyCursor_Hook(HCURSOR cursor) {
@@ -799,13 +829,12 @@ BOOL WINAPI DestroyCursor_Hook(HCURSOR cursor) {
         SetLastError(ERROR_ACCESS_DENIED);
         return FALSE;
     }
-    ++g_destroying;
-    ForgetCursor(cursor);
+    CursorDestruction pending{};
+    BeginCursorDestruction(pending, cursor);
     SetLastError(error);
     BOOL result = DestroyCursor_Original(cursor);
     DWORD resultError = GetLastError();
-    ++g_cacheGeneration;
-    --g_destroying;
+    EndCursorDestruction(pending);
     SetLastError(resultError);
     return result;
 }
@@ -819,13 +848,12 @@ BOOL WINAPI DestroyIcon_Hook(HICON icon) {
         SetLastError(ERROR_ACCESS_DENIED);
         return FALSE;
     }
-    ++g_destroying;
-    ForgetCursor(cursor);
+    CursorDestruction pending{};
+    BeginCursorDestruction(pending, cursor);
     SetLastError(error);
     BOOL result = DestroyIcon_Original(icon);
     DWORD resultError = GetLastError();
-    ++g_cacheGeneration;
-    --g_destroying;
+    EndCursorDestruction(pending);
     SetLastError(resultError);
     return result;
 }
