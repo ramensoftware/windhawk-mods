@@ -1180,6 +1180,7 @@ BOOL WINAPI ImageList_DrawIndirect_Hook(IMAGELISTDRAWPARAMS* pimldp)
         if (!(params.fState & ILS_ALPHA)) {
             params.Frame = 255;
         }
+        params.fState |= ILS_ALPHA;
         params.Frame = (DWORD)((params.Frame * g_currentOpacity) / 100);
 
         g_inDirectHook = true;
@@ -1380,7 +1381,7 @@ BOOL WINAPI ExtTextOutW_Hook(
         BitBlt(hdcMem, 0, 0, w, h, hdc, rc.left, rc.top, SRCCOPY);
 
         SetTextColor(hdcMem, GetTextColor(hdc));
-        SetTextAlign(hdcMem, GetTextAlign(hdc));
+        UINT oldAlign = SetTextAlign(hdcMem, GetTextAlign(hdc));
         SetBkMode(hdcMem, TRANSPARENT);
 
         g_inTextHook = true;
@@ -1395,6 +1396,7 @@ BOOL WINAPI ExtTextOutW_Hook(
 
         GdiAlphaBlend_Original(hdc, rc.left, rc.top, w, h, hdcMem, 0, 0, w, h, bf);
 
+        SetTextAlign(hdcMem, oldAlign);
         SelectObject(hdcMem, hOldFont);
         return TRUE;
     }
@@ -1421,7 +1423,8 @@ LRESULT CALLBACK DesktopListViewSubclassProc(
         return result;
     }
 
-    if (uMsg == WM_WINDOWPOSCHANGED || uMsg == WM_STYLECHANGED) {
+    if (uMsg == WM_WINDOWPOSCHANGED || uMsg == WM_STYLECHANGED ||
+        uMsg == LVM_SORTITEMS || uMsg == LVM_SORTITEMSEX || uMsg == LVM_ARRANGE) {
         g_desktopItemsCacheDirty = true;
     }
 
@@ -2161,6 +2164,8 @@ void Wh_ModSettingsChanged()
         GetWindowThreadProcessId(g_hDesktopDefView, &pid);
         if (pid == GetCurrentProcessId() && g_msgRefreshSettings) {
             SendMessageW(g_hDesktopDefView, g_msgRefreshSettings, 0, 0);
+            return;
         }
     }
+    LoadSettings();
 }
