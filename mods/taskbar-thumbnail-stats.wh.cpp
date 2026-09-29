@@ -1420,7 +1420,7 @@ bool HookTaskbarDllSymbols() {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
+    WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
             {LR"(public: virtual struct HWND__ * __cdecl CWindowTaskItem::GetWindow(void))"},
             &CWindowTaskItem_GetWindow_Original,
@@ -1453,8 +1453,8 @@ bool HookTaskbarDllSymbols() {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, symbolHooks,
-                                    ARRAYSIZE(symbolHooks))) {
+    if (!WindhawkUtils::HookSymbols(module, taskbarDllHooks,
+                                    ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"HookSymbols (taskbar.dll) failed");
         return false;
     }
@@ -1468,6 +1468,7 @@ bool HookTaskbarDllSymbols() {
 }
 
 bool HookTaskbarViewDllSymbols(HMODULE module) {
+    // Taskbar.View.dll, ExplorerExtensions.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
         {
             {LR"(public: void __cdecl winrt::Taskbar::implementation::TaskItemThumbnailView::OnApplyTemplate(void))"},
