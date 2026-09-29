@@ -231,11 +231,9 @@ LRESULT CALLBACK SubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                 DwmIsCompositionEnabled(&dwmEnabled);
                 if (dwmEnabled) {
                     BOOL dwmFrameEnabled = FALSE;
-                    if (dwmEnabled) {
-                        HRESULT hr = DwmGetWindowAttribute(hWnd, DWMWA_NCRENDERING_ENABLED, &dwmFrameEnabled, sizeof(dwmFrameEnabled));
-                        if (!SUCCEEDED(hr) || dwmFrameEnabled) { // Potentially fix Aero Glass issues with Chromium browsers that still support it
-                            return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-                        }
+                    HRESULT hr = DwmGetWindowAttribute(hWnd, DWMWA_NCRENDERING_ENABLED, &dwmFrameEnabled, sizeof(dwmFrameEnabled));
+                    if (FAILED(hr) || dwmFrameEnabled) { // Potentially fix Aero Glass issues with Chromium browsers that still support it
+                        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
                     }
                 }
                 // If not, apply Chromium Basic/Classic NC paint fix from https://windhawk.net/mods/chromium-ncpaint-fix 
@@ -639,6 +637,7 @@ bool PrepareSteamIndexHtml() {
                     "}"
                 "};"
             "})();"
+            "window._tb4eLoaded = true;" // Marker for Millennium extensions
         "</script>";
 
     // Look for the first <script tag
