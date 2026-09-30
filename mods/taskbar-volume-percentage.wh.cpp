@@ -181,59 +181,31 @@ struct {
 std::atomic<bool> g_unloading;
 std::atomic<bool> g_systemTrayModuleHooked;
 
-// Incremented on every settings load. Layouts configured under an older
-// generation are redone, without touching the snapshot of the original values.
 std::atomic<int> g_settingsGeneration;
 
-// The state below is only touched on the taskbar UI thread: the hooks run
-// there, and the mod callbacks marshal to it.
-
-// Volume state, from the UpdateVolume hook.
 std::mutex g_volumeStateMutex;
 bool g_hasVolumeState;
 float g_volumeLevel;
 bool g_isMuted;
 
-// Dynamic observed width (DIPs) to adapt to active DPI scaling and long strings.
 double g_maxObservedWidth = 0.0;
 
-// Volume data models (one per system tray), kept to make them re-notify their
-// view models on settings change and on unload. The raw pointer is the C++
-// `this` for calling UpdateVolume, valid while the weak reference resolves.
 struct VolumeDataModel {
     void* pThis;
     winrt::weak_ref<winrt::Windows::Foundation::IInspectable> weakRef;
 };
 std::vector<VolumeDataModel> g_volumeDataModels;
 
-// The interface pointer of the data model whose get_CurrentData ABI thunk is
-// in progress. The thunk calls CurrentData on the C++ object, which pairs the
-// two.
 void* g_gettingCurrentDataModel;
 
-// The spatial sound name UpdateVolume was last given. It only affects the
-// tooltip, and UpdateVolume gets it back when the mod re-runs it.
 winrt::hstring g_spatialSoundName;
 
-// The IconData most recently produced by a volume data model. The view model
-// receives that same object right afterwards on the same thread, so pointer
-// identity tells the volume icon's view model apart from other text icons.
 [[clang::no_destroy]] winrt::Windows::Foundation::IUnknown g_volumeIconData;
 
-// The text the mod last set on the volume view model. The XAML binding puts
-// it in the InnerTextBlock of the TextIconContent showing the volume icon,
-// which is how that element is told apart from the other text icons.
 std::wstring g_volumeText;
 
-// Set when the text changed and the element showing it is to be looked up in
-// the next measure passes.
 bool g_volumeTextChanged;
 
-// The native speaker glyph captured from Windows.
-winrt::hstring g_nativeVolumeGlyph;
-bool g_capturingVolumeGlyph = false;
-
-// IconView elements that were given a custom width, with snapshot for reversibility.
 struct TrackedIconView {
     winrt::weak_ref<FrameworkElement> iconView;
     bool hasCustomWidth = false;
@@ -244,7 +216,6 @@ struct TrackedIconView {
 [[clang::no_destroy]] std::optional<std::vector<TrackedIconView>>
     g_volumeIconViews{std::in_place};
 
-// Tracked TextIconContent and its sub-box hierarchy for dual-column mode.
 struct TrackedVolumeContent {
     winrt::weak_ref<FrameworkElement> textIconContent;
     winrt::weak_ref<Controls::Grid> containerGrid;
@@ -264,14 +235,9 @@ struct TrackedVolumeContent {
         nullptr};
     winrt::Windows::Foundation::IInspectable origTextIconContentAlignment{
         nullptr};
-    winrt::Windows::Foundation::IInspectable origBaseMargin{nullptr};
-    winrt::Windows::Foundation::IInspectable origUnderlayMargin{nullptr};
     winrt::weak_ref<Controls::TextBlock> observedInnerTextBlock;
     int64_t fontSizeCallbackToken = 0;
-    // True when the native (icon font) text block is the one displayed, i.e.
-    // for the native mute glyph. Otherwise our own text block is displayed.
     bool lastNativeGlyph = false;
-    // Settings generation the current layout was built for.
     int layoutSettingsGeneration = -1;
 };
 [[clang::no_destroy]] std::optional<std::vector<TrackedVolumeContent>>
@@ -281,14 +247,9 @@ using FrameworkElementLayoutUpdatedEventRevoker = winrt::impl::event_revoker<
     IFrameworkElement,
     &winrt::impl::abi<IFrameworkElement>::type::remove_LayoutUpdated>;
 
-// Layout properties set from inside a measure pass are not picked up by it,
-// so the width of a view found there is applied once the pass is over.
 [[clang::no_destroy]] std::optional<
     std::list<FrameworkElementLayoutUpdatedEventRevoker>>
     g_autoRevokerList{std::in_place};
-
-////////////////////////////////////////////////////////////////////////////////
-// Taskbar thread
 
 static BOOL CALLBACK EnumWindowsTaskbarProc(HWND hWnd, LPARAM lParam) {
     DWORD dwProcessId;
@@ -371,9 +332,6 @@ bool RunFromTaskbarThread(RunFromWindowThreadProc_t proc) {
     return hTaskbarWnd && RunFromWindowThread(hTaskbarWnd, proc, nullptr);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Visual tree
-
 FrameworkElement GetParentElementByClassName(FrameworkElement const& element,
                                              PCWSTR className) {
     auto parent = element;
@@ -400,9 +358,6 @@ FrameworkElement FindChildByName(FrameworkElement const& element, PCWSTR name) {
 
     return nullptr;
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// Text and width
 
 bool IsDualBoxStyle() {
     return g_settings.displayStyle == DisplayStyle::glyphRight ||
@@ -457,26 +412,11 @@ std::wstring FormatVolumeText(float volumeLevel, bool isMuted) {
     return number + L"%";
 }
 
-std::wstring GetNativeVolumeGlyph(float volumeLevel, bool isMuted) {
-    if (isMuted) {
-        return L"\uE74F";
-    }
-
-    int percentage =
-        std::clamp((int)std::lround(volumeLevel * 100.0f), 0, 100);
-    return (percentage == 0)   ? L"\uE992"
-           : (percentage < 33) ? L"\uE993"
-           : (percentage < 66) ? L"\uE994"
-                               : L"\uE995";
-}
-
-// Calculates dynamic baseline width adapted to custom prefix length and mute text.
 double CalculateAutoWidth() {
     std::wstring maxVolText = FormatVolumeText(1.0f, false);
     std::wstring muteText = FormatVolumeText(0.0f, true);
     size_t maxLen = (std::max)(maxVolText.length(), muteText.length());
 
-    // Compact padding (~8 DIPs) + Segoe UI Variable character metrics (~7.0 DIPs/char)
     double estimatedWidth = 8.0 + (static_cast<double>(maxLen) * 7.0);
     if (IsDualBoxStyle()) {
         double gap = (g_settings.iconSpacing < 0)
@@ -495,7 +435,6 @@ double CalculateAutoWidth() {
     return (std::max)(estimatedWidth, minFloor);
 }
 
-// Zero means leaving the width to Windows.
 double GetContainerWidth() {
     if (g_unloading || g_settings.containerWidth == 0) {
         return 0;
@@ -543,9 +482,6 @@ void ApplyIconViewWidth(TrackedIconView& tracked,
         tracked.hasCustomWidth = false;
     }
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// Object tracking
 
 void PruneVolumeDataModels() {
     std::erase_if(g_volumeDataModels, [](const auto& dataModel) {
@@ -606,9 +542,6 @@ void ApplyVolumeIconViewsWidth() {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Layout management
-
 void PruneTrackedVolumeContents() {
     if (!g_trackedVolumeContents) {
         return;
@@ -652,11 +585,6 @@ TrackedVolumeContent* FindTrackedVolumeContent(
 }
 
 void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
-    auto containerGrid = tracked.containerGrid.get();
-    if (!containerGrid) {
-        return;
-    }
-
     if (tracked.fontSizeCallbackToken != 0) {
         if (auto observed = tracked.observedInnerTextBlock.get()) {
             try {
@@ -670,6 +598,11 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
         }
         tracked.fontSizeCallbackToken = 0;
         tracked.observedInnerTextBlock = nullptr;
+    }
+
+    auto containerGrid = tracked.containerGrid.get();
+    if (!containerGrid) {
+        return;
     }
 
     auto subBlock = tracked.subBlock.get();
@@ -711,8 +644,6 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
                     tracked.origBaseVisibility);
         restoreProp(base, FrameworkElement::HorizontalAlignmentProperty(),
                     tracked.origBaseAlignment);
-        restoreProp(base, FrameworkElement::MarginProperty(),
-                    tracked.origBaseMargin);
         restoreProp(base, Controls::Grid::ColumnProperty(),
                     tracked.origBaseColumn);
         if (FrameworkElement tbEl = FindChildByName(base, L"InnerTextBlock")) {
@@ -727,8 +658,6 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
                     tracked.origUnderlayVisibility);
         restoreProp(underlay, FrameworkElement::HorizontalAlignmentProperty(),
                     tracked.origUnderlayAlignment);
-        restoreProp(underlay, FrameworkElement::MarginProperty(),
-                    tracked.origUnderlayMargin);
         restoreProp(underlay, Controls::Grid::ColumnProperty(),
                     tracked.origUnderlayColumn);
         if (FrameworkElement tbEl =
@@ -760,6 +689,20 @@ void RestoreAllVolumeLayouts() {
     }
     if (g_trackedVolumeContents) {
         for (auto& tracked : *g_trackedVolumeContents) {
+            if (tracked.fontSizeCallbackToken != 0) {
+                if (auto observed = tracked.observedInnerTextBlock.get()) {
+                    try {
+                        observed.UnregisterPropertyChangedCallback(
+                            Controls::TextBlock::FontSizeProperty(),
+                            tracked.fontSizeCallbackToken);
+                    } catch (...) {
+                    }
+                }
+                tracked.fontSizeCallbackToken = 0;
+                tracked.observedInnerTextBlock = nullptr;
+            }
+        }
+        for (auto& tracked : *g_trackedVolumeContents) {
             RestoreVolumeLayout(tracked);
         }
     }
@@ -771,9 +714,6 @@ void SyncSubBlockFontSize(Controls::TextBlock const& subBlock,
         return;
     }
     double sourceFontSize = source.FontSize();
-    // 16.0 DIPs is the vanilla Windows 11 icon glyph size. If a theme (e.g. from
-    // Taskbar Styler) set a custom font size on InnerTextBlock, mirror it.
-    // Otherwise, stick to the 12.0 DIPs baseline for text.
     if (std::abs(sourceFontSize - 16.0) > 0.01) {
         subBlock.FontSize(sourceFontSize);
     } else {
@@ -781,8 +721,6 @@ void SyncSubBlockFontSize(Controls::TextBlock const& subBlock,
     }
 }
 
-// Makes the sub-block follow the native text block's brush, weight, and custom
-// font size through bindings and property change observers.
 void BindSubBlockTextStyle(TrackedVolumeContent& tracked,
                            Controls::TextBlock const& subBlock,
                            Controls::TextBlock const& source) {
@@ -832,6 +770,43 @@ void BindSubBlockTextStyle(TrackedVolumeContent& tracked,
             tracked.fontSizeCallbackToken = 0;
         }
     }
+}
+
+Controls::TextBlock GetOrCreateSubBlock(TrackedVolumeContent& tracked,
+                                        Controls::Grid const& containerGrid,
+                                        FrameworkElement const& baseElement) {
+    Controls::TextBlock subBlock = nullptr;
+    if (auto existingSubBlock = tracked.subBlock.get()) {
+        subBlock = existingSubBlock;
+    } else {
+        FrameworkElement child =
+            FindChildByName(containerGrid, L"VolumePercentageSubBlock");
+        if (child) {
+            subBlock = child.try_as<Controls::TextBlock>();
+        }
+    }
+
+    if (!subBlock) {
+        subBlock = Controls::TextBlock();
+        subBlock.Name(L"VolumePercentageSubBlock");
+        subBlock.VerticalAlignment(VerticalAlignment::Center);
+        subBlock.FontFamily(
+            Media::FontFamily(L"Segoe UI Variable Text, Segoe UI"));
+        subBlock.FontSize(12.0);
+
+        containerGrid.Children().Append(subBlock);
+        tracked.subBlock = subBlock;
+    }
+
+    FrameworkElement textBlockEl =
+        FindChildByName(baseElement, L"InnerTextBlock");
+    if (textBlockEl) {
+        if (auto innerTextBlock = textBlockEl.try_as<Controls::TextBlock>()) {
+            BindSubBlockTextStyle(tracked, subBlock, innerTextBlock);
+        }
+    }
+
+    return subBlock;
 }
 
 void SetupVolumeLayout(FrameworkElement const& textIconContent) {
@@ -890,8 +865,6 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
                 base.ReadLocalValue(UIElement::VisibilityProperty());
             tracked->origBaseAlignment = base.ReadLocalValue(
                 FrameworkElement::HorizontalAlignmentProperty());
-            tracked->origBaseMargin =
-                base.ReadLocalValue(FrameworkElement::MarginProperty());
             tracked->origBaseColumn =
                 base.ReadLocalValue(Controls::Grid::ColumnProperty());
         }
@@ -900,8 +873,6 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
                 underlay.ReadLocalValue(UIElement::VisibilityProperty());
             tracked->origUnderlayAlignment = underlay.ReadLocalValue(
                 FrameworkElement::HorizontalAlignmentProperty());
-            tracked->origUnderlayMargin =
-                underlay.ReadLocalValue(FrameworkElement::MarginProperty());
             tracked->origUnderlayColumn =
                 underlay.ReadLocalValue(Controls::Grid::ColumnProperty());
         }
@@ -924,16 +895,9 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
                           g_settings.muteStyle == MuteStyle::glyphZero);
     bool showDualBox = isDualBoxRequested && (!g_isMuted || isMuteDualBox);
 
-    // The native mute glyph is the only case that needs the native text block
-    // (Segoe Fluent Icons). Every other text is rendered in our own text block
-    // (Segoe UI Variable), like the other tray texts. The native block uses
-    // icon-font vertical metrics, which shifts digits by a pixel or two.
     bool useNativeGlyph =
         g_isMuted && g_settings.muteStyle == MuteStyle::glyph;
 
-    // Fast-path: when layout structure, mode, position, and spacing are already
-    // configured, update only the text without touching margins or columns.
-    // This preserves custom XAML styling (e.g. from Taskbar Styler) on volume changes.
     if (tracked->isCustomLayoutConfigured &&
         tracked->layoutSettingsGeneration == g_settingsGeneration &&
         tracked->lastDualBoxMode == showDualBox &&
@@ -947,47 +911,17 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
     }
 
     if (!showDualBox) {
-        // Single-element indicator: either our text block alone (text styles,
-        // text mute styles) or the native glyph alone (native mute icon).
         containerGrid.ColumnDefinitions().Clear();
         containerGrid.ColumnSpacing(0.0);
 
-        Controls::TextBlock subBlock = nullptr;
-        if (auto existingSubBlock = tracked->subBlock.get()) {
-            subBlock = existingSubBlock;
-        } else {
-            FrameworkElement child =
-                FindChildByName(containerGrid, L"VolumePercentageSubBlock");
-            if (child) {
-                subBlock = child.try_as<Controls::TextBlock>();
-            }
-        }
-
-        if (!subBlock) {
-            subBlock = Controls::TextBlock();
-            subBlock.Name(L"VolumePercentageSubBlock");
-            subBlock.VerticalAlignment(VerticalAlignment::Center);
-            subBlock.FontFamily(
-                Media::FontFamily(L"Segoe UI Variable Text, Segoe UI"));
-            subBlock.FontSize(12.0);
-
-            containerGrid.Children().Append(subBlock);
-            tracked->subBlock = subBlock;
-        }
-
-        FrameworkElement textBlockEl =
-            FindChildByName(baseElement, L"InnerTextBlock");
-        if (textBlockEl) {
-            if (auto innerTextBlock =
-                    textBlockEl.try_as<Controls::TextBlock>()) {
-                BindSubBlockTextStyle(*tracked, subBlock, innerTextBlock);
-            }
-        }
+        Controls::TextBlock subBlock =
+            GetOrCreateSubBlock(*tracked, containerGrid, baseElement);
 
         if (useNativeGlyph) {
             subBlock.Text(L"");
             subBlock.Visibility(Visibility::Collapsed);
-            if (textBlockEl) {
+            if (FrameworkElement textBlockEl =
+                    FindChildByName(baseElement, L"InnerTextBlock")) {
                 if (auto innerTextBlock =
                         textBlockEl.try_as<Controls::TextBlock>()) {
                     innerTextBlock.TextAlignment(TextAlignment::Center);
@@ -1023,38 +957,8 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         return;
     }
 
-    // Dual-column layout (unmuted OR muted with glyphText / glyphZero)
-    Controls::TextBlock subBlock = nullptr;
-    if (auto existingSubBlock = tracked->subBlock.get()) {
-        subBlock = existingSubBlock;
-    } else {
-        FrameworkElement child =
-            FindChildByName(containerGrid, L"VolumePercentageSubBlock");
-        if (child) {
-            subBlock = child.try_as<Controls::TextBlock>();
-        }
-    }
-
-    if (!subBlock) {
-        subBlock = Controls::TextBlock();
-        subBlock.Name(L"VolumePercentageSubBlock");
-        subBlock.VerticalAlignment(VerticalAlignment::Center);
-        subBlock.FontFamily(
-            Media::FontFamily(L"Segoe UI Variable Text, Segoe UI"));
-        subBlock.FontSize(12.0);
-
-        containerGrid.Children().Append(subBlock);
-        tracked->subBlock = subBlock;
-    }
-
-    FrameworkElement textBlockEl =
-        FindChildByName(baseElement, L"InnerTextBlock");
-    if (textBlockEl) {
-        if (auto innerTextBlock =
-                textBlockEl.try_as<Controls::TextBlock>()) {
-            BindSubBlockTextStyle(*tracked, subBlock, innerTextBlock);
-        }
-    }
+    Controls::TextBlock subBlock =
+        GetOrCreateSubBlock(*tracked, containerGrid, baseElement);
 
     if (containerGrid.ColumnDefinitions().Size() < 2) {
         containerGrid.ColumnDefinitions().Clear();
@@ -1065,18 +969,12 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         containerGrid.ColumnDefinitions().Append(col1);
     }
 
-    // -1: automatic (4 DIPs), 0: no spacing set by the mod, other: fixed size.
-    // Handled natively via Grid.ColumnSpacing to preserve child margins.
     double spacing = (g_settings.iconSpacing < 0)
                          ? 4.0
                          : static_cast<double>(g_settings.iconSpacing);
-    if (g_settings.iconSpacing == 0) {
-        spacing = 0.0;
-    }
     containerGrid.ColumnSpacing(spacing);
 
     if (g_settings.elementPosition == ElementPosition::left) {
-        // Native speaker/mute icon on left (col 0), text on right (col 1).
         applyLayout(baseElement, 0, Visibility::Visible);
         applyLayout(underlayElement, 0, Visibility::Visible);
 
@@ -1085,7 +983,6 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         subBlock.Visibility(Visibility::Visible);
         Controls::Grid::SetColumn(subBlock, 1);
     } else {
-        // Text on left (col 0), native speaker/mute icon on right (col 1).
         subBlock.Text(g_volumeText);
         subBlock.HorizontalAlignment(HorizontalAlignment::Right);
         subBlock.Visibility(Visibility::Visible);
@@ -1121,8 +1018,6 @@ void UpdateAllVolumeLayouts() {
     }
 }
 
-// SystemTray.TextIconContent > Grid#ContainerGrid >
-// SystemTray.AdaptiveTextBlock#Base > TextBlock#InnerTextBlock
 bool IsVolumeTextIconContent(FrameworkElement const& textIconContent) {
     FrameworkElement container =
         FindChildByName(textIconContent, L"ContainerGrid");
@@ -1158,9 +1053,6 @@ bool IsVolumeTextIconContent(FrameworkElement const& textIconContent) {
     return false;
 }
 
-// Whether the element showing the volume text has to be looked up: after the
-// text changed, or while no IconView is known to show it (Explorer start, tray
-// rebuild).
 bool IsVolumeIconViewLookupPending(FrameworkElement const& textIconContent) {
     if (g_unloading || g_volumeText.empty()) {
         return false;
@@ -1169,7 +1061,6 @@ bool IsVolumeIconViewLookupPending(FrameworkElement const& textIconContent) {
     return g_volumeTextChanged || !FindTrackedVolumeContent(textIconContent);
 }
 
-// Setters taking winrt::hstring by value. On x64 that is a pointer to a
 using TextIconContentViewModel_SetText_t = void(WINAPI*)(void*, winrt::hstring*);
 TextIconContentViewModel_SetText_t TextIconContentViewModel_BaseText_Original;
 TextIconContentViewModel_SetText_t
@@ -1186,9 +1077,6 @@ void SafeXamlCall(F&& func) {
     }
 }
 
-// Finds the IconView hosting the volume icon once the text set on the view
-// model reached the element. Done from the element's measure, which follows a
-// text change and the creation of a new element.
 void LookUpVolumeIconView(FrameworkElement const& textIconContent) {
     if (!IsVolumeTextIconContent(textIconContent)) {
         return;
@@ -1240,11 +1128,6 @@ void LookUpVolumeIconView(FrameworkElement const& textIconContent) {
         });
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Hooks
-
-// The hstring is the spatial sound format name, which only shows up in the
-// tooltip. The icon glyph is derived from the level and the mute state.
 using VolumeSystemTrayIconDataModel_UpdateVolume_t =
     void(WINAPI*)(void*, float, bool, winrt::hstring*);
 VolumeSystemTrayIconDataModel_UpdateVolume_t
@@ -1332,33 +1215,12 @@ void* WINAPI VolumeSystemTrayIconDataModel_CurrentData_Hook(void* pThis,
     return ret;
 }
 
-void WINAPI TextIconContentViewModel_BaseText_Hook(void* pThis,
-                                                   winrt::hstring* text) {
-    if (g_capturingVolumeGlyph && text && !text->empty()) {
-        g_nativeVolumeGlyph = *text;
-    }
-    TextIconContentViewModel_BaseText_Original(pThis, text);
-}
-
 void WINAPI TextIconContentViewModel_UpdateStyles_Hook(void* pThis,
                                                        void** iconData) {
-    bool isVolume = (g_volumeIconData && iconData &&
-                     *iconData == winrt::get_abi(g_volumeIconData));
-    if (isVolume) {
-        g_capturingVolumeGlyph = true;
-    }
-
-    struct FlagGuard {
-        bool* flag;
-        ~FlagGuard() {
-            if (flag) {
-                *flag = false;
-            }
-        }
-    } flagGuard{isVolume ? &g_capturingVolumeGlyph : nullptr};
-
     TextIconContentViewModel_UpdateStyles_Original(pThis, iconData);
 
+    bool isVolume = (g_volumeIconData && iconData &&
+                     *iconData == winrt::get_abi(g_volumeIconData));
     if (g_unloading || !g_hasVolumeState || !isVolume) {
         return;
     }
@@ -1377,16 +1239,10 @@ void WINAPI TextIconContentViewModel_UpdateStyles_Hook(void* pThis,
                 return;
             }
         } else {
-            // The text is set on the native view model so that the volume
-            // TextIconContent can still be recognized (see
-            // IsVolumeTextIconContent). It is displayed by our own text block,
-            // the native one being hidden by SetupVolumeLayout (except for the
-            // native mute glyph).
             winrt::hstring baseText{g_volumeText};
             TextIconContentViewModel_BaseText_Original(pThis, &baseText);
             (void)winrt::detach_abi(baseText);
 
-            // The volume bars outline drawn behind the glyph.
             winrt::hstring underlayText;
             TextIconContentViewModel_UnderlayText_Original(pThis, &underlayText);
             (void)winrt::detach_abi(underlayText);
@@ -1408,9 +1264,6 @@ int WINAPI TextIconContent_MeasureOverride_Hook(
         ((IUnknown*)pThis)->QueryInterface(winrt::guid_of<FrameworkElement>(), winrt::put_abi(textIconContent));
 
         if (textIconContent && IsVolumeTextIconContent(textIconContent)) {
-            // Track maximum real XAML-measured width strictly for the volume icon
-            // to dynamically adapt to DPI and font sizes without interference from
-            // other tray text icons (e.g. keyboard language switcher ENG/FRA).
             if (resultSize && resultSize->Width > 0) {
                 double measuredWithPadding =
                     static_cast<double>(resultSize->Width) + 6.0;
@@ -1429,12 +1282,6 @@ int WINAPI TextIconContent_MeasureOverride_Hook(
     return ret;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Refresh
-
-// Makes the volume data models recompute their icon and re-notify their view
-// models, the same path a real volume change takes. With the mod unloading,
-// that restores the Windows glyph.
 void RefreshVolumeIcons() {
     float volumeLevel;
     bool isMuted;
@@ -1468,9 +1315,6 @@ void RefreshVolumeIcons() {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Module handling
-
 bool HookSystemTraySymbols(HMODULE module) {
     // SystemTray.dll, Taskbar.View.dll
     WindhawkUtils::SYMBOL_HOOK symbolHooks[] = {
@@ -1487,8 +1331,7 @@ bool HookSystemTraySymbols(HMODULE module) {
          &TextIconContentViewModel_UpdateStyles_Original,
          TextIconContentViewModel_UpdateStyles_Hook},
         {{LR"(public: void __cdecl winrt::SystemTray::implementation::TextIconContentViewModel::BaseText(struct winrt::hstring))"},
-         &TextIconContentViewModel_BaseText_Original,
-         TextIconContentViewModel_BaseText_Hook},
+         &TextIconContentViewModel_BaseText_Original},
         {{LR"(public: void __cdecl winrt::SystemTray::implementation::TextIconContentViewModel::UnderlayText(struct winrt::hstring))"},
          &TextIconContentViewModel_UnderlayText_Original},
         {{LR"(public: virtual int __cdecl winrt::impl::produce<struct winrt::SystemTray::implementation::TextIconContent,struct winrt::Windows::UI::Xaml::IFrameworkElementOverrides>::MeasureOverride(struct winrt::Windows::Foundation::Size,struct winrt::Windows::Foundation::Size *))"},
@@ -1527,16 +1370,11 @@ VS_FIXEDFILEINFO* GetModuleVersionInfo(HMODULE hModule, UINT* puPtrLen) {
     return static_cast<VS_FIXEDFILEINFO*>(pFixedFileInfo);
 }
 
-// Returns the module that hosts winrt::SystemTray::* in the current build.
-// Order matters: SystemTray.dll is the new home (Win11 Insider 26200+);
-// Taskbar.View.dll is kept as fallbacks so this still works on older builds.
 HMODULE GetSystemTrayModuleHandle() {
     HMODULE module = GetModuleHandle(L"SystemTray.dll");
     if (!module) {
         module = GetModuleHandle(L"Taskbar.View.dll");
         if (module) {
-            // First known module version without SystemTray is Taskbar.View.dll
-            // 2604.8002.200.6000.
             VS_FIXEDFILEINFO* fixedFileInfo =
                 GetModuleVersionInfo(module, nullptr);
             WORD moduleMajor =
@@ -1574,9 +1412,6 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
 
     return module;
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// Mod lifetime
 
 void LoadSettings() {
     auto displayStyle = WindhawkUtils::StringSetting::make(L"displayStyle");
@@ -1713,8 +1548,6 @@ void Wh_ModBeforeUninit() {
         g_volumeDataModels.clear();
         g_spatialSoundName.clear();
         g_maxObservedWidth = 0.0;
-        g_nativeVolumeGlyph.clear();
-        g_capturingVolumeGlyph = false;
     };
 
     bool cleanedUp = false;
@@ -1740,7 +1573,6 @@ void Wh_ModUninit() {
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
 
-    // Settings are read by the hooks on the taskbar thread.
     if (!RunFromTaskbarThread([](void*) {
             LoadSettings();
 
