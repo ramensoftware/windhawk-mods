@@ -13,6 +13,7 @@
 // @github          https://github.com/crazyboyybs
 // @include         *
 // @exclude         dwm.exe
+// @exclude         msiexec.exe
 // @compilerOptions   -ldwmapi -lgdi32 -lcomctl32 -ld2d1 -ldwrite -luxtheme -lwinmm -lmsimg32 -lshcore -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdiplus -lruntimeobject
 // @license         GPL-3.0
 // ==/WindhawkMod==
@@ -176,13 +177,13 @@ Please open a GitHub issue. Show your settings and mention which program froze.
 This is a limitation of Windows' own legacy programs (uxtheme/comctl32 internal caching). Restarting Explorer fixes it.
 
 **I noticed dark mode changes colors in non-native programs:**
-That's expected — this mod uses SetSysColors to change system colors, which can't easily be excluded per-app, so any program that asks Windows for system colors will get the dark ones. For better exclusion, use the dark mode exclusion list in the settings.
+That's expected — this mod uses SetSysColors to change system colors, which can't easily be excluded per-app, so any program that asks Windows for system colors will get the dark ones. For better exclusion, use the dark mode exclusion list in the settings. In programs the mod doesn't run in (excluded in Windhawk, or that it can't be injected into), classic dialog labels can end up dark on the dark background and hard to read; let the mod run there and add the program to the dark mode exclusion list, or turn custom dark mode off.
 
 **Colors stayed dark even after disabling or removing this mod:**
 This is a Windows Fast Startup ("hybrid shutdown") interaction, not something this mod controls. Fast Startup hibernates the kernel session instead of truly restarting it, so the system's live color table (set via SetSysColors) can survive a "Shut down → power on" cycle unchanged. On top of that, Windows can separately save whatever colors were live at the time into the registry's legacy color scheme (Control Panel\Colors), so even a genuine Restart may not be enough if that already happened. Fix: first try a genuine Restart (not Shut down) or disable Fast Startup in Power Options; if colors are still stuck afterward, reselect a theme (or toggle light/dark mode) in Settings > Personalization to force Windows to redefine its colors from scratch.
 
-**In some older 32-bit programs the drag insertion line still looks like the legacy one:**
-List views get the modern mark through a comctl32 drawing helper that is only hooked in 64-bit processes: in the 32-bit build its calling convention is a compiler choice that can change between Windows updates, and assuming it would corrupt the caller's stack. Tree views are modernized in both, and the desktop is always 64-bit.
+**In some older 32-bit programs the drag insertion line and the disk usage chart still look like the legacy ones:**
+List views get the modern mark through a comctl32 drawing helper that is only hooked in 64-bit processes: in the 32-bit build its calling convention is a compiler choice that can change between Windows updates, and assuming it would corrupt the caller's stack. Tree views are modernized in both, and the desktop is always 64-bit. The disk usage ring in drive properties is left out of 32-bit programs for the same reason: its shell32 and wpdshext drawing functions take their arguments in registers there, and that can change too.
 
 ### Recommended mods to modernize the system
 - **WinUI Context Menu Animation** by crazyboyybs
@@ -251,13 +252,13 @@ Esse suporte e experimental e existe a partir da versao 1.0.3. Se algum ainda pa
 Isso e uma limitacao dos proprios programas antigos do Windows (cache interno do uxtheme/comctl32). Reiniciar o Explorer resolve.
 
 **Notei que o modo escuro altera cores em programas que nao sao nativos:**
-Isso e esperado — esse mod usa o SetSysColors para trocar as cores do sistema, algo que nao pode ser excluido facilmente, entao qualquer programa que peca ao Windows as cores do sistema recebera as cores escuras. Para melhor exclusao, use a lista de exclusao de modo escuro nas configuracoes.
+Isso e esperado — esse mod usa o SetSysColors para trocar as cores do sistema, algo que nao pode ser excluido facilmente, entao qualquer programa que peca ao Windows as cores do sistema recebera as cores escuras. Para melhor exclusao, use a lista de exclusao de modo escuro nas configuracoes. Em programas onde o mod nao roda (excluidos no Windhawk, ou onde ele nao pode ser injetado), os rotulos de dialogos classicos podem ficar escuros sobre o fundo escuro e dificeis de ler; deixe o mod rodar neles e adicione o programa a lista de exclusao de modo escuro, ou desative o modo escuro customizado.
 
 **As cores continuaram escuras mesmo depois de desativar ou remover esse mod:**
 Isso e uma interacao com o Fast Startup ("inicializacao rapida") do Windows, algo fora do controle deste mod. O Fast Startup hiberna a sessao do kernel em vez de reiniciar de verdade, entao a tabela de cores ao vivo do sistema (definida via SetSysColors) pode sobreviver intacta a um ciclo de "Desligar -> ligar novamente". Alem disso, o Windows pode salvar por conta propria as cores que estavam ao vivo naquele momento no esquema de cores legado do registro (Control Panel\Colors), entao ate um Reiniciar de verdade pode nao bastar se isso ja tiver acontecido. Solucao: primeiro faca um Reiniciar de verdade (nao "Desligar") ou desative o Fast Startup nas Opcoes de Energia; se as cores continuarem presas depois disso, reselecione um tema (ou alterne claro/escuro) em Configuracoes > Personalizacao pra forcar o Windows a redefinir as cores do zero.
 
-**Em alguns programas antigos de 32 bits a linha de insercao do arraste continua a antiga:**
-As listas recebem a marca moderna por um auxiliar de desenho do comctl32 que so e interceptado em processos de 64 bits: na versao de 32 bits a convencao de chamada dele e uma escolha do compilador que pode mudar entre atualizacoes do Windows, e assumi-la corromperia a pilha de quem chamou. Arvores sao modernizadas nas duas, e a area de trabalho e sempre de 64 bits.
+**Em alguns programas antigos de 32 bits a linha de insercao do arraste e o grafico de uso do disco continuam os antigos:**
+As listas recebem a marca moderna por um auxiliar de desenho do comctl32 que so e interceptado em processos de 64 bits: na versao de 32 bits a convencao de chamada dele e uma escolha do compilador que pode mudar entre atualizacoes do Windows, e assumi-la corromperia a pilha de quem chamou. Arvores sao modernizadas nas duas, e a area de trabalho e sempre de 64 bits. O anel de uso do disco nas propriedades da unidade fica de fora dos programas de 32 bits pelo mesmo motivo: as funcoes de desenho dele no shell32 e no wpdshext recebem os argumentos em registradores ali, e isso tambem pode mudar.
 
 ### Mods recomendados para modernizar o sistema
 - **WinUI Context Menu Animation** por crazyboyybs
@@ -326,13 +327,13 @@ Este soporte es experimental y existe a partir de la version 1.0.3. Si alguno to
 Esto es una limitacion de los propios programas antiguos de Windows (cache interno de uxtheme/comctl32). Reiniciar el Explorador lo soluciona.
 
 **Note que el modo oscuro cambia colores en programas que no son nativos:**
-Esto es esperado — este mod usa SetSysColors para cambiar los colores del sistema, algo que no se puede excluir facilmente por aplicacion, asi que cualquier programa que le pida a Windows los colores del sistema recibira los colores oscuros. Para una mejor exclusion, usa la lista de exclusion de modo oscuro en la configuracion.
+Esto es esperado — este mod usa SetSysColors para cambiar los colores del sistema, algo que no se puede excluir facilmente por aplicacion, asi que cualquier programa que le pida a Windows los colores del sistema recibira los colores oscuros. Para una mejor exclusion, usa la lista de exclusion de modo oscuro en la configuracion. En programas donde el mod no se ejecuta (excluidos en Windhawk, o donde no se puede inyectar), las etiquetas de los dialogos clasicos pueden quedar oscuras sobre el fondo oscuro y ser dificiles de leer; deja que el mod se ejecute en ellos y agrega el programa a la lista de exclusion del modo oscuro, o desactiva el modo oscuro personalizado.
 
 **Los colores siguieron oscuros incluso despues de desactivar o eliminar este mod:**
 Esto es una interaccion con el Inicio rapido ("Fast Startup") de Windows, algo fuera del control de este mod. El Inicio rapido hiberna la sesion del kernel en lugar de reiniciarla de verdad, asi que la tabla de colores en vivo del sistema (definida mediante SetSysColors) puede sobrevivir intacta a un ciclo de "Apagar -> encender". Ademas, Windows puede guardar por su cuenta los colores que estaban en vivo en ese momento en el esquema de colores heredado del registro (Control Panel\Colors), asi que incluso un Reiniciar de verdad puede no ser suficiente si eso ya ocurrio. Solucion: primero haz un Reiniciar de verdad (no "Apagar") o desactiva el Inicio rapido en Opciones de energia; si los colores siguen atascados despues de eso, vuelve a seleccionar un tema (o alterna claro/oscuro) en Configuracion > Personalizacion para forzar a Windows a redefinir los colores desde cero.
 
-**En algunos programas antiguos de 32 bits la linea de insercion al arrastrar sigue siendo la antigua:**
-Las listas reciben la marca moderna mediante un auxiliar de dibujo de comctl32 que solo se intercepta en procesos de 64 bits: en la version de 32 bits su convencion de llamada es una eleccion del compilador que puede cambiar entre actualizaciones de Windows, y asumirla corromperia la pila de quien llamo. Los arboles se modernizan en ambas, y el escritorio siempre es de 64 bits.
+**En algunos programas antiguos de 32 bits la linea de insercion al arrastrar y el grafico de uso del disco siguen siendo los antiguos:**
+Las listas reciben la marca moderna mediante un auxiliar de dibujo de comctl32 que solo se intercepta en procesos de 64 bits: en la version de 32 bits su convencion de llamada es una eleccion del compilador que puede cambiar entre actualizaciones de Windows, y asumirla corromperia la pila de quien llamo. Los arboles se modernizan en ambas, y el escritorio siempre es de 64 bits. El anillo de uso del disco en las propiedades de la unidad queda fuera de los programas de 32 bits por el mismo motivo: sus funciones de dibujo en shell32 y wpdshext reciben los argumentos en registros alli, y eso tambien puede cambiar.
 
 ### Mods recomendados para modernizar el sistema
 - **WinUI Context Menu Animation** por crazyboyybs
@@ -492,13 +493,13 @@ DirectWrite 是 Windows 的现代文本渲染器。旧版 Win32 界面通常使�
 这是 Windows 旧版程序自身的限制(uxtheme/comctl32 内部缓存)，重启资源管理器即可解决。
 
 **我发现深色模式改变了非原生程序的颜色：**
-这是预期行为——本模组使用 SetSysColors 更改系统颜色，无法轻易按应用排除，因此任何向 Windows 查询系统颜色的程序都会拿到深色值。如需更精细的排除控制，请使用设置中的深色模式排除列表。
+这是预期行为——本模组使用 SetSysColors 更改系统颜色，无法轻易按应用排除，因此任何向 Windows 查询系统颜色的程序都会拿到深色值。如需更精细的排除控制，请使用设置中的深色模式排除列表。在本模组未运行的程序中（在 Windhawk 中被排除，或无法注入的程序），经典对话框的标签可能会成为深色背景上的深色文字而难以阅读；请让模组在其中运行并将该程序加入深色模式排除列表，或关闭自定义深色模式。
 
 **禁用或删除本模组后颜色仍然是深色：**
 这是 Windows 快速启动(“混合关机”)的行为，并非本模组所能控制。快速启动会休眠内核会话而非真正重启，因此系统的实时颜色表(由 SetSysColors 设置)可能原封不动地熬过一次“关机 → 开机”。此外，Windows 还可能自行把当时生效的颜色保存到注册表的旧版配色方案(Control Panel\Colors)中，若已发生，即便真正重启也未必足够。解决办法：先执行一次真正的重启(而非“关机”)，或在电源选项中关闭快速启动；若颜色仍未恢复，请在“设置 > 个性化”中重新选择一个主题(或切换浅色/深色模式)，强制 Windows 从头重新定义颜色。
 
-**在部分较旧的 32 位程序中，拖动插入线仍是旧样式：**
-列表视图的现代插入标记通过 comctl32 的一个绘制辅助函数实现，而该函数仅在 64 位进程中被拦截：在 32 位版本中它的调用约定是编译器的选择，可能随 Windows 更新而改变，贸然假定会破坏调用方的栈。树形视图在两种位数下都已现代化，而桌面始终是 64 位。
+**在部分较旧的 32 位程序中，拖动插入线和磁盘使用图表仍是旧样式：**
+列表视图的现代插入标记通过 comctl32 的一个绘制辅助函数实现，而该函数仅在 64 位进程中被拦截：在 32 位版本中它的调用约定是编译器的选择，可能随 Windows 更新而改变，贸然假定会破坏调用方的栈。树形视图在两种位数下都已现代化，而桌面始终是 64 位。驱动器属性中的磁盘使用环形图出于同样原因不在 32 位程序中启用：它在 shell32 和 wpdshext 中的绘制函数在那里通过寄存器传递参数，而这同样可能改变。
 
 ### 系统现代化推荐模组搭配
 - **WinUI Context Menu Animation** —— crazyboyybs
@@ -13602,7 +13603,11 @@ static bool DrawShellItemTextDWrite(HDC hdc, LPCWSTR text, int cch,
         if (plainText && SUCCEEDED(layout->GetMetrics(&dwMetrics))) {
             const HRESULT lineHr = layout->GetLineMetrics(
                 dwLines, ARRAYSIZE(dwLines), &dwLineCount);
-            dwSuspect = FAILED(lineHr) || dwLineCount != 1 ||
+            // More lines than the buffer holds (dwLineCount then is the
+            // real count): the native text.
+            if (FAILED(lineHr))
+                return false;
+            dwSuspect = dwLineCount != 1 ||
                 dwMetrics.widthIncludingTrailingWhitespace * widthScale >
                     static_cast<float>(width);
             for (UINT32 i = 0; !dwSuspect && i < dwLineCount; ++i)
@@ -20500,8 +20505,11 @@ struct CbtThreadHook {
 };
 static std::unordered_map<DWORD, CbtThreadHook> g_cbtHooks;
 // The calling thread already carries its hook: the common case, checked for
-// free on every call. Hooks are only removed at unload, so it never goes stale.
+// free on every call. InitCbtHooks_Cleanup (unload, or both features turned
+// off) bumps the generation, so a flag set before it no longer counts.
 static thread_local bool t_cbtHookInstalled = false;
+static thread_local unsigned t_cbtHookGeneration = 0;
+static std::atomic<unsigned> g_cbtHooksGeneration{0};
 
 // Callback for EnumChildWindows — applies dark mode to children of flyout windows
 
@@ -20620,8 +20628,10 @@ static void InstallCbtHookForThread(DWORD tid)
 {
     if (!g_settings.RoundedButtons && !g_settings.ModernContextMenus) return;
     const bool currentThread = tid == 0 || tid == GetCurrentThreadId();
+    const unsigned generation =
+        g_cbtHooksGeneration.load(std::memory_order_acquire);
     if (currentThread) {
-        if (t_cbtHookInstalled)
+        if (t_cbtHookInstalled && t_cbtHookGeneration == generation)
             return;
         tid = GetCurrentThreadId();
     }
@@ -20633,8 +20643,10 @@ static void InstallCbtHookForThread(DWORD tid)
     auto it = g_cbtHooks.find(tid);
     if (it != g_cbtHooks.end()) {
         if (CompareFileTime(&it->second.created, &created) == 0) {
-            if (currentThread)
+            if (currentThread) {
                 t_cbtHookInstalled = true;
+                t_cbtHookGeneration = generation;
+            }
             return;
         }
         // The ID now belongs to a newer thread; the old hook ended with the
@@ -20653,8 +20665,10 @@ static void InstallCbtHookForThread(DWORD tid)
         });
     }
     g_cbtHooks[tid] = { h, created };
-    if (currentThread)
+    if (currentThread) {
         t_cbtHookInstalled = true;
+        t_cbtHookGeneration = generation;
+    }
 }
 
 // EnumWindows callback for mod init: install CbtProc hooks on all
@@ -21968,9 +21982,12 @@ static bool DiskPieDrawRoundedRingBuffered(HDC hdc, const RECT& chartRect,
 // ret 0Ch, and _DrvGeneralDlgProc loads ECX/EDX before calling
 // _DrvPrshtDrawItem), checked by disassembly on build 26100. A __stdcall
 // hook read them from the stack and crashed the page. No effect on x64.
+// As with CCDrawInsertMark, that is a compiler choice that can change
+// between Windows builds, so these hooks are only installed in 64-bit
+// processes; the typed hooks stay for that build's convention.
 using DiskPieShell32DrawPie_t = int(__fastcall*)(HDC, LPRECT, DWORD, DWORD, const DWORD*);
 static DiskPieShell32DrawPie_t g_pDiskPieShell32DrawPie_Orig;
-static int __fastcall DiskPieShell32DrawPie_Hook(
+[[maybe_unused]] static int __fastcall DiskPieShell32DrawPie_Hook(
     HDC hdc, LPRECT prcChart, DWORD dwUsagePer1000, DWORD dwCachePer1000, const DWORD* lpColors)
 {
     g_diskPieState.active = g_settings.DiskChartAccentColor;
@@ -22125,7 +22142,7 @@ static COLORREF DiskPieSampleOriginalSwatchColor(void* lpps, LPDRAWITEMSTRUCT lp
 
 // __fastcall: see DiskPieShell32DrawPie_t.
 static void (__fastcall *g_pDiskPieDrvPrshtDrawItem_Orig)(void*, LPDRAWITEMSTRUCT);
-static void __fastcall DiskPieDrvPrshtDrawItem_Hook(void* lpps, LPDRAWITEMSTRUCT lpdi)
+[[maybe_unused]] static void __fastcall DiskPieDrvPrshtDrawItem_Hook(void* lpps, LPDRAWITEMSTRUCT lpdi)
 {
     if (!g_settings.DiskChartAccentColor)
     {
@@ -22199,8 +22216,8 @@ static std::atomic<bool> g_insertMarkContextSeen{false};
 static std::atomic<bool> g_lazyFeatureApplyPosted{false};
 
 static std::mutex g_diskPieHookMutex;
-static bool g_diskPieShell32HooksAttempted = false;
-static bool g_diskPieWpdShExtHooksAttempted = false;
+[[maybe_unused]] static bool g_diskPieShell32HooksAttempted = false;
+[[maybe_unused]] static bool g_diskPieWpdShExtHooksAttempted = false;
 static bool g_diskPieGdipHooksAttempted = false;
 
 // Registers private Shell symbols only for the disk chart, while the shared
@@ -22224,6 +22241,8 @@ static bool DiskPieInit()
     std::lock_guard<std::mutex> lock(g_diskPieHookMutex);
     bool hooksQueued = false;
 
+#ifdef _WIN64
+    // 64-bit only: see DiskPieShell32DrawPie_t.
     if (g_settings.DiskChartAccentColor && diskPieContext &&
         !g_diskPieShell32HooksAttempted) {
         HMODULE hShell32 = LazyFeatureAcquireSystemModule(
@@ -22262,6 +22281,7 @@ static bool DiskPieInit()
                 Wh_Log(L"Disk chart: wpdshext symbol unavailable");
         }
     }
+#endif
 
     if (g_diskPieGdipHooksAttempted)
         return hooksQueued;
@@ -56730,6 +56750,7 @@ static void InitCbtHooks_Cleanup()
     for (auto& [tid, entry] : g_cbtHooks)
         UnhookWindowsHookEx(entry.hook);
     g_cbtHooks.clear();
+    g_cbtHooksGeneration.fetch_add(1, std::memory_order_acq_rel);
 }
 
 // -- DirectUI Element::PaintBackground hook --
