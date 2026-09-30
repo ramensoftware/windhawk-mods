@@ -6,12 +6,12 @@
 // @author          bbmaster123
 // @github          https://github.com/bbmaster123
 // @include         explorer.exe
-// @compilerOptions -lcomctl32 -lole32 -luuid -luser32 -lgdi32 -luxtheme -lshlwapi -lmsimg32 -lgdiplus
+// @compilerOptions -luser32 -lgdi32 -luxtheme -lshlwapi -lgdiplus
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-![Screenshot](https://raw.githubusercontent.com/bbmaster123/FWFU/refs/heads/main/Assets/screenshot.png)
+![Screenshot](https://raw.githubusercontent.com/bbmaster123/FWFU/refs/heads/main/Assets/screenshot-1.2.0.png)
 
 Enables the ability to customize the disk drive tiles in explorer, targeting the disk's usage bar, as well
 as the details that appear below.
@@ -19,9 +19,11 @@ as the details that appear below.
 New in 1.2.0
 - separate disk bar and text customization toggles
 - updated text formatting to support any subset of stats in any order
+- independent bold toggles for free, used, total, and both percentages
 - added used percentage (%p) and free percentage (%fp) stats
 - added unit normalization (ex show 1.5TB as 1536GB, or 512GB as 0.5TB)
-- optional custom number of decimals in displayed units (0-6, 0 being integer numbers only)
+- optional unit precision (0-10 decimals when converting units; one decimal for unconverted sizes) and separate percentage precision (0-10)
+- bold toggles for each unit type
 
 Features
 - follow system accent color, or set custom colors with transparency for disk usage, track (background/unused), and outline
@@ -32,7 +34,6 @@ Features
 - height/width (inset) controls for disk bar and track
 - custom disk usage text with font size adjustment, multi-line support, line-height adjustment, and more
 - named stat placeholders (%f for free, %u for used, %t for total, %p for used percentage, %fp for free percentage)
-
 
 Named placeholders can appear in any order or be repeated. Legacy `%s` placeholders
 still insert free, used, and total space in that order. Use `%%` for a literal
@@ -122,13 +123,24 @@ ex.
     - mb: Always MB
     - tb: Always TB
 - enableCustomDecimals: false
-  $name: Custom Decimal Places for Displayed Units
-  $description: Enable to specify a custom number of decimal places for displayed units.
+  $name: Custom Unit Precision
+  $description: Enable custom decimal places for disk sizes. Converted values can show more digits but are estimated from Explorer's rounded sizes.
 - decimalPlaces: 2
-  $name: Number of Decimal Places
-  $description: Number of decimal places when custom decimals is enabled (0 to 6; larger values are capped at 6)
+  $name: Unit Decimal Places
+  $description: Converted sizes use 0 to 10 decimal places; unconverted sizes use at most one. Values above 10 are capped at 10.
+- percentageDecimalPlaces: -1
+  $name: Percentage Decimal Places
+  $description: Used and free percentages use 0 to 10 decimal places; values above 10 are capped at 10. Use -1 for automatic formatting. Percentages are estimated from Explorer's rounded sizes.
 - boldUsed: true
   $name: Bold Used Space Value
+- boldFree: false
+  $name: Bold Free Space Value
+- boldTotal: false
+  $name: Bold Total Space Value
+- boldUsedPercent: false
+  $name: Bold Used Percentage
+- boldFreePercent: false
+  $name: Bold Free Percentage
 - boldStyle: sans-serif
   $name: Text Style
   $options:
@@ -151,9 +163,7 @@ ex.
 // ==/WindhawkModSettings==
 
 #include <windows.h>
-#include <commctrl.h>
 #include <gdiplus.h>
-#include <shlobj.h>
 #include <shlwapi.h>
 #include <uxtheme.h>
 #include <windhawk_api.h>
@@ -182,12 +192,13 @@ enum class UnitGranularity {
 
 std::wstring g_formatString;
 wchar_t g_decimalSeparator = L'.', g_thousandsSeparator = L',';
-bool g_boldUsed, g_removeSpace, g_showGloss, g_enableWordEllipsis,
+bool g_boldUsed, g_boldFree, g_boldTotal, g_boldUsedPercent,
+    g_boldFreePercent, g_removeSpace, g_showGloss, g_enableWordEllipsis,
     g_roundFillBothSides, g_useAccentColor, g_enableBarCustomization,
     g_enableTextCustomization,
     g_enableCustomDecimals;
 int g_lineYOffset, g_accentColorGradientDelta;
-int g_barYOffset, g_lineSpacing, g_decimalPlaces;
+int g_barYOffset, g_lineSpacing, g_decimalPlaces, g_percentageDecimalPlaces;
 int g_leftInset, g_rightInset, g_topInset, g_bottomInset;
 int g_trackLeftInset, g_trackRightInset, g_trackTopInset, g_trackBottomInset;
 int g_gradientDirection;
@@ -200,6 +211,7 @@ UnitGranularity g_unitGranularity = UnitGranularity::Auto;
 ULONG_PTR g_gdiplusToken;
 std::atomic<bool> g_unloading{false};
 std::atomic<unsigned> g_activeBarCalls{0};
+std::atomic<bool> g_settingsReloading{false};
 
 class ActiveBarCall {
 public:
@@ -331,7 +343,7 @@ void LoadSettings() {
     if (s && s[0] != L'\0') {
         g_formatString = s;
     } else {
-        g_formatString = L"%s free | %s used\n%s total";
+        g_formatString = L"%f free | %u used\n%t Total";
     }
     Wh_FreeStringSetting(s);
     if (g_formatString.size() > 4096)
@@ -364,8 +376,14 @@ void LoadSettings() {
     }
 
     g_enableCustomDecimals = Wh_GetIntSetting(L"enableCustomDecimals") != 0;
-    g_decimalPlaces = std::clamp(Wh_GetIntSetting(L"decimalPlaces"), 0, 6);
+    g_decimalPlaces = std::clamp(Wh_GetIntSetting(L"decimalPlaces"), 0, 10);
+    g_percentageDecimalPlaces =
+        std::clamp(Wh_GetIntSetting(L"percentageDecimalPlaces"), -1, 10);
     g_boldUsed = Wh_GetIntSetting(L"boldUsed") != 0;
+    g_boldFree = Wh_GetIntSetting(L"boldFree") != 0;
+    g_boldTotal = Wh_GetIntSetting(L"boldTotal") != 0;
+    g_boldUsedPercent = Wh_GetIntSetting(L"boldUsedPercent") != 0;
+    g_boldFreePercent = Wh_GetIntSetting(L"boldFreePercent") != 0;
     g_removeSpace = Wh_GetIntSetting(L"removeSpace") != 0;
     g_enableWordEllipsis = Wh_GetIntSetting(L"enableWordEllipsis") != 0;
     g_enableTextCustomization = Wh_GetIntSetting(L"enableTextCustomization") != 0;
@@ -391,8 +409,8 @@ static bool IsSizeNumericChar(wchar_t c) {
            c == L'\'' || c == 0x2019 || IsSizeSpace(c);
 }
 
-// The parser accepts only known byte units. A two-letter word such as "km"
-// must not be treated as KB in an unrelated Explorer label.
+// Recognize common units first, then Finnish-style kt/Mt/Gt. Accepting any
+// two letters after a size prefix would mistake distances such as Km for bytes.
 static std::wstring UpperSizeUnit(const wchar_t* unit) {
     std::wstring result = unit;
     for (auto& c : result) {
@@ -402,6 +420,12 @@ static std::wstring UpperSizeUnit(const wchar_t* unit) {
             c -= 0x20; // Cyrillic casing without a dependency on CRT locale.
     }
     return result;
+}
+
+static bool IsSizeUnitLetter(wchar_t c) {
+    return (c >= L'A' && c <= L'Z') ||
+           (c >= L'a' && c <= L'z') ||
+           (c >= 0x0400 && c <= 0x04FF) || iswalpha(c);
 }
 
 double GetUnitMultiplier(const wchar_t* unit) {
@@ -425,6 +449,15 @@ double GetUnitMultiplier(const wchar_t* unit) {
             if (up == name)
                 return multiplier;
         multiplier *= 1024.0;
+    }
+    if (up.size() == 2 && (up[1] == L'T' || up[1] == L'\x0422')) {
+        static const wchar_t* const prefixes = L"KMGTPE";
+        static const wchar_t* const cyrillic = L"\x041A\x041C\x0413\x0422\x041F";
+        double value = 1024.0;
+        for (int i = 0; prefixes[i]; ++i, value *= 1024.0) {
+            if (up[0] == prefixes[i] || (i < 5 && up[0] == cyrillic[i]))
+                return value;
+        }
     }
     return 0.0;
 }
@@ -663,20 +696,18 @@ static void PaintEnhancedBar(HDC hdc,
     if (trackRect.Width <= 0.1f || trackRect.Height <= 0.1f)
         return;
 
-    // 2. Paths
-    GraphicsPath trackPath;
-    BuildRoundedPath(trackPath, trackRect, (float)g_cornerRadius * scale);
-
-    RectF borderRect = trackRect;
-    float bOff = g_trackBorderOffset * scale;
-    if (bOff != 0) {
-        borderRect.Inflate(bOff, bOff);
-    }
-    GraphicsPath borderPath;
-    BuildRoundedPath(borderPath, borderRect, (float)g_cornerRadius * scale);
-
     if (!isFill) {
         // PASS A: Background
+        GraphicsPath trackPath;
+        BuildRoundedPath(trackPath, trackRect, (float)g_cornerRadius * scale);
+
+        RectF borderRect = trackRect;
+        float bOff = g_trackBorderOffset * scale;
+        if (bOff != 0)
+            borderRect.Inflate(bOff, bOff);
+        GraphicsPath borderPath;
+        BuildRoundedPath(borderPath, borderRect, (float)g_cornerRadius * scale);
+
         SolidBrush trBr{Color{g_trackColor}};
         graphics.FillPath(&trBr, &trackPath);
 
@@ -864,10 +895,6 @@ HRESULT WINAPI HookedDrawThemeBackground(HTHEME hTheme,
                                          int iStateId,
                                          LPCRECT pRect,
                                          LPCRECT pClipRect) {
-    if (!g_enableBarCustomization)
-        return DrawThemeBackground_Orig(hTheme, hdc, iPartId, iStateId,
-                                        pRect, pClipRect);
-
     // Increment before checking the stop flag. Cleanup sets the flag first,
     // then waits for all calls that could have entered GDI+ to finish.
     {
@@ -908,6 +935,26 @@ std::wstring GetLocalizedUnitName(double multiplier, const wchar_t* sampleUnit) 
                      up.find(L"BYTE") == std::wstring::npos &&
                      up.find(L"B") == std::wstring::npos);
     bool isCyrillic = (up.find(L"\x0411") != std::wstring::npos);
+
+    // Keep a recognized two-letter localized suffix, e.g. kt -> Mt/Gt.
+    if (up.size() == 2 && IsSizeUnitLetter(up[0]) &&
+        IsSizeUnitLetter(up[1]) &&
+        GetUnitMultiplier(sampleUnit) > 0.0 &&
+        !isFrench && !isCyrillic && up[1] != L'B') {
+        const wchar_t* prefixes = L"KMGTPE";
+        const wchar_t* cyrillic = L"\x041A\x041C\x0413\x0422\x041F\x042D";
+        bool useCyrillic = up[0] == L'\x041A' || up[0] == L'\x041C' ||
+                           up[0] == L'\x0413' || up[0] == L'\x0422' ||
+                           up[0] == L'\x041F';
+        for (int i = 0; prefixes[i]; ++i) {
+            double target = 1024.0;
+            for (int j = 0; j < i; ++j)
+                target *= 1024.0;
+            if (multiplier == target)
+                return std::wstring(1, useCyrillic ? cyrillic[i] : prefixes[i]) +
+                       sampleUnit[1];
+        }
+    }
 
     if (multiplier >= 1152921504606846976.0) {  // EB
         if (isFrench)
@@ -979,7 +1026,7 @@ static std::wstring FormatFixedNumber(double value, int decimals,
     char buffer[64];
     auto formatted = std::to_chars(std::begin(buffer), std::end(buffer), value,
                                     std::chars_format::fixed,
-                                    std::clamp(decimals, 0, 6));
+                                    std::clamp(decimals, 0, 10));
     if (formatted.ec != std::errc{})
         return L"0";
     std::string number(buffer, formatted.ptr);
@@ -997,7 +1044,7 @@ static std::wstring FormatFixedNumber(double value, int decimals,
 std::wstring FormatValueWithDecimals(double value, int decimals) {
     if (decimals >= 0)
         return FormatFixedNumber(value, decimals, false);
-    int precision = value >= 100.0 ? 1 : 2;
+    int precision = 1;
     if (value >= 10.0 && std::abs(value - std::round(value)) < 0.001)
         precision = 0;
     return FormatFixedNumber(value, precision, true);
@@ -1018,6 +1065,16 @@ std::wstring ApplyPlaceholders(const std::wstring& fmt,
                                const std::wstring& usedPctStr,
                                const std::wstring& freePctStr) {
     std::wstring result;
+    const std::wstring displayedFree =
+        g_boldFree ? MakeBoldText(freeStr) : freeStr;
+    const std::wstring displayedUsed =
+        g_boldUsed ? MakeBoldText(usedStr) : usedStr;
+    const std::wstring displayedTotal =
+        g_boldTotal ? MakeBoldText(totalStr) : totalStr;
+    const std::wstring displayedUsedPct =
+        g_boldUsedPercent ? MakeBoldText(usedPctStr) : usedPctStr;
+    const std::wstring displayedFreePct =
+        g_boldFreePercent ? MakeBoldText(freePctStr) : freePctStr;
     int seqIndex = 0;
     size_t i = 0;
     while (i < fmt.length()) {
@@ -1025,33 +1082,33 @@ std::wstring ApplyPlaceholders(const std::wstring& fmt,
             wchar_t next = towlower(fmt[i + 1]);
             if (next == L'f') {
                 if (i + 2 < fmt.length() && towlower(fmt[i + 2]) == L'p') {
-                    result += freePctStr;
+                    result += displayedFreePct;
                     i += 3;
                     continue;
                 } else {
-                    result += freeStr;
+                    result += displayedFree;
                     i += 2;
                     continue;
                 }
             } else if (next == L'u') {
-                result += (g_boldUsed ? MakeBoldText(usedStr) : usedStr);
+                result += displayedUsed;
                 i += 2;
                 continue;
             } else if (next == L't') {
-                result += totalStr;
+                result += displayedTotal;
                 i += 2;
                 continue;
             } else if (next == L'p') {
-                result += usedPctStr;
+                result += displayedUsedPct;
                 i += 2;
                 continue;
             } else if (next == L's') {
                 if (seqIndex == 0) {
-                    result += freeStr;
+                    result += displayedFree;
                 } else if (seqIndex == 1) {
-                    result += (g_boldUsed ? MakeBoldText(usedStr) : usedStr);
+                    result += displayedUsed;
                 } else if (seqIndex == 2) {
-                    result += totalStr;
+                    result += displayedTotal;
                 }
                 seqIndex++;
                 i += 2;
@@ -1194,23 +1251,31 @@ bool ProcessDiskUsageText(HDC hdc,
     double freePct =
         std::clamp((freeBytes / totalBytes) * 100.0, 0.0, 100.0);
 
-    int effectiveDecimals =
-        g_enableCustomDecimals ? std::clamp(g_decimalPlaces, 0, 6) : -1;
+    int effectiveDecimals = g_enableCustomDecimals ? g_decimalPlaces : -1;
+    auto unitDecimals = [effectiveDecimals](bool converted) {
+        return effectiveDecimals < 0 || converted
+                   ? effectiveDecimals
+                   : std::min(effectiveDecimals, 1);
+    };
 
-    std::wstring usedPctStr = FormatPercentage(usedPct, effectiveDecimals);
-    std::wstring freePctStr = FormatPercentage(freePct, effectiveDecimals);
+    std::wstring usedPctStr =
+        FormatPercentage(usedPct, g_percentageDecimalPlaces);
+    std::wstring freePctStr =
+        FormatPercentage(freePct, g_percentageDecimalPlaces);
 
     std::wstring outFree, outUsed, outTotal;
 
     if (g_unitGranularity == UnitGranularity::Auto) {
         if (g_enableCustomDecimals) {
             double usedMult = GetDisplayUnitMultiplier(usedBytes);
-            outFree = FormatValueWithDecimals(fv, effectiveDecimals) + L" " +
+            outFree = FormatValueWithDecimals(fv, unitDecimals(false)) + L" " +
                       GetLocalizedUnitName(um1, fu.c_str());
-            outTotal = FormatValueWithDecimals(tv, effectiveDecimals) + L" " +
+            outTotal = FormatValueWithDecimals(tv, unitDecimals(false)) + L" " +
                        GetLocalizedUnitName(um2, tu.c_str());
             outUsed = FormatValueWithDecimals(usedBytes / usedMult,
-                                              effectiveDecimals) + L" " +
+                                              unitDecimals(um1 != usedMult ||
+                                                           um2 != usedMult)) +
+                      L" " +
                       GetLocalizedUnitName(usedMult, tu.c_str());
         } else {
             outFree = fs;
@@ -1246,13 +1311,14 @@ bool ProcessDiskUsageText(HDC hdc,
         std::wstring sep = g_removeSpace ? L"" : L" ";
 
         outFree = FormatValueWithDecimals(freeBytes / targetMult,
-                                          effectiveDecimals) +
+                                          unitDecimals(um1 != targetMult)) +
                   sep + unitName;
         outUsed = FormatValueWithDecimals(usedBytes / targetMult,
-                                          effectiveDecimals) +
+                                          unitDecimals(um1 != targetMult ||
+                                                       um2 != targetMult)) +
                   sep + unitName;
         outTotal = FormatValueWithDecimals(totalBytes / targetMult,
-                                           effectiveDecimals) +
+                                           unitDecimals(um2 != targetMult)) +
                    sep + unitName;
     }
 
@@ -1416,7 +1482,7 @@ int WINAPI DrawTextW_Hook(HDC hdc,
                           int cch,
                           LPRECT prc,
                           UINT fmt) {
-    if (!g_enableTextCustomization || !hdc || !psz || !prc ||
+    if (!hdc || !psz || !prc ||
         g_insideTextHook || g_unloading.load() || (fmt & DT_MODIFYSTRING))
         return DrawTextW_Orig(hdc, psz, cch, prc, fmt);
 
@@ -1438,7 +1504,7 @@ int WINAPI DrawTextExW_Hook(HDC hdc,
                             LPRECT prc,
                             UINT fmt,
                             LPDRAWTEXTPARAMS pDtp) {
-    if (!g_enableTextCustomization || !hdc || !psz || !prc ||
+    if (!hdc || !psz || !prc ||
         g_insideTextHook || g_unloading.load() || (fmt & DT_MODIFYSTRING) ||
         (pDtp && pDtp->cbSize != sizeof(*pDtp)))
         return DrawTextExW_Orig(hdc, psz, cch, prc, fmt, pDtp);
@@ -1548,12 +1614,16 @@ void Wh_ModUninit() {
     while (g_activeBarCalls.load() != 0)
         Sleep(1);
     ShutdownGdiPlus();
-    RefreshExplorer();
+    // The new instance refreshes once in Wh_ModAfterInit. On a full disable,
+    // there is no new instance, so restore the default view here.
+    if (!g_settingsReloading.load())
+        RefreshExplorer();
 }
 
 BOOL Wh_ModSettingsChanged(BOOL* bReload) {
     // Settings remain immutable while hooks run; Windhawk performs a normal
     // unload/reload to apply changes.
+    g_settingsReloading.store(true);
     *bReload = TRUE;
     return TRUE;
 }
