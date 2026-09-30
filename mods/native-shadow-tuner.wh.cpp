@@ -681,12 +681,11 @@ BOOL Wh_ModInit() {
     opacityScale = opacityPercent / 100.0f;
     sizeScale = sizePercent / 100.0f;
 
-    DynamicShadowSymbols dynamicSymbols;
-
     // A single HookSymbols call resolves every uDWM symbol, so Windhawk's
     // symbol cache stays valid. The array is the same whatever the settings
     // are, so changing them doesn't invalidate the cache either.
-    // uDWM.dll
+    DynamicShadowSymbols dynamicSymbols;
+
     WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         {
             {
