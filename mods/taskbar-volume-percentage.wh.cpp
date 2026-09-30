@@ -2,7 +2,7 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.7.3
+// @version         1.7.4
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -55,6 +55,10 @@ level, updated in real time.
 - Only Windows 11 is supported.
 - If the mod is enabled while Explorer is already running, the text appears
   after the next volume change.
+- Compatible with [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler):
+  - Spacing is managed via `Grid.ColumnSpacing`, leaving all custom `Margin` rules set by Taskbar Styler intact.
+  - Custom font sizes on `TextBlock#InnerTextBlock` are automatically detected and mirrored.
+  - The volume text block can also be styled directly via `TextBlock#VolumePercentageSubBlock`.
 
 ## Credits
 
@@ -256,9 +260,14 @@ struct TrackedVolumeContent {
     winrt::Windows::Foundation::IInspectable origUnderlayColumn{nullptr};
     winrt::Windows::Foundation::IInspectable origBaseColumn{nullptr};
     winrt::Windows::Foundation::IInspectable origContainerGridAlignment{nullptr};
-    winrt::Windows::Foundation::IInspectable origTextIconContentAlignment{nullptr};
+    winrt::Windows::Foundation::IInspectable origContainerGridColumnSpacing{
+        nullptr};
+    winrt::Windows::Foundation::IInspectable origTextIconContentAlignment{
+        nullptr};
     winrt::Windows::Foundation::IInspectable origBaseMargin{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayMargin{nullptr};
+    winrt::weak_ref<Controls::TextBlock> observedInnerTextBlock;
+    int64_t fontSizeCallbackToken = 0;
     // True when the native (icon font) text block is the one displayed, i.e.
     // for the native mute glyph. Otherwise our own text block is displayed.
     bool lastNativeGlyph = false;
@@ -605,8 +614,25 @@ void PruneTrackedVolumeContents() {
         return;
     }
 
-    std::erase_if(*g_trackedVolumeContents, [](const auto& tracked) {
-        return !tracked.textIconContent.get();
+    std::erase_if(*g_trackedVolumeContents, [](auto& tracked) {
+        if (!tracked.textIconContent.get()) {
+            if (tracked.fontSizeCallbackToken != 0) {
+                if (auto observed = tracked.observedInnerTextBlock.get()) {
+                    try {
+                        observed.UnregisterPropertyChangedCallback(
+                            Controls::TextBlock::FontSizeProperty(),
+                            tracked.fontSizeCallbackToken);
+                    } catch (winrt::hresult_error const& ex) {
+                        Wh_Log(L"Error unregistering font size callback: %08X",
+                               ex.code());
+                    }
+                }
+                tracked.fontSizeCallbackToken = 0;
+                tracked.observedInnerTextBlock = nullptr;
+            }
+            return true;
+        }
+        return false;
     });
 }
 
@@ -629,6 +655,21 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
     auto containerGrid = tracked.containerGrid.get();
     if (!containerGrid) {
         return;
+    }
+
+    if (tracked.fontSizeCallbackToken != 0) {
+        if (auto observed = tracked.observedInnerTextBlock.get()) {
+            try {
+                observed.UnregisterPropertyChangedCallback(
+                    Controls::TextBlock::FontSizeProperty(),
+                    tracked.fontSizeCallbackToken);
+            } catch (winrt::hresult_error const& ex) {
+                Wh_Log(L"Error unregistering font size callback: %08X",
+                       ex.code());
+            }
+        }
+        tracked.fontSizeCallbackToken = 0;
+        tracked.observedInnerTextBlock = nullptr;
     }
 
     auto subBlock = tracked.subBlock.get();
@@ -701,6 +742,8 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
 
     restoreProp(containerGrid, FrameworkElement::HorizontalAlignmentProperty(),
                 tracked.origContainerGridAlignment);
+    restoreProp(containerGrid, Controls::Grid::ColumnSpacingProperty(),
+                tracked.origContainerGridColumnSpacing);
     if (auto tic = tracked.textIconContent.get()) {
         restoreProp(tic, FrameworkElement::HorizontalAlignmentProperty(),
                     tracked.origTextIconContentAlignment);
@@ -722,9 +765,26 @@ void RestoreAllVolumeLayouts() {
     }
 }
 
-// Makes the sub-block follow the native text block's brush and weight through
-// bindings rather than one-time copies, so theme changes are picked up.
-void BindSubBlockTextStyle(Controls::TextBlock const& subBlock,
+void SyncSubBlockFontSize(Controls::TextBlock const& subBlock,
+                          Controls::TextBlock const& source) {
+    if (!subBlock || !source) {
+        return;
+    }
+    double sourceFontSize = source.FontSize();
+    // 16.0 DIPs is the vanilla Windows 11 icon glyph size. If a theme (e.g. from
+    // Taskbar Styler) set a custom font size on InnerTextBlock, mirror it.
+    // Otherwise, stick to the 12.0 DIPs baseline for text.
+    if (std::abs(sourceFontSize - 16.0) > 0.01) {
+        subBlock.FontSize(sourceFontSize);
+    } else {
+        subBlock.FontSize(12.0);
+    }
+}
+
+// Makes the sub-block follow the native text block's brush, weight, and custom
+// font size through bindings and property change observers.
+void BindSubBlockTextStyle(TrackedVolumeContent& tracked,
+                           Controls::TextBlock const& subBlock,
                            Controls::TextBlock const& source) {
     auto bind = [&](DependencyProperty const& dp, PCWSTR path) {
         Data::Binding binding;
@@ -734,6 +794,44 @@ void BindSubBlockTextStyle(Controls::TextBlock const& subBlock,
     };
     bind(Controls::TextBlock::ForegroundProperty(), L"Foreground");
     bind(Controls::TextBlock::FontWeightProperty(), L"FontWeight");
+
+    SyncSubBlockFontSize(subBlock, source);
+
+    if (tracked.fontSizeCallbackToken == 0 ||
+        tracked.observedInnerTextBlock.get() != source) {
+        if (tracked.fontSizeCallbackToken != 0) {
+            if (auto prevSource = tracked.observedInnerTextBlock.get()) {
+                try {
+                    prevSource.UnregisterPropertyChangedCallback(
+                        Controls::TextBlock::FontSizeProperty(),
+                        tracked.fontSizeCallbackToken);
+                } catch (winrt::hresult_error const& ex) {
+                    Wh_Log(L"Error unregistering font size callback: %08X",
+                           ex.code());
+                }
+            }
+            tracked.fontSizeCallbackToken = 0;
+        }
+
+        tracked.observedInnerTextBlock = source;
+        try {
+            tracked.fontSizeCallbackToken =
+                source.RegisterPropertyChangedCallback(
+                    Controls::TextBlock::FontSizeProperty(),
+                    [subBlockWeak = winrt::make_weak(subBlock)](
+                        DependencyObject const& sender,
+                        DependencyProperty const&) {
+                        if (auto tb = sender.try_as<Controls::TextBlock>()) {
+                            if (auto sub = subBlockWeak.get()) {
+                                SyncSubBlockFontSize(sub, tb);
+                            }
+                        }
+                    });
+        } catch (winrt::hresult_error const& ex) {
+            Wh_Log(L"Error registering font size callback: %08X", ex.code());
+            tracked.fontSizeCallbackToken = 0;
+        }
+    }
 }
 
 void SetupVolumeLayout(FrameworkElement const& textIconContent) {
@@ -765,15 +863,12 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         if (!g_trackedVolumeContents) {
             g_trackedVolumeContents.emplace();
         }
-        g_trackedVolumeContents->push_back({
-            textIconContent,
-            containerGrid,
-            baseElement,
-            underlayElement,
-            nullptr,
-            false,
-            false,
-        });
+        TrackedVolumeContent newTracked;
+        newTracked.textIconContent = textIconContent;
+        newTracked.containerGrid = containerGrid;
+        newTracked.baseElement = baseElement;
+        newTracked.underlayElement = underlayElement;
+        g_trackedVolumeContents->push_back(std::move(newTracked));
         tracked = &g_trackedVolumeContents->back();
     } else {
         tracked->containerGrid = containerGrid;
@@ -781,12 +876,10 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         tracked->underlayElement = underlayElement;
     }
 
-    auto applyLayout = [](FrameworkElement const& el, int col, Visibility vis,
-                          Thickness margin = Thickness{0.0, 0.0, 0.0, 0.0}) {
+    auto applyLayout = [](FrameworkElement const& el, int col, Visibility vis) {
         if (el) {
             el.Visibility(vis);
             el.HorizontalAlignment(HorizontalAlignment::Center);
-            el.Margin(margin);
             Controls::Grid::SetColumn(el, col);
         }
     };
@@ -814,6 +907,8 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         }
         tracked->origContainerGridAlignment = containerGrid.ReadLocalValue(
             FrameworkElement::HorizontalAlignmentProperty());
+        tracked->origContainerGridColumnSpacing = containerGrid.ReadLocalValue(
+            Controls::Grid::ColumnSpacingProperty());
         tracked->origTextIconContentAlignment = textIconContent.ReadLocalValue(
             FrameworkElement::HorizontalAlignmentProperty());
     }
@@ -855,6 +950,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         // Single-element indicator: either our text block alone (text styles,
         // text mute styles) or the native glyph alone (native mute icon).
         containerGrid.ColumnDefinitions().Clear();
+        containerGrid.ColumnSpacing(0.0);
 
         Controls::TextBlock subBlock = nullptr;
         if (auto existingSubBlock = tracked->subBlock.get()) {
@@ -884,7 +980,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         if (textBlockEl) {
             if (auto innerTextBlock =
                     textBlockEl.try_as<Controls::TextBlock>()) {
-                BindSubBlockTextStyle(subBlock, innerTextBlock);
+                BindSubBlockTextStyle(*tracked, subBlock, innerTextBlock);
             }
         }
 
@@ -911,16 +1007,14 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         } else {
             subBlock.Text(g_volumeText);
             subBlock.HorizontalAlignment(HorizontalAlignment::Center);
-            subBlock.Margin(Thickness{0.0, 0.0, 0.0, 0.0});
             subBlock.Visibility(Visibility::Visible);
             Controls::Grid::SetColumn(subBlock, 0);
         }
 
         Visibility baseVis =
             useNativeGlyph ? Visibility::Visible : Visibility::Collapsed;
-        applyLayout(baseElement, 0, baseVis, Thickness{0.0, 0.0, 0.0, 0.0});
-        applyLayout(underlayElement, 0, baseVis,
-                    Thickness{0.0, 0.0, 0.0, 0.0});
+        applyLayout(baseElement, 0, baseVis);
+        applyLayout(underlayElement, 0, baseVis);
 
         tracked->lastDualBoxMode = false;
         tracked->lastNativeGlyph = useNativeGlyph;
@@ -958,7 +1052,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
     if (textBlockEl) {
         if (auto innerTextBlock =
                 textBlockEl.try_as<Controls::TextBlock>()) {
-            BindSubBlockTextStyle(subBlock, innerTextBlock);
+            BindSubBlockTextStyle(*tracked, subBlock, innerTextBlock);
         }
     }
 
@@ -972,38 +1066,33 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
     }
 
     // -1: automatic (4 DIPs), 0: no spacing set by the mod, other: fixed size.
+    // Handled natively via Grid.ColumnSpacing to preserve child margins.
     double spacing = (g_settings.iconSpacing < 0)
                          ? 4.0
                          : static_cast<double>(g_settings.iconSpacing);
-    bool applySpacing = (g_settings.iconSpacing != 0);
-    Thickness col0Margin = applySpacing ? Thickness{0.0, 0.0, spacing, 0.0}
-                                        : Thickness{0.0, 0.0, 0.0, 0.0};
-    Thickness zeroMargin = Thickness{0.0, 0.0, 0.0, 0.0};
+    if (g_settings.iconSpacing == 0) {
+        spacing = 0.0;
+    }
+    containerGrid.ColumnSpacing(spacing);
 
     if (g_settings.elementPosition == ElementPosition::left) {
         // Native speaker/mute icon on left (col 0), text on right (col 1).
-        applyLayout(baseElement, 0, Visibility::Visible, col0Margin);
-        applyLayout(underlayElement, 0, Visibility::Visible, col0Margin);
+        applyLayout(baseElement, 0, Visibility::Visible);
+        applyLayout(underlayElement, 0, Visibility::Visible);
 
         subBlock.Text(g_volumeText);
         subBlock.HorizontalAlignment(HorizontalAlignment::Left);
-        if (applySpacing) {
-            subBlock.Margin(zeroMargin);
-        }
         subBlock.Visibility(Visibility::Visible);
         Controls::Grid::SetColumn(subBlock, 1);
     } else {
         // Text on left (col 0), native speaker/mute icon on right (col 1).
         subBlock.Text(g_volumeText);
         subBlock.HorizontalAlignment(HorizontalAlignment::Right);
-        if (applySpacing) {
-            subBlock.Margin(col0Margin);
-        }
         subBlock.Visibility(Visibility::Visible);
         Controls::Grid::SetColumn(subBlock, 0);
 
-        applyLayout(baseElement, 1, Visibility::Visible, zeroMargin);
-        applyLayout(underlayElement, 1, Visibility::Visible, zeroMargin);
+        applyLayout(baseElement, 1, Visibility::Visible);
+        applyLayout(underlayElement, 1, Visibility::Visible);
     }
 
     tracked->lastDualBoxMode = true;
