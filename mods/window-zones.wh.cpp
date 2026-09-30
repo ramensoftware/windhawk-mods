@@ -39,8 +39,8 @@ invalid layout is ignored and the reason is written to the log.
 Hotkey modifier (Ctrl+Alt by default) plus:
 - **Arrow keys:** move the active window to the neighboring zone. If the window
   is not in a zone it goes to the closest one.
-- **Space:** switch the layout used by the arrow keys (the zones flash on the
-  screen).
+- **Layout switch key** (Enter by default, configurable): switch the layout used
+  by the arrow keys (the zones flash on the screen).
 
 ## Notes
 - For best results turn off Windows snapping (Settings > System > Multitasking >
@@ -112,12 +112,21 @@ Hotkey modifier (Ctrl+Alt by default) plus:
   $description: Show the zones while dragging a window with a layout modifier held, and place it in the zone under the cursor on release.
 - modifier: ctrl_alt
   $name: Hotkey modifier
-  $description: Modifier keys used with the arrow keys and Space.
+  $description: Modifier keys used with the arrow keys and the layout switch key.
   $options:
   - ctrl_alt: Ctrl + Alt
   - win_alt: Win + Alt
   - ctrl_win: Ctrl + Win
   - ctrl_shift_alt: Ctrl + Shift + Alt
+- cycleKey: enter
+  $name: Layout switch key
+  $description: Key used with the hotkey modifier to switch the layout used by the arrow keys. Change it if the hotkey is already used by another program (the log shows "RegisterHotKey failed").
+  $options:
+  - enter: Enter
+  - space: Space
+  - backspace: Backspace
+  - pageup: Page Up
+  - pagedown: Page Down
 */
 // ==/WindhawkModSettings==
 
@@ -134,6 +143,7 @@ struct {
     std::atomic<int> outerGap;
     std::atomic<int> innerGap;
     std::atomic<UINT> modifiers;
+    std::atomic<UINT> cycleVk;
     std::atomic<bool> dragOverlay;
 } g_settings;
 
@@ -746,7 +756,7 @@ void RegisterHotkeys() {
                 {kHotkeyRight, VK_RIGHT},
                 {kHotkeyUp, VK_UP},
                 {kHotkeyDown, VK_DOWN},
-                {kHotkeyCycle, VK_SPACE}};
+                {kHotkeyCycle, g_settings.cycleVk}};
     for (const auto& key : keys) {
         if (!RegisterHotKey(nullptr, key.id, mods, key.vk)) {
             Wh_Log(L"RegisterHotKey failed for vk=%u: %u", key.vk,
@@ -764,6 +774,14 @@ UINT ParseHotkeyModifiers(PCWSTR value) {
     return MOD_CONTROL | MOD_ALT;
 }
 
+UINT ParseCycleKey(PCWSTR value) {
+    if (!wcscmp(value, L"space")) return VK_SPACE;
+    if (!wcscmp(value, L"backspace")) return VK_BACK;
+    if (!wcscmp(value, L"pageup")) return VK_PRIOR;
+    if (!wcscmp(value, L"pagedown")) return VK_NEXT;
+    return VK_RETURN;
+}
+
 // Called before the worker thread starts, and afterwards only from it.
 void LoadSettings() {
     g_settings.outerGap = std::max(Wh_GetIntSetting(L"outerGap"), 0);
@@ -773,6 +791,10 @@ void LoadSettings() {
     PCWSTR modifier = Wh_GetStringSetting(L"modifier");
     g_settings.modifiers = ParseHotkeyModifiers(modifier);
     Wh_FreeStringSetting(modifier);
+
+    PCWSTR cycleKey = Wh_GetStringSetting(L"cycleKey");
+    g_settings.cycleVk = ParseCycleKey(cycleKey);
+    Wh_FreeStringSetting(cycleKey);
 
     g_layouts.clear();
     for (int i = 1; i <= kLayoutSlots; i++) {
@@ -867,7 +889,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
     return 0;
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     Wh_Log(L"Init");
 
     LoadSettings();
@@ -881,7 +903,7 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L"Uninit");
 
     if (g_thread) {
@@ -896,11 +918,182 @@ void Wh_ModUninit() {
     }
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L"SettingsChanged");
 
     // Reloaded on the worker thread, which owns the layout list.
     if (g_thread) {
         PostThreadMessageW(g_threadId, kMsgReload, 0, 0);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+  Wh_Log(L">");
+  ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+  bool isExcluded = false;
+  bool isToolModProcess = false;
+  bool isCurrentToolModProcess = false;
+  int argc;
+  LPWSTR *argv = CommandLineToArgvW(GetCommandLine(), &argc);
+  if (!argv) {
+    Wh_Log(L"CommandLineToArgvW failed");
+    return FALSE;
+  }
+
+  for (int i = 1; i < argc; i++) {
+    if (wcscmp(argv[i], L"-service") == 0 ||
+        wcscmp(argv[i], L"-service-start") == 0 ||
+        wcscmp(argv[i], L"-service-stop") == 0) {
+      isExcluded = true;
+      break;
+    }
+  }
+
+  for (int i = 1; i < argc - 1; i++) {
+    if (wcscmp(argv[i], L"-tool-mod") == 0) {
+      isToolModProcess = true;
+      if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+        isCurrentToolModProcess = true;
+      }
+      break;
+    }
+  }
+
+  LocalFree(argv);
+
+  if (isExcluded) {
+    return FALSE;
+  }
+
+  if (isCurrentToolModProcess) {
+    g_toolModProcessMutex =
+        CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+    if (!g_toolModProcessMutex) {
+      Wh_Log(L"CreateMutex failed");
+      ExitProcess(1);
+    }
+
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+      Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+      ExitProcess(1);
+    }
+
+    if (!WhTool_ModInit()) {
+      ExitProcess(1);
+    }
+
+    IMAGE_DOS_HEADER *dosHeader = (IMAGE_DOS_HEADER *)GetModuleHandle(nullptr);
+    IMAGE_NT_HEADERS *ntHeaders =
+        (IMAGE_NT_HEADERS *)((BYTE *)dosHeader + dosHeader->e_lfanew);
+
+    DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+    void *entryPoint = (BYTE *)dosHeader + entryPointRVA;
+
+    Wh_SetFunctionHook(entryPoint, (void *)EntryPoint_Hook, nullptr);
+    return TRUE;
+  }
+
+  if (isToolModProcess) {
+    return FALSE;
+  }
+
+  g_isToolModProcessLauncher = true;
+  return TRUE;
+}
+
+void Wh_ModAfterInit() {
+  if (!g_isToolModProcessLauncher) {
+    return;
+  }
+
+  WCHAR currentProcessPath[MAX_PATH];
+  switch (GetModuleFileName(nullptr, currentProcessPath,
+                            ARRAYSIZE(currentProcessPath))) {
+  case 0:
+  case ARRAYSIZE(currentProcessPath):
+    Wh_Log(L"GetModuleFileName failed");
+    return;
+  }
+
+  WCHAR
+  commandLine[MAX_PATH + 2 +
+              (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+  swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+             WH_MOD_ID);
+
+  HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+  if (!kernelModule) {
+    kernelModule = GetModuleHandle(L"kernel32.dll");
+    if (!kernelModule) {
+      Wh_Log(L"No kernelbase.dll/kernel32.dll");
+      return;
+    }
+  }
+
+  using CreateProcessInternalW_t = BOOL(WINAPI *)(
+      HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+      LPSECURITY_ATTRIBUTES lpProcessAttributes,
+      LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+      DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+      LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation,
+      PHANDLE hRestrictedUserToken);
+  CreateProcessInternalW_t pCreateProcessInternalW =
+      (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                               "CreateProcessInternalW");
+  if (!pCreateProcessInternalW) {
+    Wh_Log(L"No CreateProcessInternalW");
+    return;
+  }
+
+  STARTUPINFO si{
+      .cb = sizeof(STARTUPINFO),
+      .dwFlags = STARTF_FORCEOFFFEEDBACK,
+  };
+  PROCESS_INFORMATION pi;
+  if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                               nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                               nullptr, nullptr, &si, &pi, nullptr)) {
+    Wh_Log(L"CreateProcess failed");
+    return;
+  }
+
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+  if (g_isToolModProcessLauncher) {
+    return;
+  }
+
+  WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+  if (g_isToolModProcessLauncher) {
+    return;
+  }
+
+  WhTool_ModUninit();
+  ExitProcess(0);
 }
