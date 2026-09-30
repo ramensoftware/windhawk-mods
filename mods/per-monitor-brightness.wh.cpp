@@ -2562,6 +2562,16 @@ double g_volumeIconSize = 16;
 constexpr int kMaxLookRetries = 30;
 int g_lookRetries = 0;
 
+// Opens of the Control Center, counted by ShellEventWatcher, and when the last
+// one was. The retries above are charged per open, not per refresh: refreshes
+// also arrive with the panel closed -- every brightness event from a laptop
+// panel is one, and Windows dims it on its own -- when the rows to borrow from
+// don't exist, and those used to spend the whole budget before the panel was
+// ever opened, leaving the plain look for the rest of the session.
+std::atomic<unsigned> g_opens{0};
+std::atomic<ULONGLONG> g_lastOpenTick{0};
+unsigned g_lookRetryOpen = 0;
+
 // The shell's own slider style, set on ours explicitly. Left to implicit
 // lookup, an injected row can resolve to the plain system slider -- a tall
 // rectangular thumb -- instead of the round WinUI one the shell's rows use,
@@ -4664,6 +4674,7 @@ void RemoveInjections() {
     g_volumeSource = nullptr;
     g_capturedVolume = false;
     g_lookRetries = 0;
+    g_lookRetryOpen = 0;
     g_sliderStyle = nullptr;
     g_animatedIconStatics = nullptr;
     g_capturedSource = false;
@@ -4885,10 +4896,16 @@ void ApplyRefreshedValues() try {
     // Lottie and its slider style both come off rows that are virtualized, and
     // are often not there yet the first time. Rows built without them keep
     // the fallback glyph and whatever slider style lookup found, so once
-    // either turns up the rows are built again.
-    if ((!g_capturedSource || !g_capturedVolume || !g_sliderStyle) &&
-        g_lookRetries < kMaxLookRetries) {
-        ++g_lookRetries;
+    // either turns up the rows are built again. Only just after an open, and
+    // one try of the budget per open (see g_opens).
+    const unsigned open = g_opens.load();
+    const bool justOpened = open != 0 && GetTickCount64() - g_lastOpenTick.load() < 10000;
+    if ((!g_capturedSource || !g_capturedVolume || !g_sliderStyle) && justOpened &&
+        (open == g_lookRetryOpen || g_lookRetries < kMaxLookRetries)) {
+        if (open != g_lookRetryOpen) {
+            g_lookRetryOpen = open;
+            ++g_lookRetries;
+        }
         bool captured = false;
         for (Injection& injection : *g_injections) {
             if (auto grid = injection.grid.get()) {
@@ -5133,6 +5150,8 @@ class ShellEventWatcher {
             return;
         }
         lastTick = now;
+        g_lastOpenTick.store(now);
+        g_opens.fetch_add(1);
 
         Wh_Log(L"Control Center shown (%s); refreshing values", className);
         if (g_engine) {
