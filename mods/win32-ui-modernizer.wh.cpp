@@ -24442,11 +24442,17 @@ static float ListSelectFadeProgress(const ListSelectFadeState& state, DOUBLE now
     return t * t * (3.f - 2.f * t);
 }
 
+// When this thread's fade timer last ran, and when a paint last stood in for
+// it (ListSelectFadeKickFromPaint).
+static thread_local DOUBLE t_listSelectFadeLastTick = 0.0;
+static thread_local DOUBLE t_listSelectFadeLastKick = 0.0;
+
 static LRESULT CALLBACK ListSelectFadeSubclassProc(
     HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, DWORD_PTR)
 {
     if (msg == WM_TIMER && wp == kListSelectFadeTimerId) {
         DOUBLE now = TimerGetSeconds();
+        t_listSelectFadeLastTick = now;
 
         // Rects to invalidate are collected under the lock and fired off
         // after releasing it -- InvalidateRect itself doesn't need the
@@ -24476,6 +24482,16 @@ static LRESULT CALLBACK ListSelectFadeSubclassProc(
 
                 const float progress = ListSelectFadeProgress(state, now);
                 if (progress >= 1.f) {
+                    // WM_TIMER only comes with an empty queue, so a marquee
+                    // drag can starve every tick of a fade, and the parts of
+                    // the item it repaints carry whatever opacity the fade
+                    // had then. Repaint the whole item once at its final one.
+                    if (state.activeCounted && state.rect.right > state.rect.left) {
+                        RECT inv = state.rect;
+                        const int margin = GetSelectionBorderOuterPaddingX(state.paintHwnd);
+                        InflateRect(&inv, margin, margin);
+                        pending.push_back({state.paintHwnd, inv});
+                    }
                     ListSelectFadeMarkComplete(state);
                 } else {
                     anyFading = true;
@@ -24594,6 +24610,43 @@ static bool ListSelectFadeEnsureTimer(HWND timerHwnd)
             timerHwnd, ListSelectFadeSubclassProc);
     }
     return false;
+}
+
+// WM_TIMER only comes with an empty queue, and a marquee drag keeps it full
+// while repainting the list on every mouse move. A paint that draws a fade
+// frame while the timer is behind asks for the next frame of every fading
+// item of its window, at most once per frame interval, so the drag's own
+// repaints carry the animation and an idle queue still leaves the timer room
+// to take over. A fade already over gets its final frame here instead.
+static void ListSelectFadeKickFromPaint(HWND hwnd, DOUBLE now)
+{
+    constexpr DOUBLE kFrameSeconds = 1.0 / 60.0;
+    if (!hwnd || now - t_listSelectFadeLastTick < kFrameSeconds ||
+        now - t_listSelectFadeLastKick < kFrameSeconds)
+        return;
+    t_listSelectFadeLastKick = now;
+
+    std::vector<RECT> rects;
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
+        auto winIt = g_lvSelectFadeKeysByWindow.find(hwnd);
+        if (winIt == g_lvSelectFadeKeysByWindow.end())
+            return;
+        for (ULONG_PTR key : winIt->second) {
+            auto it = g_lvSelectFadeAnims.find(key);
+            if (it == g_lvSelectFadeAnims.end() || !it->second.activeCounted ||
+                it->second.rect.right <= it->second.rect.left)
+                continue;
+            rects.push_back(it->second.rect);
+            if (ListSelectFadeProgress(it->second, now) >= 1.f)
+                ListSelectFadeMarkComplete(it->second);
+        }
+    }
+    const int margin = GetSelectionBorderOuterPaddingX(hwnd);
+    for (RECT& rect : rects) {
+        InflateRect(&rect, margin, margin);
+        InvalidateRect(hwnd, &rect, FALSE);
+    }
 }
 
 // Called from SendMessageW_hook's LVN_ITEMCHANGED interception for a clean
@@ -24791,15 +24844,20 @@ static bool DrawRoundedItemBg(HDC hdc, LPCRECT pRect, INT iStateId, bool isTreeV
             }
             if (anyActive) {
                 const int fadeItem = ListSelectFadeHitTestItem(itemHwnd, pRect);
+                const DOUBLE now = TimerGetSeconds();
+                bool fading = false;
                 if (fadeItem >= 0) {
                     std::lock_guard<std::recursive_mutex> lk(g_lvSelectFadeMutex);
                     auto fadeIt = g_lvSelectFadeAnims.find(
                         ListSelectFadeKey(itemHwnd, (ULONG_PTR)(UINT)fadeItem));
                     if (fadeIt != g_lvSelectFadeAnims.end()) {
                         fadeIt->second.rect = *pRect;
-                        selectFadeProgress = ListSelectFadeProgress(fadeIt->second, TimerGetSeconds());
+                        selectFadeProgress = ListSelectFadeProgress(fadeIt->second, now);
+                        fading = selectFadeProgress < 1.f;
                     }
                 }
+                if (fading)
+                    ListSelectFadeKickFromPaint(itemHwnd, now);
             }
         }
     }
