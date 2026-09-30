@@ -51,12 +51,7 @@ Free 128.4 of 931.5 GiB
 
 ## Why this is a separate mod
 
-`taskbar-disk-space-label` is a useful compact free-space label. This mod keeps a
-different interaction and presentation: it shows free **and total** capacity,
-uses the Windows volume label, provides a click-to-switch drive menu, draws a
-free/used hover bar, supports a two-line/one-line layout, and matches the Start
-button frame height. Users who only need a simple free-space label should use the
-existing mod; this one is intended for the richer drive indicator.
+Both mods display free space and total capacity on the taskbar. Taskbar Disk Space focuses on interactive drive selection: it provides a click-to-switch drive menu, uses Windows volume labels, remembers the selected drive, and displays a free/used space bar on hover.
 
 ## Compatibility and placement
 
