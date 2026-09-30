@@ -1050,10 +1050,11 @@ static std::wstring FormatFixedNumber(double value, int decimals,
 std::wstring FormatValueWithDecimals(double value, int decimals) {
     if (decimals >= 0)
         return FormatFixedNumber(value, decimals, false);
-    // Automatic converted values use roughly three significant digits.
-    int precision = value > 0.0
-                        ? std::clamp(2 - (int)std::floor(std::log10(value)), 0, 10)
-                        : 0;
+    // Match Explorer's precision for typical values. Keep small converted
+    // fractions visible without implying more than roughly two useful digits.
+    int precision = value >= 100.0 ? 0 : value >= 10.0 ? 1 : 2;
+    if (value > 0.0 && value < 0.01)
+        precision = std::clamp(1 - (int)std::floor(std::log10(value)), 2, 10);
     return FormatFixedNumber(value, precision, true);
 }
 
@@ -1285,9 +1286,10 @@ bool ProcessDiskUsageText(HDC hdc,
             outTotal = FormatValueWithDecimals(
                            tv, unitDecimals(false, totalDecimals)) + L" " +
                        GetLocalizedUnitName(um2, tu.c_str());
+            bool usedConverted = um2 != usedMult ||
+                                 (freeBytes > 0.0 && um1 != usedMult);
             outUsed = FormatValueWithDecimals(usedBytes / usedMult,
-                                              unitDecimals(um1 != usedMult ||
-                                                               um2 != usedMult,
+                                              unitDecimals(usedConverted,
                                                            usedSourceDecimals)) +
                       L" " +
                       GetLocalizedUnitName(usedMult, tu.c_str());
@@ -1327,9 +1329,12 @@ bool ProcessDiskUsageText(HDC hdc,
         outFree = FormatValueWithDecimals(freeBytes / targetMult,
                                           unitDecimals(um1 != targetMult, freeDecimals)) +
                   sep + unitName;
+        // When free space is zero, used space is the displayed total itself.
+        // A zero in another unit does not make that value a conversion.
+        bool usedConverted = um2 != targetMult ||
+                             (freeBytes > 0.0 && um1 != targetMult);
         outUsed = FormatValueWithDecimals(usedBytes / targetMult,
-                                          unitDecimals(um1 != targetMult ||
-                                                           um2 != targetMult,
+                                          unitDecimals(usedConverted,
                                                        usedSourceDecimals)) +
                   sep + unitName;
         outTotal = FormatValueWithDecimals(totalBytes / targetMult,
