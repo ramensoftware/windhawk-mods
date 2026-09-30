@@ -38,7 +38,7 @@ sliders that set every display at once.
 > make sure DDC/CI is turned on in the monitor's own menu, and try a direct
 > cable instead of an adapter, dock or KVM switch.
 
-![Per-monitor brightness sliders in Quick Settings](https://raw.githubusercontent.com/bardelyne/per-monitor-brightness/main/screenshot.png)
+![Per-monitor brightness sliders in Quick Settings](https://raw.githubusercontent.com/bardelyne/per-monitor-brightness/main/screenshot-3.0.png)
 
 ## How each display is driven
 
