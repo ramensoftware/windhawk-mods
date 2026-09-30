@@ -22,8 +22,7 @@ New in 1.2.0
 - independent bold toggles for free, used, total, and both percentages
 - added used percentage (%p) and free percentage (%fp) stats
 - added unit normalization (ex show 1.5TB as 1536GB, or 512GB as 0.5TB)
-- optional unit precision (0-10 decimals when converting units; one decimal for unconverted sizes) and separate percentage precision (0-10)
-- bold toggles for each unit type
+- optional unit precision (0-10 decimals when converting units) and separate percentage precision (0-10)
 
 Features
 - follow system accent color, or set custom colors with transparency for disk usage, track (background/unused), and outline
@@ -124,13 +123,13 @@ ex.
     - tb: Always TB
 - enableCustomDecimals: false
   $name: Custom Unit Precision
-  $description: Enable custom decimal places for disk sizes. Converted values can show more digits but are estimated from Explorer's rounded sizes.
+  $description: Enable custom decimal places for disk sizes. Converted values can show more digits, but are estimated from Explorer's rounded sizes.
 - decimalPlaces: 2
   $name: Unit Decimal Places
-  $description: Converted sizes use 0 to 10 decimal places; unconverted sizes use at most one. Values above 10 are capped at 10.
-- percentageDecimalPlaces: -1
+  $description: Converted sizes use 0 to 10 decimal places. Unconverted sizes use no more decimal places than what Explorer shows, and going beyond will add zeros. Values above 10 are capped at 10.
+- percentageDecimalPlaces: 2
   $name: Percentage Decimal Places
-  $description: Used and free percentages use 0 to 10 decimal places; values above 10 are capped at 10. Use -1 for automatic formatting. Percentages are estimated from Explorer's rounded sizes.
+  $description: Used and free percentages use 0 to 10 decimal places; values above 10 are capped at 10. You can use -1 for automatic formatting. Percentages are estimated from Explorer's rounded sizes.
 - boldUsed: true
   $name: Bold Used Space Value
 - boldFree: false
@@ -422,13 +421,10 @@ static std::wstring UpperSizeUnit(const wchar_t* unit) {
     return result;
 }
 
-static bool IsSizeUnitLetter(wchar_t c) {
-    return (c >= L'A' && c <= L'Z') ||
-           (c >= L'a' && c <= L'z') ||
-           (c >= 0x0400 && c <= 0x04FF) || iswalpha(c);
-}
-
 double GetUnitMultiplier(const wchar_t* unit) {
+    // Finnish uses a lowercase t for a byte, and kt for a kilobyte.
+    if (wcscmp(unit, L"t") == 0)
+        return 1.0;
     const std::wstring up = UpperSizeUnit(unit);
     if (up == L"B" || up == L"O" || up == L"BYTE" || up == L"BYTES" ||
         up == L"\x0411" || up == L"\x0411\x0410\x0419\x0422" ||
@@ -470,7 +466,7 @@ bool IsValidUnitString(const wchar_t* unit) {
 // different process CRT locale cannot change the value, and EB cannot become
 // a floating-point exponent.
 static bool ParseSpaceValue(const std::wstring& text, double& value,
-                             std::wstring& unit) {
+                            std::wstring& unit, int* sourceDecimals = nullptr) {
     size_t unitStart = 0;
     while (unitStart < text.size() && IsSizeNumericChar(text[unitStart]))
         ++unitStart;
@@ -517,8 +513,11 @@ static bool ParseSpaceValue(const std::wstring& text, double& value,
             return false;
         }
     }
-    return groupDigits > 0 && (!grouped || groupDigits == 3) &&
-           (!decimal || fractionalDigits > 0) && std::isfinite(value);
+    bool valid = groupDigits > 0 && (!grouped || groupDigits == 3) &&
+                 (!decimal || fractionalDigits > 0) && std::isfinite(value);
+    if (valid && sourceDecimals)
+        *sourceDecimals = fractionalDigits;
+    return valid;
 }
 
 std::wstring MakeBoldText(const std::wstring& s) {
@@ -936,23 +935,29 @@ std::wstring GetLocalizedUnitName(double multiplier, const wchar_t* sampleUnit) 
                      up.find(L"B") == std::wstring::npos);
     bool isCyrillic = (up.find(L"\x0411") != std::wstring::npos);
 
-    // Keep a recognized two-letter localized suffix, e.g. kt -> Mt/Gt.
-    if (up.size() == 2 && IsSizeUnitLetter(up[0]) &&
-        IsSizeUnitLetter(up[1]) &&
-        GetUnitMultiplier(sampleUnit) > 0.0 &&
-        !isFrench && !isCyrillic && up[1] != L'B') {
+    // Preserve recognized Finnish and Cyrillic-T suffixes during conversion.
+    bool finnishByte = sampleUnit && wcscmp(sampleUnit, L"t") == 0;
+    if (finnishByte ||
+        (up.size() == 2 && (up[1] == L'T' || up[1] == L'\x0422') &&
+         GetUnitMultiplier(sampleUnit) > 0.0)) {
         const wchar_t* prefixes = L"KMGTPE";
         const wchar_t* cyrillic = L"\x041A\x041C\x0413\x0422\x041F\x042D";
         bool useCyrillic = up[0] == L'\x041A' || up[0] == L'\x041C' ||
                            up[0] == L'\x0413' || up[0] == L'\x0422' ||
                            up[0] == L'\x041F';
+        wchar_t suffix = finnishByte ? L't' : sampleUnit[1];
+        if (multiplier == 1.0 && suffix == L't' && !useCyrillic)
+            return L"t";
         for (int i = 0; prefixes[i]; ++i) {
             double target = 1024.0;
             for (int j = 0; j < i; ++j)
                 target *= 1024.0;
-            if (multiplier == target)
-                return std::wstring(1, useCyrillic ? cyrillic[i] : prefixes[i]) +
-                       sampleUnit[1];
+            if (multiplier == target) {
+                wchar_t prefix = useCyrillic ? cyrillic[i] : prefixes[i];
+                if (!useCyrillic && suffix == L't' && i == 0)
+                    prefix = L'k';
+                return std::wstring(1, prefix) + suffix;
+            }
         }
     }
 
@@ -1044,9 +1049,10 @@ static std::wstring FormatFixedNumber(double value, int decimals,
 std::wstring FormatValueWithDecimals(double value, int decimals) {
     if (decimals >= 0)
         return FormatFixedNumber(value, decimals, false);
-    int precision = 1;
-    if (value >= 10.0 && std::abs(value - std::round(value)) < 0.001)
-        precision = 0;
+    // Automatic converted values use roughly three significant digits.
+    int precision = value > 0.0
+                        ? std::clamp(2 - (int)std::floor(std::log10(value)), 0, 10)
+                        : 0;
     return FormatFixedNumber(value, precision, true);
 }
 
@@ -1229,8 +1235,10 @@ bool ProcessDiskUsageText(HDC hdc,
     }
 
     double fv = 0.0, tv = 0.0;
+    int freeDecimals = 0, totalDecimals = 0;
     std::wstring fu, tu;
-    if (!ParseSpaceValue(fs, fv, fu) || !ParseSpaceValue(ts, tv, tu))
+    if (!ParseSpaceValue(fs, fv, fu, &freeDecimals) ||
+        !ParseSpaceValue(ts, tv, tu, &totalDecimals))
         return false;
 
     double um1 = GetUnitMultiplier(fu.c_str());
@@ -1252,10 +1260,12 @@ bool ProcessDiskUsageText(HDC hdc,
         std::clamp((freeBytes / totalBytes) * 100.0, 0.0, 100.0);
 
     int effectiveDecimals = g_enableCustomDecimals ? g_decimalPlaces : -1;
-    auto unitDecimals = [effectiveDecimals](bool converted) {
-        return effectiveDecimals < 0 || converted
-                   ? effectiveDecimals
-                   : std::min(effectiveDecimals, 1);
+    int usedSourceDecimals = std::max(freeDecimals, totalDecimals);
+    auto unitDecimals = [effectiveDecimals](bool converted, int sourceDecimals) {
+        if (converted)
+            return effectiveDecimals;
+        return effectiveDecimals < 0 ? sourceDecimals
+                                     : std::min(effectiveDecimals, sourceDecimals);
     };
 
     std::wstring usedPctStr =
@@ -1268,13 +1278,16 @@ bool ProcessDiskUsageText(HDC hdc,
     if (g_unitGranularity == UnitGranularity::Auto) {
         if (g_enableCustomDecimals) {
             double usedMult = GetDisplayUnitMultiplier(usedBytes);
-            outFree = FormatValueWithDecimals(fv, unitDecimals(false)) + L" " +
+            outFree = FormatValueWithDecimals(
+                          fv, unitDecimals(false, freeDecimals)) + L" " +
                       GetLocalizedUnitName(um1, fu.c_str());
-            outTotal = FormatValueWithDecimals(tv, unitDecimals(false)) + L" " +
+            outTotal = FormatValueWithDecimals(
+                           tv, unitDecimals(false, totalDecimals)) + L" " +
                        GetLocalizedUnitName(um2, tu.c_str());
             outUsed = FormatValueWithDecimals(usedBytes / usedMult,
                                               unitDecimals(um1 != usedMult ||
-                                                           um2 != usedMult)) +
+                                                               um2 != usedMult,
+                                                           usedSourceDecimals)) +
                       L" " +
                       GetLocalizedUnitName(usedMult, tu.c_str());
         } else {
@@ -1311,14 +1324,15 @@ bool ProcessDiskUsageText(HDC hdc,
         std::wstring sep = g_removeSpace ? L"" : L" ";
 
         outFree = FormatValueWithDecimals(freeBytes / targetMult,
-                                          unitDecimals(um1 != targetMult)) +
+                                          unitDecimals(um1 != targetMult, freeDecimals)) +
                   sep + unitName;
         outUsed = FormatValueWithDecimals(usedBytes / targetMult,
                                           unitDecimals(um1 != targetMult ||
-                                                       um2 != targetMult)) +
+                                                           um2 != targetMult,
+                                                       usedSourceDecimals)) +
                   sep + unitName;
         outTotal = FormatValueWithDecimals(totalBytes / targetMult,
-                                           unitDecimals(um2 != targetMult)) +
+                                           unitDecimals(um2 != targetMult, totalDecimals)) +
                    sep + unitName;
     }
 
