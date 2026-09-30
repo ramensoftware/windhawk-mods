@@ -52567,6 +52567,28 @@ COLORREF NavigationRailDividerColor(HWND hwnd) {
                              kNavigationRailDividerContrastLight);
 }
 
+// The toggle button and the shortcuts cover the rail, so each draws the rail's
+// right-edge divider itself -- but only while its right edge is the rail's.
+// Collapsed over the tab's native inset the rail is wider than they are and
+// its own divider shows past them.
+bool NavigationItemCoversRailEdge(HWND item) {
+    HWND host =
+        reinterpret_cast<HWND>(GetWindowLongPtrW(item, GWLP_USERDATA));
+    HWND rail = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_navigationButtonMutex);
+        const auto found = g_navigationButtons.find(host);
+        if (found != g_navigationButtons.end())
+            rail = found->second.rail;
+    }
+    RECT itemRect = {};
+    RECT railRect = {};
+    if (!rail || !GetWindowRect(item, &itemRect) ||
+        !GetWindowRect(rail, &railRect))
+        return true;
+    return itemRect.right >= railRect.right;
+}
+
 void PaintNavigationRailDivider(HDC hdc, HWND hwnd, const RECT& client) {
     if (GetPropW(hwnd, L"NavCollapse.Expanded"))
         return;
@@ -52680,7 +52702,16 @@ void PaintNavigationRail(HWND hwnd) {
     }
 }
 
-static HRGN CreateBottomRightRoundedRgn(int size, int radius);
+static HRGN CreateBottomRightRoundedRgn(int width, int height, int radius);
+
+// The toggle button and the shortcuts are a rail row tall but as wide as the
+// rail's content column, which also spans the tab's native inset.
+int NavigationItemWidth(HWND hwnd) {
+    RECT client = {};
+    return GetClientRect(hwnd, &client) && client.right > 0
+               ? client.right
+               : NavigationRailWidth(hwnd);
+}
 
 bool DrawNavigationButtonD2D(ID2D1DCRenderTarget* target, HWND hwnd,
                              bool dark, bool hot, bool pressed,
@@ -52688,6 +52719,8 @@ bool DrawNavigationButtonD2D(ID2D1DCRenderTarget* target, HWND hwnd,
     const float dpi = static_cast<float>(GetDpiForWindow(hwnd));
     const float buttonSize =
         static_cast<float>(NavigationRailWidth(hwnd)) * 96.0f / dpi;
+    const float buttonWidth =
+        static_cast<float>(NavigationItemWidth(hwnd)) * 96.0f / dpi;
     target->SetDpi(dpi, dpi);
     if (transparentSurface) {
         target->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
@@ -52731,7 +52764,7 @@ bool DrawNavigationButtonD2D(ID2D1DCRenderTarget* target, HWND hwnd,
             constexpr float inset = 3.0f;
             target->FillRoundedRectangle(
                 D2D1::RoundedRect(
-                    D2D1::RectF(inset, inset, buttonSize - inset,
+                    D2D1::RectF(inset, inset, buttonWidth - inset,
                                 buttonSize - inset),
                     5.0f, 5.0f),
                 interactionBrush.Get());
@@ -52747,18 +52780,19 @@ bool DrawNavigationButtonD2D(ID2D1DCRenderTarget* target, HWND hwnd,
     if (SUCCEEDED(target->CreateSolidColorBrush(glyphColor, &glyphBrush))) {
         const wchar_t glyph[] = {static_cast<wchar_t>(0xE700), L'\0'};
         const D2D1_RECT_F layoutRect =
-            D2D1::RectF(0.0f, 0.0f, buttonSize, buttonSize);
+            D2D1::RectF(0.0f, 0.0f, buttonWidth, buttonSize);
         const NavigationGlyphFrame glyphFrame = NavigationGlyphScale(hwnd);
         target->SetTransform(D2D1::Matrix3x2F::Scale(
             D2D1::SizeF(glyphFrame.scaleX, glyphFrame.scaleY),
-            D2D1::Point2F(buttonSize / 2.0f, buttonSize / 2.0f)));
+            D2D1::Point2F(buttonWidth / 2.0f, buttonSize / 2.0f)));
         target->DrawTextW(glyph, 1, g_navigationButtonGlyphFormat,
                           layoutRect, glyphBrush.Get());
         target->SetTransform(D2D1::Matrix3x2F::Identity());
     }
 
     if (!transparentSurface &&
-        !GetPropW(hwnd, L"NavCollapse.Expanded")) {
+        !GetPropW(hwnd, L"NavCollapse.Expanded") &&
+        NavigationItemCoversRailEdge(hwnd)) {
         const COLORREF divider = NavigationRailDividerColor(hwnd);
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> dividerBrush;
         if (SUCCEEDED(target->CreateSolidColorBrush(
@@ -52767,8 +52801,8 @@ bool DrawNavigationButtonD2D(ID2D1DCRenderTarget* target, HWND hwnd,
                              GetBValue(divider) / 255.0f),
                 &dividerBrush))) {
             target->FillRectangle(
-                D2D1::RectF(buttonSize - 1.0f, 0.0f,
-                            buttonSize, buttonSize),
+                D2D1::RectF(buttonWidth - 1.0f, 0.0f,
+                            buttonWidth, buttonSize),
                 dividerBrush.Get());
         }
     }
@@ -52944,7 +52978,8 @@ void PaintNavigationButton(HWND hwnd) {
         const int cornerRadius = MulDiv(
             5, GetDpiForWindow(hwnd), USER_DEFAULT_SCREEN_DPI);
         SetWindowRgn(hwnd,
-                     CreateBottomRightRoundedRgn(client.right, cornerRadius),
+                     CreateBottomRightRoundedRgn(client.right, client.bottom,
+                                                 cornerRadius),
                      TRUE);
     }
     if (!painted && g_navigationButtonD2dFactory &&
@@ -53020,7 +53055,8 @@ void PaintNavigationButton(HWND hwnd) {
             SelectObject(hdc, oldFont);
             DeleteObject(font);
         }
-        PaintNavigationRailDivider(hdc, hwnd, client);
+        if (NavigationItemCoversRailEdge(hwnd))
+            PaintNavigationRailDivider(hdc, hwnd, client);
     }
     EndPaint(hwnd, &paint);
 
@@ -53034,13 +53070,13 @@ void PaintNavigationButton(HWND hwnd) {
 
 bool IsNavigationButtonPoint(HWND hwnd, POINT point) {
     const int buttonSize = NavigationRailWidth(hwnd);
-    return point.x >= 0 && point.x < buttonSize && point.y >= 0 &&
-           point.y < buttonSize;
+    return point.x >= 0 && point.x < NavigationItemWidth(hwnd) &&
+           point.y >= 0 && point.y < buttonSize;
 }
 
 void InvalidateNavigationButtonGlyph(HWND hwnd) {
     const int buttonSize = NavigationRailWidth(hwnd);
-    const RECT buttonRect = {0, 0, buttonSize, buttonSize};
+    const RECT buttonRect = {0, 0, NavigationItemWidth(hwnd), buttonSize};
     InvalidateRect(hwnd, &buttonRect, FALSE);
 }
 
@@ -53280,10 +53316,13 @@ void PaintRailShortcutButton(HWND hwnd) {
                     const float buttonSize =
                         static_cast<float>(NavigationRailWidth(hwnd)) *
                         96.0f / dpi;
+                    const float buttonWidth =
+                        static_cast<float>(NavigationItemWidth(hwnd)) *
+                        96.0f / dpi;
                     const D2D1_ROUNDED_RECT interactionRect =
                         D2D1::RoundedRect(
                             D2D1::RectF(inset, inset,
-                                        buttonSize - inset,
+                                        buttonWidth - inset,
                                         buttonSize - inset),
                             5.0f, 5.0f);
                     target->FillRoundedRectangle(interactionRect,
@@ -53304,14 +53343,17 @@ void PaintRailShortcutButton(HWND hwnd) {
                 const float buttonSize =
                     static_cast<float>(NavigationRailWidth(hwnd)) *
                     96.0f / dpi;
+                const float buttonWidth =
+                    static_cast<float>(NavigationItemWidth(hwnd)) *
+                    96.0f / dpi;
                 const D2D1_RECT_F layoutRect = D2D1::RectF(
-                    0.0f, 0.0f, buttonSize, buttonSize);
+                    0.0f, 0.0f, buttonWidth, buttonSize);
                 target->DrawTextW(glyph, 1, g_navigationButtonGlyphFormat,
                                   layoutRect, glyphBrush);
                 glyphBrush->Release();
             }
 
-            {
+            if (NavigationItemCoversRailEdge(hwnd)) {
                 const COLORREF divider = NavigationRailDividerColor(hwnd);
                 ID2D1SolidColorBrush* dividerBrush = nullptr;
                 if (SUCCEEDED(target->CreateSolidColorBrush(
@@ -53323,9 +53365,12 @@ void PaintRailShortcutButton(HWND hwnd) {
                     const float buttonSize =
                         static_cast<float>(NavigationRailWidth(hwnd)) *
                         96.0f / dpi;
+                    const float buttonWidth =
+                        static_cast<float>(NavigationItemWidth(hwnd)) *
+                        96.0f / dpi;
                     target->FillRectangle(
-                        D2D1::RectF(buttonSize - 1.0f, 0.0f,
-                                    buttonSize, buttonSize),
+                        D2D1::RectF(buttonWidth - 1.0f, 0.0f,
+                                    buttonWidth, buttonSize),
                         dividerBrush);
                     dividerBrush->Release();
                 }
@@ -53394,7 +53439,8 @@ void PaintRailShortcutButton(HWND hwnd) {
                 DeleteObject(font);
             }
         }
-        PaintNavigationRailDivider(hdc, hwnd, client);
+        if (NavigationItemCoversRailEdge(hwnd))
+            PaintNavigationRailDivider(hdc, hwnd, client);
     }
     EndPaint(hwnd, &paint);
 
@@ -53402,8 +53448,8 @@ void PaintRailShortcutButton(HWND hwnd) {
 
 bool IsRailShortcutButtonPoint(HWND hwnd, POINT point) {
     const int buttonSize = NavigationRailWidth(hwnd);
-    return point.x >= 0 && point.x < buttonSize && point.y >= 0 &&
-           point.y < buttonSize;
+    return point.x >= 0 && point.x < NavigationItemWidth(hwnd) &&
+           point.y >= 0 && point.y < buttonSize;
 }
 
 void InvalidateRailShortcutButton(HWND hwnd) {
@@ -53696,7 +53742,8 @@ HWND FindShellViewForTab(HWND tab) {
     return nullptr;
 }
 
-void ApplyRailShortcutTopClip(HWND button, int buttonSize, int clipTop) {
+void ApplyRailShortcutTopClip(HWND button, int buttonWidth, int buttonSize,
+                              int clipTop) {
     clipTop = std::clamp(clipTop, 0, buttonSize);
     if (clipTop == 0) {
         if (RemovePropW(button, kNavigationRailShortcutTopClipProp))
@@ -53705,11 +53752,13 @@ void ApplyRailShortcutTopClip(HWND button, int buttonSize, int clipTop) {
     }
 
     const HANDLE encodedClip = reinterpret_cast<HANDLE>(
-        static_cast<uintptr_t>(static_cast<unsigned>(clipTop)) + 1);
+        ((static_cast<uintptr_t>(static_cast<unsigned>(buttonWidth)) & 0xFFFF)
+         << 16) |
+        (static_cast<uintptr_t>(static_cast<unsigned>(clipTop)) + 1));
     if (GetPropW(button, kNavigationRailShortcutTopClipProp) == encodedClip)
         return;
 
-    HRGN region = CreateRectRgn(0, clipTop, buttonSize, buttonSize);
+    HRGN region = CreateRectRgn(0, clipTop, buttonWidth, buttonSize);
     if (!region)
         return;
     if (SetWindowRgn(button, region, TRUE)) {
@@ -53727,7 +53776,7 @@ void ApplyRailShortcutTopClip(HWND button, int buttonSize, int clipTop) {
 // coordinates are rail-local; moving or resizing the rail therefore moves
 // and clips the whole list atomically.
 void PositionNavigationRailShortcuts(HWND host, HWND rail, int inset,
-                                     int stripeHeight,
+                                     int itemWidth, int stripeHeight,
                                      bool paneExpanded, bool show) {
     if (!IsWindow(rail))
         return;
@@ -53778,15 +53827,23 @@ void PositionNavigationRailShortcuts(HWND host, HWND rail, int inset,
                 // The rail clips its children at the status boundary. A
                 // region is needed only at the internal top viewport edge,
                 // below the separate hamburger button.
-                ApplyRailShortcutTopClip(item.button, inset,
+                ApplyRailShortcutTopClip(item.button, itemWidth, inset,
                                          visibleTop - rowY);
             }
             UINT flags = SWP_NOACTIVATE |
                          (itemVisible ? SWP_SHOWWINDOW : SWP_HIDEWINDOW);
             if (itemVisible && !wasVisible)
                 flags |= SWP_NOREDRAW;
-            SetWindowPos_orig(item.button, HWND_TOP, 0, rowY, inset, inset,
-                              flags);
+            RECT previousClient = {};
+            GetClientRect(item.button, &previousClient);
+            SetWindowPos_orig(item.button, HWND_TOP, 0, rowY, itemWidth,
+                              inset, flags);
+            // No CS_HREDRAW on the class, so a new width must repaint the
+            // whole button to keep its glyph centered.
+            if (itemVisible && wasVisible &&
+                previousClient.right != itemWidth) {
+                InvalidateRect(item.button, nullptr, FALSE);
+            }
             if (itemVisible && !wasVisible) {
                 RedrawWindow(item.button, nullptr, nullptr,
                              RDW_INVALIDATE | RDW_UPDATENOW);
@@ -53827,14 +53884,15 @@ struct NavigationButtonPositionSnapshot {
 // circle inscribed in that square -- the circle's own bottom-right quarter
 // is exactly the arc that square needs; the rest of the circle just
 // overlaps area the rectangle already covers.
-static HRGN CreateBottomRightRoundedRgn(int size, int radius) {
-    radius = std::clamp(radius, 0, size / 2);
+static HRGN CreateBottomRightRoundedRgn(int width, int height, int radius) {
+    radius = std::clamp(radius, 0, std::min(width, height) / 2);
     if (radius <= 0)
-        return CreateRectRgn(0, 0, size, size);
-    HRGN region = CreateRectRgn(0, 0, size, size - radius);
-    HRGN bottomLeft = CreateRectRgn(0, size - radius, size - radius, size);
-    HRGN corner = CreateEllipticRgn(size - 2 * radius, size - 2 * radius,
-                                     size, size);
+        return CreateRectRgn(0, 0, width, height);
+    HRGN region = CreateRectRgn(0, 0, width, height - radius);
+    HRGN bottomLeft =
+        CreateRectRgn(0, height - radius, width - radius, height);
+    HRGN corner = CreateEllipticRgn(width - 2 * radius, height - 2 * radius,
+                                     width, height);
     CombineRgn(region, region, bottomLeft, RGN_OR);
     CombineRgn(region, region, corner, RGN_OR);
     DeleteObject(bottomLeft);
@@ -53987,10 +54045,30 @@ void PositionNavigationButton(HWND host) {
             }
         }
     }
+    // The rail also covers the tab's native inset left of the pane host: a
+    // few pixels the tab leaves to whatever lies below, which is the file
+    // list's shade (or its native light fill) once the pane is gone. It then
+    // sits flush with the window edge like WinUI's compact pane. The toggle
+    // button and the shortcuts span that inset too, up to the rail's divider,
+    // so they stay centered in it and the button keeps one place whether the
+    // pane is expanded or collapsed.
+    const UINT tabDpi = GetDpiForWindow(tab);
+    const int nativeInset =
+        position.x > 0 &&
+                position.x <= MulDiv(8, tabDpi, USER_DEFAULT_SCREEN_DPI)
+            ? position.x
+            : 0;
+    const int railX = position.x - nativeInset;
+    const int railWidth = stripeWidth + nativeInset;
+    const int itemWidth =
+        nativeInset > 0
+            ? inset + nativeInset -
+                  std::max(1, MulDiv(1, tabDpi, USER_DEFAULT_SCREEN_DPI))
+            : inset;
     RECT previousRailClient = {};
     GetClientRect(state.rail, &previousRailClient);
     const bool railSizeChanged =
-        previousRailClient.right != stripeWidth ||
+        previousRailClient.right != railWidth ||
         previousRailClient.bottom != stripeHeight;
     SetNavigationRailBlendTarget(host, !paneExpanded);
     if (paneExpanded) {
@@ -54017,11 +54095,11 @@ void PositionNavigationButton(HWND host) {
     const bool prepareRail = show && !railWasVisible;
     const bool prepareButton = show && !buttonWasVisible;
     const UINT visibilityFlags = show ? 0 : SWP_HIDEWINDOW;
-    SetWindowPos_orig(state.rail, state.button, position.x, position.y,
-                      stripeWidth, stripeHeight,
+    SetWindowPos_orig(state.rail, state.button, railX, position.y,
+                      railWidth, stripeHeight,
                       SWP_NOACTIVATE | visibilityFlags);
-    SetWindowPos_orig(state.button, HWND_TOP, position.x, position.y,
-                      inset, inset,
+    SetWindowPos_orig(state.button, HWND_TOP, railX, position.y,
+                      itemWidth, inset,
                       SWP_NOACTIVATE | visibilityFlags);
     if (ExplorerMicaActive() &&
         IsInsideExplorer(state.root)) {
@@ -54030,7 +54108,9 @@ void PositionNavigationButton(HWND host) {
         const int cornerRadius = MulDiv(
             5, GetDpiForWindow(state.button), USER_DEFAULT_SCREEN_DPI);
         SetWindowRgn(state.button,
-                     CreateBottomRightRoundedRgn(inset, cornerRadius), TRUE);
+                     CreateBottomRightRoundedRgn(itemWidth, inset,
+                                                 cornerRadius),
+                     TRUE);
     }
     RedrawWindow(state.rail, nullptr, nullptr,
                  RDW_INVALIDATE |
@@ -54051,8 +54131,8 @@ void PositionNavigationButton(HWND host) {
                           SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
                               SWP_NOACTIVATE | SWP_SHOWWINDOW);
     }
-    PositionNavigationRailShortcuts(host, state.rail, inset, stripeHeight,
-                                    paneExpanded, show);
+    PositionNavigationRailShortcuts(host, state.rail, inset, itemWidth,
+                                    stripeHeight, paneExpanded, show);
 }
 
 HWND StatusBarTabFromHost(HWND statusHost) {
