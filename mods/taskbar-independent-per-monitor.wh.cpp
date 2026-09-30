@@ -146,6 +146,8 @@ static PCIDLIST_ABSOLUTE (*pGroupGetShortcutIDList)(void*);
 static HRESULT (*pGroupUpdateFlags)(void*, DWORD, DWORD);
 static HWND (*pItemGetWindow)(void*);   // CWindowTaskItem::GetWindow (resolved only)
 static void* pWindowItemVft = nullptr;  // class identity of CWindowTaskItem
+static HWND (*pImmersiveItemGetWindow)(void*);  // CImmersiveTaskItem::GetWindow (resolved only)
+static void* pImmersiveItemVft = nullptr;       // class identity of CImmersiveTaskItem
 static HRESULT (*pGroupItemFromWindow)(void*, HWND, void**) = nullptr;  // CTaskGroup::GetItemFromWindow
 
 // ---------- Helpers
@@ -550,6 +552,7 @@ struct WinInfo {
     void* g = nullptr;
     HMONITOR mon = nullptr;    // last known monitor
     std::set<HMONITOR> bars;   // taskbars (by monitor) the button is on
+    bool frame = false;        // UWP frame window (ApplicationFrameWindow)
 };
 static std::map<HWND, WinInfo> g_wins;
 // Message window on the taskbar thread. The timers belong to this thread and must be removed
@@ -577,11 +580,19 @@ static void* g_fakeGroup = nullptr;  // jump list showed "Pin" although pinned g
 static std::wstring g_swallowAddKey;
 static DWORD g_swallowAddTick = 0;
 
-// Window of a button - only if it is definitely a CWindowTaskItem
+// Window handle of a button even if the window is already destroyed (for cleanup) - only if it
+// is definitely a CWindowTaskItem or a CImmersiveTaskItem (UWP apps such as Settings)
+static HWND ItemWindowRaw(void* item) {
+    if (!item) return nullptr;
+    void* vft = *(void**)item;
+    if (vft && vft == pWindowItemVft && pItemGetWindow) return pItemGetWindow(item);
+    if (vft && vft == pImmersiveItemVft && pImmersiveItemGetWindow) return pImmersiveItemGetWindow(item);
+    return nullptr;
+}
+
+// Window of a button
 static HWND ItemWindow(void* item) {
-    if (!item || !pItemGetWindow || !pWindowItemVft) return nullptr;
-    if (*(void**)item != pWindowItemVft) return nullptr;
-    HWND h = pItemGetWindow(item);
+    HWND h = ItemWindowRaw(item);
     return (h && IsWindow(h)) ? h : nullptr;
 }
 
@@ -590,13 +601,18 @@ static HMONITOR ItemMonitor(void* item) {
     return h ? MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST) : nullptr;
 }
 
-// Window handle of a button even if the window is already destroyed (for cleanup)
-static HWND ItemWindowRaw(void* item) {
-    if (!item || !pItemGetWindow || !pWindowItemVft || *(void**)item != pWindowItemVft) return nullptr;
-    return pItemGetWindow(item);
+// Windows doesn't report monitor changes of UWP frame windows to the taskbar: while one is
+// tracked, a timer checks their monitor
+static const UINT_PTR kFrameTimerId = 6;
+static bool g_frameTimer = false;
+
+static bool IsFrameWindow(HWND h) {
+    wchar_t cls[32];
+    return GetClassNameW(h, cls, ARRAYSIZE(cls)) && !wcscmp(cls, L"ApplicationFrameWindow");
 }
 
 static void TrackWindow(HWND h, void* g) {
+    bool frame = IsFrameWindow(h);
     void* old = nullptr;
     {
         std::lock_guard<std::mutex> l(g_mx);
@@ -607,8 +623,12 @@ static void TrackWindow(HWND h, void* g) {
             ((IUnknown*)g)->AddRef();
         }
         w.mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+        w.frame = frame;
     }
     if (old) ((IUnknown*)old)->Release();
+    // SetTimer only succeeds on the taskbar thread, which owns the message window
+    if (frame && g_msgWnd && !g_frameTimer && !g_unloading)
+        g_frameTimer = SetTimer(g_msgWnd, kFrameTimerId, 500, nullptr) != 0;
 }
 
 static void UntrackWindow(HWND h) {
@@ -965,7 +985,14 @@ static HRESULT TaskIncl_hook(void* self, void* g, void* item) {
     if (!item && g && pGroupGetFlags && (pGroupGetFlags(g) & 0x1) &&
         !ShouldShow(self, g, nullptr))
         return S_OK;
-    return TaskIncl_orig(self, g, item);
+    HRESULT hr = TaskIncl_orig(self, g, item);
+    // UWP frame windows get their buttons through here, bypassing IsTaskAllowed on other taskbars
+    HWND h = ItemWindow(item);
+    if (h && g && IsFrameWindow(h)) {
+        TrackWindow(h, g);
+        QueuePrune(self, g);
+    }
+    return hr;
 }
 
 static bool Pinned(void* g);
@@ -1127,6 +1154,32 @@ static void QueueReeval(HWND h) {
         g_reevalTimer = SetTimer(g_msgWnd, kReevalTimerId, 150, nullptr) != 0;
 }
 
+static void FrameTimerProc() {
+    std::vector<HWND> moved;
+    bool any = false;
+    {
+        std::lock_guard<std::mutex> l(g_mx);
+        for (auto& [h, w] : g_wins) {
+            if (!w.frame) continue;
+            any = true;
+            HMONITOR now = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+            if (now == w.mon) continue;
+            MONITORINFO a{.cbSize = sizeof(a)}, b{.cbSize = sizeof(b)};
+            if (w.mon && GetMonitorInfoW(w.mon, &a) && GetMonitorInfoW(now, &b)) {
+                g_moveDir = b.rcMonitor.left > a.rcMonitor.left ? 1 : -1;
+                g_moveTick = GetTickCount();
+            }
+            w.mon = now;
+            moved.push_back(h);
+        }
+    }
+    if (!any) {
+        KillTimer(g_msgWnd, kFrameTimerId);
+        g_frameTimer = false;
+    }
+    for (HWND h : moved) QueueReeval(h);
+}
+
 
 // Windows reports a monitor change itself before it shows the button on the new taskbar:
 // remember the direction for the sideways slide-in and re-evaluate the window
@@ -1164,6 +1217,10 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     }
     if (msg == WM_TIMER && wp == kPruneTimerId) {
         PruneTimerProc();
+        return 0;
+    }
+    if (msg == WM_TIMER && wp == kFrameTimerId) {
+        FrameTimerProc();
         return 0;
     }
     if (msg == WM_TIMER && wp == kSyncTimerId) {
@@ -1208,6 +1265,8 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         KillTimer(h, kApplyTimerId);
         KillTimer(h, kSyncTimerId);
         KillTimer(h, kPruneTimerId);
+        KillTimer(h, kFrameTimerId);
+        g_frameTimer = false;
         ReleasePrune();
         ReleasePending();
         SetFakeGroup(nullptr);
@@ -2362,6 +2421,9 @@ BOOL Wh_ModInit() {
         {{L"const CWindowTaskItem::`vftable'{for `ITaskItem'}",
           L"const CWindowTaskItem::`vftable'"},
          (void**)&pWindowItemVft, nullptr, true},
+        {{L"public: virtual struct HWND__ * __cdecl CImmersiveTaskItem::GetWindow(void)"},
+         (void**)&pImmersiveItemGetWindow, nullptr, true},
+        {{L"const CImmersiveTaskItem::`vftable'{for `ITaskItem'}"}, (void**)&pImmersiveItemVft, nullptr, true},
         {{L"public: virtual long __cdecl CTaskGroup::UpdateFlags(unsigned long,unsigned long)"},
          (void**)&pGroupUpdateFlags, nullptr, true},
         {{L"public: virtual long __cdecl CTaskGroup::SetShortcutIDList(struct _ITEMIDLIST_ABSOLUTE const *)"},
