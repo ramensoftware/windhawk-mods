@@ -2,12 +2,28 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-30T20:57:50.000Z</updated>
+    <updated>2026-09-30T22:25:58.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.1.4]]></title>
+        <id>https://windhawk.net/mods/taskbar-multirow#ef8d22d9212973de5786625aa010047192accd83</id>
+        <link href="https://windhawk.net/mods/taskbar-multirow"/>
+        <updated>2026-09-30T22:25:58.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Improved thumbnail previews placement to stop covering the upper taskbar rows.</li>
+<li>Improved jump list placement, and fixed incorrect placement with touch screens.</li>
+<li>Fixed compatibility with the Taskbar Labels for Windows 11 mod.</li>
+<li>Fixed compatibility with older Windows 11 versions.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Clock Customization 1.8.1]]></title>
         <id>https://windhawk.net/mods/taskbar-clock-customization#fbcec11c935aeb63203a1f4990a4d76c58525c4c</id>
@@ -677,37 +693,6 @@ non-elevated process can't send them commands.</li>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Quick translator & Layout-switcher 1.0.1]]></title>
-        <id>https://windhawk.net/mods/quick-translator-layout-switcher#1b1974185df3c2e3efd977b64b7f7d6a0bac18e4</id>
-        <link href="https://windhawk.net/mods/quick-translator-layout-switcher"/>
-        <updated>2026-09-28T11:02:30.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="selectionlayoutswitchertranslator">Selection Layout Switcher &amp; Translator</h1>
-<p>A lightweight Windows utility that bridges communication between English and Russian speakers. Eliminates mistyped keyboard layout errors and allows instant two-way translation without breaking workflow.</p>
-<blockquote>
-  <p><strong>Privacy Notice</strong>: This mod optionally connects to Google Translate (<code>translate.googleapis.com</code>) over HTTPS to perform translations. Selected text is transmitted only when a translation hotkey is triggered. This feature is strictly <strong>opt-in and disabled by default</strong>.</p>
-</blockquote>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://i.imgur.com/GHEgOIK.png" alt="HUD Tooltip Preview" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Layout Correction (<code>Ctrl + Alt + L</code>)</strong>: Fixes mistyped text (<code>ghbdtn</code> -&gt; <code>привет</code> or vice versa) with full punctuation mapping and automatically updates the active system input layout.</li>
-<li><strong>In-Place Translation (<code>Ctrl + Alt + T</code>)</strong>: Replaces selected text directly inside any editable input field using HTTPS POST requests. Supports multi-line paragraphs.</li>
-<li><strong>Floating HUD Tooltip (<code>Ctrl + Alt + Q</code>)</strong>: Translates read-only incoming messages in a sleek DPI-aware dark tooltip positioned near your cursor.</li>
-<li><strong>Smart Auto-Dismiss</strong>: The tooltip remains visible until you click anywhere, scroll the mouse wheel, or press navigation keys (Esc / Arrows).</li>
-<li><strong>Clipboard Preservation</strong>: Automatically restores previous clipboard contents after performing operations.</li>
-</ul>
-<h2 id="defaulthotkeys">Default Hotkeys</h2>
-<ul>
-<li><code>Ctrl + Alt + L</code> - Switch mistyped layout (US <-> RU)</li>
-<li><code>Ctrl + Alt + T</code> - In-place translation (Requires enabling online translation in Settings)</li>
-<li><code>Ctrl + Alt + Q</code> - Floating HUD Tooltip translation (Requires enabling online translation in Settings)</li>
-</ul>]]></content>
-        <author>
-            <name>zed712969-crypto</name>
-            <uri>https://github.com/zed712969-crypto</uri>
         </author>
     </entry>
 </feed>

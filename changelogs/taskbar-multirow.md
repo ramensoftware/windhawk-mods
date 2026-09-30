@@ -1,3 +1,10 @@
+## 1.1.4 ([Sep 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/ef8d22d9212973de5786625aa010047192accd83/mods/taskbar-multirow.wh.cpp))
+
+* Improved thumbnail previews placement to stop covering the upper taskbar rows.
+* Improved jump list placement, and fixed incorrect placement with touch screens.
+* Fixed compatibility with the Taskbar Labels for Windows 11 mod.
+* Fixed compatibility with older Windows 11 versions.
+
 ## 1.1.3 ([Aug 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6dba9b6ab6c4c0cb8a723eb2fd06e74936a912d2/mods/taskbar-multirow.wh.cpp))
 
 * It's now possible to move items to different rows on the taskbar.
