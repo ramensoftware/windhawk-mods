@@ -192,6 +192,14 @@ include stays off.
   opening the panel again re-probes it, backing off from 30 seconds to at most
   16 minutes between attempts, and unplugging and replugging it starts over
   immediately.
+- A monitor that worked before can also stop answering DDC/CI later, often
+  after waking from sleep, and then shows "Brightness control not supported".
+  That is the monitor, not the mod: Windows itself gets no reply from it.
+  Unplugging and replugging its video cable, or turning it off and on with
+  its own power button, almost always brings it back, and it is picked up
+  again right away. If it still does not answer, check that DDC/CI is turned
+  on in the monitor's own menu, and try a direct cable instead of an adapter,
+  dock or KVM switch -- some of those do not pass DDC/CI through.
 */
 // ==/WindhawkModReadme==
 
