@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-30T07:02:49.000Z</updated>
+    <updated>2026-09-30T12:03:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Thumbnail Stats 1.2]]></title>
+        <id>https://windhawk.net/mods/taskbar-thumbnail-stats#75ca8ca0c2b754242492f73b632a79dee9432643</id>
+        <link href="https://windhawk.net/mods/taskbar-thumbnail-stats"/>
+        <updated>2026-09-30T12:03:25.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbarthumbnailstats">Taskbar Thumbnail Stats</h1>
+<p>Adds a line with live process information to the Windows 11 taskbar
+thumbnails (the previews shown when hovering an open app), inside the
+thumbnail, over the bottom of the preview image or below it:</p>
+<ul>
+<li><strong>RAM</strong> in use (private working set, like Task Manager)</li>
+<li><strong>CPU</strong> usage in percent, updated every second</li>
+<li><strong>version</strong> of the executable</li>
+</ul>
+<p>Example: <code>RAM 412 MB · CPU 3.4% · v131.0.2</code></p>
+<p><img src="https://i.imgur.com/qxWa9bC.png" alt="Screenshot" /></p>
+<p>For multi-process programs (Firefox, Chrome, Edge, Teams…) the values can
+include the child processes too, to get closer to what Task Manager shows.</p>
+<p>The line can use the Windows accent color, a custom color or no background
+at all, and the font size and text color can be customized.</p>
+<p>Works with the new XAML thumbnails of Windows 11 (tested on 25H2). It does
+not work with taskbar replacements such as StartAllBack or ExplorerPatcher.</p>
+<p>The statistics are collected on a background thread, so the taskbar is never
+slowed down, and only while a thumbnail is actually visible.</p>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Explorer Standard Title Bar Colors 1.0.0]]></title>
         <id>https://windhawk.net/mods/standard-title-bar-colors#ffb89c1c92efa5f9d74a39e58f1b55972e255a21</id>
@@ -684,21 +713,6 @@ non-elevated process can't send them commands.</li>
         <author>
             <name>0Allu</name>
             <uri>https://github.com/0Allu</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[File Operation Styler 1.1.0]]></title>
-        <id>https://windhawk.net/mods/file-operation-styler#39e18e74b6870d3a9e469cca0840168b02c27a9b</id>
-        <link href="https://windhawk.net/mods/file-operation-styler"/>
-        <updated>2026-09-28T09:05:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add Frosted Glass theme and footer customization.</li>
-<li>Add current-file progress and smoother progress animation.</li>
-<li>Improve multi-operation handling, lifecycle cleanup, and reliability.</li>
-</ul>]]></content>
-        <author>
-            <name>digART</name>
-            <uri>https://github.com/digart11</uri>
         </author>
     </entry>
 </feed>
