@@ -211,10 +211,11 @@ Note on Pinning: Windows 11 blocks programmatic pinning to the Taskbar or Start 
 */
 // ==/WindhawkModSettings==
 
-#include <initguid.h>  // must precede xamlom.h
+// Defines the GUIDs the headers below declare, so only the used ones are
+// linked instead of whole objects from libuuid.
+#include <initguid.h>
 
 #include <inspectable.h>
-#include <xamlom.h>
 
 // winbase.h defines GetCurrentTime as a macro, which collides with
 // Windows.UI.Xaml.Media.Animation's method of the same name.
@@ -647,24 +648,26 @@ class Client {
 
    private:
     static constexpr wchar_t kReplyClass[] = L"WindhawkEverythingBrokerReply";
-    static constexpr DWORD kReplyId = 0x45565251;   // EVRQ
-    static constexpr DWORD kReplyId2 = 0x45565232;  // EVR2
+    static constexpr DWORD kReplyIdBase = 0x45560000;  // EV, then a serial
 
-    void Reset() {
+    // Everything echoes the id as the reply's dwData. A new one per query means
+    // a late reply to a query that timed out can't pass for the next one's.
+    void Reset(bool query2) {
         results_.clear();
         total_ = 0;
         replied_ = false;
+        expecting_ = kReplyIdBase | (++serial_ & 0xFFFF);
+        expectingQuery2_ = query2;
     }
 
     bool SendQuery2(HWND everything, const std::wstring& text,
                     DWORD maxResults, DWORD requestFlags, DWORD sortType) {
-        Reset();
-        expecting_ = kReplyId2;
+        Reset(true);
         std::vector<BYTE> buffer(sizeof(Query2HeaderW) +
                                  (text.size() + 1) * sizeof(wchar_t));
         auto* q = reinterpret_cast<Query2HeaderW*>(buffer.data());
         q->reply_hwnd = static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd_));
-        q->reply_copydata_message = kReplyId2;
+        q->reply_copydata_message = expecting_;
         q->search_flags = 0;
         q->offset = 0;
         q->max_results = maxResults;
@@ -677,13 +680,12 @@ class Client {
 
     bool SendQueryLegacy(HWND everything, const std::wstring& text,
                          DWORD maxResults) {
-        Reset();
-        expecting_ = kReplyId;
+        Reset(false);
         std::vector<BYTE> buffer(sizeof(QueryHeaderW) +
                                  (text.size() + 1) * sizeof(wchar_t));
         auto* q = reinterpret_cast<QueryHeaderW*>(buffer.data());
         q->reply_hwnd = static_cast<DWORD>(reinterpret_cast<ULONG_PTR>(hwnd_));
-        q->reply_copydata_message = kReplyId;
+        q->reply_copydata_message = expecting_;
         q->search_flags = 0;
         q->offset = 0;
         q->max_results = maxResults;
@@ -747,7 +749,7 @@ class Client {
                 reinterpret_cast<Client*>(GetWindowLongPtrW(h, GWLP_USERDATA));
             auto* cds = reinterpret_cast<COPYDATASTRUCT*>(l);
             if (self && cds && cds->dwData == self->expecting_) {
-                if (cds->dwData == kReplyId2) {
+                if (self->expectingQuery2_) {
                     ParseReply2(cds->lpData, cds->cbData, &self->results_,
                                 &self->total_);
                 } else {
@@ -766,6 +768,8 @@ class Client {
     std::vector<Result> results_;
     DWORD total_ = 0;
     DWORD expecting_ = 0;
+    DWORD serial_ = 0;
+    bool expectingQuery2_ = false;
     bool replied_ = false;
 };
 
@@ -1040,6 +1044,7 @@ inline std::wstring WithExclusions(const std::wstring& query,
 #include <shellapi.h>
 #include <shlobj.h>
 
+#include <chrono>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -1120,33 +1125,105 @@ inline bool IconToBgra(HICON icon, int size, std::vector<BYTE>* out) {
     return drawn != FALSE;
 }
 
-// Icons for files, keyed by extension.
+// Icons for files.
 //
 // Fetching a real icon per result is far too slow to do per keystroke -- a
 // single IShellItemImageFactory::GetImage measured 38-220 ms. Almost every
 // file of the same type has the same icon, though, so the shell is asked once
 // per extension using SHGFI_USEFILEATTRIBUTES, which answers from the
 // registered file type without touching the disk at all.
-class ExtensionCache {
+//
+// The exception is a type whose files carry their own icon: programs,
+// shortcuts, icon files. Those are fetched per file and kept per path. A new
+// one measured 3-40 ms and about 0.6 ms once the shell has seen it, so each
+// set of results gets a time budget for them, top rows first; the rest show
+// their type's icon and are fetched while idle, for the next keystroke.
+class FileIconCache {
    public:
-    explicit ExtensionCache(int size) : size_(size) {}
+    explicit FileIconCache(int size) : size_(size) {}
+
+    // Starts a new set of results: files still queued from the last one are
+    // no longer on screen.
+    void NewResults(std::chrono::milliseconds budget) {
+        pending_.clear();
+        deadline_ = std::chrono::steady_clock::now() + budget;
+    }
 
     // Returns BGRA pixels, or nullptr when the shell had nothing.
-    const std::vector<BYTE>* Get(const std::wstring& nameOrPath,
-                                 bool isFolder) {
-        std::wstring key = isFolder ? L"<dir>" : ExtensionOf(nameOrPath);
-        auto it = cache_.find(key);
-        if (it != cache_.end()) {
-            return it->second.empty() ? nullptr : &it->second;
+    const std::vector<BYTE>* Get(const std::wstring& path, bool isFolder) {
+        if (!isFolder && HasOwnIcon(path)) {
+            auto it = files_.find(path);
+            if (it == files_.end() && std::chrono::steady_clock::now() < deadline_) {
+                it = StoreFile(path);
+            }
+            if (it == files_.end()) {
+                pending_.push_back(path);
+            } else if (!it->second.empty()) {
+                return &it->second;
+            }
         }
+        return ForType(path, isFolder);
+    }
 
+    // Fetches one file left over from the budget. Returns whether there was one.
+    bool FetchPending() {
+        while (!pending_.empty()) {
+            std::wstring path = std::move(pending_.front());  // top rows first
+            pending_.erase(pending_.begin());
+            if (!files_.count(path)) {
+                StoreFile(path);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool HasPending() const { return !pending_.empty(); }
+
+   private:
+    using Map = std::unordered_map<std::wstring, std::vector<BYTE>>;
+
+    const std::vector<BYTE>* ForType(const std::wstring& nameOrPath, bool isFolder) {
+        std::wstring key = isFolder ? L"<dir>" : ExtensionOf(nameOrPath);
+        auto it = types_.find(key);
+        if (it == types_.end()) {
+            // A name that does not exist is fine and is the point: with
+            // SHGFI_USEFILEATTRIBUTES the shell answers from the extension alone.
+            std::wstring probe = isFolder ? L"folder" : (L"file" + key);
+            it = types_.emplace(key, Load(probe.c_str(),
+                                          isFolder ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL,
+                                          SHGFI_USEFILEATTRIBUTES)).first;
+        }
+        return it->second.empty() ? nullptr : &it->second;
+    }
+
+    Map::iterator StoreFile(const std::wstring& path) {
+        if (files_.size() >= 4096) {
+            files_.clear();
+        }
+        return files_.emplace(path, Load(path.c_str(), 0, 0)).first;
+    }
+
+    // Types whose icon is in the file itself, on a local fixed drive: a
+    // network or removable path could stall the search thread on the disk.
+    static bool HasOwnIcon(const std::wstring& path) {
+        static const wchar_t* const kTypes[] = {L".exe", L".lnk", L".ico", L".url", L".scr",
+                                                L".cpl", L".cur", L".ani", L".appref-ms"};
+        std::wstring ext = ExtensionOf(path);
+        bool own = false;
+        for (const wchar_t* type : kTypes) {
+            own = own || ext == type;
+        }
+        if (!own || path.size() < 3 || path[1] != L':' || path[2] != L'\\') {
+            return false;
+        }
+        const wchar_t root[] = {path[0], L':', L'\\', 0};
+        return GetDriveTypeW(root) == DRIVE_FIXED;
+    }
+
+    std::vector<BYTE> Load(const wchar_t* probe, DWORD attributes, UINT flags) {
         std::vector<BYTE> pixels;
-        // A name that does not exist is fine and is the point: with
-        // SHGFI_USEFILEATTRIBUTES the shell answers from the extension alone.
-        std::wstring probe = isFolder ? L"folder" : (L"file" + key);
         SHFILEINFOW info{};
-        DWORD attributes =
-            isFolder ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL;
 
         // Above 32px, go through the system image list rather than
         // SHGFI_LARGEICON.
@@ -1158,8 +1235,8 @@ class ExtensionCache {
         // than the blurry one did.
         bool got = false;
         if (size_ > 32) {
-            if (SHGetFileInfoW(probe.c_str(), attributes, &info, sizeof(info),
-                               SHGFI_USEFILEATTRIBUTES | SHGFI_SYSICONINDEX)) {
+            if (SHGetFileInfoW(probe, attributes, &info, sizeof(info),
+                               flags | SHGFI_SYSICONINDEX)) {
                 IImageList* list = nullptr;
                 int which = (size_ > 48) ? SHIL_JUMBO : SHIL_EXTRALARGE;
                 if (SUCCEEDED(SHGetImageList(which, IID_PPV_ARGS(&list))) &&
@@ -1177,23 +1254,18 @@ class ExtensionCache {
         }
 
         if (!got &&
-            SHGetFileInfoW(probe.c_str(), attributes, &info, sizeof(info),
-                           SHGFI_USEFILEATTRIBUTES | SHGFI_ICON |
-                               SHGFI_LARGEICON)) {
+            SHGetFileInfoW(probe, attributes, &info, sizeof(info),
+                           flags | SHGFI_ICON | SHGFI_LARGEICON)) {
             IconToBgra(info.hIcon, size_, &pixels);
             DestroyIcon(info.hIcon);
         }
-        auto inserted = cache_.emplace(key, std::move(pixels));
-        return inserted.first->second.empty() ? nullptr
-                                              : &inserted.first->second;
+        return pixels;
     }
 
-    size_t size() const { return cache_.size(); }
-
-   private:
     static std::wstring ExtensionOf(const std::wstring& name) {
         size_t dot = name.rfind(L'.');
-        if (dot == std::wstring::npos || dot + 1 >= name.size()) {
+        if (dot == std::wstring::npos || dot + 1 >= name.size() ||
+            name.find_first_of(L"\\/", dot) != std::wstring::npos) {
             return L"";
         }
         std::wstring ext = name.substr(dot);
@@ -1204,7 +1276,10 @@ class ExtensionCache {
     }
 
     int size_;
-    std::unordered_map<std::wstring, std::vector<BYTE>> cache_;
+    Map types_;
+    Map files_;
+    std::vector<std::wstring> pending_;
+    std::chrono::steady_clock::time_point deadline_{};
 };
 
 }  // namespace icons
@@ -1592,6 +1667,11 @@ inline const std::vector<SettingItem>& GetSettingsList() {
 
 namespace apps {
 
+// PKEY_Link_TargetParsingPath. Not from propkey.h: after initguid.h, that
+// header would define every key it declares.
+inline constexpr PROPERTYKEY kLinkTargetParsingPath = {
+    {0xb9b4b3fc, 0x2b51, 0x4a42, {0xb5, 0xd8, 0x32, 0x41, 0x46, 0xaf, 0xcf, 0x25}}, 2};
+
 namespace detail {
 
 struct PidlDeleter {
@@ -1611,6 +1691,7 @@ struct App {
     std::wstring nameLower;        // precomputed, so filtering never allocates
     std::wstring targetPath;       // file path, AUMID, or ms-settings: URI
     std::wstring targetPathLower;  // precomputed lowercase target path
+    std::wstring linkTarget;       // the program an app-ID entry's shortcut runs, if the shell knows it
     std::wstring exeNameLower;     // executable / command name (e.g. "cmd", "wt", "calc")
     std::wstring acronym;          // acronym from name words (e.g. "cp" for Command Prompt)
     std::vector<std::wstring> words;   // individual words in name
@@ -1702,21 +1783,17 @@ inline std::wstring ExtractExeName(const std::wstring& path) {
     }
     size_t lastSlash = path.find_last_of(L"\\/");
     std::wstring filename = (lastSlash != std::wstring::npos) ? path.substr(lastSlash + 1) : path;
+    // A packaged app's ID (Microsoft.WindowsNotepad_8wekyb3d8bbwe!App): the
+    // name is the package's last dotted part, not what precedes the first dot.
+    size_t bang = filename.find_last_of(L'!');
+    if (bang != std::wstring::npos) {
+        std::wstring pkg = filename.substr(0, std::min(bang, filename.find_first_of(L'_')));
+        size_t dotInPkg = pkg.find_last_of(L'.');
+        return dotInPkg != std::wstring::npos ? pkg.substr(dotInPkg + 1) : pkg;
+    }
     size_t dot = filename.find_last_of(L'.');
     if (dot != std::wstring::npos) {
         return filename.substr(0, dot);
-    }
-    size_t bang = filename.find_last_of(L'!');
-    if (bang != std::wstring::npos) {
-        size_t underscore = filename.find_first_of(L'_');
-        if (underscore != std::wstring::npos) {
-            std::wstring pkg = filename.substr(0, underscore);
-            size_t dotInPkg = pkg.find_last_of(L'.');
-            if (dotInPkg != std::wstring::npos) {
-                return pkg.substr(dotInPkg + 1);
-            }
-            return pkg;
-        }
     }
     return filename;
 }
@@ -2064,6 +2141,22 @@ class Index {
                 CoTaskMemFree(parse);
             }
 
+            // An app registered under an app ID (Windhawk's is
+            // RamenSoftware.Windhawk) has the ID as its parsing name. For a
+            // desktop app the shell still knows the program its shortcut
+            // runs; a packaged app has none.
+            if (a.targetPath.find(L":\\") == std::wstring::npos) {
+                IShellItem2* item2 = nullptr;
+                if (SUCCEEDED(item->QueryInterface(IID_PPV_ARGS(&item2))) && item2) {
+                    LPWSTR target = nullptr;
+                    if (SUCCEEDED(item2->GetString(kLinkTargetParsingPath, &target)) && target) {
+                        a.linkTarget = target;
+                        CoTaskMemFree(target);
+                    }
+                    item2->Release();
+                }
+            }
+
             ITEMIDLIST* pidl = nullptr;
             if (SUCCEEDED(SHGetIDListFromObject(item, &pidl)) && pidl) {
                 a.pidl.reset(pidl);
@@ -2071,7 +2164,7 @@ class Index {
             if (!a.name.empty() && a.pidl) {
                 a.nameLower = ToLower(a.name);
                 a.targetPathLower = ToLower(a.targetPath);
-                a.exeNameLower = ToLower(ExtractExeName(a.targetPath));
+                a.exeNameLower = ToLower(ExtractExeName(a.linkTarget.empty() ? a.targetPath : a.linkTarget));
 
                 std::wistringstream ss(a.nameLower);
                 std::wstring word;
@@ -3784,7 +3877,14 @@ static void SetSearchWindowNeutralized(HWND hwnd, BOOL on) {
 
 void InitSearchHost() {
     Wh_Log(L"=== start-everything: initializing SearchHost disconnect ===");
-    WindhawkUtils::SetFunctionHook(CreateProcessW, Hook_SearchHost_CreateProcessW, &pOriginalCreateProcessW);
+    // kernel32's CreateProcessW only forwards to kernelbase's, and a caller
+    // importing through an API set goes to kernelbase directly.
+    HMODULE kernelBase = GetModuleHandleW(L"kernelbase.dll");
+    auto target = kernelBase
+        ? reinterpret_cast<CreateProcessW_t>(GetProcAddress(kernelBase, "CreateProcessW"))
+        : nullptr;
+    WindhawkUtils::SetFunctionHook(target ? target : CreateProcessW, Hook_SearchHost_CreateProcessW,
+                                   &pOriginalCreateProcessW);
 }
 
 // SearchHost's CoreWindow can appear after this mod loads, and the shell can
@@ -4061,6 +4161,29 @@ struct AppCardUI {
 // The Files column's rows, in order, for keyboard selection there.
 [[clang::no_destroy]] static std::optional<std::vector<wuxc::Button>> g_fileButtonsOpt;
 
+// Every handler the mod puts on Start's XAML objects, so the teardown can take
+// them all off while the mod is still loaded. Taking an element out of the tree
+// doesn't free it: XAML can hold a dropped row until its next frame, which a
+// closed Start doesn't draw until it opens again, and freeing a handler whose
+// code went away with the mod crashes Start.
+struct XamlHandler {
+    winrt::weak_ref<wf::IInspectable> source;
+    std::shared_ptr<void> revoker;  // a C++/WinRT revoker; revokes when destroyed
+};
+[[clang::no_destroy]] std::vector<XamlHandler> g_xamlHandlers;
+
+template <typename Revoker>
+void KeepHandler(wf::IInspectable const& source, Revoker revoker) {
+    // Rows are rebuilt on every keystroke; forget handlers on objects XAML has
+    // since freed, whenever the list doubles.
+    static size_t s_pruneAt = 512;
+    if (g_xamlHandlers.size() >= s_pruneAt) {
+        std::erase_if(g_xamlHandlers, [](XamlHandler const& h) { return !h.source.get(); });
+        s_pruneAt = std::max<size_t>(512, g_xamlHandlers.size() * 2);
+    }
+    g_xamlHandlers.push_back({winrt::make_weak(source), std::make_shared<Revoker>(std::move(revoker))});
+}
+
 [[clang::no_destroy]] wuxc::Border g_appsHeaderHolder{nullptr};
 [[clang::no_destroy]] wuxc::Border g_filesHeaderHolder{nullptr};
 [[clang::no_destroy]] wuxc::Border g_searchBarBorder{nullptr};
@@ -4083,6 +4206,9 @@ inline UINT GetTeardownMessage() {
     static UINT s_msg = RegisterWindowMessageW(L"Windhawk_StartMenuTeardown_start-everything");
     return s_msg;
 }
+// The subclass's answer to the teardown message. A window that isn't
+// subclassed answers 0 through DefWindowProc, which must not count as done.
+constexpr LRESULT kTeardownDone = 0x5445;
 
 [[clang::no_destroy]] wuxc::TextBox::TextChanged_revoker g_ourBoxChanged;
 [[clang::no_destroy]] wux::UIElement::LostFocus_revoker g_ourBoxLost;
@@ -4254,13 +4380,13 @@ void RevealOverlayAnimated() {
             sb.Children().Append(animY);
         }
 
-        sb.Completed([](wf::IInspectable const&, wf::IInspectable const&) {
+        KeepHandler(sb, sb.Completed(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) {
             if (g_isOverlayVisible.load() && g_resultsHost) {
                 g_resultsHost.Opacity(1.0);
                 g_resultsHost.IsHitTestVisible(true);
                 if (g_resultsTranslate) g_resultsTranslate.Y(0.0);
             }
-        });
+        }));
 
         g_revealAnim = sb;
         sb.Begin();
@@ -4298,7 +4424,7 @@ void HideOverlayAnimated() {
         animOpacity.EasingFunction(ease);
         sb.Children().Append(animOpacity);
 
-        sb.Completed([](wf::IInspectable const&, wf::IInspectable const&) {
+        KeepHandler(sb, sb.Completed(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) {
             g_isHiding.store(false);
             if (!g_isOverlayVisible.load() && g_resultsHost) {
                 g_resultsHost.Opacity(0.0);
@@ -4312,7 +4438,7 @@ void HideOverlayAnimated() {
                 if (g_appButtonsOpt) g_appButtonsOpt->clear();
                 if (g_fileButtonsOpt) g_fileButtonsOpt->clear();
             }
-        });
+        }));
 
         g_hideAnim = sb;
         sb.Begin();
@@ -4586,7 +4712,7 @@ void TriggerMenuOpenFocus() {
         auto t = wux::DispatcherTimer();
         t.Interval(std::chrono::milliseconds(50));
         auto ticks = std::make_shared<int>(0);
-        t.Tick([ticks](wf::IInspectable const& sender, wf::IInspectable const&) {
+        KeepHandler(t, t.Tick(winrt::auto_revoke, [ticks](wf::IInspectable const& sender, wf::IInspectable const&) {
             auto timer = sender.try_as<wux::DispatcherTimer>();
             if (g_suppressRefocus.load()) {
                 if (timer) timer.Stop();
@@ -4602,7 +4728,7 @@ void TriggerMenuOpenFocus() {
             if ((now && now == g_ourBox && fg == ours) || ++(*ticks) >= 10) {
                 if (timer) timer.Stop();
             }
-        });
+        }));
         t.Start();
         g_openFocus = t;
     } catch (...) {
@@ -4631,7 +4757,7 @@ void TakeForegroundWhenShown() {
         auto t = wux::DispatcherTimer();
         t.Interval(std::chrono::milliseconds(10));
         auto ticks = std::make_shared<int>(0);
-        t.Tick([ticks](wf::IInspectable const& sender, wf::IInspectable const&) {
+        KeepHandler(t, t.Tick(winrt::auto_revoke, [ticks](wf::IInspectable const& sender, wf::IInspectable const&) {
             HWND ours = GetOurCoreWindow();
             HWND fg = GetForegroundWindow();  // null while the foreground changes hands
             bool done = !ours || ++(*ticks) > 30 || (fg && fg != ours && !IsSearchHostWindow(fg));
@@ -4643,7 +4769,7 @@ void TakeForegroundWhenShown() {
                     timer.Stop();
                 }
             }
-        });
+        }));
         t.Start();
         g_shownFocus = t;
     } catch (...) {
@@ -4953,7 +5079,7 @@ static LRESULT CALLBACK StartMenuSubclassProc(HWND hWnd, UINT uMsg, WPARAM wPara
     if (uMsg && uMsg == GetTeardownMessage()) {
         Wh_Log(L"subclass: teardown message received");
         TeardownStartMenuUi();
-        return 0;
+        return kTeardownDone;
     }
 
     static UINT s_uMsgTaskbarCreated = 0;
@@ -5147,19 +5273,26 @@ void CALLBACK AttachWatchProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
 
 DWORD WINAPI AttachWatchThreadProc(LPVOID) {
     // In-context, so the callback runs on whichever thread shows the window;
-    // this thread only owns the hook, and needs no message loop for it.
-    HWINEVENTHOOK hook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_UNCLOAKED,
-                                         GetCurrentModuleHandle(), AttachWatchProc,
-                                         GetCurrentProcessId(), 0,
-                                         WINEVENT_INCONTEXT);
-    if (hook) {
-        Wh_Log(L"attach watch installed on thread %lu", GetCurrentThreadId());
-    } else {
-        Wh_Log(L"attach watch FAILED, err=%lu", GetLastError());
+    // this thread only owns the hooks, and needs no message loop for them.
+    // One hook per event: the range between them covers focus, location and
+    // name changes too, each of which would be a call into the mod.
+    const DWORD events[] = {EVENT_OBJECT_SHOW, EVENT_OBJECT_UNCLOAKED};
+    HWINEVENTHOOK hooks[ARRAYSIZE(events)] = {};
+    for (size_t i = 0; i < ARRAYSIZE(events); ++i) {
+        hooks[i] = SetWinEventHook(events[i], events[i], GetCurrentModuleHandle(),
+                                   AttachWatchProc, GetCurrentProcessId(), 0,
+                                   WINEVENT_INCONTEXT);
+        if (hooks[i]) {
+            Wh_Log(L"attach watch: event 0x%X hooked on thread %lu", events[i], GetCurrentThreadId());
+        } else {
+            Wh_Log(L"attach watch: event 0x%X FAILED, err=%lu", events[i], GetLastError());
+        }
     }
     WaitForSingleObject(g_attachWatchStop, INFINITE);
-    if (hook && !UnhookWinEvent(hook)) {
-        Wh_Log(L"attach watch: unhook failed, err=%lu", GetLastError());
+    for (HWINEVENTHOOK hook : hooks) {
+        if (hook && !UnhookWinEvent(hook)) {
+            Wh_Log(L"attach watch: unhook failed, err=%lu", GetLastError());
+        }
     }
     return 0;
 }
@@ -5525,24 +5658,6 @@ void LaunchTerminal(const std::wstring& dir, bool isPowerShell, bool asAdmin) {
             CoUninitialize();
         }
     });
-}
-
-inline bool CopyTextToClipboard(const std::wstring& text) {
-    if (text.empty()) return false;
-    if (!OpenClipboard(nullptr)) return false;
-    EmptyClipboard();
-    size_t bytes = (text.size() + 1) * sizeof(wchar_t);
-    HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, bytes);
-    if (hGlobal) {
-        void* ptr = GlobalLock(hGlobal);
-        if (ptr) {
-            memcpy(ptr, text.c_str(), bytes);
-            GlobalUnlock(hGlobal);
-            SetClipboardData(CF_UNICODETEXT, hGlobal);
-        }
-    }
-    CloseClipboard();
-    return true;
 }
 
 inline std::wstring UrlEncode(const std::wstring& str) {
@@ -6113,7 +6228,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
             } catch (...) {}
         });
 
-    box.PreviewKeyDown([](wf::IInspectable const&, wux::Input::KeyRoutedEventArgs const& args) {
+    KeepHandler(box, box.PreviewKeyDown(winrt::auto_revoke, [](wf::IInspectable const&, wux::Input::KeyRoutedEventArgs const& args) {
         try {
             auto key = args.Key();
             if (key == winrt::Windows::System::VirtualKey::Escape && !EscapeBelongsToContextMenu()) {
@@ -6131,7 +6246,7 @@ void BuildResultsList(wuxc::Panel const& ownerPanel) try {
                 }
             }
         } catch (...) {}
-    });
+    }));
 
     g_ourBoxLost = box.LostFocus(
         winrt::auto_revoke,
@@ -6604,7 +6719,7 @@ void RenderResults() try {
 
         // Weak: the button holds these handlers, and a strong self-reference
         // would keep every card ever built alive.
-        button.PointerEntered([weakBtn = winrt::make_weak(button)](wf::IInspectable const&,
+        KeepHandler(button, button.PointerEntered(winrt::auto_revoke, [weakBtn = winrt::make_weak(button)](wf::IInspectable const&,
                                                                    wux::Input::PointerRoutedEventArgs const&) {
             auto btn = weakBtn.get();
             if (!btn || !g_activeAppsOpt) return;
@@ -6614,9 +6729,9 @@ void RenderResults() try {
                     break;
                 }
             }
-        });
+        }));
 
-        button.Click([weakBtn = winrt::make_weak(button)](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+        KeepHandler(button, button.Click(winrt::auto_revoke, [weakBtn = winrt::make_weak(button)](wf::IInspectable const&, wux::RoutedEventArgs const&) {
             auto btn = weakBtn.get();
             if (!btn || !g_activeAppsOpt) return;
             for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
@@ -6625,17 +6740,17 @@ void RenderResults() try {
                     return;
                 }
             }
-        });
+        }));
 
         wuxc::MenuFlyout menu;
-        menu.Opened([](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuOpened(); });
-        menu.Closed([](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuClosed(); });
+        KeepHandler(menu, menu.Opened(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuOpened(); }));
+        KeepHandler(menu, menu.Closed(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuClosed(); }));
         // Filled in when first opened, not with the card (see the file rows).
         // What it needs of the row is copied, less the icon pixels; the card
         // is held weakly, since it owns this menu.
         Row menuItem = item;
         menuItem.icon.clear();
-        menu.Opening([item = std::move(menuItem), weakBtn = winrt::make_weak(button)](
+        KeepHandler(menu, menu.Opening(winrt::auto_revoke, [item = std::move(menuItem), weakBtn = winrt::make_weak(button)](
                          wf::IInspectable const& sender, wf::IInspectable const&) {
             auto flyout = sender.as<wuxc::MenuFlyout>();
             if (flyout.Items().Size() > 0) return;
@@ -6645,9 +6760,9 @@ void RenderResults() try {
                 wuxc::FontIcon copyIcon;
                 copyIcon.Glyph(L"\uE8C8");
                 copyItem.Icon(copyIcon);
-                copyItem.Click([txt = item.copyText](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                KeepHandler(copyItem, copyItem.Click(winrt::auto_revoke, [txt = item.copyText](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     tools::CopyTextToClipboard(txt);
-                });
+                }));
                 flyout.Items().Append(copyItem);
             } else {
                 bool isWebItem = item.openPath.starts_with(L"http:") || item.openPath.starts_with(L"https:");
@@ -6658,7 +6773,7 @@ void RenderResults() try {
                 wuxc::FontIcon openIcon;
                 openIcon.Glyph(isWebItem ? L"\uE774" : L"\uE8A7");
                 openItem.Icon(openIcon);
-                openItem.Click([weakBtn](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                KeepHandler(openItem, openItem.Click(winrt::auto_revoke, [weakBtn](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     auto btn = weakBtn.get();
                     if (!btn || !g_activeAppsOpt) return;
                     for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
@@ -6667,7 +6782,7 @@ void RenderResults() try {
                             return;
                         }
                     }
-                });
+                }));
                 flyout.Items().Append(openItem);
 
                 if (item.canRunAsAdmin && !isWebItem && !isSettingItem) {
@@ -6676,7 +6791,7 @@ void RenderResults() try {
                     wuxc::FontIcon adminIcon;
                     adminIcon.Glyph(L"\uE7EF");
                     adminItem.Icon(adminIcon);
-                    adminItem.Click([weakBtn](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    KeepHandler(adminItem, adminItem.Click(winrt::auto_revoke, [weakBtn](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                         auto btn = weakBtn.get();
                         if (!btn || !g_activeAppsOpt) return;
                         for (size_t i = 0; i < g_activeAppsOpt->size(); ++i) {
@@ -6685,7 +6800,7 @@ void RenderResults() try {
                                 return;
                             }
                         }
-                    });
+                    }));
                     flyout.Items().Append(adminItem);
                 }
 
@@ -6696,9 +6811,9 @@ void RenderResults() try {
                     wuxc::FontIcon copyIcon;
                     copyIcon.Glyph(L"\uE8C8");
                     copyUrlItem.Icon(copyIcon);
-                    copyUrlItem.Click([webUrl](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                        CopyTextToClipboard(webUrl);
-                    });
+                    KeepHandler(copyUrlItem, copyUrlItem.Click(winrt::auto_revoke, [webUrl](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        tools::CopyTextToClipboard(webUrl);
+                    }));
                     flyout.Items().Append(copyUrlItem);
                 } else if (!isSettingItem && !item.openPath.empty()) {
                     std::wstring locTarget = item.openPath;
@@ -6714,10 +6829,10 @@ void RenderResults() try {
                         wuxc::FontIcon locIcon;
                         locIcon.Glyph(L"\uE838");
                         locItem.Icon(locIcon);
-                        locItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        KeepHandler(locItem, locItem.Click(winrt::auto_revoke, [locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                             OpenFileLocation(locTarget);
                             DismissStartMenu();
-                        });
+                        }));
                         flyout.Items().Append(locItem);
 
                         wuxc::MenuFlyoutItem copyPathItem;
@@ -6725,9 +6840,9 @@ void RenderResults() try {
                         wuxc::FontIcon copyPathIcon;
                         copyPathIcon.Glyph(L"\uE71B");
                         copyPathItem.Icon(copyPathIcon);
-                        copyPathItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        KeepHandler(copyPathItem, copyPathItem.Click(winrt::auto_revoke, [locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                             tools::CopyTextToClipboard(locTarget);
-                        });
+                        }));
                         flyout.Items().Append(copyPathItem);
 
                         wuxc::MenuFlyoutItem shortcutItem;
@@ -6735,9 +6850,9 @@ void RenderResults() try {
                         wuxc::FontIcon shortcutIcon;
                         shortcutIcon.Glyph(L"\uE7C5");
                         shortcutItem.Icon(shortcutIcon);
-                        shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        KeepHandler(shortcutItem, shortcutItem.Click(winrt::auto_revoke, [locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                             tools::CreateDesktopShortcut(locTarget, appTitle);
-                        });
+                        }));
                         flyout.Items().Append(shortcutItem);
 
                         wuxc::MenuFlyoutSeparator sep2;
@@ -6748,11 +6863,11 @@ void RenderResults() try {
                         wuxc::FontIcon propIcon;
                         propIcon.Glyph(L"\uE946");
                         propItem.Icon(propIcon);
-                        propItem.Click([locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        KeepHandler(propItem, propItem.Click(winrt::auto_revoke, [locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                             AllowExplorerForeground();
                             DismissStartMenu();
                             ShowPropertiesDialog(locTarget);
-                        });
+                        }));
                         flyout.Items().Append(propItem);
                     } else if (!locTarget.starts_with(L"ms-settings:") && !locTarget.starts_with(L"http:") && !locTarget.starts_with(L"https:")) {
                         wuxc::MenuFlyoutSeparator sep1;
@@ -6763,15 +6878,15 @@ void RenderResults() try {
                         wuxc::FontIcon shortcutIcon;
                         shortcutIcon.Glyph(L"\uE7C5");
                         shortcutItem.Icon(shortcutIcon);
-                        shortcutItem.Click([locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        KeepHandler(shortcutItem, shortcutItem.Click(winrt::auto_revoke, [locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                             tools::CreateDesktopShortcut(L"shell:AppsFolder\\" + locTarget, appTitle);
-                        });
+                        }));
                         flyout.Items().Append(shortcutItem);
                     }
                 }
             }
 
-        });
+        }));
         button.ContextFlyout(menu);
 
         return AppCardUI{item.appIndex, item.title, item.openPath, button, item.canRunAsAdmin, item.isSetting, item.isFile};
@@ -7001,7 +7116,7 @@ void RenderResults() try {
         // Hovering a row selects it, as it does an app card, so the pointer's
         // highlight and the keyboard's are the same one. Weak: the button
         // holds this handler.
-        button.PointerEntered([weak = winrt::make_weak(button)](wf::IInspectable const&,
+        KeepHandler(button, button.PointerEntered(winrt::auto_revoke, [weak = winrt::make_weak(button)](wf::IInspectable const&,
                                                                 wux::Input::PointerRoutedEventArgs const&) {
             auto btn = weak.get();
             if (!btn || !g_fileButtonsOpt) return;
@@ -7011,21 +7126,21 @@ void RenderResults() try {
                     break;
                 }
             }
-        });
+        }));
 
         if (!item.openPath.empty()) {
             std::wstring target = item.openPath;
-            button.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+            KeepHandler(button, button.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                 DismissStartMenu();
                 OpenResult(target);
-            });
+            }));
 
             wuxc::MenuFlyout menu;
-            menu.Opened([](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuOpened(); });
-            menu.Closed([](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuClosed(); });
+            KeepHandler(menu, menu.Opened(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuOpened(); }));
+            KeepHandler(menu, menu.Closed(winrt::auto_revoke, [](wf::IInspectable const&, wf::IInspectable const&) { NoteContextMenuClosed(); }));
             // Filled in when first opened, not with the row: every keystroke
             // builds every row, and hardly any of their menus are ever opened.
-            menu.Opening([target, isFolder = item.isFolder, title = item.title](
+            KeepHandler(menu, menu.Opening(winrt::auto_revoke, [target, isFolder = item.isFolder, title = item.title](
                              wf::IInspectable const& sender, wf::IInspectable const&) {
                 auto flyout = sender.as<wuxc::MenuFlyout>();
                 if (flyout.Items().Size() > 0) return;
@@ -7034,10 +7149,10 @@ void RenderResults() try {
                 wuxc::FontIcon openIcon;
                 openIcon.Glyph(L"\uE8A7");
                 openItem.Icon(openIcon);
-                openItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                KeepHandler(openItem, openItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     DismissStartMenu();
                     OpenResult(target);
-                });
+                }));
                 flyout.Items().Append(openItem);
 
                 if (CanElevatePath(target)) {
@@ -7046,10 +7161,10 @@ void RenderResults() try {
                     wuxc::FontIcon adminIcon;
                     adminIcon.Glyph(L"\uE7EF");
                     adminItem.Icon(adminIcon);
-                    adminItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                    KeepHandler(adminItem, adminItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                         DismissStartMenu();
                         OpenResult(target, true /* asAdmin */);
-                    });
+                    }));
                     flyout.Items().Append(adminItem);
                 }
 
@@ -7066,10 +7181,10 @@ void RenderResults() try {
                         wuxc::FontIcon icon;
                         icon.Glyph(asAdmin ? L"\uE7EF" : L"\uE756");
                         termItem.Icon(icon);
-                        termItem.Click([target, isPowerShell, asAdmin](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                        KeepHandler(termItem, termItem.Click(winrt::auto_revoke, [target, isPowerShell, asAdmin](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                             DismissStartMenu();
                             LaunchTerminal(target, isPowerShell, asAdmin);
-                        });
+                        }));
                         termSub.Items().Append(termItem);
                     };
 
@@ -7089,9 +7204,9 @@ void RenderResults() try {
                 wuxc::FontIcon cutIcon;
                 cutIcon.Glyph(L"\uE8C6");
                 cutItem.Icon(cutIcon);
-                cutItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                KeepHandler(cutItem, cutItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     tools::CopyOrCutFileToClipboard(target, true /* isCut */);
-                });
+                }));
                 flyout.Items().Append(cutItem);
 
                 wuxc::MenuFlyoutItem copyItem;
@@ -7099,9 +7214,9 @@ void RenderResults() try {
                 wuxc::FontIcon copyIcon;
                 copyIcon.Glyph(L"\uE8C8");
                 copyItem.Icon(copyIcon);
-                copyItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                KeepHandler(copyItem, copyItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     tools::CopyOrCutFileToClipboard(target, false /* isCut */);
-                });
+                }));
                 flyout.Items().Append(copyItem);
 
                 wuxc::MenuFlyoutItem copyPathItem;
@@ -7109,9 +7224,9 @@ void RenderResults() try {
                 wuxc::FontIcon copyPathIcon;
                 copyPathIcon.Glyph(L"\uE71B");
                 copyPathItem.Icon(copyPathIcon);
-                copyPathItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                KeepHandler(copyPathItem, copyPathItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     tools::CopyTextToClipboard(target);
-                });
+                }));
                 flyout.Items().Append(copyPathItem);
 
                 wuxc::MenuFlyoutSeparator sep2;
@@ -7122,10 +7237,10 @@ void RenderResults() try {
                 wuxc::FontIcon locIcon;
                 locIcon.Glyph(L"\uE838");
                 locItem.Icon(locIcon);
-                locItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                KeepHandler(locItem, locItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     OpenFileLocation(target);
                     DismissStartMenu();
-                });
+                }));
                 flyout.Items().Append(locItem);
 
                 wuxc::MenuFlyoutItem shortcutItem;
@@ -7133,9 +7248,9 @@ void RenderResults() try {
                 wuxc::FontIcon shortcutIcon;
                 shortcutIcon.Glyph(L"\uE7C5");
                 shortcutItem.Icon(shortcutIcon);
-                shortcutItem.Click([target, title](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                KeepHandler(shortcutItem, shortcutItem.Click(winrt::auto_revoke, [target, title](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     tools::CreateDesktopShortcut(target, title);
-                });
+                }));
                 flyout.Items().Append(shortcutItem);
 
                 wuxc::MenuFlyoutSeparator sep3;
@@ -7146,14 +7261,14 @@ void RenderResults() try {
                 wuxc::FontIcon propIcon;
                 propIcon.Glyph(L"\uE946");
                 propItem.Icon(propIcon);
-                propItem.Click([target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                KeepHandler(propItem, propItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
                     AllowExplorerForeground();
                     DismissStartMenu();
                     ShowPropertiesDialog(target);
-                });
+                }));
                 flyout.Items().Append(propItem);
 
-            });
+            }));
             button.ContextFlyout(menu);
         }
         return button;
@@ -7534,7 +7649,7 @@ void SearchThreadMain() {
         Wh_Log(L"apps: index failed");
     }
 
-    icons::ExtensionCache iconCache(kIconSize);
+    icons::FileIconCache iconCache(kIconSize);
 
     // The apps behind the rows currently on screen, in the same order.
     std::vector<const apps::App*> lastHits;
@@ -7580,9 +7695,12 @@ void SearchThreadMain() {
             auto hasWork = [] {
                 return g_queryDirty.load() || g_searchQuit.load() || (g_launchRequest.load() >= 0) || g_appIndexNeedsRefresh.load();
             };
-            if (!hasWork() && prefetchNext < appIndex.Count()) {
+            if (!hasWork() && (iconCache.HasPending() || prefetchNext < appIndex.Count())) {
                 lock.unlock();
-                prefetchIcon();
+                // Files first: they are on screen now.
+                if (!iconCache.FetchPending()) {
+                    prefetchIcon();
+                }
                 continue;
             }
             g_queryWake.wait(lock, hasWork);
@@ -7965,9 +8083,10 @@ void SearchThreadMain() {
                     row.subtitle = m.app->targetPath;
                     canAdmin = true;
                     isFileTarget = true;
-                } else if (!m.app->exeNameLower.empty()) {
-                    row.subtitle = m.app->exeNameLower + L".exe";
-                    canAdmin = true;
+                } else if (!m.app->linkTarget.empty()) {
+                    // Shown, not launched: the app ID keeps the shortcut's
+                    // arguments and taskbar identity.
+                    row.subtitle = m.app->linkTarget;
                 } else {
                     row.subtitle = L"Application";
                 }
@@ -8024,6 +8143,7 @@ void SearchThreadMain() {
         }
 
         std::vector<Row> fileRows;
+        iconCache.NewResults(std::chrono::milliseconds(25));
         for (const everything::Result& r : pool) {
             Row row;
             row.title = r.name;
@@ -8034,10 +8154,10 @@ void SearchThreadMain() {
                 row.openPath += L'\\';
             }
             row.openPath += r.name;
-            // One shell call per distinct extension, not per row: the cache
-            // answers from the registered file type without touching disk.
+            // One shell call per distinct extension, not per row, except for
+            // files with an icon of their own (see FileIconCache).
             if (const std::vector<BYTE>* pixels =
-                    iconCache.Get(r.name, r.isFolder)) {
+                    iconCache.Get(row.openPath, r.isFolder)) {
                 row.icon = *pixels;
             }
             fileRows.push_back(std::move(row));
@@ -8312,6 +8432,11 @@ void TeardownStartMenuUi() {
         g_hGetMsgHook = nullptr;
     }
 
+    // Before anything is dropped: see g_xamlHandlers.
+    try {
+        g_xamlHandlers.clear();
+    } catch (...) {}
+
     try {
         if (g_hCoreWindow && g_subclassed) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(g_hCoreWindow, StartMenuSubclassProc);
@@ -8540,9 +8665,12 @@ void Wh_ModUninit() {
     WaitForTrackedLaunches();
 
     bool tornDown = false;
-    if (g_ourBox) {
+    // The stock button is kept from before the box is placed, so a half-done
+    // attach (stock elements hidden, no box) is still undone on its thread.
+    wux::FrameworkElement anchor = g_ourBox ? g_ourBox.as<wux::FrameworkElement>() : g_stockButton;
+    if (anchor) {
         try {
-            auto dispatcher = g_ourBox.Dispatcher();
+            auto dispatcher = anchor.Dispatcher();
             if (dispatcher) {
                 auto op = dispatcher.RunAsync(
                     wuc::CoreDispatcherPriority::Low,
@@ -8561,7 +8689,7 @@ void Wh_ModUninit() {
             DWORD_PTR result = 0;
             LRESULT lr = SendMessageTimeoutW(hCore, GetTeardownMessage(), 0, 0,
                                              SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, &result);
-            if (lr != 0) {
+            if (lr != 0 && static_cast<LRESULT>(result) == kTeardownDone) {
                 tornDown = true;
             }
         }
