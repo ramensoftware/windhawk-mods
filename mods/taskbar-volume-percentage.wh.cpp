@@ -110,7 +110,7 @@ level, updated in real time.
   $description: >-
     Space between the icon and the text. Set to -1 for automatic spacing, or
     to 0 to disable it. Any other number sets the space in pixels.
-- fixedContainerWidth: -1
+- containerWidth: -1
   $name: Container width
   $description: >-
     Width of the volume area. Set to -1 for automatic width, or to 0 to
@@ -174,7 +174,7 @@ struct {
     WindhawkUtils::StringSetting customPrefix;
     MuteStyle muteStyle;
     WindhawkUtils::StringSetting customMuteText;
-    int fixedContainerWidth;
+    int containerWidth;
     int iconSpacing;
 } g_settings;
 
@@ -497,12 +497,12 @@ double CalculateAutoWidth() {
 
 // Zero means leaving the width to Windows.
 double GetContainerWidth() {
-    if (g_unloading || g_settings.fixedContainerWidth == 0) {
+    if (g_unloading || g_settings.containerWidth == 0) {
         return 0;
     }
 
-    if (g_settings.fixedContainerWidth > 0) {
-        return g_settings.fixedContainerWidth;
+    if (g_settings.containerWidth > 0) {
+        return g_settings.containerWidth;
     }
 
     return (std::max)(CalculateAutoWidth(), g_maxObservedWidth);
@@ -1622,7 +1622,7 @@ void LoadSettings() {
 
     g_settings.iconSpacing = Wh_GetIntSetting(L"iconSpacing");
 
-    g_settings.fixedContainerWidth = Wh_GetIntSetting(L"fixedContainerWidth");
+    g_settings.containerWidth = Wh_GetIntSetting(L"containerWidth");
     g_maxObservedWidth = 0.0;
 
     g_settingsGeneration++;
