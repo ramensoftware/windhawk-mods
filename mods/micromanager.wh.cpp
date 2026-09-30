@@ -7,7 +7,7 @@
 // @github          https://github.com/BlackPaw21
 // @donateUrl       https://ko-fi.com/blackpaw21
 // @include         windhawk.exe
-// @compilerOptions -lpdh -lshell32 -lgdi32 -luser32 -lole32 -luuid -ladvapi32 -ldwmapi -ffp-exception-behavior=maytrap
+// @compilerOptions -lpdh -lshell32 -lgdi32 -luser32 -lole32 -luuid -ladvapi32 -ldwmapi
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -22,12 +22,17 @@ and RAM usage, plus the single top-consuming process for each.
 ## How to Use
 
 1. **Left-click** the tray icon to open the popup showing:
-   - Total CPU usage and the top CPU-consuming process
-   - Total GPU usage and the top GPU-consuming process
-   - Total RAM usage and the top RAM-consuming process
-2. **Click anywhere outside** the popup (or press **Esc**) to close it
-3. **Hover** the tray icon to see a live `CPU / GPU / RAM` summary tooltip
-4. **Right-click** the tray icon for options
+   - Total CPU, GPU, and RAM usage with live percentage meters
+   - Top-consuming process for each resource
+   - 16-sample activity history graph for the selected resource
+2. **Click any row or the graph canvas** (or press **Up** / **Down** arrow keys) to cycle the history graph between CPU, GPU, and RAM
+3. **Right-click any process row** (or press the **Menu** key / **Shift+F10**) to access process actions:
+   - **End task:** Terminates only the selected process
+   - **End process tree...:** Safely terminates the application root and all its related processes (with process count confirmation)
+   - **Open file location:** Selects the executable file in File Explorer
+4. **Click anywhere outside** the popup (or press **Esc**) to close it
+5. **Hover** the tray icon to see a live `CPU / GPU / RAM` summary tooltip
+6. **Right-click** the tray icon to change refresh rate, choose the active graph metric, or open Windhawk
 
 ## Configuration
 
@@ -36,14 +41,15 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 ## Changelog
 
 # 1.2.0
-- **Live Activity Graphs:** Added a 16-sample history graph to the popup. Click any row or the graph canvas to cycle between live CPU, GPU, and RAM trends.
-- **Process Tree Termination:** "End Task" now terminates the entire process tree, cleanly closing multi-process apps (Firefox, Chrome, Electron) without leaving orphaned crashed tabs.
-- **Open File Location:** Added a quick action to reveal and select the top consumer's executable in File Explorer.
-- **Safety & Identity Protection:** Confirms termination targets, validates process creation times against PID reuse, and blocks critical Windows system processes.
-- **High-Contrast Readability:** Pure white text across popup labels, graph titles, and context menus for excellent readability with dark and custom themes.
-- **Top Taskbar Placement:** Automatically detects top-aligned taskbars and flips the popup below the tray icon so it never renders off-screen.
-- **System Process Display:** Correctly identifies and labels "System Idle Process" and the NT Kernel (PID 4) when they consume resources.
-- **Tray & Navigation Fixes:** Fixed popup flicker on rapid tray clicks, added keyboard navigation (Up / Down / Esc), and improved reload stability.
+- **Added:** Live activity graphs — added a 16-sample history graph to the popup. Click any row or the graph canvas to cycle between live CPU, GPU, and RAM trends.
+- **Added:** Process management actions — right-click any top-consumer row to access "End task", "End process tree...", and "Open file location".
+- **Added:** Safe process tree termination — resolved application root by ancestor timestamps to eliminate PID reuse issues, added shell (explorer.exe) protection, and added confirmation showing the exact number of related processes.
+- **Added:** Open file location — added a quick action to reveal and select the top consumer's executable in File Explorer.
+- **Added:** Safety & identity protection — confirms termination targets, validates process creation times against PID reuse, and blocks critical Windows system processes and Windhawk itself.
+- **Improved:** High-contrast readability — pure white text across popup labels, graph titles, and context menus for excellent readability with dark and custom themes.
+- **Improved:** Top taskbar placement — automatically detects top-aligned taskbars using the icon's monitor rect and flips the popup below the tray icon so it never renders off-screen.
+- **Improved:** System process display — correctly identifies and labels "System Idle Process" and the NT Kernel (PID 4) when they consume resources.
+- **Fixed:** Tray & navigation fixes — handled WM_CONTEXTMENU for tray right-clicks, added keyboard navigation (Up / Down / Esc), and improved popup reliability.
 
 # 1.1.0
 - **Fixed:** Tooltip now displays correctly when hovering the tray icon.
@@ -62,7 +68,7 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 
 #define NOMINMAX
 #include <windows.h>
-#include <tlhelp32.h>
+#include <windowsx.h>
 #include <shellapi.h>
 #include <shobjidl.h>
 #include <shlobj.h>
@@ -124,7 +130,8 @@ Right-click the tray icon to change the refresh rate (0.3s / 0.5s / 1s / 3s).
 #define MENU_GRAPH_GPU       9002
 #define MENU_GRAPH_RAM       9003
 #define MENU_PROC_END        9200
-#define MENU_PROC_LOCATION   9201
+#define MENU_PROC_END_TREE   9201
+#define MENU_PROC_LOCATION   9202
 #define MENU_INTERVAL_300MS  9100
 #define MENU_INTERVAL_500MS  9101
 #define MENU_INTERVAL_1S     9102
@@ -575,8 +582,8 @@ static void RefreshData() {
             if (bestWs > 0 && g_totalPhys > 0) {
                 int pct = (int)((bestWs * 100ULL) / g_totalPhys);
                 newTopRamPct = pct < 1 ? 1 : pct;  // the top consumer is always shown
-            wcscpy_s(newTopRamName, bestRamName);
-            g_topRamTarget = bestRamTarget;
+                wcscpy_s(newTopRamName, bestRamName);
+                g_topRamTarget = bestRamTarget;
             }
 
             free(buf);
@@ -657,6 +664,13 @@ static HANDLE OpenSampledProcess(const ProcessTarget& target, DWORD rights) {
 }
 
 static bool IsProtectedProcess(HANDLE process) {
+    if (g_windhawkPath[0] != L'\0') {
+        WCHAR path[MAX_PATH];
+        DWORD len = ARRAYSIZE(path);
+        if (QueryFullProcessImageNameW(process, 0, path, &len)) {
+            if (_wcsicmp(path, g_windhawkPath) == 0) return true;
+        }
+    }
     BOOL critical = FALSE;
     if (!IsProcessCritical(process, &critical) || critical) return true;
     HANDLE token = nullptr;
@@ -674,128 +688,174 @@ static bool IsProtectedProcess(HANDLE process) {
     return protectedAccount;
 }
 
-static bool IsProtectedPid(DWORD pid) {
-    if (pid == 0 || pid == 4 || pid == GetCurrentProcessId()) return true;
-    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!h) return true;
-    bool prot = IsProtectedProcess(h);
-    if (!prot && g_windhawkPath[0] != L'\0') {
-        WCHAR path[MAX_PATH];
-        DWORD len = ARRAYSIZE(path);
-        if (QueryFullProcessImageNameW(h, 0, path, &len)) {
-            if (_wcsicmp(path, g_windhawkPath) == 0) {
-                prot = true;
+static void TerminateProcessTree(HWND popup, const ProcessTarget& target) {
+    DWORD shellPid = 0;
+    HWND hShell = GetShellWindow();
+    if (hShell) GetWindowThreadProcessId(hShell, &shellPid);
+    if (target.pid == shellPid || _wcsicmp(target.name, L"explorer.exe") == 0) {
+        MessageBoxW(popup,
+            L"Ending the process tree for Windows Explorer is not supported because it would terminate the shell and all running desktop applications. Use \"End task\" instead.",
+            L"MicroManager", MB_OK | MB_ICONWARNING);
+        return;
+    }
+
+    MY_SYSTEM_PROCESS_INFO* buf = nullptr;
+    if (!CollectProcessInfo(&buf) || !buf) {
+        HANDLE process = OpenSampledProcess(target, PROCESS_TERMINATE | SYNCHRONIZE);
+        if (!process) {
+            MessageBoxW(popup, L"The selected process has exited, changed identity, or denied access.",
+                        L"MicroManager", MB_OK | MB_ICONINFORMATION);
+            return;
+        }
+        if (IsProtectedProcess(process)) {
+            MessageBoxW(popup, L"This process is protected or its protection status is unavailable.",
+                        L"MicroManager", MB_OK | MB_ICONWARNING);
+        } else {
+            WCHAR prompt[256];
+            swprintf_s(prompt, L"End %s (PID %lu)?\nUnsaved work may be lost.", target.name, target.pid);
+            if (MessageBoxW(popup, prompt, L"Confirm End Task", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) == IDYES &&
+                WaitForSingleObject(process, 0) == WAIT_TIMEOUT) {
+                TerminateProcess(process, 1);
             }
         }
-    }
-    CloseHandle(h);
-    return prot;
-}
-
-static void TerminateProcessTree(HANDLE retainedHandle, DWORD targetPid, PCWSTR targetName) {
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE) {
-        if (!IsProtectedProcess(retainedHandle)) {
-            TerminateProcess(retainedHandle, 1);
-        }
+        CloseHandle(process);
         return;
     }
 
     struct ProcItem {
         DWORD pid;
         DWORD parentPid;
-        WCHAR name[MAX_PATH];
+        LONGLONG created;
+        WCHAR name[64];
     };
     std::vector<ProcItem> allProcs;
-    PROCESSENTRY32W pe = { sizeof(pe) };
-    if (Process32FirstW(snap, &pe)) {
-        do {
-            ProcItem item;
-            item.pid = pe.th32ProcessID;
-            item.parentPid = pe.th32ParentProcessID;
-            wcscpy_s(item.name, pe.szExeFile);
-            allProcs.push_back(item);
-        } while (Process32NextW(snap, &pe));
+    MY_SYSTEM_PROCESS_INFO* p = buf;
+    while (p) {
+        ProcItem item = {};
+        item.pid = (DWORD)(ULONG_PTR)p->UniqueProcessId;
+        item.parentPid = (DWORD)(ULONG_PTR)p->InheritedFromUniqueProcessId;
+        item.created = p->CreateTime.QuadPart;
+        GetProcessDisplayName(p, item.name, ARRAYSIZE(item.name));
+        allProcs.push_back(item);
+        if (p->NextEntryOffset == 0) break;
+        p = (MY_SYSTEM_PROCESS_INFO*)((BYTE*)p + p->NextEntryOffset);
     }
-    CloseHandle(snap);
+    free(buf);
 
-    // 1. Walk up the parent chain if parent shares the same executable name
-    DWORD rootPid = targetPid;
+    auto isParentOf = [](const ProcItem& parent, const ProcItem& child) {
+        return child.parentPid == parent.pid && child.pid != parent.pid &&
+               parent.created < child.created;
+    };
+
+    const ProcItem* targetItem = nullptr;
+    for (const auto& item : allProcs) {
+        if (item.pid == target.pid && item.created == target.created) {
+            targetItem = &item;
+            break;
+        }
+    }
+    if (!targetItem) {
+        MessageBoxW(popup, L"The selected process has exited, changed identity, or denied access.",
+                    L"MicroManager", MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+
+    // 1. Walk up the parent chain while parent shares the same executable name
+    ProcItem root = *targetItem;
     bool movedUp = true;
     while (movedUp) {
         movedUp = false;
-        for (const auto& item : allProcs) {
-            if (item.pid == rootPid && item.parentPid != 0 && item.parentPid != rootPid) {
-                for (const auto& parent : allProcs) {
-                    if (parent.pid == item.parentPid && _wcsicmp(parent.name, targetName) == 0) {
-                        rootPid = parent.pid;
-                        movedUp = true;
-                        break;
-                    }
-                }
+        for (const auto& parent : allProcs) {
+            if (isParentOf(parent, root) && _wcsicmp(parent.name, root.name) == 0) {
+                root = parent;
+                movedUp = true;
                 break;
             }
         }
     }
 
-    // 2. Collect all descendant PIDs under rootPid
-    std::vector<DWORD> treePids;
-    treePids.push_back(rootPid);
-    bool added = true;
-    while (added) {
-        added = false;
-        for (const auto& item : allProcs) {
-            if (item.pid == 0 || item.pid == 4 || item.pid == GetCurrentProcessId()) continue;
-            bool parentIn = (std::find(treePids.begin(), treePids.end(), item.parentPid) != treePids.end());
-            bool alreadyIn = (std::find(treePids.begin(), treePids.end(), item.pid) != treePids.end());
-            if (parentIn && !alreadyIn) {
-                treePids.push_back(item.pid);
-                added = true;
+    // 2. Collect all descendants under root
+    std::vector<ProcItem> treeItems;
+    treeItems.push_back(root);
+    size_t qHead = 0;
+    while (qHead < treeItems.size()) {
+        const ProcItem parent = treeItems[qHead++];
+        for (const auto& child : allProcs) {
+            if (child.pid == 0 || child.pid == 4 || child.pid == GetCurrentProcessId()) continue;
+            if (isParentOf(parent, child)) {
+                bool already = false;
+                for (const auto& existing : treeItems) {
+                    if (existing.pid == child.pid) { already = true; break; }
+                }
+                if (!already) {
+                    treeItems.push_back(child);
+                }
             }
         }
-    }
-    if (std::find(treePids.begin(), treePids.end(), targetPid) == treePids.end()) {
-        treePids.push_back(targetPid);
     }
 
-    // 3. Terminate bottom-up (descendants first, root last)
-    for (auto it = treePids.rbegin(); it != treePids.rend(); ++it) {
-        DWORD pid = *it;
-        if (pid == 0 || pid == 4 || pid == GetCurrentProcessId()) continue;
-        if (pid == targetPid) {
-            if (!IsProtectedProcess(retainedHandle)) {
-                TerminateProcess(retainedHandle, 1);
+    bool foundTarget = false;
+    for (const auto& item : treeItems) {
+        if (item.pid == targetItem->pid) { foundTarget = true; break; }
+    }
+    if (!foundTarget) {
+        treeItems.push_back(*targetItem);
+    }
+
+    // 3. Confirm with user
+    WCHAR prompt[300];
+    if (treeItems.size() <= 1) {
+        swprintf_s(prompt, L"End %s (PID %lu)?\nUnsaved work may be lost.", root.name, root.pid);
+    } else {
+        swprintf_s(prompt, L"End %s (PID %lu) and %u related processes?\nUnsaved work may be lost.",
+                   root.name, root.pid, (UINT)(treeItems.size() - 1));
+    }
+
+    if (MessageBoxW(popup, prompt, L"Confirm End Process Tree", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES) {
+        return;
+    }
+
+    // 4. Terminate bottom-up (descendants first, root last)
+    for (auto it = treeItems.rbegin(); it != treeItems.rend(); ++it) {
+        if (it->pid == 0 || it->pid == 4 || it->pid == GetCurrentProcessId()) continue;
+        ProcessTarget t = {};
+        t.pid = it->pid;
+        t.created = it->created;
+        wcscpy_s(t.name, it->name);
+        HANDLE h = OpenSampledProcess(t, PROCESS_TERMINATE | SYNCHRONIZE);
+        if (h) {
+            if (!IsProtectedProcess(h)) {
+                TerminateProcess(h, 1);
             }
-            continue;
-        }
-        if (IsProtectedPid(pid)) continue;
-        HANDLE hChild = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid);
-        if (hChild) {
-            TerminateProcess(hChild, 1);
-            WaitForSingleObject(hChild, 500);
-            CloseHandle(hChild);
+            CloseHandle(h);
         }
     }
 }
 
 static void RunProcessAction(HWND popup, const ProcessTarget& target, UINT action) {
-    DWORD rights = action == MENU_PROC_END ? PROCESS_TERMINATE | SYNCHRONIZE : SYNCHRONIZE;
+    if (action == MENU_PROC_END_TREE) {
+        TerminateProcessTree(popup, target);
+        return;
+    }
+
+    DWORD rights = (action == MENU_PROC_END) ? (PROCESS_TERMINATE | SYNCHRONIZE) : SYNCHRONIZE;
     HANDLE process = OpenSampledProcess(target, rights);
     if (!process) {
         MessageBoxW(popup, L"The selected process has exited, changed identity, or denied access.",
                     L"MicroManager", MB_OK | MB_ICONINFORMATION);
         return;
     }
+
     if (action == MENU_PROC_END) {
         if (IsProtectedProcess(process)) {
             MessageBoxW(popup, L"This process is protected or its protection status is unavailable.",
                         L"MicroManager", MB_OK | MB_ICONWARNING);
         } else {
             WCHAR prompt[256];
-            swprintf_s(prompt, L"End %s (PID %lu) and its process tree? Unsaved work may be lost.", target.name, target.pid);
+            swprintf_s(prompt, L"End %s (PID %lu)?\nUnsaved work may be lost.", target.name, target.pid);
             if (MessageBoxW(popup, prompt, L"Confirm End Task", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) == IDYES &&
                 WaitForSingleObject(process, 0) == WAIT_TIMEOUT) {
-                TerminateProcessTree(process, target.pid, target.name);
+                TerminateProcess(process, 1);
             }
         }
     } else if (action == MENU_PROC_LOCATION) {
@@ -820,7 +880,8 @@ static void ShowProcessMenu(HWND popup, int row, POINT point) {
     swprintf_s(heading, L"%s (PID %lu)", target.name, target.pid);
     AppendMenuW(menu, MF_STRING, 0, heading);
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, MENU_PROC_END, L"End Task...");
+    AppendMenuW(menu, MF_STRING, MENU_PROC_END, L"End task");
+    AppendMenuW(menu, MF_STRING, MENU_PROC_END_TREE, L"End process tree...");
     AppendMenuW(menu, MF_STRING, MENU_PROC_LOCATION, L"Open file location");
     SetForegroundWindow(popup);
     UINT action = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, point.x, point.y, 0, popup, nullptr);
@@ -948,10 +1009,6 @@ static LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
             return 0;
         }
 
-        case WM_NCHITTEST: {
-            return DefWindowProcW(hWnd, msg, wParam, lParam);
-        }
-
         case WM_LBUTTONDOWN: {
             int y = (short)HIWORD(lParam);
             if (y < Sc(12)) return 0;
@@ -971,7 +1028,7 @@ static LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
         case WM_CONTEXTMENU: {
             POINT point = {(short)LOWORD(lParam), (short)HIWORD(lParam)};
             int row = g_actionRow;
-            if (lParam == -1) {
+            if (GET_X_LPARAM(lParam) == -1 && GET_Y_LPARAM(lParam) == -1) {
                 RECT rect; GetWindowRect(hWnd, &rect);
                 point.x = rect.left + Sc(160);
                 point.y = rect.top + Sc(12 + row * 32);
@@ -1000,8 +1057,6 @@ static LRESULT CALLBACK PopupWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
                 g_graphMetric = g_actionRow;
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
-            if (wParam == VK_APPS || (wParam == VK_F10 && (GetKeyState(VK_SHIFT) & 0x8000)))
-                SendMessageW(hWnd, WM_CONTEXTMENU, (WPARAM)hWnd, -1);
             break;
 
         case WM_DESTROY:
@@ -1065,8 +1120,8 @@ static void ShowPopup(HWND hTrayWnd) {
     }
 
     // Clamp to monitor work area and flip below icon if taskbar is at the top
-    POINT ptCenter = { x + w / 2, y + h / 2 };
-    HMONITOR hm = MonitorFromPoint(ptCenter, MONITOR_DEFAULTTONEAREST);
+    HMONITOR hm = hasIconRect ? MonitorFromRect(&iconRect, MONITOR_DEFAULTTONEAREST)
+                              : MonitorFromPoint(POINT{ x + w / 2, y + h / 2 }, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(mi) };
     if (GetMonitorInfoW(hm, &mi)) {
         const RECT& wa = mi.rcWork;
@@ -1163,7 +1218,6 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                     break;
                 }
 
-                case WM_RBUTTONUP:
                 case WM_CONTEXTMENU: {
                     HMENU hMenu = CreatePopupMenu();
 
@@ -1194,8 +1248,10 @@ static LRESULT CALLBACK TrayWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                     AppendMenuW(hMenu, MF_STRING, MENU_OPEN_WINDHAWK, L"Open Windhawk");
 
-                    POINT pt;
-                    GetCursorPos(&pt);
+                    POINT pt = { (short)LOWORD(wParam), (short)HIWORD(wParam) };
+                    if (pt.x == 0 && pt.y == 0) {
+                        GetCursorPos(&pt);
+                    }
                     bool dark = IsSystemDarkMode();
                     ApplyContextMenuTheme(hWnd, dark);
                     SetForegroundWindow(hWnd);
@@ -1372,12 +1428,7 @@ static DWORD WINAPI TrayThreadProc(LPVOID) {
 
 // ─── Windhawk Callbacks ───────────────────────────────────────────────────────
 
-static LONG g_initComplete = FALSE;
-
 BOOL WhTool_ModInit() {
-    if (InterlockedCompareExchange(&g_initComplete, TRUE, FALSE))
-        return TRUE;
-
     Wh_Log(L"MicroManager Init");
 
     g_updateMs = LoadIntervalMs();
@@ -1433,9 +1484,6 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
-    if (!InterlockedCompareExchange(&g_initComplete, FALSE, TRUE))
-        return;
-
     Wh_Log(L"MicroManager Mod Uninit");
 
     // WM_CLOSE handler on the tray thread destroys g_popupHwnd before the tray
