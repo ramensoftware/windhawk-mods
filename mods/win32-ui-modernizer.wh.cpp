@@ -1484,7 +1484,7 @@ static thread_local ThemeClassFrontEntry g_themeClassFront[64];
 
 // Interns under g_themeClassCacheMutex. The set is never cleared (pointers
 // are held by every thread's front cache); past the cap the name is returned
-// uncached through a per-thread scratch string instead.
+// uncached through a per-thread scratch string (in the FLS cache) instead.
 static const std::wstring* InternThemeClassLocked(const wchar_t* name)
 {
     constexpr size_t kThemeClassNamesMax = 256;
@@ -1494,10 +1494,12 @@ static const std::wstring* InternThemeClassLocked(const wchar_t* name)
     return &*g_themeClassNames.emplace(name).first;
 }
 
+// The thread's scratch string in the FLS cache (defined with it below).
+static std::wstring* ThreadThemeClassScratch();
+
 static const std::wstring& GetCachedThemeClass(HTHEME hTheme)
 {
     static const std::wstring kNoClass;
-    static thread_local std::wstring scratch;
     if (!pGetThemeClass) {
         HMODULE hUx = GetModuleHandleW(L"uxtheme.dll");
         if (hUx) {
@@ -1529,7 +1531,13 @@ static const std::wstring& GetCachedThemeClass(HTHEME hTheme)
             WCHAR buf[256] = {};
             if (SUCCEEDED(pGetThemeClass(hTheme, buf, 256))) {
                 cls = InternThemeClassLocked(buf);
-                if (!cls) { scratch = buf; return scratch; }
+                if (!cls) {
+                    std::wstring* scratch = ThreadThemeClassScratch();
+                    if (!scratch)
+                        return kNoClass;
+                    *scratch = buf;
+                    return *scratch;
+                }
             } else {
                 cls = &kNoClass;
             }
@@ -3007,6 +3015,10 @@ struct RoundedSelectionTile
     }
 };
 
+// A destination column's source pair and 8-bit weight in a horizontally
+// scaled row blend (BlendRowsOverScaled), -1 where nothing maps.
+struct BlendScaleColumn { int xa, xb, wx; };
+
 struct D2DThreadCache
 {
     ID2D1DCRenderTarget* renderTarget = nullptr;
@@ -3041,6 +3053,16 @@ struct D2DThreadCache
     // DComp device context owns its layer in PillDComp instead.
     ID2D1Layer* homeDoorMaskLayer = nullptr;
     ID2D1RenderTarget* homeDoorMaskLayerRT = nullptr; // identity check only
+
+    // Menu hover overlay brush (GetMenuHoverBrush), tied to the render
+    // target it was made from.
+    ID2D1SolidColorBrush* menuHoverBrush = nullptr;
+    ID2D1DCRenderTarget* menuHoverBrushRT = nullptr; // identity check only
+
+    // Heap state that would otherwise sit in a thread_local past unload.
+    // Not part of Reset(): unrelated to the render target.
+    std::wstring themeClassScratch;              // GetCachedThemeClass
+    std::vector<BlendScaleColumn> blendScaleColumns; // BlendRowsOverScaled
 
     // Rounded ListView/TreeView tiles contain thread-affine memory DCs. Keep
     // them in the same FLS-owned cache instead of sharing HDCs between
@@ -3103,6 +3125,8 @@ struct D2DThreadCache
         editBorderLineLayerRT = nullptr;
         if (homeDoorMaskLayer) { homeDoorMaskLayer->Release(); homeDoorMaskLayer = nullptr; }
         homeDoorMaskLayerRT = nullptr;
+        if (menuHoverBrush) { menuHoverBrush->Release(); menuHoverBrush = nullptr; }
+        menuHoverBrushRT = nullptr;
     }
 
     ~D2DThreadCache() { Reset(); ReleasePillGlyph(); }
@@ -3153,6 +3177,12 @@ static D2DThreadCache* D2DGetThreadCache(bool create = true)
         }
     }
     return cache;
+}
+
+static std::wstring* ThreadThemeClassScratch()
+{
+    D2DThreadCache* cache = D2DGetThreadCache();
+    return cache ? &cache->themeClassScratch : nullptr;
 }
 
 static bool D2DThreadCachesClear()
@@ -14995,14 +15025,16 @@ static FlushMenuThemes_t     g_flushMenuThemes = nullptr;
 static DrawTextWithGlow_t    g_pDrawTextWithGlow = nullptr;
 static decltype(&DwmSetWindowAttribute) DwmSetWindowAttribute_orig = nullptr;
 
-// BufferedPaintInit must be called once per thread before that thread's
-// first BeginBufferedPaint, or the OS-pooled paint buffer isn't reliably
-// erased. Runs automatically per thread via the OS TLS callback.
-struct BufferedPaintThreadGuard {
-    BufferedPaintThreadGuard()  { BufferedPaintInit(); }
-    ~BufferedPaintThreadGuard() { BufferedPaintUnInit(); }
+// BufferedPaintInit must be in effect on a thread before its
+// BeginBufferedPaint, or the OS-pooled paint buffer isn't reliably erased.
+// Balanced within the paint that uses it, so no thread keeps it past unload.
+struct BufferedPaintScope {
+    const bool initialized = SUCCEEDED(BufferedPaintInit());
+    BufferedPaintScope() = default;
+    BufferedPaintScope(const BufferedPaintScope&) = delete;
+    BufferedPaintScope& operator=(const BufferedPaintScope&) = delete;
+    ~BufferedPaintScope() { if (initialized) BufferedPaintUnInit(); }
 };
-thread_local BufferedPaintThreadGuard g_bufferedPaintThreadGuard;
 
 // ============================================================================
 // ListView label-edit modernization
@@ -15669,7 +15701,7 @@ static void LIST_RENAME_DUI_CALL ListRenameHwndHostPaint_hook(
     paintParams.cbSize = sizeof(paintParams);
     paintParams.dwFlags = BPPF_NOCLIP;
     HPAINTBUFFER paintBuffer = nullptr;
-    (void)g_bufferedPaintThreadGuard;
+    const BufferedPaintScope bufferedPaintScope;
     if (bufferedRectReady) {
         paintBuffer = BeginBufferedPaint(
             hdc, &bufferedRect, BPBF_TOPDOWNDIB,
@@ -17528,11 +17560,7 @@ static bool MenuInstallImmersiveHook(
     }
 
     state->attempted.store(true, std::memory_order_release);
-    // explorer.exe, ExplorerFrame.dll, MoNotificationUx.exe,
-    // museuxdocked.dll, MusNotifyIcon.exe, Narrator.exe, pnidui.dll,
-    // SecurityHealthSSO.dll, SecurityHealthSsoUdk.dll,
-    // SecurityHealthSystray.exe, shell32.dll, SndVolSSO.dll, Taskmgr.exe,
-    // twinui.dll, twinui.pcshell.dll, usoapi.dll
+    // explorer.exe, ExplorerFrame.dll, MoNotificationUx.exe, museuxdocked.dll, MusNotifyIcon.exe, Narrator.exe, pnidui.dll, SecurityHealthSSO.dll, SecurityHealthSsoUdk.dll, SecurityHealthSystray.exe, shell32.dll, SndVolSSO.dll, Taskmgr.exe, twinui.dll, twinui.pcshell.dll, usoapi.dll
     WindhawkUtils::SYMBOL_HOOK immersive_menu_module_hooks[] = {{
         {L"bool " MENU_IMMERSIVE_SCALL
          L" ImmersiveContextMenuHelper::CanApplyOwnerDrawToMenu("
@@ -17805,8 +17833,6 @@ static void MenuDetectPopupFromUAH(LPARAM lParam)
     }
 }
 
-static thread_local HTHEME g_uahMenuBarTheme = nullptr;
-
 static void DrawUAHMenuNCBottomLine(HWND hWnd) {
     MENUBARINFO mbi{ sizeof(mbi) };
     if (!GetMenuBarInfo(hWnd, OBJID_MENU, 0, &mbi)) return;
@@ -17824,10 +17850,8 @@ static void DrawUAHMenuNCBottomLine(HWND hWnd) {
 }
 
 static bool UAHWndProc(HWND hWnd, UINT uMsg, WPARAM, LPARAM lParam) {
-    if (uMsg == WM_THEMECHANGED || uMsg == WM_DESTROY) {
-        if (g_uahMenuBarTheme) { CloseThemeData(g_uahMenuBarTheme); g_uahMenuBarTheme = nullptr; }
+    if (uMsg == WM_THEMECHANGED || uMsg == WM_DESTROY)
         return false;
-    }
     // Only the UAH paint messages need the colors. Probing dark mode for every
     // DefWindowProc call is also a recursion trap: IsHwndDarkMode sends
     // LVM_GETBKCOLOR to SysListView32, and a list view whose CListView is
@@ -17908,8 +17932,6 @@ static bool UAHWndProc(HWND hWnd, UINT uMsg, WPARAM, LPARAM lParam) {
         mii.dwTypeData = menuStr; mii.cch = 255;
         if (!GetMenuItemInfoW(pItem->um.hMenu, pItem->umi.iPosition, TRUE, &mii))
             return false;
-        if (!g_uahMenuBarTheme)
-            g_uahMenuBarTheme = OpenThemeData(hWnd, L"Menu");
         DTTOPTS dtto = { sizeof(dtto) };
         dtto.dwFlags = DTT_TEXTCOLOR;
         dtto.crText = (isDisabled || isInactive)
@@ -17929,10 +17951,15 @@ static bool UAHWndProc(HWND hWnd, UINT uMsg, WPARAM, LPARAM lParam) {
             }
         }
         if (!drawnViaD2D) {
-            g_glowEntry = true;
-            DrawThemeTextEx(g_uahMenuBarTheme, pItem->um.hdc, MENU_BARITEM,
-                MBI_NORMAL, menuStr, mii.cch, dtFlags, &pItem->dis.rcItem, &dtto);
-            g_glowEntry = false;
+            // Opened for this draw only: a thread's cached handle would stay
+            // open past unload.
+            if (HTHEME menuTheme = OpenThemeData(hWnd, L"Menu")) {
+                g_glowEntry = true;
+                DrawThemeTextEx(menuTheme, pItem->um.hdc, MENU_BARITEM,
+                    MBI_NORMAL, menuStr, mii.cch, dtFlags, &pItem->dis.rcItem, &dtto);
+                g_glowEntry = false;
+                CloseThemeData(menuTheme);
+            }
         }
         return true;
     }
@@ -30605,9 +30632,8 @@ static void PaintNavDividerHoverPill(HDC hdc, LPCRECT pRect, float fadeFrac, boo
 // colors used there are static literals (white/black at a few fixed alphas)
 // recomputed via CreateSolidColorBrush on every mouse-move repaint of any
 // open menu -- SetColor on a reused brush is a cheap field write instead of
-// a fresh COM allocation.
-static thread_local ID2D1DCRenderTarget*                         t_menuHoverBrushRT = nullptr;
-static thread_local Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> t_menuHoverBrush;
+// a fresh COM allocation. Kept in the thread's D2D cache, which releases it
+// with the render target and on unload.
 
 // A menu item's hover is SubtleFillColorSecondary, WinUI's pointer-over
 // fill. It stays translucent rather than flattened, because it lands on the
@@ -30623,15 +30649,21 @@ static D2D1_COLOR_F MenuItemHoverFill(bool dark)
 
 static ID2D1SolidColorBrush* GetMenuHoverBrush(ID2D1DCRenderTarget* pRT, D2D1_COLOR_F color)
 {
-    if (t_menuHoverBrushRT != pRT) {
-        t_menuHoverBrush.Reset();
-        t_menuHoverBrushRT = pRT;
+    D2DThreadCache* cache = D2DGetThreadCache();
+    if (!cache || !pRT)
+        return nullptr;
+    if (cache->menuHoverBrushRT != pRT) {
+        if (cache->menuHoverBrush) {
+            cache->menuHoverBrush->Release();
+            cache->menuHoverBrush = nullptr;
+        }
+        cache->menuHoverBrushRT = pRT;
     }
-    if (t_menuHoverBrush)
-        t_menuHoverBrush->SetColor(color);
-    else
-        pRT->CreateSolidColorBrush(color, &t_menuHoverBrush);
-    return t_menuHoverBrush.Get();
+    if (cache->menuHoverBrush)
+        cache->menuHoverBrush->SetColor(color);
+    else if (FAILED(pRT->CreateSolidColorBrush(color, &cache->menuHoverBrush)))
+        cache->menuHoverBrush = nullptr;
+    return cache->menuHoverBrush;
 }
 
 static bool PaintLegacyShellDropdownHover(HDC hdc, LPCRECT pRect, HWND hwnd, bool selected = false)
@@ -36288,8 +36320,11 @@ static void BlendScaledRowsOver(Dib& dst, int dstY, const Dib& src, int srcY, in
 
     // The horizontal mapping is the same for every row: source column pair
     // and 8-bit weight per destination column, -1 where nothing maps.
-    struct Column { int xa, xb, wx; };
-    static thread_local std::vector<Column> columns;
+    using Column = BlendScaleColumn;
+    std::vector<Column> localColumns;
+    D2DThreadCache* threadCache = D2DGetThreadCache();
+    std::vector<Column>& columns =
+        threadCache ? threadCache->blendScaleColumns : localColumns;
     columns.resize(copyW);
     int xFirst = copyW, xLast = -1;
     for (int x = 0; x < copyW; ++x) {
@@ -40187,11 +40222,15 @@ static bool DrawTooltipTextAlphaMask(HDC hdc, LPCWSTR text, INT count,
 // SysLink lays itself out through plain DrawTextW alone (never DrawTextExW),
 // one call per run/line with a real *lprc each time -- reading that rect
 // directly is exact, no separate measurement or calibration needed.
+// Fixed storage, so a thread alive at unload holds nothing on the heap: a
+// longer link text isn't captured, and a link wraps to at most 8 lines.
 struct SysLinkPillCapture {
     bool active = false;
     HWND targetHwnd = nullptr;
-    std::wstring targetText; // the active link's own plain-text substring
-    std::vector<RECT> rects;
+    wchar_t targetText[256] = {}; // the active link's own plain-text substring
+    size_t targetLength = 0;
+    RECT rects[8] = {};
+    int rectCount = 0;
 };
 static thread_local SysLinkPillCapture g_sysLinkPillCapture;
 
@@ -40263,9 +40302,12 @@ static INT WINAPI DrawTextW_hook_impl(HDC hdc, LPCWSTR lpchText, INT cchText,
         !(format & DT_CALCRECT) &&
         (g_tlsPaintHwnd ? g_tlsPaintHwnd : WindowFromDC(hdc)) == g_sysLinkPillCapture.targetHwnd) {
         const size_t len = cchText >= 0 ? (size_t)cchText : wcslen(lpchText);
+        auto& capture = g_sysLinkPillCapture;
         if (len > 0 &&
-            g_sysLinkPillCapture.targetText.find(lpchText, 0, len) != std::wstring::npos) {
-            g_sysLinkPillCapture.rects.push_back(*lprc);
+            capture.rectCount < static_cast<int>(ARRAYSIZE(capture.rects)) &&
+            std::wstring_view(capture.targetText, capture.targetLength).find(
+                std::wstring_view(lpchText, len)) != std::wstring_view::npos) {
+            capture.rects[capture.rectCount++] = *lprc;
         }
     }
 
@@ -43387,9 +43429,6 @@ static LRESULT CALLBACK RgMainSubclassProc(
         if (!GetMenuItemInfoW(pItem->um.hMenu, pItem->umi.iPosition, TRUE, &mii))
             return 0;
 
-        if (!g_uahMenuBarTheme)
-            g_uahMenuBarTheme = OpenThemeData(hwnd, L"Menu");
-
         DTTOPTS dtto = { sizeof(dtto) };
         dtto.dwFlags = DTT_TEXTCOLOR;
         dtto.crText = (isDisabled || isInactive)
@@ -43410,10 +43449,13 @@ static LRESULT CALLBACK RgMainSubclassProc(
             }
         }
         if (!drawnViaD2D) {
-            g_glowEntry = true;
-            DrawThemeTextEx(g_uahMenuBarTheme, pItem->um.hdc, MENU_BARITEM,
-                MBI_NORMAL, menuStr, mii.cch, dtFlags, &pItem->dis.rcItem, &dtto);
-            g_glowEntry = false;
+            if (HTHEME menuTheme = OpenThemeData(hwnd, L"Menu")) {
+                g_glowEntry = true;
+                DrawThemeTextEx(menuTheme, pItem->um.hdc, MENU_BARITEM,
+                    MBI_NORMAL, menuStr, mii.cch, dtFlags, &pItem->dis.rcItem, &dtto);
+                g_glowEntry = false;
+                CloseThemeData(menuTheme);
+            }
         }
         return 0;
     }
@@ -43422,7 +43464,6 @@ static LRESULT CALLBACK RgMainSubclassProc(
     case WM_SETTINGCHANGE:
         AccentPaletteInvalidate();
         g_accentCacheDirty.store(true, std::memory_order_release);
-        if (g_uahMenuBarTheme) { CloseThemeData(g_uahMenuBarTheme); g_uahMenuBarTheme = nullptr; }
         if (const UINT refreshMsg = g_rgRefreshColorsMessage.load(std::memory_order_acquire))
             PostMessageW(hwnd, refreshMsg, 0, 0);
         else {
@@ -49770,7 +49811,7 @@ static void ExplorerSysLinkAddRoundedPath(Gdiplus::GraphicsPath& path,
 
 static void ExplorerPaintSysLinkPill(HWND hwnd, HDC hdc, bool pressed, float progress)
 {
-    if (g_sysLinkPillCapture.rects.empty() || progress <= 0.f)
+    if (g_sysLinkPillCapture.rectCount <= 0 || progress <= 0.f)
         return;
 
     std::lock_guard<std::mutex> lk(g_expLinkGdipMutex);
@@ -49793,7 +49834,8 @@ static void ExplorerPaintSysLinkPill(HWND hwnd, HDC hdc, bool pressed, float pro
     Gdiplus::Graphics graphics(hdc);
     graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
     Gdiplus::SolidBrush brush(fillClr);
-    for (const RECT& r : g_sysLinkPillCapture.rects) {
+    for (int i = 0; i < g_sysLinkPillCapture.rectCount; ++i) {
+        const RECT& r = g_sysLinkPillCapture.rects[i];
         Gdiplus::GraphicsPath path;
         ExplorerSysLinkAddRoundedPath(path,
             Gdiplus::RectF((float)r.left - padX, (float)r.top - padY,
@@ -49898,12 +49940,15 @@ static LRESULT CALLBACK ExplorerSysLinkSubclassProc(HWND hwnd, UINT msg,
         std::wstring targetText;
         if (activeIx >= 0)
             targetText = ExplorerSysLinkActiveText(hwnd, activeIx);
-        const bool capturing = !targetText.empty();
+        const bool capturing = !targetText.empty() &&
+            targetText.size() < ARRAYSIZE(g_sysLinkPillCapture.targetText);
         if (capturing) {
             g_sysLinkPillCapture.active = true;
             g_sysLinkPillCapture.targetHwnd = hwnd;
-            g_sysLinkPillCapture.targetText = std::move(targetText);
-            g_sysLinkPillCapture.rects.clear();
+            wcsncpy_s(g_sysLinkPillCapture.targetText, targetText.c_str(),
+                _TRUNCATE);
+            g_sysLinkPillCapture.targetLength = targetText.size();
+            g_sysLinkPillCapture.rectCount = 0;
         }
 
         const LRESULT res = DefSubclassProc(hwnd, msg, wp, lp);
@@ -49911,14 +49956,14 @@ static LRESULT CALLBACK ExplorerSysLinkSubclassProc(HWND hwnd, UINT msg,
         if (capturing) {
             g_sysLinkPillCapture.active = false;
             g_sysLinkPillCapture.targetHwnd = nullptr;
-            if (!g_sysLinkPillCapture.rects.empty()) {
+            if (g_sysLinkPillCapture.rectCount > 0) {
                 HDC hdc = GetDC(hwnd);
                 if (hdc) {
                     ExplorerPaintSysLinkPill(hwnd, hdc, pressIx >= 0, progress);
                     ReleaseDC(hwnd, hdc);
                 }
             }
-            g_sysLinkPillCapture.rects.clear();
+            g_sysLinkPillCapture.rectCount = 0;
         }
         return res;
     }
@@ -57144,8 +57189,47 @@ static thread_local ExplorerMicaStatusBarPaintState*
     g_explorerMicaStatusBarPaintState = nullptr;
 static thread_local ExplorerMicaStatusBarPaintState
     g_pendingExplorerMicaStatusBarPaintState = {};
-static thread_local std::unordered_map<HWND, RECT>
-    g_explorerMicaStatusBarRects;
+// Up to 16 windows' rects per thread, in fixed storage: a thread alive at
+// unload holds nothing on the heap. Map-like, for the paths below.
+struct HwndRectSlots {
+    struct Entry { HWND first; RECT second; };
+    static constexpr int kCapacity = 16;
+    Entry entries[kCapacity] = {};
+    int count = 0;
+
+    Entry* find(HWND hwnd)
+    {
+        for (int i = 0; i < count; ++i) {
+            if (entries[i].first == hwnd)
+                return &entries[i];
+        }
+        return nullptr;
+    }
+    Entry* end() { return nullptr; }
+    bool contains(HWND hwnd) { return find(hwnd) != nullptr; }
+    size_t size() const { return static_cast<size_t>(count); }
+    void clear() { count = 0; }
+    void erase(Entry* entry) { *entry = entries[--count]; }
+    void EraseDestroyed()
+    {
+        for (int i = 0; i < count;) {
+            if (!IsWindow(entries[i].first))
+                erase(&entries[i]);
+            else
+                ++i;
+        }
+    }
+    RECT& operator[](HWND hwnd)
+    {
+        if (Entry* entry = find(hwnd))
+            return entry->second;
+        if (count == kCapacity)
+            count = 0;
+        entries[count] = { hwnd, {} };
+        return entries[count++].second;
+    }
+};
+static thread_local HwndRectSlots g_explorerMicaStatusBarRects;
 
 // The id name of an element painting inside one of Explorer's outer host
 // paints (the status bar host, the content pane's outer host), read once per
@@ -57218,8 +57302,7 @@ static thread_local ExplorerMicaPaneEdgePaintState*
     g_explorerMicaPaneEdgePaintState = nullptr;
 static thread_local ExplorerMicaPaneEdgePaintState
     g_pendingExplorerMicaPaneEdgePaintState = {};
-static thread_local std::unordered_map<HWND, RECT>
-    g_explorerMicaPaneEdgeRects;
+static thread_local HwndRectSlots g_explorerMicaPaneEdgeRects;
 
 static bool IsExplorerMicaPaneEdgeTarget(
     const wchar_t* idName, HDC hdc, HWND* hostHwnd)
@@ -57419,9 +57502,7 @@ static void ExplorerMicaPaneEdgeEndPaint(
     if (pending.hwnd == hwnd && pending.captured) {
         if (g_explorerMicaPaneEdgeRects.size() >= 16 &&
             !g_explorerMicaPaneEdgeRects.contains(hwnd)) {
-            std::erase_if(g_explorerMicaPaneEdgeRects, [](const auto& entry) {
-                return !IsWindow(entry.first);
-            });
+            g_explorerMicaPaneEdgeRects.EraseDestroyed();
             if (g_explorerMicaPaneEdgeRects.size() >= 16)
                 g_explorerMicaPaneEdgeRects.clear();
         }
@@ -57808,10 +57889,7 @@ static void ExplorerMicaStatusBarEndPaint(
         if (ExplorerBackdropMode()) {
             if (g_explorerMicaStatusBarRects.size() >= 16 &&
                 !g_explorerMicaStatusBarRects.contains(hwnd)) {
-                std::erase_if(g_explorerMicaStatusBarRects,
-                              [](const auto& entry) {
-                                  return !IsWindow(entry.first);
-                              });
+                g_explorerMicaStatusBarRects.EraseDestroyed();
                 if (g_explorerMicaStatusBarRects.size() >= 16)
                     g_explorerMicaStatusBarRects.clear();
             }
@@ -58155,12 +58233,17 @@ static void DuiApplyDarkForPaintWindow(HWND paintHwnd)
     if (!root || !IsWindow(root))
         return;
 
-    thread_local std::unordered_set<HWND> appliedRoots;
-    if (appliedRoots.size() > 32)
-        appliedRoots.clear();
-
-    if (!appliedRoots.insert(root).second)
-        return;
+    // Roots already swept on this thread, in fixed storage (restarted when
+    // full): a thread alive at unload holds nothing on the heap.
+    static thread_local HWND appliedRoots[32] = {};
+    static thread_local int appliedRootCount = 0;
+    for (int i = 0; i < appliedRootCount; ++i) {
+        if (appliedRoots[i] == root)
+            return;
+    }
+    if (appliedRootCount == static_cast<int>(ARRAYSIZE(appliedRoots)))
+        appliedRootCount = 0;
+    appliedRoots[appliedRootCount++] = root;
 
     EnumThreadWindows(GetCurrentThreadId(), DuiApplyDarkProc, 0);
 }
