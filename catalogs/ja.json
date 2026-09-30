@@ -11929,7 +11929,7 @@
         "ratingBreakdown": [34, 28, 45, 176, 1894],
         "ratingUsers": 2177,
         "reviews": 0,
-        "updated": 1782858536000,
+        "updated": 1790801870000,
         "users": 112237
       },
       "featured": true,
@@ -11947,7 +11947,7 @@
         ],
         "name": "Taskbar Clock Customization",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.8"
+        "version": "1.8.1"
       }
     },
     "taskbar-clock-to-left": {

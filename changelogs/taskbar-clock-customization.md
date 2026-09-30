@@ -1,3 +1,11 @@
+## 1.8.1 ([Sep 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/fbcec11c935aeb63203a1f4990a4d76c58525c4c/mods/taskbar-clock-customization.wh.cpp))
+
+* Added GPU temperature metrics: `%gpu_temp%` and `%gpu_temp_f%`.
+* Added the ability to use different locales for different date formats.
+* Added support for multi-digit patterns, for example `%date12%` (previously it was supported only up to `%date9%`).
+* RAM sizes now use locale formatting (previously, a period was always used).
+* Fixed missing ellipsis with clock max width option.
+
 ## 1.8 ([Jun 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/c016d1c9b8d23944d834dd41c1029f0d124ff858/mods/taskbar-clock-customization.wh.cpp))
 
 * Added new system performance metrics, contributed by [yalov](https://github.com/yalov):

@@ -2,12 +2,29 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-30T15:01:58.000Z</updated>
+    <updated>2026-09-30T20:57:50.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Clock Customization 1.8.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-clock-customization#fbcec11c935aeb63203a1f4990a4d76c58525c4c</id>
+        <link href="https://windhawk.net/mods/taskbar-clock-customization"/>
+        <updated>2026-09-30T20:57:50.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added GPU temperature metrics: <code>%gpu_temp%</code> and <code>%gpu_temp_f%</code>.</li>
+<li>Added the ability to use different locales for different date formats.</li>
+<li>Added support for multi-digit patterns, for example <code>%date12%</code> (previously it was supported only up to <code>%date9%</code>).</li>
+<li>RAM sizes now use locale formatting (previously, a period was always used).</li>
+<li>Fixed missing ellipsis with clock max width option.</li>
+</ul>]]></content>
+        <author>
+            <name>m417z</name>
+            <uri>https://github.com/m417z</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Titlebar For Everyone 0.5]]></title>
         <id>https://windhawk.net/mods/titlebar-for-everyone#46656e53918bf748150677074046be05de1d8de4</id>
@@ -691,23 +708,6 @@ non-elevated process can't send them commands.</li>
         <author>
             <name>zed712969-crypto</name>
             <uri>https://github.com/zed712969-crypto</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Mouse Trail 3.4.4.0]]></title>
-        <id>https://windhawk.net/mods/mouse-trail#bfcbf010b49005e0b230d4dee351ccc4975d1143</id>
-        <link href="https://windhawk.net/mods/mouse-trail"/>
-        <updated>2026-09-28T10:01:26.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Change：Reorganized settings into collapsible groups (will reset to defaults)</li>
-<li>Fix：10 shader issues</li>
-<li>Fix：Particle mode accidentally spawning particles due to aggressive compensation mechanism</li>
-<li>Change：Improved debug rendering</li>
-<li>Change：Improved vortex generation, merging, and spawning frequency around cursor</li>
-</ul>]]></content>
-        <author>
-            <name>MCheng404</name>
-            <uri>https://github.com/MCheng404</uri>
         </author>
     </entry>
 </feed>
