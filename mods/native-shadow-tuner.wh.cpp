@@ -485,7 +485,8 @@ bool InitDynamicShadows(HMODULE module) {
     void* onOffsetUpdatedAddress = nullptr;
     void* createAndAttachBorderBrushAddress = nullptr;
 
-    WindhawkUtils::SYMBOL_HOOK resolveOnly[] = {
+    // uDWM.dll
+    WindhawkUtils::SYMBOL_HOOK udwmDllResolveHooks[] = {
         {
             {LR"(public: virtual long __cdecl CWindowBorder::ValidateVisual(void))"},
             &validateVisualAddress,
@@ -504,8 +505,8 @@ bool InitDynamicShadows(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, resolveOnly,
-                                    ARRAYSIZE(resolveOnly)) ||
+    if (!WindhawkUtils::HookSymbols(module, udwmDllResolveHooks,
+                                    ARRAYSIZE(udwmDllResolveHooks)) ||
         !validateVisualAddress || !updateWindowVisualsAddress ||
         !onOffsetUpdatedAddress || !createAndAttachBorderBrushAddress) {
         Wh_Log(L"Dynamic shadows: required symbols not found.");
@@ -533,7 +534,8 @@ bool InitDynamicShadows(HMODULE module) {
         return false;
     }
 
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
+    // uDWM.dll
+    WindhawkUtils::SYMBOL_HOOK udwmDllDynamicShadowHooks[] = {
         {
             {LR"(public: void __cdecl CTopLevelWindow::OnOffsetUpdated(void))"},
             &onOffsetUpdated_Original,
@@ -546,7 +548,8 @@ bool InitDynamicShadows(HMODULE module) {
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, hooks, ARRAYSIZE(hooks))) {
+    if (!WindhawkUtils::HookSymbols(module, udwmDllDynamicShadowHooks,
+                                    ARRAYSIZE(udwmDllDynamicShadowHooks))) {
         Wh_Log(L"Dynamic shadows: hooks could not be registered.");
         return false;
     }
