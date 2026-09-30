@@ -2,7 +2,7 @@
 // @id              native-shadow-tuner
 // @name            Windows Shadows Tuner
 // @description     Adjust the size, blur and intensity of native Windows shadows.
-// @version         0.9.3
+// @version         0.9.4
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         dwm.exe
@@ -80,7 +80,8 @@ It sets the opacity of each window's shadow sprite through the public
 `Windows.UI.Composition.IVisual` interface. The shadow sprite also draws the
 thin window border, so the border fades together with the shadow. Each
 monitor has its own light, so a window's shadow can change abruptly when the
-window's center crosses to another monitor.
+window's center crosses to another monitor. While "Show shadows under windows" is off
+in Windows, dynamic shadows don't change anything.
 
 The mod creates no overlay windows. The only value it stores is the time of
 its last initialization, used to detect a DWM crash loop.
@@ -271,7 +272,19 @@ enum class FadeCurve { Linear, Fast, Smooth, Late };
 FadeCurve fadeCurve = FadeCurve::Linear;
 
 std::atomic<bool> unloading{false};
+
+// Mirrors "Show shadows under windows". The sprite dimmed by dynamic shadows
+// also draws the thin window border, so while shadows are off it's kept at
+// full opacity: otherwise the border would stay dimmed after unloading,
+// because the shadow refresh used to reset sprites does nothing then.
+std::atomic<bool> dropShadowsOn{false};
 std::atomic<int> resetCount{0};
+
+void UpdateDropShadowsOn() {
+    BOOL shadows = FALSE;
+    dropShadowsOn =
+        SystemParametersInfoW(SPI_GETDROPSHADOW, 0, &shadows, 0) && shadows;
+}
 
 void LoadLightPosition() {
     lightKind = LightKind::Point;
@@ -390,7 +403,7 @@ void ApplyDynamicShadows(void* topLevel) {
     }
 
     float opacity = 1.0f;
-    if (!unloading) {
+    if (!unloading && dropShadowsOn) {
         const BYTE* windowData = *reinterpret_cast<BYTE**>(
             static_cast<BYTE*>(topLevel) + kTopLevelWindowDataOffset);
         if (!windowData) {
@@ -436,6 +449,9 @@ void __cdecl OnOffsetUpdated_Hook(void* pThis) {
 
 long __cdecl UpdateWindowVisuals_Hook(void* pThis) {
     const long result = updateWindowVisuals_Original(pThis);
+    // UpdateWindowVisuals runs for every window when the drop shadow setting
+    // changes, so the cached flag is always current when it's applied.
+    UpdateDropShadowsOn();
     ApplyDynamicShadows(pThis);
     return result;
 }
@@ -477,79 +493,56 @@ bool HasCallTo(const BYTE* start, size_t searchSize, const void* target) {
     return false;
 }
 
-bool InitDynamicShadows(HMODULE module) {
-    // First pass: resolve addresses only, to check the field offsets before
-    // installing any hook.
-    void* validateVisualAddress = nullptr;
-    void* updateWindowVisualsAddress = nullptr;
-    void* onOffsetUpdatedAddress = nullptr;
-    void* createAndAttachBorderBrushAddress = nullptr;
+// Addresses of the uDWM functions used by dynamic shadows. They're resolved
+// in the same HookSymbols call as the static hook, as optional entries.
+struct DynamicShadowSymbols {
+    void* validateVisual = nullptr;
+    void* createAndAttachBorderBrush = nullptr;
+    OnOffsetUpdated_t onOffsetUpdated = nullptr;
+    UpdateWindowVisuals_t updateWindowVisuals = nullptr;
+};
 
-    // uDWM.dll
-    WindhawkUtils::SYMBOL_HOOK udwmDllResolveHooks[] = {
-        {
-            {LR"(public: virtual long __cdecl CWindowBorder::ValidateVisual(void))"},
-            &validateVisualAddress,
-        },
-        {
-            {LR"(private: long __cdecl CTopLevelWindow::UpdateWindowVisuals(void))"},
-            &updateWindowVisualsAddress,
-        },
-        {
-            {LR"(public: void __cdecl CTopLevelWindow::OnOffsetUpdated(void))"},
-            &onOffsetUpdatedAddress,
-        },
-        {
-            {LR"(private: long __cdecl CWindowBorder::CreateAndAttachBorderBrush(struct Windows::UI::Composition::ISpriteVisual *))"},
-            &createAndAttachBorderBrushAddress,
-        },
-    };
-
-    if (!WindhawkUtils::HookSymbols(module, udwmDllResolveHooks,
-                                    ARRAYSIZE(udwmDllResolveHooks)) ||
-        !validateVisualAddress || !updateWindowVisualsAddress ||
-        !onOffsetUpdatedAddress || !createAndAttachBorderBrushAddress) {
+bool InitDynamicShadows(const DynamicShadowSymbols& symbols) {
+    if (!symbols.validateVisual || !symbols.createAndAttachBorderBrush ||
+        !symbols.onOffsetUpdated || !symbols.updateWindowVisuals) {
         Wh_Log(L"Dynamic shadows: required symbols not found.");
         return false;
     }
+
+    const void* onOffsetUpdatedCode =
+        reinterpret_cast<const void*>(symbols.onOffsetUpdated);
+    const void* updateWindowVisualsCode =
+        reinterpret_cast<const void*>(symbols.updateWindowVisuals);
 
     // The sprite pointer is used to call into a COM vtable, so require the
     // exact code shape: the load must be followed by the call that attaches
     // the shadow brush to that sprite.
     const BYTE* spriteLoad =
-        FindPattern(validateVisualAddress, 0x200, kBorderSpritePattern,
+        FindPattern(symbols.validateVisual, 0x200, kBorderSpritePattern,
                     sizeof(kBorderSpritePattern));
 
     if (!spriteLoad ||
         !HasCallTo(spriteLoad + sizeof(kBorderSpritePattern), 0x20,
-                   createAndAttachBorderBrushAddress) ||
-        !CodeContains(updateWindowVisualsAddress, 0x800,
-                      kTopLevelBorderPattern,
+                   symbols.createAndAttachBorderBrush) ||
+        !CodeContains(updateWindowVisualsCode, 0x800, kTopLevelBorderPattern,
                       sizeof(kTopLevelBorderPattern)) ||
-        !CodeContains(onOffsetUpdatedAddress, 0x40, kWindowDataPattern,
+        !CodeContains(onOffsetUpdatedCode, 0x40, kWindowDataPattern,
                       sizeof(kWindowDataPattern)) ||
-        !CodeContains(onOffsetUpdatedAddress, 0x40, kWindowRectPattern,
+        !CodeContains(onOffsetUpdatedCode, 0x40, kWindowRectPattern,
                       sizeof(kWindowRectPattern))) {
         Wh_Log(L"Dynamic shadows: field offsets don't match this uDWM build.");
         return false;
     }
 
-    // uDWM.dll
-    WindhawkUtils::SYMBOL_HOOK udwmDllDynamicShadowHooks[] = {
-        {
-            {LR"(public: void __cdecl CTopLevelWindow::OnOffsetUpdated(void))"},
-            &onOffsetUpdated_Original,
-            OnOffsetUpdated_Hook,
-        },
-        {
-            {LR"(private: long __cdecl CTopLevelWindow::UpdateWindowVisuals(void))"},
-            &updateWindowVisuals_Original,
-            UpdateWindowVisuals_Hook,
-        },
-    };
-
-    if (!WindhawkUtils::HookSymbols(module, udwmDllDynamicShadowHooks,
-                                    ARRAYSIZE(udwmDllDynamicShadowHooks))) {
+    // Hooks set before Wh_ModInit returns are applied together with the
+    // symbol hooks. If only the first one succeeds, it stays harmless: both
+    // hooks do nothing while dynamicShadows is false.
+    if (!WindhawkUtils::SetFunctionHook(symbols.onOffsetUpdated,
+                                        OnOffsetUpdated_Hook,
+                                        &onOffsetUpdated_Original) ||
+        !WindhawkUtils::SetFunctionHook(symbols.updateWindowVisuals,
+                                        UpdateWindowVisuals_Hook,
+                                        &updateWindowVisuals_Original)) {
         Wh_Log(L"Dynamic shadows: hooks could not be registered.");
         return false;
     }
@@ -688,6 +681,12 @@ BOOL Wh_ModInit() {
     opacityScale = opacityPercent / 100.0f;
     sizeScale = sizePercent / 100.0f;
 
+    DynamicShadowSymbols dynamicSymbols;
+
+    // A single HookSymbols call resolves every uDWM symbol, so Windhawk's
+    // symbol cache stays valid. The array is the same whatever the settings
+    // are, so changing them doesn't invalidate the cache either.
+    // uDWM.dll
     WindhawkUtils::SYMBOL_HOOK udwmDllHooks[] = {
         {
             {
@@ -697,6 +696,32 @@ BOOL Wh_ModInit() {
             &getShadowParameters_Original,
             GetShadowParameters_Hook,
         },
+        // Dynamic shadows: addresses only, hooked after the offsets are
+        // validated.
+        {
+            {LR"(public: virtual long __cdecl CWindowBorder::ValidateVisual(void))"},
+            &dynamicSymbols.validateVisual,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(private: long __cdecl CWindowBorder::CreateAndAttachBorderBrush(struct Windows::UI::Composition::ISpriteVisual *))"},
+            &dynamicSymbols.createAndAttachBorderBrush,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(public: void __cdecl CTopLevelWindow::OnOffsetUpdated(void))"},
+            &dynamicSymbols.onOffsetUpdated,
+            nullptr,
+            true,
+        },
+        {
+            {LR"(private: long __cdecl CTopLevelWindow::UpdateWindowVisuals(void))"},
+            &dynamicSymbols.updateWindowVisuals,
+            nullptr,
+            true,
+        },
     };
 
     if (!WindhawkUtils::HookSymbols(module, udwmDllHooks,
@@ -705,7 +730,9 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    if (dynamicShadows && !InitDynamicShadows(module)) {
+    UpdateDropShadowsOn();
+
+    if (dynamicShadows && !InitDynamicShadows(dynamicSymbols)) {
         Wh_Log(L"Dynamic shadows disabled; static shadow tuning still active.");
         dynamicShadows = false;
     }
@@ -729,6 +756,14 @@ void Wh_ModAfterInit() {
 
 void Wh_ModBeforeUninit() {
     if (!dynamicShadows) {
+        return;
+    }
+
+    // While shadows are off, sprites are kept at full opacity and the refresh
+    // below would do nothing, so there's nothing to reset or wait for.
+    BOOL shadows = FALSE;
+    if (!SystemParametersInfoW(SPI_GETDROPSHADOW, 0, &shadows, 0) ||
+        !shadows) {
         return;
     }
 
