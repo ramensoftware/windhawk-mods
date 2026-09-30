@@ -161,6 +161,7 @@ ex.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
 #include <windows.h>
 #include <gdiplus.h>
 #include <shlwapi.h>
@@ -1588,7 +1589,7 @@ BOOL Wh_ModInit() {
             }
             // Referencing the imported function also ensures uxtheme stays
             // loaded throughout the lifetime of this mod.
-            if (!Wh_SetFunctionHook((void*)DrawThemeBackground,
+            if (!WindhawkUtils::SetFunctionHook((void*)DrawThemeBackground,
                                     (void*)HookedDrawThemeBackground,
                                     (void**)&DrawThemeBackground_Orig)) {
                 Wh_Log(L"Failed to hook DrawThemeBackground");
@@ -1597,9 +1598,9 @@ BOOL Wh_ModInit() {
             }
         }
         if (g_enableTextCustomization) {
-            if (!Wh_SetFunctionHook((void*)DrawTextW, (void*)DrawTextW_Hook,
+            if (!WindhawkUtils::SetFunctionHook((void*)DrawTextW, (void*)DrawTextW_Hook,
                                     (void**)&DrawTextW_Orig) ||
-                !Wh_SetFunctionHook((void*)DrawTextExW, (void*)DrawTextExW_Hook,
+                !WindhawkUtils::SetFunctionHook((void*)DrawTextExW, (void*)DrawTextExW_Hook,
                                     (void**)&DrawTextExW_Orig)) {
                 Wh_Log(L"Failed to hook disk text drawing");
                 ShutdownGdiPlus();
