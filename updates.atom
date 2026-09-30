@@ -2,12 +2,25 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-29T21:04:50.000Z</updated>
+    <updated>2026-09-30T01:03:16.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Remove UWP titlebars Lite 1.3.0]]></title>
+        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#196fcdb727a79e52a624264506fdd1928e4ec565</id>
+        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
+        <updated>2026-09-30T01:03:16.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix immersive Alt-Tab switcher</li>
+</ul>]]></content>
+        <author>
+            <name>Anixx</name>
+            <uri>https://github.com/Anixx</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[AudioSwap 2.4.0]]></title>
         <id>https://windhawk.net/mods/audioswap#073c3b60d072f548e05d713317ed9714dabb234e</id>
@@ -680,88 +693,6 @@ Windows 11 only.</p>
         <author>
             <name>allelimo</name>
             <uri>https://github.com/allelimo</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Taskbar Only on Desktop 8.0.0]]></title>
-        <id>https://windhawk.net/mods/hide-taskbar-only-on-desktop#222fe7db8466b63b488ee78695a9cee03145e3ed</id>
-        <link href="https://windhawk.net/mods/hide-taskbar-only-on-desktop"/>
-        <updated>2026-09-28T09:04:52.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hidetaskbaronlyondesktop">Hide Taskbar Only on Desktop</h1>
-<p>Hides selected bottom-docked taskbars when their display has no relevant application. Detected borderless fullscreen windows are also treated as desktop-only display state, with explicit shell, keyboard, and hover reveals handled separately. Each display is evaluated independently.</p>
-<h2 id="demo">Demo</h2>
-<h3 id="multipledisplays">Multiple Displays</h3>
-<p><img src="https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/multiple-display.gif" alt="Multiple Display" /></p>
-<h3 id="singledisplay">Single Display</h3>
-<p><img src="https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/single-display.gif" alt="Single Display" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Per-display desktop-only hiding</li>
-<li>Independent bottom-edge hover reveal</li>
-<li>Multi-monitor and spanning-window support</li>
-<li>Keyboard taskbar interaction such as Win+T and Win+B</li>
-<li>Recognized shell UI, taskbar popups, and desktop shell surfaces handled separately</li>
-<li>Per-display borderless fullscreen tracking</li>
-<li>Recovery after taskbar recreation or tool-process restart</li>
-<li>Optional stable monitor interface-name mapping</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<p><strong>Extra hover margin (px)</strong> adds to the taskbar-height-based bottom-edge reveal zone and is scaled for the display DPI.</p>
-<p><strong>Auto-hide delay after hover (ms)</strong> controls how long the revealed taskbar stays visible after the cursor leaves the bottom-edge hover zone. It only affects hover dismissal; desktop-only hides remain immediate.</p>
-<p><strong>Reveal taskbar on bottom-edge hover</strong> selects the displays where bottom-edge hover can reveal the taskbar.</p>
-<p><strong>Taskbars to hide on desktop</strong> selects the displays whose taskbars participate in desktop-only hiding.</p>
-<p><strong>Stable monitor interface names</strong> lets you pin a display slot to a specific physical monitor by selecting the slot and pasting its Windows monitor interface name returned by <code>EnumDisplayDevicesW</code> with <code>EDD_GET_DEVICE_INTERFACE_NAME</code>. Each mapping has its own display selector and text field, so a mapping for Display 10 can be added directly without creating mappings for Displays 1 through 9. Pinned monitors always use their configured display slots. Any monitors that are not pinned fill the remaining display slots in their current logical order. If multiple mappings target the same slot or physical monitor, the last matching mapping wins.</p>
-<p>To find the interface names on Windows, run this in PowerShell:</p>
-<pre><code class="powershell language-powershell">Add-Type @'
-using System;
-using System.Runtime.InteropServices;
-public static class DisplayDevices2 {
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public struct DISPLAY_DEVICE {
-        public int cb;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceString;
-        public int StateFlags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceID;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceKey;
-    }
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "EnumDisplayDevicesW")]
-    public static extern bool EnumDisplayDevices(string lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
-}
-'@
-for ($i = 1; $i -le 16; $i++) {
-    $m = New-Object DisplayDevices2+DISPLAY_DEVICE
-    $m.cb = [Runtime.InteropServices.Marshal]::SizeOf($m)
-    if ([DisplayDevices2]::EnumDisplayDevices("\\.\DISPLAY$i", 0, [ref]$m, 1)) {
-        Write-Host "Display $i : $($m.DeviceString)"
-        Write-Host "Interface : $($m.DeviceID)"
-        Write-Host ""
-    }
-}
-</code></pre>
-<p>Paste the full value shown after <strong>Interface :</strong> into the mapping for the display slot you want to attach to that physical monitor.</p>
-<p>The mod intentionally supports up to 16 fixed logical display slots. Pinned monitors stay in their selected slots, while unpinned monitors fill the remaining slots in current logical order.</p>
-<h2 id="differencefromtaskbarfade">Difference from <code>taskbar-fade</code></h2>
-<p><code>taskbar-fade</code> and this mod both use layered taskbar transparency and can reveal the taskbar from the bottom edge, so they overlap in mechanism. This mod has a different primary state model: <strong>desktop-only state is evaluated independently for each display, and the taskbar becomes immediately eligible for hiding when that display has no relevant application, subject to explicit hover, shell, or keyboard reveals</strong>. It also carries the per-display fullscreen, shell-surface, keyboard, minimize, and recovery handling needed by that model.</p>
-<p>The two mods should not be used on the same taskbar because both modify the taskbar window's transparency/style state.</p>
-<h2 id="implementation">Implementation</h2>
-<p>The state logic runs in a dedicated Windhawk tool process. Taskbars are hidden with layered-window transparency plus click-through behavior instead of Windows' native taskbar auto-hide, so the normal desktop work area is intentionally unchanged.</p>
-<p>Fullscreen ownership is tracked per display for borderless monitor-sized windows. Foreground, move/size, per-owner location, and recognized shell-surface events update state promptly, including geometry changes while the owner is in the background. Cached fullscreen ownership tolerates transient visibility or cloak changes while focus moves between displays and remains active while the owner still matches fullscreen geometry. Short validation timers and a 5-second safety refresh cover transitions that do not produce a single reliable event. Taskbar control focus is tracked through out-of-context accessibility focus events, so keyboard navigation such as Win+T and Win+B can reveal a taskbar even when Windows has not yet made that taskbar the foreground window. A short release debounce keeps the taskbar visible across transient focus transitions between taskbar buttons. Mouse-button activity and shell-menu focus are excluded so ordinary mouse interaction is not misclassified as keyboard navigation.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li><strong>Recovery:</strong> If the dedicated tool process terminates unexpectedly while a taskbar is hidden, disable and re-enable this mod in Windhawk or restart Windows Explorer to restore it. A later tool-process startup also performs ownership recovery. If the taskbar window itself no longer exists, restarting Windows Explorer recreates it.</li>
-<li>Desktop-only hiding and hover reveal apply to bottom-docked taskbars.</li>
-<li>The hidden taskbar remains part of the normal work area and is click-through.</li>
-<li>If a taskbar's monitor cannot be resolved during a state refresh, the mod fails safe by leaving that taskbar visible.</li>
-<li>Flashing taskbar buttons and tray notifications are not visible while the taskbar is transparent.</li>
-<li>Native Windows taskbar auto-hide remains separate from this mod; when it is enabled, this mod does not take over that taskbar.</li>
-<li>Other taskbar transparency/style mods can conflict when they modify the same taskbar.</li>
-<li>A visible, monitor-sized, captionless, non-resizable application may be treated as fullscreen. Cached fullscreen ownership can remain active through transient visibility or cloak changes while the owner still matches fullscreen geometry. During fullscreen detection, bottom-edge mouse hover does not reveal the taskbar; use <strong>Win+T</strong> or <strong>Start</strong> to access it.</li>
-<li>Windows shell classes/processes can change between Windows releases.</li>
-</ul>]]></content>
-        <author>
-            <name>Sahil Dashoni</name>
-            <uri>https://github.com/Sahil-Dashoni</uri>
         </author>
     </entry>
 </feed>
