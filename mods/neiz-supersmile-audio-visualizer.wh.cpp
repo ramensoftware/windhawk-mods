@@ -3,7 +3,7 @@
 // @name            Desktop Audio Visualizer Plus
 // @description     A highly customizable audio visualizer with synced lyrics, media controls and EQ, featuring optional network access to fetch lyrics from lrclib.net
 // @description:ru  Настраиваемый аудиовизуализатор с синхронизированным текстом песен, управлением медиа и эквалайзером, с опциональным доступом к сети для загрузки текстов с lrclib.net
-// @version         1.1.0
+// @version         1.1.1
 // @license         MIT
 // @author          NeiZ
 // @github          https://github.com/NeiZqwe
@@ -1633,11 +1633,24 @@ static constexpr std::array<float, VIZ_EQ_BANDS> VIZ_EQ_HIGH_HZ = {
     60.0f, 120.0f, 250.0f, 500.0f, 1000.0f,
     2000.0f, 4000.0f, 8000.0f, 14000.0f, 20000.0f
 };
+// Legacy single-curve storage kept for backwards compatibility.
 static constexpr std::array<const wchar_t*, VIZ_EQ_BANDS> VIZ_EQ_STORAGE_KEYS = {
     L"customEqBand0", L"customEqBand1", L"customEqBand2", L"customEqBand3",
     L"customEqBand4", L"customEqBand5", L"customEqBand6", L"customEqBand7",
     L"customEqBand8", L"customEqBand9"
 };
+
+// Persistent storage for the actual curve currently shown by the EQ. This is
+// deliberately separate from custom presets and from the old legacy curve so
+// selecting a built-in preset can never overwrite the user's current values.
+static constexpr std::array<const wchar_t*, VIZ_EQ_BANDS> VIZ_EQ_ACTIVE_STORAGE_KEYS = {
+    L"eqActiveBand0", L"eqActiveBand1", L"eqActiveBand2", L"eqActiveBand3",
+    L"eqActiveBand4", L"eqActiveBand5", L"eqActiveBand6", L"eqActiveBand7",
+    L"eqActiveBand8", L"eqActiveBand9"
+};
+static constexpr wchar_t VIZ_EQ_SELECTED_PRESET_STORAGE_KEY[] =
+    L"eqSelectedPreset";
+static constexpr int VIZ_EQ_BUILTIN_PRESET_COUNT = 8;
 static constexpr int VIZ_EQ_MAX_CUSTOM_PRESETS = 12;
 static constexpr int EQ_CUSTOM_PRESET_INDEX_BASE = 100;
 static std::array<std::array<std::atomic<float>, VIZ_EQ_BANDS>, VIZ_EQ_MAX_CUSTOM_PRESETS> g_eqCustomPresetGains{};
@@ -1645,6 +1658,7 @@ static int g_eqCustomPresetCount = 0;
 static int g_eqSelectedPreset = -1;
 static std::array<std::atomic<float>, VIZ_EQ_BANDS> g_customEqGains{};
 static std::array<std::atomic<float>, VIZ_EQ_BANDS> g_eqActiveGains{};
+static bool g_eqStorageInitialized = false;
 
 static std::atomic<float> g_audioBands[VIZ_NUM_BANDS] = {};
 static std::atomic<ULONGLONG> g_lastAudioUpdateMs{0};
@@ -2776,15 +2790,30 @@ static void EqSaveAllCustomPresets() {
 }
 
 static void LoadCustomEQSettings() {
-    // Keep the old single-Custom storage as the initial EQ curve so existing
-    // users keep their previous curve. New custom presets have their own keys.
+    // Windhawk calls LoadSettings() again when the user changes any mod
+    // setting. Do not reload the live EQ curve from storage on those calls,
+    // otherwise a normal settings change would silently revert the current
+    // EQ values. The storage is loaded once per module lifetime instead.
+    if (g_eqStorageInitialized)
+        return;
+
+    // Load the current EQ curve independently from preset storage. Newer
+    // versions use eqActiveBand0..9; older installations only have the
+    // legacy customEqBand0..9 values, so fall back to those when needed.
     for (int i = 0; i < VIZ_EQ_BANDS; ++i) {
+        const int activeStored = Wh_GetIntValue(
+            VIZ_EQ_ACTIVE_STORAGE_KEYS[static_cast<size_t>(i)], -1);
         const int stored = std::clamp(
-            Wh_GetIntValue(VIZ_EQ_STORAGE_KEYS[static_cast<size_t>(i)], 100), 0, 200);
+            activeStored >= 0
+                ? activeStored
+                : Wh_GetIntValue(
+                    VIZ_EQ_STORAGE_KEYS[static_cast<size_t>(i)], 100),
+            0, 200);
         const float gain = stored / 100.0f;
         g_customEqGains[static_cast<size_t>(i)].store(gain, std::memory_order_relaxed);
         g_eqActiveGains[static_cast<size_t>(i)].store(gain, std::memory_order_relaxed);
     }
+
     g_eqCustomPresetCount = std::clamp(
         Wh_GetIntValue(L"customEqPresetCount", 0), 0, VIZ_EQ_MAX_CUSTOM_PRESETS);
     for (int preset = 0; preset < VIZ_EQ_MAX_CUSTOM_PRESETS; ++preset) {
@@ -2796,29 +2825,60 @@ static void LoadCustomEQSettings() {
                 stored / 100.0f, std::memory_order_relaxed);
         }
     }
+
+    const int savedPreset = Wh_GetIntValue(
+        VIZ_EQ_SELECTED_PRESET_STORAGE_KEY, -1);
+    if (savedPreset >= 0 && savedPreset < VIZ_EQ_BUILTIN_PRESET_COUNT) {
+        g_eqSelectedPreset = savedPreset;
+    } else if (savedPreset >= EQ_CUSTOM_PRESET_INDEX_BASE &&
+               savedPreset < EQ_CUSTOM_PRESET_INDEX_BASE + g_eqCustomPresetCount) {
+        g_eqSelectedPreset = savedPreset;
+    } else {
+        g_eqSelectedPreset = -1;
+    }
+
+    g_eqStorageInitialized = true;
 }
 
 static void SaveCustomEQSettings() {
-    if (g_eqSelectedPreset >= EQ_CUSTOM_PRESET_INDEX_BASE) {
-        const int presetIndex = g_eqSelectedPreset - EQ_CUSTOM_PRESET_INDEX_BASE;
-        if (presetIndex >= 0 && presetIndex < g_eqCustomPresetCount) {
-            for (int band = 0; band < VIZ_EQ_BANDS; ++band) {
-                g_eqCustomPresetGains[static_cast<size_t>(presetIndex)][static_cast<size_t>(band)].store(
-                    std::clamp(g_eqActiveGains[static_cast<size_t>(band)].load(std::memory_order_relaxed),
-                               0.0f, 2.0f), std::memory_order_relaxed);
-            }
-            EqSaveCustomPreset(presetIndex);
-            return;
-        }
-    }
+    // Always persist the currently visible EQ curve, regardless of whether a
+    // built-in preset, a custom preset, or no preset is selected. This keeps
+    // the actual slider values stable across settings changes, recompiles,
+    // Explorer restarts, and full PC reboots.
     for (int band = 0; band < VIZ_EQ_BANDS; ++band) {
         const float gain = std::clamp(
             g_eqActiveGains[static_cast<size_t>(band)].load(std::memory_order_relaxed),
             0.0f, 2.0f);
         g_customEqGains[static_cast<size_t>(band)].store(gain, std::memory_order_relaxed);
-        Wh_SetIntValue(VIZ_EQ_STORAGE_KEYS[static_cast<size_t>(band)],
-                       static_cast<int>(std::lround(gain * 100.0f)));
+        const int stored = static_cast<int>(std::lround(gain * 100.0f));
+
+        // New persistent active-curve storage.
+        Wh_SetIntValue(
+            VIZ_EQ_ACTIVE_STORAGE_KEYS[static_cast<size_t>(band)], stored);
+
+        // Keep the legacy keys mirrored so older versions can still restore
+        // the last active curve if the user downgrades the mod.
+        Wh_SetIntValue(
+            VIZ_EQ_STORAGE_KEYS[static_cast<size_t>(band)], stored);
     }
+
+    // A custom preset represents the currently editable curve. Keep the
+    // selected preset synchronized with the actual slider values as before.
+    if (g_eqSelectedPreset >= EQ_CUSTOM_PRESET_INDEX_BASE) {
+        const int presetIndex = g_eqSelectedPreset - EQ_CUSTOM_PRESET_INDEX_BASE;
+        if (presetIndex >= 0 && presetIndex < g_eqCustomPresetCount) {
+            for (int band = 0; band < VIZ_EQ_BANDS; ++band) {
+                g_eqCustomPresetGains[static_cast<size_t>(presetIndex)][static_cast<size_t>(band)].store(
+                    std::clamp(
+                        g_eqActiveGains[static_cast<size_t>(band)].load(std::memory_order_relaxed),
+                        0.0f, 2.0f),
+                    std::memory_order_relaxed);
+            }
+            EqSaveCustomPreset(presetIndex);
+        }
+    }
+
+    Wh_SetIntValue(VIZ_EQ_SELECTED_PRESET_STORAGE_KEY, g_eqSelectedPreset);
 }
 
 struct VizEqBandMap {
@@ -11610,7 +11670,6 @@ static int g_eqDraggingBand = -1;
 static int g_eqHotPreset = -1;
 static const wchar_t* kEqPopupClass = L"WindhawkVisualizerEQPopup";
 
-static constexpr int VIZ_EQ_BUILTIN_PRESET_COUNT = 8;
 static constexpr int EQ_PLUS_PRESET_HIT = -2;
 static constexpr std::array<const wchar_t*, VIZ_EQ_BUILTIN_PRESET_COUNT> VIZ_EQ_PRESET_NAMES = {
     L"Flat", L"Bass Boost", L"Bass Cut", L"Treble Boost", L"Vocal",
@@ -12539,6 +12598,7 @@ static void EqStartPresetAnimation(HWND hwnd, int presetIndex) {
         for (int i = 0; i < VIZ_EQ_BANDS; ++i)
             g_eqPresetTargets[static_cast<size_t>(i)] = std::clamp(g_eqCustomPresetGains[static_cast<size_t>(customIndex)][static_cast<size_t>(i)].load(std::memory_order_relaxed), 0.0f, 2.0f);
     }
+    Wh_SetIntValue(VIZ_EQ_SELECTED_PRESET_STORAGE_KEY, g_eqSelectedPreset);
     g_eqPresetAnimationActive = true;
     g_eqLastAnimationTick = GetTickCount64();
     if (hwnd) SetTimer(hwnd, kEqPopupAnimationTimerId, kEqPopupAnimationIntervalMs, nullptr);
@@ -12554,6 +12614,7 @@ static void EqCreateCustomPreset(HWND hwnd) {
     g_eqSelectedPreset = EQ_CUSTOM_PRESET_INDEX_BASE + newIndex;
     EqSaveCustomPreset(newIndex);
     EqSaveCustomPresetCount();
+    SaveCustomEQSettings();
     g_eqHotPresetDelete = -1;
     if (hwnd) RenderEqPopup(hwnd);
 }
@@ -12575,6 +12636,7 @@ static void EqDeleteCustomPreset(HWND hwnd, int customIndex) {
     if (selectedCustom == customIndex) g_eqSelectedPreset = -1;
     else if (selectedCustom > customIndex) g_eqSelectedPreset = EQ_CUSTOM_PRESET_INDEX_BASE + selectedCustom - 1;
     EqSaveAllCustomPresets();
+    SaveCustomEQSettings();
     g_eqHotPresetDelete = -1;
     if (hwnd) RenderEqPopup(hwnd);
 }
@@ -12613,6 +12675,7 @@ static void EqApplyPresetAnimationStep(HWND hwnd) {
                 std::memory_order_relaxed);
         }
         EqStopPresetAnimation(hwnd);
+        SaveCustomEQSettings();
     }
 
     RenderEqPopup(hwnd);
@@ -14105,8 +14168,7 @@ static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         break;
     case WM_KILLFOCUS:
         if (g_eqDraggingBand >= 0) {
-            if (g_eqSelectedPreset >= EQ_CUSTOM_PRESET_INDEX_BASE || g_eqSelectedPreset < 0)
-                SaveCustomEQSettings();
+            SaveCustomEQSettings();
             g_eqDraggingBand = -1;
             ReleaseCapture();
         }
@@ -14739,8 +14801,7 @@ static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             const int x = GET_X_LPARAM(lParam);
             const int y = GET_Y_LPARAM(lParam);
             SetEqGainFromMouse(g_eqDraggingBand, x, y);
-            if (g_eqSelectedPreset >= EQ_CUSTOM_PRESET_INDEX_BASE || g_eqSelectedPreset < 0)
-                SaveCustomEQSettings();
+            SaveCustomEQSettings();
             g_eqDraggingBand = -1;
             ReleaseCapture();
             RenderEqPopup(hwnd);
@@ -14773,8 +14834,7 @@ static LRESULT CALLBACK EqPopupProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             g_eqMediaSeeking = false;
         }
         if (g_eqDraggingBand >= 0) {
-            if (g_eqSelectedPreset >= EQ_CUSTOM_PRESET_INDEX_BASE || g_eqSelectedPreset < 0)
-                SaveCustomEQSettings();
+            SaveCustomEQSettings();
             g_eqDraggingBand = -1;
         }
         return 0;
@@ -14837,8 +14897,7 @@ static void EqClosePopup();
 
 static void DestroyEqPopup() {
     if (g_eqDraggingBand >= 0) {
-        if (g_eqSelectedPreset >= EQ_CUSTOM_PRESET_INDEX_BASE || g_eqSelectedPreset < 0)
-            SaveCustomEQSettings();
+        SaveCustomEQSettings();
         g_eqDraggingBand = -1;
         ReleaseCapture();
     }
@@ -14852,8 +14911,7 @@ static void DestroyEqPopup() {
                 std::memory_order_relaxed);
         }
     }
-    if (g_eqSelectedPreset >= EQ_CUSTOM_PRESET_INDEX_BASE || g_eqSelectedPreset < 0)
-        SaveCustomEQSettings();
+    SaveCustomEQSettings();
 
     HWND hwnd = g_eqPopupHwnd;
     g_eqPopupHwnd = nullptr;
@@ -18763,6 +18821,7 @@ void Wh_ModAfterInit() {
 }
 
 BOOL Wh_ModInit() {
+    g_eqStorageInitialized = false;
     g_eqSelectedPreset = -1;
     g_eqHotPreset = -1;
     g_eqHotPresetDelete = -1;
@@ -18838,6 +18897,8 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
+    // Persist the live EQ before any teardown/reload path can discard it.
+    SaveCustomEQSettings();
     g_running.store(false, std::memory_order_release);
 
     // The overlay thread owns the Win10 tray message window and the overlay
