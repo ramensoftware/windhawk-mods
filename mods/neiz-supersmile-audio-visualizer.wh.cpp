@@ -3,7 +3,7 @@
 // @name            Desktop Audio Visualizer Plus
 // @description     A highly customizable audio visualizer with synced lyrics, media controls and EQ, featuring optional network access to fetch lyrics from lrclib.net
 // @description:ru  Настраиваемый аудиовизуализатор с синхронизированным текстом песен, управлением медиа и эквалайзером, с опциональным доступом к сети для загрузки текстов с lrclib.net
-// @version         1.1.1
+// @version         1.1.0
 // @license         MIT
 // @author          NeiZ
 // @github          https://github.com/NeiZqwe
@@ -18897,8 +18897,9 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModUninit() {
-    // Persist the live EQ before any teardown/reload path can discard it.
-    SaveCustomEQSettings();
+    if (g_shellServicesStarted.load(std::memory_order_acquire))
+        SaveCustomEQSettings();
+
     g_running.store(false, std::memory_order_release);
 
     // The overlay thread owns the Win10 tray message window and the overlay
