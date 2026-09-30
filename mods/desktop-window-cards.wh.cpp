@@ -26,7 +26,8 @@ underneath all other windows.
 * **Top bar:** drag it to move the card around the desktop. With the option
   enabled, the position is remembered: the next time you minimize that window,
   its card lands where you left it. In grid layout, dragging a card over
-  another one swaps them.
+  another one swaps them; with the same option enabled, reordered cards return
+  to their place in the grid the next time their window is minimized.
 * **Grid layout (optional):** instead of floating freely, the cards of each
   monitor are arranged automatically in a centered grid, similar to Task View,
   as large as the space allows. Only the windows of that monitor and of the
@@ -104,7 +105,9 @@ and cards survive an Explorer restart.
   - never: Never off
 - RememberPosition: true
   $name: Remember the position of moved cards
-  $description: Floating layout only.
+  $description: >-
+    Floating layout: the card lands where you left it. Grid layout: a card you
+    reordered goes back to its place instead of the end of the grid.
 - SmoothReveal: true
   $name: Smooth reveal on restore
   $description: Hides the flicker of transparent windows (Mica/Acrylic) with a fade.
@@ -451,12 +454,44 @@ const SavedCardPosition* FindSavedPosition(HWND target) {
     return nullptr;
 }
 
+// Grid layout: the order value of each window whose card was reordered by
+// dragging (this session only). Order values are unique and only ever swapped
+// between existing cards, so a returning card takes back exactly its old place
+// relative to the cards still on the desk.
+struct SavedCardOrder {
+    HWND target;
+    uint64_t order;
+};
+std::vector<SavedCardOrder> g_savedOrders;
+
+void SaveCardOrder(HWND target, uint64_t order) {
+    for (auto& saved : g_savedOrders) {
+        if (saved.target == target) {
+            saved.order = order;
+            return;
+        }
+    }
+    g_savedOrders.push_back({target, order});
+}
+
+const SavedCardOrder* FindSavedOrder(HWND target) {
+    for (auto& saved : g_savedOrders) {
+        if (saved.target == target) return &saved;
+    }
+    return nullptr;
+}
+
 void ForgetSavedPosition(HWND target) {
     g_savedPositions.erase(std::remove_if(g_savedPositions.begin(), g_savedPositions.end(),
                                           [target](const SavedCardPosition& saved) {
                                               return saved.target == target;
                                           }),
                            g_savedPositions.end());
+    g_savedOrders.erase(std::remove_if(g_savedOrders.begin(), g_savedOrders.end(),
+                                       [target](const SavedCardOrder& saved) {
+                                           return saved.target == target;
+                                       }),
+                        g_savedOrders.end());
 }
 
 // ---------------------------------------------------------------------------
@@ -883,6 +918,8 @@ void OnGridDrag(Card& dragged) {
         if (!PtInRect(&cell, pt)) continue;
         if (other == g_lastSwapWith || now - g_lastReorderMs < kReorderCooldownMs) return;
         std::swap(dragged.order, other->order);
+        SaveCardOrder(dragged.target, dragged.order);
+        SaveCardOrder(other->target, other->order);
         g_lastSwapWith = other;
         g_lastReorderMs = now;
         RelayoutGrid(true);
@@ -1473,7 +1510,8 @@ void CreateCard(HWND target, bool animate) {
                     static_cast<LONG>(source.cy - insets.bottom * sy)};
     double aspect = static_cast<double>(RectW(c.sourceCrop)) / std::max(1, RectH(c.sourceCrop));
     c.aspect = std::clamp(aspect, 0.25, 4.0);
-    c.order = g_nextOrder++;
+    const SavedCardOrder* savedOrder = FindSavedOrder(target);
+    c.order = g_settings.rememberPosition && savedOrder ? savedOrder->order : g_nextOrder++;
     Wh_Log(L"Card for %p: window %dx%d, source %dx%d, maximized=%d", target, RectW(windowRect),
            RectH(windowRect), source.cx, source.cy, maximized);
 
@@ -1860,7 +1898,9 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject,
         event == EVENT_OBJECT_NAMECHANGE || event == EVENT_OBJECT_CLOAKED ||
         event == EVENT_OBJECT_UNCLOAKED) {
         // Very frequent system-wide: only forward windows we care about.
-        if (!FindCardByTarget(hwnd) && !FindSavedPosition(hwnd)) return;
+        if (!FindCardByTarget(hwnd) && !FindSavedPosition(hwnd) && !FindSavedOrder(hwnd)) {
+            return;
+        }
     }
     if (HWND controller = g_controller.load()) {
         PostMessageW(controller, WM_APP_WINEVENT, event, reinterpret_cast<LPARAM>(hwnd));
