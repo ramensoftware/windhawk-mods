@@ -1,3 +1,9 @@
+## 0.5 ([Sep 30, 2026](https://github.com/ramensoftware/windhawk-mods/blob/46656e53918bf748150677074046be05de1d8de4/mods/titlebar-for-everyone.wh.cpp))
+
+* Exclude more problematic Visual Studio dialogs
+* Exclude Steam's in-game overlay windows (by @darkthemer)
+* Add an option to skip the Steam JavaScript injection, for users of the ["Change Window Parameters" Millennium extension](https://github.com/ricewind012/steam-change-window-params)
+
 ## 0.4 ([Aug 7, 2025](https://github.com/ramensoftware/windhawk-mods/blob/bc652e3d04758de30858d999319b89858cc629e6/mods/titlebar-for-everyone.wh.cpp))
 
 Fix the regression with Visual Studio

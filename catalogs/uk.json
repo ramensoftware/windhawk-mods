@@ -13842,12 +13842,12 @@
         "ratingBreakdown": [3, 1, 0, 2, 16],
         "ratingUsers": 22,
         "reviews": 0,
-        "updated": 1754581652000,
+        "updated": 1790780518000,
         "users": 833
       },
       "metadata": {
         "author": "Ingan121",
-        "compilerOptions": "-lcomctl32 -luxtheme -lgdi32 -lshlwapi",
+        "compilerOptions": "-lcomctl32 -luxtheme -lgdi32 -lshlwapi -ldwmapi",
         "description": "Force native title bars and frames for various programs",
         "github": "https://github.com/Ingan121",
         "homepage": "https://www.ingan121.com/",
@@ -13877,9 +13877,10 @@
           "MuseScore*.exe",
           "ms-teams.exe"
         ],
+        "license": "MIT",
         "name": "Titlebar For Everyone",
         "twitter": "https://twitter.com/Ingan121",
-        "version": "0.4"
+        "version": "0.5"
       }
     },
     "toggle-hidden-files": {
