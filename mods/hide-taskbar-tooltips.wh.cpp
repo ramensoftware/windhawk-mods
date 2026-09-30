@@ -2,7 +2,7 @@
 // @id              hide-taskbar-tooltips
 // @name            Hide Taskbar Tooltips
 // @description     Suppresses native Windows 11 XAML hover tooltips in Explorer (taskbar buttons, system tray icons, and shell controls).
-// @version         1.0.7
+// @version         1.0.8
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
@@ -71,7 +71,7 @@ static bool IsWindows11OrGreater() {
     return (major > 10) || (major == 10 && build >= 22000);
 }
 
-static DWORD g_taskbarThreadId = 0;
+static std::atomic<DWORD> g_taskbarThreadId{0};
 static thread_local int t_tooltipScopeDepth = 0;
 
 struct ToolTipScope {
@@ -135,7 +135,8 @@ static HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
                                         HMENU hMenu,
                                         HINSTANCE hInstance,
                                         LPVOID lpParam) {
-    if (g_taskbarThreadId && GetCurrentThreadId() != g_taskbarThreadId) {
+    DWORD taskbarThreadId = g_taskbarThreadId.load(std::memory_order_relaxed);
+    if (taskbarThreadId && GetCurrentThreadId() != taskbarThreadId) {
         return CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
                                         dwStyle, X, Y, nWidth, nHeight,
                                         hWndParent, hMenu, hInstance, lpParam);
@@ -164,7 +165,8 @@ using ShowWindow_t = decltype(&ShowWindow);
 static ShowWindow_t ShowWindow_Original = nullptr;
 
 static BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
-    if (g_taskbarThreadId && GetCurrentThreadId() != g_taskbarThreadId) {
+    DWORD taskbarThreadId = g_taskbarThreadId.load(std::memory_order_relaxed);
+    if (taskbarThreadId && GetCurrentThreadId() != taskbarThreadId) {
         return ShowWindow_Original(hWnd, nCmdShow);
     }
 
@@ -188,7 +190,8 @@ static BOOL WINAPI SetWindowPos_Hook(HWND hWnd,
                                      int cx,
                                      int cy,
                                      UINT uFlags) {
-    if (g_taskbarThreadId && GetCurrentThreadId() != g_taskbarThreadId) {
+    DWORD taskbarThreadId = g_taskbarThreadId.load(std::memory_order_relaxed);
+    if (taskbarThreadId && GetCurrentThreadId() != taskbarThreadId) {
         return SetWindowPos_Original(hWnd, hWndInsertAfter, X, Y, cx, cy,
                                      uFlags);
     }
@@ -232,6 +235,11 @@ static HRESULT __stdcall ToolTip_put_IsOpen_Hook(void* pThis, boolean value) {
 }
 
 static bool SuppressToolTip(void* pToolTip) {
+    if (!g_taskbarThreadId.load(std::memory_order_relaxed)) {
+        g_taskbarThreadId.store(GetCurrentThreadId(),
+                                std::memory_order_relaxed);
+    }
+
     if (!pToolTip) {
         return false;
     }
@@ -374,9 +382,10 @@ static void WINAPI EagerHookToolTipOnTaskbarThread(void* /*procParam*/) {
 static void InitEagerToolTipHook() {
     HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
     if (hTaskbarWnd) {
-        g_taskbarThreadId = GetWindowThreadProcessId(hTaskbarWnd, nullptr);
+        DWORD threadId = GetWindowThreadProcessId(hTaskbarWnd, nullptr);
+        g_taskbarThreadId.store(threadId, std::memory_order_relaxed);
         Wh_Log(L"> Dispatching eager ToolTip hook to Taskbar window %p (thread %u)",
-               hTaskbarWnd, g_taskbarThreadId);
+               hTaskbarWnd, threadId);
         RunFromWindowThread(hTaskbarWnd, EagerHookToolTipOnTaskbarThread,
                             nullptr);
     } else {
@@ -680,10 +689,6 @@ static void HandleLoadedModule(HMODULE module) {
             HookTaskbarViewSymbols(module);
             Wh_ApplyHookOperations();
         }
-    }
-
-    if (!g_putIsOpenHooked.load(std::memory_order_relaxed)) {
-        InitEagerToolTipHook();
     }
 }
 
