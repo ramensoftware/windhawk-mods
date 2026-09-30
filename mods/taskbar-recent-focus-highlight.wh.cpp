@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.9.35
+// @version         0.9.45
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -33,7 +33,6 @@ buttons on the current desktop get a highlight:
 
 - **Side bar** (default) — a bar beside the icon (left on a bottom/top
   taskbar, under the icon on a left/right taskbar)
-- **Edge bar** — a pill on the same side as the native running indicator
 - **Frame** / **Full** — a rounded rectangle around or behind the icon
 
 Rank 1 is strongest; ranks 2 and 3 (and 4+) use the intensities you set.
@@ -143,15 +142,12 @@ to clear highlights.
       $description: >-
         How ranked apps look on the taskbar. Bars rotate with the taskbar edge
         (bottom / left / top / right). Side bar = beside the icon (left on a
-        bottom or top taskbar, under the icon on a left or right taskbar). Edge
-        bar = same side as the native running indicator (screen edge). Frame/Full
-        = rounded rectangle. Edge bar paints our own pill and does not restyle
-        the native running indicator permanently.
+        bottom or top taskbar, under the icon on a left or right taskbar).
+        Frame/Full follow the native background contour.
       $options:
       - leftBar: Side bar (left on bottom/top, under icon on left/right)
       - frame: Frame (hollow rounded rectangle)
       - full: Full (filled rounded rectangle)
-      - bottomBar: Edge bar (follows the screen edge)
     - glowColor: accent
       $name: Glow color
       $description: Base color for icon highlights (and previews)
@@ -177,27 +173,26 @@ to clear highlights.
     - glowThickness: 3
       $name: Thickness (px)
       $description: >-
-        Frame/Full border width, or bar thickness (1–16). For side/edge bars this
-        is the bar’s short dimension.
+        Frame stroke or side-bar thickness (1–16). Full has no stroke.
     - glowRoundness: 28
       $name: Roundness (%)
       $description: >-
-        Corner radius for Frame/Full (0 = square, ~25–35 = Win11, 50 ≈ pill).
-        Side and edge bars stay capsules and ignore this.
+        Thumbnail preview roundness. Frame/Full follow native background corners;
+        side bars stay capsules.
     - glowSize: 92
       $name: Size (%)
       $description: >-
-        Frame/Full: box size vs icon panel (≤100). Side bar: bar length along the
-        icon. Edge bar: pill length % of the icon’s long side (try 70–100).
+        Frame/Full: inset within native background (≤100, minimum 1px inset).
+        Side bar: bar length.
     - glowLayers: 2
       $name: Layers
       $description: >-
-        Frame/Full: nested frames (1–3). Side bar: soft outer glow layers. Edge
-        bar: ignored.
+        Side bar: soft outer glow layers. Frame/Full use one contour and
+        ignore this setting.
     - glowFillOpacity: 40
       $name: Fill opacity
       $description: >-
-        0–100. Plate fill for Full; solid bar opacity for Side/Edge. Frame uses
+        0–100. Soft fill strength for Full; solid bar opacity for Side. Frame uses
         stroke only. (Thumbnail tints use Previews → Tint opacity.)
     - sizeBoostRank1: 10
       $name: Size boost rank 1 (%)
@@ -271,6 +266,7 @@ to clear highlights.
 
 #include <windhawk_utils.h>
 
+#include <cmath>
 #include <commctrl.h>
 #include <initguid.h>
 #include <propkey.h>
@@ -349,7 +345,6 @@ enum class GlowStyle {
     Frame,      // hollow rounded rectangle
     Full,       // filled rounded rectangle
     LeftBar,    // side bar: left on horizontal taskbar, bottom on vertical
-    BottomBar,  // edge bar: same side as the native RunningIndicator
 };
 
 // Physical screen edge the taskbar is on (Win11 24H2/25H2 can use all four).
@@ -807,10 +802,6 @@ struct IconPanelLayoutWatch {
     winrt::event_token sizeChanged{};
     TaskbarEdge lastEdge = TaskbarEdge::Bottom;
     bool haveEdge = false;
-    // Native IconPanel children in visual order before we first moved them
-    // (including unnamed Styler-injected elements). Restore by identity.
-    std::vector<winrt::weak_ref<UIElement>> nativeChildren;
-    bool haveNativeOrder = false;
 };
 std::mutex g_layoutWatchMutex;
 std::unordered_map<void*, IconPanelLayoutWatch> g_layoutWatches;
@@ -2180,6 +2171,7 @@ FrameworkElement GetIconPanel(FrameworkElement button) {
     return iconPanel;
 }
 
+
 void RemoveNamedChild(Controls::Panel panel, PCWSTR name) {
     if (!panel) {
         return;
@@ -2225,29 +2217,6 @@ void ClearOurHostClip(FrameworkElement host) {
     }
 }
 
-// One glow layer: stroked rounded rect; optional fill for Full style.
-void StyleGlowRectangle(Shapes::Rectangle rect,
-                        const winrt::Windows::UI::Color& stroke,
-                        const winrt::Windows::UI::Color& fill,
-                        double strokeThickness,
-                        double corner,
-                        double inset,
-                        double opacity) {
-    rect.Stroke(Media::SolidColorBrush{stroke});
-    rect.StrokeThickness(strokeThickness);
-    rect.Fill(Media::SolidColorBrush{fill});
-    rect.RadiusX(corner);
-    rect.RadiusY(corner);
-    rect.Opacity(opacity);
-    rect.HorizontalAlignment(HorizontalAlignment::Stretch);
-    rect.VerticalAlignment(VerticalAlignment::Stretch);
-    rect.Margin(Thickness{inset, inset, inset, inset});
-    rect.ClearValue(FrameworkElement::WidthProperty());
-    rect.ClearValue(FrameworkElement::HeightProperty());
-    rect.IsHitTestVisible(false);
-    rect.Visibility(Visibility::Visible);
-}
-
 FrameworkElement FindRunningIndicator(FrameworkElement iconPanel) {
     if (!iconPanel) {
         return nullptr;
@@ -2281,315 +2250,48 @@ bool RunningIndicatorLooksLikeHoverPlate(FrameworkElement ri,
     }
 }
 
-void EnsureOverlayIconAboveGlyph(FrameworkElement iconPanel);
-
-// Place glow host in the IconPanel child list without thrashing native chrome.
-//
-// Moving RunningIndicator every paint (mouse-over UpdateVisualStates) causes
-// the short/long underline to flicker. Instead, put our host *under* native
-// RunningIndicator / MultiWindowElement / ProgressIndicator so they always
-// paint on top — only reorder when the host is in the wrong place.
-void EnsureGlowHostZOrder(Controls::Panel panel,
-                          UIElement host,
-                          GlowStyle style) {
-    if (!panel || !host) {
-        return;
+// Position in the native-only child sequence. Never reorder native children.
+struct GlowOrderChild {
+    bool aboveHost;
+};
+uint32_t GlowHostInsertionIndex(const std::vector<GlowOrderChild>& children) {
+    for (uint32_t i = 0; i < children.size(); ++i) {
+        if (children[i].aboveHost) {
+            return i;
+        }
     }
+    return static_cast<uint32_t>(children.size());
+}
+
+// Preserve the established style layering without changing native properties.
+// Explicit InsertAt is required even at the end: Append omits XAML deferred
+// index notifications while RemoveAt sends them (tests/badge-static-analysis.md).
+void EnsureGlowHostZOrder(Controls::Panel panel, UIElement host, GlowStyle style) {
+    if (!panel || !host) return;
     try {
         auto children = panel.Children();
-        uint32_t hostIdx = 0;
-        if (!children.IndexOf(host, hostIdx)) {
-            return;
-        }
-
-        if (style == GlowStyle::Full) {
-            // Plate behind icon and indicators.
-            if (hostIdx != 0) {
-                children.RemoveAt(hostIdx);
-                children.InsertAt(0, host);
-            }
-            return;
-        }
-
-        if (style == GlowStyle::BottomBar) {
-            // Cover the native pill without Visibility=Collapsed: host after
-            // RunningIndicator. OverlayIcon stays last (badges).
-            uint32_t riIdx = UINT32_MAX;
-            if (auto ri = FindChildByName(panel.as<FrameworkElement>(),
-                                          L"RunningIndicator")) {
-                uint32_t i = 0;
-                if (children.IndexOf(ri, i)) {
-                    riIdx = i;
-                }
-            }
-            if (!children.IndexOf(host, hostIdx)) {
-                return;
-            }
-            if (riIdx != UINT32_MAX) {
-                if (hostIdx != riIdx + 1) {
-                    children.RemoveAt(hostIdx);
-                    if (hostIdx < riIdx) {
-                        children.InsertAt(riIdx, host);
-                    } else {
-                        children.InsertAt(riIdx + 1, host);
-                    }
-                }
-            } else if (hostIdx + 1 != children.Size()) {
-                children.RemoveAt(hostIdx);
-                children.Append(host);
-            }
-            EnsureOverlayIconAboveGlyph(panel.as<FrameworkElement>());
-            return;
-        }
-
-        // Frame / side bar: stay under OverlayIcon, progress, a native thin
-        // running pill, and (for side bar) the glyph. Do *not* stay under a
-        // Styler hover plate (large RunningIndicator) — that covers the bar.
+        uint32_t current;
+        if (!children.IndexOf(host, current)) return;
+        std::vector<GlowOrderChild> native;
         auto panelFe = panel.as<FrameworkElement>();
-        uint32_t insertBefore = children.Size();
-        bool foundTop = false;
-        auto considerUnder = [&](PCWSTR name) {
-            auto el = FindChildByName(panelFe, name);
-            if (!el) {
-                return;
-            }
-            uint32_t idx = 0;
-            if (!children.IndexOf(el, idx)) {
-                return;
-            }
-            if (!foundTop || idx < insertBefore) {
-                insertBefore = idx;
-                foundTop = true;
-            }
-        };
-        considerUnder(L"OverlayIcon");
-        considerUnder(L"MultiWindowElement");
-        considerUnder(L"ProgressIndicator");
-        if (style == GlowStyle::LeftBar) {
-            considerUnder(L"Icon");
-            considerUnder(L"DefaultIcon");
+        for (auto child : children) {
+            if (child == host) continue;
+            auto fe = child.try_as<FrameworkElement>();
+            auto name = fe ? fe.Name() : winrt::hstring{};
+            bool running = name == L"RunningIndicator";
+            bool above = name == L"OverlayIcon" || name == L"MultiWindowElement" ||
+                         name == L"ProgressIndicator";
+            if ((style == GlowStyle::LeftBar || style == GlowStyle::Full) &&
+                (name == L"Icon" || name == L"DefaultIcon")) above = true;
+            if (running && !RunningIndicatorLooksLikeHoverPlate(fe, panelFe)) above = true;
+            native.push_back({above});
         }
-        if (auto ri = FindRunningIndicator(panelFe)) {
-            if (!RunningIndicatorLooksLikeHoverPlate(ri, panelFe)) {
-                considerUnder(L"RunningIndicator");
-            }
-        }
-
-        if (!children.IndexOf(host, hostIdx)) {
-            return;
-        }
-
-        if (foundTop) {
-            if (hostIdx < insertBefore) {
-                if (hostIdx + 1 == insertBefore) {
-                    // Already immediately under the first element that must
-                    // stay on top.
-                    EnsureOverlayIconAboveGlyph(panelFe);
-                    return;
-                }
-                // Gap (Styler plate between host and icon) — raise the bar.
-                children.RemoveAt(hostIdx);
-                children.InsertAt(insertBefore - 1, host);
-            } else {
-                children.RemoveAt(hostIdx);
-                children.InsertAt(insertBefore, host);
-            }
-        } else if (hostIdx + 1 != children.Size()) {
-            children.RemoveAt(hostIdx);
-            children.Append(host);
-        }
-
-        // Moving the host can leave OverlayIcon behind Icon when Windows later
-        // re-appends the glyph (Discord/Thunderbird ping). Heal after we settle.
-        EnsureOverlayIconAboveGlyph(panel.as<FrameworkElement>());
+        uint32_t target = GlowHostInsertionIndex(native);
+        if (target == current) return;
+        children.RemoveAt(current);
+        children.InsertAt(target, host);
     } catch (...) {
-    }
-}
-
-// TaskListLabeledButtonPanel paints later children on top. Native template
-// order is BackgroundElement (back) → Icon → OverlayIcon → RunningIndicator
-// (front). Inserting/removing our host can leave BackgroundElement in front
-// of the running underscore, or leave OverlayIcon *behind* Icon (Discord /
-// Thunderbird / WhatsApp badge clipped by the glyph after a ping + UVS).
-void EnsureOverlayIconAboveGlyph(FrameworkElement iconPanel) {
-    if (!iconPanel) {
-        return;
-    }
-    auto panel = iconPanel.try_as<Controls::Panel>();
-    if (!panel) {
-        return;
-    }
-    try {
-        auto overlay = FindChildByName(iconPanel, L"OverlayIcon");
-        if (!overlay) {
-            return;
-        }
-        auto children = panel.Children();
-        uint32_t oIdx = 0;
-        if (!children.IndexOf(overlay, oIdx)) {
-            return;
-        }
-
-        uint32_t glyphLast = 0;
-        bool haveGlyph = false;
-        for (PCWSTR name : {L"Icon", L"DefaultIcon"}) {
-            auto el = FindChildByName(iconPanel, name);
-            if (!el) {
-                continue;
-            }
-            uint32_t idx = 0;
-            if (!children.IndexOf(el, idx)) {
-                continue;
-            }
-            if (!haveGlyph || idx > glyphLast) {
-                glyphLast = idx;
-                haveGlyph = true;
-            }
-        }
-        if (!haveGlyph || oIdx > glyphLast) {
-            return;
-        }
-
-        children.RemoveAt(oIdx);
-        uint32_t dest = glyphLast;
-        if (dest > children.Size()) {
-            dest = children.Size();
-        }
-        children.InsertAt(dest, overlay);
-        Wh_Log(L"Raised OverlayIcon above Icon (notification badge was behind "
-               L"the glyph)");
-    } catch (...) {
-    }
-}
-
-void RememberNativeIconPanelOrder(FrameworkElement iconPanel) {
-    if (!iconPanel) {
-        return;
-    }
-    auto panel = iconPanel.try_as<Controls::Panel>();
-    if (!panel) {
-        return;
-    }
-    void* id = InspectableIdentity(iconPanel);
-    if (!id) {
-        return;
-    }
-    std::vector<winrt::weak_ref<UIElement>> saved;
-    try {
-        auto children = panel.Children();
-        const uint32_t n = children.Size();
-        saved.reserve(n);
-        for (uint32_t i = 0; i < n; ++i) {
-            auto el = children.GetAt(i);
-            if (!el) {
-                continue;
-            }
-            try {
-                if (auto fe = el.try_as<FrameworkElement>()) {
-                    if (fe.Name() == kGlowElementName) {
-                        continue;
-                    }
-                }
-            } catch (...) {
-            }
-            saved.push_back(winrt::make_weak(el));
-        }
-    } catch (...) {
-        return;
-    }
-    std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
-    auto it = g_layoutWatches.find(id);
-    if (it == g_layoutWatches.end() ||
-        !WeakIsSameElement(it->second.panel, iconPanel) ||
-        it->second.haveNativeOrder) {
-        return;
-    }
-    it->second.nativeChildren = std::move(saved);
-    it->second.haveNativeOrder = true;
-}
-
-void RestoreIconPanelNativeZOrder(FrameworkElement iconPanel) {
-    if (!iconPanel) {
-        return;
-    }
-    auto panel = iconPanel.try_as<Controls::Panel>();
-    if (!panel) {
-        return;
-    }
-    try {
-        auto children = panel.Children();
-        std::vector<winrt::weak_ref<UIElement>> saved;
-        {
-            void* id = InspectableIdentity(iconPanel);
-            std::lock_guard<std::mutex> lock(g_layoutWatchMutex);
-            auto it = id ? g_layoutWatches.find(id) : g_layoutWatches.end();
-            if (it != g_layoutWatches.end() &&
-                WeakIsSameElement(it->second.panel, iconPanel) &&
-                it->second.haveNativeOrder) {
-                saved = it->second.nativeChildren;
-            }
-        }
-        if (!saved.empty()) {
-            uint32_t dest = 0;
-            for (auto& weak : saved) {
-                UIElement el = nullptr;
-                try {
-                    el = weak.get();
-                } catch (...) {
-                    continue;
-                }
-                if (!el) {
-                    continue;
-                }
-                uint32_t idx = 0;
-                if (!children.IndexOf(el, idx)) {
-                    continue;
-                }
-                if (idx != dest) {
-                    children.RemoveAt(idx);
-                    if (idx < dest) {
-                        --dest;
-                    }
-                    children.InsertAt(dest, el);
-                }
-                ++dest;
-            }
-            // Snapshot is from first glow. OverlayIcon (mail badge) can appear
-            // later — compaction would leave it behind the glyph.
-            EnsureOverlayIconAboveGlyph(iconPanel);
-            return;
-        }
-
-        auto indexOfName = [&](PCWSTR name) -> int {
-            auto el = FindChildByName(iconPanel, name);
-            if (!el) {
-                return -1;
-            }
-            uint32_t idx = 0;
-            if (!children.IndexOf(el, idx)) {
-                return -1;
-            }
-            return static_cast<int>(idx);
-        };
-
-        const int bg = indexOfName(kBackgroundElementName);
-        const int run = indexOfName(L"RunningIndicator");
-        if (bg >= 0 && run >= 0 && bg > run) {
-            auto bgEl = FindChildByName(iconPanel, kBackgroundElementName);
-            if (bgEl) {
-                uint32_t bgIdx = 0;
-                if (children.IndexOf(bgEl, bgIdx)) {
-                    children.RemoveAt(bgIdx);
-                    children.InsertAt(0, bgEl);
-                    Wh_Log(
-                        L"Restored IconPanel z-order (BackgroundElement was "
-                        L"in front of RunningIndicator)");
-                }
-            }
-        }
-
-        EnsureOverlayIconAboveGlyph(iconPanel);
-    } catch (...) {
+        Wh_Log(L"Glow host placement failed: %08X", winrt::to_hresult());
     }
 }
 
@@ -2665,7 +2367,6 @@ void ClearButtonHighlight(FrameworkElement button) {
             }
         }
 
-        RestoreIconPanelNativeZOrder(iconPanel);
         SetCachedPaintState(button, 0, SettingsSnap()->generation);
     } catch (...) {
         HRESULT hr = winrt::to_hresult();
@@ -2689,7 +2390,6 @@ Controls::Grid EnsureGlowHost(Controls::Panel panel,
     }
 
     if (!host) {
-        RememberNativeIconPanelOrder(iconPanel);
         PCWSTR xaml =
             LR"(
             <Grid
@@ -2711,7 +2411,11 @@ Controls::Grid EnsureGlowHost(Controls::Panel panel,
             </Grid>
         )";
         host = Markup::XamlReader::Load(xaml).as<Controls::Grid>();
-        panel.Children().Append(host);
+        // InsertAt(end), unlike Append, notifies XAML's deferred-element
+        // index bookkeeping. Pair this with removal when unhighlighted.
+        // See tests/badge-static-analysis.md for the reproduced badge-index drift.
+        auto children = panel.Children();
+        children.InsertAt(children.Size(), host);
     }
 
     SpanHostOverPanel(host, panel);
@@ -2724,6 +2428,9 @@ void HideAllGlowLayers(Controls::Grid host) {
     if (!host) {
         return;
     }
+    if (auto contour = FindChildByName(host, L"WhRecentFocusContour")) {
+        contour.Visibility(Visibility::Collapsed);
+    }
     for (int i = 0; i < kGlowMaxLayers; ++i) {
         if (auto r =
                 FindChildByName(host, kGlowLayerNames[i]).try_as<Shapes::Rectangle>()) {
@@ -2735,14 +2442,131 @@ void HideAllGlowLayers(Controls::Grid host) {
     }
 }
 
+// Reject malformed geometry before arithmetic or assigning XAML properties.
+// Coordinates are DIPs relative to the native panel. Never divide by native dimensions.
+bool SafeGlowMetric(double value) {
+    return std::isfinite(value) && std::abs(value) <= 16384.0;
+}
+bool SafeGlowBounds(double x, double y, double w, double h) {
+    return SafeGlowMetric(x) && SafeGlowMetric(y) && SafeGlowMetric(w) &&
+           SafeGlowMetric(h) && w > 0.5 && h > 0.5;
+}
+double InsetGlowRadius(double radius, double inset, double w, double h) {
+    if (!SafeGlowMetric(radius) || radius < 0 || !SafeGlowMetric(inset) ||
+        !SafeGlowBounds(0, 0, w, h)) return 0;
+    return (std::max)(0.0, (std::min)(radius - inset, (std::min)(w, h) * 0.5));
+}
+struct NativeGlowShape {
+    double x = 0, y = 0, w = 0, h = 0;
+    CornerRadius corners{0, 0, 0, 0};
+};
+bool ReadNativeGlowShape(FrameworkElement element, FrameworkElement reference,
+                         NativeGlowShape& shape) {
+    try {
+        if (!element || element.Visibility() != Visibility::Visible) return false;
+        double w = element.ActualWidth(), h = element.ActualHeight();
+        if (!SafeGlowBounds(0, 0, w, h)) return false;
+        CornerRadius corners{0, 0, 0, 0};
+        if (auto border = element.try_as<Controls::Border>()) {
+            corners = border.CornerRadius();
+        } else if (auto rect = element.try_as<Shapes::Rectangle>()) {
+            double radius = (std::min)(rect.RadiusX(), rect.RadiusY());
+            corners = CornerRadius{radius, radius, radius, radius};
+        } else {
+            return false; // Unknown shape: use fallback, not a guessed native contour.
+        }
+        auto transform = element.TransformToVisual(reference);
+        auto origin = transform.TransformPoint({0, 0});
+        auto unitX = transform.TransformPoint({1, 0});
+        auto unitY = transform.TransformPoint({0, 1});
+        double sx = unitX.X-origin.X, sy = unitY.Y-origin.Y;
+        // Border radii cannot reproduce rotations, skew or non-uniform scaling.
+        if (!SafeGlowMetric(unitX.Y) || !SafeGlowMetric(unitY.X) ||
+            !SafeGlowMetric(sx) || !SafeGlowMetric(sy) || sx <= 0 || sy <= 0 ||
+            std::abs(unitX.Y-origin.Y) > 0.01 || std::abs(unitY.X-origin.X) > 0.01 ||
+            std::abs(sx-sy) > 0.01) return false;
+        if (!SafeGlowBounds(origin.X, origin.Y, w*sx, h*sy)) return false;
+        shape = {origin.X, origin.Y, w*sx, h*sy,
+                 CornerRadius{corners.TopLeft*sx, corners.TopRight*sx,
+                              corners.BottomRight*sx, corners.BottomLeft*sx}};
+        return true;
+    } catch (...) {
+        return false; // Detached or changing native visual; use the safe fallback.
+    }
+}
+void PaintNativeContour(Controls::Grid host, FrameworkElement iconPanel,
+                         GlowStyle style, winrt::Windows::UI::Color color,
+                         double thickness, double sizeFrac, double opacity,
+                         int fillOpacity) {
+    // The host may not have been arranged yet. Use the native panel's content
+    // center, not TransformToVisual(host), so first paint and later paints agree.
+    double panelW = iconPanel.ActualWidth(), panelH = iconPanel.ActualHeight();
+    if (!SafeGlowBounds(0, 0, panelW, panelH)) return;
+    Thickness padding{0, 0, 0, 0};
+    if (auto grid = iconPanel.try_as<Controls::Grid>()) {
+        auto p = grid.Padding();
+        auto b = grid.BorderThickness();
+        padding = {p.Left+b.Left, p.Top+b.Top, p.Right+b.Right, p.Bottom+b.Bottom};
+    }
+    if (!SafeGlowMetric(padding.Left) || !SafeGlowMetric(padding.Top) ||
+        !SafeGlowMetric(padding.Right) || !SafeGlowMetric(padding.Bottom)) return;
+    double contentW = panelW-padding.Left-padding.Right;
+    double contentH = panelH-padding.Top-padding.Bottom;
+    if (!SafeGlowBounds(0, 0, contentW, contentH)) return;
+    double centerX = padding.Left+contentW*0.5;
+    double centerY = padding.Top+contentH*0.5;
+    NativeGlowShape shape;
+    auto indicator = FindRunningIndicator(iconPanel);
+    bool plate = indicator && RunningIndicatorLooksLikeHoverPlate(indicator, iconPanel);
+    bool found = false;
+    if (plate) found = ReadNativeGlowShape(indicator, iconPanel, shape);
+    if (!found) found = ReadNativeGlowShape(FindChildByName(iconPanel, L"BackgroundElement"), iconPanel, shape);
+    if (!found) {
+        shape.x = padding.Left; shape.y = padding.Top;
+        shape.w = contentW; shape.h = contentH;
+        if (!SafeGlowBounds(0, 0, shape.w, shape.h)) return;
+        shape.corners = CornerRadius{4, 4, 4, 4};
+    }
+    double inset =
+        (std::max)(1.0, (std::min)(shape.w, shape.h) * (1.0-sizeFrac) * 0.5);
+    double w = shape.w-2*inset, h = shape.h-2*inset;
+    if (!SafeGlowBounds(shape.x+inset, shape.y+inset, w, h)) return;
+    Controls::Border border = FindChildByName(host, L"WhRecentFocusContour").try_as<Controls::Border>();
+    if (!border) {
+        border = Controls::Border();
+        border.Name(L"WhRecentFocusContour");
+        border.IsHitTestVisible(false);
+        auto children = host.Children();
+        children.InsertAt(children.Size(), border);
+    }
+    double dx = shape.x+shape.w*0.5-centerX;
+    double dy = shape.y+shape.h*0.5-centerY;
+    if (!SafeGlowMetric(dx) || !SafeGlowMetric(dy)) return;
+    border.HorizontalAlignment(HorizontalAlignment::Center);
+    border.VerticalAlignment(VerticalAlignment::Center);
+    border.Width(w); border.Height(h);
+    border.Margin({dx, dy, -dx, -dy});
+    border.CornerRadius({InsetGlowRadius(shape.corners.TopLeft,0,w,h),
+                         InsetGlowRadius(shape.corners.TopRight,0,w,h),
+                         InsetGlowRadius(shape.corners.BottomRight,0,w,h),
+                         InsetGlowRadius(shape.corners.BottomLeft,0,w,h)});
+    bool frame = style == GlowStyle::Frame;
+    double stroke = frame ? (std::min)(thickness, (std::min)(w,h)*0.5) : 0;
+    border.BorderThickness({stroke,stroke,stroke,stroke});
+    auto strokeColor = color; strokeColor.A = 230;
+    border.BorderBrush(Media::SolidColorBrush{strokeColor});
+    color.A = frame ? 0 : static_cast<uint8_t>((std::clamp)(fillOpacity,0,100)*2.55*0.6+0.5);
+    border.Background(Media::SolidColorBrush{color});
+    border.Opacity((std::clamp)(opacity,0.0,1.0));
+    border.Visibility(Visibility::Visible);
+}
+
 PCWSTR GlowStyleName(GlowStyle s) {
     switch (s) {
         case GlowStyle::Full:
             return L"full";
         case GlowStyle::LeftBar:
             return L"leftBar";
-        case GlowStyle::BottomBar:
-            return L"bottomBar";
         case GlowStyle::Frame:
         default:
             return L"frame";
@@ -2963,20 +2787,7 @@ TaskbarEdge DetectTaskbarEdge(FrameworkElement iconPanel) {
     return TaskbarEdgeFromAppBar();
 }
 
-BarSide BarSideForGlowStyle(GlowStyle style, TaskbarEdge edge) {
-    if (style == GlowStyle::BottomBar) {
-        switch (edge) {
-            case TaskbarEdge::Left:
-                return BarSide::Left;
-            case TaskbarEdge::Top:
-                return BarSide::Top;
-            case TaskbarEdge::Right:
-                return BarSide::Right;
-            case TaskbarEdge::Bottom:
-            default:
-                return BarSide::Bottom;
-        }
-    }
+BarSide SideBarForTaskbarEdge(TaskbarEdge edge) {
     // Side bar: perpendicular to the taskbar so it does not cover the native
     // running pill (left on bottom/top, under the icon on left/right).
     switch (edge) {
@@ -3114,14 +2925,12 @@ FrameworkElement TaskListButtonFromDescendant(FrameworkElement start) {
     return nullptr;
 }
 
-// Relayout (taskbar moved to another screen edge): put RunningIndicator back
-// in front of BackgroundElement / our host. Do not ClearValue Width/Height —
-// OrientationStates owns those. Only call on size/edge change, not every UVS.
-void HealRunningIndicatorAfterRelayout(FrameworkElement iconPanel) {
+// Relayout: restore the host placement relative to the native pill / Styler plate.
+// Never mutate native collection order or geometry.
+void RepositionGlowAfterRelayout(FrameworkElement iconPanel) {
     if (!iconPanel) {
         return;
     }
-    RestoreIconPanelNativeZOrder(iconPanel);
 
     auto panel = iconPanel.try_as<Controls::Panel>();
     if (!panel) {
@@ -3324,7 +3133,7 @@ void EnsureIconPanelLayoutWatch(FrameworkElement button) {
                 }
                 ++g_iconPanelRelayoutDepth;
                 try {
-                    HealRunningIndicatorAfterRelayout(panel);
+                    RepositionGlowAfterRelayout(panel);
                     if (auto btn = TaskListButtonFromDescendant(panel)) {
                         RefreshButtonHighlight(btn);
                         ScheduleRefreshAllHighlights(btn);
@@ -3378,10 +3187,10 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
 
         double panelW = iconPanel.ActualWidth();
         double panelH = iconPanel.ActualHeight();
-        if (!(panelW > 1.0)) {
+        if (!SafeGlowMetric(panelW) || !(panelW > 1.0)) {
             panelW = 44.0;
         }
-        if (!(panelH > 1.0)) {
+        if (!SafeGlowMetric(panelH) || !(panelH > 1.0)) {
             panelH = 44.0;
         }
         const TaskbarEdge edge = CachedTaskbarEdge(iconPanel);
@@ -3389,17 +3198,19 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
         double keyW = panelW;
         double keyH = panelH;
         GlowContentBoxSize(existingHost, iconPanel, panelW, panelH, keyW, keyH);
+        if (!SafeGlowBounds(0, 0, keyW, keyH)) { keyW = panelW; keyH = panelH; }
         const int boxWi = static_cast<int>(keyW + 0.5);
         const int boxHi = static_cast<int>(keyH + 0.5);
         {
             auto painted = GetCachedPaintState(button);
-            if (painted.rank == rankOneBased &&
+            if (settings->glowStyle == GlowStyle::LeftBar &&
+                painted.rank == rankOneBased &&
                 painted.settingsGen == settings->generation &&
                 painted.accent ==
                     g_cachedAccent.load(std::memory_order_relaxed) &&
                 painted.edge == edge && painted.boxW == boxWi &&
                 painted.boxH == boxHi && ButtonHasOurChrome(button)) {
-                EnsureOverlayIconAboveGlyph(iconPanel);
+                EnsureGlowHostZOrder(panel, existingHost, settings->glowStyle);
                 return;
             }
         }
@@ -3423,8 +3234,6 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
             (std::max)(1, (std::min)(kGlowMaxLayers, settings->glowLayers));
         const double thickness = static_cast<double>(
             (std::max)(1, (std::min)(16, settings->glowThickness)));
-        const double roundnessFrac =
-            (std::max)(0, (std::min)(50, settings->glowRoundness)) / 100.0;
         const double sizeFrac =
             (std::max)(40, (std::min)(100, settings->glowSize)) / 100.0;
         const GlowStyle style = settings->glowStyle;
@@ -3440,15 +3249,9 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
         double boxH = panelH;
         GlowContentBoxSize(host, iconPanel, panelW, panelH, boxW, boxH);
 
-        const BarSide barSide = BarSideForGlowStyle(style, edge);
+        const BarSide barSide = SideBarForTaskbarEdge(edge);
 
-        // Heal native stacking first (Discord overlay / leftover attention
-        // plate), then place our host (under a native pill; above a Styler
-        // hover plate so the side bar is not covered on PointerOver).
-        RestoreIconPanelNativeZOrder(iconPanel);
-
-        // Z-order once when wrong — never yank RunningIndicator every paint
-        // (that caused short/long underline flicker on mouse-over).
+        // Position only our host; native children keep their relative order.
         EnsureGlowHostZOrder(panel, host, style);
 
         HideAllGlowLayers(host);
@@ -3463,45 +3266,8 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
         }
 
         if (style == GlowStyle::Frame || style == GlowStyle::Full) {
-            const double baseInset =
-                (std::min)(boxW, boxH) * (1.0 - sizeFrac) * 0.5;
-            const bool isFrame = style == GlowStyle::Frame;
-
-            for (int i = 0; i < kGlowMaxLayers; ++i) {
-                auto rect = FindChildByName(host, kGlowLayerNames[i])
-                                .try_as<Shapes::Rectangle>();
-                if (!rect) {
-                    continue;
-                }
-                if (i >= layers) {
-                    continue;
-                }
-
-                const double step =
-                    (i == 0) ? 0.0 : (3.0 + thickness * 0.55) * i;
-                const double inset = baseInset + step;
-                const double inner =
-                    (std::max)(8.0, (std::min)(boxW, boxH) - 2.0 * inset);
-                const double corner = inner * roundnessFrac;
-                const double layerT = t * (1.0 - 0.15 * i);
-                const double th =
-                    (std::max)(1.0, thickness * (1.0 - 0.1 * i));
-                // Rank intensity is element Opacity only. Brush alpha is the
-                // stroke/fill setting — multiplying both made 60% look ~36%.
-                const int strokeA = static_cast<int>(
-                    230.0 * (1.0 - 0.12 * i) + 0.5);
-                const double opacity = layerT;
-
-                winrt::Windows::UI::Color fill{0, 0, 0, 0};
-                if (!isFrame && i == 0) {
-                    int fillA = static_cast<int>(fillOpacitySetting * 2.55 +
-                                                 0.5);
-                    fill = withAlpha(base, fillA);
-                }
-
-                StyleGlowRectangle(rect, withAlpha(base, strokeA), fill, th,
-                                   corner, inset, opacity);
-            }
+            PaintNativeContour(host, iconPanel, style, base, thickness, sizeFrac,
+                               t, fillOpacitySetting);
         } else if (style == GlowStyle::LeftBar) {
             // Side bar: left of the icon on a bottom/top taskbar, under the
             // icon on a left/right taskbar — never the native-pill edge.
@@ -3524,28 +3290,6 @@ void ApplyButtonHighlight(FrameworkElement button, int rankOneBased) {
                 StyleGlowBarOnSide(rect, withAlpha(base, fillA), barT, barLen,
                                    barSide, i, opacity);
             }
-        } else if (style == GlowStyle::BottomBar) {
-            // Edge bar on the native RunningIndicator side. Cover the pill
-            // by z-order (host after RI). Never set Visibility/Width/Height
-            // on the native indicator.
-            if (!FindRunningIndicator(iconPanel)) {
-                Wh_Log(L"EdgeBar: RunningIndicator not found on \"%s\"",
-                       GetButtonAutomationName(button).c_str());
-            }
-
-            const int fillA =
-                static_cast<int>(fillOpacitySetting * 2.55 + 0.5);
-            const double barT =
-                (std::max)(2.0, (std::min)(6.0, thickness));
-            const double barLen =
-                BarLengthForSide(boxW, boxH, barSide, sizeFrac);
-
-            if (auto rect = FindChildByName(host, kGlowLayerNames[0])
-                                .try_as<Shapes::Rectangle>()) {
-                StyleGlowBarOnSide(rect, withAlpha(base, fillA), barT, barLen,
-                                   barSide, 0, t);
-            }
-
         }
 
         if (auto icon = FindChildByName(iconPanel, L"Icon")) {
@@ -7948,6 +7692,7 @@ void LoadSettings() {
     }
 
     auto glowStyle = WindhawkUtils::StringSetting::make(L"icons.glowStyle");
+    // Removed bottomBar and unknown saved values fall back to Side.
     s.glowStyle = GlowStyle::LeftBar;
     if (wcscmp(glowStyle.get(), L"full") == 0) {
         s.glowStyle = GlowStyle::Full;
@@ -7955,8 +7700,7 @@ void LoadSettings() {
         s.glowStyle = GlowStyle::Frame;
     } else if (wcscmp(glowStyle.get(), L"leftBar") == 0) {
         s.glowStyle = GlowStyle::LeftBar;
-    } else if (wcscmp(glowStyle.get(), L"bottomBar") == 0) {
-        s.glowStyle = GlowStyle::BottomBar;
+
     }
 
     s.glowThickness = Wh_GetIntSetting(L"icons.glowThickness");
