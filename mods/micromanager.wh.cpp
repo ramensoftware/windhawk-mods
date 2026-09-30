@@ -22,7 +22,7 @@ and RAM usage, plus the single top-consuming process for each.
 ## How to Use
 
 1. **Left-click** the tray icon to open the popup showing:
-   - Total CPU, GPU, and RAM usage with live percentage meters
+   - Total CPU, GPU, and RAM usage percentages
    - Top-consuming process for each resource
    - 16-sample activity history graph for the selected resource
 2. **Click any row or the graph canvas** (or press **Up** / **Down** arrow keys) to cycle the history graph between CPU, GPU, and RAM
@@ -688,6 +688,8 @@ static bool IsProtectedProcess(HANDLE process) {
     return protectedAccount;
 }
 
+static void RunProcessAction(HWND popup, const ProcessTarget& target, UINT action);
+
 static void TerminateProcessTree(HWND popup, const ProcessTarget& target) {
     DWORD shellPid = 0;
     HWND hShell = GetShellWindow();
@@ -701,24 +703,7 @@ static void TerminateProcessTree(HWND popup, const ProcessTarget& target) {
 
     MY_SYSTEM_PROCESS_INFO* buf = nullptr;
     if (!CollectProcessInfo(&buf) || !buf) {
-        HANDLE process = OpenSampledProcess(target, PROCESS_TERMINATE | SYNCHRONIZE);
-        if (!process) {
-            MessageBoxW(popup, L"The selected process has exited, changed identity, or denied access.",
-                        L"MicroManager", MB_OK | MB_ICONINFORMATION);
-            return;
-        }
-        if (IsProtectedProcess(process)) {
-            MessageBoxW(popup, L"This process is protected or its protection status is unavailable.",
-                        L"MicroManager", MB_OK | MB_ICONWARNING);
-        } else {
-            WCHAR prompt[256];
-            swprintf_s(prompt, L"End %s (PID %lu)?\nUnsaved work may be lost.", target.name, target.pid);
-            if (MessageBoxW(popup, prompt, L"Confirm End Task", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) == IDYES &&
-                WaitForSingleObject(process, 0) == WAIT_TIMEOUT) {
-                TerminateProcess(process, 1);
-            }
-        }
-        CloseHandle(process);
+        RunProcessAction(popup, target, MENU_PROC_END);
         return;
     }
 
@@ -742,6 +727,20 @@ static void TerminateProcessTree(HWND popup, const ProcessTarget& target) {
     }
     free(buf);
 
+    auto canEnd = [&](const ProcItem& item) {
+        if (item.pid == 0 || item.pid == 4 || item.pid == shellPid || item.pid == GetCurrentProcessId()) return false;
+        if (_wcsicmp(item.name, L"explorer.exe") == 0) return false;
+        ProcessTarget t = {};
+        t.pid = item.pid;
+        t.created = item.created;
+        wcscpy_s(t.name, item.name);
+        HANDLE h = OpenSampledProcess(t, PROCESS_TERMINATE);
+        if (!h) return false;
+        bool ok = !IsProtectedProcess(h);
+        CloseHandle(h);
+        return ok;
+    };
+
     auto isParentOf = [](const ProcItem& parent, const ProcItem& child) {
         return child.parentPid == parent.pid && child.pid != parent.pid &&
                parent.created < child.created;
@@ -760,13 +759,19 @@ static void TerminateProcessTree(HWND popup, const ProcessTarget& target) {
         return;
     }
 
-    // 1. Walk up the parent chain while parent shares the same executable name
+    if (!canEnd(*targetItem)) {
+        MessageBoxW(popup, L"This process is protected or its protection status is unavailable.",
+                    L"MicroManager", MB_OK | MB_ICONWARNING);
+        return;
+    }
+
+    // 1. Walk up the parent chain while parent shares the same executable name and can be ended
     ProcItem root = *targetItem;
     bool movedUp = true;
     while (movedUp) {
         movedUp = false;
         for (const auto& parent : allProcs) {
-            if (isParentOf(parent, root) && _wcsicmp(parent.name, root.name) == 0) {
+            if (isParentOf(parent, root) && _wcsicmp(parent.name, root.name) == 0 && canEnd(parent)) {
                 root = parent;
                 movedUp = true;
                 break;
@@ -774,15 +779,14 @@ static void TerminateProcessTree(HWND popup, const ProcessTarget& target) {
         }
     }
 
-    // 2. Collect all descendants under root
+    // 2. Collect all descendants under root that can be ended
     std::vector<ProcItem> treeItems;
     treeItems.push_back(root);
     size_t qHead = 0;
     while (qHead < treeItems.size()) {
         const ProcItem parent = treeItems[qHead++];
         for (const auto& child : allProcs) {
-            if (child.pid == 0 || child.pid == 4 || child.pid == GetCurrentProcessId()) continue;
-            if (isParentOf(parent, child)) {
+            if (isParentOf(parent, child) && canEnd(child)) {
                 bool already = false;
                 for (const auto& existing : treeItems) {
                     if (existing.pid == child.pid) { already = true; break; }
@@ -792,14 +796,6 @@ static void TerminateProcessTree(HWND popup, const ProcessTarget& target) {
                 }
             }
         }
-    }
-
-    bool foundTarget = false;
-    for (const auto& item : treeItems) {
-        if (item.pid == targetItem->pid) { foundTarget = true; break; }
-    }
-    if (!foundTarget) {
-        treeItems.push_back(*targetItem);
     }
 
     // 3. Confirm with user
@@ -817,7 +813,6 @@ static void TerminateProcessTree(HWND popup, const ProcessTarget& target) {
 
     // 4. Terminate bottom-up (descendants first, root last)
     for (auto it = treeItems.rbegin(); it != treeItems.rend(); ++it) {
-        if (it->pid == 0 || it->pid == 4 || it->pid == GetCurrentProcessId()) continue;
         ProcessTarget t = {};
         t.pid = it->pid;
         t.created = it->created;
