@@ -2,12 +2,187 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-30T01:03:16.000Z</updated>
+    <updated>2026-09-30T07:02:49.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Explorer Standard Title Bar Colors 1.0.0]]></title>
+        <id>https://windhawk.net/mods/standard-title-bar-colors#ffb89c1c92efa5f9d74a39e58f1b55972e255a21</id>
+        <link href="https://windhawk.net/mods/standard-title-bar-colors"/>
+        <updated>2026-09-30T07:02:49.000Z</updated>
+        <content type="html"><![CDATA[<p>Explorer overrides its titlebar colors. This stops that.
+If you're not applying your accent color to the titlebars, you may not notice the difference.</p>
+<p>If you disable this mod, toggling the focus of an open window will prompt Explorer to override the
+color again.</p>
+<p>This mod can probably be applied, at your own risk, to other apps that use DwmSetWindowAttribute to
+change their titlebar colors.</p>
+<p>Derived from <code>win11-custom-title-bar-colours</code> by Th3Fanbus.</p>
+<p>Before: Explorer does its own thing.</p>
+<p><img src="https://raw.githubusercontent.com/j--m/windhawk-mods/refs/heads/pages/before.png" alt="image of two apps with different titlebar colors" /></p>
+<p>After: They match!</p>
+<p><img src="https://raw.githubusercontent.com/j--m/windhawk-mods/refs/heads/pages/after.png" alt="image of two apps with same titlebar colors" /></p>]]></content>
+        <author>
+            <name>j--m</name>
+            <uri>https://github.com/j--m</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[MicSwitch 2.1.0]]></title>
+        <id>https://windhawk.net/mods/microswap#a9fbca8f625ac2e8d3150da96b212090c49b432e</id>
+        <link href="https://windhawk.net/mods/microswap"/>
+        <updated>2026-09-30T07:02:45.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Live input meter:</strong> Added a live microphone level meter inside the volume slider popup.</li>
+<li><strong>Mute sound cues:</strong> Optional Windows sound cues when toggling mute state.</li>
+<li><strong>Actual endpoint mute state:</strong> Accurately reflects endpoint mute state directly from WASAPI notifications.</li>
+<li><strong>Settings focus restoration:</strong> Re-opening Mod Settings while already running brings the existing window to the foreground.</li>
+<li><strong>Hook-free architecture:</strong> Completely removed low-level keyboard/mouse hooks, eliminating anti-cheat interference and hook chain overhead.</li>
+<li><strong>Bluetooth auto-reconnect:</strong> Automatically reconnects Bluetooth microphones and headsets when powered back on without requiring manual re-selection in settings.</li>
+<li><strong>Persistent disconnected devices:</strong> Disconnected microphones are remembered in settings instead of being removed or unselected on save.</li>
+<li><strong>Explorer restart recovery:</strong> Tray icon restores cleanly after Windows Explorer updates or restarts.</li>
+<li><strong>Multi-monitor volume slider:</strong> Volume slider popup is properly clamped to the bottom edge of secondary monitors.</li>
+<li><strong>Security:</strong> Hardened DLL search paths to prevent library hijacking.</li>
+</ul>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Classic WebView Pane 2.15]]></title>
+        <id>https://windhawk.net/mods/classic-webview-pane#c871a2fda4c89a8f1d224abb4f02eda91cb1a98b</id>
+        <link href="https://windhawk.net/mods/classic-webview-pane"/>
+        <updated>2026-09-30T07:02:42.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="classicwebviewpane">Classic WebView Pane</h1>
+<blockquote>
+  <p><strong>Tested only on Windows 11 24H2 (build 26100).</strong> It has not been tried on any other version of Windows and may not work there.</p>
+</blockquote>
+<p>Windows 2000 showed a pane on the left of the file list - the <em>WebView</em> - with
+the icon and the name of whatever was selected, a divider line under it, a line
+of text and a short list of <em>See also</em> links. Windows Vista dropped it, and
+Windows 11 has no trace of it left.</p>
+<p>This mod puts it back. The icon and the name follow the selection, and fall
+back to the folder itself when nothing is selected; the links navigate the same
+window the way they used to. On top of that, the pane brings back two things
+Windows 2000 showed there:</p>
+<ul>
+<li>authentic descriptions of the system folders - This PC, Documents, Recycle
+Bin and the others;</li>
+<li>for a drive, its capacity, used and free space and the three-dimensional pie
+chart of how full it is.</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/my-computer.png" alt="This PC, with the description of the folder" /></p>
+<p><img src="https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/drive.png" alt="A drive, with its capacity and how full it is" /></p>
+<p><img src="https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/recycle-bin.png" alt="The Recycle Bin" /></p>
+<h2 id="howitworks">How it works</h2>
+<p>The content area of an Explorer window is not a set of child windows, it is a
+DirectUI tree. <code>shell32</code> keeps its layout in <code>UIFILE</code> resources - one per folder
+type - and hands the whole thing to <code>DirectUI::DUIXmlParser::SetXML</code> in
+<code>dui70.dll</code> as one XML document, which is the single place where the layout of
+every Explorer window can be seen and changed.</p>
+<p>The mod hooks that function and inserts one element next to the one that hosts
+the file list:</p>
+<pre><code>&lt;Element layoutpos="Client" layout="shellborderlayout()"&gt;
+  &lt;BannerContainer .../&gt;
+  &lt;Element id="atom(ClassicWebViewPane)" layoutpos="left" .../&gt;   &lt;-- inserted
+  &lt;Element id="atom(ViewHostContainer)" ...&gt;
+  &lt;DetailsContainer layoutpos="right"/&gt;
+</code></pre>
+<p>That element is only a spacer. Everything inside the pane - the icon, the name,
+the divider, the text and the links - is drawn by the mod into a child window
+of its own, which it keeps over the gap the spacer opens up between the folder
+tree and the file list.</p>
+<p>It is done that way because the parts of the shell the pane would otherwise be
+built out of are gone. The Windows 2000 recreations for Windows 10 fill their
+header with <code>PreviewThumbnail</code> and <code>PreviewMetadata</code> elements bound to
+<code>PreviewThumbnailModule</code> and <code>PreviewMetadataModule</code>. On Windows 11 24H2 those
+module names do not appear in <code>shell32</code> at all any more: the element classes
+still exist and still take up space, but nothing ever fills them, so a header
+built that way comes out empty. Drawing it directly also means the pane needs no
+patched <code>shellstyle.dll</code> and looks right on the Classic theme, where the theme
+colour functions the shell's own style sheets use return nothing.</p>
+<p>The contents come from the shell view itself: the mod asks the
+<code>SHELLDLL_DefView</code> window of the folder for its <code>IShellBrowser</code>, and through it
+for the current folder and the selection, refreshing whenever the list reports
+that the selection changed.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li><p>In a narrow window the pane gives way first, as the WebView did in Windows
+2000: once the file list would be left with less than <em>Room kept for the file
+list</em>, the mod collapses the DirectUI spacer to nothing (through the element
+itself - <code>HWNDElement</code> is in the first pointer of the <code>DirectUIHWND</code>'s extra
+bytes, the spacer is found under it by its id) and hides the pane, and gives
+both back when the window is wide enough again. The pane also follows the
+folder tree and the file list whenever DirectUI moves, resizes or hides
+either, and keeps clear of the splitter next to the tree.</p></li>
+<li><p>The pictures of the Windows 2000 web view - the clouds or the coloured
+squares in the corner, and the bar in the colours of the Windows logo under
+the name - are built into the mod, and the clouds and the bar are shown by
+default, so the pane looks right straight after installing. Both can be
+switched off or come from a file of your own instead: BMP, GIF, PNG, JPEG and
+ICO are all read - <code>LoadImage</code> takes the BMPs and icons, the shell takes the
+rest. The picture is stretched across the pane at its own proportions with the
+pixels left alone by default, and it can also be given a width of its own, put
+above the name or at the bottom instead, and smoothed when scaled.</p></li>
+<li><p>Two things in DirectUI markup take the whole window down with them - the file
+list, the folder tree and all - while <code>SetXML</code> still reports success: an
+attribute the element class does not know, and a value the parser cannot
+read. Colours from the settings are checked against the names DirectUI
+actually accepts for that reason.</p></li>
+<li><p>The pane sits between the folder tree and the file list. In Windows 2000 the
+tree and the WebView replaced each other; here they can both be open.</p></li>
+<li><p>If you also inject a WebView pane through patched <code>shell32</code> resources - the
+WinClassic recreation with Resource Redirect, say - turn that off, or you get
+two panes.</p></li>
+<li><p>The texts of the pane follow the Windows display language. The defaults are
+the wording of the English Windows 2000 - <em>Select an item to view its
+description.</em>, <em>See also:</em>, <em>My Documents</em>, <em>Capacity:</em> and so on - and on a
+Russian Windows they are shown in the wording of the Russian Windows 2000
+instead. A text you change yourself is shown exactly as you typed it. The
+short description of a system folder (Documents, This PC, Recycle Bin and the
+others) is written for this mod and is shown in English or Russian the same
+way.</p></li>
+</ul>
+<hr />
+<h2 id="">По-русски</h2>
+<p>Windows 2000 показывала слева от списка файлов панель WebView: значок и имя
+выбранного объекта (или самой папки, если ничего не выделено), линию-разделитель
+под ними, строку описания и короткий список ссылок «Перейти к». В Windows Vista
+её убрали, в Windows 11 от неё не осталось ничего.</p>
+<p>Мод возвращает эту панель. Значок и имя следуют за выделением, а ссылки
+открывают папку в том же окне. Кроме того, панель возвращает то, что Windows
+2000 показывала в ней:</p>
+<ul>
+<li>аутентичные описания системных папок - «Мой компьютер», «Документы»,
+«Корзина» и других;</li>
+<li>для диска - ёмкость, занятое и свободное место и объёмную круговую диаграмму
+его заполненности.</li>
+</ul>
+<p>В узком окне панель, как и в Windows 2000, первой уступает место списку файлов.
+Скриншоты - выше, в английской части.</p>
+<p>Картинки веб-вида Windows 2000 - облака или цветные квадраты в углу и полоска
+в цветах логотипа Windows под именем - встроены в мод; облака и полоска
+включены по умолчанию, так что панель выглядит как надо сразу после установки.
+Вместо них можно указать свои файлы или выключить их.</p>
+<p>Внешний вид настраивается: ширина и сторона панели, размер значка, картинки,
+цвета, подписи и ссылки. Тексты по умолчанию берутся в формулировке
+Windows 2000 на языке интерфейса Windows: в русской Windows - «Выберите объект
+для просмотра его описания.», «Перейти к:», «Мои документы» и так далее.
+Изменённый вами текст показывается как есть.</p>
+<p>Если вы уже добавляете панель WebView через изменённые ресурсы <code>shell32</code>
+(например, WinClassic с Resource Redirect), отключите это, иначе панелей будет
+две.</p>
+<blockquote>
+  <p><strong>Проверено только на Windows 11 24H2 (сборка 26100).</strong> На других версиях Windows мод не проверялся и может не работать.</p>
+</blockquote>]]></content>
+        <author>
+            <name>appEW</name>
+            <uri>https://github.com/appEW</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Remove UWP titlebars Lite 1.3.0]]></title>
         <id>https://windhawk.net/mods/native-titlebars-uwp-lite#196fcdb727a79e52a624264506fdd1928e4ec565</id>
@@ -524,175 +699,6 @@ non-elevated process can't send them commands.</li>
         <author>
             <name>digART</name>
             <uri>https://github.com/digart11</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[WinDuo 0.1.0]]></title>
-        <id>https://windhawk.net/mods/winduo#bd025e4fcde71a615aa6f16071597a81f7dde19f</id>
-        <link href="https://windhawk.net/mods/winduo"/>
-        <updated>2026-09-28T09:05:04.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="winduo">WinDuo</h1>
-<p>As the laptop lid closes, the picture on screen leans back, blurs and dims, as
-though it were a sheet hinged at the bottom of the display that stays put in the
-room while the glass turns away from it. The top of the sheet tips forward a
-little, so content near the top edge stays legible for longer.</p>
-<p>There is no hinge sensor on most laptops, so the lid angle comes from the
-webcam: closing the lid pitches the camera down, the scene slides up the frame,
-and the size of that slide is the angle.</p>
-<p>This is the Windhawk edition of <a href="https://github.com/BaselAshraf81/winduo">WinDuo</a>.
-Its geometry, shader and state machine are ported from
-<a href="https://github.com/sumimakito/Mac-Duo">Mac Duo</a> (Apache 2.0, Copyright 2026
-Makito).
-It runs as its own process (a Windhawk <em>tool mod</em>), injects into nothing, and
-hooks nothing.</p>
-<p><img src="https://raw.githubusercontent.com/BaselAshraf81/winduo/main/docs/windhawk-preview.gif" alt="The screen leaning back as the lid closes" /></p>
-<h2 id="whattoexpect">What to expect</h2>
-<ul>
-<li><strong>The camera stays on while you are using the laptop</strong>, so its privacy light
-stays lit. It has to be watching before the lid starts to move. It turns off
-while the lid is shut, the display is off, the session is locked, or the
-built-in screen is not in use. Frames are measured in memory and never stored
-or sent anywhere. Disable the mod to turn the camera off entirely.</li>
-<li><strong>Battery.</strong> A streaming webcam costs roughly as much as a video call's
-camera does, which on most laptops is well under a watt but is not nothing.</li>
-<li><strong>Other camera apps.</strong> On many laptops, especially on Windows 10, only one
-app can use the camera at a time. While the mod is streaming, a video call or
-the Camera app started afterwards may report that the camera is in use:
-disable the mod for the call. If the other app has the camera first, the mod
-backs off and tries again later (every few seconds at first, then up to once
-a minute) until the camera is free.</li>
-<li><strong>Built-in screen only.</strong> The effect runs on the laptop's own panel, even
-when an external monitor is the main display, and does nothing while the
-laptop is docked with the lid shut.</li>
-<li><strong>Camera permission.</strong> The mod reads the camera as an ordinary desktop app
-(it runs inside <code>windhawk.exe</code>), so Windows shows no prompt. It needs
-<em>Settings > Privacy & security > Camera > Let desktop apps access your
-camera</em> turned on, and <code>windhawk.exe</code> then appears in that list while the
-mod runs. If the setting is off, the mod log says so.</li>
-<li>It needs Windows 10 version 2004 or later, so the overlay can keep itself out
-of its own screen capture.</li>
-<li>Accuracy depends on the room: a lit room with some detail in front of the
-camera tracks well; a dark room or a blank wall does not, and the effect then
-declines to run rather than guessing.</li>
-</ul>
-<h2 id="calibration">Calibration</h2>
-<p>The default assumes a typical laptop webcam (about a 75 degree field of view).
-If the effect starts too early or too late, adjust <strong>Degrees per pixel</strong>: raise
-it if a small close already triggers the effect, lower it if a large one does
-not. The desktop app has a calibration wizard that measures this exactly.</p>
-<h2 id="tryingitwithoutclosingthelid">Trying it without closing the lid</h2>
-<p>Turn on <strong>Play a preview</strong> and save. The effect plays one scripted close on
-whatever is on screen, then the switch can be turned back off.</p>]]></content>
-        <author>
-            <name>Basel Ashraf</name>
-            <uri>https://github.com/BaselAshraf81</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Live Video Wallpaper 1.1.1]]></title>
-        <id>https://windhawk.net/mods/live-video-wallpaper#08d0121ef8c059403359260816a6cca7a4c84746</id>
-        <link href="https://windhawk.net/mods/live-video-wallpaper"/>
-        <updated>2026-09-28T09:05:01.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="livevideowallpaper">Live Video Wallpaper</h1>
-<p><strong>Author:</strong> AKS HAY | <strong>GitHub:</strong> <a href="https://github.com/sysakshay">sysakshay</a> | <strong>License:</strong> GPL-3.0</p>
-<p>Play local MP4 videos directly on your Windows desktop as a live wallpaper using
-Media Foundation and Direct3D 11, featuring a built-in real-time hardware profiler.</p>
-<p>Unlike traditional animated wallpaper implementations, this mod renders video
-directly through the GPU, minimizing CPU usage while maintaining rock-solid 60 FPS
-playback.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Hardware-Accelerated Playback:</strong> Direct3D 11 rendering and Windows Media Foundation zero-copy video decoding directly onto the desktop window hierarchy.</li>
-<li><strong>Built-in Performance Profiler (<code>Ctrl + Alt + D</code>):</strong> Live HUD overlay displaying true wall-clock FPS, frame-time percentiles (<code>P95</code>/<code>P99</code>), VRAM/commit stats, and pipeline stage timings (<code>Decode</code>, <code>Transfer</code>, <code>Present</code>).</li>
-<li><strong>Smart Occlusion Detection:</strong> Automatically pauses video rendering when top-level or maximized application windows fully cover the desktop (<code>P95</code> CPU occlusion check &lt; 0.1ms). Uses zero-latency <code>EVENT_SYSTEM_FOREGROUND</code> event hooks.</li>
-<li><strong>Audio Volume Control & Stream Restoration:</strong> Integrated audio volume control (<code>0%</code> to <code>100%</code>) with automatic unmuting and volume restoration when resuming playback or switching apps.</li>
-<li><strong>Battery-Aware Power Saving:</strong> Configurable behavior (<code>Pause</code>, <code>Drop to 15 FPS</code>, or <code>Play normally</code>) when running on laptop battery power.</li>
-<li><strong>Instant First-Frame Presentation:</strong> Decodes and presents the initial video frame immediately upon loading so the wallpaper never gets stuck on a black screen when starting in paused/battery mode.</li>
-<li><strong>Scaling Modes & Aspect Ratio Fix:</strong> Support for <code>Fill</code> (stretch to fill screen), <code>Cover</code> (zoom &amp; crop edges without distortion), and <code>Fit</code> (letterbox with cinema-style black borders). Fixed aspect ratio scaling for wide, ultrawide, and 1:1 square monitors.</li>
-<li><strong>Multi-monitor layout:</strong> Span one video across the desktop, or show the same video on each monitor with independent scaling.</li>
-<li><strong>Async File Picker (<code>Ctrl + Alt + G</code>):</strong> Asynchronous background thread file picker for <code>.mp4</code>, <code>.m4v</code>, <code>.mov</code>, <code>.wmv</code>, and <code>.webm</code> files with zero frame drops during selection.</li>
-<li><strong>Zero Desktop Right-Click Menu Delay:</strong> Full input transparency (<code>HTTRANSPARENT</code>, <code>WS_EX_TRANSPARENT</code>, <code>WS_DISABLED</code>) ensures right-clicking desktop icons or background opens context menus with 0ms latency.</li>
-<li><strong>Auto-Recovery:</strong> Automatic D3D device-loss and Media Foundation decode stall recovery.</li>
-</ul>
-<h2 id="controlshotkeys">Controls &amp; Hotkeys</h2>
-<ul>
-<li><strong><code>Ctrl + Alt + G</code></strong> — Open the interactive file picker to load a new video (<code>.mp4</code>, <code>.m4v</code>, <code>.mov</code>, <code>.wmv</code>, <code>.webm</code>).</li>
-<li><strong><code>Ctrl + Alt + H</code></strong> — Hide and pause the wallpaper and its audio, or show and resume them.</li>
-<li><strong><code>Ctrl + Alt + D</code></strong> — Toggle Performance Profiler HUD (On / Off), if enabled in settings.</li>
-</ul>
-<h2 id="performanceprofilerhud">Performance Profiler HUD</h2>
-<p>When toggled via <code>Ctrl + Alt + D</code>, the on-screen profiler groups diagnostics into color-coded (<code>🟢 Good</code>, <code>🟡 Warning</code>, <code>🔴 Critical</code>) sections:</p>
-<ul>
-<li><strong>Performance:</strong> Real-clock <code>FPS</code> vs polling <code>Ticks</code>, rolling average <code>Frame Time</code>, <code>P95</code>/<code>P99</code> frame times, and overall CPU/GPU time.</li>
-<li><strong>Memory & Resources:</strong> <code>VRAM</code> usage, <code>Shared RAM</code>, working set, commit charge, and active D3D/MF object counts (<code>Textures</code>, <code>SwapChains</code>, <code>MediaEngines</code>, <code>Surfaces</code>).</li>
-<li><strong>Pipeline Breakdown:</strong> Precise microsecond timers for <code>Decode</code>, <code>TransferVideoFrame</code>, <code>CopyResource</code>, <code>Present</code>, and <code>Occlusion</code> checks.</li>
-<li><strong>Status & Bottlenecks:</strong> Live diagnosis showing exact bottlenecks (<code>GPU Idle</code>, <code>Bound by Decode</code>, <code>Present blocked by DWM</code>, etc.) and system state (<code>Battery</code>, <code>Paused</code>, <code>Recoveries</code>).</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<h3 id="videopath">Video Path</h3>
-<p>Full path to any local video file on your disk. Can also be updated dynamically via <code>Ctrl + Alt + G</code>.</p>
-<h3 id="fitmode">Fit Mode</h3>
-<ul>
-<li><strong>Fill:</strong> Stretch/scale video to fill the entire monitor.</li>
-<li><strong>Cover:</strong> Zoom and crop video edges to fill screen without aspect ratio distortion.</li>
-<li><strong>Fit:</strong> Letterbox video while preserving original aspect ratio.</li>
-</ul>
-<h3 id="batterysavingmode">Battery Saving Mode</h3>
-<ul>
-<li><strong>Pause video (maximum battery life):</strong> Stops video processing completely when unplugged from AC power.</li>
-<li><strong>Drop to 15 FPS (reduced power consumption):</strong> Throttles frame rate to save power while keeping background animation alive.</li>
-<li><strong>Play normally (ignore battery status):</strong> Maintains full 60 FPS playback on battery.</li>
-</ul>
-<h3 id="targetframerate">Target Frame Rate</h3>
-<p>Max frames per second (<code>60</code>, <code>30</code>, <code>15</code>) or <code>monitor</code> to sync exactly with monitor refresh rate (<code>VREFRESH</code>).</p>
-<h3 id="muteaudiovolumecontrol">Mute Audio &amp; Volume Control</h3>
-<ul>
-<li><strong>Mute Audio:</strong> Mute video audio track (<code>true</code> / <code>false</code>).</li>
-<li><strong>Audio Volume:</strong> Audio output volume percentage (<code>100%</code>, <code>90%</code>, …, <code>Muted</code>).</li>
-</ul>
-<h3 id="occlusioncheckinterval">Occlusion Check Interval</h3>
-<p>Frequency of background occlusion safety-net polling (<code>fast</code>: 100ms, <code>normal</code>: 250ms, <code>relaxed</code>: 500ms).</p>
-<h2 id="technicalhighlightsoptimizations">Technical Highlights &amp; Optimizations</h2>
-<ul>
-<li><strong>Zero-Copy Offscreen Target:</strong> Decodes to an offscreen <code>B8G8R8A8_UNORM</code> render target before copying to the flip-model swap chain (<code>DXGI_SWAP_EFFECT_FLIP_DISCARD</code>) to guarantee tear-free presentation without MF timing conflicts.</li>
-<li><strong>DXGI Flip-Model RTV Caching:</strong> Caches D3D11 render target views while handling DXGI swap-chain buffer rotation in <code>Fit</code> mode.</li>
-<li><strong>Zero Heap Allocations:</strong> Ring buffer percentile calculations use zero-allocation stack buffers at 60 Hz.</li>
-<li><strong>$O(1)$ Section Timers:</strong> Profiler queries bypass linear string comparisons via pooled pointer-equality checks inside hot rendering loops.</li>
-<li><strong>Kernel Resource Caching:</strong> GDI font handles (<code>HFONT</code>), desktop region guards (<code>HRGN</code>), and WorkerW window handles are cached across frames to eliminate handle churn.</li>
-<li><strong>Fast Occlusion Screening:</strong> Bounding-box intersection screening skips invisible, borderless system helpers, and non-overlapping windows before querying DWM or class attributes.</li>
-</ul>]]></content>
-        <author>
-            <name>AKS HAY</name>
-            <uri>https://github.com/sysakshay</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Disk Space Label 0.72]]></title>
-        <id>https://windhawk.net/mods/taskbar-disk-space-label#494cecad37227b5dc5cf0e112ee8bd91c350281b</id>
-        <link href="https://windhawk.net/mods/taskbar-disk-space-label"/>
-        <updated>2026-09-28T09:04:56.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbardiskspacelabel">Taskbar Disk Space Label</h1>
-<p>A lightweight free/available disk space label integrated directly into the
-Windows 11 taskbar. This is kind of a "remix" of the Taskbar Countdown Timer
-module by Richi (https://github.com/richilp) 
-The label is shown on the primary taskbar only, taskbars on secondary monitors don't show it.
-Windows 11 only.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Choose the disk to be checked via module settings (default to C)</li>
-<li>Choose the font size (Default to 12)</li>
-<li>Choose between user available free space or total free available space (Default to total free space)</li>
-<li>Choose the update interval (default to 60 seconds)</li>
-<li>Choose the description text on the first line of the label (default to "Free Space")</li>
-<li>Leave the description text empty to have a single-line label with no info text</li>
-<li>Choose the alignment of the label text</li>
-</ul>
-<p>When the label gets clipped, please lower the font size, or clear the description</p>
-<h2 id="screenshot">Screenshot</h2>
-<p><img src="https://i.imgur.com/Nwuevwf.png" alt="Screenshot" /></p>]]></content>
-        <author>
-            <name>allelimo</name>
-            <uri>https://github.com/allelimo</uri>
         </author>
     </entry>
 </feed>

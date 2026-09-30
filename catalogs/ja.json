@@ -2390,6 +2390,32 @@
         "version": "0.3"
       }
     },
+    "classic-webview-pane": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790751762000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790751762000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "appEW",
+        "compilerOptions": "-lcomctl32 -lgdi32 -lmsimg32 -lole32 -lshlwapi -luuid -lwindowscodecs",
+        "description": "Brings back the Windows 2000 WebView - the pane left of the file list with the icon and name of the folder or the selected item, a divider line, a description and See also links",
+        "github": "https://github.com/appEW",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Classic WebView Pane",
+        "version": "2.15"
+      }
+    },
     "classic-winver": {
       "details": {
         "defaultSorting": 4167,
@@ -7825,12 +7851,12 @@
         "ratingBreakdown": [0, 0, 0, 1, 3],
         "ratingUsers": 4,
         "reviews": 0,
-        "updated": 1784249030000,
+        "updated": 1790751765000,
         "users": 86
       },
       "metadata": {
         "author": "BlackPaw",
-        "compilerOptions": "-lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32 -ladvapi32 -lcomctl32",
+        "compilerOptions": "-lshell32 -lgdi32 -luser32 -lole32 -luuid -loleaut32 -lcomdlg32 -ladvapi32 -lcomctl32 -lwinmm",
         "description": "Tray icon to cycle between multiple preferred microphones. Supports up to 6 devices with click or scroll to swap.",
         "donateUrl": "https://ko-fi.com/blackpaw21",
         "github": "https://github.com/BlackPaw21",
@@ -7839,7 +7865,7 @@
         ],
         "license": "MIT",
         "name": "MicSwitch",
-        "version": "2.0.1"
+        "version": "2.1.0"
       }
     },
     "minimize-to-tray": {
@@ -11040,6 +11066,29 @@
         ],
         "name": "Spoof Light/Dark Theme",
         "version": "1.1.0"
+      }
+    },
+    "standard-title-bar-colors": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790751769000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790751769000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "j--m",
+        "compilerOptions": "-ldwmapi -luser32",
+        "description": "Forces Explorer to use the same titlebar colors as most apps.",
+        "github": "https://github.com/j--m",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Explorer Standard Title Bar Colors",
+        "version": "1.0.0"
       }
     },
     "start-button-replacer": {
