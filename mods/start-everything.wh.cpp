@@ -601,15 +601,9 @@ class Client {
             return false;
         }
 
-        // Everything answers by sending WM_COPYDATA back to this window, and
-        // UIPI silently drops messages sent from a lower integrity level to a
-        // higher one. Everything runs at medium, so this only bites when the
-        // broker is elevated -- but when it does, the failure is invisible:
-        // the query is accepted, Everything runs the search, and the reply is
-        // discarded, which is indistinguishable from a timeout. Measured on
-        // this machine: elevated without this call, zero replies in 2 s; with
-        // it, the same query answers in about 30 ms.
-        ChangeWindowMessageFilterEx(hwnd_, WM_COPYDATA, MSGFLT_ALLOW, nullptr);
+        // No message filter: Everything replies from the same integrity level
+        // as Start or a higher one, which UIPI lets through, and allowing
+        // lower ones would only let a sandboxed process hand us results.
         return true;
     }
 
@@ -1137,7 +1131,7 @@ inline bool IconToBgra(HICON icon, int size, std::vector<BYTE>* out) {
 // shortcuts, icon files. Those are fetched per file and kept per path. A new
 // one measured 3-40 ms and about 0.6 ms once the shell has seen it, so each
 // set of results gets a time budget for them, top rows first; the rest show
-// their type's icon and are fetched while idle, for the next keystroke.
+// their type's icon until they are fetched while idle (TakeLate).
 class FileIconCache {
    public:
     explicit FileIconCache(int size) : size_(size) {}
@@ -1146,12 +1140,13 @@ class FileIconCache {
     // no longer on screen.
     void NewResults(std::chrono::milliseconds budget) {
         pending_.clear();
+        late_.clear();
         deadline_ = std::chrono::steady_clock::now() + budget;
     }
 
     // Returns BGRA pixels, or nullptr when the shell had nothing.
     const std::vector<BYTE>* Get(const std::wstring& path, bool isFolder) {
-        if (!isFolder && HasOwnIcon(path)) {
+        if (!isFolder && HasOwnIcon(ExtensionOf(path))) {
             auto it = files_.find(path);
             if (it == files_.end() && std::chrono::steady_clock::now() < deadline_) {
                 it = StoreFile(path);
@@ -1171,7 +1166,10 @@ class FileIconCache {
             std::wstring path = std::move(pending_.front());  // top rows first
             pending_.erase(pending_.begin());
             if (!files_.count(path)) {
-                StoreFile(path);
+                auto it = StoreFile(path);
+                if (!it->second.empty()) {
+                    late_.emplace_back(path, it->second);
+                }
                 return true;
             }
         }
@@ -1179,6 +1177,11 @@ class FileIconCache {
     }
 
     bool HasPending() const { return !pending_.empty(); }
+
+    // The icons FetchPending found since the last call, for rows already drawn.
+    std::vector<std::pair<std::wstring, std::vector<BYTE>>> TakeLate() {
+        return std::exchange(late_, {});
+    }
 
    private:
     using Map = std::unordered_map<std::wstring, std::vector<BYTE>>;
@@ -1197,24 +1200,69 @@ class FileIconCache {
         return it->second.empty() ? nullptr : &it->second;
     }
 
+    // Empty when the icon would come from somewhere slow; the type's icon
+    // stands in for it then.
     Map::iterator StoreFile(const std::wstring& path) {
         if (files_.size() >= 4096) {
             files_.clear();
         }
-        return files_.emplace(path, Load(path.c_str(), 0, 0)).first;
+        return files_.emplace(path, IconIsLocal(path) ? Load(path.c_str(), 0, 0) : std::vector<BYTE>{}).first;
     }
 
-    // Types whose icon is in the file itself, on a local fixed drive: a
-    // network or removable path could stall the search thread on the disk.
-    static bool HasOwnIcon(const std::wstring& path) {
-        static const wchar_t* const kTypes[] = {L".exe", L".lnk", L".ico", L".url", L".scr",
-                                                L".cpl", L".cur", L".ani", L".appref-ms"};
-        std::wstring ext = ExtensionOf(path);
-        bool own = false;
+    static bool HasOwnIcon(const std::wstring& ext) {
+        static const wchar_t* const kTypes[] = {L".exe", L".lnk", L".ico", L".url",
+                                                L".scr", L".cpl", L".cur", L".ani"};
         for (const wchar_t* type : kTypes) {
-            own = own || ext == type;
+            if (ext == type) {
+                return true;
+            }
         }
-        if (!own || path.size() < 3 || path[1] != L':' || path[2] != L'\\') {
+        return false;
+    }
+
+    // Whether the shell would read the icon from a local fixed drive: a
+    // network or removable path could stall the search thread until it times
+    // out. For a shortcut that is its icon location, or else its target.
+    static bool IconIsLocal(const std::wstring& path) {
+        if (!OnFixedDrive(path)) {
+            return false;
+        }
+        std::wstring ext = ExtensionOf(path);
+        wchar_t where[MAX_PATH] = {};
+        if (ext == L".url") {
+            GetPrivateProfileStringW(L"InternetShortcut", L"IconFile", L"", where, MAX_PATH, path.c_str());
+        } else if (ext == L".lnk") {
+            IShellLinkW* link = nullptr;
+            if (FAILED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link)))) {
+                return false;
+            }
+            IPersistFile* file = nullptr;
+            bool loaded = SUCCEEDED(link->QueryInterface(IID_PPV_ARGS(&file))) &&
+                          SUCCEEDED(file->Load(path.c_str(), STGM_READ));
+            int index = 0;
+            if (loaded && (FAILED(link->GetIconLocation(where, MAX_PATH, &index)) || !where[0]) &&
+                FAILED(link->GetPath(where, MAX_PATH, nullptr, SLGP_RAWPATH))) {
+                where[0] = 0;
+            }
+            if (file) {
+                file->Release();
+            }
+            link->Release();
+            if (!loaded) {
+                return false;
+            }
+        }
+        // Nothing named: the file's own icon, a URL's browser, or the shell
+        // item a link points to.
+        if (!where[0]) {
+            return true;
+        }
+        wchar_t expanded[MAX_PATH] = {};
+        return ExpandEnvironmentStringsW(where, expanded, MAX_PATH) && OnFixedDrive(expanded);
+    }
+
+    static bool OnFixedDrive(const std::wstring& path) {
+        if (path.size() < 3 || path[1] != L':' || path[2] != L'\\') {
             return false;
         }
         const wchar_t root[] = {path[0], L':', L'\\', 0};
@@ -1279,6 +1327,7 @@ class FileIconCache {
     Map types_;
     Map files_;
     std::vector<std::wstring> pending_;
+    std::vector<std::pair<std::wstring, std::vector<BYTE>>> late_;
     std::chrono::steady_clock::time_point deadline_{};
 };
 
@@ -4170,18 +4219,21 @@ struct XamlHandler {
     winrt::weak_ref<wf::IInspectable> source;
     std::shared_ptr<void> revoker;  // a C++/WinRT revoker; revokes when destroyed
 };
-[[clang::no_destroy]] std::vector<XamlHandler> g_xamlHandlers;
+[[clang::no_destroy]] std::optional<std::vector<XamlHandler>> g_xamlHandlers{std::in_place};
+// Rows are rebuilt on every keystroke; handlers on objects XAML has since
+// freed are forgotten whenever the list doubles.
+size_t g_xamlHandlersPruneAt = 512;
 
 template <typename Revoker>
 void KeepHandler(wf::IInspectable const& source, Revoker revoker) {
-    // Rows are rebuilt on every keystroke; forget handlers on objects XAML has
-    // since freed, whenever the list doubles.
-    static size_t s_pruneAt = 512;
-    if (g_xamlHandlers.size() >= s_pruneAt) {
-        std::erase_if(g_xamlHandlers, [](XamlHandler const& h) { return !h.source.get(); });
-        s_pruneAt = std::max<size_t>(512, g_xamlHandlers.size() * 2);
+    if (!g_xamlHandlers) {
+        return;  // torn down: the revoker revokes as it goes out of scope
     }
-    g_xamlHandlers.push_back({winrt::make_weak(source), std::make_shared<Revoker>(std::move(revoker))});
+    if (g_xamlHandlers->size() >= g_xamlHandlersPruneAt) {
+        std::erase_if(*g_xamlHandlers, [](XamlHandler const& h) { return !h.source.get(); });
+        g_xamlHandlersPruneAt = std::max<size_t>(512, g_xamlHandlers->size() * 2);
+    }
+    g_xamlHandlers->push_back({winrt::make_weak(source), std::make_shared<Revoker>(std::move(revoker))});
 }
 
 [[clang::no_destroy]] wuxc::Border g_appsHeaderHolder{nullptr};
@@ -5401,6 +5453,7 @@ struct Row {
     bool isSetting = false;
     bool isFolder = false;
     bool isFile = false;
+    std::wstring programPath; // apps launched by app ID: their program on disk, for its file actions
     std::wstring copyText;   // text to copy to clipboard on activation
     std::wstring customGlyph; // Segoe Fluent glyph override (e.g. \uE1D0, \uE701, \uE88E)
 };
@@ -6819,69 +6872,68 @@ void RenderResults() try {
                     std::wstring locTarget = item.openPath;
                     std::wstring appTitle = item.title;
                     bool isFile = item.isFile;
+                    bool viaAppId = !isFile && !locTarget.starts_with(L"ms-settings:") &&
+                                    !locTarget.starts_with(L"http:") && !locTarget.starts_with(L"https:");
+                    // An app launched by its app ID can still have a program
+                    // on disk, which the card shows; the file actions use it.
+                    std::wstring filePath = isFile ? locTarget : viaAppId ? item.programPath : L"";
 
-                    if (isFile) {
+                    if (isFile || viaAppId) {
                         wuxc::MenuFlyoutSeparator sep1;
                         flyout.Items().Append(sep1);
 
-                        wuxc::MenuFlyoutItem locItem;
-                        locItem.Text(L"Open file location");
-                        wuxc::FontIcon locIcon;
-                        locIcon.Glyph(L"\uE838");
-                        locItem.Icon(locIcon);
-                        KeepHandler(locItem, locItem.Click(winrt::auto_revoke, [locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                            OpenFileLocation(locTarget);
-                            DismissStartMenu();
-                        }));
-                        flyout.Items().Append(locItem);
+                        if (!filePath.empty()) {
+                            wuxc::MenuFlyoutItem locItem;
+                            locItem.Text(L"Open file location");
+                            wuxc::FontIcon locIcon;
+                            locIcon.Glyph(L"\uE838");
+                            locItem.Icon(locIcon);
+                            KeepHandler(locItem, locItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                                OpenFileLocation(filePath);
+                                DismissStartMenu();
+                            }));
+                            flyout.Items().Append(locItem);
 
-                        wuxc::MenuFlyoutItem copyPathItem;
-                        copyPathItem.Text(L"Copy path");
-                        wuxc::FontIcon copyPathIcon;
-                        copyPathIcon.Glyph(L"\uE71B");
-                        copyPathItem.Icon(copyPathIcon);
-                        KeepHandler(copyPathItem, copyPathItem.Click(winrt::auto_revoke, [locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                            tools::CopyTextToClipboard(locTarget);
-                        }));
-                        flyout.Items().Append(copyPathItem);
+                            wuxc::MenuFlyoutItem copyPathItem;
+                            copyPathItem.Text(L"Copy path");
+                            wuxc::FontIcon copyPathIcon;
+                            copyPathIcon.Glyph(L"\uE71B");
+                            copyPathItem.Icon(copyPathIcon);
+                            KeepHandler(copyPathItem, copyPathItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                                tools::CopyTextToClipboard(filePath);
+                            }));
+                            flyout.Items().Append(copyPathItem);
+                        }
 
+                        // Through the app ID where there is one, so the
+                        // shortcut keeps the original's arguments.
+                        std::wstring shortcutTarget = isFile ? locTarget : L"shell:AppsFolder\\" + locTarget;
                         wuxc::MenuFlyoutItem shortcutItem;
                         shortcutItem.Text(L"Create desktop shortcut");
                         wuxc::FontIcon shortcutIcon;
                         shortcutIcon.Glyph(L"\uE7C5");
                         shortcutItem.Icon(shortcutIcon);
-                        KeepHandler(shortcutItem, shortcutItem.Click(winrt::auto_revoke, [locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                            tools::CreateDesktopShortcut(locTarget, appTitle);
+                        KeepHandler(shortcutItem, shortcutItem.Click(winrt::auto_revoke, [shortcutTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                            tools::CreateDesktopShortcut(shortcutTarget, appTitle);
                         }));
                         flyout.Items().Append(shortcutItem);
 
-                        wuxc::MenuFlyoutSeparator sep2;
-                        flyout.Items().Append(sep2);
+                        if (!filePath.empty()) {
+                            wuxc::MenuFlyoutSeparator sep2;
+                            flyout.Items().Append(sep2);
 
-                        wuxc::MenuFlyoutItem propItem;
-                        propItem.Text(L"Properties");
-                        wuxc::FontIcon propIcon;
-                        propIcon.Glyph(L"\uE946");
-                        propItem.Icon(propIcon);
-                        KeepHandler(propItem, propItem.Click(winrt::auto_revoke, [locTarget](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                            AllowExplorerForeground();
-                            DismissStartMenu();
-                            ShowPropertiesDialog(locTarget);
-                        }));
-                        flyout.Items().Append(propItem);
-                    } else if (!locTarget.starts_with(L"ms-settings:") && !locTarget.starts_with(L"http:") && !locTarget.starts_with(L"https:")) {
-                        wuxc::MenuFlyoutSeparator sep1;
-                        flyout.Items().Append(sep1);
-
-                        wuxc::MenuFlyoutItem shortcutItem;
-                        shortcutItem.Text(L"Create desktop shortcut");
-                        wuxc::FontIcon shortcutIcon;
-                        shortcutIcon.Glyph(L"\uE7C5");
-                        shortcutItem.Icon(shortcutIcon);
-                        KeepHandler(shortcutItem, shortcutItem.Click(winrt::auto_revoke, [locTarget, appTitle](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                            tools::CreateDesktopShortcut(L"shell:AppsFolder\\" + locTarget, appTitle);
-                        }));
-                        flyout.Items().Append(shortcutItem);
+                            wuxc::MenuFlyoutItem propItem;
+                            propItem.Text(L"Properties");
+                            wuxc::FontIcon propIcon;
+                            propIcon.Glyph(L"\uE946");
+                            propItem.Icon(propIcon);
+                            KeepHandler(propItem, propItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
+                                AllowExplorerForeground();
+                                DismissStartMenu();
+                                ShowPropertiesDialog(filePath);
+                            }));
+                            flyout.Items().Append(propItem);
+                        }
                     }
                 }
             }
@@ -7346,6 +7398,69 @@ void RenderResults() try {
     Wh_Log(L"render failed %08X", static_cast<unsigned>(winrt::to_hresult()));
 }
 
+// File icons fetched after their rows were drawn (see FileIconCache), under
+// g_resultsMutex. They are swapped into the rows in place: drawing the rows
+// again would start the keyboard selection over.
+std::vector<std::pair<std::wstring, std::vector<BYTE>>> g_lateFileIcons;
+
+void ApplyLateFileIcons() try {
+    std::vector<std::pair<std::wstring, std::vector<BYTE>>> late;
+    {
+        std::lock_guard<std::mutex> lock(g_resultsMutex);
+        late.swap(g_lateFileIcons);
+    }
+    if (!g_fileButtonsOpt) {
+        return;
+    }
+    const size_t rows = std::min(g_currentFileRows.size(), g_fileButtonsOpt->size());
+    for (const auto& [path, pixels] : late) {
+        if (pixels.size() != static_cast<size_t>(kIconSize) * kIconSize * 4) {
+            continue;
+        }
+        for (size_t i = 0; i < rows; ++i) {
+            if (g_currentFileRows[i].openPath != path) {
+                continue;
+            }
+            auto layout = (*g_fileButtonsOpt)[i].Content().try_as<wuxc::Grid>();
+            auto image = layout && layout.Children().Size() > 0
+                             ? layout.Children().GetAt(0).try_as<wuxc::Image>()
+                             : nullptr;
+            if (!image) {
+                continue;
+            }
+            wuxmi::WriteableBitmap bmp{kIconSize, kIconSize};
+            auto access = bmp.PixelBuffer().as<::Windows::Storage::Streams::IBufferByteAccess>();
+            BYTE* dest = nullptr;
+            if (SUCCEEDED(access->Buffer(&dest)) && dest) {
+                memcpy(dest, pixels.data(), pixels.size());
+                bmp.Invalidate();
+                image.Source(bmp);
+            }
+        }
+    }
+} catch (...) {
+}
+
+// Called from the search thread.
+void PublishLateFileIcons(std::vector<std::pair<std::wstring, std::vector<BYTE>>> late) {
+    if (late.empty()) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_resultsMutex);
+        for (auto& icon : late) {
+            g_lateFileIcons.push_back(std::move(icon));
+        }
+    }
+    try {
+        if (g_ourBox) {
+            g_ourBox.Dispatcher().RunAsync(wuc::CoreDispatcherPriority::Normal,
+                                           wuc::DispatchedHandler{[] { ApplyLateFileIcons(); }});
+        }
+    } catch (...) {
+    }
+}
+
 // Called from the search thread once results are in.
 void RequestRender() {
     try {
@@ -7698,7 +7813,11 @@ void SearchThreadMain() {
             if (!hasWork() && (iconCache.HasPending() || prefetchNext < appIndex.Count())) {
                 lock.unlock();
                 // Files first: they are on screen now.
-                if (!iconCache.FetchPending()) {
+                if (iconCache.FetchPending()) {
+                    if (!iconCache.HasPending()) {
+                        PublishLateFileIcons(iconCache.TakeLate());
+                    }
+                } else {
                     prefetchIcon();
                 }
                 continue;
@@ -8083,10 +8202,13 @@ void SearchThreadMain() {
                     row.subtitle = m.app->targetPath;
                     canAdmin = true;
                     isFileTarget = true;
-                } else if (!m.app->linkTarget.empty()) {
-                    // Shown, not launched: the app ID keeps the shortcut's
-                    // arguments and taskbar identity.
+                } else if (!m.app->linkTarget.empty() &&
+                           GetFileAttributesW(m.app->linkTarget.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                    // Shown, and used by the file actions, but not launched:
+                    // the app ID keeps the shortcut's arguments and taskbar
+                    // identity.
                     row.subtitle = m.app->linkTarget;
+                    row.programPath = m.app->linkTarget;
                 } else {
                     row.subtitle = L"Application";
                 }
@@ -8434,7 +8556,7 @@ void TeardownStartMenuUi() {
 
     // Before anything is dropped: see g_xamlHandlers.
     try {
-        g_xamlHandlers.clear();
+        g_xamlHandlers.reset();
     } catch (...) {}
 
     try {
@@ -8665,21 +8787,27 @@ void Wh_ModUninit() {
     WaitForTrackedLaunches();
 
     bool tornDown = false;
-    // The stock button is kept from before the box is placed, so a half-done
+    // Only the dispatcher: a reference to the box itself would be released
+    // here, off the XAML thread, after the teardown dropped the others. The
+    // stock button is kept from before the box is placed, so a half-done
     // attach (stock elements hidden, no box) is still undone on its thread.
-    wux::FrameworkElement anchor = g_ourBox ? g_ourBox.as<wux::FrameworkElement>() : g_stockButton;
-    if (anchor) {
+    wuc::CoreDispatcher dispatcher{nullptr};
+    try {
+        if (g_ourBox) {
+            dispatcher = g_ourBox.Dispatcher();
+        } else if (g_stockButton) {
+            dispatcher = g_stockButton.Dispatcher();
+        }
+    } catch (...) {}
+    if (dispatcher) {
         try {
-            auto dispatcher = anchor.Dispatcher();
-            if (dispatcher) {
-                auto op = dispatcher.RunAsync(
-                    wuc::CoreDispatcherPriority::Low,
-                    wuc::DispatchedHandler{[] { TeardownStartMenuUi(); }});
-                if (op.wait_for(std::chrono::seconds(5)) == wf::AsyncStatus::Completed) {
-                    tornDown = true;
-                } else {
-                    op.Cancel();
-                }
+            auto op = dispatcher.RunAsync(
+                wuc::CoreDispatcherPriority::Low,
+                wuc::DispatchedHandler{[] { TeardownStartMenuUi(); }});
+            if (op.wait_for(std::chrono::seconds(5)) == wf::AsyncStatus::Completed) {
+                tornDown = true;
+            } else {
+                op.Cancel();
             }
         } catch (...) {}
     }
