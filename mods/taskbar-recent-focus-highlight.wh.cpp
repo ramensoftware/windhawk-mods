@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.9.45
+// @version         0.9.46
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -4906,6 +4906,8 @@ void ClearThumbnailHighlight(FrameworkElement thumbView) {
     }
 }
 
+// Preview panels use explicit insertion too: keep deferred-child index
+// notifications balanced with removal, even when inserting at the end.
 void BringElementToFront(Controls::Panel panel, UIElement el) {
     if (!panel || !el) {
         return;
@@ -4915,7 +4917,7 @@ void BringElementToFront(Controls::Panel panel, UIElement el) {
         uint32_t idx = 0;
         if (children.IndexOf(el, idx) && idx + 1 != children.Size()) {
             children.RemoveAt(idx);
-            children.Append(el);
+            children.InsertAt(children.Size(), el);
         }
     } catch (...) {
     }
@@ -4950,7 +4952,8 @@ Controls::Grid EnsureThumbOverlayHost(Controls::Panel panel) {
             </Grid>
         )";
         host = Markup::XamlReader::Load(xaml).as<Controls::Grid>();
-        panel.Children().Append(host);
+        auto children = panel.Children();
+        children.InsertAt(children.Size(), host);
     }
 
     // Critical: cover title+image rows, not just row 0 (title).
@@ -5312,7 +5315,8 @@ void ApplyThumbnailHighlight(FrameworkElement thumbView, int rankOneBased) {
                         if (marker) {
                             StorePlateOwner(marker, hadLocal, localNull, prior,
                                             ours);
-                            panel.Children().Append(marker);
+                            auto children = panel.Children();
+                            children.InsertAt(children.Size(), marker);
                             border.Background(ours);
                             usedNative = true;
                         }
