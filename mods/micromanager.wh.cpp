@@ -14,7 +14,7 @@
 /*
 # MicroManager
 
-![Screenshot](https://i.imgur.com/V83qvSc.png)
+![Screenshot](https://i.imgur.com/D01Gk2T.png)
 
 A lightweight tray icon that shows a mini task manager popup with live CPU, GPU
 and RAM usage, plus the single top-consuming process for each.
