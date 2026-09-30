@@ -521,6 +521,9 @@ struct ColorMatrixEffect
 }  // namespace icc_fx
 
 
+static float Clamp(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+static int ClampInt(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
 // ---------------------------------------------------------------------------
 // Album-reactive visualizer + glossy Dynamic Island material.
 // The palette is deliberately subtle: album colors tint the visualizer,
@@ -554,17 +557,11 @@ static void UpdateAlbumVisualizerPalette(ID2D1Bitmap* bitmap) {
     D2D1_SIZE_F sz = bitmap->GetSize();
     if (sz.width <= 1.0f || sz.height <= 1.0f) return;
 
-    // A lightweight representative color. Keep it intentionally conservative
-    // so skin tones/white covers don't turn the visualizer into a harsh color.
-    D2D1_RECT_F r = D2D1::RectF(0, 0, sz.width, sz.height);
-    ComPtr<ID2D1Bitmap1> b1;
-    if (FAILED(bitmap->QueryInterface(IID_PPV_ARGS(&b1))) || !b1) return;
-
-    // Use the bitmap's average-ish center color only when the backing bitmap
-    // exposes CPU-readable pixels through the existing render path.
-    // Otherwise retain the previous palette rather than adding a costly readback.
-    D2D1_COLOR_F base;
-    base = D2D1::ColorF(D2D1::ColorF::DeepSkyBlue);
+    // The render bitmap is not guaranteed to expose CPU-readable pixels in the
+    // D2D1 interface used by the Windhawk compiler headers. Keep this path
+    // lightweight and retain the existing fallback palette when no CPU-side
+    // album pixel data is available.
+    D2D1_COLOR_F base = D2D1::ColorF(D2D1::ColorF::DeepSkyBlue);
     std::lock_guard<std::mutex> lock(g_albumPaletteMutex);
     g_albumPalette.color = base;
     g_albumPalette.glow = MixColor(base, D2D1::ColorF(D2D1::ColorF::White), 0.32f);
@@ -622,8 +619,6 @@ double NowSeconds() {
     return std::chrono::duration<double>(clock::now() - start).count();
 }
 
-float Clamp(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
-int ClampInt(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 bool EqualsNoCase(const std::wstring& a, const wchar_t* b) { return _wcsicmp(a.c_str(), b) == 0; }
 
 std::wstring GetStringSettingCopy(PCWSTR name) {
@@ -2479,7 +2474,6 @@ void DrawWaveform(DrawContext& dc, D2D1_RECT_F wf, float (&smooth)[kWaveBars], b
         dc.accent->SetOpacity(0.4f + 0.6f * v);
         dc.dc->FillRoundedRectangle(
             D2D1::RoundedRect(D2D1::RectF(x, cy - half, x + barW, cy + half), rad, rad), dc.accent);
-    DrawGlossyIslandHighlight(rt, D2D1);
     }
     dc.accent->SetOpacity(1.0f);
 }
@@ -5439,6 +5433,7 @@ DWORD WINAPI RenderThreadProc(void*) {
                 {
                     D2D1_ROUNDED_RECT rr = D2D1::RoundedRect(panelR, panelRadius, panelRadius);
                     pdc.dc->FillRoundedRectangle(rr, pdc.panel);
+                    DrawGlossyIslandHighlight(pdc.dc, rr);
                     pdc.dc->DrawRoundedRectangle(rr, pdc.border, 1.0f);
                 }
                 surface.Layout(pdc, inner);
@@ -5767,3 +5762,4 @@ void Wh_ModUninit() {
     WhTool_ModUninit();
     ExitProcess(0);
 }
+ 
