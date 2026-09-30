@@ -27,8 +27,16 @@ Windows gives you exactly one brightness slider no matter how many monitors you
 have, and on a desktop it gives you none at all. This mod adds a labelled slider
 for every connected display, right in the Quick Settings panel, each showing its
 current level and carrying the shell's own animated brightness icon -- plus
-contrast and power where the monitor supports them, and sliders that set every
-display at once.
+contrast, volume, input and power controls where the monitor supports them, and
+sliders that set every display at once.
+
+> ⚠️ **If a monitor shows "Brightness control not supported" after it worked
+> before** (often after waking from sleep), the monitor has stopped answering
+> DDC/CI. Windows itself gets no reply from it, so this is not the mod.
+> **Unplug and replug its video cable**, or turn it off and on with its own
+> power button, and it is picked up again right away. If that does not help,
+> make sure DDC/CI is turned on in the monitor's own menu, and try a direct
+> cable instead of an adapter, dock or KVM switch.
 
 ![Per-monitor brightness sliders in Quick Settings](https://raw.githubusercontent.com/bardelyne/per-monitor-brightness/main/screenshot.png)
 
@@ -192,14 +200,6 @@ include stays off.
   opening the panel again re-probes it, backing off from 30 seconds to at most
   16 minutes between attempts, and unplugging and replugging it starts over
   immediately.
-- A monitor that worked before can also stop answering DDC/CI later, often
-  after waking from sleep, and then shows "Brightness control not supported".
-  That is the monitor, not the mod: Windows itself gets no reply from it.
-  Unplugging and replugging its video cable, or turning it off and on with
-  its own power button, almost always brings it back, and it is picked up
-  again right away. If it still does not answer, check that DDC/CI is turned
-  on in the monitor's own menu, and try a direct cable instead of an adapter,
-  dock or KVM switch -- some of those do not pass DDC/CI through.
 */
 // ==/WindhawkModReadme==
 
