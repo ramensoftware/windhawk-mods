@@ -5114,10 +5114,23 @@ void TryAttachFromWindowRoot() {
     }
 }
 
-HWINEVENTHOOK g_attachWatch = nullptr;
+// The hook lives on a thread of its own: UnhookWinEvent only works on the
+// thread that called SetWinEventHook, and Wh_ModAfterInit and Wh_ModUninit
+// don't always run on the same thread. A hook left behind keeps the DLL loaded
+// and its callback running in Start after the mod is unloaded.
+HANDLE g_attachWatchThread = nullptr;
+HANDLE g_attachWatchStop = nullptr;
+std::atomic<int> g_attachWatchCalls{0};
 
 void CALLBACK AttachWatchProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
                               LONG idObject, LONG idChild, DWORD, DWORD) {
+    g_attachWatchCalls.fetch_add(1);
+    struct Leave {
+        ~Leave() { g_attachWatchCalls.fetch_sub(1); }
+    } leave;
+    if (g_quit.load()) {
+        return;  // unloading: once the teardown clears g_ourBox, attaching would put the box back
+    }
     if ((event != EVENT_OBJECT_SHOW && event != EVENT_OBJECT_UNCLOAKED) ||
         !hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
         return;
@@ -5132,21 +5145,56 @@ void CALLBACK AttachWatchProc(HWINEVENTHOOK, DWORD event, HWND hwnd,
     TryAttachFromWindowRoot();
 }
 
-void StartAttachWatch() {
-    if (g_attachWatch) {
-        return;
+DWORD WINAPI AttachWatchThreadProc(LPVOID) {
+    // In-context, so the callback runs on whichever thread shows the window;
+    // this thread only owns the hook, and needs no message loop for it.
+    HWINEVENTHOOK hook = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_UNCLOAKED,
+                                         GetCurrentModuleHandle(), AttachWatchProc,
+                                         GetCurrentProcessId(), 0,
+                                         WINEVENT_INCONTEXT);
+    if (hook) {
+        Wh_Log(L"attach watch installed on thread %lu", GetCurrentThreadId());
+    } else {
+        Wh_Log(L"attach watch FAILED, err=%lu", GetLastError());
     }
-    g_attachWatch = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_UNCLOAKED,
-                                    GetCurrentModuleHandle(), AttachWatchProc,
-                                    GetCurrentProcessId(), 0,
-                                    WINEVENT_INCONTEXT);
-    Wh_Log(L"attach watch %ls", g_attachWatch ? L"installed" : L"FAILED");
+    WaitForSingleObject(g_attachWatchStop, INFINITE);
+    if (hook && !UnhookWinEvent(hook)) {
+        Wh_Log(L"attach watch: unhook failed, err=%lu", GetLastError());
+    }
+    return 0;
 }
 
+void StartAttachWatch() {
+    if (g_attachWatchThread) {
+        return;
+    }
+    g_attachWatchStop = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_attachWatchStop) {
+        Wh_Log(L"attach watch: CreateEvent failed, err=%lu", GetLastError());
+        return;
+    }
+    g_attachWatchThread = CreateThread(nullptr, 0, AttachWatchThreadProc, nullptr, 0, nullptr);
+    if (!g_attachWatchThread) {
+        Wh_Log(L"attach watch: CreateThread failed, err=%lu", GetLastError());
+        CloseHandle(g_attachWatchStop);
+        g_attachWatchStop = nullptr;
+    }
+}
+
+// Must not run on Start's XAML thread: it waits for callbacks, which run there.
 void StopAttachWatch() {
-    if (g_attachWatch) {
-        UnhookWinEvent(g_attachWatch);
-        g_attachWatch = nullptr;
+    if (!g_attachWatchThread) {
+        return;
+    }
+    SetEvent(g_attachWatchStop);
+    WaitForSingleObject(g_attachWatchThread, INFINITE);
+    CloseHandle(g_attachWatchThread);
+    g_attachWatchThread = nullptr;
+    CloseHandle(g_attachWatchStop);
+    g_attachWatchStop = nullptr;
+    // A call that got in before the unhook may still be running elsewhere.
+    for (int i = 0; g_attachWatchCalls.load() > 0 && i < 200; ++i) {
+        Sleep(10);
     }
 }
 
@@ -8256,9 +8304,13 @@ void PlaceOurSearchBox(wux::FrameworkElement const& stockButton) try {
 
 void TeardownStartMenuUi() {
     Wh_Log(L"teardown: tearing down Start Menu UI on XAML thread");
-    try {
-        StopAttachWatch();
-    } catch (...) {}
+
+    // Here rather than in Wh_ModUninit: on the hooked thread, the hook
+    // procedure can't be mid-call when it goes.
+    if (g_hGetMsgHook) {
+        UnhookWindowsHookEx(g_hGetMsgHook);
+        g_hGetMsgHook = nullptr;
+    }
 
     try {
         if (g_hCoreWindow && g_subclassed) {
@@ -8486,11 +8538,6 @@ void Wh_ModUninit() {
         g_searchThread.reset();
     }
     WaitForTrackedLaunches();
-
-    if (g_hGetMsgHook) {
-        UnhookWindowsHookEx(g_hGetMsgHook);
-        g_hGetMsgHook = nullptr;
-    }
 
     bool tornDown = false;
     if (g_ourBox) {
