@@ -1565,6 +1565,12 @@ def validate_symbol_hooks(path: Path, mod_source: str):
         previous_line = mod_source_lines[line_num - 2]
         targets_from_comment = get_target_modules_from_previous_line(previous_line)
 
+        if targets_from_comment and line_num > 2:
+            line_before_comment = mod_source_lines[line_num - 3].strip()
+            if line_before_comment.startswith('//') and line_before_comment.endswith(','):
+                warning_msg = 'List all target modules in a single comment line'
+                warnings += add_warning(path, line_num - 1, warning_msg)
+
         if target_from_name and targets_from_comment:
             warning_msg = (
                 'Use either a comment or a variable name, not both. For example, you'
