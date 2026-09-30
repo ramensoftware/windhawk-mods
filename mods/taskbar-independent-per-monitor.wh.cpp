@@ -677,8 +677,17 @@ static bool IsExemptWindow(HWND h) {
         auto it = g_exemptCache.find(h);
         if (it != g_exemptCache.end()) return it->second;
     }
+    // UWP frame windows belong to ApplicationFrameHost.exe: use the app's CoreWindow instead. It's
+    // detached while the app is minimized or suspended - then don't cache the result.
     DWORD pid = 0;
-    GetWindowThreadProcessId(h, &pid);
+    bool cache = true;
+    if (IsFrameWindow(h)) {
+        if (HWND core = FindWindowExW(h, nullptr, L"Windows.UI.Core.CoreWindow", nullptr))
+            GetWindowThreadProcessId(core, &pid);
+        else
+            cache = false;
+    }
+    if (!pid) GetWindowThreadProcessId(h, &pid);
     std::wstring path = ProcPath(pid), exe = FileName(path);
     bool r = false;
     {
@@ -687,6 +696,7 @@ static bool IsExemptWindow(HWND h) {
             if (a == (a.find(L'\\') != std::wstring::npos ? path : exe)) r = true;
         }
     }
+    if (!cache) return r;
     std::lock_guard<std::mutex> l(g_exemptMx);
     if (g_exemptCache.size() > 1000) g_exemptCache.clear();
     g_exemptCache[h] = r;
