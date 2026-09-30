@@ -5572,6 +5572,32 @@ void OpenFileLocation(const std::wstring& path) {
     }
 }
 
+// "Open file location" from a menu: the folder opens on a worker, and Start is
+// dismissed after, back on its thread. The shell call waits on Explorer and
+// pumps messages meanwhile; in the click handler, Start losing the foreground
+// then closed the menu and rebuilt the results under the running handler, and
+// a slow or disconnected share froze Start. The foreground right belongs to
+// the process, so the folder still opens in front.
+void OpenFileLocationThenDismiss(std::wstring path) {
+    wuc::CoreDispatcher dispatcher{nullptr};
+    try {
+        if (g_ourBox) {
+            dispatcher = g_ourBox.Dispatcher();
+        }
+    } catch (...) {}
+    SpawnTrackedLaunch([path = std::move(path), dispatcher] {
+        HRESULT co = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        OpenFileLocation(path);
+        if (SUCCEEDED(co)) {
+            CoUninitialize();
+        }
+        if (dispatcher && !g_quit.load()) {
+            dispatcher.RunAsync(wuc::CoreDispatcherPriority::Normal,
+                                wuc::DispatchedHandler{[] { DismissStartMenu(); }});
+        }
+    });
+}
+
 // Every explorer.exe hosts a relay window (StartExplorerHelperHost). The one in
 // the taskbar's process is used when it exists: that is the process the
 // Properties click lets take the foreground, so the dialog opens in front.
@@ -6889,8 +6915,7 @@ void RenderResults() try {
                             locIcon.Glyph(L"\uE838");
                             locItem.Icon(locIcon);
                             KeepHandler(locItem, locItem.Click(winrt::auto_revoke, [filePath](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                                OpenFileLocation(filePath);
-                                DismissStartMenu();
+                                OpenFileLocationThenDismiss(filePath);
                             }));
                             flyout.Items().Append(locItem);
 
@@ -7290,8 +7315,7 @@ void RenderResults() try {
                 locIcon.Glyph(L"\uE838");
                 locItem.Icon(locIcon);
                 KeepHandler(locItem, locItem.Click(winrt::auto_revoke, [target](wf::IInspectable const&, wux::RoutedEventArgs const&) {
-                    OpenFileLocation(target);
-                    DismissStartMenu();
+                    OpenFileLocationThenDismiss(target);
                 }));
                 flyout.Items().Append(locItem);
 
