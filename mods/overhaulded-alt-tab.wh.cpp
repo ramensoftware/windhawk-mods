@@ -2,7 +2,7 @@
 // @id              overhaulded-alt-tab
 // @name            OverhauldedWin Alt+Tab
 // @description     Replaces the boring Windows Alt+Tab with a modern and elegant window switcher.
-// @version         1.2.22
+// @version         1.2.21
 // @author          IMiloDev
 // @github          https://github.com/IMiloDev
 // @homepage        https://github.com/IMiloDev/OverhauldedWin-Task-Switcher
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Overhaulded Task Switcher
+# Overhaulded Task Switcher  
 
 A modern, fluid and highly visual replacement for the native Windows Alt+Tab experience.
 
@@ -1025,6 +1025,38 @@ enum class WindowClassification
     Unknown
 };
 
+static bool IsFullscreenApplicationWindow(HWND hwnd)
+{
+    RECT windowRect = {};
+    if (!GetWindowRect(hwnd, &windowRect))
+        return false;
+
+    HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (!monitor)
+        return false;
+
+    MONITORINFO monitorInfo = {};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (!GetMonitorInfoW(monitor, &monitorInfo))
+        return false;
+
+    // Borderless fullscreen windows are commonly WS_POPUP windows without
+    // WS_EX_APPWINDOW or a normal frame. Accept only a top-level window whose
+    // bounds cover an entire monitor (or its work area), not every popup.
+    const LONG tolerance = 4;
+    const RECT* candidates[] = { &monitorInfo.rcMonitor, &monitorInfo.rcWork };
+    for (size_t i = 0; i < ARRAYSIZE(candidates); ++i)
+    {
+        const RECT& bounds = *candidates[i];
+        if (windowRect.left <= bounds.left + tolerance &&
+            windowRect.top <= bounds.top + tolerance &&
+            windowRect.right >= bounds.right - tolerance &&
+            windowRect.bottom >= bounds.bottom - tolerance)
+            return true;
+    }
+    return false;
+}
+
 static WindowClassification ClassifyApplicationWindow(
     HWND hwnd, DWORD processId, const std::wstring& processPath,
     const std::wstring& appName, const std::wstring& windowClass,
@@ -1077,6 +1109,9 @@ static WindowClassification ClassifyApplicationWindow(
 
     if (name == L"systeminfo" && !hasApplicationStyle && !hasNormalFrame)
         return WindowClassification::AuxiliaryWindow;
+    if (!hasApplicationStyle && !hasNormalFrame &&
+        IsFullscreenApplicationWindow(hwnd))
+        return WindowClassification::RealApplication;
     if (!hasApplicationStyle && !hasNormalFrame && isPopup)
         return WindowClassification::AuxiliaryWindow;
 
