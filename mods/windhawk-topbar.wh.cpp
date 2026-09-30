@@ -1,6 +1,6 @@
 // ==WindhawkMod==
-// @id              windhawk-topbar
-// @name            TopBar for Windows
+// @id              windhawk-topbar-stable
+// @name            TopBar for Windows stable
 // @donateUrl       https://www.patreon.com/WasiXGamer/join
 // @description     A working TopBar with Flyouts for Windows through Windhawk.
 // @version         1.3.0
@@ -1172,6 +1172,7 @@ struct {
 bool g_prevDefaultStartMenu = true;
 bool g_prevDefaultSearch = true;
 std::wstring g_prevStartButtonAction = L"topbar";
+int g_prevMonitorIndex = 0;
 
 // Guards against the boot-rebuild timer restarting the topbar thread more
 // than once. The restarted thread runs TopBarThreadProc again, which would
@@ -2119,6 +2120,19 @@ bool TestTreeMatcher(FrameworkElement const& element, TreeElementMatcher const& 
 
     if (m.bareIdentifier) {
         if (!m.name.empty() && elementName == m.name) return true;
+        static const wchar_t* kSharedSuffixes[] = {
+            L"FlyoutBlurHost", L"FlyoutScroller", L"FlyoutListRow",
+            L"FlyoutTitle", L"FlyoutDivider",
+        };
+        for (auto* sfx : kSharedSuffixes) {
+            if (m.name == sfx) {
+                size_t sl = wcslen(sfx);
+                if (elementName.size() > sl &&
+                    elementName.compare(elementName.size() - sl, sl, sfx) == 0) {
+                    return true;
+                }
+            }
+        }
         return shortName == m.name || std::wstring(className) == m.name;
     }
 
@@ -2138,7 +2152,44 @@ bool TestTreeMatcher(FrameworkElement const& element, TreeElementMatcher const& 
             if (std::wstring(className) != want && shortName != want) return false;
         }
     }
-    if (!m.name.empty() && elementName != m.name) return false;
+    if (!m.name.empty() && elementName != m.name) {
+        static const wchar_t* kSharedSuffixes[] = {
+            L"FlyoutBlurHost", L"FlyoutScroller", L"FlyoutListRow",
+            L"FlyoutTitle", L"FlyoutDivider",
+        };
+        bool suffixMatch = false;
+        for (auto* sfx : kSharedSuffixes) {
+            if (m.name == sfx) {
+                size_t sl = wcslen(sfx);
+                if (elementName.size() > sl &&
+                    elementName.compare(elementName.size() - sl, sl, sfx) == 0) {
+                    suffixMatch = true;
+                    break;
+                }
+            }
+        }
+        if (!suffixMatch) return false;
+    }
+
+    if (!m.visualStateGroupName.empty()) {
+        bool matched = false;
+        try {
+            auto groups = VisualStateManager::GetVisualStateGroups(element);
+            for (auto const& g : groups) {
+                if (!g) continue;
+                if (std::wstring(g.Name()) == m.visualStateGroupName) {
+                    matched = true;
+                    break;
+                }
+                auto cur = g.CurrentState();
+                if (cur && std::wstring(cur.Name()) == m.visualStateGroupName) {
+                    matched = true;
+                    break;
+                }
+            }
+        } catch (...) {}
+        if (!matched) return false;
+    }
 
     if (m.oneBasedIndex > 0) {
         auto parent = wuxm::VisualTreeHelper::GetParent(element);
@@ -3845,17 +3896,13 @@ wuxm::Imaging::BitmapImage HIconToBitmapImage(HICON hIcon, UINT size) {
         }
     }
 
-    // Tint priority: a global IconColor override wins over everything, then
-    // the per-task IconTint* styles, then no tint. Bitmap icons (task
-    // buttons, Start menu tiles, search results) keep their native colours;
-    // the user-facing IconColor setting is applied to vector glyphs only,
-    // through ApplyIconColorToElement.
+    // Bitmap icons (task buttons, Start menu tiles, search results) keep
+    // their native colours. IconColor applies to vector glyphs only, through
+    // ApplyIconColorToElement. Only per-task IconTint* styles tint bitmaps,
+    // via g_iconTintOpacity.
     double tintOpacity = 0.0;
     wui::Color tintColor = g_iconTintColor;
-    if (g_iconColorOverride) {
-        tintColor = *g_iconColorOverride;
-        tintOpacity = 1.0;
-    } else if (g_iconTintOpacity > 0.0) {
+    if (g_iconTintOpacity > 0.0) {
         tintOpacity = std::clamp(g_iconTintOpacity, 0.0, 1.0);
     }
 
@@ -7972,6 +8019,15 @@ Style MakeFlyoutPresenterStyle(double width) {
 // The panel body is wrapped in a ScrollViewer so a long network or tray list
 // stays inside a sane height instead of running off the bottom of the screen.
 wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
+    std::wstring rootName(name);
+    std::wstring prefix = rootName;
+    const std::wstring suffix = L"FlyoutRoot";
+    if (prefix.size() > suffix.size() &&
+        prefix.compare(prefix.size() - suffix.size(), suffix.size(), suffix) == 0) {
+        prefix.erase(prefix.size() - suffix.size());
+    }
+    auto prefixed = [&](const wchar_t* tail) { return prefix + tail; };
+
     wuxc::StackPanel panel;
     panel.Name(name);
     panel.Spacing(1);
@@ -7980,6 +8036,7 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
     g_detachedStyleRoots.push_back(panel);  // Register panel so tree targets can find it
 
     wuxc::ScrollViewer scroller;
+    scroller.Name(winrt::hstring(prefixed(L"FlyoutScroller")));
     scroller.Content(panel);
     scroller.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
     scroller.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
@@ -7987,7 +8044,7 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
     scroller.MaxHeight(560);
 
     wuxc::Border blurHost;
-    blurHost.Name(L"FlyoutBlurHost");
+    blurHost.Name(winrt::hstring(prefixed(L"FlyoutBlurHost")));
     blurHost.CornerRadius(MakeCorner(kFlyoutCorner));
     blurHost.Padding(Thickness{12, 12, 12, 12});
     blurHost.HorizontalAlignment(HorizontalAlignment::Stretch);
@@ -8234,8 +8291,9 @@ wuxc::Button MakeListRow(FrameworkElement leading,
                          std::wstring_view primary,
                          std::wstring_view secondary,
                          FrameworkElement trailing,
-                         std::function<void()> onClick) {
-    auto button = MakeGhostButton(L"FlyoutListRow", kRowCorner);
+                         std::function<void()> onClick,
+                         PCWSTR rowName = L"FlyoutListRow") {
+    auto button = MakeGhostButton(rowName, kRowCorner);
     button.HorizontalAlignment(HorizontalAlignment::Stretch);
     button.Padding(Thickness{10, 8, 10, 8});
     button.Content(MakeRowContent(leading, primary, secondary, trailing));
@@ -8999,6 +9057,7 @@ struct Snapshot {
     std::vector<uint8_t> thumbnailBytes;
     int64_t positionTicks = 0;
     int64_t endTicks = 0;
+    int64_t lastUpdated = 0;
     bool shuffleActive = false;
     bool repeatActive = false;
 };
@@ -9062,6 +9121,10 @@ Snapshot Read() {
             if (timeline) {
                 snapshot.positionTicks = timeline.Position().count();
                 snapshot.endTicks = timeline.EndTime().count();
+                try {
+                    snapshot.lastUpdated =
+                        timeline.LastUpdatedTime().time_since_epoch().count();
+                } catch (...) {}
             }
         } catch (...) {}
 
@@ -9249,7 +9312,7 @@ static void FormatMediaTimeStr(int64_t ticks, wchar_t* buf, size_t bufSize) {
 }
 
 void UpdateMediaFlyoutProgress() {
-    if (!g_mediaFlyout || !g_mediaFlyout.IsOpen()) return;
+    if (!g_mediaPanel) return;
 #if TOPBAR_HAS_MEDIA_CONTROL
     RunInBackground([] {
         auto p = media::ReadPosition();
@@ -9264,7 +9327,7 @@ void UpdateMediaFlyoutProgress() {
             int64_t nowTicks =
                 winrt::clock::now().time_since_epoch().count();
             int64_t elapsed = nowTicks - p.lastUpdated;
-            if (elapsed > 0 && elapsed < 300000000LL) {
+            if (elapsed > 0) {
                 p.pos += elapsed;
                 if (p.end > 0 && p.pos > p.end) p.pos = p.end;
             }
@@ -9313,11 +9376,10 @@ void StartMediaProgressTimer() {
         g_mediaProgressTimer.Interval(std::chrono::milliseconds(80));
         g_mediaProgressTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
             try {
+                g_mediaProgressTimer.Interval(std::chrono::seconds(1));
                 if (!g_mediaFlyout || !g_mediaFlyout.IsOpen()) {
-                    g_mediaProgressTimer.Stop();
                     return;
                 }
-                g_mediaProgressTimer.Interval(std::chrono::seconds(1));
                 UpdateMediaFlyoutProgress();
             } catch (...) {}
         });
@@ -9596,6 +9658,17 @@ void PopulateMediaPanel() {
     if (!g_mediaPanel) return;
     RunInBackground([] {
         auto snapshot = media::Read();
+        if (snapshot.valid && snapshot.playing && snapshot.lastUpdated > 0) {
+            int64_t nowTicks = winrt::clock::now().time_since_epoch().count();
+            int64_t elapsed = nowTicks - snapshot.lastUpdated;
+            if (elapsed > 0) {
+                snapshot.positionTicks += elapsed;
+                if (snapshot.endTicks > 0 &&
+                    snapshot.positionTicks > snapshot.endTicks) {
+                    snapshot.positionTicks = snapshot.endTicks;
+                }
+            }
+        }
         RunOnUiThread([snapshot] {
             if (!g_mediaPanel) return;
             g_populatingPanel = true;
@@ -9908,6 +9981,17 @@ void PopulateMediaPanel() {
             RunOnUiThread([] {
                 try { UpdateMediaFlyoutProgress(); } catch (...) {}
             });
+            auto scheduleRefresh = [](int delayMs) {
+                RunInBackground([delayMs] {
+                    Sleep(delayMs);
+                    RunOnUiThread([] {
+                        try { UpdateMediaFlyoutProgress(); } catch (...) {}
+                    });
+                });
+            };
+            scheduleRefresh(150);
+            scheduleRefresh(500);
+            scheduleRefresh(1200);
         });
     });
 }
@@ -10017,7 +10101,7 @@ void PopulateSoundPanel() {
                     }
                     RefreshSoundButtonIcon();
                     RepopulateLater(PopulateSoundPanel);
-                }));
+                }, L"OutputDeviceRow"));
         }
         children.Append(expander.root);
     }
@@ -10312,6 +10396,7 @@ void PopulateWifiPanel() {
 
     // 2-Column Header: Left (Title + Spinner) | Right (Refresh + Toggle)
     wuxc::Grid headerGrid;
+    headerGrid.Name(L"WifiHeaderGrid");
     headerGrid.Margin(Thickness{4, 2, 0, 6});
     headerGrid.HorizontalAlignment(HorizontalAlignment::Stretch);
 
@@ -10327,6 +10412,7 @@ void PopulateWifiPanel() {
 
     // Left stack: title + spinner
     wuxc::StackPanel leftStack;
+    leftStack.Name(L"WifiHeaderLeftStack");
     leftStack.Orientation(wuxc::Orientation::Horizontal);
     leftStack.Spacing(8);
     leftStack.VerticalAlignment(VerticalAlignment::Center);
@@ -10349,6 +10435,7 @@ void PopulateWifiPanel() {
 
     // Right stack: refresh button + toggle
     wuxc::StackPanel rightStack;
+    rightStack.Name(L"WifiHeaderRightStack");
     rightStack.Orientation(wuxc::Orientation::Horizontal);
     rightStack.Spacing(4);
     rightStack.VerticalAlignment(VerticalAlignment::Center);
@@ -10470,7 +10557,7 @@ void PopulateWifiPanel() {
             RepopulateLater(PopulateWifiPanel); // Show "Connecting..."
             
             ConnectToWifi(captured, L"");
-        }));
+        }, L"WifiNetworkRow"));
     }
 
     children.Append(MakeDivider());
@@ -10575,6 +10662,7 @@ void PopulateBluetoothPanel() {
 
     // 2-Column Header: Left (Title + Spinner) | Right (Toggle)
     wuxc::Grid headerGrid;
+    headerGrid.Name(L"BluetoothHeaderGrid");
     headerGrid.Margin(Thickness{4, 2, 0, 6});
     headerGrid.HorizontalAlignment(HorizontalAlignment::Stretch);
 
@@ -10590,6 +10678,7 @@ void PopulateBluetoothPanel() {
 
     // Left stack: title + spinner
     wuxc::StackPanel leftStack;
+    leftStack.Name(L"BluetoothHeaderLeftStack");
     leftStack.Orientation(wuxc::Orientation::Horizontal);
     leftStack.Spacing(8);
     leftStack.VerticalAlignment(VerticalAlignment::Center);
@@ -10612,6 +10701,7 @@ void PopulateBluetoothPanel() {
 
     // Right side: refresh button + toggle (stacked horizontally)
     wuxc::StackPanel rightStack;
+    rightStack.Name(L"BluetoothHeaderRightStack");
     rightStack.Orientation(wuxc::Orientation::Horizontal);
     rightStack.Spacing(4);
     rightStack.VerticalAlignment(VerticalAlignment::Center);
@@ -10762,7 +10852,7 @@ void PopulateBluetoothPanel() {
                     PopulateBluetoothPanel();
                 });
             });
-        }));
+        }, L"BluetoothDeviceRow"));
     }
 
     // (Scan button removed – scanning is now automatic or via header button)
@@ -11474,23 +11564,26 @@ void PopulateResourceFlyout() {
 
     // Tab buttons
     wuxc::StackPanel tabPanel;
+    tabPanel.Name(L"ResourceTabPanel");
     tabPanel.Orientation(wuxc::Orientation::Horizontal);
     tabPanel.Spacing(4);
     tabPanel.Margin(Thickness{0, 0, 0, 4});
 
-    auto makeTabButton = [&](PCWSTR name, int tabIndex,
+    auto makeTabButton = [&](PCWSTR name, PCWSTR displayText, int tabIndex,
                              PCWSTR iconStroke) -> wuxc::Button {
         auto btn = MakeGhostButton(name, kRowCorner);
+        std::wstring baseName(name);
         wuxc::StackPanel content;
+        content.Name(winrt::hstring(baseName + L"Content"));
         content.Orientation(wuxc::Orientation::Horizontal);
         content.Spacing(6);
         content.HorizontalAlignment(HorizontalAlignment::Center);
         content.VerticalAlignment(VerticalAlignment::Center);
-        if (auto icon = BuildVectorIcon(nullptr, L"", iconStroke, 24, 20, 1.8)) {
+        if (auto icon = BuildVectorIcon((baseName + L"Icon").c_str(), L"", iconStroke, 24, 20, 1.8)) {
             icon.VerticalAlignment(VerticalAlignment::Center);
             content.Children().Append(icon);
         }
-        auto text = MakeText(nullptr, name, 14);
+        auto text = MakeText((baseName + L"Text").c_str(), displayText, 14);
         text.VerticalAlignment(VerticalAlignment::Center);
         content.Children().Append(text);
         btn.Content(content);
@@ -11504,9 +11597,9 @@ void PopulateResourceFlyout() {
         return btn;
     };
 
-    auto cpuTab = makeTabButton(L"CPU", 0, icons::kCpuChipStroke);
-    auto ramTab = makeTabButton(L"RAM", 1, icons::kRamStickStroke);
-    auto gpuTab = makeTabButton(L"GPU", 2, icons::kGpuCardStroke);
+    auto cpuTab = makeTabButton(L"ResourceCpuTab", L"CPU", 0, icons::kCpuChipStroke);
+    auto ramTab = makeTabButton(L"ResourceRamTab", L"RAM", 1, icons::kRamStickStroke);
+    auto gpuTab = makeTabButton(L"ResourceGpuTab", L"GPU", 2, icons::kGpuCardStroke);
     tabPanel.Children().Append(cpuTab);
     tabPanel.Children().Append(ramTab);
     tabPanel.Children().Append(gpuTab);
@@ -11535,19 +11628,19 @@ void PopulateResourceFlyout() {
     infoStack.VerticalAlignment(VerticalAlignment::Center); // Centers the text inside the Border
 
     // CPU Name
-    g_infoCpuLabel = MakeText(nullptr, L"CPU", 10, false, 0.6);
-    g_infoCpuName = MakeText(nullptr, L"Loading...", 13, true);
+    g_infoCpuLabel = MakeText(L"InfoCpuLabel", L"CPU", 10, false, 0.6);
+    g_infoCpuName = MakeText(L"InfoCpuName", L"Loading...", 13, true);
     infoStack.Children().Append(g_infoCpuLabel);
     infoStack.Children().Append(g_infoCpuName);
 
     // RAM Name
-    g_infoRamLabel = MakeText(nullptr, L"Memory", 10, false, 0.6);
-    g_infoRamName = MakeText(nullptr, L"Loading...", 13, true);
+    g_infoRamLabel = MakeText(L"InfoRamLabel", L"Memory", 10, false, 0.6);
+    g_infoRamName = MakeText(L"InfoRamName", L"Loading...", 13, true);
     infoStack.Children().Append(g_infoRamLabel);
     infoStack.Children().Append(g_infoRamName);
 
     // GPU Combo
-    g_infoGpuLabel = MakeText(nullptr, L"GPU", 10, false, 0.6);
+    g_infoGpuLabel = MakeText(L"InfoGpuLabel", L"GPU", 10, false, 0.6);
     g_infoGpuCombo = wuxc::ComboBox();
     g_infoGpuCombo.Name(L"GpuSelector");
     g_infoGpuCombo.HorizontalAlignment(HorizontalAlignment::Stretch);
@@ -11583,14 +11676,17 @@ void PopulateResourceFlyout() {
 
     // Content area: graph + stats
     wuxc::Grid contentGrid;
+    contentGrid.Name(L"ResourceContentGrid");
     contentGrid.RowDefinitions().Append(wuxc::RowDefinition()); // graph row
     contentGrid.RowDefinitions().Append(wuxc::RowDefinition()); // stats row
 
     // Graph Canvas (wrapped in Border for rounded corners)
     wuxc::Canvas graphCanvas;
+    graphCanvas.Name(L"ResourceGraphCanvas");
     graphCanvas.Height(150);
     graphCanvas.HorizontalAlignment(HorizontalAlignment::Stretch);
     wuxc::Border graphBorder;
+    graphBorder.Name(L"ResourceGraphBorder");
     graphBorder.Height(150);
     graphBorder.Background(MakeBrush(0x10, 0xFF, 0xFF, 0xFF));
     graphBorder.CornerRadius(MakeCorner(6));
@@ -11615,6 +11711,7 @@ void PopulateResourceFlyout() {
 
     // Stats grid (2x2, Task Manager style)
     wuxc::Grid statsGrid;
+    statsGrid.Name(L"ResourceStatsGrid");
     statsGrid.Margin(Thickness{8, 4, 8, 4});
     statsGrid.HorizontalAlignment(HorizontalAlignment::Stretch);
     statsGrid.VerticalAlignment(VerticalAlignment::Stretch);
@@ -11627,14 +11724,14 @@ void PopulateResourceFlyout() {
     }
 
     // Helper to create a stat cell (centered)
-    auto makeStatCell = [&](int row, int col, PCWSTR labelText, wuxc::TextBlock& labelOut, wuxc::TextBlock& valueOut, wuxc::StackPanel& cellOut) {
+    auto makeStatCell = [&](int row, int col, PCWSTR labelText, PCWSTR labelName, PCWSTR valueName, wuxc::TextBlock& labelOut, wuxc::TextBlock& valueOut, wuxc::StackPanel& cellOut) {
         wuxc::StackPanel cell;
         cell.Spacing(2);
         cell.HorizontalAlignment(HorizontalAlignment::Center);
-        auto label = MakeText(nullptr, labelText, 11, false, 0.6);
+        auto label = MakeText(labelName, labelText, 11, false, 0.6);
         label.HorizontalAlignment(HorizontalAlignment::Center);
         label.TextAlignment(TextAlignment::Center);
-        auto value = MakeText(nullptr, L"-", 20, true);
+        auto value = MakeText(valueName, L"-", 20, true);
         value.HorizontalAlignment(HorizontalAlignment::Center);
         value.TextAlignment(TextAlignment::Center);
         labelOut = label;
@@ -11648,10 +11745,10 @@ void PopulateResourceFlyout() {
         cellOut = cell; // Store the cell container
     };
 
-    makeStatCell(0, 0, L"CPU Usage", g_statLabel0, g_statValue0, g_statCell0);
-    makeStatCell(0, 1, L"Clock Speed", g_statLabel1, g_statValue1, g_statCell1);
-    makeStatCell(1, 0, L"Cores", g_statLabel2, g_statValue2, g_statCell2);
-    makeStatCell(1, 1, L"Threads", g_statLabel3, g_statValue3, g_statCell3);
+    makeStatCell(0, 0, L"CPU Usage",   L"StatLabel0", L"StatValue0", g_statLabel0, g_statValue0, g_statCell0);
+    makeStatCell(0, 1, L"Clock Speed", L"StatLabel1", L"StatValue1", g_statLabel1, g_statValue1, g_statCell1);
+    makeStatCell(1, 0, L"Cores",       L"StatLabel2", L"StatValue2", g_statLabel2, g_statValue2, g_statCell2);
+    makeStatCell(1, 1, L"Threads",     L"StatLabel3", L"StatValue3", g_statLabel3, g_statValue3, g_statCell3);
 
     contentGrid.Children().Append(statsGrid);
     wuxc::Grid::SetRow(statsGrid, 1);
@@ -11777,7 +11874,7 @@ void RebuildWeatherSearchResultsPanel() {
                             PopulateWeatherPanel();
                         });
                     });
-                }));
+                }, L"WeatherCityRow"));
         }
     }
 
@@ -15753,6 +15850,26 @@ void BuildAppTitleContextMenu() {
 
     auto items = menu.Items();
 
+    items.Append(MakeMenuItem(L"Minimize", [] {
+        if (g_appTitleContextTarget) {
+            ShowWindow(g_appTitleContextTarget, SW_MINIMIZE);
+        }
+    }, L"\uE921"));
+
+    items.Append(MakeMenuItem(L"Maximize", [] {
+        if (g_appTitleContextTarget) {
+            ToggleMaximizeWindow(g_appTitleContextTarget);
+        }
+    }, L"\uE740"));
+
+    items.Append(MakeMenuItem(L"Close", [] {
+        if (g_appTitleContextTarget) {
+            CloseWindowGracefully(g_appTitleContextTarget);
+        }
+    }, L"\uE8BB"));
+
+    items.Append(MakeMenuSeparator());
+
     items.Append(MakeMenuItem(L"Open file location", [] {
         if (g_appTitleContextTarget) {
             OpenFileLocationForApp(g_appTitleContextTarget);
@@ -19532,6 +19649,7 @@ g_centerPanel.Children().Append(resourceButton);
         });
         g_mediaFlyout.Closed([](auto&&, auto&&) {
             StopMediaVisualizer();
+            if (g_mediaProgressTimer) g_mediaProgressTimer.Stop();
         });
 
         FrameworkElement mediaInitialContent = BuildVectorIcon(
@@ -24318,11 +24436,24 @@ void WhTool_ModSettingsChanged() {
     bool prevStart = g_settings.defaultStartMenu;
     bool prevSearch = g_settings.defaultSearch;
     std::wstring prevStartAction = g_settings.startButtonAction;
-    RunOnUiThread([prevStart, prevSearch, prevStartAction] {
+    int prevMonitorIndex = g_prevMonitorIndex;
+    RunOnUiThread([prevStart, prevSearch, prevStartAction, prevMonitorIndex] {
         LoadSettings();
         g_prevDefaultStartMenu = g_settings.defaultStartMenu;
         g_prevDefaultSearch = g_settings.defaultSearch;
         g_prevStartButtonAction = g_settings.startButtonAction;
+        bool monitorChanged = (prevMonitorIndex != g_settings.monitorIndex);
+        g_prevMonitorIndex = g_settings.monitorIndex;
+        if (monitorChanged && g_topBarHwnd && IsWindow(g_topBarHwnd)) {
+            UnregisterAppBar(g_topBarHwnd);
+            RegisterAppBar(g_topBarHwnd);
+            SetTimer(g_topBarHwnd, kAppBarInitTimerId, 200, nullptr);
+            g_forcePopupPosition = false;
+            g_replaceAttempts = 0;
+            g_wideFlyoutTargetX = -1;
+            g_wideFlyoutTargetY = -1;
+            ClearChildPopupTargets();
+        }
         bool turnedOffStart = prevStart && !g_settings.defaultStartMenu;
         bool turnedOffSearch = prevSearch && !g_settings.defaultSearch;
         bool startActionSwitchedToWindows =
