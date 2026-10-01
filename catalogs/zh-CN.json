@@ -6881,6 +6881,33 @@
         "version": "8.0.0"
       }
     },
+    "hide-taskbar-tooltips": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790852465000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790852465000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "gilnett",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject",
+        "description": "Suppresses native Windows 11 XAML hover tooltips in Explorer (taskbar buttons, system tray icons, and shell controls).",
+        "github": "https://github.com/gilnett",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Hide Taskbar Tooltips",
+        "version": "1.0.8"
+      }
+    },
     "hide-titlebar-elements": {
       "details": {
         "defaultSorting": 2510,
@@ -8648,7 +8675,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790005349000,
+        "updated": 1790852473000,
         "users": 196
       },
       "metadata": {
@@ -8663,7 +8690,7 @@
           "dwm.exe"
         ],
         "name": "Windows Shadows Tuner",
-        "version": "0.6.4"
+        "version": "0.9.4"
       }
     },
     "native-titlebars-uwp-lite": {
@@ -13075,7 +13102,7 @@
         "rating": 10,
         "ratingBreakdown": [5, 9, 19, 44, 538],
         "ratingUsers": 615,
-        "reviews": 1,
+        "reviews": 0,
         "trendingSorting": 0,
         "updated": 1790547107000,
         "users": 35862
@@ -14079,7 +14106,7 @@
         "ratingUsers": 14,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790287417000,
+        "updated": 1790852469000,
         "users": 179
       },
       "metadata": {
@@ -14095,7 +14122,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Volume Percentage Indicator",
-        "version": "1.6.3"
+        "version": "1.7.4"
       }
     },
     "taskbar-wheel-cycle": {
