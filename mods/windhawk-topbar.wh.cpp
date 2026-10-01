@@ -15695,31 +15695,13 @@ void RebuildSearchResultsPanel() {
                 }
             }
         } else if (r.kind == search::Result::Kind::ControlPanel) {
-            // Use the Control Panel shell namespace's own icon. The .cpl
-            // files on Windows 11 either don't carry an embedded icon or
-            // carry one that doesn't render legibly at 26 px, so results
-            // were coming out blank or with a generic document glyph.
-            constexpr PCWSTR kControlPanelShell =
-                L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}";
-            winrt::com_ptr<IShellItemImageFactory> factory;
-            if (SUCCEEDED(SHCreateItemFromParsingName(kControlPanelShell, nullptr,
-                                                      IID_PPV_ARGS(factory.put()))) &&
-                factory) {
-                HBITMAP hbm = nullptr;
-                SIZE sz{ static_cast<LONG>(physical), static_cast<LONG>(physical) };
-                if (SUCCEEDED(factory->GetImage(sz, SIIGBF_ICONONLY, &hbm)) && hbm) {
-                    ICONINFO ii{};
-                    ii.fIcon = TRUE;
-                    ii.hbmColor = hbm;
-                    ii.hbmMask = CreateBitmap(sz.cx, sz.cy, 1, 1, nullptr);
-                    HICON icon = CreateIconIndirect(&ii);
-                    if (ii.hbmMask) DeleteObject(ii.hbmMask);
-                    DeleteObject(hbm);
-                    if (icon) {
-                        bmp = HIconToBitmapImage(icon, physical);
-                        DestroyIcon(icon);
-                    }
-                }
+            // Resolve the .cpl file's own icon. The shell namespace GUID
+            // (shell:::{26EE0668-...}) is redirected to the modern Settings
+            // app on Windows 11, so every Control Panel result was showing
+            // the Settings gear. Using the actual .cpl path gives each
+            // applet its real icon.
+            if (!r.target.empty()) {
+                bmp = GetShellItemIconBitmap(r.target, physical);
             }
         } else {
             if (!r.lnkPath.empty()) {
@@ -21602,7 +21584,7 @@ g_centerPanel.Children().Append(resourceButton);
                               L"ControlCenterButton",
                               L"ResourceButton", L"WeatherButton",
                               L"RecycleBinButton", L"SettingsButton",
-                              L"ClockButton" }) {
+                              L"ClockButton", L"MediaButton" }) {
         auto it = g_namedElements.find(name);
         if (it == g_namedElements.end()) continue;
         if (auto btn = it->second.try_as<wuxc::Button>()) {
