@@ -58,7 +58,7 @@ You can assign any hotkey directly to built-in commands by setting the path to o
 #### Navigation & Dialogs
 | Command | Default Key | Description |
 | :--- | :--- | :--- |
-| `internal:showProperties` | `Ctrl + Alt + Enter` | Opens individual Properties dialogs for selected items. |
+| `internal:showProperties` | `Ctrl + Alt + Enter` | Opens individual Properties dialogs for selected items (Max 15). |
 | `internal:openWith` | `Alt + H` | Opens the native "How do you want to open this file?" dialog. |
 | `internal:openRecycleBin` | `Ctrl + Shift + B` | Navigates the active tab to the Recycle Bin. |
 | `internal:emptyRecycleBin` | `Ctrl + Shift + Del` | Prompts confirmation to wipe the Recycle Bin. |
@@ -1314,7 +1314,16 @@ void LaunchTerminalHelper(const std::wstring& activeDir,
 
     if (hasWT) {
         targetExe = wtResolved;
-        targetParams = L"-d " + SafeQuote(activeDir);
+
+        // Escape semicolons so wt.exe doesn't read them as new commands
+        std::wstring wtDir;
+        for (wchar_t ch : activeDir) {
+            if (ch == L';')
+                wtDir += L'\\';
+            wtDir += ch;
+        }
+
+        targetParams = L"-d " + SafeQuote(wtDir);
         Wh_Log(L"LaunchTerminalHelper: Windows Terminal detected at '%s'",
                targetExe.c_str());
     } else {
@@ -1337,7 +1346,7 @@ void LaunchTerminalHelper(const std::wstring& activeDir,
            targetExe.c_str(), elevated ? 1 : 0, activeDir.c_str());
 
     SHELLEXECUTEINFOW sei = {sizeof(sei)};
-    sei.fMask = SEE_MASK_DEFAULT;
+    sei.fMask = SEE_MASK_DEFAULT | SEE_MASK_NOASYNC;
     sei.hwnd = rootHwnd;
     sei.lpVerb = elevated ? L"runas" : L"open";
     sei.lpFile = targetExe.c_str();
@@ -1995,7 +2004,14 @@ void ExecuteInternalCommand(const std::wstring& command,
 
         if (!allSelected.empty()) {
             // Open an individual properties dialog for every selected item
+            int count = 0;
             for (const auto& path : allSelected) {
+                if (count++ >= 15) {
+                    ShowActionToast(rootHwnd,
+                                    L"Opened max 15 properties windows",
+                                    ToastType::Info);
+                    break;
+                }
                 SHELLEXECUTEINFOW sei = {sizeof(sei)};
                 sei.fMask = SEE_MASK_INVOKEIDLIST | SEE_MASK_NOASYNC;
                 sei.lpVerb = L"properties";
@@ -2069,6 +2085,12 @@ void ExecuteInternalCommand(const std::wstring& command,
         std::vector<std::wstring> allSelected = GetSelectedPaths(psv);
         std::wstring activeDir = GetActiveFolderPath(psv);
         psv->Release();
+
+        if (activeDir.empty()) {
+            ShowActionToast(rootHwnd, L"Cannot create shortcuts here",
+                            ToastType::Error);
+            return;
+        }
 
         if (allSelected.empty()) {
             ShowActionToast(rootHwnd, L"No items selected", ToastType::Error);
