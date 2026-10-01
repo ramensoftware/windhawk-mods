@@ -145,6 +145,10 @@ struct
 
 std::atomic<bool> g_unloading;
 
+// Set once the margin has been applied to a taskbar, and cleared when it is
+// removed, so that the anchor is only shifted while the padding is in place.
+std::atomic<bool> g_marginApplied;
+
 // Elements whose value the mod set, so it can be cleared again.
 struct AppliedElement
 {
@@ -409,6 +413,8 @@ void ApplyMarginToTaskbar(HWND hTaskbarWnd, XamlRoot xamlRoot) {
     } else {
         Wh_Log(L"Failed to find TaskbarBackground");
     }
+
+    g_marginApplied.store(true);
 }
 
 void RemoveAppliedMargins() {
@@ -423,6 +429,7 @@ void RemoveAppliedMargins() {
     }
 
     g_appliedElements.clear();
+    g_marginApplied.store(false);
 }
 
 using ComputeJumpViewPosition_t = HRESULT(WINAPI*)(
@@ -445,7 +452,8 @@ HRESULT WINAPI ComputeJumpViewPosition_Hook(
     HRESULT hr = ComputeJumpViewPosition_Original(pThis, pTaskBtnGroup, param2,
                                                   point, hAlign, vAlign);
 
-    if (FAILED(hr) || !point || g_unloading || !g_settings.leftMargin) {
+    if (FAILED(hr) || !point || g_unloading || !g_marginApplied.load() ||
+        !g_settings.leftMargin) {
         return hr;
     }
 
@@ -763,6 +771,10 @@ bool HookTaskbarDllSymbols() {
 
 void LoadSettings() {
     g_settings.leftMargin = Wh_GetIntSetting(L"leftMargin");
+    if (g_settings.leftMargin < 0) {
+        g_settings.leftMargin = 0;
+    }
+
     g_settings.followDpi = Wh_GetIntSetting(L"followDpi") != 0;
 
     g_settings.displays = Displays::All;
