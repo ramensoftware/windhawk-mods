@@ -2,7 +2,7 @@
 // @id              cursor-override
 // @name            Cursor Override
 // @description     Recognizes Mozilla, Chromium and RichEdit cursors and loads replacements on demand
-// @version         1.0.0
+// @version         1.0.1
 // @author          Basti
 // @github          https://github.com/sebastianheder01
 // @include         *
@@ -40,14 +40,15 @@ Recognition can require an update when an application changes its cursor artwork
 Supports `Grab`, `Grabbing`, `Cell`, `Copy`, `Alias`, `ZoomIn`, `ZoomOut`, `ColResize`, `RowResize`, `VerticalText` and `SelectionBar`.
 Standard Windows cursors remain unchanged.
 
-## Usage
-
-Under Settings, enter the full local path to each `.cur` or `.ani` file you want to change.
-Leave a field empty to keep the original cursor.
-Keep the cursor files in a permanent local folder. Network paths and mapped network drives are not supported.
+Network paths and mapped network drives are not supported.
 If a file cannot be loaded, the original cursor stays active. Check the path and save the settings again to retry.
 Windhawk debug logging reports the affected setting and error code without logging the file path.
 With all fields empty, the mod installs no hooks.
+
+## Usage
+
+Under Settings, enter the full local path to each `.cur` or `.ani` file you want to change. Leave a field empty to keep the original cursor.
+Keep the cursor files in a permanent local folder.
 
 ## Compatibility
 
@@ -72,7 +73,7 @@ For an optional cursor pack, check out [Galaxy Cursor](https://github.com/sebast
   $description: Full local path to a .cur or .ani file. Leave empty to keep the original cursor.
 
 - selectionBarPath: ""
-  $name: Selection bar (RichEdit left margin)
+  $name: Selection bar
   $description: Full local path to a .cur or .ani file. Leave empty to keep the original cursor.
 
 - copyPath: ""
