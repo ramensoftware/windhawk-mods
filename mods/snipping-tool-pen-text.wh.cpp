@@ -4,7 +4,7 @@
 // @name:pt-BR         Snipping Tool: texto com a caneta
 // @description        Adds a text tool to the Windows 11 Snipping Tool that writes with the app's own pen
 // @description:pt-BR  Adiciona ao Snipping Tool do Windows 11 uma ferramenta de texto que escreve com a própria caneta do app
-// @version            1.0.0
+// @version            1.0.2
 // @author             Cris
 // @github             https://github.com/cristianosm
 // @license            MIT
@@ -30,14 +30,16 @@ with Ctrl+Z, erase it with the eraser, save and copy as usual.
 ## How to use
 
 1. Open a screenshot in the Snipping Tool editor.
-2. Select the **pen** and pick its color and thickness.
+2. Pick the pen color and thickness. The pen is selected automatically when
+   writing, and the previous tool (highlighter or eraser) is restored after.
 3. Click the floating **T** button (near the window corner) or press
    **Ctrl+Alt+Shift+T**. With the hotkey, the text starts at the mouse position.
 4. Type the text. A live preview shows where it will be written, in the pen's
    color and thickness.
    - **Position**: click on the image where the text should start
      (the preview follows the mouse).
-   - **Alt+Arrows**: move the text 2 px (20 px with Shift).
+   - **Alt+Arrows**: move the text 10 px (100 px with Shift). The step is
+     configurable.
    - **Height** and **Speed**: use the - / + buttons, the mouse wheel or the
      Up/Down keys. The last values used are remembered.
    - **Ctrl+Enter**: write. **Shift+Enter** (or Enter): new line.
@@ -62,8 +64,10 @@ Este mod adiciona uma ferramenta de texto ao Snipping Tool do Windows 11. O
 texto é escrito com a **própria caneta do Snipping Tool**, então fica dentro do
 editor: dá para desfazer com Ctrl+Z, apagar com a borracha, salvar e copiar.
 
-Como usar: selecione a caneta (cor e espessura), clique no botão flutuante
-**T** ou use **Ctrl+Alt+Shift+T**, digite o texto e confira a prévia.
+Como usar: escolha a cor e a espessura da caneta (ela é selecionada
+automaticamente ao escrever, e a ferramenta anterior volta depois), clique no
+botão flutuante **T** ou use **Ctrl+Alt+Shift+T**, digite o texto e confira a
+prévia.
 **Posicionar** escolhe onde o texto começa; **Alt+Setas** ajusta a posição;
 **Ctrl+Enter** escreve, **Shift+Enter** quebra a linha e **Esc** cancela.
 A janela aparece em português automaticamente quando o Windows está em
@@ -137,6 +141,11 @@ português.
   $name:pt-BR: Altura padrão das letras (px)
   $description: "Height of uppercase letters, in screen pixels. The last height used is remembered."
   $description:pt-BR: "Altura das letras maiúsculas, em pixels de tela. O último tamanho usado é lembrado."
+- nudgeStep: 10
+  $name: Alt+Arrow step (px)
+  $name:pt-BR: Passo do Alt+Seta (px)
+  $description: "How many pixels Alt+Arrow moves the text (1 to 200). With Shift, it moves 10 times more."
+  $description:pt-BR: "Quantos pixels o Alt+Seta move o texto (1 a 200). Com Shift, move 10 vezes mais."
 - showButton: true
   $name: Show floating button
   $name:pt-BR: Mostrar botão flutuante
@@ -229,6 +238,8 @@ constexpr double kLineHeight = 80.0;
 
 constexpr int kMinSize = 6;
 constexpr int kMaxSize = 400;
+constexpr int kMinNudge = 1;
+constexpr int kMaxNudge = 200;
 constexpr int kMinSpeed = 1;
 constexpr int kMaxSpeed = 10;
 
@@ -314,6 +325,7 @@ struct Settings {
     bool blockMouse = true;
     bool dialogBottomCenter = true;
     int defaultSize = 28;
+    int nudgeStep = 10;
     bool showButton = true;
     Corner corner = Corner::TopRight;
     int offsetX = 140;
@@ -735,7 +747,8 @@ void ReadHotkeySetting(Settings* s) {
 }
 
 //+-------------------------------------
-//|Writing speed, default letter height, mouse lock and dialog position.
+//|Writing speed, default letter height, Alt+Arrow step, mouse lock and
+//|dialog position.
 //+---------------------------------------------------------------------------
 //|ReadWritingSettings
 //+---------------------------------------------------------------------------
@@ -745,6 +758,9 @@ void ReadWritingSettings(Settings* s) {
 
     int size = Wh_GetIntSetting(L"defaultSize");
     s->defaultSize = size > 0 ? Clamp(size, kMinSize, kMaxSize) : 28;
+
+    int nudge = Wh_GetIntSetting(L"nudgeStep");
+    s->nudgeStep = nudge > 0 ? Clamp(nudge, kMinNudge, kMaxNudge) : 10;
 
     s->blockMouse = Wh_GetIntSetting(L"blockMouse") != 0;
     s->dialogBottomCenter = ReadStringSetting(L"dialogPosition") != L"auto";
@@ -1471,49 +1487,110 @@ RECT EditorSafeRect(HWND target) {
 }
 
 //+---------------------------------------------------------------------------
-//|IUIAutomationSelectionItemPattern IID and the pen button's AutomationId.
+//|IUIAutomationSelectionItemPattern IID and the toolbar buttons' AutomationIds.
 constexpr GUID kIidSelectionItemPattern = {
     0xa8efa66a, 0x0fda, 0x421a, {0x91, 0x94, 0x38, 0x02, 0x1f, 0x35, 0x78, 0xea}};
 constexpr wchar_t kPenButtonAutomationId[] = L"InkToolbarBallpointPenButton";
+constexpr const wchar_t* kOtherToolAutomationIds[] = {
+    L"InkToolbarHighlighterButton",
+    L"InkToolbarEraserButton",
+};
 
 //+-------------------------------------
-//|Selects the ballpoint pen in the Snipping Tool toolbar if another tool
-//|(highlighter, eraser...) is active, so the text is written with the pen.
+//|Selection pattern of a toolbar button, found by AutomationId (nullptr if
+//|not found). The caller releases it.
 //+---------------------------------------------------------------------------
-//|EnsurePenSelected
+//|FindToolButton
 //+---------------------------------------------------------------------------
-void EnsurePenSelected(HWND target) {
-    if (!g_uia) return;
+IUIAutomationSelectionItemPattern* FindToolButton(HWND target,
+                                                  const wchar_t* automationId) {
+    if (!g_uia) return nullptr;
     IUIAutomationElement* root = nullptr;
     IUIAutomationCondition* cond = nullptr;
-    IUIAutomationElement* pen = nullptr;
+    IUIAutomationElement* button = nullptr;
     IUIAutomationSelectionItemPattern* sel = nullptr;
 
     VARIANT id;
     VariantInit(&id);
     id.vt = VT_BSTR;
-    id.bstrVal = SysAllocString(kPenButtonAutomationId);
+    id.bstrVal = SysAllocString(automationId);
     if (SUCCEEDED(g_uia->ElementFromHandle(target, &root)) && root &&
         SUCCEEDED(g_uia->CreatePropertyCondition(UIA_AutomationIdPropertyId, id,
                                                  &cond)) &&
-        SUCCEEDED(root->FindFirst(TreeScope_Descendants, cond, &pen)) && pen &&
-        SUCCEEDED(pen->GetCurrentPatternAs(UIA_SelectionItemPatternId,
-                                           kIidSelectionItemPattern,
-                                           (void**)&sel)) &&
-        sel) {
-        BOOL selected = TRUE;
-        sel->get_CurrentIsSelected(&selected);
-        if (!selected) {
-            Wh_Log(L"Selecting the pen tool");
-            sel->Select();
-            SleepUnlessStopping(100);
+        SUCCEEDED(root->FindFirst(TreeScope_Descendants, cond, &button)) &&
+        button) {
+        if (FAILED(button->GetCurrentPatternAs(UIA_SelectionItemPatternId,
+                                               kIidSelectionItemPattern,
+                                               (void**)&sel))) {
+            sel = nullptr;
         }
     }
     VariantClear(&id);
-    if (sel) sel->Release();
-    if (pen) pen->Release();
+    if (button) button->Release();
     if (cond) cond->Release();
     if (root) root->Release();
+    return sel;
+}
+
+//+-------------------------------------
+//|True if the toolbar button exists and is the selected tool.
+//+---------------------------------------------------------------------------
+//|IsToolSelected
+//+---------------------------------------------------------------------------
+bool IsToolSelected(HWND target, const wchar_t* automationId) {
+    IUIAutomationSelectionItemPattern* sel = FindToolButton(target, automationId);
+    if (!sel) return false;
+    BOOL selected = FALSE;
+    sel->get_CurrentIsSelected(&selected);
+    sel->Release();
+    return selected;
+}
+
+//+-------------------------------------
+//|Selects a toolbar button. Returns true if it was found.
+//+---------------------------------------------------------------------------
+//|SelectTool
+//+---------------------------------------------------------------------------
+bool SelectTool(HWND target, const wchar_t* automationId) {
+    IUIAutomationSelectionItemPattern* sel = FindToolButton(target, automationId);
+    if (!sel) return false;
+    sel->Select();
+    sel->Release();
+    SleepUnlessStopping(100);
+    return true;
+}
+
+//+-------------------------------------
+//|Selects the ballpoint pen if another tool (highlighter, eraser) is active.
+//|Returns the AutomationId of that tool, to restore it after writing, or
+//|nullptr if nothing has to be restored.
+//+---------------------------------------------------------------------------
+//|EnsurePenSelected
+//+---------------------------------------------------------------------------
+const wchar_t* EnsurePenSelected(HWND target) {
+    if (!g_uia || IsToolSelected(target, kPenButtonAutomationId)) return nullptr;
+
+    const wchar_t* previous = nullptr;
+    for (const wchar_t* toolId : kOtherToolAutomationIds) {
+        if (IsToolSelected(target, toolId)) {
+            previous = toolId;
+            break;
+        }
+    }
+    Wh_Log(L"Selecting the pen tool (previous: %s)",
+           previous ? previous : L"unknown");
+    return SelectTool(target, kPenButtonAutomationId) ? previous : nullptr;
+}
+
+//+-------------------------------------
+//|Selects again the tool that was active before writing (if any).
+//+---------------------------------------------------------------------------
+//|RestoreTool
+//+---------------------------------------------------------------------------
+void RestoreTool(HWND target, const wchar_t* automationId) {
+    if (!automationId || !IsWindow(target)) return;
+    Wh_Log(L"Restoring tool %s", automationId);
+    SelectTool(target, automationId);
 }
 
 //+-------------------------------------
@@ -2112,7 +2189,7 @@ RECT PreviewBounds() {
 //|UpdatePreview
 //+---------------------------------------------------------------------------
 void UpdatePreview() {
-    if (!g_preview.hwnd || !g_dlg.hwnd) return;
+    if (!g_preview.hwnd || !g_dlg.hwnd || g_dlg.hiddenAway) return;
     if (g_dlg.warning) {
         g_dlg.warning = false;
         SetWindowTextW(g_dlg.hint, Text().lineBreakHint);
@@ -3355,13 +3432,14 @@ void RunDrawJob() {
     HWND target = g_job.target;
     if (target && IsWindow(target) && BringTargetToFront(target)) {
         WaitForInputRelease();
-        EnsurePenSelected(target);
+        const wchar_t* previousTool = EnsurePenSelected(target);
         std::vector<Stroke> strokes =
             LayoutText(g_job.text, g_job.origin.x, g_job.origin.y, g_job.size);
         Wh_Log(L"Writing %d chars (%d strokes), height %d px, speed %d",
                (int)g_job.text.size(), (int)strokes.size(), g_job.size,
                g_job.speed);
         DrawStrokes(target, strokes, g_job.speed);
+        RestoreTool(target, previousTool);
     }
     g_job = DrawJob();
     g_mode = Mode::Idle;
@@ -3634,13 +3712,13 @@ bool IsDialogMessageTarget(HWND hwnd) {
 }
 
 //+-------------------------------------
-//|Alt+arrows: moves the text 2 px (20 px with Shift).
+//|Alt+arrows: moves the text by the configured step (10x with Shift).
 //+---------------------------------------------------------------------------
 //|HandleAltArrow
 //+---------------------------------------------------------------------------
 bool HandleAltArrow(const MSG& msg) {
     if (msg.message != WM_SYSKEYDOWN || !IsArrowKey(msg.wParam)) return false;
-    int step = KeyDown(VK_SHIFT) ? 20 : 2;
+    int step = g_settings.nudgeStep * (KeyDown(VK_SHIFT) ? 10 : 1);
     int dx = msg.wParam == VK_LEFT ? -step : msg.wParam == VK_RIGHT ? step : 0;
     int dy = msg.wParam == VK_UP ? -step : msg.wParam == VK_DOWN ? step : 0;
     NudgeOrigin(dx, dy);
