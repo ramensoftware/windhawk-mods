@@ -42,6 +42,10 @@ Hotkey modifier (Ctrl+Alt by default) plus:
 - **Layout switch key** (Enter by default, configurable): switch the layout used
   by the arrow keys (the zones flash on the screen).
 
+These are global hotkeys. The default Ctrl+Alt+Arrow combinations override
+shortcuts such as VS Code's add-cursor commands and JetBrains navigation.
+Choose a different hotkey modifier if you use those shortcuts.
+
 ## Notes
 - For best results turn off Windows snapping (Settings > System > Multitasking >
   Snap windows), otherwise Win+Arrow and edge dragging still use native snap.
@@ -183,7 +187,8 @@ constexpr ULONGLONG kFlashMs = 900;
 RECT ZoneRect(const RECT& wa, const Zone& z) {
     int outer = g_settings.outerGap;
     int inner = g_settings.innerGap;
-    const double eps = 1e-6;
+    // Custom percentages are commonly rounded, e.g. three columns of 33.33%.
+    const double eps = 0.1;
 
     double width = wa.right - wa.left;
     double height = wa.bottom - wa.top;
@@ -194,10 +199,10 @@ RECT ZoneRect(const RECT& wa, const Zone& z) {
     rc.top = wa.top + (LONG)std::lround(height * z.y / 100.0);
     rc.bottom = wa.top + (LONG)std::lround(height * (z.y + z.h) / 100.0);
 
-    rc.left += z.x < eps ? outer : inner - inner / 2;
-    rc.right -= z.x + z.w > 100.0 - eps ? outer : inner / 2;
-    rc.top += z.y < eps ? outer : inner - inner / 2;
-    rc.bottom -= z.y + z.h > 100.0 - eps ? outer : inner / 2;
+    rc.left = z.x < eps ? wa.left + outer : rc.left + inner - inner / 2;
+    rc.right = z.x + z.w > 100.0 - eps ? wa.right - outer : rc.right - inner / 2;
+    rc.top = z.y < eps ? wa.top + outer : rc.top + inner - inner / 2;
+    rc.bottom = z.y + z.h > 100.0 - eps ? wa.bottom - outer : rc.bottom - inner / 2;
 
     if (rc.right <= rc.left) rc.right = rc.left + 1;
     if (rc.bottom <= rc.top) rc.bottom = rc.top + 1;
@@ -250,7 +255,7 @@ bool ParseZones(PCWSTR s, std::vector<Zone>& out) {
         for (int i = 0; i < 4; i++) {
             wchar_t* end;
             v[i] = wcstod(p, &end);
-            if (end == p) {
+            if (end == p || !std::isfinite(v[i])) {
                 return false;
             }
             p = end;
@@ -308,7 +313,7 @@ int LayoutForMask(UINT mask) {
 
 bool IsManageable(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd) || !IsWindowVisible(hwnd) || IsIconic(hwnd) ||
-        GetAncestor(hwnd, GA_ROOT) != hwnd) {
+        IsHungAppWindow(hwnd) || GetAncestor(hwnd, GA_ROOT) != hwnd) {
         return false;
     }
 
@@ -331,8 +336,18 @@ bool IsManageable(HWND hwnd) {
 // Moves/resizes so that the visible frame (without invisible borders) matches
 // the target rect.
 bool PlaceWindow(HWND hwnd, const RECT& target) {
+    if (!IsManageable(hwnd)) {
+        return false;
+    }
+
     if (IsZoomed(hwnd)) {
-        ShowWindow(hwnd, SW_RESTORE);
+        // A foreground app can stop responding after IsManageable. Bound the
+        // restore request, then read its restored frame before positioning.
+        if (!SendMessageTimeoutW(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0,
+                                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, nullptr) ||
+            IsZoomed(hwnd)) {
+            return false;
+        }
     }
 
     RECT wr, fr;
@@ -349,7 +364,9 @@ bool PlaceWindow(HWND hwnd, const RECT& target) {
     int cy = (target.bottom - target.top) +
              ((wr.bottom - wr.top) - (fr.bottom - fr.top));
 
-    UINT flags = SWP_NOZORDER | SWP_NOACTIVATE;
+    // The target owns another input queue. Do not wait for it to process the
+    // move/resize: a hung app must not freeze the overlay and global hotkeys.
+    UINT flags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS;
     if (!(GetWindowLongW(hwnd, GWL_STYLE) & WS_THICKFRAME)) {
         flags |= SWP_NOSIZE;  // Not resizable: only move.
     }
@@ -361,8 +378,9 @@ bool PlaceWindow(HWND hwnd, const RECT& target) {
     return true;
 }
 
-// Closest zone (by center) to a window frame, and whether the frame is already
-// aligned with it.
+// Prefer an aligned top-left: fixed/minimum-size windows may not fit a zone.
+// If zones share an origin, prefer the closest size. Otherwise use the center
+// to find the nearest zone for the first placement.
 int FindCurrentZone(const std::vector<Zone>& zones,
                     const RECT& wa,
                     const RECT& fr,
@@ -374,16 +392,16 @@ int FindCurrentZone(const std::vector<Zone>& zones,
     *aligned = false;
     for (size_t i = 0; i < zones.size(); i++) {
         RECT z = ZoneRect(wa, zones[i]);
+        bool originAligned = std::abs(fr.left - z.left) <= kAlignTolerance &&
+                             std::abs(fr.top - z.top) <= kAlignTolerance;
         long long zx = (z.left + z.right) / 2 - cx;
         long long zy = (z.top + z.bottom) / 2 - cy;
         long long dist = zx * zx + zy * zy;
-        if (bestDist < 0 || dist < bestDist) {
+        if (bestDist < 0 || (originAligned && !*aligned) ||
+            (originAligned == *aligned && dist < bestDist)) {
             bestDist = dist;
             best = (int)i;
-            *aligned = std::abs(fr.left - z.left) <= kAlignTolerance &&
-                       std::abs(fr.right - z.right) <= kAlignTolerance &&
-                       std::abs(fr.top - z.top) <= kAlignTolerance &&
-                       std::abs(fr.bottom - z.bottom) <= kAlignTolerance;
+            *aligned = originAligned;
         }
     }
     return best;
@@ -444,6 +462,10 @@ int g_activeZone = -1;
 ULONGLONG g_flashUntil;
 
 HWND g_dragHwnd;
+SIZE g_dragSize;
+UINT g_dragDpi;
+bool g_dragWasMaximized;
+bool g_dragSizeMismatch;
 HWND g_dropHwnd;
 RECT g_dropRect;
 ULONGLONG g_dropTick;
@@ -599,17 +621,54 @@ bool ShowOverlayOn(const MONITORINFO& mi) {
     return true;
 }
 
-void UpdateOverlay() {
+void UpdateOverlay(bool finishing = false) {
+    RECT wr;
+    if (!IsManageable(g_dragHwnd) || !GetWindowRect(g_dragHwnd, &wr)) {
+        CancelTransientWork();
+        return;
+    }
+
+    SIZE size = {wr.right - wr.left, wr.bottom - wr.top};
+    UINT dpi = GetDpiForWindow(g_dragHwnd);
+    if (!dpi) dpi = 96;
+
+    // A delayed hit test can miss the resize border. Detect the actual size
+    // change too, allowing both apps that scale and apps that keep their pixel
+    // size when moved between monitors with different DPI. A move starting
+    // maximized is exempt throughout: it cannot start as a border resize, and
+    // the zoom flag and restored geometry need not update atomically.
+    bool samePixels = std::abs(size.cx - g_dragSize.cx) <= 2 &&
+                      std::abs(size.cy - g_dragSize.cy) <= 2;
+    bool sameLogicalSize =
+        std::abs(size.cx * 96.0 / dpi - g_dragSize.cx * 96.0 / g_dragDpi) <= 2 &&
+        std::abs(size.cy * 96.0 / dpi - g_dragSize.cy * 96.0 / g_dragDpi) <= 2;
+    if (!g_dragWasMaximized && !samePixels && !sameLogicalSize) {
+        // Rect and DPI can update on adjacent ticks. Hide immediately, but
+        // allow one sample to settle; never drop using mismatched geometry.
+        if (finishing || g_dragSizeMismatch) {
+            CancelTransientWork();
+        } else {
+            g_dragSizeMismatch = true;
+            HideOverlay();
+        }
+        return;
+    }
+    g_dragSizeMismatch = false;
+
     int layout = LayoutForMask(CurrentDragMask());
-    if (!g_overlay || !IsWindow(g_dragHwnd) || layout < 0) {
+    if (!g_overlay || layout < 0) {
         HideOverlay();
         return;
     }
 
     POINT pt;
-    GetCursorPos(&pt);
+    if (!GetCursorPos(&pt)) {
+        HideOverlay();
+        return;
+    }
     MONITORINFO mi = {sizeof(mi)};
     if (!GetMonitorInfoW(MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST), &mi)) {
+        HideOverlay();
         return;
     }
 
@@ -679,23 +738,40 @@ void CALLBACK WinEventProc(HWINEVENTHOOK,
     }
 
     if (event == EVENT_SYSTEM_MOVESIZESTART) {
+        // A new operation must not receive an old deferred placement, even if
+        // the new operation turns out to be a resize.
+        CancelTransientWork();
         if (!g_settings.dragOverlay || !IsManageable(hwnd)) {
             return;
         }
+        g_dragWasMaximized = IsZoomed(hwnd);
 
         // Ignore resizing: only show zones when moving (not dragging an edge).
         POINT pt;
-        GetCursorPos(&pt);
-        DWORD_PTR hit = 0;
-        if (SendMessageTimeoutW(hwnd, WM_NCHITTEST, 0,
-                                MAKELPARAM((short)pt.x, (short)pt.y),
-                                SMTO_ABORTIFHUNG, 100, &hit) &&
-            hit >= HTLEFT && hit <= HTBOTTOMRIGHT) {
+        if (!GetCursorPos(&pt)) {
             return;
         }
+        DWORD_PTR hit = 0;
+        if (!SendMessageTimeoutW(hwnd, WM_NCHITTEST, 0,
+                                 MAKELPARAM((short)pt.x, (short)pt.y),
+                                 SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, &hit) ||
+            (hit >= HTLEFT && hit <= HTBOTTOMRIGHT)) {
+            return;
+        }
+        RECT wr;
+        if (!GetWindowRect(hwnd, &wr)) {
+            return;
+        }
+        g_dragSize = {wr.right - wr.left, wr.bottom - wr.top};
+        g_dragDpi = GetDpiForWindow(hwnd);
+        if (!g_dragDpi) g_dragDpi = 96;
+        g_dragSizeMismatch = false;
         g_dragHwnd = hwnd;
         g_flashUntil = 0;
     } else if (event == EVENT_SYSTEM_MOVESIZEEND && hwnd == g_dragHwnd) {
+        // Re-sample cursor, modifiers and geometry instead of trusting the
+        // previous timer tick (which may not have happened on a quick drag).
+        UpdateOverlay(true);
         if (g_overlayVisible && g_activeZone >= 0 &&
             g_overlayLayout < (int)g_layouts.size() &&
             g_activeZone < (int)g_layouts[g_overlayLayout].zones.size()) {
