@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         3.4.4
+// @version         3.4.5
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -2918,21 +2918,22 @@ TryTrimProcess(DWORD pid, const SystemActionArbiter& arbiter,
             settings.enableElectronMemoryCap &&
             (wsMb >= static_cast<SIZE_T>(settings.electronMemoryCapMb));
 
-        // Physical eviction occurs only for critical emergencies, explicit sweeps, or memory cap violations
-        if (forceHardTrim || emergency || isMemoryCapExceeded) {
-            if (wsMb >= settings.minProcessMemoryToTrimMb) {
-                int cooldownSec = emergency ? 45 : 180;
-                auto itTrim = g_processLastTrimmed.find(pid);
-                if (itTrim != g_processLastTrimmed.end()) {
-                    auto diffSec = std::chrono::duration_cast<std::chrono::seconds>(
-                                       now - itTrim->second)
-                                       .count();
-                    if (diffSec < cooldownSec) {
-                        CloseHandle(hProc);
-                        return result;
-                    }
+        if (wsMb >= settings.minProcessMemoryToTrimMb) {
+            int cooldownSec = emergency ? 45 : 180;
+            auto itTrim = g_processLastTrimmed.find(pid);
+            if (itTrim != g_processLastTrimmed.end()) {
+                auto diffSec = std::chrono::duration_cast<std::chrono::seconds>(
+                                   now - itTrim->second)
+                                   .count();
+                if (diffSec < cooldownSec) {
+                    CloseHandle(hProc);
+                    return result;
                 }
+            }
 
+            // BUG-03: Hard eviction (SetProcessWorkingSetSize) causes 150-400 ms
+            // page fault storms. Reserve it for truly critical situations only.
+            if (forceHardTrim || emergency || isMemoryCapExceeded) {
                 SIZE_T beforeBytes = pmc.WorkingSetSize;
                 if (SetProcessWorkingSetSize(hProc, static_cast<SIZE_T>(-1),
                                              static_cast<SIZE_T>(-1))) {
@@ -2943,15 +2944,36 @@ TryTrimProcess(DWORD pid, const SystemActionArbiter& arbiter,
                     ZeroMemory(&afterPmc, sizeof(afterPmc));
                     afterPmc.cb = sizeof(afterPmc);
                     if (GetProcessMemoryInfo(
-                            hProc, reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&afterPmc),
+                            hProc,
+                            reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&afterPmc),
                             sizeof(afterPmc))) {
                         if (beforeBytes > afterPmc.WorkingSetSize) {
                             result.trimmed = true;
                             result.beforeBytes = beforeBytes;
                             result.afterBytes = afterPmc.WorkingSetSize;
-                            result.freedBytes = beforeBytes - afterPmc.WorkingSetSize;
+                            result.freedBytes =
+                                beforeBytes - afterPmc.WorkingSetSize;
                         }
                     }
+                }
+            } else {
+                // BUG-02: Soft trim — demote memory priority so the standby
+                // list manager gradually reclaims pages without causing hard
+                // page faults. This unblocks normal automatic cleanup passes
+                // that were previously gated behind forceHardTrim/emergency.
+                ULONG currentMemPri = GetProcessMemoryPriorityHint(hProc);
+                if (currentMemPri > 2 /* MEMORY_PRIORITY_LOW */) {
+                    SetProcessMemoryPriorityHint(
+                        hProc, 2 /* MEMORY_PRIORITY_LOW */);
+                    g_processLastTrimmed[pid] = now;
+
+                    // Report estimated savings: the kernel will reclaim these
+                    // pages asynchronously, so we report the working set as
+                    // "marked for reclaim" rather than instantly freed.
+                    result.trimmed = true;
+                    result.beforeBytes = pmc.WorkingSetSize;
+                    result.afterBytes = pmc.WorkingSetSize;
+                    result.freedBytes = 0;
                 }
             }
         }
