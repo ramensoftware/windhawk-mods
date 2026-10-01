@@ -44,6 +44,15 @@ _The context menu follows the content_
 
 Requires Windows 11.
 
+The taskbar must be **left-aligned** (Settings → Personalization → Taskbar →
+Taskbar alignment). With centered alignment, the buttons move by only part of
+the margin while the context menu moves by all of it, so the two no longer line
+up.
+
+The taskbar is not mirrored correctly on right-to-left display languages: the
+margin is applied to the left regardless of the taskbar's flow direction, while
+the context menu is moved to the right.
+
 ## Compatibility
 
 - **Windows 11 Taskbar Styler** can be used alongside this mod. This mod reads
