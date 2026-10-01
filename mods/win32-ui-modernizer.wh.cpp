@@ -176,6 +176,9 @@ Please open a GitHub issue. Show your settings and mention which program froze.
 **Some colors didn't change when switching from dark mode back to light mode:**
 This is a limitation of Windows' own legacy programs (uxtheme/comctl32 internal caching). Restarting Explorer fixes it.
 
+**On LTSC or an older Windows 11 build, a taskbar thumbnail's tooltip shows white text on a light background:**
+Those builds still show the taskbar thumbnails and their tooltips with Win32 windows. The taskbar already exists when the mod loads, so it only picks up custom dark mode once it's created again: restart Explorer with the mod enabled.
+
 **I noticed dark mode changes colors in non-native programs:**
 That's expected — this mod uses SetSysColors to change system colors, which can't easily be excluded per-app, so any program that asks Windows for system colors will get the dark ones. For better exclusion, use the dark mode exclusion list in the settings. In programs the mod doesn't run in (excluded in Windhawk, or that it can't be injected into), classic dialog labels can end up dark on the dark background and hard to read; let the mod run there and add the program to the dark mode exclusion list, or turn custom dark mode off.
 
@@ -251,6 +254,9 @@ Esse suporte e experimental e existe a partir da versao 1.0.3. Se algum ainda pa
 **Ao sair do modo escuro para o modo claro algumas cores nao mudaram:**
 Isso e uma limitacao dos proprios programas antigos do Windows (cache interno do uxtheme/comctl32). Reiniciar o Explorer resolve.
 
+**No LTSC ou numa versao mais antiga do Windows 11, a dica de uma miniatura da barra de tarefas mostra texto branco sobre fundo claro:**
+Essas versoes ainda mostram as miniaturas da barra de tarefas e as dicas delas com janelas Win32. A barra de tarefas ja existe quando o mod carrega, entao ela so recebe o modo escuro customizado quando e criada de novo: reinicie o Explorer com o mod ativado.
+
 **Notei que o modo escuro altera cores em programas que nao sao nativos:**
 Isso e esperado — esse mod usa o SetSysColors para trocar as cores do sistema, algo que nao pode ser excluido facilmente, entao qualquer programa que peca ao Windows as cores do sistema recebera as cores escuras. Para melhor exclusao, use a lista de exclusao de modo escuro nas configuracoes. Em programas onde o mod nao roda (excluidos no Windhawk, ou onde ele nao pode ser injetado), os rotulos de dialogos classicos podem ficar escuros sobre o fundo escuro e dificeis de ler; deixe o mod rodar neles e adicione o programa a lista de exclusao de modo escuro, ou desative o modo escuro customizado.
 
@@ -325,6 +331,9 @@ Este soporte es experimental y existe a partir de la version 1.0.3. Si alguno to
 
 **Al pasar del modo oscuro al modo claro, algunos colores no cambiaron:**
 Esto es una limitacion de los propios programas antiguos de Windows (cache interno de uxtheme/comctl32). Reiniciar el Explorador lo soluciona.
+
+**En LTSC o en una version anterior de Windows 11, la descripcion emergente de una miniatura de la barra de tareas muestra texto blanco sobre fondo claro:**
+Esas versiones todavia muestran las miniaturas de la barra de tareas y sus descripciones emergentes con ventanas Win32. La barra de tareas ya existe cuando el mod se carga, asi que solo recibe el modo oscuro personalizado cuando se vuelve a crear: reinicia el Explorador con el mod activado.
 
 **Note que el modo oscuro cambia colores en programas que no son nativos:**
 Esto es esperado — este mod usa SetSysColors para cambiar los colores del sistema, algo que no se puede excluir facilmente por aplicacion, asi que cualquier programa que le pida a Windows los colores del sistema recibira los colores oscuros. Para una mejor exclusion, usa la lista de exclusion de modo oscuro en la configuracion. En programas donde el mod no se ejecuta (excluidos en Windhawk, o donde no se puede inyectar), las etiquetas de los dialogos clasicos pueden quedar oscuras sobre el fondo oscuro y ser dificiles de leer; deja que el mod se ejecute en ellos y agrega el programa a la lista de exclusion del modo oscuro, o desactiva el modo oscuro personalizado.
@@ -491,6 +500,9 @@ DirectWrite 是 Windows 的现代文本渲染器。旧版 Win32 界面通常使�
 
 **从深色模式切回浅色模式时，部分颜色未恢复：**
 这是 Windows 旧版程序自身的限制(uxtheme/comctl32 内部缓存)，重启资源管理器即可解决。
+
+**在 LTSC 或较早的 Windows 11 版本上，任务栏缩略图的工具提示显示为浅色背景上的白色文字：**
+这些版本仍使用 Win32 窗口来显示任务栏缩略图及其工具提示。本模组加载时任务栏已经存在，因此只有在任务栏重新创建后才会应用自定义深色模式：请在启用本模组的情况下重启资源管理器。
 
 **我发现深色模式改变了非原生程序的颜色：**
 这是预期行为——本模组使用 SetSysColors 更改系统颜色，无法轻易按应用排除，因此任何向 Windows 查询系统颜色的程序都会拿到深色值。如需更精细的排除控制，请使用设置中的深色模式排除列表。在本模组未运行的程序中（在 Windhawk 中被排除，或无法注入的程序），经典对话框的标签可能会成为深色背景上的深色文字而难以阅读；请让模组在其中运行并将该程序加入深色模式排除列表，或关闭自定义深色模式。
@@ -2026,15 +2038,11 @@ static bool IsAeroWizardRawWindow(HWND hwnd)
 // The shell draws its title and close glyph itself over a DWM surface,
 // already in the system theme; the dark text pipeline's recolor and glow
 // make both vanish.
+static bool IsCurrentProcessExplorer();
+
 static bool IsTaskbarThumbnailWindow(HWND hwnd)
 {
-    static const bool inExplorer = [] {
-        wchar_t path[MAX_PATH] = {};
-        GetModuleFileNameW(nullptr, path, MAX_PATH);
-        wchar_t* name = wcsrchr(path, L'\\');
-        return name && _wcsicmp(name + 1, L"explorer.exe") == 0;
-    }();
-    if (!inExplorer || !hwnd)
+    if (!hwnd || !IsCurrentProcessExplorer())
         return false;
     HWND root = GetAncestor(hwnd, GA_ROOT);
     wchar_t cls[32] = {};
@@ -36252,8 +36260,12 @@ static bool StartFramePacing(HWND tree) {
         if (!g_workerWake) return false;
     }
     if (!g_workerThread) {
-        g_workerThread = new (std::nothrow) std::thread(FrameWorker);
-        if (!g_workerThread) return false;
+        try {
+            g_workerThread = new std::thread(FrameWorker);
+        } catch (...) {
+            g_workerThread = nullptr;
+            return false;
+        }
     }
     g_activeAnims[tree] = ActiveAnim{FrameSleepMsForWindow(tree), false};
     SetEvent(g_workerWake);
