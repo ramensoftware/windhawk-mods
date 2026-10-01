@@ -1815,7 +1815,7 @@ bool HookTaskbarHostSymbols() {
          &RefCount_Decref_Original},
         {{LR"(protected: long __cdecl CTaskListWnd::_ComputeJumpViewPosition(struct ITaskBtnGroup *,int,struct Windows::Foundation::Point &,enum Windows::UI::Xaml::HorizontalAlignment &,enum Windows::UI::Xaml::VerticalAlignment &)const )"},
          &CTaskListWnd_ComputeJumpViewPosition_Original,
-         CTaskListWnd_ComputeJumpViewPosition_Hook},
+         CTaskListWnd_ComputeJumpViewPosition_Hook, true},
     };
     return WindhawkUtils::HookSymbols(module, taskbarDllHooks,
                                       ARRAYSIZE(taskbarDllHooks));
