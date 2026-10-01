@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.9.46
+// @version         0.10.0
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -12,6 +12,8 @@
 // -loleaut32 is required: WinRT hresult_error calls SysFreeString / SysStringLen.
 
 // Source code is published under The GNU General Public License v3.0.
+// Development repository, tests and investigation notes:
+// https://github.com/jvlasek/taskbar-recent-focus-highlight
 
 // ==WindhawkModReadme==
 /*
@@ -175,7 +177,7 @@ to clear highlights.
       $description: >-
         Frame stroke or side-bar thickness (1–16). Full has no stroke.
     - glowRoundness: 28
-      $name: Roundness (%)
+      $name: "Previews: Roundness (%)"
       $description: >-
         Thumbnail preview roundness. Frame/Full follow native background corners;
         side bars stay capsules.
@@ -2171,7 +2173,6 @@ FrameworkElement GetIconPanel(FrameworkElement button) {
     return iconPanel;
 }
 
-
 void RemoveNamedChild(Controls::Panel panel, PCWSTR name) {
     if (!panel) {
         return;
@@ -2265,29 +2266,38 @@ uint32_t GlowHostInsertionIndex(const std::vector<GlowOrderChild>& children) {
 
 // Preserve the established style layering without changing native properties.
 // Explicit InsertAt is required even at the end: Append omits XAML deferred
-// index notifications while RemoveAt sends them (tests/badge-static-analysis.md).
-void EnsureGlowHostZOrder(Controls::Panel panel, UIElement host, GlowStyle style) {
-    if (!panel || !host) return;
+// index notifications while RemoveAt sends them.
+void EnsureGlowHostZOrder(Controls::Panel panel,
+                          UIElement host,
+                          GlowStyle style) {
+    if (!panel || !host)
+        return;
     try {
         auto children = panel.Children();
         uint32_t current;
-        if (!children.IndexOf(host, current)) return;
+        if (!children.IndexOf(host, current))
+            return;
         std::vector<GlowOrderChild> native;
         auto panelFe = panel.as<FrameworkElement>();
         for (auto child : children) {
-            if (child == host) continue;
+            if (child == host)
+                continue;
             auto fe = child.try_as<FrameworkElement>();
             auto name = fe ? fe.Name() : winrt::hstring{};
             bool running = name == L"RunningIndicator";
-            bool above = name == L"OverlayIcon" || name == L"MultiWindowElement" ||
+            bool above = name == L"OverlayIcon" ||
+                         name == L"MultiWindowElement" ||
                          name == L"ProgressIndicator";
             if ((style == GlowStyle::LeftBar || style == GlowStyle::Full) &&
-                (name == L"Icon" || name == L"DefaultIcon")) above = true;
-            if (running && !RunningIndicatorLooksLikeHoverPlate(fe, panelFe)) above = true;
+                (name == L"Icon" || name == L"DefaultIcon"))
+                above = true;
+            if (running && !RunningIndicatorLooksLikeHoverPlate(fe, panelFe))
+                above = true;
             native.push_back({above});
         }
         uint32_t target = GlowHostInsertionIndex(native);
-        if (target == current) return;
+        if (target == current)
+            return;
         children.RemoveAt(current);
         children.InsertAt(target, host);
     } catch (...) {
@@ -2413,7 +2423,6 @@ Controls::Grid EnsureGlowHost(Controls::Panel panel,
         host = Markup::XamlReader::Load(xaml).as<Controls::Grid>();
         // InsertAt(end), unlike Append, notifies XAML's deferred-element
         // index bookkeeping. Pair this with removal when unhighlighted.
-        // See tests/badge-static-analysis.md for the reproduced badge-index drift.
         auto children = panel.Children();
         children.InsertAt(children.Size(), host);
     }
@@ -2453,19 +2462,23 @@ bool SafeGlowBounds(double x, double y, double w, double h) {
 }
 double InsetGlowRadius(double radius, double inset, double w, double h) {
     if (!SafeGlowMetric(radius) || radius < 0 || !SafeGlowMetric(inset) ||
-        !SafeGlowBounds(0, 0, w, h)) return 0;
+        !SafeGlowBounds(0, 0, w, h))
+        return 0;
     return (std::max)(0.0, (std::min)(radius - inset, (std::min)(w, h) * 0.5));
 }
 struct NativeGlowShape {
     double x = 0, y = 0, w = 0, h = 0;
     CornerRadius corners{0, 0, 0, 0};
 };
-bool ReadNativeGlowShape(FrameworkElement element, FrameworkElement reference,
+bool ReadNativeGlowShape(FrameworkElement element,
+                         FrameworkElement reference,
                          NativeGlowShape& shape) {
     try {
-        if (!element || element.Visibility() != Visibility::Visible) return false;
+        if (!element || element.Visibility() != Visibility::Visible)
+            return false;
         double w = element.ActualWidth(), h = element.ActualHeight();
-        if (!SafeGlowBounds(0, 0, w, h)) return false;
+        if (!SafeGlowBounds(0, 0, w, h))
+            return false;
         CornerRadius corners{0, 0, 0, 0};
         if (auto border = element.try_as<Controls::Border>()) {
             corners = border.CornerRadius();
@@ -2473,65 +2486,88 @@ bool ReadNativeGlowShape(FrameworkElement element, FrameworkElement reference,
             double radius = (std::min)(rect.RadiusX(), rect.RadiusY());
             corners = CornerRadius{radius, radius, radius, radius};
         } else {
-            return false; // Unknown shape: use fallback, not a guessed native contour.
+            return false;  // Unknown shape: use fallback, not a guessed native
+                           // contour.
         }
         auto transform = element.TransformToVisual(reference);
         auto origin = transform.TransformPoint({0, 0});
         auto unitX = transform.TransformPoint({1, 0});
         auto unitY = transform.TransformPoint({0, 1});
-        double sx = unitX.X-origin.X, sy = unitY.Y-origin.Y;
+        double sx = unitX.X - origin.X, sy = unitY.Y - origin.Y;
         // Border radii cannot reproduce rotations, skew or non-uniform scaling.
         if (!SafeGlowMetric(unitX.Y) || !SafeGlowMetric(unitY.X) ||
             !SafeGlowMetric(sx) || !SafeGlowMetric(sy) || sx <= 0 || sy <= 0 ||
-            std::abs(unitX.Y-origin.Y) > 0.01 || std::abs(unitY.X-origin.X) > 0.01 ||
-            std::abs(sx-sy) > 0.01) return false;
-        if (!SafeGlowBounds(origin.X, origin.Y, w*sx, h*sy)) return false;
-        shape = {origin.X, origin.Y, w*sx, h*sy,
-                 CornerRadius{corners.TopLeft*sx, corners.TopRight*sx,
-                              corners.BottomRight*sx, corners.BottomLeft*sx}};
+            std::abs(unitX.Y - origin.Y) > 0.01 ||
+            std::abs(unitY.X - origin.X) > 0.01 || std::abs(sx - sy) > 0.01)
+            return false;
+        if (!SafeGlowBounds(origin.X, origin.Y, w * sx, h * sy))
+            return false;
+        shape = {
+            origin.X, origin.Y, w * sx, h * sy,
+            CornerRadius{corners.TopLeft * sx, corners.TopRight * sx,
+                         corners.BottomRight * sx, corners.BottomLeft * sx}};
         return true;
     } catch (...) {
-        return false; // Detached or changing native visual; use the safe fallback.
+        return false;  // Detached or changing native visual; use the safe
+                       // fallback.
     }
 }
-void PaintNativeContour(Controls::Grid host, FrameworkElement iconPanel,
-                         GlowStyle style, winrt::Windows::UI::Color color,
-                         double thickness, double sizeFrac, double opacity,
-                         int fillOpacity) {
+void PaintNativeContour(Controls::Grid host,
+                        FrameworkElement iconPanel,
+                        GlowStyle style,
+                        winrt::Windows::UI::Color color,
+                        double thickness,
+                        double sizeFrac,
+                        double opacity,
+                        int fillOpacity) {
     // The host may not have been arranged yet. Use the native panel's content
-    // center, not TransformToVisual(host), so first paint and later paints agree.
+    // center, not TransformToVisual(host), so first paint and later paints
+    // agree.
     double panelW = iconPanel.ActualWidth(), panelH = iconPanel.ActualHeight();
-    if (!SafeGlowBounds(0, 0, panelW, panelH)) return;
+    if (!SafeGlowBounds(0, 0, panelW, panelH))
+        return;
     Thickness padding{0, 0, 0, 0};
     if (auto grid = iconPanel.try_as<Controls::Grid>()) {
         auto p = grid.Padding();
         auto b = grid.BorderThickness();
-        padding = {p.Left+b.Left, p.Top+b.Top, p.Right+b.Right, p.Bottom+b.Bottom};
+        padding = {p.Left + b.Left, p.Top + b.Top, p.Right + b.Right,
+                   p.Bottom + b.Bottom};
     }
     if (!SafeGlowMetric(padding.Left) || !SafeGlowMetric(padding.Top) ||
-        !SafeGlowMetric(padding.Right) || !SafeGlowMetric(padding.Bottom)) return;
-    double contentW = panelW-padding.Left-padding.Right;
-    double contentH = panelH-padding.Top-padding.Bottom;
-    if (!SafeGlowBounds(0, 0, contentW, contentH)) return;
-    double centerX = padding.Left+contentW*0.5;
-    double centerY = padding.Top+contentH*0.5;
+        !SafeGlowMetric(padding.Right) || !SafeGlowMetric(padding.Bottom))
+        return;
+    double contentW = panelW - padding.Left - padding.Right;
+    double contentH = panelH - padding.Top - padding.Bottom;
+    if (!SafeGlowBounds(0, 0, contentW, contentH))
+        return;
+    double centerX = padding.Left + contentW * 0.5;
+    double centerY = padding.Top + contentH * 0.5;
     NativeGlowShape shape;
     auto indicator = FindRunningIndicator(iconPanel);
-    bool plate = indicator && RunningIndicatorLooksLikeHoverPlate(indicator, iconPanel);
+    bool plate =
+        indicator && RunningIndicatorLooksLikeHoverPlate(indicator, iconPanel);
     bool found = false;
-    if (plate) found = ReadNativeGlowShape(indicator, iconPanel, shape);
-    if (!found) found = ReadNativeGlowShape(FindChildByName(iconPanel, L"BackgroundElement"), iconPanel, shape);
+    if (plate)
+        found = ReadNativeGlowShape(indicator, iconPanel, shape);
+    if (!found)
+        found = ReadNativeGlowShape(
+            FindChildByName(iconPanel, L"BackgroundElement"), iconPanel, shape);
     if (!found) {
-        shape.x = padding.Left; shape.y = padding.Top;
-        shape.w = contentW; shape.h = contentH;
-        if (!SafeGlowBounds(0, 0, shape.w, shape.h)) return;
+        shape.x = padding.Left;
+        shape.y = padding.Top;
+        shape.w = contentW;
+        shape.h = contentH;
+        if (!SafeGlowBounds(0, 0, shape.w, shape.h))
+            return;
         shape.corners = CornerRadius{4, 4, 4, 4};
     }
     double inset =
-        (std::max)(1.0, (std::min)(shape.w, shape.h) * (1.0-sizeFrac) * 0.5);
-    double w = shape.w-2*inset, h = shape.h-2*inset;
-    if (!SafeGlowBounds(shape.x+inset, shape.y+inset, w, h)) return;
-    Controls::Border border = FindChildByName(host, L"WhRecentFocusContour").try_as<Controls::Border>();
+        (std::max)(1.0, (std::min)(shape.w, shape.h) * (1.0 - sizeFrac) * 0.5);
+    double w = shape.w - 2 * inset, h = shape.h - 2 * inset;
+    if (!SafeGlowBounds(shape.x + inset, shape.y + inset, w, h))
+        return;
+    Controls::Border border = FindChildByName(host, L"WhRecentFocusContour")
+                                  .try_as<Controls::Border>();
     if (!border) {
         border = Controls::Border();
         border.Name(L"WhRecentFocusContour");
@@ -2539,25 +2575,30 @@ void PaintNativeContour(Controls::Grid host, FrameworkElement iconPanel,
         auto children = host.Children();
         children.InsertAt(children.Size(), border);
     }
-    double dx = shape.x+shape.w*0.5-centerX;
-    double dy = shape.y+shape.h*0.5-centerY;
-    if (!SafeGlowMetric(dx) || !SafeGlowMetric(dy)) return;
+    double dx = shape.x + shape.w * 0.5 - centerX;
+    double dy = shape.y + shape.h * 0.5 - centerY;
+    if (!SafeGlowMetric(dx) || !SafeGlowMetric(dy))
+        return;
     border.HorizontalAlignment(HorizontalAlignment::Center);
     border.VerticalAlignment(VerticalAlignment::Center);
-    border.Width(w); border.Height(h);
+    border.Width(w);
+    border.Height(h);
     border.Margin({dx, dy, -dx, -dy});
-    border.CornerRadius({InsetGlowRadius(shape.corners.TopLeft,0,w,h),
-                         InsetGlowRadius(shape.corners.TopRight,0,w,h),
-                         InsetGlowRadius(shape.corners.BottomRight,0,w,h),
-                         InsetGlowRadius(shape.corners.BottomLeft,0,w,h)});
+    border.CornerRadius({InsetGlowRadius(shape.corners.TopLeft, 0, w, h),
+                         InsetGlowRadius(shape.corners.TopRight, 0, w, h),
+                         InsetGlowRadius(shape.corners.BottomRight, 0, w, h),
+                         InsetGlowRadius(shape.corners.BottomLeft, 0, w, h)});
     bool frame = style == GlowStyle::Frame;
-    double stroke = frame ? (std::min)(thickness, (std::min)(w,h)*0.5) : 0;
-    border.BorderThickness({stroke,stroke,stroke,stroke});
-    auto strokeColor = color; strokeColor.A = 230;
+    double stroke = frame ? (std::min)(thickness, (std::min)(w, h) * 0.5) : 0;
+    border.BorderThickness({stroke, stroke, stroke, stroke});
+    auto strokeColor = color;
+    strokeColor.A = 230;
     border.BorderBrush(Media::SolidColorBrush{strokeColor});
-    color.A = frame ? 0 : static_cast<uint8_t>((std::clamp)(fillOpacity,0,100)*2.55*0.6+0.5);
+    color.A = frame ? 0
+                    : static_cast<uint8_t>(
+                          (std::clamp)(fillOpacity, 0, 100) * 2.55 * 0.6 + 0.5);
     border.Background(Media::SolidColorBrush{color});
-    border.Opacity((std::clamp)(opacity,0.0,1.0));
+    border.Opacity((std::clamp)(opacity, 0.0, 1.0));
     border.Visibility(Visibility::Visible);
 }
 
@@ -7702,9 +7743,6 @@ void LoadSettings() {
         s.glowStyle = GlowStyle::Full;
     } else if (wcscmp(glowStyle.get(), L"frame") == 0) {
         s.glowStyle = GlowStyle::Frame;
-    } else if (wcscmp(glowStyle.get(), L"leftBar") == 0) {
-        s.glowStyle = GlowStyle::LeftBar;
-
     }
 
     s.glowThickness = Wh_GetIntSetting(L"icons.glowThickness");
