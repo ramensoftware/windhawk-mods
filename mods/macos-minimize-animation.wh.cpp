@@ -2,7 +2,7 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize and restore (open) animations for every window.
-// @version         3.1.2
+// @version         3.1.5
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
@@ -98,7 +98,12 @@ style is the mod's original renderer.
 - **Actually smooth.** Progress is driven by real elapsed time, and frames are
   paced at twice the display's refresh rate (via a high-resolution timer), so the
   compositor always has a fresh frame ready at each vsync. No system animation
-  competes with it, so it stays smooth at any duration you set.
+  competes with it, so it stays smooth at any duration you set. In v3.1.3 the
+  modern genie's render canvas shrank from the full virtual desktop to a tight
+  bounding box around the window and dock target, which removed a large per-frame
+  `UpdateLayeredWindow` cost that made the modern style stutter on AMD GPUs
+  (reported on a 6900 XT and a Vega 8 iGPU; the classic style was already using
+  the tight canvas).
 - **Smoothstep easing** instead of a linear ramp, so it eases in and out.
 - **Accurate targeting.** The mod locates the app's actual taskbar button via UI
   Automation and aims the genie at it (with a per-process fallback cache), instead
@@ -747,6 +752,58 @@ static void CalculateLampVertexMacOS(float tx, float ty, float p, const Geometry
     *outY = w.y + y + offsetY;
 }
 
+// Shared by both engines: union of the monitors involved (the window's own
+// monitor and the monitor the genie funnels to). With Multi-monitor support off
+// (the default) data->hMon is the primary monitor, so a window sitting on a
+// secondary display still needs its own monitor in the union or the canvas would
+// collapse onto the primary and clip the first half of the animation.
+static RECT GetGenieMonitorUnion(const RECT& winRect, HMONITOR hDockMon) {
+    RECT winMon;
+    HMONITOR hWinMon = MonitorFromRect(&winRect, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO wmi = {0};
+    wmi.cbSize = sizeof(wmi);
+    if (hWinMon && GetMonitorInfoW(hWinMon, &wmi)) {
+        winMon = wmi.rcMonitor;
+    } else {
+        winMon = winRect;
+    }
+
+    RECT dockMon;
+    MONITORINFO dmi = {0};
+    dmi.cbSize = sizeof(dmi);
+    if (hDockMon && GetMonitorInfoW(hDockMon, &dmi)) {
+        dockMon = dmi.rcMonitor;
+    } else {
+        dockMon = winMon;
+    }
+
+    RECT u;
+    u.left   = (winMon.left   < dockMon.left)   ? winMon.left   : dockMon.left;
+    u.top    = (winMon.top    < dockMon.top)    ? winMon.top    : dockMon.top;
+    u.right  = (winMon.right  > dockMon.right)  ? winMon.right  : dockMon.right;
+    u.bottom = (winMon.bottom > dockMon.bottom) ? winMon.bottom : dockMon.bottom;
+    return u;
+}
+
+// Shared by both engines: clamp a proposed canvas rect to the union of the
+// monitors involved, then re-expand it so it can never clip the window rect or
+// the dock target column away. The monitor clamp only trims the box to the
+// screens actually used; it must never cut geometry the animation draws.
+static void ClampGenieCanvas(int& left, int& top, int& right, int& bottom,
+                             const RECT& winRect, int dockX, const RECT& monUnion) {
+    if (left   < monUnion.left)   left   = monUnion.left;
+    if (right  > monUnion.right)  right  = monUnion.right;
+    if (top    < monUnion.top)    top    = monUnion.top;
+    if (bottom > monUnion.bottom) bottom = monUnion.bottom;
+
+    if (left  > winRect.left)  left  = winRect.left;
+    if (right < winRect.right) right = winRect.right;
+    if (top   > winRect.top)   top   = winRect.top;
+    if (bottom < winRect.bottom) bottom = winRect.bottom;
+    if (left  > dockX - 16)    left  = dockX - 16;   // iGeom is dockX ± 11
+    if (right < dockX + 16)    right = dockX + 16;
+}
+
 // -------------------------------------------------------------------------
 // Genie Animation Thread
 //
@@ -764,71 +821,6 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
     // preempt the host app's UI thread for the whole animation on slow or 2-core
     // machines; the pacer below keeps the frame rate up without that.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
-
-    // Full virtual-screen canvas: HIS's genie mesh is written in screen-space
-    // coordinates (it can spill outside the window rect), so the ghost and its
-    // render surface span every monitor. This is the one place we adopt HIS's
-    // full-screen ghost over MINE's tight bounding box, because the mesh geometry
-    // structurally requires a screen-space canvas.
-    int vLeft = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    int vTop = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    int vWidth = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    int vHeight = GetSystemMetrics(SM_CYVIRTUALSCREEN) - 1;
-
-    HDC hScreenDC = GetDC(NULL);
-    HDC hMemDC = CreateCompatibleDC(hScreenDC);
-
-    BITMAPINFO bmi = {{0}};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = vWidth;
-    bmi.bmiHeader.biHeight = -vHeight;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    void* pTargetBits = nullptr;
-    HBITMAP hTargetBmp = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pTargetBits, NULL, 0);
-    HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, hTargetBmp);
-
-    // Full-screen layered ghost. Created hidden (plain STATIC class, torn down by
-    // this thread) so we keep MINE's in-thread ghost lifecycle instead of HIS's
-    // registered window class + g_activeGhosts vector.
-    HWND hGhost = CreateWindowExW(
-        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
-        L"STATIC", NULL, WS_POPUP,
-        vLeft, vTop, vWidth, vHeight,
-        NULL, NULL, NULL, NULL);
-
-    // --- Direct2D setup (Potassiumuncher's engine) ---
-    ID2D1DCRenderTarget* rt = nullptr;
-    ID2D1Bitmap* snapshotBmp = nullptr;
-    ID2D1BitmapBrush* bmpBrush = nullptr;
-
-    if (g_d2dFactory) {
-        D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
-            D2D1_RENDER_TARGET_TYPE_DEFAULT,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
-            0, 0, D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE, D2D1_FEATURE_LEVEL_DEFAULT
-        );
-        g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
-        if (rt) {
-            // Potassiumuncher's v1.5: text AA fixed once at creation (the geometry
-            // AA mode is set per frame in the draw loop below).
-            rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-            D2D1_BITMAP_PROPERTIES bmpProps = D2D1::BitmapProperties(
-                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)
-            );
-            rt->CreateBitmap(D2D1::SizeU(data->width, data->height), data->pBits, data->width * 4, bmpProps, &snapshotBmp);
-            if (snapshotBmp) {
-                D2D1_BITMAP_BRUSH_PROPERTIES brushProps = D2D1::BitmapBrushProperties(
-                    D2D1_EXTEND_MODE_CLAMP, D2D1_EXTEND_MODE_CLAMP,
-                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR
-                );
-                rt->CreateBitmapBrush(snapshotBmp, &brushProps, nullptr, &bmpBrush);
-            }
-        }
-    }
-    bool d2dOk = (rt && bmpBrush);
 
     // --- Target geometry (Potassiumuncher's engine), using the monitor picked by
     // the multi-monitor setting (data->hMon), so "off" keeps the primary-monitor
@@ -874,14 +866,122 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
         scaledIconSize
     };
 
+    // Mesh resolution from the tile-count setting (Potassiumuncher's v1.5).
+    int xTiles = g_tileCount.load(std::memory_order_relaxed);
+    int yTiles = xTiles;
+
+    // Tight bounding-box canvas: the genie mesh is written in screen-space
+    // coordinates and only ever occupies the region between the window rect and
+    // the dock target. Rendering over the full virtual desktop wasted CPU on
+    // every frame - UpdateLayeredWindow of a whole-screen layered window is slow,
+    // most visibly on AMD drivers. A ~W/2 pad alone can't bound the mesh's sway
+    // term in CalculateLampVertexMacOS (its amplitude scales with the
+    // window-to-dock distance, not the window width), so the horizontal pad is
+    // the exact sway bound: max(|w.x-i.x|, |w.right-i.right|)/7.
+    const int origLeftB = data->targetRect.left;
+    const int origTopB  = data->targetRect.top;
+    const int wB = data->width;
+    const int dockXB = data->targetDockX;
+
+    const float iLeftF = iGeom.x;
+    const float iWidthF = iGeom.width;
+    const float sway = fmaxf(fabsf((float)origLeftB - iLeftF),
+                             fabsf((float)origLeftB + wB - iLeftF - iWidthF)) / 7.0f;
+    int padX = (int)((wB / 2 > sway ? wB / 2 : sway) + 1);
+
+    // iGeom is known here, so a top/side taskbar (iGeom.y above/beside the
+    // window) is covered: the box spans min..max of the window and the icon rect,
+    // with no band below the taskbar top ever wasted.
+    int boundLeft   = ((origLeftB < dockXB) ? origLeftB : dockXB) - padX;
+    int boundRight  = (((origLeftB + wB) > dockXB) ? (origLeftB + wB) : dockXB) + padX;
+    int boundTop    = (int)fminf(wGeom.y, iGeom.y);
+    int boundBottom = (int)fmaxf(wGeom.y + wGeom.height, iGeom.y + iGeom.height);
+
+    // Trim the box to the union of the monitors actually involved, but never
+    // clip the window rect or the dock target column away.
+    RECT monUnion = GetGenieMonitorUnion(data->targetRect, data->hMon);
+    ClampGenieCanvas(boundLeft, boundTop, boundRight, boundBottom,
+                     data->targetRect, dockXB, monUnion);
+
+    int vLeft = boundLeft;
+    int vTop = boundTop;
+    int vWidth = boundRight - boundLeft;
+    int vHeight = (boundBottom - boundTop) - 1;
+    if (vWidth < 1) vWidth = 1;
+    if (vHeight < 1) vHeight = 1;
+
+    HDC hScreenDC = GetDC(NULL);
+    HDC hMemDC = CreateCompatibleDC(hScreenDC);
+
+    BITMAPINFO bmi = {{0}};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = vWidth;
+    bmi.bmiHeader.biHeight = -vHeight;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* pTargetBits = nullptr;
+    HBITMAP hTargetBmp = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pTargetBits, NULL, 0);
+    HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, hTargetBmp);
+
+    // Full-screen layered ghost. Created hidden (plain STATIC class, torn down by
+    // this thread) so we keep MINE's in-thread ghost lifecycle instead of HIS's
+    // registered window class + g_activeGhosts vector.
+    HWND hGhost = CreateWindowExW(
+        WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
+        L"STATIC", NULL, WS_POPUP,
+        vLeft, vTop, vWidth, vHeight,
+        NULL, NULL, NULL, NULL);
+
+    // --- Direct2D setup (Potassiumuncher's engine) ---
+    ID2D1DCRenderTarget* rt = nullptr;
+    ID2D1Bitmap* snapshotBmp = nullptr;
+    ID2D1BitmapBrush* bmpBrush = nullptr;
+
+    if (g_d2dFactory) {
+        D2D1_RENDER_TARGET_PROPERTIES rtProps = D2D1::RenderTargetProperties(
+            D2D1_RENDER_TARGET_TYPE_HARDWARE,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+            0, 0, D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE, D2D1_FEATURE_LEVEL_DEFAULT
+        );
+        HRESULT hrRt = g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
+        if (SUCCEEDED(hrRt) && rt) {
+            // DEFAULT already means "hardware if available, otherwise software",
+            // so log which path actually ran - otherwise a silent fallback (or a
+            // silent success) makes any perf claim unverifiable. This is the only
+            // Wh_Log in the mod, so every outcome must be distinguishable.
+            Wh_Log(L"D2D DC render target: hardware (0x%08X)", hrRt);
+        } else {
+            Wh_Log(L"Hardware DC render target failed (0x%08X), falling back to default", hrRt);
+            rtProps.type = D2D1_RENDER_TARGET_TYPE_DEFAULT;
+            hrRt = g_d2dFactory->CreateDCRenderTarget(&rtProps, &rt);
+            Wh_Log(L"Default DC render target: 0x%08X", hrRt);
+        }
+        if (rt) {
+            // Potassiumuncher's v1.5: text AA fixed once at creation (the geometry
+            // AA mode is set per frame in the draw loop below).
+            rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+            D2D1_BITMAP_PROPERTIES bmpProps = D2D1::BitmapProperties(
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)
+            );
+            rt->CreateBitmap(D2D1::SizeU(data->width, data->height), data->pBits, data->width * 4, bmpProps, &snapshotBmp);
+            if (snapshotBmp) {
+                D2D1_BITMAP_BRUSH_PROPERTIES brushProps = D2D1::BitmapBrushProperties(
+                    D2D1_EXTEND_MODE_CLAMP, D2D1_EXTEND_MODE_CLAMP,
+                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR
+                );
+                rt->CreateBitmapBrush(snapshotBmp, &brushProps, nullptr, &bmpBrush);
+            }
+        }
+    }
+    bool d2dOk = (rt && bmpBrush);
+
     const double animDur = (double)data->durationMs;
     LARGE_INTEGER qpcFreq, qpcStart, qpcNow;
     QueryPerformanceFrequency(&qpcFreq);
     QueryPerformanceCounter(&qpcStart);
 
-    // Mesh resolution from the tile-count setting (Potassiumuncher's v1.5).
-    int xTiles = g_tileCount.load(std::memory_order_relaxed);
-    int yTiles = xTiles;
     std::vector<std::vector<D2D1_POINT_2F>> grid(yTiles + 1, std::vector<D2D1_POINT_2F>(xTiles + 1));
 
     ID2D1PathGeometry* cachedOutlineGeo = nullptr;
@@ -936,7 +1036,7 @@ DWORD WINAPI MacGenieAnimThread(LPVOID lpParam) {
                     // (virtual-desktop) coordinates - wGeom / iGeom are both
                     // screen-space (targetRect, targetDockX, taskbar-top Y are all
                     // virtual-screen). The ONLY conversion to the ghost's
-                    // full-virtual-screen canvas is the (px - vLeft, py - vTop)
+                    // bounding-box canvas is the (px - vLeft, py - vTop)
                     // subtraction below - vLeft/vTop are negative on monitors left of
                     // / above the primary. Every mesh coordinate passes through here
                     // exactly once; nothing downstream re-offsets.
@@ -1259,25 +1359,50 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     const int origTop  = data->targetRect.top;
     const float origCenterX = (float)origLeft + W * 0.5f;
 
-    // Where the genie funnels to: the learned taskbar icon X, at the bottom of the
-    // monitor the genie plays on.
+    // Where the genie funnels to: the learned taskbar icon X. The dock Y is taken
+    // from the real per-monitor taskbar window (the same signal the modern engine
+    // uses), so a taskbar pinned to the top of the screen is honored too -
+    // previously the classic style always assumed the taskbar was at the bottom of
+    // the monitor. A single global shell query would get the wrong edge on setups
+    // where each monitor's taskbar can be on a different edge.
     int dockX = data->targetDockX;
     if (dockX < mon.left) dockX = mon.left;
     if (dockX > mon.right) dockX = mon.right;
     const float dockXf = (float)dockX;
-    const float dockY  = (float)mon.bottom;
+    float dockY = (float)mon.bottom;
+    if (HWND hTray = FindTaskbarForMonitor(data->hMon)) {
+        RECT tr;
+        if (GetWindowRect(hTray, &tr) && tr.bottom > tr.top &&
+            (tr.top + tr.bottom) < (mon.top + mon.bottom)) {   // taskbar in the upper half
+            dockY = (float)mon.top;
+        }
+    }
+    // Which end leads the morph. Taken from the window's mid-line so a dock that
+    // lands exactly on the window edge still picks a sane direction, and kept
+    // outside the window's own vertical span so the yb[] map below stays
+    // monotonic (a hard requirement of the scanline walk).
+    const float origBottomF = (float)(origTop + H);
+    const bool dockAbove = dockY < ((float)origTop + origBottomF) * 0.5f;
+    if (dockAbove) { if (dockY > (float)origTop) dockY = (float)origTop; }
+    else           { if (dockY < origBottomF)    dockY = origBottomF; }
     float neckW = W * 0.03f;
     if (neckW < 12.0f) neckW = 12.0f;
     if (neckW > 60.0f) neckW = 60.0f;
 
-    // Bounding box the funnel can occupy.
+    // Bounding box the funnel can occupy. Both the window's own monitor and the
+    // monitor it funnels to are unioned; the box is trimmed to them but never
+    // allowed to clip the window rect or the dock column away (shared helper -
+    // the same clipping bug the modern engine had, when multi-monitor support is
+    // off and the window sits on a secondary display).
     int boundLeft   = (origLeft < dockX ? origLeft : dockX) - W / 2;
     int boundRight  = ((origLeft + W) > dockX ? (origLeft + W) : dockX) + W / 2;
-    int boundTop    = origTop;
-    int boundBottom = mon.bottom;
-    if (boundLeft < mon.left) boundLeft = mon.left;
-    if (boundRight > mon.right) boundRight = mon.right;
-    if (boundTop < mon.top) boundTop = mon.top;
+    // Span from the dock edge up/down to the window so a top taskbar (dock above
+    // the window) is inside the canvas instead of below the box.
+    int boundTop    = std::min<int>(origTop, (int)dockY);
+    int boundBottom = std::max<int>(origTop + H, (int)dockY);
+    RECT monUnion = GetGenieMonitorUnion(data->targetRect, data->hMon);
+    ClampGenieCanvas(boundLeft, boundTop, boundRight, boundBottom,
+                     data->targetRect, dockX, monUnion);
     int boundW = boundRight - boundLeft;
     int boundH = boundBottom - boundTop;
     if (boundW < 1) boundW = 1;
@@ -1328,7 +1453,8 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
     HBITMAP hOldCanvas = (HBITMAP)SelectObject(hCanvasDC, hCanvas);
     const int canvasStride = boundW * 4;
 
-    const float SPREAD = 0.65f;   // lower rows lead the morph (bottom-first neck)
+    const float SPREAD = 0.65f;   // rows nearest the dock lead the morph (the
+                                  // spread v is flipped when the dock is above)
     const size_t canvasBytes = (size_t)boundW * 4 * boundH;
 
     const double totalMs = (double)data->durationMs;
@@ -1384,10 +1510,13 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
 
         memset(pBits, 0, canvasBytes);
 
-        // Vertical map: where each source row lands on screen this frame.
+        // Vertical map: where each source row lands on screen this frame. The rows
+        // nearest the dock lead the morph (bottom-first neck when the dock is
+        // below the window, top-first when it's above), so the spread v is
+        // flipped accordingly.
         for (int k = 0; k <= H; ++k) {
             float v = (float)k / (float)H;
-            float e = morphAt(v, tt);
+            float e = morphAt(dockAbove ? (1.0f - v) : v, tt);
             float idY = (float)origTop + (float)H * v;
             yb[k] = idY + (dockY - idY) * e;
         }
@@ -1402,7 +1531,7 @@ DWORD WINAPI MacGenieAnimThreadClassic(LPVOID lpParam) {
             float frac = segH > 1e-4f ? (screenY - yb[kSeg]) / segH : 0.0f;
             float v = ((float)kSeg + frac) / (float)H;
 
-            float em = morphAt(v, tt);
+            float em = morphAt(dockAbove ? (1.0f - v) : v, tt);
             float width = (float)W + (neckW - (float)W) * em;
             if (width < 1.0f) width = 1.0f;
             float cx = origCenterX + (dockXf - origCenterX) * em;
