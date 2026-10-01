@@ -2,7 +2,7 @@
 // @id              taskbar-top-window-guard
 // @name            Taskbar Top Window Guard
 // @description     Keeps windows out from under a top taskbar, with optional centering when windows open.
-// @version         0.5.0
+// @version         0.6.0
 // @author          Eron Greco Melo
 // @github          https://github.com/eronGreco
 // @include         windhawk.exe
@@ -77,9 +77,11 @@ saved position shortly after opening without continuously enumerating all
 windows.
 
 The usable top boundary comes from the monitor work area plus the actual
-`Shell_TrayWnd` / `Shell_SecondaryTrayWnd` rectangle when necessary. Window
-moves are queued asynchronously, and unresponsive applications are skipped so
-a hung app can't block the guard.
+`Shell_TrayWnd` / `Shell_SecondaryTrayWnd` rectangle when necessary. The
+auto-hide state is cached and refreshed outside per-window checks, avoiding
+synchronous Explorer IPC in the hot path. Window moves are queued
+asynchronously, and unresponsive applications are skipped so a hung app can't
+block the guard.
 */
 // ==/WindhawkModReadme==
 
@@ -93,6 +95,7 @@ a hung app can't block the guard.
 #include <cmath>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 static std::atomic<bool> g_centerWindowsOnOpen{false};
 static std::atomic<int> g_centerVerticalOffset{0};
@@ -114,6 +117,11 @@ struct RecheckState {
 static std::unordered_map<HWND, RecheckState> g_rechecks;
 static std::unordered_set<HWND> g_seenWindows;
 static std::unordered_set<HWND> g_moveSizeWindows;
+
+static bool g_autoHideTaskbarEnabled = false;
+static bool g_autoHideStateDirty = true;
+static ULONGLONG g_autoHideLastRefresh = 0;
+static constexpr ULONGLONG kAutoHideRefreshIntervalMs = 1000;
 
 static void LoadSettings() {
     int centerOffset = Wh_GetIntSetting(L"centerVerticalOffset");
@@ -169,9 +177,23 @@ static bool IsExcludedClass(HWND hwnd) {
     return false;
 }
 
-// Used to remember windows that already existed before the mod saw them become
-// visible. Unlike IsEligibleWindow, this deliberately accepts minimized and
-// DWM-cloaked windows so virtual-desktop switches don't make them look new.
+static bool IsTaskbarWindow(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) {
+        return false;
+    }
+
+    wchar_t className[64] = {};
+    if (!GetClassNameW(hwnd, className, ARRAYSIZE(className))) {
+        return false;
+    }
+
+    return wcscmp(className, L"Shell_TrayWnd") == 0 ||
+           wcscmp(className, L"Shell_SecondaryTrayWnd") == 0;
+}
+
+// Used only for lifetime tracking. It deliberately accepts minimized, cloaked
+// and very small windows so they don't become "new" later merely because their
+// geometry or visibility changed.
 static bool IsTrackableTopLevelWindow(HWND hwnd) {
     if (!hwnd || !IsWindow(hwnd) || GetAncestor(hwnd, GA_ROOT) != hwnd) {
         return false;
@@ -188,16 +210,7 @@ static bool IsTrackableTopLevelWindow(HWND hwnd) {
         return false;
     }
 
-    if (IsExcludedClass(hwnd)) {
-        return false;
-    }
-
-    RECT rc = {};
-    if (!GetWindowRect(hwnd, &rc)) {
-        return false;
-    }
-
-    return (rc.right - rc.left) >= 120 && (rc.bottom - rc.top) >= 70;
+    return !IsExcludedClass(hwnd);
 }
 
 static bool IsEligibleWindow(HWND hwnd) {
@@ -215,16 +228,31 @@ static bool IsEligibleWindow(HWND hwnd) {
         return false;
     }
 
-    return true;
+    RECT rc = {};
+    if (!GetWindowRect(hwnd, &rc)) {
+        return false;
+    }
+
+    return (rc.right - rc.left) >= 120 && (rc.bottom - rc.top) >= 70;
 }
 
 static bool IsWindowBeingMovedOrSized(HWND hwnd) {
     return g_moveSizeWindows.find(hwnd) != g_moveSizeWindows.end();
 }
 
-static bool IsAutoHideTaskbarEnabled() {
+static void RefreshAutoHideStateIfStale(bool force = false) {
+    const ULONGLONG now = GetTickCount64();
+    if (!force &&
+        !g_autoHideStateDirty &&
+        now - g_autoHideLastRefresh < kAutoHideRefreshIntervalMs) {
+        return;
+    }
+
     APPBARDATA appBarData = {sizeof(appBarData)};
-    return (SHAppBarMessage(ABM_GETSTATE, &appBarData) & ABS_AUTOHIDE) != 0;
+    g_autoHideTaskbarEnabled =
+        (SHAppBarMessage(ABM_GETSTATE, &appBarData) & ABS_AUTOHIDE) != 0;
+    g_autoHideLastRefresh = GetTickCount64();
+    g_autoHideStateDirty = false;
 }
 
 static void ConsiderTaskbarWindow(
@@ -272,9 +300,9 @@ static bool GetProtectedTopForWindow(HWND hwnd, LONG* protectedTop) {
     LONG safeTop = mi.rcWork.top;
     bool hasProtectedTop = mi.rcWork.top > mi.rcMonitor.top;
 
-    // With auto-hide, don't use the temporarily revealed taskbar rectangle as
-    // a persistent boundary. rcWork is the stable Windows-provided boundary.
-    if (!IsAutoHideTaskbarEnabled()) {
+    // The auto-hide state is cached. No Shell IPC occurs in this per-window
+    // function, keeping the correction path non-blocking with respect to Explorer.
+    if (!g_autoHideTaskbarEnabled) {
         LONG taskbarBottom = mi.rcMonitor.top;
         bool found = false;
 
@@ -540,37 +568,44 @@ static void StopRecheckTimerIfIdle() {
 }
 
 static VOID CALLBACK RecheckTimerProc(HWND, UINT, UINT_PTR, DWORD) {
+    // This is the only recurring SHAppBarMessage call site. It runs before any
+    // container iteration, so WinEvent reentrancy can't invalidate iterators.
+    RefreshAutoHideStateIfStale();
+
+    std::vector<HWND> hwnds;
+    hwnds.reserve(g_rechecks.size());
+    for (const auto& entry : g_rechecks) {
+        hwnds.push_back(entry.first);
+    }
+
     const ULONGLONG now = GetTickCount64();
+    for (HWND hwnd : hwnds) {
+        auto it = g_rechecks.find(hwnd);
+        if (it == g_rechecks.end()) {
+            continue;
+        }
 
-    for (auto it = g_rechecks.begin(); it != g_rechecks.end();) {
-        HWND hwnd = it->first;
-        RecheckState& state = it->second;
-
-        if (!IsWindow(hwnd) || now >= state.until) {
-            it = g_rechecks.erase(it);
+        if (!IsWindow(hwnd) || now >= it->second.until) {
+            g_rechecks.erase(it);
             continue;
         }
 
         if (IsWindowBeingMovedOrSized(hwnd)) {
-            ++it;
             continue;
         }
 
-        bool moveQueued = false;
-        if (state.centerUntil && now < state.centerUntil) {
-            moveQueued = CenterWindowIfNeeded(hwnd);
-        } else {
-            state.centerUntil = 0;
+        const bool center =
+            it->second.centerUntil && now < it->second.centerUntil;
+        if (!center) {
+            it->second.centerUntil = 0;
         }
 
-        // An asynchronous centering move may not be reflected by GetWindowRect
-        // immediately. Don't read stale geometry and queue a conflicting guard
-        // move in the same tick.
-        if (!moveQueued) {
+        // Don't use the map iterator after this point. The calls below can
+        // trigger asynchronous window activity and future message-pumping APIs
+        // must remain safe against nested WinEvents.
+        if (!(center && CenterWindowIfNeeded(hwnd))) {
             CorrectWindowIfNeeded(hwnd);
         }
-
-        ++it;
     }
 
     StopRecheckTimerIfIdle();
@@ -695,6 +730,14 @@ static void CALLBACK WinEventProc(
         }
     }
 
+    // A taskbar geometry change can accompany auto-hide changes. Mark the
+    // cached state stale, but don't call SHAppBarMessage from inside WinEvent.
+    if (event == EVENT_OBJECT_LOCATIONCHANGE && IsTaskbarWindow(hwnd)) {
+        g_autoHideStateDirty = true;
+        StartRecheck(GetForegroundWindow(), false);
+        return;
+    }
+
     switch (event) {
         case EVENT_OBJECT_SHOW:
         case EVENT_OBJECT_UNCLOAKED:
@@ -723,10 +766,14 @@ static DWORD WINAPI WinEventThreadProc(LPVOID) {
     MSG msg = {};
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
-    // Remember all current top-level application windows, including minimized
-    // and DWM-cloaked ones, so enabling the mod or switching virtual desktops
+    // Remember every current top-level application window, including minimized,
+    // cloaked and small ones, so enabling the mod or switching virtual desktops
     // never makes an old window look newly opened.
     EnumWindows(RememberExistingWindowsProc, 0);
+
+    // Do the initial Shell query before installing WinEvent hooks. This avoids
+    // any possible WinEvent reentrancy while SHAppBarMessage is in progress.
+    RefreshAutoHideStateIfStale(true);
 
     HWINEVENTHOOK foregroundHook = SetWinEventHook(
         EVENT_SYSTEM_FOREGROUND,
@@ -893,11 +940,6 @@ void WhTool_ModUninit() {
         CloseHandle(g_hookThread);
         g_hookThread = nullptr;
         g_hookThreadId = 0;
-    }
-
-    if (g_threadReadyEvent) {
-        CloseHandle(g_threadReadyEvent);
-        g_threadReadyEvent = nullptr;
     }
 }
 
