@@ -236,6 +236,7 @@ constexpr UINT WM_APP_OPEN = WM_APP + 1;
 constexpr UINT WM_APP_DRAW = WM_APP + 2;
 constexpr UINT WM_APP_RELOAD = WM_APP + 3;
 constexpr UINT WM_APP_ENDPICK = WM_APP + 4;
+constexpr UINT WM_APP_THEME = WM_APP + 5;
 constexpr UINT_PTR kDialogTimer = 1;
 constexpr UINT kDialogTimerMs = 250;
 constexpr int kHotkeyId = 1;
@@ -417,7 +418,8 @@ struct DialogState {
     int size = 28;
     int speed = 3;
     bool closing = false;
-    bool warning = false;  // hint shows the "outside the editor" warning
+    bool warning = false;     // hint shows the "outside the editor" warning
+    bool hiddenAway = false;  // hidden while another app is in front
 };
 
 struct PreviewState {
@@ -488,6 +490,7 @@ POINT g_lastRel = {};
 //|Foreground tracking and hotkey registration state.
 bool g_wasForeground = false;
 bool g_hotkeyRegistered = false;
+bool g_themePending = false;  // a theme refresh is already queued
 
 //+-------------------------------------
 //|Functions used before their definition.
@@ -621,11 +624,12 @@ RECT FallbackSafeRect(HWND target) {
 }
 
 //+-------------------------------------
-//|Moves a point inside a rectangle.
+//|Moves a point inside a rectangle (unchanged if the rectangle is empty).
 //+---------------------------------------------------------------------------
 //|ClampToRect
 //+---------------------------------------------------------------------------
 POINT ClampToRect(POINT pt, const RECT& r) {
+    if (IsRectEmpty(&r)) return pt;
     pt.x = Clamp(pt.x, r.left, r.right - 1);
     pt.y = Clamp(pt.y, r.top, r.bottom - 1);
     return pt;
@@ -650,7 +654,7 @@ RECT GetWorkArea(POINT pt) {
 //+---------------------------------------------------------------------------
 std::wstring ReadStringSetting(const wchar_t* name) {
     PCWSTR value = Wh_GetStringSetting(name);
-    std::wstring result = value ? value : L"";
+    std::wstring result = value;  // never null
     Wh_FreeStringSetting(value);
     return result;
 }
@@ -669,7 +673,8 @@ bool ParseHotkeyToken(const std::wstring& tok, UINT* mods, UINT* vk) {
         *mods |= MOD_SHIFT;
     } else if (tok == L"win" || tok == L"windows") {
         *mods |= MOD_WIN;
-    } else if (tok.size() == 1 && iswalnum(tok[0])) {
+    } else if (tok.size() == 1 && ((tok[0] >= L'a' && tok[0] <= L'z') ||
+                                   (tok[0] >= L'0' && tok[0] <= L'9'))) {
         *vk = (UINT)towupper(tok[0]);
     } else if (tok.size() >= 2 && tok[0] == L'f') {
         int n = _wtoi(tok.c_str() + 1);
@@ -1312,6 +1317,17 @@ void RefreshThemedWindows() {
 }
 
 //+-------------------------------------
+//|Queues one theme refresh; several windows receive the same broadcast.
+//+---------------------------------------------------------------------------
+//|QueueThemeRefresh
+//+---------------------------------------------------------------------------
+void QueueThemeRefresh() {
+    if (g_themePending || !g_msgWnd) return;
+    g_themePending = true;
+    PostMessageW(g_msgWnd, WM_APP_THEME, 0, 0);
+}
+
+//+-------------------------------------
 //|Segoe UI font at the given size and DPI.
 //+---------------------------------------------------------------------------
 //|MakeFont
@@ -1440,16 +1456,64 @@ bool CanDetectCanvas() {
 
 //+-------------------------------------
 //|Area of the editor where the pen may draw (screen coordinates): the
-//|annotation canvas, or an estimate from the window frame as a fallback.
+//|annotation canvas. Empty if UI Automation works but finds no canvas; an
+//|estimate from the window frame only if UI Automation is unavailable.
 //+---------------------------------------------------------------------------
 //|EditorSafeRect
 //+---------------------------------------------------------------------------
 RECT EditorSafeRect(HWND target) {
     RECT canvas;
-    if (!FindCanvasRect(target, &canvas)) return FallbackSafeRect(target);
+    if (!FindCanvasRect(target, &canvas))
+        return CanDetectCanvas() ? RECT{} : FallbackSafeRect(target);
     UINT dpi = WindowDpi(target);
     InflateRect(&canvas, -Scale(4, dpi), -Scale(4, dpi));  // small margin
     return canvas;
+}
+
+//+---------------------------------------------------------------------------
+//|IUIAutomationSelectionItemPattern IID and the pen button's AutomationId.
+constexpr GUID kIidSelectionItemPattern = {
+    0xa8efa66a, 0x0fda, 0x421a, {0x91, 0x94, 0x38, 0x02, 0x1f, 0x35, 0x78, 0xea}};
+constexpr wchar_t kPenButtonAutomationId[] = L"InkToolbarBallpointPenButton";
+
+//+-------------------------------------
+//|Selects the ballpoint pen in the Snipping Tool toolbar if another tool
+//|(highlighter, eraser...) is active, so the text is written with the pen.
+//+---------------------------------------------------------------------------
+//|EnsurePenSelected
+//+---------------------------------------------------------------------------
+void EnsurePenSelected(HWND target) {
+    if (!g_uia) return;
+    IUIAutomationElement* root = nullptr;
+    IUIAutomationCondition* cond = nullptr;
+    IUIAutomationElement* pen = nullptr;
+    IUIAutomationSelectionItemPattern* sel = nullptr;
+
+    VARIANT id;
+    VariantInit(&id);
+    id.vt = VT_BSTR;
+    id.bstrVal = SysAllocString(kPenButtonAutomationId);
+    if (SUCCEEDED(g_uia->ElementFromHandle(target, &root)) && root &&
+        SUCCEEDED(g_uia->CreatePropertyCondition(UIA_AutomationIdPropertyId, id,
+                                                 &cond)) &&
+        SUCCEEDED(root->FindFirst(TreeScope_Descendants, cond, &pen)) && pen &&
+        SUCCEEDED(pen->GetCurrentPatternAs(UIA_SelectionItemPatternId,
+                                           kIidSelectionItemPattern,
+                                           (void**)&sel)) &&
+        sel) {
+        BOOL selected = TRUE;
+        sel->get_CurrentIsSelected(&selected);
+        if (!selected) {
+            Wh_Log(L"Selecting the pen tool");
+            sel->Select();
+            SleepUnlessStopping(100);
+        }
+    }
+    VariantClear(&id);
+    if (sel) sel->Release();
+    if (pen) pen->Release();
+    if (cond) cond->Release();
+    if (root) root->Release();
 }
 
 //+-------------------------------------
@@ -1508,6 +1572,7 @@ std::vector<Stroke> LayoutText(const std::wstring& text, double ox, double oy,
 
     for (wchar_t ch : text) {
         if (ch == L'\r') continue;
+        if (IS_LOW_SURROGATE(ch)) continue;  // one "?" per character, not per unit
         if (ch == L'\n') {
             penX = 0;
             penY += kLineHeight;
@@ -1548,22 +1613,36 @@ Stroke Densify(const Stroke& st, double maxStep) {
 }
 
 //+-------------------------------------
-//|Microsecond delay (sleep for the long part, then spin).
+//|Short delays for the pen strokes, without busy-waiting: a high-resolution
+//|waitable timer (Windows 10 1803+), or Sleep as a fallback.
 //+---------------------------------------------------------------------------
-//|PreciseDelayUs
+//|Delayer
 //+---------------------------------------------------------------------------
-void PreciseDelayUs(int us) {
-    if (us <= 0) return;
-    LARGE_INTEGER freq, start, now;
-    QueryPerformanceFrequency(&freq);
-    QueryPerformanceCounter(&start);
-    long long target = start.QuadPart + freq.QuadPart * us / 1000000;
-    if (us > 3000) Sleep((us - 2000) / 1000);
-    do {
-        YieldProcessor();
-        QueryPerformanceCounter(&now);
-    } while (now.QuadPart < target);
-}
+struct Delayer {
+    HANDLE timer = nullptr;
+
+    Delayer() {
+        timer = CreateWaitableTimerExW(nullptr, nullptr,
+                                       0x00000002 /* CREATE_WAITABLE_TIMER_HIGH_RESOLUTION */,
+                                       TIMER_ALL_ACCESS);
+    }
+
+    ~Delayer() {
+        if (timer) CloseHandle(timer);
+    }
+
+    void WaitUs(int us) {
+        if (us <= 0) return;
+        if (!timer) {
+            Sleep((us + 999) / 1000);
+            return;
+        }
+        LARGE_INTEGER due;
+        due.QuadPart = -(LONGLONG)us * 10;  // relative, 100 ns units
+        if (SetWaitableTimer(timer, &due, 0, nullptr, nullptr, FALSE))
+            WaitForSingleObject(timer, INFINITE);
+    }
+};
 
 //+-------------------------------------
 //|Moves the mouse to a screen point, optionally pressing/releasing a button.
@@ -1665,6 +1744,7 @@ struct DrawParams {
     int pointDelayUs;
     int strokeDelayUs;
     RECT safe;  // editor area where the pen may draw
+    Delayer* delay;
 };
 
 //+-------------------------------------
@@ -1672,7 +1752,7 @@ struct DrawParams {
 //+---------------------------------------------------------------------------
 //|MakeDrawParams
 //+---------------------------------------------------------------------------
-DrawParams MakeDrawParams(HWND target, int speed) {
+DrawParams MakeDrawParams(HWND target, int speed, Delayer* delay) {
     bool swapped = GetSystemMetrics(SM_SWAPBUTTON) != 0;
     DrawParams p;
     p.down = swapped ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN;
@@ -1681,6 +1761,7 @@ DrawParams MakeDrawParams(HWND target, int speed) {
     SpeedToDelays(speed, &p.pointDelayUs, &strokeMs);
     p.strokeDelayUs = strokeMs * 1000;
     p.safe = EditorSafeRect(target);
+    p.delay = delay;
     return p;
 }
 
@@ -1711,9 +1792,9 @@ bool DrawStroke(HWND target, const Stroke& raw, const DrawParams& p) {
     }
 
     SendMouse(st[0].x, st[0].y, 0);
-    PreciseDelayUs(p.strokeDelayUs / 2);
+    p.delay->WaitUs(p.strokeDelayUs / 2);
     SendMouse(st[0].x, st[0].y, p.down);
-    PreciseDelayUs(p.pointDelayUs);
+    p.delay->WaitUs(p.pointDelayUs);
 
     size_t last = 0;
     bool ok = true;
@@ -1725,7 +1806,7 @@ bool DrawStroke(HWND target, const Stroke& raw, const DrawParams& p) {
         }
         SendMouse(st[i].x, st[i].y, 0);
         last = i;
-        PreciseDelayUs(p.pointDelayUs);
+        p.delay->WaitUs(p.pointDelayUs);
         if (ShouldAbort(target)) {
             ok = false;
             break;
@@ -1741,7 +1822,8 @@ bool DrawStroke(HWND target, const Stroke& raw, const DrawParams& p) {
 //|DrawStrokes
 //+---------------------------------------------------------------------------
 void DrawStrokes(HWND target, const std::vector<Stroke>& strokes, int speed) {
-    DrawParams p = MakeDrawParams(target, speed);
+    Delayer delay;
+    DrawParams p = MakeDrawParams(target, speed, &delay);
     POINT orig;
     GetCursorPos(&orig);
 
@@ -1751,7 +1833,7 @@ void DrawStrokes(HWND target, const std::vector<Stroke>& strokes, int speed) {
     for (const Stroke& raw : strokes) {
         if (ShouldAbort(target)) break;
         if (!DrawStroke(target, raw, p)) break;
-        PreciseDelayUs(p.strokeDelayUs);
+        p.delay->WaitUs(p.strokeDelayUs);
     }
 
     SendMouse(orig.x, orig.y, 0);
@@ -2191,7 +2273,7 @@ LRESULT CALLBACK ButtonWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             PaintFloatingButton(hwnd);
             return 0;
     }
-    if (IsThemeChangeMessage(msg, lParam)) RefreshThemedWindows();
+    if (IsThemeChangeMessage(msg, lParam)) QueueThemeRefresh();
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
@@ -2203,7 +2285,7 @@ LRESULT CALLBACK ButtonWndProc(HWND hwnd, UINT msg, WPARAM wParam,
 HWND ResolveButtonTarget() {
     if (!g_settings.showButton) return nullptr;
     HWND target = nullptr;
-    if (g_mode == Mode::Dialog) target = g_dlg.target;
+    if (g_mode == Mode::Dialog && IsOurProcessForeground()) target = g_dlg.target;
     else if (g_mode == Mode::Idle) target = FindEditorTarget();
     if (!target || !IsWindow(target) || IsIconic(target)) return nullptr;
     return target;
@@ -2294,8 +2376,16 @@ void CALLBACK LocationChangedProc(HWINEVENTHOOK, DWORD, HWND hwnd, LONG idObject
     //+---------------------------------------------------------------------------
     //|The attached editor moved, or the foreground window may have just become
     //|a usable editor (shown or resized after a capture).
-    if (hwnd == g_btn.target ||
-        (!g_btn.target && hwnd == GetForegroundWindow())) {
+    if (hwnd == g_btn.target) {
+        UpdateButton();
+    } else if (!g_btn.target && hwnd == GetForegroundWindow()) {
+        //+---------------------------------------------------------------------------
+        //|Query the canvas again (an image may have been opened in place),
+        //|unless a re-check cycle is already running.
+        if (g_recheckLeft == 0) {
+            g_editorChecked = nullptr;
+            g_recheckHwnd = nullptr;
+        }
         UpdateButton();
     }
 }
@@ -2477,7 +2567,7 @@ void DrawCloseButton(const DRAWITEMSTRUCT* d) {
     RECT rc = d->rcItem;
     FillRect(d->hDC, &rc, g_bgBrush);
     FillRoundRect(d->hDC, rc, Scale(6, g_dlg.dpi), fill, fill);
-    DrawCenteredText(d->hDC, L"", rc, g_dlg.fontIcon, g_theme.textSecondary);
+    DrawCenteredText(d->hDC, L"\uE8BB", rc, g_dlg.fontIcon, g_theme.textSecondary);
 }
 
 //+---------------------------------------------------------------------------
@@ -2689,7 +2779,7 @@ LRESULT CALLBACK DialogWndProc(HWND hwnd, UINT msg, WPARAM wParam,
             OnDialogActivate(wParam);
             break;
     }
-    if (IsThemeChangeMessage(msg, lParam)) RefreshThemedWindows();
+    if (IsThemeChangeMessage(msg, lParam)) QueueThemeRefresh();
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
@@ -2984,11 +3074,11 @@ bool CreateDialogWindow(POINT origin) {
 }
 
 //+-------------------------------------
-//|Opens the text dialog (from the button or the hotkey).
+//|Opens the text dialog for an editor window (from the button or hotkey).
 //+---------------------------------------------------------------------------
 //|OpenDialog
 //+---------------------------------------------------------------------------
-void OpenDialog(bool fromButton) {
+void OpenDialog(HWND target, bool fromButton) {
     if (g_mode == Mode::Dialog && g_dlg.hwnd) {
         SetForegroundWindow(g_dlg.hwnd);
         return;
@@ -2997,8 +3087,6 @@ void OpenDialog(bool fromButton) {
     LoadTheme();
     if (g_settings.previewFromPen) ReadPenInfo();
 
-    HWND target = fromButton ? g_btn.target
-                             : GetAncestor(GetForegroundWindow(), GA_ROOT);
     if (!target || !IsWindow(target)) return;
 
     g_dlg = DialogState();
@@ -3267,6 +3355,7 @@ void RunDrawJob() {
     HWND target = g_job.target;
     if (target && IsWindow(target) && BringTargetToFront(target)) {
         WaitForInputRelease();
+        EnsurePenSelected(target);
         std::vector<Stroke> strokes =
             LayoutText(g_job.text, g_job.origin.x, g_job.origin.y, g_job.size);
         Wh_Log(L"Writing %d chars (%d strokes), height %d px, speed %d",
@@ -3319,7 +3408,26 @@ void UpdateHotkeyRegistration(bool foreground) {
 }
 
 //+-------------------------------------
-//|Foreground or minimize state changed: log, hotkey and button.
+//|Hides the dialog and preview while another app is in front (they are
+//|topmost), and shows them again when the Snipping Tool comes back.
+//+---------------------------------------------------------------------------
+//|UpdateDialogVisibility
+//+---------------------------------------------------------------------------
+void UpdateDialogVisibility(bool foreground) {
+    if (g_mode != Mode::Dialog || !g_dlg.hwnd) return;
+    if (!foreground && !g_dlg.hiddenAway) {
+        g_dlg.hiddenAway = true;
+        ShowWindow(g_dlg.hwnd, SW_HIDE);
+        if (g_preview.hwnd) ShowWindow(g_preview.hwnd, SW_HIDE);
+    } else if (foreground && g_dlg.hiddenAway) {
+        g_dlg.hiddenAway = false;
+        ShowWindow(g_dlg.hwnd, SW_SHOWNOACTIVATE);
+        UpdatePreview();
+    }
+}
+
+//+-------------------------------------
+//|Foreground or minimize state changed: log, hotkey, dialog and button.
 //+---------------------------------------------------------------------------
 //|OnForegroundChanged
 //+---------------------------------------------------------------------------
@@ -3332,6 +3440,7 @@ void OnForegroundChanged() {
         g_wasForeground = fg;
     }
     UpdateHotkeyRegistration(fg);
+    UpdateDialogVisibility(fg);
     UpdateButton();
 }
 
@@ -3372,10 +3481,12 @@ void OnHotkey() {
         return;
     }
     if (g_mode != Mode::Idle) return;
-    if (!FindEditorTarget()) return;  // start screen, no image to write on
+    g_editorChecked = nullptr;  // fresh check: an image may have just opened
+    HWND target = FindEditorTarget();
+    if (!target) return;  // start screen, no image to write on
     Wh_Log(L"Hotkey detected");
     WaitForHotkeyRelease();
-    if (!Stopping()) OpenDialog(false);
+    if (!Stopping()) OpenDialog(target, false);
 }
 
 //+-------------------------------------
@@ -3395,12 +3506,18 @@ void OnDialogTimer() {
 //|OnEditorRecheckTimer
 //+---------------------------------------------------------------------------
 void OnEditorRecheckTimer() {
-    if (--g_recheckLeft <= 0) {
+    bool lastTry = --g_recheckLeft <= 0;
+    if (lastTry) {
         KillTimer(g_msgWnd, kEditorRecheckTimer);
         g_recheckLeft = 0;
     }
     g_editorChecked = nullptr;  // query again
     UpdateButton();
+    if (lastTry && !g_editorHasImage && g_editorChecked) {
+        Wh_Log(L"Editor window %p has no '%s' element (start screen, or the "
+               L"Snipping Tool changed its UI)",
+               g_editorChecked, kCanvasAutomationId);
+    }
 }
 
 //+-------------------------------------
@@ -3433,7 +3550,11 @@ LRESULT CALLBACK MsgWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (wParam == kHotkeyId) OnHotkey();
             return 0;
         case WM_APP_OPEN:
-            OpenDialog(wParam != 0);
+            OpenDialog(g_btn.target, true);
+            return 0;
+        case WM_APP_THEME:
+            g_themePending = false;
+            RefreshThemedWindows();
             return 0;
         case WM_APP_DRAW:
             RunDrawJob();
