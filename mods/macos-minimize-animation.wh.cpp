@@ -2,7 +2,7 @@
 // @id              macos-minimize-animation
 // @name            MacOS Minimize Animation
 // @description     Smooth macOS-style genie minimize and restore (open) animations for every window.
-// @version         3.1.3
+// @version         3.2.0
 // @author          Abdullah Masood
 // @github          https://github.com/Abdullah-Masood-05
 // @include         *
@@ -105,9 +105,10 @@ style is the mod's original renderer.
   (reported on a 6900 XT and a Vega 8 iGPU; the classic style was already using
   the tight canvas).
 - **Smoothstep easing** instead of a linear ramp, so it eases in and out.
-- **Accurate targeting.** The mod locates the app's actual taskbar button via UI
-  Automation and aims the genie at it (with a per-process fallback cache), instead
-  of guessing from the cursor.
+- **Accurate targeting.** The mod uses the shell's own minimize-target rect
+  (`GetWindowMinimizeRect`) to aim the genie at the app's actual taskbar button,
+  instead of guessing from the cursor. This replaced the earlier UI Automation
+  search (suggested by @shoaibhassantech in PR #4754).
 - **Pixel-aligned capture.** The window is measured by its DWM extended frame
   bounds (not the legacy window rect), so keyboard / AutoHotkey minimizes are no
   longer spatially shifted.
@@ -150,7 +151,8 @@ minimize behind it without the system's own animation getting in the way.
   effect, since the terminal window doesn't belong to PowerShell.
 
 ## Notes
-- Works on all top-level windows; child / tiny / hidden windows are skipped.
+- Works on all top-level windows; child / tiny / hidden / off-screen windows are
+  skipped, and so are windows that start minimized (they were never on screen).
 - DWM transitions are temporarily disabled on the animated window and restored
   afterwards, so the system's own minimize/restore animation doesn't fight ours.
 - Minimize snapshots are captured from the window itself, so the taskbar and other
@@ -236,7 +238,6 @@ Check out the documentation
 #include <string>
 #include <algorithm>
 #include <cwctype>
-#include <uiautomation.h>
 #include <shellapi.h>
 
 #ifndef DWMWA_EXTENDED_FRAME_BOUNDS
@@ -287,6 +288,12 @@ typedef BOOL (WINAPI *SetWindowPos_t)(HWND hWnd, HWND hWndInsertAfter, int X, in
                                       int cx, int cy, UINT uFlags);
 SetWindowPos_t SetWindowPos_Original;
 
+// Undocumented but stable user32 function: returns the RECT the shell uses for
+// its own minimize/restore animation (the taskbar button). Replaces the ~160-line
+// UI Automation search. Suggested by @shoaibhassantech in PR #4754.
+typedef BOOL (WINAPI *GetWindowMinimizeRect_t)(HWND hwnd, LPRECT prcMin);
+GetWindowMinimizeRect_t pGetWindowMinimizeRect = nullptr;
+
 // Shared Direct2D factory (multi-threaded: several worker threads may render at
 // once). Ported from Potassiumuncher's genie engine.
 ID2D1Factory* g_d2dFactory = nullptr;
@@ -331,7 +338,6 @@ struct SnapCache { HBITMAP hBmp; void* pBits; int w; int h; };
 // --- THE VAULTS ---
 std::unordered_map<HWND, SnapCache> g_SnapshotCache;
 std::unordered_map<HWND, int> g_IconPositions;            // per-window learned icon X
-std::unordered_map<std::wstring, int> g_ProcessIconPositions; // per-process fallback
 std::unordered_set<HWND> g_LaunchSeen;   // windows we've already shown/animated once
 std::unordered_set<HWND> g_AnimActive;   // windows with a genie currently in flight
 std::mutex g_CacheMutex;
@@ -494,7 +500,18 @@ static bool MacGenieShouldAnimate(HWND hWnd) {
         return false;
     }
     if ((r.right - r.left) < 40 || (r.bottom - r.top) < 40) return false;
+    // Parked entirely off-screen (Lively Wallpaper keeps its wallpaper player
+    // windows at -9999,0 until it re-parents them onto the desktop): no monitor
+    // shows the window, so there is nothing to animate from or to.
+    if (!MonitorFromRect(&r, MONITOR_DEFAULTTONULL)) return false;
     return true;
+}
+
+// A minimize only has something to animate if the window is on screen right now.
+// A hidden window being shown straight into the minimized state (SW_SHOWMINNOACTIVE
+// on a never-shown window) or an already-iconic one has no frame to warp.
+static bool MacGenieCanAnimateMinimize(HWND hWnd) {
+    return IsWindowVisible(hWnd) && !IsIconic(hWnd) && MacGenieShouldAnimate(hWnd);
 }
 
 // A real, top-level window with a title bar (skips child windows, tool windows,
@@ -558,174 +575,29 @@ HWND FindTaskbarForMonitor(HMONITOR hMon) {
     return hMainTray;
 }
 
-// Ported from Potassiumuncher's genie engine (github.com/Potassiumuncher).
-// Locates the app's taskbar button via UI Automation and returns its center X
-// (falls back to fallbackX, then to the per-window / per-process learned cache).
-// Runs on the hook (app UI) thread: CoInitializeEx(APARTMENTTHREADED) matches the
-// typical GUI-thread apartment (S_FALSE) or reports RPC_E_CHANGED_MODE on an MTA
-// thread; either way CoUninitialize is balanced only when we actually initialized.
-int GetTaskbarButtonX(HWND hWndApp, int fallbackX, HMONITOR hMon) {
-    int targetX = fallbackX;
-    bool uiaFound = false;
-
-    std::wstring procNameLower = L"";
-    DWORD ownerPid = 0;
-    GetWindowThreadProcessId(hWndApp, &ownerPid);
-    if (ownerPid) {
-        HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, ownerPid);
-        if (hProc) {
-            WCHAR exePath[MAX_PATH] = {0};
-            DWORD exePathLen = MAX_PATH;
-            if (QueryFullProcessImageNameW(hProc, 0, exePath, &exePathLen)) {
-                WCHAR* name = wcsrchr(exePath, L'\\');
-                if (name) {
-                    procNameLower = (name + 1);
-                    size_t dotPos = procNameLower.find(L'.');
-                    if (dotPos != std::wstring::npos) procNameLower = procNameLower.substr(0, dotPos);
-                    std::transform(procNameLower.begin(), procNameLower.end(), procNameLower.begin(), ::towlower);
-                }
-            }
-            CloseHandle(hProc);
+// Returns the center X of the window's minimize target rect (the taskbar button
+// the shell would animate into). Uses the undocumented GetWindowMinimizeRect,
+// which gives the exact rect DWM uses — no UI Automation search or scoring
+// needed. Falls back to the per-window cursor-learned cache, then to fallbackX.
+// Replaces the original 160-line UIA search contributed by Potassiumuncher;
+// switch suggested by @shoaibhassantech (PR #4754).
+int GetMinimizeTargetX(HWND hWnd, int fallbackX) {
+    if (pGetWindowMinimizeRect) {
+        RECT rc;
+        if (pGetWindowMinimizeRect(hWnd, &rc) && rc.right > rc.left) {
+            int x = rc.left + (rc.right - rc.left) / 2;
+            std::lock_guard<std::mutex> lock(g_CacheMutex);
+            g_IconPositions[hWnd] = x;
+            return x;
         }
     }
-
-    std::wstring processKey = procNameLower;
-    if (!processKey.empty() && hMon) {
-        processKey += L"_" + std::to_wstring(reinterpret_cast<size_t>(hMon));
+    // Fallback: per-window learned position from a prior taskbar click.
+    {
+        std::lock_guard<std::mutex> lock(g_CacheMutex);
+        auto it = g_IconPositions.find(hWnd);
+        if (it != g_IconPositions.end()) return it->second;
     }
-
-    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
-    bool coInit = (hr == S_OK || hr == S_FALSE);
-
-    if (hr == S_OK || hr == S_FALSE || hr == RPC_E_CHANGED_MODE) {
-        IUIAutomation* pAutomation = nullptr;
-        HRESULT hrUia = CoCreateInstance(__uuidof(CUIAutomation8), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&pAutomation);
-        if (FAILED(hrUia)) {
-            hrUia = CoCreateInstance(__uuidof(CUIAutomation), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&pAutomation);
-        }
-
-        if (SUCCEEDED(hrUia) && pAutomation) {
-            HWND hTray = FindTaskbarForMonitor(hMon);
-            if (hTray) {
-                IUIAutomationElement* pTrayElement = nullptr;
-                if (SUCCEEDED(pAutomation->ElementFromHandle(hTray, &pTrayElement)) && pTrayElement) {
-
-                    WCHAR titleW[512] = {0};
-                    GetWindowTextW(hWndApp, titleW, 512);
-                    std::wstring titleLower = titleW;
-                    std::transform(titleLower.begin(), titleLower.end(), titleLower.begin(), ::towlower);
-
-                    std::wstring procHintLower = procNameLower;
-                    if (procNameLower == L"chrome") procHintLower = L"google chrome";
-                    else if (procNameLower == L"msedge") procHintLower = L"microsoft edge";
-                    else if (procNameLower == L"firefox") procHintLower = L"firefox";
-                    else if (procNameLower == L"brave") procHintLower = L"brave";
-                    else if (procNameLower == L"opera") procHintLower = L"opera";
-                    else if (procNameLower == L"vivaldi") procHintLower = L"vivaldi";
-
-                    IUIAutomationCondition* pButtonCond = nullptr;
-                    IUIAutomationCondition* pListItemCond = nullptr;
-                    IUIAutomationCondition* pOrCond = nullptr;
-
-                    VARIANT varBtn; varBtn.vt = VT_I4; varBtn.lVal = UIA_ButtonControlTypeId;
-                    pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varBtn, &pButtonCond);
-
-                    VARIANT varList; varList.vt = VT_I4; varList.lVal = UIA_ListItemControlTypeId;
-                    pAutomation->CreatePropertyCondition(UIA_ControlTypePropertyId, varList, &pListItemCond);
-
-                    if (pButtonCond && pListItemCond) {
-                        pAutomation->CreateOrCondition(pButtonCond, pListItemCond, &pOrCond);
-                    }
-
-                    IUIAutomationElementArray* pArray = nullptr;
-                    if (pOrCond && SUCCEEDED(pTrayElement->FindAll(TreeScope_Descendants, pOrCond, &pArray)) && pArray) {
-                        int length = 0;
-                        pArray->get_Length(&length);
-
-                        MONITORINFO mi = {0};
-                        mi.cbSize = sizeof(MONITORINFO);
-                        GetMonitorInfoW(hMon, &mi);
-                        int monRight = mi.rcMonitor.right;
-
-                        int bestScore = 0;
-
-                        for (int i = 0; i < length; i++) {
-                            IUIAutomationElement* pItem = nullptr;
-                            if (SUCCEEDED(pArray->GetElement(i, &pItem)) && pItem) {
-                                BSTR name;
-                                if (SUCCEEDED(pItem->get_CurrentName(&name)) && name) {
-                                    std::wstring uiaNameLower = name;
-                                    std::transform(uiaNameLower.begin(), uiaNameLower.end(), uiaNameLower.begin(), ::towlower);
-
-                                    if (!uiaNameLower.empty()) {
-                                        int score = 0;
-
-                                        if (titleLower == uiaNameLower) score += 1000;
-                                        if (!titleLower.empty() && titleLower.find(uiaNameLower) != std::wstring::npos) score += 500;
-                                        if (!uiaNameLower.empty() && uiaNameLower.find(titleLower) != std::wstring::npos) score += 500;
-
-                                        if (!procNameLower.empty() && uiaNameLower.find(procNameLower) != std::wstring::npos) score += 400;
-                                        if (!procHintLower.empty() && procHintLower != procNameLower &&
-                                            uiaNameLower.find(procHintLower) != std::wstring::npos) score += 900;
-
-                                        std::wstring currentWord;
-                                        for (wchar_t c : titleLower) {
-                                            if (iswalnum(c)) {
-                                                currentWord += c;
-                                            } else {
-                                                if (currentWord.length() >= 4 && uiaNameLower.find(currentWord) != std::wstring::npos) score += 50;
-                                                currentWord.clear();
-                                            }
-                                        }
-                                        if (currentWord.length() >= 4 && uiaNameLower.find(currentWord) != std::wstring::npos) score += 50;
-
-                                        if (uiaNameLower.find(L"start") != std::wstring::npos) score -= 500;
-                                        if (uiaNameLower.find(L"search") != std::wstring::npos) score -= 500;
-                                        if (uiaNameLower.find(L"task view") != std::wstring::npos) score -= 500;
-                                        if (uiaNameLower.find(L"widgets") != std::wstring::npos) score -= 500;
-
-                                        if (score > bestScore) {
-                                            RECT bRect;
-                                            if (SUCCEEDED(pItem->get_CurrentBoundingRectangle(&bRect))) {
-                                                if (bRect.right > bRect.left && bRect.left < monRight - 50) {
-                                                    bestScore = score;
-                                                    targetX = bRect.left + (bRect.right - bRect.left) / 2;
-                                                    uiaFound = true;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    SysFreeString(name);
-                                }
-                                pItem->Release();
-                            }
-                        }
-                        pArray->Release();
-                    }
-                    if (pButtonCond) pButtonCond->Release();
-                    if (pListItemCond) pListItemCond->Release();
-                    if (pOrCond) pOrCond->Release();
-                    pTrayElement->Release();
-                }
-            }
-            pAutomation->Release();
-        }
-        if (coInit) CoUninitialize();
-    }
-
-    std::lock_guard<std::mutex> lock(g_CacheMutex);
-    if (uiaFound) {
-        g_IconPositions[hWndApp] = targetX;
-        if (!processKey.empty()) {
-            g_ProcessIconPositions[processKey] = targetX;
-        }
-    } else if (g_IconPositions.count(hWndApp)) {
-        targetX = g_IconPositions[hWndApp];
-    } else if (!processKey.empty() && g_ProcessIconPositions.count(processKey)) {
-        targetX = g_ProcessIconPositions[processKey];
-    }
-
-    return targetX;
+    return fallbackX;
 }
 
 // Ported from Potassiumuncher's genie engine (github.com/Potassiumuncher).
@@ -1778,13 +1650,11 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
                                          : (mi.rcMonitor.left + monWidth / 2);
 
     // --- Per-window targeting ---
-    // UI Automation (GetTaskbarButtonX) matches taskbar buttons by title / process
-    // name, which can't reliably tell apart several windows of the SAME process
-    // (e.g. multiple Brave profiles): they tie on the process-name score and it
-    // resolves them all to the first-opened window's button. So MINE's cursor +
-    // per-window signal takes priority; UIA is only a fallback for a window we've
-    // never seen minimized from the taskbar (frame 0 of the warp is the identity,
-    // so targetDockX is only needed for later frames).
+    // GetWindowMinimizeRect (GetMinimizeTargetX) returns the exact taskbar button
+    // rect the shell would use for its own animation — per-window, no scoring.
+    // Cursor over the taskbar still takes priority (below) because a user click
+    // is the single most reliable signal, but the fallback is now a kernel-level
+    // rect instead of the old UIA heuristic.
     //
     // 1. Cursor over the taskbar = the user clicked THIS window's own taskbar
     //    button, so its X is exactly the icon - the only fully reliable per-window
@@ -1806,14 +1676,10 @@ bool StartMacGenieAnim(HWND hWnd, BOOL rising, LONG_PTR originalExStyle,
         std::lock_guard<std::mutex> lock(g_CacheMutex);
         g_IconPositions[hWnd] = learnedTargetX;       // remember it for this window
     } else {
-        // 2. Title-bar / keyboard minimize: locate the taskbar button via UI
-        //    Automation EVERY time (Potassiumuncher's targeting). Reusing a
-        //    per-window cache here made the button-minimize land past the icon when
-        //    the cached spot was stale; running UIA fresh lands it on the icon.
-        //    GetTaskbarButtonX still falls back to the per-window / per-process cache
-        //    (including a position learned from an earlier taskbar click) internally
-        //    if UIA can't match, so nothing is lost.
-        learnedTargetX = GetTaskbarButtonX(hWnd, learnedTargetX, hMon);
+        // 2. Title-bar / keyboard minimize: query the shell's own minimize-target
+        //    rect (GetWindowMinimizeRect). Falls back to the per-window learned
+        //    cache internally if the API is unavailable or returns nothing.
+        learnedTargetX = GetMinimizeTargetX(hWnd, learnedTargetX);
     }
 
     MacGenieAnimData* data = new MacGenieAnimData();
@@ -2084,7 +1950,7 @@ static void MacGenieLaunchCommit(HWND hWnd, LONG_PTR originalExStyle) {
 
 BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
     if (nCmdShow == SW_MINIMIZE || nCmdShow == SW_SHOWMINIMIZED || nCmdShow == SW_SHOWMINNOACTIVE) {
-        if (MacGenieShouldAnimate(hWnd)) {
+        if (MacGenieCanAnimateMinimize(hWnd)) {
             MacGenieSetDwmTransitions(hWnd, FALSE);
             StartMacGenieAnim(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
         }
@@ -2133,7 +1999,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
             if (GetPropW(hWnd, L"GenieBypass")) {
                 return DefWindowProcW_Original(hWnd, Msg, wParam, lParam);
             }
-            if (MacGenieShouldAnimate(hWnd)) {
+            if (MacGenieCanAnimateMinimize(hWnd)) {
                 // Auto-hide taskbar? Reveal it, defer the real minimize until the
                 // animation finishes so it doesn't slide away mid-genie.
                 // (Potassiumuncher's engine, reconciled with MINE's cloak hide.)
@@ -2201,8 +2067,7 @@ LRESULT WINAPI DefWindowProcW_Hook(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lP
 // SetWindowPlacement, or CloseWindow. Shared minimize kick-off for those paths (no
 // unhide handling - that lives on the SC_MINIMIZE path only).
 static void MacGenieTryMinimizeAnim(HWND hWnd) {
-    if (!IsWindowVisible(hWnd) || IsIconic(hWnd)) return;
-    if (!MacGenieShouldAnimate(hWnd)) return;
+    if (!MacGenieCanAnimateMinimize(hWnd)) return;
     MacGenieSetDwmTransitions(hWnd, FALSE);
     StartMacGenieAnim(hWnd, FALSE, GetWindowLongPtrW(hWnd, GWL_EXSTYLE));
 }
@@ -2302,6 +2167,14 @@ BOOL Wh_ModInit() {
                                    reinterpret_cast<void**>(&g_d2dFactory));
     if (FAILED(hr)) g_d2dFactory = nullptr;
 
+    // Load undocumented GetWindowMinimizeRect (user32): returns the shell's own
+    // minimize-target rect (the taskbar button). Available on all supported
+    // Windows versions. Non-fatal if missing — falls back to cursor/registry.
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+    if (hUser32) {
+        pGetWindowMinimizeRect = (GetWindowMinimizeRect_t)GetProcAddress(hUser32, "GetWindowMinimizeRect");
+    }
+
     Wh_SetFunctionHook((void*)DefWindowProcW, (void*)DefWindowProcW_Hook, (void**)&DefWindowProcW_Original);
     Wh_SetFunctionHook((void*)ShowWindow, (void*)ShowWindow_Hook, (void**)&ShowWindow_Original);
     Wh_SetFunctionHook((void*)ShowWindowAsync, (void*)ShowWindowAsync_Hook, (void**)&ShowWindowAsync_Original);
@@ -2337,6 +2210,5 @@ void Wh_ModUninit() {
     }
     g_SnapshotCache.clear();
     g_IconPositions.clear();
-    g_ProcessIconPositions.clear();
     g_LaunchSeen.clear();
 }
