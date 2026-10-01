@@ -1,6 +1,6 @@
 // ==WindhawkMod==
 // @id                dark-menus
-// @version           1.4.2
+// @version           1.5
 // @author            Mgg Sk
 // @github            https://github.com/MGGSK
 // @include           *
@@ -33,7 +33,7 @@ Enables dark mode for all win32 menus to create a consistent UI. Requires Window
 ### Dark menus: [Repository](https://github.com/MGGSK/DarkMenus) [Issues](https://github.com/MGGSK/DarkMenus/issues) [Discussions](https://github.com/MGGSK/DarkMenus/discussions)
 ### Windhawk mods: [Repository](https://github.com/ramensoftware/windhawk-mods) [Issues](https://github.com/ramensoftware/windhawk-mods/issues) [Discussions](https://github.com/ramensoftware/windhawk-mods/discussions)
 
-## Credits: [win32-darkmode](https://github.com/adzm/win32-darkmode), [notepad++](https://github.com/notepad-plus-plus/notepad-plus-plus) 
+## Credits: [win32-darkmode](https://github.com/adzm/win32-darkmode), [notepad++](https://github.com/notepad-plus-plus/notepad-plus-plus), [icon-resource-redirect](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/icon-resource-redirect.wh.cpp)
 */
 // ==/WindhawkModReadme==
 
@@ -58,6 +58,13 @@ Enables dark mode for all win32 menus to create a consistent UI. Requires Window
 
   $description:de-DE: Behebt Menü Farben wenn sie TranslucentFlyouts verwenden. 
 
+- ThemeClassicMenus: false
+  $name: Dark mode for classic themed menus
+  $description: This applies to all programs, not just the included programs.
+
+  $name:de-DE: Dunkler Modus für Klassische Menüs
+  $description:de-DE: Dies ist für alle Programe, nicht nur die eingeschlossenen programe.
+
 */
 // ==/WindhawkModSettings==
 
@@ -72,16 +79,21 @@ Enables dark mode for all win32 menus to create a consistent UI. Requires Window
 constexpr COLORREF DARK_MENU_COLOR = 0x2C2C2C;
 constexpr COLORREF DARK_MENU_ITEM_FOREGROUND = 0xFFFFFF;
 constexpr COLORREF DARK_MENU_ITEM_FOREGROUND_DISABLED = 0xAAAAAA;
+constexpr COLORREF DARK_MENU_ITEM_BACKGROUND_HOVER_COLOR = 0x353535;
 
 const HBRUSH DARK_CONTROL_BRUSH = CreateSolidBrush(0x262626);
 const HBRUSH DARK_MENU_BRUSH = CreateSolidBrush(DARK_MENU_COLOR);
 const HBRUSH DARK_MENUBAR_SEPARATOR_BRUSH = CreateSolidBrush(0x222222);
-const HBRUSH DARK_MENU_ITEM_BACKGROUND_HOVER = CreateSolidBrush(0x353535);
+const HBRUSH DARK_MENU_ITEM_BACKGROUND_HOVER = CreateSolidBrush(DARK_MENU_ITEM_BACKGROUND_HOVER_COLOR);
 const HBRUSH DARK_MENU_ITEM_BACKGROUND_SELECTED = CreateSolidBrush(0x454545);
+
+constexpr INT SYS_COLOR_IDS[] = { COLOR_MENU, COLOR_MENUBAR, COLOR_MENUTEXT, COLOR_MENUHILIGHT };
 
 thread_local HTHEME g_menuBarTheme = nullptr;
 HFONT g_iconFont = nullptr;
 HMODULE g_hUxtheme = nullptr;
+bool g_isDesktopWindow = false;
+COLORREF g_oldSysColors[ARRAYSIZE(SYS_COLOR_IDS)];
 
 #define WM_UAHDRAWMENU         0x91
 #define WM_UAHDRAWMENUITEM     0x92
@@ -331,12 +343,13 @@ ShouldAppsUseDarkMode_T ShouldAppsUseDarkMode = nullptr;
 
 AppMode g_currentAppMode;
 
-#define IS_DARK_MODE(hWnd) ((g_currentAppMode == AppMode::ForceDark || (g_currentAppMode == AppMode::AllowDark && ShouldAppsUseDarkMode())) && GetMenu(hWnd))
+#define IS_DARK_MODE (g_currentAppMode == AppMode::ForceDark || (g_currentAppMode == AppMode::AllowDark && ShouldAppsUseDarkMode()))
+#define IS_DARK_MODE_WINDOW(hWnd) (IS_DARK_MODE && GetMenu(hWnd))
 
 decltype(&DefFrameProcW) DefFrameProcW_Original;
 LRESULT CALLBACK DefFrameProcW_Hook(HWND hWnd, HWND hMdiClient, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    if(!IS_DARK_MODE(hWnd))
+    if(!IS_DARK_MODE_WINDOW(hWnd))
         return DefFrameProcW_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
     
     LRESULT lResult = 0;
@@ -356,7 +369,7 @@ LRESULT CALLBACK DefFrameProcW_Hook(HWND hWnd, HWND hMdiClient, UINT uMsg, WPARA
 decltype(&DefWindowProcW) DefWindowProcW_Original;
 LRESULT CALLBACK DefWindowProcW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    if(!IS_DARK_MODE(hWnd))
+    if(!IS_DARK_MODE_WINDOW(hWnd))
         return DefWindowProcW_Original(hWnd, uMsg, wParam, lParam);
 
     LRESULT lResult = 0;
@@ -376,7 +389,7 @@ LRESULT CALLBACK DefWindowProcW_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 decltype(&DefFrameProcA) DefFrameProcA_Original;
 LRESULT CALLBACK DefFrameProcA_Hook(HWND hWnd, HWND hMdiClient, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    if(!IS_DARK_MODE(hWnd))
+    if(!IS_DARK_MODE_WINDOW(hWnd))
         return DefFrameProcA_Original(hWnd, hMdiClient, uMsg, wParam, lParam);
 
     LRESULT lResult = 0;
@@ -396,7 +409,7 @@ LRESULT CALLBACK DefFrameProcA_Hook(HWND hWnd, HWND hMdiClient, UINT uMsg, WPARA
 decltype(&DefWindowProcA) DefWindowProcA_Original;
 LRESULT CALLBACK DefWindowProcA_Hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    if(!IS_DARK_MODE(hWnd))
+    if(!IS_DARK_MODE_WINDOW(hWnd))
         return DefWindowProcA_Original(hWnd, uMsg, wParam, lParam);
 
     LRESULT lResult = 0;
@@ -433,6 +446,38 @@ WINBOOL WINAPI SetMenuInfo_Hook(HMENU hMenu, LPCMENUINFO lpInfo)
     return SetMenuInfo_Original(hMenu, infoCopy);
 }
 
+decltype(&CreateMenu) CreateMenu_Original;
+HMENU WINAPI CreateMenu_Hook()
+{
+    HMENU hMenu = CreateMenu_Original();
+    
+    if(IS_DARK_MODE)
+    {
+        MENUINFO menuInfo{sizeof(menuInfo), MIM_BACKGROUND};
+        menuInfo.hbrBack = DARK_MENU_BRUSH;
+        if(!SetMenuInfo_Original(hMenu, &menuInfo))
+            Wh_Log(L"SetMenuInfo failed!"); 
+    }
+
+    return hMenu;
+}
+
+decltype(&CreatePopupMenu) CreatePopupMenu_Original;
+HMENU WINAPI CreatePopupMenu_Hook()
+{
+    HMENU hMenu = CreatePopupMenu_Original();
+    
+    if(IS_DARK_MODE)
+    {
+        MENUINFO menuInfo{sizeof(menuInfo), MIM_BACKGROUND};
+        menuInfo.hbrBack = DARK_MENU_BRUSH;
+        if(!SetMenuInfo_Original(hMenu, &menuInfo))
+            Wh_Log(L"SetMenuInfo failed!"); 
+    }
+
+    return hMenu;
+}
+
 //Applies the theme to all menus.
 void ApplyTheme(const AppMode inputTheme = AppMode::Max)
 {
@@ -460,12 +505,78 @@ void ApplyTheme(const AppMode inputTheme = AppMode::Max)
     g_currentAppMode = theme;
 }
 
+void EnableDarkClassicTheme()
+{
+    for(int i = 0; i < (int)ARRAYSIZE(SYS_COLOR_IDS); i++)
+        g_oldSysColors[i] = GetSysColor(SYS_COLOR_IDS[i]);
+
+    COLORREF values[] = { DARK_MENU_COLOR, DARK_MENU_COLOR, DARK_MENU_ITEM_FOREGROUND, DARK_MENU_ITEM_BACKGROUND_HOVER_COLOR };
+    if(!SetSysColors(ARRAYSIZE(SYS_COLOR_IDS), SYS_COLOR_IDS, values))
+        Wh_Log(L"Failed to set the system colors!");
+}
+
+void DisableDarkClassicTheme()
+{
+    if(!SetSysColors(ARRAYSIZE(SYS_COLOR_IDS), SYS_COLOR_IDS, g_oldSysColors))
+        Wh_Log(L"Failed to set the system colors!");
+}
+
 //Updates the theme of the window when the settings change.
 void Wh_ModSettingsChanged()
 {
     Wh_Log(L"Settings changed");
     ApplyTheme();
+
+    if(g_isDesktopWindow)
+    {
+        if(Wh_GetIntSetting(L"ThemeClassicMenus"))
+            EnableDarkClassicTheme();
+        else
+            DisableDarkClassicTheme();
+    }
 }
+
+#pragma region CodeFromIconResourceRedirect
+
+bool IsExplorerProcess() 
+{
+    WCHAR path[MAX_PATH];
+    if (!GetWindowsDirectoryW(path, ARRAYSIZE(path)))
+    {
+        Wh_Log(L"GetWindowsDirectory failed");
+        return false;
+    }
+
+    wcscat_s(path, MAX_PATH, L"\\explorer.exe");
+
+    return GetModuleHandleW(path) == GetModuleHandleW(nullptr);
+}
+
+HWND FindCurrentProcessTaskbarWnd() 
+{
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) WINAPI -> BOOL
+        {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassNameW(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0)
+            {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
+}
+
+#pragma endregion CodeFromIconResourceRedirect
 
 //Import functions
 BOOL Wh_ModInit()
@@ -478,6 +589,14 @@ BOOL Wh_ModInit()
 
     Wh_Log(L"Init");
 
+    if(IsExplorerProcess() && FindCurrentProcessTaskbarWnd()) //Only set the sys colors once
+    {
+        g_isDesktopWindow = true;
+
+        if(Wh_GetIntSetting(L"ThemeClassicMenus"))
+            EnableDarkClassicTheme();
+    }
+
     if(!WindhawkUtils::SetFunctionHook(DefWindowProcW, DefWindowProcW_Hook, &DefWindowProcW_Original) ||
         !WindhawkUtils::SetFunctionHook(DefWindowProcA, DefWindowProcA_Hook, &DefWindowProcA_Original))
     {
@@ -489,6 +608,13 @@ BOOL Wh_ModInit()
         !WindhawkUtils::SetFunctionHook(DefFrameProcA, DefFrameProcA_Hook, &DefFrameProcA_Original))
     {
         Wh_Log(L"Failed to hook DefFrameProc!");
+        return FALSE;
+    }
+
+    if(!WindhawkUtils::SetFunctionHook(CreateMenu, CreateMenu_Hook, &CreateMenu_Original) ||
+        !WindhawkUtils::SetFunctionHook(CreatePopupMenu, CreatePopupMenu_Hook, &CreatePopupMenu_Original))
+    {
+        Wh_Log(L"Failed to hook CreateMenu!");
         return FALSE;
     }
 
@@ -521,6 +647,9 @@ void Wh_ModUninit()
 {
     Wh_Log(L"Restoring the default theme.");
     ApplyTheme(AppMode::Default);
+
+    if(g_isDesktopWindow && Wh_GetIntSetting(L"ThemeClassicMenus"))
+        DisableDarkClassicTheme();
 
     if(!IsSystemCallDisableMitigationEnabled())
     {
