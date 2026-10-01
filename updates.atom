@@ -2,12 +2,41 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-09-30T22:25:58.000Z</updated>
+    <updated>2026-10-01T09:04:03.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar multi-tray 1.3.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-multi-tray#a7cd9de73db60e1d68de5db6008eae71c09eed91</id>
+        <link href="https://windhawk.net/mods/taskbar-multi-tray"/>
+        <updated>2026-10-01T09:04:03.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="bugfixesimprovements">Bug fixes &amp; improvements</h3>
+<ul>
+<li>Graphical issues shouldn't be present anymore, including :</li>
+<li>Empty space(s) on some monitors</li>
+<li>Light flickering on tray icons right-click</li>
+<li>Hidden tray icon menu spawning with the wrong position</li>
+<li>Right click menus should appear on the correct monitor</li>
+<li>Right-clicking a non-hidden tray icon on another monitor no longer requires an extra click (&amp; doesn't refresh the chevron menu)</li>
+<li>Move icons anywhere ! No need to move them back to the primary screen's area to drop them, works cross-screen too !</li>
+<li>As a consequence, the hidden tray flyout no longer teleports when there's a line added/removed</li>
+<li>Some apps with custom right-click menus (like Raycast) no longer appear on the wrong screen, although they might have positioning/scaling issues. This is out of scope for this mod &amp; requires the app itself to fix this.</li>
+<li>Better logs</li>
+</ul>
+<h3 id="issuesremaining">Issues remaining</h3>
+<ul>
+<li>Support for the new taskbar layouts in Windows 11 (left/right/top) has NOT been tested, tho nice if it works</li>
+<li>Extra items like emoji/language selector aren't cloned YET (progress is underway)</li>
+<li>As always compatibility with other mods that change the taskbar is NOT guaranteed</li>
+</ul>]]></content>
+        <author>
+            <name>EDM115</name>
+            <uri>https://github.com/EDM115</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.1.4]]></title>
         <id>https://windhawk.net/mods/taskbar-multirow#ef8d22d9212973de5786625aa010047192accd83</id>
@@ -643,56 +672,6 @@ runs first wins, so the <em>Folders</em> and <em>Shortcuts</em> settings may hav
         <author>
             <name>Kitsune</name>
             <uri>https://github.com/AromaKitsune</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Window Cards 1.3]]></title>
-        <id>https://windhawk.net/mods/desktop-window-cards#651e01908512da9fa4935a9ef2859741c7e69240</id>
-        <link href="https://windhawk.net/mods/desktop-window-cards"/>
-        <updated>2026-09-28T15:01:18.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopwindowcards">Desktop Window Cards</h1>
-<p>When you minimize a window, a copy of it "falls" onto the desktop: it drops
-away, tilts back, loses its shadow and dims, until it lands as a small card
-underneath all other windows.
-<img src="https://i.imgur.com/jo794nO.gif" alt="Showcase" />
-<a href="https://i.imgur.com/YmIrKAd.mp4">Watch the full-quality video</a></p>
-<ul>
-<li><strong>Click the thumbnail:</strong> the card rises back to the window's original
-position and the real window is restored in its place.</li>
-<li><strong>Top bar:</strong> drag it to move the card around the desktop. With the option
-enabled, the position is remembered: the next time you minimize that window,
-its card lands where you left it.</li>
-<li><strong>X button:</strong> closes the window (or only removes the card, depending on the
-settings).</li>
-<li><strong>Smooth reveal:</strong> on restore, a snapshot of the card stays on top of the
-window while Windows rebuilds its transparency effects (Mica/Acrylic), then
-fades out to reveal the real window, hiding the initial flicker.</li>
-</ul>
-<p>Cards use DWM thumbnails, the same ones used by taskbar previews. The content
-stays live as long as the app keeps drawing while minimized; many apps stop
-doing so and show their last frame.</p>
-<p>The mod runs in a dedicated Windhawk tool process. Cards remain available
-across Explorer restarts.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Native Windows animation: in "Off only when restoring from a card" mode
-(default), Windows animations stay enabled (maximize, snap and other mods
-relying on them keep working) and are switched off only for the moment a
-card restores its window. When minimizing, Windows' own animation towards
-the taskbar therefore remains visible as well. "Always off" disables it while
-the mod is active: no double animation, but no maximize animation either.
-These changes only apply to the current session.</li>
-<li>If the mod's process ends unexpectedly while the native animation is
-switched off, the mod switches it back on the next time it starts.</li>
-<li>Cards don't follow virtual desktops.</li>
-<li>Windows running as administrator can be shown as cards, but restoring or
-closing them from a card may fall back to a plain restore, since a
-non-elevated process can't send them commands.</li>
-<li>Apps that hide to the notification area when minimized don't get a card.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>
