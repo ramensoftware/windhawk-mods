@@ -1594,19 +1594,19 @@ BOOL Wh_ModInit() {
             }
             // Referencing the imported function also ensures uxtheme stays
             // loaded throughout the lifetime of this mod.
-            if (!WindhawkUtils::SetFunctionHook((void*)DrawThemeBackground,
-                                    (void*)HookedDrawThemeBackground,
-                                    (void**)&DrawThemeBackground_Orig)) {
+            if (!WindhawkUtils::SetFunctionHook(DrawThemeBackground,
+                                    HookedDrawThemeBackground,
+                                    &DrawThemeBackground_Orig)) {
                 Wh_Log(L"Failed to hook DrawThemeBackground");
                 ShutdownGdiPlus();
                 return FALSE;
             }
         }
         if (g_enableTextCustomization) {
-            if (!WindhawkUtils::SetFunctionHook((void*)DrawTextW, (void*)DrawTextW_Hook,
-                                    (void**)&DrawTextW_Orig) ||
-                !WindhawkUtils::SetFunctionHook((void*)DrawTextExW, (void*)DrawTextExW_Hook,
-                                    (void**)&DrawTextExW_Orig)) {
+            if (!WindhawkUtils::SetFunctionHook(DrawTextW, DrawTextW_Hook,
+                                    &DrawTextW_Orig) ||
+                !WindhawkUtils::SetFunctionHook(DrawTextExW, DrawTextExW_Hook,
+                                    &DrawTextExW_Orig)) {
                 Wh_Log(L"Failed to hook disk text drawing");
                 ShutdownGdiPlus();
                 return FALSE;
