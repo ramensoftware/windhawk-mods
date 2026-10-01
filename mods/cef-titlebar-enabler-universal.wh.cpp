@@ -111,7 +111,7 @@
     * Only available in mod version 1.6 and above; missing in older versions
     * Enables or disables transparent mode. Only works when the transparent rendering option is enabled, and native frames are disabled.
 * `setBackdrop(string: type)`
-    * Sets the backdrop type of the main window. Only works on Windows 11 and requires native frames to be enabled.
+    * Sets the backdrop type of the main window. Only supported on Windows 11.
     * `type` can be one of the following values:
         * `"none"`: No backdrop (Only supported on mod version 1.6 and above; will throw an exception on older versions)
         * `"mica"`: Mica backdrop
