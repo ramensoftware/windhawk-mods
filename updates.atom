@@ -2,12 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-01T11:01:13.000Z</updated>
+    <updated>2026-10-01T13:03:27.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Window Cards 1.5]]></title>
+        <id>https://windhawk.net/mods/desktop-window-cards#e720a2611fdcaad46cf05cbe608b24526a74493e</id>
+        <link href="https://windhawk.net/mods/desktop-window-cards"/>
+        <updated>2026-10-01T13:03:27.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>grid layout </li>
+<li>virtual desktop support</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Desktop Audio Visualizer Plus 1.1.0]]></title>
+        <id>https://windhawk.net/mods/neiz-supersmile-audio-visualizer#d8d332cac51b2112390617ea31229fd76fb7df20</id>
+        <link href="https://windhawk.net/mods/neiz-supersmile-audio-visualizer"/>
+        <updated>2026-10-01T13:03:23.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Replaced standalone EQ popup with a full Media &amp; EQ overlay featuring playback controls, seek bar, and scrollable interactive lyrics.</li>
+<li>Added support for up to 12 custom EQ presets with responsive layout and active-preset auto-saving.</li>
+<li>Popup positioning with aspect-ratio placement storage and bounds clamping.</li>
+<li>Reworked "Selected applications" mode to capture and mix audio from multiple target processes simultaneously.</li>
+<li>Added automatic process tracking, device-invalidation recovery, and state resets when switching audio modes.</li>
+<li>Upgraded album color extraction to a perceptual OKLab k-means pipeline with better hue diversity and deterministic results.</li>
+<li>Optimized blur rendering with a sliding-sum algorithm and added per-overlay blur/artwork caching.</li>
+<li>Added multi-monitor selection support and dynamic bar width based on cursor distance.</li>
+<li>Added Windows 11 24H2+ desktop placement modes (behind/above icons).</li>
+<li>Added native Windows 10 support with tray icon integration and automatic tray-recreation recovery.</li>
+<li>Added local <code>.lrc</code> lyrics file matching (<code>Artist - Title.lrc</code>).</li>
+<li>Added smart per-monitor throttling (drops to 1 FPS during fullscreen applications without changing global settings).</li>
+</ul>]]></content>
+        <author>
+            <name>NeiZ</name>
+            <uri>https://github.com/NeiZqwe</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Windows Shadows Tuner 0.9.4]]></title>
         <id>https://windhawk.net/mods/native-shadow-tuner#9a06ff2e9d46c9745918d9b52743e6f2f87077d9</id>
@@ -517,76 +555,6 @@ visible, disable the mod and check the Windhawk log before trying it again.</p>]
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Shake to Find Cursor 1.3]]></title>
-        <id>https://windhawk.net/mods/shake-to-find-cursor#7cad60cca1a0a2ad2dd405bf9d4a4bea65a941bf</id>
-        <link href="https://windhawk.net/mods/shake-to-find-cursor"/>
-        <updated>2026-09-28T20:01:00.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="shaketofindcursor">Shake to Find Cursor</h1>
-<p><img src="https://raw.githubusercontent.com/Darius-Varnelis/shake-to-find-cursor/main/shake-to-find.gif" alt="Shake to Find Cursor demo" /></p>
-<p>Shake the mouse (or swipe back and forth on the touchpad) and the cursor grows
-so you can spot it instantly. Stop shaking and it shrinks back.</p>
-<h2 id="howitworks">How it works</h2>
-<ul>
-<li>Runs as a <em>tool mod</em> in its own background process, so it never touches
-Explorer.</li>
-<li>Listens to raw mouse input: no polling, no CPU use while the mouse is idle,
-and it can't add input lag the way a low-level mouse hook can.</li>
-<li>A shake means the cursor travelled a long way (<strong>Shake distance</strong>) while
-staying inside a small area (<strong>Back-and-forth ratio</strong>) within the
-<strong>Time window</strong>.</li>
-<li>Enlarging replaces the real system cursors with bigger versions loaded from
-your current cursor scheme's files at the target size. The big cursor <em>is</em>
-the pointer: no overlay window, no trailing, and it keeps your cursor
-style and colour. The normal cursors are restored the same way Control Panel
-applies a scheme.</li>
-<li>Keep shaking and the cursor keeps growing, slower and slower: each further
-step of the same size takes twice as long as the previous one. By default
-it stops at the height of your screen, which takes hours of shaking.</li>
-<li>The grow and shrink animations are time-based and run at your display's
-refresh rate. While animating, only the cursor that's on screen is resized,
-which keeps every frame cheap.</li>
-</ul>
-<h2 id="vsmacosmagnifyingcursor">vs. macOS magnifying cursor</h2>
-<p>The catalog already has <a href="https://windhawk.net/mods/mac-magnifying-cursor">macOS magnifying cursor</a>,
-which does something similar but works differently: it hides the system
-cursors and draws a scaled copy in its own overlay window, polling the cursor
-position every 16-40 ms. This mod instead replaces the real system cursors
-with bigger renders of your own cursor scheme, driven by raw input rather
-than polling. In practice that means no overlay lag or trailing, the enlarged
-cursor keeps your actual cursor style and colour, and there's no CPU cost
-while the mouse is idle. Don't enable both at once - they'll fight over the
-system cursors.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Apps that draw their own custom cursor keep their small one.</li>
-<li>Cursor files contain images of up to 256 px, so past that the cursor is
-upscaled and gets softer.</li>
-<li>If the mod's process is killed while the cursor is big, the normal cursors
-are restored the next time the mod starts (re-applying a pointer scheme in
-Mouse Properties also fixes it).</li>
-<li>Raw input may not reach the mod while an elevated window (Task Manager, a
-UAC prompt, an installer) has focus, depending on Windows version. If so, a
-shake over such a window won't be detected until focus moves elsewhere.</li>
-</ul>]]></content>
-        <author>
-            <name>Darius Varnelis</name>
-            <uri>https://github.com/Darius-Varnelis</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[ExplorerFrame and menubar fixes fork 3.1.0]]></title>
-        <id>https://windhawk.net/mods/restore-folder-menubar-25h2#8a375d54f96fe347d9224f6a4154a40d102855e8</id>
-        <link href="https://windhawk.net/mods/restore-folder-menubar-25h2"/>
-        <updated>2026-09-28T18:04:16.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Also hook registry query for greater reliability</li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>
