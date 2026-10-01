@@ -1149,8 +1149,8 @@ const char* search_function_instructions(std::wstring identifier, std::string_vi
 
 typedef uint64_t* __fastcall (*CreateTrackPlayer_t)(
     int64_t trackPlayer,
-    void* a2,
-    void* a3,
+    uint64_t* a2,
+    uint64_t* a3,
     double speed,
     unsigned int a5,
     unsigned int a6,
@@ -1235,7 +1235,7 @@ BOOL HookCreateTrackPlayer(char* pbExecutable, BOOL shouldFindSetPlaybackSpeed) 
     }
     if (addr == NULL) return FALSE;
     Wh_Log(L"Hooking CreateTrackPlayer at %p", addr);
-    WindhawkUtils::SetFunctionHook((void*)addr, (void*)CreateTrackPlayer_hook, (void**)&CreateTrackPlayer_original);
+    WindhawkUtils::SetFunctionHook((CreateTrackPlayer_t)addr, CreateTrackPlayer_hook, &CreateTrackPlayer_original);
 
     // This only works on Spotify x64 1.2.45 and newer
     // Don't find SetPlaybackSpeed on a known unsupported version, as finding non-existent instructions will delay startup
@@ -2129,6 +2129,7 @@ int ConnectToNamedPipe() {
     if (hPipe == INVALID_HANDLE_VALUE) {
         int gle = GetLastError();
         Wh_Log(L"CreateFile failed, GLE=%d", gle);
+        CloseHandle(g_stopEvent);
         return gle;
     }
 
@@ -2687,6 +2688,13 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
         if (handler->execute != cancelCosmosRequest_hook) {
             cancelCosmosRequest_original = handler->execute;
             handler->execute = cancelCosmosRequest_hook;
+            // Release handlers that only this mod hold reference
+            for (auto& handler : cancelCosmosRequest_v8handlers) {
+                if (handler->base.has_one_ref(&handler->base)) {
+                    handler->execute = cancelCosmosRequest_original;
+                    handler->base.release(&handler->base);
+                }
+            }
             // These V8 functions are created twice on page load (seems the first one is only used)
             // And it gets called twice whenever the page reloads
             // So save it in a vector and restore all on uninit
@@ -2707,6 +2715,12 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
         if (handler->execute != cancelEsperantoCall_hook) {
             cancelEsperantoCall_original = handler->execute;
             handler->execute = cancelEsperantoCall_hook;
+            for (auto& handler : cancelEsperantoCall_v8handlers) {
+                if (handler->base.has_one_ref(&handler->base)) {
+                    handler->execute = cancelEsperantoCall_hook;
+                    handler->base.release(&handler->base);
+                }
+            }
             cancelEsperantoCall_v8handlers.push_back(handler);
             handler->base.add_ref(&handler->base);
         }
@@ -2724,6 +2738,12 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
         if (handler->execute != _getSpotifyModule_hook) {
             _getSpotifyModule_original = handler->execute;
             handler->execute = _getSpotifyModule_hook;
+            for (auto& handler : _getSpotifyModule_v8handlers) {
+                if (handler->base.has_one_ref(&handler->base)) {
+                    handler->execute = _getSpotifyModule_hook;
+                    handler->base.release(&handler->base);
+                }
+            }
             _getSpotifyModule_v8handlers.push_back(handler);
             handler->base.add_ref(&handler->base);
         }
@@ -3033,18 +3053,29 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
-// The mod is being unloaded, free all allocated resources.
-void Wh_ModUninit() {
-    Wh_Log(L"Uninit");
-
+void Wh_ModBeforeUninit() {
+    Wh_Log(L"BeforeUninit");
+    
     g_shouldClosePipe.store(TRUE);
 
-    SetEvent(g_stopEvent);
+    if (g_stopEvent) {
+        SetEvent(g_stopEvent);
+    }
+
     if (g_pipeThread && g_pipeThread->joinable()) {
         g_pipeThread->join();
     }
     g_pipeThread.reset();
-    CloseHandle(g_stopEvent);
+
+    if (g_stopEvent) {
+        CloseHandle(g_stopEvent);
+        g_stopEvent = NULL;
+    }
+}
+
+// The mod is being unloaded, free all allocated resources.
+void Wh_ModUninit() {
+    Wh_Log(L"Uninit");
 
     if (g_isSpotifyRenderer) {
         // Note: sandboxed renderers won't even respond to the uninit request and keep loaded until the renderer exits
