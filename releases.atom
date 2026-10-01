@@ -2,12 +2,36 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-01T16:01:22.000Z</updated>
+    <updated>2026-10-01T19:00:04.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Independent taskbar per monitor 1.5.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-independent-per-monitor#004342fdf226b83a905abffd4a880249e2c47679</id>
+        <link href="https://windhawk.net/mods/taskbar-independent-per-monitor"/>
+        <updated>2026-10-01T19:00:04.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="independenttaskbarpermonitor">Independent taskbar per monitor</h1>
+<p>Each taskbar behaves like its own main taskbar.</p>
+<p><img src="https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ea374053f26cfbfe3865461bdd4adf86dce6b782/images/windows-per-monitor.png" alt="Each taskbar shows only the windows of its own monitor" /><br />
+<em>Each taskbar shows only the windows of its own monitor</em></p>
+<p><img src="https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ea374053f26cfbfe3865461bdd4adf86dce6b782/images/pins-per-taskbar.png" alt="Separate pinned items for each taskbar" /><br />
+<em>Separate pinned items for each taskbar</em></p>
+<ul>
+<li>Pin/unpin from the jump list applies to that taskbar only.</li>
+<li>Pin <em>Properties</em> can differ per taskbar.</li>
+<li>Clicking the pin of a running app brings its window to the front (Shift+click
+or middle-click starts a new instance).</li>
+</ul>
+<p>Requires Windows 11 and <em>Show my taskbar on all displays</em>. Tested with <em>Combine
+taskbar buttons: Never</em>. Not compatible with <em>Disable grouping on the taskbar</em>.</p>]]></content>
+        <author>
+            <name>2ndSky95</name>
+            <uri>https://github.com/2ndSky95</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Cursor Override 1.0.0]]></title>
         <id>https://windhawk.net/mods/cursor-override#eee6eb7fba4dc744cef023877595ef32736d411c</id>
@@ -1138,46 +1162,6 @@ inspiró el objetivo de recolorear la interfaz nativa sin reemplazar archivos.</
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Quick Explorer Switcher 1.0]]></title>
-        <id>https://windhawk.net/mods/quick-explorer-switcher#ee3bfa55c123e8023d52ae73d054b8ac3dd395e0</id>
-        <link href="https://windhawk.net/mods/quick-explorer-switcher"/>
-        <updated>2026-09-26T10:02:35.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="quickexplorerswitcher">Quick Explorer Switcher</h1>
-<p>When a program shows an <strong>Open</strong>, <strong>Save As</strong> or <strong>Select Folder</strong> dialog, this
-mod adds the folders currently open in File Explorer (up to 3) to the bottom of
-the dialog's navigation pane, most recently used first. One click and you're
-there.</p>
-<p>Optionally, the dialog can open directly in the most recently used File
-Explorer folder.</p>
-<p><img src="https://i.imgur.com/3E1dyV3.jpeg" alt="Showcase" /></p>
-<h2 id="details">Details</h2>
-<ul>
-<li>Folders are ordered by window Z-order, so the Explorer window you used last
-comes first.</li>
-<li>With Windows 11 File Explorer tabs, the active tab of each window takes
-precedence over the inactive ones.</li>
-<li>Duplicate folders are shown only once.</li>
-<li>Virtual locations such as "Home" or "This PC" are skipped by default (this
-can be changed in the settings).</li>
-</ul>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li>Works with the standard Windows file dialog (Vista and later). Not affected:
-programs that draw their own dialogs, and legacy-style dialogs (programs
-that customize <code>GetOpenFileName</code>/<code>GetSaveFileName</code> with a hook procedure or
-a dialog template get the older dialog, which has no navigation pane).</li>
-<li>A dialog that is already open when the mod is enabled won't show the
-suggestions; they appear the next time a dialog is opened.</li>
-</ul>
-<p>If you don't want the mod in a specific program (for example, a browser that
-already remembers its download folder), exclude it in the mod's <strong>Advanced</strong>
-tab.</p>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
         </author>
     </entry>
 </feed>

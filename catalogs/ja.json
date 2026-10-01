@@ -13075,6 +13075,34 @@
         "version": "1.3.10"
       }
     },
+    "taskbar-independent-per-monitor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790881204000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790881204000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "2ndSky95",
+        "compilerOptions": "-lole32 -loleaut32 -lshell32 -luuid -lpsapi -lruntimeobject",
+        "description": "Each taskbar shows only the windows of its own monitor and has its own pinned items (Windows 11 only)",
+        "github": "https://github.com/2ndSky95",
+        "include": [
+          "explorer.exe",
+          "sihost.exe"
+        ],
+        "license": "MIT",
+        "name": "Independent taskbar per monitor",
+        "version": "1.5.0"
+      }
+    },
     "taskbar-jump-list-on-cursor-pos": {
       "details": {
         "defaultSorting": 4050,
