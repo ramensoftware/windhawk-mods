@@ -31,6 +31,15 @@ and the taskbar context menu follows the content.
 
 Only the taskbar itself is affected.
 
+![Taskbar without the margin](https://raw.githubusercontent.com/loliri/windhawk-taskbar-left-margin/main/images/before.png) \
+_Before_
+
+![Taskbar with a left margin](https://raw.githubusercontent.com/loliri/windhawk-taskbar-left-margin/main/images/after.png) \
+_After_
+
+![Taskbar context menu](https://raw.githubusercontent.com/loliri/windhawk-taskbar-left-margin/main/images/jumplist.png) \
+_The context menu follows the content_
+
 ## Notes
 
 Requires Windows 11.
