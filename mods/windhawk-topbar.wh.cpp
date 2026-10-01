@@ -282,6 +282,14 @@ desktop are ignored.
 #define TOPBAR_HAS_RADIOS 0
 #endif
 
+#if __has_include(<winrt/Windows.Networking.NetworkOperators.h>)
+#define TOPBAR_HAS_NETWORK_OPERATORS 1
+#include <winrt/Windows.Networking.NetworkOperators.h>
+#include <winrt/Windows.Networking.Connectivity.h>
+#else
+#define TOPBAR_HAS_NETWORK_OPERATORS 0
+#endif
+
 #if __has_include(<winrt/Windows.Devices.Bluetooth.h>)
 #define TOPBAR_HAS_BLUETOOTH_LE 1
 #include <winrt/Windows.Devices.Bluetooth.h>
@@ -1843,7 +1851,6 @@ static const std::map<std::wstring, int>& IntDefaults() {
         { L"taskIconSize", 20 },
         { L"showStartButton", 1 },
         { L"showSearchButton", 1 },
-        { L"showControlCenterButton", 1 },
         { L"showDisplayButton", 1 },
         { L"showSoundButton", 1 },
         { L"showWifiButton", 1 },
@@ -3393,8 +3400,6 @@ constexpr PCWSTR kMusicNoteFill =
 constexpr PCWSTR kControlCenterStroke =
     L"M4.5 8 L19.5 8 M4.5 16 L19.5 16 "
     L"M9.5 5.5 L9.5 10.5 M15 13.5 L15 18.5";
-
-constexpr PCWSTR kTrayChevron = L"M7 10 L12 15 L17 10";
 
 }  // namespace icons
 // Windows 11 Start logo — four rounded squares drawn as a single Path so
@@ -8099,7 +8104,6 @@ void ToggleFlyout(wuxc::Flyout const& flyout, wuxc::Button const& button) {
 [[clang::no_destroy]] wuxc::Button g_controlCenterButton{nullptr};
 [[clang::no_destroy]] wuxc::Flyout g_controlCenterFlyout{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_controlCenterPanel{nullptr};
-static bool g_ccCustomizeMode = false;
 [[clang::no_destroy]] wuxc::StackPanel g_weatherPanel{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_recycleBinPanel{nullptr};
 // Set while a panel is writing its own controls, so the ValueChanged /Toggled
@@ -11813,19 +11817,66 @@ BatteryInfo GetBatteryInfo() {
     }
 
     info.powerSaving = false;
-    HKEY key = nullptr;
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Power\\SystemSettings",
-                     0, KEY_READ, &key) == ERROR_SUCCESS) {
-        DWORD value = 0, size = sizeof(value);
-        if (RegQueryValueEx(key, L"PowerSavingMode", nullptr, nullptr, (BYTE*)&value, &size) == ERROR_SUCCESS)
-            info.powerSaving = value != 0;
-        RegCloseKey(key);
+    {
+        HKEY key = nullptr;
+        if (RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+                         L"SYSTEM\\CurrentControlSet\\Control\\Power",
+                         0, KEY_READ, &key) == ERROR_SUCCESS) {
+            DWORD value = 0, size = sizeof(value);
+            if (RegQueryValueEx(key, L"EcoModeState", nullptr, nullptr,
+                                reinterpret_cast<BYTE*>(&value),
+                                &size) == ERROR_SUCCESS) {
+                info.powerSaving = value != 0;
+            }
+            RegCloseKey(key);
+        }
     }
 
     if (info.present) {
         info.health = QueryBatteryHealth();
     }
     return info;
+}
+
+std::mutex g_nightLightCoalesceMutex;
+int g_nightLightPendingValue = -1;
+bool g_nightLightWorkerRunning = false;
+std::atomic<int> g_nightLightCachedState{-1};
+
+void SetNightLightState(bool enable) {
+    g_nightLightCachedState.store(enable ? 1 : 0);
+    {
+        std::lock_guard<std::mutex> lock(g_nightLightCoalesceMutex);
+        g_nightLightPendingValue = enable ? 1 : 0;
+        if (g_nightLightWorkerRunning) return;
+        g_nightLightWorkerRunning = true;
+    }
+    RunInBackground([] {
+        for (;;) {
+            int v;
+            {
+                std::lock_guard<std::mutex> lock(g_nightLightCoalesceMutex);
+                if (g_nightLightPendingValue < 0) {
+                    g_nightLightWorkerRunning = false;
+                    return;
+                }
+                v = g_nightLightPendingValue;
+                g_nightLightPendingValue = -1;
+            }
+            try { nightlight::Set(v != 0); } catch (...) {}
+        }
+    });
+}
+
+bool GetNightLightState() {
+    int v = g_nightLightCachedState.load();
+    if (v < 0) {
+        bool actual = false;
+        try { actual = nightlight::Get(); } catch (...) {}
+        v = actual ? 1 : 0;
+        g_nightLightCachedState.store(v);
+    }
+    return v != 0;
 }
 
 void UpdateBatteryButton() {
@@ -13082,20 +13133,14 @@ namespace nightlight {
             Wh_Log(L"NightLight: RegSetValueExW failed: %u", GetLastError());
         }
         RegCloseKey(key);
-        if (ok) {
-            DWORD_PTR r = 0;
-            SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0,
-                                reinterpret_cast<LPARAM>(L"ImmersiveColorSet"),
-                                SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &r);
-            SHChangeNotify(0x08000000, 0x0000, nullptr, nullptr);
-        }
         return ok;
     }
 }
 
 namespace ccd {
     inline std::vector<std::wstring> AllItems() {
-        return {L"WiFi", L"Bluetooth", L"NightLight", L"DarkMode",
+        return {L"WiFi", L"Bluetooth", L"AirplaneMode", L"MobileHotspot",
+                L"NightLight", L"DarkMode",
                 L"Battery", L"Power", L"Display", L"Sound"};
     }
     inline bool IsSlider(const std::wstring& id) {
@@ -13158,6 +13203,27 @@ void CCRequestFlyoutOpen(const std::wstring& target) {
                             g_bluetoothFlyout.ShowAt(g_bluetoothButton);
                         else if (hasVisibleAnchor(g_controlCenterButton))
                             g_bluetoothFlyout.ShowAt(g_controlCenterButton);
+                    }
+                } else if (g_ccDelayedOpenTarget == L"display") {
+                    if (g_displayFlyout && !g_displayFlyout.IsOpen()) {
+                        if (hasVisibleAnchor(g_displayButton))
+                            g_displayFlyout.ShowAt(g_displayButton);
+                        else if (hasVisibleAnchor(g_controlCenterButton))
+                            g_displayFlyout.ShowAt(g_controlCenterButton);
+                    }
+                } else if (g_ccDelayedOpenTarget == L"sound") {
+                    if (g_soundFlyout && !g_soundFlyout.IsOpen()) {
+                        if (hasVisibleAnchor(g_soundButton))
+                            g_soundFlyout.ShowAt(g_soundButton);
+                        else if (hasVisibleAnchor(g_controlCenterButton))
+                            g_soundFlyout.ShowAt(g_controlCenterButton);
+                    }
+                } else if (g_ccDelayedOpenTarget == L"battery") {
+                    if (g_batteryFlyout && !g_batteryFlyout.IsOpen()) {
+                        if (hasVisibleAnchor(g_batteryButton))
+                            g_batteryFlyout.ShowAt(g_batteryButton);
+                        else if (hasVisibleAnchor(g_controlCenterButton))
+                            g_batteryFlyout.ShowAt(g_controlCenterButton);
                     }
                 }
                 g_ccDelayedOpenTarget.clear();
@@ -13315,22 +13381,29 @@ void PopulateControlCenterPanel_New() {
         btn.Padding(Thickness{8, 0, 10, 0});
         btn.Background(tileBg);
         styleTileButton(btn);
+        auto circle = makeCircle(icon, on);
         wuxc::StackPanel st;
         st.Orientation(wuxc::Orientation::Horizontal);
         st.Spacing(8);
         st.VerticalAlignment(VerticalAlignment::Center);
-        st.Children().Append(makeCircle(icon, on));
+        st.Children().Append(circle);
         st.Children().Append(makeLabels(l, s));
         btn.Content(st);
-        btn.Click([onClick](auto&&, auto&&) {
+        auto onBrush = circleOn;
+        auto offBrush = circleOff;
+        auto stateRef = std::make_shared<bool>(on);
+        btn.Click([onClick, circle, onBrush, offBrush, stateRef](auto&&, auto&&) {
             if (s_ccCustomize) return;
+            *stateRef = !*stateRef;
+            try { circle.Background(*stateRef ? onBrush : offBrush); } catch (...) {}
             if (onClick) onClick();
         });
         return btn;
     };
 
-    auto makeSliderCard = [&](const std::wstring& title, FrameworkElement icon,
-                              int value, std::function<void(int)> onChanged) -> wuxc::Border {
+    auto makeSliderCard = [&](FrameworkElement icon,
+                              int value, std::function<void(int)> onChanged,
+                              std::function<void()> chevronClick = nullptr) -> wuxc::Border {
         auto card = wuxc::Border();
         card.CornerRadius(CornerRadius{kTileRadius, kTileRadius, kTileRadius, kTileRadius});
         card.Background(tileBg);
@@ -13339,7 +13412,43 @@ void PopulateControlCenterPanel_New() {
         card.VerticalAlignment(VerticalAlignment::Stretch);
         wuxc::StackPanel st; 
         st.Spacing(4);
-        st.Children().Append(MakeSliderRow(icon, value, onChanged));
+        FrameworkElement sliderRow = MakeSliderRow(icon, value, onChanged);
+        if (chevronClick) {
+            auto rowGrid = wuxc::Grid();
+            wuxc::ColumnDefinition cc1;
+            cc1.Width(GridLength{1, GridUnitType::Star});
+            wuxc::ColumnDefinition cc2;
+            cc2.Width(GridLength{0, GridUnitType::Auto});
+            rowGrid.ColumnDefinitions().Append(cc1);
+            rowGrid.ColumnDefinitions().Append(cc2);
+            sliderRow.Margin(Thickness{0, 0, 6, 0});
+            wuxc::Grid::SetColumn(sliderRow, 0);
+            rowGrid.Children().Append(sliderRow);
+
+            auto chevronBtn = MakeGhostButton(nullptr, 6);
+            chevronBtn.Width(28);
+            chevronBtn.Height(28);
+            chevronBtn.MinWidth(28);
+            chevronBtn.Padding(Thickness{0, 0, 0, 0});
+            chevronBtn.Background(MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
+            chevronBtn.BorderThickness(Thickness{0, 0, 0, 0});
+            chevronBtn.VerticalAlignment(VerticalAlignment::Center);
+            chevronBtn.HorizontalContentAlignment(HorizontalAlignment::Center);
+            chevronBtn.VerticalContentAlignment(VerticalAlignment::Center);
+            if (auto chev = BuildVectorIcon(nullptr, L"", icons::kChevronRight, 24, 14, 1.8)) {
+                chev.HorizontalAlignment(HorizontalAlignment::Center);
+                chev.VerticalAlignment(VerticalAlignment::Center);
+                chevronBtn.Content(chev);
+            }
+            chevronBtn.Click([chevronClick](auto&&, auto&&) {
+                if (chevronClick) chevronClick();
+            });
+            wuxc::Grid::SetColumn(chevronBtn, 1);
+            rowGrid.Children().Append(chevronBtn);
+            st.Children().Append(rowGrid);
+        } else {
+            st.Children().Append(sliderRow);
+        }
         card.Child(st);
         return card;
     };
@@ -13398,13 +13507,19 @@ void PopulateControlCenterPanel_New() {
                 } catch (...) {} }); });
         }
         if (id == L"NightLight") {
-            bool on = nightlight::Get();
-            auto ic = BuildVectorIcon(nullptr, icons::kMoonFill, L"", 24, 16, 1.7, iconColorFor(on));
-            return makeSimpleTile(ic, L"Night Light", on ? L"On" : L"Off", on,
+            bool on = GetNightLightState();
+            wuxc::FontIcon nlIcon;
+            nlIcon.Glyph(on ? L"\uE708" : L"\uE706");
+            nlIcon.FontSize(16);
+            nlIcon.Foreground(on ? MakeBrush(0xFF, 0, 0, 0)
+                                 : MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+            return makeSimpleTile(nlIcon, L"Night Light", on ? L"On" : L"Off", on,
                 [] {
-                    bool t = !nightlight::Get();
-                    nightlight::Set(t);
-                    RunOnUiThread([] { try { PopulateControlCenterPanel_New(); } catch (...) {} });
+                    bool t = !GetNightLightState();
+                    SetNightLightState(t);
+                    RunOnUiThread([] {
+                        try { PopulateControlCenterPanel_New(); } catch (...) {}
+                    });
                 });
         }
         if (id == L"DarkMode") {
@@ -13417,17 +13532,130 @@ void PopulateControlCenterPanel_New() {
                     RunOnUiThread([] { try { PopulateControlCenterPanel_New(); } catch (...) {} });
                 });
         }
+        if (id == L"AirplaneMode") {
+            bool on = false;
+#if TOPBAR_HAS_RADIOS
+            try {
+                using namespace winrt::Windows::Devices::Radios;
+                auto radios = Radio::GetRadiosAsync().get();
+                bool anyRadio = false;
+                bool anyOn = false;
+                for (auto&& radio : radios) {
+                    if (radio.Kind() == RadioKind::WiFi ||
+                        radio.Kind() == RadioKind::Bluetooth ||
+                        radio.Kind() == RadioKind::MobileBroadband) {
+                        anyRadio = true;
+                        if (radio.State() == RadioState::On) { anyOn = true; break; }
+                    }
+                }
+                on = anyRadio && !anyOn;
+            } catch (...) {}
+#endif
+            wuxc::FontIcon apIcon;
+            apIcon.Glyph(L"\uE709");
+            apIcon.FontSize(16);
+            apIcon.Foreground(on ? MakeBrush(0xFF, 0, 0, 0)
+                                 : MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+            return makeSimpleTile(apIcon, L"Airplane mode", on ? L"On" : L"Off", on,
+                [] {
+#if TOPBAR_HAS_RADIOS
+                    RunInBackground([] {
+                        try {
+                            using namespace winrt::Windows::Devices::Radios;
+                            auto access = Radio::RequestAccessAsync().get();
+                            if (access != RadioAccessStatus::Allowed) return;
+                            auto radios = Radio::GetRadiosAsync().get();
+                            bool anyOn = false;
+                            for (auto&& radio : radios) {
+                                if (radio.Kind() == RadioKind::WiFi ||
+                                    radio.Kind() == RadioKind::Bluetooth ||
+                                    radio.Kind() == RadioKind::MobileBroadband) {
+                                    if (radio.State() == RadioState::On) { anyOn = true; break; }
+                                }
+                            }
+                            bool target = !anyOn;
+                            std::vector<winrt::Windows::Foundation::IAsyncOperation<RadioAccessStatus>> pending;
+                            for (auto&& radio : radios) {
+                                if (radio.Kind() == RadioKind::WiFi ||
+                                    radio.Kind() == RadioKind::Bluetooth ||
+                                    radio.Kind() == RadioKind::MobileBroadband) {
+                                    pending.push_back(radio.SetStateAsync(
+                                        target ? RadioState::On : RadioState::Off));
+                                }
+                            }
+                            for (auto& op : pending) {
+                                try { op.get(); } catch (...) {}
+                            }
+                        } catch (...) {}
+                        RunOnUiThread([] {
+                            try { RefreshWifiButtonIcon(); } catch (...) {}
+                            try { RefreshBluetoothRadioState(); } catch (...) {}
+                            try { PopulateControlCenterPanel_New(); } catch (...) {}
+                        });
+                    });
+#endif
+                });
+        }
+        if (id == L"MobileHotspot") {
+            bool on = false;
+            std::wstring sub = L"Off";
+#if TOPBAR_HAS_NETWORK_OPERATORS
+            try {
+                using namespace winrt::Windows::Networking::NetworkOperators;
+                using namespace winrt::Windows::Networking::Connectivity;
+                auto profile = NetworkInformation::GetInternetConnectionProfile();
+                if (profile) {
+                    auto mgr = NetworkOperatorTetheringManager::CreateFromConnectionProfile(profile);
+                    if (mgr) {
+                        auto state = mgr.TetheringOperationalState();
+                        on = (state == TetheringOperationalState::On);
+                        sub = on ? L"On" : L"Off";
+                    }
+                }
+            } catch (...) {}
+#endif
+            wuxc::FontIcon hsIcon;
+            hsIcon.Glyph(L"\uE704");
+            hsIcon.FontSize(16);
+            hsIcon.Foreground(on ? MakeBrush(0xFF, 0, 0, 0)
+                                 : MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+            return makeSimpleTile(hsIcon, L"Mobile hotspot", sub, on,
+                [] {
+#if TOPBAR_HAS_NETWORK_OPERATORS
+                    RunInBackground([] {
+                        try {
+                            using namespace winrt::Windows::Networking::NetworkOperators;
+                            using namespace winrt::Windows::Networking::Connectivity;
+                            auto profile = NetworkInformation::GetInternetConnectionProfile();
+                            if (!profile) return;
+                            auto mgr = NetworkOperatorTetheringManager::CreateFromConnectionProfile(profile);
+                            if (!mgr) return;
+                            auto state = mgr.TetheringOperationalState();
+                            if (state == TetheringOperationalState::On) {
+                                mgr.StopTetheringAsync().get();
+                            } else {
+                                mgr.StartTetheringAsync().get();
+                            }
+                        } catch (...) {}
+                        WaitForSingleObject(g_stopEvent, 1200);
+                        RunOnUiThread([] {
+                            try { PopulateControlCenterPanel_New(); } catch (...) {}
+                        });
+                    });
+#endif
+                });
+        }
         if (id == L"Battery") {
             BatteryInfo info = GetBatteryInfo();
             std::wstring sub = std::to_wstring(info.percentage) + L"%";
             if (info.charging) sub += L" \u00B7 Chg";
             auto ic = BuildBatteryIcon(16, info.percentage, info.charging);
-            return makeToggleTile(ic, L"Battery", sub, false,
-                [] { ShellExecute(nullptr, L"open", L"ms-settings:batterysaver", nullptr, nullptr, SW_SHOWNORMAL); },
+            return makeSimpleTile(ic, L"Battery", sub, false,
                 [] { RunOnUiThread([] { try {
                     if (!g_batteryButton || !g_batteryFlyout) return;
-                    if (g_batteryFlyout.IsOpen()) g_batteryFlyout.Hide();
-                    else { CloseAnyOpenChildFlyout(); g_batteryFlyout.ShowAt(g_batteryButton); }
+                    if (g_batteryFlyout.IsOpen()) { g_batteryFlyout.Hide(); return; }
+                    CloseAnyOpenChildFlyout();
+                    CCRequestFlyoutOpen(L"battery");
                 } catch (...) {} }); });
         }
         if (id == L"Power") {
@@ -13435,19 +13663,41 @@ void PopulateControlCenterPanel_New() {
             bool on = info.powerSaving;
             auto ic = BuildVectorIcon(nullptr, L"M12 2 L5 13 L10 13 L10 22 L19 11 L14 11 Z",
                                       L"", 24, 16, 1.8, iconColorFor(on));
-            return makeSimpleTile(ic, L"Power", on ? L"Saver" : L"Normal", on,
-                [] { ShellExecute(nullptr, L"open", L"ms-settings:batterysaver", nullptr, nullptr, SW_SHOWNORMAL); });
+            return makeSimpleTile(ic, L"Power saving", on ? L"On" : L"Off", on,
+                [] {
+                    RunOnUiThread([] {
+                        try {
+                            if (g_controlCenterFlyout && g_controlCenterFlyout.IsOpen()) {
+                                g_controlCenterFlyout.Hide();
+                            }
+                        } catch (...) {}
+                        ShellExecuteW(nullptr, L"open", L"ms-settings:batterysaver",
+                                      nullptr, nullptr, SW_SHOWNORMAL);
+                    });
+                });
         }
         if (id == L"Display") {
             auto ic = BuildVectorIcon(nullptr, L"", icons::kBrightnessStroke, 24, 16, 1.6);
-            return makeSliderCard(L"Display", ic, brightness::GetFast(),
-                                  [](int v) { SetBrightnessCoalesced(v); });
+            return makeSliderCard(ic, brightness::GetFast(),
+                                  [](int v) { SetBrightnessCoalesced(v); },
+                                  [] { RunOnUiThread([] { try {
+                                      if (!g_displayButton || !g_displayFlyout) return;
+                                      if (g_displayFlyout.IsOpen()) { g_displayFlyout.Hide(); return; }
+                                      CloseAnyOpenChildFlyout();
+                                      CCRequestFlyoutOpen(L"display");
+                                  } catch (...) {} }); });
         }
         if (id == L"Sound") {
             auto ic = BuildSpeakerIcon(16, audio::GetMasterVolume(), audio::GetMasterMute());
-            return makeSliderCard(L"Sound", ic, audio::GetMasterVolume(),
+            return makeSliderCard(ic, audio::GetMasterVolume(),
                                   [](int v) { SetMasterVolumeCoalesced(v);
-                                              RunOnUiThread([] { RefreshSoundButtonIcon(); }); });
+                                              RunOnUiThread([] { RefreshSoundButtonIcon(); }); },
+                                  [] { RunOnUiThread([] { try {
+                                      if (!g_soundButton || !g_soundFlyout) return;
+                                      if (g_soundFlyout.IsOpen()) { g_soundFlyout.Hide(); return; }
+                                      CloseAnyOpenChildFlyout();
+                                      CCRequestFlyoutOpen(L"sound");
+                                  } catch (...) {} }); });
         }
         return nullptr;
     };
@@ -13477,34 +13727,6 @@ void PopulateControlCenterPanel_New() {
     static auto dragState = std::make_shared<DragState>();
     auto wrappersRef = std::make_shared<std::map<std::wstring, wuxc::Grid>>();
     auto transformsRef = std::make_shared<std::map<std::wstring, wuxm::TranslateTransform>>();
-
-    auto targetMapRef = std::make_shared<std::map<void*, std::pair<double,double>>>();
-    auto animate = [targetMapRef](wuxm::TranslateTransform tt, double fx, double fy, double tx, double ty) { 
-        void* key = winrt::get_abi(tt);
-        auto cached = targetMapRef->find(key);
-        if (cached != targetMapRef->end() &&
-            std::abs(cached->second.first - tx) < 0.5 &&
-            std::abs(cached->second.second - ty) < 0.5) {
-            return;
-        }
-        (*targetMapRef)[key] = {tx, ty};
-
-        if (std::abs(fx - tx) < 0.5 && std::abs(fy - ty) < 0.5) {
-            tt.X(tx); tt.Y(ty);
-            return;
-        }
-        try {
-            winrt::Windows::UI::Xaml::Duration dur{std::chrono::milliseconds(20)};
-            wuxa::DoubleAnimation ax; ax.To(tx); ax.Duration(dur);
-            wuxa::DoubleAnimation ay; ay.To(ty); ay.Duration(dur);
-            wuxa::Storyboard sb; sb.Children().Append(ax); sb.Children().Append(ay);
-            wuxa::Storyboard::SetTarget(ax, tt); wuxa::Storyboard::SetTargetProperty(ax, L"X");
-            wuxa::Storyboard::SetTarget(ay, tt); wuxa::Storyboard::SetTargetProperty(ay, L"Y");
-            sb.Begin();
-        } catch (...) {
-            tt.X(tx); tt.Y(ty);
-        }
-    };
 
     auto setTilePos = [](wuxc::Grid const& w, double x, double y) {
         try {
@@ -13863,382 +14085,6 @@ void PopulateControlCenterPanel_New() {
 
 void PopulateControlCenterPanel() {
     PopulateControlCenterPanel_New();
-}
-
-void PopulateControlCenterPanel_v1() {
-    if (!g_controlCenterPanel) {
-        return;
-    }
-    g_populatingPanel = true;
-    struct Guard {
-        ~Guard() { g_populatingPanel = false; }
-    } guard;
-
-    auto children = g_controlCenterPanel.Children();
-    children.Clear();
-
-    children.Append(MakePanelTitle(L"Control Center"));
-
-    auto tileBg      = MakeBrush(0x30, 0xFF, 0xFF, 0xFF);
-    auto tileHover   = MakeBrush(0x42, 0xFF, 0xFF, 0xFF);
-    auto tilePressed = MakeBrush(0x54, 0xFF, 0xFF, 0xFF);
-    auto circleOn    = MakeBrush(0xFF, 0xFF, 0xFF, 0xFF);
-    auto circleOff   = MakeBrush(0x1E, 0xFF, 0xFF, 0xFF);
-
-    constexpr double kGap = 8.0;
-    constexpr double kTileH = 54.0;
-    constexpr double kTileRadius = 14.0;
-    constexpr double kCircle = 28.0;
-
-    auto styleTileButton = [&](wuxc::Button const& b) {
-        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackground")), tileBg);
-        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPointerOver")), tileHover);
-        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundPressed")), tilePressed);
-        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBackgroundDisabled")), tileBg);
-        auto t = MakeBrush(0, 0, 0, 0);
-        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrush")), t);
-        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrushPointerOver")), t);
-        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrushPressed")), t);
-        b.Resources().Insert(winrt::box_value(winrt::hstring(L"ButtonBorderBrushDisabled")), t);
-    };
-
-    auto makeCircle = [&](FrameworkElement icon, bool on) -> wuxc::Border {
-        wuxc::Border circle;
-        circle.Width(kCircle);
-        circle.Height(kCircle);
-        circle.CornerRadius(CornerRadius{kCircle/2.0, kCircle/2.0, kCircle/2.0, kCircle/2.0});
-        circle.Background(on ? circleOn : circleOff);
-        circle.HorizontalAlignment(HorizontalAlignment::Center);
-        circle.VerticalAlignment(VerticalAlignment::Center);
-        if (icon) {
-            icon.Width(16);
-            icon.Height(16);
-            icon.HorizontalAlignment(HorizontalAlignment::Center);
-            icon.VerticalAlignment(VerticalAlignment::Center);
-            circle.Child(icon);
-        }
-        return circle;
-    };
-
-    auto makeLabels = [&](const std::wstring& label, const std::wstring& sub) -> wuxc::StackPanel {
-        wuxc::StackPanel labels;
-        labels.Spacing(1);
-        labels.VerticalAlignment(VerticalAlignment::Center);
-        labels.HorizontalAlignment(HorizontalAlignment::Left);
-        labels.Children().Append(MakeText(nullptr, label, 11, true));
-        if (!sub.empty()) {
-            auto st = MakeText(nullptr, sub, 9, false, 0.7);
-            st.TextTrimming(TextTrimming::CharacterEllipsis);
-            st.MaxWidth(110);
-            labels.Children().Append(st);
-        }
-        return labels;
-    };
-
-    auto makeToggleTile = [&](FrameworkElement icon,
-                              const std::wstring& label, const std::wstring& sub,
-                              bool on,
-                              std::function<void()> onCircle,
-                              std::function<void()> onBody) -> wuxc::Button {
-        auto btn = MakeGhostButton(nullptr, kTileRadius);
-        btn.Height(kTileH);
-        btn.MinHeight(kTileH);
-        btn.Padding(Thickness{8, 0, 10, 0});
-        btn.HorizontalAlignment(HorizontalAlignment::Stretch);
-        btn.BorderThickness(Thickness{0, 0, 0, 0});
-        btn.HorizontalContentAlignment(HorizontalAlignment::Left);
-        btn.VerticalContentAlignment(VerticalAlignment::Center);
-        btn.Background(tileBg);
-        styleTileButton(btn);
-
-        auto circle = makeCircle(icon, on);
-        auto labels = makeLabels(label, sub);
-        wuxc::StackPanel stack;
-        stack.Orientation(wuxc::Orientation::Horizontal);
-        stack.Spacing(8);
-        stack.VerticalAlignment(VerticalAlignment::Center);
-        stack.HorizontalAlignment(HorizontalAlignment::Left);
-        stack.Children().Append(circle);
-        stack.Children().Append(labels);
-        btn.Content(stack);
-
-        btn.Tapped([circle, onCircle, onBody](
-                wf::IInspectable const& sender,
-                Input::TappedRoutedEventArgs const& args) {
-            try {
-                args.Handled(true);
-                auto b = sender.as<wuxc::Button>();
-                auto pt = args.GetPosition(b);
-                if (!circle || circle.ActualWidth() <= 0 || circle.ActualHeight() <= 0) {
-                    if (onBody) onBody();
-                    return;
-                }
-                auto t = circle.TransformToVisual(b);
-                auto origin = t.TransformPoint(wf::Point{0.0f, 0.0f});
-                bool inside = pt.X >= origin.X && pt.X <= origin.X + circle.ActualWidth() &&
-                              pt.Y >= origin.Y && pt.Y <= origin.Y + circle.ActualHeight();
-                if (inside) { if (onCircle) onCircle(); }
-                else        { if (onBody)   onBody();   }
-            } catch (...) {}
-        });
-        return btn;
-    };
-
-    auto makeSimpleTile = [&](FrameworkElement icon,
-                              const std::wstring& label, const std::wstring& sub,
-                              bool on,
-                              std::function<void()> onClick) -> wuxc::Button {
-        auto btn = MakeGhostButton(nullptr, kTileRadius);
-        btn.Height(kTileH);
-        btn.MinHeight(kTileH);
-        btn.Padding(Thickness{8, 0, 10, 0});
-        btn.HorizontalAlignment(HorizontalAlignment::Stretch);
-        btn.BorderThickness(Thickness{0, 0, 0, 0});
-        btn.HorizontalContentAlignment(HorizontalAlignment::Left);
-        btn.VerticalContentAlignment(VerticalAlignment::Center);
-        btn.Background(tileBg);
-        styleTileButton(btn);
-
-        wuxc::StackPanel stack;
-        stack.Orientation(wuxc::Orientation::Horizontal);
-        stack.Spacing(8);
-        stack.VerticalAlignment(VerticalAlignment::Center);
-        stack.HorizontalAlignment(HorizontalAlignment::Left);
-        stack.Children().Append(makeCircle(icon, on));
-        stack.Children().Append(makeLabels(label, sub));
-        btn.Content(stack);
-
-        btn.Click([onClick](auto&&, auto&&) { if (onClick) onClick(); });
-        return btn;
-    };
-
-    auto makeSliderCard = [&](const std::wstring& title,
-                              FrameworkElement icon, int value,
-                              std::function<void(int)> onChanged) -> wuxc::Border {
-        auto card = wuxc::Border();
-        card.CornerRadius(CornerRadius{kTileRadius, kTileRadius, kTileRadius, kTileRadius});
-        card.Background(tileBg);
-        card.Padding(Thickness{12, 10, 12, 10});
-        card.HorizontalAlignment(HorizontalAlignment::Stretch);
-        wuxc::StackPanel stack;
-        stack.Spacing(6);
-        stack.Children().Append(MakeText(nullptr, title, 11, true));
-        stack.Children().Append(MakeSliderRow(icon, value, onChanged));
-        card.Child(stack);
-        return card;
-    };
-
-    auto iconColorFor = [](bool on) -> PCWSTR {
-        return on ? L"#000000" : L"#FFFFFF";
-    };
-
-    wuxc::Grid grid;
-    grid.ColumnSpacing(kGap);
-    grid.RowSpacing(kGap);
-    for (int i = 0; i < 4; i++) {
-        wuxc::ColumnDefinition cd;
-        cd.Width(GridLength{1, GridUnitType::Star});
-        grid.ColumnDefinitions().Append(cd);
-    }
-    for (int i = 0; i < 5; i++) {
-        wuxc::RowDefinition rd;
-        rd.Height(GridLength{0, GridUnitType::Auto});
-        grid.RowDefinitions().Append(rd);
-    }
-
-    {
-        auto status = wifi::GetStatus();
-        bool on = status.radioOn && status.connected;
-        std::wstring sub;
-        if (!status.radioOn) sub = L"Off";
-        else if (status.connected) sub = status.ssid.empty() ? L"Connected" : status.ssid;
-        else sub = L"Not connected";
-
-        auto icon = BuildWifiIcon(16, status.signal, true);
-        if (icon) ApplyIconColorToElement(icon, iconColorFor(on));
-        auto tile = makeToggleTile(icon, L"Wi-Fi", sub, on,
-            [] {
-                bool target = !wifi::GetStatus().radioOn;
-                RunInBackground([target] {
-                    if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) return;
-                    wifi::SetRadio(target);
-                    WaitForSingleObject(g_stopEvent, 700);
-                    RunOnUiThread([] {
-                        try { RefreshWifiButtonIcon(); PopulateControlCenterPanel(); } catch (...) {}
-                    });
-                });
-            },
-            [] {
-                RunOnUiThread([] {
-                    try {
-                        if (!g_wifiButton || !g_wifiFlyout) return;
-                        if (g_wifiFlyout.IsOpen()) g_wifiFlyout.Hide();
-                        else { CloseAnyOpenChildFlyout(); g_wifiFlyout.ShowAt(g_wifiButton); }
-                    } catch (...) {}
-                });
-            });
-        wuxc::Grid::SetColumn(tile, 0);
-        wuxc::Grid::SetColumnSpan(tile, 2);
-        wuxc::Grid::SetRow(tile, 0);
-        grid.Children().Append(tile);
-    }
-
-    {
-        bool on = bluetooth::IsRadioOn();
-        auto icon = BuildVectorIcon(nullptr, L"", icons::kBluetoothStroke, 24, 16, 2.0,
-                                    iconColorFor(on));
-        auto tile = makeToggleTile(icon, L"Bluetooth", on ? L"On" : L"Off", on,
-            [] {
-                bool target = !bluetooth::IsRadioOn();
-                RunInBackground([target] {
-                    if (WaitForSingleObject(g_stopEvent, 0) == WAIT_OBJECT_0) return;
-                    bluetooth::SetRadio(target);
-                    WaitForSingleObject(g_stopEvent, 800);
-                    RunOnUiThread([] {
-                        try {
-                            RefreshBluetoothRadioState();
-                            RefreshBluetoothButtonIcon();
-                            PopulateControlCenterPanel();
-                        } catch (...) {}
-                    });
-                });
-            },
-            [] {
-                RunOnUiThread([] {
-                    try {
-                        if (!g_bluetoothButton || !g_bluetoothFlyout) return;
-                        if (g_bluetoothFlyout.IsOpen()) g_bluetoothFlyout.Hide();
-                        else { CloseAnyOpenChildFlyout(); g_bluetoothFlyout.ShowAt(g_bluetoothButton); }
-                    } catch (...) {}
-                });
-            });
-        wuxc::Grid::SetColumn(tile, 2);
-        wuxc::Grid::SetColumnSpan(tile, 2);
-        wuxc::Grid::SetRow(tile, 0);
-        grid.Children().Append(tile);
-    }
-
-    {
-        bool on = IsAppsDarkMode();
-        auto icon = BuildVectorIcon(nullptr, icons::kMoonFill, L"", 24, 16, 1.7,
-                                    iconColorFor(on));
-        auto tile = makeSimpleTile(icon, L"Dark mode", on ? L"On" : L"Off", on,
-            [] {
-                bool target = !IsAppsDarkMode();
-                RunInBackground([target] {
-                    SetAppsDarkMode(target);
-                    WaitForSingleObject(g_stopEvent, 200);
-                    RunOnUiThread([] {
-                        try { PopulateControlCenterPanel(); } catch (...) {}
-                    });
-                });
-            });
-        wuxc::Grid::SetColumn(tile, 2);
-        wuxc::Grid::SetColumnSpan(tile, 2);
-        wuxc::Grid::SetRow(tile, 1);
-        grid.Children().Append(tile);
-    }
-
-    {
-        auto icon = BuildVectorIcon(nullptr, L"", icons::kBrightnessStroke, 24, 16, 1.6);
-        auto card = makeSliderCard(L"Display", icon, brightness::GetFast(),
-            [](int value) { SetBrightnessCoalesced(value); });
-        wuxc::Grid::SetColumn(card, 0);
-        wuxc::Grid::SetColumnSpan(card, 4);
-        wuxc::Grid::SetRow(card, 2);
-        grid.Children().Append(card);
-    }
-
-    {
-        auto icon = BuildSpeakerIcon(16, audio::GetMasterVolume(), audio::GetMasterMute());
-        auto card = makeSliderCard(L"Sound", icon, audio::GetMasterVolume(),
-            [](int value) {
-                SetMasterVolumeCoalesced(value);
-                RunOnUiThread([] { RefreshSoundButtonIcon(); });
-            });
-        wuxc::Grid::SetColumn(card, 0);
-        wuxc::Grid::SetColumnSpan(card, 4);
-        wuxc::Grid::SetRow(card, 3);
-        grid.Children().Append(card);
-    }
-
-    {
-        BatteryInfo info = GetBatteryInfo();
-        std::wstring sub = std::to_wstring(info.percentage) + L"%";
-        if (info.charging) sub += L" \u00B7 Chg";
-        auto icon = BuildBatteryIcon(16, info.percentage, info.charging);
-        auto tile = makeToggleTile(icon, L"Battery", sub, false,
-            [] {
-                ShellExecute(nullptr, L"open", L"ms-settings:batterysaver",
-                             nullptr, nullptr, SW_SHOWNORMAL);
-            },
-            [] {
-                RunOnUiThread([] {
-                    try {
-                        if (!g_batteryButton || !g_batteryFlyout) return;
-                        if (g_batteryFlyout.IsOpen()) g_batteryFlyout.Hide();
-                        else { CloseAnyOpenChildFlyout(); g_batteryFlyout.ShowAt(g_batteryButton); }
-                    } catch (...) {}
-                });
-            });
-        wuxc::Grid::SetColumn(tile, 0);
-        wuxc::Grid::SetColumnSpan(tile, 2);
-        wuxc::Grid::SetRow(tile, 1);
-        grid.Children().Append(tile);
-    }
-
-    children.Append(grid);
-
-    if (g_ccCustomizeMode) {
-        auto hiddenTitle = MakeText(nullptr, L"Hidden", 11, true);
-        hiddenTitle.Margin(Thickness{2, 14, 0, 4});
-        children.Append(hiddenTitle);
-
-        auto hiddenHint = MakeText(nullptr,
-            L"Drag items here to hide them, or press the minus icon on any tile.",
-            10, false, 0.55);
-        hiddenHint.TextWrapping(TextWrapping::Wrap);
-        hiddenHint.Margin(Thickness{2, 0, 0, 6});
-        children.Append(hiddenHint);
-
-        wuxc::Border hiddenTray;
-        hiddenTray.CornerRadius(CornerRadius{12, 12, 12, 12});
-        hiddenTray.Background(MakeBrush(0x14, 0xFF, 0xFF, 0xFF));
-        hiddenTray.BorderBrush(MakeBrush(0x28, 0xFF, 0xFF, 0xFF));
-        hiddenTray.BorderThickness(Thickness{1, 1, 1, 1});
-        hiddenTray.Padding(Thickness{12, 12, 12, 12});
-        hiddenTray.MinHeight(60);
-        hiddenTray.HorizontalAlignment(HorizontalAlignment::Stretch);
-
-        auto hiddenHint2 = MakeText(nullptr,
-            L"(Hidden items will appear here once you hide one.)",
-            10, false, 0.4);
-        hiddenHint2.TextWrapping(TextWrapping::Wrap);
-        hiddenTray.Child(hiddenHint2);
-        children.Append(hiddenTray);
-    }
-
-    {
-        wuxc::Grid bottomRow;
-        bottomRow.HorizontalAlignment(HorizontalAlignment::Center);
-        bottomRow.Margin(Thickness{0, 14, 0, 4});
-
-        auto customizeBtn = MakeGhostButton(nullptr, kTileRadius);
-        customizeBtn.Padding(Thickness{20, 8, 20, 8});
-        customizeBtn.BorderThickness(Thickness{0, 0, 0, 0});
-        customizeBtn.Background(tileBg);
-        styleTileButton(customizeBtn);
-        customizeBtn.Content(MakeText(nullptr,
-            g_ccCustomizeMode ? L"Done" : L"Customize Control Center", 11, true));
-        customizeBtn.Click([](auto&&, auto&&) {
-            g_ccCustomizeMode = !g_ccCustomizeMode;
-            RunOnUiThread([] {
-                try { PopulateControlCenterPanel(); } catch (...) {}
-            });
-        });
-        bottomRow.Children().Append(customizeBtn);
-        children.Append(bottomRow);
-    }
 }
 
 void PopulateBatteryPanel() {
@@ -15106,6 +14952,7 @@ const SettingsPage kSettingsPages[] = {
     { L"Mouse",              L"ms-settings:mousetouchpad",           L"mouse touchpad pointer" },
     { L"Keyboard",           L"ms-settings:keyboard",                L"keyboard input shortcuts" },
     { L"Printers & scanners",L"ms-settings:printers",                L"printers scanners print" },
+    { L"Control Panel",      L"shell:::{26EE0668-A00A-44D7-9371-BEB064C98683}", L"control panel legacy applets system classic" },
 };
 
 bool IsSearchStopWord(const std::wstring& w) {
@@ -15396,9 +15243,17 @@ void Launch(const Result& r) {
                              nullptr, nullptr, SW_SHOWNORMAL);
                 break;
             case Result::Kind::Setting:
-            case Result::Kind::ControlPanel:
                 ShellExecute(nullptr, L"open", r.target.c_str(),
                              nullptr, nullptr, SW_SHOWNORMAL);
+                break;
+            case Result::Kind::ControlPanel:
+                {
+                    // .cpl files cannot be launched directly on Windows 11;
+                    // they must go through control.exe with the file as
+                    // an argument.
+                    ShellExecuteW(nullptr, L"open", L"control.exe",
+                                  r.target.c_str(), nullptr, SW_SHOWNORMAL);
+                }
                 break;
         }
     } catch (...) {}
@@ -21357,6 +21212,7 @@ RunOnUiThread([status, networks = std::move(networks)]() mutable {
         g_controlCenterFlyout = MakeControlFlyout(L"ControlCenterFlyoutRoot",
                                                   g_controlCenterPanel);
         g_controlCenterFlyout.Opened([](auto&&, auto&&) {
+            g_nightLightCachedState.store(-1);
             RunOnUiThread([] {
                 try {
                     PopulateControlCenterPanel();
@@ -22289,15 +22145,16 @@ static HWND GetShellTrayWnd() {
 }
 
 winrt::com_ptr<IUIAutomation> GetCachedUIA() {
+    static std::once_flag s_once;
     static winrt::com_ptr<IUIAutomation> s_uia;
-    if (!s_uia) {
+    std::call_once(s_once, [] {
         HRESULT hr = CoCreateInstance(kCLSID_CUIAutomation, nullptr,
                                       CLSCTX_INPROC_SERVER,
                                       kIID_IUIAutomation, s_uia.put_void());
         if (FAILED(hr)) {
             Wh_Log(L"GetCachedUIA: CoCreateInstance failed hr=0x%08X", hr);
         }
-    }
+    });
     return s_uia;
 }
 
@@ -22619,13 +22476,7 @@ LRESULT CALLBACK ChildFlyoutMouseHookProc(int nCode, WPARAM wParam, LPARAM lPara
             }
         }
 
-        if (false) {
-            if (!g_settings.disableFlyoutAutoClose) {
-                RunOnUiThread([] {
-                    try { CloseAnyOpenChildFlyout(); } catch (...) {}
-                });
-            }
-        } else {
+        {
             // Click landed on one of our own XAML popups. The UIA
             // hit-test runs on a background thread because the very first
             // UIA call after the mod loads has to spin up the UIAutomation
@@ -22699,8 +22550,6 @@ constexpr UINT WM_HOOK_THREAD_INSTALL_MOUSE = WM_APP + 0x500;
 constexpr UINT WM_HOOK_THREAD_REMOVE_MOUSE  = WM_APP + 0x501;
 constexpr UINT WM_HOOK_THREAD_INSTALL_KB    = WM_APP + 0x502;
 constexpr UINT WM_HOOK_THREAD_REMOVE_KB     = WM_APP + 0x503;
-constexpr UINT WM_HOOK_THREAD_INSTALL_SPY   = WM_APP + 0x504;
-constexpr UINT WM_HOOK_THREAD_REMOVE_SPY    = WM_APP + 0x505;
 
 DWORD WINAPI HookThreadProc(LPVOID) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -22780,7 +22629,12 @@ void StopHookThread() {
 
 void InstallChildFlyoutMouseHook() {
     if (!g_hookThreadId) return;
-    PostThreadMessage(g_hookThreadId, WM_HOOK_THREAD_INSTALL_MOUSE, 0, 0);
+    for (int i = 0; i < 100; i++) {
+        if (PostThreadMessage(g_hookThreadId, WM_HOOK_THREAD_INSTALL_MOUSE, 0, 0)) {
+            return;
+        }
+        Sleep(20);
+    }
 }
 
 
@@ -25695,7 +25549,12 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                         if (fgNow) GetWindowThreadProcessId(fgNow, &fgPid);
                         if (fgPid != GetCurrentProcessId()) {
                             RunOnUiThread([] {
-                                try { EnsureTopBarHasKeyboardFocus(); } catch (...) {}
+                                try {
+                                    if (g_startMenuFlyout && g_startMenuFlyout.IsOpen())
+                                        g_startMenuFlyout.Hide();
+                                    if (g_searchFlyout && g_searchFlyout.IsOpen())
+                                        g_searchFlyout.Hide();
+                                } catch (...) {}
                             });
                         }
                     }
