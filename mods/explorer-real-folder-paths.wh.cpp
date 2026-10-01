@@ -2,7 +2,7 @@
 // @id              explorer-real-folder-paths
 // @name            Explorer real folder paths
 // @description     Open filesystem-backed Shell shortcuts through their actual paths
-// @version         0.1.2
+// @version         0.1.3
 // @author          Nerdworld
 // @github          https://github.com/nerdworldDE
 // @include         explorer.exe
@@ -22,6 +22,8 @@ same folder through its filesystem path. Explorer can then show the physical
 folder hierarchy and an editable address such as `C:\Users\Daniel\Downloads`.
 Press **Ctrl+L** or **Alt+D** to edit the address.
 
+![Downloads address bar before and after enabling the mod](https://i.imgur.com/Dc6GdsL.png)
+
 Windows still renders breadcrumbs when the address bar is not being edited.
 The mod does not force keyboard focus into the address bar after navigation.
 When the sidebar already has the converted folder selected, keep that row
@@ -30,15 +32,19 @@ and its scroll position instead of selecting the folder's physical drive.
 Paths are resolved through the Windows Shell. Moved folders, OneDrive folder
 redirection, localized names, and network paths are not hardcoded.
 
-Home, This PC, libraries, searches, ZIP views, and other virtual locations keep
-their normal behavior. The merged Shell Desktop is also left alone; it is not
-the same view as the user's physical Desktop directory.
+Virtual locations such as Home, This PC, library roots, searches, and ZIP
+views keep their normal behavior. Filesystem folders reached through a
+library, OneDrive, or another Shell alias can open through their physical
+paths. The merged Shell Desktop is left alone; it is not the same view as
+the user's physical Desktop directory.
+
+Only Explorer (`explorer.exe`) windows are affected. Open/Save dialogs hosted
+by other applications are unaffected.
 
 ## Usage and compatibility
 
-Create a new mod in Windhawk, replace the template with this entire source,
-and compile it. Open a new Explorer window, click Downloads in the sidebar,
-and press Ctrl+L. Navigate away and back when testing an already-open window.
+Open a new Explorer window, click Downloads in the sidebar, and press Ctrl+L.
+Navigate away and back when testing an already-open window.
 
 Tested on 64-bit Windows 11 23H2, build 22631.6199: the editable address shows
 the full path, and sidebar clicks retain the selected shortcut and scroll
@@ -50,9 +56,8 @@ Sidebar selection follows Windows' normal behavior when navigating to a
 different folder through history or the address bar. The mod preserves a
 shortcut that already represents the opened folder.
 
-Turn on **Diagnostic logging** and Windhawk's debug logging to investigate a
-shortcut that still displays a friendly name. The log includes navigation
-flags, resolution results, and paths. Disable diagnostic logging afterwards.
+Enable logging for this mod in Windhawk to see navigation flags, resolution
+results, and paths. Disable logging afterwards.
 
 Disabling the mod stops future conversions. Entries already stored in an
 Explorer window's navigation history can still point to the physical path.
@@ -60,28 +65,12 @@ No folder, pin, or registry setting is changed.
 */
 // ==/WindhawkModReadme==
 
-// ==WindhawkModSettings==
-/*
-- diagnostics: false
-  $name: Diagnostic logging
-  $description: Log navigation flags and resolved folder paths when Windhawk debug logging is enabled.
-*/
-// ==/WindhawkModSettings==
-
-#include <cstddef>
-
-// Windhawk's utilities refer to nullptr_t without a namespace. Expose the
-// standard type for both Windhawk's Clang toolchain and the MinGW build check.
-using std::nullptr_t;
-
-#include <windhawk_api.h>
 #include <windhawk_utils.h>
 
 #include <shlobj.h>
 #include <shobjidl.h>
 
 #include <array>
-#include <atomic>
 #include <cstring>
 #include <memory>
 #include <utility>
@@ -99,8 +88,8 @@ using QueryInterface_t = HRESULT(WINAPI*)(void*, REFIID, void**);
 QueryInterface_t g_treeQueryInterface = nullptr;
 
 HMODULE g_explorerFrame = nullptr;
-std::atomic<bool> g_diagnostics = false;
-std::atomic<bool> g_unloading = false;
+// These guards are defensive: Shell calls can cross COM/provider boundaries
+// and pump messages. Reentry wasn't observed in the tested Windows build.
 thread_local bool g_insideNormalization = false;
 thread_local bool g_insideSelectionCheck = false;
 
@@ -204,15 +193,21 @@ ShellAllocation<wchar_t> GetName(PCIDLIST_ABSOLUTE pidl, SIGDN kind) {
     return result;
 }
 
-ShellAllocation<wchar_t> GetFolderPath(IShellItem* item) {
+bool IsFileSystemFolder(IShellItem* item) {
     constexpr SFGAOF required = SFGAO_FILESYSTEM | SFGAO_FOLDER;
     SFGAOF attributes = 0;
     if (!item || FAILED(item->GetAttributes(required | SFGAO_STREAM,
                                            &attributes)) ||
         (attributes & required) != required || (attributes & SFGAO_STREAM)) {
+        return false;
+    }
+    return true;
+}
+
+ShellAllocation<wchar_t> GetFileSystemPath(IShellItem* item) {
+    if (!item) {
         return {};
     }
-
     PWSTR rawPath = nullptr;
     HRESULT hr = item->GetDisplayName(SIGDN_FILESYSPATH, &rawPath);
     ShellAllocation<wchar_t> path(rawPath);
@@ -223,15 +218,13 @@ ShellAllocation<wchar_t> GetFolderPath(IShellItem* item) {
 }
 
 bool ShouldKeepSidebarSelection(void* tree, IShellItem* target) {
-    const bool diagnostics = g_diagnostics.load(std::memory_order_relaxed);
-    auto targetPath = GetFolderPath(target);
+    // Check eligibility before attributes, which may query a UNC provider.
+    // Unrelated sidebar syncs need only the Shell's filesystem name.
+    auto targetPath = GetFileSystemPath(target);
     const bool converted = targetPath && IsConvertedPath(targetPath.get());
-    if (diagnostics) {
-        Wh_Log(L"Sidebar target: %s; converted=%d",
-               targetPath ? targetPath.get() : L"<not a filesystem folder>",
-               converted);
-    }
-    if (!converted) {
+    Wh_Log(L"Sidebar target: %s; converted=%d",
+           targetPath ? targetPath.get() : L"<no filesystem path>", converted);
+    if (!converted || !IsFileSystemFolder(target)) {
         return false;
     }
 
@@ -243,9 +236,7 @@ bool ShouldKeepSidebarSelection(void* tree, IShellItem* target) {
     HRESULT hr = g_treeQueryInterface(tree, IID_PPV_ARGS(&rawControl));
     ComAllocation<INameSpaceTreeControl> control(rawControl);
     if (FAILED(hr) || !control) {
-        if (diagnostics) {
-            Wh_Log(L"Sidebar QueryInterface failed: 0x%08X", (unsigned)hr);
-        }
+        Wh_Log(L"Sidebar QueryInterface failed: 0x%08X", (unsigned)hr);
         return false;
     }
 
@@ -257,10 +248,8 @@ bool ShouldKeepSidebarSelection(void* tree, IShellItem* target) {
         hr = selectedItems->GetCount(&count);
     }
     if (FAILED(hr) || !selectedItems || count != 1) {
-        if (diagnostics) {
-            Wh_Log(L"Sidebar selection unavailable: result=0x%08X; count=%u",
-                   (unsigned)hr, (unsigned)count);
-        }
+        Wh_Log(L"Sidebar selection unavailable: result=0x%08X; count=%u",
+               (unsigned)hr, (unsigned)count);
         return false;
     }
 
@@ -268,27 +257,23 @@ bool ShouldKeepSidebarSelection(void* tree, IShellItem* target) {
     hr = selectedItems->GetItemAt(0, &rawSelected);
     ComAllocation<IShellItem> selected(rawSelected);
     if (FAILED(hr) || !selected) {
-        if (diagnostics) {
-            Wh_Log(L"Sidebar selected item unavailable: 0x%08X", (unsigned)hr);
-        }
+        Wh_Log(L"Sidebar selected item unavailable: 0x%08X", (unsigned)hr);
         return false;
     }
 
-    auto selectedPath = GetFolderPath(selected.get());
-    if (diagnostics) {
-        Wh_Log(L"Sidebar paths: requested=%s; selected=%s", targetPath.get(),
-               selectedPath ? selectedPath.get() : L"<unavailable>");
-    }
+    auto selectedPath = IsFileSystemFolder(selected.get())
+                            ? GetFileSystemPath(selected.get())
+                            : ShellAllocation<wchar_t>{};
+    Wh_Log(L"Sidebar paths: requested=%s; selected=%s", targetPath.get(),
+           selectedPath ? selectedPath.get() : L"<unavailable>");
     if (!SamePath(targetPath.get(), selectedPath.get())) {
         // Includes deliberate drive clicks, navigation to another folder,
         // and a selection in another tab. Let Explorer synchronize normally.
         return false;
     }
 
-    if (diagnostics) {
-        Wh_Log(L"Keeping sidebar selection and scroll position: %s",
-               targetPath.get());
-    }
+    Wh_Log(L"Keeping sidebar selection and scroll position: %s",
+           targetPath.get());
     return true;
 }
 
@@ -326,11 +311,9 @@ ShellAllocation<ITEMIDLIST_ABSOLUTE> ResolveFileSystemAlias(
     PCIDLIST_ABSOLUTE pidl) {
     auto editingName = GetName(pidl, SIGDN_DESKTOPABSOLUTEEDITING);
     auto parsingName = GetName(pidl, SIGDN_DESKTOPABSOLUTEPARSING);
-    if (g_diagnostics.load(std::memory_order_relaxed)) {
-        Wh_Log(L"Target names: editing=%s; parsing=%s",
-               editingName ? editingName.get() : L"<unavailable>",
-               parsingName ? parsingName.get() : L"<unavailable>");
-    }
+    Wh_Log(L"Target names: editing=%s; parsing=%s",
+           editingName ? editingName.get() : L"<unavailable>",
+           parsingName ? parsingName.get() : L"<unavailable>");
     if (!editingName || !parsingName ||
         (IsAbsoluteFileSystemPath(editingName.get()) &&
          IsAbsoluteFileSystemPath(parsingName.get()))) {
@@ -355,17 +338,13 @@ ShellAllocation<ITEMIDLIST_ABSOLUTE> ResolveFileSystemAlias(
     hr = item->GetAttributes(required | SFGAO_STREAM, &attributes);
     if (FAILED(hr) || (attributes & required) != required ||
         (attributes & SFGAO_STREAM)) {
-        if (g_diagnostics.load(std::memory_order_relaxed)) {
-            Wh_Log(L"Skipping a virtual or stream-backed location");
-        }
+        Wh_Log(L"Skipping a virtual or stream-backed location");
         return {};
     }
 
     auto path = GetName(pidl, SIGDN_FILESYSPATH);
     if (!path || !IsAbsoluteFileSystemPath(path.get())) {
-        if (g_diagnostics.load(std::memory_order_relaxed)) {
-            Wh_Log(L"Shell did not supply an absolute filesystem path");
-        }
+        Wh_Log(L"Shell did not supply an absolute filesystem path");
         return {};
     }
 
@@ -379,19 +358,15 @@ ShellAllocation<ITEMIDLIST_ABSOLUTE> ResolveFileSystemAlias(
         if (FAILED(hr) || !canonical ||
             (canonicalAttributes & required) != required ||
             (canonicalAttributes & SFGAO_STREAM)) {
-            if (g_diagnostics.load(std::memory_order_relaxed)) {
-                Wh_Log(L"Parsing the physical path failed: 0x%08X", (unsigned)hr);
-            }
+            Wh_Log(L"Parsing the physical path failed: 0x%08X", (unsigned)hr);
             return {};
         }
-    } else if (g_diagnostics.load(std::memory_order_relaxed)) {
+    } else {
         Wh_Log(L"Using the known-folder route with KF_FLAG_NO_ALIAS");
     }
 
     if (canonical->mkid.cb == 0) {
-        if (g_diagnostics.load(std::memory_order_relaxed)) {
-            Wh_Log(L"Physical route unexpectedly resolved to the Shell Desktop");
-        }
+        Wh_Log(L"Physical route unexpectedly resolved to the Shell Desktop");
         return {};
     }
 
@@ -406,10 +381,8 @@ ShellAllocation<ITEMIDLIST_ABSOLUTE> ResolveFileSystemAlias(
         !canonicalName || !IsAbsoluteFileSystemPath(canonicalName.get()) ||
         !canonicalParsingName ||
         !IsAbsoluteFileSystemPath(canonicalParsingName.get())) {
-        if (g_diagnostics.load(std::memory_order_relaxed)) {
-            Wh_Log(L"Physical path did not produce an absolute editing address: %s",
-                   path.get());
-        }
+        Wh_Log(L"Physical path did not produce an absolute editing address: %s",
+               path.get());
         return {};
     }
 
@@ -419,10 +392,8 @@ ShellAllocation<ITEMIDLIST_ABSOLUTE> ResolveFileSystemAlias(
         return {};
     }
 
-    if (g_diagnostics.load(std::memory_order_relaxed)) {
-        Wh_Log(L"Resolved alias: %s (%s) -> %s", editingName.get(),
-               parsingName.get(), path.get());
-    }
+    Wh_Log(L"Resolved alias: %s (%s) -> %s", editingName.get(),
+           parsingName.get(), path.get());
 
     // Register before calling BrowseObject: sidebar synchronization can run
     // either inside that call or later, after asynchronous navigation finishes.
@@ -454,12 +425,9 @@ HRESULT SetSelectedItem(void* tree,
                        IShellItem* item,
                        SetSelectedItem_t original,
                        PCWSTR method) {
-    if (!g_unloading.load(std::memory_order_relaxed) &&
-        !g_insideSelectionCheck) {
+    if (!g_insideSelectionCheck) {
         SelectionCheckScope scope;
-        if (g_diagnostics.load(std::memory_order_relaxed)) {
-            Wh_Log(L"Sidebar selection: %s", method);
-        }
+        Wh_Log(L"Sidebar selection: %s", method);
         if (ShouldKeepSidebarSelection(tree, item)) {
             // Both native methods select a tree row and call _EnsureVisible.
             // The correct folder is already selected, so neither operation
@@ -484,14 +452,11 @@ HRESULT WINAPI SetSelectedItemNoExpand_Hook(void* tree, IShellItem* item) {
 HRESULT WINAPI BrowseObject_Hook(void* browser,
                                 PCUIDLIST_RELATIVE pidl,
                                 UINT flags) {
-    if (g_unloading.load(std::memory_order_relaxed) ||
-        g_insideNormalization) {
+    if (g_insideNormalization) {
         return g_originalBrowseObject(browser, pidl, flags);
     }
 
-    if (g_diagnostics.load(std::memory_order_relaxed)) {
-        Wh_Log(L"BrowseObject: flags=0x%08X", flags);
-    }
+    Wh_Log(L"BrowseObject: flags=0x%08X", flags);
 
     if (!IsAbsoluteNavigation(pidl, flags)) {
         return g_originalBrowseObject(browser, pidl, flags);
@@ -504,7 +469,7 @@ HRESULT WINAPI BrowseObject_Hook(void* browser,
             reinterpret_cast<PCIDLIST_ABSOLUTE>(pidl));
     }
 
-    if (canonical && g_diagnostics.load(std::memory_order_relaxed)) {
+    if (canonical) {
         Wh_Log(L"Converted navigation: flags=0x%08X; sidebar preservation eligible",
                flags);
     }
@@ -517,11 +482,6 @@ HRESULT WINAPI BrowseObject_Hook(void* browser,
         flags);
 }
 
-void LoadSettings() {
-    g_diagnostics.store(Wh_GetIntSetting(L"diagnostics") != 0,
-                        std::memory_order_relaxed);
-}
-
 void ReleaseExplorerFrame() {
     if (g_explorerFrame) {
         FreeLibrary(g_explorerFrame);
@@ -532,7 +492,6 @@ void ReleaseExplorerFrame() {
 }  // namespace
 
 BOOL Wh_ModInit() {
-    LoadSettings();
     g_explorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", nullptr,
                                      LOAD_LIBRARY_SEARCH_SYSTEM32);
     if (!g_explorerFrame) {
@@ -584,14 +543,6 @@ BOOL Wh_ModInit() {
 
     Wh_Log(L"Explorer real folder paths initialized");
     return TRUE;
-}
-
-void Wh_ModSettingsChanged() {
-    LoadSettings();
-}
-
-void Wh_ModBeforeUninit() {
-    g_unloading.store(true, std::memory_order_relaxed);
 }
 
 void Wh_ModUninit() {
