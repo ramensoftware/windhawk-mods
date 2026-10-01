@@ -76,12 +76,31 @@ You can assign any hotkey directly to built-in commands by setting the path to o
 | Command | Default Key | Description |
 | :--- | :--- | :--- |
 | `internal:openWithNotepad` | `Alt + N` | Opens selected file(s) in Notepad. |
-| `internal:openTerminalHere` | `Ctrl + Alt + T` | Opens Windows Terminal (or PowerShell) in the folder. |
+| `internal:openTerminal` | `Ctrl + Alt + T` | Opens Windows Terminal (or PowerShell) in the folder. |
 | `internal:openTerminalAdmin` | `Ctrl + Shift + Alt + T` | Opens Terminal/PowerShell as Administrator. |
 | `internal:openCmd` | — | Opens the classic Command Prompt in the folder. |
 | `internal:openCmdAdmin` | — | Opens the classic Command Prompt as Administrator. |
 
 > **Persistent Settings Notice:** Toggles for hidden files, extensions, and checkboxes flip the native Windows Explorer shell settings directly (`SHGetSetSettings`). These changes affect all File Explorer surfaces globally and persist even if this mod is disabled.
+
+---
+
+### Available Tokens for Arguments & Examples
+
+* **`%f`** — All selected items as space-separated quoted paths (`"C:\a.txt" "C:\b.png"`).
+* **`%files`** — Selected regular files only (skips selected folders).
+* **`%folders`** — Selected folders only (skips selected regular files).
+* **`%1`** — Quoted path of the first selected file or directory (`"C:\a.txt"`).
+* **`%n`** — File or folder names only without absolute directory paths (`"a.txt"`).
+* **`%c`** — Total number of selected items as an integer (`3`). In loop modes, this resolves to `1`.
+* **`%ext`** — File extension of the first selected item (`.png`).
+* **`%s`** — Space-separated paths with **smart-quoting** (automatically adds double-quotes only to paths containing spaces).
+* **`%d`** — Active directory open in the current tab (`C:\Users\Name\Documents`). Virtual folders like *This PC* or *Recycle Bin* resolve to an empty string.
+* **`%d_smart`** — Selected folder if one is highlighted; otherwise falls back to the current active directory.
+* **`%d_name`** — Folder name of the active tab only, without the full directory path (`Documents`).
+* **`%p`** — Parent directory path of the active tab.
+
+> **Shell Interpreter Security Notice:** Path tokens are quoted according to standard Windows CRT command-line (`argv`) rules. If arguments are passed to script interpreters (e.g. `cmd.exe /c` or `powershell.exe -Command`), parameters may be re-parsed by that interpreter. Use native binary arguments or pass paths directly to target programs.
 
 ---
 
@@ -1202,11 +1221,16 @@ void ShowActionToast(HWND hOwner,
 
     // Dynamic duration wait in 50ms intervals
     int waitMs = g_toastDuration.load();
-    int iterations = std::max(1, waitMs / 50);
-    for (int i = 0; i < iterations; ++i) {
+    DWORD start = GetTickCount();
+    while (GetTickCount() - start < (DWORD)waitMs) {
         if (g_unloading.load())
             break;
-        Sleep(50);
+        MsgWaitForMultipleObjects(0, nullptr, FALSE, 50, QS_ALLINPUT);
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
     }
 
     // Smooth fade out
@@ -1265,6 +1289,14 @@ bool SetClipboardTextHelper(const std::wstring& text) {
     return true;
 }
 
+std::wstring GetSystemExePath(PCWSTR relativePath) {
+    WCHAR sysDir[MAX_PATH];
+    UINT len = GetSystemDirectoryW(sysDir, ARRAYSIZE(sysDir));
+    if (!len || len >= ARRAYSIZE(sysDir))
+        return L"";
+    return std::wstring(sysDir) + L"\\" + relativePath;
+}
+
 void LaunchTerminalHelper(const std::wstring& activeDir,
                           bool elevated,
                           HWND rootHwnd) {
@@ -1286,9 +1318,16 @@ void LaunchTerminalHelper(const std::wstring& activeDir,
         Wh_Log(L"LaunchTerminalHelper: Windows Terminal detected at '%s'",
                targetExe.c_str());
     } else {
-        targetExe = L"powershell.exe";
-        targetParams = L"-NoExit -Command \"Set-Location -LiteralPath " +
-                       SafeQuote(activeDir) + L"\"";
+        targetExe =
+            GetSystemExePath(L"WindowsPowerShell\\v1.0\\powershell.exe");
+        std::wstring psDir;
+        for (wchar_t ch : activeDir) {
+            psDir += ch;
+            if (ch == L'\'' || (ch >= 0x2018 && ch <= 0x201B))
+                psDir += ch;
+        }
+        targetParams =
+            L"-NoExit -Command \"Set-Location -LiteralPath '" + psDir + L"'\"";
         Wh_Log(
             L"LaunchTerminalHelper: Windows Terminal not found. Falling back "
             L"to PowerShell.");
@@ -1600,6 +1639,7 @@ void ExecuteInternalCommand(const std::wstring& command,
                                           CLSCTX_ALL, IID_PPV_ARGS(&pfo));
             if (SUCCEEDED(hr) && pfo) {
                 pfo->SetOperationFlags(FOF_ALLOWUNDO | FOF_NOCONFIRMMKDIR);
+                pfo->SetOwnerWindow(rootHwnd);
 
                 IShellItem* psiDest = nullptr;
                 hr = SHCreateItemFromParsingName(targetFolder.c_str(), nullptr,
@@ -1616,10 +1656,19 @@ void ExecuteInternalCommand(const std::wstring& command,
                         }
                     }
                     hr = pfo->PerformOperations();
+                    BOOL aborted = FALSE;
+                    pfo->GetAnyOperationsAborted(&aborted);
+
+                    if (SUCCEEDED(hr) && !aborted) {
+                        ShowActionToast(rootHwnd, L"Packed into folder",
+                                        ToastType::Success);
+                    }
+
                     Wh_Log(
                         L"internal:packIntoFolder: "
-                        L"IFileOperation::PerformOperations result (hr=0x%08X)",
-                        hr);
+                        L"IFileOperation::PerformOperations result (hr=0x%08X, "
+                        L"aborted=%d)",
+                        hr, aborted);
                     psiDest->Release();
                 } else {
                     Wh_Log(
@@ -1634,8 +1683,6 @@ void ExecuteInternalCommand(const std::wstring& command,
                     L"(hr=0x%08X)",
                     hr);
             }
-            ShowActionToast(rootHwnd, L"Packed into folder",
-                            ToastType::Success);
         } else {
             Wh_Log(
                 L"internal:packIntoFolder: CreateDirectoryW failed (err=%lu)",
@@ -1676,6 +1723,7 @@ void ExecuteInternalCommand(const std::wstring& command,
                                       IID_PPV_ARGS(&pfo));
         if (SUCCEEDED(hr) && pfo) {
             pfo->SetOperationFlags(FOF_ALLOWUNDO | FOF_RENAMEONCOLLISION);
+            pfo->SetOwnerWindow(rootHwnd);
 
             IShellItem* psiDest = nullptr;
             hr = SHCreateItemFromParsingName(activeDir.c_str(), nullptr,
@@ -1691,10 +1739,19 @@ void ExecuteInternalCommand(const std::wstring& command,
                     }
                 }
                 hr = pfo->PerformOperations();
+                BOOL aborted = FALSE;
+                pfo->GetAnyOperationsAborted(&aborted);
+
+                if (SUCCEEDED(hr) && !aborted) {
+                    ShowActionToast(rootHwnd, L"Items duplicated",
+                                    ToastType::Success);
+                }
+
                 Wh_Log(
                     L"internal:bulkDuplicate: "
-                    L"IFileOperation::PerformOperations result (hr=0x%08X)",
-                    hr);
+                    L"IFileOperation::PerformOperations result (hr=0x%08X, "
+                    L"aborted=%d)",
+                    hr, aborted);
                 psiDest->Release();
             } else {
                 Wh_Log(
@@ -1703,7 +1760,6 @@ void ExecuteInternalCommand(const std::wstring& command,
                     hr);
             }
             pfo->Release();
-            ShowActionToast(rootHwnd, L"Items duplicated", ToastType::Success);
         } else {
             Wh_Log(
                 L"internal:bulkDuplicate: Failed to create IFileOperation "
@@ -1714,7 +1770,8 @@ void ExecuteInternalCommand(const std::wstring& command,
     }
 
     // --- 11. Open Terminal Here ---
-    if (_wcsicmp(command.c_str(), L"internal:openTerminal") == 0) {
+    if (_wcsicmp(command.c_str(), L"internal:openTerminal") == 0 ||
+        _wcsicmp(command.c_str(), L"internal:openTerminalHere") == 0) {
         Wh_Log(L"internal:openTerminal: Invoked.");
         IShellView* psv = GetActiveShellView(rootHwnd, capturedFocus);
         std::wstring activeDir = GetActiveFolderPath(psv);
@@ -1806,9 +1863,15 @@ void ExecuteInternalCommand(const std::wstring& command,
                 pidlTarget) {
                 PITEMID_CHILD pidlChild = ILFindLastID(pidlTarget);
                 if (pidlChild) {
-                    psv->SelectItem(pidlChild, SVSI_SELECT | SVSI_EDIT |
-                                                   SVSI_DESELECTOTHERS |
-                                                   SVSI_ENSUREVISIBLE);
+                    for (int r = 0; r < 5; ++r) {
+                        if (SUCCEEDED(psv->SelectItem(
+                                pidlChild, SVSI_SELECT | SVSI_EDIT |
+                                               SVSI_DESELECTOTHERS |
+                                               SVSI_ENSUREVISIBLE))) {
+                            break;
+                        }
+                        Sleep(40);
+                    }
                 }
                 CoTaskMemFree(pidlTarget);
             }
@@ -1861,9 +1924,15 @@ void ExecuteInternalCommand(const std::wstring& command,
                 pidlTarget) {
                 PITEMID_CHILD pidlChild = ILFindLastID(pidlTarget);
                 if (pidlChild) {
-                    psv->SelectItem(pidlChild, SVSI_SELECT | SVSI_EDIT |
-                                                   SVSI_DESELECTOTHERS |
-                                                   SVSI_ENSUREVISIBLE);
+                    for (int r = 0; r < 5; ++r) {
+                        if (SUCCEEDED(psv->SelectItem(
+                                pidlChild, SVSI_SELECT | SVSI_EDIT |
+                                               SVSI_DESELECTOTHERS |
+                                               SVSI_ENSUREVISIBLE))) {
+                            break;
+                        }
+                        Sleep(40);
+                    }
                 }
                 CoTaskMemFree(pidlTarget);
             }
@@ -1928,7 +1997,7 @@ void ExecuteInternalCommand(const std::wstring& command,
             // Open an individual properties dialog for every selected item
             for (const auto& path : allSelected) {
                 SHELLEXECUTEINFOW sei = {sizeof(sei)};
-                sei.fMask = SEE_MASK_INVOKEIDLIST;
+                sei.fMask = SEE_MASK_INVOKEIDLIST | SEE_MASK_NOASYNC;
                 sei.lpVerb = L"properties";
                 sei.lpFile = path.c_str();
                 sei.nShow = SW_SHOWNORMAL;
@@ -1940,7 +2009,7 @@ void ExecuteInternalCommand(const std::wstring& command,
             std::wstring currentDir = GetActiveFolderPath(psv);
             if (!currentDir.empty()) {
                 SHELLEXECUTEINFOW sei = {sizeof(sei)};
-                sei.fMask = SEE_MASK_INVOKEIDLIST;
+                sei.fMask = SEE_MASK_INVOKEIDLIST | SEE_MASK_NOASYNC;
                 sei.lpVerb = L"properties";
                 sei.lpFile = currentDir.c_str();
                 sei.nShow = SW_SHOWNORMAL;
@@ -1966,11 +2035,13 @@ void ExecuteInternalCommand(const std::wstring& command,
             // Force cmd to change to the target directory upon launching
             std::wstring params = L"/s /k pushd " + SafeQuote(activeDir);
 
+            std::wstring cmdPath = GetSystemExePath(L"cmd.exe");
+
             SHELLEXECUTEINFOW sei = {sizeof(sei)};
-            sei.fMask = SEE_MASK_DEFAULT;
+            sei.fMask = SEE_MASK_DEFAULT | SEE_MASK_NOASYNC;
             sei.hwnd = rootHwnd;
             sei.lpVerb = elevated ? L"runas" : L"open";
-            sei.lpFile = L"cmd.exe";
+            sei.lpFile = cmdPath.c_str();
             sei.lpParameters = params.c_str();
             sei.lpDirectory = activeDir.c_str();
             sei.nShow = SW_SHOWNORMAL;
