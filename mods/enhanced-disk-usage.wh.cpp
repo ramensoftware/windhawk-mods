@@ -126,7 +126,7 @@ ex.
   $description: Enable custom decimal places for disk sizes. Converted values can show more digits, but are estimated from Explorer's rounded sizes.
 - decimalPlaces: 2
   $name: Unit Decimal Places
-  $description: Converted sizes use 0 to 10 decimal places. Unconverted sizes use no more decimal places than what Explorer shows, and going beyond will add zeros. Values above 10 are capped at 10.
+  $description: Converted sizes use 0 to 10 decimal places. Unconverted sizes use no more decimal places than Explorer shows. Values above 10 are capped at 10.
 - percentageDecimalPlaces: 2
   $name: Percentage Decimal Places
   $description: Used and free percentages use 0 to 10 decimal places; values above 10 are capped at 10. You can use -1 for automatic formatting. Percentages are estimated from Explorer's rounded sizes.
