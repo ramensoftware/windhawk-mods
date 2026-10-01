@@ -3,7 +3,7 @@
 // @name            Taskbar Disk Space
 // @description     Disk space on the Windows 11 taskbar with drive selection, color themes and system shortcuts.
 // @description:ru-RU Место на диске на панели задач Windows 11: выбор диска, цветовые темы и системные команды.
-// @version         0.12.24
+// @version         0.12.25
 // @author          Fatalko
 // @github          https://github.com/Fatalko
 // @license         GPL-3.0
@@ -60,7 +60,7 @@ or 2.0 and the native bottom taskbar on Windows 11 22H2+. ExplorerPatcher and
 StartAllBack are unsupported. Only fixed local drives are listed; capacity checks
 read volume metadata without writing user data.
 
-**Recent changes:** 0.12.24 makes English the default description and restores the separate-mod rationale; 0.12.23 adds four current screenshots; 0.12.22 groups compact controls in Mini design and adds icons to remaining menu items; 0.12.21 adds automatic compact layout, warning presets, reset/apply actions and menu icons. 0.12.20 adds precision; 0.12.19 adds Position; 0.12.18 improves placement; 0.12.17 adds monitor model names.
+**Recent changes:** 0.12.25 waits for final UI teardown before unloading and removes redundant monitor-label writes; 0.12.24 makes English the default description and restores the separate-mod rationale; 0.12.23 adds four current screenshots; 0.12.22 groups compact controls in Mini design and adds icons to remaining menu items; 0.12.21 adds automatic compact layout, warning presets, reset/apply actions and menu icons. 0.12.20 adds precision; 0.12.19 adds Position; 0.12.18 improves placement; 0.12.17 adds monitor model names.
 
 ## Screenshots
 
@@ -211,6 +211,8 @@ Windhawk **1.7.3 и 2.0**, штатная нижняя горизонтальн�
 `GetDiskFreeSpaceExW` и не записывает пользовательские данные на диск.
 
 ## Изменения
+
+- **0.12.25:** при выгрузке ожидается удаление интерфейса и обработчиков; убраны повторные записи статических подписей мониторов.
 
 - **0.12.24:** английское описание размещено первым; восстановлено пояснение о назначении отдельного мода.
 
@@ -1948,7 +1950,7 @@ LRESULT CALLBACK DispatchHook(int code, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
-bool RunOnTaskbar(Dispatch& call) {
+bool RunOnTaskbar(Dispatch& call, bool blocking = false) {
     DWORD process = 0;
     DWORD thread = GetWindowThreadProcessId(call.window, &process);
     if (!thread || process != GetCurrentProcessId()) return false;
@@ -1963,10 +1965,16 @@ bool RunOnTaskbar(Dispatch& call) {
     // A hung taskbar must not prevent the worker from observing g_stop. If the
     // hook has already claimed the call, wait for it before freeing stack data
     // or unloading the hook code. Otherwise a late message cannot use the call.
-    DWORD_PTR result = 0;
-    SendMessageTimeoutW(call.window, g_dispatchMessage, 0,
-                        reinterpret_cast<LPARAM>(&call),
-                        SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, &result);
+    if (blocking) {
+        // Final teardown must finish revoking handlers before the mod unloads.
+        SendMessageW(call.window, g_dispatchMessage, 0,
+                     reinterpret_cast<LPARAM>(&call));
+    } else {
+        DWORD_PTR result = 0;
+        SendMessageTimeoutW(call.window, g_dispatchMessage, 0,
+                            reinterpret_cast<LPARAM>(&call),
+                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, &result);
+    }
     Dispatch* expected = &call;
     if (!g_pending.compare_exchange_strong(expected, nullptr)) {
         WaitForSingleObject(call.completed, INFINITE);
@@ -1979,7 +1987,7 @@ bool RunOnTaskbar(Dispatch& call) {
     return call.invoked;
 }
 
-void PublishMonitors(bool russian) {
+void PublishMonitors() {
     const auto monitors = DetectMonitors();
     if (monitors.empty()) return;
     const auto previous = LocalStringValue(L"PublishedMonitorDevices");
@@ -2001,10 +2009,7 @@ void PublishMonitors(bool russian) {
         devices += monitor.device + L"|";
     }
     if (previous != devices) Wh_SetStringValue(L"PublishedMonitorDevices", devices.c_str());
-    Wh_SetStringValue(L"::wh_select_option::DisplayOn::primary",
-                     UiText(russian, L"Primary taskbar", L"Основная панель").c_str());
-    Wh_SetStringValue(L"::wh_select_option::DisplayOn::all",
-                     UiText(russian, L"All taskbars", L"Все панели").c_str());
+
 }
 
 struct TaskbarWindow {
@@ -2058,7 +2063,7 @@ struct TaskbarSlot {
     UiState* state;
 };
 
-bool RemoveSlot(TaskbarSlot& slot) {
+bool RemoveSlot(TaskbarSlot& slot, bool blocking = false) {
     if (WaitForSingleObject(slot.threadHandle, 0) == WAIT_OBJECT_0) {
         // Never release apartment-bound XAML objects after their owner exits.
         // The state is retired just as in the former single-taskbar path.
@@ -2071,7 +2076,7 @@ bool RemoveSlot(TaskbarSlot& slot) {
         slot.window : WindowOnThread(slot.thread);
     if (!window) return false;
     Dispatch remove{window, nullptr, nullptr, true, slot.state};
-    if (!RunOnTaskbar(remove)) return false;
+    if (!RunOnTaskbar(remove, blocking)) return false;
     // RemoveUi has already released all XAML references on the owner thread.
     delete slot.state;
     CloseHandle(slot.threadHandle);
@@ -2103,7 +2108,7 @@ DWORD WINAPI Worker(void*) {
             }
             if (now >= nextUiProbe) {
                 uiDirty = true;
-                PublishMonitors(IsRussianUi());
+                PublishMonitors();
                 nextUiProbe = now + uiProbeInterval;
             }
             if (uiDirty) {
@@ -2166,7 +2171,7 @@ DWORD WINAPI Worker(void*) {
         Wh_Log(L"Disk space worker failed: %08X", static_cast<unsigned>(winrt::to_hresult()));
     }
     for (auto& slot : slots) {
-        if (!RemoveSlot(slot)) {
+        if (!RemoveSlot(slot, true)) {
             Wh_Log(L"Taskbar teardown dispatch failed for thread %u", slot.thread);
             CloseHandle(slot.threadHandle);
         }
@@ -2215,7 +2220,7 @@ void ReleaseHandles() {
 
 BOOL Wh_ModInit() {
     LoadSettings();
-    PublishMonitors(IsRussianUi());
+    PublishMonitors();
     if (!ResolveTaskbar()) {
         Wh_Log(L"Unsupported taskbar or unavailable symbols; Windows 11 22H2+ native taskbar required");
         ReleaseHandles();
