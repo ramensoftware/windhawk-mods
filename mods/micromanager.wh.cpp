@@ -14,7 +14,7 @@
 /*
 # MicroManager
 
-![Screenshot](https://i.imgur.com/D01Gk2T.png)
+![Screenshot](https://i.imgur.com/TaUELAP.png)
 
 A lightweight tray icon that shows a mini task manager popup with live CPU, GPU
 and RAM usage, plus the single top-consuming process for each.
@@ -204,6 +204,7 @@ static ULONGLONG           g_lastPopupCloseTime = 0;
 static ULONGLONG           g_lastPopupOpenTime  = 0;
 static HINSTANCE           g_hInstance    = nullptr;
 static WCHAR               g_windhawkPath[MAX_PATH] = {};
+static WCHAR               g_windhawkModPath[MAX_PATH] = {};
 static WCHAR               g_ddoresDllPath[MAX_PATH] = {};
 
 static DWORD               g_updateMs     = 1000;
@@ -664,11 +665,12 @@ static HANDLE OpenSampledProcess(const ProcessTarget& target, DWORD rights) {
 }
 
 static bool IsProtectedProcess(HANDLE process) {
-    if (g_windhawkPath[0] != L'\0') {
+    if (g_windhawkPath[0] != L'\0' || g_windhawkModPath[0] != L'\0') {
         WCHAR path[MAX_PATH];
         DWORD len = ARRAYSIZE(path);
         if (QueryFullProcessImageNameW(process, 0, path, &len)) {
-            if (_wcsicmp(path, g_windhawkPath) == 0) return true;
+            if (g_windhawkPath[0] != L'\0' && _wcsicmp(path, g_windhawkPath) == 0) return true;
+            if (g_windhawkModPath[0] != L'\0' && _wcsicmp(path, g_windhawkModPath) == 0) return true;
         }
     }
     BOOL critical = FALSE;
@@ -1432,12 +1434,26 @@ BOOL WhTool_ModInit() {
     if (GlobalMemoryStatusEx(&mem)) g_totalPhys = mem.ullTotalPhys;
 
     g_hInstance = GetModuleHandleW(nullptr);
-    switch (GetModuleFileNameW(g_hInstance, g_windhawkPath, ARRAYSIZE(g_windhawkPath))) {
+    WCHAR modulePath[MAX_PATH];
+    switch (GetModuleFileNameW(g_hInstance, modulePath, ARRAYSIZE(modulePath))) {
         case 0:
-        case ARRAYSIZE(g_windhawkPath):
+        case ARRAYSIZE(modulePath):
             Wh_Log(L"GetModuleFileNameW failed");
             g_windhawkPath[0] = L'\0';
+            g_windhawkModPath[0] = L'\0';
             break;
+        default: {
+            WCHAR* lastSlash = wcsrchr(modulePath, L'\\');
+            if (lastSlash) {
+                *lastSlash = L'\0';
+                swprintf_s(g_windhawkPath, L"%s\\windhawk.exe", modulePath);
+                swprintf_s(g_windhawkModPath, L"%s\\windhawk-mod.exe", modulePath);
+            } else {
+                wcscpy_s(g_windhawkPath, L"windhawk.exe");
+                wcscpy_s(g_windhawkModPath, L"windhawk-mod.exe");
+            }
+            break;
+        }
     }
 
     // Full path for ddores.dll — ExtractIconExW handles the .mun redirect on Win11
