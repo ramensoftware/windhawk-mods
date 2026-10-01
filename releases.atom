@@ -2,12 +2,44 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-01T11:01:05.000Z</updated>
+    <updated>2026-10-01T16:01:22.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Cursor Override 1.0.0]]></title>
+        <id>https://windhawk.net/mods/cursor-override#eee6eb7fba4dc744cef023877595ef32736d411c</id>
+        <link href="https://windhawk.net/mods/cursor-override"/>
+        <updated>2026-10-01T16:01:22.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="cursoroverride">Cursor Override</h1>
+<p>Replaces common additional cursors with custom <code>.cur</code> or <code>.ani</code> files.</p>
+<p><img src="https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-grab.png" alt="Grab cursor before and after" /></p>
+<p><img src="https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-cell.png" alt="Cell cursor before and after" /></p>
+<h2 id="howitworks">How it works</h2>
+<p>Identifies supported Mozilla, Chromium and RichEdit cursors based on their image and hotspot.
+Resource cursors are compared at a fixed size when their source resource is available; known bitmap signatures provide a fallback.
+Recognition can require an update when an application changes its cursor artwork.
+Supports <code>Grab</code>, <code>Grabbing</code>, <code>Cell</code>, <code>Copy</code>, <code>Alias</code>, <code>ZoomIn</code>, <code>ZoomOut</code>, <code>ColResize</code>, <code>RowResize</code>, <code>VerticalText</code> and <code>SelectionBar</code>.
+Standard Windows cursors remain unchanged.</p>
+<h2 id="usage">Usage</h2>
+<p>Under Settings, enter the full local path to each <code>.cur</code> or <code>.ani</code> file you want to change.
+Leave a field empty to keep the original cursor.
+Keep the cursor files in a permanent local folder. Network paths and mapped network drives are not supported.
+If a file cannot be loaded, the original cursor stays active. Check the path and save the settings again to retry.
+Windhawk debug logging reports the affected setting and error code without logging the file path.
+With all fields empty, the mod installs no hooks.</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>This mod overlaps with <a href="https://windhawk.net/mods/chromium-cursor-remap">Chromium Cursor Remap</a> for Chromium-based applications and additionally recognizes Mozilla and RichEdit cursors.
+Do not enable both mods in the same applications.</p>
+<h2 id="optionalcursorpack">Optional cursor pack</h2>
+<p>For an optional cursor pack, check out <a href="https://github.com/sebastianheder01/Galaxy-Cursor">Galaxy Cursor</a>.</p>]]></content>
+        <author>
+            <name>Basti</name>
+            <uri>https://github.com/sebastianheder01</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Hide Taskbar Tooltips 1.0.8]]></title>
         <id>https://windhawk.net/mods/hide-taskbar-tooltips#4e4ad92d9b819f521487076cb487b999c176390f</id>
@@ -1146,60 +1178,6 @@ tab.</p>]]></content>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Wobbly Windows 0.115]]></title>
-        <id>https://windhawk.net/mods/wobbly-windows#dfb8f35a56860377efb2ee4c719ca66997f6eb0a</id>
-        <link href="https://windhawk.net/mods/wobbly-windows"/>
-        <updated>2026-09-25T15:40:27.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="wobblywindows">Wobbly Windows</h1>
-<p>The classic Compiz/KDE Plasma style Wobbly Windows effect for Windows 11!</p>
-<p><img src="https://raw.githubusercontent.com/lalimatyus/Wobbly-Windows/refs/heads/main/showcase.gif" alt="Showcase" /></p>
-<h2 id="important">⚠️ IMPORTANT ⚠️</h2>
-<p>Since this mod runs in <code>dwm.exe</code>, add <code>dwm.exe</code> to Windhawk's
-<strong>Settings > Advanced settings > More advanced settings > Process inclusion list</strong>:</p>
-<p><img src="https://raw.githubusercontent.com/lalimatyus/Wobbly-Windows/refs/heads/main/dwm.gif" alt="Tutorial" /></p>
-<p>This mod runs inside <code>dwm.exe</code> and has been tested on Windows 11 <code>23H2</code>, <code>24H2</code>, <code>25H2</code>
-and <code>Insider Preview 26H2</code>. If the required private
-uDWM symbols or validated object layouts aren't available, the mod refuses to
-initialize instead of using unverified addresses.</p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Change the wobbliness of the windows from 5 presets</li>
-<li>Enable custom physics to change each parameter independently, instead of a preset</li>
-<li>Fluid wobble animations for dragging, snapping and even resizing windows</li>
-<li>Uses a 4x4 spring simulation fitted to a smooth whole-window transform</li>
-</ul>
-<h2 id="knownissues">Known Issues</h2>
-<ul>
-<li>ARM64 isn't supported yet.</li>
-<li>If DWM stops servicing its scene thread while the mod is being disabled or updated,
-a transformed window can remain deformed until DWM recreates its visual.
-Try minimizing and restoring or reopening the affected window to recover.</li>
-<li>Some windows may show blur, ghosting, or temporary artifacts along their thin borders during wobble animations.
-These effects can be more noticeable on high-refresh-rate displays.</li>
-<li>Snap detection intentionally uses permissive geometry checks to support custom
-layouts such as PowerToys FancyZones, rather than only standard Windows Snap zones.
-An unsnapped window placed close to a work-area corner may also trigger a snap wobble.</li>
-</ul>
-<h2 id="feedback">Feedback</h2>
-<p>If you found a reproducible issue or need help, open an issue in the <a href="https://github.com/lalimatyus/Wobbly-Windows">GitHub repository</a>.</p>
-<h2 id="credits">Credits</h2>
-<ul>
-<li>The physics presets and edge-locking behavior are based on
-<a href="https://invent.kde.org/plasma/kwin/-/tree/master/src/plugins/wobblywindows">KDE Plasma/KWin's Wobbly Windows effect</a>.</li>
-<li>The Dwminit crash-loop guard and the <code>CWindowData::IsGhostWindow</code>-based HWND-offset
-discovery draw on <a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/custom-corner-radius.wh.cpp">Custom Window Corner Radius</a>
-by m417z and contributors, published under GPLv3.</li>
-</ul>
-<h2 id="license">License</h2>
-<p>This mod is distributed under the <a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU General Public License, version 3</a>
-(<code>GPL-3.0-only</code>). GPLv3 is used to accommodate the GPLv3-derived code credited above;
-the combined mod is not offered under GPLv2.</p>]]></content>
-        <author>
-            <name>lalimatyus</name>
-            <uri>https://github.com/lalimatyus</uri>
         </author>
     </entry>
 </feed>

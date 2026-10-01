@@ -3091,6 +3091,44 @@
         "version": "2.0"
       }
     },
+    "cursor-override": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790870482000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790870482000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Basti",
+        "compilerOptions": "-lgdi32",
+        "description": "Recognizes Mozilla, Chromium and RichEdit cursors and loads replacements on demand",
+        "exclude": [
+          "dwm.exe",
+          "LogonUI.exe",
+          "consent.exe",
+          "winlogon.exe",
+          "csrss.exe",
+          "lsass.exe",
+          "services.exe",
+          "smss.exe",
+          "wininit.exe",
+          "fontdrvhost.exe",
+          "windhawk.exe",
+          "windhawk-x64-helper.exe"
+        ],
+        "github": "https://github.com/sebastianheder01",
+        "include": [
+          "*"
+        ],
+        "license": "MIT",
+        "name": "Cursor Override",
+        "version": "1.0.0"
+      }
+    },
     "custom-cmd-startup-text": {
       "details": {
         "defaultSorting": 5230,
