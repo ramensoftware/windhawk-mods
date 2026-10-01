@@ -2,12 +2,60 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-01T19:00:04.000Z</updated>
+    <updated>2026-10-01T21:02:21.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Auto Refresh Rate 1.0.0]]></title>
+        <id>https://windhawk.net/mods/auto-refresh-rate#6d1e4a85f76a6ac1f893efcaec2401a9ab2813ca</id>
+        <link href="https://windhawk.net/mods/auto-refresh-rate"/>
+        <updated>2026-10-01T21:02:21.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="autorefreshrate">Auto Refresh Rate</h1>
+<p>Automates display refresh rates based on AC/battery power, fullscreen games, foreground apps, and docking.</p>
+<p>Runs as a standalone background tool process via <code>windhawk.exe</code> using native event subscriptions (<code>RegisterPowerSettingNotification</code>, <code>SetWinEventHook</code>) with zero polling loops and 0.0% idle CPU usage.</p>
+<p>Configure target rates, app rules, and hotkeys in the <strong>Settings</strong> tab above.</p>
+<p><em>Quick test: Toggle Windows Energy Saver in Quick Settings (<code>Win + A</code>), or enable the cycle hotkey (<code>Win + Ctrl + R</code>) under Settings.</em></p>
+<h2 id="evaluationpriority">Evaluation Priority</h2>
+<p>When multiple rules trigger at once, display frequency resolves in strict order:</p>
+<ol>
+<li><strong>Manual Hotkey Lock</strong> — <code>Win + Ctrl + R</code> override active</li>
+<li><strong>Protected Apps</strong> — Inhibit tools running (<code>obs64</code>)</li>
+<li><strong>Windows Energy Saver</strong> — Drops to configured battery-saver rate</li>
+<li><strong>Foreground App / Game</strong> — App rules (<code>blender</code>, <code>resolve</code>) or fullscreen 3D boost</li>
+<li><strong>Night Schedule</strong> — Evening low-Hz comfort window</li>
+<li><strong>Power Baseline</strong> — AC (Panel Max) vs Battery (60 Hz)</li>
+</ol>
+<h2 id="features">Features</h2>
+<ul>
+<li><strong>Power Baseline:</strong> Panel max on AC, 60 Hz (or minimum supported) on battery.</li>
+<li><strong>Game Boost:</strong> Boosts to highest supported refresh rate in borderless and exclusive fullscreen 3D games.</li>
+<li><strong>App Rules:</strong> Dedicated refresh rates for creative tools (<code>blender</code>, <code>resolve</code>, <code>affinity</code>) and media playback (<code>screenbox</code>, <code>netflix</code>).</li>
+<li><strong>Capture Protection:</strong> Freezes rate switching while capture or streaming tools run (<code>obs64</code>) to prevent capture drops or display flashes.</li>
+<li><strong>Smart Docking:</strong> Lowers only built-in laptop panels on battery; keeps external desktop monitors at full refresh rate.</li>
+<li><strong>Quiet Switching:</strong> Waits for keyboard and mouse activity to pause before lowering refresh rate.</li>
+<li><strong>Night Schedule:</strong> Optional time window to lock lower refresh rates during evening hours.</li>
+<li><strong>Native Notifications:</strong> Windows notification banner confirms rate changes and logs them to the Notification Center.</li>
+<li><strong>Cycle Hotkey:</strong> Optional <code>Win + Ctrl + R</code> shortcut to cycle supported panel frequencies.</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<ul>
+<li><strong>Panel Flashing:</strong> Increase <strong>Anti-flicker cooldown</strong> (default: 3 seconds) under <strong>Display & transitions</strong>.</li>
+<li><strong>External Displays on Battery:</strong> Smart docking leaves external monitors at full rate by default. Set <strong>Target displays</strong> to <code>all</code> and disable <strong>Smart laptop docking</strong> to switch all connected screens.</li>
+<li><strong>Diagnostics:</strong> Check Windhawk's <strong>Log</strong> tab for real-time AC/DC transitions, active process detection, and display modes.</li>
+</ul>
+<h2 id="changelog">Changelog</h2>
+<h3 id="version10020260930">Version 1.0.0 (2026-09-30)</h3>
+<ul>
+<li>Initial release.</li>
+</ul>]]></content>
+        <author>
+            <name>roypriyanshu02</name>
+            <uri>https://github.com/roypriyanshu02</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Independent taskbar per monitor 1.5.0]]></title>
         <id>https://windhawk.net/mods/taskbar-independent-per-monitor#004342fdf226b83a905abffd4a880249e2c47679</id>
@@ -561,20 +609,6 @@ visible, disable the mod and check the Windhawk log before trying it again.</p>]
         <content type="html"><![CDATA[<ul>
 <li>Added support for the native vertical taskbar.</li>
 <li>Improved ARM64 support.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Vertical Taskbar for Windows 11 1.4.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-vertical#3f34e7e3836a762a8b18dd683a781476c8bf2208</id>
-        <link href="https://windhawk.net/mods/taskbar-vertical"/>
-        <updated>2026-09-29T00:24:08.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added the ability to move secondary taskbars to the top/bottom (similar to how the Taskbar on top mod can move secondary taskbars to the left/right).</li>
-<li>Improved the layout of tray icons in some cases.</li>
 </ul>]]></content>
         <author>
             <name>m417z</name>

@@ -648,6 +648,31 @@
         "version": "1.2.0"
       }
     },
+    "auto-refresh-rate": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790888541000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790888541000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "roypriyanshu02",
+        "compilerOptions": "-lole32 -lgdi32 -luser32 -ladvapi32 -lpowrprof -lshell32",
+        "description": "Automatically switch monitor refresh rates based on AC/battery power, fullscreen games, foreground apps, and docking.",
+        "github": "https://github.com/roypriyanshu02",
+        "homepage": "https://github.com/roypriyanshu02/windhawk-auto-refresh-rate",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Auto Refresh Rate",
+        "version": "1.0.0"
+      }
+    },
     "auto-theme-switcher": {
       "details": {
         "defaultSorting": 7128,
