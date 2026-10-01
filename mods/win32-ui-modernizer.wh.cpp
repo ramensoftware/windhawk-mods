@@ -2022,6 +2022,26 @@ static bool IsAeroWizardRawWindow(HWND hwnd)
     return root && GetPropW(root, kPropAeroWizardCaption);
 }
 
+// The taskbar's Win32 thumbnail popup (builds without the XAML thumbnails).
+// The shell draws its title and close glyph itself over a DWM surface,
+// already in the system theme; the dark text pipeline's recolor and glow
+// make both vanish.
+static bool IsTaskbarThumbnailWindow(HWND hwnd)
+{
+    static const bool inExplorer = [] {
+        wchar_t path[MAX_PATH] = {};
+        GetModuleFileNameW(nullptr, path, MAX_PATH);
+        wchar_t* name = wcsrchr(path, L'\\');
+        return name && _wcsicmp(name + 1, L"explorer.exe") == 0;
+    }();
+    if (!inExplorer || !hwnd)
+        return false;
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    wchar_t cls[32] = {};
+    return root && GetClassNameW(root, cls, ARRAYSIZE(cls)) &&
+           _wcsicmp(cls, L"TaskListThumbnailWnd") == 0;
+}
+
 // Defined later in the file (NavDivider section) -- reused as-is here rather
 // than duplicating an EnumChildWindows walk. Resolves hwnd's own root and
 // checks whether it IS or CONTAINS a NamespaceTreeControl, caching a
@@ -39659,7 +39679,8 @@ HRESULT WINAPI DrawThemeText_hook(HTHEME hTheme, HDC hdc, int iPartId,
     }
 
     if (IsTextPipelineDisabled() || !g_darkModeActive || !pRect ||
-        IsAeroWizardRawWindow(WindowFromDC(hdc)))
+        IsAeroWizardRawWindow(WindowFromDC(hdc)) ||
+        IsTaskbarThumbnailWindow(ResolvePaintHwndFreshFirst(hdc)))
         return DrawThemeText_orig(hTheme, hdc, iPartId, iStateId,
             pszText, cchText, dwTextFlags, dwTextFlags2, pRect);
 
@@ -39988,7 +40009,8 @@ HRESULT WINAPI DrawThemeTextEx_hook(HTHEME hTheme, HDC hdc, int iPartId,
     }
 
     if (IsTextPipelineDisabled() || !g_darkModeActive || !pRect || g_glowEntry || !g_pDrawTextWithGlow ||
-        IsAeroWizardRawWindow(WindowFromDC(hdc))) {
+        IsAeroWizardRawWindow(WindowFromDC(hdc)) ||
+        IsTaskbarThumbnailWindow(ResolvePaintHwndFreshFirst(hdc))) {
         return DrawThemeTextEx_orig(hTheme, hdc, iPartId, iStateId,
             pszText, cchText, dwTextFlags, pRect, pOptions);
     }
@@ -40516,6 +40538,7 @@ static INT WINAPI DrawTextW_hook_impl(HDC hdc, LPCWSTR lpchText, INT cchText,
     if ((format & DT_CALCRECT) || g_glowEntry || IsTextPipelineDisabled() ||
         !g_darkModeActive || !lprc ||
         IsAeroWizardRawWindow(splitChevronHwnd) ||
+        IsTaskbarThumbnailWindow(splitChevronHwnd) ||
         IsInsideSearchEditBoxWrapper(splitChevronHwnd))
         [[clang::musttail]] return DrawTextW_orig(hdc, lpchText, cchText, lprc, format);
 
@@ -40760,6 +40783,7 @@ BOOL WINAPI ExtTextOutW_hook(HDC hdc, int x, int y, UINT options,
         paintHwnd = dcHwnd;
     }
     if (IsAeroWizardRawWindow(paintHwnd) ||
+        IsTaskbarThumbnailWindow(paintHwnd) ||
         IsInsideSearchEditBoxWrapper(paintHwnd)) {
         [[clang::musttail]] return ExtTextOutW_orig(hdc, x, y, options, lprect, lpString, c, lpDx);
     }
