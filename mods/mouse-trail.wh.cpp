@@ -6226,7 +6226,7 @@ static void RunPostChain(ID3D11RenderTargetView *pBackRTV, int w, int h) {
         if (dstRTV) {
             ID3D11ShaderResourceView *srvs[2] = {cur, g_pHistorySRV};
             memset(cb, 0, sizeof(cb));
-            cb[4] = FxApply(g_temporalBlurAmount / 100.0f, g_fxBlurMul);  // k = 上一帧保留比例
+            cb[4] = fminf(FxApply(g_temporalBlurAmount / 100.0f, g_fxBlurMul), 0.95f);  // k = 上一帧保留比例, clamp to avoid freezing
             PostPass(dstRTV, g_pTemporalPS, srvs, 2, g_pPostCB, cb, 16);
             cur = dstSRV;
             curIsScene = !curIsScene;
@@ -7294,9 +7294,10 @@ static inline float MtStripHalfW(const MtDraw &d, int i) {
 
 // ---- D3D11 后端：图元 -> 三角形 -> 顶点缓冲，最后一次性提交 ----
 namespace mtb {
-    struct Layer { int offset, count; bool additive; };
+    struct Layer { int offset, count; bool additive; D3D11_PRIMITIVE_TOPOLOGY topo; };
     static std::vector<VertexPosColor> s_verts;
     static std::vector<Layer> s_layers;
+    static std::unordered_map<int, ID2D1PathGeometry *> s_keyCache;
 
     static void D3DBegin() {
         s_verts.clear();
@@ -7314,10 +7315,11 @@ namespace mtb {
         switch (d.kind) {
         case MtPrim::Poly: {
             if (!d.verts || d.vertCount < 3) return;
-            for (int i = 1; i < d.vertCount - 1; i++) {
-                push2(d.verts[0], d.verts[1], 0.0f);
+            // Triangle list: pass through as-is (each group of 3 verts = one triangle)
+            for (int i = 0; i + 2 < d.vertCount; i += 3) {
                 push2(d.verts[i * 2], d.verts[i * 2 + 1], 0.0f);
                 push2(d.verts[(i + 1) * 2], d.verts[(i + 1) * 2 + 1], 0.0f);
+                push2(d.verts[(i + 2) * 2], d.verts[(i + 2) * 2 + 1], 0.0f);
             }
             break;
         }
@@ -7377,7 +7379,12 @@ namespace mtb {
         }
         }
         int n = (int)s_verts.size() - start;
-        if (n > 0) s_layers.push_back({start, n, d.additive});
+        if (n > 0) {
+            D3D11_PRIMITIVE_TOPOLOGY topo = (d.kind == MtPrim::Poly || d.kind == MtPrim::Disc)
+                ? D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST
+                : D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+            s_layers.push_back({start, n, d.additive, topo});
+        }
     }
     static void D3DEnd(int screenW, int screenH, const GradData *grad = nullptr) {
         if (s_verts.empty() || !g_pTrailVB) return;
@@ -7387,8 +7394,8 @@ namespace mtb {
         memcpy(mapped.pData, s_verts.data(), s_verts.size() * sizeof(VertexPosColor));
         g_pD3DContext->Unmap(g_pTrailVB, 0);
         // 把渐变一并上传：Strip 图元的 u=ratio 由 PS 采样渐变，才能画出彩色拖尾
-        SetNativeRenderState(screenW, screenH, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP, grad);
         for (const Layer &L : s_layers) {
+            SetNativeRenderState(screenW, screenH, L.topo, grad);
             g_pD3DContext->OMSetBlendState(L.additive ? g_pAdditiveBlend : g_pAlphaBlend,
                                            nullptr, 0xFFFFFFFF);
             g_pD3DContext->Draw((UINT)L.count, (UINT)L.offset);
@@ -7422,11 +7429,11 @@ namespace mtb {
         // 只有显式给了 cacheKey 才缓存。不要按顶点指针缓存 —— 调用方可能用同一个
         // static buffer 每帧生成不同内容（指针不变、内容在变），那样会命中过期的 geometry。
         if (cacheKey < 0) return BuildPolyGeom(verts, count);
-        static std::unordered_map<int, ID2D1PathGeometry *> keyCache;
-        auto it = keyCache.find(cacheKey);
-        if (it != keyCache.end()) return it->second;
+        // keyCache is now in mtb namespace scope (see below)
+        auto it = s_keyCache.find(cacheKey);
+        if (it != s_keyCache.end()) return it->second;
         ID2D1PathGeometry *g = BuildPolyGeom(verts, count);
-        if (g) keyCache[cacheKey] = g;
+        if (g) s_keyCache[cacheKey] = g;
         return g;
     }
     static void D2DDraw(const MtDraw &d) {
@@ -7839,15 +7846,17 @@ static void DrawClickEffects(int screenW, int screenH, DWORD dwTime, const GradD
         }
         case 2: {  // 墨晕
             float w = 4.0f + progress * 3.0f;
-            d.kind = MtPrim::Poly; d.verts = s_poly.data();
+            d.kind = MtPrim::Poly;
             d.r = cr; d.g = cg; d.b = cb;
             // 内部淡墨
             d.vertCount = polyRing(radius * 0.92f, radius * 0.30f, 28, 0.28f, progress * 4.0f);
+            d.verts = s_poly.data();
             d.a = alpha * 0.20f; d.additive = true;
             d.cacheKey = 200000 + InkKey(progress, radius);
             MtPrimDraw(d);
             // 不规则主轮廓
             d.vertCount = polyRing(radius, w, 28, 0.28f, progress * 4.0f);
+            d.verts = s_poly.data();
             d.a = alpha; d.additive = false;
             d.cacheKey = 250000 + InkKey(progress, radius);
             MtPrimDraw(d);
@@ -7886,7 +7895,7 @@ static void DrawClickEffects(int screenW, int screenH, DWORD dwTime, const GradD
             break;
         }
         case 4: {  // 花瓣绽放
-            d.kind = MtPrim::Poly; d.verts = s_poly.data();
+            d.kind = MtPrim::Poly;
             d.r = cr; d.g = cg; d.b = cb; d.a = alpha * 0.9f; d.additive = false;
             for (int i = 0; i < 6; i++) {
                 float ang = (float)i * 6.2831853f / 6.0f + progress * 0.9f;
@@ -7894,6 +7903,7 @@ static void DrawClickEffects(int screenW, int screenH, DWORD dwTime, const GradD
                 d.cy = (float)(r.pos.y - vY) + sinf(ang) * radius * 0.55f;
                 d.rot = ang;
                 d.vertCount = polyEllipse(radius * 0.5f, radius * 0.19f, 16);
+                d.verts = s_poly.data();
                 // 花瓣尺寸只随 radius 变，把它量化进缓存键即可命中缓存
                 int qr = (int)(radius * 0.25f);
                 if (qr > 199) qr = 199;
@@ -9555,8 +9565,18 @@ void LoadSettings() {
     // 飞行器（火箭/导弹/光纤导弹）静止引爆
     g_missileIdleExplode = Wh_GetIntSetting(L"ShapesText.missile_idle_explode") != 0;
     g_missileIdleDelay = Wh_GetIntSetting(L"ShapesText.missile_idle_delay");
+    if (g_missileIdleDelay < 100) g_missileIdleDelay = 100;
+    if (g_missileIdleDelay > 5000) g_missileIdleDelay = 5000;
     g_missileExplodeParticles = Wh_GetIntSetting(L"ShapesText.missile_explode_particles");
-    g_missileExplodeFx = Wh_GetIntSetting(L"ShapesText.missile_explode_fx");
+    if (g_missileExplodeParticles < 0) g_missileExplodeParticles = 0;
+    if (g_missileExplodeParticles > 40) g_missileExplodeParticles = 40;
+    {
+        PCWSTR fxStr = Wh_GetStringSetting(L"ShapesText.missile_explode_fx");
+        if (wcscmp(fxStr, L"particles") == 0) g_missileExplodeFx = 0;
+        else if (wcscmp(fxStr, L"shockwave") == 0) g_missileExplodeFx = 1;
+        else g_missileExplodeFx = 2;  // both
+        Wh_FreeStringSetting(fxStr);
+    }
     g_enableGlow = Wh_GetIntSetting(L"Quality.enable_glow") != 0;
     g_glowIntensity = Wh_GetIntSetting(L"Quality.glow_intensity");
     g_edgeSoftness = Wh_GetIntSetting(L"Quality.edge_softness");
@@ -14045,6 +14065,9 @@ static void ReleaseAllRenderResources() {
     if (g_pStarGeom) { g_pStarGeom->Release(); g_pStarGeom = nullptr; }
     if (g_pHexagramGeom) { g_pHexagramGeom->Release(); g_pHexagramGeom = nullptr; }
     if (g_pHeartGeom) { g_pHeartGeom->Release(); g_pHeartGeom = nullptr; }
+    // Release cached D2D path geometries before releasing the factory
+    for (auto &kv : mtb::s_keyCache) { if (kv.second) kv.second->Release(); }
+    mtb::s_keyCache.clear();
     if (g_pD2DFactory) { g_pD2DFactory->Release(); g_pD2DFactory = nullptr; }
     if (g_dwFactory) { g_dwFactory->Release(); g_dwFactory = nullptr; }
     if (g_pDXGIDevice) { g_pDXGIDevice->Release(); g_pDXGIDevice = nullptr; }
