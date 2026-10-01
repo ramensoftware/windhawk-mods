@@ -23,6 +23,10 @@ tool. This mod adds one: it "writes" your text on the screenshot using the
 Since the text becomes real pen strokes, it lives inside the editor: undo it
 with Ctrl+Z, erase it with the eraser, save and copy as usual.
 
+## Preview
+
+![Snipping Tool Pen Text demo](https://raw.githubusercontent.com/cristianosm/windhawk-assets/main/snipping-tool-pen-text-demo.gif)
+
 ## How to use
 
 1. Open a screenshot in the Snipping Tool editor.
