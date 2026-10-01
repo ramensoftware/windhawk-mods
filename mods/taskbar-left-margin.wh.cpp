@@ -9,14 +9,13 @@
 // @github          https://github.com/loliri
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lgdi32 -lole32 -loleaut32 -lruntimeobject -lshlwapi
+// @compilerOptions -lole32 -loleaut32 -lruntimeobject
 // ==/WindhawkMod==
 
 // Source code is published under The GNU General Public License v3.0.
 //
-// The XAML diagnostics and visual tree watching code is based on the
-// Windows 11 Taskbar Styler mod by m417z, which is also licensed under the
-// GNU General Public License v3.0:
+// The taskbar XAML access is based on the Start button always on the left mod
+// by m417z, which is also licensed under the GNU General Public License v3.0:
 // https://github.com/m417z/my-windhawk-mods
 //
 // For bug reports and feature requests, please open an issue here:
@@ -27,7 +26,8 @@
 # Taskbar Left Margin
 
 Shifts the taskbar **content** to the right by a configurable number of pixels,
-leaving an empty margin on the left. The taskbar background stays full width.
+leaving an empty margin on the left. The taskbar background stays full width,
+and the taskbar context menu follows the content.
 
 Only the taskbar itself is affected.
 
@@ -37,12 +37,12 @@ Requires Windows 11.
 
 ## Compatibility
 
+- **Windows 11 Taskbar Styler** can be used alongside this mod. This mod reads
+  the taskbar's XAML tree directly instead of going through XAML diagnostics, so
+  it does not compete with the Styler for the single XAML diagnostics consumer
+  slot that Explorer allows.
 - **TranslucentTB** is confirmed compatible and can be used alongside this mod.
 - Tested on Windows 11 26H2.
-
-This mod uses XAML diagnostics to modify taskbar elements. There can only be one
-XAML diagnostics consumer at a time, so it may conflict with other tools which
-use it.
 
 ## Suggested use
 
@@ -53,40 +53,14 @@ overlapping each other.
 
 ## Implementation notes
 
-The VisualTreeWatcher implementation is based on the
-[ExplorerTAP](https://github.com/TranslucentTB/TranslucentTB/tree/develop/ExplorerTAP)
-code from the **TranslucentTB** project.
-
-### How the context menu is positioned
-
 The taskbar context menu (the jump list) is not laid out by XAML. Its anchor
 point is computed in `explorer.exe` by `CTaskListWnd::_ComputeJumpViewPosition`
-in `taskbar.dll`, and handed to `ShellExperienceHost.exe`, which draws the menu
-there. The point is in physical screen pixels.
+in `taskbar.dll`, and handed to the process that draws the menu. The point is in
+physical screen pixels.
 
-The consequences below were all verified on a 150% display:
-
-* Shifting the taskbar's XAML content does not move the menu, because the menu
-  is not placed relative to it. The mod adjusts the anchor point instead, which
-  is why it hooks that function.
-* The menu's content is its own visual tree. The chain stops at
-  `JumpViewUI.TaskbarJumpListFrame > Border > ScrollContentPresenter >
-  ScrollViewer`, with no visual or logical parent beyond it, and the popup
-  carrying it is never reported to the XAML diagnostics callback. Moving the
-  content directly is not possible.
-* The menu's `XamlRoot` is exactly the size of the menu, so a render transform
-  on the content is clipped by it rather than moving the menu.
-* The menu is drawn into a `Windows.UI.Core.CoreWindow`, but that window's
-  rectangle does not correspond to the menu's visible area, so moving the window
-  has no effect either.
-
-Because the anchor is in physical pixels, the setting is converted according to
-the display scale when **Follow display DPI** is enabled.
-
-## Feedback
-
-Bug reports and feature requests are welcome at
-[loliri/windhawk-taskbar-left-margin](https://github.com/loliri/windhawk-taskbar-left-margin/issues).
+Shifting the taskbar's XAML content therefore does not move the menu on its own,
+because the menu is not placed relative to it. The mod adjusts the anchor point
+instead, which is why it hooks that function.
 */
 // ==/WindhawkModReadme==
 
@@ -112,1255 +86,301 @@ Bug reports and feature requests are welcome at
 */
 // ==/WindhawkModSettings==
 
-#include <commctrl.h>
-#include <xamlom.h>
-
 #include <atomic>
+#include <functional>
 #include <vector>
 
 #undef GetCurrentTime
 
-#include <winrt/Windows.UI.Xaml.h>
-
-#include <Unknwn.h>
-#include <combaseapi.h>
-#include <ocidl.h>
-#include <weakreference.h>
-
 #include <windhawk_utils.h>
 
-#include <algorithm>
-#include <chrono>
-#include <utility>
-
 #include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.System.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
+#include <winrt/Windows.UI.Xaml.Media.h>
+#include <winrt/Windows.UI.Xaml.h>
 
 using namespace winrt::Windows::UI::Xaml;
 
-namespace wuxc = winrt::Windows::UI::Xaml::Controls;
+struct
+{
+    int leftMargin;
+    bool followDpi;
+} g_settings;
 
-int g_leftMargin;
-bool g_followDpi;
+std::atomic<bool> g_unloading;
 
-// The jump list (taskbar context menu) is positioned by taskbar.dll, which
-// computes a screen-space anchor point and hands it to the process that draws
-// the menu. That anchor is computed from the taskbar's own layout, not from the
-// XAML positions of the buttons, so shifting the taskbar content does not move
-// the menu. The anchor is adjusted here instead, which moves the menu itself.
-//
-// The anchor is in physical screen pixels, while the margin setting is in DIPs,
-// hence the DPI conversion.
+// The jump list anchor is in physical screen pixels, so the offset the hook
+// adds is kept in the same unit.
 std::atomic<int> g_anchorOffsetPx{0};
 
-std::atomic<bool> g_initialized;
-thread_local bool g_initializedForThread;
-
+// Elements whose value the mod set, so it can be cleared again. The taskbars
+// live on different threads, hence thread-local.
 struct AppliedElement
 {
-    winrt::weak_ref<winrt::Windows::UI::Xaml::FrameworkElement> element;
-    winrt::Windows::UI::Xaml::DependencyProperty property;
+    winrt::weak_ref<FrameworkElement> element;
+    DependencyProperty property;
 };
 
 thread_local std::vector<AppliedElement> g_appliedElements;
 
-HMODULE GetCurrentModuleHandle()
-{
-    HMODULE module;
-    if (!GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                           L"", &module))
-    {
+void* CTaskBand_ITaskListWndSite_vftable;
+
+void* CSecondaryTaskBand_ITaskListWndSite_vftable;
+
+using CTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis, void** result);
+CTaskBand_GetTaskbarHost_t CTaskBand_GetTaskbarHost_Original;
+
+void* TaskbarHost_FrameHeight_Original;
+
+using CSecondaryTaskBand_GetTaskbarHost_t = void*(WINAPI*)(void* pThis,
+                                                           void** result);
+CSecondaryTaskBand_GetTaskbarHost_t CSecondaryTaskBand_GetTaskbarHost_Original;
+
+using std__Ref_count_base__Decref_t = void(WINAPI*)(void* pThis);
+std__Ref_count_base__Decref_t std__Ref_count_base__Decref_Original;
+
+// The taskbar's XAML tree is reached through its host object rather than
+// through XAML diagnostics, so that the mod can run alongside other mods which
+// need to be Explorer's XAML diagnostics consumer.
+XamlRoot XamlRootFromTaskbarHostSharedPtr(void* taskbarHostSharedPtr[2]) {
+    if (!taskbarHostSharedPtr[0] && !taskbarHostSharedPtr[1]) {
         return nullptr;
     }
 
-    return module;
-}
+    size_t taskbarElementIUnknownOffset = 0x10;
 
-// XamlDiagnostics implements this interface too, and xamlom.h does not declare
-// it. UnregisterInstance closes the runtime object cached for a handle, the
-// only reference the diagnostics keep to an element once it was reported.
-static constexpr GUID IID_IXamlDiagnosticsTestHooks =
-    {0x735941a2, 0x3ee3, 0x495a, {0x8d, 0xa9, 0x97, 0x26, 0x27, 0x00, 0x30, 0x75}};
-
-struct IXamlDiagnosticsTestHooks : IUnknown
-{
-    virtual HRESULT STDMETHODCALLTYPE UnregisterInstance(
-        InstanceHandle handle) = 0;
-    virtual HRESULT STDMETHODCALLTYPE TryGetDispatcherQueueForObject(
-        InstanceHandle handle,
-        void **dispatcherQueue) = 0;
-};
-
-// The diagnostics create a runtime object which holds every element they
-// report, and drop it only once the element is reported as removed. Removals
-// are reported for elements taken out of their parent, but a tree which is
-// discarded whole is never taken apart that way. Elements nothing is keyed by
-// are handed back from here so the teardown can happen.
-//
-// Reporting an element recreates the runtime object of its parent, which is why
-// each report queues the parent as well, and why the queue is drained only once
-// the burst of reports has stopped: releasing mid-burst would just be undone by
-// the next child of whatever was released.
-thread_local std::vector<InstanceHandle> g_pendingDiagnosticsRelease;
-thread_local ULONGLONG g_lastDiagnosticsReleaseQueueTick;
-thread_local bool g_diagnosticsReleaseDrainQueued;
-thread_local winrt::Windows::System::DispatcherQueueTimer
-    g_diagnosticsReleaseDrainTimer{nullptr};
-thread_local winrt::Windows::System::DispatcherQueueTimer::Tick_revoker
-    g_diagnosticsReleaseDrainTimerTickRevoker;
-
-// Long enough to sit out a tree being built.
-constexpr ULONGLONG kDiagnosticsReleaseDelay = 200;
-
-// The drain waits on a one-shot timer, which the thread teardown can stop,
-// rather than on a dispatcher item, which it cannot: the module is freed once
-// the mod is uninitialized, and an item still on the dispatcher would call into
-// it. The interval only has to carry the drain out of the report which arms it.
-constexpr ULONGLONG kDiagnosticsReleaseDrainDelay = 1;
-
-class VisualTreeWatcher
-    : public winrt::implements<VisualTreeWatcher,
-                               IVisualTreeServiceCallback2,
-                               winrt::non_agile>
-{
-public:
-    VisualTreeWatcher(winrt::com_ptr<IUnknown> site);
-
-    VisualTreeWatcher(const VisualTreeWatcher &) = delete;
-    VisualTreeWatcher &operator=(const VisualTreeWatcher &) = delete;
-
-    VisualTreeWatcher(VisualTreeWatcher &&) = delete;
-    VisualTreeWatcher &operator=(VisualTreeWatcher &&) = delete;
-
-    ~VisualTreeWatcher();
-
-    void UnadviseVisualTreeChange();
-
-    bool ReleaseDiagnosticsReference(InstanceHandle handle);
-
-    winrt::Windows::Foundation::IInspectable FromHandle(
-        InstanceHandle handle)
+#if defined(_M_X64)
     {
-        winrt::Windows::Foundation::IInspectable obj{nullptr};
-        winrt::check_hresult(m_XamlDiagnostics->GetIInspectableFromHandle(
-            handle,
-            reinterpret_cast<::IInspectable **>(winrt::put_abi(obj))));
-        return obj;
-    }
-
-private:
-    HRESULT STDMETHODCALLTYPE OnVisualTreeChange(
-        ParentChildRelation relation,
-        VisualElement element,
-        VisualMutationType mutationType) override;
-    HRESULT STDMETHODCALLTYPE OnElementStateChanged(InstanceHandle element,
-                                                    VisualElementState elementState,
-                                                    LPCWSTR context) noexcept override;
-
-    winrt::com_ptr<IXamlDiagnostics> m_XamlDiagnostics = nullptr;
-    winrt::com_ptr<IXamlDiagnosticsTestHooks> m_XamlDiagnosticsTestHooks =
-        nullptr;
-};
-
-winrt::com_ptr<VisualTreeWatcher> g_visualTreeWatcher;
-
-// {C85D8CC7-5463-40E8-A432-F5916B6427E5}
-static constexpr CLSID CLSID_WindhawkTAP = {
-    0xc85d8cc7, 0x5463, 0x40e8, {0xa4, 0x32, 0xf5, 0x91, 0x6b, 0x64, 0x27, 0xe5}};
-
-class WindhawkTAP : public winrt::implements<WindhawkTAP,
-                                             IObjectWithSite,
-                                             winrt::non_agile>
-{
-public:
-    HRESULT STDMETHODCALLTYPE SetSite(IUnknown *pUnkSite) override;
-    HRESULT STDMETHODCALLTYPE GetSite(REFIID riid, void **ppvSite) noexcept override;
-
-private:
-    winrt::com_ptr<IUnknown> site;
-};
-
-template <class T>
-struct SimpleFactory
-    : winrt::implements<SimpleFactory<T>, IClassFactory, winrt::non_agile>
-{
-    HRESULT STDMETHODCALLTYPE CreateInstance(IUnknown *pUnkOuter,
-                                             REFIID riid,
-                                             void **ppvObject) override
-    try
-    {
-        if (!pUnkOuter)
-        {
-            *ppvObject = nullptr;
-            return winrt::make<T>().as(riid, ppvObject);
-        }
-        else
-        {
-            return CLASS_E_NOAGGREGATION;
+        // 48:83EC 28 | sub rsp,28
+        // 48:83C1 48 | add rcx,48
+        const BYTE* b = (const BYTE*)TaskbarHost_FrameHeight_Original;
+        if (b[0] == 0x48 && b[1] == 0x83 && b[2] == 0xEC && b[4] == 0x48 &&
+            b[5] == 0x83 && b[6] == 0xC1 && b[7] <= 0x7F) {
+            taskbarElementIUnknownOffset = b[7];
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
         }
     }
-    catch (...)
+#elif defined(_M_ARM64)
     {
-        HRESULT hr = winrt::to_hresult();
-        Wh_Log(L"Error %08X", hr);
-        return hr;
+        // 7f2303d5 pacibsp
+        // fd7bbfa9 stp     fp, lr, [sp, #-0x10]!
+        // fd030091 mov     fp, sp
+        // 080c41f8 ldr     x8, [x0, #0x10]!
+        const DWORD* p = (const DWORD*)TaskbarHost_FrameHeight_Original;
+        if (p[0] == 0xD503237F && (p[1] & 0xFFC07FFF) == 0xA9807BFD &&
+            p[2] == 0x910003FD && (p[3] & 0xFFF00FE0) == 0xF8400C00) {
+            taskbarElementIUnknownOffset = (p[3] >> 12) & 0xFF;
+        } else {
+            Wh_Log(L"Unsupported TaskbarHost::FrameHeight");
+        }
     }
+#else
+#error "Unsupported architecture"
+#endif
 
-    HRESULT STDMETHODCALLTYPE LockServer(BOOL) noexcept override
-    {
-        return S_OK;
-    }
-};
+    auto* taskbarElementIUnknown =
+        *(IUnknown**)((BYTE*)taskbarHostSharedPtr[0] +
+                      taskbarElementIUnknownOffset);
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdll-attribute-on-redeclaration"
+    FrameworkElement taskbarElement = nullptr;
+    taskbarElementIUnknown->QueryInterface(winrt::guid_of<FrameworkElement>(),
+                                           winrt::put_abi(taskbarElement));
 
-__declspec(dllexport) _Use_decl_annotations_ STDAPI
-DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
-try
-{
-    if (rclsid == CLSID_WindhawkTAP)
-    {
-        *ppv = nullptr;
-        return winrt::make<SimpleFactory<WindhawkTAP>>().as(riid, ppv);
-    }
-    else
-    {
-        return CLASS_E_CLASSNOTAVAILABLE;
-    }
-}
-catch (...)
-{
-    HRESULT hr = winrt::to_hresult();
-    Wh_Log(L"Error %08X", hr);
-    return hr;
+    auto result = taskbarElement ? taskbarElement.XamlRoot() : nullptr;
+
+    std__Ref_count_base__Decref_Original(taskbarHostSharedPtr[1]);
+
+    return result;
 }
 
-__declspec(dllexport) _Use_decl_annotations_ STDAPI DllCanUnloadNow()
-{
-    if (winrt::get_module_lock())
-    {
-        return S_FALSE;
+XamlRoot GetTaskbarXamlRoot(HWND hTaskbarWnd) {
+    HWND hTaskSwWnd = (HWND)GetProp(hTaskbarWnd, L"TaskbandHWND");
+    if (!hTaskSwWnd) {
+        return nullptr;
     }
-    else
-    {
-        return S_OK;
+
+    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void**)taskBandForTaskListWndSite !=
+                    CTaskBand_ITaskListWndSite_vftable;
+         i++) {
+        if (i == 20) {
+            return nullptr;
+        }
+
+        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
     }
+
+    void* taskbarHostSharedPtr[2]{};
+    CTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                      taskbarHostSharedPtr);
+
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
 }
 
-#pragma clang diagnostic pop
-
-HRESULT WindhawkTAP::SetSite(IUnknown *pUnkSite)
-try
-{
-    // Only ever 1 VTW at once.
-    if (g_visualTreeWatcher)
-    {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
+XamlRoot GetSecondaryTaskbarXamlRoot(HWND hSecondaryTaskbarWnd) {
+    HWND hTaskSwWnd =
+        (HWND)FindWindowEx(hSecondaryTaskbarWnd, nullptr, L"WorkerW", nullptr);
+    if (!hTaskSwWnd) {
+        return nullptr;
     }
 
-    site.copy_from(pUnkSite);
+    void* taskBand = (void*)GetWindowLongPtr(hTaskSwWnd, 0);
+    void* taskBandForTaskListWndSite = taskBand;
+    for (int i = 0; *(void**)taskBandForTaskListWndSite !=
+                    CSecondaryTaskBand_ITaskListWndSite_vftable;
+         i++) {
+        if (i == 20) {
+            return nullptr;
+        }
 
-    if (site)
-    {
-        // Decrease refcount increased by InitializeXamlDiagnosticsEx.
-        FreeLibrary(GetCurrentModuleHandle());
-
-        g_visualTreeWatcher = winrt::make_self<VisualTreeWatcher>(site);
+        taskBandForTaskListWndSite = (void**)taskBandForTaskListWndSite + 1;
     }
 
-    return S_OK;
-}
-catch (...)
-{
-    HRESULT hr = winrt::to_hresult();
-    Wh_Log(L"Error %08X", hr);
-    return hr;
+    void* taskbarHostSharedPtr[2]{};
+    CSecondaryTaskBand_GetTaskbarHost_Original(taskBandForTaskListWndSite,
+                                               taskbarHostSharedPtr);
+
+    return XamlRootFromTaskbarHostSharedPtr(taskbarHostSharedPtr);
 }
 
-HRESULT WindhawkTAP::GetSite(REFIID riid, void **ppvSite) noexcept
-{
-    return site.as(riid, ppvSite);
-}
+FrameworkElement EnumChildElements(
+    FrameworkElement element,
+    std::function<bool(FrameworkElement)> enumCallback) {
+    int childrenCount = Media::VisualTreeHelper::GetChildrenCount(element);
 
-bool g_inInjectWindhawkTAP = false;
+    for (int i = 0; i < childrenCount; i++) {
+        auto child = Media::VisualTreeHelper::GetChild(element, i)
+                         .try_as<FrameworkElement>();
+        if (!child) {
+            Wh_Log(L"Failed to get child %d of %d", i + 1, childrenCount);
+            continue;
+        }
 
-using PFN_INITIALIZE_XAML_DIAGNOSTICS_EX =
-    decltype(&InitializeXamlDiagnosticsEx);
-
-HRESULT InjectWindhawkTAP() noexcept
-{
-    HMODULE module = GetCurrentModuleHandle();
-    if (!module)
-    {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    WCHAR location[MAX_PATH];
-    switch (GetModuleFileName(module, location, ARRAYSIZE(location)))
-    {
-    case 0:
-    case ARRAYSIZE(location):
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    const HMODULE wux = LoadLibraryEx(L"Windows.UI.Xaml.dll", nullptr,
-                                      LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!wux) [[unlikely]]
-    {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    const auto ixde = reinterpret_cast<PFN_INITIALIZE_XAML_DIAGNOSTICS_EX>(
-        GetProcAddress(wux, "InitializeXamlDiagnosticsEx"));
-    if (!ixde) [[unlikely]]
-    {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    // I didn't find a better way than trying many connections until one works.
-    g_inInjectWindhawkTAP = true;
-
-    HRESULT hr;
-    for (int i = 0; i < 10000; i++)
-    {
-        WCHAR connectionName[256];
-        wsprintf(connectionName, L"VisualDiagConnection%d", i + 1);
-
-        hr = ixde(connectionName, GetCurrentProcessId(), L"", location,
-                  CLSID_WindhawkTAP, nullptr);
-        if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND))
-        {
-            break;
+        if (enumCallback(child)) {
+            return child;
         }
     }
 
-    g_inInjectWindhawkTAP = false;
-
-    return hr;
+    return nullptr;
 }
 
-// The XAML composition diagnostics rebuild a process-wide visual tree walker
-// without any locking whenever a DirectComposition visual is added, so any UI
-// thread which adds one corrupts the heap while another thread is in the same
-// code. Only element mutations are needed here, and those are reported by an
-// unrelated code path, so the composition diagnostics are kept from being
-// created at all: XamlDiagnostics::CreateCompVisualDiag skips them when the
-// HKLM\Software\Microsoft\XAML\Debug\DisableCompositionDiag value is 1.
-// Windows.UI.Xaml.dll reads and caches the value once, from within
-// AdviseVisualTreeChange, so it is faked for exactly that window.
-thread_local bool g_reportCompositionDiagAsDisabled;
-
-using RegOpenKeyExW_t = decltype(&RegOpenKeyExW);
-RegOpenKeyExW_t RegOpenKeyExW_Original;
-LSTATUS WINAPI RegOpenKeyExW_Hook(HKEY hKey,
-                                  LPCWSTR lpSubKey,
-                                  DWORD ulOptions,
-                                  REGSAM samDesired,
-                                  PHKEY phkResult)
-{
-    LSTATUS result = RegOpenKeyExW_Original(hKey, lpSubKey, ulOptions,
-                                            samDesired, phkResult);
-    if (result == ERROR_SUCCESS || !g_reportCompositionDiagAsDisabled ||
-        hKey != HKEY_LOCAL_MACHINE || !lpSubKey ||
-        _wcsicmp(lpSubKey, L"Software\\Microsoft\\XAML\\Debug") != 0)
-    {
-        return result;
-    }
-
-    // The key usually doesn't exist, and the value isn't queried unless the key
-    // could be opened, so hand out a key which does exist.
-    Wh_Log(L"Substituting the XAML debug key");
-    return RegOpenKeyExW_Original(HKEY_LOCAL_MACHINE, L"Software\\Microsoft",
-                                  ulOptions, samDesired, phkResult);
+FrameworkElement FindChildByName(FrameworkElement element, PCWSTR name) {
+    return EnumChildElements(element, [name](FrameworkElement child) {
+        return child.Name() == name;
+    });
 }
 
-using RegQueryValueExW_t = decltype(&RegQueryValueExW);
-RegQueryValueExW_t RegQueryValueExW_Original;
-LSTATUS WINAPI RegQueryValueExW_Hook(HKEY hKey,
-                                     LPCWSTR lpValueName,
-                                     LPDWORD lpReserved,
-                                     LPDWORD lpType,
-                                     LPBYTE lpData,
-                                     LPDWORD lpcbData)
-{
-    if (!g_reportCompositionDiagAsDisabled || !lpValueName ||
-        _wcsicmp(lpValueName, L"DisableCompositionDiag") != 0)
-    {
-        return RegQueryValueExW_Original(hKey, lpValueName, lpReserved, lpType,
-                                         lpData, lpcbData);
-    }
-
-    Wh_Log(L"Reporting DisableCompositionDiag as set");
-
-    if (lpType)
-    {
-        *lpType = REG_DWORD;
-    }
-
-    if (lpData && (!lpcbData || *lpcbData < sizeof(DWORD)))
-    {
-        if (lpcbData)
-        {
-            *lpcbData = sizeof(DWORD);
-        }
-        return ERROR_MORE_DATA;
-    }
-
-    if (lpData)
-    {
-        *reinterpret_cast<DWORD *>(lpData) = 1;
-    }
-
-    if (lpcbData)
-    {
-        *lpcbData = sizeof(DWORD);
-    }
-
-    return ERROR_SUCCESS;
-}
-
-void FlushDiagnosticsReleases()
-{
-    auto pending = std::move(g_pendingDiagnosticsRelease);
-    g_pendingDiagnosticsRelease.clear();
-
-    if (!g_visualTreeWatcher)
-    {
-        return;
-    }
-
-    // A handle is queued once per report naming it, so a parent appears once
-    // per child.
-    std::sort(pending.begin(), pending.end());
-    pending.erase(std::unique(pending.begin(), pending.end()), pending.end());
-
-    for (InstanceHandle handle : pending)
-    {
-        g_visualTreeWatcher->ReleaseDiagnosticsReference(handle);
-    }
-}
-
-void QueueDiagnosticsRelease(InstanceHandle handle)
-{
-    if (!handle)
-    {
-        return;
-    }
-
-    g_pendingDiagnosticsRelease.push_back(handle);
-    g_lastDiagnosticsReleaseQueueTick = GetTickCount64();
-}
-
-// Whether the burst has stopped is decided when this is scheduled: the report
-// which schedules it queues its own handles right afterwards, so the time since
-// the last queue is short again by the time this runs.
-void DrainDiagnosticsReleases()
-{
-    g_diagnosticsReleaseDrainQueued = false;
-    FlushDiagnosticsReleases();
-}
-
-// Reports arrive from inside XAML's own Enter and Leave walks, and a release
-// there re-enters the diagnostics while the tree is being mutated: dropping the
-// last reference to an element the walk is still visiting destroys it mid-walk.
-// The drain is therefore armed on the thread's dispatcher, which runs it once
-// the walk has finished.
-void FlushDiagnosticsReleasesIfQuiet()
-{
-    if (g_pendingDiagnosticsRelease.empty() ||
-        g_diagnosticsReleaseDrainQueued ||
-        GetTickCount64() - g_lastDiagnosticsReleaseQueueTick <
-            kDiagnosticsReleaseDelay)
-    {
-        return;
-    }
-
-    try
-    {
-        if (!g_diagnosticsReleaseDrainTimer)
-        {
-            auto dispatcherQueue =
-                winrt::Windows::System::DispatcherQueue::GetForCurrentThread();
-            if (!dispatcherQueue)
-            {
-                // Releasing from here is the one thing that isn't safe, so the
-                // elements stay held instead.
-                Wh_Log(L"No dispatcher queue, elements will be held");
-                return;
-            }
-
-            g_diagnosticsReleaseDrainTimer = dispatcherQueue.CreateTimer();
-            g_diagnosticsReleaseDrainTimer.IsRepeating(false);
-            g_diagnosticsReleaseDrainTimer.Interval(
-                std::chrono::milliseconds{kDiagnosticsReleaseDrainDelay});
-            g_diagnosticsReleaseDrainTimerTickRevoker =
-                g_diagnosticsReleaseDrainTimer.Tick(
-                    winrt::auto_revoke,
-                    [](winrt::Windows::System::DispatcherQueueTimer const &,
-                       winrt::Windows::Foundation::IInspectable const &)
-                    {
-                        DrainDiagnosticsReleases();
-                    });
-        }
-
-        g_diagnosticsReleaseDrainTimer.Start();
-        g_diagnosticsReleaseDrainQueued = true;
-    }
-    catch (winrt::hresult_error const &ex)
-    {
-        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
-    }
-}
-
-void StopDiagnosticsReleases()
-{
-    g_pendingDiagnosticsRelease.clear();
-
-    if (g_diagnosticsReleaseDrainTimer)
-    {
-        try
-        {
-            g_diagnosticsReleaseDrainTimer.Stop();
-        }
-        catch (winrt::hresult_error const &ex)
-        {
-            Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
-        }
-    }
-
-    g_diagnosticsReleaseDrainTimerTickRevoker.revoke();
-    g_diagnosticsReleaseDrainTimer = nullptr;
-    g_diagnosticsReleaseDrainQueued = false;
-}
-
-bool IsElementOfType(const VisualElement &element, PCWSTR type)
-{
-    return element.Type && _wcsicmp(element.Type, type) == 0;
-}
-
-bool ParentIsOfType(VisualTreeWatcher *watcher,
-                    InstanceHandle parentHandle,
-                    PCWSTR type)
-{
-    if (!parentHandle)
-    {
-        return false;
-    }
-
-    try
-    {
-        auto parent = watcher->FromHandle(parentHandle);
-        return parent &&
-               _wcsicmp(winrt::get_class_name(parent).c_str(), type) == 0;
-    }
-    catch (...)
-    {
-        return false;
-    }
-}
-
-bool ParentIsNamed(VisualTreeWatcher *watcher,
-                   InstanceHandle parentHandle,
-                   PCWSTR name)
-{
-    if (!parentHandle)
-    {
-        return false;
-    }
-
-    try
-    {
-        auto parent = watcher->FromHandle(parentHandle);
-        auto parentElement =
-            parent ? parent.try_as<winrt::Windows::UI::Xaml::FrameworkElement>()
-                   : nullptr;
-        return parentElement && _wcsicmp(parentElement.Name().c_str(), name) == 0;
-    }
-    catch (...)
-    {
-        return false;
-    }
-}
-
-void RecordApplied(winrt::Windows::UI::Xaml::FrameworkElement const &element,
-                   winrt::Windows::UI::Xaml::DependencyProperty property)
-{
-    g_appliedElements.push_back({winrt::make_weak(element), property});
+FrameworkElement FindChildByClassName(FrameworkElement element,
+                                      PCWSTR className) {
+    return EnumChildElements(element, [className](FrameworkElement child) {
+        return winrt::get_class_name(child) == className;
+    });
 }
 
 // The margin in DIPs, which is what XAML expects. With DPI following on the
 // setting is taken as DIPs; with it off the setting is taken as physical pixels
 // and converted, so the margin keeps a constant physical size.
-double GetMarginInDips(
-    winrt::Windows::UI::Xaml::FrameworkElement const &element)
-{
-    if (g_followDpi)
-    {
-        return static_cast<double>(g_leftMargin);
+double GetMarginInDips(FrameworkElement const& element) {
+    if (g_settings.followDpi) {
+        return static_cast<double>(g_settings.leftMargin);
     }
 
-    try
-    {
+    try {
         auto xamlRoot = element.XamlRoot();
-        if (xamlRoot)
-        {
+        if (xamlRoot) {
             double scale = xamlRoot.RasterizationScale();
-            if (scale > 0)
-            {
-                return static_cast<double>(g_leftMargin) / scale;
+            if (scale > 0) {
+                return static_cast<double>(g_settings.leftMargin) / scale;
             }
         }
-    }
-    catch (...)
-    {
-        Wh_Log(L"Error %08X", winrt::to_hresult());
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
     }
 
-    return static_cast<double>(g_leftMargin);
+    return static_cast<double>(g_settings.leftMargin);
 }
 
 // The margin in physical screen pixels, which is the unit the jump list anchor
 // uses.
-int GetMarginInPixels(
-    winrt::Windows::UI::Xaml::FrameworkElement const &element)
-{
-    if (!g_followDpi)
-    {
-        return g_leftMargin;
+int GetMarginInPixels(FrameworkElement const& element) {
+    if (!g_settings.followDpi) {
+        return g_settings.leftMargin;
     }
 
-    try
-    {
+    try {
         auto xamlRoot = element.XamlRoot();
-        if (xamlRoot)
-        {
+        if (xamlRoot) {
             double scale = xamlRoot.RasterizationScale();
-            if (scale > 0)
-            {
-                return static_cast<int>(g_leftMargin * scale);
+            if (scale > 0) {
+                return static_cast<int>(g_settings.leftMargin * scale);
             }
         }
-    }
-    catch (...)
-    {
-        Wh_Log(L"Error %08X", winrt::to_hresult());
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
     }
 
-    return g_leftMargin;
+    return g_settings.leftMargin;
 }
 
-void ApplyLeftMargin(VisualTreeWatcher *watcher,
-                     const ParentChildRelation &relation,
-                     const VisualElement &element,
-                     winrt::Windows::UI::Xaml::FrameworkElement const &frameworkElement)
-{
-    double margin = GetMarginInDips(frameworkElement);
-
-    if (IsElementOfType(element, L"Windows.UI.Xaml.Controls.Grid") &&
-        element.Name && _wcsicmp(element.Name, L"RootGrid") == 0)
-    {
-        if (!ParentIsOfType(watcher, relation.Parent,
-                            L"Taskbar.TaskbarFrame"))
-        {
-            return;
-        }
-
-        auto grid = frameworkElement.try_as<wuxc::Grid>();
-        if (!grid)
-        {
-            Wh_Log(L"RootGrid is not a Grid, skipping");
-            return;
-        }
-
-        grid.Padding(winrt::Windows::UI::Xaml::Thickness{margin, 0, 0, 0});
-        RecordApplied(frameworkElement, wuxc::Grid::PaddingProperty());
-
-        // The jump list anchor is computed in physical pixels, so the offset
-        // the hook adds is kept in the same unit.
-        g_anchorOffsetPx.store(GetMarginInPixels(frameworkElement));
-    }
-    else if (IsElementOfType(element, L"Taskbar.TaskbarBackground"))
-    {
-        if (!ParentIsNamed(watcher, relation.Parent, L"RootGrid"))
-        {
-            return;
-        }
-
-        frameworkElement.Margin(
-            winrt::Windows::UI::Xaml::Thickness{-margin, 0, 0, 0});
-        RecordApplied(frameworkElement,
-                      winrt::Windows::UI::Xaml::FrameworkElement::MarginProperty());
-    }
-}
-
-VisualTreeWatcher::VisualTreeWatcher(winrt::com_ptr<IUnknown> site) : m_XamlDiagnostics(site.as<IXamlDiagnostics>())
-{
-    Wh_Log(L"Constructing VisualTreeWatcher");
-
-    HRESULT hr = m_XamlDiagnostics->QueryInterface(
-        IID_IXamlDiagnosticsTestHooks, m_XamlDiagnosticsTestHooks.put_void());
-    if (FAILED(hr))
-    {
-        Wh_Log(L"IXamlDiagnosticsTestHooks is unavailable, elements will be leaked: %08X",
-               hr);
-    }
-
-    // Calling AdviseVisualTreeChange from the current thread causes the app to
-    // hang in Advising::RunOnUIThread sometimes. Creating a new thread and
-    // calling it from there fixes it.
-    HANDLE thread = CreateThread(
-        nullptr, 0,
-        [](LPVOID lpParam) -> DWORD
-        {
-            auto watcher = reinterpret_cast<VisualTreeWatcher *>(lpParam);
-            auto service = watcher->m_XamlDiagnostics.as<IVisualTreeService3>();
-            g_reportCompositionDiagAsDisabled = true;
-            HRESULT hr = service->AdviseVisualTreeChange(watcher);
-            g_reportCompositionDiagAsDisabled = false;
-            watcher->Release();
-            if (FAILED(hr))
-            {
-                Wh_Log(L"AdviseVisualTreeChange failed with error %08X", hr);
-            }
-            return 0;
-        },
-        this, 0, nullptr);
-    if (thread)
-    {
-        AddRef();
-        CloseHandle(thread);
-    }
-}
-
-VisualTreeWatcher::~VisualTreeWatcher()
-{
-    Wh_Log(L"Destructing VisualTreeWatcher");
-}
-
-void VisualTreeWatcher::UnadviseVisualTreeChange()
-{
-    Wh_Log(L"UnadviseVisualTreeChange VisualTreeWatcher");
-    HRESULT hr =
-        m_XamlDiagnostics.as<IVisualTreeService3>()->UnadviseVisualTreeChange(
-            this);
-    if (FAILED(hr))
-    {
-        Wh_Log(L"UnadviseVisualTreeChange failed with error %08X", hr);
-    }
-}
-
-bool VisualTreeWatcher::ReleaseDiagnosticsReference(InstanceHandle handle)
-{
-    if (!m_XamlDiagnosticsTestHooks)
-    {
-        return false;
-    }
-
-    HRESULT hr = m_XamlDiagnosticsTestHooks->UnregisterInstance(handle);
-    if (FAILED(hr))
-    {
-        Wh_Log(L"UnregisterInstance failed with error %08X", hr);
-        return false;
-    }
-
-    return true;
-}
-
-HRESULT VisualTreeWatcher::OnVisualTreeChange(ParentChildRelation relation,
-                                              VisualElement element,
-                                              VisualMutationType mutationType)
-try
-{
-    if (!g_initializedForThread)
-    {
-        return S_OK;
-    }
-
-    if (mutationType == Add)
-    {
-        try
-        {
-            auto inspectable = FromHandle(element.Handle);
-            auto frameworkElement =
-                inspectable
-                    ? inspectable
-                          .try_as<winrt::Windows::UI::Xaml::FrameworkElement>()
-                    : nullptr;
-            if (frameworkElement)
-            {
-                ApplyLeftMargin(this, relation, element, frameworkElement);
-            }
-        }
-        catch (...)
-        {
-            Wh_Log(L"Error %08X", winrt::to_hresult());
-        }
-    }
-
-    FlushDiagnosticsReleasesIfQuiet();
-
-    if (mutationType == Add)
-    {
-        QueueDiagnosticsRelease(element.Handle);
-        QueueDiagnosticsRelease(relation.Parent);
-    }
-    else if (mutationType == Remove)
-    {
-        QueueDiagnosticsRelease(element.Handle);
-    }
-
-    return S_OK;
-}
-catch (...)
-{
-    Wh_Log(L"Error %08X", winrt::to_hresult());
-
-    // Returning an error prevents (some?) further messages, always return
-    // success.
-    return S_OK;
-}
-
-HRESULT VisualTreeWatcher::OnElementStateChanged(InstanceHandle,
-                                                 VisualElementState,
-                                                 LPCWSTR) noexcept
-{
-    return S_OK;
-}
-
-void UninitializeForCurrentThread()
-{
-    if (!g_initializedForThread)
-    {
+void ApplyMarginToTaskbar(XamlRoot xamlRoot) {
+    auto content = xamlRoot.Content().try_as<FrameworkElement>();
+    if (!content) {
+        Wh_Log(L"Failed to get the taskbar content element");
         return;
     }
 
-    for (const auto &applied : g_appliedElements)
-    {
-        if (auto element = applied.element.get())
-        {
-            try
-            {
+    auto taskbarFrame = FindChildByClassName(content, L"Taskbar.TaskbarFrame");
+    auto rootGrid = taskbarFrame ? FindChildByName(taskbarFrame, L"RootGrid")
+                                 : nullptr;
+    if (!rootGrid) {
+        Wh_Log(L"Failed to find the taskbar RootGrid");
+        return;
+    }
+
+    auto grid = rootGrid.try_as<Controls::Grid>();
+    if (!grid) {
+        Wh_Log(L"RootGrid is not a Grid, skipping");
+        return;
+    }
+
+    double margin = GetMarginInDips(taskbarFrame);
+
+    // The padding shifts the taskbar content, and the background is pulled back
+    // by the same amount so that it keeps spanning the full width.
+    grid.Padding(Thickness{margin, 0, 0, 0});
+    g_appliedElements.push_back(
+        {winrt::make_weak(rootGrid), Controls::Grid::PaddingProperty()});
+
+    auto taskbarBackground =
+        FindChildByClassName(rootGrid, L"Taskbar.TaskbarBackground");
+    if (taskbarBackground) {
+        taskbarBackground.Margin(Thickness{-margin, 0, 0, 0});
+        g_appliedElements.push_back({winrt::make_weak(taskbarBackground),
+                                     FrameworkElement::MarginProperty()});
+    } else {
+        Wh_Log(L"Failed to find TaskbarBackground");
+    }
+
+    g_anchorOffsetPx.store(GetMarginInPixels(taskbarFrame));
+}
+
+void RemoveAppliedMargins() {
+    for (const auto& applied : g_appliedElements) {
+        if (auto element = applied.element.get()) {
+            try {
                 element.ClearValue(applied.property);
-            }
-            catch (winrt::hresult_error const &ex)
-            {
+            } catch (winrt::hresult_error const& ex) {
                 Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
             }
         }
     }
 
     g_appliedElements.clear();
-
     g_anchorOffsetPx.store(0);
-
-    StopDiagnosticsReleases();
-
-    g_initializedForThread = false;
 }
 
-void InitializeForCurrentThread()
-{
-    if (g_initializedForThread)
-    {
-        return;
-    }
-
-    g_initializedForThread = true;
-}
-
-void InitializeSettingsAndTap()
-{
-    if (g_initialized.exchange(true))
-    {
-        return;
-    }
-
-    HRESULT hr = InjectWindhawkTAP();
-    if (FAILED(hr))
-    {
-        Wh_Log(L"Error %08X", hr);
-    }
-}
-
-void UninitializeSettingsAndTap()
-{
-    if (g_visualTreeWatcher)
-    {
-        g_visualTreeWatcher->UnadviseVisualTreeChange();
-        g_visualTreeWatcher = nullptr;
-    }
-
-    g_initialized = false;
-}
-
-using RunFromWindowThreadProc_t = void(WINAPI *)(PVOID parameter);
-
-bool RunFromWindowThread(HWND hWnd,
-                         RunFromWindowThreadProc_t proc,
-                         PVOID procParam)
-{
-    static const UINT runFromWindowThreadRegisteredMsg =
-        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
-
-    struct RUN_FROM_WINDOW_THREAD_PARAM
-    {
-        RunFromWindowThreadProc_t proc;
-        PVOID procParam;
-    };
-
-    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
-    if (dwThreadId == 0)
-    {
-        return false;
-    }
-
-    if (dwThreadId == GetCurrentThreadId())
-    {
-        proc(procParam);
-        return true;
-    }
-
-    HHOOK hook = SetWindowsHookEx(
-        WH_CALLWNDPROC,
-        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT
-        {
-            if (nCode == HC_ACTION)
-            {
-                const CWPSTRUCT *cwp = (const CWPSTRUCT *)lParam;
-                if (cwp->message == runFromWindowThreadRegisteredMsg)
-                {
-                    RUN_FROM_WINDOW_THREAD_PARAM *param =
-                        (RUN_FROM_WINDOW_THREAD_PARAM *)cwp->lParam;
-                    param->proc(param->procParam);
-                }
-            }
-
-            return CallNextHookEx(nullptr, nCode, wParam, lParam);
-        },
-        nullptr, dwThreadId);
-    if (!hook)
-    {
-        return false;
-    }
-
-    RUN_FROM_WINDOW_THREAD_PARAM param;
-    param.proc = proc;
-    param.procParam = procParam;
-    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
-
-    UnhookWindowsHookEx(hook);
-
-    return true;
-}
-
-void OnWindowCreated(HWND hWnd,
-                     HWND hWndParent,
-                     LPCWSTR lpClassName,
-                     PCSTR funcName)
-{
-    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
-
-    WCHAR className[64];
-    if (hWndParent && GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-        _wcsicmp(className,
-                 L"Windows.UI.Composition.DesktopWindowContentBridge") == 0 &&
-        GetClassName(hWndParent, className, ARRAYSIZE(className)) &&
-        _wcsicmp(className, L"Shell_TrayWnd") == 0)
-    {
-        Wh_Log(L"Initializing - Created DesktopWindowContentBridge window");
-        InitializeForCurrentThread();
-        InitializeSettingsAndTap();
-        return;
-    }
-
-    if (bTextualClassName &&
-        (_wcsicmp(lpClassName, L"XamlExplorerHostIslandWindow") == 0 ||
-         _wcsicmp(lpClassName, L"Shell_InputSwitchTopLevelWindow") == 0))
-    {
-        Wh_Log(L"Initializing - Created XAML host window: %08X via %S",
-               (DWORD)(ULONG_PTR)hWnd, funcName);
-        InitializeForCurrentThread();
-        InitializeSettingsAndTap();
-        return;
-    }
-}
-
-using CreateWindowExW_t = decltype(&CreateWindowExW);
-CreateWindowExW_t CreateWindowExW_Original;
-HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
-                                 LPCWSTR lpClassName,
-                                 LPCWSTR lpWindowName,
-                                 DWORD dwStyle,
-                                 int X,
-                                 int Y,
-                                 int nWidth,
-                                 int nHeight,
-                                 HWND hWndParent,
-                                 HMENU hMenu,
-                                 HINSTANCE hInstance,
-                                 PVOID lpParam)
-{
-    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
-                                         dwStyle, X, Y, nWidth, nHeight,
-                                         hWndParent, hMenu, hInstance, lpParam);
-    if (!hWnd)
-    {
-        return hWnd;
-    }
-
-    OnWindowCreated(hWnd, hWndParent, lpClassName, __FUNCTION__);
-
-    return hWnd;
-}
-
-using CreateWindowInBand_t = HWND(WINAPI *)(DWORD dwExStyle,
-                                            LPCWSTR lpClassName,
-                                            LPCWSTR lpWindowName,
-                                            DWORD dwStyle,
-                                            int X,
-                                            int Y,
-                                            int nWidth,
-                                            int nHeight,
-                                            HWND hWndParent,
-                                            HMENU hMenu,
-                                            HINSTANCE hInstance,
-                                            PVOID lpParam,
-                                            DWORD dwBand);
-CreateWindowInBand_t CreateWindowInBand_Original;
-HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
-                                    LPCWSTR lpClassName,
-                                    LPCWSTR lpWindowName,
-                                    DWORD dwStyle,
-                                    int X,
-                                    int Y,
-                                    int nWidth,
-                                    int nHeight,
-                                    HWND hWndParent,
-                                    HMENU hMenu,
-                                    HINSTANCE hInstance,
-                                    PVOID lpParam,
-                                    DWORD dwBand)
-{
-    HWND hWnd = CreateWindowInBand_Original(
-        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
-        hWndParent, hMenu, hInstance, lpParam, dwBand);
-    if (!hWnd)
-    {
-        return hWnd;
-    }
-
-    OnWindowCreated(hWnd, hWndParent, lpClassName, __FUNCTION__);
-
-    return hWnd;
-}
-
-using CreateWindowInBandEx_t = HWND(WINAPI *)(DWORD dwExStyle,
-                                              LPCWSTR lpClassName,
-                                              LPCWSTR lpWindowName,
-                                              DWORD dwStyle,
-                                              int X,
-                                              int Y,
-                                              int nWidth,
-                                              int nHeight,
-                                              HWND hWndParent,
-                                              HMENU hMenu,
-                                              HINSTANCE hInstance,
-                                              PVOID lpParam,
-                                              DWORD dwBand,
-                                              DWORD dwTypeFlags);
-CreateWindowInBandEx_t CreateWindowInBandEx_Original;
-HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
-                                      LPCWSTR lpClassName,
-                                      LPCWSTR lpWindowName,
-                                      DWORD dwStyle,
-                                      int X,
-                                      int Y,
-                                      int nWidth,
-                                      int nHeight,
-                                      HWND hWndParent,
-                                      HMENU hMenu,
-                                      HINSTANCE hInstance,
-                                      PVOID lpParam,
-                                      DWORD dwBand,
-                                      DWORD dwTypeFlags)
-{
-    HWND hWnd = CreateWindowInBandEx_Original(
-        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
-        hWndParent, hMenu, hInstance, lpParam, dwBand, dwTypeFlags);
-    if (!hWnd)
-    {
-        return hWnd;
-    }
-
-    OnWindowCreated(hWnd, hWndParent, lpClassName, __FUNCTION__);
-
-    return hWnd;
-}
-
-PFN_INITIALIZE_XAML_DIAGNOSTICS_EX InitializeXamlDiagnosticsEx_Original;
-HRESULT WINAPI InitializeXamlDiagnosticsEx_Hook(
-    _In_ PCWSTR endPointName,
-    _In_ DWORD pid,
-    _In_ PCWSTR wszDllXamlDiagnostics,
-    _In_ PCWSTR wszTAPDllName,
-    _In_ CLSID tapClsid,
-    _In_opt_ PCWSTR wszInitializationData)
-{
-    if (g_inInjectWindhawkTAP)
-    {
-        return InitializeXamlDiagnosticsEx_Original(
-            endPointName, pid, wszDllXamlDiagnostics, wszTAPDllName, tapClsid,
-            wszInitializationData);
-    }
-
-    // Another consumer is asking for the diagnostics. There can only be one at
-    // a time; let the other one have it rather than breaking it.
-    Wh_Log(L"Allowing InitializeXamlDiagnosticsEx call");
-    return InitializeXamlDiagnosticsEx_Original(
-        endPointName, pid, wszDllXamlDiagnostics, wszTAPDllName, tapClsid,
-        wszInitializationData);
-}
-
-bool HookInitializeXamlDiagnosticsExIfNeeded()
-{
-    if (InitializeXamlDiagnosticsEx_Original)
-    {
-        return false; // Already hooked
-    }
-
-    const HMODULE wux = GetModuleHandle(L"Windows.UI.Xaml.dll");
-    if (!wux)
-    {
-        return false; // DLL not loaded yet
-    }
-
-    const auto ixde = reinterpret_cast<PFN_INITIALIZE_XAML_DIAGNOSTICS_EX>(
-        GetProcAddress(wux, "InitializeXamlDiagnosticsEx"));
-    if (!ixde)
-    {
-        return false;
-    }
-
-    Wh_Log(L"Hooking InitializeXamlDiagnosticsEx");
-    return WindhawkUtils::SetFunctionHook(ixde,
-                                          InitializeXamlDiagnosticsEx_Hook,
-                                          &InitializeXamlDiagnosticsEx_Original);
-}
-
-using LoadLibraryExW_t = decltype(&LoadLibraryExW);
-LoadLibraryExW_t LoadLibraryExW_Original;
-HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
-                                   HANDLE hFile,
-                                   DWORD dwFlags)
-{
-    HMODULE module = LoadLibraryExW_Original(lpLibFileName, hFile, dwFlags);
-
-    if (module && !InitializeXamlDiagnosticsEx_Original && lpLibFileName)
-    {
-        PCWSTR fileName = wcsrchr(lpLibFileName, L'\\');
-        fileName = fileName ? fileName + 1 : lpLibFileName;
-        if (_wcsicmp(fileName, L"Windows.UI.Xaml.dll") == 0 &&
-            HookInitializeXamlDiagnosticsExIfNeeded())
-        {
-            Wh_ApplyHookOperations();
-        }
-    }
-
-    return module;
-}
-
-std::vector<HWND> GetXamlHostWnds()
-{
-    struct ENUM_WINDOWS_PARAM
-    {
-        std::vector<HWND> *hWnds;
-    };
-
-    std::vector<HWND> hWnds;
-    ENUM_WINDOWS_PARAM param = {&hWnds};
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL
-        {
-            ENUM_WINDOWS_PARAM &param = *(ENUM_WINDOWS_PARAM *)lParam;
-
-            DWORD dwProcessId = 0;
-            if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
-                dwProcessId != GetCurrentProcessId())
-            {
-                return TRUE;
-            }
-
-            WCHAR szClassName[32];
-            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0)
-            {
-                return TRUE;
-            }
-
-            if (_wcsicmp(szClassName, L"XamlExplorerHostIslandWindow") == 0 ||
-                _wcsicmp(szClassName, L"Shell_InputSwitchTopLevelWindow") == 0)
-            {
-                param.hWnds->push_back(hWnd);
-            }
-
-            return TRUE;
-        },
-        (LPARAM)&param);
-
-    return hWnds;
-}
-
-HWND FindCurrentProcessTaskbarWnd()
-{
-    HWND hTaskbarWnd = nullptr;
-
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL
-        {
-            DWORD dwProcessId;
-            WCHAR className[32];
-            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
-                dwProcessId == GetCurrentProcessId() &&
-                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-                _wcsicmp(className, L"Shell_TrayWnd") == 0)
-            {
-                *reinterpret_cast<HWND *>(lParam) = hWnd;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&hTaskbarWnd));
-
-    return hTaskbarWnd;
-}
-
-HWND GetTaskbarUiWnd()
-{
-    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
-    if (!hTaskbarWnd)
-    {
-        return nullptr;
-    }
-
-    return FindWindowEx(hTaskbarWnd, nullptr,
-                        L"Windows.UI.Composition.DesktopWindowContentBridge",
-                        nullptr);
-}
-
-void LoadSettings()
-{
-    g_leftMargin = Wh_GetIntSetting(L"leftMargin");
-    g_followDpi = Wh_GetIntSetting(L"followDpi") != 0;
-}
-
-// taskbar.dll computes the jump list's anchor point in physical screen pixels
-// and hands it to the process that draws the menu, so the menu is positioned
-// from here rather than from the XAML layout of the taskbar buttons. Adjusting
-// the point is what moves the menu, and it does so for every way the menu can be
-// opened: mouse, touch and keyboard alike.
 using ComputeJumpViewPosition_t = HRESULT(WINAPI*)(
     void* pThis,
     void* pTaskBtnGroup,
@@ -1377,73 +397,326 @@ HRESULT WINAPI ComputeJumpViewPosition_Hook(
     int param2,
     winrt::Windows::Foundation::Point* point,
     winrt::Windows::UI::Xaml::HorizontalAlignment* hAlign,
-    winrt::Windows::UI::Xaml::VerticalAlignment* vAlign)
-{
+    winrt::Windows::UI::Xaml::VerticalAlignment* vAlign) {
     HRESULT hr = ComputeJumpViewPosition_Original(pThis, pTaskBtnGroup, param2,
                                                   point, hAlign, vAlign);
 
     int offset = g_anchorOffsetPx.load();
-    if (SUCCEEDED(hr) && point && offset)
-    {
-        float originalX = point->X;
+    if (SUCCEEDED(hr) && point && offset && !g_unloading) {
+        Wh_Log(L"Jump list anchor x: %d -> %d", (int)point->X,
+               (int)(point->X + offset));
         point->X += static_cast<float>(offset);
-        Wh_Log(L"Jump list anchor x: %d -> %d", (int)originalX, (int)point->X);
     }
 
     return hr;
 }
 
-bool HookTaskbarDllSymbols()
-{
+using RunFromWindowThreadProc_t = void(WINAPI*)(void* parameter);
+
+bool RunFromWindowThread(HWND hWnd,
+                         RunFromWindowThreadProc_t proc,
+                         void* procParam) {
+    static const UINT runFromWindowThreadRegisteredMsg =
+        RegisterWindowMessage(L"Windhawk_RunFromWindowThread_" WH_MOD_ID);
+
+    struct RUN_FROM_WINDOW_THREAD_PARAM {
+        RunFromWindowThreadProc_t proc;
+        void* procParam;
+    };
+
+    DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+    if (dwThreadId == 0) {
+        return false;
+    }
+
+    if (dwThreadId == GetCurrentThreadId()) {
+        proc(procParam);
+        return true;
+    }
+
+    HHOOK hook = SetWindowsHookEx(
+        WH_CALLWNDPROC,
+        [](int nCode, WPARAM wParam, LPARAM lParam) -> LRESULT {
+            if (nCode == HC_ACTION) {
+                const CWPSTRUCT* cwp = (const CWPSTRUCT*)lParam;
+                if (cwp->message == runFromWindowThreadRegisteredMsg) {
+                    RUN_FROM_WINDOW_THREAD_PARAM* param =
+                        (RUN_FROM_WINDOW_THREAD_PARAM*)cwp->lParam;
+                    param->proc(param->procParam);
+                }
+            }
+
+            return CallNextHookEx(nullptr, nCode, wParam, lParam);
+        },
+        nullptr, dwThreadId);
+    if (!hook) {
+        return false;
+    }
+
+    RUN_FROM_WINDOW_THREAD_PARAM param;
+    param.proc = proc;
+    param.procParam = procParam;
+    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+
+    UnhookWindowsHookEx(hook);
+
+    return true;
+}
+
+void ApplySettingsFromTaskbarThread() {
+    Wh_Log(L">");
+
+    RemoveAppliedMargins();
+
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hWnd, LPARAM) -> BOOL {
+            WCHAR szClassName[32];
+            if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0) {
+                return TRUE;
+            }
+
+            XamlRoot xamlRoot = nullptr;
+            if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0) {
+                xamlRoot = GetTaskbarXamlRoot(hWnd);
+            } else if (_wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0) {
+                xamlRoot = GetSecondaryTaskbarXamlRoot(hWnd);
+            } else {
+                return TRUE;
+            }
+
+            if (!xamlRoot) {
+                Wh_Log(L"Getting XamlRoot failed");
+                return TRUE;
+            }
+
+            ApplyMarginToTaskbar(xamlRoot);
+
+            return TRUE;
+        },
+        0);
+}
+
+void ApplySettings(HWND hTaskbarWnd) {
+    RunFromWindowThread(
+        hTaskbarWnd, [](void*) { ApplySettingsFromTaskbarThread(); }, nullptr);
+}
+
+void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName) {
+    if (!lpClassName) {
+        return;
+    }
+
+    BOOL bTextualClassName = ((ULONG_PTR)lpClassName & ~(ULONG_PTR)0xffff) != 0;
+    if (!bTextualClassName) {
+        return;
+    }
+
+    if (_wcsicmp(lpClassName, L"Shell_TrayWnd") == 0 ||
+        _wcsicmp(lpClassName, L"Shell_SecondaryTrayWnd") == 0) {
+        Wh_Log(L"Taskbar window created: %08X", (DWORD)(ULONG_PTR)hWnd);
+        ApplySettings(hWnd);
+    }
+}
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original;
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle,
+                                 LPCWSTR lpClassName,
+                                 LPCWSTR lpWindowName,
+                                 DWORD dwStyle,
+                                 int X,
+                                 int Y,
+                                 int nWidth,
+                                 int nHeight,
+                                 HWND hWndParent,
+                                 HMENU hMenu,
+                                 HINSTANCE hInstance,
+                                 PVOID lpParam) {
+    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
+                                         dwStyle, X, Y, nWidth, nHeight,
+                                         hWndParent, hMenu, hInstance, lpParam);
+    if (!hWnd) {
+        return hWnd;
+    }
+
+    OnWindowCreated(hWnd, lpClassName);
+
+    return hWnd;
+}
+
+using CreateWindowInBand_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                           LPCWSTR lpClassName,
+                                           LPCWSTR lpWindowName,
+                                           DWORD dwStyle,
+                                           int X,
+                                           int Y,
+                                           int nWidth,
+                                           int nHeight,
+                                           HWND hWndParent,
+                                           HMENU hMenu,
+                                           HINSTANCE hInstance,
+                                           PVOID lpParam,
+                                           DWORD dwBand);
+CreateWindowInBand_t CreateWindowInBand_Original;
+HWND WINAPI CreateWindowInBand_Hook(DWORD dwExStyle,
+                                    LPCWSTR lpClassName,
+                                    LPCWSTR lpWindowName,
+                                    DWORD dwStyle,
+                                    int X,
+                                    int Y,
+                                    int nWidth,
+                                    int nHeight,
+                                    HWND hWndParent,
+                                    HMENU hMenu,
+                                    HINSTANCE hInstance,
+                                    PVOID lpParam,
+                                    DWORD dwBand) {
+    HWND hWnd = CreateWindowInBand_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand);
+    if (!hWnd) {
+        return hWnd;
+    }
+
+    OnWindowCreated(hWnd, lpClassName);
+
+    return hWnd;
+}
+
+using CreateWindowInBandEx_t = HWND(WINAPI*)(DWORD dwExStyle,
+                                             LPCWSTR lpClassName,
+                                             LPCWSTR lpWindowName,
+                                             DWORD dwStyle,
+                                             int X,
+                                             int Y,
+                                             int nWidth,
+                                             int nHeight,
+                                             HWND hWndParent,
+                                             HMENU hMenu,
+                                             HINSTANCE hInstance,
+                                             PVOID lpParam,
+                                             DWORD dwBand,
+                                             DWORD dwTypeFlags);
+CreateWindowInBandEx_t CreateWindowInBandEx_Original;
+HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
+                                      LPCWSTR lpClassName,
+                                      LPCWSTR lpWindowName,
+                                      DWORD dwStyle,
+                                      int X,
+                                      int Y,
+                                      int nWidth,
+                                      int nHeight,
+                                      HWND hWndParent,
+                                      HMENU hMenu,
+                                      HINSTANCE hInstance,
+                                      PVOID lpParam,
+                                      DWORD dwBand,
+                                      DWORD dwTypeFlags) {
+    HWND hWnd = CreateWindowInBandEx_Original(
+        dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight,
+        hWndParent, hMenu, hInstance, lpParam, dwBand, dwTypeFlags);
+    if (!hWnd) {
+        return hWnd;
+    }
+
+    OnWindowCreated(hWnd, lpClassName);
+
+    return hWnd;
+}
+
+HWND FindCurrentProcessTaskbarWnd() {
+    HWND hTaskbarWnd = nullptr;
+
+    EnumWindows(
+        [](HWND hWnd, LPARAM lParam) -> BOOL {
+            DWORD dwProcessId;
+            WCHAR className[32];
+            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
+                dwProcessId == GetCurrentProcessId() &&
+                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+                _wcsicmp(className, L"Shell_TrayWnd") == 0) {
+                *reinterpret_cast<HWND*>(lParam) = hWnd;
+                return FALSE;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&hTaskbarWnd));
+
+    return hTaskbarWnd;
+}
+
+bool HookTaskbarDllSymbols() {
     HMODULE module =
         LoadLibraryEx(L"taskbar.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (!module)
-    {
+    if (!module) {
         Wh_Log(L"Failed to load taskbar.dll");
         return false;
     }
 
     WindhawkUtils::SYMBOL_HOOK taskbarDllHooks[] = {
         {
+            {LR"(const CTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CTaskBand_ITaskListWndSite_vftable,
+        },
+        {
+            {LR"(const CSecondaryTaskBand::`vftable'{for `ITaskListWndSite'})"},
+            &CSecondaryTaskBand_ITaskListWndSite_vftable,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CTaskBand::GetTaskbarHost(void)const )"},
+            &CTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: int __cdecl TaskbarHost::FrameHeight(void)const )"},
+            &TaskbarHost_FrameHeight_Original,
+        },
+        {
+            {LR"(public: virtual class std::shared_ptr<class TaskbarHost> __cdecl CSecondaryTaskBand::GetTaskbarHost(void)const )"},
+            &CSecondaryTaskBand_GetTaskbarHost_Original,
+        },
+        {
+            {LR"(public: void __cdecl std::_Ref_count_base::_Decref(void))"},
+            &std__Ref_count_base__Decref_Original,
+        },
+        {
             {LR"(protected: long __cdecl CTaskListWnd::_ComputeJumpViewPosition(struct ITaskBtnGroup *,int,struct Windows::Foundation::Point &,enum Windows::UI::Xaml::HorizontalAlignment &,enum Windows::UI::Xaml::VerticalAlignment &)const )"},
             &ComputeJumpViewPosition_Original,
             ComputeJumpViewPosition_Hook,
-            // Optional: if the symbol is unavailable the mod still loads, and
-            // the menu simply keeps its original position.
-            true,
         },
     };
 
-    if (!WindhawkUtils::HookSymbols(module, taskbarDllHooks,
-                                    ARRAYSIZE(taskbarDllHooks)))
-    {
+    if (!HookSymbols(module, taskbarDllHooks, ARRAYSIZE(taskbarDllHooks))) {
         Wh_Log(L"HookSymbols failed");
         return false;
     }
 
-    Wh_Log(L"Hooked taskbar.dll symbols");
     return true;
 }
 
-BOOL Wh_ModInit()
-{
+void LoadSettings() {
+    g_settings.leftMargin = Wh_GetIntSetting(L"leftMargin");
+    g_settings.followDpi = Wh_GetIntSetting(L"followDpi") != 0;
+}
+
+BOOL Wh_ModInit() {
     Wh_Log(L">");
 
     LoadSettings();
 
-    HookTaskbarDllSymbols();
+    if (!HookTaskbarDllSymbols()) {
+        return FALSE;
+    }
 
     WindhawkUtils::SetFunctionHook(CreateWindowExW, CreateWindowExW_Hook,
                                    &CreateWindowExW_Original);
 
     HMODULE user32Module =
         LoadLibraryEx(L"user32.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-    if (user32Module)
-    {
+    if (user32Module) {
         auto pCreateWindowInBand = (CreateWindowInBand_t)GetProcAddress(
             user32Module, "CreateWindowInBand");
-        if (pCreateWindowInBand)
-        {
+        if (pCreateWindowInBand) {
             WindhawkUtils::SetFunctionHook(pCreateWindowInBand,
                                            CreateWindowInBand_Hook,
                                            &CreateWindowInBand_Original);
@@ -1451,137 +724,49 @@ BOOL Wh_ModInit()
 
         auto pCreateWindowInBandEx = (CreateWindowInBandEx_t)GetProcAddress(
             user32Module, "CreateWindowInBandEx");
-        if (pCreateWindowInBandEx)
-        {
+        if (pCreateWindowInBandEx) {
             WindhawkUtils::SetFunctionHook(pCreateWindowInBandEx,
                                            CreateWindowInBandEx_Hook,
                                            &CreateWindowInBandEx_Original);
         }
     }
 
-    HMODULE kernelBaseModule = GetModuleHandle(L"kernelbase.dll");
-    auto pKernelBaseLoadLibraryExW = (decltype(&LoadLibraryExW))GetProcAddress(
-        kernelBaseModule, "LoadLibraryExW");
-    WindhawkUtils::SetFunctionHook(pKernelBaseLoadLibraryExW,
-                                   LoadLibraryExW_Hook,
-                                   &LoadLibraryExW_Original);
-
-    auto pKernelBaseRegOpenKeyExW =
-        (RegOpenKeyExW_t)GetProcAddress(kernelBaseModule, "RegOpenKeyExW");
-    WindhawkUtils::SetFunctionHook(pKernelBaseRegOpenKeyExW, RegOpenKeyExW_Hook,
-                                   &RegOpenKeyExW_Original);
-
-    auto pKernelBaseRegQueryValueExW = (RegQueryValueExW_t)GetProcAddress(
-        kernelBaseModule, "RegQueryValueExW");
-    WindhawkUtils::SetFunctionHook(pKernelBaseRegQueryValueExW,
-                                   RegQueryValueExW_Hook,
-                                   &RegQueryValueExW_Original);
-
-    // Hook immediately if DLL is already loaded.
-    HookInitializeXamlDiagnosticsExIfNeeded();
-
     return TRUE;
 }
 
-void Wh_ModAfterInit()
-{
+void Wh_ModAfterInit() {
     Wh_Log(L">");
 
-    bool initialize = false;
-
-    HWND hTaskbarUiWnd = GetTaskbarUiWnd();
-    if (hTaskbarUiWnd)
-    {
-        Wh_Log(L"Initializing - Found DesktopWindowContentBridge window");
-        RunFromWindowThread(
-            hTaskbarUiWnd, [](PVOID)
-            { InitializeForCurrentThread(); },
-            nullptr);
-        initialize = true;
-    }
-
-    for (auto hXamlHostWnd : GetXamlHostWnds())
-    {
-        Wh_Log(L"Initializing for %08X", (DWORD)(ULONG_PTR)hXamlHostWnd);
-        RunFromWindowThread(
-            hXamlHostWnd, [](PVOID)
-            { InitializeForCurrentThread(); }, nullptr);
-        initialize = true;
-    }
-
-    if (initialize)
-    {
-        InitializeSettingsAndTap();
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd) {
+        ApplySettings(hTaskbarWnd);
     }
 }
 
-void Wh_ModUninit()
-{
+void Wh_ModBeforeUninit() {
     Wh_Log(L">");
 
-    UninitializeSettingsAndTap();
+    g_unloading = true;
 
-    HWND hTaskbarUiWnd = GetTaskbarUiWnd();
-    if (hTaskbarUiWnd)
-    {
-        Wh_Log(L"Uninitializing - Found DesktopWindowContentBridge window");
-        RunFromWindowThread(
-            hTaskbarUiWnd, [](PVOID)
-            { UninitializeForCurrentThread(); },
-            nullptr);
-    }
-
-    for (auto hXamlHostWnd : GetXamlHostWnds())
-    {
-        Wh_Log(L"Uninitializing for %08X", (DWORD)(ULONG_PTR)hXamlHostWnd);
-        RunFromWindowThread(
-            hXamlHostWnd, [](PVOID)
-            { UninitializeForCurrentThread(); },
-            nullptr);
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd) {
+        ApplySettings(hTaskbarWnd);
     }
 }
 
-void Wh_ModSettingsChanged()
-{
+void Wh_ModUninit() {
     Wh_Log(L">");
+}
 
-    UninitializeSettingsAndTap();
+BOOL Wh_ModSettingsChanged(BOOL* bReload) {
+    Wh_Log(L">");
 
     LoadSettings();
 
-    bool initialize = false;
-
-    HWND hTaskbarUiWnd = GetTaskbarUiWnd();
-    if (hTaskbarUiWnd)
-    {
-        Wh_Log(L"Reinitializing - Found DesktopWindowContentBridge window");
-        RunFromWindowThread(
-            hTaskbarUiWnd,
-            [](PVOID)
-            {
-                UninitializeForCurrentThread();
-                InitializeForCurrentThread();
-            },
-            nullptr);
-        initialize = true;
+    HWND hTaskbarWnd = FindCurrentProcessTaskbarWnd();
+    if (hTaskbarWnd) {
+        ApplySettings(hTaskbarWnd);
     }
 
-    for (auto hXamlHostWnd : GetXamlHostWnds())
-    {
-        Wh_Log(L"Reinitializing for %08X", (DWORD)(ULONG_PTR)hXamlHostWnd);
-        RunFromWindowThread(
-            hXamlHostWnd,
-            [](PVOID)
-            {
-                UninitializeForCurrentThread();
-                InitializeForCurrentThread();
-            },
-            nullptr);
-        initialize = true;
-    }
-
-    if (initialize)
-    {
-        InitializeSettingsAndTap();
-    }
+    return TRUE;
 }
