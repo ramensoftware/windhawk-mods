@@ -64825,15 +64825,15 @@ static void WinverPaintNow(HWND hWnd)
     const float logoAnimT = WinverLogoAnimProgress();
     const float gradientPhase = WinverGradientAnimPhase();
     if (WinverUsesBlackBackground()) {
-        // Whole client rect, not just the banner -- GetDC respects
-        // WS_CLIPCHILDREN, so this only paints the gaps between child
-        // controls; the controls themselves keep their own background
-        // (static text labels are handled via WM_CTLCOLORSTATIC in
-        // WinverDialogSubclassProc, buttons via PaintPushButton's
-        // winverMicaCorner branch).
+        // Whole client rect, not just the banner, clipped to the gaps
+        // between child controls: the dialog has no WS_CLIPCHILDREN, and a
+        // partial repaint only repaints the children it exposed. The
+        // controls keep their own background (static text labels via
+        // WM_CTLCOLORSTATIC in WinverDialogSubclassProc, buttons via
+        // PaintPushButton's winverMicaCorner branch).
         RECT full{};
         GetClientRect(hWnd, &full);
-        HDC hdcFull = GetDC(hWnd);
+        HDC hdcFull = GetDCEx(hWnd, nullptr, DCX_CACHE | DCX_CLIPCHILDREN);
         if (!hdcFull) return;
         if (HBRUSH br = CreateSolidBrush(RGB(0, 0, 0))) {
             FillRect(hdcFull, &full, br);
