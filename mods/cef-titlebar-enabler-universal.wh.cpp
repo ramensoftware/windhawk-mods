@@ -2,13 +2,14 @@
 // @id              cef-titlebar-enabler-universal
 // @name            CEF/Spotify Tweaks
 // @description     Various tweaks for Spotify, including native frames, transparent windows, and more
-// @version         1.8
+// @version         1.9
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
 // @homepage        https://www.ingan121.com/
 // @include         spotify.exe
 // @include         cefclient.exe
+// @license         MIT
 // @compilerOptions -lcomctl32 -luxtheme -ldwmapi -lgdi32 -lversion
 // ==/WindhawkMod==
 
@@ -27,20 +28,22 @@
 * Hide the menu button or Spotify's custom window controls
 * Make Spotify's custom window controls transparent
 * Ignore the minimum window size set by Spotify
-* Change the playback speed
 * Enable transparent rendering to make the transparent parts of the web content transparent
 * Disable forced dark mode to prevent Spotify from forcing dark mode on the CEF UI & web contents
 * Force enable Chrome extension support
 * Block automatic updates
+* Change the playback speed (deprecated; specific old versions only)
 * Use the settings tab on the mod details page to configure the features
+* Screenshot with this mod's native title bar option + transparency option + [WMPotify](https://github.com/Ingan121/WMPotify) + [Aero10](https://www.deviantart.com/vaporvance/art/Aero10-Vista-Seven-909711949) + [OpenGlass](https://github.com/ALTaleX531/OpenGlass) (Windows 10 LTSC 2021)
+![Screenshot](https://raw.githubusercontent.com/Ingan121/WMPotify/refs/heads/master/screenshots/home_aero.png)
 ## Notes
-* Supported CEF versions: 90.4 to 146
+* Supported CEF versions: 90.4 to 151
     * This mod won't work with versions before 90.4
     * Newer versions may work, but they have not been tested.
     * A variant of this mod, which uses copy-pasted CEF structs instead of hardcoded offsets, is available [here](https://github.com/Ingan121/files/tree/master/cte)
     * Copy the required structs/definitions from your wanted CEF version (available [here](https://cef-builds.spotifycdn.com/index.html)) and paste them into the above variant to calculate the offsets
     * Testing with cefclient: `cefclient.exe --use-views --hide-frame --hide-controls`
-* Supported Spotify versions: 1.1.60 to 1.2.88
+* Supported Spotify versions: 1.1.60 to 1.3.3
     * Newer versions may work, especially when the CEF version is within the supported versions above.
     * If some features, such as transparency or the theme JavaScript integration, don't work on a newly released Spotify version, it's because the CEF version has been updated to a version not yet supported by this mod,
     and thus those features have been disabled for stability and safety. You can try enabling the `Use unsafe methods on untested CEF versions` switch in the mod settings page to disable the safety feature,
@@ -108,7 +111,7 @@
     * Only available in mod version 1.6 and above; missing in older versions
     * Enables or disables transparent mode. Only works when the transparent rendering option is enabled, and native frames are disabled.
 * `setBackdrop(string: type)`
-    * Sets the backdrop type of the main window. Only works on Windows 11 when native frames are enabled.
+    * Sets the backdrop type of the main window. Only works on Windows 11 and requires native frames to be enabled.
     * `type` can be one of the following values:
         * `"none"`: No backdrop (Only supported on mod version 1.6 and above; will throw an exception on older versions)
         * `"mica"`: Mica backdrop
@@ -195,9 +198,14 @@
   $name:ko-KR: 자동 업데이트 차단*
   $description: Prevents Spotify from updating itself. This has the same effect as "spicetify spotify-updates block".
   $description:ko-KR: Spotify가 스스로 업데이트하는 것을 방지합니다. "spicetify spotify-updates block"과 효과가 같습니다.
+- ignoreminsize: false
+  $name: Ignore minimum window size
+  $name:ko-KR: 최소 창 크기 무시
+  $description: Allows resizing the window below the minimum size set by Spotify
+  $description:ko-KR: Spotify가 정한 최소 크기 이하로 창의 크기를 조절하는 것을 허용합니다
 - playbackspeed: "1"
-  $name: Playback speed
-  $name:ko-KR: 재생 속도
+  $name: (Deprecated) Playback speed
+  $name:ko-KR: (지원 중단) 재생 속도
   $description: "Enter a decimal number. Value 1.0 represents a normal speed\n
     Requires an x64 version of the Spotify client between 1.2.36 and 1.2.66\n
     Spotify 1.2.36-1.2.44: The change will take effect from the next track\n
@@ -208,11 +216,6 @@
     Spotify 1.2.36-1.2.44: 변경 사항은 다음 트랙부터 적용됩니다\n
     Spotify 1.2.45+: 변경 사항은 즉시 적용됩니다\n
     다른 기기에서 재생하는 동안에는 사용할 수 없습니다"
-- ignoreminsize: false
-  $name: Ignore minimum window size
-  $name:ko-KR: 최소 창 크기 무시
-  $description: Allows resizing the window below the minimum size set by Spotify
-  $description:ko-KR: Spotify가 정한 최소 크기 이하로 창의 크기를 조절하는 것을 허용합니다
 - allowuntested: false
   $name: (Advanced) Use unsafe methods on untested CEF versions*
   $name:ko-KR: (고급) 검증되지 않은 CEF 버전에서 안전하지 않은 메서드 사용*
@@ -261,7 +264,8 @@
 142: 1.2.78-1.2.79
 143: 1.2.80-1.2.82
 144: 1.2.83-1.2.87
-146: 1.2.88
+146: 1.2.88-1.3.1
+151: 1.3.2-1.3.3
 See https://www.spotify.com/opensource/ for more
 */
 
@@ -291,7 +295,7 @@ using namespace std::string_view_literals;
 #define cef_window_handle_t HWND
 #define ANY_MINOR -1
 #define PIPE_NAME L"\\\\.\\pipe\\CTEWH-IPC"
-#define LAST_TESTED_CEF_VERSION 146
+#define LAST_TESTED_CEF_VERSION 151
 #define CR_RT_1ST_VERSION 119 // First Spotify version to support Chrome runtime
 
 // Win11 only DWM attributes for Windhawk 1.4
@@ -1268,6 +1272,7 @@ BOOL HookCreateTrackPlayer(char* pbExecutable, BOOL shouldFindSetPlaybackSpeed) 
 #pragma endregion
 
 #pragma region CEF hooks
+// This is only called once, during window creation
 typedef int CEF_CALLBACK (*is_frameless_t)(struct _cef_window_delegate_t* self, struct _cef_window_t* window);
 int CEF_CALLBACK is_frameless_hook(struct _cef_window_delegate_t* self, struct _cef_window_t* window) {
     Wh_Log(L"is_frameless_hook");
@@ -1275,6 +1280,8 @@ int CEF_CALLBACK is_frameless_hook(struct _cef_window_delegate_t* self, struct _
 }
 
 typedef cef_size_t CEF_CALLBACK (*get_minimum_size_t)(struct _cef_view_delegate_t* self, struct _cef_view_t* view);
+get_minimum_size_t get_minimum_size_original;
+get_minimum_size_t* get_minimum_size_addr;
 cef_size_t CEF_CALLBACK get_minimum_size_hook(struct _cef_view_delegate_t* self, struct _cef_view_t* view) {
     //Wh_Log(L"get_minimum_size_hook");
     cef_size_t* size = (cef_size_t*)calloc(1, sizeof(cef_size_t));
@@ -1321,7 +1328,9 @@ _cef_window_t* CEF_EXPORT cef_window_create_top_level_hook(cef_window_delegate_t
         if (g_mainHwnd == NULL) {
             g_mainHwnd = hWnd;
             if (g_isSpotify) {
-                delegate->base.base.get_minimum_size = get_minimum_size_hook;
+                get_minimum_size_original = delegate->base.base.get_minimum_size;
+                get_minimum_size_addr = &delegate->base.base.get_minimum_size;
+                *get_minimum_size_addr = get_minimum_size_hook;
                 if (!NO_RENDERER_INJECTION) {
                     g_pipeThread = std::thread([=]() {
                         CreateNamedPipeServer();
@@ -2409,6 +2418,8 @@ int CEF_CALLBACK WindhawkCommV8Handler(cef_v8handler_t* self, const cef_string_t
 }
 
 cef_v8handler_t* cancelCosmosRequest_v8handler;
+cef_v8handler_t* cancelEsperantoCall_v8handler;
+cef_v8handler_t* _getSpotifyModule_v8handler;
 typedef int CEF_CALLBACK (*v8func_exec_t)(cef_v8handler_t* self, const cef_string_t* name, cef_v8value_t* object, size_t argumentsCount, cef_v8value_t* const* arguments, cef_v8value_t** retval, cef_string_t* exception);
 v8func_exec_t CEF_CALLBACK cancelCosmosRequest_original;
 v8func_exec_t CEF_CALLBACK cancelEsperantoCall_original;
@@ -2522,6 +2533,7 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
         }
         cancelEsperantoCall_original = handler->execute;
         handler->execute = cancelEsperantoCall_hook;
+        cancelEsperantoCall_v8handler = handler;
         return cef_v8value_create_function_original(name, handler);
     }
     // And hook _getSpotifyModule too for 1.2.4-1.2.32 which lack cancelEsperantoCall
@@ -2535,6 +2547,7 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
         }
         _getSpotifyModule_original = handler->execute;
         handler->execute = _getSpotifyModule_hook;
+        _getSpotifyModule_v8handler = handler;
     }
     return cef_v8value_create_function_original(name, handler);
 };
@@ -2736,7 +2749,8 @@ BOOL Wh_ModInit() {
         if (g_isSpotify && isInitialThread &&
             major >= 108 && isTestedVersion && !NO_RENDERER_INJECTION &&
             wcsstr(args, L"--type=renderer") != NULL &&
-            wcsstr(args, L"--extension-process") == NULL
+            wcsstr(args, L"--extension-process") == NULL &&
+            wcsstr(args, L"--top-chrome-webui") == NULL
         ) {
             return InitSpotifyRendererHooks(major);
         }
@@ -2842,7 +2856,6 @@ BOOL Wh_ModInit() {
 
         #ifdef _M_X64
         // Spotify 1.2.67+ hard blocked my way of changing the playback speed by calling the internal functions
-        // So disable this for now until a workaround is found
         if (major >= 122 && major < 138 && isTestedVersion &&
             spMajor == 1 && spMinor == 2 && spBuild < 67
         ) {
@@ -2871,6 +2884,16 @@ void Wh_ModUninit() {
         if (g_pipeThread.joinable()) {
             g_pipeThread.join();
         }
+        // Unhook JS native functions
+        if (cancelCosmosRequest_v8handler != NULL) {
+            cancelCosmosRequest_v8handler->execute = cancelCosmosRequest_original;
+        }
+        if (cancelEsperantoCall_v8handler != NULL) {
+            cancelEsperantoCall_v8handler->execute = cancelEsperantoCall_original;
+        }
+        if (_getSpotifyModule_v8handler != NULL) {
+            _getSpotifyModule_v8handler->execute = _getSpotifyModule_original;
+        }
         return;
     }
 
@@ -2886,11 +2909,15 @@ void Wh_ModUninit() {
     EnumWindows(UninitEnumWindowsProc, 1);
 
     // Restore the original set_background_color functions to prevent crashes
-    // (Control colors hooks won't work till the app is restarted)
+    // (Control colors hooks will no longer work till the app is restarted)
     for (int i = 0; i < 3; i++) {
         if (cte_controls[i].set_background_color_addr != NULL) {
             *((set_background_color_t*)cte_controls[i].set_background_color_addr) = cte_controls[i].set_background_color_original;
         }
+    }
+    // This too
+    if (get_minimum_size_addr != NULL) {
+        *get_minimum_size_addr = get_minimum_size_original;
     }
 }
 
