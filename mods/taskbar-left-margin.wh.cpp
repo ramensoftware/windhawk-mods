@@ -83,14 +83,33 @@ instead, which is why it hooks that function.
     physical pixel size.
   $description:zh-CN: >-
     让边距随显示器 DPI 一同缩放，在高 DPI 显示器上保持相同的视觉大小。关闭后边距将固定为恒定的物理像素数。
+- displays: all
+  $name: Displays
+  $name:zh-CN: 生效显示器
+  $description: >-
+    Which displays the margin is applied to. Each display keeps its own taskbar
+    and its own DPI, so the margin is calculated per display.
+  $description:zh-CN: >-
+    边距应用在哪些显示器上。每个显示器有自己的任务栏和 DPI，边距按显示器分别计算。
+  $options:
+    - all: All displays
+    - primary: Primary display only
+    - secondary: Secondary displays only
+  $options:zh-CN:
+    - all: 所有显示器
+    - primary: 仅主显示器
+    - secondary: 仅副显示器
 */
 // ==/WindhawkModSettings==
 
 #include <atomic>
 #include <functional>
+#include <string>
 #include <vector>
 
 #undef GetCurrentTime
+
+#include <shellscalingapi.h>
 
 #include <windhawk_utils.h>
 
@@ -101,26 +120,31 @@ instead, which is why it hooks that function.
 
 using namespace winrt::Windows::UI::Xaml;
 
+enum class Displays
+{
+    All,
+    Primary,
+    Secondary,
+};
+
 struct
 {
     int leftMargin;
     bool followDpi;
+    Displays displays;
 } g_settings;
 
 std::atomic<bool> g_unloading;
 
-// The jump list anchor is in physical screen pixels, so the offset the hook
-// adds is kept in the same unit.
-std::atomic<int> g_anchorOffsetPx{0};
-
-// Elements whose value the mod set, so it can be cleared again. The taskbars
-// live on different threads, hence thread-local.
+// Elements whose value the mod set, so it can be cleared again.
 struct AppliedElement
 {
     winrt::weak_ref<FrameworkElement> element;
     DependencyProperty property;
 };
 
+// The taskbars live on different threads, so the applied elements are tracked
+// per thread.
 thread_local std::vector<AppliedElement> g_appliedElements;
 
 void* CTaskBand_ITaskListWndSite_vftable;
@@ -279,6 +303,36 @@ FrameworkElement FindChildByClassName(FrameworkElement element,
     });
 }
 
+// Whether the margin should be applied to the display the taskbar is on. The
+// primary display is the one whose top-left corner is the origin of the
+// virtual screen.
+bool ShouldApplyToMonitor(HMONITOR monitor) {
+    switch (g_settings.displays) {
+        case Displays::All:
+            return true;
+
+        case Displays::Primary: {
+            MONITORINFO monitorInfo{.cbSize = sizeof(MONITORINFO)};
+            if (!GetMonitorInfo(monitor, &monitorInfo)) {
+                return false;
+            }
+
+            return (monitorInfo.dwFlags & MONITORINFOF_PRIMARY) != 0;
+        }
+
+        case Displays::Secondary: {
+            MONITORINFO monitorInfo{.cbSize = sizeof(MONITORINFO)};
+            if (!GetMonitorInfo(monitor, &monitorInfo)) {
+                return false;
+            }
+
+            return (monitorInfo.dwFlags & MONITORINFOF_PRIMARY) == 0;
+        }
+    }
+
+    return true;
+}
+
 // The margin in DIPs, which is what XAML expects. With DPI following on the
 // setting is taken as DIPs; with it off the setting is taken as physical pixels
 // and converted, so the margin keeps a constant physical size.
@@ -302,29 +356,13 @@ double GetMarginInDips(FrameworkElement const& element) {
     return static_cast<double>(g_settings.leftMargin);
 }
 
-// The margin in physical screen pixels, which is the unit the jump list anchor
-// uses.
-int GetMarginInPixels(FrameworkElement const& element) {
-    if (!g_settings.followDpi) {
-        return g_settings.leftMargin;
+void ApplyMarginToTaskbar(HWND hTaskbarWnd, XamlRoot xamlRoot) {
+    HMONITOR monitor =
+        MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST);
+    if (!ShouldApplyToMonitor(monitor)) {
+        return;
     }
 
-    try {
-        auto xamlRoot = element.XamlRoot();
-        if (xamlRoot) {
-            double scale = xamlRoot.RasterizationScale();
-            if (scale > 0) {
-                return static_cast<int>(g_settings.leftMargin * scale);
-            }
-        }
-    } catch (winrt::hresult_error const& ex) {
-        Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
-    }
-
-    return g_settings.leftMargin;
-}
-
-void ApplyMarginToTaskbar(XamlRoot xamlRoot) {
     auto content = xamlRoot.Content().try_as<FrameworkElement>();
     if (!content) {
         Wh_Log(L"Failed to get the taskbar content element");
@@ -362,8 +400,6 @@ void ApplyMarginToTaskbar(XamlRoot xamlRoot) {
     } else {
         Wh_Log(L"Failed to find TaskbarBackground");
     }
-
-    g_anchorOffsetPx.store(GetMarginInPixels(taskbarFrame));
 }
 
 void RemoveAppliedMargins() {
@@ -378,7 +414,6 @@ void RemoveAppliedMargins() {
     }
 
     g_appliedElements.clear();
-    g_anchorOffsetPx.store(0);
 }
 
 using ComputeJumpViewPosition_t = HRESULT(WINAPI*)(
@@ -401,12 +436,35 @@ HRESULT WINAPI ComputeJumpViewPosition_Hook(
     HRESULT hr = ComputeJumpViewPosition_Original(pThis, pTaskBtnGroup, param2,
                                                   point, hAlign, vAlign);
 
-    int offset = g_anchorOffsetPx.load();
-    if (SUCCEEDED(hr) && point && offset && !g_unloading) {
-        Wh_Log(L"Jump list anchor x: %d -> %d", (int)point->X,
-               (int)(point->X + offset));
-        point->X += static_cast<float>(offset);
+    if (FAILED(hr) || !point || g_unloading || !g_settings.leftMargin) {
+        return hr;
     }
+
+    // The anchor is in physical screen pixels. The DPI is taken from the
+    // display the anchor is on, so that displays at different scales each get
+    // the right offset.
+    HMONITOR monitor =
+        MonitorFromPoint(POINT{(LONG)point->X, (LONG)point->Y},
+                         MONITOR_DEFAULTTONEAREST);
+    if (!ShouldApplyToMonitor(monitor)) {
+        return hr;
+    }
+
+    int offset = g_settings.leftMargin;
+    if (g_settings.followDpi) {
+        UINT dpiX = 0;
+        UINT dpiY = 0;
+        if (SUCCEEDED(
+                GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)) &&
+            dpiX > 0) {
+            offset = MulDiv(g_settings.leftMargin, dpiX,
+                            USER_DEFAULT_SCREEN_DPI);
+        }
+    }
+
+    Wh_Log(L"Jump list anchor x: %d -> %d", (int)point->X,
+           (int)(point->X + offset));
+    point->X += static_cast<float>(offset);
 
     return hr;
 }
@@ -490,7 +548,7 @@ void ApplySettingsFromTaskbarThread() {
                 return TRUE;
             }
 
-            ApplyMarginToTaskbar(xamlRoot);
+            ApplyMarginToTaskbar(hWnd, xamlRoot);
 
             return TRUE;
         },
@@ -697,6 +755,15 @@ bool HookTaskbarDllSymbols() {
 void LoadSettings() {
     g_settings.leftMargin = Wh_GetIntSetting(L"leftMargin");
     g_settings.followDpi = Wh_GetIntSetting(L"followDpi") != 0;
+
+    g_settings.displays = Displays::All;
+    PCWSTR displays = Wh_GetStringSetting(L"displays");
+    if (wcscmp(displays, L"primary") == 0) {
+        g_settings.displays = Displays::Primary;
+    } else if (wcscmp(displays, L"secondary") == 0) {
+        g_settings.displays = Displays::Secondary;
+    }
+    Wh_FreeStringSetting(displays);
 }
 
 BOOL Wh_ModInit() {
