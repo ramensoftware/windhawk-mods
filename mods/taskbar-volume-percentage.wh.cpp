@@ -276,6 +276,8 @@ struct TrackedVolumeContent {
     winrt::Windows::Foundation::IInspectable origBaseMinWidth{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayFontSize{nullptr};
     winrt::Windows::Foundation::IInspectable origUnderlayMinWidth{nullptr};
+    winrt::weak_ref<Controls::TextBlock> observedInnerTextBlock;
+    int64_t fontSizeCallbackToken = 0;
     bool lastNativeGlyph = false;
     int layoutSettingsGeneration = -1;
 };
@@ -626,8 +628,23 @@ void PruneTrackedVolumeContents() {
         return;
     }
 
-    std::erase_if(*g_trackedVolumeContents, [](auto const& tracked) {
-        return !tracked.textIconContent.get();
+    std::erase_if(*g_trackedVolumeContents, [](auto& tracked) {
+        if (!tracked.textIconContent.get()) {
+            if (tracked.fontSizeCallbackToken != 0) {
+                if (auto observed = tracked.observedInnerTextBlock.get()) {
+                    try {
+                        observed.UnregisterPropertyChangedCallback(
+                            Controls::TextBlock::FontSizeProperty(),
+                            tracked.fontSizeCallbackToken);
+                    } catch (...) {
+                    }
+                }
+                tracked.fontSizeCallbackToken = 0;
+                tracked.observedInnerTextBlock = nullptr;
+            }
+            return true;
+        }
+        return false;
     });
 }
 
@@ -684,6 +701,19 @@ void ApplyIconFontSize(
 }
 
 void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
+    if (tracked.fontSizeCallbackToken != 0) {
+        if (auto observed = tracked.observedInnerTextBlock.get()) {
+            try {
+                observed.UnregisterPropertyChangedCallback(
+                    Controls::TextBlock::FontSizeProperty(),
+                    tracked.fontSizeCallbackToken);
+            } catch (...) {
+            }
+        }
+        tracked.fontSizeCallbackToken = 0;
+        tracked.observedInnerTextBlock = nullptr;
+    }
+
     auto containerGrid = tracked.containerGrid.get();
     if (!containerGrid) {
         return;
@@ -781,6 +811,20 @@ void RestoreAllVolumeLayouts() {
     }
     if (g_trackedVolumeContents) {
         for (auto& tracked : *g_trackedVolumeContents) {
+            if (tracked.fontSizeCallbackToken != 0) {
+                if (auto observed = tracked.observedInnerTextBlock.get()) {
+                    try {
+                        observed.UnregisterPropertyChangedCallback(
+                            Controls::TextBlock::FontSizeProperty(),
+                            tracked.fontSizeCallbackToken);
+                    } catch (...) {
+                    }
+                }
+                tracked.fontSizeCallbackToken = 0;
+                tracked.observedInnerTextBlock = nullptr;
+            }
+        }
+        for (auto& tracked : *g_trackedVolumeContents) {
             RestoreVolumeLayout(tracked);
         }
     }
@@ -809,18 +853,30 @@ void SyncSubBlockFontFamily(Controls::TextBlock const& subBlock) {
     subBlock.ClearValue(Controls::TextBlock::FontFamilyProperty());
 }
 
-void SyncSubBlockFontSize(Controls::TextBlock const& subBlock) {
+double GetSubBlockFontSize(Controls::TextBlock const& source) {
+    if (g_settings.fontSize > 0) {
+        return g_settings.fontSize;
+    }
+    // With iconSize set, the mod owns the source value - don't copy it.
+    if (g_settings.iconSize <= 0 && source) {
+        double sourceSize = source.FontSize();
+        if (std::abs(sourceSize - kDefaultIconFontSize) > 0.01) {
+            return sourceSize;  // Customized, e.g. by Taskbar Styler.
+        }
+    }
+    return 12.0;
+}
+
+void SyncSubBlockFontSize(Controls::TextBlock const& subBlock,
+                          Controls::TextBlock const& source) {
     if (!subBlock) {
         return;
     }
-    if (g_settings.fontSize > 0) {
-        subBlock.FontSize(g_settings.fontSize);
-    } else {
-        subBlock.ClearValue(Controls::TextBlock::FontSizeProperty());
-    }
+    subBlock.FontSize(GetSubBlockFontSize(source));
 }
 
-void BindSubBlockTextStyle(Controls::TextBlock const& subBlock,
+void BindSubBlockTextStyle(TrackedVolumeContent& tracked,
+                           Controls::TextBlock const& subBlock,
                            Controls::TextBlock const& source) {
     auto bind = [&](DependencyProperty const& dp, PCWSTR path) {
         Data::Binding binding;
@@ -831,10 +887,42 @@ void BindSubBlockTextStyle(Controls::TextBlock const& subBlock,
     bind(Controls::TextBlock::ForegroundProperty(), L"Foreground");
     bind(Controls::TextBlock::FontWeightProperty(), L"FontWeight");
 
-    if (g_settings.fontSize > 0) {
-        subBlock.FontSize(g_settings.fontSize);
-    } else {
-        bind(Controls::TextBlock::FontSizeProperty(), L"FontSize");
+    SyncSubBlockFontSize(subBlock, source);
+
+    if (tracked.fontSizeCallbackToken == 0 ||
+        tracked.observedInnerTextBlock.get() != source) {
+        if (tracked.fontSizeCallbackToken != 0) {
+            if (auto prevSource = tracked.observedInnerTextBlock.get()) {
+                try {
+                    prevSource.UnregisterPropertyChangedCallback(
+                        Controls::TextBlock::FontSizeProperty(),
+                        tracked.fontSizeCallbackToken);
+                } catch (...) {
+                }
+            }
+            tracked.fontSizeCallbackToken = 0;
+        }
+
+        tracked.observedInnerTextBlock = source;
+        if (source) {
+            try {
+                tracked.fontSizeCallbackToken =
+                    source.RegisterPropertyChangedCallback(
+                        Controls::TextBlock::FontSizeProperty(),
+                        [subBlockWeak = winrt::make_weak(subBlock)](
+                            DependencyObject const& sender,
+                            DependencyProperty const&) {
+                            if (auto tb = sender.try_as<Controls::TextBlock>()) {
+                                if (auto sub = subBlockWeak.get()) {
+                                    SyncSubBlockFontSize(sub, tb);
+                                }
+                            }
+                        });
+            } catch (winrt::hresult_error const& ex) {
+                Wh_Log(L"Error registering font size callback: %08X", ex.code());
+                tracked.fontSizeCallbackToken = 0;
+            }
+        }
     }
 
     SyncSubBlockFontFamily(subBlock);
@@ -859,9 +947,7 @@ Controls::TextBlock GetOrCreateSubBlock(TrackedVolumeContent& tracked,
         subBlock.Name(L"VolumePercentageSubBlock");
         subBlock.VerticalAlignment(VerticalAlignment::Center);
         SyncSubBlockFontFamily(subBlock);
-        if (g_settings.fontSize > 0) {
-            subBlock.FontSize(g_settings.fontSize);
-        }
+        SyncSubBlockFontSize(subBlock, nullptr);
 
         containerGrid.Children().Append(subBlock);
         tracked.subBlock = subBlock;
@@ -871,10 +957,11 @@ Controls::TextBlock GetOrCreateSubBlock(TrackedVolumeContent& tracked,
         FindChildByName(baseElement, L"InnerTextBlock");
     if (textBlockEl) {
         if (auto innerTextBlock = textBlockEl.try_as<Controls::TextBlock>()) {
-            BindSubBlockTextStyle(subBlock, innerTextBlock);
+            BindSubBlockTextStyle(tracked, subBlock, innerTextBlock);
         }
     } else {
-        SyncSubBlockFontSize(subBlock);
+        SyncSubBlockFontSize(subBlock, nullptr);
+        SyncSubBlockFontFamily(subBlock);
     }
 
     return subBlock;
