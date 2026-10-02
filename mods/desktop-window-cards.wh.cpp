@@ -2,11 +2,11 @@
 // @id              desktop-window-cards
 // @name            Desktop Window Cards
 // @description     Minimized windows fall onto the desktop as dimmed thumbnail cards you can restore or close
-// @version         1.5
+// @version         1.7
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
-// @compilerOptions -ldwmapi -lgdi32 -lshell32
+// @compilerOptions -ldwmapi -lgdi32 -lshell32 -lole32 -luuid
 // @license         GPL-3.0-only
 // ==/WindhawkMod==
 
@@ -14,12 +14,15 @@
 /*
 # Desktop Window Cards
 
+![Desktop Window Cards overview](https://i.imgur.com/4jPnn65.png)
+[Watch the overview video in full quality](https://i.imgur.com/kzgxJRg.mp4)
+
 When you minimize a window, a copy of it "falls" onto the desktop: it drops
 away, tilts back, loses its shadow and dims, until it lands as a small card
 underneath all other windows.
 
-![Showcase](https://i.imgur.com/jo794nO.gif)
-[Watch the full-quality video](https://i.imgur.com/YmIrKAd.mp4)
+![Minimize animation](https://i.imgur.com/jo794nO.gif)
+[Watch the minimize animation in full quality](https://i.imgur.com/YmIrKAd.mp4)
 
 * **Click the thumbnail:** the card rises back to the window's original
   position and the real window is restored in its place.
@@ -28,12 +31,21 @@ underneath all other windows.
   its card lands where you left it. In grid layout, dragging a card over
   another one swaps them; with the same option enabled, reordered cards return
   to their place in the grid the next time their window is minimized.
+* **Another monitor:** drop a card on another monitor and its window moves
+  there too, centered (it opens there from the card, the taskbar or Alt+Tab).
+  In grid layout the card joins that monitor's grid where you drop it.
+* **Drag and drop:** drag a file (or text, an image...) over a card and hold
+  it there for a moment: the window opens, and you can drop it exactly where
+  you want, just like with taskbar buttons. Into an Explorer folder to copy or
+  move it, into an e-mail being written to attach it, into Notepad to open it,
+  and so on: the app itself handles the drop.
 * **Grid layout (optional):** instead of floating freely, the cards of each
   monitor are arranged automatically in a centered grid, similar to Task View,
   as large as the space allows. Only the windows of that monitor and of the
   current virtual desktop are shown, and the grid rearranges itself with an
   animation whenever a card arrives or leaves. Tip: Win+M minimizes all windows
   at once, turning the desktop into an overview of everything that is open.
+* **Mouse over:** the card brightens and, optionally, grows a little.
 * **X button:** closes the window (or only removes the card, depending on the
   settings).
 * **Virtual desktops:** each card is shown only on the virtual desktop of its
@@ -103,6 +115,14 @@ and cards survive an Explorer restart.
   - restore: Off only when restoring from a card
   - always: Always off (maximize/snap too)
   - never: Never off
+- HoverZoom: true
+  $name: Enlarge cards on mouse over
+  $description: Resting cards grow slightly, with a springy motion, under the mouse.
+- DragOpenDelayMs: 600
+  $name: Open a card when something is dragged over it (ms)
+  $description: >-
+    200-2000. How long to hold a dragged file over a card before its window
+    opens, ready for the drop. 0 disables it.
 - RememberPosition: true
   $name: Remember the position of moved cards
   $description: >-
@@ -126,6 +146,8 @@ and cards survive an Explorer restart.
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <shellapi.h>
+#include <ole2.h>
+#include <shobjidl.h>
 
 #include <algorithm>
 #include <atomic>
@@ -160,7 +182,13 @@ constexpr UINT_PTR TIMER_DESKTOP_POLL = 11;   // safety net for missed events
 constexpr UINT kDesktopCheckDelayMs = 30;
 constexpr UINT kDesktopPollMs = 1000;
 constexpr UINT_PTR TIMER_RELAYOUT = 12;       // coalesces display / work area changes
-constexpr int kGlideMs = 260;                 // grid rearrangement animation
+constexpr UINT_PTR TIMER_SWITCH_TIMEOUT = 13;  // a desktop switch that never completed
+constexpr UINT kSwitchTimeoutMs = 800;
+// Grid rearrangement and hover zoom use a critically damped spring: a card
+// that gets a new destination mid-motion keeps its speed and curves smoothly
+// towards it instead of restarting. Settles in roughly 300 ms.
+constexpr double kSpringOmega = 0.022;        // 1/ms
+constexpr double kHoverZoom = 1.04;
 constexpr double kReorderCooldownMs = 150;    // between two swaps while dragging
 
 constexpr double kPi = 3.14159265358979323846;
@@ -188,6 +216,8 @@ struct Settings {
     int revealFadeMs = 220;
     bool grid = false;
     int gridMaxWidth = 560;
+    int dragOpenDelayMs = 600;  // 0 = disabled
+    bool hoverZoom = true;
 } g_settings;
 
 enum class CardState { Falling, Resting, Rising, Handoff, Revealing, Vanishing };
@@ -224,8 +254,19 @@ struct Card {
     double aspect = 1.6;
     // A resting card sliding to its new grid cell.
     bool gliding = false;
-    RECT glideFrom = {}, glideTo = {};
-    double glideStart = 0;
+    RECT glideTo = {};
+    double springPos[4] = {}, springVel[4] = {};  // left, top, right, bottom (thumbnail)
+    double glideLast = 0;
+
+    // Drag and drop: something is being dragged over the card (spring-loading),
+    // and the card was opened that way.
+    IDropTarget* dropTarget = nullptr;
+    bool dragHover = false;
+    double dragHoverStart = 0;
+    bool springLoaded = false;
+    // The restored window didn't land exactly where the card ended: fade the
+    // snapshot out quickly, so the two images don't show side by side.
+    bool revealMismatch = false;
     std::wstring title;
     HICON icon = nullptr;  // our own copy, destroyed with the card
     HFONT font = nullptr;
@@ -252,7 +293,11 @@ std::atomic<bool> g_stop{false};
 HANDLE g_thread = nullptr;
 HANDLE g_frameTimer = nullptr;
 bool g_frameTimerArmed = false;
-HWINEVENTHOOK g_hooks[4] = {};
+// Windows 11: wait for the compositor's own clock, so every animation frame is
+// computed right when DWM composes. Windows 10 uses the waitable timer.
+using DCompositionWaitForCompositorClock_t = DWORD(WINAPI*)(UINT, const HANDLE*, DWORD);
+DCompositionWaitForCompositorClock_t g_waitForCompositorClock = nullptr;
+HWINEVENTHOOK g_hooks[6] = {};
 
 bool g_nativeAnimationChanged = false;
 
@@ -333,7 +378,7 @@ bool AnyAnimating() {
     for (auto& c : g_cards) {
         if (c->state == CardState::Falling || c->state == CardState::Rising ||
             c->state == CardState::Revealing || c->state == CardState::Vanishing ||
-            c->gliding) {
+            c->gliding || c->dragHover) {
             return true;
         }
     }
@@ -366,6 +411,9 @@ void LoadSettings() {
     g_settings.grid = layout && wcscmp(layout, L"grid") == 0;
     Wh_FreeStringSetting(layout);
     g_settings.gridMaxWidth = std::clamp(Wh_GetIntSetting(L"GridMaxWidth"), 200, 1600);
+    g_settings.hoverZoom = Wh_GetIntSetting(L"HoverZoom") != 0;
+    int dragDelay = Wh_GetIntSetting(L"DragOpenDelayMs");
+    g_settings.dragOpenDelayMs = dragDelay <= 0 ? 0 : std::clamp(dragDelay, 200, 2000);
 }
 
 // All changes are session-only (no SPIF_UPDATEINIFILE): signing out resets them.
@@ -516,6 +564,65 @@ bool IsEligibleTarget(HWND hwnd) {
     return true;
 }
 
+// Invisible resize borders, measured on the real window. The system metrics
+// only fit standard frames: apps that draw their own (browsers, WinUI/XAML,
+// Electron...) often have thinner borders or none. A wrong guess makes the
+// card's content slightly offset from the window, which shows when the card
+// hands over to it. Measured whenever the window is visible and in a normal
+// state: when it becomes active, after a move/resize, and after a restore.
+struct MeasuredFrame {
+    HWND hwnd;
+    RECT insets;  // window rect minus the visible frame (DWM extended frame bounds)
+    UINT dpi;
+};
+std::vector<MeasuredFrame> g_measuredFrames;
+
+const MeasuredFrame* FindMeasuredFrame(HWND hwnd) {
+    for (auto& m : g_measuredFrames) {
+        if (m.hwnd == hwnd) return &m;
+    }
+    return nullptr;
+}
+
+void MeasureWindowFrame(HWND hwnd) {
+    if (!IsWindow(hwnd) || !IsWindowVisible(hwnd) || IsIconic(hwnd) || IsZoomed(hwnd) ||
+        GetAncestor(hwnd, GA_ROOT) != hwnd || IsOurWindow(hwnd)) {
+        return;
+    }
+    RECT windowRect, frame;
+    if (!GetWindowRect(hwnd, &windowRect) ||
+        FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &frame, sizeof(frame)))) {
+        return;
+    }
+    RECT insets = {frame.left - windowRect.left, frame.top - windowRect.top,
+                   windowRect.right - frame.right, windowRect.bottom - frame.bottom};
+    const LONG edges[4] = {insets.left, insets.top, insets.right, insets.bottom};
+    for (LONG edge : edges) {
+        if (edge < 0 || edge > 64) return;  // mid-animation or nonsense
+    }
+    UINT dpi = GetDpiForWindow(hwnd);
+    if (!dpi) dpi = 96;
+    for (auto& m : g_measuredFrames) {
+        if (m.hwnd == hwnd) {
+            m.insets = insets;
+            m.dpi = dpi;
+            return;
+        }
+    }
+    g_measuredFrames.push_back({hwnd, insets, dpi});
+}
+
+void ForgetMeasuredFrame(HWND hwnd) {
+    g_measuredFrames.erase(std::remove_if(g_measuredFrames.begin(), g_measuredFrames.end(),
+                                          [hwnd](const MeasuredFrame& m) { return m.hwnd == hwnd; }),
+                           g_measuredFrames.end());
+}
+
+BOOL CALLBACK MeasureVisibleWindow(HWND hwnd, LPARAM) {
+    MeasureWindowFrame(hwnd);
+    return TRUE;
+}
+
 // Restored window rect in screen coordinates, plus the invisible resize borders
 // that Windows 10/11 keep around most windows.
 bool GetRestoredGeometry(HWND hwnd, RECT& windowRect, RECT& insets, bool& maximized) {
@@ -551,6 +658,11 @@ bool GetRestoredGeometry(HWND hwnd, RECT& windowRect, RECT& insets, bool& maximi
     } else {
         windowRect = r;
         insets = {frame, 0, frame, frame};
+        if (const MeasuredFrame* measured = FindMeasuredFrame(hwnd)) {
+            auto scaled = [&](LONG v) { return static_cast<LONG>(MulDiv(v, dpi, measured->dpi)); };
+            insets = {scaled(measured->insets.left), scaled(measured->insets.top),
+                      scaled(measured->insets.right), scaled(measured->insets.bottom)};
+        }
     }
     return RectW(windowRect) > 0 && RectH(windowRect) > 0;
 }
@@ -640,39 +752,120 @@ void SendCardToDesktopLevel(Card& c) {
 
 void UpdateThumbnail(Card& c);
 
+// The shell cloaks the windows of the old desktop only once its switch
+// animation is over, which is too late: the cards would stay on screen while
+// the windows slide away. The virtual desktop manager (documented COM API)
+// knows earlier: as soon as the current desktop changes, which the shell
+// records in the registry (watched by the worker thread, see
+// StartDesktopSwitchWatch), it reports the old desktop's windows as no longer
+// on the current one. The cloak state stays as a fallback when it's unavailable.
+
+// Not declared by every MinGW version.
+constexpr GUID kClsidVirtualDesktopManager = {
+    0xaa509086, 0x5ca9, 0x4c25, {0x8f, 0x95, 0x58, 0x9d, 0x3c, 0x07, 0xb4, 0x8a}};
+constexpr GUID kIidVirtualDesktopManager = {
+    0xa5cd92ff, 0x29be, 0x454c, {0x8d, 0x04, 0xd8, 0x28, 0x79, 0xfb, 0x3f, 0x1b}};
+
+IVirtualDesktopManager* g_virtualDesktops = nullptr;
+
+// 1: on another desktop, 0: on this one (pinned windows included), -1: unknown.
+int QueryVirtualDesktopManager(HWND target) {
+    if (!g_virtualDesktops &&
+        FAILED(CoCreateInstance(kClsidVirtualDesktopManager, nullptr, CLSCTX_ALL,
+                                kIidVirtualDesktopManager,
+                                reinterpret_cast<void**>(&g_virtualDesktops)))) {
+        g_virtualDesktops = nullptr;
+        return -1;
+    }
+    BOOL onCurrent = TRUE;
+    HRESULT hr = g_virtualDesktops->IsWindowOnCurrentVirtualDesktop(target, &onCurrent);
+    if (FAILED(hr)) {
+        // Explorer restarted: get a new manager next time.
+        if (hr == RPC_E_DISCONNECTED || hr == HRESULT_FROM_WIN32(RPC_S_SERVER_UNAVAILABLE) ||
+            hr == HRESULT_FROM_WIN32(RPC_S_CALL_FAILED)) {
+            g_virtualDesktops->Release();
+            g_virtualDesktops = nullptr;
+        }
+        return -1;
+    }
+    return onCurrent ? 0 : 1;
+}
+
 bool IsOnOtherVirtualDesktop(HWND target) {
     DWORD cloaked = 0;
-    return SUCCEEDED(DwmGetWindowAttribute(target, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
-           (cloaked & DWM_CLOAKED_SHELL);
+    if (SUCCEEDED(DwmGetWindowAttribute(target, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+        (cloaked & DWM_CLOAKED_SHELL)) {
+        return true;
+    }
+    return QueryVirtualDesktopManager(target) == 1;
 }
 
 void RelayoutGrid(bool animate);
+void ApplyFrame(Card& c, RECT thumbRect);
+void ScheduleDesktopCheck();
 
-void UpdateDesktopVisibility() {
-    std::vector<Card*> shown;
-    bool changed = false;
+// A desktop switch started with Ctrl+Win+arrows: the shell shows this window
+// right at the key press, about 200 ms before it hides the old desktop's
+// windows (at the end of its slide animation). The cards of the current
+// desktop are hidden at once, and no card is shown until the switch is over.
+constexpr wchar_t kHotkeySwitcherClass[] = L"VirtualDesktopHotkeySwitcher";
+bool g_switchPending = false;
+bool g_switchSawCloak = false;  // windows were already hidden/shown by the switch
+
+// The card is already cloaked by the caller.
+void HideCardForDesktop(Card& c) {
+    if (GetCapture() == c.host) SendMessageW(c.host, WM_CANCELMODE, 0, 0);
+    ShowWindow(c.host, SW_HIDE);
+    c.hover = c.hoverClose = c.pressed = c.dragHover = false;
+    // Back to normal size, in case it was enlarged under the mouse.
+    c.gliding = false;
+    ApplyFrame(c, c.restThumbRect);
+}
+
+// hideOnly: called on the first "window hidden" event of a desktop switch, to
+// take the old desktop's cards away immediately. Showing the new desktop's
+// cards waits for the switch to settle (ScheduleDesktopCheck), so that they
+// appear together.
+void UpdateDesktopVisibility(bool hideOnly = false) {
+    // Asking the virtual desktop manager is a cross-process COM call, during
+    // which this (STA) thread can dispatch messages, and cards may come and go.
+    // So: first collect the answers, then apply them to the cards that still
+    // exist; and never run nested.
+    static bool running = false;
+    if (running) {
+        ScheduleDesktopCheck();
+        return;
+    }
+    running = true;
+    if (g_switchPending) hideOnly = true;  // cards come back once the switch is over
+    std::vector<std::pair<HWND, bool>> answers;
     for (auto& p : g_cards) {
-        Card& c = *p;
         // Only resting cards: a card is always born on the current desktop, and
         // a card that just landed is checked by OnAnimationFinished.
-        if (c.state != CardState::Resting || !c.host || !IsWindow(c.target)) continue;
-        bool off = IsOnOtherVirtualDesktop(c.target);
-        if (off == c.offDesktop) continue;
+        if (p->state == CardState::Resting && p->host && !(hideOnly && p->offDesktop)) {
+            answers.push_back({p->target, false});
+        }
+    }
+    for (auto& [target, off] : answers) off = IsWindow(target) && IsOnOtherVirtualDesktop(target);
+    running = false;
+
+    std::vector<Card*> shown, hidden;
+    bool changed = false;
+    for (auto& [target, off] : answers) {
+        Card* card = FindCardByTarget(target);
+        if (!card || card->state != CardState::Resting || !card->host) continue;
+        Card& c = *card;
+        if (off == c.offDesktop || (hideOnly && !off)) continue;
         changed = true;
         c.offDesktop = off;
         // Cloak first in both directions: hiding leaves no trace, and showing
         // doesn't flash a black rectangle before the thumbnail is composed.
         BOOL cloak = TRUE;
         DwmSetWindowAttribute(c.host, kDwmCloak, &cloak, sizeof(cloak));
-        if (off) {
-            if (GetCapture() == c.host) SendMessageW(c.host, WM_CANCELMODE, 0, 0);
-            ShowWindow(c.host, SW_HIDE);
-            c.hover = c.hoverClose = c.pressed = false;
-            UpdateThumbnail(c);
-        } else {
-            shown.push_back(&c);
-        }
+        (off ? hidden : shown).push_back(&c);
     }
+    // All cloaked first (instant), the slower cleanup afterwards.
+    for (Card* c : hidden) HideCardForDesktop(*c);
     // Grid: arrange this desktop's cards before any of them reappears. Cards
     // that just left only make the others slide into the gap.
     if (changed) RelayoutGrid(shown.empty());
@@ -693,6 +886,94 @@ void ScheduleDesktopCheck() {
     if (HWND controller = g_controller.load()) {
         SetTimer(controller, TIMER_DESKTOP_CHECK, kDesktopCheckDelayMs, nullptr);
     }
+}
+
+// The shell writes the current desktop's id to the registry at the start of a
+// switch: Windows 11 in Explorer\VirtualDesktops, Windows 10 in
+// Explorer\SessionInfo\<session>\VirtualDesktops. The worker thread waits on
+// these events next to its other work.
+struct DesktopSwitchWatch {
+    HKEY key;
+    HANDLE event;
+};
+std::vector<DesktopSwitchWatch> g_desktopWatches;
+
+void ArmDesktopSwitchWatch(DesktopSwitchWatch& watch) {
+    RegNotifyChangeKeyValue(watch.key, FALSE, REG_NOTIFY_CHANGE_LAST_SET, watch.event, TRUE);
+}
+
+void StartDesktopSwitchWatch() {
+    wchar_t sessionPath[160] = L"";
+    DWORD session = 0;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &session)) {
+        swprintf_s(sessionPath,
+                   L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\SessionInfo\\%lu\\"
+                   L"VirtualDesktops",
+                   session);
+    }
+    const wchar_t* paths[] = {
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VirtualDesktops", sessionPath};
+    for (const wchar_t* path : paths) {
+        HKEY key = nullptr;
+        if (!*path || RegOpenKeyExW(HKEY_CURRENT_USER, path, 0, KEY_NOTIFY, &key) != ERROR_SUCCESS) {
+            continue;
+        }
+        HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+        if (!event) {
+            RegCloseKey(key);
+            continue;
+        }
+        g_desktopWatches.push_back({key, event});
+        ArmDesktopSwitchWatch(g_desktopWatches.back());
+    }
+}
+
+void StopDesktopSwitchWatch() {
+    for (auto& watch : g_desktopWatches) {
+        RegCloseKey(watch.key);
+        CloseHandle(watch.event);
+    }
+    g_desktopWatches.clear();
+}
+
+void OnDesktopSwitchStarting() {
+    g_switchPending = true;
+    g_switchSawCloak = false;
+    if (HWND controller = g_controller.load()) {
+        SetTimer(controller, TIMER_SWITCH_TIMEOUT, kSwitchTimeoutMs, nullptr);
+    }
+    // Every visible card belongs to the desktop being left (or to a window
+    // pinned to all desktops, which comes back when the switch is over).
+    std::vector<Card*> leaving;
+    for (auto& p : g_cards) {
+        Card& c = *p;
+        if (c.state != CardState::Resting || !c.host || c.offDesktop) continue;
+        c.offDesktop = true;
+        BOOL cloak = TRUE;
+        DwmSetWindowAttribute(c.host, kDwmCloak, &cloak, sizeof(cloak));
+        leaving.push_back(&c);
+    }
+    for (Card* c : leaving) HideCardForDesktop(*c);
+}
+
+// Also after a timeout: e.g. Ctrl+Win+arrow towards a desktop that doesn't
+// exist only plays a bounce, and the cards must come back.
+void EndDesktopSwitch() {
+    if (!g_switchPending) return;
+    g_switchPending = false;
+    if (HWND controller = g_controller.load()) KillTimer(controller, TIMER_SWITCH_TIMEOUT);
+    UpdateDesktopVisibility();
+}
+
+void OnDesktopSwitchSignaled(size_t index) {
+    if (index >= g_desktopWatches.size()) return;
+    ArmDesktopSwitchWatch(g_desktopWatches[index]);
+    if (g_switchPending) {
+        EndDesktopSwitch();  // the new desktop's cards appear right away
+        return;
+    }
+    UpdateDesktopVisibility(true);  // the old desktop's cards go away now
+    ScheduleDesktopCheck();         // the new desktop's cards come back together
 }
 
 // ---------------------------------------------------------------------------
@@ -776,6 +1057,7 @@ RECT ComputeRestThumbRect(const Card& self, const RECT& visible, double aspect, 
 // possible number of rows is tried and the one giving the largest cards wins.
 
 void ArmFrameTimer();
+void ApplyFrame(Card& c, RECT thumbRect);
 
 HMONITOR CardMonitor(const Card& c) {
     return MonitorFromRect(&c.visibleRect, MONITOR_DEFAULTTONEAREST);
@@ -786,21 +1068,76 @@ bool TakesGridSlot(const Card& c) {
 }
 
 void StartGlide(Card& c, const RECT& to) {
-    RECT from;
-    GetWindowRect(c.host, &from);
-    from.top += c.headerFullPx;  // resting cards always show the full header
-    if (EqualRect(&from, &to)) {
-        c.gliding = false;
-        return;
+    if (!c.gliding) {
+        RECT from;
+        GetWindowRect(c.host, &from);
+        from.top += c.headerFullPx;  // resting cards always show the full header
+        if (EqualRect(&from, &to)) return;
+        const LONG edges[4] = {from.left, from.top, from.right, from.bottom};
+        for (int i = 0; i < 4; i++) {
+            c.springPos[i] = edges[i];
+            c.springVel[i] = 0;
+        }
+        c.glideLast = NowMs();
+        c.gliding = true;
     }
-    c.glideFrom = from;
+    // Already moving: only the destination changes, the speed is kept.
     c.glideTo = to;
-    c.glideStart = NowMs();
-    c.gliding = true;
     ArmFrameTimer();
 }
 
-void ApplyFrame(Card& c, RECT thumbRect);
+// One step of the spring towards glideTo; returns false once settled.
+bool StepGlide(Card& c, double now) {
+    double dt = std::clamp(now - c.glideLast, 0.0, 50.0);
+    c.glideLast = now;
+    const LONG target[4] = {c.glideTo.left, c.glideTo.top, c.glideTo.right, c.glideTo.bottom};
+    double decay = std::exp(-kSpringOmega * dt);
+    bool settled = true;
+    for (int i = 0; i < 4; i++) {
+        // Exact solution of a critically damped spring over dt.
+        double x = c.springPos[i] - target[i];
+        double k = c.springVel[i] + kSpringOmega * x;
+        x = (x + k * dt) * decay;
+        c.springVel[i] = (c.springVel[i] - kSpringOmega * k * dt) * decay;
+        c.springPos[i] = target[i] + x;
+        if (std::fabs(x) > 0.5 || std::fabs(c.springVel[i]) > 0.02) settled = false;
+    }
+    RECT r = {static_cast<LONG>(std::lround(c.springPos[0])),
+              static_cast<LONG>(std::lround(c.springPos[1])),
+              static_cast<LONG>(std::lround(c.springPos[2])),
+              static_cast<LONG>(std::lround(c.springPos[3]))};
+    ApplyFrame(c, settled ? c.glideTo : r);
+    return !settled;
+}
+
+// Where a resting card should be shown: its place, enlarged under the mouse.
+RECT CardTargetRect(const Card& c) {
+    if (g_settings.hoverZoom && c.hover && c.state == CardState::Resting && !c.closing) {
+        return ScaleAroundCenter(c.restThumbRect, kHoverZoom);
+    }
+    return c.restThumbRect;
+}
+
+// Falling cards follow a fixed curve from animFrom to animTo. When the grid
+// gives them a new cell mid-air, animFrom is adjusted so that the card goes on
+// from where it is instead of jumping.
+void RetargetFall(Card& c, const RECT& to) {
+    double t = Clamp01((NowMs() - c.animStart) / c.animMs);
+    const double land = 0.78;  // same curve as TickAnimations
+    double p = t < land ? t / land : 1.0;
+    double e = p * p;
+    if (e > 0.97) {
+        c.animTo = to;
+        return;
+    }
+    RECT current = LerpRect(c.animFrom, c.animTo, e);
+    auto from = [e](LONG cur, LONG target) {
+        return static_cast<LONG>(std::lround((cur - target * e) / (1 - e)));
+    };
+    c.animFrom = {from(current.left, to.left), from(current.top, to.top),
+                  from(current.right, to.right), from(current.bottom, to.bottom)};
+    c.animTo = to;
+}
 
 void LayoutMonitorGrid(HMONITOR monitor, std::vector<Card*>& group, bool animate) {
     MONITORINFO mi = {sizeof(mi)};
@@ -857,13 +1194,13 @@ void LayoutMonitorGrid(HMONITOR monitor, std::vector<Card*>& group, bool animate
                           static_cast<LONG>(std::lround(y + header + h))};
             c.restThumbRect = thumb;
             if (c.state == CardState::Falling) {
-                c.animTo = thumb;  // redirected mid-air if the grid changed
+                if (!EqualRect(&c.animTo, &thumb)) RetargetFall(c, thumb);
             } else if (&c != g_draggingCard) {
                 if (animate) {
-                    StartGlide(c, thumb);
+                    StartGlide(c, CardTargetRect(c));
                 } else {
                     c.gliding = false;
-                    ApplyFrame(c, thumb);
+                    ApplyFrame(c, CardTargetRect(c));
                 }
             }
             x += w + gap;
@@ -898,6 +1235,93 @@ void RelayoutGrid(bool animate) {
 void ScheduleRelayout() {
     if (HWND controller = g_controller.load()) {
         SetTimer(controller, TIMER_RELAYOUT, 150, nullptr);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Moving a card to another monitor moves its window there as well, while it is
+// still minimized: its restore position is changed, centered on the new
+// monitor's work area and shrunk only if it doesn't fit. Restoring it in any
+// way (card, taskbar, Alt+Tab) then opens it there, with no visible jump.
+
+bool MoveTargetToMonitor(Card& c, HMONITOR monitor) {
+    WINDOWPLACEMENT wp = {sizeof(wp)};
+    if (!GetWindowPlacement(c.target, &wp)) return false;
+    RECT windowRect, insets;
+    bool maximized = false;
+    if (!GetRestoredGeometry(c.target, windowRect, insets, maximized)) return false;
+    MONITORINFO mi = {sizeof(mi)};
+    if (!GetMonitorInfoW(monitor, &mi)) return false;
+    const RECT& work = mi.rcWork;
+
+    // Size of the restored (not maximized) window, invisible borders included.
+    RECT normal = wp.rcNormalPosition;
+    int w = std::min(RectW(normal), static_cast<int>(RectW(work) + insets.left + insets.right));
+    int h = std::min(RectH(normal), static_cast<int>(RectH(work) + insets.bottom));
+    int left = work.left + (RectW(work) - w) / 2;
+    int top = work.top + (RectH(work) - h) / 2;
+    RECT screenRect = {left, top, left + w, top + h};
+
+    // rcNormalPosition uses workspace coordinates (see GetRestoredGeometry).
+    wp.rcNormalPosition = screenRect;
+    OffsetRect(&wp.rcNormalPosition, mi.rcMonitor.left - work.left, mi.rcMonitor.top - work.top);
+    wp.showCmd = SW_SHOWMINNOACTIVE;  // stays minimized
+    // Posted to the window's thread: a hung app can't block the worker.
+    wp.flags = (wp.flags & WPF_RESTORETOMAXIMIZED) | WPF_ASYNCWINDOWPLACEMENT;
+    if (!SetWindowPlacement(c.target, &wp)) {
+        // Typically an elevated window (UIPI): it stays where it is.
+        Wh_Log(L"SetWindowPlacement failed for %p (%lu)", c.target, GetLastError());
+        return false;
+    }
+
+    if (maximized) {
+        // Maximizes on the monitor of its restore position: the new one.
+        c.visibleRect = work;
+    } else {
+        c.visibleRect = {screenRect.left + insets.left, screenRect.top + insets.top,
+                         screenRect.right - insets.right, screenRect.bottom - insets.bottom};
+    }
+    return true;
+}
+
+void SaveCardOrder(HWND target, uint64_t order);
+
+// Grid: put a card that arrived from another monitor where it was dropped,
+// between the cards of its new monitor. The order values of the group are
+// reused and redistributed, so they stay unique.
+void InsertIntoGridAt(Card& moved, POINT pt) {
+    HMONITOR monitor = CardMonitor(moved);
+    std::vector<Card*> group;
+    for (auto& p : g_cards) {
+        Card* other = p.get();
+        if (other != &moved && TakesGridSlot(*other) && CardMonitor(*other) == monitor) {
+            group.push_back(other);
+        }
+    }
+    std::sort(group.begin(), group.end(),
+              [](const Card* a, const Card* b) { return a->order < b->order; });
+
+    // Before or after the nearest card, depending on the side of the drop.
+    size_t index = group.size();
+    double best = -1;
+    for (size_t i = 0; i < group.size(); i++) {
+        const RECT& r = group[i]->restThumbRect;
+        double cx = (r.left + r.right) / 2.0, cy = (r.top + r.bottom) / 2.0;
+        double d = (pt.x - cx) * (pt.x - cx) + (pt.y - cy) * (pt.y - cy);
+        if (best < 0 || d < best) {
+            best = d;
+            index = pt.x < cx ? i : i + 1;
+        }
+    }
+
+    std::vector<uint64_t> orders;
+    for (Card* other : group) orders.push_back(other->order);
+    orders.push_back(moved.order);
+    std::sort(orders.begin(), orders.end());
+    group.insert(group.begin() + index, &moved);
+    for (size_t i = 0; i < group.size(); i++) {
+        group[i]->order = orders[i];
+        if (g_settings.rememberPosition) SaveCardOrder(group[i]->target, orders[i]);
     }
 }
 
@@ -977,6 +1401,13 @@ void PaintCard(Card& c, HDC hdc) {
         HBRUSH bg = CreateSolidBrush(c.hover ? RGB(46, 46, 46) : RGB(28, 28, 28));
         FillRect(mem, &header, bg);
         DeleteObject(bg);
+        if (c.dragHover && g_settings.dragOpenDelayMs > 0) {
+            // Fills up until the window opens.
+            double progress = Clamp01((NowMs() - c.dragHoverStart) / g_settings.dragOpenDelayMs);
+            RECT bar = {0, hh - std::max(2, S(3)), static_cast<LONG>(std::lround(rc.right * progress)),
+                        hh};
+            FillRect(mem, &bar, GetSysColorBrush(COLOR_HIGHLIGHT));
+        }
 
         if (hh >= c.headerFullPx * 0.7) {
             int x = S(7);
@@ -1254,7 +1685,8 @@ void DestroyRevealOverlay(Card& c) {
 // Animation clock (high-resolution waitable timer at the display refresh rate)
 
 void ArmFrameTimer() {
-    if (g_frameTimerArmed || !g_frameTimer) return;
+    // With the compositor clock, the message loop ticks while AnyAnimating().
+    if (g_waitForCompositorClock || g_frameTimerArmed || !g_frameTimer) return;
     double refresh = 60.0;
     DWM_TIMING_INFO ti = {sizeof(ti)};
     if (SUCCEEDED(DwmGetCompositionTimingInfo(nullptr, &ti)) && ti.rateRefresh.uiDenominator &&
@@ -1277,6 +1709,7 @@ void StartAnimation(Card& c, CardState state, int durationMs) {
 }
 
 void DestroyCard(Card* card);
+void RegisterCardDropTarget(Card& c);
 
 void StartVanishing(Card& c) {
     KillTimer(c.host, TIMER_HANDOFF);
@@ -1317,6 +1750,22 @@ void StartRising(Card& c) {
     RelayoutGrid(true);
 }
 
+// Let the app restore itself through its own WM_SYSCOMMAND handling, like the
+// taskbar does. Forcing foreground onto a still-minimized window and restoring
+// it from outside confuses Chromium/Electron apps, which then minimize
+// themselves again a few seconds later.
+void RestoreTarget(Card& c) {
+    DWORD pid = 0;
+    GetWindowThreadProcessId(c.target, &pid);
+    AllowSetForegroundWindow(pid);
+    BeginTransientNoAnimation(c);
+    if (!PostMessageW(c.target, WM_SYSCOMMAND, SC_RESTORE, 0)) {
+        // e.g. an elevated window: UIPI blocks posted messages.
+        Wh_Log(L"SC_RESTORE post failed (%lu), falling back to ShowWindowAsync", GetLastError());
+        ShowWindowAsync(c.target, SW_RESTORE);
+    }
+}
+
 void OnAnimationFinished(Card& c) {
     switch (c.state) {
         case CardState::Falling:
@@ -1341,20 +1790,7 @@ void OnAnimationFinished(Card& c) {
                 DwmFlush();  // snapshot on screen before the live card goes away
                 ShowWindow(c.host, SW_HIDE);
             }
-            // Let the app restore itself through its own WM_SYSCOMMAND handling,
-            // like the taskbar does. Forcing foreground onto a still-minimized
-            // window and restoring it from outside confuses Chromium/Electron
-            // apps, which then minimize themselves again a few seconds later.
-            DWORD pid = 0;
-            GetWindowThreadProcessId(c.target, &pid);
-            AllowSetForegroundWindow(pid);
-            BeginTransientNoAnimation(c);
-            if (!PostMessageW(c.target, WM_SYSCOMMAND, SC_RESTORE, 0)) {
-                // e.g. an elevated window: UIPI blocks posted messages.
-                Wh_Log(L"SC_RESTORE post failed (%lu), falling back to ShowWindowAsync",
-                       GetLastError());
-                ShowWindowAsync(c.target, SW_RESTORE);
-            }
+            RestoreTarget(c);
             // Normally replaced on EVENT_SYSTEM_MINIMIZEEND; this is the fallback.
             SetTimer(c.host, c.overlay ? TIMER_REVEAL : TIMER_HANDOFF, 1500, nullptr);
             break;
@@ -1368,15 +1804,24 @@ void OnAnimationFinished(Card& c) {
     }
 }
 
+void SpringRestore(Card& c);
+
 bool TickAnimations() {
     double now = NowMs();
     std::vector<Card*> finished;
+    std::vector<Card*> springs;
     for (auto& up : g_cards) {
         Card& c = *up;
+        if (c.dragHover) {
+            if (c.state != CardState::Resting || g_settings.dragOpenDelayMs <= 0) {
+                c.dragHover = false;
+            } else {
+                InvalidateRect(c.host, nullptr, FALSE);  // progress bar
+                if (now - c.dragHoverStart >= g_settings.dragOpenDelayMs) springs.push_back(&c);
+            }
+        }
         if (c.state == CardState::Resting && c.gliding) {
-            double t = Clamp01((now - c.glideStart) / kGlideMs);
-            ApplyFrame(c, LerpRect(c.glideFrom, c.glideTo, EaseOutCubic(t)));
-            if (t >= 1.0) c.gliding = false;
+            c.gliding = StepGlide(c, now);
             continue;
         }
         if (c.state != CardState::Falling && c.state != CardState::Rising &&
@@ -1427,6 +1872,7 @@ bool TickAnimations() {
         if (t >= 1.0) finished.push_back(&c);
     }
     for (Card* c : finished) OnAnimationFinished(*c);
+    for (Card* c : springs) SpringRestore(*c);
     return AnyAnimating();
 }
 
@@ -1443,6 +1889,11 @@ void DestroyCard(Card* card) {
     if (g_lastSwapWith == owned.get()) g_lastSwapWith = nullptr;
     RelayoutGrid(true);
     EndTransientNoAnimation(*owned);
+    if (owned->dropTarget) {
+        RevokeDragDrop(owned->host);
+        owned->dropTarget->Release();
+        owned->dropTarget = nullptr;
+    }
     if (owned->thumb) DwmUnregisterThumbnail(owned->thumb);
     DestroyRevealOverlay(*owned);
     if (owned->host) DestroyWindow(owned->host);
@@ -1503,17 +1954,37 @@ void CreateCard(HWND target, bool animate) {
     if (FAILED(DwmQueryThumbnailSourceSize(c.thumb, &source)) || source.cx < 50 || source.cy < 50) {
         source = {RectW(windowRect), RectH(windowRect)};
     }
-    double sx = static_cast<double>(source.cx) / RectW(windowRect);
-    double sy = static_cast<double>(source.cy) / RectH(windowRect);
-    c.sourceCrop = {static_cast<LONG>(insets.left * sx), static_cast<LONG>(insets.top * sy),
-                    static_cast<LONG>(source.cx - insets.right * sx),
-                    static_cast<LONG>(source.cy - insets.bottom * sy)};
+    // The thumbnail source uses the window's own pixel coordinates: x = 0 is
+    // the outer edge of the left invisible border. Some Windows builds report
+    // a source size without the borders (window minus borders), others with
+    // them, but in both cases the visible window starts at (left, top) inset,
+    // 1:1. Only when the size is something else (e.g. a DPI-scaled window) is
+    // the source scaled relative to the window.
+    int visibleW = RectW(windowRect) - insets.left - insets.right;
+    int visibleH = RectH(windowRect) - insets.top - insets.bottom;
+    bool sizeWithoutBorders =
+        std::abs(source.cx - visibleW) <= 2 && std::abs(source.cy - visibleH) <= 2;
+    bool sizeWithBorders = std::abs(source.cx - RectW(windowRect)) <= 2 &&
+                           std::abs(source.cy - RectH(windowRect)) <= 2;
+    bool oneToOne = sizeWithoutBorders || sizeWithBorders;
+    if (oneToOne) {
+        c.sourceCrop = {insets.left, insets.top, insets.left + visibleW, insets.top + visibleH};
+    } else {
+        double sx = static_cast<double>(source.cx) / RectW(windowRect);
+        double sy = static_cast<double>(source.cy) / RectH(windowRect);
+        c.sourceCrop = {static_cast<LONG>(insets.left * sx), static_cast<LONG>(insets.top * sy),
+                        static_cast<LONG>(source.cx - insets.right * sx),
+                        static_cast<LONG>(source.cy - insets.bottom * sy)};
+    }
     double aspect = static_cast<double>(RectW(c.sourceCrop)) / std::max(1, RectH(c.sourceCrop));
     c.aspect = std::clamp(aspect, 0.25, 4.0);
     const SavedCardOrder* savedOrder = FindSavedOrder(target);
     c.order = g_settings.rememberPosition && savedOrder ? savedOrder->order : g_nextOrder++;
-    Wh_Log(L"Card for %p: window %dx%d, source %dx%d, maximized=%d", target, RectW(windowRect),
-           RectH(windowRect), source.cx, source.cy, maximized);
+    Wh_Log(L"Card for %p: window %dx%d, source %dx%d, insets %ld/%ld/%ld/%ld, 1:1=%d (size %s borders), "
+           L"maximized=%d",
+           target, RectW(windowRect), RectH(windowRect), source.cx, source.cy, insets.left,
+           insets.top, insets.right, insets.bottom, oneToOne,
+           sizeWithoutBorders ? L"without" : L"with", maximized);
 
     UINT dpi = GetDpiForWindow(c.host);
     if (!dpi) dpi = 96;
@@ -1553,6 +2024,7 @@ void CreateCard(HWND target, bool animate) {
 
     double restBrightness = g_settings.brightness / 100.0;
     g_cards.push_back(std::move(card));
+    RegisterCardDropTarget(c);
 
     if (animate) {
         c.animFrom = c.visibleRect;
@@ -1599,6 +2071,7 @@ void RequestClose(Card& c) {
     c.closing = true;
     UpdateThumbnail(c);
     InvalidateRect(c.host, nullptr, FALSE);
+    StartGlide(c, CardTargetRect(c));
     // If the app is still alive after a moment it is probably asking something
     // (e.g. "save changes?"); bring it back so the prompt is visible.
     SetTimer(c.host, TIMER_CLOSE_CHECK, 1500, nullptr);
@@ -1609,6 +2082,32 @@ void OnTargetRestored(Card& c) {
         EndTransientNoAnimation(c);
         // Activate only now that the window is really restored.
         if (GetForegroundWindow() != c.target) SetForegroundWindow(c.target);
+        if (c.springLoaded) {
+            // During a drag the foreground belongs to the drag source and the
+            // activation above may be refused: make sure the window is at least
+            // on top, where the user is about to drop.
+            SetWindowPos(c.target, HWND_TOP, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        // Learn this window's real borders for its next card, and check where
+        // it actually landed compared to the card.
+        MeasureWindowFrame(c.target);
+        RECT actual;
+        if (!IsZoomed(c.target) &&
+            SUCCEEDED(DwmGetWindowAttribute(c.target, DWMWA_EXTENDED_FRAME_BOUNDS, &actual,
+                                            sizeof(actual)))) {
+            LONG drift = std::max({std::labs(actual.left - c.visibleRect.left),
+                                   std::labs(actual.top - c.visibleRect.top),
+                                   std::labs(actual.right - c.visibleRect.right),
+                                   std::labs(actual.bottom - c.visibleRect.bottom)});
+            if (drift > 2) {
+                c.revealMismatch = true;
+                Wh_Log(L"Restored %p off by %ld px: card (%ld,%ld,%ld,%ld), window (%ld,%ld,%ld,%ld)",
+                       c.target, drift, c.visibleRect.left, c.visibleRect.top,
+                       c.visibleRect.right, c.visibleRect.bottom, actual.left, actual.top,
+                       actual.right, actual.bottom);
+            }
+        }
         if (c.overlay) {
             // Keep the snapshot on top while the backdrop is being rebuilt.
             KillTimer(c.host, TIMER_REVEAL);
@@ -1623,10 +2122,131 @@ void OnTargetRestored(Card& c) {
 
 void SetHover(Card& c, bool hover, bool hoverClose) {
     if (c.hover == hover && c.hoverClose == hoverClose) return;
+    bool hoverChanged = c.hover != hover;
     c.hover = hover;
     c.hoverClose = hoverClose;
     UpdateThumbnail(c);
     InvalidateRect(c.host, nullptr, FALSE);
+    if (hoverChanged && c.state == CardState::Resting && g_draggingCard != &c) {
+        if (hover && g_settings.hoverZoom) {
+            // Above the other cards, so the enlarged card isn't cut by its neighbors.
+            SetWindowPos(c.host, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        StartGlide(c, CardTargetRect(c));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Drag and drop (spring-loading, like taskbar buttons)
+//
+// The card never accepts the drop itself. Holding something over it restores
+// the window right away, without the rise animation, and hides the card, so
+// that the drop lands in the real window and the app handles it as usual:
+// copy/move into an Explorer folder, attach to an e-mail, open in an editor...
+
+void SpringRestore(Card& c) {
+    if (c.state != CardState::Resting) return;
+    c.dragHover = false;
+    c.gliding = false;
+    c.hover = c.hoverClose = c.pressed = false;
+    c.springLoaded = true;
+    KillTimer(c.host, TIMER_CLOSE_CHECK);
+    c.state = CardState::Handoff;
+    // Out of the way at once: the drop must reach the window, not the card.
+    ShowWindow(c.host, SW_HIDE);
+    RelayoutGrid(true);
+    RestoreTarget(c);
+    // Normally replaced on EVENT_SYSTEM_MINIMIZEEND; this is the fallback.
+    SetTimer(c.host, TIMER_HANDOFF, 1500, nullptr);
+}
+
+IDropTargetHelper* g_dropHelper = nullptr;  // keeps the drag image visible over cards
+// CLSID_DragDropHelper (shlguid.h); not declared by every MinGW version.
+constexpr GUID kClsidDragDropHelper = {
+    0x4657278a, 0x411b, 0x11d2, {0x83, 0x9a, 0x00, 0xc0, 0x4f, 0xd9, 0x18, 0xd0}};
+
+Card* CardFromHost(HWND host) {
+    return IsWindow(host) ? reinterpret_cast<Card*>(GetWindowLongPtrW(host, GWLP_USERDATA))
+                          : nullptr;
+}
+
+class CardDropTarget final : public IDropTarget {
+   public:
+    explicit CardDropTarget(HWND host) : host_(host) {}
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** object) override {
+        if (!object) return E_POINTER;
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_IDropTarget)) {
+            *object = static_cast<IDropTarget*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *object = nullptr;
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&refs_); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG refs = InterlockedDecrement(&refs_);
+        if (!refs) delete this;
+        return refs;
+    }
+
+    HRESULT STDMETHODCALLTYPE DragEnter(IDataObject* data, DWORD, POINTL pt,
+                                        DWORD* effect) override {
+        POINT p = {pt.x, pt.y};
+        if (g_dropHelper) g_dropHelper->DragEnter(host_, data, &p, DROPEFFECT_NONE);
+        Card* c = CardFromHost(host_);
+        if (c && g_settings.dragOpenDelayMs > 0 && c->state == CardState::Resting &&
+            !c->offDesktop) {
+            c->dragHover = true;
+            c->dragHoverStart = NowMs();
+            SetHover(*c, true, false);
+            InvalidateRect(host_, nullptr, FALSE);
+            ArmFrameTimer();
+        }
+        *effect = DROPEFFECT_NONE;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE DragOver(DWORD, POINTL pt, DWORD* effect) override {
+        POINT p = {pt.x, pt.y};
+        if (g_dropHelper) g_dropHelper->DragOver(&p, DROPEFFECT_NONE);
+        *effect = DROPEFFECT_NONE;
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE DragLeave() override {
+        if (g_dropHelper) g_dropHelper->DragLeave();
+        EndHover();
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE Drop(IDataObject* data, DWORD, POINTL pt, DWORD* effect) override {
+        // Dropped before the window opened: nothing happens, like on the taskbar.
+        POINT p = {pt.x, pt.y};
+        if (g_dropHelper) g_dropHelper->Drop(data, &p, DROPEFFECT_NONE);
+        EndHover();
+        *effect = DROPEFFECT_NONE;
+        return S_OK;
+    }
+
+   private:
+    void EndHover() {
+        Card* c = CardFromHost(host_);
+        if (!c || !c->dragHover) return;
+        c->dragHover = false;
+        SetHover(*c, false, false);
+        InvalidateRect(host_, nullptr, FALSE);
+    }
+
+    LONG refs_ = 1;
+    HWND host_;
+};
+
+void RegisterCardDropTarget(Card& c) {
+    auto* target = new CardDropTarget(c.host);
+    if (SUCCEEDED(RegisterDragDrop(c.host, target))) {
+        c.dropTarget = target;  // RegisterDragDrop holds its own reference
+    } else {
+        target->Release();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1659,8 +2279,9 @@ LRESULT CALLBACK CardWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
         case WM_WINDOWPOSCHANGING: {
             auto* wp = reinterpret_cast<WINDOWPOS*>(lParam);
             if (c->state == CardState::Resting && !(wp->flags & SWP_NOZORDER)) {
-                HWND after = g_draggingCard == c ? GetAboveCardsInsertAfter(hwnd)
-                                                 : GetDesktopInsertAfter(hwnd);
+                bool raised = g_draggingCard == c || (c->hover && g_settings.hoverZoom);
+                HWND after =
+                    raised ? GetAboveCardsInsertAfter(hwnd) : GetDesktopInsertAfter(hwnd);
                 if (after) {
                     wp->hwndInsertAfter = after;
                 } else {
@@ -1688,15 +2309,29 @@ LRESULT CALLBACK CardWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             g_draggingCard = nullptr;
             g_lastSwapWith = nullptr;
             SendCardToDesktopLevel(*c);
+            RECT r;
+            GetWindowRect(hwnd, &r);
+            // Dropped on another monitor: the window follows the card.
+            HMONITOR dropMonitor = MonitorFromRect(&r, MONITOR_DEFAULTTONEAREST);
+            bool movedMonitor = c->state == CardState::Resting &&
+                                dropMonitor != CardMonitor(*c) &&
+                                MoveTargetToMonitor(*c, dropMonitor);
             if (g_settings.grid) {
+                if (movedMonitor) {
+                    POINT pt;
+                    GetCursorPos(&pt);
+                    InsertIntoGridAt(*c, pt);
+                }
                 RelayoutGrid(true);  // slide into its (possibly new) cell
                 return 0;
             }
-            RECT r;
-            GetWindowRect(hwnd, &r);
-            SaveCardPosition(c->target, {r.left, r.top});
             r.top += c->headerFullPx;
-            c->restThumbRect = r;
+            RECT rest = c->restThumbRect;  // normal size, unchanged by the drag
+            int cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+            OffsetRect(&rest, cx - (rest.left + rest.right) / 2, cy - (rest.top + rest.bottom) / 2);
+            c->restThumbRect = rest;
+            SaveCardPosition(c->target, {rest.left, rest.top - c->headerFullPx});
+            StartGlide(*c, CardTargetRect(*c));
             return 0;
         }
         case WM_NCHITTEST: {
@@ -1786,7 +2421,9 @@ LRESULT CALLBACK CardWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
             if (wParam == TIMER_HANDOFF) {
                 DestroyCard(c);  // c is gone after this
             } else if (wParam == TIMER_REVEAL && c->state == CardState::Handoff) {
-                StartAnimation(*c, CardState::Revealing, g_settings.revealFadeMs);
+                StartAnimation(*c, CardState::Revealing,
+                               c->revealMismatch ? std::min(g_settings.revealFadeMs, 60)
+                                                 : g_settings.revealFadeMs);
             } else if (wParam == TIMER_CLOSE_CHECK && c->state == CardState::Resting) {
                 c->closing = false;
                 if (IsWindow(c->target) && IsIconic(c->target) && !c->offDesktop) {
@@ -1836,7 +2473,18 @@ LRESULT CALLBACK ControllerWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
                 RelayoutGrid(true);
                 return 0;
             }
-            if (wParam == TIMER_DESKTOP_CHECK) KillTimer(hwnd, wParam);
+            if (wParam == TIMER_SWITCH_TIMEOUT) {
+                EndDesktopSwitch();
+                return 0;
+            }
+            if (wParam == TIMER_DESKTOP_CHECK) {
+                KillTimer(hwnd, wParam);
+                // The switch has hidden/shown its windows: it's over.
+                if (g_switchPending && g_switchSawCloak) {
+                    EndDesktopSwitch();
+                    return 0;
+                }
+            }
             if (wParam == TIMER_DESKTOP_CHECK || wParam == TIMER_DESKTOP_POLL) {
                 UpdateDesktopVisibility();
             }
@@ -1861,6 +2509,7 @@ void HandleWinEvent(DWORD event, HWND hwnd) {
             break;
         case EVENT_OBJECT_DESTROY:
             ForgetSavedPosition(hwnd);
+            ForgetMeasuredFrame(hwnd);
             if (Card* c = FindCardByTarget(hwnd)) DestroyCard(c);
             break;
         case EVENT_OBJECT_HIDE:
@@ -1872,9 +2521,20 @@ void HandleWinEvent(DWORD event, HWND hwnd) {
                 }
             }
             break;
+        case EVENT_OBJECT_SHOW:
+            // Only the hotkey switcher is forwarded by WinEventProc.
+            OnDesktopSwitchStarting();
+            break;
         case EVENT_OBJECT_CLOAKED:
-        case EVENT_OBJECT_UNCLOAKED:
             // Virtual desktop switch, or a window moved to another desktop.
+            // A card whose window just left: hide right away, without waiting
+            // for the rest of the switch.
+            if (g_switchPending) g_switchSawCloak = true;
+            if (FindCardByTarget(hwnd)) UpdateDesktopVisibility(true);
+            ScheduleDesktopCheck();
+            break;
+        case EVENT_OBJECT_UNCLOAKED:
+            if (g_switchPending) g_switchSawCloak = true;
             ScheduleDesktopCheck();
             break;
         case EVENT_OBJECT_NAMECHANGE:
@@ -1893,12 +2553,22 @@ void HandleWinEvent(DWORD event, HWND hwnd) {
 void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG idChild,
                            DWORD, DWORD) {
     if (!hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
-    if (event == EVENT_OBJECT_SHOW) return;  // only part of the hooked range
+    if (event == EVENT_SYSTEM_FOREGROUND || event == EVENT_SYSTEM_MOVESIZEEND) {
+        MeasureWindowFrame(hwnd);  // cheap, and touches no card
+        return;
+    }
+    if (event == EVENT_OBJECT_SHOW) {
+        // Part of the hooked range: only the start of a desktop switch matters.
+        if (GetAncestor(hwnd, GA_ROOT) != hwnd || !IsClassName(hwnd, kHotkeySwitcherClass)) {
+            return;
+        }
+    }
     if (event == EVENT_OBJECT_DESTROY || event == EVENT_OBJECT_HIDE ||
         event == EVENT_OBJECT_NAMECHANGE || event == EVENT_OBJECT_CLOAKED ||
         event == EVENT_OBJECT_UNCLOAKED) {
         // Very frequent system-wide: only forward windows we care about.
-        if (!FindCardByTarget(hwnd) && !FindSavedPosition(hwnd) && !FindSavedOrder(hwnd)) {
+        if (!FindCardByTarget(hwnd) && !FindSavedPosition(hwnd) && !FindSavedOrder(hwnd) &&
+            !(event == EVENT_OBJECT_DESTROY && FindMeasuredFrame(hwnd))) {
             return;
         }
     }
@@ -1919,6 +2589,14 @@ BOOL CALLBACK CollectMinimizedWindow(HWND hwnd, LPARAM lParam) {
 
 DWORD WINAPI WorkerThread(void*) {
     SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    // Drag and drop needs OLE on the thread that owns the cards.
+    bool oleInitialized = SUCCEEDED(OleInitialize(nullptr));
+    if (oleInitialized) {
+        CoCreateInstance(kClsidDragDropHelper, nullptr, CLSCTX_INPROC_SERVER,
+                         IID_IDropTargetHelper, reinterpret_cast<void**>(&g_dropHelper));
+    } else {
+        Wh_Log(L"OleInitialize failed: drag and drop over cards is unavailable");
+    }
     LoadSettings();
 
     WNDCLASSEXW wc = {sizeof(wc)};
@@ -1934,6 +2612,11 @@ DWORD WINAPI WorkerThread(void*) {
     wc.lpszClassName = kControllerClass;
     RegisterClassExW(&wc);
 
+    HMODULE dcomp = LoadLibraryExW(L"dcomp.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (dcomp) {
+        g_waitForCompositorClock = reinterpret_cast<DCompositionWaitForCompositorClock_t>(
+            GetProcAddress(dcomp, "DCompositionWaitForCompositorClock"));
+    }
     g_frameTimer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
                                           TIMER_ALL_ACCESS);
     if (!g_frameTimer) g_frameTimer = CreateWaitableTimerW(nullptr, FALSE, nullptr);
@@ -1953,6 +2636,11 @@ DWORD WINAPI WorkerThread(void*) {
                                      WinEventProc, 0, 0, flags);
         g_hooks[3] = SetWinEventHook(EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED, nullptr,
                                      WinEventProc, 0, 0, flags);
+        g_hooks[4] = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
+                                     WinEventProc, 0, 0, flags);
+        g_hooks[5] = SetWinEventHook(EVENT_SYSTEM_MOVESIZEEND, EVENT_SYSTEM_MOVESIZEEND, nullptr,
+                                     WinEventProc, 0, 0, flags);
+        EnumWindows(MeasureVisibleWindow, 0);
         SetTimer(controller, TIMER_DESKTOP_POLL, kDesktopPollMs, nullptr);
         RecoverNativeAnimationAfterCrash();
         ApplyNativeAnimationSetting(false);
@@ -1964,13 +2652,37 @@ DWORD WINAPI WorkerThread(void*) {
         }
         Wh_Log(L"Desktop Window Cards running, %zu existing cards", g_cards.size());
 
+        StartDesktopSwitchWatch();
+        // [frame timer, desktop switch events...]
+        std::vector<HANDLE> handles = {g_frameTimer};
+        for (auto& watch : g_desktopWatches) handles.push_back(watch.event);
+        const DWORD watchCount = static_cast<DWORD>(g_desktopWatches.size());
+
         bool quit = false;
         while (!quit) {
-            DWORD r = MsgWaitForMultipleObjectsEx(1, &g_frameTimer, INFINITE, QS_ALLINPUT,
-                                                  MWMO_INPUTAVAILABLE);
-            if (r == WAIT_OBJECT_0) {
-                g_frameTimerArmed = false;
-                if (TickAnimations()) ArmFrameTimer();
+            if (g_waitForCompositorClock && AnyAnimating()) {
+                // Messages are handled right after each frame (a few ms later
+                // at most), which is fine for clicks and drag and drop.
+                DWORD r = g_waitForCompositorClock(watchCount, handles.data() + 1, 100);
+                if (r == WAIT_FAILED) {
+                    Wh_Log(L"Compositor clock unavailable, using the timer");
+                    g_waitForCompositorClock = nullptr;
+                    ArmFrameTimer();
+                } else if (r < WAIT_OBJECT_0 + watchCount) {
+                    OnDesktopSwitchSignaled(r - WAIT_OBJECT_0);
+                } else {
+                    TickAnimations();
+                }
+            } else {
+                DWORD r = MsgWaitForMultipleObjectsEx(static_cast<DWORD>(handles.size()),
+                                                      handles.data(), INFINITE, QS_ALLINPUT,
+                                                      MWMO_INPUTAVAILABLE);
+                if (r == WAIT_OBJECT_0) {
+                    g_frameTimerArmed = false;
+                    if (TickAnimations()) ArmFrameTimer();
+                } else if (r > WAIT_OBJECT_0 && r < WAIT_OBJECT_0 + handles.size()) {
+                    OnDesktopSwitchSignaled(r - WAIT_OBJECT_0 - 1);
+                }
             }
             MSG msg;
             while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -1989,7 +2701,11 @@ DWORD WINAPI WorkerThread(void*) {
         hook = nullptr;
     }
     g_shuttingDown = true;
+    StopDesktopSwitchWatch();
+    g_switchPending = false;
     while (!g_cards.empty()) DestroyCard(g_cards.back().get());
+    if (g_virtualDesktops) g_virtualDesktops->Release();
+    g_virtualDesktops = nullptr;
     ApplyNativeAnimationSetting(true);
     g_controller = nullptr;
     if (IsWindow(controller)) DestroyWindow(controller);
@@ -1998,6 +2714,11 @@ DWORD WINAPI WorkerThread(void*) {
     UnregisterClassW(kCardClass, ModuleInstance());
     UnregisterClassW(kLayeredClass, ModuleInstance());
     UnregisterClassW(kControllerClass, ModuleInstance());
+    if (g_dropHelper) g_dropHelper->Release();
+    g_dropHelper = nullptr;
+    g_waitForCompositorClock = nullptr;
+    if (dcomp) FreeLibrary(dcomp);
+    if (oleInitialized) OleUninitialize();
     return 0;
 }
 
