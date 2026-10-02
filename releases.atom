@@ -2,12 +2,59 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-01T21:02:21.000Z</updated>
+    <updated>2026-10-02T08:05:36.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Top Window Guard 0.6.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-top-window-guard#f1230894d67eeb0fd0ab01dd0a918c43295e8fc3</id>
+        <link href="https://windhawk.net/mods/taskbar-top-window-guard"/>
+        <updated>2026-10-02T08:05:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbartopwindowguard">Taskbar Top Window Guard</h1>
+<p>Prevents regular application windows from opening or being restored with their
+title bar hidden behind a taskbar placed at the top of a monitor. It's intended
+for top-taskbar configurations, including the <strong>Taskbar on top for Windows 11</strong>
+Windhawk mod and Windows builds/configurations that place the taskbar at the top.</p>
+<p>The mod preserves the application's requested size and position whenever
+possible. If a window overlaps the protected top taskbar area, it's moved down
+only as far as necessary to keep its top edge accessible.</p>
+<p>Maximized and fullscreen windows are intentionally left untouched. Auto-hidden
+taskbars also don't force windows down while hidden.</p>
+<h2 id="optionalcentering">Optional centering</h2>
+<p>Enable <strong>Center windows when they open</strong> to center normal windows inside the
+usable area of their monitor on their first appearance. A window is remembered
+for the lifetime of its HWND, so minimizing/restoring it, Alt+Tab, switching
+virtual desktops, or hiding/showing it again won't re-center it.</p>
+<p>Always-on-top windows are excluded from centering by default. This keeps
+Picture-in-Picture windows, such as Chrome/Chromium PiP, at the position chosen
+by the user. Owned windows such as dialogs are also left to their application.
+Top-taskbar protection still applies to eligible always-on-top windows.</p>
+<p>This option intentionally overlaps only part of <strong>Center New Windows</strong>. The
+existing mod is the better choice if centering is your main goal. This mod's
+centering is a lightweight companion to the top-taskbar guard: it runs from a
+dedicated Windhawk tool process rather than injecting into every application,
+centers against the taskbar-aware usable area, centers only once per window,
+and skips always-on-top windows by default.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod is event-driven. It listens for window show, foreground, restore,
+uncloak, location-change, move/size, and destroy events. After a relevant event
+it briefly rechecks only that window, which catches applications that restore a
+saved position shortly after opening without continuously enumerating all
+windows.</p>
+<p>The usable top boundary comes from the monitor work area plus the actual
+<code>Shell_TrayWnd</code> / <code>Shell_SecondaryTrayWnd</code> rectangle when necessary. The
+auto-hide state is cached and refreshed outside per-window checks, avoiding
+synchronous Explorer IPC in the hot path. Window moves are queued
+asynchronously, and unresponsive applications are skipped so a hung app can't
+block the guard.</p>]]></content>
+        <author>
+            <name>Eron Greco Melo</name>
+            <uri>https://github.com/eronGreco</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Auto Refresh Rate 1.0.0]]></title>
         <id>https://windhawk.net/mods/auto-refresh-rate#6d1e4a85f76a6ac1f893efcaec2401a9ab2813ca</id>
@@ -1090,40 +1137,6 @@ live; the two noted below need a mod reload.</p>
         <author>
             <name>Dron007</name>
             <uri>https://github.com/Dron007</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[StartAllBack Jump List Width 1.2]]></title>
-        <id>https://windhawk.net/mods/startallback-jumplist-width#33490a366015e6a37b09d4d5c41b12af2b27366e</id>
-        <link href="https://windhawk.net/mods/startallback-jumplist-width"/>
-        <updated>2026-09-26T13:00:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="startallbackjumplistwidth">StartAllBack Jump List Width</h1>
-<p>Changes the width of StartAllBack jump lists and resizes their internal controls to match.</p>
-<p>The mod targets StartAllBack's <code>SIBJumpView</code> hierarchy in <code>explorer.exe</code>.
-It subclasses the relevant jump-list window and its <code>SIBBarHost</code> /
-<code>SysListView32</code> children, so the configured width and the internal right
-margin remain stable even if StartAllBack performs another layout pass.
-When the width changes, the jump list stays centered around the position
-chosen by StartAllBack and is clamped to the monitor work area.</p>
-<h2 id="settings">Settings</h2>
-<ul>
-<li><strong>Jump List width</strong> - target width at 100% scaling (96 DPI). The value is
-limited to 120-600 pixels and is scaled automatically for the DPI of the
-monitor where the jump list is shown.</li>
-<li>The internal list uses a fixed 6-pixel right margin at 100% scaling, also
-scaled automatically for DPI.</li>
-</ul>
-<p>Changes are applied immediately to existing StartAllBack jump-list windows.
-When the mod is disabled, the original StartAllBack width and internal layout
-are restored.</p>
-<h2 id="beforeandafter">Before and after</h2>
-<h3 id="before">Before</h3>
-<p><img src="https://raw.githubusercontent.com/Murtuzoff/windhawk-assets/main/before.png" alt="StartAllBack Jump List before" /></p>
-<h3 id="after">After</h3>
-<p><img src="https://raw.githubusercontent.com/Murtuzoff/windhawk-assets/main/after.png" alt="StartAllBack Jump List after" /></p>]]></content>
-        <author>
-            <name>Murtuzoff</name>
-            <uri>https://github.com/Murtuzoff</uri>
         </author>
     </entry>
 </feed>

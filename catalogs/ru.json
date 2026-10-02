@@ -7323,7 +7323,7 @@
         "ratingUsers": 35,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1785447979000,
+        "updated": 1790928340000,
         "users": 1007
       },
       "metadata": {
@@ -7339,7 +7339,7 @@
         ],
         "license": "MIT",
         "name": "Instant Taskbar Thumbnail Previews",
-        "version": "1.0.0"
+        "version": "1.1.0"
       }
     },
     "internet-status-indicator": {
@@ -9869,7 +9869,7 @@
         "ratingUsers": 26,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790082414000,
+        "updated": 1790928247000,
         "users": 336
       },
       "metadata": {
@@ -9878,14 +9878,14 @@
         ],
         "author": "bardelyne",
         "compilerOptions": "-ldxva2 -lole32 -loleaut32 -lwbemuuid -luuid -lruntimeobject",
-        "description": "Adds a titled brightness slider for every connected monitor to the Windows 11 Quick Settings panel",
+        "description": "Brightness, contrast, volume, input and power controls for every connected monitor, plus sliders for all of them at once, in the Windows 11 Quick Settings panel",
         "github": "https://github.com/bardelyne",
         "include": [
           "ShellHost.exe"
         ],
         "license": "GPL-3.0",
-        "name": "Per-monitor brightness in Quick Settings",
-        "version": "2.1"
+        "name": "Per-monitor brightness and more in Quick Settings",
+        "version": "3.0"
       }
     },
     "per-monitor-scale-switcher": {
@@ -13989,6 +13989,30 @@
         "name": "Disable Taskbar Thumbnails",
         "twitter": "https://twitter.com/m417z",
         "version": "1.2"
+      }
+    },
+    "taskbar-top-window-guard": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1790928336000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1790928336000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Eron Greco Melo",
+        "compilerOptions": "-ldwmapi -lshell32",
+        "description": "Keeps windows out from under a top taskbar, with optional centering when windows open.",
+        "github": "https://github.com/eronGreco",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Taskbar Top Window Guard",
+        "version": "0.6.0"
       }
     },
     "taskbar-tray-show-on-hover": {

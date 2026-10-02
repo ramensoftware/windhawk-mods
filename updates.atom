@@ -2,12 +2,100 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-01T21:02:21.000Z</updated>
+    <updated>2026-10-02T08:05:40.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Instant Taskbar Thumbnail Previews 1.1.0]]></title>
+        <id>https://windhawk.net/mods/instant-taskbar-thumbnail-previews#0796806625b29f982264f16488f7e9b4d9f956dc</id>
+        <link href="https://windhawk.net/mods/instant-taskbar-thumbnail-previews"/>
+        <updated>2026-10-02T08:05:40.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>New "Delay after thumbnail removal" setting (default 500 ms). When a thumbnail is removed and others remain (close button, middle-click, keyboard, or the window closing externally), the remaining previews stay open for this long. The normal close delay applies when the last thumbnail is removed.</li>
+<li>The default "Thumbnail close delay" is now 200 ms instead of 1 ms. I find this provides optimal expected behavior; set it to 1 for the previous behavior.</li>
+<li>Fixed hook installation when the taskbar loads after the mod.</li>
+<li>Added a demo to the README.</li>
+</ul>]]></content>
+        <author>
+            <name>Alchemy</name>
+            <uri>https://github.com/alchemyyy</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Top Window Guard 0.6.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-top-window-guard#f1230894d67eeb0fd0ab01dd0a918c43295e8fc3</id>
+        <link href="https://windhawk.net/mods/taskbar-top-window-guard"/>
+        <updated>2026-10-02T08:05:36.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="taskbartopwindowguard">Taskbar Top Window Guard</h1>
+<p>Prevents regular application windows from opening or being restored with their
+title bar hidden behind a taskbar placed at the top of a monitor. It's intended
+for top-taskbar configurations, including the <strong>Taskbar on top for Windows 11</strong>
+Windhawk mod and Windows builds/configurations that place the taskbar at the top.</p>
+<p>The mod preserves the application's requested size and position whenever
+possible. If a window overlaps the protected top taskbar area, it's moved down
+only as far as necessary to keep its top edge accessible.</p>
+<p>Maximized and fullscreen windows are intentionally left untouched. Auto-hidden
+taskbars also don't force windows down while hidden.</p>
+<h2 id="optionalcentering">Optional centering</h2>
+<p>Enable <strong>Center windows when they open</strong> to center normal windows inside the
+usable area of their monitor on their first appearance. A window is remembered
+for the lifetime of its HWND, so minimizing/restoring it, Alt+Tab, switching
+virtual desktops, or hiding/showing it again won't re-center it.</p>
+<p>Always-on-top windows are excluded from centering by default. This keeps
+Picture-in-Picture windows, such as Chrome/Chromium PiP, at the position chosen
+by the user. Owned windows such as dialogs are also left to their application.
+Top-taskbar protection still applies to eligible always-on-top windows.</p>
+<p>This option intentionally overlaps only part of <strong>Center New Windows</strong>. The
+existing mod is the better choice if centering is your main goal. This mod's
+centering is a lightweight companion to the top-taskbar guard: it runs from a
+dedicated Windhawk tool process rather than injecting into every application,
+centers against the taskbar-aware usable area, centers only once per window,
+and skips always-on-top windows by default.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod is event-driven. It listens for window show, foreground, restore,
+uncloak, location-change, move/size, and destroy events. After a relevant event
+it briefly rechecks only that window, which catches applications that restore a
+saved position shortly after opening without continuously enumerating all
+windows.</p>
+<p>The usable top boundary comes from the monitor work area plus the actual
+<code>Shell_TrayWnd</code> / <code>Shell_SecondaryTrayWnd</code> rectangle when necessary. The
+auto-hide state is cached and refreshed outside per-window checks, avoiding
+synchronous Explorer IPC in the hot path. Window moves are queued
+asynchronously, and unresponsive applications are skipped so a hung app can't
+block the guard.</p>]]></content>
+        <author>
+            <name>Eron Greco Melo</name>
+            <uri>https://github.com/eronGreco</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Per-monitor brightness and more in Quick Settings 3.0]]></title>
+        <id>https://windhawk.net/mods/per-monitor-brightness#cbc35e8691aacc9d6809f1cc2318587e284b6c3c</id>
+        <link href="https://windhawk.net/mods/per-monitor-brightness"/>
+        <updated>2026-10-02T08:04:07.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>New name:</strong> "Per-monitor brightness in Quick Settings" is now <strong>"Per-monitor brightness and more in Quick Settings"</strong>, because it now does more than brightness.</li>
+<li><strong>Contrast slider</strong> for each monitor that supports it.</li>
+<li><strong>Volume slider</strong> for monitors with speakers or a headphone jack, with the same animated speaker icon Windows uses.</li>
+<li><strong>Input buttons</strong> (HDMI 1, DP 1, …) to switch what a monitor shows.</li>
+<li><strong>Power button</strong> at the end of a monitor's brightness slider, to turn it off and back on. Only on monitors that support it, and only while another screen is connected.</li>
+<li><strong>"All displays" sliders</strong> that set brightness or contrast on every monitor at once.</li>
+<li><strong>Two layouts:</strong> keep each monitor's extra controls in a dropdown, or show everything.</li>
+<li><strong>Show or hide anything:</strong> every slider and button has its own setting.</li>
+<li><strong>Per-monitor settings:</strong> give a monitor your own name, hide it, or hide some of its controls. Two monitors of the same model are numbered, and hovering a name shows its ID.</li>
+<li><strong>Mouse wheel</strong> moves the slider under the pointer, with an adjustable step (#5647).</li>
+<li><strong>Click a slider's icon</strong> to jump to a level; left, middle and right click each have their own. Off by default (#5697).</li>
+<li><strong>Titles show every value</strong>, for example "Samsung · 80% · 50%".</li>
+<li><strong>Fixes:</strong> the brightness icon sometimes not animating, the slider knob sometimes looking tall, and the percentage in titles sometimes getting stuck.</li>
+</ul>]]></content>
+        <author>
+            <name>bardelyne</name>
+            <uri>https://github.com/bardelyne</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Auto Refresh Rate 1.0.0]]></title>
         <id>https://windhawk.net/mods/auto-refresh-rate#6d1e4a85f76a6ac1f893efcaec2401a9ab2813ca</id>
@@ -531,88 +619,6 @@ Windows 2000 на языке интерфейса Windows: в русской Win
         <author>
             <name>Anixx</name>
             <uri>https://github.com/Anixx</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[AudioSwap 2.4.0]]></title>
-        <id>https://windhawk.net/mods/audioswap#073c3b60d072f548e05d713317ed9714dabb234e</id>
-        <link href="https://windhawk.net/mods/audioswap"/>
-        <updated>2026-09-29T21:04:50.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Numeric volume tray badge:</strong> Added an optional numeric output-volume badge on the tray icon (switchable in the dashboard; off by default).</li>
-<li><strong>Audio & mute verification:</strong> Verified default-device and mute operations before reporting success; automatic mute cleanup now tracks only changes made during the active session.</li>
-<li><strong>Bluetooth auto-reconnect:</strong> Automatically reconnects Bluetooth headphones and audio devices when powered back on without requiring manual re-selection in settings.</li>
-<li><strong>Persistent disconnected devices:</strong> Disconnected audio devices are preserved in settings instead of being removed or unselected on save.</li>
-<li><strong>Explorer restart recovery:</strong> Tray icon reliably restores after Windows Explorer restarts or taskbar recreation.</li>
-<li><strong>Multi-monitor volume slider:</strong> Volume slider popup is properly clamped to the work area bounds of secondary monitors.</li>
-<li><strong>Settings window focus:</strong> Clicking "Mod Settings" when the dashboard is already open reliably restores it from minimized state and brings it to the foreground.</li>
-<li><strong>Security:</strong> Hardened DLL search paths to prevent library hijacking.</li>
-</ul>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Folder Bookmarks Bar 0.7.8]]></title>
-        <id>https://windhawk.net/mods/explorer-folder-bookmarks-bar#0c9eded5a005f4645d1e834b11a5fd94fc3159c2</id>
-        <link href="https://windhawk.net/mods/explorer-folder-bookmarks-bar"/>
-        <updated>2026-09-29T10:02:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="explorerfolderbookmarksbar">Explorer Folder Bookmarks Bar</h1>
-<p>For the Windows 11 WinUI File Explorer. A scrollable bookmark bar appears below
-the address bar. Click <strong>+</strong> to bookmark the current filesystem folder. Click a
-bookmark to navigate the active tab to it. Ctrl+click asks Explorer to open it
-in a new tab. Drag a bookmark onto another to reorder the row. Middle-click a
-bookmark to remove it from the bar. Removing a bookmark never deletes its
-target folder.</p>
-<p><img src="https://raw.githubusercontent.com/MaxITService/EXPLORER-bookmarks-bar-windhawk/main/Promo/How-it-works.gif" alt="Explorer Folder Bookmarks Bar in File Explorer" /></p>
-<p>After enabling or updating the mod, open a new File Explorer window to use the
-bar. Windows that were already open may remain unchanged. Opening a new window
-is the supported way to activate the bar without relying on live window updates.</p>
-<p>The bar expands from one to four rows as the window narrows. If bookmarks
-still exceed the fourth row, the bar can pan sideways.
-Left-click <strong>FX</strong>, next to <strong>+</strong>, for the profile (<strong>~</strong>), Desktop, Documents,
-Downloads, and the custom folders listed in this mod's Windhawk settings.
-Custom shortcuts are empty by default. Add a folder path and optional label in
-<strong>Settings → FX custom folders</strong>; blank entries are ignored. Paths must be
-absolute, and <code>%NAME%</code> environment variables are expanded. Local, network
-(UNC or mapped drive) and removable-drive folders all work. A folder missing
-from a local disk is hidden from FX until it exists again. Like bookmarks,
-network and removable entries are shown without being checked; if one is
-unavailable, Explorer reports it when you click it. New settings take effect in
-newly opened Explorer windows. Right-click <strong>FX</strong> for all drives with their
-labels. The list updates each time the menu opens. Ctrl+click a menu entry to
-open it in a new tab.</p>
-<p>Right-click <strong>+</strong> for <strong>Save bookmarks</strong> and <strong>Load bookmarks</strong>. The commands
-open a file dialog so you can choose the JSON backup. The profile folder is
-suggested initially. Loading replaces the current list only after the entire
-UTF-8 JSON file passes validation.</p>
-<p>The bookmark list lives in this mod's Windhawk local storage. This version
-supports up to 32 folders and uses the folder name as the button label. Icons
-come from Windows Shell, including desktop.ini custom folder icons. Hovering a
-bookmark shows its full path. Virtual locations such as Home are ignored by
-<strong>+</strong>. Bookmark removal never touches the target folder or its contents.
-Missing folders on local fixed drives show a yellow warning icon. Icons are
-cached for up to five minutes and refreshed when the bar redraws.</p>
-<p>The XAML insertion point can change in a Windows update. If the bar is not
-visible, disable the mod and check the Windhawk log before trying it again.</p>]]></content>
-        <author>
-            <name>Maxim Fomin</name>
-            <uri>https://github.com/MaxITService</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar tray icon spacing and grid 1.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-notification-icon-spacing#acaf719bf04c2d02a48e3be37b2fcd23411231de</id>
-        <link href="https://windhawk.net/mods/taskbar-notification-icon-spacing"/>
-        <updated>2026-09-29T01:11:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for the native vertical taskbar.</li>
-<li>Improved ARM64 support.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>
