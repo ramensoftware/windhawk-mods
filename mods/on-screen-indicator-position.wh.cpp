@@ -2,7 +2,7 @@
 // @id              on-screen-indicator-position
 // @name            On-Screen Indicator Position
 // @description     Put the volume, brightness and camera on-screen indicators anywhere on the screen, each in its own spot if you like, and optionally skip the slide out animation
-// @version         1.4.3
+// @version         1.4.4
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         explorer.exe
@@ -50,13 +50,13 @@ nudge one of the built-in positions.
 ## A different spot per indicator
 
 Volume, brightness, keyboard brightness, airplane mode, camera, microphone, the
-virtual desktop name popup and the plain text indicator can each be given their own
+virtual desktop name popup and the other text indicators can each be given their own
 position. Anything left on **Same as the main position** follows the setting above,
 so you only have to touch the ones you want somewhere else. Handy if you want the
 volume indicator out of the way at the bottom but still want the camera one where
 you will notice it.
 
-If you used **Plain text indicator** to place the "Desktop N" popup before 1.4.0,
+If you used **Other indicators** to place the "Desktop N" popup before 1.4.0,
 set **Virtual desktop name** to that spot after updating. It now has its own setting
 and otherwise follows the main position.
 
@@ -351,8 +351,7 @@ PCWSTR IndicatorName(Indicator indicator) {
     return i < ARRAYSIZE(kNames) ? kNames[i] : L"unknown";
 }
 
-// Said from two places. The text is shared rather than the call, so the line still
-// reports whichever function actually logged it.
+// Logged from both Wh_ModInit and Wh_ModSettingsChanged.
 constexpr PCWSTR kKindUnreliableMessage =
     L"An indicator entry point didn't resolve, so the position per indicator "
     L"settings are ignored and everything uses the main position";
@@ -363,6 +362,15 @@ bool g_hideAnimationUnavailable = false;
 constexpr PCWSTR kHideAnimationUnavailableMessage =
     L"The hide entry points didn't resolve, so the slide out animation is left "
     L"alone";
+
+// Set once in Wh_ModInit when ShowText's thunk didn't resolve. The ramp alone still
+// recognises text indicators, but only the thunk can tell the virtual desktop popup
+// apart from them.
+bool g_virtualDesktopUndetectable = false;
+
+constexpr PCWSTR kVirtualDesktopUndetectableMessage =
+    L"ShowText thunk did not resolve, virtual desktop popup will use the plain "
+    L"text position";
 
 // The position to place the indicator that is being shown right now.
 Position CurrentPosition() {
@@ -541,8 +549,7 @@ int WINAPI ShowTextThunk_Hook(void* pThis, void* text, bool value) {
 // arguments, with the pointer handed back as the return value. A signature
 // without that slot compiles and links, but every real argument then arrives
 // one register late and the original coroutine gets called with garbage
-// where it expects its own arguments to be — this shipped for a session
-// before a maintainer caught it from the disassembly. Each name is optional;
+// where it expects its own arguments to be. Each name is optional;
 // if neither layer resolves for a kind, Wh_ModInit disables per-indicator
 // placement rather than reuse a previous kind's spot.
 DEFINE_RECORDER_HOOK(ShowVolumeAsync, void*, Indicator::volume,
@@ -574,6 +581,8 @@ DEFINE_RECORDER_HOOK(ShowCameraAccessEnabledAsync, void*, Indicator::camera,
 DEFINE_RECORDER_HOOK(ShowMicrophoneMutedAsync, void*, Indicator::microphone,
                      (void* pThis, void* retval, int value, void* text),
                      (pThis, retval, value, text));
+
+#undef DEFINE_RECORDER_HOOK
 
 using ShowTextAsync_t = void*(WINAPI*)(void* pThis,
                                        void* retval,
@@ -661,17 +670,13 @@ void AdjustPositionRect(const WinrtRect& rect, WinrtRect* result) {
     result->Y += offsetY;
 }
 
-#undef DEFINE_RECORDER_HOOK
-
 // winrt::Windows::Foundation::Rect has a user-provided constructor, so MSVC
 // returns it through a hidden pointer rather than in registers on both
 // architectures it's built for here: `this` first, the hidden retval pointer
 // next, then the rect argument (RCX/RDX/R8 on x64, x0/x1/x2 on ARM64), with
-// the pointer handed back as the return value. Confirmed against the ARM64
-// binary's disassembly, not just inferred from the ABI docs, since the
-// mismatch is exactly the kind of thing that looks plausible and crashes the
-// shell on the first call. One signature covers both, so there's nothing to
-// branch on here.
+// the pointer handed back as the return value. A signature without that slot
+// looks plausible and crashes the shell on the first call. One signature covers
+// both, so there's nothing to branch on here.
 using HardwareConfirmatorHost_GetPositionRect_t =
     WinrtRect*(WINAPI*)(void* pThis, WinrtRect* retval, const WinrtRect* rect);
 HardwareConfirmatorHost_GetPositionRect_t
@@ -680,13 +685,14 @@ WinrtRect* WINAPI
 HardwareConfirmatorHost_GetPositionRect_Hook(void* pThis,
                                              WinrtRect* retval,
                                              const WinrtRect* rect) {
-    WinrtRect shiftedRect{0, 0, rect->Width, rect->Height};
+    WinrtRect inputRect = *rect;
+    WinrtRect shiftedRect{0, 0, inputRect.Width, inputRect.Height};
 
     WinrtRect* result = HardwareConfirmatorHost_GetPositionRect_Original(
         pThis, retval, &shiftedRect);
 
     if (result) {
-        AdjustPositionRect(*rect, result);
+        AdjustPositionRect(inputRect, result);
     }
 
     return result;
@@ -983,11 +989,12 @@ BOOL Wh_ModInit() {
     // The ramp resolving on its own is enough to keep text detection working,
     // so it wouldn't trip the recorder check above. Only worth saying if the
     // user has actually set a per-kind position for the virtual desktop popup.
-    if (!ShowTextThunk_Original && ShowTextAsync_Original &&
+    g_virtualDesktopUndetectable =
+        !ShowTextThunk_Original && ShowTextAsync_Original;
+    if (g_virtualDesktopUndetectable &&
         g_settings.perIndicator[(size_t)Indicator::virtualDesktop].load() !=
             Position::windowsDefault) {
-        Wh_Log(L"ShowText thunk did not resolve, virtual desktop popup will "
-               L"use the plain text position");
+        Wh_Log(L"%s", kVirtualDesktopUndetectableMessage);
     }
 
     return TRUE;
@@ -1012,5 +1019,11 @@ void Wh_ModSettingsChanged() {
 
     if (g_hideAnimationUnavailable && g_settings.skipHideAnimation) {
         Wh_Log(L"%s", kHideAnimationUnavailableMessage);
+    }
+
+    if (g_virtualDesktopUndetectable &&
+        g_settings.perIndicator[(size_t)Indicator::virtualDesktop].load() !=
+            Position::windowsDefault) {
+        Wh_Log(L"%s", kVirtualDesktopUndetectableMessage);
     }
 }
