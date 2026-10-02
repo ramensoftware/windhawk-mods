@@ -2,7 +2,7 @@
 // @id              premiere-pro-theme
 // @name            Premiere Pro Theme
 // @description     Recolors the Adobe Premiere Pro interface — panels, timeline, monitors, window frame and menu bar — with a choice of very dark palettes.
-// @version         1.0.0
+// @version         1.0.1
 // @author          Threshold Editor
 // @license         MIT
 // @include         Adobe Premiere Pro.exe
@@ -165,7 +165,8 @@ one field each:
 | **Highlight**          | optional | the hue Premiere's blue takes; the blue stays when left empty |
 | **Monitor background** | optional | the band around the picture; the panel tone when left empty   |
 
-Colors are `#RRGGBB`. The group starts as Onyx, with **Highlight** and
+Colors are `#RRGGBB`, or `#RRGGBBAA` from a picker that writes an alpha,
+which is ignored. The group starts as Onyx, with **Highlight** and
 **Monitor background** empty. A required field left empty or misspelled falls
 back to Onyx's color, named in the log, so the interface never ends up half
 themed.
@@ -301,6 +302,14 @@ by `DisplaySurface.dll`. The mod recognizes those draws by the module they
 come from and by the color they carry, and gives them the theme's **Monitor
 background**, or its panel tone when that is left empty.
 
+From Premiere 26.3 on there is no `DisplaySurface.dll`: that renderer is linked
+into `Adobe Premiere Pro.exe`, and the mod finds it there by name instead. What
+it cannot do on such a build is tell those draws from Premiere's other GPU work
+by where they come from, so the band is recognized by its shape and its color
+alone — and the layer only comes on once the interface is up, never while
+Premiere is starting, which is not survivable. If anything but the surround
+changes color, **Monitor band** is the switch to turn off.
+
 What shows behind the picture is black, and stays black in every palette: it
 is what a clip with an alpha channel is composited onto and what the monitor
 shows over a gap in the timeline, which is why a transparent PNG still sits on
@@ -334,6 +343,19 @@ squeezed very narrow keeps Premiere's own gray while the other one is themed.
 The black *inside* the sequence frame is the rendered picture, not chrome, and
 stays black in every palette.
 
+**The dropdown menus are dark, not palette-colored.** The menu bar itself is
+painted here, item by item; the menus that drop out of it, and the right-click
+menus, are drawn by Windows with the dark menu theme this mod switches on.
+Measured on Windows 11 build 26200: the theme those menus draw with never
+passes through any of the four entry points the mod watches, and their items
+arrive as a theme part it does not paint. So on that build the switch buys
+them dark rather than the palette.
+
+**A menu taller than the screen** grows a small scroll button at each end.
+Windows paints those outside the theme system altogether — no draw the mod can
+see covers that rectangle — so they keep the light system color while the menu
+around them is dark.
+
 ## Compatibility
 
 The mod looks up each color function by name at startup, installs the ones the
@@ -348,11 +370,37 @@ builds:
 
 The four missing on 2023 do not exist there under any name, and their surfaces
 fall back to the Spectrum family, which both have. The window frame, the menu
-bar, the native dialogs and the band around the picture do not depend on the
-Premiere version: the band is recognized by the module that draws it and the
-shape of the work, not by an address inside it. Native dark
+bar and the native dialogs do not depend on the Premiere version at all, and
+neither does the band around the picture depend on an address inside anyone's
+code: it is recognized by where the draw comes from and the shape of the work. Native dark
 mode needs Windows 10 build 17763 or newer; below that the mod still themes the
 interface and paints the menus itself.
+
+**What the interface layer needs.** Those functions live in the module Premiere
+has shipped as `dvaui.dll`, and the mod hooks them there — or, if a build
+renames that module or folds it into another, in whichever module still
+exports most of them.
+
+**Premiere 2026.3 and later ship no such module.** The whole toolkit is linked
+into `Adobe Premiere Pro.exe`, which exports none of it, so there is no name
+left to look up. The mod then takes every entry point the executable's own RTTI
+still names — the ones that are virtual: the theme's `GetColor`, the Direct2D
+brush factory that most solid fills pass through, and the swatch draws that
+keep a color swatch out of it.
+
+That is less than a build with the module gives, and more than it sounds.
+Three of the twenty-six color functions are virtual, and the Spectrum gray
+ramp that paints most of the interface passes through one of them on its way
+out, so what the other twenty-three return is converted anyway. What keeps
+Premiere's own gray is whatever only a free function ever touches.
+
+Turn on **Mod logs** in Windhawk's Advanced tab to see which of the two a
+session got. On a build with the module it logs `dvaui: 31 hooks active`; on
+one without, that the toolkit is linked into the executable, and how many entry
+points it found in it. A build that offers neither cannot be themed that way,
+and the mod says the interface layer is not installed rather than looking like
+it worked — the window frame, the menu bar and the native dialogs still follow
+the palette there, and the panels keep Premiere's own colors.
 
 ## Questions, bugs and palettes
 
@@ -430,9 +478,9 @@ This mod is MIT as well.
       empty, the panel tone is used, which is what Premiere itself does.
   $name: Custom theme
   $description: >-
-    Used when the palette is Custom. It starts as Onyx. Colors are #RRGGBB; the
-    six required fields fall back to Onyx's one at a time when left empty or
-    unreadable, which the log names. Themes are shared through this tab's text
+    Used when the palette is Custom. It starts as Onyx. Colors are #RRGGBB, or
+    #RRGGBBAA with the alpha ignored; the six required fields fall back to
+    Onyx's one at a time when left empty or unreadable, which the log names. Themes are shared through this tab's text
     mode: the log writes the one in force as a line to paste into it.
 - strength: 100
   $name: Strength
@@ -470,7 +518,10 @@ This mod is MIT as well.
   $description: Immersive dark mode, title bar, border and native dialogs.
 - menuHook: true
   $name: Menu bar and menus
-  $description: Paints the File/Edit/Clip bar and the dropdown menus in the palette, instead of white or the Windows default gray.
+  $description: >-
+    Paints the File/Edit/Clip bar in the palette, and turns the menus that drop
+    out of it dark instead of white. On Windows 11 those menus take Windows'
+    own dark menu style rather than the palette; the readme says why.
 - gdiHook: true
   $name: GDI surfaces
   $description: Darkens GDI brushes, pens and text backgrounds created by Premiere's own modules.
@@ -844,6 +895,10 @@ static void DropModuleRange(uintptr_t begin) {
     hook on a D3D12 path ever has to take the loader lock, and the range is
     cleared the moment the module unloads rather than pointing at whatever is
     mapped there next.
+
+    From Premiere 26.3 on there is no such module, and this holds the
+    executable instead — but not before Premiere's interface is up; see
+    g_staticDisplaySurfaceEnd just below, which is where that waits.
 */
 std::atomic<uintptr_t> g_displaySurfaceBegin{0};
 std::atomic<uintptr_t> g_displaySurfaceEnd{0};
@@ -879,6 +934,60 @@ static bool IsDisplaySurfaceCall(void* returnAddress) {
     auto p = reinterpret_cast<uintptr_t>(returnAddress);
 
     return p >= g_displaySurfaceBegin.load(std::memory_order_relaxed) && p < end;
+}
+
+/*
+    Where that renderer is on a Premiere that ships no module for it: the
+    executable, which ProbeStaticDisplaySurface finds by name at init and
+    leaves here instead of publishing above.
+
+    It is held back because publishing it is what turns the band layer on, and
+    at init nothing about Premiere's graphics has happened yet. Two things go
+    wrong when the range is set there, and both were seen:
+    InstallMonitorBandFromProbe reads it as proof that Premiere has made its
+    device — true of a module that renders monitors, vacuous of the executable,
+    which is always mapped — and builds a device of its own before Premiere has
+    settled which runtime it uses; and the layer's hooks go live over
+    Premiere's own startup rendering, which they have no business in. Either
+    takes the process down: heap corruption inside ntdll, with no window ever
+    shown.
+
+    So it is published once Premiere's interface is up, which is the state the
+    module test really stood for and the only state this layer is known to work
+    in on such a build — switched on under a running Premiere, the band
+    recolors and nothing else does. A framed window is how the mod tells that
+    apart everywhere else; see HasFramedWindow.
+*/
+std::atomic<uintptr_t> g_staticDisplaySurfaceBegin{0};
+std::atomic<uintptr_t> g_staticDisplaySurfaceEnd{0};
+volatile LONG g_staticDisplaySurfacePublished = FALSE;
+
+/*
+    Premiere is up, so the executable may stand in for the module now.
+
+    Two callers decide that, one for each way the mod arrives.
+    NoteWindowForStaticDisplaySurface is the startup half, and carries the
+    conditions; Wh_ModAfterInit is the other, where a Premiere the mod was
+    switched on under is already up by definition.
+
+    On a build that has the module the candidate is never filled in, so this
+    is one atomic load and nothing else, forever.
+*/
+static void PublishStaticDisplaySurface() {
+    uintptr_t end = g_staticDisplaySurfaceEnd.load(std::memory_order_acquire);
+
+    if (!end || !Claim(&g_staticDisplaySurfacePublished)) {
+        return;
+    }
+
+    SetDisplaySurfaceRange(
+        g_staticDisplaySurfaceBegin.load(std::memory_order_relaxed), end);
+
+    Wh_Log(L"this Premiere has no DisplaySurface.dll: the renderer that draws "
+           L"the monitors is linked into the executable, whose image stands in "
+           L"for it now that the interface is up. The band is told apart by "
+           L"the shape of the draw alone there, so turn \"Monitor band\" off if "
+           L"anything but the surround changes color.");
 }
 
 /*
@@ -1076,6 +1185,66 @@ static void NoteDisplaySurface() {
     }
 }
 
+/*
+    The modules mapped right now. False when the process cannot be enumerated,
+    with `error` the reason: zero when the API itself is missing,
+    ERROR_OUTOFMEMORY when the list cannot be held, and otherwise whatever the
+    call set.
+
+    This is the one allocation on the mod's startup path, and the one place it
+    could throw back into Windhawk, so bad_alloc is answered here.
+*/
+static bool EnumerateProcessModules(std::vector<HMODULE>* modules, DWORD* error) {
+    *error = 0;
+    modules->clear();
+
+    HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
+
+    auto enumModules =
+        kernel32 ? reinterpret_cast<EnumProcessModules_t>(
+                       GetProcAddress(kernel32, "K32EnumProcessModules"))
+                 : nullptr;
+
+    if (!enumModules) {
+        return false;
+    }
+
+    HANDLE process = GetCurrentProcess();
+    DWORD needed = 0;
+    DWORD bytes = 0;
+
+    try {
+        modules->resize(1024);
+
+        // Modules can load between two calls, so a retry may still come up short.
+        for (int attempt = 0; attempt < 3; attempt++) {
+            bytes = static_cast<DWORD>(modules->size() * sizeof(HMODULE));
+
+            if (!enumModules(process, modules->data(), bytes, &needed)) {
+                *error = GetLastError();
+                modules->clear();
+                return false;
+            }
+
+            if (needed <= bytes) {
+                break;
+            }
+
+            if (attempt < 2) {
+                modules->resize(needed / sizeof(HMODULE) + 64);
+            }
+        }
+
+        modules->resize(std::min(needed, bytes) / sizeof(HMODULE));
+    } catch (const std::bad_alloc&) {
+        *error = ERROR_OUTOFMEMORY;
+        modules->clear();
+        return false;
+    }
+
+    return true;
+}
+
 static void SnapshotAdobeModules() {
     /*
         These are recorded first, whatever the enumeration below manages. It
@@ -1088,70 +1257,30 @@ static void SnapshotAdobeModules() {
 
     HMODULE kernel32 = GetModuleHandleW(L"kernel32.dll");
 
-    auto enumModules =
-        kernel32 ? reinterpret_cast<EnumProcessModules_t>(
-                       GetProcAddress(kernel32, "K32EnumProcessModules"))
-                 : nullptr;
-
     auto moduleInformation =
         kernel32 ? reinterpret_cast<GetModuleInformation_t>(
                        GetProcAddress(kernel32, "K32GetModuleInformation"))
                  : nullptr;
 
-    if (!enumModules || !moduleInformation) {
-        Wh_Log(L"cannot enumerate modules; besides the executable, dvaui, "
+    std::vector<HMODULE> modules;
+    DWORD error = 0;
+
+    /*
+        Short of memory, or with no way to ask, the modules noted above are all
+        the mod knows about — the same degradation either way.
+    */
+    if (!moduleInformation || !EnumerateProcessModules(&modules, &error)) {
+        Wh_Log(L"cannot enumerate modules (%u); besides the executable, dvaui, "
                L"dvacore and UIFramework, only dva modules loaded from now on "
-               L"will be recognized as Adobe UI");
+               L"will be recognized as Adobe UI",
+               error);
         return;
     }
 
     HANDLE process = GetCurrentProcess();
     HMODULE executable = GetModuleHandleW(nullptr);
 
-    std::vector<HMODULE> modules;
-    DWORD needed = 0;
-    DWORD bytes = 0;
-
-    /*
-        The one allocation on the mod's startup path, and the one place it
-        could throw back into Windhawk. Short of memory, the four modules
-        noted above are all the mod knows about — the same degradation as an
-        enumeration that fails outright.
-    */
-    try {
-        modules.resize(1024);
-
-        // Modules can load between two calls, so a retry may still come up short.
-        for (int attempt = 0; attempt < 3; attempt++) {
-            bytes = static_cast<DWORD>(modules.size() * sizeof(HMODULE));
-
-            if (!enumModules(process, modules.data(), bytes, &needed)) {
-                Wh_Log(L"module enumeration failed (%u); besides the executable, "
-                       L"dvaui, dvacore and UIFramework, only dva modules loaded "
-                       L"from now on will be recognized as Adobe UI",
-                       GetLastError());
-                return;
-            }
-
-            if (needed <= bytes) {
-                break;
-            }
-
-            if (attempt < 2) {
-                modules.resize(needed / sizeof(HMODULE) + 64);
-            }
-        }
-    } catch (const std::bad_alloc&) {
-        Wh_Log(L"not enough memory to enumerate modules; besides the "
-               L"executable, dvaui, dvacore and UIFramework, only dva modules "
-               L"loaded from now on will be recognized as Adobe UI");
-        return;
-    }
-
-    size_t count = std::min(needed, bytes) / sizeof(HMODULE);
-
-    for (size_t i = 0; i < count; i++) {
-        HMODULE module = modules[i];
+    for (HMODULE module : modules) {
         bool adobe = module == executable;
 
         if (!adobe) {
@@ -1671,7 +1800,25 @@ static const DvaColorRGBA* ConvertColorRef(const DvaColorRGBA* original) {
     // Read before the settings are, so a change in between is caught as stale.
     LONG generation = g_generation;
 
-    if (!original || !CurrentSettings().dvauiHook || IsOurSlot(original)) {
+    /*
+        A slot found by RTTI need not be the method it was measured to be: the
+        length test catches a virtual added or removed, not one replaced at the
+        same count. What another method returns is a bool, an int or an
+        HRESULT, and reading sixteen bytes from it would fault inside Premiere
+        — the one failure this design is otherwise careful never to produce.
+
+        A color is a pointer into Premiere's own data, so anything in the first
+        page or misaligned for a float is not one and goes back untouched. That
+        covers null as well. Two instructions on the path that found its
+        function by name, where the value is always a color.
+    */
+    auto address = reinterpret_cast<uintptr_t>(original);
+
+    if (address < 0x10000 || (address & (alignof(DvaColorRGBA) - 1)) != 0) {
+        return original;
+    }
+
+    if (!CurrentSettings().dvauiHook || IsOurSlot(original)) {
         return original;
     }
 
@@ -1931,14 +2078,12 @@ struct HookCount {
     int missing = 0;
 };
 
-static void InstallHook(HMODULE module, const HookSpec& spec, HookCount* count) {
-    FARPROC proc = GetProcAddress(module, spec.mangled);
+static void InstallHookAt(void* proc, const HookSpec& spec, HookCount* count) {
     bool installed = false;
 
     if (!proc) {
         Wh_Log(L"absent in this version: %s", spec.label);
-    } else if (!Wh_SetFunctionHook(reinterpret_cast<void*>(proc), spec.hook,
-                                   spec.original)) {
+    } else if (!Wh_SetFunctionHook(proc, spec.hook, spec.original)) {
         Wh_Log(L"failed to hook %s", spec.label);
     } else {
         installed = true;
@@ -1947,6 +2092,11 @@ static void InstallHook(HMODULE module, const HookSpec& spec, HookCount* count) 
     if (count) {
         (installed ? count->installed : count->missing)++;
     }
+}
+
+static void InstallHook(HMODULE module, const HookSpec& spec, HookCount* count) {
+    InstallHookAt(reinterpret_cast<void*>(GetProcAddress(module, spec.mangled)),
+                  spec, count);
 }
 
 template <size_t N>
@@ -2107,6 +2257,40 @@ void* NewBrush_Hook(void* self, const DvaColorRGBA* color) {
     }
 
     return NewBrush_Original(self, color);
+}
+
+/*
+    The rectangle fill, one level below `utils::DrawFillRect`.
+
+    That free function is three instructions — it hands its drawbot's surface
+    the color and the rect and jumps into the surface's seventh slot — so where
+    the free function cannot be found by name, the slot it jumps to can:
+
+        dvaui::drawbot::d2d::OSSurfaceInterface::FillRect(const ColorRGBA&,
+                                                          const RectT<float>&)
+
+    The arguments arrive swapped against the free function's, color first,
+    which is what the jump does on its way in. Nothing keeps the reference —
+    the color is read into the D2D call on the spot — so a stack temporary is
+    safe here as it is for the brushes.
+
+    Only the static path installs this. Where dvaui is a module, DrawFillRect
+    itself is hooked, one level up, and hooking both would only convert what
+    has already been converted.
+*/
+using SurfaceFillRect_t = void (*)(void*, const DvaColorRGBA*, const void*);
+
+SurfaceFillRect_t SurfaceFillRect_Original = nullptr;
+
+void SurfaceFillRect_Hook(void* self, const DvaColorRGBA* color, const void* rect) {
+    DvaColorRGBA converted{};
+
+    if (ConvertForPaint(color, &converted)) {
+        SurfaceFillRect_Original(self, &converted, rect);
+        return;
+    }
+
+    SurfaceFillRect_Original(self, color, rect);
 }
 
 void* NewPen_Hook(void* self, const DvaColorRGBA* color, float width) {
@@ -2548,6 +2732,682 @@ static void InstallNodeDrawHooks(HMODULE dvaui) {
 volatile LONG g_dvauiHooked = FALSE;
 volatile LONG g_uifHooked = FALSE;
 
+// ============================================================================
+// THE TOOLKIT LINKED INTO THE EXECUTABLE
+// ============================================================================
+
+/*
+    Premiere 2026.3 ships no dvaui.dll. The toolkit is linked into
+    `Adobe Premiere Pro.exe` instead — an 800 MB image whose 703 exports are a
+    plugin SDK and nothing else — so GetProcAddress has no answer for any name
+    in kColorSymbols, on a Premiere that is running its whole interface right
+    there in the process.
+
+    What a C++ class cannot hide is its RTTI, so each entry point that is
+    virtual is found from the decorated class name down, the way a debugger
+    finds it:
+
+        ".?AVOSSupplier@d2d@drawbot@dvaui@@"    the type descriptor's name
+          -> the type descriptor          two pointers before the name
+          -> the complete object locator  the word in .rdata holding its RVA
+          -> the vtable                   the slot after the locator's address
+
+    The layout was measured against 2025's dvaui.dll, where the same classes
+    are exported and the answer is therefore known: the slots below hold what
+    they are named after, and the two brush bodies disassemble the same in
+    both. Five of the six tables are even the same length there; UI_Swatch's
+    has one virtual more here, added after the slot this takes, which is why
+    each length is pinned to the build it was read off. A table that is not
+    that length is a layout this was never measured against, and nothing is
+    taken from it — the hook is dropped and said so, because a slot that has
+    moved holds another method with another signature.
+
+    Only the virtual half is reachable: three of the color functions, the
+    brush factory, and the swatch draws that keep a swatch out of it.
+    DrawFillRect, UI_DispatchDrawFromRoot, the node draws and the other
+    twenty-three color functions are free or private, and leave no RTTI
+    behind.
+*/
+
+/*
+    The image's section table, once its headers check out. Only the executable
+    is walked here, and it is mapped for the life of the process — unlike an
+    arbitrary module out of an enumeration. `visit` returns whether to go on.
+*/
+template <typename Visit>
+static void ForEachImageSection(HMODULE module, Visit&& visit) {
+    auto base = reinterpret_cast<const unsigned char*>(module);
+
+    if (!base) {
+        return;
+    }
+
+    auto dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) {
+        return;
+    }
+
+    auto nt = reinterpret_cast<const IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+
+    if (nt->Signature != IMAGE_NT_SIGNATURE) {
+        return;
+    }
+
+    const IMAGE_SECTION_HEADER* section = IMAGE_FIRST_SECTION(nt);
+
+    for (WORD i = 0; i < nt->FileHeader.NumberOfSections; i++, section++) {
+        if (!visit(*section)) {
+            return;
+        }
+    }
+}
+
+/*
+    How far a read can go from `at` without leaving committed image memory
+    that belongs to `image`, stopping at `limit`. Regions that follow each
+    other are taken together, so a needle lying across the seam between two of
+    them is still found whole.
+
+    A section is not one region for long. Premiere writes all over its .data,
+    and a written page of a mapped image parts company with the ones around
+    it: inside Premiere that section comes back in pieces, and asking for it
+    end to end would find nothing at all.
+*/
+static const unsigned char* ReadableEnd(const unsigned char* at, uintptr_t image,
+                                        const unsigned char* limit) {
+    const unsigned char* end = at;
+
+    while (end < limit) {
+        MEMORY_BASIC_INFORMATION info{};
+
+        if (!VirtualQuery(end, &info, sizeof(info)) || info.State != MEM_COMMIT ||
+            info.Type != MEM_IMAGE ||
+            (info.Protect & (PAGE_NOACCESS | PAGE_GUARD)) ||
+            reinterpret_cast<uintptr_t>(info.AllocationBase) != image) {
+            break;
+        }
+
+        auto next =
+            static_cast<const unsigned char*>(info.BaseAddress) + info.RegionSize;
+
+        if (next <= end) {  // a region that does not move on ends the run
+            break;
+        }
+
+        end = next < limit ? next : limit;
+    }
+
+    return end;
+}
+
+// Every place `needle` appears in `size` readable bytes. False to stop early.
+template <typename Visit>
+static bool ScanForNeedle(const unsigned char* begin, size_t size,
+                          const void* needle, size_t length, Visit&& visit) {
+    if (size < length) {
+        return true;
+    }
+
+    auto first = *static_cast<const unsigned char*>(needle);
+    const unsigned char* at = begin;
+    size_t left = size - length + 1;
+
+    while (left) {
+        auto hit = static_cast<const unsigned char*>(memchr(at, first, left));
+
+        if (!hit) {
+            break;
+        }
+
+        if (memcmp(hit, needle, length) == 0 && !visit(hit)) {
+            return false;
+        }
+
+        left -= hit - at + 1;
+        at = hit + 1;
+    }
+
+    return true;
+}
+
+/*
+    Every place `needle` appears in the image's data: the writable sections,
+    where MSVC puts type descriptors, or the read-only ones, which hold the
+    locators and the vtables. `visit` returns whether to keep looking.
+
+    Each section is read through ReadableEnd rather than in one go, so what is
+    scanned is what is there to scan, and a page the process has made
+    unreadable is stepped over instead of faulted on.
+*/
+template <typename Visit>
+static void ForEachImageMatch(HMODULE module, bool writable, const void* needle,
+                              size_t length, Visit&& visit) {
+    auto base = reinterpret_cast<const unsigned char*>(module);
+    auto image = reinterpret_cast<uintptr_t>(base);
+
+    ForEachImageSection(module, [&](const IMAGE_SECTION_HEADER& section) {
+        constexpr DWORD kNotData =
+            IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_DISCARDABLE;
+
+        bool isWritable = (section.Characteristics & IMAGE_SCN_MEM_WRITE) != 0;
+
+        if ((section.Characteristics & kNotData) ||
+            !(section.Characteristics & IMAGE_SCN_MEM_READ) ||
+            isWritable != writable) {
+            return true;
+        }
+
+        size_t size = section.Misc.VirtualSize ? section.Misc.VirtualSize
+                                               : section.SizeOfRawData;
+        const unsigned char* at = base + section.VirtualAddress;
+        const unsigned char* limit = at + size;
+
+        while (at < limit) {
+            const unsigned char* end = ReadableEnd(at, image, limit);
+
+            if (end > at) {
+                if (!ScanForNeedle(at, end - at, needle, length, visit)) {
+                    return false;
+                }
+
+                at = end;
+                continue;
+            }
+
+            // Nothing to read here: step past this region and go on after it.
+            MEMORY_BASIC_INFORMATION info{};
+
+            if (!VirtualQuery(at, &info, sizeof(info))) {
+                break;
+            }
+
+            auto next = static_cast<const unsigned char*>(info.BaseAddress) +
+                        info.RegionSize;
+
+            if (next <= at) {
+                break;
+            }
+
+            at = next;
+        }
+
+        return true;
+    });
+}
+
+// Whether `address` is code in this image, which is what a vtable slot holds.
+static bool IsImageCode(HMODULE module, const void* address) {
+    auto base = reinterpret_cast<uintptr_t>(module);
+    auto value = reinterpret_cast<uintptr_t>(address);
+
+    if (value <= base) {
+        return false;
+    }
+
+    uintptr_t rva = value - base;
+    bool code = false;
+
+    ForEachImageSection(module, [&](const IMAGE_SECTION_HEADER& section) {
+        size_t size = section.Misc.VirtualSize ? section.Misc.VirtualSize
+                                               : section.SizeOfRawData;
+
+        if (rva < section.VirtualAddress ||
+            rva >= section.VirtualAddress + size) {
+            return true;
+        }
+
+        code = (section.Characteristics & IMAGE_SCN_MEM_EXECUTE) != 0;
+        return false;
+    });
+
+    return code;
+}
+
+/*
+    How many slots the table at `vtable` has: the run of code pointers that
+    starts it. What sits after a vtable in .rdata is the next class's locator,
+    which points at data, so the run ends on its own. The cap is for a
+    candidate that is not a vtable at all.
+*/
+static size_t VtableLength(HMODULE module, void* const* vtable) {
+    constexpr size_t kMostSlots = 512;
+    size_t length = 0;
+
+    while (length < kMostSlots) {
+        if (!IsImageMemory(vtable + length, sizeof(void*), nullptr) ||
+            !IsImageCode(module, vtable[length])) {
+            break;
+        }
+
+        length++;
+    }
+
+    return length;
+}
+
+/*
+    The one vtable of `className` with exactly `slots` entries, or null: when
+    the image holds no class of that name, or when more than one table answers
+    to it. Ambiguity counts as not found, because a hook has to go somewhere
+    known rather than somewhere likely.
+*/
+static void* const* FindVtableByName(HMODULE module, const char* className,
+                                     size_t slots) {
+    auto base = reinterpret_cast<uintptr_t>(module);
+    void* const* found = nullptr;
+    size_t matches = 0;
+
+    // With its terminator, so ".?AVV6PopupSkin@..." cannot match a longer name.
+    size_t nameLength = strlen(className) + 1;
+
+    ForEachImageMatch(module, true, className, nameLength,
+                      [&](const unsigned char* name) {
+        auto nameAddress = reinterpret_cast<uintptr_t>(name);
+
+        if (nameAddress < base + 2 * sizeof(void*)) {
+            return true;
+        }
+
+        // A type descriptor is a vtable pointer, a spare pointer, then the name.
+        DWORD descriptor =
+            static_cast<DWORD>(nameAddress - 2 * sizeof(void*) - base);
+
+        ForEachImageMatch(module, false, &descriptor, sizeof(descriptor),
+                          [&](const unsigned char* at) {
+            if (reinterpret_cast<uintptr_t>(at) % sizeof(DWORD)) {
+                return true;
+            }
+
+            auto locator = reinterpret_cast<const RttiLocator*>(
+                at - offsetof(RttiLocator, typeDescriptor));
+
+            /*
+                The locator of the class itself, not of a base flattened into
+                it: `offset` is where that vtable sits inside the object, and
+                the one this wants is the one at the front.
+            */
+            if (!IsImageMemory(locator, sizeof(RttiLocator), nullptr) ||
+                locator->signature != 1 || locator->offset != 0 ||
+                base + locator->self != reinterpret_cast<uintptr_t>(locator)) {
+                return true;
+            }
+
+            auto address = reinterpret_cast<uintptr_t>(locator);
+
+            ForEachImageMatch(module, false, &address, sizeof(address),
+                              [&](const unsigned char* slot) {
+                if (reinterpret_cast<uintptr_t>(slot) % sizeof(void*)) {
+                    return true;
+                }
+
+                auto vtable = reinterpret_cast<void* const*>(slot + sizeof(void*));
+
+                if (VtableLength(module, vtable) == slots) {
+                    matches++;
+                    found = vtable;
+                }
+
+                return matches < 2;
+            });
+
+            return matches < 2;
+        });
+
+        return matches < 2;
+    });
+
+    return matches == 1 ? found : nullptr;
+}
+
+/*
+    Whether the image carries a class of that name at all — the type
+    descriptor's name, which is where FindVtableByName starts from and the
+    only part of it a build cannot rearrange.
+
+    Nothing is hooked from this. It answers, on a Premiere that has no module
+    for some piece of itself, the question that module's presence used to
+    answer: is this code in here?
+*/
+static bool ImageHasClass(HMODULE module, const char* className) {
+    bool found = false;
+
+    // With its terminator, as in FindVtableByName: a name is never a prefix.
+    ForEachImageMatch(module, true, className, strlen(className) + 1,
+                      [&](const unsigned char*) {
+        found = true;
+        return false;
+    });
+
+    return found;
+}
+
+/*
+    Whether the monitor renderer went the way of the toolkit, and where it
+    landed if it did. Only recorded — see PublishStaticDisplaySurface for why
+    the answer is not acted on until the interface is up.
+
+    Asked once, and only when DisplaySurface.dll is not mapped: the
+    executable's image is complete before any of Premiere's own code runs, so
+    "no such class" is final the first time. A build that has the module never
+    gets past the first line.
+
+    Nothing but the band layer reads what this records, and that layer ships
+    off, so it is asked only while the switch is on — a walk of the
+    executable's writable sections is not a cost to put on a default startup.
+    Both entry points ask: Wh_ModInit for a switch already on, and
+    Wh_ModSettingsChanged for one turned on later, where the latch is what
+    keeps a run of settings changes from scanning again.
+*/
+volatile LONG g_staticDisplaySurfaceProbed = FALSE;
+
+static void ProbeStaticDisplaySurface() {
+    if (g_displaySurfaceEnd.load(std::memory_order_acquire) ||
+        !CurrentSettings().monitorBand ||
+        !Claim(&g_staticDisplaySurfaceProbed)) {
+        return;
+    }
+
+    HMODULE executable = GetModuleHandleW(nullptr);
+    uintptr_t begin = 0;
+    uintptr_t end = 0;
+
+    if (!ImageHasClass(executable, ".?AVDirectXSurface@DS@@") ||
+        !ModuleImageRange(executable, &begin, &end)) {
+        return;
+    }
+
+    g_staticDisplaySurfaceBegin.store(begin, std::memory_order_relaxed);
+    g_staticDisplaySurfaceEnd.store(end, std::memory_order_release);
+}
+
+/*
+    A slot is only hooked when the body behind it is the one that was
+    measured. Both brush functions open by asking the allocator for the object
+    they are about to build — `mov ecx, <size>` — and no other slot in
+    OSSupplier's table asks for that size, so the immediate tells a shifted
+    layout apart from the one this was written against.
+*/
+static bool AllocatesObject(const void* function, DWORD size) {
+    // Wide enough for the pen's, which comes after four saved registers.
+    constexpr size_t kPrologue = 0x40;
+    unsigned char needle[1 + sizeof(DWORD)] = {0xB9};
+
+    memcpy(needle + 1, &size, sizeof(size));
+
+    if (!IsImageMemory(function, kPrologue, nullptr)) {
+        return false;
+    }
+
+    auto bytes = static_cast<const unsigned char*>(function);
+
+    for (size_t i = 0; i + sizeof(needle) <= kPrologue; i++) {
+        if (memcmp(bytes + i, needle, sizeof(needle)) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/*
+    `allocates` is the object size to expect in the body, or zero where there
+    is nothing that cheap to check: the vtable's own length has already said
+    the layout is the measured one, and a content draw only opens a scope.
+*/
+static void InstallVtableHook(HMODULE module, void* const* vtable, size_t index,
+                              DWORD allocates, const HookSpec& spec,
+                              HookCount* count) {
+    void* proc = vtable[index];
+
+    if (!IsImageCode(module, proc) ||
+        (allocates && !AllocatesObject(proc, allocates))) {
+        Wh_Log(L"the slot holding %s is not the body it was measured against, "
+               L"so it is left alone",
+               spec.label);
+
+        if (count) {
+            count->missing++;
+        }
+
+        return;
+    }
+
+    InstallHookAt(proc, spec, count);
+}
+
+/*
+    The color functions that are virtual, and so can still be found where
+    there is no name to look up. Three of the twenty-six are; the rest are
+    free functions that leave nothing behind to find them by.
+
+    Losing twenty-three of them costs less than it reads, because of where the
+    other three sit. The Spectrum gray ramp, which is most of the interface,
+    arrives through `ui::GetGrayColor`, which tail-calls `Theme::GetGrayColor`,
+    which tail-calls `skins::utilities::GetSpectrumGrayColor` — and that one
+    ends in `call [rax+8]`, the second slot of whatever theme it was handed,
+    which is `ThemeClient::GetColor`. Converting there converts what the free
+    functions return, because it is what they return.
+*/
+struct ColorVtable {
+    size_t symbol;          // which of kColorSymbols this is
+    const char* className;  // the decorated name of the class declaring it
+    size_t slots;           // that vtable's length, which pins the layout
+    size_t index;           // the slot holding it
+};
+
+static constexpr ColorVtable kColorVtables[] = {
+    {0, ".?AVTheme@ui@dvaui@@", 13, 5},         // Theme::GetColor
+    {1, ".?AVThemeClient@ui@dvaui@@", 18, 1},   // ThemeClient::GetColor
+    {2, ".?AVThemeClient@ui@dvaui@@", 18, 15},  // ThemeClient::GetThemeColor
+};
+
+// Which entry of kColorVtables describes kColorSymbols[symbol], or -1.
+static constexpr int ColorVtableFor(size_t symbol) {
+    for (size_t i = 0; i < ARRAYSIZE(kColorVtables); i++) {
+        if (kColorVtables[i].symbol == symbol) {
+            return static_cast<int>(i);
+        }
+    }
+
+    return -1;
+}
+
+/*
+    What this probe has looked up so far. Two hooks can sit in one class's
+    vtable, and every search is a pass over the image's data, so an answer is
+    kept — including a miss, which costs the same to find again.
+
+    It is written from InstallStaticToolkitHooks alone, which runs once.
+*/
+struct FoundVtable {
+    const char* className;
+    size_t slots;
+    void* const* vtable;
+};
+
+constexpr size_t kMostLookups = 16;
+
+FoundVtable g_foundVtables[kMostLookups];
+size_t g_foundVtableCount = 0;
+
+static void* const* FindVtableOnce(HMODULE module, const char* className,
+                                   size_t slots) {
+    for (size_t i = 0; i < g_foundVtableCount; i++) {
+        if (g_foundVtables[i].slots == slots &&
+            strcmp(g_foundVtables[i].className, className) == 0) {
+            return g_foundVtables[i].vtable;
+        }
+    }
+
+    void* const* vtable = FindVtableByName(module, className, slots);
+
+    if (g_foundVtableCount < kMostLookups) {
+        g_foundVtables[g_foundVtableCount++] = {className, slots, vtable};
+    }
+
+    return vtable;
+}
+
+/*
+    One hook out of a table found by class name, with the label and the thunk
+    the symbol path would have used for it.
+*/
+static void InstallHookFromVtable(HMODULE module, const char* className,
+                                  size_t slots, size_t index,
+                                  const wchar_t* label, void* hook,
+                                  void** original, HookCount* count) {
+    void* const* vtable = FindVtableOnce(module, className, slots);
+
+    if (!vtable) {
+        Wh_Log(L"absent in this version: %s", label);
+
+        if (count) {
+            count->missing++;
+        }
+
+        return;
+    }
+
+    // No mangled name to carry: this one was found by where it sits.
+    InstallVtableHook(module, vtable, index, 0, {nullptr, hook, original, label},
+                      count);
+}
+
+template <size_t I>
+static void InstallOneStaticColorHook(HMODULE module, HookCount& count) {
+    constexpr int at = ColorVtableFor(I);
+
+    if constexpr (at >= 0) {
+        const ColorVtable& where = kColorVtables[at];
+
+        InstallHookFromVtable(module, where.className, where.slots, where.index,
+                              kColorSymbols[I].label,
+                              reinterpret_cast<void*>(&ColorHook<I>::Hook),
+                              reinterpret_cast<void**>(&ColorHook<I>::original),
+                              &count);
+    }
+}
+
+template <size_t... I>
+static void InstallStaticColorHooks(HMODULE module, HookCount& count,
+                                    std::index_sequence<I...>) {
+    (InstallOneStaticColorHook<I>(module, count), ...);
+}
+
+/*
+    Where each of kContentDraws sits when there is no symbol to look it up by:
+    the class whose vtable carries it, that vtable's length, and the slot. The
+    array is as long as kContentDraws by declaration, so the two cannot drift
+    apart without the compiler saying so.
+*/
+struct ContentVtable {
+    const char* className;
+    size_t slots;
+    size_t index;
+};
+
+static const ContentVtable kContentVtables[kContentDrawCount] = {
+    {".?AVUI_Swatch@controls@dvaui@@", 139, 29},
+    {".?AVV7SwatchSkin@v7@skins@dvaui@@", 7, 3},
+    {".?AVBaseSwatchSkin@csnext@skins@dvaui@@", 12, 3},
+    {".?AVV7PopupSkin@v7@skins@dvaui@@", 30, 10},
+    {".?AVV6PopupSkin@v6@skins@dvaui@@", 31, 10},
+};
+
+static void InstallOneStaticContentHook(HMODULE module, size_t index, void* hook,
+                                        void** original, HookCount* count) {
+    const ContentVtable& where = kContentVtables[index];
+
+    InstallHookFromVtable(module, where.className, where.slots, where.index,
+                          kContentDraws[index].label, hook, original, count);
+}
+
+template <size_t... I>
+static void InstallStaticContentHooks(HMODULE module, HookCount& count,
+                                      std::index_sequence<I...>) {
+    (InstallOneStaticContentHook(
+         module, I, reinterpret_cast<void*>(&ContentDrawHook<I>::Hook),
+         reinterpret_cast<void**>(&ContentDrawHook<I>::original), &count),
+     ...);
+}
+
+volatile LONG g_toolkitProbed = FALSE;
+
+/*
+    Asks the executable whether it carries the toolkit, and hooks what its
+    RTTI can reach. False on every Premiere that has a module for it, where
+    the question costs microseconds: a 3 MB launcher holds no class of that
+    name to find.
+
+    Asked once. The executable's image is complete before any of Premiere's
+    own code runs, so "no such class" is final the first time — unlike a
+    module, which may still be on its way when the mod starts.
+*/
+static bool InstallStaticToolkitHooks() {
+    if (!Claim(&g_toolkitProbed)) {
+        return false;
+    }
+
+    HMODULE executable = GetModuleHandleW(nullptr);
+    ULONGLONG started = GetTickCount64();
+
+    void* const* supplier =
+        FindVtableByName(executable, ".?AVOSSupplier@d2d@drawbot@dvaui@@", 29);
+
+    if (!supplier || !Claim(&g_dvauiHooked)) {
+        return false;
+    }
+
+    HookCount count;
+
+    // A pen is 0x98 bytes and a brush 0x30; see AllocatesObject.
+    InstallVtableHook(executable, supplier, 9, 0x98,
+                      {nullptr, reinterpret_cast<void*>(NewPen_Hook),
+                       reinterpret_cast<void**>(&NewPen_Original), L"d2d::NewPen"},
+                      &count);
+
+    InstallVtableHook(executable, supplier, 10, 0x30,
+                      {nullptr, reinterpret_cast<void*>(NewBrush_Hook),
+                       reinterpret_cast<void**>(&NewBrush_Original),
+                       L"d2d::NewBrush"},
+                      &count);
+
+    /*
+        The rect fill, which is where utils::DrawFillRect ends up; see
+        FillRect_Hook. Its table is the surface's, not the supplier's.
+    */
+    InstallHookFromVtable(executable, ".?AVOSSurfaceInterface@d2d@drawbot@dvaui@@",
+                          46, 7, L"d2d::FillRect",
+                          reinterpret_cast<void*>(SurfaceFillRect_Hook),
+                          reinterpret_cast<void**>(&SurfaceFillRect_Original),
+                          &count);
+
+    InstallStaticColorHooks(executable, count,
+                            std::make_index_sequence<kColorSymbolCount>{});
+    InstallStaticContentHooks(executable, count,
+                              std::make_index_sequence<kContentDrawCount>{});
+
+    if (count.installed == 0) {
+        /*
+            Nothing went in, so the latch goes back: a dvaui arriving later
+            must still be able to take it, and Wh_ModUninit reads it to decide
+            whether to say the interface layer was never installed.
+        */
+        InterlockedExchange(&g_dvauiHooked, FALSE);
+    }
+
+    Wh_Log(L"this Premiere has no module for its toolkit: it is linked into "
+           L"the executable, where %d of %d virtual entry points were found "
+           L"through RTTI in %u ms. The color functions that are not virtual "
+           L"are out of reach in a build like this; the ramp they share is "
+           L"converted where the theme hands it over.",
+           count.installed, count.installed + count.missing,
+           static_cast<unsigned>(GetTickCount64() - started));
+
+    return count.installed > 0;
+}
+
 /*
     Registers the hooks for whichever of the two modules is loaded now and not
     done yet, and returns whether it registered any. It does not apply them:
@@ -2566,7 +3426,198 @@ static bool WantsPremiereHooks() {
     return s.dvauiHook || s.brushHook || s.gdiHook;
 }
 
-static bool HookLoadedModules() {
+/*
+    Premiere has shipped its UI toolkit as dvaui.dll from 2023 through 2026,
+    and every hook below is looked up in it by name. A build that renames the
+    module, or folds the toolkit into another one, still carries Adobe's own
+    mangled names — they spell the dvaui namespaces out — so when the name is
+    gone the module is looked for by symbol instead.
+
+    Nothing here runs while GetModuleHandleW(L"dvaui.dll") answers: on every
+    build that ships the DLL no module is enumerated and no anchor is asked
+    for.
+*/
+static const char* const kColorAnchors[] = {
+    // The Spectrum ramp, which most of the interface is painted from.
+    "?GetGrayColor@ui@dvaui@@YAAEBVColorRGBA@drawbot@2@W4SpectrumGrayColor@12@@Z",
+
+    // The classic theme, which the older builds paint from.
+    "?GetColor@Theme@ui@dvaui@@UEBAAEBVColorRGBA@drawbot@3@_K@Z",
+
+    // The fill path, which is hooked even with the color layer off.
+    ("?NewBrush@OSSupplier@d2d@drawbot@dvaui@@UEBAPEAUBrushInterface@34@"
+     "AEBVColorRGBA@34@@Z"),
+};
+
+static bool ExportsColorAnchor(HMODULE module) {
+    for (const char* anchor : kColorAnchors) {
+        if (GetProcAddress(module, anchor)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// How much of the color surface one module carries; either spelling counts once.
+static int CountColorExports(HMODULE module) {
+    int found = 0;
+
+    for (const ColorSymbol& symbol : kColorSymbols) {
+        if (GetProcAddress(module, symbol.mangled) ||
+            (symbol.before2026 && GetProcAddress(module, symbol.before2026))) {
+            found++;
+        }
+    }
+
+    return found;
+}
+
+/*
+    How much of the color surface a module has to carry to stand in for
+    dvaui.dll. More than one module answers an anchor: measured on Premiere
+    2026, dvaui.dll exports all 26 of the functions, while dvaworkspace.dll
+    carries 11 of them and Frontend.dll 4. Those are copies of part of the
+    toolkit and paint none of the interface, so hooking one in place of the
+    real module would cost the session. Half the surface keeps them out and
+    still accepts a build that dropped a few functions.
+*/
+constexpr int kMinColorExports = static_cast<int>(kColorSymbolCount) / 2;
+
+static bool QualifiesAsColorModule(HMODULE module) {
+    return module && ExportsColorAnchor(module) &&
+           CountColorExports(module) >= kMinColorExports;
+}
+
+/*
+    The richest module in `modules` that qualifies, or null when none does.
+
+    Split from the enumeration so the harness can hand it a set of modules.
+*/
+static HMODULE FindColorModuleIn(const HMODULE* modules, size_t count) {
+    HMODULE best = nullptr;
+    int bestExports = 0;
+
+    for (size_t i = 0; i < count; i++) {
+        if (!modules[i] || !ExportsColorAnchor(modules[i])) {
+            continue;
+        }
+
+        int exports = CountColorExports(modules[i]);
+
+        if (exports >= kMinColorExports && exports > bestExports) {
+            best = modules[i];
+            bestExports = exports;
+        }
+    }
+
+    return best;
+}
+
+volatile LONG g_colorSearchClosed = FALSE;
+volatile LONG g_noColorModuleLogged = FALSE;
+
+/*
+    Said once, from wherever first knows for certain. Not at startup: dvaui is
+    a static dependency of Frontend.dll and the mod can initialize before the
+    loader maps it, so "not there yet" and "not in this build" look alike
+    until Premiere's UI is up.
+*/
+static void ReportNoColorModule() {
+    if (!Claim(&g_noColorModuleLogged)) {
+        return;
+    }
+
+    Wh_Log(L"the interface layer is not installed: no module in this process "
+           L"exports Premiere's color functions, so this build cannot be "
+           L"themed that way. The window frame, the menu bar and the native "
+           L"dialogs still follow the palette; the panels keep Premiere's own "
+           L"colors.");
+}
+
+/*
+    The module named here is hooked for the rest of the process, the way
+    dvaui.dll is. A module carrying most of the color surface is part of
+    Premiere's UI and stays mapped while that UI is up; the hooks would point
+    into unmapped memory if one ever did not.
+
+    It says dvaui is not loaded, not that this Premiere has none. One of the
+    two callers reaches here from the loader hook, where a null
+    GetModuleHandleW may only mean dvaui has not been mapped yet — see
+    SearchForColorModule, which is careful about the same distinction.
+*/
+static void ReportColorModule(HMODULE module) {
+    wchar_t path[MAX_PATH]{};
+    const wchar_t* name = L"an unnamed module";
+
+    if (GetModuleFileNameW(module, path, ARRAYSIZE(path))) {
+        const wchar_t* slash = wcsrchr(path, L'\\');
+        name = slash ? slash + 1 : path;
+    }
+
+    Wh_Log(L"dvaui.dll is not loaded; the color functions were found in "
+           L"%s, and the interface layer goes in there",
+           name);
+}
+
+// Defined with the window layer, far below; see SearchForColorModule.
+static bool HasFramedWindow();
+
+// Defined with the monitor band layer, far below, which is what it is for.
+static void NoteWindowForStaticDisplaySurface(HWND hwnd);
+
+/*
+    Every module in the process, asked for the color functions. This is the
+    expensive half of the search, so it runs only from the two callers that
+    can afford it — after init, and after a settings change — and never from
+    the loader hook, which Premiere goes through hundreds of times while it
+    starts.
+
+    Failing does not close the search: until Premiere's UI is up, "nothing
+    carries them" only means the toolkit is not mapped yet. Once a framed
+    window is there, every module the UI needs is in, and a build that still
+    answers nothing is one this layer cannot reach — which is said once and
+    not asked again.
+*/
+static HMODULE SearchForColorModule() {
+    if (g_colorSearchClosed) {
+        return nullptr;
+    }
+
+    std::vector<HMODULE> modules;
+    DWORD error = 0;
+
+    if (!EnumerateProcessModules(&modules, &error)) {
+        Wh_Log(L"dvaui.dll is not loaded and the modules could not be "
+               L"enumerated (%u), so the interface layer has nothing to look "
+               L"through",
+               error);
+        return nullptr;
+    }
+
+    HMODULE found = FindColorModuleIn(modules.data(), modules.size());
+
+    if (found) {
+        ReportColorModule(found);
+        return found;
+    }
+
+    if (HasFramedWindow()) {
+        InterlockedExchange(&g_colorSearchClosed, TRUE);
+        ReportNoColorModule();
+    }
+
+    return nullptr;
+}
+
+/*
+    `justLoaded` is the module the loader hook has just mapped, which costs
+    three lookups to ask and covers a renamed toolkit that arrives late.
+    `maySearchProcess` is for the callers that can afford to walk every module
+    in the process; see SearchForColorModule.
+*/
+static bool HookLoadedModules(HMODULE justLoaded = nullptr,
+                              bool maySearchProcess = false) {
     if (!WantsPremiereHooks()) {
         return false;
     }
@@ -2574,6 +3625,24 @@ static bool HookLoadedModules() {
     bool registered = false;
 
     HMODULE dvaui = GetModuleHandleW(L"dvaui.dll");
+
+    if (!dvaui && !g_dvauiHooked && QualifiesAsColorModule(justLoaded)) {
+        dvaui = justLoaded;
+        ReportColorModule(dvaui);
+    }
+
+    /*
+        The executable before the modules: a build that carries the toolkit
+        inside it says so in its own RTTI, and says it from the first
+        instruction, while a module can still be on its way.
+    */
+    if (!dvaui && !g_dvauiHooked && maySearchProcess) {
+        if (InstallStaticToolkitHooks()) {
+            registered = true;
+        } else {
+            dvaui = SearchForColorModule();
+        }
+    }
 
     if (dvaui && Claim(&g_dvauiHooked)) {
         HookCount count;
@@ -2642,7 +3711,8 @@ HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR fileName, HANDLE file, DWORD flags) {
         returned: it usually arrives as a dependency of something else. Once
         both are hooked, this is a couple of plain reads.
     */
-    bool registered = (!g_dvauiHooked || !g_uifHooked) && HookLoadedModules();
+    bool registered =
+        (!g_dvauiHooked || !g_uifHooked) && HookLoadedModules(module);
 
     // And d3d12, whose CreateDevice is how the monitor layer gets in.
     registered = HookD3D12CreateDevice() || registered;
@@ -3958,6 +5028,27 @@ static void ApplyThemeToExistingWindows() {
     EnumWindows(ApplyToTopLevel, 0);
 }
 
+static BOOL CALLBACK NoteFramedWindow(HWND hwnd, LPARAM found) {
+    if (!IsOwnWindow(hwnd) ||
+        !(GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CAPTION)) {
+        return TRUE;
+    }
+
+    *reinterpret_cast<bool*>(found) = true;
+    return FALSE;  // one is the whole answer
+}
+
+/*
+    Whether this process already has a window with a frame, which Premiere's
+    main window and its dialogs have and its tooltips and menu popups do not.
+    It is how the mod tells "the UI is up" from "Premiere is still starting".
+*/
+static bool HasFramedWindow() {
+    bool found = false;
+    EnumWindows(NoteFramedWindow, reinterpret_cast<LPARAM>(&found));
+    return found;
+}
+
 // ============================================================================
 // CreateWindowExW HOOK
 // ============================================================================
@@ -3977,6 +5068,7 @@ HWND WINAPI CreateWindowExW_Hook(DWORD exStyle, LPCWSTR className,
 
     // A message-only window never shows, so there is nothing to theme.
     if (hwnd && parent != HWND_MESSAGE) {
+        NoteWindowForStaticDisplaySurface(hwnd);
         ApplyDarkModeToWindow(hwnd);
     }
 
@@ -4003,6 +5095,7 @@ HWND WINAPI CreateWindowExA_Hook(DWORD exStyle, LPCSTR className,
 
     // A message-only window never shows, so there is nothing to theme.
     if (hwnd && parent != HWND_MESSAGE) {
+        NoteWindowForStaticDisplaySurface(hwnd);
         ApplyDarkModeToWindow(hwnd);
     }
 
@@ -5190,6 +6283,17 @@ COLORREF WINAPI SetBkColor_Hook(HDC hdc, COLORREF color) {
 // SETTINGS
 // ============================================================================
 
+/*
+    "#RRGGBB", and "#RRGGBBAA" for the color pickers that write one.
+
+    Eight digits are read as a color with an alpha channel and the alpha is
+    dropped. Every surface a palette describes is opaque, so there is nothing
+    for it to mean here — and refusing it is worse than ignoring it: the field
+    falls back to Onyx's color with only a line in the log to say why, which
+    is what a color picked rather than typed used to do.
+
+    The leading # and any spaces are skipped, and the case is free.
+*/
 static bool ParseHexColor(PCWSTR text, COLORREF* out) {
     while (*text == L'#' || *text == L' ') {
         text++;
@@ -5218,8 +6322,13 @@ static bool ParseHexColor(PCWSTR text, COLORREF* out) {
         digits++;
     }
 
-    if (digits != 6) {
+    if (digits != 6 && digits != 8) {
         return false;
+    }
+
+    // RRGGBBAA: the alpha is the low byte, and it is not this palette's to keep.
+    if (digits == 8) {
+        value >>= 8;
     }
 
     // The text is RRGGBB; COLORREF is 0x00BBGGRR.
@@ -5475,7 +6584,7 @@ static Palette LoadCustomTheme(const Palette& onyx) {
 
         if (!ReadThemeColor(field.setting, field.color, &present)) {
             Wh_Log(L"custom theme: %s is %s; Onyx's is used", field.name,
-                   present ? L"not a #RRGGBB color" : L"empty");
+                   present ? L"not a hex color" : L"empty");
         }
     }
 
@@ -5491,7 +6600,7 @@ static Palette LoadCustomTheme(const Palette& onyx) {
         }
 
         if (present) {
-            Wh_Log(L"custom theme: %s is not a #RRGGBB color; left out", name);
+            Wh_Log(L"custom theme: %s is not a hex color; left out", name);
         }
 
         return false;
@@ -5601,6 +6710,17 @@ static void LoadSettings() {
     tracked from the loader notification, and a return address outside it is
     not this layer's business. No offset into anyone's code appears here, so
     the layer does not depend on a Premiere build.
+
+    From 26.3 on that module is gone — the renderer is linked into the
+    executable, the way the toolkit is — and the executable stands in for it
+    there, found by name. That is no scope at all: every D3D12 caller in
+    Premiere becomes the band's, and the shape of the work below is the whole
+    of what is left between this mod and a command list it has no business in.
+    Two things follow, and both are load-bearing. The layer is only turned on
+    once Premiere is up and has made its own device, never during startup —
+    g_staticDisplaySurfaceEnd is where that waits, and where the crash that
+    taught it is written down. And "Monitor band" is the way out if anything
+    but the surround ever changes color on such a build.
 
     The rest of the test is the shape of the work: a viewport and a scissor
     that cover the whole render target, with no sub-rectangle taken out of
@@ -6384,6 +7504,36 @@ static MonitorBandInstall InstallMonitorBandHooks(ID3D12Device* device) {
 }
 
 /*
+    Every window this process creates, until the executable has taken over for
+    a missing DisplaySurface.dll — see PublishStaticDisplaySurface, which this
+    is the startup half of.
+
+    Two things have to be true, and one window is not enough on its own.
+    Premiere must have made its device, which is what installed the layer's
+    hooks from the branch above, so those hooks cannot come alive over
+    rendering that predates them. And a window with a frame must exist, which
+    is how the mod tells a Premiere that is up from one that is starting
+    everywhere else; the style is read back off the window rather than taken
+    from the creator, because Premiere's main window is themed on the same
+    test and a caption can arrive after the create call.
+
+    On a build that has the module there is no candidate to publish, so this
+    is one atomic load for every window Premiere opens and never more.
+*/
+static void NoteWindowForStaticDisplaySurface(HWND hwnd) {
+    if (!g_staticDisplaySurfaceEnd.load(std::memory_order_acquire) ||
+        !g_monitorBandInstalled) {
+        return;
+    }
+
+    LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+
+    if (!(style & WS_CHILD) && (style & WS_CAPTION)) {
+        PublishStaticDisplaySurface();
+    }
+}
+
+/*
     Premiere's own device, the moment it makes one.
 
     Taking the vtable from Premiere's device rather than from one of the mod's
@@ -6478,10 +7628,18 @@ static bool HookD3D12CreateDevice() {
     only if d3d12 is already in the process — never loaded here, so a Premiere
     that does not use it pays nothing.
 
-    DisplaySurface being mapped is what says so: it is the module that renders
-    the monitors, so by the time it is in the process Premiere has made its
-    device and there is no SDK version left to settle. Premiere starting up
-    reaches here with it absent, and the hook covers that case instead.
+    The renderer's range being set is what says so: on a build that has the
+    module, that is the module being mapped, and by then Premiere has made its
+    device with no SDK version left to settle; on one that does not, the range
+    is the executable's and is only published once the interface is up, which
+    says the same thing. Premiere starting up reaches here before either, and
+    the hook covers that case instead.
+
+    d3d12 alone would not do as that test. It is a static import of Premiere's
+    executable, so it is mapped before a line of Premiere runs — and a device
+    built from it that early takes the process down: heap corruption inside
+    ntdll, before a window ever appears. That is why what is asked for here is
+    the renderer, not the runtime.
 */
 static bool InstallMonitorBandFromProbe() {
     if (g_monitorBandTried || !CurrentSettings().monitorBand ||
@@ -6561,6 +7719,12 @@ BOOL Wh_ModInit() {
 
     WatchModuleLoads();
     SnapshotAdobeModules();
+
+    // And, where SnapshotAdobeModules found no DisplaySurface.dll, whether this
+    // Premiere carries that renderer in the executable instead. Recorded only;
+    // see PublishStaticDisplaySurface.
+    ProbeStaticDisplaySurface();
+
     InitNativeDarkMode();
 
     /*
@@ -6701,7 +7865,7 @@ void Wh_ModAfterInit() {
         times while it starts, so in practice the next one catches it, but the
         race closes here for nothing.
     */
-    bool registered = HookLoadedModules();
+    bool registered = HookLoadedModules(nullptr, true);
 
     registered = HookD3D12CreateDevice() || registered;
 
@@ -6710,6 +7874,15 @@ void Wh_ModAfterInit() {
     }
 
     ApplyThemeToExistingWindows();
+
+    /*
+        A Premiere the mod was switched on under is up already, and will
+        create no window of its own for NoteWindowForStaticDisplaySurface to
+        notice — nor did the mod see it make the device that test also wants.
+    */
+    if (HasFramedWindow()) {
+        PublishStaticDisplaySurface();
+    }
 
     /*
         Enable the mod while Premiere is already running and its D3D12 device
@@ -6743,6 +7916,16 @@ void Wh_ModUninit() {
            static_cast<unsigned>(used), static_cast<unsigned>(kSlotCount),
            std::popcount(static_cast<uint64_t>(g_bluesRecolored)),
            static_cast<unsigned>(kInterfaceBlueCount));
+
+    /*
+        A whole session with nothing hooked, and a UI that did come up: every
+        module loaded by then was asked in Wh_ModAfterInit, and every one that
+        arrived through the loader hook after it. Without a window of its own
+        the process never got far enough to tell, so nothing is claimed.
+    */
+    if (WantsPremiereHooks() && !g_dvauiHooked && HasFramedWindow()) {
+        ReportNoColorModule();
+    }
 
     /*
         The layer went in but never recognized a surround — a Premiere that
@@ -6822,9 +8005,35 @@ void Wh_ModSettingsChanged() {
         the export is not hooked when the switch is off, and nothing else
         would come back to it.
     */
-    bool registered = HookLoadedModules();
+    bool registered = HookLoadedModules(nullptr, true);
 
     registered = HookD3D12CreateDevice() || registered;
+
+    /*
+        And on a build with no DisplaySurface.dll, where the executable stands
+        in for it, the range has to be published here too. Its other two
+        publishers cannot do it: a window create wants the layer already
+        installed, which it is not while the switch is off, and Wh_ModAfterInit
+        ran before any window existed. Without this the two halves wait on each
+        other — nothing publishes, so nothing installs, so nothing publishes —
+        and the band keeps Premiere's gray for the session with nothing logged.
+
+        A settings change is the user in Windhawk's own window, so Premiere is
+        up and its device is made; the framed window is what says so.
+
+        The candidate is tested before the window is looked for. Publishing
+        without one does nothing, and that is every build that ships
+        DisplaySurface.dll and every 26.3 session where the band switch has
+        never been on — so the load this does anyway saves them all an
+        EnumWindows.
+    */
+    ProbeStaticDisplaySurface();
+
+    if (g_staticDisplaySurfaceEnd.load(std::memory_order_acquire) &&
+        HasFramedWindow()) {
+        PublishStaticDisplaySurface();
+    }
+
     registered = InstallMonitorBandFromProbe() || registered;
 
     if (registered && !Wh_ApplyHookOperations()) {
