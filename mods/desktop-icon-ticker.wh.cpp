@@ -2,7 +2,7 @@
 // @id              desktop-icon-ticker
 // @name            Desktop Icon Ticker
 // @description     Show live scrolling or static text (time, date, CPU, RAM, disk, battery, Recycle Bin...) on top of desktop icons
-// @version         0.4
+// @version         0.5
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         explorer.exe
@@ -13,8 +13,6 @@
 /*
 # Desktop Icon Ticker
 ![Desktop Icon Ticker overview](https://i.imgur.com/54urXw9.png)
-
-
 
 Draws live text on top of desktop icons: a scrolling ticker inside the
 "This PC" monitor, a badge on the Recycle Bin, free space on a drive
@@ -165,9 +163,12 @@ Example: `{time} • CPU {cpu} • C: {disk:C} free`
 //
 // Threads:
 //   - desktop thread (explorer): custom draw, paints the text
-//   - animation thread: hooks the desktop, invalidates scrolling text
+//   - animation thread: invalidates scrolling text
 //   - info thread: resolves icon names, expands placeholders (may block on
 //     slow drives, so it is kept away from the animation)
+// The two worker threads are only started in the explorer.exe process that
+// owns the desktop, when its list view is found (CreateWindowExW hook or
+// Wh_ModAfterInit). Other explorer.exe processes only carry the hook.
 // Everything in g_rules / g_states / g_generation is guarded by g_lock.
 // ---------------------------------------------------------------------------
 
@@ -209,10 +210,21 @@ std::atomic<HWND> g_listView{nullptr};
 std::atomic<unsigned> g_tick{0};
 std::atomic<bool> g_needFullRedraw{true};
 
+std::atomic<bool> g_animIdle{false};      // animation thread sleeps indefinitely
+std::atomic<unsigned> g_paintCount{0};    // incremented on every rule paint
+std::atomic<bool> g_unloading{false};
+
 HANDLE g_stopEvent = nullptr;
-HANDLE g_infoWake = nullptr;
+HANDLE g_infoWake = nullptr;   // auto-reset
+HANDLE g_animWake = nullptr;   // auto-reset
 HANDLE g_animThread = nullptr;
 HANDLE g_infoThread = nullptr;
+SRWLOCK g_startLock = SRWLOCK_INIT;  // guards thread creation vs. unload
+bool g_threadsStarted = false;
+
+static void WakeAnim() {
+    if (g_animWake) SetEvent(g_animWake);
+}
 
 static int Clamp(int v, int lo, int hi) {
     return v < lo ? lo : (v > hi ? hi : v);
@@ -331,6 +343,7 @@ static void LoadSettings() {
 
     g_needFullRedraw = true;
     if (g_infoWake) SetEvent(g_infoWake);
+    WakeAnim();
     Wh_Log(L"Loaded %d rule(s)", count);
 }
 
@@ -593,6 +606,7 @@ static void DrawRuleLocked(HWND lv, HDC hdc, int index, int ri) {
     UnionRect(&st.lastRect, &area, &icon);
     st.hasRect = true;
     st.missed = 0;
+    g_paintCount++;
 
     if (st.text.empty() || st.text == r.hideWhen) return;
 
@@ -671,6 +685,9 @@ LRESULT CALLBACK DefViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
                 int ri = FindRuleLocked(label);
                 if (ri >= 0) DrawRuleLocked(lv, cd->nmcd.hdc, index, ri);
                 ReleaseSRWLockExclusive(&g_lock);
+                // Our icon is painting again (shown, re-added, desktop icons
+                // turned back on): wake the animation if it went to sleep.
+                if (ri >= 0 && g_animIdle.exchange(false)) WakeAnim();
             }
             return res;
         }
@@ -679,10 +696,28 @@ LRESULT CALLBACK DefViewSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam,
 }
 
 // ---------------------------------------------------------------------------
-// Desktop hook
+// Desktop discovery
 // ---------------------------------------------------------------------------
 
-static bool FindDesktop(HWND* outDefView, HWND* outListView) {
+DWORD WINAPI AnimThread(LPVOID);
+DWORD WINAPI InfoThread(LPVOID);
+
+static bool HasClass(HWND h, PCWSTR cls) {
+    WCHAR buf[64] = {};
+    return h && GetClassNameW(h, buf, ARRAYSIZE(buf)) && _wcsicmp(buf, cls) == 0;
+}
+
+// SysListView32 -> SHELLDLL_DefView -> Progman / WorkerW
+static bool IsDesktopListView(HWND lv) {
+    if (!HasClass(lv, L"SysListView32")) return false;
+    HWND dv = GetParent(lv);
+    if (!HasClass(dv, L"SHELLDLL_DefView")) return false;
+    HWND top = GetParent(dv);
+    return HasClass(top, L"Progman") || HasClass(top, L"WorkerW");
+}
+
+// Used once in Wh_ModAfterInit, for a desktop that already exists.
+static HWND FindExistingDesktopListView() {
     HWND dv = nullptr;
     HWND progman = FindWindowW(L"Progman", nullptr);
     if (progman) dv = FindWindowExW(progman, nullptr, L"SHELLDLL_DefView", nullptr);
@@ -693,59 +728,76 @@ static bool FindDesktop(HWND* outDefView, HWND* outListView) {
             if (dv) break;
         }
     }
-    if (!dv) return false;
+    if (!dv) return nullptr;
 
     // Windhawk loads the mod in every explorer.exe; only the shell process
     // owns the desktop.
     DWORD pid = 0;
     GetWindowThreadProcessId(dv, &pid);
-    if (pid != GetCurrentProcessId()) return false;
+    if (pid != GetCurrentProcessId()) return nullptr;
 
     HWND lv = FindWindowExW(dv, nullptr, L"SysListView32", nullptr);
-    if (!lv) return false;
-
-    *outDefView = dv;
-    *outListView = lv;
-    return true;
+    return IsDesktopListView(lv) ? lv : nullptr;
 }
 
-static bool EnsureHooked() {
-    HWND dv = g_defView;
-    HWND lv = g_listView;
-
-    if (dv && IsWindow(dv)) {
-        if (lv && IsWindow(lv) && GetParent(lv) == dv) return true;
-        // The view is still there but its list view was recreated.
-        HWND newLv = FindWindowExW(dv, nullptr, L"SysListView32", nullptr);
-        if (!newLv) return false;
-        g_listView = newLv;
-        g_needFullRedraw = true;
-        Wh_Log(L"List view re-acquired");
-        return true;
+static void StartThreads() {
+    AcquireSRWLockExclusive(&g_startLock);
+    if (!g_unloading && !g_threadsStarted) {
+        g_threadsStarted = true;
+        g_infoThread = CreateThread(nullptr, 0, InfoThread, nullptr, 0, nullptr);
+        g_animThread = CreateThread(nullptr, 0, AnimThread, nullptr, 0, nullptr);
+        if (!g_infoThread || !g_animThread) Wh_Log(L"CreateThread failed");
     }
+    ReleaseSRWLockExclusive(&g_startLock);
+}
 
-    g_defView = nullptr;
-    g_listView = nullptr;
+// Called from the CreateWindowExW hook (desktop thread) or from
+// Wh_ModAfterInit (Windhawk thread). No lock is held across the subclass
+// call; subclassing the same window twice with the same proc and id only
+// updates it, so a race between the two callers is harmless.
+static void OnDesktopListView(HWND lv) {
+    if (g_unloading) return;
 
-    HWND newDv, newLv;
-    if (!FindDesktop(&newDv, &newLv)) return false;
-
-    g_listView = newLv;
-    if (!WindhawkUtils::SetWindowSubclassFromAnyThread(newDv, DefViewSubclassProc, 0)) {
-        g_listView = nullptr;
-        Wh_Log(L"Subclass failed");
-        return false;
+    HWND dv = GetParent(lv);
+    if (g_defView.load() != dv) {
+        if (!WindhawkUtils::SetWindowSubclassFromAnyThread(dv, DefViewSubclassProc, 0)) {
+            Wh_Log(L"Subclass failed");
+            return;
+        }
+        g_defView = dv;
     }
-    g_defView = newDv;
+    g_listView = lv;
 
-    // Rects from a previous desktop window are meaningless now.
+    // Rects from a previous list view are meaningless now.
     AcquireSRWLockExclusive(&g_lock);
     for (auto& st : g_states) st.hasRect = false;
     ReleaseSRWLockExclusive(&g_lock);
 
     g_needFullRedraw = true;
+    StartThreads();
+    if (g_infoWake) SetEvent(g_infoWake);
+    WakeAnim();
     Wh_Log(L"Desktop hooked");
-    return true;
+}
+
+using CreateWindowExW_t = decltype(&CreateWindowExW);
+CreateWindowExW_t CreateWindowExW_Original;
+
+HWND WINAPI CreateWindowExW_Hook(DWORD dwExStyle, LPCWSTR lpClassName,
+                                 LPCWSTR lpWindowName, DWORD dwStyle, int X,
+                                 int Y, int nWidth, int nHeight,
+                                 HWND hWndParent, HMENU hMenu,
+                                 HINSTANCE hInstance, LPVOID lpParam) {
+    HWND hWnd = CreateWindowExW_Original(dwExStyle, lpClassName, lpWindowName,
+                                         dwStyle, X, Y, nWidth, nHeight,
+                                         hWndParent, hMenu, hInstance, lpParam);
+    // Cheap filter first: this hook sees every window explorer creates.
+    if (hWnd && hWndParent && lpClassName && !IS_INTRESOURCE(lpClassName) &&
+        _wcsicmp(lpClassName, L"SysListView32") == 0 &&
+        IsDesktopListView(hWnd)) {
+        OnDesktopListView(hWnd);
+    }
+    return hWnd;
 }
 
 // Monitor whose work area is fully covered by the foreground window
@@ -779,27 +831,42 @@ static HMONITOR GetCoveredMonitor() {
 // Threads
 // ---------------------------------------------------------------------------
 
+// Wait policy:
+//   - something is actually scrolling           -> frame interval
+//   - scrolling is paused because the icon's monitor is covered, or the
+//     item stopped painting (occasional probe)  -> 250 ms
+//   - nothing to animate (no scrolling rules, icon not on the desktop,
+//     desktop icons hidden, desktop gone)        -> sleep until woken by a
+//     paint of a rule's icon, a settings change or a re-hook
 DWORD WINAPI AnimThread(LPVOID) {
-    for (;;) {
-        AcquireSRWLockShared(&g_lock);
-        int frame = g_frameInterval;
-        bool anyScroll = false;
-        for (auto& r : g_rules) anyScroll |= r.scroll;
-        ReleaseSRWLockShared(&g_lock);
+    HANDLE handles[2] = {g_stopEvent, g_animWake};
+    unsigned loops = 0;
 
-        bool hooked = EnsureHooked();
-        DWORD wait = !hooked ? 1000 : (anyScroll ? (DWORD)frame : 250);
+    for (;;) {
+        unsigned paintsAtStart = g_paintCount.load();
+        DWORD wait = INFINITE;
 
         HWND lv = g_listView;
-        if (hooked && lv) {
-            if (g_needFullRedraw.exchange(false)) {
-                InvalidateRect(lv, nullptr, TRUE);
-            }
+        HWND dv = g_defView;
+        bool hooked = lv && dv && IsWindow(lv) && IsWindow(dv) && GetParent(lv) == dv;
+        if (!hooked) {
+            // Drop stale handles; a new desktop is reported by the hook.
+            if (lv && (!IsWindow(lv) || GetParent(lv) != dv)) g_listView.compare_exchange_strong(lv, nullptr);
+            if (dv && !IsWindow(dv)) g_defView.compare_exchange_strong(dv, nullptr);
+        } else {
+            if (g_needFullRedraw.exchange(false)) InvalidateRect(lv, nullptr, TRUE);
 
-            if (anyScroll && IsWindowVisible(lv)) {
-                unsigned tick = ++g_tick;
+            AcquireSRWLockShared(&g_lock);
+            int frame = g_frameInterval;
+            ReleaseSRWLockShared(&g_lock);
+
+            loops++;
+            bool animating = false;
+            bool polling = false;
+            std::vector<RECT> dirty;
+
+            if (IsWindowVisible(lv)) {
                 HMONITOR covered = GetCoveredMonitor();
-                std::vector<RECT> dirty;
 
                 AcquireSRWLockExclusive(&g_lock);
                 for (size_t i = 0; i < g_rules.size(); i++) {
@@ -809,22 +876,45 @@ DWORD WINAPI AnimThread(LPVOID) {
                     if (covered) {
                         RECT sr = st.lastRect;
                         MapWindowPoints(lv, nullptr, (POINT*)&sr, 2);
-                        if (MonitorFromRect(&sr, MONITOR_DEFAULTTONEAREST) == covered) continue;
+                        if (MonitorFromRect(&sr, MONITOR_DEFAULTTONEAREST) == covered) {
+                            polling = true;  // need to notice when it's uncovered
+                            continue;
+                        }
                     }
 
-                    // If the item stopped painting (deleted, hidden), back off
-                    // to an occasional probe instead of invalidating every frame.
-                    if (st.missed > 100 && (tick % 64) != 0) continue;
+                    if (st.missed > 100) {
+                        // The item stopped painting (deleted, hidden): probe
+                        // now and then instead of every frame.
+                        polling = true;
+                        if (loops % 64 != 0) continue;
+                    } else {
+                        animating = true;
+                    }
                     if (st.missed < 1000000) st.missed++;
                     dirty.push_back(st.lastRect);
                 }
                 ReleaseSRWLockExclusive(&g_lock);
+            }
 
-                for (auto& rc : dirty) InvalidateRect(lv, &rc, TRUE);
+            if (animating) g_tick++;
+            for (auto& rc : dirty) InvalidateRect(lv, &rc, TRUE);
+
+            wait = animating ? (DWORD)frame : (polling ? 250 : INFINITE);
+        }
+
+        if (wait == INFINITE) {
+            // Announce the sleep, then make sure no paint slipped in since
+            // this iteration started; otherwise its wake-up would be lost.
+            g_animIdle = true;
+            if (g_paintCount.load() != paintsAtStart) {
+                g_animIdle = false;
+                wait = 0;
             }
         }
 
-        if (WaitForSingleObject(g_stopEvent, wait) == WAIT_OBJECT_0) break;
+        DWORD w = WaitForMultipleObjects(2, handles, FALSE, wait);
+        g_animIdle = false;
+        if (w == WAIT_OBJECT_0) break;
     }
     return 0;
 }
@@ -842,6 +932,13 @@ DWORD WINAPI InfoThread(LPVOID) {
     for (;;) {
         DWORD w = WaitForMultipleObjects(2, handles, FALSE, wait);
         if (w == WAIT_OBJECT_0) break;
+
+        // Nothing to draw on: stay idle until the desktop is (re)hooked,
+        // which signals g_infoWake.
+        if (!g_listView.load()) {
+            wait = INFINITE;
+            continue;
+        }
 
         unsigned gen;
         int refreshMs;
@@ -897,7 +994,10 @@ DWORD WINAPI InfoThread(LPVOID) {
         // A full redraw only when the set of matched icons changes, never
         // just because a value changed: a missing icon must not cause the
         // whole desktop to repaint every second.
-        if (namesChanged) g_needFullRedraw = true;
+        if (namesChanged) {
+            g_needFullRedraw = true;
+            WakeAnim();
+        }
         HWND lv = g_listView;
         if (lv) {
             for (auto& rc : dirty) InvalidateRect(lv, &rc, TRUE);
@@ -932,6 +1032,11 @@ static void WaitPumping(HANDLE h) {
 // ---------------------------------------------------------------------------
 
 static void Cleanup() {
+    // No thread may be started after this point.
+    AcquireSRWLockExclusive(&g_startLock);
+    g_unloading = true;
+    ReleaseSRWLockExclusive(&g_startLock);
+
     if (g_stopEvent) SetEvent(g_stopEvent);
     WaitPumping(g_animThread);
     WaitPumping(g_infoThread);
@@ -953,6 +1058,7 @@ static void Cleanup() {
 
     if (g_stopEvent) { CloseHandle(g_stopEvent); g_stopEvent = nullptr; }
     if (g_infoWake) { CloseHandle(g_infoWake); g_infoWake = nullptr; }
+    if (g_animWake) { CloseHandle(g_animWake); g_animWake = nullptr; }
 }
 
 BOOL Wh_ModInit() {
@@ -960,20 +1066,27 @@ BOOL Wh_ModInit() {
 
     g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     g_infoWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    if (!g_stopEvent || !g_infoWake) {
+    g_animWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_stopEvent || !g_infoWake || !g_animWake) {
         Cleanup();
         return FALSE;
     }
 
     LoadSettings();
 
-    g_infoThread = CreateThread(nullptr, 0, InfoThread, nullptr, 0, nullptr);
-    g_animThread = CreateThread(nullptr, 0, AnimThread, nullptr, 0, nullptr);
-    if (!g_infoThread || !g_animThread) {
-        Cleanup();
-        return FALSE;
+    // The desktop list view is reported when it is created; worker threads
+    // start only then, so non-shell explorer.exe processes stay idle.
+    if (!Wh_SetFunctionHook((void*)CreateWindowExW, (void*)CreateWindowExW_Hook,
+                            (void**)&CreateWindowExW_Original)) {
+        Wh_Log(L"Failed to hook CreateWindowExW");
     }
     return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    // The desktop usually exists already when the mod is enabled.
+    HWND lv = FindExistingDesktopListView();
+    if (lv) OnDesktopListView(lv);
 }
 
 void Wh_ModUninit() {
