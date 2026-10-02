@@ -3647,12 +3647,12 @@
         "ratingUsers": 15,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790859807000,
+        "updated": 1790964221000,
         "users": 236
       },
       "metadata": {
         "author": "HaVeN80",
-        "compilerOptions": "-ldwmapi -lgdi32 -lshell32",
+        "compilerOptions": "-ldwmapi -lgdi32 -lshell32 -lole32 -luuid",
         "description": "Minimized windows fall onto the desktop as dimmed thumbnail cards you can restore or close",
         "github": "https://github.com/haven80",
         "include": [
@@ -3660,7 +3660,7 @@
         ],
         "license": "GPL-3.0-only",
         "name": "Desktop Window Cards",
-        "version": "1.5"
+        "version": "1.7"
       }
     },
     "disable-feedback-hub-hotkey": {
@@ -4541,19 +4541,19 @@
         "ratingUsers": 43,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1780055460000,
+        "updated": 1790964205000,
         "users": 2338
       },
       "metadata": {
         "author": "bbmaster123",
-        "compilerOptions": "-lcomctl32 -lole32 -luuid -luser32 -lgdi32 -luxtheme -lshlwapi -lmsimg32 -lgdiplus",
+        "compilerOptions": "-luser32 -lgdi32 -luxtheme -lshlwapi -lgdiplus",
         "description": "Enables the ability to customize the disk drive tiles in explorer, targeting the disk's usage bar, as well as the details that appear below.",
         "github": "https://github.com/bbmaster123",
         "include": [
           "explorer.exe"
         ],
         "name": "Enhanced Disk Usage",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "enlarged-icons-without-thumbnail-frames": {
@@ -4854,7 +4854,7 @@
         "ratingUsers": 3,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790582633000,
+        "updated": 1790964209000,
         "users": 21
       },
       "metadata": {
@@ -4870,7 +4870,7 @@
         ],
         "license": "MIT",
         "name": "Explorer Custom Shortcuts",
-        "version": "1.4.0"
+        "version": "1.5.0"
       }
     },
     "explorer-details-better-file-sizes": {
@@ -8486,7 +8486,7 @@
         "ratingUsers": 45,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790589686000,
+        "updated": 1790964213000,
         "users": 676
       },
       "metadata": {
@@ -8499,7 +8499,7 @@
         ],
         "license": "MIT",
         "name": "Traînée de souris",
-        "version": "3.4.4.0"
+        "version": "3.4.5.3"
       },
       "metadataEnglish": {
         "description": "Customizable cursor trail: D3D11 + DirectComposition, 23 color modes, 10 trail styles, low idle CPU.",
@@ -13698,7 +13698,7 @@
         "ratingUsers": 1,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1789686666000,
+        "updated": 1790964217000,
         "users": 42
       },
       "metadata": {
@@ -13715,7 +13715,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Split: Running Left, Pinned Right",
-        "version": "0.3.18"
+        "version": "0.3.22"
       }
     },
     "taskbar-start-button-colorizer": {
@@ -15988,16 +15988,15 @@
         "ratingUsers": 141,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1785445785000,
+        "updated": 1790964201000,
         "users": 2705
       },
       "metadata": {
         "author": "crazyboyybs",
-        "compilerOptions": "-ldwmapi -lgdi32 -lcomctl32 -ld2d1 -ldwrite -luxtheme -ld3d11 -ldxgi -ldcomp -lwinmm -lmsimg32 -lshcore -lole32 -lshell32 -lshlwapi -luuid -lgdiplus",
+        "compilerOptions": "-ldwmapi -lgdi32 -lcomctl32 -ld2d1 -ldwrite -luxtheme -lwinmm -lmsimg32 -lshcore -lole32 -loleaut32 -lshell32 -lshlwapi -luuid -lgdiplus -lruntimeobject",
         "description": "Modernizes legacy Win32 UI elements",
         "exclude": [
           "dwm.exe",
-          "mmc.exe",
           "msiexec.exe"
         ],
         "github": "https://github.com/crazyboyybs",
@@ -16006,7 +16005,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Win32 UI Modernizer",
-        "version": "1.0.2"
+        "version": "1.0.3"
       }
     },
     "win7-action-center-recreation": {

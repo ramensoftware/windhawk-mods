@@ -2,12 +2,203 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-02T08:05:40.000Z</updated>
+    <updated>2026-10-02T18:03:41.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Window Cards 1.7]]></title>
+        <id>https://windhawk.net/mods/desktop-window-cards#128938b0170236340ac149a6dddb1a6860e78eee</id>
+        <link href="https://windhawk.net/mods/desktop-window-cards"/>
+        <updated>2026-10-02T18:03:41.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="desktopwindowcards17">Desktop Window Cards 1.7</h2>
+<h3 id="new">New</h3>
+<ul>
+<li><strong>Drag & drop onto cards</strong> – hold a dragged file, text or image over a card and its window opens, ready for the drop, just like taskbar buttons. The app handles the drop natively (copy/move into an Explorer folder, attach to an e-mail, open in an editor…). The delay is adjustable, or 0 to disable it.</li>
+<li><strong>Multi-monitor</strong> – dropping a card on another monitor moves its window there too, centered, while it's still minimized. It opens there however it's restored (card, taskbar, Alt+Tab). In grid layout the card joins that monitor's grid where it's dropped.</li>
+<li><strong>Grid layout (optional)</strong> – a Task View-style grid per monitor, with cards as large as the space allows. Drag cards to reorder them; with "Remember the position of moved cards" they return to their place the next time their window is minimized.</li>
+<li><strong>Hover zoom (optional)</strong> – resting cards grow slightly under the mouse with a springy motion and rise above their neighbors.</li>
+</ul>
+<h3 id="improved">Improved</h3>
+<ul>
+<li><strong>Smoother animations</strong> – on Windows 11, frames are synchronized with the compositor clock (<code>DCompositionWaitForCompositorClock</code>), with the high-resolution timer as fallback. Grid rearrangements use a critically damped spring, so cards that get a new destination mid-motion keep their speed instead of restarting, and falling cards are redirected mid-air without jumps.</li>
+<li><strong>Virtual desktops</strong> – cards follow their window's virtual desktop (windows pinned to all desktops keep their card everywhere). On Ctrl+Win+Arrow switches, cards of the desktop being left are hidden at the key press instead of after the shell's slide animation, so they no longer linger on the new desktop.</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li><strong>Content shift when a card hands over to the restored window</strong> – cards used the system frame metrics to crop the invisible resize borders, which don't match apps that draw their own frame (browsers, WinUI/XAML, Electron…), and assumed the wrong layout for the thumbnail source on recent Windows builds. The mod now measures each window's real borders (window rect vs. <code>DWMWA_EXTENDED_FRAME_BOUNDS</code>) when it's activated, moved or restored, and crops the thumbnail 1:1, so the card lines up with the real window to the pixel.</li>
+<li>If a restored window still doesn't land exactly where the card ended, the smooth-reveal snapshot fades out quickly instead of showing both images side by side, and the mismatch is logged.</li>
+<li>Cards no longer slide underneath other cards while being dragged.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Split: Running Left, Pinned Right 0.3.22]]></title>
+        <id>https://windhawk.net/mods/taskbar-split#9b75f1f18306184fcec90fc1e60f776c1eed9445</id>
+        <link href="https://windhawk.net/mods/taskbar-split"/>
+        <updated>2026-10-02T18:03:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix the jump-list menu opening over the old left-side slot when right-clicking closed pinned icons in the right section.</li>
+</ul>]]></content>
+        <author>
+            <name>Arkadiusz</name>
+            <uri>https://github.com/Artllex</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Mouse Trail 3.4.5.3]]></title>
+        <id>https://windhawk.net/mods/mouse-trail#8630d6bf9b605f1cd3dff532975d62a8deeec28f</id>
+        <link href="https://windhawk.net/mods/mouse-trail"/>
+        <updated>2026-10-02T18:03:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add：4 new color modes with optimizations to existing modes</li>
+<li>Add：3 new trail shape types</li>
+<li>Add：More click feedback effects</li>
+<li>Change：Refactored API abstraction layer for D3D11/D2D fallback, reduced maintenance cost</li>
+<li>Change：Improved particle cursor attraction — particles now follow the trail path toward the cursor</li>
+<li>Change：Improved physics clustering behavior</li>
+<li>Change：Improved performance mode visibility</li>
+<li>Fix：Color overflow issue</li>
+<li>Fix：Trail delay offset error</li>
+<li>Fix：Bezier smoothing not taking effect</li>
+</ul>]]></content>
+        <author>
+            <name>MCheng404</name>
+            <uri>https://github.com/MCheng404</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer Custom Shortcuts 1.5.0]]></title>
+        <id>https://windhawk.net/mods/explorer-custom-shortcuts#efe709cf5a54c20c661b4322a8367d278a95f9f1</id>
+        <link href="https://windhawk.net/mods/explorer-custom-shortcuts"/>
+        <updated>2026-10-02T18:03:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added <code>internal:showProperties</code> command to open native properties dialogs for selected items (capped at 15 windows to prevent Explorer hangs).</li>
+<li>Added <code>internal:openCmd</code> and <code>internal:openCmdAdmin</code> commands to launch Command Prompt with <code>pushd</code> directory resolution.</li>
+<li>Added <code>internal:createShortcut</code> command to generate <code>.lnk</code> files using the <code>IShellLink</code> interface with native collision renaming.</li>
+<li>Added <code>internal:packIntoFolder</code> command to move selected items into a new group folder with native <code>Ctrl+Z</code> undo support.</li>
+<li>Added <code>internal:bulkDuplicate</code> command to duplicate selected items in-place.</li>
+<li>Added <code>internal:openTerminal</code> and <code>internal:openTerminalAdmin</code> commands with automatic PowerShell fallback.</li>
+<li>Added <code>internal:openWithNotepad</code> command to open all selected files simultaneously in Notepad.</li>
+<li>Added <code>internal:toggleCheckboxes</code> command to toggle the native Windows item checkboxes setting globally.</li>
+<li>Rebuilt the toast notification engine with distinct visual states (<strong>Info</strong>, <strong>Success</strong>, <strong>Error</strong>) and colorblind-friendly error indicators.</li>
+<li>Added customizable screen positioning (9 anchor points) and display duration settings for notifications.</li>
+<li>Implemented multi-monitor dynamic anchoring and per-monitor DPI scaling for toast notifications.</li>
+<li>Added the <code>%d_name</code> token to extract only the active tab's folder name.</li>
+<li>Added <code>Ctrl+Alt+Enter</code> mapped to <code>internal:showProperties</code> in the default settings configuration.</li>
+<li>Improved notification fade-out animations by calculating dynamic timing instead of using hardcoded sleep loops.</li>
+</ul>]]></content>
+        <author>
+            <name>ArvindSaini978</name>
+            <uri>https://github.com/ArvindSaini978</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Enhanced Disk Usage 1.2.0]]></title>
+        <id>https://windhawk.net/mods/enhanced-disk-usage#e6b8b838e544d8cd7520efd7ab45581422170e19</id>
+        <link href="https://windhawk.net/mods/enhanced-disk-usage"/>
+        <updated>2026-10-02T18:03:25.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>separate disk bar and text customization toggles</li>
+<li>updated text formatting to support any subset of stats in any order</li>
+<li>independent bold toggles for free, used, total, and both percentages</li>
+<li>added used percentage (%p) and free percentage (%fp) stats</li>
+<li>added unit normalization (ex show 1.5TB as 1536GB, or 512GB as 0.5TB)</li>
+<li>optional unit precision (0-10 decimals when converting units) and separate percentage precision (0-10)</li>
+</ul>]]></content>
+        <author>
+            <name>bbmaster123</name>
+            <uri>https://github.com/bbmaster123</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Win32 UI Modernizer 1.0.3]]></title>
+        <id>https://windhawk.net/mods/win32-ui-modernizer#50f4b88cfb44c00344966688db3b0a275614857b</id>
+        <link href="https://windhawk.net/mods/win32-ui-modernizer"/>
+        <updated>2026-10-02T18:03:21.000Z</updated>
+        <content type="html"><![CDATA[<h3 id="added">Added</h3>
+<ul>
+<li>Mica surface for File Explorer, with content-pane and opaque variants</li>
+<li>Open/Save dialogs follow that surface, with matching shades, dividers and scrollbars</li>
+<li>Collapsible navigation pane, with an animated hamburger button and an icon rail</li>
+<li>Optional automatic collapse the way WinUI's NavigationView does it</li>
+<li>Expand and collapse animation for navigation pane folders</li>
+<li>Multi-color Fluent icons for the navigation pane</li>
+<li>Modern shortcut overlay arrow</li>
+<li>DirectWrite text in Explorer, file pickers and desktop icon labels</li>
+<li>Single-line property-sheet tabs</li>
+<li>Insertion mark extended to list views and the desktop</li>
+<li>About dialog also covered in the Registry Editor and MMC consoles, with an animated logo</li>
+<li>Accent logo in the Alt+F4 "Shut Down Windows" banner</li>
+<li>Acrylic menus in light mode</li>
+<li>Experimental MMC support</li>
+<li>Mica background for the Registry Editor, with its value list as a card</li>
+<li>Task dialogs laid out like WinUI's ContentDialog</li>
+<li>Buttons, check boxes, radios, ComboBox and list selection restyled from WinUI's own templates</li>
+<li>Control borders antialiased with WinUI's corner radius, matching the modern GroupBox</li>
+<li>Legacy address and search boxes styled like the other text fields</li>
+<li>Progress bar colors taken from WinUI's ProgressBar</li>
+<li>Control Panel home page text in WinUI colors</li>
+<li>Dark surfaces on WinUI's tokens: #202020 base outside File Explorer, #2B2B2B for property sheets and tab panes</li>
+<li>Group headers without the separator line, like current File Explorer</li>
+<li>Drag and drop redrawn with rounded backgrounds, Fluent action badges and DirectWrite text</li>
+<li>Disk usage chart redrawn as an animated WinUI ring</li>
+<li>Hover pill on hyperlinks, modern rename editors</li>
+<li>Pill, selection and ReBar glyph motion retimed from WinUI's own keyframes</li>
+<li>Scrollbars continue the background of the control they scroll</li>
+<li>Trackbars fill the track up to the thumb, in accent, like WinUI's Slider</li>
+<li>Trackbar track and thumb take their colors and elevation border from WinUI's Slider</li>
+<li>Simplified Chinese translation, by SS3-4001</li>
+<li>Related settings merged into fewer options</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li>Dark mode now changes 7 system-wide colors instead of 30, the rest resolved in-process</li>
+<li>System colors restored on unload, including entries left behind by earlier versions</li>
+<li>Threads, timers and window changes left behind after the mod unloads</li>
+<li>Crash when a file picker's breadcrumb drop-down closed</li>
+<li>Crash when reloading the mod inside Explorer</li>
+<li>Registry Editor freezing on locales that parse decimal numbers differently</li>
+<li>Registry Editor tree scrollbars opening white or keeping stale pixels after a resize</li>
+<li>Dark mode following the system theme instead of the app theme</li>
+<li>Dark mode forcing the modern scrollbar on, with no way to turn it off</li>
+<li>Dark mode leaking into excluded processes, including accent colors resolved from the system instead of the window</li>
+<li>Disabled and read-only fields painted dark in excluded processes</li>
+<li>Edit focus line using the dark accent in light apps under a dark system</li>
+<li>Primary buttons enabled after a dialog opens missing their accent fill until hovered</li>
+<li>Progress bar fill using the system accent variant instead of the window's</li>
+<li>Progress bar track not scaling with the DPI</li>
+<li>Navigation pane chevron and pill animations interfering between windows</li>
+<li>Desktop icons covering the wallpaper with an opaque dark fill</li>
+<li>White backgrounds in the permissions dialog and on the second AeroWizard page</li>
+<li>Seam around a focused edit in ComboBoxEx32, in both light and dark</li>
+<li>Menu borders never reaching light mode</li>
+<li>Tooltip border color never being applied</li>
+<li>"Previous Versions" DirectUI list staying light</li>
+<li>Legacy address bar breadcrumb repaint desync and drop-down recursion</li>
+<li>Modern borders drawn around scrollbars</li>
+<li>Tooltip text rendering over acrylic</li>
+<li>Black hover text on tree items in dark mode</li>
+<li>Gradient showing through the property-sheet tabs of the permissions editor</li>
+<li>Dark system colors not restored after an external theme change</li>
+<li>A dialog's own background brush being overridden in dark mode</li>
+<li>The mod reverting Explorer's app-mode preference on unload</li>
+<li>Shared color data opened to any process instead of the current user and SYSTEM</li>
+</ul>
+<h3 id="performance">Performance</h3>
+<ul>
+<li>Hot paint paths moved off Direct2D to GDI+ and direct pixel writes, idle animation threads blocked instead of polling, accent/theme lookups cached, and private symbols resolved once per module</li>
+</ul>]]></content>
+        <author>
+            <name>crazyboyybs</name>
+            <uri>https://github.com/crazyboyybs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Instant Taskbar Thumbnail Previews 1.1.0]]></title>
         <id>https://windhawk.net/mods/instant-taskbar-thumbnail-previews#0796806625b29f982264f16488f7e9b4d9f956dc</id>
@@ -387,238 +578,6 @@ verified by disassembly on uDWM.dll 10.0.26100.9278.</li>
         <author>
             <name>m417z</name>
             <uri>https://github.com/m417z</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Titlebar For Everyone 0.5]]></title>
-        <id>https://windhawk.net/mods/titlebar-for-everyone#46656e53918bf748150677074046be05de1d8de4</id>
-        <link href="https://windhawk.net/mods/titlebar-for-everyone"/>
-        <updated>2026-09-30T15:01:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Exclude more problematic Visual Studio dialogs</li>
-<li>Exclude Steam's in-game overlay windows (by @darkthemer)</li>
-<li>Add an option to skip the Steam JavaScript injection, for users of the <a href="https://github.com/ricewind012/steam-change-window-params">"Change Window Parameters" Millennium extension</a></li>
-</ul>]]></content>
-        <author>
-            <name>Ingan121</name>
-            <uri>https://github.com/Ingan121</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Thumbnail Stats 1.2]]></title>
-        <id>https://windhawk.net/mods/taskbar-thumbnail-stats#75ca8ca0c2b754242492f73b632a79dee9432643</id>
-        <link href="https://windhawk.net/mods/taskbar-thumbnail-stats"/>
-        <updated>2026-09-30T12:03:25.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbarthumbnailstats">Taskbar Thumbnail Stats</h1>
-<p>Adds a line with live process information to the Windows 11 taskbar
-thumbnails (the previews shown when hovering an open app), inside the
-thumbnail, over the bottom of the preview image or below it:</p>
-<ul>
-<li><strong>RAM</strong> in use (private working set, like Task Manager)</li>
-<li><strong>CPU</strong> usage in percent, updated every second</li>
-<li><strong>version</strong> of the executable</li>
-</ul>
-<p>Example: <code>RAM 412 MB · CPU 3.4% · v131.0.2</code></p>
-<p><img src="https://i.imgur.com/qxWa9bC.png" alt="Screenshot" /></p>
-<p>For multi-process programs (Firefox, Chrome, Edge, Teams…) the values can
-include the child processes too, to get closer to what Task Manager shows.</p>
-<p>The line can use the Windows accent color, a custom color or no background
-at all, and the font size and text color can be customized.</p>
-<p>Works with the new XAML thumbnails of Windows 11 (tested on 25H2). It does
-not work with taskbar replacements such as StartAllBack or ExplorerPatcher.</p>
-<p>The statistics are collected on a background thread, so the taskbar is never
-slowed down, and only while a thumbnail is actually visible.</p>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Standard Title Bar Colors 1.0.0]]></title>
-        <id>https://windhawk.net/mods/standard-title-bar-colors#ffb89c1c92efa5f9d74a39e58f1b55972e255a21</id>
-        <link href="https://windhawk.net/mods/standard-title-bar-colors"/>
-        <updated>2026-09-30T07:02:49.000Z</updated>
-        <content type="html"><![CDATA[<p>Explorer overrides its titlebar colors. This stops that.
-If you're not applying your accent color to the titlebars, you may not notice the difference.</p>
-<p>If you disable this mod, toggling the focus of an open window will prompt Explorer to override the
-color again.</p>
-<p>This mod can probably be applied, at your own risk, to other apps that use DwmSetWindowAttribute to
-change their titlebar colors.</p>
-<p>Derived from <code>win11-custom-title-bar-colours</code> by Th3Fanbus.</p>
-<p>Before: Explorer does its own thing.</p>
-<p><img src="https://raw.githubusercontent.com/j--m/windhawk-mods/refs/heads/pages/before.png" alt="image of two apps with different titlebar colors" /></p>
-<p>After: They match!</p>
-<p><img src="https://raw.githubusercontent.com/j--m/windhawk-mods/refs/heads/pages/after.png" alt="image of two apps with same titlebar colors" /></p>]]></content>
-        <author>
-            <name>j--m</name>
-            <uri>https://github.com/j--m</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[MicSwitch 2.1.0]]></title>
-        <id>https://windhawk.net/mods/microswap#a9fbca8f625ac2e8d3150da96b212090c49b432e</id>
-        <link href="https://windhawk.net/mods/microswap"/>
-        <updated>2026-09-30T07:02:45.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>Live input meter:</strong> Added a live microphone level meter inside the volume slider popup.</li>
-<li><strong>Mute sound cues:</strong> Optional Windows sound cues when toggling mute state.</li>
-<li><strong>Actual endpoint mute state:</strong> Accurately reflects endpoint mute state directly from WASAPI notifications.</li>
-<li><strong>Settings focus restoration:</strong> Re-opening Mod Settings while already running brings the existing window to the foreground.</li>
-<li><strong>Hook-free architecture:</strong> Completely removed low-level keyboard/mouse hooks, eliminating anti-cheat interference and hook chain overhead.</li>
-<li><strong>Bluetooth auto-reconnect:</strong> Automatically reconnects Bluetooth microphones and headsets when powered back on without requiring manual re-selection in settings.</li>
-<li><strong>Persistent disconnected devices:</strong> Disconnected microphones are remembered in settings instead of being removed or unselected on save.</li>
-<li><strong>Explorer restart recovery:</strong> Tray icon restores cleanly after Windows Explorer updates or restarts.</li>
-<li><strong>Multi-monitor volume slider:</strong> Volume slider popup is properly clamped to the bottom edge of secondary monitors.</li>
-<li><strong>Security:</strong> Hardened DLL search paths to prevent library hijacking.</li>
-</ul>]]></content>
-        <author>
-            <name>BlackPaw</name>
-            <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Classic WebView Pane 2.15]]></title>
-        <id>https://windhawk.net/mods/classic-webview-pane#c871a2fda4c89a8f1d224abb4f02eda91cb1a98b</id>
-        <link href="https://windhawk.net/mods/classic-webview-pane"/>
-        <updated>2026-09-30T07:02:42.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="classicwebviewpane">Classic WebView Pane</h1>
-<blockquote>
-  <p><strong>Tested only on Windows 11 24H2 (build 26100).</strong> It has not been tried on any other version of Windows and may not work there.</p>
-</blockquote>
-<p>Windows 2000 showed a pane on the left of the file list - the <em>WebView</em> - with
-the icon and the name of whatever was selected, a divider line under it, a line
-of text and a short list of <em>See also</em> links. Windows Vista dropped it, and
-Windows 11 has no trace of it left.</p>
-<p>This mod puts it back. The icon and the name follow the selection, and fall
-back to the folder itself when nothing is selected; the links navigate the same
-window the way they used to. On top of that, the pane brings back two things
-Windows 2000 showed there:</p>
-<ul>
-<li>authentic descriptions of the system folders - This PC, Documents, Recycle
-Bin and the others;</li>
-<li>for a drive, its capacity, used and free space and the three-dimensional pie
-chart of how full it is.</li>
-</ul>
-<p><img src="https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/my-computer.png" alt="This PC, with the description of the folder" /></p>
-<p><img src="https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/drive.png" alt="A drive, with its capacity and how full it is" /></p>
-<p><img src="https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/recycle-bin.png" alt="The Recycle Bin" /></p>
-<h2 id="howitworks">How it works</h2>
-<p>The content area of an Explorer window is not a set of child windows, it is a
-DirectUI tree. <code>shell32</code> keeps its layout in <code>UIFILE</code> resources - one per folder
-type - and hands the whole thing to <code>DirectUI::DUIXmlParser::SetXML</code> in
-<code>dui70.dll</code> as one XML document, which is the single place where the layout of
-every Explorer window can be seen and changed.</p>
-<p>The mod hooks that function and inserts one element next to the one that hosts
-the file list:</p>
-<pre><code>&lt;Element layoutpos="Client" layout="shellborderlayout()"&gt;
-  &lt;BannerContainer .../&gt;
-  &lt;Element id="atom(ClassicWebViewPane)" layoutpos="left" .../&gt;   &lt;-- inserted
-  &lt;Element id="atom(ViewHostContainer)" ...&gt;
-  &lt;DetailsContainer layoutpos="right"/&gt;
-</code></pre>
-<p>That element is only a spacer. Everything inside the pane - the icon, the name,
-the divider, the text and the links - is drawn by the mod into a child window
-of its own, which it keeps over the gap the spacer opens up between the folder
-tree and the file list.</p>
-<p>It is done that way because the parts of the shell the pane would otherwise be
-built out of are gone. The Windows 2000 recreations for Windows 10 fill their
-header with <code>PreviewThumbnail</code> and <code>PreviewMetadata</code> elements bound to
-<code>PreviewThumbnailModule</code> and <code>PreviewMetadataModule</code>. On Windows 11 24H2 those
-module names do not appear in <code>shell32</code> at all any more: the element classes
-still exist and still take up space, but nothing ever fills them, so a header
-built that way comes out empty. Drawing it directly also means the pane needs no
-patched <code>shellstyle.dll</code> and looks right on the Classic theme, where the theme
-colour functions the shell's own style sheets use return nothing.</p>
-<p>The contents come from the shell view itself: the mod asks the
-<code>SHELLDLL_DefView</code> window of the folder for its <code>IShellBrowser</code>, and through it
-for the current folder and the selection, refreshing whenever the list reports
-that the selection changed.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li><p>In a narrow window the pane gives way first, as the WebView did in Windows
-2000: once the file list would be left with less than <em>Room kept for the file
-list</em>, the mod collapses the DirectUI spacer to nothing (through the element
-itself - <code>HWNDElement</code> is in the first pointer of the <code>DirectUIHWND</code>'s extra
-bytes, the spacer is found under it by its id) and hides the pane, and gives
-both back when the window is wide enough again. The pane also follows the
-folder tree and the file list whenever DirectUI moves, resizes or hides
-either, and keeps clear of the splitter next to the tree.</p></li>
-<li><p>The pictures of the Windows 2000 web view - the clouds or the coloured
-squares in the corner, and the bar in the colours of the Windows logo under
-the name - are built into the mod, and the clouds and the bar are shown by
-default, so the pane looks right straight after installing. Both can be
-switched off or come from a file of your own instead: BMP, GIF, PNG, JPEG and
-ICO are all read - <code>LoadImage</code> takes the BMPs and icons, the shell takes the
-rest. The picture is stretched across the pane at its own proportions with the
-pixels left alone by default, and it can also be given a width of its own, put
-above the name or at the bottom instead, and smoothed when scaled.</p></li>
-<li><p>Two things in DirectUI markup take the whole window down with them - the file
-list, the folder tree and all - while <code>SetXML</code> still reports success: an
-attribute the element class does not know, and a value the parser cannot
-read. Colours from the settings are checked against the names DirectUI
-actually accepts for that reason.</p></li>
-<li><p>The pane sits between the folder tree and the file list. In Windows 2000 the
-tree and the WebView replaced each other; here they can both be open.</p></li>
-<li><p>If you also inject a WebView pane through patched <code>shell32</code> resources - the
-WinClassic recreation with Resource Redirect, say - turn that off, or you get
-two panes.</p></li>
-<li><p>The texts of the pane follow the Windows display language. The defaults are
-the wording of the English Windows 2000 - <em>Select an item to view its
-description.</em>, <em>See also:</em>, <em>My Documents</em>, <em>Capacity:</em> and so on - and on a
-Russian Windows they are shown in the wording of the Russian Windows 2000
-instead. A text you change yourself is shown exactly as you typed it. The
-short description of a system folder (Documents, This PC, Recycle Bin and the
-others) is written for this mod and is shown in English or Russian the same
-way.</p></li>
-</ul>
-<hr />
-<h2 id="">По-русски</h2>
-<p>Windows 2000 показывала слева от списка файлов панель WebView: значок и имя
-выбранного объекта (или самой папки, если ничего не выделено), линию-разделитель
-под ними, строку описания и короткий список ссылок «Перейти к». В Windows Vista
-её убрали, в Windows 11 от неё не осталось ничего.</p>
-<p>Мод возвращает эту панель. Значок и имя следуют за выделением, а ссылки
-открывают папку в том же окне. Кроме того, панель возвращает то, что Windows
-2000 показывала в ней:</p>
-<ul>
-<li>аутентичные описания системных папок - «Мой компьютер», «Документы»,
-«Корзина» и других;</li>
-<li>для диска - ёмкость, занятое и свободное место и объёмную круговую диаграмму
-его заполненности.</li>
-</ul>
-<p>В узком окне панель, как и в Windows 2000, первой уступает место списку файлов.
-Скриншоты - выше, в английской части.</p>
-<p>Картинки веб-вида Windows 2000 - облака или цветные квадраты в углу и полоска
-в цветах логотипа Windows под именем - встроены в мод; облака и полоска
-включены по умолчанию, так что панель выглядит как надо сразу после установки.
-Вместо них можно указать свои файлы или выключить их.</p>
-<p>Внешний вид настраивается: ширина и сторона панели, размер значка, картинки,
-цвета, подписи и ссылки. Тексты по умолчанию берутся в формулировке
-Windows 2000 на языке интерфейса Windows: в русской Windows - «Выберите объект
-для просмотра его описания.», «Перейти к:», «Мои документы» и так далее.
-Изменённый вами текст показывается как есть.</p>
-<p>Если вы уже добавляете панель WebView через изменённые ресурсы <code>shell32</code>
-(например, WinClassic с Resource Redirect), отключите это, иначе панелей будет
-две.</p>
-<blockquote>
-  <p><strong>Проверено только на Windows 11 24H2 (сборка 26100).</strong> На других версиях Windows мод не проверялся и может не работать.</p>
-</blockquote>]]></content>
-        <author>
-            <name>appEW</name>
-            <uri>https://github.com/appEW</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Remove UWP titlebars Lite 1.3.0]]></title>
-        <id>https://windhawk.net/mods/native-titlebars-uwp-lite#196fcdb727a79e52a624264506fdd1928e4ec565</id>
-        <link href="https://windhawk.net/mods/native-titlebars-uwp-lite"/>
-        <updated>2026-09-30T01:03:16.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Fix immersive Alt-Tab switcher</li>
-</ul>]]></content>
-        <author>
-            <name>Anixx</name>
-            <uri>https://github.com/Anixx</uri>
         </author>
     </entry>
 </feed>

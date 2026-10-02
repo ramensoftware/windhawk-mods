@@ -1,3 +1,16 @@
+## 3.4.5.3 ([Oct 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/8630d6bf9b605f1cd3dff532975d62a8deeec28f/mods/mouse-trail.wh.cpp))
+
+- Add：4 new color modes with optimizations to existing modes
+- Add：3 new trail shape types
+- Add：More click feedback effects
+- Change：Refactored API abstraction layer for D3D11/D2D fallback, reduced maintenance cost
+- Change：Improved particle cursor attraction — particles now follow the trail path toward the cursor
+- Change：Improved physics clustering behavior
+- Change：Improved performance mode visibility
+- Fix：Color overflow issue
+- Fix：Trail delay offset error
+- Fix：Bezier smoothing not taking effect
+
 ## 3.4.4.0 ([Sep 28, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bfcbf010b49005e0b230d4dee351ccc4975d1143/mods/mouse-trail.wh.cpp))
 
 - Change：Reorganized settings into collapsible groups (will reset to defaults)
