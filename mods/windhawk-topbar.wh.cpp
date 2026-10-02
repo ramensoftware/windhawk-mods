@@ -1063,16 +1063,19 @@ void PopulateRecycleBinPanel();
 void PopulateSettingsPanel();
 void PopulateMediaPanel();
 void RefreshMediaButtonState();
-void ApplyBlurToAllOpenPopups();
+void ApplyBlurToAllOpenPopups(); 
+void ForceTopMostChildXamlPopups();
 void ApplyFlyoutBlurBrush(wuxc::Border const& border);
 void StripInheritedIslandBackgrounds();
 void ApplyWindowBackdrop(HWND hwnd);
 void ApplyModernWindowChrome(HWND hwnd);
 void ForceDisableWindowsTransparency(HWND hwnd); 
+void ForceXamlPopupToTop(HWND hwnd);
 std::wstring ReadTrayOrder();
 void SetTopBarContent(FrameworkElement content);
 void RepositionTopBarPopup();
 void EnsureTopBarPopupShown();
+void ReloadTopBarFully();
 void PromoteChildFlyoutPopups();
 HWND FindOpenChildFlyoutHwnd();
 void CenterChildFlyoutPopup(double matchedWidthDip, double matchedHeightDip);
@@ -1471,12 +1474,18 @@ static std::vector<wuxc::Primitives::FlyoutBase> g_openPopups;
 
 // Non-zero once the mod starts tearing down; background workers check it before
 // touching XAML or dispatching back to the UI thread.
-volatile LONG g_shuttingDown = 0;
-
-
+volatile LONG g_shuttingDown = 0; 
 
 void PromoteChildFlyoutPopups();
 
+// Runs while any child flyout is open and forces DWM's Mica/Acrylic
+// backdrop off every XAML popup HWND this process owns. DWM applies the
+// backdrop to a fresh popup HWND the moment XAML creates it, and the
+// periodic transparency kill in PinTopBarFlyoutHwnd only runs once a
+// second -- far too late to hide the ~1 s window where the tint sits above
+// the flyout content. This timer runs at 30 ms intervals, so the backdrop
+// is removed before the user sees it. It stops itself once the last flyout
+// closes, so it costs nothing when no flyout is open.
 void RegisterOpenPopup(wuxc::Primitives::FlyoutBase const& fb) {
     if (!fb) return;
     std::lock_guard<std::mutex> lock(g_openPopupMutex);
@@ -1508,11 +1517,18 @@ void RegisterOpenPopup(wuxc::Primitives::FlyoutBase const& fb) {
             });
         } catch (...) {}
     }
-    try { StripFlyoutPopupBackgrounds(fb); } catch (...) {}
+    // PopupRoot sits above the presenter and is only present once XAML has
+    // finished laying out the popup tree, so this runs a turn later. The
+    // z-order promotion runs on the same ticks so the flyout reaches the
+    // topmost band as soon as its HWND is visible — without it the popup
+    // sits behind other windows for up to a second, waiting for the next
+    // restore-timer tick.
     RunOnUiThread([fb] {
         try { StripFlyoutPopupBackgrounds(fb); } catch (...) {}
+        try { PromoteChildFlyoutPopups(); } catch (...) {}
         RunOnUiThread([fb] {
             try { StripFlyoutPopupBackgrounds(fb); } catch (...) {}
+            try { PromoteChildFlyoutPopups(); } catch (...) {}
         });
     });
 }
@@ -8452,18 +8468,36 @@ Style MakeFlyoutPresenterStyle(double width) {
     return style;
 }
 
+void ForceTopMostChildXamlPopups() {
+    if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) return;
+    struct Ctx { DWORD pid; HWND topBar; HWND island; HWND topbarPopup; };
+    Ctx ctx{ GetCurrentProcessId(), g_topBarHwnd, g_islandHwnd, g_topBarPopupHwnd };
+    EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+        auto* c = reinterpret_cast<Ctx*>(lp);
+        if (hwnd == c->topBar || hwnd == c->island || hwnd == c->topbarPopup) return TRUE;
+        DWORD pid = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid != c->pid) return TRUE;
+        if (!IsWindowVisible(hwnd)) return TRUE;
+        wchar_t cls[256]{};
+        if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return TRUE;
+        if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return TRUE;
+        RECT r{};
+        if (!GetWindowRect(hwnd, &r)) return TRUE;
+        if (r.right - r.left <= 0 || r.bottom - r.top <= 0) return TRUE;
+        ForceDisableWindowsTransparency(hwnd);
+        BOOL cloakOff = FALSE;
+        DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        return TRUE;
+    }, reinterpret_cast<LPARAM>(&ctx));
+    DwmFlush();
+}
+
 // The panel body is wrapped in a ScrollViewer so a long network or tray list
 // stays inside a sane height instead of running off the bottom of the screen.
 wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
-    std::wstring rootName(name);
-    std::wstring prefix = rootName;
-    const std::wstring suffix = L"FlyoutRoot";
-    if (prefix.size() > suffix.size() &&
-        prefix.compare(prefix.size() - suffix.size(), suffix.size(), suffix) == 0) {
-        prefix.erase(prefix.size() - suffix.size());
-    }
-    auto prefixed = [&](const wchar_t* tail) { return prefix + tail; };
-
     wuxc::StackPanel panel;
     panel.Name(name);
     panel.Spacing(1);
@@ -8472,7 +8506,6 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
     g_detachedStyleRoots.push_back(panel);  // Register panel so tree targets can find it
 
     wuxc::ScrollViewer scroller;
-    scroller.Name(winrt::hstring(prefixed(L"FlyoutScroller")));
     scroller.Content(panel);
     scroller.VerticalScrollBarVisibility(wuxc::ScrollBarVisibility::Auto);
     scroller.HorizontalScrollBarVisibility(wuxc::ScrollBarVisibility::Disabled);
@@ -8480,7 +8513,7 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
     scroller.MaxHeight(560);
 
     wuxc::Border blurHost;
-    blurHost.Name(winrt::hstring(prefixed(L"FlyoutBlurHost")));
+    blurHost.Name(L"FlyoutBlurHost");
     blurHost.CornerRadius(MakeCorner(kFlyoutCorner));
     blurHost.Padding(Thickness{12, 12, 12, 12});
     blurHost.HorizontalAlignment(HorizontalAlignment::Stretch);
@@ -8661,6 +8694,7 @@ wuxc::Flyout MakeControlFlyout(PCWSTR name, wuxc::StackPanel& contentOut) {
             }
             ApplyBlurToAllOpenPopups();
             ApplyAllControlStyles();
+            try { PromoteChildFlyoutPopups(); } catch (...) {}
         } catch (...) {
         }
     });
@@ -14236,18 +14270,12 @@ Style MakeMenuPresenterStyle() {
         setters.Append(Setter(wuxc::Control::FontWeightProperty(),
                               winrt::box_value(winrt::Windows::UI::Text::FontWeights::Bold())));
     }
-    wui::Color menuInitialTint;
-    if (!ParseBarColor(g_settings.topBarBackgroundColor,
-                       g_settings.topBarBackgroundOpacity,
-                       &menuInitialTint)) {
-        menuInitialTint = wui::ColorHelper::FromArgb(128, 0, 0, 0);
-    }
     setters.Append(Setter(wuxc::Control::BackgroundProperty(),
-                          winrt::box_value(wuxm::SolidColorBrush(menuInitialTint))));
+                          winrt::box_value(FlyoutBackgroundBrush())));
     setters.Append(Setter(wuxc::Control::BorderBrushProperty(),
-                          winrt::box_value(MakeBrush(0, 0, 0, 0))));
+                          winrt::box_value(MakeBrush(0x30, 0xFF, 0xFF, 0xFF))));
     setters.Append(Setter(wuxc::Control::BorderThicknessProperty(),
-                          winrt::box_value(Thickness{0, 0, 0, 0})));
+                          winrt::box_value(Thickness{1, 1, 1, 1})));
     setters.Append(Setter(wuxc::Control::CornerRadiusProperty(),
                           winrt::box_value(MakeCorner(kMenuCorner))));
     setters.Append(
@@ -20908,20 +20936,7 @@ FrameworkElement BuildTopBarContent() {
         }, L"\uE713"));
         menu.Items().Append(MakeMenuItem(L"Reload TopBar", [] {
             RunOnUiThread([] {
-                if (!g_topBarHwnd) return;
-                LoadSettings();
-                g_dpiScale = GetBarDpiScale();
-                g_barHeightPx = static_cast<int>(g_settings.barHeightDip * g_dpiScale + 0.5);
-                InvalidateStartAndSearchFlyouts();
-                SetTopBarContent(BuildTopBarContent());
-                BuildStartContextMenu();
-                BuildTaskContextMenu();
-                ApplyAllControlStyles();
-                ApplyVisibilitySettings();
-                UpdateResourceButton();
-                StripInheritedIslandBackgrounds();
-                PositionAppBar(g_topBarHwnd, g_barHeightPx);
-                RefreshTaskList(true);
+                try { ReloadTopBarFully(); } catch (...) {}
             });
         }, L"\uE895"));
         menu.Items().Append(MakeMenuItem(L"Restart Explorer", [] {
@@ -21664,8 +21679,31 @@ int GetAutoTopBarScale() {
 }
 
 HWND FindTopBarFlyoutHwnd() {
-    struct SearchCtx { DWORD pid; HWND result; };
-    SearchCtx ctx{ GetCurrentProcessId(), nullptr };
+    // Prefer a bar-shaped popup (monitor width, bar height), but fall back
+    // to whatever XAML popup this process owns when no bar-shaped candidate
+    // exists. XAML places the freshly created topbar popup at
+    // (0, -barHeight) on its first layout pass — the geometry-aware filter
+    // alone rejects that, g_topBarPopupHwnd stays null, and
+    // EnsureTopBarPopupShown's retry timer loops in the ShowAt branch,
+    // destroying and rebuilding the popup every ~180 ms (each ShowAt makes
+    // XAML throw away the current popup and create a fresh one). At the
+    // point this is called the topbar flyout is the only XAML popup open,
+    // so the fallback cannot pick up a control flyout or a menu.
+    struct SearchCtx {
+        DWORD pid;
+        int minWidth;
+        int maxHeight;
+        HWND barShaped;
+        HWND anyPopup;
+    };
+    RECT mr = GetBarMonitorRect();
+    SearchCtx ctx{
+        GetCurrentProcessId(),
+        (mr.right - mr.left) - 4,
+        g_barHeightPx + 8,
+        nullptr,
+        nullptr
+    };
     EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
         auto* c = reinterpret_cast<SearchCtx*>(lp);
         DWORD pid = 0;
@@ -21674,13 +21712,19 @@ HWND FindTopBarFlyoutHwnd() {
         if (hwnd == g_topBarHwnd || hwnd == g_islandHwnd) return TRUE;
         wchar_t cls[256]{};
         if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return TRUE;
-        if (wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup")) {
-            c->result = hwnd;
-            return FALSE;
-        }
-        return TRUE;
+        if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return TRUE;
+        if (!c->anyPopup) c->anyPopup = hwnd;
+        RECT r{};
+        if (!GetWindowRect(hwnd, &r)) return TRUE;
+        int w = r.right - r.left;
+        int h = r.bottom - r.top;
+        if (w < c->minWidth) return TRUE;
+        if (h <= 0 || h > c->maxHeight) return TRUE;
+        c->barShaped = hwnd;
+        return FALSE;
     }, reinterpret_cast<LPARAM>(&ctx));
-    return ctx.result;
+    if (ctx.barShaped) return ctx.barShaped;
+    return ctx.anyPopup;
 }
 
 void ClipIslandHwndToEmpty() {
@@ -21692,6 +21736,126 @@ void ClipIslandHwndToEmpty() {
 }
 
 void EnsureTopBarPopupShown();
+
+// XAML caches its monitor DPI scale against the DesktopWindowXamlSource /
+// WindowsXamlManager for the whole UI thread, not per popup. Nudging a popup
+// HWND with WM_DPICHANGED does nothing because XAML never re-reads the
+// source-level DPI. When the OS display scale changes we therefore have to
+// detach the content, drop the current XAML source, create a new one on the
+// topbar HWND (which by now lives on a monitor with the new DPI), and
+// rebuild every piece of UI against it. This is the only reliable way to
+// reset XAML's cached rasterization scale without restarting the thread.
+void RebuildXamlForDpiChange() {
+    if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) return;
+    if (!g_topBarHwnd || !IsWindow(g_topBarHwnd)) return;
+
+    Wh_Log(L"RebuildXamlForDpiChange: rebuilding XAML stack for new DPI");
+
+    // Hide every flyout so XAML tears them down before the source goes away.
+    try { if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) g_startMenuFlyout.Hide(); } catch (...) {}
+    try { if (g_searchFlyout && g_searchFlyout.IsOpen()) g_searchFlyout.Hide(); } catch (...) {}
+    try { if (g_displayFlyout) g_displayFlyout.Hide(); } catch (...) {}
+    try { if (g_soundFlyout) g_soundFlyout.Hide(); } catch (...) {}
+    try { if (g_wifiFlyout) g_wifiFlyout.Hide(); } catch (...) {}
+    try { if (g_bluetoothFlyout) g_bluetoothFlyout.Hide(); } catch (...) {}
+    try { if (g_batteryFlyout) g_batteryFlyout.Hide(); } catch (...) {}
+    try { if (g_resourceFlyout) g_resourceFlyout.Hide(); } catch (...) {}
+    try { if (g_mediaFlyout) g_mediaFlyout.Hide(); } catch (...) {}
+    try { if (g_settingsFlyout) g_settingsFlyout.Hide(); } catch (...) {}
+    try { if (g_startContextMenu) g_startContextMenu.Hide(); } catch (...) {}
+    try { if (g_taskContextMenu) g_taskContextMenu.Hide(); } catch (...) {}
+    try { if (g_appTitleContextMenu) g_appTitleContextMenu.Hide(); } catch (...) {}
+    try { if (g_startPowerMenu) g_startPowerMenu.Hide(); } catch (...) {}
+    try { if (g_startAccountFlyout) g_startAccountFlyout.Hide(); } catch (...) {}
+    try { if (g_startTileMenu) g_startTileMenu.Hide(); } catch (...) {}
+    try { if (g_searchResultMenu) g_searchResultMenu.Hide(); } catch (...) {}
+
+    // Tear down the topbar popup and its references.
+    g_topBarAllowClose = true;
+    try { if (g_topBarPopup) g_topBarPopup.Hide(); } catch (...) {}
+    g_topBarAllowClose = false;
+
+    g_topBarPopup = nullptr;
+    g_topBarPopupHwnd = nullptr;
+    g_topBarPopupCanvas = nullptr;
+    g_topBarPopupAnchor = nullptr;
+    g_subclassedPopupHwnd = nullptr;
+
+    // Drop every XAML reference — the entire tree is about to be destroyed.
+    g_startMenuFlyout = nullptr;
+    g_searchFlyout = nullptr;
+    g_startPowerMenu = nullptr;
+    g_startAccountFlyout = nullptr;
+    g_startTileMenu = nullptr;
+    g_searchResultMenu = nullptr;
+    g_displayFlyout = nullptr;
+    g_soundFlyout = nullptr;
+    g_wifiFlyout = nullptr;
+    g_bluetoothFlyout = nullptr;
+    g_batteryFlyout = nullptr;
+    g_resourceFlyout = nullptr;
+    g_mediaFlyout = nullptr;
+    g_settingsFlyout = nullptr;
+    g_startContextMenu = nullptr;
+    g_taskContextMenu = nullptr;
+    g_appTitleContextMenu = nullptr;
+
+    g_namedElements.clear();
+    g_detachedStyleRoots.clear();
+    g_rootElement = nullptr;
+    g_taskListPanel = nullptr;
+    g_leftPanel = nullptr;
+    g_centerPanel = nullptr;
+    g_clockPanel = nullptr;
+    g_trayPanel = nullptr;
+    g_settingsButton = nullptr;
+
+    {
+        std::lock_guard<std::mutex> lock(g_openPopupMutex);
+        g_openPopups.clear();
+        g_anyChildFlyoutOpen = false;
+    }
+
+    // Detach content from the current source and destroy it. Only the
+    // DesktopWindowXamlSource is recreated here — the WindowsXamlManager
+    // (per-thread XAML host) is left alone; recreating the source itself is
+    // what resets the cached DPI for the new island.
+    try { if (g_desktopSource) g_desktopSource.Content(nullptr); } catch (...) {}
+    g_desktopSource = nullptr;
+    g_islandHwnd = nullptr;
+
+    try {
+        g_desktopSource = wuxh::DesktopWindowXamlSource();
+        auto native = g_desktopSource.as<IDesktopWindowXamlSourceNative>();
+        winrt::check_hresult(native->AttachToWindow(g_topBarHwnd));
+        winrt::check_hresult(native->get_WindowHandle(&g_islandHwnd));
+    } catch (winrt::hresult_error const& ex) {
+        Wh_Log(L"RebuildXamlForDpiChange: attach failed: %08X %s",
+               static_cast<unsigned>(ex.code().value), ex.message().c_str());
+        return;
+    }
+
+    // Size the new island to the new bar geometry at the new DPI.
+    RECT mr = GetBarMonitorRect();
+    SetWindowPos(g_islandHwnd, nullptr, 0, 0,
+                 mr.right - mr.left, g_barHeightPx,
+                 SWP_NOZORDER | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+
+    // Rebuild the whole UI against the fresh source.
+    InstallGlobalMenuResources();
+    SetTopBarContent(BuildTopBarContent());
+    BuildStartContextMenu();
+    BuildTaskContextMenu();
+    BuildAppTitleContextMenu();
+    ApplyAllControlStyles();
+    ApplyVisibilitySettings();
+    UpdateResourceButton();
+    StripInheritedIslandBackgrounds();
+    PositionAppBar(g_topBarHwnd, g_barHeightPx);
+    RefreshTaskList(true);
+
+    Wh_Log(L"RebuildXamlForDpiChange: complete");
+}
 
 // Closes whichever control flyout is currently open. Called from the popup
 // subclass on a mouse-down so that a click on the topbar while a child
@@ -21705,11 +21869,6 @@ void EnsureTopBarPopupShown();
 void PromoteChildFlyoutPopups() {
     HWND topBar = g_topBarPopupHwnd;
     if (!topBar || !IsWindow(topBar)) return;
-
-    ULONGLONG now = GetTickCount64();
-    ULONGLONG last = g_lastPromoteTick.load();
-    if (now - last < 200) return;
-    g_lastPromoteTick.store(now);
 
     std::vector<HWND> popups;
     EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
@@ -23641,6 +23800,38 @@ void PinTopBarFlyoutHwnd() {
         DemoteTopBarForFullscreen();
         return;
     }
+
+    // Adopt the newest popup HWND every tick. XAML creates a fresh popup
+    // HWND one frame to a second after a topbar reload, and our previous
+    // reference goes stale: it points at a popup XAML no longer owns, the
+    // new popup is never repositioned, and the bar appears either missing
+    // (new popup off the top of the screen) or wrong. FindTopBarFlyoutHwnd
+    // returns the topmost XAML popup owned by this process, which after a
+    // reload is the new one.
+    {
+        HWND newest = FindTopBarFlyoutHwnd();
+        if (newest && newest != g_topBarPopupHwnd) {
+            Wh_Log(L"PinTopBarFlyoutHwnd: popup HWND changed %p -> %p",
+                   g_topBarPopupHwnd, newest);
+            g_topBarPopupHwnd = newest;
+            g_forcePopupPosition = false;
+            g_replaceAttempts = 0;
+        }
+    }
+    // Adopt the newest XAML popup HWND owned by this process on every tick.
+    // XAML destroys and recreates the popup HWND roughly one second after
+    // every reload; without this our reference points at a popup that no
+    // longer exists and position-forcing is a no-op.
+    {
+        HWND newest = FindTopBarFlyoutHwnd();
+        if (newest && newest != g_topBarPopupHwnd) {
+            Wh_Log(L"PinTopBarFlyoutHwnd: adopting popup HWND %p -> %p",
+                   g_topBarPopupHwnd, newest);
+            g_topBarPopupHwnd = newest;
+            g_forcePopupPosition = false;
+            g_replaceAttempts = 0;
+        }
+    }
     if (!g_topBarPopupHwnd || !IsWindow(g_topBarPopupHwnd)) {
         g_topBarPopupHwnd = FindTopBarFlyoutHwnd();
     }
@@ -23666,11 +23857,42 @@ void PinTopBarFlyoutHwnd() {
     }
     BOOL cloakOff = FALSE;
     DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
-    SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+
+    // Force the popup into the reserved strip whenever it is off-position.
+    // This is what catches the fresh popup XAML creates after a reload:
+    // EnsureTopBarPopupShown's forced-position branch settles to a 5 s
+    // retry cadence once the bar is stable, so between a reload and the
+    // next tick the new popup would sit off-screen. PinTopBarFlyoutHwnd
+    // runs every second from the restore timer, so adopting the new HWND
+    // above and then forcing it here gets the bar on screen within one
+    // tick of the reload.
+    {
+        RECT mr = GetBarMonitorRect();
+        RECT actual{};
+        bool offPosition = false;
+        if (GetWindowRect(g_topBarPopupHwnd, &actual)) {
+            offPosition = (actual.left != mr.left || actual.top != mr.top);
+        }
+        if (g_forcePopupPosition || offPosition) {
+            SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST,
+                         mr.left, mr.top,
+                         mr.right - mr.left, g_barHeightPx,
+                         SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+            if (!g_forcePopupPosition) {
+                g_forcePopupPosition = true;
+                Wh_Log(L"PinTopBarFlyoutHwnd: popup was off-position, forcing to (%ld,%ld)-(%ld,%ld)",
+                       mr.left, mr.top, mr.right, mr.bottom);
+            }
+        } else {
+            SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
+    }
+
     if (g_anyChildFlyoutOpen.load()) {
         PromoteChildFlyoutPopups();
     }
+
     ClipIslandHwndToEmpty();
 }
 
@@ -23696,8 +23918,127 @@ void RepositionTopBarPopup() {
     PinTopBarFlyoutHwnd();
 }
 
+// XAML registers an input-site rectangle for every popup HWND the moment it
+// creates one, and it never re-evaluates that rectangle on its own. Moving
+// the popup with SetWindowPos, or changing the monitor DPI, both leave the
+// input-site stale: clicks still work (Windows hit-tests the real HWND) but
+// hover is routed through XAML's old rectangle, so it lands offset or dies.
+//
+// The only way to recompute it is to let XAML itself destroy and recreate
+// the popup HWND — a Hide() followed by ShowAt() on the next dispatcher
+// turn. A plain Win32 ShowWindow cycle does not touch it.
+static std::atomic<bool> g_reShowPending{false};
+
+// XAML records the DPI scale against the popup HWND the moment it creates
+// it and never re-queries on its own. When the OS display scale changes and
+// we rebuild the popup, XAML reuses the DPI it captured against the previous
+// popup — so content laid out at 45 DIP is rendered at 1 px/DIP instead of
+// 1.25 px/DIP, and the whole bar comes out 36 px tall instead of 45. Opening
+// the Start menu forces a fresh layout pass that happens to re-query the
+// correct DPI, which is why the bar snaps back to the right size only after
+// that.
+//
+// Sending WM_DPICHANGED to the popup HWND directly is the only way to make
+// XAML's popup manager re-read the monitor DPI without tearing the entire
+// XamlIsland down.
+static void ForcePopupDpiRecalc(HWND popupHwnd) {
+    if (!popupHwnd || !IsWindow(popupHwnd)) return;
+    HMONITOR mon = MonitorFromWindow(popupHwnd, MONITOR_DEFAULTTONEAREST);
+    UINT dpiX = 96, dpiY = 96;
+    if (FAILED(GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) return;
+    RECT r{};
+    if (!GetWindowRect(popupHwnd, &r)) return;
+    RECT suggested = r;
+    DWORD_PTR res = 0;
+    SendMessageTimeout(popupHwnd, WM_DPICHANGED,
+                       MAKEWPARAM(dpiX, dpiY),
+                       reinterpret_cast<LPARAM>(&suggested),
+                       SMTO_ABORTIFHUNG, 500, &res);
+    Wh_Log(L"ForcePopupDpiRecalc: sent WM_DPICHANGED dpi=%u to popup %p",
+           dpiX, popupHwnd);
+}
+
+static void FinishReShowTopBarPopup() {
+    // The flyout's HWND survives Hide() (XAML reuses it), so
+    // EnsureTopBarPopupShown's "correct == true" fast path would only
+    // re-ShowWindow the stale HWND — XAML has already torn the flyout's
+    // visual tree down, so nothing would ever be painted into it again.
+    // Dropping the cached references forces the rebuild branch that calls
+    // ShowAt against the current tree.
+    g_topBarPopupHwnd = nullptr;
+    g_subclassedPopupHwnd = nullptr;
+
+    // Run deferred — calling ShowAt synchronously from inside the Closed
+    // handler would re-enter XAML while it is still unwinding the old
+    // flyout's state.
+    RunOnUiThread([] {
+        try { EnsureTopBarPopupShown(); } catch (...) {}
+        RunOnUiThread([] {
+            try { EnsureTopBarPopupShown(); } catch (...) {}
+        });
+    });
+}
+
+void ReShowTopBarPopupViaXaml() {
+    if (!g_topBarPopup) return;
+
+    auto anchorIt = g_namedElements.find(L"StartMenuAnchor");
+    if (anchorIt == g_namedElements.end()) {
+        Wh_Log(L"ReShowTopBarPopupViaXaml: no anchor registered");
+        return;
+    }
+
+    Wh_Log(L"ReShowTopBarPopupViaXaml: performing XAML-level re-show");
+
+    // The flyout can be recreated between calls (ReloadTopBarFully does a full
+    // XAML rebuild, and every scale/monitor change runs it), so a one-shot
+    // "already installed" flag would leave every flyout after the first
+    // without a Closed handler. Attach a fresh handler to whichever flyout
+    // is current — old flyout instances are destroyed along with their
+    // handlers when the tree is rebuilt.
+    try {
+        g_topBarPopup.Closed([](auto&&, auto&&) {
+            if (!g_reShowPending.exchange(false)) return;
+            Wh_Log(L"ReShowTopBarPopupViaXaml: Closed fired, re-showing");
+            g_topBarAllowClose = false;
+            FinishReShowTopBarPopup();
+        });
+    } catch (...) {
+        return;
+    }
+
+    g_topBarAllowClose = true;
+    g_reShowPending = true;
+
+    try { g_topBarPopup.Hide(); } catch (...) {}
+
+    // Safety net: if Closed never fires (Hide() no-ops on a flyout XAML
+    // already considers closed), reset the guard and re-show manually.
+    // 800 ms is long enough that a genuine Closed has definitely fired.
+    RunInBackground([] {
+        if (WaitForSingleObject(g_stopEvent, 800) == WAIT_OBJECT_0) return;
+        RunOnUiThread([] {
+            if (g_reShowPending.exchange(false)) {
+                Wh_Log(L"ReShowTopBarPopupViaXaml: safety net fired");
+                g_topBarAllowClose = false;
+                FinishReShowTopBarPopup();
+            }
+        });
+    });
+}
+
 static bool s_everShown = false;
 static bool s_startupFlagCleared = false;
+
+// Last monitor rect the bar content was laid out against. The restore timer
+// polls GetBarMonitorRect() and, when the rect changes (resolution switch,
+// monitor swap, scaling change), rebuilds the content so the DIP layout and
+// the scaler's RenderTransform are recomputed. WM_DISPLAYCHANGE is not
+// delivered reliably to WS_POPUP | WS_EX_TOOLWINDOW windows on all Windows
+// builds, so the poll is what actually catches the change.
+static RECT g_lastBarMonitorRect{};
+static bool g_lastBarMonitorRectValid = false;
+static double g_lastOsScale = -1.0;
 
 // Renders the popup HWND via PrintWindow with PW_RENDERFULLCONTENT and
 // checks whether any pixels vary. A popup whose XAML composition layer
@@ -23784,14 +24125,137 @@ static bool PopupRenderingState(HWND hwnd, bool* outRendering) {
 // the forced composition reset both fire on every mod enable, each one
 // hide/show'ing the popup and making the bar visibly blink.
 static bool IsRecentColdBoot() {
-    ULONGLONG uptime = GetTickCount64();
-    return uptime < 5ULL * 60ULL * 1000ULL;
+    // Process age, not system uptime. The XAML input-site registration can
+    // fail exactly as it does on a cold boot whenever the mod process is
+    // fresh — after a reboot, after the user toggles the mod, or after
+    // Explorer restarts. Anchoring on system uptime meant a fresh mod
+    // process on an already-running system never got the boot rebuild, and
+    // the hover bug it fixes persisted. The rebuild restarts the topbar
+    // thread, which is the only reliable way to reset XAML's input-site
+    // state without a full XAML stack rebuild.
+    static ULONGLONG s_processStartTick = 0;
+    if (s_processStartTick == 0) {
+        s_processStartTick = GetTickCount64();
+    }
+    return (GetTickCount64() - s_processStartTick) < 60ULL * 1000ULL;
 }
 
 void EnsureTopBarPopupShown() {
+    {
+        static std::atomic<ULONGLONG> s_lastCallLog{0};
+        ULONGLONG now = GetTickCount64();
+        if (now - s_lastCallLog.load() > 800) {
+            s_lastCallLog = now;
+            Wh_Log(L"EnsureTopBarPopupShown CALLED: popup=%p anchor=%p topbar=%p visible=%d island=%p",
+                   g_topBarPopup ? winrt::get_abi(g_topBarPopup) : nullptr,
+                   g_topBarPopupAnchor ? winrt::get_abi(g_topBarPopupAnchor) : nullptr,
+                   g_topBarHwnd,
+                   g_topBarHwnd && IsWindowVisible(g_topBarHwnd) ? 1 : 0,
+                   g_islandHwnd);
+        }
+    }
     if (!g_topBarPopup || !g_topBarPopupAnchor) return;
 
+    // If a live popup HWND already exists, we have already called ShowAt on
+    // the flyout successfully. Calling ShowAt again makes XAML destroy the
+    // existing popup and create a fresh one — a fresh HWND, a fresh XAML
+    // input-site, a fresh layout pass — and the bar visibly jumps or
+    // disappears each time. That is the cycle the retry timer was stuck in:
+    // ~180 ms per ShowAt, popup replaced on every tick, position never
+    // settling. Force the geometry on the existing HWND instead; it is
+    // synchronous and does not touch XAML's popup lifecycle.
+    if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+        RECT mr = GetBarMonitorRect();
+        RECT actual{};
+        if (GetWindowRect(g_topBarPopupHwnd, &actual)) {
+            bool wrongPos  = (actual.left != mr.left || actual.top != mr.top);
+            bool wrongSize = ((actual.right - actual.left) != (mr.right - mr.left)) ||
+                             ((actual.bottom - actual.top) != g_barHeightPx);
+            if (wrongPos || wrongSize) {
+                g_suppressPopupPositionLock = true;
+                SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST,
+                             mr.left, mr.top,
+                             mr.right - mr.left, g_barHeightPx,
+                             SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+                g_suppressPopupPositionLock = false;
+            }
+        }
+        if (!IsWindowVisible(g_topBarPopupHwnd)) {
+            ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
+        }
+        BOOL cloakOff = FALSE;
+        DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
+                              &cloakOff, sizeof(cloakOff));
+        ForceDisableWindowsTransparency(g_topBarPopupHwnd);
+        if (g_anyChildFlyoutOpen.load()) {
+            try { PromoteChildFlyoutPopups(); } catch (...) {}
+        }
+        ClipIslandHwndToEmpty();
+
+        // Poll slowly — just enough to notice if XAML ever destroys the
+        // popup (e.g. after a display mode change). The old 150 / 200 ms
+        // interval existed only to spam ShowAt, which we no longer do.
+        if (!g_topBarPopupRetryTimer) {
+            g_topBarPopupRetryTimer = DispatcherTimer();
+            g_topBarPopupRetryTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                try { EnsureTopBarPopupShown(); } catch (...) {}
+            });
+        }
+        g_topBarPopupRetryTimer.Interval(std::chrono::milliseconds(500));
+        g_topBarPopupRetryTimer.Stop();
+        g_topBarPopupRetryTimer.Start();
+        return;
+    }
+
     static int s_stableTicks = 0;
+
+    // If a live popup HWND already exists, we have already called ShowAt on
+    // the flyout successfully. Calling ShowAt again makes XAML destroy the
+    // existing popup and create a fresh one — a fresh HWND, a fresh XAML
+    // input-site, a fresh layout pass — and the bar visibly jumps or
+    // disappears each time. That is the cycle the retry timer was stuck in:
+    // ~180 ms per ShowAt, popup replaced on every tick, position never
+    // settling. Force the geometry on the existing HWND instead; it is
+    // synchronous and does not touch XAML's popup lifecycle.
+    if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+        RECT mr = GetBarMonitorRect();
+        RECT actual{};
+        if (GetWindowRect(g_topBarPopupHwnd, &actual)) {
+            bool wrongPos  = (actual.left != mr.left || actual.top != mr.top);
+            bool wrongSize = ((actual.right - actual.left) != (mr.right - mr.left)) ||
+                             ((actual.bottom - actual.top) != g_barHeightPx);
+            if (wrongPos || wrongSize) {
+                g_suppressPopupPositionLock = true;
+                SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST,
+                             mr.left, mr.top,
+                             mr.right - mr.left, g_barHeightPx,
+                             SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+                g_suppressPopupPositionLock = false;
+            }
+        }
+        if (!IsWindowVisible(g_topBarPopupHwnd)) {
+            ShowWindow(g_topBarPopupHwnd, SW_SHOWNOACTIVATE);
+        }
+        BOOL cloakOff = FALSE;
+        DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
+                              &cloakOff, sizeof(cloakOff));
+        ForceDisableWindowsTransparency(g_topBarPopupHwnd);
+        if (g_anyChildFlyoutOpen.load()) {
+            try { PromoteChildFlyoutPopups(); } catch (...) {}
+        }
+        ClipIslandHwndToEmpty();
+
+        if (!g_topBarPopupRetryTimer) {
+            g_topBarPopupRetryTimer = DispatcherTimer();
+            g_topBarPopupRetryTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
+                try { EnsureTopBarPopupShown(); } catch (...) {}
+            });
+        }
+        g_topBarPopupRetryTimer.Interval(std::chrono::milliseconds(500));
+        g_topBarPopupRetryTimer.Stop();
+        g_topBarPopupRetryTimer.Start();
+        return;
+    }
 
     // While a fullscreen app owns the screen, never re-show or re-position
     // the popup. Without this early-out, the retry timer fires every
@@ -23912,8 +24376,31 @@ void EnsureTopBarPopupShown() {
         // the override on is what stops the popup drifting off-screen
         // between retry ticks.
     } else if (windowReady) {
-        // Popup missing, or it's at the wrong position. Tear it down if it
-        // exists and try to show it fresh against the current XAML tree.
+        // If the popup HWND already exists and is valid, DO NOT tear it
+        // down. XAML's Flyout.Hide() is asynchronous; calling ShowAt in the
+        // same tick (which is what the retry timer used to do, ~180 ms
+        // apart) races XAML's teardown, produces an orphaned popup HWND,
+        // and leaves g_topBarPopupHwnd pointing at a window that IsWindow()
+        // reports as dead — so the boot rebuild's "popup not created yet"
+        // retry loop never settles and the bar never stays up. Forcing the
+        // position of the existing HWND with SetWindowPos is synchronous
+        // and does not restart XAML's popup lifecycle.
+        if (havePopup && IsWindow(g_topBarPopupHwnd)) {
+            g_forcePopupPosition = true;
+            SetWindowPos(g_topBarPopupHwnd, HWND_TOPMOST,
+                         mr.left, mr.top,
+                         mr.right - mr.left, g_barHeightPx,
+                         SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+            BOOL cloakOff = FALSE;
+            DwmSetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAK,
+                                  &cloakOff, sizeof(cloakOff));
+            ForceDisableWindowsTransparency(g_topBarPopupHwnd);
+            try { if (g_rootElement) g_rootElement.UpdateLayout(); } catch (...) {}
+            RedrawWindow(g_topBarPopupHwnd, nullptr, nullptr,
+                         RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+            DwmFlush();
+        } else {
+        // Popup missing (or the cached HWND is dead). Build it fresh.
         if (havePopup) {
             try {
                 g_topBarAllowClose = true;
@@ -23941,6 +24428,7 @@ void EnsureTopBarPopupShown() {
         } catch (...) {}
 
         if (anchorReady) {
+            Wh_Log(L"EnsureTopBarPopupShown: calling ShowAt on anchor");
             // Force layout so the anchor's position is committed before
             // placement reads it.
             try { if (g_rootElement) g_rootElement.UpdateLayout(); } catch (...) {}
@@ -23963,6 +24451,14 @@ void EnsureTopBarPopupShown() {
 
             if (!g_topBarPopupHwnd || !IsWindow(g_topBarPopupHwnd)) {
                 g_topBarPopupHwnd = FindTopBarFlyoutHwnd();
+            }
+
+            // Nudge XAML to re-read the monitor DPI on the new popup HWND.
+            // Without this, the bar renders at the wrong physical size after
+            // any OS display-scale change, and stays wrong until some other
+            // event forces a XAML layout pass.
+            if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+                ForcePopupDpiRecalc(g_topBarPopupHwnd);
             }
 
             // Immediately kill Mica on the freshly created popup. This has
@@ -24002,6 +24498,7 @@ void EnsureTopBarPopupShown() {
                 }
             }
         }
+        }   // closes the "popup is dead, build fresh" else
     }
     // else: not ready yet, wait for the next tick.
 
@@ -24123,9 +24620,19 @@ void SetTopBarContent(FrameworkElement content) {
     double userScale = g_settings.topBarScale / 100.0;
     double osScale = GetBarDpiScale();
     if (osScale <= 0.0) osScale = 1.0;
+    if (userScale <= 0.0) userScale = 1.0;
+
+    // The content is laid out at these canonical DIP dimensions, and a
+    // Viewbox (below) shrinks it by visualScale to fit the popup's actual
+    // DIP dimensions. UserScale=100% means "render at the same physical
+    // size a 100% DPI system would produce", independent of OS DPI.
     double widthDip = (monitorRect.right - monitorRect.left) / userScale;
     double heightDip = static_cast<double>(g_settings.barHeightDip);
+    double visualScale = userScale / osScale;
+    if (visualScale <= 0.0) visualScale = 1.0;
 
+    Wh_Log(L"SetTopBarContent: userScale=%.3f osScale=%.3f visualScale=%.3f dip=%.1fx%.1f",
+           userScale, osScale, visualScale, widthDip, heightDip);
     g_replaceAttempts = 0;
     g_forceShowAt = false;
 
@@ -24181,15 +24688,39 @@ void SetTopBarContent(FrameworkElement content) {
     content.Width(widthDip);
     content.Height(heightDip);
     try {
-        content.HorizontalAlignment(HorizontalAlignment::Left);
-        content.VerticalAlignment(VerticalAlignment::Top);
-        content.RenderTransformOrigin(winrt::Windows::Foundation::Point{0.0, 0.0});
-        wuxm::ScaleTransform userScaleTransform;
-        userScaleTransform.ScaleX(userScale / osScale);
-        userScaleTransform.ScaleY(userScale / osScale);
-        content.RenderTransform(userScaleTransform);
+        content.HorizontalAlignment(HorizontalAlignment::Stretch);
+        content.VerticalAlignment(VerticalAlignment::Stretch);
+        content.ClearValue(UIElement::RenderTransformProperty());
     } catch (...) {}
-    g_topBarPopup.Content(content);
+
+    // Remember which monitor rect this layout was built for, so the
+    // restore timer can detect a later change and trigger a rebuild.
+    g_lastBarMonitorRect = monitorRect;
+    g_lastBarMonitorRectValid = true;
+    g_lastOsScale = osScale;
+
+    // Wrap the content in a Grid so the scale is applied to a child element
+    // of the flyout root rather than to the flyout root itself. XAML
+    // special-cases a flyout's direct content: RenderTransform on that root
+    // is applied to rendering only, and pointer hit-testing tests against
+    // the untransformed layout slot — which is why clicks in the lower part
+    // of the bar missed at any OS DPI above 100%. A RenderTransform on an
+    // ordinary child element goes through XAML's normal input transform
+    // walk and is honoured by hit-testing.
+    wuxc::Grid scaler;
+    scaler.Name(L"TopBarScaler");
+    scaler.Width(widthDip);
+    scaler.Height(heightDip);
+    scaler.HorizontalAlignment(HorizontalAlignment::Left);
+    scaler.VerticalAlignment(VerticalAlignment::Top);
+    scaler.RenderTransformOrigin(winrt::Windows::Foundation::Point{0.0, 0.0});
+    wuxm::ScaleTransform scaleTransform;
+    scaleTransform.ScaleX(visualScale);
+    scaleTransform.ScaleY(visualScale);
+    scaler.RenderTransform(scaleTransform);
+    scaler.Children().Append(content);
+
+    g_topBarPopup.Content(scaler);
 
     RunOnUiThread([] { EnsureTopBarPopupShown(); });
     RunOnUiThread([] {
@@ -24231,6 +24762,74 @@ void PositionAppBar(HWND hwnd, int heightPx) {
     if (g_islandHwnd) {
         SetWindowPos(g_islandHwnd, nullptr, 0, 0, data.rc.right - data.rc.left,
                      data.rc.bottom - data.rc.top, SWP_NOZORDER | SWP_SHOWWINDOW);
+    }
+}
+
+void ReloadTopBarFully() {
+    if (!g_topBarHwnd || !IsWindow(g_topBarHwnd)) return;
+    if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) return;
+
+    LoadSettings();
+    g_dpiScale = g_settings.topBarScale / 100.0;
+    g_barHeightPx = static_cast<int>(g_settings.barHeightDip * g_dpiScale + 0.5);
+
+    // A XAML popup evaluates its DIP-to-physical factor once when its
+    // window is created, and does not reliably re-evaluate it when the
+    // hosting monitor's DPI changes: after a live scale switch the popup
+    // keeps rendering against the old factor, which shows up as the bar
+    // being either tiny (popup thinks DPI is lower than the monitor) or
+    // zoomed-in (popup thinks DPI is higher). Hiding the current popup and
+    // dropping every reference to it forces XAML to build a fresh popup
+    // against the current monitor DPI the next time EnsureTopBarPopupShown
+    // calls ShowAt. This reproduces exactly what toggling the mod off and
+    // on does.
+    try {
+        g_topBarAllowClose = true;
+        if (g_topBarPopup) g_topBarPopup.Hide();
+    } catch (...) {}
+    g_topBarAllowClose = false;
+    g_topBarPopup = nullptr;
+    g_topBarPopupHwnd = nullptr;
+    g_topBarPopupCanvas = nullptr;
+    g_topBarPopupAnchor = nullptr;
+    g_subclassedPopupHwnd = nullptr;
+    g_forcePopupPosition = false;
+    g_replaceAttempts = 0;
+    g_suppressPopupPositionLock = false;
+    g_wideFlyoutTargetX = -1;
+    g_wideFlyoutTargetY = -1;
+    ClearChildPopupTargets();
+
+    g_lastBarMonitorRect = GetBarMonitorRect();
+    g_lastBarMonitorRectValid = true;
+    g_lastOsScale = GetBarDpiScale();
+
+    InvalidateStartAndSearchFlyouts();
+    SetTopBarContent(BuildTopBarContent());
+    BuildStartContextMenu();
+    BuildTaskContextMenu();
+    BuildAppTitleContextMenu();
+    ApplyAllControlStyles();
+    ApplyVisibilitySettings();
+    UpdateResourceButton();
+    StripInheritedIslandBackgrounds();
+    PositionAppBar(g_topBarHwnd, g_barHeightPx);
+    RefreshTaskList(true);
+
+    // XAML creates a fresh popup HWND roughly one second after a reload,
+    // and its bounds-aware placement puts that popup above the monitor's
+    // top edge because the island is only bar-height tall. The one-second
+    // restore timer would eventually catch it, but this leaves the bar off-
+    // screen for up to a second after every reload. Force the popup into
+    // the reserved strip on a few quick follow-up ticks so it appears
+    // immediately regardless of when XAML realises the new HWND.
+    for (int delayMs : {100, 300, 600, 1200, 2000}) {
+        RunInBackground([delayMs] {
+            if (WaitForSingleObject(g_stopEvent, delayMs) == WAIT_OBJECT_0) return;
+            RunOnUiThread([] {
+                try { PinTopBarFlyoutHwnd(); } catch (...) {}
+            });
+        });
     }
 }
 
@@ -24450,6 +25049,25 @@ void ApplyFlyoutBlurBrush(wuxc::Border const& border) {
     border.Background(blurBrush);
 }
 
+void ForceXamlPopupToTop(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    BOOL cloakOff = FALSE;
+    DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, &cloakOff, sizeof(cloakOff));
+    if (!IsWindowVisible(hwnd)) {
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    }
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                 SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    RedrawWindow(hwnd, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW | RDW_FRAME);
+    DwmFlush();
+}
+
+void InstallChildPopupSubclassForTintKill(HWND hwnd) {
+    (void)hwnd;
+}
+
 void ApplyBlurToAllOpenPopups() {
     // Drop dead HWNDs so the set doesn't grow unbounded across flyout rebuilds.
     for (auto it = g_blurredPopupHwnds.begin(); it != g_blurredPopupHwnds.end();) {
@@ -24464,6 +25082,9 @@ void ApplyBlurToAllOpenPopups() {
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
         if (pid != GetCurrentProcessId() || hwnd == g_topBarHwnd) {
+            return TRUE;
+        }
+        if (hwnd == g_topBarPopupHwnd || hwnd == g_islandHwnd) {
             return TRUE;
         }
         // Never touch the settings window or any of its child HWNDs — the
@@ -24481,6 +25102,7 @@ void ApplyBlurToAllOpenPopups() {
             return TRUE;
         }
         if (g_blurredPopupHwnds.insert(hwnd).second) {
+            ApplyBlurToWindow(hwnd);
             ApplyRoundedCornersToWindow(hwnd);
         }
         return TRUE;
@@ -24683,12 +25305,12 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 
         case WM_DISPLAYCHANGE:
         case WM_DPICHANGED:
-            g_dpiScale = g_settings.topBarScale / 100.0;
-            g_barHeightPx = static_cast<int>(g_settings.barHeightDip * g_dpiScale + 0.5);
-            PositionAppBar(hwnd, g_barHeightPx);
-            RepositionTopBarPopup();
-            RefreshTaskList(true);
-        RefreshBluetoothRadioState(); // initial radio state
+            // The restore timer already detects monitor and OS-scale
+            // changes and runs a full reload. WM_DISPLAYCHANGE is not
+            // delivered reliably to WS_POPUP | WS_EX_TOOLWINDOW windows,
+            // so relying on this message alone left the bar clipped after
+            // a resolution switch. The timer is authoritative; this case
+            // just needs to not fight it.
             g_taskbarButtonRectsValid = false;
             RefreshTaskbarButtonRectsAsync();
             return 0;
@@ -24869,6 +25491,18 @@ void ScheduleTaskListRefresh() {
     g_taskRefreshTimer.Start();
 }
 
+void CALLBACK SelfProcessWindowEventProc(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD, DWORD) {
+    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF || !hwnd) return;
+    if (event != EVENT_OBJECT_CREATE && event != EVENT_OBJECT_SHOW) return;
+    if (hwnd == g_topBarHwnd || hwnd == g_islandHwnd || hwnd == g_topBarPopupHwnd) return;
+    wchar_t cls[256]{};
+    if (!GetClassName(hwnd, cls, ARRAYSIZE(cls))) return;
+    if (!(wcsstr(cls, L"Xaml") && wcsstr(cls, L"Popup"))) return;
+    InstallChildPopupSubclassForTintKill(hwnd);
+}
+
+HWINEVENTHOOK g_selfProcessWindowHook = nullptr;
+
 void ForegroundEventProcInstall() {
     if (g_foregroundHook) {
         return;
@@ -24959,6 +25593,92 @@ void ShowElementTargetUnderCursor() {
         s_targetFlyout.ShouldConstrainToRootBounds(false);
         s_targetFlyout.ShowAt(hit);
     } catch (...) {}
+}
+
+// XAML caches its rasterization scale (monitor DPI) inside the UI thread's
+// WindowsXamlManager / DesktopWindowXamlSource. It is never re-read when the
+// OS display scale changes. Any attempt to reset it in place — detach and
+// reattach the source, nudge the popup HWND with WM_DPICHANGED, re-ShowAt
+// the flyout — leaves stale state somewhere: a bar rendered at the wrong
+// physical size, or, worse, an orphaned island HWND whose composition target
+// still holds the previous frame and produces a non-interactive artifact on
+// the desktop.
+//
+// The only reliable reset is a full restart of the topbar thread, which
+// destroys and rebuilds every XAML object against a monitor that already
+// reports the new DPI. That is the same path toggling the mod off and on
+// takes, and the same path the boot-rebuild timer uses.
+static std::atomic<bool> g_scaleRestartPending{false};
+
+DWORD WINAPI TopBarThreadProc(LPVOID);
+
+void RestartTopBarThreadForScaleChange() {
+    bool expected = false;
+    if (!g_scaleRestartPending.compare_exchange_strong(expected, true)) {
+        Wh_Log(L"RestartTopBarThreadForScaleChange: restart already pending");
+        return;
+    }
+    if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) {
+        g_scaleRestartPending = false;
+        return;
+    }
+    if (!g_topBarThread || !g_topBarHwnd) {
+        g_scaleRestartPending = false;
+        return;
+    }
+
+    Wh_Log(L"RestartTopBarThreadForScaleChange: restarting topbar thread");
+
+    // Close every flyout while the old XAML manager is still alive so their
+    // popup HWNDs are torn down cleanly. Orphaned topmost popups from the
+    // old thread would otherwise interfere with the new thread's flyouts.
+    try { if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) g_startMenuFlyout.Hide(); } catch (...) {}
+    try { if (g_searchFlyout && g_searchFlyout.IsOpen()) g_searchFlyout.Hide(); } catch (...) {}
+    try { if (g_displayFlyout) g_displayFlyout.Hide(); } catch (...) {}
+    try { if (g_soundFlyout) g_soundFlyout.Hide(); } catch (...) {}
+    try { if (g_wifiFlyout) g_wifiFlyout.Hide(); } catch (...) {}
+    try { if (g_bluetoothFlyout) g_bluetoothFlyout.Hide(); } catch (...) {}
+    try { if (g_batteryFlyout) g_batteryFlyout.Hide(); } catch (...) {}
+    try { if (g_resourceFlyout) g_resourceFlyout.Hide(); } catch (...) {}
+    try { if (g_mediaFlyout) g_mediaFlyout.Hide(); } catch (...) {}
+    try { if (g_settingsFlyout) g_settingsFlyout.Hide(); } catch (...) {}
+    try { if (g_startContextMenu) g_startContextMenu.Hide(); } catch (...) {}
+    try { if (g_taskContextMenu) g_taskContextMenu.Hide(); } catch (...) {}
+    try { if (g_appTitleContextMenu) g_appTitleContextMenu.Hide(); } catch (...) {}
+    try { if (g_startPowerMenu) g_startPowerMenu.Hide(); } catch (...) {}
+    try { if (g_startAccountFlyout) g_startAccountFlyout.Hide(); } catch (...) {}
+    try { if (g_startTileMenu) g_startTileMenu.Hide(); } catch (...) {}
+    try { if (g_searchResultMenu) g_searchResultMenu.Hide(); } catch (...) {}
+
+    // Stop the fresh thread from re-arming the boot-rebuild timer and doing
+    // a second restart on top of this one.
+    g_bootRebuildDone.exchange(true);
+
+    HANDLE oldThread = g_topBarThread;
+    DWORD oldThreadId = g_topBarThreadId;
+
+    RunInBackground([oldThread] {
+        WaitForSingleObject(oldThread, 15000);
+        CloseHandle(oldThread);
+        if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) {
+            g_scaleRestartPending = false;
+            return;
+        }
+        DWORD newThreadId = 0;
+        HANDLE newThread = CreateThread(nullptr, 0, TopBarThreadProc,
+                                        nullptr, 0, &newThreadId);
+        if (newThread) {
+            g_topBarThread = newThread;
+            g_topBarThreadId = newThreadId;
+            Wh_Log(L"RestartTopBarThreadForScaleChange: restarted");
+        } else {
+            Wh_Log(L"RestartTopBarThreadForScaleChange: failed: %u", GetLastError());
+        }
+        g_scaleRestartPending = false;
+    });
+
+    if (oldThreadId) PostThreadMessage(oldThreadId, WM_QUIT, 0, 0);
+    if (g_topBarHwnd) PostMessage(g_topBarHwnd, WM_CLOSE, 0, 0);
 }
 
 DWORD WINAPI TopBarThreadProc(LPVOID) {
@@ -25061,6 +25781,30 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         InstallGlobalMenuResources();
 
         SetTopBarContent(BuildTopBarContent());
+
+        // Follow-up build. XAML occasionally commits the first content tree
+        // without attaching it to the live visual tree on a fresh process
+        // start; the popup HWND ends up at the correct position and size
+        // with visible=1, but no frames are presented and the bar never
+        // appears. Running the content build a second time forces XAML to
+        // re-attach the tree, which is the same effect that a resolution
+        // change (and therefore a reload) has. Observed on the re-enable
+        // path; the compile path was unaffected.
+        RunInBackground([] {
+            if (WaitForSingleObject(g_stopEvent, 500) == WAIT_OBJECT_0) return;
+            RunOnUiThread([] {
+                // Same full reload that resolution changes use. A bare
+                // SetTopBarContent replaces the content tree but leaves
+                // XAML's FlyoutService pointing at the previous tree as
+                // the coordinate root for control flyouts, so subsequent
+                // Flyout.ShowAt(button) calls computed the button's
+                // position against a stale root and opened the flyout at
+                // the top-left of the monitor. ReloadTopBarFully destroys
+                // the popup HWND, which forces XAML to rebuild that cache
+                // alongside the tree.
+                try { ReloadTopBarFully(); } catch (...) {}
+            });
+        });
         
         // Make the XAML island background transparent so the system blur shows through.
         //
@@ -25165,6 +25909,13 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
 
         ForegroundEventProcInstall();
 
+        if (!g_selfProcessWindowHook) {
+            g_selfProcessWindowHook = SetWinEventHook(EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW,
+                                                      nullptr, SelfProcessWindowEventProc,
+                                                      GetCurrentProcessId(), 0,
+                                                      WINEVENT_OUTOFCONTEXT);
+        }
+
         RunOnUiThread([] {
             try { InstallChildFlyoutMouseHook(); } catch (...) {}
         });
@@ -25197,6 +25948,58 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                 }
             }
             Wh_Log(L"[StartMenu] Icon cache pre-warm complete");
+        });
+
+        // Boot diagnostic: after the bar has had time to appear, ask
+        // Windows what window is actually at a click point inside the bar.
+        // If it is the popup HWND, the popup is on top and XAML is the
+        // problem; if it is anything else (the island, the topbar HWND,
+        // another XAML popup, some shell window), then something is
+        // physically blocking clicks and we know exactly which class to
+        // filter out or re-stack.
+        RunInBackground([] {
+            if (WaitForSingleObject(g_stopEvent, 8000) == WAIT_OBJECT_0) return;
+            RunOnUiThread([] {
+                POINT pt{ 100, 20 };
+                HWND at = WindowFromPoint(pt);
+                wchar_t cls[256]{};
+                if (at) GetClassName(at, cls, ARRAYSIZE(cls));
+                DWORD pid = 0;
+                if (at) GetWindowThreadProcessId(at, &pid);
+                Wh_Log(L"Boot diagnostic: window at (100,20)=%p class=%s pid=%u (our pid=%u) popup=%p topbar=%p island=%p",
+                       at, cls, pid, GetCurrentProcessId(),
+                       g_topBarPopupHwnd, g_topBarHwnd, g_islandHwnd);
+
+                // Also log every top-level window visible at that point,
+                // walking downward, so we can see the full stack.
+                HWND walker = at;
+                int depth = 0;
+                while (walker && depth < 6) {
+                    wchar_t c2[256]{};
+                    GetClassName(walker, c2, ARRAYSIZE(c2));
+                    DWORD p2 = 0;
+                    GetWindowThreadProcessId(walker, &p2);
+                    Wh_Log(L"Boot diagnostic:   stack[%d] hwnd=%p class=%s pid=%u",
+                           depth, walker, c2, p2);
+                    walker = GetWindow(walker, GW_HWNDNEXT);
+                    depth++;
+                }
+            });
+        });
+
+        RunInBackground([] {
+            if (WaitForSingleObject(g_stopEvent, 8000) == WAIT_OBJECT_0) return;
+            RunOnUiThread([] {
+                POINT pt{ 100, 20 };
+                HWND under = WindowFromPoint(pt);
+                wchar_t cls[128]{};
+                if (under) GetClassName(under, cls, ARRAYSIZE(cls));
+                DWORD underPid = 0;
+                if (under) GetWindowThreadProcessId(under, &underPid);
+                Wh_Log(L"BootProbe: under(100,20)=%p class=%s pid=%u ourpid=%u popup=%p island=%p",
+                       under, cls, underPid, GetCurrentProcessId(),
+                       g_topBarPopupHwnd, g_islandHwnd);
+            });
         });
 
         g_clockTimer = DispatcherTimer();
@@ -25542,6 +26345,77 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                     }
                 }
 
+                // Detect a monitor rect change (physical resolution switch
+                // or monitor swap) OR an OS display-scale change. Either
+                // one invalidates the XAML layout: the popup HWND is
+                // resized by EnsureTopBarPopupShown on its own retry timer,
+                // but the content inside keeps its previous DIP dimensions
+                // and the scaler keeps its previous RenderTransform, which
+                // is why the bar was permanently clipped after a resolution
+                // switch until the mod was re-enabled.
+                //
+                // The OS display-scale change is not visible as a monitor
+                // rect change (physical resolution is unchanged), so it is
+                // tracked separately. This is also what gives the same
+                // "detect and restore" behaviour as MyDockFinder, without
+                // depending on WM_DISPLAYCHANGE reaching a WS_POPUP window.
+                {
+                    RECT currentMonitor = GetBarMonitorRect();
+                    double currentOsScale = GetBarDpiScale();
+                    bool monitorChanged =
+                        g_lastBarMonitorRectValid &&
+                        (currentMonitor.left != g_lastBarMonitorRect.left ||
+                         currentMonitor.top != g_lastBarMonitorRect.top ||
+                         currentMonitor.right != g_lastBarMonitorRect.right ||
+                         currentMonitor.bottom != g_lastBarMonitorRect.bottom);
+                    bool scaleChanged =
+                        g_lastOsScale > 0.0 &&
+                        std::abs(currentOsScale - g_lastOsScale) > 0.001;
+                    if (monitorChanged || scaleChanged) {
+                        Wh_Log(L"Restore: monitor/scale changed (rect %ld,%ld-%ld,%ld -> %ld,%ld-%ld,%ld, osScale %.3f -> %.3f), reloading topbar",
+                               g_lastBarMonitorRect.left, g_lastBarMonitorRect.top,
+                               g_lastBarMonitorRect.right, g_lastBarMonitorRect.bottom,
+                               currentMonitor.left, currentMonitor.top,
+                               currentMonitor.right, currentMonitor.bottom,
+                               g_lastOsScale, currentOsScale);
+                        ReloadTopBarFully();
+                        g_taskbarButtonRectsValid = false;
+                        RefreshTaskbarButtonRectsAsync();
+                    }
+                }
+
+                // Detect an OS display-scale change and rebuild the popup
+                // through XAML. WM_DPICHANGED is not delivered reliably to
+                // WS_POPUP | WS_EX_TOOLWINDOW windows, and even when it is,
+                // XAML's input-site is keyed to the DPI value that was
+                // current when the popup was created — it never recomputes
+                // on its own. The visible symptom is a bar that gets small
+                // (up-scale) or misaligns / disappears (down-scale) until
+                // some other event forces a rebuild, and a hover target
+                // that is offset by a few pixels per percent of scale.
+                // A XAML-level Hide + ShowAt is the only thing that makes
+                // XAML re-register its input-site against the new DPI.
+                {
+                    static double s_lastOsScale = -1.0;
+                    double curScale = GetBarDpiScale();
+                    if (s_lastOsScale > 0.0 &&
+                        std::abs(curScale - s_lastOsScale) > 0.001) {
+                        Wh_Log(L"Restore: OS scale changed %.3f -> %.3f, restarting topbar thread",
+                               s_lastOsScale, curScale);
+                        // Full thread restart — see RestartTopBarThreadForScaleChange.
+                        // In-place attempts to reset XAML's cached DPI all
+                        // leave stale state, and some of them (detaching and
+                        // reattaching the DesktopWindowXamlSource) produce a
+                        // non-interactive artifact on the desktop because the
+                        // old island's composition target still holds the
+                        // last frame it painted.
+                        RunOnUiThread([] {
+                            try { RestartTopBarThreadForScaleChange(); } catch (...) {}
+                        });
+                    }
+                    s_lastOsScale = curScale;
+                }
+
                 // Reposition if drifted.
                 RECT wanted = GetBarMonitorRect();
                 wanted.bottom = wanted.top + g_barHeightPx;
@@ -25592,45 +26466,46 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                 // rebuild to fire before XAML had even realised the popup HWND,
                 // which is why the topbar stayed invisible for the first few
                 // seconds after sign-in.
-                g_bootRebuildTimer.Interval(std::chrono::seconds(6));
+                g_bootRebuildTimer.Interval(std::chrono::seconds(3));
                 g_bootRebuildTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
                     g_bootRebuildTimer.Stop();
                     if (g_bootRebuildDone.exchange(true)) return;
-                    if (!g_topBarThread || !g_topBarHwnd) return;
-                    if (!g_topBarPopupHwnd || !IsWindow(g_topBarPopupHwnd)) {
-                        Wh_Log(L"TopBar: boot rebuild — popup not created yet, skipping");
+                    // Only cold boots need this rebuild. On a mid-session mod
+                    // enable, WindowsXamlManager::InitializeForCurrentThread
+                    // registers the popup's input site correctly the first
+                    // time. On a cold boot Explorer's shell is still
+                    // initialising when the topbar thread first initialises
+                    // XAML, and the popup HWND that results renders correctly
+                    // but silently discards every mouse message -- the
+                    // "clickable nowhere" state. Only a fresh WindowsXaml-
+                    // Manager on a new thread restores input, which is why
+                    // toggling the mod off/on fixes it. Gating on cold boot
+                    // also removes the 10-15 s delay a previous unconditional
+                    // version of this timer added to every enable.
+                    if (!IsRecentColdBoot()) {
+                        Wh_Log(L"TopBar: boot rebuild skipped - not a recent cold boot");
                         return;
                     }
+                    if (!g_topBarThread || !g_topBarHwnd) return;
+                    // The rebuild does not need the old thread's popup HWND
+                    // to exist — the fresh thread creates its own from
+                    // scratch. Gating on it just turned a transient
+                    // "popup not yet realised" window into an infinite
+                    // retry loop. Restart unconditionally on a fresh mod
+                    // process.
 
-                    // Before rebuilding, ask whether the popup is actually
-                    // being presented to DWM. This is the difference between
-                    // the original "blank bar on boot" failure and a bar
-                    // that's already working: the previous version of this
-                    // timer killed a working bar, which is what produced the
-                    // blink + wrong-position + second-thread-fails cycle.
-                    if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
-                        bool rendering = false;
-                        bool known = PopupRenderingState(g_topBarPopupHwnd, &rendering);
-                        if (known && rendering) {
-                            Wh_Log(L"TopBar: boot rebuild skipped — popup is rendering");
-                            return;
-                        }
-                        if (!known) {
-                            Wh_Log(L"TopBar: boot rebuild — unknown state, skipping");
-                            return;
-                        }
-                        static int s_blankStrikes = 0;
-                        if (++s_blankStrikes < 2) {
-                            Wh_Log(L"TopBar: boot rebuild — popup blank (strike %d), retrying",
-                                   s_blankStrikes);
-                            g_bootRebuildDone = false;
-                            g_bootRebuildTimer.Start();
-                            return;
-                        }
-                        Wh_Log(L"TopBar: boot rebuild — popup is blank, restarting");
-                    } else {
-                        Wh_Log(L"TopBar: boot rebuild — no popup yet, restarting");
-                    }
+                    // Cold-boot XAML input-site bug: the popup HWND renders
+                    // correctly and reports visible, but XAML registered its
+                    // input-site coordinate transform against a stale state,
+                    // so every mouse message is silently dropped and hover
+                    // inside Start/Search flyouts is offset by roughly an
+                    // inch. The visual state looks healthy from a pixel-
+                    // variance test, so the rendering check cannot detect
+                    // it -- only a fresh WindowsXamlManager on a new thread
+                    // re-registers the input site correctly. Always restart
+                    // on a cold boot; non-cold-boot enables never reach
+                    // this code because of the IsRecentColdBoot guard above.
+                    Wh_Log(L"TopBar: boot rebuild - restarting topbar thread (cold boot)");
 
                     // Hide every flyout and context menu before tearing the
                     // old thread down. Their popup HWNDs are OS windows that
@@ -25656,15 +26531,17 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                     try { if (g_startTileMenu) g_startTileMenu.Hide(); } catch (...) {}
                     try { if (g_searchResultMenu) g_searchResultMenu.Hide(); } catch (...) {}
                     try { if (g_taskContextMenu) g_taskContextMenu.Hide(); } catch (...) {}
-                    try { if (g_startContextMenu) g_startContextMenu.Hide(); } catch (...) {}
-                    try { if (g_appTitleContextMenu) g_appTitleContextMenu.Hide(); } catch (...) {}
-                    {
-                        std::lock_guard<std::mutex> lock(g_openPopupMutex);
-                        g_openPopups.clear();
-                        g_anyChildFlyoutOpen = false;
-                    }
-
-                    Wh_Log(L"TopBar: boot rebuild — restarting topbar thread");
+                    // Restart the topbar thread. On a cold boot the XAML
+                    // input site registers before Explorer's shell is fully
+                    // initialised; the popup HWND renders correctly but every
+                    // mouse message is silently dropped, and only a fresh
+                    // WindowsXamlManager on a new thread restores input.
+                    // ReloadTopBarFully rebuilds the content on the same
+                    // thread and therefore cannot fix it. This is exactly
+                    // what toggling the mod off and on does, and the
+                    // IsRecentColdBoot guard above keeps it from firing on
+                    // mid-session enables.
+                    Wh_Log(L"TopBar: boot rebuild - restarting topbar thread");
 
                     HANDLE oldThread = g_topBarThread;
                     DWORD oldThreadId = g_topBarThreadId;
@@ -25673,7 +26550,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                         WaitForSingleObject(oldThread, 15000);
                         CloseHandle(oldThread);
                         if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) {
-                            Wh_Log(L"TopBar: boot rebuild — shutdown in progress, aborting");
+                            Wh_Log(L"TopBar: boot rebuild - shutdown in progress, aborting");
                             return;
                         }
                         DWORD newThreadId = 0;
@@ -25684,14 +26561,14 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                                 PostThreadMessage(newThreadId, WM_QUIT, 0, 0);
                                 WaitForSingleObject(newThread, 5000);
                                 CloseHandle(newThread);
-                                Wh_Log(L"TopBar: boot rebuild — aborted after create");
+                                Wh_Log(L"TopBar: boot rebuild - aborted after create");
                                 return;
                             }
                             g_topBarThread = newThread;
                             g_topBarThreadId = newThreadId;
-                            Wh_Log(L"TopBar: boot rebuild — restarted");
+                            Wh_Log(L"TopBar: boot rebuild - restarted");
                         } else {
-                            Wh_Log(L"TopBar: boot rebuild — failed to restart: %u",
+                            Wh_Log(L"TopBar: boot rebuild - failed to restart: %u",
                                    GetLastError());
                         }
                     });
@@ -25753,6 +26630,10 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         if (g_windowEventNameHook) {
             UnhookWinEvent(g_windowEventNameHook);
             g_windowEventNameHook = nullptr;
+        }
+        if (g_selfProcessWindowHook) {
+            UnhookWinEvent(g_selfProcessWindowHook);
+            g_selfProcessWindowHook = nullptr;
         }
 
         // The topbar has been closed. Stop all timers before the DLL unloads.
@@ -26346,9 +27227,19 @@ void WhTool_ModUninit() {
         g_workerThreads.clear();
     }
 
-    // Wait for the main UI thread to exit.
+    // Wait for the main UI thread to exit, but never forever. If the
+    // topbar thread is stuck inside a XAML call, an infinite wait here
+    // keeps this tool-mod process alive, its tool-mod mutex held, and the
+    // next enable exits immediately with "already running" -- which is
+    // exactly the state where the bar never comes back after a mod
+    // toggle. Bail out after 5 seconds and force the process to exit; the
+    // OS releases the mutex on process termination.
     if (g_topBarThread) {
-        WaitForSingleObject(g_topBarThread, INFINITE);
+        DWORD threadWait = WaitForSingleObject(g_topBarThread, 5000);
+        if (threadWait != WAIT_OBJECT_0) {
+            Wh_Log(L"WhTool_ModUninit: topbar thread did not exit within 5 s; forcing process exit");
+            ExitProcess(0);
+        }
         CloseHandle(g_topBarThread);
         g_topBarThread = nullptr;
     }
@@ -26361,6 +27252,8 @@ void WhTool_ModUninit() {
         g_stopEvent = nullptr;
     }
 }
+
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Windhawk tool mod implementation for mods which don't need to inject to other
