@@ -2,12 +2,12 @@
 // @id              taskbar-volume-percentage
 // @name            Taskbar Volume Percentage Indicator
 // @description     Shows the master volume percentage in the Windows 11 system tray volume icon
-// @version         1.7.4
+// @version         1.8.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         explorer.exe
-// @architecture    x86-64
 // @compilerOptions -lole32 -loleaut32 -lruntimeobject -lversion
+// @donateUrl       https://ko-fi.com/gilnet
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -19,7 +19,7 @@ Replaces the Windows 11 system tray volume icon with the current master volume
 level, updated in real time.
 
 ![Taskbar Volume Percentage Preview 1](https://i.imgur.com/vjwali8.png)
-![Taskbar Volume Percentage Preview 2](https://i.imgur.com/XEf8m50.png)
+![Taskbar Volume Percentage Preview 2](https://i.imgur.com/rbVvlEg.png)
 ![Taskbar Volume Percentage Preview 3](https://i.imgur.com/27iyViO.png)
 ![Taskbar Volume Percentage Preview 4](https://i.imgur.com/1alQd1j.png)
 
@@ -49,16 +49,26 @@ level, updated in real time.
 - **Custom mute text**: Text used when the "Custom text" or "Native mute icon and text" mute style is selected (default: `Mute`).
 - **Icon spacing**: Space between the icon and the text (default: `-1` for automatic, `0` to disable, or any other number for a fixed size in pixels).
 - **Container width**: Width of the volume area (default: `-1` for automatic, `0` to disable, or any other number for a fixed size in pixels).
+- **Volume font size**: Size in points for the volume text indicator. Set to `0` to use the default size.
+- **Prefix font size**: Size in points for the prefix text. Set to `0` to use the default size.
+- **Icon and logo size**: Size in pixels for native volume/mute icons and emoji icons. Set to `0` to use the Windows default size.
+- **Custom font family**: Name of any font installed in Windows (e.g. `JetBrains Mono`, `Fira Code`, `Bahnschrift`, `Consolas`, `Digital-7`). Leave empty to use the default taskbar font.
 
 ## Compatibility
 
 - Only Windows 11 is supported.
+- Supported Architectures: x86, x64, and ARM64.
 - If the mod is enabled while Explorer is already running, the text appears
   after the next volume change.
 - Compatible with [Windows 11 Taskbar Styler](https://windhawk.net/mods/windows-11-taskbar-styler):
   - Spacing is managed via `Grid.ColumnSpacing`, leaving all custom `Margin` rules set by Taskbar Styler intact.
   - Custom font sizes on `TextBlock#InnerTextBlock` are automatically detected and mirrored.
   - The volume text block can also be styled directly via `TextBlock#VolumePercentageSubBlock`.
+
+## Support
+
+If you find this mod useful, you can support its development and maintenance:
+- [Support on Ko-fi](https://ko-fi.com/gilnet)
 
 ## Credits
 
@@ -115,6 +125,26 @@ level, updated in real time.
   $description: >-
     Width of the volume area. Set to -1 for automatic width, or to 0 to
     disable it. Any other number sets the width in pixels.
+- fontSize: 0
+  $name: Volume font size
+  $description: >-
+    Font size in points for the volume number or percentage text. Set to 0 to
+    use the default size.
+- prefixSize: 0
+  $name: Prefix font size
+  $description: >-
+    Font size in points for the prefix text. Set to 0 to use the default size.
+- iconSize: 0
+  $name: Icon and logo size
+  $description: >-
+    Size in pixels for native volume/mute icons and emoji icons. Set to 0 to
+    use the Windows default size.
+- customFontFamily: ""
+  $name: Custom font family
+  $description: >-
+    Name of any font installed in Windows (e.g. "JetBrains Mono", "Fira Code",
+    "Bahnschrift", "Consolas", "Digital-7"). Leave empty to use the default
+    taskbar font.
 */
 // ==/WindhawkModSettings==
 
@@ -124,6 +154,7 @@ level, updated in real time.
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cwctype>
 #include <list>
 #include <mutex>
 #include <string>
@@ -137,6 +168,7 @@ level, updated in real time.
 #include <winrt/Windows.UI.Text.h>
 #include <winrt/Windows.UI.Xaml.Controls.h>
 #include <winrt/Windows.UI.Xaml.Data.h>
+#include <winrt/Windows.UI.Xaml.Documents.h>
 #include <winrt/Windows.UI.Xaml.h>
 #include <winrt/Windows.UI.Xaml.Media.h>
 
@@ -176,6 +208,10 @@ struct {
     WindhawkUtils::StringSetting customMuteText;
     int containerWidth;
     int iconSpacing;
+    double fontSize;
+    double prefixSize;
+    double iconSize;
+    WindhawkUtils::StringSetting customFontFamily;
 } g_settings;
 
 std::atomic<bool> g_unloading;
@@ -235,8 +271,6 @@ struct TrackedVolumeContent {
         nullptr};
     winrt::Windows::Foundation::IInspectable origTextIconContentAlignment{
         nullptr};
-    winrt::weak_ref<Controls::TextBlock> observedInnerTextBlock;
-    int64_t fontSizeCallbackToken = 0;
     bool lastNativeGlyph = false;
     int layoutSettingsGeneration = -1;
 };
@@ -320,7 +354,10 @@ bool RunFromWindowThread(HWND hWnd,
     RUN_FROM_WINDOW_THREAD_PARAM param;
     param.proc = proc;
     param.procParam = procParam;
-    SendMessage(hWnd, runFromWindowThreadRegisteredMsg, 0, (LPARAM)&param);
+    DWORD_PTR dwResult = 0;
+    SendMessageTimeoutW(hWnd, runFromWindowThreadRegisteredMsg, 0,
+                        reinterpret_cast<LPARAM>(&param),
+                        SMTO_ABORTIFHUNG | SMTO_NORMAL, 2000, &dwResult);
 
     UnhookWindowsHookEx(hook);
 
@@ -417,22 +454,57 @@ double CalculateAutoWidth() {
     std::wstring muteText = FormatVolumeText(0.0f, true);
     size_t maxLen = (std::max)(maxVolText.length(), muteText.length());
 
-    double estimatedWidth = 8.0 + (static_cast<double>(maxLen) * 7.0);
+    double volFontSize =
+        (g_settings.fontSize > 0) ? (g_settings.fontSize * 0.85) : 10.0;
+    double prefixFontSize = (g_settings.prefixSize > 0)
+                                ? (g_settings.prefixSize * 0.85)
+                                : 10.0;
+    double iconW = (g_settings.iconSize > 0) ? g_settings.iconSize : 16.0;
+
+    double estimatedWidth = 10.0;
+    if (g_settings.displayStyle == DisplayStyle::prefix) {
+        PCWSTR prefix = g_settings.customPrefix.get();
+        size_t prefLen = prefix ? wcslen(prefix) : 4;
+        estimatedWidth += (static_cast<double>(prefLen) * prefixFontSize) +
+                          (4.0 * volFontSize);
+    } else if (g_settings.displayStyle == DisplayStyle::emoji) {
+        estimatedWidth += (4.0 * volFontSize) + iconW + 6.0;
+    } else if (g_settings.displayStyle == DisplayStyle::number ||
+               g_settings.displayStyle == DisplayStyle::glyphNumber) {
+        estimatedWidth += (3.0 * volFontSize);
+    } else {
+        estimatedWidth += (static_cast<double>(maxLen) * volFontSize);
+    }
+
     if (IsDualBoxStyle()) {
         double gap = (g_settings.iconSpacing < 0)
                          ? 4.0
                          : static_cast<double>(g_settings.iconSpacing);
-        estimatedWidth += 16.0 + gap;
+        estimatedWidth += iconW + gap;
     }
 
-    double minFloor = (g_settings.displayStyle == DisplayStyle::glyphRight)    ? 54.0
-                      : (g_settings.displayStyle == DisplayStyle::emoji)       ? 50.0
-                      : (g_settings.displayStyle == DisplayStyle::glyphNumber) ? 48.0
-                      : (g_settings.displayStyle == DisplayStyle::prefix)      ? 42.0
-                      : (g_settings.displayStyle == DisplayStyle::percentage)  ? 38.0
-                                                                               : 30.0;
+    double baseFloor = (g_settings.displayStyle == DisplayStyle::glyphRight)    ? 56.0
+                       : (g_settings.displayStyle == DisplayStyle::emoji)       ? 56.0
+                       : (g_settings.displayStyle == DisplayStyle::glyphNumber) ? 48.0
+                       : (g_settings.displayStyle == DisplayStyle::prefix)      ? 64.0
+                       : (g_settings.displayStyle == DisplayStyle::percentage)  ? 40.0
+                                                                                : 32.0;
 
-    return (std::max)(estimatedWidth, minFloor);
+    double dynamicFloor = baseFloor;
+    if (g_settings.fontSize > 0) {
+        dynamicFloor +=
+            (g_settings.fontSize - 12.0) * static_cast<double>(maxLen) * 0.85;
+    }
+    if (g_settings.prefixSize > 0 &&
+        g_settings.displayStyle == DisplayStyle::prefix) {
+        dynamicFloor += (g_settings.prefixSize - 12.0) * 4.0 * 0.85;
+    }
+    if (g_settings.iconSize > 0 &&
+        (IsDualBoxStyle() || g_settings.displayStyle == DisplayStyle::emoji)) {
+        dynamicFloor += (g_settings.iconSize - 16.0);
+    }
+
+    return (std::max)({estimatedWidth, dynamicFloor, 32.0});
 }
 
 double GetContainerWidth() {
@@ -444,7 +516,11 @@ double GetContainerWidth() {
         return g_settings.containerWidth;
     }
 
-    return (std::max)(CalculateAutoWidth(), g_maxObservedWidth);
+    if (g_maxObservedWidth > 0.0) {
+        return g_maxObservedWidth;
+    }
+
+    return CalculateAutoWidth();
 }
 
 void ApplyIconViewWidth(TrackedIconView& tracked,
@@ -547,25 +623,8 @@ void PruneTrackedVolumeContents() {
         return;
     }
 
-    std::erase_if(*g_trackedVolumeContents, [](auto& tracked) {
-        if (!tracked.textIconContent.get()) {
-            if (tracked.fontSizeCallbackToken != 0) {
-                if (auto observed = tracked.observedInnerTextBlock.get()) {
-                    try {
-                        observed.UnregisterPropertyChangedCallback(
-                            Controls::TextBlock::FontSizeProperty(),
-                            tracked.fontSizeCallbackToken);
-                    } catch (winrt::hresult_error const& ex) {
-                        Wh_Log(L"Error unregistering font size callback: %08X",
-                               ex.code());
-                    }
-                }
-                tracked.fontSizeCallbackToken = 0;
-                tracked.observedInnerTextBlock = nullptr;
-            }
-            return true;
-        }
-        return false;
+    std::erase_if(*g_trackedVolumeContents, [](auto const& tracked) {
+        return !tracked.textIconContent.get();
     });
 }
 
@@ -584,22 +643,26 @@ TrackedVolumeContent* FindTrackedVolumeContent(
     return nullptr;
 }
 
-void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
-    if (tracked.fontSizeCallbackToken != 0) {
-        if (auto observed = tracked.observedInnerTextBlock.get()) {
-            try {
-                observed.UnregisterPropertyChangedCallback(
-                    Controls::TextBlock::FontSizeProperty(),
-                    tracked.fontSizeCallbackToken);
-            } catch (winrt::hresult_error const& ex) {
-                Wh_Log(L"Error unregistering font size callback: %08X",
-                       ex.code());
+constexpr double kDefaultIconFontSize = 16.0;
+
+void ApplyIconFontSize(FrameworkElement const& el, double size) {
+    if (!el) {
+        return;
+    }
+    if (FrameworkElement tbEl = FindChildByName(el, L"InnerTextBlock")) {
+        if (auto tb = tbEl.try_as<Controls::TextBlock>()) {
+            if (size > 0) {
+                tb.FontSize(size);
+                el.MinWidth(size);
+            } else {
+                tb.FontSize(kDefaultIconFontSize);
+                el.ClearValue(FrameworkElement::MinWidthProperty());
             }
         }
-        tracked.fontSizeCallbackToken = 0;
-        tracked.observedInnerTextBlock = nullptr;
     }
+}
 
+void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
     auto containerGrid = tracked.containerGrid.get();
     if (!containerGrid) {
         return;
@@ -614,6 +677,7 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
     }
 
     if (subBlock) {
+        subBlock.ClearValue(Controls::TextBlock::FontFamilyProperty());
         uint32_t index = 0;
         if (containerGrid.Children().IndexOf(subBlock, index)) {
             containerGrid.Children().RemoveAt(index);
@@ -640,6 +704,7 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
         };
 
     if (auto base = tracked.baseElement.get()) {
+        base.ClearValue(FrameworkElement::MinWidthProperty());
         restoreProp(base, UIElement::VisibilityProperty(),
                     tracked.origBaseVisibility);
         restoreProp(base, FrameworkElement::HorizontalAlignmentProperty(),
@@ -650,10 +715,12 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
             if (auto tb = tbEl.try_as<Controls::TextBlock>()) {
                 tb.ClearValue(Controls::TextBlock::TextAlignmentProperty());
                 tb.ClearValue(FrameworkElement::HorizontalAlignmentProperty());
+                tb.FontSize(kDefaultIconFontSize);
             }
         }
     }
     if (auto underlay = tracked.underlayElement.get()) {
+        underlay.ClearValue(FrameworkElement::MinWidthProperty());
         restoreProp(underlay, UIElement::VisibilityProperty(),
                     tracked.origUnderlayVisibility);
         restoreProp(underlay, FrameworkElement::HorizontalAlignmentProperty(),
@@ -665,6 +732,7 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
             if (auto tb = tbEl.try_as<Controls::TextBlock>()) {
                 tb.ClearValue(Controls::TextBlock::TextAlignmentProperty());
                 tb.ClearValue(FrameworkElement::HorizontalAlignmentProperty());
+                tb.FontSize(kDefaultIconFontSize);
             }
         }
     }
@@ -689,40 +757,104 @@ void RestoreAllVolumeLayouts() {
     }
     if (g_trackedVolumeContents) {
         for (auto& tracked : *g_trackedVolumeContents) {
-            if (tracked.fontSizeCallbackToken != 0) {
-                if (auto observed = tracked.observedInnerTextBlock.get()) {
-                    try {
-                        observed.UnregisterPropertyChangedCallback(
-                            Controls::TextBlock::FontSizeProperty(),
-                            tracked.fontSizeCallbackToken);
-                    } catch (...) {
-                    }
-                }
-                tracked.fontSizeCallbackToken = 0;
-                tracked.observedInnerTextBlock = nullptr;
-            }
-        }
-        for (auto& tracked : *g_trackedVolumeContents) {
             RestoreVolumeLayout(tracked);
         }
     }
 }
 
-void SyncSubBlockFontSize(Controls::TextBlock const& subBlock,
-                          Controls::TextBlock const& source) {
-    if (!subBlock || !source) {
-        return;
+static int CALLBACK EnumFontFamExProc(const LOGFONTW* lpelfe,
+                                      const TEXTMETRICW*,
+                                      DWORD,
+                                      LPARAM lParam) {
+    if (lpelfe) {
+        *reinterpret_cast<bool*>(lParam) = true;
     }
-    double sourceFontSize = source.FontSize();
-    if (std::abs(sourceFontSize - 16.0) > 0.01) {
-        subBlock.FontSize(sourceFontSize);
-    } else {
-        subBlock.FontSize(12.0);
-    }
+    return 0;
 }
 
-void BindSubBlockTextStyle(TrackedVolumeContent& tracked,
-                           Controls::TextBlock const& subBlock,
+bool IsFontInstalled(std::wstring_view fontName) {
+    if (fontName.empty() || fontName.length() >= LF_FACESIZE) {
+        return false;
+    }
+
+    HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
+    HMODULE hGdi32 = GetModuleHandleW(L"gdi32.dll");
+    if (!hGdi32) {
+        hGdi32 = LoadLibraryW(L"gdi32.dll");
+    }
+    if (!hUser32 || !hGdi32) {
+        return true;
+    }
+
+    using GetDC_t = HDC(WINAPI*)(HWND);
+    using ReleaseDC_t = int(WINAPI*)(HWND, HDC);
+    using EnumFontFamiliesExW_t =
+        int(WINAPI*)(HDC, LPLOGFONTW, FONTENUMPROCW, LPARAM, DWORD);
+
+    auto pfnGetDC = reinterpret_cast<GetDC_t>(GetProcAddress(hUser32, "GetDC"));
+    auto pfnReleaseDC =
+        reinterpret_cast<ReleaseDC_t>(GetProcAddress(hUser32, "ReleaseDC"));
+    auto pfnEnum = reinterpret_cast<EnumFontFamiliesExW_t>(
+        GetProcAddress(hGdi32, "EnumFontFamiliesExW"));
+
+    if (!pfnGetDC || !pfnReleaseDC || !pfnEnum) {
+        return true;
+    }
+
+    HDC hdc = pfnGetDC(nullptr);
+    if (!hdc) {
+        return true;
+    }
+
+    LOGFONTW lf{};
+    lf.lfCharSet = DEFAULT_CHARSET;
+    std::wstring nameStr(fontName);
+    wcsncpy_s(lf.lfFaceName, nameStr.c_str(), _TRUNCATE);
+
+    bool fontExists = false;
+    pfnEnum(hdc, &lf, EnumFontFamExProc, reinterpret_cast<LPARAM>(&fontExists),
+            0);
+
+    pfnReleaseDC(nullptr, hdc);
+    return fontExists;
+}
+
+void SyncSubBlockFontFamily(Controls::TextBlock const& subBlock) {
+    if (!subBlock) {
+        return;
+    }
+    PCWSTR fontSetting = g_settings.customFontFamily.get();
+    std::wstring_view fontName = fontSetting ? fontSetting : L"";
+    while (!fontName.empty() && iswspace(fontName.front())) {
+        fontName.remove_prefix(1);
+    }
+    while (!fontName.empty() && iswspace(fontName.back())) {
+        fontName.remove_suffix(1);
+    }
+
+    if (!fontName.empty()) {
+        if (IsFontInstalled(fontName)) {
+            std::wstring fontChain =
+                std::wstring(fontName) + L", Segoe UI Variable Text, Segoe UI";
+            subBlock.FontFamily(Media::FontFamily(fontChain));
+            return;
+        }
+        Wh_Log(L"Custom font '%.*s' is not installed; falling back to default",
+               static_cast<int>(fontName.length()), fontName.data());
+    }
+
+    subBlock.ClearValue(Controls::TextBlock::FontFamilyProperty());
+}
+
+void SyncSubBlockFontSize(Controls::TextBlock const& subBlock) {
+    if (!subBlock) {
+        return;
+    }
+    double targetSize = (g_settings.fontSize > 0) ? g_settings.fontSize : 12.0;
+    subBlock.FontSize(targetSize);
+}
+
+void BindSubBlockTextStyle(Controls::TextBlock const& subBlock,
                            Controls::TextBlock const& source) {
     auto bind = [&](DependencyProperty const& dp, PCWSTR path) {
         Data::Binding binding;
@@ -733,43 +865,8 @@ void BindSubBlockTextStyle(TrackedVolumeContent& tracked,
     bind(Controls::TextBlock::ForegroundProperty(), L"Foreground");
     bind(Controls::TextBlock::FontWeightProperty(), L"FontWeight");
 
-    SyncSubBlockFontSize(subBlock, source);
-
-    if (tracked.fontSizeCallbackToken == 0 ||
-        tracked.observedInnerTextBlock.get() != source) {
-        if (tracked.fontSizeCallbackToken != 0) {
-            if (auto prevSource = tracked.observedInnerTextBlock.get()) {
-                try {
-                    prevSource.UnregisterPropertyChangedCallback(
-                        Controls::TextBlock::FontSizeProperty(),
-                        tracked.fontSizeCallbackToken);
-                } catch (winrt::hresult_error const& ex) {
-                    Wh_Log(L"Error unregistering font size callback: %08X",
-                           ex.code());
-                }
-            }
-            tracked.fontSizeCallbackToken = 0;
-        }
-
-        tracked.observedInnerTextBlock = source;
-        try {
-            tracked.fontSizeCallbackToken =
-                source.RegisterPropertyChangedCallback(
-                    Controls::TextBlock::FontSizeProperty(),
-                    [subBlockWeak = winrt::make_weak(subBlock)](
-                        DependencyObject const& sender,
-                        DependencyProperty const&) {
-                        if (auto tb = sender.try_as<Controls::TextBlock>()) {
-                            if (auto sub = subBlockWeak.get()) {
-                                SyncSubBlockFontSize(sub, tb);
-                            }
-                        }
-                    });
-        } catch (winrt::hresult_error const& ex) {
-            Wh_Log(L"Error registering font size callback: %08X", ex.code());
-            tracked.fontSizeCallbackToken = 0;
-        }
-    }
+    SyncSubBlockFontSize(subBlock);
+    SyncSubBlockFontFamily(subBlock);
 }
 
 Controls::TextBlock GetOrCreateSubBlock(TrackedVolumeContent& tracked,
@@ -790,9 +887,9 @@ Controls::TextBlock GetOrCreateSubBlock(TrackedVolumeContent& tracked,
         subBlock = Controls::TextBlock();
         subBlock.Name(L"VolumePercentageSubBlock");
         subBlock.VerticalAlignment(VerticalAlignment::Center);
-        subBlock.FontFamily(
-            Media::FontFamily(L"Segoe UI Variable Text, Segoe UI"));
-        subBlock.FontSize(12.0);
+        SyncSubBlockFontFamily(subBlock);
+        subBlock.FontSize(
+            (g_settings.fontSize > 0) ? g_settings.fontSize : 12.0);
 
         containerGrid.Children().Append(subBlock);
         tracked.subBlock = subBlock;
@@ -802,11 +899,149 @@ Controls::TextBlock GetOrCreateSubBlock(TrackedVolumeContent& tracked,
         FindChildByName(baseElement, L"InnerTextBlock");
     if (textBlockEl) {
         if (auto innerTextBlock = textBlockEl.try_as<Controls::TextBlock>()) {
-            BindSubBlockTextStyle(tracked, subBlock, innerTextBlock);
+            BindSubBlockTextStyle(subBlock, innerTextBlock);
         }
+    } else {
+        SyncSubBlockFontSize(subBlock);
+        SyncSubBlockFontFamily(subBlock);
     }
 
     return subBlock;
+}
+
+void UpdateSubBlockContent(Controls::TextBlock const& subBlock,
+                           bool isMuted,
+                           float volumeLevel) {
+    if (!subBlock) {
+        return;
+    }
+
+    double baseFontSize =
+        (g_settings.fontSize > 0) ? g_settings.fontSize : 12.0;
+
+    if (isMuted) {
+        if (g_settings.muteStyle == MuteStyle::emoji) {
+            double effectiveIconSize = (g_settings.iconSize > 0)
+                                           ? g_settings.iconSize
+                                           : kDefaultIconFontSize;
+            subBlock.Text(L"");
+            subBlock.Inlines().Clear();
+            Documents::Run run;
+            run.Text(L"\U0001F507");
+            run.FontSize(effectiveIconSize);
+            subBlock.Inlines().Append(run);
+            return;
+        }
+        subBlock.Inlines().Clear();
+        subBlock.Text(FormatVolumeText(volumeLevel, isMuted));
+        return;
+    }
+
+    int percentage =
+        std::clamp(static_cast<int>(std::lround(volumeLevel * 100.0f)), 0, 100);
+    std::wstring number = std::to_wstring(percentage);
+
+    if (g_settings.displayStyle == DisplayStyle::prefix) {
+        double effectivePrefixSize =
+            (g_settings.prefixSize > 0) ? g_settings.prefixSize : 12.0;
+        PCWSTR prefix = g_settings.customPrefix.get();
+        std::wstring rawPrefix = prefix ? prefix : L"";
+        std::wstring numPart = number + L"%";
+        std::wstring prefPart;
+
+        if (g_settings.elementPosition == ElementPosition::right) {
+            auto start = rawPrefix.find_first_not_of(L" \t\r\n");
+            auto end = rawPrefix.find_last_not_of(L" \t\r\n");
+            if (start != std::wstring::npos) {
+                prefPart = L" " + rawPrefix.substr(start, end - start + 1);
+            }
+        } else {
+            prefPart = rawPrefix;
+        }
+
+        subBlock.Text(L"");
+        subBlock.Inlines().Clear();
+
+        Documents::Run prefRun;
+        prefRun.Text(prefPart);
+        prefRun.FontSize(effectivePrefixSize);
+
+        Documents::Run volRun;
+        volRun.Text(numPart);
+        volRun.FontSize(baseFontSize);
+
+        if (g_settings.elementPosition == ElementPosition::right) {
+            subBlock.Inlines().Append(volRun);
+            subBlock.Inlines().Append(prefRun);
+        } else {
+            subBlock.Inlines().Append(prefRun);
+            subBlock.Inlines().Append(volRun);
+        }
+        return;
+    }
+
+    if (g_settings.displayStyle == DisplayStyle::emoji) {
+        double effectiveIconSize = (g_settings.iconSize > 0)
+                                       ? g_settings.iconSize
+                                       : kDefaultIconFontSize;
+        std::wstring numPart = number + L"%";
+        std::wstring emojiPart = L"\U0001F50A";
+
+        subBlock.Text(L"");
+        subBlock.Inlines().Clear();
+
+        Documents::Run emojiRun;
+        emojiRun.Text(emojiPart);
+        emojiRun.FontSize(effectiveIconSize);
+
+        Documents::Run volRun;
+        volRun.Text(numPart);
+        volRun.FontSize(baseFontSize);
+
+        Documents::Run spaceRun;
+        spaceRun.Text(L" ");
+        spaceRun.FontSize(baseFontSize);
+
+        if (g_settings.elementPosition == ElementPosition::left) {
+            subBlock.Inlines().Append(emojiRun);
+            subBlock.Inlines().Append(spaceRun);
+            subBlock.Inlines().Append(volRun);
+        } else {
+            subBlock.Inlines().Append(volRun);
+            subBlock.Inlines().Append(spaceRun);
+            subBlock.Inlines().Append(emojiRun);
+        }
+        return;
+    }
+
+    subBlock.Inlines().Clear();
+    subBlock.Text(FormatVolumeText(volumeLevel, isMuted));
+}
+
+void MeasureMaxContainerWidth(Controls::Grid const& containerGrid,
+                              Controls::TextBlock const& subBlock,
+                              bool useNativeGlyph) {
+    if (useNativeGlyph || !containerGrid || !subBlock) {
+        return;
+    }
+    try {
+        auto measureCandidate = [&](float vol, bool muted) {
+            UpdateSubBlockContent(subBlock, muted, vol);
+            containerGrid.Measure(
+                winrt::Windows::Foundation::Size{1000.0f, 1000.0f});
+            double candWidth =
+                static_cast<double>(containerGrid.DesiredSize().Width) + 6.0;
+            if (candWidth > g_maxObservedWidth) {
+                g_maxObservedWidth = candWidth;
+            }
+        };
+        measureCandidate(1.0f, false);
+        measureCandidate(0.0f, true);
+    } catch (...) {
+        Wh_Log(L"MeasureMaxContainerWidth error: %08X", winrt::to_hresult());
+    }
+    UpdateSubBlockContent(subBlock, g_isMuted, g_volumeLevel);
+    ApplyVolumeIconViewsWidth();
 }
 
 void SetupVolumeLayout(FrameworkElement const& textIconContent) {
@@ -889,6 +1124,9 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         textIconContent.HorizontalAlignment(HorizontalAlignment::Center);
     }
 
+    ApplyIconFontSize(baseElement, g_settings.iconSize);
+    ApplyIconFontSize(underlayElement, g_settings.iconSize);
+
     bool isDualBoxRequested = IsDualBoxStyle();
     bool isMuteDualBox = isDualBoxRequested && g_isMuted &&
                          (g_settings.muteStyle == MuteStyle::glyphText ||
@@ -904,7 +1142,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         tracked->lastNativeGlyph == useNativeGlyph) {
         if (!useNativeGlyph) {
             if (auto subBlock = tracked->subBlock.get()) {
-                subBlock.Text(g_volumeText);
+                UpdateSubBlockContent(subBlock, g_isMuted, g_volumeLevel);
             }
         }
         return;
@@ -939,7 +1177,7 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
                 }
             }
         } else {
-            subBlock.Text(g_volumeText);
+            UpdateSubBlockContent(subBlock, g_isMuted, g_volumeLevel);
             subBlock.HorizontalAlignment(HorizontalAlignment::Center);
             subBlock.Visibility(Visibility::Visible);
             Controls::Grid::SetColumn(subBlock, 0);
@@ -949,6 +1187,8 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
             useNativeGlyph ? Visibility::Visible : Visibility::Collapsed;
         applyLayout(baseElement, 0, baseVis);
         applyLayout(underlayElement, 0, baseVis);
+
+        MeasureMaxContainerWidth(containerGrid, subBlock, useNativeGlyph);
 
         tracked->lastDualBoxMode = false;
         tracked->lastNativeGlyph = useNativeGlyph;
@@ -978,12 +1218,12 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         applyLayout(baseElement, 0, Visibility::Visible);
         applyLayout(underlayElement, 0, Visibility::Visible);
 
-        subBlock.Text(g_volumeText);
+        UpdateSubBlockContent(subBlock, g_isMuted, g_volumeLevel);
         subBlock.HorizontalAlignment(HorizontalAlignment::Left);
         subBlock.Visibility(Visibility::Visible);
         Controls::Grid::SetColumn(subBlock, 1);
     } else {
-        subBlock.Text(g_volumeText);
+        UpdateSubBlockContent(subBlock, g_isMuted, g_volumeLevel);
         subBlock.HorizontalAlignment(HorizontalAlignment::Right);
         subBlock.Visibility(Visibility::Visible);
         Controls::Grid::SetColumn(subBlock, 0);
@@ -991,6 +1231,8 @@ void SetupVolumeLayout(FrameworkElement const& textIconContent) {
         applyLayout(baseElement, 1, Visibility::Visible);
         applyLayout(underlayElement, 1, Visibility::Visible);
     }
+
+    MeasureMaxContainerWidth(containerGrid, subBlock, false);
 
     tracked->lastDualBoxMode = true;
     tracked->lastNativeGlyph = false;
@@ -1270,6 +1512,7 @@ int WINAPI TextIconContent_MeasureOverride_Hook(
                 if (measuredWithPadding > g_maxObservedWidth) {
                     g_maxObservedWidth = measuredWithPadding;
                     g_volumeTextChanged = true;
+                    ApplyVolumeIconViewsWidth();
                 }
             }
 
@@ -1458,13 +1701,64 @@ void LoadSettings() {
     g_settings.iconSpacing = Wh_GetIntSetting(L"iconSpacing");
 
     g_settings.containerWidth = Wh_GetIntSetting(L"containerWidth");
+
+    g_settings.fontSize = Wh_GetIntSetting(L"fontSize");
+    if (g_settings.fontSize < 0) {
+        g_settings.fontSize = 0;
+    }
+
+    g_settings.prefixSize = Wh_GetIntSetting(L"prefixSize");
+    if (g_settings.prefixSize < 0) {
+        g_settings.prefixSize = 0;
+    }
+
+    g_settings.iconSize = Wh_GetIntSetting(L"iconSize");
+    if (g_settings.iconSize < 0) {
+        g_settings.iconSize = 0;
+    }
+
+    g_settings.customFontFamily =
+        WindhawkUtils::StringSetting::make(L"customFontFamily");
+
     g_maxObservedWidth = 0.0;
 
     g_settingsGeneration++;
 }
 
+bool ContainsCaseInsensitive(std::wstring_view text, std::wstring_view sub) {
+    if (sub.empty()) {
+        return true;
+    }
+    if (text.size() < sub.size()) {
+        return false;
+    }
+    auto it = std::search(
+        text.begin(), text.end(), sub.begin(), sub.end(),
+        [](wchar_t c1, wchar_t c2) {
+            return std::towlower(c1) == std::towlower(c2);
+        });
+    return it != text.end();
+}
+
+bool IsSecondaryExplorerProcess() {
+    PCWSTR cmdLine = GetCommandLineW();
+    if (!cmdLine || !*cmdLine) {
+        return false;
+    }
+
+    std::wstring_view cmdView{cmdLine};
+    return ContainsCaseInsensitive(cmdView, L"/factory") ||
+           ContainsCaseInsensitive(cmdView, L"-Embedding") ||
+           ContainsCaseInsensitive(cmdView, L"/separate");
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+
+    if (IsSecondaryExplorerProcess()) {
+        Wh_Log(L"Skipping secondary explorer process");
+        return FALSE;
+    }
 
     if (!g_volumeIconViews) {
         g_volumeIconViews.emplace();
@@ -1572,6 +1866,8 @@ void Wh_ModUninit() {
 
 void Wh_ModSettingsChanged() {
     Wh_Log(L">");
+
+    g_maxObservedWidth = 0.0;
 
     if (!RunFromTaskbarThread([](void*) {
             LoadSettings();
