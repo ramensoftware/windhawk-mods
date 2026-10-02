@@ -3,7 +3,8 @@
 // @name            Desktop Icon Ticker
 // @description     Show live scrolling or static text (time, date, CPU, RAM, disk, battery, Recycle Bin...) on top of desktop icons
 // @version         0.4
-// @author          you
+// @author          HaVeN80
+// @github          https://github.com/haven80
 // @include         explorer.exe
 // @compilerOptions -lcomctl32 -lgdi32 -lshell32 -lole32
 // ==/WindhawkMod==
