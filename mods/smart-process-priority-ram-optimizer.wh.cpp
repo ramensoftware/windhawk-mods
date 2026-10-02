@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         3.5.0
+// @version         3.6.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -32,6 +32,9 @@ An intelligent system responsiveness and memory optimization engine for Windows.
 
 ### 3. Audio & Network Activity Protection
 - Automatically detects active audio playback (music players, video streaming, DAWs) and active network transfers (downloads, streams, VoIP).
+- Topological audio sanctuary: shields the exact audio pipeline and active rendering workers without blindly immunizing dormant sibling processes or tabs.
+- Pre-emptive memory staging: gently demotes memory priority to the standby list when audio stops so memory is ready in advance for heavy workloads.
+- Instant elastic rebound: immediately restores memory priority and priority shields the instant audio playback resumes.
 - Prevents audio dropouts and download throttling by guaranteeing that processes streaming or transferring data are never throttled or memory-trimmed.
 
 ### 4. Local AI Model Sanctuary
@@ -1450,6 +1453,28 @@ static std::unordered_set<DWORD> GetActiveAudioProcessIds() {
     return audioPids;
 }
 
+// Forward declarations for early audio elastic re-engagement & pre-emptive staging
+static bool SetProcessMemoryPriorityHint(HANDLE hProcess, ULONG priority);
+static bool ResetProcessEcoQoS(HANDLE hProcess);
+
+static std::wstring GetProcessNameByPid(DWORD pid) {
+    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe{};
+        pe.dwSize = sizeof(pe);
+        if (Process32FirstW(hSnap, &pe)) {
+            do {
+                if (pe.th32ProcessID == pid) {
+                    CloseHandle(hSnap);
+                    return ToLower(pe.szExeFile);
+                }
+            } while (Process32NextW(hSnap, &pe));
+        }
+        CloseHandle(hSnap);
+    }
+    return L"process";
+}
+
 // Cached WASAPI audio sessions with hysteresis grace period.
 static std::chrono::steady_clock::time_point g_audioPidsCacheTime{};
 static std::unordered_set<DWORD> g_audioPidsCache;
@@ -1471,11 +1496,30 @@ GetActiveAudioProcessIdsCached(const ModSettings& settings) {
     }
 
     auto rawPids = GetActiveAudioProcessIds();
+
+    // 1. Instant Elastic Rebound: for any audio stream newly started or resumed,
+    // immediately restore full memory priority (5 / Normal) and clear any EcoQoS throttling.
     for (DWORD pid : rawPids) {
+        if (g_audioPidsCache.find(pid) == g_audioPidsCache.end()) {
+            HANDLE hProc = OpenProcess(
+                PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION,
+                FALSE, pid);
+            if (hProc) {
+                SetProcessMemoryPriorityHint(hProc, 5 /* MEMORY_PRIORITY_NORMAL */);
+                ResetProcessEcoQoS(hProc);
+                CloseHandle(hProc);
+            }
+            std::wstring procName = GetProcessNameByPid(pid);
+            LogEvent(LogCategory::Sanctuary, LogDetailLevel::Minimal,
+                     L"Active audio stream detected on %s (PID %u) -> Engaging topological sanctuary | Memory: Normal",
+                     procName.c_str(), pid);
+        }
         g_audioPidLastActive[pid] = now;
     }
 
-    // Retain PIDs that were active within the last 5 seconds (grace period)
+    // 2. Pre-emptive Memory Staging: for any PID that stopped playing audio,
+    // stage memory gently to standby list (2 / Low) once the grace period elapses.
+    DWORD fgPid = GetForegroundProcessId();
     std::unordered_set<DWORD> combined;
     for (auto it = g_audioPidLastActive.begin();
          it != g_audioPidLastActive.end();) {
@@ -1486,6 +1530,25 @@ GetActiveAudioProcessIdsCached(const ModSettings& settings) {
             combined.insert(it->first);
             ++it;
         } else {
+            DWORD stoppedPid = it->first;
+            std::wstring procName = GetProcessNameByPid(stoppedPid);
+            std::wstring fgName = (fgPid != 0) ? GetProcessNameByPid(fgPid) : L"";
+            bool isForegroundApp =
+                (stoppedPid == fgPid) ||
+                (!fgName.empty() && _wcsicmp(procName.c_str(), fgName.c_str()) == 0);
+
+            if (!isForegroundApp && stoppedPid != 0 && stoppedPid != 4) {
+                HANDLE hProc = OpenProcess(
+                    PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION,
+                    FALSE, stoppedPid);
+                if (hProc) {
+                    SetProcessMemoryPriorityHint(hProc, 2 /* MEMORY_PRIORITY_LOW */);
+                    CloseHandle(hProc);
+                }
+                LogEvent(LogCategory::Sanctuary, LogDetailLevel::Minimal,
+                         L"Audio stream ceased on %s (PID %u) -> Pre-emptively staging to Standby memory (Memory: Low)",
+                         procName.c_str(), stoppedPid);
+            }
             it = g_audioPidLastActive.erase(it);
         }
     }
@@ -2236,58 +2299,159 @@ static std::unordered_map<DWORD, WindowState> BuildWindowStateMapCached() {
 }
 
 // ---------------------------------------------------------------------------
-// Audio Process Tree Expansion Helper
+// Audio Process Tree Expansion Helper (Topological Liveness Sanctuary)
 // ---------------------------------------------------------------------------
+
+struct AudioWorkerSample {
+    ULONGLONG streamBytes = 0;
+    ULONGLONG cpuTime100ns = 0;
+    std::chrono::steady_clock::time_point sampleTime{};
+};
+
+static std::unordered_map<DWORD, AudioWorkerSample> g_audioWorkerSamples;
+static std::unordered_map<DWORD, std::chrono::steady_clock::time_point>
+    g_audioWorkerActiveUntil;
+static std::unordered_set<DWORD> g_loggedAudioWorkers;
 
 static std::unordered_set<DWORD>
 ExpandAudioProcessShield(const std::unordered_set<DWORD>& rawAudioPids,
-                         const std::vector<ProcessSnapshotEntry>& processList,
+                         const std::vector<ProcessSnapshotEntry>& /*processList*/,
                          const std::unordered_map<DWORD, std::vector<DWORD>>& childrenOf,
-                         const std::unordered_map<DWORD, DWORD>& parentOf) {
-    if (rawAudioPids.empty())
+                         const std::unordered_map<DWORD, DWORD>& parentOf,
+                         const std::unordered_map<DWORD, WindowState>& windowStates) {
+    if (rawAudioPids.empty()) {
+        g_loggedAudioWorkers.clear();
         return {};
-
-    std::unordered_map<DWORD, std::wstring> procNames;
-    for (const auto& entry : processList) {
-        procNames[entry.pid] = entry.name;
     }
 
+    auto now = std::chrono::steady_clock::now();
     std::unordered_set<DWORD> activeAudioPids = rawAudioPids;
+
     for (DWORD aPid : rawAudioPids) {
-        // Match processes sharing the same executable name (excluding generic hosts)
-        auto itName = procNames.find(aPid);
-        if (itName != procNames.end()) {
-            const std::wstring& aName = itName->second;
-            static const std::unordered_set<std::wstring> kGenericAudioHosts = {
-                L"svchost.exe", L"msedgewebview2.exe", L"node.exe", L"rundll32.exe",
-                L"dllhost.exe", L"cmd.exe", L"powershell.exe"};
-            if (kGenericAudioHosts.count(aName) == 0) {
-                for (const auto& kv : procNames) {
-                    if (kv.second == aName) {
-                        activeAudioPids.insert(kv.first);
+        // 1. Walk up parentOf to find root ancestor in the user session
+        std::unordered_set<DWORD> ancestors{aPid};
+        DWORD cur = aPid;
+        DWORD rootPid = aPid;
+        while (true) {
+            auto itP = parentOf.find(cur);
+            if (itP == parentOf.end() || itP->second == 0 || itP->second == 4 ||
+                !ancestors.insert(itP->second).second)
+                break;
+            cur = itP->second;
+            rootPid = cur;
+        }
+
+        // Always protect the direct ancestral lineage orchestrating the audio session
+        for (DWORD anc : ancestors) {
+            activeAudioPids.insert(anc);
+        }
+
+        // 2. Collect all descendant processes across the application tree
+        std::vector<DWORD> treeMembers;
+        std::unordered_set<DWORD> visited;
+        CollectDescendants(rootPid, childrenOf, treeMembers, visited);
+
+        // 3. Strict Liveness Gate: inspect each descendant to avoid immunizing dormant/dead helpers
+        for (DWORD dPid : treeMembers) {
+            if (activeAudioPids.count(dPid)) {
+                continue;
+            }
+
+            // A visible, non-minimized GUI window has active user presence
+            auto wsIt = windowStates.find(dPid);
+            if (wsIt != windowStates.end() && wsIt->second.hasVisibleWindow &&
+                !wsIt->second.isMinimized) {
+                activeAudioPids.insert(dPid);
+                continue;
+            }
+
+            // For headless/background workers, require genuine sustained streaming throughput
+            // (>= 16 KB/s continuous transfer) or active decoding (>= 1.0% CPU) over >= 1 second
+            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, dPid);
+            if (hProc) {
+                bool isLively = false;
+                IO_COUNTERS io{};
+                FILETIME creation{}, exit{}, kernel{}, user{};
+                if (GetProcessIoCounters(hProc, &io) &&
+                    GetProcessTimes(hProc, &creation, &exit, &kernel, &user)) {
+                    ULARGE_INTEGER k{}, u{};
+                    k.LowPart = kernel.dwLowDateTime;
+                    k.HighPart = kernel.dwHighDateTime;
+                    u.LowPart = user.dwLowDateTime;
+                    u.HighPart = user.dwHighDateTime;
+                    ULONGLONG curCpu100ns = k.QuadPart + u.QuadPart;
+                    ULONGLONG curStreamBytes =
+                        io.ReadTransferCount + io.WriteTransferCount;
+
+                    auto itSample = g_audioWorkerSamples.find(dPid);
+                    if (itSample != g_audioWorkerSamples.end()) {
+                        double deltaSec =
+                            (double)std::chrono::duration_cast<
+                                std::chrono::milliseconds>(
+                                now - itSample->second.sampleTime)
+                                .count() /
+                            1000.0;
+                        if (deltaSec >= 1.0) {
+                            double bytesPerSec =
+                                (curStreamBytes >= itSample->second.streamBytes)
+                                    ? ((double)(curStreamBytes -
+                                                itSample->second.streamBytes) /
+                                       deltaSec)
+                                    : 0.0;
+                            double cpuTimeMs =
+                                (curCpu100ns >= itSample->second.cpuTime100ns)
+                                    ? ((double)(curCpu100ns -
+                                                itSample->second.cpuTime100ns) /
+                                       10000.0)
+                                    : 0.0;
+                            double cpuPercent =
+                                (cpuTimeMs / (deltaSec * 1000.0)) * 100.0 /
+                                GetSystemCoreCount();
+
+                            // Threshold: >= 16 KB/s streaming throughput or >= 1.0% CPU decoding
+                            if (bytesPerSec >= 16384.0 || cpuPercent >= 1.0) {
+                                isLively = true;
+                                g_audioWorkerActiveUntil[dPid] =
+                                    now + std::chrono::seconds(15);
+                            }
+                            itSample->second = {curStreamBytes, curCpu100ns,
+                                                now};
+                        }
+                    } else {
+                        g_audioWorkerSamples[dPid] = {curStreamBytes, curCpu100ns,
+                                                      now};
+                    }
+                }
+                CloseHandle(hProc);
+
+                // Hysteresis hold: maintain sanctuary state across momentary network buffers
+                if (!isLively) {
+                    auto itHyst = g_audioWorkerActiveUntil.find(dPid);
+                    if (itHyst != g_audioWorkerActiveUntil.end() &&
+                        now < itHyst->second) {
+                        isLively = true;
+                    }
+                }
+
+                if (isLively) {
+                    activeAudioPids.insert(dPid);
+                    if (g_loggedAudioWorkers.insert(dPid).second) {
+                        std::wstring dName = GetProcessNameByPid(dPid);
+                        LogEvent(LogCategory::Sanctuary, LogDetailLevel::Detailed,
+                                 L"Audio worker/renderer active: %s (PID %u) under parent PID %u -> Shielded via liveness gate",
+                                 dName.c_str(), dPid, rootPid);
                     }
                 }
             }
         }
+    }
 
-        // Descendants in process tree
-        std::vector<DWORD> descendants;
-        std::unordered_set<DWORD> visited;
-        CollectDescendants(aPid, childrenOf, descendants, visited);
-        for (DWORD dPid : descendants) {
-            activeAudioPids.insert(dPid);
-        }
-
-        // Ancestor processes in tree
-        std::unordered_set<DWORD> seen{aPid};
-        DWORD cur = aPid;
-        while (true) {
-            auto itP = parentOf.find(cur);
-            if (itP == parentOf.end() || itP->second == 0 || itP->second == 4 ||
-                !seen.insert(itP->second).second)
-                break;
-            activeAudioPids.insert(itP->second);
-            cur = itP->second;
+    // Debounce log prune: remove PIDs that are no longer active in the audio sanctuary
+    for (auto it = g_loggedAudioWorkers.begin(); it != g_loggedAudioWorkers.end();) {
+        if (activeAudioPids.count(*it) == 0) {
+            it = g_loggedAudioWorkers.erase(it);
+        } else {
+            ++it;
         }
     }
 
@@ -2782,9 +2946,11 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
         threadCounts[entry.pid] = entry.threadCount;
     }
 
+    std::unordered_map<DWORD, WindowState> windowStates = BuildWindowStateMapCached();
+
     // Expand audio shield to entire process tree & executable family
     std::unordered_set<DWORD> activeAudioPids =
-        ExpandAudioProcessShield(rawAudioPids, snapshot, childrenOf, parentOf);
+        ExpandAudioProcessShield(rawAudioPids, snapshot, childrenOf, parentOf, windowStates);
 
     // Immunize the entire active foreground family from background throttling
     std::unordered_set<DWORD> fgFamilyPids;
@@ -2797,8 +2963,6 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
             fgFamilyPids.insert(fgChild);
         }
     }
-
-    std::unordered_map<DWORD, WindowState> windowStates = BuildWindowStateMapCached();
 
     // Immunize descendants of visible windows to prevent IPC priority inversions
     std::unordered_set<DWORD> visibleFamilyPids = fgFamilyPids;
@@ -3055,6 +3219,8 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
     PruneDeadPids(g_cpuSamples, alivePids);
     PruneDeadPids(g_lastCalmSampleTime, alivePids);
     PruneDeadPids(g_ioSamples, alivePids);
+    PruneDeadPids(g_audioWorkerSamples, alivePids);
+    PruneDeadPids(g_audioWorkerActiveUntil, alivePids);
     PruneDeadPids(g_aiLastInferenceTime, alivePids);
     PruneDeadPids(g_aiLastWorkingSetSize, alivePids);
     PruneAccessDeniedImmunity(alivePids);
@@ -3405,11 +3571,11 @@ static TrimStats TrimBackgroundWorkingSets(const ModSettings& settings,
         byPid[entry.pid] = &entry;
     }
 
+    std::unordered_map<DWORD, WindowState> windowStates = BuildWindowStateMapCached();
+
     // Expand audio shielding to the whole process tree & executable family
     std::unordered_set<DWORD> activeAudioPids =
-        ExpandAudioProcessShield(rawAudioPids, processList, childrenOf, parentOf);
-
-    std::unordered_map<DWORD, WindowState> windowStates = BuildWindowStateMapCached();
+        ExpandAudioProcessShield(rawAudioPids, processList, childrenOf, parentOf, windowStates);
 
     std::vector<AppTrimEntry> trimmedEntries;
     std::unordered_set<DWORD> handledPids;
@@ -3995,6 +4161,9 @@ static void MemoryOptimizerWorker() {
         if (g_resetSamplesRequested.exchange(false, std::memory_order_acq_rel)) {
             g_cpuSamples.clear();
             g_ioSamples.clear();
+            g_audioWorkerSamples.clear();
+            g_audioWorkerActiveUntil.clear();
+            g_loggedAudioWorkers.clear();
             g_aiCpuSamples.clear();
         }
 
@@ -4609,6 +4778,9 @@ void WhTool_ModUninit() {
     RestoreAllThrottledProcesses();
     g_audioPidLastActive.clear();
     g_audioPidsCache.clear();
+    g_audioWorkerSamples.clear();
+    g_audioWorkerActiveUntil.clear();
+    g_loggedAudioWorkers.clear();
     {
         std::lock_guard<std::mutex> lock(g_priorityMutex);
         RestoreForegroundBoostLocked();
