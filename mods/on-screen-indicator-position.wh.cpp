@@ -369,8 +369,8 @@ constexpr PCWSTR kHideAnimationUnavailableMessage =
 bool g_virtualDesktopUndetectable = false;
 
 constexpr PCWSTR kVirtualDesktopUndetectableMessage =
-    L"ShowText thunk did not resolve, virtual desktop popup will use the plain "
-    L"text position";
+    L"ShowText thunk did not resolve, so the virtual desktop popup uses the "
+    L"Other indicators position";
 
 // The position to place the indicator that is being shown right now.
 Position CurrentPosition() {
@@ -985,13 +985,14 @@ BOOL Wh_ModInit() {
 
     // The thread_local flag that tells virtual desktop popups apart from other
     // text indicators is set from ShowText's thunk, so if the thunk didn't
-    // resolve, virtual desktop popups silently follow the plain text position.
+    // resolve, virtual desktop popups silently follow the Other indicators position.
     // The ramp resolving on its own is enough to keep text detection working,
     // so it wouldn't trip the recorder check above. Only worth saying if the
-    // user has actually set a per-kind position for the virtual desktop popup.
+    // user has actually set a per-kind position for the virtual desktop popup, and
+    // not when every kind already falls back to the main position.
     g_virtualDesktopUndetectable =
         !ShowTextThunk_Original && ShowTextAsync_Original;
-    if (g_virtualDesktopUndetectable &&
+    if (g_virtualDesktopUndetectable && !g_kindUnreliable &&
         g_settings.perIndicator[(size_t)Indicator::virtualDesktop].load() !=
             Position::windowsDefault) {
         Wh_Log(L"%s", kVirtualDesktopUndetectableMessage);
@@ -1021,7 +1022,7 @@ void Wh_ModSettingsChanged() {
         Wh_Log(L"%s", kHideAnimationUnavailableMessage);
     }
 
-    if (g_virtualDesktopUndetectable &&
+    if (g_virtualDesktopUndetectable && !g_kindUnreliable &&
         g_settings.perIndicator[(size_t)Indicator::virtualDesktop].load() !=
             Position::windowsDefault) {
         Wh_Log(L"%s", kVirtualDesktopUndetectableMessage);
