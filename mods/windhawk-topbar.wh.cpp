@@ -52,6 +52,7 @@ Themes are collections of styles that can be selected from the **Theme** dropdow
 | [GreenBar](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) | [![GreenBar](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/HEAD/Themes/GreenBar/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/GreenBar) |
 | [NoIslands](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) | [![NoIslands](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/HEAD/Themes/NoIslands/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/NoIslands) |
 | [OS27 GoldenGate](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) | [![OS27 GoldenGate](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/OS27%20GoldenGate/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/OS27%20GoldenGate) |
+| [Midnight Neon](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/Midnight%20Neon) | [![Midnight Neon](https://raw.githubusercontent.com/wasixgamer/windhawk-topbar-styling-guide/main/Themes/Midnight%20Neon/screenshot.png)](https://github.com/wasixgamer/windhawk-topbar-styling-guide/tree/main/Themes/Midnight%20Neon) |
 
 More themes, stylings, etc can be found and contributed from:
 **[Windhawk TopBar Styling Guide](https://github.com/wasixgamer/windhawk-topbar-styling-guide)**
@@ -176,6 +177,7 @@ desktop are ignored.
   - GreenBar: GreenBar
   - NoIslands: NoIslands
   - OS27 GoldenGate: OS27 GoldenGate
+  - Midnight Neon: Midnight Neon
   $description: >-
     Select a TopBar theme.
 - monitorIndex: 0
@@ -1398,6 +1400,125 @@ const std::vector<ControlStyleRule> g_themeOS27GoldenGateStyles = {
         L"Background:=<WindhawkBlur BlurAmount=\"16\" TintColor=\"#20FFFFFF\" TintOpacity=\"0.2\" />",
         L"BorderThickness=1",
         L"CornerRadius=10"}},
+};
+
+const std::vector<ControlStyleRule> g_themeMidnightNeonStyles = {
+    {L"TopBarRoot", {
+        L"Width=Auto",
+        L"Background:=<LinearGradientBrush StartPoint=\"0,0\" EndPoint=\"1,0\"><GradientStop Offset=\"0\" Color=\"#0A1628\"/><GradientStop Offset=\"0.5\" Color=\"#12203A\"/><GradientStop Offset=\"1\" Color=\"#0E1B33\"/></LinearGradientBrush>",
+        L"IconColor=#8FD9F0",
+        L"CornerRadius=12"}},
+    {L"StartButton", {
+        L"Background:=#182038",
+        L"BorderBrush:=#55A78BFA",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#B8A5FF"}},
+    {L"SearchButton", {
+        L"Background:=#182038",
+        L"BorderBrush:=#556EE7F9",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#8FD9F0"}},
+    {L"ResourceButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#4434D399",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#7FE0BC"}},
+    {L"WeatherButton", {
+        L"Background:=#182038",
+        L"BorderBrush:=#44FBBF24",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#F5CE6B"}},
+    {L"SettingsButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#448FD9F0",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#8FD9F0"}},
+    {L"MediaButton", {
+        L"Background:=#1E1E38",
+        L"BorderBrush:=#44F472B6",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#E8A5C8"}},
+    {L"MediaTransportButton", {
+        L"Background:=#252540",
+        L"BorderThickness=0",
+        L"CornerRadius=8"}},
+    {L"DisplayButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#33FBBF24",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#E8C784"}},
+    {L"SoundButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#338FD9F0",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#8FD9F0"}},
+    {L"WifiButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#338FBBE8",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#8FBBE8"}},
+    {L"BluetoothButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#33B8A5FF",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#B8A5FF"}},
+    {L"BatteryButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#3334D399",
+        L"BorderThickness=1",
+        L"CornerRadius=10"}},
+    {L"RecycleBinButton", {
+        L"Background:=#1E1E38",
+        L"BorderBrush:=#33E8A5C8",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#E8A5C8"}},
+    {L"ControlCenterButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#338FD9F0",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#8FD9F0"}},
+    {L"ClockButton", { 
+        L"Background:=#16243A",
+        L"BorderBrush:=#338FD9F0",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"Margin=4,4,6,4"}},
+    {L"ClockText", {
+        L"Foreground=#B8DCEA",
+        L"FontSize=14"}},
+    {L"TaskButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#2A3552",
+        L"BorderThickness=1",
+        L"CornerRadius=10"}},
+    {L"AppTitleButton", {
+        L"Background:=#16243A",
+        L"BorderBrush:=#448FD9F0",
+        L"BorderThickness=1",
+        L"CornerRadius=10",
+        L"IconColor=#8FD9F0"}},
+    {L"FlyoutBlurHost", {
+        L"Background:=<WindhawkBlur BlurAmount=\"16\" TintColor=\"#0E1B33\" TintOpacity=\"0.65\" />",
+        L"CornerRadius=14"}},
+    {L"FlyoutPresenter", {
+        L"CornerRadius=14"}},
+    {L"MenuFlyoutPresenter", {
+        L"CornerRadius=14"}},
+    {L"Canvas > FlyoutPresenter > Grid > Border#PART_BackgroundBorder", {
+        L"Background:=<WindhawkBlur BlurAmount=\"16\" TintColor=\"#0E1B33\" TintOpacity=\"0.7\" />",
+        L"CornerRadius=14"}},
 };
 
 // Global variable to hold the currently selected theme's styles
@@ -9467,13 +9588,16 @@ void PopulateDisplayPanel() {
                     GetSystemAccentColor().G, GetSystemAccentColor().B)
         : MakeBrush(0x18, 0xFF, 0xFF, 0xFF));
 
-    wuxc::StackPanel nightStack;
+    wuxc::StackPanel nightStack; 
     nightStack.Orientation(wuxc::Orientation::Horizontal);
     nightStack.Spacing(8);
-    if (auto icon = BuildVectorIcon(nullptr, icons::kMoonFill, L"", 24, 16,
-                                    1.7, L"#FFFFFF")) {
-        icon.VerticalAlignment(VerticalAlignment::Center);
-        nightStack.Children().Append(icon);
+    {
+        wuxc::FontIcon nlIcon;
+        nlIcon.Glyph(L"\uE708");
+        nlIcon.FontSize(16);
+        nlIcon.Foreground(MakeBrush(0xFF, 0xFF, 0xFF, 0xFF));
+        nlIcon.VerticalAlignment(VerticalAlignment::Center);
+        nightStack.Children().Append(nlIcon);
     }
     nightStack.Children().Append(MakeText(nullptr, L"Night light", 12));
     nightTile.Content(nightStack);
@@ -12375,8 +12499,18 @@ void PopulateResourceFlyout() {
             UpdateResourceFlyoutContent();
         }
     });
-    g_infoGpuCombo.DropDownOpened([](auto&&, auto&&) {
+    g_infoGpuCombo.DropDownOpened([](auto&&, auto&&) { 
         g_resourceComboOpen = true;
+        auto promote = [] {
+            try { PromoteChildFlyoutPopups(); } catch (...) {}
+        };
+        RunOnUiThread([promote] { promote(); });
+        RunInBackground([promote] {
+            Sleep(80);
+            RunOnUiThread([promote] { promote(); });
+            Sleep(80);
+            RunOnUiThread([promote] { promote(); });
+        });
     });
     g_infoGpuCombo.DropDownClosed([](auto&&, auto&&) {
         g_resourceComboOpen = false;
@@ -12860,7 +12994,8 @@ void BuildWeatherView(const wf::Collections::IVector<UIElement>& children) {
     // for the row.
     scrollLeft.VerticalAlignment(VerticalAlignment::Stretch);
     scrollLeft.Content(BuildVectorIcon(nullptr, L"", icons::kChevronLeft, 24, 14, 1.8));
-    scrollLeft.Click([hourlyScroller, hourlyRow](auto&&, auto&&) {
+    scrollLeft.Click([hourlyScroller, hourlyRow](auto&&, auto&&) { 
+        if (hourlyRow.Children().Size() == 0) return;
         constexpr double kCellStep = 52.0;
         double current = hourlyScroller.HorizontalOffset();
         int currentIndex = static_cast<int>(std::round(current / kCellStep));
@@ -12884,12 +13019,13 @@ void BuildWeatherView(const wf::Collections::IVector<UIElement>& children) {
     scrollRight.VerticalContentAlignment(VerticalAlignment::Center);
     scrollRight.VerticalAlignment(VerticalAlignment::Stretch);
     scrollRight.Content(BuildVectorIcon(nullptr, L"", icons::kChevronRight, 24, 14, 1.8));
-    scrollRight.Click([hourlyScroller, hourlyRow](auto&&, auto&&) {
+    scrollRight.Click([hourlyScroller, hourlyRow](auto&&, auto&&) { 
+        int childCount = static_cast<int>(hourlyRow.Children().Size());
+        if (childCount <= 0) return;
         constexpr double kCellStep = 52.0;
         double current = hourlyScroller.HorizontalOffset();
         int currentIndex = static_cast<int>(std::round(current / kCellStep));
         int targetIndex = currentIndex + 5;
-        int childCount = static_cast<int>(hourlyRow.Children().Size());
         if (targetIndex >= childCount) {
             targetIndex = childCount - 1;
         }
@@ -21638,7 +21774,7 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR monitor, HDC, LPRECT, LPARAM lParam) {
 }
 
 HMONITOR GetBarMonitor() {
-    if (g_settings.monitorIndex > 0) {
+    if (g_settings.monitorIndex > 1) {
         MonitorEnumState state;
         state.wanted = g_settings.monitorIndex;
         EnumDisplayMonitors(nullptr, nullptr, MonitorEnumProc,
@@ -26994,6 +27130,8 @@ void LoadSettings() {
         g_themeStyleRules = g_themeNoIslandsStyles;
     } else if (theme == L"OS27 GoldenGate") {
         g_themeStyleRules = g_themeOS27GoldenGateStyles;
+    } else if (theme == L"Midnight Neon") {
+        g_themeStyleRules = g_themeMidnightNeonStyles;
     }
 }
 
