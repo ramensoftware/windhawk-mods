@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.21.2
+// @version         0.21.3
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -1956,6 +1956,15 @@ static bool HashFile(HANDLE file, std::array<BYTE, 32>& digest) {
     return ok;
 }
 
+// Caller holds g_lock.
+static void RememberRecentContent(const std::array<BYTE, 32>& hash,
+                                  const std::wstring& path,
+                                  ULONGLONG now) {
+    g_recentContent.push_back({hash, path, now + kContentDuplicateWindowMs});
+    while (g_recentContent.size() > kMaxRecentContent)
+        g_recentContent.pop_front();
+}
+
 static bool SeenRecentContentAndRemember(const std::array<BYTE, 32>& hash,
                                          const std::wstring& path,
                                          ULONGLONG now,
@@ -1974,9 +1983,7 @@ static bool SeenRecentContentAndRemember(const std::array<BYTE, 32>& hash,
         }
         it = g_recentContent.erase(it);
     }
-    g_recentContent.push_back({hash, path, now + kContentDuplicateWindowMs});
-    while (g_recentContent.size() > kMaxRecentContent)
-        g_recentContent.pop_front();
+    RememberRecentContent(hash, path, now);
     return false;
 }
 
@@ -2077,9 +2084,13 @@ static void ProcessOne(std::wstring path) {
                     L"file was unavailable or processing stopped", path);
         return;
     }
-    if (g_generation.load() != generation || WaitStop(0)) {
-        AuditResult(s, AuditOutcome::Kept, L"processing cancelled or stopped", path);
+    if (WaitStop(0)) {
+        AuditResult(s, AuditOutcome::Kept, L"processing stopped", path);
         return;
+    }
+    if (g_generation.load() != generation) {
+        // Nothing has been acted on yet, so the new settings simply apply.
+        s = SnapshotSettings(&generation);
     }
     if (s.logDetails) {
         Wh_Log(L"stable in %lu ms: %s", GetTickCount() - t0, path.c_str());
@@ -2126,10 +2137,13 @@ static void ProcessOne(std::wstring path) {
     bool duplicateCandidate = s.removeExactDuplicates &&
         (forceImage || s.mode == L"image");
     if (duplicateCandidate && !capture.Open(path, s.folder)) {
-        // Lack of delete access must not prevent an otherwise valid clipboard copy
-        // or the configured normal cleanup path. It only disables deduplication
-        // for this file.
+        // A file that can't be opened for reading this way (still held for write by
+        // another program, or failing the folder and file checks) must not stop an
+        // otherwise valid clipboard copy or the configured normal cleanup path. It
+        // only disables deduplication for this file.
         duplicateCandidate = false;
+        Wh_Log(L"Duplicate check skipped, could not open the screenshot%s",
+               s.logDetails ? (L": " + path).c_str() : L"");
     }
 
     bool copied;
@@ -2166,6 +2180,16 @@ static void ProcessOne(std::wstring path) {
                 return;
             }
             if (duplicate && action == ACTION_AUTO) {
+                // A duplicate that stays on disk was never remembered as a keeper.
+                // Without this, once the earlier copy is gone the next identical
+                // capture becomes a second survivor instead of matching this one.
+                auto rememberKept = [&]() {
+                    EnterCriticalSection(&g_lock);
+                    if (generation == g_generation.load()) {
+                        RememberRecentContent(digest, path, GetTickCount64());
+                    }
+                    LeaveCriticalSection(&g_lock);
+                };
                 DWORD delay = s.popup ? 0 : (DWORD)s.delaySeconds * 1000;
                 BY_HANDLE_FILE_INFORMATION beforeCleanup{};
                 if (!GetFileInformationByHandle(capture.file, &beforeCleanup)) {
@@ -2175,12 +2199,14 @@ static void ProcessOne(std::wstring path) {
                 }
                 capture.Close();
                 if (CleanupCancelled(delay, generation)) {
+                    rememberKept();
                     AuditResult(s, AuditOutcome::Kept,
                                 L"duplicate cleanup cancelled or stopped", path);
                     return;
                 }
                 LockedCapture kept;
                 if (!kept.Open(keeper, s.folder, false)) {
+                    rememberKept();
                     AuditResult(s, AuditOutcome::Kept,
                                 L"earlier copy is unavailable", path);
                     return;
@@ -2201,20 +2227,20 @@ static void ProcessOne(std::wstring path) {
                                 L"file changed before cleanup", path);
                     return;
                 }
-                std::array<BYTE, 32> currentDigest;
-                if (!HashFile(again.file, currentDigest) || currentDigest != digest ||
-                    !SameFileContents(again.file, kept.file)) {
+                // Both handles deny writes, so a byte-for-byte match against the
+                // kept copy is the whole guarantee that recycling this one loses
+                // nothing.
+                if (!SameFileContents(again.file, kept.file)) {
                     AuditResult(s, AuditOutcome::Kept,
                                 L"file contents changed before cleanup", path);
                     return;
                 }
                 AuditOutcome outcome =
                     CleanupDuplicate(path, generation, again);
+                if (outcome != AuditOutcome::RecycledDuplicate) rememberKept();
                 AuditResult(s, outcome, outcome == AuditOutcome::RecycledDuplicate
                                 ? L"exact duplicate"
-                                : outcome == AuditOutcome::Kept
-                                      ? L"duplicate cleanup failed; file kept"
-                                      : L"duplicate cleanup completed",
+                                : L"duplicate cleanup failed; file kept",
                             path);
                 return;
             }
