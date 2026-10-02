@@ -2670,6 +2670,17 @@ int CEF_CALLBACK _getSpotifyModule_hook(cef_v8handler_t* self, const cef_string_
     return _getSpotifyModule_original(self, name, object, argumentsCount, arguments, retval, exception);
 }
 
+void PruneV8Handlers(std::vector<cef_v8handler_t*>& handlers, v8func_exec_t original) {
+    std::erase_if(handlers, [original](cef_v8handler_t* h) {
+        if (!h->base.has_one_ref(&h->base)) {
+            return false;
+        }
+        h->execute = original;
+        h->base.release(&h->base);
+        return true;
+    });
+}
+
 cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](const cef_string_t* name, cef_v8handler_t* handler) -> cef_v8value_t* {
     Wh_Log(L"cef_v8value_create_function called with name: %s", name->str);
     // This function exists on all Spotify versions supported by this mod
@@ -2689,12 +2700,7 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
             cancelCosmosRequest_original = handler->execute;
             handler->execute = cancelCosmosRequest_hook;
             // Release handlers that only this mod hold reference
-            for (auto& handler : cancelCosmosRequest_v8handlers) {
-                if (handler->base.has_one_ref(&handler->base)) {
-                    handler->execute = cancelCosmosRequest_original;
-                    handler->base.release(&handler->base);
-                }
-            }
+            PruneV8Handlers(cancelCosmosRequest_v8handlers, cancelCosmosRequest_original);
             // These V8 functions are created twice on page load (seems the first one is only used)
             // And it gets called twice whenever the page reloads
             // So save it in a vector and restore all on uninit
@@ -2715,12 +2721,7 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
         if (handler->execute != cancelEsperantoCall_hook) {
             cancelEsperantoCall_original = handler->execute;
             handler->execute = cancelEsperantoCall_hook;
-            for (auto& handler : cancelEsperantoCall_v8handlers) {
-                if (handler->base.has_one_ref(&handler->base)) {
-                    handler->execute = cancelEsperantoCall_hook;
-                    handler->base.release(&handler->base);
-                }
-            }
+            PruneV8Handlers(cancelEsperantoCall_v8handlers, cancelEsperantoCall_original);
             cancelEsperantoCall_v8handlers.push_back(handler);
             handler->base.add_ref(&handler->base);
         }
@@ -2738,12 +2739,7 @@ cef_v8value_create_function_t CEF_EXPORT cef_v8value_create_function_hook = [](c
         if (handler->execute != _getSpotifyModule_hook) {
             _getSpotifyModule_original = handler->execute;
             handler->execute = _getSpotifyModule_hook;
-            for (auto& handler : _getSpotifyModule_v8handlers) {
-                if (handler->base.has_one_ref(&handler->base)) {
-                    handler->execute = _getSpotifyModule_hook;
-                    handler->base.release(&handler->base);
-                }
-            }
+            PruneV8Handlers(_getSpotifyModule_v8handlers, _getSpotifyModule_original);
             _getSpotifyModule_v8handlers.push_back(handler);
             handler->base.add_ref(&handler->base);
         }
