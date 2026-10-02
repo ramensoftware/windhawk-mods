@@ -1,3 +1,9 @@
+## 1.3.3 ([Oct 2, 2026](https://github.com/ramensoftware/windhawk-mods/blob/525894960b8e1cdb3633ad6aa72afee4907dfa99/mods/taskbar-start-button-position.wh.cpp))
+
+* Added support for the vertical taskbar.
+* Improved compatibility with the taskbar search box.
+* Fixed the task view hover popup (vertical desktops preview) when "Move other system buttons to the left" is enabled.
+
 ## 1.3.2 ([Aug 11, 2026](https://github.com/ramensoftware/windhawk-mods/blob/f54228f470bf21b8c0d7d291a80fc4d7d802084c/mods/taskbar-start-button-position.wh.cpp))
 
 * Added an option to position the search menu in all cases. By default, the search menu is only repositioned when it's opened from the Start menu, not when it's opened in other ways, such as with the Win+S shortcut or the taskbar search icon.

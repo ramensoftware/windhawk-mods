@@ -13785,7 +13785,7 @@
         "ratingUsers": 279,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1786484133000,
+        "updated": 1790981419000,
         "users": 18710
       },
       "metadata": {
@@ -13803,7 +13803,7 @@
         ],
         "name": "Start button always on the left",
         "twitter": "https://twitter.com/m417z",
-        "version": "1.3.2"
+        "version": "1.3.3"
       }
     },
     "taskbar-system-info": {
