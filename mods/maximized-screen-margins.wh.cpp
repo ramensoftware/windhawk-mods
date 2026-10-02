@@ -25,6 +25,29 @@
 */
 // ==/WindhawkModSettings==
 
+// ==WindhawkModReadme==
+/*
+# Screen Margin Gaps for Maximized Windows
+
+Adds customizable outer margin gaps around your screen so maximized windows leave space along the edges.
+
+This is especially useful when using mods like **Custom Window Corner Radius** with rounded corners enabled for maximized windows. Since Windows normally stretches maximized windows to the exact screen boundaries, rounded corners can get clipped or touch the screen borders. This mod ensures there is always breathing room around maximized apps, keeping rounded corners fully visible and floating smoothly above your desktop.
+
+## Features
+
+- **Native Windows AppBar API:** Uses official Win32 application desktop toolbar APIs (`SHAppBarMessage`) instead of hooking or fighting with window sizing protocols.
+- **Universal Window Support:** Works consistently across all apps (Chrome, VS Code, File Explorer, Terminal, Electron apps, etc.).
+- **Click-Through & Invisible:** The reserved edge regions are completely transparent and allow mouse input to pass through freely.
+- **Configurable Edges:** Customize the gap size (in pixels) and independently toggle margins for the top and bottom borders.
+- **Clean Unload:** Disabling or modifying settings instantly restores your original desktop work area without requiring a restart of `explorer.exe`.
+
+## Recommended Pairing
+
+- **Custom Window Corner Radius:** Enable the option to round maximized/snapped windows to achieve a modern, floating-card window aesthetic.
+- **Windows 11 Taskbar Styler:** If you use a floating or centered dock-style taskbar, set `bottomGap: false` so this mod preserves your existing taskbar spacing.
+*/
+// ==/WindhawkModReadme==
+
 #include <windhawk_api.h>
 #include <windows.h>
 #include <shellapi.h>
