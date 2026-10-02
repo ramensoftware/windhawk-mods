@@ -2074,6 +2074,21 @@ static AuditOutcome CleanupDuplicate(const std::wstring& path,
     return RecycleFile(path) ? AuditOutcome::RecycledDuplicate : AuditOutcome::Kept;
 }
 
+// Defined with the worker below, which is also where it is normally called.
+static void SyncToastRegistration(bool wantPopup, bool unloading = false);
+
+// Same parent test LockedCapture::Open applies, for a path that has to be a plain
+// child of the folder being watched.
+static bool IsDirectChildOf(const std::wstring& path, const std::wstring& folder) {
+    std::wstring parent = folder;
+    if (parent.size() > 1 && (parent.back() == L'\\' || parent.back() == L'/')) {
+        parent.pop_back();
+    }
+    auto split = path.find_last_of(L"\\/");
+    return split != std::wstring::npos &&
+           _wcsicmp(path.substr(0, split).c_str(), parent.c_str()) == 0;
+}
+
 static void ProcessOne(std::wstring path) {
     ULONGLONG generation;
     Settings s = SnapshotSettings(&generation);
@@ -2091,6 +2106,14 @@ static void ProcessOne(std::wstring path) {
     if (g_generation.load() != generation) {
         // Nothing has been acted on yet, so the new settings simply apply.
         s = SnapshotSettings(&generation);
+        // The worker only syncs the toast registration when it wakes and between
+        // files, so a popup switched on during the wait would still get the dialog.
+        SyncToastRegistration(s.popup);
+        // A different folder is now being watched, and this file is not in it.
+        if (!IsDirectChildOf(path, s.folder)) {
+            AuditResult(s, AuditOutcome::Skipped, L"watched folder changed", path);
+            return;
+        }
     }
     if (s.logDetails) {
         Wh_Log(L"stable in %lu ms: %s", GetTickCount() - t0, path.c_str());
@@ -2231,6 +2254,21 @@ static void ProcessOne(std::wstring path) {
                 // kept copy is the whole guarantee that recycling this one loses
                 // nothing.
                 if (!SameFileContents(again.file, kept.file)) {
+                    // The incoming file just passed the identity, size and time
+                    // check and is locked against writes. If it still hashes to
+                    // what was recorded, the earlier copy is what changed, so drop
+                    // its stale entry and remember this one in its place.
+                    std::array<BYTE, 32> current;
+                    if (HashFile(again.file, current) && current == digest) {
+                        EnterCriticalSection(&g_lock);
+                        if (generation == g_generation.load()) {
+                            std::erase_if(g_recentContent, [&](const RecentContent& e) {
+                                return _wcsicmp(e.keeper.c_str(), keeper.c_str()) == 0;
+                            });
+                            RememberRecentContent(digest, path, GetTickCount64());
+                        }
+                        LeaveCriticalSection(&g_lock);
+                    }
                     AuditResult(s, AuditOutcome::Kept,
                                 L"file contents changed before cleanup", path);
                     return;
@@ -2375,7 +2413,7 @@ static void ClearToastHistory() {
 // unconditionally at startup. With processing or the popup off there is no
 // notification, and a SnapSentry entry sitting in Start and in Search would be
 // there for nothing.
-static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
+static void SyncToastRegistration(bool wantPopup, bool unloading) {
     // Clear Action Center and reclaim the per-AUMID notification key on unload,
     // unconditionally and before the early return below: with the popup already
     // off at unload the requested state matches, and we would otherwise return
@@ -2488,6 +2526,9 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         }
         std::wstring path;
         while (!WaitStop(0) && DequeueOne(path)) {
+            // Settings can change between files, and the popup setting decides
+            // whether the toast is registered.
+            SyncToastRegistration(SnapshotSettings().popup);
             ProcessOne(path);
             ReleaseInflight(path);
         }
