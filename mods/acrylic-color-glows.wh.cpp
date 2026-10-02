@@ -4,6 +4,7 @@
 // @description     Animated light effects behind selected translucent windows
 // @version         0.4.2
 // @author          HaVeN80
+// @https://github.com/haven80
 // @include         windhawk.exe
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lshell32 -ladvapi32
 // @license         GPL-3.0
@@ -12,6 +13,9 @@
 // ==WindhawkModReadme==
 /*
 # Acrylic Color Glows
+
+![Acrylic Glow](https://i.imgur.com/qvqqV2I.png)
+[Watch the overview video in full quality](https://i.imgur.com/huCSr8H.mp4)
 
 Animated light effects behind the windows you choose: drifting glows, sweeping
 light beams, orbs moving in the directions you pick, or flowing waves. The
