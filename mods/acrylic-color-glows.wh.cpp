@@ -4,7 +4,7 @@
 // @description     Animated light effects behind selected translucent windows
 // @version         0.4.2
 // @author          HaVeN80
-// @https://github.com/haven80
+// @github          https://github.com/haven80
 // @include         windhawk.exe
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lshell32 -ladvapi32
 // @license         GPL-3.0
