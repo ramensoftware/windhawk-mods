@@ -8,7 +8,7 @@
 // @homepage        https://github.com/marco-kretz/win11-multi-dpi-cursor
 // @license         MIT
 // @include         windhawk.exe
-// @compilerOptions -lshcore -lshell32
+// @compilerOptions -lshcore -lshell32 -ladvapi32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -22,8 +22,15 @@ higher-DPI monitor.
 Whenever the cursor moves to another monitor, this mod sets the cursor size to
 `baseSize × monitorDpi / 96`. At 125 % a base size of 32 becomes 40.
 
+By default, the base size is the pointer size chosen in Windows Settings
+(Accessibility > Mouse pointer and touch), so the Settings slider keeps working.
+Set a base size in the mod settings to override it. While dragging the
+slider, the cursor briefly jumps between the Settings size and the scaled
+size, and settles once the slider is released.
+
 Cursor movement is received via an out-of-context WinEvent hook, so there is
-no polling and mouse input is never delayed. Disabling the mod resets the cursor to the base size.
+no polling and mouse input is never delayed. Disabling the mod restores the
+pointer size from Windows Settings.
 
 The size is applied live only and never written to the registry. It relies on
 the undocumented `SystemParametersInfo(0x2029)` call used by the Settings app,
@@ -33,10 +40,10 @@ which a Windows update could change.
 
 // ==WindhawkModSettings==
 /*
-- baseSize: 32
+- baseSize: 0
   $name: Base cursor size
-  $description: Cursor size in pixels at 100 % scaling (Windows default is 32, maximum 256)
-  #! $min: 1
+  $description: Cursor size in pixels at 100 % scaling (maximum 256). 0 uses the pointer size from Windows Settings.
+  #! $min: 0
   #! $max: 256
 */
 // ==/WindhawkModSettings==
@@ -50,19 +57,35 @@ which a Windows update could change.
 constexpr UINT SPI_SETCURSORSIZE = 0x2029;
 constexpr UINT WM_APP_SETTINGS = WM_APP + 1;
 
-std::atomic<UINT> g_baseSize;
+std::atomic<UINT> g_baseSize;  // 0: use the Windows Settings size
 std::atomic<HWND> g_hwnd;
+std::atomic<bool> g_stopping;
 HANDLE g_thread;
 HMONITOR g_lastMonitor;  // only touched on the window thread
 
 void SetCursorSize(UINT size) {
-    SystemParametersInfo(SPI_SETCURSORSIZE, 0, (PVOID)(UINT_PTR)size, 0);
+    if (!SystemParametersInfo(SPI_SETCURSORSIZE, 0, (PVOID)(UINT_PTR)size, 0)) {
+        Wh_Log(L"SystemParametersInfo(%u) failed: %u", size, GetLastError());
+    }
+}
+
+// The size from Settings, which our live-only SPI calls never overwrite.
+UINT GetWindowsCursorSize() {
+    DWORD size = 0;
+    DWORD cb = sizeof(size);
+    if (RegGetValue(HKEY_CURRENT_USER, L"Control Panel\\Cursors",
+                    L"CursorBaseSize", RRF_RT_REG_DWORD, nullptr, &size,
+                    &cb) != ERROR_SUCCESS ||
+        size == 0) {
+        return 32;
+    }
+    return size;
 }
 
 void LoadSettings() {
     int size = Wh_GetIntSetting(L"baseSize");
     // Settings caps at 256 px, and 1.7.3 doesn't enforce $min/$max.
-    g_baseSize = size <= 0 ? 32 : size > 256 ? 256 : size;
+    g_baseSize = size <= 0 ? 0 : size > 256 ? 256 : size;
 }
 
 void Update() {
@@ -80,7 +103,11 @@ void Update() {
         Wh_Log(L"GetDpiForMonitor failed: 0x%08X", hr);
         return;
     }
-    UINT size = MulDiv(g_baseSize, dpi, 96);
+    UINT baseSize = g_baseSize;
+    if (!baseSize) {
+        baseSize = GetWindowsCursorSize();
+    }
+    UINT size = MulDiv(baseSize, dpi, 96);
     Wh_Log(L"Monitor %p at (%d, %d): dpi=%u, size=%u", monitor, pt.x, pt.y,
            dpi, size);
     SetCursorSize(size);
@@ -96,6 +123,7 @@ void CALLBACK CursorMoved(HWINEVENTHOOK, DWORD, HWND, LONG idObject, LONG,
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         // Scaling or cursor changes keep the same HMONITOR, so force a refresh.
+        // WM_SETTINGCHANGE also covers the Settings pointer size slider.
         case WM_DISPLAYCHANGE:
         case WM_SETTINGCHANGE:
         case WM_DPICHANGED:
@@ -144,6 +172,9 @@ DWORD WINAPI WindowThread(LPVOID) {
     }
 
     g_hwnd = hwnd;
+    if (g_stopping) {
+        DestroyWindow(hwnd);  // Uninit ran before the window existed.
+    }
     Update();
 
     MSG msg;
@@ -170,11 +201,12 @@ void WhTool_ModSettingsChanged() {
 }
 
 void WhTool_ModUninit() {
+    g_stopping = true;
     if (HWND hwnd = g_hwnd) {
         PostMessage(hwnd, WM_CLOSE, 0, 0);
     }
-    WaitForSingleObject(g_thread, 1000);
-    SetCursorSize(g_baseSize);
+    WaitForSingleObject(g_thread, INFINITE);
+    SetCursorSize(GetWindowsCursorSize());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
