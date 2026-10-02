@@ -2,7 +2,7 @@
 // @id              overhaulded-alt-tab
 // @name            OverhauldedWin Alt+Tab
 // @description     Replaces the boring Windows Alt+Tab with a modern and elegant window switcher.
-// @version         1.1.29
+// @version         1.2.1
 // @author          IMiloDev
 // @github          https://github.com/IMiloDev
 // @homepage        https://github.com/IMiloDev/OverhauldedWin-Task-Switcher
@@ -12,7 +12,7 @@
 
 // ==WindhawkModReadme==
 /*
-# Overhaulded Task Switcher  
+# Overhaulded Task Switcher
 
 A modern, fluid and highly visual replacement for the native Windows Alt+Tab experience.
 
@@ -22,7 +22,7 @@ Built from scratch in native C++ as a project to explore Windows APIs, graphics,
  
 ## Screenshot
 
-![OverhauldedWin Task Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Task2.png)
+![OverhauldedWin Task Switcher](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/TaskManager.jpg)
 
 ## Features
 
@@ -75,17 +75,17 @@ The central visualizer remains fixed while the cards move through the carousel, 
 
 ## Smooth Animations
 
-### Open
+### Open / Close
 
-![OverhauldedWin Open Animation](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/task-switcher.webp)
+![OverhauldedWin Open Animation](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Open_n'_Close.webp)
 
 ### Navigation
 
-![OverhauldedWin](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Desplazamiento-sexy.webp)
+![OverhauldedWin](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Desplacement.webp)
 
-### Close
+### Window Close
 
-![OverhauldedWin Close Animation](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/close.webp)
+![OverhauldedWin](https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/abort.webp)
 
 ## Background Execution
 
@@ -172,14 +172,26 @@ Native C++ • Windows 11 • Windhawk
 
 // ==WindhawkModSettings==
 /*
-- AnimationFps: "90"
-  $name: Animation FPS
-  $description: Maximum animation update frequency. Durations remain time-based.
+- VisibleCards: "5"
+  $name: Visible cards
+  $description: Number of cards shown in the carousel.
   $options:
-  - "60": 60 FPS
-  - "90": 90 FPS
-  - "120": 120 FPS
-  - "240": 240 FPS
+  - "3": 3 cards
+  - "5": 5 cards (default)
+- AnimationSpeed: "100"
+  $name: Animation speed
+  $description: Relative speed of existing animations.
+  $options:
+  - "75": 75%
+  - "100": 100% (default)
+  - "125": 125%
+  - "150": 150%
+- PerformanceMode: "balanced"
+  $name: Performance mode
+  $description: Controls the animation update frequency.
+  $options:
+  - "balanced": Balanced (default)
+  - "smooth": Smooth
 */
 // ==/WindhawkModSettings==
 
@@ -208,7 +220,9 @@ static const wchar_t kWindowClassName[] = L"OverhauldedAltTabSelector";
 
 static const int kSelectorWidth = 1220;
 static const int kSelectorHeight = 430;
-static const int kCarouselSlots = 5;
+static const int kMaxCarouselSlots = 5;
+static int g_visibleCardCount = 5;
+static int g_animationSpeedPercent = 100;
 static const int kCounterWidth = 140;
 static const int kCounterHeight = 28;
 static const int kCounterTop = 378;
@@ -223,25 +237,31 @@ static const float kNavigationDuration = 150.0f;
 static const int kDefaultAnimationFps = 90;
 static int g_animationFps = kDefaultAnimationFps;
 
-static bool IsSupportedAnimationFps(int value)
+static int GetCarouselCenterSlot() { return g_visibleCardCount / 2; }
+static int GetCarouselSlotCount() { return g_visibleCardCount; }
+static float AnimationDuration(float baseMs)
 {
-    return value == 60 || value == 90 || value == 120 || value == 240;
+    return baseMs * 100.0f / static_cast<float>(g_animationSpeedPercent);
+}
+static void LoadTaskSwitcherSettings()
+{
+    auto read = [](PCWSTR key, PCWSTR fallback) {
+        PCWSTR value = Wh_GetStringSetting(key);
+        if (!value) return std::wstring(fallback);
+        std::wstring result(value);
+        Wh_FreeStringSetting(value);
+        return result;
+    };
+    std::wstring visible = read(L"VisibleCards", L"5");
+    g_visibleCardCount = visible == L"3" ? 3 : 5;
+    std::wstring speed = read(L"AnimationSpeed", L"100");
+    g_animationSpeedPercent = (speed == L"75" ? 75 : speed == L"125" ? 125 : speed == L"150" ? 150 : 100);
+    std::wstring mode = read(L"PerformanceMode", L"balanced");
+    g_animationFps = mode == L"smooth" ? 120 : 90;
 }
 
-static void LoadAnimationSettings()
-{
-    PCWSTR storedValue = Wh_GetStringSetting(L"AnimationFps");
-    int value = kDefaultAnimationFps;
-    if (storedValue)
-    {
-        if (wcscmp(storedValue, L"60") == 0) value = 60;
-        else if (wcscmp(storedValue, L"90") == 0) value = 90;
-        else if (wcscmp(storedValue, L"120") == 0) value = 120;
-        else if (wcscmp(storedValue, L"240") == 0) value = 240;
-        Wh_FreeStringSetting(storedValue);
-    }
-    g_animationFps = IsSupportedAnimationFps(value) ? value : kDefaultAnimationFps;
-}
+
+
 
 static UINT GetAnimationTimerInterval()
 {
@@ -343,22 +363,6 @@ typedef HRESULT (WINAPI* DwmSetWindowAttributeFn)(HWND, DWORD,
                                                    const void*, DWORD);
 typedef HRESULT (WINAPI* DwmGetWindowAttributeFn)(HWND, DWORD,
                                                    void*, DWORD);
-
-struct AccentPolicyLocal
-{
-    DWORD accentState;
-    DWORD accentFlags;
-    DWORD gradientColor;
-    DWORD animationId;
-};
-
-struct WindowCompositionAttributeDataLocal
-{
-    DWORD attribute;
-    void* data;
-    SIZE_T sizeOfData;
-};
-
 struct MARGINS
 {
     int cxLeftWidth;
@@ -367,27 +371,20 @@ struct MARGINS
     int cyBottomHeight;
 };
 
-typedef BOOL (WINAPI* SetWindowCompositionAttributeFn)(
-    HWND, WindowCompositionAttributeDataLocal*);
-
+// Atributos y flags DWM usados por el glass y las miniaturas.
 static const DWORD kDwmWindowCornerPreference = 33;
+static const DWORD kDwmBorderColor = 34;
+// COLORREF en formato 0x00BBGGRR: obsidiana acorde al fondo general.
+static const DWORD kDwmGlassBorderColor = 0x000D0A08;
 static const DWORD kDwmNcRenderingPolicy = 2;
 static const DWORD kDwmNcRenderingPolicyDisabled = 1;
-static const DWORD kDwmRoundRect = 2;
 static const DWORD kDwmWaSystemBackdropType = 38;
 static const DWORD kDwmSbtNone = 1;
-static const DWORD kDwmSbtAuto = 3;
-static const DWORD kDwmSbtTabbed = 4;
-static const DWORD kDwmSbtTransient = 5;
-
-static const DWORD kWcaAccentPolicy = 19;
-static const DWORD kAccentEnableBlurBehind = 3;
 
 static const DWORD kDwmTnpRectDestination = 0x00000001;
 static const DWORD kDwmTnpRectSource = 0x00000002;
 static const DWORD kDwmTnpOpacity = 0x00000004;
 static const DWORD kDwmTnpVisible = 0x00000008;
-static const DWORD kDwmTnpSourceClientAreaOnly = 0x00000010;
 
 struct CardStyleConfig
 {
@@ -513,6 +510,7 @@ static const UINT WM_UI_MOUSE_BUTTON = WM_APP + 8; // wParam=mensaje, lParam=pt 
 static const UINT WM_UI_MOUSE_WHEEL = WM_APP + 9;  // wParam=delta (short)
 static const UINT WM_UI_SETTINGS = WM_APP + 10;
 static const UINT WM_IN_MOUSEHOOK = WM_APP + 20;   // wParam=1 instalar, 0 quitar
+static const UINT WM_IN_ACTIVATE = WM_APP + 21;     // wParam=target HWND
 
 // Solo UI thread.
 static HWND g_selector = nullptr;
@@ -533,14 +531,14 @@ struct ThumbnailSlot
     HWND source;
 };
 
-static ThumbnailSlot g_thumbnailSlots[kCarouselSlots] = {};
+static ThumbnailSlot g_thumbnailSlots[kMaxCarouselSlots] = {};
 static HMODULE g_dwmApi = nullptr;
 static DwmRegisterThumbnailFn g_dwmRegisterThumbnail = nullptr;
 static DwmUnregisterThumbnailFn g_dwmUnregisterThumbnail = nullptr;
 static DwmUpdateThumbnailPropertiesFn g_dwmUpdateThumbnailProperties = nullptr;
 static DwmSetWindowAttributeFn g_dwmSetWindowAttribute = nullptr;
 static DwmGetWindowAttributeFn g_dwmGetWindowAttribute = nullptr;
-static SetWindowCompositionAttributeFn g_setWindowCompositionAttribute = nullptr;
+static bool g_dwmGlassEnabled = false;
 
 // Selección lógica vs. posición animada. La colección de AppGroups no se toca.
 static float g_animOffset = 0.0f;
@@ -629,6 +627,8 @@ typedef int (WINAPI* GetObjectWFn)(HGDIOBJ, int, LPVOID);
 typedef HDC (WINAPI* CreateCompatibleDCFn)(HDC);
 typedef HBITMAP (WINAPI* CreateDIBSectionFn)(HDC, const BITMAPINFO*, UINT, void**, HANDLE*, DWORD);
 typedef BOOL (WINAPI* StretchBltFn)(HDC, int, int, int, int, HDC, int, int, int, int, DWORD);
+typedef int (WINAPI* SetStretchBltModeFn)(HDC, int);
+typedef BOOL (WINAPI* SetBrushOrgExFn)(HDC, int, int, LPPOINT);
 typedef BOOL (WINAPI* BitBltFn)(HDC, int, int, int, int, HDC, int, int, DWORD);
 typedef int (WINAPI* GetDIBitsFn)(HDC, HBITMAP, UINT, UINT, LPVOID, LPBITMAPINFO, UINT);
 typedef BOOL (WINAPI* DeleteDCFn)(HDC);
@@ -650,6 +650,8 @@ static GetObjectWFn g_getObjectW = nullptr;
 static CreateCompatibleDCFn g_createCompatibleDC = nullptr;
 static CreateDIBSectionFn g_createDIBSection = nullptr;
 static StretchBltFn g_stretchBlt = nullptr;
+static SetStretchBltModeFn g_setStretchBltMode = nullptr;
+static SetBrushOrgExFn g_setBrushOrgEx = nullptr;
 static BitBltFn g_bitBlt = nullptr;
 static DeleteDCFn g_deleteDC = nullptr;
 
@@ -674,6 +676,20 @@ static unsigned char* g_blurPixels = nullptr;
 static int g_blurWidth = 0;
 static int g_blurHeight = 0;
 static bool g_blurBackgroundCreated = false;
+// El fondo se procesa a media resolución del área realmente capturada.
+// Los límites evitan imágenes demasiado pequeñas en resoluciones compactas.
+static const int kBlurDownscaleNumerator = 1;
+static const int kBlurDownscaleDenominator = 2;
+static const int kBlurMinimumWidth = 320;
+static const int kBlurMinimumHeight = 180;
+static const int kBlurPassCount = 3;
+static const int kBlurPassRadius = 2;
+// Reduce los halos de color producidos por el antialiasing subpíxel del
+// escritorio al hacer downscale/upscale de texto blanco.
+// Corrección cromática ligera: conserva los colores del escritorio y solo
+// atenúa los bordes RGB más agresivos del antialiasing subpíxel.
+static const float kBlurChromaSuppression = 0.18f;
+static const float kBlurPreChromaSuppression = 0.16f;
 static int g_blurCaptureX = 0;
 static int g_blurCaptureY = 0;
 static ID2D1Bitmap* g_blurD2DBitmap = nullptr;
@@ -1645,6 +1661,7 @@ static void UnloadDwmFunctions()
     g_dwmUpdateThumbnailProperties = nullptr;
     g_dwmSetWindowAttribute = nullptr;
     g_dwmGetWindowAttribute = nullptr;
+    g_dwmGlassEnabled = false;
     if (g_dwmApi)
     {
         FreeLibrary(g_dwmApi);
@@ -1678,6 +1695,7 @@ static void ApplySelectorVisuals(HWND hwnd)
     if (!hwnd)
         return;
 
+    g_dwmGlassEnabled = false;
     if (LoadDwmFunctions() && g_dwmSetWindowAttribute)
     {
         // Habilitar glass en toda el área cliente
@@ -1688,13 +1706,23 @@ static void ApplySelectorVisuals(HWND hwnd)
                 GetProcAddress(g_dwmApi, "DwmExtendFrameIntoClientArea"));
         if (pDwmExtendFrameIntoClientArea)
         {
-            pDwmExtendFrameIntoClientArea(hwnd, &margins);
+            HRESULT frameResult = pDwmExtendFrameIntoClientArea(hwnd, &margins);
+            // Glass transparente dinámico: el contenido detrás sigue vivo.
+            // El backdrop nativo permanece desactivado para conservar la
+            // transparencia DWM estable de este selector.
+            g_dwmGlassEnabled = SUCCEEDED(frameResult);
         }
 
-        // Desactivar backdrop nativo (usaremos blur propio)
+        // Mantener el backdrop nativo desactivado: el glass transparente se
+        // obtiene mediante el frame extendido y deja vivo el vídeo detrás.
         DWORD backdrop = kDwmSbtNone;
         g_dwmSetWindowAttribute(hwnd, kDwmWaSystemBackdropType,
                                 &backdrop, sizeof(backdrop));
+        // Mantener el borde nativo, pero igualarlo al tono general obsidiana
+        // para que el margen de DWM no aparezca gris ni contrastado.
+        DWORD borderColor = kDwmGlassBorderColor;
+        g_dwmSetWindowAttribute(hwnd, kDwmBorderColor,
+                                &borderColor, sizeof(borderColor));
 
         DWORD ncPolicy = kDwmNcRenderingPolicyDisabled;
         g_dwmSetWindowAttribute(hwnd, kDwmNcRenderingPolicy,
@@ -2100,6 +2128,10 @@ static bool LoadGdiFunctions()
         GetProcAddress(g_gdiApi, "CreateDIBSection"));
     g_stretchBlt = reinterpret_cast<StretchBltFn>(
         GetProcAddress(g_gdiApi, "StretchBlt"));
+    g_setStretchBltMode = reinterpret_cast<SetStretchBltModeFn>(
+        GetProcAddress(g_gdiApi, "SetStretchBltMode"));
+    g_setBrushOrgEx = reinterpret_cast<SetBrushOrgExFn>(
+        GetProcAddress(g_gdiApi, "SetBrushOrgEx"));
     g_bitBlt = reinterpret_cast<BitBltFn>(
         GetProcAddress(g_gdiApi, "BitBlt"));
     g_deleteDC = reinterpret_cast<DeleteDCFn>(
@@ -2364,69 +2396,88 @@ static void ApplyBlurToPixels(unsigned char* pixels, int width, int height, int 
     if (!pixels || width <= 0 || height <= 0 || radius <= 0)
         return;
 
-    // Box blur separable con ventana deslizante. El buffer es BGRA contiguo.
-    const int diameter = radius * 2 + 1;
-    std::vector<unsigned char> horizontal(static_cast<size_t>(width) * height * 4);
+    // Kernel Gaussian binomial de cinco taps: [1, 4, 6, 4, 1] / 16.
+    // Es separable y se repite para obtener una distribución más suave sin
+    // reservar un kernel grande ni introducir una ruta D3D adicional.
+    const int weights[5] = { 1, 4, 6, 4, 1 };
+    const int kernelRadius = std::min(radius, 2);
+    const int kernelWidth = kernelRadius * 2 + 1;
+    const int weightOffset = 2 - kernelRadius;
+    const int weightDivisor = kernelRadius == 2 ? 16 : 6;
+    const size_t pixelBytes = static_cast<size_t>(width) * height * 4;
+    std::vector<unsigned char> source(pixelBytes);
+    std::vector<unsigned char> horizontal(pixelBytes);
+    std::vector<unsigned char> destination(pixelBytes);
+    std::copy(pixels, pixels + pixelBytes, source.begin());
 
-    for (int y = 0; y < height; ++y)
+    for (int pass = 0; pass < kBlurPassCount; ++pass)
     {
-        int sumB = 0, sumG = 0, sumR = 0, sumA = 0;
-        for (int k = -radius; k <= radius; ++k)
+        for (int y = 0; y < height; ++y)
         {
-            // Initialize the sliding window at x == 0 using x + k.
-            int sx = std::max(0, std::min(width - 1, 0 + k));
-            const unsigned char* p = pixels + (static_cast<size_t>(y) * width + sx) * 4;
-            sumB += p[0]; sumG += p[1]; sumR += p[2]; sumA += p[3];
-        }
+            for (int x = 0; x < width; ++x)
+            {
+                int sumB = 0, sumG = 0, sumR = 0, sumA = 0;
+                for (int k = 0; k < kernelWidth; ++k)
+                {
+                    int sx = std::max(0, std::min(width - 1,
+                        x + k - kernelRadius));
+                    const unsigned char* p = source.data() +
+                        (static_cast<size_t>(y) * width + sx) * 4;
+                    int weight = weights[k + weightOffset];
+                    sumB += p[0] * weight;
+                    sumG += p[1] * weight;
+                    sumR += p[2] * weight;
+                    sumA += p[3] * weight;
+                }
 
-        for (int x = 0; x < width; ++x)
-        {
-            unsigned char* d = horizontal.data() + (static_cast<size_t>(y) * width + x) * 4;
-            d[0] = static_cast<unsigned char>(sumB / diameter);
-            d[1] = static_cast<unsigned char>(sumG / diameter);
-            d[2] = static_cast<unsigned char>(sumR / diameter);
-            d[3] = static_cast<unsigned char>(sumA / diameter);
-
-            int removeX = std::max(0, x - radius);
-            int addX = std::min(width - 1, x + radius + 1);
-            const unsigned char* removeP = pixels + (static_cast<size_t>(y) * width + removeX) * 4;
-            const unsigned char* addP = pixels + (static_cast<size_t>(y) * width + addX) * 4;
-            sumB += addP[0] - removeP[0];
-            sumG += addP[1] - removeP[1];
-            sumR += addP[2] - removeP[2];
-            sumA += addP[3] - removeP[3];
-        }
-    }
-
-    for (int x = 0; x < width; ++x)
-    {
-        int sumB = 0, sumG = 0, sumR = 0, sumA = 0;
-        for (int k = -radius; k <= radius; ++k)
-        {
-            // Initialize the vertical sliding window at y == 0 using y + k.
-            int sy = std::max(0, std::min(height - 1, 0 + k));
-            const unsigned char* p = horizontal.data() + (static_cast<size_t>(sy) * width + x) * 4;
-            sumB += p[0]; sumG += p[1]; sumR += p[2]; sumA += p[3];
+                unsigned char* d = horizontal.data() +
+                    (static_cast<size_t>(y) * width + x) * 4;
+                d[0] = static_cast<unsigned char>((sumB + weightDivisor / 2) /
+                                                   weightDivisor);
+                d[1] = static_cast<unsigned char>((sumG + weightDivisor / 2) /
+                                                   weightDivisor);
+                d[2] = static_cast<unsigned char>((sumR + weightDivisor / 2) /
+                                                   weightDivisor);
+                d[3] = static_cast<unsigned char>((sumA + weightDivisor / 2) /
+                                                   weightDivisor);
+            }
         }
 
         for (int y = 0; y < height; ++y)
         {
-            unsigned char* d = pixels + (static_cast<size_t>(y) * width + x) * 4;
-            d[0] = static_cast<unsigned char>(sumB / diameter);
-            d[1] = static_cast<unsigned char>(sumG / diameter);
-            d[2] = static_cast<unsigned char>(sumR / diameter);
-            d[3] = static_cast<unsigned char>(sumA / diameter);
+            for (int x = 0; x < width; ++x)
+            {
+                int sumB = 0, sumG = 0, sumR = 0, sumA = 0;
+                for (int k = 0; k < kernelWidth; ++k)
+                {
+                    int sy = std::max(0, std::min(height - 1,
+                        y + k - kernelRadius));
+                    const unsigned char* p = horizontal.data() +
+                        (static_cast<size_t>(sy) * width + x) * 4;
+                    int weight = weights[k + weightOffset];
+                    sumB += p[0] * weight;
+                    sumG += p[1] * weight;
+                    sumR += p[2] * weight;
+                    sumA += p[3] * weight;
+                }
 
-            int removeY = std::max(0, y - radius);
-            int addY = std::min(height - 1, y + radius + 1);
-            const unsigned char* removeP = horizontal.data() + (static_cast<size_t>(removeY) * width + x) * 4;
-            const unsigned char* addP = horizontal.data() + (static_cast<size_t>(addY) * width + x) * 4;
-            sumB += addP[0] - removeP[0];
-            sumG += addP[1] - removeP[1];
-            sumR += addP[2] - removeP[2];
-            sumA += addP[3] - removeP[3];
+                unsigned char* d = destination.data() +
+                    (static_cast<size_t>(y) * width + x) * 4;
+                d[0] = static_cast<unsigned char>((sumB + weightDivisor / 2) /
+                                                   weightDivisor);
+                d[1] = static_cast<unsigned char>((sumG + weightDivisor / 2) /
+                                                   weightDivisor);
+                d[2] = static_cast<unsigned char>((sumR + weightDivisor / 2) /
+                                                   weightDivisor);
+                d[3] = static_cast<unsigned char>((sumA + weightDivisor / 2) /
+                                                   weightDivisor);
+            }
         }
+
+        source.swap(destination);
     }
+
+    std::copy(source.begin(), source.end(), pixels);
 }
 
 static void CreateBlurBackground(int captureX, int captureY)
@@ -2442,9 +2493,13 @@ static void CreateBlurBackground(int captureX, int captureY)
     g_blurCaptureX = captureX;
     g_blurCaptureY = captureY;
 
-    // El coste del blur se reduce a aproximadamente una novena parte.
-    g_blurWidth = std::max(160, captureWidth / 3);
-    g_blurHeight = std::max(90, captureHeight / 3);
+    // Procesar a ~50% reduce el área de trabajo a una cuarta parte. El tamaño
+    // se deriva del área/escala del monitor ya calculada por el selector; no
+    // se usan dimensiones fijas dependientes de una resolución concreta.
+    g_blurWidth = std::max(kBlurMinimumWidth,
+        (captureWidth * kBlurDownscaleNumerator) / kBlurDownscaleDenominator);
+    g_blurHeight = std::max(kBlurMinimumHeight,
+        (captureHeight * kBlurDownscaleNumerator) / kBlurDownscaleDenominator);
 
     HDC screenDC = GetDC(nullptr);
     if (!screenDC)
@@ -2479,6 +2534,14 @@ static void CreateBlurBackground(int captureX, int captureY)
 
     g_blurOldBitmap = reinterpret_cast<HBITMAP>(g_selectObject(g_blurDC, g_blurBitmap));
 
+    // HALFTONE evita el patrón de interpolación por defecto de StretchBlt,
+    // que puede generar líneas de color al reducir texto y vídeo. Las dos
+    // funciones son opcionales para conservar compatibilidad con GDI.
+    if (g_setStretchBltMode)
+        g_setStretchBltMode(g_blurDC, HALFTONE);
+    if (g_setBrushOrgEx)
+        g_setBrushOrgEx(g_blurDC, 0, 0, nullptr);
+
     // Captura y downscale en una sola operación, antes de hacer visible la ventana.
     BOOL copied = g_stretchBlt(g_blurDC, 0, 0, g_blurWidth, g_blurHeight,
                                screenDC, captureX, captureY,
@@ -2492,18 +2555,42 @@ static void CreateBlurBackground(int captureX, int captureY)
     }
 
     // El DIB creado directamente expone ya los píxeles BGRA contiguos.
-    // Se conserva alpha opaco y la transparencia visual se aplica al dibujar la capa.
-    for (int i = 0; i < g_blurWidth * g_blurHeight; ++i)
-        g_blurPixels[i * 4 + 3] = 255;
-
-    ApplyBlurToPixels(g_blurPixels, g_blurWidth, g_blurHeight, 4);
-
-    // Tinte gris azulado oscuro sutil; no convierte el fondo en negro opaco.
+    // Se atenúa la crominancia subpíxel antes del blur: se conservan los
+    // colores reales, pero los bordes RGB extremos no se propagan.
     for (int i = 0; i < g_blurWidth * g_blurHeight * 4; i += 4)
     {
-        g_blurPixels[i + 0] = static_cast<unsigned char>(g_blurPixels[i + 0] * 0.86f);
-        g_blurPixels[i + 1] = static_cast<unsigned char>(g_blurPixels[i + 1] * 0.88f);
-        g_blurPixels[i + 2] = static_cast<unsigned char>(g_blurPixels[i + 2] * 0.90f);
+        float blue = static_cast<float>(g_blurPixels[i + 0]);
+        float green = static_cast<float>(g_blurPixels[i + 1]);
+        float red = static_cast<float>(g_blurPixels[i + 2]);
+        float luminance = red * 0.2126f + green * 0.7152f + blue * 0.0722f;
+        blue += (luminance - blue) * kBlurPreChromaSuppression;
+        green += (luminance - green) * kBlurPreChromaSuppression;
+        red += (luminance - red) * kBlurPreChromaSuppression;
+        g_blurPixels[i + 0] = static_cast<unsigned char>(blue);
+        g_blurPixels[i + 1] = static_cast<unsigned char>(green);
+        g_blurPixels[i + 2] = static_cast<unsigned char>(red);
+        g_blurPixels[i + 3] = 255;
+    }
+
+    ApplyBlurToPixels(g_blurPixels, g_blurWidth, g_blurHeight,
+                      kBlurPassRadius);
+
+    // Tinte obsidiana moderado; el alpha permanece opaco porque la intensidad
+    // final de la capa se controla de forma independiente al dibujarla.
+    for (int i = 0; i < g_blurWidth * g_blurHeight * 4; i += 4)
+    {
+        // Atenuar ligeramente la crominancia evita halos RGB sin eliminar
+        // el color real del escritorio o del vídeo.
+        float blue = static_cast<float>(g_blurPixels[i + 0]);
+        float green = static_cast<float>(g_blurPixels[i + 1]);
+        float red = static_cast<float>(g_blurPixels[i + 2]);
+        float luminance = red * 0.2126f + green * 0.7152f + blue * 0.0722f;
+        blue += (luminance - blue) * kBlurChromaSuppression;
+        green += (luminance - green) * kBlurChromaSuppression;
+        red += (luminance - red) * kBlurChromaSuppression;
+        g_blurPixels[i + 0] = static_cast<unsigned char>(blue * 0.90f);
+        g_blurPixels[i + 1] = static_cast<unsigned char>(green * 0.92f);
+        g_blurPixels[i + 2] = static_cast<unsigned char>(red * 0.94f);
         g_blurPixels[i + 3] = 255;
     }
 
@@ -2552,7 +2639,7 @@ struct CardSlotGeometry
     float padding;
 };
 
-static CardSlotGeometry GetSlotKeyframe(int slot)
+static CardSlotGeometry GetCanonicalSlotKeyframe(int slot)
 {
     CardSlotGeometry g = {};
     if (slot <= -1)
@@ -2624,6 +2711,25 @@ static CardSlotGeometry GetSlotKeyframe(int slot)
         g.cornerRadius = 10.0f;
         g.headerHeight = 24.0f;
         g.padding = 6.0f;
+    }
+    return g;
+}
+
+static CardSlotGeometry GetSlotKeyframe(int slot)
+{
+    CardSlotGeometry g = {};
+    if (g_visibleCardCount == 5)
+    {
+        // Keep the original five-card trajectory, including its off-screen
+        // keyframes used while a navigation animation is in progress.
+        g = GetCanonicalSlotKeyframe(slot);
+    }
+    else
+    {
+        // The three-card layout reuses the center and adjacent keyframes.
+        const int relative = slot - GetCarouselCenterSlot();
+        const int canonical = std::max(-1, std::min(1, relative)) + 2;
+        g = GetCanonicalSlotKeyframe(canonical);
     }
     return g;
 }
@@ -2716,7 +2822,7 @@ static RECT GetSlotCardRect(int slot)
     rc.top = static_cast<int>(roundf(g.top));
     rc.right = static_cast<int>(roundf(g.right));
     rc.bottom = static_cast<int>(roundf(g.bottom));
-    if (slot == 2)
+    if (slot == GetCarouselCenterSlot())
         rc = ScaleRectAroundCenter(rc, g_cardSnapScale);
     if (g_cardExitActive && slot == g_cardExitSlot)
     {
@@ -2752,7 +2858,7 @@ static RECT GetSlotPreviewRect(int slot)
     CardSlotGeometry g = GetInterpolatedSlotGeometry(static_cast<float>(slot) + g_animOffset);
     int pad = static_cast<int>(roundf(g.padding));
     int hHeight = static_cast<int>(roundf(g.headerHeight));
-    float dist = fabsf(static_cast<float>(slot - 2) + g_animOffset);
+    float dist = fabsf(static_cast<float>(slot - GetCarouselCenterSlot()) + g_animOffset);
     int gap = ScaleLayoutPx(static_cast<float>((dist < 0.5f) ? 8 : (dist < 1.5f ? 6 : 4)));
 
     RECT preview = {};
@@ -2760,7 +2866,7 @@ static RECT GetSlotPreviewRect(int slot)
     preview.right = static_cast<int>(roundf(g.right)) - pad;
     preview.top = static_cast<int>(roundf(g.top)) + pad + hHeight + gap;
     preview.bottom = static_cast<int>(roundf(g.bottom)) - pad;
-    if (slot == 2)
+    if (slot == GetCarouselCenterSlot())
         preview = ScaleRectAroundCenter(preview, g_cardSnapScale);
     if (g_cardExitActive && slot == g_cardExitSlot)
     {
@@ -2856,7 +2962,7 @@ static int ResolveGroupIndex(int slot)
     if (count <= 0)
         return -1;
 
-    int index = g_selected + (slot - 2);
+    int index = g_selected + (slot - GetCarouselCenterSlot());
     while (index < 0)
         index += count;
     while (index >= count)
@@ -2883,14 +2989,13 @@ static void UpdateHoveredSlot(POINT ptClient)
 
 static int GetSlotAtPoint(POINT ptClient)
 {
-    RECT rcCenter = GetSlotCardRect(2);
+    RECT rcCenter = GetSlotCardRect(GetCarouselCenterSlot());
     if (PtInRect(&rcCenter, ptClient))
-        return 2;
+        return GetCarouselCenterSlot();
 
-    int order[] = { 1, 3, 0, 4 };
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < GetCarouselSlotCount(); ++i)
     {
-        int slot = order[i];
+        int slot = i;
         RECT rc = GetSlotCardRect(slot);
         if (PtInRect(&rc, ptClient))
             return slot;
@@ -3005,7 +3110,7 @@ static void PaintBottomShadowGDI(HDC hdc, const RECT& objectRect, int radius)
 
 static void UnregisterThumbnailSlot(int slot)
 {
-    if (slot < 0 || slot >= kCarouselSlots)
+    if (slot < 0 || slot >= kMaxCarouselSlots)
         return;
     if (g_thumbnailSlots[slot].thumbnail && g_dwmUnregisterThumbnail)
         g_dwmUnregisterThumbnail(g_thumbnailSlots[slot].thumbnail);
@@ -3015,13 +3120,13 @@ static void UnregisterThumbnailSlot(int slot)
 
 static void UnregisterAllThumbnails()
 {
-    for (int i = 0; i < kCarouselSlots; ++i)
+    for (int i = 0; i < kMaxCarouselSlots; ++i)
         UnregisterThumbnailSlot(i);
 }
 
 static void UpdateThumbnailProperties(int slot, const RECT& area, HWND source)
 {
-    if (slot < 0 || slot >= kCarouselSlots ||
+    if (slot < 0 || slot >= kMaxCarouselSlots ||
         !g_thumbnailSlots[slot].thumbnail || !source ||
         !g_dwmUpdateThumbnailProperties)
         return;
@@ -3125,7 +3230,7 @@ static void UpdateThumbnailSlots()
         return;
     }
 
-    for (int slot = 0; slot < kCarouselSlots; ++slot)
+    for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
     {
         int index = ResolveGroupIndex(slot);
         HWND source = (index >= 0) ? g_groups[index].representativeWindow : nullptr;
@@ -3212,7 +3317,7 @@ static float GetCardExitProgress()
     if (!g_cardExitActive)
         return 0.0f;
     return std::min(1.0f,
-        static_cast<float>(GetTickCount64() - g_cardExitStart) / 360.0f);
+        static_cast<float>(GetTickCount64() - g_cardExitStart) / AnimationDuration(360.0f));
 }
 
 static float GetCardExitOpacity()
@@ -3281,7 +3386,7 @@ static void UpdateSelectorMotion()
     }
     if (g_selectorAnimation == SelectorAnimationState::Opening)
     {
-        const float duration = 240.0f;
+        const float duration = AnimationDuration(240.0f);
         float t = std::min(1.0f, static_cast<float>(elapsed) / duration);
         // Fluid Pop: una expansión rápida, un único overshoot sutil y
         // un asentamiento corto; no es un rebote elástico.
@@ -3312,7 +3417,7 @@ static void UpdateSelectorMotion()
     }
     else if (g_selectorAnimation == SelectorAnimationState::SelectionChange)
     {
-        const float duration = kNavigationDuration;
+        const float duration = AnimationDuration(kNavigationDuration);
         float t = std::min(1.0f, static_cast<float>(elapsed) / duration);
         // La navegación se anima exclusivamente mediante g_animOffset. No
         // escalamos ni inclinamos la escena completa: el visualizer y el
@@ -3333,7 +3438,7 @@ static void UpdateSelectorMotion()
     }
     else if (g_selectorAnimation == SelectorAnimationState::Closing)
     {
-        const float duration = 420.0f;
+        const float duration = AnimationDuration(420.0f);
         float t = std::min(1.0f, static_cast<float>(elapsed) / duration);
         float verticalPhase = std::min(1.0f, t / 0.72f);
         float verticalEase = verticalPhase * verticalPhase * verticalPhase;
@@ -3371,14 +3476,6 @@ static void UpdateSelectorControls()
     CreateUiFonts();
     UpdateThumbnailSlots();
     InvalidateRect(g_selector, nullptr, FALSE);
-}
-
-static void ClearClientToGlassKey(HDC hdc, const RECT& clientRect)
-{
-    // Eliminado el relleno negro para permitir transparencia DWM
-    // DWM composition ahora maneja el fondo con blur ligero
-    (void)hdc;
-    (void)clientRect;
 }
 
 static void EnsureIconBitmap(int groupIndex)
@@ -3485,7 +3582,7 @@ static void PaintSlotHeaderD2D(int slot, int groupIndex, bool selected, float di
     int iconY = rc.top + (rc.bottom - rc.top - iconSize) / 2;
     int textX = iconX + iconSize + ScaleLayoutPx(8.0f);
     RECT iconRect = { iconX, iconY, iconX + iconSize, iconY + iconSize };
-    if (slot == 2)
+    if (slot == GetCarouselCenterSlot())
     {
         RECT cardRect = GetSlotCardRect(slot);
         float pivotX = (static_cast<float>(cardRect.left) + cardRect.right) * 0.5f;
@@ -3529,10 +3626,6 @@ static void PaintCounterD2D()
     RECT rc = GetCounterRect();
     std::wstring text = MakeCounterText();
 
-    D2D1_ROUNDED_RECT cr = D2D1::RoundedRect(
-        D2D1::RectF(static_cast<float>(rc.left) + 0.5f, static_cast<float>(rc.top) + 0.5f,
-                    static_cast<float>(rc.right) - 0.5f, static_cast<float>(rc.bottom) - 0.5f),
-        12.0f, 12.0f);
     // El contador no tiene superficie propia: el texto flota directamente
     // sobre la misma card translúcida, sin cápsula, rectángulo ni borde.
 
@@ -3559,7 +3652,7 @@ static void PaintSlotHeaderGDI(HDC hdc, int slot, int groupIndex, bool selected,
     int iconY = rc.top + (rc.bottom - rc.top - iconSize) / 2;
     int textX = iconX + iconSize + ScaleLayoutPx(8.0f);
     RECT iconRect = { iconX, iconY, iconX + iconSize, iconY + iconSize };
-    if (slot == 2)
+    if (slot == GetCarouselCenterSlot())
     {
         RECT cardRect = GetSlotCardRect(slot);
         float pivotX = (static_cast<float>(cardRect.left) + cardRect.right) * 0.5f;
@@ -3648,9 +3741,6 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
     RECT clientRect = {};
     GetClientRect(hwnd, &clientRect);
 
-    // Ya no rellenamos con negro - DWM composition maneja el fondo
-    ClearClientToGlassKey(hdc, clientRect);
-
     int count = static_cast<int>(g_groups.size());
     if (count <= 0)
         return;
@@ -3692,8 +3782,21 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
             g_d2dDCRenderTarget->PushLayer(&opacityParameters, sceneOpacityLayer);
         }
 
-        // El fondo es una única bitmap cacheada durante toda la sesión.
-        if (g_blurBackgroundCreated && g_blurPixels && g_blurDC)
+        // Glass DWM transparente: no se dibuja bitmap y el vídeo permanece
+        // vivo detrás; solo se añade un tinte oscuro muy ligero.
+        if (g_dwmGlassEnabled)
+        {
+            D2D1_RECT_F bgRect = D2D1::RectF(
+                static_cast<float>(clientRect.left),
+                static_cast<float>(clientRect.top),
+                static_cast<float>(clientRect.right),
+                static_cast<float>(clientRect.bottom));
+            // Mantener el color original de la superficie; el ajuste de borde
+            // se realiza únicamente mediante DWMWA_BORDER_COLOR.
+            g_d2dBrush->SetColor(D2D1::ColorF(0.035f, 0.050f, 0.075f, 0.20f));
+            g_d2dDCRenderTarget->FillRectangle(&bgRect, g_d2dBrush);
+        }
+        else if (g_blurBackgroundCreated && g_blurPixels && g_blurDC)
         {
             D2D1_RECT_F bgRect = D2D1::RectF(
                 static_cast<float>(clientRect.left),
@@ -3713,11 +3816,14 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
             }
 
             if (g_blurD2DBitmap)
-                g_d2dDCRenderTarget->DrawBitmap(g_blurD2DBitmap, &bgRect, 0.82f,
+                // Opacidad completa: evita que el vídeo vivo se mezcle con la
+                // captura y deje el primer frame superpuesto.
+                g_d2dDCRenderTarget->DrawBitmap(g_blurD2DBitmap, &bgRect, 1.0f,
                                                  D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
 
-            // Tinte adicional muy ligero, manteniendo visible la composición translúcida.
-            g_d2dBrush->SetColor(D2D1::ColorF(0.08f, 0.11f, 0.16f, 0.10f));
+            // Capa obsidiana separada: evita oscurecer en exceso los píxeles
+            // capturados y mantiene control independiente sobre la composición.
+            g_d2dBrush->SetColor(D2D1::ColorF(0.035f, 0.050f, 0.075f, 0.15f));
             g_d2dDCRenderTarget->FillRectangle(&bgRect, g_d2dBrush);
         }
         else
@@ -3752,7 +3858,7 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
         };
         PaintBottomShadowD2D(containerShadow, ScaleLayoutPx(12.0f), 0.34f);
 
-    for (int slot = 0; slot < kCarouselSlots; ++slot)
+    for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
         {
             int index = ResolveGroupIndex(slot);
             if (index < 0)
@@ -3774,13 +3880,13 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
                 }
             }
 
-            float distFromCenter = fabsf(static_cast<float>(slot - 2) + g_animOffset);
+            float distFromCenter = fabsf(static_cast<float>(slot - GetCarouselCenterSlot()) + g_animOffset);
             bool selected = (distFromCenter < 0.5f);
             RECT cardRect = GetSlotCardRect(slot);
             float radius = selected ? static_cast<float>(g_cardStyle.selectedCornerRadius) * g_uiScale.value
                                     : static_cast<float>(g_cardStyle.cornerRadius) * g_uiScale.value;
             PaintBottomShadowD2D(cardRect, radius, selected ? 0.28f : 0.20f);
-            if (selected && slot == 2)
+            if (selected && slot == GetCarouselCenterSlot())
                 PaintCenterAccentMarginD2D(cardRect, index, radius);
 
             D2D1_COLOR_F bgCol = selected
@@ -3835,7 +3941,7 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
                 g_groups[index].icon)
             {
                 EnsureIconBitmap(index);
-                int relative = slot - 2;
+                int relative = slot - GetCarouselCenterSlot();
                 int iconSize = ScaleLayoutPx(static_cast<float>(selected ? 56 : (abs(relative) == 1 ? 40 : 28)));
                 int cx = prevRect.left + (prevRect.right - prevRect.left - iconSize) / 2;
                 int cy = prevRect.top + (prevRect.bottom - prevRect.top - iconSize) / 2;
@@ -3967,12 +4073,12 @@ static void PaintSelectorScene(HWND hwnd, HDC hdc)
     };
     PaintBottomShadowGDI(hdc, containerShadow, ScaleLayoutPx(12.0f));
 
-    for (int slot = 0; slot < kCarouselSlots; ++slot)
+    for (int slot = 0; slot < GetCarouselSlotCount(); ++slot)
     {
         int index = ResolveGroupIndex(slot);
         if (index < 0)
             continue;
-        float dist = fabsf(static_cast<float>(slot - 2) + g_animOffset);
+        float dist = fabsf(static_cast<float>(slot - GetCarouselCenterSlot()) + g_animOffset);
         bool selected = (dist < 0.5f);
         RECT cardRect = GetSlotCardRect(slot);
         int radius = selected ? ScaleLayoutPx(static_cast<float>(g_cardStyle.selectedCornerRadius))
@@ -4093,7 +4199,7 @@ static LRESULT CALLBACK SelectorWndProc(HWND hwnd, UINT message, WPARAM wParam, 
 
             ULONGLONG now = GetTickCount64();
             ULONGLONG elapsed = now - g_animStartTime;
-            if (elapsed >= static_cast<ULONGLONG>(kNavigationDuration))
+            if (elapsed >= static_cast<ULONGLONG>(AnimationDuration(kNavigationDuration)))
             {
                 g_animActive = false;
                 g_animOffset = 0.0f;
@@ -4282,9 +4388,10 @@ static bool CreateSelector(bool shiftHeld)
     StopCarouselAnimation();
     ReleaseBlurBackground();
 
-    // El blur se genera con el selector todavía oculto. Solo se recalcula al
-    // comenzar una nueva sesión visible; nunca durante Tab/Shift+Tab.
-    CreateBlurBackground(x, y);
+    // Con DWM glass el fondo es transparente y vivo; no se captura ningún
+    // frame estático. Si DWM no está disponible, se usa el blur propio.
+    if (!g_dwmGlassEnabled)
+        CreateBlurBackground(x, y);
 
     SetWindowPos(g_selector, HWND_TOPMOST, x, y,
                  g_runtimeSelectorWidth, g_runtimeSelectorHeight,
@@ -4309,6 +4416,13 @@ static bool CreateSelector(bool shiftHeld)
     g_selectorAnimationStart = GetTickCount64();
 
     UpdateSelectorControls();
+
+    // Allows the Alt+Tab window to take foreground when it is shown from
+    // the WH_KEYBOARD_LL hook context.
+    INPUT input;
+    ZeroMemory(&input, sizeof(INPUT));
+    SendInput(1, &input, sizeof(INPUT));
+
     ShowWindow(g_selector, SW_SHOWNOACTIVATE);
     UpdateWindow(g_selector);
     SetWindowPos(g_selector, HWND_TOPMOST, x, y,
@@ -4316,6 +4430,9 @@ static bool CreateSelector(bool shiftHeld)
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
 
     g_selectorOpening = false;
+    // El bitmap permanece cacheado durante la sesión. No se recaptura después
+    // de mostrar el selector: ocultar/mostrar la ventana produciría parpadeo.
+    // La captura inicial se realizó mientras el selector aún estaba oculto.
     SetTimer(g_selector, kSelectorMotionTimerId,
              GetAnimationTimerInterval(), nullptr);
     // Failsafe solo mientras el selector está abierto (sin polling permanente).
@@ -4433,7 +4550,7 @@ static void UpdateCarouselAnimation(HWND hwnd)
     ULONGLONG now = GetTickCount64();
     ULONGLONG elapsed = now - g_animStartTime;
     float progress = std::min(1.0f,
-        static_cast<float>(elapsed) / kNavigationDuration);
+        static_cast<float>(elapsed) / AnimationDuration(kNavigationDuration));
     float eased = EaseOutCubic(progress);
     g_animOffset = g_animStartOffset * (1.0f - eased);
 
@@ -4576,35 +4693,28 @@ static HWND GetNextGroupWindow(AppGroup& group)
     return target;
 }
 
-// Activación de la ventana elegida (UI thread). Sin AllowSetForegroundWindow
-// global; solo el attach al hilo foreground necesario para SetForegroundWindow.
+// Solicita la activación al input thread sin bloquear el UI thread.
 static void ActivateWindow(HWND target)
 {
     if (!target || !IsWindow(target))
         return;
 
-    HWND foreground = GetForegroundWindow();
-    DWORD currentThread = GetCurrentThreadId();
-    DWORD foregroundThread = foreground ? GetWindowThreadProcessId(foreground, nullptr) : 0;
-    DWORD targetThread = GetWindowThreadProcessId(target, nullptr);
+    DWORD inputThreadId = g_inputThreadId;
+    if (inputThreadId)
+        PostThreadMessageW(inputThreadId, WM_IN_ACTIVATE,
+                           reinterpret_cast<WPARAM>(target), 0);
+}
+
+// Esta función solo se ejecuta desde InputThreadProc.
+static void ActivateWindowOnInputThread(HWND target)
+{
+    if (!target || !IsWindow(target))
+        return;
 
     if (IsIconic(target))
         ShowWindowAsync(target, SW_RESTORE);
 
-    bool attachedForeground = false;
-    bool attachedTarget = false;
-
-    if (foregroundThread && foregroundThread != currentThread)
-        attachedForeground = AttachThreadInput(currentThread, foregroundThread, TRUE) != FALSE;
-    if (targetThread && targetThread != currentThread && targetThread != foregroundThread)
-        attachedTarget = AttachThreadInput(currentThread, targetThread, TRUE) != FALSE;
-
     SetForegroundWindow(target);
-
-    if (attachedTarget)
-        AttachThreadInput(currentThread, targetThread, FALSE);
-    if (attachedForeground)
-        AttachThreadInput(currentThread, foregroundThread, FALSE);
 }
 
 static void ConfirmSelection()
@@ -4718,13 +4828,13 @@ static void UiHandleMouseButton(UINT message, POINT screenPt)
             {
                 CloseWindowForSlot(clickedSlot);
             }
-            else if (clickedSlot == 2)
+            else if (clickedSlot == GetCarouselCenterSlot())
             {
                 ConfirmSelection();
             }
             else
             {
-                StartSlide(clickedSlot - 2);
+                StartSlide(clickedSlot - GetCarouselCenterSlot());
             }
         }
     }
@@ -4741,6 +4851,9 @@ static void UiHandleSettingsChanged()
         if (g_animActive)
             SetTimer(g_selector, kSelectorMotionTimerId,
                      GetAnimationTimerInterval(), nullptr);
+        // A visible-card count change can invalidate existing DWM slot mapping.
+        UnregisterAllThumbnails();
+        UpdateSelectorControls();
     }
 }
 
@@ -5210,6 +5323,12 @@ static DWORD WINAPI InputThreadProc(LPVOID)
     {
         while (GetMessageW(&message, nullptr, 0, 0) > 0)
         {
+            if (message.message == WM_IN_ACTIVATE)
+            {
+                ActivateWindowOnInputThread(
+                    reinterpret_cast<HWND>(message.wParam));
+                continue;
+            }
             if (message.message == WM_IN_MOUSEHOOK)
             {
                 if (message.wParam != 0)
@@ -5382,7 +5501,7 @@ static bool StartWorkerThread(LPTHREAD_START_ROUTINE proc, HANDLE* outThread,
 
 BOOL WhTool_ModInit()
 {
-    LoadAnimationSettings();
+    LoadTaskSwitcherSettings();
 
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -5423,7 +5542,7 @@ BOOL WhTool_ModInit()
 
 void WhTool_ModSettingsChanged()
 {
-    LoadAnimationSettings();
+    LoadTaskSwitcherSettings();
     // Los timers pertenecen al UI thread; se le pide que los reprograme.
     PostUiCommand(WM_UI_SETTINGS, 0, 0);
 }
