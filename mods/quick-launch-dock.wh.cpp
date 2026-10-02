@@ -5,8 +5,8 @@
 // @description     A slim animated dock on the screen edge: drop a shortcut or pick a program with "+", then launch it in one click
 // @description:ru-RU Тонкая анимированная панель у края экрана: перетащи ярлык или выбери программу через «+» и запускай в один клик
 // @version         1.0.0
-// @author          your-name
-// @github          https://github.com/your-name
+// @author          cheliks1123
+// @github          https://github.com/cheliks1123
 // @include         explorer.exe
 // @compilerOptions -lshell32 -lcomdlg32 -lgdi32 -luser32 -lole32 -ldwmapi -lcomctl32
 // ==/WindhawkMod==
