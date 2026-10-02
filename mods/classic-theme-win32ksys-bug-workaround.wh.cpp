@@ -2,22 +2,22 @@
 // @id              classic-theme-win32ksys-bug-workaround
 // @name            Classic theme caption/scrollbar button fix for 24H2+ builds 9444+
 // @description     Fixes caption buttons and scrollbar arrows on newer Windows builds
-// @version         0.27.0
+// @version         0.28.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
-// @compilerOptions -luser32 -lgdi32
+// @compilerOptions -luser32 -lgdi32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
-On the newest buids of Windows Microsoft broke the very core of its operating system, the essential part of the kernel,
+On the newest builds of Windows Microsoft broke the very core of its operating system, the essential part of the kernel,
 the module win32k.sys.
 
 This led to the titlebar buttons and scrollbars in unthemed applications being broken. Unfortunately, Windhawk cannot fix or patch a part of the kernel.
 But it is possible to make a partial workaround.
 
-You will encounter the bug if you are using the Claasic theme on Windows versions 24H2, 25H2, 26H2 with build number 9444 or above or version 26H1.
+You will encounter the bug if you are using the Classic theme on Windows versions 24H2, 25H2, 26H2 with build number 9444 or above or version 26H1.
 If you are on build 8875 or below, you do not need this mod.
 
 Microsoft removed the calculation of visual size of titlebar and scrollbar buttons, hardcoding them to 22px and 17px respectively,
@@ -39,14 +39,13 @@ This fix has multiple known issues. For instance, expect garbled buttons in conh
 #include <windows.h>
 #include <windowsx.h>
 #include <algorithm>
+#include <uxtheme.h>
 
 // ======================= all tuning lives here =======================
+// gapRight, iconicGapRight, kernelPad, kernelExtraLeft, kernelOffY and kernelScrollPad are given at 96 DPI
+// and scaled to the window's DPI at run time. kernelBtnSize and kernelScrollSize are hardcoded in the
+// kernel and are NOT scaled.
 namespace cfg {
-    constexpr int  btnShrinkW      = 2;   // button width  = SM_CXSIZE - btnShrinkW
-    constexpr int  btnShrinkH      = 4;   // button height = SM_CYSIZE - btnShrinkH
-    constexpr int  smBtnShrinkW    = 2;   // palette (tool) windows: width  = SM_CXSMSIZE - smBtnShrinkW
-    constexpr int  smBtnShrinkH    = 4;   // palette (tool) windows: height = SM_CYSMSIZE - smBtnShrinkH
-    constexpr int  btnGap          = 2;   // gap before close / help
     constexpr int  gapRight        = 3;   // gap between close and the right edge of its cell
     constexpr int  iconicGapRight  = 2;   // minimized windows: gap between close and caption's right edge
 
@@ -64,9 +63,6 @@ namespace cfg {
     // the far side (the window frame). Set to true if they stick out the other way
     // (then the garbage is in the client area and is repaired by invalidation).
     constexpr bool kernelCrossFromEnd = false;
-
-    // Log scrollbar geometry to the Windhawk log (for diagnostics)
-    constexpr bool debugLog = false;
 
     // "type" argument of NtUserMessageCall for calls coming from DefWindowProc
     // (only the low 16 bits are compared; the kernel may set extra high bits).
@@ -105,6 +101,26 @@ struct BusyScope {
     BusyScope()  { t_busy = true; }
     ~BusyScope() { t_busy = false; }
 };
+
+// ---------- DPI helpers ----------
+
+// DPI of the window (what the kernel uses for its non-client area), not the system DPI.
+static UINT WinDpi(HWND hwnd)
+{
+    UINT d = GetDpiForWindow(hwnd);
+    return d ? d : 96;
+}
+
+static int Sm(int index, UINT dpi)
+{
+    return GetSystemMetricsForDpi(index, dpi);
+}
+
+// Scale a 96-DPI pixel constant to the given DPI.
+static int Px(int v, UINT dpi)
+{
+    return MulDiv(v, (int)dpi, 96);
+}
 
 // ---------- drawing primitives (pure GDI) ----------
 
@@ -176,10 +192,10 @@ static bool IsParkedIconic(const RECT& wr)
 }
 
 // Frame of a minimized window is the fixed frame
-static RECT IconicCaptionRect(const RECT& wr)
+static RECT IconicCaptionRect(const RECT& wr, UINT dpi)
 {
-    int fx = GetSystemMetrics(SM_CXFIXEDFRAME);
-    int fy = GetSystemMetrics(SM_CYFIXEDFRAME);
+    int fx = Sm(SM_CXFIXEDFRAME, dpi);
+    int fy = Sm(SM_CYFIXEDFRAME, dpi);
     return {wr.left + fx, wr.top + fy, wr.right - fx, wr.bottom - fy};
 }
 
@@ -232,21 +248,22 @@ static bool LayoutCaption(HWND hwnd, CapBtns& o)
     const LONG ex    = GetWindowLongW(hwnd, GWL_EXSTYLE);
     const bool tool   = (ex & WS_EX_TOOLWINDOW) != 0;
     const bool iconic = (style & WS_MINIMIZE) != 0;
+    const UINT dpi    = WinDpi(hwnd);
 
     bool want[6], sdis[6];
     StyleButtons(hwnd, style, ex, want, sdis);
 
     int right = -0x7fffffff, top = 0, h = 0;
-    int inset = cfg::gapRight;
+    int inset = Px(cfg::gapRight, dpi);
     bool any = false;
 
     if (iconic) {
         // No cells from the kernel for minimized windows: synthesize them
         RECT wr;
         if (!GetWindowRect(hwnd, &wr)) return false;
-        RECT cap = IconicCaptionRect(wr);
+        RECT cap = IconicCaptionRect(wr, dpi);
         if (cap.right <= cap.left || cap.bottom <= cap.top) return false;
-        const int cw = GetSystemMetrics(tool ? SM_CXSMSIZE : SM_CXSIZE);
+        const int cw = Sm(tool ? SM_CXSMSIZE : SM_CXSIZE, dpi);
         int cur = cap.right;
         const int ord[4] = {5, 4, 3, 2};
         for (int k = 0; k < 4; k++) {
@@ -260,7 +277,7 @@ static bool LayoutCaption(HWND hwnd, CapBtns& o)
         right = cap.right;
         top   = cap.top;
         h     = cap.bottom - cap.top;
-        inset = cfg::iconicGapRight;
+        inset = Px(cfg::iconicGapRight, dpi);
     } else {
         GetTitleInfo(hwnd, o.tb);
         for (int i = 2; i <= 5; i++) {
@@ -273,17 +290,18 @@ static bool LayoutCaption(HWND hwnd, CapBtns& o)
             if (!any) { top = c.top; h = c.bottom - c.top; }
             any = true;
             if (c.right > right) right = c.right;
-            if (cfg::debugLog)
-                Wh_Log(L"cell[%d]=(%d,%d,%d,%d) tool=%d", i, c.left, c.top, c.right, c.bottom, (int)tool);
+            Wh_Log(L"cell[%d]=(%d,%d,%d,%d) tool=%d dpi=%u", i, c.left, c.top, c.right, c.bottom,
+                   (int)tool, dpi);
         }
     }
     if (!any) return false;
 
-    // Size: system metrics (SmCaption* for palette windows). Position: centered in the cell.
-    const int cxEdge = GetSystemMetrics(SM_CXEDGE);
-    const int cyEdge = GetSystemMetrics(SM_CYEDGE);
-    int bw = GetSystemMetrics(tool ? SM_CXSMSIZE : SM_CXSIZE) - cxEdge;
-    int bh = GetSystemMetrics(tool ? SM_CYSMSIZE : SM_CYSIZE) - 2 * cyEdge;
+    // Size: system metrics at the window's DPI (SmCaption* for palette windows).
+    // Position: centered in the cell.
+    const int cxEdge = Sm(SM_CXEDGE, dpi);
+    const int cyEdge = Sm(SM_CYEDGE, dpi);
+    int bw = Sm(tool ? SM_CXSMSIZE : SM_CXSIZE, dpi) - cxEdge;
+    int bh = Sm(tool ? SM_CYSMSIZE : SM_CYSIZE, dpi) - 2 * cyEdge;
     if (bw < 6) bw = 6;
     if (bh < 6) bh = 6;
     if (bh > h) bh = h;
@@ -337,15 +355,16 @@ static bool IsCaptionActive(HWND hwnd)
 
 static int FrameSize(HWND hwnd, bool vertical)
 {
+    const UINT dpi = WinDpi(hwnd);
     LONG style = GetWindowLongW(hwnd, GWL_STYLE);
     if (style & WS_MINIMIZE)
-        return GetSystemMetrics(vertical ? SM_CYFIXEDFRAME : SM_CXFIXEDFRAME);
+        return Sm(vertical ? SM_CYFIXEDFRAME : SM_CXFIXEDFRAME, dpi);
     if (style & WS_THICKFRAME)
-        return GetSystemMetrics(vertical ? SM_CYSIZEFRAME : SM_CXSIZEFRAME) +
-               GetSystemMetrics(SM_CXPADDEDBORDER);
+        return Sm(vertical ? SM_CYSIZEFRAME : SM_CXSIZEFRAME, dpi) +
+               Sm(SM_CXPADDEDBORDER, dpi);
     if (style & (WS_DLGFRAME | WS_CAPTION))
-        return GetSystemMetrics(vertical ? SM_CYFIXEDFRAME : SM_CXFIXEDFRAME);
-    return GetSystemMetrics(vertical ? SM_CYBORDER : SM_CXBORDER);
+        return Sm(vertical ? SM_CYFIXEDFRAME : SM_CXFIXEDFRAME, dpi);
+    return Sm(vertical ? SM_CYBORDER : SM_CXBORDER, dpi);
 }
 
 static bool ClientScreenRect(HWND hwnd, RECT& r)
@@ -359,10 +378,11 @@ static bool ClientScreenRect(HWND hwnd, RECT& r)
 
 static RECT ComputeCaptionRect(HWND hwnd, const TITLEBARINFOEX& tb, const RECT& wr)
 {
-    if (IsIconic(hwnd)) return IconicCaptionRect(wr);
+    const UINT dpi = WinDpi(hwnd);
+    if (IsIconic(hwnd)) return IconicCaptionRect(wr, dpi);
 
     LONG ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
-    int capH = GetSystemMetrics((ex & WS_EX_TOOLWINDOW) ? SM_CYSMCAPTION : SM_CYCAPTION);
+    int capH = Sm((ex & WS_EX_TOOLWINDOW) ? SM_CYSMCAPTION : SM_CYCAPTION, dpi);
 
     int fx = FrameSize(hwnd, false), fy = FrameSize(hwnd, true);
     RECT m = {wr.left + fx, wr.top + fy, wr.right - fx, wr.top + fy + capH - 1};
@@ -378,13 +398,18 @@ struct CapGeom {
     RECT cap;
     bool hasStrip;
     RECT strip;
+    UINT dpi;
 };
 
 static void ComputeStrip(CapGeom& g)
 {
     g.hasStrip = false;
-    const LONG S = cfg::kernelBtnSize;
+    const LONG S = cfg::kernelBtnSize;   // hardcoded in the kernel, not DPI-scaled
     if (S <= 0) return;
+
+    const LONG pad       = Px(cfg::kernelPad, g.dpi);
+    const LONG extraLeft = Px(cfg::kernelExtraLeft, g.dpi);
+    const LONG offY      = Px(cfg::kernelOffY, g.dpi);
 
     LONG left = 0x7fffffff, right = -0x7fffffff;
     LONG top = 0x7fffffff, bottom = -0x7fffffff;
@@ -403,15 +428,15 @@ static void ComputeStrip(CapGeom& g)
     }
     if (!n) return;
 
-    const LONG kernelLeft   = right - (S * n + cfg::kernelExtraLeft);
-    const LONG kernelTop    = cellTop + cfg::kernelOffY;
+    const LONG kernelLeft   = right - (S * n + extraLeft);
+    const LONG kernelTop    = cellTop + offY;
     const LONG kernelBottom = kernelTop + S;
 
     RECT strip;
-    strip.left   = std::min(kernelLeft, left) - cfg::kernelPad;
-    strip.right  = right + cfg::kernelPad;
-    strip.top    = std::min(top, kernelTop) - cfg::kernelPad;
-    strip.bottom = std::max({bottom, kernelBottom, g.cap.bottom}) + cfg::kernelPad;
+    strip.left   = std::min(kernelLeft, left) - pad;
+    strip.right  = right + pad;
+    strip.top    = std::min(top, kernelTop) - pad;
+    strip.bottom = std::max({bottom, kernelBottom, g.cap.bottom}) + pad;
 
     if (!IntersectRect(&g.strip, &strip, &g.wr)) return;
     g.hasStrip = true;
@@ -426,6 +451,7 @@ static bool GetCapGeom(HWND hwnd, CapGeom& g)
     if ((style & WS_CAPTION) != WS_CAPTION) return false;
     if (!GetWindowRect(hwnd, &g.wr)) return false;
     if ((style & WS_MINIMIZE) && IsParkedIconic(g.wr)) return false;
+    g.dpi = WinDpi(hwnd);
     if (!LayoutCaption(hwnd, g.b)) return false;
     g.cap = ComputeCaptionRect(hwnd, g.b.tb, g.wr);
     ComputeStrip(g);
@@ -569,7 +595,8 @@ static void InvalidateClientOverlap(HWND hwnd, const RECT& strip)
 
 static void CleanKernelScrollButtons(HWND hwnd, HDC dc, const RECT& wr, int obj, bool live)
 {
-    const int S = cfg::kernelScrollSize;
+    const UINT dpi = WinDpi(hwnd);
+    const int S = cfg::kernelScrollSize;   // hardcoded in the kernel, not DPI-scaled
     if (S <= 0) return;
 
     SCROLLBARINFO sb = {};
@@ -581,16 +608,15 @@ static void CleanKernelScrollButtons(HWND hwnd, HDC dc, const RECT& wr, int obj,
     const bool vert = (obj == OBJID_VSCROLL);
     const int thick = vert ? (bar.right - bar.left) : (bar.bottom - bar.top);
     const int len   = vert ? (bar.bottom - bar.top) : (bar.right - bar.left);
-    const int reach = S + cfg::kernelScrollPad;
+    const int reach = S + Px(cfg::kernelScrollPad, dpi);
 
     RECT cl = {};
     bool haveCl = ClientScreenRect(hwnd, cl);
 
-    if (cfg::debugLog) {
-        Wh_Log(L"scroll obj=%d bar=(%d,%d,%d,%d) thick=%d len=%d dxyLine=%d win=(%d,%d,%d,%d) client=(%d,%d,%d,%d) haveCl=%d",
-               obj, bar.left, bar.top, bar.right, bar.bottom, thick, len, (int)sb.dxyLineButton,
-               wr.left, wr.top, wr.right, wr.bottom, cl.left, cl.top, cl.right, cl.bottom, (int)haveCl);
-    }
+    Wh_Log(L"scroll obj=%d bar=(%d,%d,%d,%d) thick=%d len=%d dxyLine=%d win=(%d,%d,%d,%d) client=(%d,%d,%d,%d) haveCl=%d dpi=%u",
+           obj, bar.left, bar.top, bar.right, bar.bottom, thick, len, (int)sb.dxyLineButton,
+           wr.left, wr.top, wr.right, wr.bottom, cl.left, cl.top, cl.right, cl.bottom,
+           (int)haveCl, dpi);
 
     if (thick >= S) return;
     if (len < 2 * reach + 2) return;
@@ -671,7 +697,8 @@ static inline bool InRc(const RECT& r, int x, int y)
 
 static void CleanKernelOverflow(HWND hwnd, HDC dc, const RECT& wr, LONG style)
 {
-    const int S = cfg::kernelScrollSize;
+    const UINT dpi = WinDpi(hwnd);
+    const int S = cfg::kernelScrollSize;   // hardcoded in the kernel, not DPI-scaled
     if (S <= 0 || cfg::kernelCrossFromEnd) return;
 
     RECT vb = {}, hb = {}, cl = {};
@@ -686,7 +713,7 @@ static void CleanKernelOverflow(HWND hwnd, HDC dc, const RECT& wr, LONG style)
     OffsetRect(&cl, -wr.left, -wr.top);
     const int winW = wr.right - wr.left, winH = wr.bottom - wr.top;
     const RECT win = {0, 0, winW, winH};
-    const int pad = cfg::kernelScrollPad;
+    const int pad = Px(cfg::kernelScrollPad, dpi);
 
     RECT g[2];
     int ng = 0;
@@ -1179,6 +1206,7 @@ static ULONG_PTR NTAPI Hook_MessageCall(ULONG_PTR hwnd, ULONG_PTR msg, ULONG_PTR
         break;
 
     case WM_WINDOWPOSCHANGED:
+    case WM_DPICHANGED:
         ResetHot(h);
         DrawAll(h, DRAW_ALL, true);
         break;
@@ -1270,7 +1298,8 @@ static bool HookExport(HMODULE m, const char* name, void* hook, void** orig)
 
 BOOL Wh_ModInit()
 {
-    HMODULE w = LoadLibraryW(L"win32u.dll");
+    if (IsThemeActive()) return FALSE;
+    HMODULE w = GetModuleHandleW(L"win32u.dll");
     if (!w) return FALSE;
     if (!HookExport(w, "NtUserMessageCall", (void*)Hook_MessageCall, (void**)&g_origMsg))
         return FALSE;
