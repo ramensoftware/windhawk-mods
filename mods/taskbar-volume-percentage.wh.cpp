@@ -636,7 +636,9 @@ void PruneTrackedVolumeContents() {
                         observed.UnregisterPropertyChangedCallback(
                             Controls::TextBlock::FontSizeProperty(),
                             tracked.fontSizeCallbackToken);
-                    } catch (...) {
+                    } catch (winrt::hresult_error const& ex) {
+                        Wh_Log(L"Error unregistering font size callback: %08X",
+                               ex.code());
                     }
                 }
                 tracked.fontSizeCallbackToken = 0;
@@ -707,7 +709,9 @@ void RestoreVolumeLayout(TrackedVolumeContent& tracked) {
                 observed.UnregisterPropertyChangedCallback(
                     Controls::TextBlock::FontSizeProperty(),
                     tracked.fontSizeCallbackToken);
-            } catch (...) {
+            } catch (winrt::hresult_error const& ex) {
+                Wh_Log(L"Error unregistering font size callback: %08X",
+                       ex.code());
             }
         }
         tracked.fontSizeCallbackToken = 0;
@@ -817,7 +821,9 @@ void RestoreAllVolumeLayouts() {
                         observed.UnregisterPropertyChangedCallback(
                             Controls::TextBlock::FontSizeProperty(),
                             tracked.fontSizeCallbackToken);
-                    } catch (...) {
+                    } catch (winrt::hresult_error const& ex) {
+                        Wh_Log(L"Error unregistering font size callback: %08X",
+                               ex.code());
                     }
                 }
                 tracked.fontSizeCallbackToken = 0;
@@ -861,7 +867,7 @@ double GetSubBlockFontSize(Controls::TextBlock const& source) {
     if (g_settings.iconSize <= 0 && source) {
         double sourceSize = source.FontSize();
         if (std::abs(sourceSize - kDefaultIconFontSize) > 0.01) {
-            return sourceSize;  // Customized, e.g. by Taskbar Styler.
+            return sourceSize; // Customized, e.g. by Taskbar Styler.
         }
     }
     return 12.0;
@@ -897,7 +903,9 @@ void BindSubBlockTextStyle(TrackedVolumeContent& tracked,
                     prevSource.UnregisterPropertyChangedCallback(
                         Controls::TextBlock::FontSizeProperty(),
                         tracked.fontSizeCallbackToken);
-                } catch (...) {
+                } catch (winrt::hresult_error const& ex) {
+                    Wh_Log(L"Error unregistering font size callback: %08X",
+                           ex.code());
                 }
             }
             tracked.fontSizeCallbackToken = 0;
