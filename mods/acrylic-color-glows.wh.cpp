@@ -2,9 +2,8 @@
 // @id              acrylic-color-glows
 // @name            Acrylic Color Glows
 // @description     Animated light effects behind selected translucent windows
-// @version         0.4.1
+// @version         0.4.2
 // @author          HaVeN80
-// @github          https://github.com/haven80
 // @include         windhawk.exe
 // @compilerOptions -ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lshell32 -ladvapi32
 // @license         GPL-3.0
@@ -13,10 +12,6 @@
 // ==WindhawkModReadme==
 /*
 # Acrylic Color Glows
-
-![Desktop Window Cards overview](https://i.imgur.com/qvqqV2I.png)
-[Watch the overview video in full quality](https://i.imgur.com/huCSr8H.mp4)
-
 
 Animated light effects behind the windows you choose: drifting glows, sweeping
 light beams, orbs moving in the directions you pick, or flowing waves. The
@@ -118,8 +113,6 @@ tooltips, menus, flyouts and drop-down lists are never decorated.
 
 // ==WindhawkModSettings==
 /*
-- enabled: true
-  $name: Enable effect
 - effect: glows
   $name: Effect
   $options:
@@ -153,7 +146,7 @@ tooltips, menus, flyouts and drop-down lists are never decorated.
   $name: Cycle duration (seconds)
   $description: 2 to 120. Higher values make every effect slower.
 - opacity: 32
-  $name: Intensity (0-100)
+  $name: Intensity (1-100)
 - diameter: 380
   $name: Size (DIP)
   $description: 80 to 1600. Glow and orb diameter; beam and wave thickness follow it.
@@ -418,7 +411,6 @@ struct Orb {
 };
 
 struct Settings {
-    bool enabled = true;
     Effect effect = Effect::Glows;
     Mode mode = Mode::Selected;
     std::vector<std::wstring> include;
@@ -576,7 +568,6 @@ Color ParseColor(std::wstring const& raw, unsigned fallback) {
 
 void LoadSettings() {
     Settings& s = g_settings;
-    s.enabled = Wh_GetIntSetting(L"enabled") != 0;
 
     std::wstring effect = TakeString(Wh_GetStringSetting(L"effect"));
     s.effect = effect == L"beams"   ? Effect::Beams
@@ -595,7 +586,7 @@ void LoadSettings() {
                 ParseColor(TakeString(Wh_GetStringSetting(L"color2")), 0xA855F7),
                 ParseColor(TakeString(Wh_GetStringSetting(L"color3")), 0xFF4081)};
     s.seconds = std::clamp(Wh_GetIntSetting(L"seconds"), 2, 120);
-    s.opacity = std::clamp(Wh_GetIntSetting(L"opacity"), 0, 100);
+    s.opacity = std::clamp(Wh_GetIntSetting(L"opacity"), 1, 100);
     s.diameter = std::clamp(Wh_GetIntSetting(L"diameter"), 80, 1600);
     s.maxWindows = std::clamp(Wh_GetIntSetting(L"maxWindows"), 1, 100);
 
@@ -634,10 +625,6 @@ void LoadSettings() {
     s.power.fullscreen = Wh_GetIntSetting(L"powerSaving.fullscreen") != 0;
     s.power.reduceMotion = Wh_GetIntSetting(L"powerSaving.reduceMotion") != 0;
     s.power.transparency = Wh_GetIntSetting(L"powerSaving.transparency") != 0;
-}
-
-bool ShouldRun() {
-    return g_settings.enabled && g_settings.opacity > 0;
 }
 
 bool Contains(std::vector<std::wstring> const& list, std::wstring const& name) {
@@ -1671,8 +1658,16 @@ void Refresh(Worker& worker) {
     }
     BusyScope scope(worker.busy);
 
+    // Composition resources are missing only after a failed settings change.
+    if (!worker.resources.compositor) {
+        worker.backdrops.clear();
+        worker.failed.clear();
+        StopClock(worker);
+        return;
+    }
+
     worker.power = QueryPowerState();
-    if (!ShouldRun() || !worker.resources.compositor || worker.power.hide) {
+    if (worker.power.hide) {
         worker.backdrops.clear();
         worker.failed.clear();
         StopClock(worker);
@@ -1785,8 +1780,7 @@ void SafeRefresh(Worker& worker) {
 void CALLBACK OnWinEvent(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG idObject, LONG idChild,
                          DWORD, DWORD) {
     Worker* worker = g_worker;
-    if (!worker || !hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF ||
-        !ShouldRun()) {
+    if (!worker || !hwnd || idObject != OBJID_WINDOW || idChild != CHILDID_SELF) {
         return;
     }
 
@@ -2119,7 +2113,8 @@ void StartWorker() {
 // Tool mod callbacks
 
 BOOL WhTool_ModInit() {
-    // The worker loads the settings itself and stays idle while disabled.
+    // The worker loads the settings itself. Disabling the mod in Windhawk
+    // ends this process, so there is no separate on/off setting.
     StartWorker();
     return g_workerThread != nullptr;
 }
