@@ -2,7 +2,7 @@
 // @id              classic-theme-win32ksys-bug-workaround
 // @name            Classic theme caption/scrollbar button fix for 24H2+ builds 9444+
 // @description     Fixes caption buttons and scrollbar arrows on newer Windows builds
-// @version         0.28.0
+// @version         0.29.0
 // @author          Anixx
 // @github          https://github.com/Anixx
 // @include         *
@@ -1079,26 +1079,6 @@ static HRGN BaseRegion(const RECT& wr, ULONG_PTR wParam)
     return base;
 }
 
-static HRGN FrameRegion(HWND hwnd, const CapGeom& g)
-{
-    const RECT& wr = g.wr;
-    int f = FrameSize(hwnd, false);
-    int capB = g.cap.bottom + 1;
-    if (capB > wr.bottom) capB = wr.bottom;
-    HRGN rgn = CreateRectRgn(wr.left, wr.top, wr.right, capB);
-    HRGN part = CreateRectRgn(0, 0, 0, 0);
-    if (rgn && part) {
-        SetRectRgn(part, wr.left, wr.top, wr.left + f, wr.bottom);
-        CombineRgn(rgn, rgn, part, RGN_OR);
-        SetRectRgn(part, wr.right - f, wr.top, wr.right, wr.bottom);
-        CombineRgn(rgn, rgn, part, RGN_OR);
-        SetRectRgn(part, wr.left, wr.bottom - f, wr.right, wr.bottom);
-        CombineRgn(rgn, rgn, part, RGN_OR);
-    }
-    if (part) DeleteObject(part);
-    return rgn;
-}
-
 static ULONG_PTR NcPaintClipped(const CapGeom& g, HRGN base, ULONG_PTR hwnd, ULONG_PTR lParam,
                                 ULONG_PTR resultInfo, ULONG_PTR type, ULONG_PTR ansi)
 {
@@ -1157,6 +1137,14 @@ static ULONG_PTR NTAPI Hook_MessageCall(ULONG_PTR hwnd, ULONG_PTR msg, ULONG_PTR
     UINT m = (UINT)msg;
     HWND h = (HWND)hwnd;
 
+    // Всё, что идёт не из DefWindowProc, нас не касается: не трогаем, не анализируем,
+    // просто пропускаем дальше как можно быстрее. Иначе хук срабатывает на любой
+    // внутренний NtUserMessageCall (меню, курсор, карет и т.п.), где число "msg"
+    // лишь случайно совпадает с нужными нам WM_*.
+    const bool fromDefWindowProc = (type & 0xFFFF) == cfg::fnidDefWindowProc;
+    if (!fromDefWindowProc)
+        return g_origMsg(hwnd, msg, wParam, lParam, resultInfo, type, ansi);
+
     if ((m == WM_NCLBUTTONDOWN || m == WM_NCLBUTTONDBLCLK) && !g_tracking && !t_busy) {
         bool handled = IsIconic(h) ? HandleIconicNcDown(h, wParam, (LPARAM)lParam)
                                    : HandleNcButtonDown(h, (WPARAM)wParam, (LPARAM)lParam);
@@ -1172,8 +1160,7 @@ static ULONG_PTR NTAPI Hook_MessageCall(ULONG_PTR hwnd, ULONG_PTR msg, ULONG_PTR
         ResetHot(h);
     }
 
-    if ((type & 0xFFFF) == cfg::fnidDefWindowProc && !t_busy &&
-        (m == WM_NCPAINT || m == WM_NCACTIVATE)) {
+    if (!t_busy && (m == WM_NCPAINT || m == WM_NCACTIVATE)) {
         CapGeom g;
         if (GetCapGeom(h, g) && g.hasStrip) {
             if (m == WM_NCPAINT) {
@@ -1186,11 +1173,16 @@ static ULONG_PTR NTAPI Hook_MessageCall(ULONG_PTR hwnd, ULONG_PTR msg, ULONG_PTR
             } else {
                 ULONG_PTR ret = g_origMsg(hwnd, msg, wParam, (ULONG_PTR)-1, resultInfo, type, ansi);
                 SetPropW(h, kActiveProp, (HANDLE)(ULONG_PTR)(wParam ? 1 : 2));
-                HRGN base = FrameRegion(h, g);
+
+                // ВАЖНО: перерисовываем весь non-client регион (рамка + caption + menu bar),
+                // а не только узкую полоску рамки — иначе menu bar не получает приглашение
+                // перекраситься в новый (активный/неактивный) цвет текста.
+                HRGN base = CreateRectRgnIndirect(&g.wr);
                 if (base)
                     NcPaintClipped(g, base, hwnd, 0, resultInfo, type, ansi);
                 else
                     g_origMsg(hwnd, WM_NCPAINT, 1, 0, resultInfo, type, ansi);
+
                 DrawAll(h, DRAW_ALL, true);
                 return ret;
             }
