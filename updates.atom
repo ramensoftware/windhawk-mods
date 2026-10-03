@@ -2,12 +2,182 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-02T22:50:19.000Z</updated>
+    <updated>2026-10-03T16:00:29.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Taskbar Volume Percentage Indicator 1.8.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-volume-percentage#7046e9ed96c91e9ce073fb74d94fac13b9c4895a</id>
+        <link href="https://windhawk.net/mods/taskbar-volume-percentage"/>
+        <updated>2026-10-03T16:00:29.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>feat: add independent fontSize, prefixSize, and iconSize settings with native 16px defaults</li>
+<li>feat: support customFontFamily with native DirectWrite fallback</li>
+<li>feat: measure container width proactively on initialization to prevent initial truncation</li>
+<li>feat: add official Ko-fi donation link and Support section in documentation</li>
+<li>fix: skip secondary Explorer COM factory processes to eliminate launch failures</li>
+<li>fix: save and restore native icon FontSize and MinWidth to ensure clean reversibility</li>
+<li>fix: preserve Taskbar Styler font inheritance and decouple volume text from iconSize</li>
+<li>fix: ensure symmetrical layer reset and clean property unbinding on unload</li>
+</ul>]]></content>
+        <author>
+            <name>gilnett</name>
+            <uri>https://github.com/gilnett</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Auto-Hide in Context 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-autohide-in-context#c5440eb6ac037ad7e329a7cfca33f28992fe9c2b</id>
+        <link href="https://windhawk.net/mods/taskbar-autohide-in-context"/>
+        <updated>2026-10-03T16:00:25.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows11taskbarautohideincontext">Windows 11 Taskbar Auto-Hide in Context</h1>
+<p>Adds an "Auto-hide Taskbar" toggle to the native Windows 11 empty-taskbar context menu.</p>
+<p><img src="https://i.imgur.com/CRooPg6.gif" alt="Taskbar Auto-Hide demo" /></p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Native UI Integration</strong>: Injects seamlessly into the native Windows 11 XAML <code>MenuFlyout</code>.</li>
+<li><strong>Immediate Auto-Hide</strong>: Automatically releases taskbar focus upon enabling auto-hide, ensuring the taskbar hides immediately.</li>
+<li><strong>Customizable</strong>: Fully customizable label, and choose between classic checkmark or checkbox indicator styles.</li>
+<li><strong>Mod Compatibility</strong>: Fully compatible with the "Taskbar Restart Explorer" mod.</li>
+</ul>
+<h3 id="compatibility">Compatibility</h3>
+<ul>
+<li>Windows 11 (Tested on 26H2).</li>
+</ul>
+<h3 id="credits">Credits</h3>
+<ul>
+<li>Inspired by the menu injection technique from <a href="https://windhawk.net/mods/taskbar-restart-explorer">Taskbar Restart
+Explorer</a> by <strong>Mgrmjp</strong>.</li>
+</ul>]]></content>
+        <author>
+            <name>oyrslyng</name>
+            <uri>https://github.com/oyrslyng</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer real folder paths 0.1.3]]></title>
+        <id>https://windhawk.net/mods/explorer-real-folder-paths#174ebb084797de21358c367c6689bbd2ad278c34</id>
+        <link href="https://windhawk.net/mods/explorer-real-folder-paths"/>
+        <updated>2026-10-03T16:00:22.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerrealfolderpaths">Explorer real folder paths</h1>
+<p>When a sidebar shortcut such as Downloads opens a Shell alias, browse to the
+same folder through its filesystem path. Explorer can then show the physical
+folder hierarchy and an editable address such as <code>C:\Users\Daniel\Downloads</code>.
+Press <strong>Ctrl+L</strong> or <strong>Alt+D</strong> to edit the address.</p>
+<p><img src="https://i.imgur.com/Dc6GdsL.png" alt="Downloads address bar before and after enabling the mod" /></p>
+<p>Windows still renders breadcrumbs when the address bar is not being edited.
+The mod does not force keyboard focus into the address bar after navigation.
+When the sidebar already has the converted folder selected, keep that row
+and its scroll position instead of selecting the folder's physical drive.</p>
+<p>Paths are resolved through the Windows Shell. Moved folders, OneDrive folder
+redirection, localized names, and network paths are not hardcoded.</p>
+<p>Virtual locations such as Home, This PC, library roots, searches, and ZIP
+views keep their normal behavior. Filesystem folders reached through a
+library, OneDrive, or another Shell alias can open through their physical
+paths. The merged Shell Desktop is left alone; it is not the same view as
+the user's physical Desktop directory.</p>
+<p>Only Explorer (<code>explorer.exe</code>) windows are affected. Open/Save dialogs hosted
+by other applications are unaffected.</p>
+<h2 id="usageandcompatibility">Usage and compatibility</h2>
+<p>Open a new Explorer window, click Downloads in the sidebar, and press Ctrl+L.
+Navigate away and back when testing an already-open window.</p>
+<p>Tested on 64-bit Windows 11 23H2, build 22631.6199: the editable address shows
+the full path, and sidebar clicks retain the selected shortcut and scroll
+position. Other Windows builds and Windows on ARM have not been validated.
+The mod needs ExplorerFrame's navigation and sidebar selection symbols. If
+Windhawk cannot resolve them, the mod refuses to initialize.</p>
+<p>Sidebar selection follows Windows' normal behavior when navigating to a
+different folder through history or the address bar. The mod preserves a
+shortcut that already represents the opened folder.</p>
+<p>Enable logging for this mod in Windhawk to see navigation flags, resolution
+results, and paths. Disable logging afterwards.</p>
+<p>Disabling the mod stops future conversions. Entries already stored in an
+Explorer window's navigation history can still point to the physical path.
+No folder, pin, or registry setting is changed.</p>]]></content>
+        <author>
+            <name>Nerdworld</name>
+            <uri>https://github.com/nerdworldDE</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Cursor Override 1.0.1]]></title>
+        <id>https://windhawk.net/mods/cursor-override#b36d755177fdd0c8a640b06f71ac57b0f8ece626</id>
+        <link href="https://windhawk.net/mods/cursor-override"/>
+        <updated>2026-10-03T16:00:18.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Remove "(RichEdit left margin)" from the "Selection bar" setting label.</li>
+<li>Reorganize the README and usage instructions.</li>
+</ul>]]></content>
+        <author>
+            <name>Basti</name>
+            <uri>https://github.com/sebastianheder01</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[CEF/Spotify Tweaks 1.9]]></title>
+        <id>https://windhawk.net/mods/cef-titlebar-enabler-universal#5997afb7892b18563ff67adec4115c9b2744ff77</id>
+        <link href="https://windhawk.net/mods/cef-titlebar-enabler-universal"/>
+        <updated>2026-10-03T16:00:15.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add support for Spotify 1.2.89 to 1.3.3 (CEF 151)</li>
+<li>Prevent crashing Spotify on mod unload</li>
+</ul>]]></content>
+        <author>
+            <name>Ingan121</name>
+            <uri>https://github.com/Ingan121</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[MicroManager 1.2.0]]></title>
+        <id>https://windhawk.net/mods/micromanager#503d101f1c5e6abf8d57e0058bb2d49617237f33</id>
+        <link href="https://windhawk.net/mods/micromanager"/>
+        <updated>2026-10-03T16:00:11.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li><strong>Live Activity Graphs:</strong> Added a 16-sample history graph to the popup. Click any row or the graph canvas to cycle between live CPU, GPU, and RAM trends.</li>
+<li><strong>Process Tree Termination:</strong> "End Task" now terminates the entire process tree, cleanly closing multi-process apps (Firefox, Chrome, Electron) without leaving orphaned crashed tabs.</li>
+<li><strong>Open File Location:</strong> Added a quick action to reveal and select the top consumer's executable in File Explorer.</li>
+<li><strong>Safety & Identity Protection:</strong> Confirms termination targets, validates process creation times against PID reuse, and blocks critical Windows system processes.</li>
+<li><strong>High-Contrast Readability:</strong> Pure white text across popup labels, graph titles, and context menus for excellent readability with dark and custom themes.</li>
+<li><strong>Top Taskbar Placement:</strong> Automatically detects top-aligned taskbars and flips the popup below the tray icon so it never renders off-screen.</li>
+<li><strong>System Process Display:</strong> Correctly identifies and labels "System Idle Process" and the NT Kernel (PID 4) when they consume resources.</li>
+<li><strong>Tray & Navigation Fixes:</strong> Fixed popup flicker on rapid tray clicks, added keyboard navigation (Up / Down / Esc), and improved reload stability.</li>
+</ul>]]></content>
+        <author>
+            <name>BlackPaw</name>
+            <uri>https://github.com/BlackPaw21</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Restore to Snap Position 1.0]]></title>
+        <id>https://windhawk.net/mods/snap-restore-position#fc84bf84018d0f9cb95349fa8c7bf9859c3b9801</id>
+        <link href="https://windhawk.net/mods/snap-restore-position"/>
+        <updated>2026-10-03T16:00:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="restoretosnapposition">Restore to Snap Position</h1>
+<p><img src="https://i.imgur.com/XqdsB0w.gif" alt="Demo" /></p>
+<p>In Windows, when a window snapped with Snap (for example, to the left half of
+the screen) is maximized and then restored, it goes back to the position and
+size it had <strong>before</strong> it was snapped.</p>
+<p>With this mod, when a snapped window is maximized, its snapped position
+becomes the window's "normal" position. The <strong>Restore</strong> button, double-clicking
+the title bar and <strong>Win + ↓</strong> then return the window exactly to where it was
+snapped.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>After being restored, the window comes back as a regular window, not as a
+snapped one, so it is no longer part of a Snap Group.</li>
+<li>The size the window had before it was snapped is no longer remembered.</li>
+<li>Works with the maximize button, double-clicking the title bar and the
+window menu (including dialogs and MDI frame windows), and with programs that
+maximize their own windows through <code>ShowWindow</code> or <code>ShowWindowAsync</code>.</li>
+</ul>]]></content>
+        <author>
+            <name>pajs</name>
+            <uri>https://github.com/pajs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Start button always on the left 1.3.3]]></title>
         <id>https://windhawk.net/mods/taskbar-start-button-position#525894960b8e1cdb3633ad6aa72afee4907dfa99</id>
@@ -404,178 +574,6 @@ Do not enable both mods in the same applications.</p>
         <author>
             <name>Basti</name>
             <uri>https://github.com/sebastianheder01</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Window Cards 1.5]]></title>
-        <id>https://windhawk.net/mods/desktop-window-cards#e720a2611fdcaad46cf05cbe608b24526a74493e</id>
-        <link href="https://windhawk.net/mods/desktop-window-cards"/>
-        <updated>2026-10-01T13:03:27.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>grid layout </li>
-<li>virtual desktop support</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Audio Visualizer Plus 1.1.0]]></title>
-        <id>https://windhawk.net/mods/neiz-supersmile-audio-visualizer#d8d332cac51b2112390617ea31229fd76fb7df20</id>
-        <link href="https://windhawk.net/mods/neiz-supersmile-audio-visualizer"/>
-        <updated>2026-10-01T13:03:23.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Replaced standalone EQ popup with a full Media &amp; EQ overlay featuring playback controls, seek bar, and scrollable interactive lyrics.</li>
-<li>Added support for up to 12 custom EQ presets with responsive layout and active-preset auto-saving.</li>
-<li>Popup positioning with aspect-ratio placement storage and bounds clamping.</li>
-<li>Reworked "Selected applications" mode to capture and mix audio from multiple target processes simultaneously.</li>
-<li>Added automatic process tracking, device-invalidation recovery, and state resets when switching audio modes.</li>
-<li>Upgraded album color extraction to a perceptual OKLab k-means pipeline with better hue diversity and deterministic results.</li>
-<li>Optimized blur rendering with a sliding-sum algorithm and added per-overlay blur/artwork caching.</li>
-<li>Added multi-monitor selection support and dynamic bar width based on cursor distance.</li>
-<li>Added Windows 11 24H2+ desktop placement modes (behind/above icons).</li>
-<li>Added native Windows 10 support with tray icon integration and automatic tray-recreation recovery.</li>
-<li>Added local <code>.lrc</code> lyrics file matching (<code>Artist - Title.lrc</code>).</li>
-<li>Added smart per-monitor throttling (drops to 1 FPS during fullscreen applications without changing global settings).</li>
-</ul>]]></content>
-        <author>
-            <name>NeiZ</name>
-            <uri>https://github.com/NeiZqwe</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Windows Shadows Tuner 0.9.4]]></title>
-        <id>https://windhawk.net/mods/native-shadow-tuner#9a06ff2e9d46c9745918d9b52743e6f2f87077d9</id>
-        <link href="https://windhawk.net/mods/native-shadow-tuner"/>
-        <updated>2026-10-01T11:01:13.000Z</updated>
-        <content type="html"><![CDATA[<h2 id="windowsshadowstuner094">Windows Shadows Tuner 0.9.4</h2>
-<h3 id="new">New</h3>
-<ul>
-<li>Dynamic shadows (experimental): each window's shadow fades based on its
-distance from a virtual light source, updating live while windows are
-dragged. Settings:</li>
-<li>Light position: four screen edges (top, bottom, left, right), four
-corners, top/bottom center or middle left/right.</li>
-<li>Dimming strength: how much the shadow fades.</li>
-<li>Fade distance: how far from the light the shadow reaches its minimum.</li>
-<li>Fade curve: linear, fast, smooth or late.</li>
-</ul>
-<h3 id="safety">Safety</h3>
-<ul>
-<li>Dynamic shadows read four internal uDWM field offsets. At startup the mod
-checks the uDWM code that uses them and, if anything doesn't match, disables
-only dynamic shadows and keeps the intensity and size controls working.</li>
-<li>When the mod is unloaded, every shadow is reset to full opacity on DWM's own
-thread before the hooks are removed.</li>
-</ul>
-<h3 id="otherchanges">Other changes</h3>
-<ul>
-<li>Removed per-call logging from the shadow parameters hook.</li>
-<li>README: documented all settings and limitations, added a demo GIF, and
-corrected the note about stored data (the mod stores the time of its last
-initialization for crash loop detection).</li>
-</ul>
-<h3 id="testing">Testing</h3>
-<ul>
-<li>Tested with uDWM.dll 10.0.26100.9549 on Windows build 26300.9550,
-Windhawk 1.7.3.</li>
-<li>The uDWM symbols and field offsets used by dynamic shadows were also
-verified by disassembly on uDWM.dll 10.0.26100.9278.</li>
-</ul>]]></content>
-        <author>
-            <name>HaVeN80</name>
-            <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Volume Percentage Indicator 1.7.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-volume-percentage#33a028cd441387b8983f5e79142c09c6e476ae93</id>
-        <link href="https://windhawk.net/mods/taskbar-volume-percentage"/>
-        <updated>2026-10-01T11:01:09.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Add native icon and text dual display options for mute state ("Native mute icon and text" and "Native mute icon and 0%")</li>
-<li>Render text-only display styles in a dedicated text block using the same font as other tray items, fixing vertical misalignment</li>
-<li>Make the volume text color dynamically follow the taskbar theme</li>
-<li>Fix the original icon layout being lost after changing settings, which could hide the volume icon when the mod was disabled</li>
-<li>Manage icon-to-text spacing via native Grid column spacing, preserving custom margins set by Windows 11 Taskbar Styler</li>
-<li>Fix the icon spacing setting being ignored when using custom or automatic values</li>
-<li>Dynamically detect and mirror custom font sizes applied to the tray text block by Taskbar Styler themes</li>
-</ul>]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Taskbar Tooltips 1.0.8]]></title>
-        <id>https://windhawk.net/mods/hide-taskbar-tooltips#4e4ad92d9b819f521487076cb487b999c176390f</id>
-        <link href="https://windhawk.net/mods/hide-taskbar-tooltips"/>
-        <updated>2026-10-01T11:01:05.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hidetaskbartooltips">Hide Taskbar Tooltips</h1>
-<p>Suppresses native Windows 11 XAML hover tooltips in Explorer, covering:</p>
-<ul>
-<li>Taskbar app icon tooltips and labels on hover</li>
-<li>System tray status icons tooltips (Network, Volume, Battery, Clock)</li>
-<li>System XAML shell UI hosted in Explorer (Task View, snap layouts, and virtual desktops)</li>
-</ul>
-<h2 id="preview">Preview</h2>
-<p><strong>Before</strong> (native Windows 11 tooltip on hover):<br />
-<img src="https://i.imgur.com/dLAXEzl.png" alt="Before" /></p>
-<p><strong>After</strong> (tooltip suppressed):<br />
-<img src="https://i.imgur.com/tISQj2F.png" alt="After" /></p>
-<h2 id="compatibility">Compatibility</h2>
-<ul>
-<li>Only Windows 11 is supported.</li>
-</ul>]]></content>
-        <author>
-            <name>gilnett</name>
-            <uri>https://github.com/gilnett</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar multi-tray 1.3.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-multi-tray#a7cd9de73db60e1d68de5db6008eae71c09eed91</id>
-        <link href="https://windhawk.net/mods/taskbar-multi-tray"/>
-        <updated>2026-10-01T09:04:03.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="bugfixesimprovements">Bug fixes &amp; improvements</h3>
-<ul>
-<li>Graphical issues shouldn't be present anymore, including :</li>
-<li>Empty space(s) on some monitors</li>
-<li>Light flickering on tray icons right-click</li>
-<li>Hidden tray icon menu spawning with the wrong position</li>
-<li>Right click menus should appear on the correct monitor</li>
-<li>Right-clicking a non-hidden tray icon on another monitor no longer requires an extra click (&amp; doesn't refresh the chevron menu)</li>
-<li>Move icons anywhere ! No need to move them back to the primary screen's area to drop them, works cross-screen too !</li>
-<li>As a consequence, the hidden tray flyout no longer teleports when there's a line added/removed</li>
-<li>Some apps with custom right-click menus (like Raycast) no longer appear on the wrong screen, although they might have positioning/scaling issues. This is out of scope for this mod &amp; requires the app itself to fix this.</li>
-<li>Better logs</li>
-</ul>
-<h3 id="issuesremaining">Issues remaining</h3>
-<ul>
-<li>Support for the new taskbar layouts in Windows 11 (left/right/top) has NOT been tested, tho nice if it works</li>
-<li>Extra items like emoji/language selector aren't cloned YET (progress is underway)</li>
-<li>As always compatibility with other mods that change the taskbar is NOT guaranteed</li>
-</ul>]]></content>
-        <author>
-            <name>EDM115</name>
-            <uri>https://github.com/EDM115</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Multirow taskbar for Windows 11 1.1.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-multirow#ef8d22d9212973de5786625aa010047192accd83</id>
-        <link href="https://windhawk.net/mods/taskbar-multirow"/>
-        <updated>2026-09-30T22:25:58.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Improved thumbnail previews placement to stop covering the upper taskbar rows.</li>
-<li>Improved jump list placement, and fixed incorrect placement with touch screens.</li>
-<li>Fixed compatibility with the Taskbar Labels for Windows 11 mod.</li>
-<li>Fixed compatibility with older Windows 11 versions.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

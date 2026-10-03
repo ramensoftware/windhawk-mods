@@ -1,3 +1,14 @@
+## 1.8.1 ([Oct 3, 2026](https://github.com/ramensoftware/windhawk-mods/blob/7046e9ed96c91e9ce073fb74d94fac13b9c4895a/mods/taskbar-volume-percentage.wh.cpp))
+
+- feat: add independent fontSize, prefixSize, and iconSize settings with native 16px defaults
+- feat: support customFontFamily with native DirectWrite fallback
+- feat: measure container width proactively on initialization to prevent initial truncation
+- feat: add official Ko-fi donation link and Support section in documentation
+- fix: skip secondary Explorer COM factory processes to eliminate launch failures
+- fix: save and restore native icon FontSize and MinWidth to ensure clean reversibility
+- fix: preserve Taskbar Styler font inheritance and decouple volume text from iconSize
+- fix: ensure symmetrical layer reset and clean property unbinding on unload
+
 ## 1.7.4 ([Oct 1, 2026](https://github.com/ramensoftware/windhawk-mods/blob/33a028cd441387b8983f5e79142c09c6e476ae93/mods/taskbar-volume-percentage.wh.cpp))
 
 - Add native icon and text dual display options for mute state ("Native mute icon and text" and "Native mute icon and 0%")

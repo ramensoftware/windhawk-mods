@@ -1123,7 +1123,7 @@
         "ratingUsers": 113,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1777532604000,
+        "updated": 1791043215000,
         "users": 12924
       },
       "metadata": {
@@ -1136,9 +1136,10 @@
           "spotify.exe",
           "cefclient.exe"
         ],
+        "license": "MIT",
         "name": "CEF/Spotify Tweaks",
         "twitter": "https://twitter.com/Ingan121",
-        "version": "1.8"
+        "version": "1.9"
       }
     },
     "center-new-windows": {
@@ -3110,7 +3111,7 @@
         "ratingUsers": 2,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790870482000,
+        "updated": 1791043218000,
         "users": 19
       },
       "metadata": {
@@ -3137,7 +3138,7 @@
         ],
         "license": "MIT",
         "name": "Cursor Override",
-        "version": "1.0.0"
+        "version": "1.0.1"
       }
     },
     "custom-cmd-startup-text": {
@@ -5352,6 +5353,33 @@
         "license": "GPL-3.0",
         "name": "Explorer Open Folder Icon",
         "version": "1.0.0"
+      }
+    },
+    "explorer-real-folder-paths": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791043222000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791043222000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Nerdworld",
+        "compilerOptions": "-lshell32 -lole32 -luuid",
+        "description": "Open filesystem-backed Shell shortcuts through their actual paths",
+        "github": "https://github.com/nerdworldDE",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Explorer real folder paths",
+        "version": "0.1.3"
       }
     },
     "explorer-rename-overwrite": {
@@ -8227,7 +8255,7 @@
         "ratingUsers": 25,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1783881631000,
+        "updated": 1791043211000,
         "users": 971
       },
       "metadata": {
@@ -8240,7 +8268,7 @@
           "windhawk.exe"
         ],
         "name": "MicroManager",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "microswap": {
@@ -11545,6 +11573,28 @@
         "version": "1.0.0"
       }
     },
+    "snap-restore-position": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791043208000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791043208000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "pajs",
+        "description": "When a snapped window is maximized and then restored, it returns to its snapped position instead of its pre-snap position",
+        "github": "https://github.com/pajs",
+        "include": [
+          "*"
+        ],
+        "name": "Restore to Snap Position",
+        "version": "1.0"
+      }
+    },
     "snap-sentry": {
       "details": {
         "defaultSorting": 1450,
@@ -12248,6 +12298,33 @@
         ],
         "name": "Better Taskbar Autohide",
         "version": "1.2"
+      }
+    },
+    "taskbar-autohide-in-context": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791043225000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791043225000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "oyrslyng",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lshell32",
+        "description": "Adds an option to toggle taskbar auto-hide to the native Windows 11 taskbar context menu.",
+        "donateUrl": "https://ko-fi.com/oyrslyng",
+        "github": "https://github.com/oyrslyng",
+        "include": [
+          "explorer.exe"
+        ],
+        "name": "Windows 11 Taskbar Auto-Hide in Context",
+        "version": "1.0"
       }
     },
     "taskbar-autohide-instant-show": {
@@ -14173,7 +14250,7 @@
         "ratingUsers": 17,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790852469000,
+        "updated": 1791043229000,
         "users": 264
       },
       "metadata": {
@@ -14183,13 +14260,14 @@
         "author": "gilnett",
         "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lversion",
         "description": "Shows the master volume percentage in the Windows 11 system tray volume icon",
+        "donateUrl": "https://ko-fi.com/gilnet",
         "github": "https://github.com/gilnett",
         "include": [
           "explorer.exe"
         ],
         "license": "GPL-3.0",
         "name": "Taskbar Volume Percentage Indicator",
-        "version": "1.7.4"
+        "version": "1.8.1"
       }
     },
     "taskbar-wheel-cycle": {

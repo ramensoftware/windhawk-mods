@@ -2,12 +2,114 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-02T08:05:36.000Z</updated>
+    <updated>2026-10-03T16:00:25.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Windows 11 Taskbar Auto-Hide in Context 1.0]]></title>
+        <id>https://windhawk.net/mods/taskbar-autohide-in-context#c5440eb6ac037ad7e329a7cfca33f28992fe9c2b</id>
+        <link href="https://windhawk.net/mods/taskbar-autohide-in-context"/>
+        <updated>2026-10-03T16:00:25.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="windows11taskbarautohideincontext">Windows 11 Taskbar Auto-Hide in Context</h1>
+<p>Adds an "Auto-hide Taskbar" toggle to the native Windows 11 empty-taskbar context menu.</p>
+<p><img src="https://i.imgur.com/CRooPg6.gif" alt="Taskbar Auto-Hide demo" /></p>
+<h3 id="features">Features</h3>
+<ul>
+<li><strong>Native UI Integration</strong>: Injects seamlessly into the native Windows 11 XAML <code>MenuFlyout</code>.</li>
+<li><strong>Immediate Auto-Hide</strong>: Automatically releases taskbar focus upon enabling auto-hide, ensuring the taskbar hides immediately.</li>
+<li><strong>Customizable</strong>: Fully customizable label, and choose between classic checkmark or checkbox indicator styles.</li>
+<li><strong>Mod Compatibility</strong>: Fully compatible with the "Taskbar Restart Explorer" mod.</li>
+</ul>
+<h3 id="compatibility">Compatibility</h3>
+<ul>
+<li>Windows 11 (Tested on 26H2).</li>
+</ul>
+<h3 id="credits">Credits</h3>
+<ul>
+<li>Inspired by the menu injection technique from <a href="https://windhawk.net/mods/taskbar-restart-explorer">Taskbar Restart
+Explorer</a> by <strong>Mgrmjp</strong>.</li>
+</ul>]]></content>
+        <author>
+            <name>oyrslyng</name>
+            <uri>https://github.com/oyrslyng</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Explorer real folder paths 0.1.3]]></title>
+        <id>https://windhawk.net/mods/explorer-real-folder-paths#174ebb084797de21358c367c6689bbd2ad278c34</id>
+        <link href="https://windhawk.net/mods/explorer-real-folder-paths"/>
+        <updated>2026-10-03T16:00:22.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="explorerrealfolderpaths">Explorer real folder paths</h1>
+<p>When a sidebar shortcut such as Downloads opens a Shell alias, browse to the
+same folder through its filesystem path. Explorer can then show the physical
+folder hierarchy and an editable address such as <code>C:\Users\Daniel\Downloads</code>.
+Press <strong>Ctrl+L</strong> or <strong>Alt+D</strong> to edit the address.</p>
+<p><img src="https://i.imgur.com/Dc6GdsL.png" alt="Downloads address bar before and after enabling the mod" /></p>
+<p>Windows still renders breadcrumbs when the address bar is not being edited.
+The mod does not force keyboard focus into the address bar after navigation.
+When the sidebar already has the converted folder selected, keep that row
+and its scroll position instead of selecting the folder's physical drive.</p>
+<p>Paths are resolved through the Windows Shell. Moved folders, OneDrive folder
+redirection, localized names, and network paths are not hardcoded.</p>
+<p>Virtual locations such as Home, This PC, library roots, searches, and ZIP
+views keep their normal behavior. Filesystem folders reached through a
+library, OneDrive, or another Shell alias can open through their physical
+paths. The merged Shell Desktop is left alone; it is not the same view as
+the user's physical Desktop directory.</p>
+<p>Only Explorer (<code>explorer.exe</code>) windows are affected. Open/Save dialogs hosted
+by other applications are unaffected.</p>
+<h2 id="usageandcompatibility">Usage and compatibility</h2>
+<p>Open a new Explorer window, click Downloads in the sidebar, and press Ctrl+L.
+Navigate away and back when testing an already-open window.</p>
+<p>Tested on 64-bit Windows 11 23H2, build 22631.6199: the editable address shows
+the full path, and sidebar clicks retain the selected shortcut and scroll
+position. Other Windows builds and Windows on ARM have not been validated.
+The mod needs ExplorerFrame's navigation and sidebar selection symbols. If
+Windhawk cannot resolve them, the mod refuses to initialize.</p>
+<p>Sidebar selection follows Windows' normal behavior when navigating to a
+different folder through history or the address bar. The mod preserves a
+shortcut that already represents the opened folder.</p>
+<p>Enable logging for this mod in Windhawk to see navigation flags, resolution
+results, and paths. Disable logging afterwards.</p>
+<p>Disabling the mod stops future conversions. Entries already stored in an
+Explorer window's navigation history can still point to the physical path.
+No folder, pin, or registry setting is changed.</p>]]></content>
+        <author>
+            <name>Nerdworld</name>
+            <uri>https://github.com/nerdworldDE</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Restore to Snap Position 1.0]]></title>
+        <id>https://windhawk.net/mods/snap-restore-position#fc84bf84018d0f9cb95349fa8c7bf9859c3b9801</id>
+        <link href="https://windhawk.net/mods/snap-restore-position"/>
+        <updated>2026-10-03T16:00:08.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="restoretosnapposition">Restore to Snap Position</h1>
+<p><img src="https://i.imgur.com/XqdsB0w.gif" alt="Demo" /></p>
+<p>In Windows, when a window snapped with Snap (for example, to the left half of
+the screen) is maximized and then restored, it goes back to the position and
+size it had <strong>before</strong> it was snapped.</p>
+<p>With this mod, when a snapped window is maximized, its snapped position
+becomes the window's "normal" position. The <strong>Restore</strong> button, double-clicking
+the title bar and <strong>Win + ↓</strong> then return the window exactly to where it was
+snapped.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>After being restored, the window comes back as a regular window, not as a
+snapped one, so it is no longer part of a Snap Group.</li>
+<li>The size the window had before it was snapped is no longer remembered.</li>
+<li>Works with the maximize button, double-clicking the title bar and the
+window menu (including dialogs and MDI frame windows), and with programs that
+maximize their own windows through <code>ShowWindow</code> or <code>ShowWindowAsync</code>.</li>
+</ul>]]></content>
+        <author>
+            <name>pajs</name>
+            <uri>https://github.com/pajs</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Top Window Guard 0.6.0]]></title>
         <id>https://windhawk.net/mods/taskbar-top-window-guard#f1230894d67eeb0fd0ab01dd0a918c43295e8fc3</id>
@@ -883,260 +985,6 @@ Windows 11 only.</p>
         <author>
             <name>allelimo</name>
             <uri>https://github.com/allelimo</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Hide Taskbar Only on Desktop 8.0.0]]></title>
-        <id>https://windhawk.net/mods/hide-taskbar-only-on-desktop#222fe7db8466b63b488ee78695a9cee03145e3ed</id>
-        <link href="https://windhawk.net/mods/hide-taskbar-only-on-desktop"/>
-        <updated>2026-09-28T09:04:52.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="hidetaskbaronlyondesktop">Hide Taskbar Only on Desktop</h1>
-<p>Hides selected bottom-docked taskbars when their display has no relevant application. Detected borderless fullscreen windows are also treated as desktop-only display state, with explicit shell, keyboard, and hover reveals handled separately. Each display is evaluated independently.</p>
-<h2 id="demo">Demo</h2>
-<h3 id="multipledisplays">Multiple Displays</h3>
-<p><img src="https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/multiple-display.gif" alt="Multiple Display" /></p>
-<h3 id="singledisplay">Single Display</h3>
-<p><img src="https://raw.githubusercontent.com/Sahil-Dashoni/Hide-Taskbar-Only-on-Desktop-Windhawk-Mod/refs/heads/main/Assets/single-display.gif" alt="Single Display" /></p>
-<h2 id="features">Features</h2>
-<ul>
-<li>Per-display desktop-only hiding</li>
-<li>Independent bottom-edge hover reveal</li>
-<li>Multi-monitor and spanning-window support</li>
-<li>Keyboard taskbar interaction such as Win+T and Win+B</li>
-<li>Recognized shell UI, taskbar popups, and desktop shell surfaces handled separately</li>
-<li>Per-display borderless fullscreen tracking</li>
-<li>Recovery after taskbar recreation or tool-process restart</li>
-<li>Optional stable monitor interface-name mapping</li>
-</ul>
-<h2 id="settings">Settings</h2>
-<p><strong>Extra hover margin (px)</strong> adds to the taskbar-height-based bottom-edge reveal zone and is scaled for the display DPI.</p>
-<p><strong>Auto-hide delay after hover (ms)</strong> controls how long the revealed taskbar stays visible after the cursor leaves the bottom-edge hover zone. It only affects hover dismissal; desktop-only hides remain immediate.</p>
-<p><strong>Reveal taskbar on bottom-edge hover</strong> selects the displays where bottom-edge hover can reveal the taskbar.</p>
-<p><strong>Taskbars to hide on desktop</strong> selects the displays whose taskbars participate in desktop-only hiding.</p>
-<p><strong>Stable monitor interface names</strong> lets you pin a display slot to a specific physical monitor by selecting the slot and pasting its Windows monitor interface name returned by <code>EnumDisplayDevicesW</code> with <code>EDD_GET_DEVICE_INTERFACE_NAME</code>. Each mapping has its own display selector and text field, so a mapping for Display 10 can be added directly without creating mappings for Displays 1 through 9. Pinned monitors always use their configured display slots. Any monitors that are not pinned fill the remaining display slots in their current logical order. If multiple mappings target the same slot or physical monitor, the last matching mapping wins.</p>
-<p>To find the interface names on Windows, run this in PowerShell:</p>
-<pre><code class="powershell language-powershell">Add-Type @'
-using System;
-using System.Runtime.InteropServices;
-public static class DisplayDevices2 {
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public struct DISPLAY_DEVICE {
-        public int cb;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceString;
-        public int StateFlags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceID;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceKey;
-    }
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "EnumDisplayDevicesW")]
-    public static extern bool EnumDisplayDevices(string lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
-}
-'@
-for ($i = 1; $i -le 16; $i++) {
-    $m = New-Object DisplayDevices2+DISPLAY_DEVICE
-    $m.cb = [Runtime.InteropServices.Marshal]::SizeOf($m)
-    if ([DisplayDevices2]::EnumDisplayDevices("\\.\DISPLAY$i", 0, [ref]$m, 1)) {
-        Write-Host "Display $i : $($m.DeviceString)"
-        Write-Host "Interface : $($m.DeviceID)"
-        Write-Host ""
-    }
-}
-</code></pre>
-<p>Paste the full value shown after <strong>Interface :</strong> into the mapping for the display slot you want to attach to that physical monitor.</p>
-<p>The mod intentionally supports up to 16 fixed logical display slots. Pinned monitors stay in their selected slots, while unpinned monitors fill the remaining slots in current logical order.</p>
-<h2 id="differencefromtaskbarfade">Difference from <code>taskbar-fade</code></h2>
-<p><code>taskbar-fade</code> and this mod both use layered taskbar transparency and can reveal the taskbar from the bottom edge, so they overlap in mechanism. This mod has a different primary state model: <strong>desktop-only state is evaluated independently for each display, and the taskbar becomes immediately eligible for hiding when that display has no relevant application, subject to explicit hover, shell, or keyboard reveals</strong>. It also carries the per-display fullscreen, shell-surface, keyboard, minimize, and recovery handling needed by that model.</p>
-<p>The two mods should not be used on the same taskbar because both modify the taskbar window's transparency/style state.</p>
-<h2 id="implementation">Implementation</h2>
-<p>The state logic runs in a dedicated Windhawk tool process. Taskbars are hidden with layered-window transparency plus click-through behavior instead of Windows' native taskbar auto-hide, so the normal desktop work area is intentionally unchanged.</p>
-<p>Fullscreen ownership is tracked per display for borderless monitor-sized windows. Foreground, move/size, per-owner location, and recognized shell-surface events update state promptly, including geometry changes while the owner is in the background. Cached fullscreen ownership tolerates transient visibility or cloak changes while focus moves between displays and remains active while the owner still matches fullscreen geometry. Short validation timers and a 5-second safety refresh cover transitions that do not produce a single reliable event. Taskbar control focus is tracked through out-of-context accessibility focus events, so keyboard navigation such as Win+T and Win+B can reveal a taskbar even when Windows has not yet made that taskbar the foreground window. A short release debounce keeps the taskbar visible across transient focus transitions between taskbar buttons. Mouse-button activity and shell-menu focus are excluded so ordinary mouse interaction is not misclassified as keyboard navigation.</p>
-<h2 id="limitations">Limitations</h2>
-<ul>
-<li><strong>Recovery:</strong> If the dedicated tool process terminates unexpectedly while a taskbar is hidden, disable and re-enable this mod in Windhawk or restart Windows Explorer to restore it. A later tool-process startup also performs ownership recovery. If the taskbar window itself no longer exists, restarting Windows Explorer recreates it.</li>
-<li>Desktop-only hiding and hover reveal apply to bottom-docked taskbars.</li>
-<li>The hidden taskbar remains part of the normal work area and is click-through.</li>
-<li>If a taskbar's monitor cannot be resolved during a state refresh, the mod fails safe by leaving that taskbar visible.</li>
-<li>Flashing taskbar buttons and tray notifications are not visible while the taskbar is transparent.</li>
-<li>Native Windows taskbar auto-hide remains separate from this mod; when it is enabled, this mod does not take over that taskbar.</li>
-<li>Other taskbar transparency/style mods can conflict when they modify the same taskbar.</li>
-<li>A visible, monitor-sized, captionless, non-resizable application may be treated as fullscreen. Cached fullscreen ownership can remain active through transient visibility or cloak changes while the owner still matches fullscreen geometry. During fullscreen detection, bottom-edge mouse hover does not reveal the taskbar; use <strong>Win+T</strong> or <strong>Start</strong> to access it.</li>
-<li>Windows shell classes/processes can change between Windows releases.</li>
-</ul>]]></content>
-        <author>
-            <name>Sahil Dashoni</name>
-            <uri>https://github.com/Sahil-Dashoni</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Left Taskbar Quick Pin Dock 2.5.4]]></title>
-        <id>https://windhawk.net/mods/taskbar-quick-pin#b8bf716e6f97ed3c13dacc7ae7f68bfc615bea6c</id>
-        <link href="https://windhawk.net/mods/taskbar-quick-pin"/>
-        <updated>2026-09-28T09:04:49.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="lefttaskbarquickpindock">Left Taskbar Quick Pin Dock</h1>
-<h2 id="onlyforwindows11witha_centered_taskbar">⚠️ <strong>Only for Windows 11 with a <em>centered</em> taskbar</strong></h2>
-<p><strong>This mod supports Windows 11 only, and only when the taskbar is centered
-(the default). Left-aligned or otherwise repositioned taskbars are <em>not</em>
-supported.</strong> On an unsupported layout it does <strong>not</strong> crash or cause any
-issue -- the dock simply detects there's no room, stays hidden, and does
-nothing. It just won't work there.</p>
-<p><img src="https://raw.githubusercontent.com/k-ashix/taskbar-quick-pin/main/src/preview.gif" alt="Live preview of the Left Taskbar Quick Pin Dock" /></p>
-<p>A lightweight icon dock that sits just left of the Start button on the
-Windows 11 taskbar. Drag any app onto it to pin, click to launch or focus, and
-drag it off (or double-right-click) to unpin.</p>
-<h2 id="quickusage">Quick usage</h2>
-<p>| Action | Result |
-|---|---|
-| Drag an app window onto the dock | Pin it |
-| Left-click a pinned icon | Launch, or focus if it's already running |
-| Drag a pinned icon left / right | Reorder it |
-| Drag a pinned icon off the dock | Unpin it |
-| Double-right-click an icon | Unpin it (off by default) |
-| Hotkey (default Ctrl + Alt + P) | Pin or unpin the focused app |
-| Triple-tap <strong>L</strong> | Lock / unlock the dock |</p>
-<p>Two more gestures are available but <strong>off by default</strong> (enable them in Settings):
-the <strong>rapid-click unpin-all</strong> (three quick clicks on an icon clears the whole
-dock) and the <strong>bare-key taps</strong> (tap <strong>P</strong> / <strong>U</strong> three times to pin / unpin the
-focused app). They ship disabled because they can fire while you type in other
-apps; the Ctrl + Alt + P hotkey is the safe alternative. Every setting is
-documented in the <strong>Settings reference</strong> below.</p>
-<p><strong>Lock the dock:</strong> triple-tap the <strong>L</strong> key to lock it, triple-tap <strong>L</strong> again
-to unlock. While locked, the quick <em>gesture</em> unpins are refused (triple-tap
-<strong>U</strong>, the rapid-click unpin-all, double-right-click, and the hotkey's unpin) so
-a stray gesture can't drop a pin. A deliberate drag-off that breaks the rope
-still unpins, and pinning / reordering still work.</p>
-<h2 id="firstrunpleasebepatient">First run  --  please be patient</h2>
-<p>On the very first launch the dock needs a moment to detect the taskbar and
-settle, so it may not appear instantly. That's normal  --  it's working in the
-background, so please wait rather than reinstalling. If it still hasn't shown up
-after a few minutes, restarting Explorer (or, most reliably, your PC) sorts it
-out. You can also raise the <strong>Startup delay</strong> setting.</p>
-<h2 id="knownlimitations">Known limitations</h2>
-<ul>
-<li>A few apps with custom icon handlers may show a generic Windows icon. This is
-a shell limitation  --  no Win32 API resolves every icon reliably.</li>
-<li>Some UWP apps may occasionally resolve to their host process if their window
-isn't ready yet.</li>
-<li>English UI strings Only</li>
-</ul>
-<h2 id="v254">v2.5.4</h2>
-<ul>
-<li>Broadcast-safe lock glow -- the lock/unlock glow window now lives on the dock's
-message-pumping UI thread, so a system-wide broadcast (theme change,
-WM_SETTINGCHANGE, some app launches) can no longer stall on it.</li>
-<li>Correct placement on scaled / mixed-DPI displays -- the dock now sets its own
-per-monitor-v2 DPI awareness, so it lands in the right spot and stays crisp
-instead of being DWM-stretched.</li>
-<li>"Separator opacity" is now "Show workspace divider" (showWorkspaceDivider) -- the
-old 0-100 value behaved identically for every value 1-100, so it is now a simple
-on/off toggle for the golden divider between workspace pins and app pins.</li>
-</ul>
-<h2 id="v253">v2.5.3</h2>
-<ul>
-<li>🪶 <strong>Leaner tool-mod runtime.</strong> — General optimisation of the tool-mod process.</li>
-<li>✨ <strong>Drag-to-pin feedback layer.</strong> — A glow bloom shows GREEN ("there's room") or RED ("dock full") while you drag an app toward the dock.</li>
-<li>🖥️ <strong>Cleaner fullscreen & Snipping Tool handling.</strong> — The dock hides smoothly under fullscreen apps and the Windows native Snipping Tool overlay, with anti-flicker so it reappears seamlessly.</li>
-<li>🎯 <strong>Refined feedback behaviour.</strong> — Dragging or deleting an already-pinned icon near the dock now stays calm in BOTH pin-limit states (dock full or with room) — no false "dock full" flash for an app that is already pinned.</li>
-<li>🧱 <strong>New "Hide dock outline" toggle</strong> (<code>hideDockBorder</code>). — Turn off the thin grey Windows 11 outline drawn around the dock. Purely cosmetic; the dock, icons and rounded corners are unchanged.</li>
-<li>🎬 <strong>Two lock/unlock flash animations, with a toggle</strong> (<code>enableLockAnimation</code>). — OFF: a brief highlight on the dock's real edge. ON: a loading-style glow sweeps left→right across the whole dock. Colours unchanged (gold when locking, green when unlocking).</li>
-<li>🔧 <strong>Some more stability & polish improvements.</strong></li>
-</ul>
-<h2 id="v252">v2.5.2</h2>
-<ul>
-<li><strong>Architectural Change</strong> — Now it <code>@include windhawk.exe</code></li>
-<li><strong>Code optimised</strong></li>
-</ul>
-<h2 id="v251">v2.5.1</h2>
-<ul>
-<li>⚡ <strong>Code optimised & lower memory usage.</strong> — No behavioural change,
-just leaner and lighter.</li>
-<li>🪜 <strong>New 5-stage resolve pipeline to cut resource usage.</strong> App identity is now
-settled through five ordered stages.</li>
-</ul>
-<ol>
-<li><strong>Cache hit</strong> — Reuse the last resolved identity for the window/point (no work).</li>
-<li><strong>Fast window probe</strong> — Cheap <code>Get*</code>/class checks before any heavyweight call.</li>
-<li><strong>UIAutomation resolve</strong> — The authoritative taskbar-surface lookup, only if 1–2 miss.</li>
-<li><strong>Process fallback</strong> — Cursor-inside process match when UIA can't name the target.</li>
-<li><strong>Miss / sentinel</strong> — Give up cleanly (no pin) instead of guessing wrong.</li>
-</ol>
-<ul>
-<li>🔁 <strong>Workspace pins re-open every time.</strong> — A Pinned workspace dock icon now resolves to the <code>"Explorer workspace"</code>.</li>
-<li>⌨️ <strong>Bare-key P / U / L gestures now work when enabled.</strong> — These gestures act on the foreground window.</li>
-<li>🪟 <strong>Focus-if-running targets a real window.</strong> — Improved</li>
-<li>🆔 <strong>Collision-free workspace IDs.</strong> <code>MakeWorkspaceId</code> now uses <code>CoCreateGuid</code></li>
-</ul>
-<h2 id="settingsreference">Settings reference</h2>
-<p>Every option lives in the Windhawk <strong>Settings</strong> panel for this mod. Most apply
-live; the two noted below need a mod reload.</p>
-<p>| Setting | What it does | Default |
-|---|---|---|
-| Max pinned apps | How many apps can be pinned (1 - 20). The dock auto-sizes: min 5 slots, grows to 10, then extra pins scroll. | 5 |
-| Icon size | Icon size in px before DPI scaling (16 - 48). | 33 |
-| Dock gap from Start | Gap between the dock and the Start button (0 - 40 px). | 6 |
-| Show workspace divider | Show the gold divider between workspace pins and app pins (only when you have both). | on |
-| Drag to reorder | Drag icons left/right to rearrange; off = drag only unpins. | on |
-| Double-right-click to unpin | Unpin an icon with a double right-click (dust effect). | off |
-| Rapid-click unpin-all (opt-in) | Three quick clicks on an icon unpins EVERYTHING. Off so it can't fire by accident. | off |
-| Bare-key tap gestures (opt-in) | Triple-tap P / U / L to pin / unpin / lock, regardless of focus. Off (fires while typing). | off |
-| Scroll-wheel navigation | Hover + wheel moves the highlight across pins. | on |
-| Drag tether (rope) | Shows the stretchy thread while dragging an icon off. | on |
-| Drag tether - thickness | Rope thickness, 1 (hair) to 10 (cord). | 2 |
-| Drag tether - break length | How far you pull before the rope snaps (150 - 650 px). | 450 |
-| Drag tether - hue | Rope colour hue (0 - 359). | 30 |
-| Unpin trigger | Only when the rope BREAKS, or rope breaks OR released outside the dock. | ropeBreak |
-| Corner roundness | 0 = square, 1 - 40 = slight, 41 - 100 = full pill. | 40 |
-| Explorer workspace pins | Allow File Explorer to be dragged in as a workspace pin. | off |
-| Startup delay | Extra wait before the dock loads (0 - 3000 ms). | 0 |
-| Sync with taskbar auto-hide | Hide the dock when the taskbar auto-hides. | off |
-| Pin hotkey - modifiers | Modifier keys for the pin/unpin hotkey (or Disabled). | Ctrl + Alt |
-| Pin hotkey - key | Key pressed with the modifiers above. | P |</p>
-<h2 id="credits">Credits</h2>
-<p>Created with ❤️ by Ashix. Thanks to the <strong>Taskbar Dock Animation</strong>
-(<code>taskbar-dock-animation</code>) and <strong>Taskbar Dock Animation Plus</strong>
-(<code>taskbar-dock-animation-plus</code>) mods for animation refinements.</p>]]></content>
-        <author>
-            <name>Ashix</name>
-            <uri>https://github.com/k-ashix</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Edge Native UI Tweaks 1.0]]></title>
-        <id>https://windhawk.net/mods/edge-native-ui-tweaks#1c29695bedd11217ed60ffc68edcbf3ee21b2d8b</id>
-        <link href="https://windhawk.net/mods/edge-native-ui-tweaks"/>
-        <updated>2026-09-27T09:50:35.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="edgenativeuitweaks">Edge Native UI Tweaks</h1>
-<p>Customize Favorites folder icons in Microsoft Edge's native browser interface without affecting web content.</p>
-<p><img src="https://i.imgur.com/idipoQV.png" alt="Favorites folder icons" /></p>
-<h2 id="gettingstarted">Getting started</h2>
-<ol>
-<li>Enable the mod.</li>
-<li>Restart Edge. If closing and reopening it doesn't restart the browser process, use <code>edge://restart</code>.</li>
-<li>Enable or disable <strong>Use Windows folder icons</strong> under <strong>Favorites</strong>.</li>
-</ol>
-<p>Once the mod is active, the setting applies immediately without restarting Edge.</p>
-<p>Disabling or uninstalling the mod restores Edge's original folder icons in the running browser. Re-enabling the mod in that same Edge instance may require a restart; use <code>edge://restart</code> if closing and reopening Edge doesn't do it.</p>
-<h2 id="features">Features</h2>
-<h3 id="favorites">Favorites</h3>
-<p>When <strong>Use Windows folder icons</strong> is enabled:</p>
-<ul>
-<li>Favorites bar folders, their drop-down menus, and folder drag images use the Windows system folder icon.</li>
-<li>The Favorites flyout, pinned Favorites pane, and Favorites page use Edge's older yellow folder icons instead of the newer monoline icons.</li>
-</ul>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>Tested with <strong>Microsoft Edge 154.0.4258.37 x64</strong>.</li>
-<li>Edge controls its newer monochrome folder style through the <code>msFavoritesMonolineFolder</code> feature. The mod suppresses that path while the option is enabled. This keeps the implementation simpler and avoids hooking private Favorites menu/button classes.</li>
-<li>The older non-monoline path is still present in current Edge but may eventually be removed by Microsoft. If that happens, the yellow Edge icons in the Favorites flyout, pane, and page may no longer be restorable. The Windows icons on the Favorites bar, its folder menus, and drag images use a separate icon hook.</li>
-<li>The mod relies on Edge's internal native UI symbols, so Edge updates can occasionally require compatibility adjustments. If the required symbols aren't available, the folder-icon tweak is left inactive rather than partially applied.</li>
-<li>After an Edge update, Windhawk may need to download and resolve new <code>msedge.dll</code> symbols. The mod waits up to 5 seconds for cached symbols. If resolution takes longer, Edge continues with its normal UI while symbol preparation finishes in the background. A temporary tray icon shows the current status and notifies you when the symbols are ready; restart Edge once after preparation completes. If closing and reopening Edge doesn't restart the browser process, use <code>edge://restart</code>.</li>
-<li>A full fresh-symbol fallback can still take several minutes. In an Edge 154.0.4258.37 test with the local PDB and Windhawk symbol cache removed, <code>msedge.dll.pdb</code> was <strong>676.0 MB (644.7 MiB)</strong> and total preparation took <strong>515.1 seconds (8 min 35 sec)</strong> on a <strong>75 Mbit/s</strong> connection and an <strong>Intel Core i7-8700K</strong>. The PDB download itself took about <strong>8 min 32 sec</strong>, while symbol resolution after the PDB was opened took under <strong>2 seconds</strong>. In this test Microsoft's symbol server delivered the <code>.pdb</code> directly rather than the compressed <code>.pd_</code> variant, and effective transfer speed was only about <strong>10.6 Mbit/s</strong>, so the download dominated the total time. Times vary with symbol-server/CDN throughput, connection, CPU, and Edge build.</li>
-<li>Disabling, updating, or uninstalling the mod while fresh symbol preparation is still running can leave Windhawk in <code>uninitializing</code> until that work completes. This is intentional: the symbol resolver can't be cancelled safely while code from the mod is still executing.</li>
-<li>Edge processes launched with <code>--remote-debugging-pipe</code> are intentionally skipped so automation sessions don't pay the native UI symbol-resolution cost.</li>
-<li>The Windows system folder icon is a raster icon. It doesn't follow Edge theme colors and isn't fully DPI-aware on high-DPI or mixed-DPI monitor setups.</li>
-</ul>]]></content>
-        <author>
-            <name>Dron007</name>
-            <uri>https://github.com/Dron007</uri>
         </author>
     </entry>
 </feed>
