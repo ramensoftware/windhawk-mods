@@ -4,19 +4,21 @@
 // @name:pt-BR      Alt+Tab Flip 3D (estilo Vista)
 // @description     Replaces Alt+Tab with a fluid, Windows Vista-style Flip 3D stack of live windows
 // @description:pt-BR Substitui o Alt+Tab por uma pilha 3D fluida de janelas ao vivo, no estilo Flip 3D do Windows Vista
-// @version         1.4.0
+// @version         1.5.0
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
+// @include         windhawk.exe
 // @include         explorer.exe
-// @architecture    x86-64
-// @compilerOptions -ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -ldwmapi -lole32 -loleaut32 -luuid -lruntimeobject -lwindowscodecs
+// @compilerOptions -ld3d11 -ldxgi -ld2d1 -ldcomp -ldwrite -ldwmapi -lole32 -loleaut32 -luuid -lruntimeobject -lwindowscodecs -lshcore -lshell32 -lgdi32
 // @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Alt+Tab Flip 3D (Vista Style)
+
+![Flip 3D style](https://i.imgur.com/mRzfHq2.gif)
 
 **English** | [Português](#português)
 
@@ -28,6 +30,8 @@ stack, one behind the other, showing their **live content**. Keep Alt held and
 flip through them; release Alt and the chosen window flies back into place.
 
 ## Animation styles
+
+![All animation styles](https://i.imgur.com/ul1d5ca.jpeg)
 
 * **Flip 3D**: the Windows Vista stack, receding up and to the left.
 * **Cascade**: a deck of windows tilted backwards, receding upwards.
@@ -70,17 +74,37 @@ where the active window is).
 A quick Alt+Tab tap (shorter than the *show delay*) switches instantly to the
 previous window without showing the stack, just like the native switcher.
 
+## How it compares with similar mods
+
+* **[Aero Flip 3D Recreation](https://windhawk.net/mods/aero-flip3d-recreation)**
+  brings Flip 3D back on **Win+Tab**. This mod replaces **Alt+Tab** instead,
+  draws the windows with real perspective from their live content, and adds
+  nine more 3D layouts. Both can be installed together, since they use
+  different shortcuts.
+* **[Simple Window Switcher](https://windhawk.net/mods/simple-window-switcher)**
+  and **[Legacy Alt+Tab dialog](https://windhawk.net/mods/legacy-alt-tab)**
+  also replace Alt+Tab. The 2D styles here are close to them, and are included
+  so that every style, 3D or 2D, can be picked from one place and share the
+  same animations, keys and settings.
+
+**Don't combine this mod with another Alt+Tab replacement**, such as the two
+above. Only one of them can take over Alt+Tab.
+
 ## Notes
 
 * Windows 11 only (uses Windows Graphics Capture without the yellow border).
 * Ctrl+Alt+Tab and Win+Tab are not changed.
+* The switcher runs in its own background process, so a problem in it can't
+  affect the taskbar or the desktop. Only the small part that handles the case
+  below runs inside explorer.
+* Also works when a program running as administrator is in front: the mod
+  catches the Alt+Tab hotkey inside explorer before the native switcher opens,
+  and hands it to the switcher.
 * Minimized windows show their last content, like the taskbar previews (this
   can be turned off). Windows that refuse to be captured are shown as a card
   with the app icon.
 * With the *Dim only* background, the real windows stay visible behind the
   stack. The wallpaper backgrounds hide them, like the original Flip 3D.
-* Also works when a program running as administrator is in front: the mod
-  catches the Alt+Tab hotkey inside explorer before the native switcher opens.
 * If the switcher can't start (e.g. no GPU device), the native Alt+Tab keeps
   working.
 
@@ -102,6 +126,8 @@ Pressione **Alt+Tab** e suas janelas voam de suas posições reais para uma pilh
 passando por elas; solte o Alt e a janela escolhida volta voando para o lugar.
 
 ### Estilos de animação
+
+![Todos os estilos de animação](https://i.imgur.com/ul1d5ca.jpeg)
 
 * **Flip 3D**: a pilha do Windows Vista, indo para cima e para a esquerda.
 * **Cascata**: um baralho de janelas inclinado para trás, subindo.
@@ -144,18 +170,37 @@ onde está a janela ativa).
 Um toque rápido no Alt+Tab (menor que o *atraso para exibir*) troca na hora
 para a janela anterior sem mostrar a pilha, igual ao alternador nativo.
 
+### Comparação com mods parecidos
+
+* O **[Aero Flip 3D Recreation](https://windhawk.net/mods/aero-flip3d-recreation)**
+  traz o Flip 3D de volta no **Win+Tab**. Este mod substitui o **Alt+Tab**,
+  desenha as janelas com perspectiva real a partir do conteúdo ao vivo e tem
+  mais nove layouts 3D. Os dois podem ficar instalados juntos, porque usam
+  atalhos diferentes.
+* O **[Simple Window Switcher](https://windhawk.net/mods/simple-window-switcher)**
+  e o **[Legacy Alt+Tab dialog](https://windhawk.net/mods/legacy-alt-tab)**
+  também substituem o Alt+Tab. Os estilos 2D daqui são parecidos com eles e
+  estão incluídos para que todos os estilos, 3D ou 2D, possam ser escolhidos
+  num lugar só, com as mesmas animações, teclas e configurações.
+
+**Não use este mod junto com outro substituto do Alt+Tab**, como os dois
+acima. Só um deles consegue assumir o Alt+Tab.
+
 ### Observações
 
 * Somente Windows 11 (usa o Windows Graphics Capture sem a borda amarela).
 * Ctrl+Alt+Tab e Win+Tab não são alterados.
+* O alternador roda num processo próprio, em segundo plano, então um problema
+  nele não afeta a barra de tarefas nem a área de trabalho. Só a pequena parte
+  que trata o caso abaixo roda dentro do explorer.
+* Funciona também com um programa rodando como administrador na frente: o mod
+  pega o atalho Alt+Tab dentro do explorer antes do alternador nativo abrir e
+  repassa para o alternador.
 * Janelas minimizadas mostram o último conteúdo, como as miniaturas da barra de
   tarefas (dá para desligar). Janelas que bloqueiam captura aparecem como um
   cartão com o ícone do app.
-* Com o fundo *Dim only* (apenas escurecer), as janelas reais continuam
-  visíveis atrás da pilha. Os fundos com papel de parede as escondem, como no
-  Flip 3D original.
-* Funciona também com um programa rodando como administrador na frente: o mod
-  pega o atalho Alt+Tab dentro do explorer antes do alternador nativo abrir.
+* Com o fundo *Apenas escurecer*, as janelas reais continuam visíveis atrás da
+  pilha. Os fundos com papel de parede as escondem, como no Flip 3D original.
 * Se o alternador não conseguir iniciar (ex.: sem dispositivo de GPU), o Alt+Tab
   nativo continua funcionando.
 
@@ -175,30 +220,50 @@ para a janela anterior sem mostrar a pilha, igual ao alternador nativo.
   $description: How the windows are presented
   $description:pt-BR: Como as janelas são apresentadas
   $options:
-  - flip3d: Flip 3D (Vista stack / pilha do Vista)
-  - cascade: Cascade / Cascata
+  - flip3d: Flip 3D (Vista stack)
+  - cascade: Cascade
   - coverflow: Cover Flow
-  - carousel: Carousel / Carrossel
-  - grid: Grid (Mission Control) / Grade
-  - helix: Helix / Hélice
-  - fan: Fan / Leque
+  - carousel: Carousel
+  - grid: Grid (Mission Control)
+  - helix: Helix
+  - fan: Fan
   - panorama: Panorama
-  - tunnel: Tunnel / Túnel
+  - tunnel: Tunnel
   - rolodex: Rolodex
-  - windows11: Windows 11 (enhanced / aprimorado)
-  - thumbnails: Thumbnails with titles below / Miniaturas com título embaixo
-  - icons: Icons and titles / Ícones e títulos
-  - list: Vertical list / Lista vertical
-  - classic: Classic (Windows XP) / Clássico (Windows XP)
-  - native: Native Windows Alt+Tab / Alt+Tab nativo do Windows
+  - windows11: Windows 11 (enhanced)
+  - thumbnails: Thumbnails with titles below
+  - icons: Icons and titles
+  - list: Vertical list
+  - classic: Classic (Windows XP)
+  - native: Native Windows Alt+Tab
+  $options:pt-BR:
+  - flip3d: Flip 3D (pilha do Vista)
+  - cascade: Cascata
+  - coverflow: Cover Flow
+  - carousel: Carrossel
+  - grid: Grade (Mission Control)
+  - helix: Hélice
+  - fan: Leque
+  - panorama: Panorama
+  - tunnel: Túnel
+  - rolodex: Rolodex
+  - windows11: Windows 11 (aprimorado)
+  - thumbnails: Miniaturas com título embaixo
+  - icons: Ícones e títulos
+  - list: Lista vertical
+  - classic: Clássico (Windows XP)
+  - native: Alt+Tab nativo do Windows
 - monitor: cursor
   $name: Monitor
   $name:pt-BR: Monitor
   $description: Which monitor the switcher opens on
   $description:pt-BR: Em qual monitor o alternador abre
   $options:
-  - cursor: Where the mouse cursor is / Onde está o cursor do mouse
-  - activeWindow: Where the active window is / Onde está a janela ativa
+  - cursor: Where the mouse cursor is
+  - activeWindow: Where the active window is
+  $options:pt-BR:
+  - cursor: Onde está o cursor do mouse
+  - activeWindow: Onde está a janela ativa
 - animationDuration: 420
   $name: Open/close animation duration (ms)
   $name:pt-BR: Duração da animação de abrir/fechar (ms)
@@ -235,9 +300,13 @@ para a janela anterior sem mostrar a pilha, igual ao alternador nativo.
   $description: What is shown behind the stack
   $description:pt-BR: O que aparece atrás da pilha
   $options:
-  - blur: Blurred wallpaper / Papel de parede desfocado
-  - wallpaper: Wallpaper / Papel de parede
-  - dim: Dim only / Apenas escurecer
+  - blur: Blurred wallpaper
+  - wallpaper: Wallpaper
+  - dim: Dim only
+  $options:pt-BR:
+  - blur: Papel de parede desfocado
+  - wallpaper: Papel de parede
+  - dim: Apenas escurecer
 - blurAmount: 20
   $name: Background blur strength
   $name:pt-BR: Intensidade do desfoque do fundo
@@ -247,7 +316,7 @@ para a janela anterior sem mostrar a pilha, igual ao alternador nativo.
   $name: Background dimming (%)
   $name:pt-BR: Escurecimento do fundo (%)
   $description: How dark the background gets (0-90). For "Dim only", around 60 looks best
-  $description:pt-BR: Quanto o fundo escurece (0-90). Para "Dim only", algo perto de 60 fica melhor
+  $description:pt-BR: Quanto o fundo escurece (0-90). Para "Apenas escurecer", algo perto de 60 fica melhor
 - showTitle: true
   $name: Show window title
   $name:pt-BR: Mostrar título da janela
@@ -279,6 +348,8 @@ para a janela anterior sem mostrar a pilha, igual ao alternador nativo.
 #include <dwrite.h>
 #include <dxgi1_3.h>
 #include <inspectable.h>
+#include <propsys.h>
+#include <shellscalingapi.h>
 #include <shobjidl.h>
 #include <tlhelp32.h>
 #include <wincodec.h>
@@ -296,6 +367,8 @@ para a janela anterior sem mostrar a pilha, igual ao alternador nativo.
 #include <memory>
 #include <string>
 #include <vector>
+
+#include <windhawk_utils.h>
 
 namespace wgc = winrt::Windows::Graphics::Capture;
 namespace wgdx = winrt::Windows::Graphics::DirectX;
@@ -324,6 +397,18 @@ constexpr GUID kCLSID_DesktopWallpaper = {
     0x460e,
     0x4fc1,
     {0xb9, 0xd0, 0x8a, 0x1c, 0x0c, 0x9c, 0xc4, 0xbd}};
+// Used to find the icons of packaged (UWP) apps.
+constexpr GUID kFOLDERID_AppsFolder = {
+    0x1e87508d,
+    0x89c2,
+    0x42f0,
+    {0x8a, 0x7e, 0x64, 0x5a, 0x0f, 0x50, 0xca, 0x58}};
+constexpr PROPERTYKEY kPKEY_AppUserModel_ID = {
+    {0x9f4c2855,
+     0x9f79,
+     0x4b39,
+     {0xa8, 0xd0, 0xe1, 0xd4, 0x2d, 0xe1, 0xd5, 0xf3}},
+    5};
 
 using CreateDirect3D11DeviceFromDXGIDevice_t = HRESULT(WINAPI*)(IDXGIDevice*,
                                                                 ::IInspectable**);
@@ -350,13 +435,17 @@ constexpr WPARAM kStartBackwards = 1;
 // the keys, usually because an elevated window has the focus.
 constexpr WPARAM kStartFromHotkey = 2;
 
-// Periodically hooks new explorer GUI threads (see HookMessageThreads).
-constexpr UINT_PTR kRescanThreadsTimerId = 1;
-constexpr UINT kRescanThreadsIntervalMs = 10000;
+// Explorer looks for new GUI threads to hook until it has seen the Alt+Tab
+// hotkey (see ExplorerThreadProc).
+constexpr DWORD kRescanThreadsIntervalMs = 10000;
+// How often explorer checks whether the taskbar has been created yet.
+constexpr DWORD kWaitForTaskbarIntervalMs = 1000;
 
 // Thread messages handled by the hook thread.
 constexpr UINT WM_HOOK_ENGAGE = WM_APP + 20;
 constexpr UINT WM_HOOK_DISENGAGE = WM_APP + 21;
+// Installs or removes the keyboard hook, following g_takeOver.
+constexpr UINT WM_HOOK_UPDATE = WM_APP + 22;
 
 // Marks input injected by this mod, so the hooks can ignore it.
 constexpr ULONG_PTR kInjectedInputTag = 0x46334453;
@@ -365,7 +454,13 @@ constexpr WORD kDummyVk = 0xE8;
 
 constexpr WCHAR kOverlayClassName[] = L"WindhawkFlip3DSwitcherOverlay";
 constexpr WCHAR kProxyClassName[] = L"WindhawkFlip3DSwitcherProxy";
-constexpr WCHAR kInstanceMutexName[] = L"Local\\WindhawkFlip3DSwitcher";
+// The overlay's title tells explorer whether the switcher can take over
+// Alt+Tab right now. FindWindow compares titles without sending messages.
+constexpr WCHAR kOverlayTitleIdle[] = L"Flip 3D";
+constexpr WCHAR kOverlayTitleReady[] = L"Flip 3D (ready)";
+// Posted by explorer to the overlay when it receives the Alt+Tab hotkey.
+// wParam: kStartBackwards or 0.
+constexpr WCHAR kHotkeyMessageName[] = L"WindhawkFlip3DSwitcher_Hotkey";
 
 enum class AnimationStyle {
     Flip3D,
@@ -383,7 +478,7 @@ enum class AnimationStyle {
     IconRow,
     List,
     Classic,
-    // The mod leaves Alt+Tab alone.
+    // The mod leaves Alt+Tab alone, and keeps no hooks or graphics devices.
     Native,
 };
 enum class MonitorMode { Cursor, ActiveWindow };
@@ -430,20 +525,18 @@ Settings LoadSettings() {
         {L"classic", AnimationStyle::Classic},
         {L"native", AnimationStyle::Native},
     };
-    PCWSTR style = Wh_GetStringSetting(L"style");
+    const auto style = WindhawkUtils::StringSetting::make(L"style");
     s.style = AnimationStyle::Flip3D;
     for (const auto& entry : kStyles) {
         if (wcscmp(style, entry.name) == 0) {
             s.style = entry.style;
         }
     }
-    Wh_FreeStringSetting(style);
 
-    PCWSTR monitor = Wh_GetStringSetting(L"monitor");
+    const auto monitor = WindhawkUtils::StringSetting::make(L"monitor");
     s.monitor = wcscmp(monitor, L"activeWindow") == 0
                     ? MonitorMode::ActiveWindow
                     : MonitorMode::Cursor;
-    Wh_FreeStringSetting(monitor);
 
     s.animationDurationMs =
         std::clamp(Wh_GetIntSetting(L"animationDuration"), 50, 3000);
@@ -455,7 +548,7 @@ Settings LoadSettings() {
         std::clamp(Wh_GetIntSetting(L"stackSpacing"), 40, 250) / 100.0f;
     s.maxWindows = std::clamp(Wh_GetIntSetting(L"maxWindows"), 2, 40);
 
-    PCWSTR background = Wh_GetStringSetting(L"background");
+    const auto background = WindhawkUtils::StringSetting::make(L"background");
     if (wcscmp(background, L"wallpaper") == 0) {
         s.background = BackgroundMode::Wallpaper;
     } else if (wcscmp(background, L"dim") == 0) {
@@ -463,7 +556,6 @@ Settings LoadSettings() {
     } else {
         s.background = BackgroundMode::BlurredWallpaper;
     }
-    Wh_FreeStringSetting(background);
 
     s.blurAmount = (float)std::clamp(Wh_GetIntSetting(L"blurAmount"), 1, 100);
     s.dimOpacity = std::clamp(Wh_GetIntSetting(L"dimOpacity"), 0, 90) / 100.0f;
@@ -475,7 +567,8 @@ Settings LoadSettings() {
 }
 
 HMODULE g_module;
-HANDLE g_instanceMutex;
+// See kHotkeyMessageName.
+UINT g_hotkeyMessage;
 HANDLE g_uiThread;
 DWORD g_uiThreadId;
 HANDLE g_hookThread;
@@ -648,16 +741,28 @@ LRESULT CALLBACK MouseProc(int code, WPARAM wParam, LPARAM lParam) {
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
+// The keyboard hook is only installed while Alt+Tab is taken over, so the
+// native style leaves no system-wide hook behind.
+void UpdateKeyboardHook() {
+    if (g_takeOver && !g_keyboardHook) {
+        g_keyboardHook =
+            SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardProc, g_module, 0);
+        if (!g_keyboardHook) {
+            Wh_Log(L"SetWindowsHookEx(WH_KEYBOARD_LL) failed: %u",
+                   GetLastError());
+        }
+    } else if (!g_takeOver && g_keyboardHook) {
+        UnhookWindowsHookEx(g_keyboardHook);
+        g_keyboardHook = nullptr;
+    }
+}
+
 DWORD WINAPI HookThreadProc(LPVOID parameter) {
     MSG msg;
     // Create the message queue before the creator continues.
     PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
 
-    g_keyboardHook =
-        SetWindowsHookExW(WH_KEYBOARD_LL, KeyboardProc, g_module, 0);
-    if (!g_keyboardHook) {
-        Wh_Log(L"SetWindowsHookEx(WH_KEYBOARD_LL) failed: %u", GetLastError());
-    }
+    UpdateKeyboardHook();
     SetEvent((HANDLE)parameter);
 
     while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
@@ -667,6 +772,10 @@ DWORD WINAPI HookThreadProc(LPVOID parameter) {
         }
 
         switch (msg.message) {
+            case WM_HOOK_UPDATE:
+                UpdateKeyboardHook();
+                break;
+
             case WM_HOOK_ENGAGE:
                 SendDummyKeyPress();
                 if (!g_mouseHook) {
@@ -696,23 +805,50 @@ DWORD WINAPI HookThreadProc(LPVOID parameter) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Explorer's Alt+Tab hotkey.
+// Explorer's Alt+Tab hotkey (explorer.exe).
 //
 // The native switcher is started by a hotkey that explorer registers for
 // itself. Normally the keyboard hook swallows the Tab before hotkeys are
 // processed, but low-level hooks don't see the keys when an elevated window
 // has the focus, and physical key presses can slip past them. Hotkeys are
 // delivered in every case, so explorer's message retrieval is watched too, and
-// the hotkey is turned into the 3D switcher instead of the native one.
+// the hotkey is handed to the switcher instead of opening the native one.
+//
+// This is the only part of the mod that runs inside explorer. The hotkey
+// always arrives on the same explorer thread, but which one isn't known in
+// advance, so every GUI thread is hooked until the hotkey has been seen. Then
+// the other hooks are removed and no more threads are looked for.
 
 struct MessageHook {
     DWORD threadId;
     HHOOK hook;
 };
 
-SRWLOCK g_messageHooksLock = SRWLOCK_INIT;
-std::vector<MessageHook> g_messageHooks;  // Guarded by g_messageHooksLock.
+std::vector<MessageHook> g_messageHooks;  // Explorer thread only.
 std::atomic<int> g_messageHookCalls;
+// The thread that received the Alt+Tab hotkey, 0 until then.
+std::atomic<DWORD> g_hotkeyThreadId;
+HANDLE g_hotkeySeenEvent;
+HANDLE g_explorerStopEvent;
+HANDLE g_explorerThread;
+
+// Hands the hotkey to the switcher. Returns false if the switcher isn't running
+// or can't take over Alt+Tab right now; the native switcher then opens.
+bool ForwardHotkey(bool backwards) {
+    HWND overlay = FindWindowW(kOverlayClassName, kOverlayTitleReady);
+    if (!overlay) {
+        return false;
+    }
+
+    // Explorer has just received the hotkey, so it may pass the foreground
+    // on. The switcher needs it to take the keyboard focus.
+    DWORD processId = 0;
+    GetWindowThreadProcessId(overlay, &processId);
+    AllowSetForegroundWindow(processId);
+
+    return PostMessageW(overlay, g_hotkeyMessage,
+                        backwards ? kStartBackwards : 0, 0) != FALSE;
+}
 
 LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam) {
     g_messageHookCalls++;
@@ -721,22 +857,15 @@ LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam) {
     if (code == HC_ACTION && wParam == PM_REMOVE &&
         msg->message == WM_HOTKEY && HIWORD(msg->lParam) == VK_TAB) {
         const UINT modifiers = LOWORD(msg->lParam);
-        if ((modifiers & MOD_ALT) && !(modifiers & (MOD_CONTROL | MOD_WIN)) &&
-            g_ready && g_takeOver) {
-            // Explorer gets an empty message instead of the hotkey.
-            msg->message = WM_NULL;
-
-            const bool backwards = (modifiers & MOD_SHIFT) != 0;
-            if (!g_switching.exchange(true)) {
-                Wh_Log(L"Alt+Tab reached explorer's hotkey, taking it over");
-                PostMessageW(g_overlayWnd, WM_APP_START,
-                             kStartFromHotkey |
-                                 (backwards ? kStartBackwards : 0),
-                             0);
-                PostThreadMessageW(g_hookThreadId, WM_HOOK_ENGAGE, 0, 0);
-            } else {
-                PostMessageW(g_overlayWnd, WM_APP_STEP,
-                             (WPARAM)(INT_PTR)(backwards ? -1 : 1), 0);
+        if ((modifiers & MOD_ALT) && !(modifiers & (MOD_CONTROL | MOD_WIN))) {
+            if (!g_hotkeyThreadId) {
+                g_hotkeyThreadId = GetCurrentThreadId();
+                SetEvent(g_hotkeySeenEvent);
+            }
+            if (ForwardHotkey((modifiers & MOD_SHIFT) != 0)) {
+                Wh_Log(L"Alt+Tab reached explorer's hotkey, handing it over");
+                // Explorer gets an empty message instead of the hotkey.
+                msg->message = WM_NULL;
             }
         }
     }
@@ -766,8 +895,6 @@ void HookMessageThreads() {
         return;
     }
 
-    AcquireSRWLockExclusive(&g_messageHooksLock);
-
     // Forget hooks of threads that ended, their IDs can be reused.
     std::erase_if(g_messageHooks, [](const MessageHook& entry) {
         if (IsThreadAlive(entry.threadId)) {
@@ -782,7 +909,7 @@ void HookMessageThreads() {
          more = Thread32Next(snapshot, &entry)) {
         const DWORD threadId = entry.th32ThreadID;
         if (entry.th32OwnerProcessID != processId ||
-            threadId == GetCurrentThreadId() || threadId == g_hookThreadId) {
+            threadId == GetCurrentThreadId()) {
             continue;
         }
         if (std::any_of(g_messageHooks.begin(), g_messageHooks.end(),
@@ -803,22 +930,135 @@ void HookMessageThreads() {
         }
     }
 
-    ReleaseSRWLockExclusive(&g_messageHooksLock);
     CloseHandle(snapshot);
 }
 
+// Keeps only the hook of the thread that receives the hotkey.
+void PruneMessageHooks(DWORD keepThreadId) {
+    std::erase_if(g_messageHooks, [keepThreadId](const MessageHook& entry) {
+        if (entry.threadId == keepThreadId) {
+            return false;
+        }
+        UnhookWindowsHookEx(entry.hook);
+        return true;
+    });
+}
+
 void UnhookMessageThreads() {
-    AcquireSRWLockExclusive(&g_messageHooksLock);
     for (const MessageHook& entry : g_messageHooks) {
         UnhookWindowsHookEx(entry.hook);
     }
     g_messageHooks.clear();
-    ReleaseSRWLockExclusive(&g_messageHooksLock);
 
     // Let calls already running on other threads leave the module before it
-    // gets unloaded.
-    for (int i = 0; g_messageHookCalls > 0 && i < 1000; i++) {
+    // gets unloaded. No new calls can start after the hooks are removed, so
+    // this always ends.
+    const ULONGLONG start = GetTickCount64();
+    bool logged = false;
+    while (g_messageHookCalls > 0) {
+        if (!logged && GetTickCount64() - start > 1000) {
+            Wh_Log(L"Still waiting for message hook calls to return");
+            logged = true;
+        }
         Sleep(1);
+    }
+}
+
+// Returns false if the stop event was signaled while waiting.
+bool WaitOrStop(HANDLE event, DWORD timeout) {
+    HANDLE events[] = {g_explorerStopEvent, event};
+    const DWORD count = event ? 2 : 1;
+    return WaitForMultipleObjects(count, events, FALSE, timeout) !=
+           WAIT_OBJECT_0;
+}
+
+DWORD WINAPI ExplorerThreadProc(LPVOID) {
+    // Only the shell process (the one with the taskbar) receives the hotkey.
+    // With "Launch folder windows in a separate process", folder windows run
+    // in other explorer processes, which have nothing to do.
+    for (;;) {
+        if (HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr)) {
+            DWORD processId = 0;
+            GetWindowThreadProcessId(taskbar, &processId);
+            if (processId != GetCurrentProcessId()) {
+                Wh_Log(L"Not the shell process, nothing to do");
+                return 0;
+            }
+            break;
+        }
+        // Explorer is still starting up.
+        if (!WaitOrStop(nullptr, kWaitForTaskbarIntervalMs)) {
+            return 0;
+        }
+    }
+
+    bool stopped = false;
+    while (!stopped) {
+        // Look for GUI threads until the hotkey has been seen.
+        while (!g_hotkeyThreadId) {
+            HookMessageThreads();
+            if (!WaitOrStop(g_hotkeySeenEvent, kRescanThreadsIntervalMs)) {
+                stopped = true;
+                break;
+            }
+        }
+        if (stopped) {
+            break;
+        }
+
+        const DWORD hotkeyThreadId = g_hotkeyThreadId;
+        PruneMessageHooks(hotkeyThreadId);
+
+        // If that thread ever ends, look for the new one.
+        HANDLE thread = OpenThread(SYNCHRONIZE, FALSE, hotkeyThreadId);
+        stopped = !WaitOrStop(thread, INFINITE);
+        if (thread) {
+            CloseHandle(thread);
+        }
+        g_hotkeyThreadId = 0;
+        ResetEvent(g_hotkeySeenEvent);
+    }
+
+    UnhookMessageThreads();
+    return 0;
+}
+
+void StopExplorerPart() {
+    if (g_explorerThread) {
+        SetEvent(g_explorerStopEvent);
+        WaitForSingleObject(g_explorerThread, INFINITE);
+        CloseHandle(g_explorerThread);
+        g_explorerThread = nullptr;
+    }
+    if (g_explorerStopEvent) {
+        CloseHandle(g_explorerStopEvent);
+        g_explorerStopEvent = nullptr;
+    }
+    if (g_hotkeySeenEvent) {
+        CloseHandle(g_hotkeySeenEvent);
+        g_hotkeySeenEvent = nullptr;
+    }
+    g_hotkeyThreadId = 0;
+}
+
+// Doesn't wait for anything, so explorer's startup isn't delayed.
+void StartExplorerPart() {
+    if (LoadSettings().style == AnimationStyle::Native) {
+        // Nothing to hand over.
+        return;
+    }
+
+    g_explorerStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    g_hotkeySeenEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_explorerStopEvent || !g_hotkeySeenEvent) {
+        StopExplorerPart();
+        return;
+    }
+    g_explorerThread =
+        CreateThread(nullptr, 0, ExplorerThreadProc, nullptr, 0, nullptr);
+    if (!g_explorerThread) {
+        Wh_Log(L"CreateThread failed: %u", GetLastError());
+        StopExplorerPart();
     }
 }
 
@@ -1081,7 +1321,8 @@ struct DrawEntry {
 
 class Switcher {
    public:
-    bool Initialize();
+    bool CreateOverlay();
+    void Activate();
     void Run();
     void Shutdown();
 
@@ -1090,11 +1331,14 @@ class Switcher {
    private:
     enum class State { Idle, Pending, Open, Closing };
 
+    void Deactivate();
+    void PublishState();
     bool CreateDeviceResources();
     void ReleaseDeviceResources();
     void HandleDeviceLost();
     bool EnsureSwapChain(UINT width, UINT height);
 
+    void OnHotkey(bool backwards);
     void OnStart(WPARAM flags);
     void OnStep(int step);
     void OnCommit(int index);
@@ -1103,6 +1347,8 @@ class Switcher {
 
     void CollectWindows();
     bool CreateProxy(Item& item);
+    void StartCaptures();
+    bool FirstFramesReady();
     void StartCapture(Item& item);
     void StopCapture(Item& item);
     void PollFrames(Item& item);
@@ -1136,7 +1382,9 @@ class Switcher {
                    D2D1_COLOR_F color);
     bool EnsureChain(EffectChain& chain);
 
+    com_ptr<ID2D1Bitmap1> GetIconBitmap(HWND hwnd);
     com_ptr<ID2D1Bitmap1> CreateIconBitmap(HICON icon);
+    com_ptr<ID2D1Bitmap1> CreateAppIconBitmap(HWND hwnd);
     com_ptr<ID2D1Bitmap1> CreatePlaceholder(const Item& item);
     com_ptr<ID2D1Bitmap1> CreateTargetBitmap(UINT width, UINT height);
     void UpdateBackground();
@@ -1165,6 +1413,7 @@ class Switcher {
     com_ptr<IWICImagingFactory> m_wicFactory;
     UINT m_swapWidth = 0;
     UINT m_swapHeight = 0;
+    bool m_borderlessRequested = false;
 
     // Background.
     com_ptr<ID2D1Bitmap1> m_background;
@@ -1175,7 +1424,13 @@ class Switcher {
     std::vector<std::unique_ptr<Item>> m_items;
     std::vector<DrawEntry> m_drawList;
     RECT m_monitor{};
+    // Monitor DPI / 96, for text sizes.
+    float m_dpiScale = 1;
     double m_showAt = 0;
+    // Captures start once the show delay has passed. The overlay is shown
+    // when their first frames arrived, or at this time at the latest.
+    bool m_capturing = false;
+    double m_captureDeadline = 0;
     double m_lastFrame = 0;
     double m_altReleasedAt = 0;
     Tween m_open;
@@ -1223,7 +1478,9 @@ LRESULT CALLBACK OverlayWndProc(HWND hwnd,
     return DefWindowProcW(hwnd, msg, wParam, lParam);
 }
 
-bool Switcher::Initialize() {
+// Creates the overlay window only. It's quick, so the mod finishes loading
+// right away; the graphics devices are created afterwards, in Activate.
+bool Switcher::CreateOverlay() {
     m_settings = LoadSettings();
     g_takeOver = m_settings.style != AnimationStyle::Native;
 
@@ -1248,13 +1505,18 @@ bool Switcher::Initialize() {
 
     m_hwnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST |
                                  WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
-                             kOverlayClassName, L"Flip 3D", WS_POPUP, 0, 0, 0,
-                             0, nullptr, nullptr, g_module, nullptr);
+                             kOverlayClassName, kOverlayTitleIdle, WS_POPUP, 0,
+                             0, 0, 0, nullptr, nullptr, g_module, nullptr);
     if (!m_hwnd) {
         Wh_Log(L"CreateWindowEx failed: %u", GetLastError());
         return false;
     }
     g_overlayWnd = m_hwnd;
+
+    // Explorer posts the hotkey message. Allow it even if this process runs
+    // at a higher integrity level than explorer.
+    ChangeWindowMessageFilterEx(m_hwnd, g_hotkeyMessage, MSGFLT_ALLOW,
+                                nullptr);
 
     BOOL disableTransitions = TRUE;
     DwmSetWindowAttribute(m_hwnd, DWMWA_TRANSITIONS_FORCEDISABLED,
@@ -1262,32 +1524,64 @@ bool Switcher::Initialize() {
     DWM_WINDOW_CORNER_PREFERENCE corners = DWMWCP_DONOTROUND;
     DwmSetWindowAttribute(m_hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corners,
                           sizeof(corners));
+    return true;
+}
 
-    HookMessageThreads();
-    SetTimer(m_hwnd, kRescanThreadsTimerId, kRescanThreadsIntervalMs, nullptr);
+// Gets ready to take over Alt+Tab. With the native style, nothing is created.
+void Switcher::Activate() {
+    if (!g_takeOver || m_d3dDevice) {
+        PublishState();
+        return;
+    }
 
     if (!CreateDeviceResources()) {
         // Alt+Tab isn't taken over, so the native switcher keeps working.
         ReleaseDeviceResources();
-        return true;
+        PublishState();
+        return;
     }
 
-    // Unpackaged processes are granted borderless capture without a prompt.
-    // Without it, Windows draws a yellow border around captured windows.
-    try {
-        const auto status = wgc::GraphicsCaptureAccess::RequestAccessAsync(
-                                wgc::GraphicsCaptureAccessKind::Borderless)
-                                .get();
-        if (status != winrt::Windows::Security::Authorization::AppCapabilityAccess::
-                          AppCapabilityAccessStatus::Allowed) {
-            Wh_Log(L"Borderless capture not allowed: %d", (int)status);
+    if (!m_borderlessRequested) {
+        m_borderlessRequested = true;
+        // Unpackaged processes are granted borderless capture without a
+        // prompt. Without it, Windows draws a yellow border around captured
+        // windows.
+        try {
+            const auto status =
+                wgc::GraphicsCaptureAccess::RequestAccessAsync(
+                    wgc::GraphicsCaptureAccessKind::Borderless)
+                    .get();
+            if (status != winrt::Windows::Security::Authorization::
+                              AppCapabilityAccess::AppCapabilityAccessStatus::
+                                  Allowed) {
+                Wh_Log(L"Borderless capture not allowed: %d", (int)status);
+            }
+        } catch (const winrt::hresult_error& e) {
+            Wh_Log(L"RequestAccessAsync failed: 0x%08X", (UINT)e.code());
         }
-    } catch (const winrt::hresult_error& e) {
-        Wh_Log(L"RequestAccessAsync failed: 0x%08X", (UINT)e.code());
     }
 
     g_ready = true;
-    return true;
+    PublishState();
+}
+
+// Switched to the native style: let go of everything.
+void Switcher::Deactivate() {
+    EndSwitching();
+    HideOverlay();
+    Teardown();
+    m_state = State::Idle;
+    ReleaseDeviceResources();
+    PublishState();
+}
+
+// Tells explorer, through the overlay's title, whether to hand the Alt+Tab
+// hotkey over (see ForwardHotkey).
+void Switcher::PublishState() {
+    if (m_hwnd) {
+        SetWindowTextW(m_hwnd, g_ready && g_takeOver ? kOverlayTitleReady
+                                                     : kOverlayTitleIdle);
+    }
 }
 
 bool Switcher::CreateDeviceResources() {
@@ -1428,6 +1722,7 @@ void Switcher::HandleDeviceLost() {
     } else {
         ReleaseDeviceResources();
     }
+    PublishState();
 }
 
 bool Switcher::EnsureSwapChain(UINT width, UINT height) {
@@ -1494,10 +1789,8 @@ bool Switcher::EnsureSwapChain(UINT width, UINT height) {
 
 void Switcher::Shutdown() {
     g_ready = false;
-    UnhookMessageThreads();
     EndSwitching();
     if (m_hwnd) {
-        KillTimer(m_hwnd, kRescanThreadsTimerId);
         HideOverlay();
     }
     Teardown();
@@ -1518,10 +1811,13 @@ void Switcher::Run() {
         if (m_state == State::Idle || m_state == State::Pending) {
             DWORD timeout = INFINITE;
             if (m_state == State::Pending) {
-                // Wake up regularly to watch the Alt key (see AltReleased).
+                // Wake up regularly to watch the Alt key (see AltReleased),
+                // and often while waiting for the first frames.
                 const double remaining = m_showAt - NowSeconds();
-                timeout = (DWORD)std::clamp(std::ceil(remaining * 1000), 0.0,
-                                            15.0);
+                timeout = m_capturing
+                              ? 4
+                              : (DWORD)std::clamp(std::ceil(remaining * 1000),
+                                                  0.0, 15.0);
             }
             MsgWaitForMultipleObjectsEx(0, nullptr, timeout, QS_ALLINPUT,
                                         MWMO_INPUTAVAILABLE);
@@ -1540,7 +1836,15 @@ void Switcher::Run() {
             if (AltReleased(now) && EndSwitching()) {
                 OnCommit(-1);
             } else if (now >= m_showAt) {
-                ShowOverlay();
+                // A quick Alt+Tab never gets here, so it doesn't pay for
+                // captures it wouldn't show.
+                if (!m_capturing) {
+                    StartCaptures();
+                    m_captureDeadline = now + 0.15;
+                }
+                if (FirstFramesReady() || now >= m_captureDeadline) {
+                    ShowOverlay();
+                }
             }
         }
 
@@ -1555,6 +1859,11 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
                                 UINT msg,
                                 WPARAM wParam,
                                 LPARAM lParam) {
+    if (msg == g_hotkeyMessage && g_hotkeyMessage) {
+        OnHotkey((wParam & kStartBackwards) != 0);
+        return 0;
+    }
+
     switch (msg) {
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
@@ -1566,13 +1875,6 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
         case WM_APP_START:
             OnStart(wParam);
             return 0;
-
-        case WM_TIMER:
-            if (wParam == kRescanThreadsTimerId) {
-                HookMessageThreads();
-                return 0;
-            }
-            break;
 
         case WM_APP_STEP:
             OnStep((int)(INT_PTR)wParam);
@@ -1599,10 +1901,18 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
         case WM_APP_SETTINGS:
             m_settings = LoadSettings();
             g_takeOver = m_settings.style != AnimationStyle::Native;
+            PostThreadMessageW(g_hookThreadId, WM_HOOK_UPDATE, 0, 0);
             m_backgroundKey.clear();
             m_titleFormat = nullptr;
-            if (m_state != State::Idle) {
-                ComputeLayout();
+            if (!g_takeOver) {
+                Deactivate();
+            } else if (!m_d3dDevice) {
+                Activate();
+            } else {
+                if (m_state != State::Idle) {
+                    ComputeLayout();
+                }
+                PublishState();
             }
             return 0;
 
@@ -1619,6 +1929,22 @@ int Switcher::SelectedIndex() const {
         return -1;
     }
     return PositiveMod(m_target, (int)m_items.size());
+}
+
+// Explorer received the Alt+Tab hotkey and handed it over: the keyboard hook
+// didn't see the keys, usually because an elevated window has the focus.
+void Switcher::OnHotkey(bool backwards) {
+    if (!g_ready || !g_takeOver) {
+        return;
+    }
+    if (g_switching.exchange(true)) {
+        // Tab pressed again while Alt is held.
+        OnStep(backwards ? -1 : 1);
+        return;
+    }
+    Wh_Log(L"Alt+Tab reached explorer's hotkey, taking it over");
+    PostThreadMessageW(g_hookThreadId, WM_HOOK_ENGAGE, 0, 0);
+    OnStart(kStartFromHotkey | (backwards ? kStartBackwards : 0));
 }
 
 void Switcher::OnStart(WPARAM flags) {
@@ -1655,6 +1981,15 @@ void Switcher::OnStart(WPARAM flags) {
     }
     m_monitor = info.rcMonitor;
 
+    UINT dpiX = 96, dpiY = 96;
+    if (FAILED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY))) {
+        dpiY = 96;
+    }
+    if (m_dpiScale != dpiY / 96.0f) {
+        m_dpiScale = dpiY / 96.0f;
+        m_titleFormat = nullptr;
+    }
+
     CollectWindows();
     if (m_items.empty()) {
         // Nothing to switch to. The rest of the keys go to the apps again.
@@ -1673,11 +2008,9 @@ void Switcher::OnStart(WPARAM flags) {
     m_selectedOnTopWhenFlat = false;
 
     ComputeLayout();
-    for (auto& item : m_items) {
-        StartCapture(*item);
-    }
 
     m_showAt = NowSeconds() + m_settings.showDelayMs / 1000.0;
+    m_capturing = false;
     m_state = State::Pending;
 
     if (fromHotkey) {
@@ -1831,23 +2164,25 @@ void Switcher::OnClick(POINT pt) {
     }
 }
 
-void Switcher::CollectWindows() {
-    struct Context {
-        std::vector<HWND> windows;
-        size_t max;
-        bool includeMinimized;
-    } context{{}, (size_t)m_settings.maxWindows, m_settings.includeMinimized};
+struct EnumWindowsContext {
+    std::vector<HWND> windows;
+    size_t max;
+    bool includeMinimized;
+};
 
-    EnumWindows(
-        [](HWND hwnd, LPARAM lParam) -> BOOL {
-            auto* context = reinterpret_cast<Context*>(lParam);
-            if (IsSwitchableWindow(hwnd) &&
-                (context->includeMinimized || !IsIconic(hwnd))) {
-                context->windows.push_back(hwnd);
-            }
-            return context->windows.size() < context->max;
-        },
-        reinterpret_cast<LPARAM>(&context));
+BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam) {
+    auto* context = reinterpret_cast<EnumWindowsContext*>(lParam);
+    if (IsSwitchableWindow(hwnd) &&
+        (context->includeMinimized || !IsIconic(hwnd))) {
+        context->windows.push_back(hwnd);
+    }
+    return context->windows.size() < context->max;
+}
+
+void Switcher::CollectWindows() {
+    EnumWindowsContext context{
+        {}, (size_t)m_settings.maxWindows, m_settings.includeMinimized};
+    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&context));
 
     // EnumWindows returns the Z order, which puts topmost windows first. The
     // foreground window must come first, like in the native switcher.
@@ -1871,9 +2206,7 @@ void Switcher::CollectWindows() {
         const int length = GetWindowTextW(hwnd, title, ARRAYSIZE(title));
         item->title.assign(title, std::max(length, 0));
 
-        if (HICON icon = GetWindowIcon(hwnd)) {
-            item->icon = CreateIconBitmap(icon);
-        }
+        item->icon = GetIconBitmap(hwnd);
         item->placeholder = CreatePlaceholder(*item);
         if (!item->placeholder) {
             continue;
@@ -1918,6 +2251,26 @@ bool Switcher::CreateProxy(Item& item) {
     const int y = GetSystemMetrics(SM_YVIRTUALSCREEN);
     return SetWindowPos(item.proxy, HWND_BOTTOM, x, y, size.cx, size.cy,
                         SWP_NOACTIVATE | SWP_SHOWWINDOW);
+}
+
+void Switcher::StartCaptures() {
+    m_capturing = true;
+    for (auto& item : m_items) {
+        StartCapture(*item);
+    }
+}
+
+// Whether every capture delivered its first frame, so the stack can open with
+// the windows' content instead of placeholders.
+bool Switcher::FirstFramesReady() {
+    bool ready = true;
+    for (auto& item : m_items) {
+        PollFrames(*item);
+        if (item->framePool && !item->content) {
+            ready = false;
+        }
+    }
+    return ready;
 }
 
 void Switcher::StartCapture(Item& item) {
@@ -2088,6 +2441,7 @@ void Switcher::Teardown() {
     m_items.clear();
     m_titleLayout = nullptr;
     m_titleIndex = -1;
+    m_capturing = false;
 }
 
 void Switcher::ShowOverlay() {
@@ -2098,6 +2452,9 @@ void Switcher::ShowOverlay() {
         return;
     }
     UpdateBackground();
+    if (!m_capturing) {
+        StartCaptures();
+    }
 
     m_open = {0, 1, NowSeconds(), m_settings.animationDurationMs / 1000.0,
               false};
@@ -2178,6 +2535,9 @@ void Switcher::ComputeLayout() {
 
     switch (m_settings.style) {
         case AnimationStyle::Native:
+            // Never laid out: nothing is shown with this style.
+            break;
+
         case AnimationStyle::Flip3D:
             // Like Flip 3D, the stack recedes up and to the left.
             m_boxWidth = m_width * 0.48f;
@@ -2321,6 +2681,8 @@ Pose Switcher::LayoutPose(const Item& item, int index, float rel) const {
 
     switch (m_settings.style) {
         case AnimationStyle::Native:
+            break;
+
         case AnimationStyle::Flip3D:
         case AnimationStyle::Cascade: {
             const bool flip = m_settings.style != AnimationStyle::Cascade;
@@ -2553,7 +2915,6 @@ void Switcher::BuildDrawList(float t) {
     };
 
     const bool stacked = m_settings.style == AnimationStyle::Flip3D ||
-                         m_settings.style == AnimationStyle::Native ||
                          m_settings.style == AnimationStyle::Cascade ||
                          m_settings.style == AnimationStyle::Tunnel;
     for (int i = 0; i < count; i++) {
@@ -2602,7 +2963,8 @@ void Switcher::ComputePanelLayout() {
     const AnimationStyle style = m_settings.style;
     const bool vertical = style == AnimationStyle::List;
     const float spacing = m_settings.stackSpacing;
-    const float font = std::max(std::round(m_height / 80), 12.0f);
+    // Follows the monitor's scaling, like the system's own text.
+    const float font = std::round(14 * m_dpiScale);
     m_labelFontSize = font;
 
     // Cell geometry relative to the cell's top-left corner, for one window.
@@ -3067,7 +3429,7 @@ void Switcher::DrawTitle(float t) {
     const int index = PositiveMod((long long)nearest, (int)m_items.size());
     const Item& item = *m_items[index];
 
-    const float fontSize = std::max(m_height / 52, 14.0f);
+    const float fontSize = std::round(21 * m_dpiScale);
     if (!m_titleFormat) {
         if (FAILED(m_dwriteFactory->CreateTextFormat(
                 L"Segoe UI Variable Display", nullptr,
@@ -3201,6 +3563,65 @@ void Switcher::RenderFrame() {
     if (m_state == State::Closing && m_open.Done(now)) {
         FinishClose();
     }
+}
+
+com_ptr<ID2D1Bitmap1> Switcher::GetIconBitmap(HWND hwnd) {
+    if (HICON icon = GetWindowIcon(hwnd)) {
+        if (auto bitmap = CreateIconBitmap(icon)) {
+            return bitmap;
+        }
+    }
+    return CreateAppIconBitmap(hwnd);
+}
+
+// Packaged (UWP) apps, hosted in an ApplicationFrameWindow, usually have no
+// window icon. Their icon comes from the shell, by the app's AppUserModelID.
+com_ptr<ID2D1Bitmap1> Switcher::CreateAppIconBitmap(HWND hwnd) {
+    com_ptr<IPropertyStore> store;
+    if (FAILED(SHGetPropertyStoreForWindow(hwnd, IID_PPV_ARGS(store.put())))) {
+        return nullptr;
+    }
+    std::wstring appId;
+    PROPVARIANT value;
+    PropVariantInit(&value);
+    if (SUCCEEDED(store->GetValue(kPKEY_AppUserModel_ID, &value)) &&
+        value.vt == VT_LPWSTR && value.pwszVal) {
+        appId = value.pwszVal;
+    }
+    PropVariantClear(&value);
+    if (appId.empty()) {
+        return nullptr;
+    }
+
+    com_ptr<IShellItemImageFactory> imageFactory;
+    if (FAILED(SHCreateItemInKnownFolder(kFOLDERID_AppsFolder, 0,
+                                         appId.c_str(),
+                                         IID_PPV_ARGS(imageFactory.put())))) {
+        return nullptr;
+    }
+    const int size = (int)std::round(64 * m_dpiScale);
+    HBITMAP hbitmap = nullptr;
+    if (FAILED(imageFactory->GetImage({size, size}, SIIGBF_ICONONLY,
+                                      &hbitmap))) {
+        return nullptr;
+    }
+
+    com_ptr<IWICBitmap> wicBitmap;
+    com_ptr<IWICFormatConverter> converter;
+    com_ptr<ID2D1Bitmap1> bitmap;
+    const bool ok =
+        SUCCEEDED(m_wicFactory->CreateBitmapFromHBITMAP(
+            hbitmap, nullptr, WICBitmapUsePremultipliedAlpha,
+            wicBitmap.put())) &&
+        SUCCEEDED(m_wicFactory->CreateFormatConverter(converter.put())) &&
+        SUCCEEDED(converter->Initialize(
+            wicBitmap.get(), GUID_WICPixelFormat32bppPBGRA,
+            WICBitmapDitherTypeNone, nullptr, 0,
+            WICBitmapPaletteTypeMedianCut)) &&
+        SUCCEEDED(m_ctx->CreateBitmapFromWicBitmap(converter.get(), nullptr,
+                                                   bitmap.put()));
+    DeleteObject(hbitmap);
+    return ok ? bitmap : nullptr;
 }
 
 com_ptr<ID2D1Bitmap1> Switcher::CreateIconBitmap(HICON icon) {
@@ -3457,9 +3878,11 @@ DWORD WINAPI UiThreadProc(LPVOID parameter) {
     {
         Switcher switcher;
         g_switcher = &switcher;
-        const bool initialized = switcher.Initialize();
+        const bool created = switcher.CreateOverlay();
+        // The creator only waits for the window.
         SetEvent((HANDLE)parameter);
-        if (initialized) {
+        if (created) {
+            switcher.Activate();
             switcher.Run();
         }
         switcher.Shutdown();
@@ -3493,47 +3916,52 @@ void StopThread(HANDLE* thread, DWORD threadId) {
     *thread = nullptr;
 }
 
-}  // namespace
-
-BOOL Wh_ModInit() {
-    Wh_Log(L">");
-
-    // There can be several explorer.exe processes; only one runs the switcher.
-    g_instanceMutex = CreateMutexW(nullptr, FALSE, kInstanceMutexName);
-    if (!g_instanceMutex) {
-        return FALSE;
-    }
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        Wh_Log(L"Already running in another explorer.exe process");
-        CloseHandle(g_instanceMutex);
-        g_instanceMutex = nullptr;
-        return TRUE;
-    }
-
+void InitModuleGlobals() {
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                       reinterpret_cast<LPCWSTR>(&Wh_ModInit), &g_module);
+                       reinterpret_cast<LPCWSTR>(&InitModuleGlobals),
+                       &g_module);
+    g_hotkeyMessage = RegisterWindowMessageW(kHotkeyMessageName);
+}
+
+bool IsExplorerProcess() {
+    WCHAR path[MAX_PATH];
+    const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    if (!length || length == ARRAYSIZE(path)) {
+        return false;
+    }
+    PCWSTR name = wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+    return _wcsicmp(name, L"explorer.exe") == 0;
+}
+
+}  // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+// The switcher runs in a dedicated windhawk.exe process (see the tool mod
+// implementation below), not in explorer.
+
+BOOL WhTool_ModInit() {
+    Wh_Log(L">");
+
+    InitModuleGlobals();
 
     if (!StartThread(UiThreadProc, &g_uiThread, &g_uiThreadId) ||
         !g_overlayWnd) {
         Wh_Log(L"Failed to start the UI thread");
         StopThread(&g_uiThread, g_uiThreadId);
-        CloseHandle(g_instanceMutex);
-        g_instanceMutex = nullptr;
         return FALSE;
     }
 
     if (!StartThread(HookThreadProc, &g_hookThread, &g_hookThreadId)) {
         Wh_Log(L"Failed to start the hook thread");
         StopThread(&g_uiThread, g_uiThreadId);
-        CloseHandle(g_instanceMutex);
-        g_instanceMutex = nullptr;
         return FALSE;
     }
     return TRUE;
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     Wh_Log(L">");
 
     g_ready = false;
@@ -3541,17 +3969,239 @@ void Wh_ModUninit() {
     g_switching = false;
     StopThread(&g_uiThread, g_uiThreadId);
     g_overlayWnd = nullptr;
-
-    if (g_instanceMutex) {
-        CloseHandle(g_instanceMutex);
-        g_instanceMutex = nullptr;
-    }
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     Wh_Log(L">");
 
     if (g_overlayWnd) {
         PostMessageW(g_overlayWnd, WM_APP_SETTINGS, 0, 0);
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// The part loaded in explorer.exe only hands the Alt+Tab hotkey over (see
+// StartExplorerPart).
+
+bool g_isExplorer;
+
+BOOL ExplorerModInit() {
+    Wh_Log(L">");
+
+    InitModuleGlobals();
+    StartExplorerPart();
+    return TRUE;
+}
+
+void ExplorerModUninit() {
+    Wh_Log(L">");
+
+    StopExplorerPart();
+}
+
+void ExplorerModSettingsChanged() {
+    Wh_Log(L">");
+
+    StopExplorerPart();
+    StartExplorerPart();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+//
+// This mod also targets explorer.exe: there, each callback calls the explorer
+// part instead (the lines marked "explorer.exe part").
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    // explorer.exe part.
+    if (IsExplorerProcess()) {
+        g_isExplorer = true;
+        return ExplorerModInit();
+    }
+
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    // explorer.exe part.
+    if (g_isExplorer) {
+        ExplorerModSettingsChanged();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    // explorer.exe part.
+    if (g_isExplorer) {
+        ExplorerModUninit();
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
