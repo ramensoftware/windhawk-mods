@@ -7,13 +7,17 @@
 // @version         1.0.0
 // @author          cheliks1123
 // @github          https://github.com/cheliks1123
-// @include         explorer.exe
-// @compilerOptions -lshell32 -lcomdlg32 -lgdi32 -luser32 -lole32 -ldwmapi -lcomctl32
+// @include         windhawk.exe
+// @compilerOptions -lshell32 -lcomdlg32 -lgdi32 -luser32 -lole32 -loleaut32 -ldwmapi -lcomctl32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Quick Launch Dock
+
+![Quick Launch Dock demo - dragging a shortcut onto the dock](https://github.com/user-attachments/assets/a6dbf1ab-fdf4-4897-b1a9-b5e7ca0d75c9)
+
+*Drag a shortcut onto the dock and it stays there. Click an icon to launch it.*
 
 A slim, smoothly animated dock that lives on the edge of your screen and gives you
 one-click access to your favourite programs, files and folders. Think of it as a
@@ -57,7 +61,7 @@ program, and it stays there until you remove it.
 
 ## Notes and limitations
 
-- The dock is created only inside the main `explorer.exe` (the one that owns the taskbar), so you will not get duplicates from other Explorer processes.
+- The mod runs as a standalone tool in its own dedicated process (it is not injected into Explorer and hooks nothing), so a problem in the mod can never affect the Windows shell, and only one instance is ever running.
 - Drag and drop from windows running **as administrator** is blocked by Windows (UIPI). Use the **+** button in that case.
 - The dock is placed on the **primary** monitor. With auto-hide and another monitor attached on the same side, the cursor may pass the edge too quickly to reveal the dock — disable auto-hide there.
 - The number of slots is limited by the screen height.
@@ -108,7 +112,7 @@ program, and it stays there until you remove it.
 
 ## Примечания и ограничения
 
-- Панель создаётся только в основном `explorer.exe` (том, что владеет панелью задач), поэтому дубликатов из других процессов проводника не будет.
+- Мод работает как самостоятельный инструмент в собственном процессе (он не внедряется в проводник и ничего не перехватывает), поэтому сбой мода не может повлиять на оболочку Windows, а одновременно запущена всегда только одна копия.
 - Перетаскивание из окон, запущенных **от имени администратора**, блокируется Windows (UIPI). В этом случае используй кнопку **+**.
 - Панель располагается на **основном** мониторе. При автоскрытии и втором мониторе с той же стороны курсор может проскакивать край слишком быстро — в таком случае отключи автоскрытие.
 - Количество слотов ограничено высотой экрана.
@@ -155,6 +159,9 @@ program, and it stays there until you remove it.
 #include <windowsx.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <exdisp.h>
+#include <shldisp.h>
+#include <servprov.h>
 #include <commdlg.h>
 #include <commctrl.h>
 #include <dwmapi.h>
@@ -272,6 +279,7 @@ static HWND g_hwnd = nullptr;
 static HWND g_tip = nullptr;
 static HANDLE g_thread = nullptr;
 static volatile bool g_stop = false;
+static DWORD g_threadId = 0;
 
 static bool g_expanded = true;
 static bool g_modal = false;
@@ -322,6 +330,9 @@ static int SlotSize() { return IconPx() + Pad() * 2; }
 static int FullW() { return SlotSize() + Margin() * 2; }
 static int TotalSlots() { return (int)g_items.size() + 1; }
 static bool Expanded() { return !g_cfg.autoHide || g_expanded; }
+
+static bool IsRu() { return (GetUserDefaultUILanguage() & 0x3FF) == LANG_RUSSIAN; }
+static PCWSTR Tr(PCWSTR en, PCWSTR ru) { return IsRu() ? ru : en; }
 
 static HMONITOR PrimaryMon() {
     return MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
@@ -557,7 +568,7 @@ static void UpdateTooltips() {
         ti.uId = i;
         ti.rect = SlotRect(i);
         ti.lpszText = i < (int)g_items.size() ? (LPWSTR)g_items[i].name.c_str()
-                                              : (LPWSTR)L"Добавить программу";
+                                              : (LPWSTR)Tr(L"Add a program", L"Добавить программу");
         if (SendMessageW(g_tip, TTM_ADDTOOLW, 0, (LPARAM)&ti)) g_toolCount = i + 1;
     }
 }
@@ -830,11 +841,11 @@ static bool AddPath(std::wstring p) {
     if (n && n <= ARRAYSIZE(exp)) p = exp;
 
     if (GetFileAttributesW(p.c_str()) == INVALID_FILE_ATTRIBUTES) {
-        Msg(L"Путь не найден:\n" + p);
+        Msg(std::wstring(Tr(L"Path not found:", L"Путь не найден:")) + L"\n" + p);
         return false;
     }
     if ((int)g_items.size() >= MaxItems()) {
-        Msg(L"На панели больше нет места.");
+        Msg(Tr(L"There is no more room on the dock.", L"На панели больше нет места."));
         return false;
     }
     for (auto& it : g_items)
@@ -860,10 +871,11 @@ static void PickAndAdd() {
     OPENFILENAMEW ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = g_hwnd;
-    ofn.lpstrFilter = L"Программы и ярлыки\0*.exe;*.lnk;*.bat;*.cmd;*.url\0Все файлы\0*.*\0";
+    ofn.lpstrFilter = IsRu() ? L"Программы и ярлыки\0*.exe;*.lnk;*.bat;*.cmd;*.url\0Все файлы\0*.*\0"
+                            : L"Programs and shortcuts\0*.exe;*.lnk;*.bat;*.cmd;*.url\0All files\0*.*\0";
     ofn.lpstrFile = file;
     ofn.nMaxFile = ARRAYSIZE(file);
-    ofn.lpstrTitle = L"Выберите программу";
+    ofn.lpstrTitle = Tr(L"Choose a program", L"Выберите программу");
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR |
                 OFN_DONTADDTORECENT | OFN_NODEREFERENCELINKS;
     g_modal = true;
@@ -888,36 +900,132 @@ static void PastePath() {
     size_t nl = t.find_first_of(L"\r\n");
     if (nl != std::wstring::npos) t = t.substr(0, nl);
     if (t.empty()) {
-        Msg(L"В буфере обмена нет пути.");
+        Msg(Tr(L"The clipboard does not contain a path.", L"В буфере обмена нет пути."));
         return;
     }
     if (AddPath(t)) Commit();
+}
+
+static const CLSID kCLSID_ShellWindows = {
+    0x9BA05972, 0xF6A8, 0x11CF, {0xA4, 0x42, 0x00, 0xA0, 0xC9, 0x0A, 0x8F, 0x39}};
+static const GUID kSID_STopLevelBrowser = {
+    0x4C96BE40, 0x915C, 0x11CF, {0x99, 0xD3, 0x00, 0xAA, 0x00, 0x4A, 0xE8, 0x37}};
+
+static bool LaunchViaExplorer(const std::wstring& file, const std::wstring& args,
+                              const std::wstring& dir, PCWSTR verb) {
+    IShellWindows* psw = nullptr;
+    if (FAILED(CoCreateInstance(kCLSID_ShellWindows, nullptr, CLSCTX_LOCAL_SERVER,
+                                __uuidof(IShellWindows), (void**)&psw)) ||
+        !psw) {
+        return false;
+    }
+
+    VARIANT vtLoc, vtEmpty;
+    VariantInit(&vtLoc);
+    VariantInit(&vtEmpty);
+    vtLoc.vt = VT_I4;
+    vtLoc.lVal = CSIDL_DESKTOP;
+    long hwnd = 0;
+    IDispatch* pdisp = nullptr;
+    HRESULT hr = psw->FindWindowSW(&vtLoc, &vtEmpty, SWC_DESKTOP, &hwnd, SWFO_NEEDDISPATCH, &pdisp);
+    psw->Release();
+    if (hr != S_OK || !pdisp) return false;
+
+    IServiceProvider* psp = nullptr;
+    hr = pdisp->QueryInterface(__uuidof(IServiceProvider), (void**)&psp);
+    pdisp->Release();
+    if (FAILED(hr) || !psp) return false;
+
+    IShellBrowser* psb = nullptr;
+    hr = psp->QueryService(kSID_STopLevelBrowser, __uuidof(IShellBrowser), (void**)&psb);
+    psp->Release();
+    if (FAILED(hr) || !psb) return false;
+
+    IShellView* psv = nullptr;
+    hr = psb->QueryActiveShellView(&psv);
+    psb->Release();
+    if (FAILED(hr) || !psv) return false;
+
+    IDispatch* pbg = nullptr;
+    hr = psv->GetItemObject(SVGIO_BACKGROUND, __uuidof(IDispatch), (void**)&pbg);
+    psv->Release();
+    if (FAILED(hr) || !pbg) return false;
+
+    IShellFolderViewDual* pfvd = nullptr;
+    hr = pbg->QueryInterface(__uuidof(IShellFolderViewDual), (void**)&pfvd);
+    pbg->Release();
+    if (FAILED(hr) || !pfvd) return false;
+
+    IDispatch* papp = nullptr;
+    hr = pfvd->get_Application(&papp);
+    pfvd->Release();
+    if (FAILED(hr) || !papp) return false;
+
+    IShellDispatch2* psd = nullptr;
+    hr = papp->QueryInterface(__uuidof(IShellDispatch2), (void**)&psd);
+    papp->Release();
+    if (FAILED(hr) || !psd) return false;
+
+    BSTR bFile = SysAllocString(file.c_str());
+    VARIANT vArgs, vDir, vVerb, vShow;
+    VariantInit(&vArgs);
+    VariantInit(&vDir);
+    VariantInit(&vVerb);
+    VariantInit(&vShow);
+    if (!args.empty()) {
+        vArgs.vt = VT_BSTR;
+        vArgs.bstrVal = SysAllocString(args.c_str());
+    }
+    if (!dir.empty()) {
+        vDir.vt = VT_BSTR;
+        vDir.bstrVal = SysAllocString(dir.c_str());
+    }
+    vVerb.vt = VT_BSTR;
+    vVerb.bstrVal = SysAllocString(verb);
+    vShow.vt = VT_I4;
+    vShow.lVal = SW_SHOWNORMAL;
+
+    hr = psd->ShellExecute(bFile, vArgs, vDir, vVerb, vShow);
+
+    SysFreeString(bFile);
+    VariantClear(&vArgs);
+    VariantClear(&vDir);
+    VariantClear(&vVerb);
+    psd->Release();
+    return SUCCEEDED(hr);
+}
+
+static void RunShell(const std::wstring& file, const std::wstring& args, const std::wstring& dir,
+                     PCWSTR verb) {
+    AllowSetForegroundWindow(ASFW_ANY);
+    if (LaunchViaExplorer(file, args, dir, verb)) return;
+    ShellExecuteW(g_hwnd, verb, file.c_str(), args.empty() ? nullptr : args.c_str(),
+                  dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
 }
 
 static void Launch(const std::wstring& path, bool admin) {
     std::wstring dir;
     size_t pos = path.find_last_of(L"\\/");
     if (pos != std::wstring::npos) dir = path.substr(0, pos);
-    ShellExecuteW(g_hwnd, admin ? L"runas" : L"open", path.c_str(), nullptr,
-                  dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
+    RunShell(path, L"", dir, admin ? L"runas" : L"open");
 }
 
 static void ShowMenu(POINT sp, int idx) {
     HMENU m = CreatePopupMenu();
     bool isItem = idx < (int)g_items.size();
     if (isItem) {
-        AppendMenuW(m, MF_STRING, ID_OPEN, L"Открыть");
-        AppendMenuW(m, MF_STRING, ID_ADMIN, L"Запуск от имени администратора");
-        AppendMenuW(m, MF_STRING, ID_FOLDER, L"Показать в папке");
+        AppendMenuW(m, MF_STRING, ID_OPEN, Tr(L"Open", L"Открыть"));
+        AppendMenuW(m, MF_STRING, ID_ADMIN, Tr(L"Run as administrator", L"Запуск от имени администратора"));
+        AppendMenuW(m, MF_STRING, ID_FOLDER, Tr(L"Show in folder", L"Показать в папке"));
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(m, MF_STRING | (idx == 0 ? MF_GRAYED : 0), ID_UP, L"Переместить выше");
+        AppendMenuW(m, MF_STRING | (idx == 0 ? MF_GRAYED : 0), ID_UP, Tr(L"Move up", L"Переместить выше"));
         AppendMenuW(m, MF_STRING | (idx + 1 >= (int)g_items.size() ? MF_GRAYED : 0), ID_DOWN,
-                    L"Переместить ниже");
+                    Tr(L"Move down", L"Переместить ниже"));
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(m, MF_STRING, ID_REMOVE, L"Удалить с панели");
+        AppendMenuW(m, MF_STRING, ID_REMOVE, Tr(L"Remove from the dock", L"Удалить с панели"));
     } else {
-        AppendMenuW(m, MF_STRING, ID_PICK, L"Выбрать программу…");
-        AppendMenuW(m, MF_STRING, ID_PASTE, L"Вставить путь из буфера обмена");
+        AppendMenuW(m, MF_STRING, ID_PICK, Tr(L"Choose a program...", L"Выбрать программу…"));
+        AppendMenuW(m, MF_STRING, ID_PASTE, Tr(L"Paste a path from the clipboard", L"Вставить путь из буфера обмена"));
     }
 
     g_modal = true;
@@ -939,7 +1047,7 @@ static void ShowMenu(POINT sp, int idx) {
             break;
         case ID_FOLDER: {
             std::wstring args = L"/select,\"" + g_items[idx].path + L"\"";
-            ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+            RunShell(L"explorer.exe", args, L"", L"open");
             break;
         }
         case ID_REMOVE:
@@ -1111,17 +1219,14 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 static DWORD WINAPI UiThread(LPVOID) {
+    MSG queueInit;
+    PeekMessageW(&queueInit, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    if (g_stop) return 0;
 
-    HWND tray = nullptr;
-    for (int i = 0; i < 600 && !g_stop; i++) {
-        tray = FindWindowW(L"Shell_TrayWnd", nullptr);
-        if (tray) break;
-        Sleep(100);
-    }
-    if (g_stop || !tray) return 0;
-    DWORD pid = 0;
-    GetWindowThreadProcessId(tray, &pid);
-    if (pid != GetCurrentProcessId()) return 0;
+    using SetDpiCtx_t = HANDLE(WINAPI*)(HANDLE);
+    auto setDpiCtx = reinterpret_cast<SetDpiCtx_t>(
+        (void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext"));
+    if (setDpiCtx) setDpiCtx((HANDLE)(INT_PTR)-4);
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if (!GpInit()) {
@@ -1176,6 +1281,7 @@ static DWORD WINAPI UiThread(LPVOID) {
                 WaitMessage();
             }
         }
+        if (IsWindow(hwnd)) DestroyWindow(hwnd);
     }
 
     for (auto& it : g_items) FreeImg(it);
@@ -1189,24 +1295,202 @@ static DWORD WINAPI UiThread(LPVOID) {
     return 0;
 }
 
-BOOL Wh_ModInit() {
+BOOL WhTool_ModInit() {
     g_stop = false;
-    g_thread = CreateThread(nullptr, 0, UiThread, nullptr, 0, nullptr);
+    g_thread = CreateThread(nullptr, 0, UiThread, nullptr, 0, &g_threadId);
     return g_thread != nullptr;
 }
 
-void Wh_ModSettingsChanged() {
+void WhTool_ModSettingsChanged() {
     HWND h = g_hwnd;
     if (h) PostMessageW(h, WM_RELOAD, 0, 0);
 }
 
-void Wh_ModUninit() {
+void WhTool_ModUninit() {
     g_stop = true;
-    HWND h = g_hwnd;
-    if (h) PostMessageW(h, WM_CLOSE, 0, 0);
     if (g_thread) {
+        PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
         WaitForSingleObject(g_thread, 5000);
         CloseHandle(g_thread);
         g_thread = nullptr;
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Windhawk tool mod implementation for mods which don't need to inject to other
+// processes or hook other functions. Context:
+// https://github.com/ramensoftware/windhawk/wiki/Mods-as-tools:-Running-mods-in-a-dedicated-process
+//
+// The mod will load and run in a dedicated windhawk.exe process.
+//
+// Paste the code below as part of the mod code, and use these callbacks:
+// * WhTool_ModInit
+// * WhTool_ModSettingsChanged
+// * WhTool_ModUninit
+//
+// Currently, other callbacks are not supported.
+
+bool g_isToolModProcessLauncher;
+HANDLE g_toolModProcessMutex;
+
+void WINAPI EntryPoint_Hook() {
+    Wh_Log(L">");
+    ExitThread(0);
+}
+
+BOOL Wh_ModInit() {
+    DWORD sessionId;
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
+        sessionId == 0) {
+        return FALSE;
+    }
+
+    bool isExcluded = false;
+    bool isToolModProcess = false;
+    bool isCurrentToolModProcess = false;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLine(), &argc);
+    if (!argv) {
+        Wh_Log(L"CommandLineToArgvW failed");
+        return FALSE;
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-service") == 0 ||
+            wcscmp(argv[i], L"-service-start") == 0 ||
+            wcscmp(argv[i], L"-service-stop") == 0) {
+            isExcluded = true;
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc - 1; i++) {
+        if (wcscmp(argv[i], L"-tool-mod") == 0) {
+            isToolModProcess = true;
+            if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
+                isCurrentToolModProcess = true;
+            }
+            break;
+        }
+    }
+
+    LocalFree(argv);
+
+    if (isExcluded) {
+        return FALSE;
+    }
+
+    if (isCurrentToolModProcess) {
+        g_toolModProcessMutex =
+            CreateMutex(nullptr, TRUE, L"windhawk-tool-mod_" WH_MOD_ID);
+        if (!g_toolModProcessMutex) {
+            Wh_Log(L"CreateMutex failed");
+            ExitProcess(1);
+        }
+
+        if (GetLastError() == ERROR_ALREADY_EXISTS) {
+            Wh_Log(L"Tool mod already running (%s)", WH_MOD_ID);
+            ExitProcess(1);
+        }
+
+        if (!WhTool_ModInit()) {
+            ExitProcess(1);
+        }
+
+        IMAGE_DOS_HEADER* dosHeader =
+            (IMAGE_DOS_HEADER*)GetModuleHandle(nullptr);
+        IMAGE_NT_HEADERS* ntHeaders =
+            (IMAGE_NT_HEADERS*)((BYTE*)dosHeader + dosHeader->e_lfanew);
+
+        DWORD entryPointRVA = ntHeaders->OptionalHeader.AddressOfEntryPoint;
+        void* entryPoint = (BYTE*)dosHeader + entryPointRVA;
+
+        Wh_SetFunctionHook(entryPoint, (void*)EntryPoint_Hook, nullptr);
+        return TRUE;
+    }
+
+    if (isToolModProcess) {
+        return FALSE;
+    }
+
+    g_isToolModProcessLauncher = true;
+    return TRUE;
+}
+
+void Wh_ModAfterInit() {
+    if (!g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WCHAR currentProcessPath[MAX_PATH];
+    switch (GetModuleFileName(nullptr, currentProcessPath,
+                              ARRAYSIZE(currentProcessPath))) {
+        case 0:
+        case ARRAYSIZE(currentProcessPath):
+            Wh_Log(L"GetModuleFileName failed");
+            return;
+    }
+
+    WCHAR
+    commandLine[MAX_PATH + 2 +
+                (sizeof(L" -tool-mod \"" WH_MOD_ID "\"") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine, L"\"%s\" -tool-mod \"%s\"", currentProcessPath,
+               WH_MOD_ID);
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) {
+        kernelModule = GetModuleHandle(L"kernel32.dll");
+        if (!kernelModule) {
+            Wh_Log(L"No kernelbase.dll/kernel32.dll");
+            return;
+        }
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    CreateProcessInternalW_t pCreateProcessInternalW =
+        (CreateProcessInternalW_t)GetProcAddress(kernelModule,
+                                                 "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"No CreateProcessInternalW");
+        return;
+    }
+
+    STARTUPINFO si{
+        .cb = sizeof(STARTUPINFO),
+        .dwFlags = STARTF_FORCEOFFFEEDBACK,
+    };
+    PROCESS_INFORMATION pi;
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"CreateProcess failed");
+        return;
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
+void Wh_ModSettingsChanged() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModSettingsChanged();
+}
+
+void Wh_ModUninit() {
+    if (g_isToolModProcessLauncher) {
+        return;
+    }
+
+    WhTool_ModUninit();
+    ExitProcess(0);
 }
