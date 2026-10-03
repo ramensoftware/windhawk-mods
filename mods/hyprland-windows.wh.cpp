@@ -2,7 +2,7 @@
 // @id              hyprland-windows
 // @name            Hyprland Windows
 // @description     Hyprland-style window handling: move, resize, maximize and close windows with Win + mouse from anywhere on them, hide title bars, color window borders, and go round the virtual desktops with Win+Tab
-// @version         1.1.0
+// @version         1.1.1
 // @author          hiword9
 // @github          https://github.com/HiWord9
 // @include         *
@@ -69,6 +69,18 @@ the title bar.
   publish. It is known for Windows 10 and for Windows 11 from 22H2 on; on a
   build the mod doesn't recognize, and with only the one desktop, Win+Tab stays
   Task View.
+* The hotkey, and a window shortcut that is a key, are taken everywhere: a
+  program that uses the same keys for something of its own doesn't get them
+  while the mod is on. Pick other keys in the settings if one does.
+
+## Conflicts
+
+* [AltDrag](https://windhawk.net/mods/alt-drag) moves and resizes windows with
+  a key and the mouse as well, and
+  [Slick Window Arrangement](https://windhawk.net/mods/slick-window-arrangement)
+  snaps windows while they are dragged. Running either of them alongside this
+  mod, two mods act on the same drag: use one of them at a time - or, with
+  Slick Window Arrangement, turn this mod's magnetic edges off.
 */
 // ==/WindhawkModReadme==
 
@@ -267,6 +279,10 @@ the title bar.
 #include <windhawk_utils.h>
 
 #include <dwmapi.h>
+#include <objectarray.h>
+#include <servprov.h>
+#include <shellapi.h>
+#include <shobjidl.h>
 #include <windowsx.h>
 
 #include <algorithm>
@@ -299,6 +315,12 @@ struct ModRef {
     ModRef(const ModRef&) = delete;
     ModRef& operator=(const ModRef&) = delete;
 };
+
+// Starts a worker thread that holds a reference, which the thread drops as
+// it ends, and keeps its handle for Wh_ModUninit to wait on.
+bool StartModThread(LPTHREAD_START_ROUTINE proc,
+                    void* param,
+                    DWORD* threadId = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Animation
@@ -344,7 +366,7 @@ constexpr int kDefaultDragFadeIn = 120;
 constexpr int kDefaultDragFadeOut = 60;
 
 // How long the border color takes to cross from one setting to the other when
-// focus moves. Zero means the default here too.
+// focus moves.
 constexpr int kDefaultBorderFade = 150;
 
 // How close an edge has to come before it sticks, in units of a 96 dpi pixel
@@ -568,6 +590,8 @@ void RequestDrag(HWND root, WPARAM kind, POINT pt);
 // Per-thread: a button-up to swallow because we swallowed its button-down.
 extern thread_local bool g_swallowButtonUp[2];  // [0] = left, [1] = right
 bool HandleDragRequest(MSG* msg);
+// After a drag: the left button the loop needed held, let go again.
+void ReleaseForcedLeftButton();
 bool HandleModifierButtonDown(const MSG* msg, bool right);
 bool HandleButtonUp(bool right);
 bool HandleLeftButtonUp();
@@ -587,7 +611,7 @@ int DoubleClickTimeMs();
 // Whether this press and the one before it on this thread are a double click.
 // Takes the tick instead of reading the clock, so the rules are testable.
 bool IsDoubleClickAt(HWND root, POINT pt, DWORD tick);
-void DoWindowAction(HWND hwnd, WindowAction action);
+bool TakeWindowAction(MSG* msg, WindowAction action);
 void RequestWindowAction(HWND root, WindowAction action);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -607,6 +631,7 @@ BYTE DragAlphaFor(BYTE baseAlpha, int opacityPercent);
 BYTE FadeAlphaAt(BYTE from, BYTE to, int durationMs, int elapsedMs);
 void BeginDragFade(HWND root, WPARAM kind);
 void EndDragFade(HWND hwnd);
+void UnfadeDraggedWindows();
 
 ////////////////////////////////////////////////////////////////////////////////
 // The hooked APIs
@@ -1504,20 +1529,13 @@ void AnimateBorderColor(HWND hwnd, bool active) {
         g_borderThreadRunning = true;
     }
 
-    g_modRefCount++;
-    HANDLE thread =
-        CreateThread(nullptr, 0, BorderFadeThread, nullptr, 0, nullptr);
-    if (!thread) {
-        Wh_Log(L"CreateThread failed (%u)", GetLastError());
-        g_modRefCount--;
+    if (!StartModThread(BorderFadeThread, nullptr)) {
         {
             std::lock_guard<std::mutex> lock(g_borderMutex);
             g_borderThreadRunning = false;
         }
         ApplyBorderColor(hwnd, active);
-        return;
     }
-    CloseHandle(thread);
 }
 
 // The teardown waits here, with g_uninitializing already set, before the
@@ -2119,6 +2137,11 @@ HINSTANCE ThisModule() {
 }
 
 DWORD WINAPI KeyboardServerThread(LPVOID param) {
+    // The queue first. The shutdown posts WM_QUIT here, and a post to a thread
+    // that has no queue yet is lost: the loop below would wait for good.
+    MSG msg;
+    PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
+
     HANDLE ready = param;
     // Registered against this image rather than the process: two copies of
     // the mod can be loaded side by side while one replaces the other, and a
@@ -2155,8 +2178,9 @@ DWORD WINAPI KeyboardServerThread(LPVOID param) {
                 OnForegroundChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
             FollowForeground(GetForegroundWindow());
         }
-        MSG msg;
-        while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        // A shutdown from before the queue was there is seen here instead: it
+        // sets the flag before it posts.
+        while (!g_uninitializing && GetMessageW(&msg, nullptr, 0, 0) > 0) {
             DispatchMessageW(&msg);
         }
         if (g_foregroundHook) {
@@ -2189,16 +2213,10 @@ HWND StartServer() {
     if (!ready) {
         return nullptr;
     }
-    g_modRefCount++;
-    HANDLE thread = CreateThread(nullptr, 0, KeyboardServerThread, ready, 0,
-                                 &g_serverThreadId);
-    if (!thread) {
-        Wh_Log(L"CreateThread failed (%u)", GetLastError());
-        g_modRefCount--;
+    if (!StartModThread(KeyboardServerThread, ready, &g_serverThreadId)) {
         CloseHandle(ready);
         return nullptr;
     }
-    CloseHandle(thread);
     // The thread takes the lock to publish its window, so it is let go of
     // while waiting.
     lock.unlock();
@@ -2232,8 +2250,24 @@ HWND FindKeyboardServer() {
     return any;
 }
 
+// The shell's own Explorer. With folder windows in a separate process, other
+// copies of explorer.exe run them, and those must not take the shell's part: a
+// second permanent keyboard hook, and hotkeys only the shell gets. The shell's
+// copy is the one that owns the shell window, or the one starting up before
+// there is any, as after an Explorer restart. Decided once, because that
+// window comes and goes with the shell.
 bool IsShellProcess() {
-    return _wcsicmp(ThisProgramName().c_str(), L"explorer.exe") == 0;
+    static const bool shell = [] {
+        if (_wcsicmp(ThisProgramName().c_str(), L"explorer.exe") != 0) {
+            return false;
+        }
+        HWND shellWindow = GetShellWindow();
+        DWORD owner = 0;
+        return !shellWindow ||
+               (GetWindowThreadProcessId(shellWindow, &owner) &&
+                owner == GetCurrentProcessId());
+    }();
+    return shell;
 }
 
 BOOL CALLBACK FindOwnWindowProc(HWND hwnd, LPARAM lParam) {
@@ -2360,12 +2394,6 @@ void ShutdownKeyboardServer() {
 // Task View and the Alt+Tab switcher are left alone while they are up: a
 // Win+Tab then goes to Windows, which closes Task View for it. With no other
 // desktop to go to, Win+Tab opens Task View, as in Windows.
-
-#include <dwmapi.h>
-#include <objectarray.h>
-#include <servprov.h>
-#include <shellapi.h>
-#include <shobjidl.h>
 
 // Set by the desktop thread once the shell has said it has no desktop manager
 // the mod knows.
@@ -2870,18 +2898,12 @@ void StartDesktopThread() {
     if (!ready) {
         return;
     }
-    g_modRefCount++;
     DWORD threadId = 0;
-    HANDLE thread = CreateThread(nullptr, 0, DesktopThread, ready, 0, &threadId);
-    if (thread) {
-        CloseHandle(thread);
+    if (StartModThread(DesktopThread, ready, &threadId)) {
         // Published once the thread has its queue: a step posted before that
         // would be lost.
         WaitForSingleObject(ready, kDesktopThreadStartWaitMs);
         g_desktopThreadId = threadId;
-    } else {
-        Wh_Log(L"CreateThread failed (%u)", GetLastError());
-        g_modRefCount--;
     }
     CloseHandle(ready);
 }
@@ -3016,6 +3038,14 @@ int PhysicalButtonVk(bool right) {
 // user is holding the right one - and for a move it isn't either when another
 // thread retrieved the press. Without this the loop starts in its keyboard
 // mode instead, where it waits for the arrow keys and ignores the mouse.
+//
+// Nothing lets the button go again in that state afterwards: the release that
+// ends a resize is posted, and a posted message does not update it. So the
+// thread remembers, and the first message it retrieves after the loop puts
+// the button back the way the mouse has it - or GetKeyState would go on
+// saying it is down until the next real click.
+thread_local bool g_leftButtonForced;
+
 void ForceLeftButtonDown() {
     if (GetKeyState(VK_LBUTTON) < 0) {
         return;
@@ -3023,6 +3053,22 @@ void ForceLeftButtonDown() {
     BYTE keyState[256];
     if (GetKeyboardState(keyState)) {
         keyState[VK_LBUTTON] |= 0x80;
+        SetKeyboardState(keyState);
+        g_leftButtonForced = true;
+    }
+}
+
+void ReleaseForcedLeftButton() {
+    if (!g_leftButtonForced || IsInMoveSizeLoop()) {
+        return;
+    }
+    g_leftButtonForced = false;
+    if (GetAsyncKeyState(PhysicalButtonVk(false)) & 0x8000) {
+        return;  // held for real by now
+    }
+    BYTE keyState[256];
+    if (GetKeyboardState(keyState)) {
+        keyState[VK_LBUTTON] &= ~0x80;
         SetKeyboardState(keyState);
     }
 }
@@ -3160,16 +3206,10 @@ bool StartResizeRelease(HWND root) {
     auto* release = new ResizeRelease{root,
                                       GetWindowThreadProcessId(root, nullptr),
                                       PhysicalButtonVk(true)};
-    g_modRefCount++;
-    HANDLE thread =
-        CreateThread(nullptr, 0, ResizeReleaseThread, release, 0, nullptr);
-    if (!thread) {
-        Wh_Log(L"CreateThread failed (%u)", GetLastError());
-        g_modRefCount--;
+    if (!StartModThread(ResizeReleaseThread, release)) {
         delete release;
         return false;
     }
-    CloseHandle(thread);
     return true;
 }
 
@@ -3212,10 +3252,10 @@ bool HandleDragRequest(MSG* msg) {
     }
 
     if (msg->wParam == kDragAction) {
-        if (!g_uninitializing && IsFrameWindow(root)) {
-            DoWindowAction(root, (WindowAction)msg->lParam);
+        if (g_uninitializing || !IsFrameWindow(root)) {
+            return false;
         }
-        return false;
+        return TakeWindowAction(msg, (WindowAction)msg->lParam);
     }
 
     // Checked again here: the request came from another thread, possibly in
@@ -3430,16 +3470,41 @@ void RunDragFade(DragFadeWork& work) {
     FadeOver(work, alpha, work.fade.baseAlpha,
              g_uninitializing ? 0 : work.fadeOut, false);
 
-    // Only the window's own thread may take WS_EX_LAYERED back off. When the
-    // request cannot be handed over - the window is gone, or the mod is being
-    // unloaded and the hook that would pick it up is not there any more - the
-    // window keeps a layered style at full opacity, which nothing can see and
-    // which goes away with the window.
+    // Only the window's own thread may take WS_EX_LAYERED back off. During the
+    // unload the teardown asks it to (UnfadeDraggedWindows), and the window's
+    // entry stays for that. Otherwise, when the request cannot be handed over,
+    // the window keeps a layered style at full opacity, which nothing can see.
     bool handed = !g_uninitializing && IsWindow(work.root) &&
                   PostMessageW(work.root, g_msgDrag, kDragUnfade, 0);
-    if (!handed) {
+    if (!handed && (!g_uninitializing || !IsWindow(work.root))) {
         std::lock_guard<std::mutex> lock(g_fadeMutex);
         g_fades.erase(work.root);
+    }
+}
+
+// The windows being dragged when the mod unloads have WS_EX_LAYERED of ours
+// on them, which only their own threads may take off. Asked here through the
+// request their message hook picks up, before that hook goes, and waited for
+// a little: a thread that does not answer leaves its window layered.
+void UnfadeDraggedWindows() {
+    std::vector<HWND> windows;
+    {
+        std::lock_guard<std::mutex> lock(g_fadeMutex);
+        for (const auto& [hwnd, fade] : g_fades) {
+            windows.push_back(hwnd);
+        }
+    }
+    for (HWND hwnd : windows) {
+        PostMessageW(hwnd, g_msgDrag, kDragUnfade, 0);
+    }
+    for (int waited = 0; !windows.empty() && waited < 2000; waited += 20) {
+        {
+            std::lock_guard<std::mutex> lock(g_fadeMutex);
+            if (g_fades.empty()) {
+                return;
+            }
+        }
+        Sleep(20);
     }
 }
 
@@ -3515,16 +3580,10 @@ void BeginDragFade(HWND root, WPARAM kind) {
         SetLayeredWindowAttributes(root, 0, fade.baseAlpha, LWA_ALPHA);
     }
 
-    g_modRefCount++;
-    HANDLE thread = CreateThread(nullptr, 0, DragFadeThread, work, 0, nullptr);
-    if (!thread) {
-        Wh_Log(L"CreateThread failed (%u)", GetLastError());
-        g_modRefCount--;
+    if (!StartModThread(DragFadeThread, work)) {
         delete work;
         EndDragFade(root);  // on the window's own thread, so undo it here
-        return;
     }
-    CloseHandle(thread);
 }
 
 // The window's thread is asked to take the mod's WS_EX_LAYERED back off, the
@@ -3591,27 +3650,36 @@ int DoubleClickTimeMs() {
     return configured > 0 ? configured : (int)GetDoubleClickTime();
 }
 
-// Runs on the window's own thread.
-void DoWindowAction(HWND hwnd, WindowAction action) {
+// Runs on the window's own thread, in the message hook, with the request the
+// window has just retrieved. Maximize and close turn it into the system
+// command for the application's own DispatchMessage to run, the way a drag
+// does: sent from the hook, a close that asks about unsaved work would hold
+// its prompt with the hook still on the stack, and the mod could not unload
+// until it was answered. Returns whether msg is now that command.
+bool TakeWindowAction(MSG* msg, WindowAction action) {
     switch (action) {
         case WindowAction::ToggleMaximize:
             // Through the window's system menu rather than ShowWindow, so an
             // application that does its own thing with SC_MAXIMIZE keeps
             // doing it.
-            SendMessageW(hwnd, WM_SYSCOMMAND,
-                         IsZoomed(hwnd) ? SC_RESTORE : SC_MAXIMIZE, 0);
-            break;
-        case WindowAction::ToggleTitleBar:
-            HandleFramelessRequest(hwnd, kActionToggle);
-            break;
+            msg->message = WM_SYSCOMMAND;
+            msg->wParam = IsZoomed(msg->hwnd) ? SC_RESTORE : SC_MAXIMIZE;
+            msg->lParam = 0;
+            return true;
         case WindowAction::Close:
             // SC_CLOSE, not a kill: an application with unsaved work gets to
             // ask about it.
-            SendMessageW(hwnd, WM_SYSCOMMAND, SC_CLOSE, 0);
-            break;
+            msg->message = WM_SYSCOMMAND;
+            msg->wParam = SC_CLOSE;
+            msg->lParam = 0;
+            return true;
+        case WindowAction::ToggleTitleBar:
+            HandleFramelessRequest(msg->hwnd, kActionToggle);
+            return false;
         case WindowAction::None:
-            break;
+            return false;
     }
+    return false;
 }
 
 void RequestWindowAction(HWND root, WindowAction action) {
@@ -4313,6 +4381,8 @@ void EndDragSnap(HWND hwnd) {
 // Called for every message an application removes from its queue. Returns
 // with the message replaced by WM_NULL if it was consumed by the mod.
 void ProcessRetrievedMessage(MSG* msg) {
+    ReleaseForcedLeftButton();
+
     bool consumed = false;
 
     switch (msg->message) {
@@ -4421,9 +4491,16 @@ LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam) {
     // include the PM_QS_* filter bits, so it is a bitwise test. PM_NOREMOVE
     // means the app is only looking at the message; it stays in the queue and
     // we must not consume it.
-    if (code == HC_ACTION && (wParam & PM_REMOVE) && lParam &&
-        !g_uninitializing) {
-        ProcessRetrievedMessage(reinterpret_cast<MSG*>(lParam));
+    if (code == HC_ACTION && (wParam & PM_REMOVE) && lParam) {
+        auto* msg = reinterpret_cast<MSG*>(lParam);
+        if (!g_uninitializing) {
+            ProcessRetrievedMessage(msg);
+        } else if (msg->message == g_msgDrag && msg->wParam == kDragUnfade) {
+            // The one request still taken during the teardown, which makes
+            // it itself: a dragged window put back the way it was.
+            EndDragFade(msg->hwnd);
+            msg->message = WM_NULL;
+        }
     }
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
@@ -4632,6 +4709,87 @@ HWND WINAPI CreateWindowExA_Hook(DWORD dwExStyle,
 std::atomic<bool> g_uninitializing;
 std::atomic<int> g_modRefCount;
 
+// Every thread of the mod is started here, and its handle kept for
+// Wh_ModUninit to wait on. The reference count alone is not enough: dropping
+// its reference is the last thing a thread does, but it still has the rest
+// of its function to return through, in the image.
+std::mutex g_threadsMutex;
+std::vector<HANDLE> g_threads;
+
+bool StartModThread(LPTHREAD_START_ROUTINE proc, void* param, DWORD* threadId) {
+    g_modRefCount++;  // the thread's own, dropped as it ends
+    HANDLE thread = CreateThread(nullptr, 0, proc, param, 0, threadId);
+    if (!thread) {
+        Wh_Log(L"CreateThread failed (%u)", GetLastError());
+        g_modRefCount--;
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(g_threadsMutex);
+    // The ones that are done go, or a long session piles up a handle a drag.
+    g_threads.erase(std::remove_if(g_threads.begin(), g_threads.end(),
+                                   [](HANDLE h) {
+                                       if (WaitForSingleObject(h, 0) !=
+                                           WAIT_OBJECT_0) {
+                                           return false;
+                                       }
+                                       CloseHandle(h);
+                                       return true;
+                                   }),
+                    g_threads.end());
+    g_threads.push_back(thread);
+    return true;
+}
+
+void JoinModThreads() {
+    std::vector<HANDLE> threads;
+    {
+        std::lock_guard<std::mutex> lock(g_threadsMutex);
+        threads.swap(g_threads);
+    }
+    for (HANDLE thread : threads) {
+        WaitForSingleObject(thread, INFINITE);
+        CloseHandle(thread);
+    }
+}
+
+// How long the unload waits for what of ours is still running before it
+// leaves the rest to ReleaseImageThread.
+constexpr DWORD kUnloadWaitMs = 1000;
+// What the last of it still runs after dropping its reference: the way out
+// of its function.
+constexpr DWORD kEpilogueGraceMs = 200;
+
+// Lets go of the reference the image took on itself at unload, once nothing
+// of ours is left running. FreeLibraryAndExitThread, because this thread runs
+// in the image too and must not return into it once it is gone.
+DWORD WINAPI ReleaseImageThread(LPVOID module) {
+    while (g_modRefCount > 0) {
+        Sleep(100);
+    }
+    JoinModThreads();
+    Sleep(kEpilogueGraceMs);
+    FreeLibraryAndExitThread(static_cast<HMODULE>(module), 0);
+}
+
+// Has the window's own thread carry out a teardown request, and waits for it.
+// A subclass procedure left behind in an unmapped image crashes its
+// application the next time the window gets a message, so a window that does
+// not answer is tried again, and then waited for: hanging the unload is bad,
+// crashing the app is worse.
+void SendTeardown(HWND hwnd, UINT message, WPARAM wParam) {
+    for (int attempt = 0; attempt < 3; attempt++) {
+        DWORD_PTR result;
+        if (SendMessageTimeoutW(hwnd, message, wParam, 0,
+                                SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, &result)) {
+            return;
+        }
+    }
+    if (IsWindow(hwnd)) {
+        Wh_Log(L"Waiting for %p to answer (%u)", hwnd, GetLastError());
+        SendMessageW(hwnd, message, wParam, 0);
+    }
+}
+
 BOOL Wh_ModInit() {
     Wh_Log(L"Init");
 
@@ -4684,6 +4842,10 @@ void Wh_ModBeforeUninit() {
     // window behind the teardown's back.
     g_uninitializing = true;
 
+    // A window being dragged is put back while the hook that does it is
+    // still there.
+    UnfadeDraggedWindows();
+
     // Take our hook procedures out before the DLL goes away.
     RemoveMessageHooks();
     ShutdownKeyboardServer();
@@ -4694,32 +4856,14 @@ void Wh_ModBeforeUninit() {
     FinishBorderFades();
     RestoreAllBorderColors();
 
-    // A drag in progress has a subclass of ours on its window as well, and
-    // the same rule applies to it: it has to come off on the window's own
-    // thread, which is where this sent message is answered.
+    // A drag has a subclass of ours on its window, and one whose loop never
+    // ended keeps it. Like the title bars below, it comes off on the window's
+    // own thread.
     for (HWND hwnd : SnapshotSnappedWindows()) {
-        DWORD_PTR result;
-        SendMessageTimeoutW(hwnd, g_msgDrag, kDragUnsnap, 0,
-                            SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000, &result);
+        SendTeardown(hwnd, g_msgDrag, kDragUnsnap);
     }
-
-    // Restore synchronously on each window's thread, so that no subclass
-    // procedure is left behind once the DLL is gone. A subclass procedure in
-    // an unmapped image crashes its application the next time the window gets
-    // a message, so a window that does not answer is tried again, and then
-    // waited for: hanging the unload is bad, crashing the app is worse.
     for (HWND hwnd : SnapshotFramelessWindows()) {
-        bool restored = false;
-        for (int attempt = 0; attempt < 3 && !restored; attempt++) {
-            DWORD_PTR result;
-            restored = SendMessageTimeoutW(hwnd, g_msgFrameless, kActionShow, 0,
-                                           SMTO_ABORTIFHUNG | SMTO_BLOCK, 2000,
-                                           &result) != 0;
-        }
-        if (!restored && IsWindow(hwnd)) {
-            Wh_Log(L"Waiting for %p to restore (%u)", hwnd, GetLastError());
-            SendMessageW(hwnd, g_msgFrameless, kActionShow, 0);
-        }
+        SendTeardown(hwnd, g_msgFrameless, kActionShow);
     }
 }
 
@@ -4730,11 +4874,42 @@ void Wh_ModUninit() {
     ChangeWindowMessageFilter(g_msgDrag, MSGFLT_REMOVE);
 
     // UnhookWindowsHookEx does not wait for a hook procedure that is running
-    // on another thread, and the resize watcher is a thread of ours, so the
-    // image can only be let go once both are done with it.
+    // on another thread, and threads of ours are on their way out, so the
+    // image can only be let go once they are all done with it. That takes a
+    // moment, as a rule.
+    for (DWORD waited = 0; g_modRefCount > 0 && waited < kUnloadWaitMs;
+         waited += 20) {
+        Sleep(20);
+    }
+    if (g_modRefCount == 0) {
+        JoinModThreads();
+        return;
+    }
+
+    // Not always: a frameless window passes every message through a
+    // procedure of ours, and the application may answer one with a modal
+    // loop - a "Save changes?" prompt, a drag - which keeps that call on its
+    // stack until the user is done. It returns into the image then, so the
+    // image can't go before, and waiting for it here would hold the unload up
+    // for as long as the prompt is open. The image keeps a reference of its
+    // own instead, and lets go of it once nothing of ours is left running.
+    HMODULE self = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                           reinterpret_cast<LPCWSTR>(&ReleaseImageThread),
+                           &self)) {
+        HANDLE thread =
+            CreateThread(nullptr, 0, ReleaseImageThread, self, 0, nullptr);
+        if (thread) {
+            CloseHandle(thread);
+            Wh_Log(L"Still in use, the image goes once it is not");
+            return;
+        }
+        FreeLibrary(self);
+    }
     while (g_modRefCount > 0) {
         Sleep(100);
     }
+    JoinModThreads();
 }
 
 void Wh_ModSettingsChanged() {
