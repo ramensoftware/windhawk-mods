@@ -2,7 +2,7 @@
 // @id              snap-sentry
 // @name            SnapSentry
 // @description     Watch your Screenshots folder or any folder you pick, then copy, rename, or delete each new screenshot, or choose from a notification.
-// @version         0.21.2
+// @version         0.21.3
 // @author          mario0318
 // @github          https://github.com/mario0318
 // @include         windhawk.exe
@@ -1956,6 +1956,15 @@ static bool HashFile(HANDLE file, std::array<BYTE, 32>& digest) {
     return ok;
 }
 
+// Caller holds g_lock.
+static void RememberRecentContent(const std::array<BYTE, 32>& hash,
+                                  const std::wstring& path,
+                                  ULONGLONG now) {
+    g_recentContent.push_back({hash, path, now + kContentDuplicateWindowMs});
+    while (g_recentContent.size() > kMaxRecentContent)
+        g_recentContent.pop_front();
+}
+
 static bool SeenRecentContentAndRemember(const std::array<BYTE, 32>& hash,
                                          const std::wstring& path,
                                          ULONGLONG now,
@@ -1974,10 +1983,19 @@ static bool SeenRecentContentAndRemember(const std::array<BYTE, 32>& hash,
         }
         it = g_recentContent.erase(it);
     }
-    g_recentContent.push_back({hash, path, now + kContentDuplicateWindowMs});
-    while (g_recentContent.size() > kMaxRecentContent)
-        g_recentContent.pop_front();
+    RememberRecentContent(hash, path, now);
     return false;
+}
+
+// True when the path is directly inside the folder being watched.
+static bool IsDirectChildOf(const std::wstring& path, const std::wstring& folder) {
+    std::wstring parent = folder;
+    if (parent.size() > 1 && (parent.back() == L'\\' || parent.back() == L'/')) {
+        parent.pop_back();
+    }
+    auto split = path.find_last_of(L"\\/");
+    return split != std::wstring::npos &&
+           _wcsicmp(path.substr(0, split).c_str(), parent.c_str()) == 0;
 }
 
 class LockedCapture {
@@ -2003,14 +2021,7 @@ public:
               bool shareDelete = true) {
         Close();
         auto split = path.find_last_of(L"\\/");
-        std::wstring comparisonParent = parent;
-        if (comparisonParent.size() > 1 &&
-            (comparisonParent.back() == L'\\' ||
-             comparisonParent.back() == L'/')) {
-            comparisonParent.pop_back();
-        }
-        if (split == std::wstring::npos ||
-            _wcsicmp(path.substr(0, split).c_str(), comparisonParent.c_str()) != 0 ||
+        if (!IsDirectChildOf(path, parent) ||
             path.find(L':', split) != std::wstring::npos) return false;
         folder = CreateFileW(parent.c_str(), FILE_READ_ATTRIBUTES,
                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
@@ -2067,6 +2078,9 @@ static AuditOutcome CleanupDuplicate(const std::wstring& path,
     return RecycleFile(path) ? AuditOutcome::RecycledDuplicate : AuditOutcome::Kept;
 }
 
+// Defined with the worker below, which is also where it is normally called.
+static void SyncToastRegistration(bool wantPopup, bool unloading = false);
+
 static void ProcessOne(std::wstring path) {
     ULONGLONG generation;
     Settings s = SnapshotSettings(&generation);
@@ -2077,8 +2091,18 @@ static void ProcessOne(std::wstring path) {
                     L"file was unavailable or processing stopped", path);
         return;
     }
-    if (g_generation.load() != generation || WaitStop(0)) {
-        AuditResult(s, AuditOutcome::Kept, L"processing cancelled or stopped", path);
+    if (WaitStop(0)) {
+        AuditResult(s, AuditOutcome::Kept, L"processing stopped", path);
+        return;
+    }
+    if (g_generation.load() != generation) {
+        // Nothing has been acted on yet, so the new settings simply apply.
+        s = SnapshotSettings(&generation);
+    }
+    // The file may come from a folder that is no longer watched, whether settings
+    // changed during the wait above or before it was taken off the queue.
+    if (!IsDirectChildOf(path, s.folder)) {
+        AuditResult(s, AuditOutcome::Skipped, L"watched folder changed", path);
         return;
     }
     if (s.logDetails) {
@@ -2097,6 +2121,9 @@ static void ProcessOne(std::wstring path) {
         }
     }
 
+    // The popup setting decides whether the toast is registered, so follow the
+    // exact settings this file is about to be handled with.
+    SyncToastRegistration(s.popup);
     DWORD t1 = GetTickCount();
     int action = s.popup ? ChooseAction(path, s, generation) : ACTION_AUTO;
     if (s.logDetails) {
@@ -2126,10 +2153,13 @@ static void ProcessOne(std::wstring path) {
     bool duplicateCandidate = s.removeExactDuplicates &&
         (forceImage || s.mode == L"image");
     if (duplicateCandidate && !capture.Open(path, s.folder)) {
-        // Lack of delete access must not prevent an otherwise valid clipboard copy
-        // or the configured normal cleanup path. It only disables deduplication
-        // for this file.
+        // A file that can't be opened for reading this way (still held for write by
+        // another program, or failing the folder and file checks) must not stop an
+        // otherwise valid clipboard copy or the configured normal cleanup path. It
+        // only disables deduplication for this file.
         duplicateCandidate = false;
+        Wh_Log(L"Duplicate check skipped, could not open the screenshot%s",
+               s.logDetails ? (L": " + path).c_str() : L"");
     }
 
     bool copied;
@@ -2166,6 +2196,16 @@ static void ProcessOne(std::wstring path) {
                 return;
             }
             if (duplicate && action == ACTION_AUTO) {
+                // A duplicate that stays on disk was never remembered as a keeper.
+                // Without this, once the earlier copy is gone the next identical
+                // capture becomes a second survivor instead of matching this one.
+                auto rememberKept = [&]() {
+                    EnterCriticalSection(&g_lock);
+                    if (generation == g_generation.load()) {
+                        RememberRecentContent(digest, path, GetTickCount64());
+                    }
+                    LeaveCriticalSection(&g_lock);
+                };
                 DWORD delay = s.popup ? 0 : (DWORD)s.delaySeconds * 1000;
                 BY_HANDLE_FILE_INFORMATION beforeCleanup{};
                 if (!GetFileInformationByHandle(capture.file, &beforeCleanup)) {
@@ -2175,12 +2215,14 @@ static void ProcessOne(std::wstring path) {
                 }
                 capture.Close();
                 if (CleanupCancelled(delay, generation)) {
+                    rememberKept();
                     AuditResult(s, AuditOutcome::Kept,
                                 L"duplicate cleanup cancelled or stopped", path);
                     return;
                 }
                 LockedCapture kept;
                 if (!kept.Open(keeper, s.folder, false)) {
+                    rememberKept();
                     AuditResult(s, AuditOutcome::Kept,
                                 L"earlier copy is unavailable", path);
                     return;
@@ -2201,20 +2243,36 @@ static void ProcessOne(std::wstring path) {
                                 L"file changed before cleanup", path);
                     return;
                 }
-                std::array<BYTE, 32> currentDigest;
-                if (!HashFile(again.file, currentDigest) || currentDigest != digest ||
-                    !SameFileContents(again.file, kept.file)) {
+                // Both handles deny writes, so a byte-for-byte match against the
+                // kept copy is the whole guarantee that recycling this one loses
+                // nothing.
+                if (!SameFileContents(again.file, kept.file)) {
+                    // The incoming file just passed the identity, size and time
+                    // check and is locked against writes. If it still hashes to
+                    // what was recorded, the earlier copy is what changed, so drop
+                    // its stale entry and remember this one in its place.
+                    std::array<BYTE, 32> incomingDigest;
+                    if (HashFile(again.file, incomingDigest) &&
+                        incomingDigest == digest) {
+                        EnterCriticalSection(&g_lock);
+                        if (generation == g_generation.load()) {
+                            std::erase_if(g_recentContent, [&](const RecentContent& e) {
+                                return _wcsicmp(e.keeper.c_str(), keeper.c_str()) == 0;
+                            });
+                            RememberRecentContent(digest, path, GetTickCount64());
+                        }
+                        LeaveCriticalSection(&g_lock);
+                    }
                     AuditResult(s, AuditOutcome::Kept,
                                 L"file contents changed before cleanup", path);
                     return;
                 }
                 AuditOutcome outcome =
                     CleanupDuplicate(path, generation, again);
+                if (outcome != AuditOutcome::RecycledDuplicate) rememberKept();
                 AuditResult(s, outcome, outcome == AuditOutcome::RecycledDuplicate
                                 ? L"exact duplicate"
-                                : outcome == AuditOutcome::Kept
-                                      ? L"duplicate cleanup failed; file kept"
-                                      : L"duplicate cleanup completed",
+                                : L"duplicate cleanup failed; file kept",
                             path);
                 return;
             }
@@ -2349,7 +2407,7 @@ static void ClearToastHistory() {
 // unconditionally at startup. With processing or the popup off there is no
 // notification, and a SnapSentry entry sitting in Start and in Search would be
 // there for nothing.
-static void SyncToastRegistration(bool wantPopup, bool unloading = false) {
+static void SyncToastRegistration(bool wantPopup, bool unloading) {
     // Clear Action Center and reclaim the per-AUMID notification key on unload,
     // unconditionally and before the early return below: with the popup already
     // off at unload the requested state matches, and we would otherwise return
