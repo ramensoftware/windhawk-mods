@@ -15,7 +15,7 @@
 /*
 # Quick Launch Dock
 
-![Quick Launch Dock demo - dragging a shortcut onto the dock](https://github.com/user-attachments/assets/a6dbf1ab-fdf4-4897-b1a9-b5e7ca0d75c9)
+![Quick Launch Dock demo - dragging a shortcut onto the dock](https://raw.githubusercontent.com/cheliks1123/windhawk-mods/main/preview.gif)
 
 *Drag a shortcut onto the dock and it stays there. Click an icon to launch it.*
 
