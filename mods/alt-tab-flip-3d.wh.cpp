@@ -366,6 +366,7 @@ acima. Só um deles consegue assumir o Alt+Tab.
 #include <cmath>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <windhawk_utils.h>
@@ -429,6 +430,7 @@ constexpr UINT WM_APP_WHEEL = WM_APP + 3;   // wParam: signed wheel delta
 constexpr UINT WM_APP_COMMIT = WM_APP + 4;  // switch to the front window
 constexpr UINT WM_APP_CANCEL = WM_APP + 5;  // go back without switching
 constexpr UINT WM_APP_SETTINGS = WM_APP + 6;
+constexpr UINT WM_APP_REFRESH_ICONS = WM_APP + 7;  // Posted to itself.
 
 constexpr WPARAM kStartBackwards = 1;
 // Started from explorer's own Alt+Tab hotkey: the keyboard hook didn't see
@@ -1009,10 +1011,11 @@ DWORD WINAPI ExplorerThreadProc(LPVOID) {
         const DWORD hotkeyThreadId = g_hotkeyThreadId;
         PruneMessageHooks(hotkeyThreadId);
 
-        // If that thread ever ends, look for the new one.
+        // If that thread ever ends, look for the new one. It may have ended
+        // already, then OpenThread fails.
         HANDLE thread = OpenThread(SYNCHRONIZE, FALSE, hotkeyThreadId);
-        stopped = !WaitOrStop(thread, INFINITE);
         if (thread) {
+            stopped = !WaitOrStop(thread, INFINITE);
             CloseHandle(thread);
         }
         g_hotkeyThreadId = 0;
@@ -1360,6 +1363,7 @@ class Switcher {
     bool AltReleased(double now);
     void BeginClose(bool commit);
     void FinishClose();
+    void EndSession();
     void ActivateWindow(HWND hwnd);
 
     void ComputeLayout();
@@ -1383,6 +1387,7 @@ class Switcher {
     bool EnsureChain(EffectChain& chain);
 
     com_ptr<ID2D1Bitmap1> GetIconBitmap(HWND hwnd);
+    void RefreshIcons();
     com_ptr<ID2D1Bitmap1> CreateIconBitmap(HICON icon);
     com_ptr<ID2D1Bitmap1> CreateAppIconBitmap(HWND hwnd);
     com_ptr<ID2D1Bitmap1> CreatePlaceholder(const Item& item);
@@ -1414,6 +1419,14 @@ class Switcher {
     UINT m_swapWidth = 0;
     UINT m_swapHeight = 0;
     bool m_borderlessRequested = false;
+
+    // Window icons, kept across sessions (see GetIconBitmap). The bitmap is
+    // null for windows without an icon.
+    struct CachedIcon {
+        HICON source = nullptr;  // The window icon it was made from, if any.
+        com_ptr<ID2D1Bitmap1> bitmap;
+    };
+    std::unordered_map<HWND, CachedIcon> m_iconCache;
 
     // Background.
     com_ptr<ID2D1Bitmap1> m_background;
@@ -1690,6 +1703,8 @@ void Switcher::ReleaseDeviceResources() {
     m_titleIndex = -1;
     m_background = nullptr;
     m_backgroundKey.clear();
+    // The bitmaps belong to the device.
+    m_iconCache.clear();
     if (m_ctx) {
         m_ctx->SetTarget(nullptr);
     }
@@ -1896,6 +1911,14 @@ LRESULT Switcher::HandleMessage(HWND hwnd,
 
         case WM_APP_CANCEL:
             OnCancel();
+            return 0;
+
+        case WM_APP_REFRESH_ICONS:
+            // Skipped if a new session started meanwhile; it posts this again
+            // when it ends.
+            if (m_state == State::Idle && m_ctx) {
+                RefreshIcons();
+            }
             return 0;
 
         case WM_APP_SETTINGS:
@@ -2110,9 +2133,7 @@ void Switcher::OnCommit(int index) {
         if (target) {
             ActivateWindow(target);
         }
-        HideOverlay();
-        Teardown();
-        m_state = State::Idle;
+        EndSession();
         return;
     }
 
@@ -2125,9 +2146,7 @@ void Switcher::OnCancel() {
         if (m_hasFocus && m_previousForeground) {
             ActivateWindow(m_previousForeground);
         }
-        HideOverlay();
-        Teardown();
-        m_state = State::Idle;
+        EndSession();
     } else if (m_state == State::Open) {
         BeginClose(false);
     }
@@ -2498,9 +2517,15 @@ void Switcher::FinishClose() {
         // Give DWM a frame to bring the window up before revealing it.
         DwmFlush();
     }
+    EndSession();
+}
+
+void Switcher::EndSession() {
     HideOverlay();
     Teardown();
     m_state = State::Idle;
+    // Nobody is waiting now, so check the cached icons (see GetIconBitmap).
+    PostMessageW(m_hwnd, WM_APP_REFRESH_ICONS, 0, 0);
 }
 
 void Switcher::ActivateWindow(HWND hwnd) {
@@ -3565,13 +3590,44 @@ void Switcher::RenderFrame() {
     }
 }
 
+// Looking an icon up can wait on the window's app (WM_GETICON) or the shell,
+// which would delay even a quick Alt+Tab. So the icons are kept across
+// sessions, and RefreshIcons checks them after a session.
 com_ptr<ID2D1Bitmap1> Switcher::GetIconBitmap(HWND hwnd) {
+    if (auto it = m_iconCache.find(hwnd); it != m_iconCache.end()) {
+        return it->second.bitmap;
+    }
+
+    CachedIcon entry;
     if (HICON icon = GetWindowIcon(hwnd)) {
-        if (auto bitmap = CreateIconBitmap(icon)) {
-            return bitmap;
+        entry.bitmap = CreateIconBitmap(icon);
+        if (entry.bitmap) {
+            entry.source = icon;
         }
     }
-    return CreateAppIconBitmap(hwnd);
+    if (!entry.bitmap) {
+        entry.bitmap = CreateAppIconBitmap(hwnd);
+    }
+    m_iconCache[hwnd] = entry;
+    return entry.bitmap;
+}
+
+// Forgets closed windows and picks up icons that changed.
+void Switcher::RefreshIcons() {
+    std::erase_if(m_iconCache,
+                  [](const auto& entry) { return !IsWindow(entry.first); });
+
+    for (auto& [hwnd, entry] : m_iconCache) {
+        HICON icon = GetWindowIcon(hwnd);
+        if (icon && icon != entry.source) {
+            if (auto bitmap = CreateIconBitmap(icon)) {
+                entry = {icon, bitmap};
+            }
+        } else if (!icon && !entry.bitmap) {
+            // Still no window icon; the app may have finished starting.
+            entry.bitmap = CreateAppIconBitmap(hwnd);
+        }
+    }
 }
 
 // Packaged (UWP) apps, hosted in an ApplicationFrameWindow, usually have no
