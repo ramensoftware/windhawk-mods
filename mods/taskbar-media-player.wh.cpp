@@ -4,7 +4,7 @@
 // @description     A modern media controller for the Windows taskbar with popup player, themes (Acrylic / Mica / Glass / Solid / Transparent), and two layouts (Rounded Apple-style / Windows-style).
 // @version         1.8.0
 // @author          Touseef
-// @github          Touseeef
+// @github          https://github.com/Touseeef
 // @include         explorer.exe
 // @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lshcore -lgdiplus -lshell32 -lwindowsapp -lruntimeobject
 // ==/WindhawkMod==
