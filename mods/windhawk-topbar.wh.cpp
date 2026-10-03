@@ -197,8 +197,7 @@ desktop are ignored.
 - disableFlyoutAutoClose: false
   $name: Never auto-close flyouts
   $description: >-
-    When turned on, flyouts, Start menu, Search panel, or context menus do NOT close when clicking on desktop or a app window. It closes only when pressing on topbar's grid. Useful for inspecting flyouts with UWPSpy
-    Mode.
+    When turned on, flyouts, Start menu, Search panel, or context menus do NOT close when clicking on desktop or a app window. It closes only when pressing on topbar's grid. Useful for inspecting flyouts with UWPSpy.
 */
 // ==/WindhawkModSettings==
 
@@ -1092,6 +1091,8 @@ void LoadSettings();
 double GetBarDpiScale();
 void UpdateResourceButton();
 void InvalidateStartAndSearchFlyouts();
+void RestartToolModProcess();
+extern HANDLE g_toolModProcessMutex;
 void OpenTopBarSettingsWindow();
 void CloseTopBarSettingsWindow();
 void CloseNativeStartMenuIfOpen();
@@ -1444,9 +1445,15 @@ const std::vector<ControlStyleRule> g_themeMidnightNeonStyles = {
         L"BorderThickness=1",
         L"CornerRadius=10",
         L"IconColor=#E8A5C8"}},
-    {L"MediaTransportButton", {
+    {L"MediaTransportButton", { 
         L"Background:=#252540",
-        L"BorderThickness=0",
+        L"BorderBrush:=#44F472B6",
+        L"BorderThickness=1",
+        L"Resource:ButtonBackgroundPointerOver:=#3A3A5C",
+        L"Resource:ButtonBackgroundPressed:=#4A4A70",
+        L"Resource:ButtonBorderBrushPointerOver:=#66F472B6",
+        L"Resource:ButtonBorderBrushPressed:=#88F472B6",
+        L"Resource:ButtonBorderBrushDisabled:=#22F472B6",
         L"CornerRadius=8"}},
     {L"DisplayButton", {
         L"Background:=#16243A",
@@ -1596,6 +1603,11 @@ static std::vector<wuxc::Primitives::FlyoutBase> g_openPopups;
 // Non-zero once the mod starts tearing down; background workers check it before
 // touching XAML or dispatching back to the UI thread.
 volatile LONG g_shuttingDown = 0; 
+
+// Set true when the tool-mod process was spawned by our own cold-boot
+// restart. The restarted process must not itself try to restart again,
+// otherwise the sequence loops.
+bool g_modRestartedOnColdBoot = false;
 
 void PromoteChildFlyoutPopups();
 
@@ -1941,6 +1953,7 @@ bool g_allowHide = false;
 wui::Color g_iconTintColor{0, 255, 255, 255};
 double g_iconTintOpacity = 0.0;
 std::optional<wui::Color> g_iconColorOverride;
+std::map<std::wstring, std::wstring> g_namedElementIconColorHex;
 
 constexpr UINT WM_APPBAR_CALLBACK = WM_APP + 0x137;
 constexpr UINT_PTR kAppBarInitTimerId = 1;
@@ -2562,16 +2575,44 @@ void ApplyStateResourceOverrides(FrameworkElement element,
             L"RepeatButtonBorderBrushPressed", L"RepeatButtonBorderBrushDisabled"
         };
     }
-    try {
-        auto res = element.Resources();
-        for (PCWSTR k : keys) {
-            auto boxedKey = winrt::box_value(winrt::hstring(k));
-            if (res.HasKey(boxedKey)) {
-                res.Remove(boxedKey);
+    std::vector<FrameworkElement> targets;
+    targets.push_back(element);
+    {
+        DependencyObject cur = element;
+        for (int i = 0; i < 8 && cur; i++) {
+            DependencyObject parent{nullptr};
+            try { parent = wuxm::VisualTreeHelper::GetParent(cur); } catch (...) { break; }
+            if (!parent) break;
+            if (auto fe = parent.try_as<FrameworkElement>()) {
+                bool isButtonLike = false;
+                try {
+                    if (fe.try_as<wuxc::Button>() ||
+                        fe.try_as<wuxc::HyperlinkButton>() ||
+                        fe.try_as<wuxc::Primitives::RepeatButton>() ||
+                        fe.try_as<wuxc::Primitives::ToggleButton>()) {
+                        isButtonLike = true;
+                    }
+                } catch (...) {}
+                if (isButtonLike) {
+                    targets.push_back(fe);
+                }
             }
-            res.Insert(boxedKey, value);
+            cur = parent;
         }
-    } catch (...) {}
+    }
+
+    for (auto& target : targets) {
+        try {
+            auto res = target.Resources();
+            for (PCWSTR k : keys) {
+                auto boxedKey = winrt::box_value(winrt::hstring(k));
+                if (res.HasKey(boxedKey)) {
+                    res.Remove(boxedKey);
+                }
+                res.Insert(boxedKey, value);
+            }
+        } catch (...) {}
+    }
 }
 
 void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rule) {
@@ -2763,8 +2804,14 @@ void ApplySingleStyleToElement(FrameworkElement element, const std::wstring& rul
     if (!isXamlValue && trimmedProp == L"IconColor") {
         wui::Color parsed{};
         if (TryParseHexColor(valuePart, &parsed) || TryParseNamedColor(valuePart, &parsed)) {
-            if (std::wstring_view(element.Name()) == L"TopBarRoot") {
+            std::wstring elemName(element.Name());
+            if (elemName == L"TopBarRoot") {
                 g_iconColorOverride = parsed;
+            } else if (!elemName.empty()) {
+                wchar_t buf[16];
+                swprintf_s(buf, L"#%02X%02X%02X",
+                           parsed.R, parsed.G, parsed.B);
+                g_namedElementIconColorHex[elemName] = buf;
             }
         }
         ApplyIconColorToElement(element, valuePart);
@@ -3197,6 +3244,8 @@ void ApplyAllControlStyles() {
     // rebuild on every styling pass.
     const wui::Color previousTintColor = g_iconTintColor;
     const double previousTintOpacity = g_iconTintOpacity;
+
+    g_namedElementIconColorHex.clear();
 
     // Built-ins always applied.
     ApplyRuleList(BuiltInStyles());
@@ -10146,6 +10195,14 @@ FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
     row.VerticalAlignment(VerticalAlignment::Center);
     row.HorizontalAlignment(HorizontalAlignment::Center);
 
+    std::wstring mediaIconColorHex = GetEffectiveIconColorString();
+    {
+        auto mapIt = g_namedElementIconColorHex.find(L"MediaButton");
+        if (mapIt != g_namedElementIconColorHex.end()) {
+            mediaIconColorHex = mapIt->second;
+        }
+    }
+
     if (g_settings.mediaButtonShowIcon) {
         if (g_mediaThumbnailCache) {
             wuxc::Image img;
@@ -10157,7 +10214,8 @@ FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
             row.Children().Append(img);
         } else {
             if (auto icon = BuildVectorIcon(
-                    nullptr, icons::kMusicNoteFill, L"", 24, 16, 1.5)) {
+                    nullptr, icons::kMusicNoteFill, L"", 24, 16, 1.5,
+                    mediaIconColorHex.c_str())) {
                 icon.VerticalAlignment(VerticalAlignment::Center);
                 row.Children().Append(icon);
             }
@@ -10174,7 +10232,7 @@ FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
     }
 
     if (g_settings.mediaButtonShowControls) {
-        auto makeCtrl = [](std::wstring_view fillIcon, std::function<void()> onClick) {
+        auto makeCtrl = [mediaIconColorHex](std::wstring_view fillIcon, std::function<void()> onClick) {
             auto hit = wuxc::Button();
             hit.Width(22);
             hit.Height(22);
@@ -10188,7 +10246,8 @@ FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
             hit.VerticalAlignment(VerticalAlignment::Center);
             hit.HorizontalContentAlignment(HorizontalAlignment::Center);
             hit.VerticalContentAlignment(VerticalAlignment::Center);
-            if (auto icon = BuildVectorIcon(nullptr, fillIcon, L"", 24, 13, 1.4)) {
+            if (auto icon = BuildVectorIcon(nullptr, fillIcon, L"", 24, 13, 1.4,
+                                            mediaIconColorHex.c_str())) {
                 icon.IsHitTestVisible(false);
                 hit.Content(icon);
             }
@@ -10224,7 +10283,7 @@ FrameworkElement BuildMediaButtonContent(const media::Snapshot& snapshot) {
         viz.VerticalAlignment(VerticalAlignment::Center);
         viz.Height(18);
         wui::Color accent{};
-        if (!TryParseHexColor(GetEffectiveIconColorString(), &accent)) {
+        if (!TryParseHexColor(mediaIconColorHex, &accent)) {
             accent = wui::ColorHelper::FromArgb(255, 255, 255, 255);
         }
         g_mediaButtonBars.clear();
@@ -24261,19 +24320,12 @@ static bool PopupRenderingState(HWND hwnd, bool* outRendering) {
 // the forced composition reset both fire on every mod enable, each one
 // hide/show'ing the popup and making the bar visibly blink.
 static bool IsRecentColdBoot() {
-    // Process age, not system uptime. The XAML input-site registration can
-    // fail exactly as it does on a cold boot whenever the mod process is
-    // fresh — after a reboot, after the user toggles the mod, or after
-    // Explorer restarts. Anchoring on system uptime meant a fresh mod
-    // process on an already-running system never got the boot rebuild, and
-    // the hover bug it fixes persisted. The rebuild restarts the topbar
-    // thread, which is the only reliable way to reset XAML's input-site
-    // state without a full XAML stack rebuild.
-    static ULONGLONG s_processStartTick = 0;
-    if (s_processStartTick == 0) {
-        s_processStartTick = GetTickCount64();
-    }
-    return (GetTickCount64() - s_processStartTick) < 60ULL * 1000ULL;
+    // System uptime, not process age. A fresh process is spawned every
+    // time the mod is (re)enabled, so process age is always small — which
+    // would make the boot-rebuild fire on every enable. System uptime
+    // captures the actual condition: the OS itself just came up a moment
+    // ago. 5 minutes of slack covers a slow logon sequence.
+    return GetTickCount64() < 5ULL * 60ULL * 1000ULL;
 }
 
 void EnsureTopBarPopupShown() {
@@ -26218,6 +26270,15 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                     return;
                 }
 
+                {
+                    static int s_bootNudgeTicks = 0;
+                    if (IsRecentColdBoot() && s_bootNudgeTicks < 30) {
+                        s_bootNudgeTicks++;
+                        if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
+                            ForcePopupDpiRecalc(g_topBarPopupHwnd);
+                        }
+                    }
+                }
 
                 // Only ensure-visible while not in fullscreen. The flag
                 // reflects the previous tick's classification, which is
@@ -26667,54 +26728,23 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                     try { if (g_startTileMenu) g_startTileMenu.Hide(); } catch (...) {}
                     try { if (g_searchResultMenu) g_searchResultMenu.Hide(); } catch (...) {}
                     try { if (g_taskContextMenu) g_taskContextMenu.Hide(); } catch (...) {}
-                    // Restart the topbar thread. On a cold boot the XAML
-                    // input site registers before Explorer's shell is fully
-                    // initialised; the popup HWND renders correctly but every
-                    // mouse message is silently dropped, and only a fresh
-                    // WindowsXamlManager on a new thread restores input.
-                    // ReloadTopBarFully rebuilds the content on the same
-                    // thread and therefore cannot fix it. This is exactly
-                    // what toggling the mod off and on does, and the
-                    // IsRecentColdBoot guard above keeps it from firing on
-                    // mid-session enables.
-                    Wh_Log(L"TopBar: boot rebuild - restarting topbar thread");
-
-                    HANDLE oldThread = g_topBarThread;
-                    DWORD oldThreadId = g_topBarThreadId;
-
-                    RunInBackground([oldThread] {
-                        WaitForSingleObject(oldThread, 15000);
-                        CloseHandle(oldThread);
-                        if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) {
-                            Wh_Log(L"TopBar: boot rebuild - shutdown in progress, aborting");
-                            return;
-                        }
-                        DWORD newThreadId = 0;
-                        HANDLE newThread = CreateThread(nullptr, 0, TopBarThreadProc,
-                                                        nullptr, 0, &newThreadId);
-                        if (newThread) {
-                            if (InterlockedCompareExchange(&g_shuttingDown, 0, 0) != 0) {
-                                PostThreadMessage(newThreadId, WM_QUIT, 0, 0);
-                                WaitForSingleObject(newThread, 5000);
-                                CloseHandle(newThread);
-                                Wh_Log(L"TopBar: boot rebuild - aborted after create");
-                                return;
-                            }
-                            g_topBarThread = newThread;
-                            g_topBarThreadId = newThreadId;
-                            Wh_Log(L"TopBar: boot rebuild - restarted");
-                        } else {
-                            Wh_Log(L"TopBar: boot rebuild - failed to restart: %u",
-                                   GetLastError());
-                        }
-                    });
-
-                    if (oldThreadId) {
-                        PostThreadMessage(oldThreadId, WM_QUIT, 0, 0);
+                    // Restart the process, not the thread. On a cold boot
+                    // XAML's input dispatcher initializes before the shell
+                    // finishes bringing its input stack up, and the
+                    // resulting popup HWND silently discards every hover
+                    // event. Restarting the thread in place does not clear
+                    // that broken state — it lives at the process level.
+                    // The only thing that reliably fixes it is a fresh
+                    // process, which is what the user does when they
+                    // toggle the mod off and on. Spawn a replacement and
+                    // exit; the replacement sees -cold-boot-restarted on
+                    // its command line and skips this branch.
+                    if (g_modRestartedOnColdBoot) {
+                        Wh_Log(L"TopBar: boot rebuild skipped - already restarted");
+                        return;
                     }
-                    if (g_topBarHwnd) {
-                        PostMessage(g_topBarHwnd, WM_CLOSE, 0, 0);
-                    }
+                    Wh_Log(L"TopBar: boot rebuild - respawning tool-mod process");
+                    RestartToolModProcess();
                 });
             }
             g_bootRebuildTimer.Stop();
@@ -27201,6 +27231,73 @@ void KillStaleShellHosts(bool killStart, bool killSearch) {
     }
 }
 
+void RestartToolModProcess() {
+    // Spawn a fresh tool-mod process and exit this one. Reproduces exactly
+    // what the user does when they toggle the mod off and on — the only
+    // thing that reliably clears the broken XAML input state on a cold
+    // boot. Thread restart (ReloadTopBarFully, boot rebuild) does not fix
+    // it because the broken state lives at the process level in XAML's
+    // input dispatcher, not on the UI thread.
+    WCHAR currentProcessPath[MAX_PATH];
+    if (!GetModuleFileName(nullptr, currentProcessPath,
+                           ARRAYSIZE(currentProcessPath))) {
+        Wh_Log(L"RestartToolModProcess: GetModuleFileName failed");
+        return;
+    }
+
+    WCHAR commandLine[MAX_PATH + 2 +
+        (sizeof(L" -tool-mod \"" WH_MOD_ID "\" -cold-boot-restarted") / sizeof(WCHAR)) - 1];
+    swprintf_s(commandLine,
+               L"\"%s\" -tool-mod \"%s\" -cold-boot-restarted",
+               currentProcessPath, WH_MOD_ID);
+
+    // Drop the mutex before spawning, otherwise the replacement's
+    // Wh_ModInit sees ERROR_ALREADY_EXISTS and exits immediately.
+    if (g_toolModProcessMutex) {
+        ReleaseMutex(g_toolModProcessMutex);
+        CloseHandle(g_toolModProcessMutex);
+        g_toolModProcessMutex = nullptr;
+    }
+
+    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
+    if (!kernelModule) kernelModule = GetModuleHandle(L"kernel32.dll");
+    if (!kernelModule) {
+        Wh_Log(L"RestartToolModProcess: no kernel module");
+        ExitProcess(1);
+    }
+
+    using CreateProcessInternalW_t = BOOL(WINAPI*)(
+        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
+        LPSECURITY_ATTRIBUTES lpProcessAttributes,
+        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
+        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
+        LPSTARTUPINFOW lpStartupInfo,
+        LPPROCESS_INFORMATION lpProcessInformation,
+        PHANDLE hRestrictedUserToken);
+    auto pCreateProcessInternalW = (CreateProcessInternalW_t)GetProcAddress(
+        kernelModule, "CreateProcessInternalW");
+    if (!pCreateProcessInternalW) {
+        Wh_Log(L"RestartToolModProcess: no CreateProcessInternalW");
+        ExitProcess(1);
+    }
+
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
+    PROCESS_INFORMATION pi{};
+    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
+                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
+                                 nullptr, nullptr, &si, &pi, nullptr)) {
+        Wh_Log(L"RestartToolModProcess: CreateProcess failed: %u", GetLastError());
+        ExitProcess(1);
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    Wh_Log(L"RestartToolModProcess: replacement spawned, exiting");
+    ExitProcess(0);
+}
+
 BOOL WhTool_ModInit() {
     Wh_Log(L"TopBar: WhTool_ModInit called.");
     LoadSettings();
@@ -27447,6 +27544,13 @@ BOOL Wh_ModInit() {
             if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
                 isCurrentToolModProcess = true;
             }
+            break;
+        }
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (wcscmp(argv[i], L"-cold-boot-restarted") == 0) {
+            g_modRestartedOnColdBoot = true;
             break;
         }
     }
