@@ -2,12 +2,281 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-03T16:00:29.000Z</updated>
+    <updated>2026-10-03T17:01:52.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Skip harmful files confirmation 0.3.0]]></title>
+        <id>https://windhawk.net/mods/harmful-files-autoaccept#8d6bcc826078ee6d87e70fb303f149e8165a6ace</id>
+        <link href="https://windhawk.net/mods/harmful-files-autoaccept"/>
+        <updated>2026-10-03T17:01:52.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="skipharmfulfilesconfirmation">Skip harmful files confirmation</h1>
+<p><img src="https://raw.githubusercontent.com/Arimodu/windhawk-mod-assets/main/harmful-files-preview.png" alt="The harmful-files dialog crossed out with a red X" /></p>
+<p>Skips "These files might be harmful to your computer" when dragging files in
+File Explorer. Windows can show this confirmation when it classifies the source
+as untrusted, including some network shares.</p>
+<p>The mod accepts drag-source confirmations for every source, before constructing
+the dialog. It targets URLACTION<em>SHELL</em>SECURE<em>DRAGSOURCE with URLPOLICY</em>QUERY.
+Other actions and denial policies keep their original behavior. Copy/paste
+operations using other URL actions are not covered.</p>
+<p>To trust a specific network location instead, configure that location in
+Internet Options &gt; Security &gt; Local intranet &gt; Sites.</p>
+<p>Internet zone settings and Zone.Identifier streams are unchanged. Disable the
+mod to restore the confirmation. Windows DLL files are not modified.</p>
+<p>Version 0.3.0 was tested with Explorer drag-and-drop on Windows 11 x64.
+ARM64 runtime behavior remains untested. Shell symbols are required.</p>]]></content>
+        <author>
+            <name>Arimodu</name>
+            <uri>https://github.com/Arimodu</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Multi-DPI Cursor 1.0]]></title>
+        <id>https://windhawk.net/mods/multi-dpi-cursor#07ea9504ad2912adc13f31fc317fc6ed20ab251a</id>
+        <link href="https://windhawk.net/mods/multi-dpi-cursor"/>
+        <updated>2026-10-03T17:01:48.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="multidpicursor">Multi-DPI Cursor</h1>
+<p>Windows uses a single cursor size (in pixels) for all monitors, so on a mixed
+setup (e.g. 100 % and 125 % scaling) the cursor looks smaller on the
+higher-DPI monitor.</p>
+<p>Whenever the cursor moves to another monitor, this mod sets the cursor size to
+<code>baseSize × monitorDpi / 96</code>. At 125 % a base size of 32 becomes 40.</p>
+<p>By default, the base size is the pointer size chosen in Windows Settings
+(Accessibility &gt; Mouse pointer and touch), so the Settings slider keeps working.
+Set a base size in the mod settings to override it. While dragging the
+slider, the cursor briefly jumps between the Settings size and the scaled
+size, and settles once the slider is released.</p>
+<p>Cursor movement is received via an out-of-context WinEvent hook, so there is
+no polling and mouse input is never delayed. Disabling the mod restores the
+pointer size from Windows Settings.</p>
+<p>The size is applied live only and never written to the registry. It relies on
+the undocumented <code>SystemParametersInfo(0x2029)</code> call used by the Settings app,
+which a Windows update could change.</p>]]></content>
+        <author>
+            <name>Marco Kretz</name>
+            <uri>https://github.com/marco-kretz</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Acrylic Color Glows 0.4.2]]></title>
+        <id>https://windhawk.net/mods/acrylic-color-glows#72b4d1d86c1ec6e0fefba8f2b54b33dec2021738</id>
+        <link href="https://windhawk.net/mods/acrylic-color-glows"/>
+        <updated>2026-10-03T17:01:45.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="acryliccolorglows">Acrylic Color Glows</h1>
+<p><img src="https://i.imgur.com/qvqqV2I.png" alt="Acrylic Glow" />
+<a href="https://i.imgur.com/huCSr8H.mp4">Watch the overview video in full quality</a></p>
+<p>Animated light effects behind the windows you choose: drifting glows, sweeping
+light beams, orbs moving in the directions you pick, or flowing waves. The
+effect is drawn by a separate, click-through window placed directly below each
+target window, so a translucent (acrylic/blur) target blurs it into its own
+background. The mod doesn't inject code into other processes, never draws above
+text or controls, and doesn't change the transparency of any application.</p>
+<h2 id="effects">Effects</h2>
+<ul>
+<li><strong>Glows</strong>: three large glows drifting from side to side.</li>
+<li><strong>Light beams</strong>: soft beams coming from one edge of the window and slowly
+sweeping back and forth. Choose the number of beams, the edge and the sweep
+angle.</li>
+<li><strong>Directional orbs</strong>: up to 12 orbs, each with its own color, direction and
+speed. They bounce off the edges or wrap around to the opposite side.</li>
+<li><strong>Waves</strong>: three flowing bands of color. Choose the amplitude and the
+wavelength.</li>
+</ul>
+<p>Colors 1-3 are used by glows, beams and waves; orbs have their own colors.
+"Cycle duration" sets the overall speed of every effect. "Size" sets the glow
+and orb diameter and the beam and wave thickness.</p>
+<h2 id="savingpower">Saving power</h2>
+<p>While an effect moves, Windows has to redraw the screen and recompute the blur
+of every decorated window on each frame. Slower or fainter effects don't
+reduce that work; fewer moving windows do:</p>
+<ul>
+<li><strong>Animate</strong>: all windows, only the active window (the others keep their
+effect, frozen), or none (a still effect, with no ongoing GPU work).</li>
+<li><strong>Smoothness</strong>: "Reduced" updates the motion about 30 times per second
+instead of at the monitor's refresh rate. Slow, blurred motion looks almost
+the same, and it saves power on high refresh rate monitors.</li>
+<li><strong>Power saving</strong>: freeze every effect on battery saver, while a fullscreen
+app, game or presentation is in front, or when Windows animation effects
+are turned off; hide it when Windows transparency effects are turned off,
+since acrylic is then opaque.</li>
+</ul>
+<p>Frozen effects resume exactly where they stopped. When nothing is moving, the
+shared clock stops too.</p>
+<p>The effect sits behind the window's blur, so fine details are softened: large,
+slow, soft shapes work best. Speeds are rounded very slightly so that every
+motion loops seamlessly.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 10 version 1803 or later (Windows 11 recommended).</li>
+<li>Target windows must already be translucent, for example through their own
+acrylic backdrop or another Windhawk mod. Opaque or Mica backgrounds hide the
+effect.</li>
+<li>Don't combine this mod with another mod that also draws effects behind the
+same windows.</li>
+</ul>
+<h2 id="modes">Modes</h2>
+<ul>
+<li><strong>Selected applications</strong>: every regular top-level window of the listed
+processes gets the effect, whether or not Windows reports it as acrylic.</li>
+<li><strong>Automatic</strong>: only windows that declare the acrylic system backdrop
+(<code>DWMSBT_TRANSIENTWINDOW</code>) to Windows. Acrylic implemented in other ways
+isn't detected.</li>
+<li><strong>Selected applications + automatic</strong>: both.</li>
+</ul>
+<p>Process names are case-insensitive, without paths or wildcards. Exclusions
+always win. Most UWP apps run inside <code>ApplicationFrameHost.exe</code>.</p>
+<p>The desktop, taskbar, shell overlays, tool windows and the mod's own process
+are always skipped. Processes that can't be queried (for example elevated or
+protected ones) are skipped too.</p>
+<h2 id="howitworks">How it works</h2>
+<p>The mod runs as a tool mod in a dedicated Windhawk process. A single worker
+thread owns all effect windows. Animations run on the GPU through
+Windows.UI.Composition, driven by one shared clock. Window events keep the effect aligned, and a two-second poll
+catches anything that was missed.</p>
+<p>Settings changes apply immediately. Colors and intensity change in place;
+other changes rebuild the effect windows, which fade back in.</p>
+<p>The effect is hidden while the target is minimized, hidden or cloaked. It is
+also hidden briefly while a window opens, maximizes, restores or comes back
+from the taskbar, then fades in once the system animation is over.</p>
+<p>Effect windows are fully click-through, never take focus and don't appear in
+the taskbar or in Alt+Tab. Invisible overlays (fully transparent or
+click-through windows), tiny helper windows and borderless popups such as
+tooltips, menus, flyouts and drop-down lists are never decorated.</p>
+<h2 id="knownlimitations">Known limitations</h2>
+<ul>
+<li>The effect window is a separate window, so during fast dragging it can lag
+slightly behind the target.</li>
+<li>The final color depends on each application's tint and blur strength.</li>
+<li>The window limit includes temporarily hidden effects.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Snipping Tool Pen Text 1.0.2]]></title>
+        <id>https://windhawk.net/mods/snipping-tool-pen-text#afcaccaaf445cc1aaaf7bcb7123c090e62a9fc46</id>
+        <link href="https://windhawk.net/mods/snipping-tool-pen-text"/>
+        <updated>2026-10-03T17:01:41.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="snippingtoolpentext">Snipping Tool Pen Text</h1>
+<p>The Windows 11 Snipping Tool has a pen, a highlighter and shapes, but no text
+tool. This mod adds one: it "writes" your text on the screenshot using the
+<strong>Snipping Tool's own pen</strong>.</p>
+<p>Since the text becomes real pen strokes, it lives inside the editor: undo it
+with Ctrl+Z, erase it with the eraser, save and copy as usual.</p>
+<h2 id="preview">Preview</h2>
+<p><img src="https://raw.githubusercontent.com/cristianosm/windhawk-assets/main/snipping-tool-pen-text-demo.gif" alt="Snipping Tool Pen Text demo" /></p>
+<h2 id="howtouse">How to use</h2>
+<ol>
+<li>Open a screenshot in the Snipping Tool editor.</li>
+<li>Pick the pen color and thickness. The pen is selected automatically when
+writing, and the previous tool (highlighter or eraser) is restored after.</li>
+<li>Click the floating <strong>T</strong> button (near the window corner) or press
+<strong>Ctrl+Alt+Shift+T</strong>. With the hotkey, the text starts at the mouse position.</li>
+<li>Type the text. A live preview shows where it will be written, in the pen's
+color and thickness.</li>
+</ol>
+<ul>
+<li><strong>Position</strong>: click on the image where the text should start
+ (the preview follows the mouse).</li>
+<li><strong>Alt+Arrows</strong>: move the text 10 px (100 px with Shift). The step is
+ configurable.</li>
+<li><strong>Height</strong> and <strong>Speed</strong>: use the - / + buttons, the mouse wheel or the
+ Up/Down keys. The last values used are remembered.</li>
+<li><strong>Ctrl+Enter</strong>: write. <strong>Shift+Enter</strong> (or Enter): new line.
+ <strong>Esc</strong>: cancel.</li>
+</ul>
+<ol>
+<li>While the text is written, the physical mouse is ignored (optional).
+Press Esc to stop.</li>
+</ol>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The text uses a single-stroke font (Hershey "futural", public domain), with
+support for accented Latin letters (á à â ã é ê í ó ô õ ú ü ç ñ) and º ª °.</li>
+<li>The dialog follows the Windows light/dark theme and accent color, and is
+shown in English or Portuguese (automatic, or chosen in the settings).</li>
+<li>The preview reads the pen color and thickness from the Snipping Tool's own
+settings. Thickness matches the result at 100% editor zoom.</li>
+<li>If curves come out jagged, lower the writing speed.</li>
+<li>The floating button position is configurable (corner + X/Y offsets).</li>
+</ul>
+<h2 id="portugus">Português</h2>
+<p>Este mod adiciona uma ferramenta de texto ao Snipping Tool do Windows 11. O
+texto é escrito com a <strong>própria caneta do Snipping Tool</strong>, então fica dentro do
+editor: dá para desfazer com Ctrl+Z, apagar com a borracha, salvar e copiar.</p>
+<p>Como usar: escolha a cor e a espessura da caneta (ela é selecionada
+automaticamente ao escrever, e a ferramenta anterior volta depois), clique no
+botão flutuante <strong>T</strong> ou use <strong>Ctrl+Alt+Shift+T</strong>, digite o texto e confira a
+prévia.
+<strong>Posicionar</strong> escolhe onde o texto começa; <strong>Alt+Setas</strong> ajusta a posição;
+<strong>Ctrl+Enter</strong> escreve, <strong>Shift+Enter</strong> quebra a linha e <strong>Esc</strong> cancela.
+A janela aparece em português automaticamente quando o Windows está em
+português.</p>]]></content>
+        <author>
+            <name>Cris</name>
+            <uri>https://github.com/cristianosm</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Desktop Icon Section Auto-Hide & Fluent Hover Reveal 1.3.4]]></title>
+        <id>https://windhawk.net/mods/desktop-icon-section-autohide#47d709edce0c60da43504bf61ff645eff601a7eb</id>
+        <link href="https://windhawk.net/mods/desktop-icon-section-autohide"/>
+        <updated>2026-10-03T17:01:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopiconsectionautohidefluenthoverrevealzerowallpaperdimming">Desktop Icon Section Auto-Hide &amp; Fluent Hover Reveal (Zero Wallpaper Dimming)</h1>
+<p>Provides a clean, distraction-free desktop experience by automatically hiding desktop icons while keeping your wallpaper, Rainmeter widgets, and live wallpapers completely untouched and crystal clear.</p>
+<p><img src="https://raw.githubusercontent.com/Piyushdas1624/windhawk-mods/assets/desktop-icon-section-autohide-preview.jpg" alt="Desktop Icon Section Auto-Hide Preview" /></p>
+<h2 id="keyfeatures">Key Features</h2>
+<ul>
+<li><strong>Zero Wallpaper Dimming</strong>: Operates by modulating icon and label rendering directly in GDI. No dark overlays, no duplicated wallpaper snapshots, and no DirectComposition layers.</li>
+<li><strong>Smooth 60 FPS Fluent Eased Alpha Fade</strong>: Fluid, flicker-free alpha transitions using Ken Perlin's quintic smootherstep curve.</li>
+<li><strong>Specific App Pinning (Always-Visible Whitelist)</strong>: Keep essential shortcuts (e.g. Recycle Bin, This PC, or work apps) permanently visible at 100% opacity while all other shortcuts auto-hide.</li>
+<li><strong>Independent Pinned App Interaction</strong>: Clicking, hovering, or launching pinned apps never accidentally unhides the rest of your desktop icons.</li>
+<li><strong>Three-Way Double-Click Mode Cycle</strong>: Double-clicking empty desktop wallpaper cycles between:</li>
+</ul>
+<ol>
+<li><em>Auto Mode</em>: Unpinned icons reveal on section hover and auto-hide on exit or inactivity; pinned icons stay visible.</li>
+<li><em>Show All</em>: Keeps all desktop icons visible indefinitely (ideal for organizing files).</li>
+<li><em>Hide All</em>: Completely locks all unpinned icons hidden (ideal for presentations or clean wallpaper viewing).</li>
+</ol>
+<ul>
+<li><strong>Middle-Click Quick Toggle</strong>: Clicking the middle mouse button on empty wallpaper instantly toggles icon visibility.</li>
+<li><strong>Wallpaper Click-and-Hold Peek Mode</strong>: Press and hold the left mouse button on empty wallpaper for 400 ms to peek at your icons temporarily; releasing smoothly hides them again.</li>
+<li><strong>Active Rename & File Drag Focus Shield</strong>: Freezes all auto-hide timeouts while actively renaming an icon, dragging a shortcut, or rubber-band selecting multiple files.</li>
+<li><strong>Multi-Anchor Section Detection</strong>: Configure which edge houses your icons (Left edge, Right edge for secondary monitors, Top edge, or Custom bounding box).</li>
+<li><strong>Subtle Acoustic Feedback</strong>: Optional subtle Windows sound cues when switching modes.</li>
+</ul>
+<h2 id="pinningappsshortcuts">Pinning Apps &amp; Shortcuts</h2>
+<p>In the mod settings, you can enable built-in pinning for the <strong>Recycle Bin</strong> and <strong>This PC</strong>, or provide your own custom app names under <strong>Custom Pinned Apps & Shortcuts</strong>.</p>
+<ul>
+<li>Enter comma-separated names (e.g., <code>Google Chrome, Discord, Steam, Visual Studio Code</code>).</li>
+<li>Case-insensitive and extension-agnostic (<code>.lnk</code>, <code>.url</code> extensions are handled automatically).</li>
+<li>Supports wildcards like <code>*</code> and <code>?</code> (e.g., <code>Project*</code>, <code>Doc?</code>).</li>
+<li>Audit and verify all detected and pinned desktop icons in the Windhawk Mod Log tab.</li>
+</ul>
+<h2 id="creditsattribution">Credits &amp; Attribution</h2>
+<p>This mod builds upon and refines ideas and code patterns established in the Windhawk community:</p>
+<ul>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/zen-desktop-toggle-icons.wh.cpp">zen-desktop-toggle-icons</a> by Lanbo (Liset999) — Desktop window subclassing, window creation hook, property tracking, and clean lifecycle management.</li>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icons-transparency.wh.cpp">desktop-icons-transparency</a> by zed712969-crypto — GDI icon and text alpha blending hooks enabling transparency without wallpaper dimming.</li>
+<li><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/transparent-desktop-icons-spotlight.wh.cpp">transparent-desktop-icons-spotlight</a> by drgutman — Desktop hover-reveal interaction concepts.</li>
+</ul>
+<h3 id="whythisisastandalonemod">Why this is a standalone mod</h3>
+<p>While related mods focus either on full-desktop toggle hiding or uniform transparency, this mod introduces:</p>
+<ol>
+<li><strong>Section-based triggering</strong>: Confines auto-hide and hover-reveal to a configurable screen edge or custom bounding box (ideal for dock-style icon arrangements and multi-monitor setups).</li>
+<li><strong>Selective per-icon whitelist pinning</strong>: Keeps essential icons (like Recycle Bin, This PC, or user-selected work apps) permanently visible and interactable while temporary desktop clutter smoothly auto-hides.</li>
+<li><strong>Four-state workflow cycle & interaction shields</strong>: Combines Auto, Show All, and Hide All modes with a peek-on-hold gesture, middle-click toggle, and focus protection shields during file renaming, shortcut dragging, and rubber-band selection.</li>
+</ol>]]></content>
+        <author>
+            <name>Piyush Das</name>
+            <uri>https://github.com/Piyushdas1624</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Volume Percentage Indicator 1.8.1]]></title>
         <id>https://windhawk.net/mods/taskbar-volume-percentage#7046e9ed96c91e9ce073fb74d94fac13b9c4895a</id>
@@ -398,182 +667,6 @@ maximize their own windows through <code>ShowWindow</code> or <code>ShowWindowAs
         <author>
             <name>Alchemy</name>
             <uri>https://github.com/alchemyyy</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Taskbar Top Window Guard 0.6.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-top-window-guard#f1230894d67eeb0fd0ab01dd0a918c43295e8fc3</id>
-        <link href="https://windhawk.net/mods/taskbar-top-window-guard"/>
-        <updated>2026-10-02T08:05:36.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="taskbartopwindowguard">Taskbar Top Window Guard</h1>
-<p>Prevents regular application windows from opening or being restored with their
-title bar hidden behind a taskbar placed at the top of a monitor. It's intended
-for top-taskbar configurations, including the <strong>Taskbar on top for Windows 11</strong>
-Windhawk mod and Windows builds/configurations that place the taskbar at the top.</p>
-<p>The mod preserves the application's requested size and position whenever
-possible. If a window overlaps the protected top taskbar area, it's moved down
-only as far as necessary to keep its top edge accessible.</p>
-<p>Maximized and fullscreen windows are intentionally left untouched. Auto-hidden
-taskbars also don't force windows down while hidden.</p>
-<h2 id="optionalcentering">Optional centering</h2>
-<p>Enable <strong>Center windows when they open</strong> to center normal windows inside the
-usable area of their monitor on their first appearance. A window is remembered
-for the lifetime of its HWND, so minimizing/restoring it, Alt+Tab, switching
-virtual desktops, or hiding/showing it again won't re-center it.</p>
-<p>Always-on-top windows are excluded from centering by default. This keeps
-Picture-in-Picture windows, such as Chrome/Chromium PiP, at the position chosen
-by the user. Owned windows such as dialogs are also left to their application.
-Top-taskbar protection still applies to eligible always-on-top windows.</p>
-<p>This option intentionally overlaps only part of <strong>Center New Windows</strong>. The
-existing mod is the better choice if centering is your main goal. This mod's
-centering is a lightweight companion to the top-taskbar guard: it runs from a
-dedicated Windhawk tool process rather than injecting into every application,
-centers against the taskbar-aware usable area, centers only once per window,
-and skips always-on-top windows by default.</p>
-<h2 id="howitworks">How it works</h2>
-<p>The mod is event-driven. It listens for window show, foreground, restore,
-uncloak, location-change, move/size, and destroy events. After a relevant event
-it briefly rechecks only that window, which catches applications that restore a
-saved position shortly after opening without continuously enumerating all
-windows.</p>
-<p>The usable top boundary comes from the monitor work area plus the actual
-<code>Shell_TrayWnd</code> / <code>Shell_SecondaryTrayWnd</code> rectangle when necessary. The
-auto-hide state is cached and refreshed outside per-window checks, avoiding
-synchronous Explorer IPC in the hot path. Window moves are queued
-asynchronously, and unresponsive applications are skipped so a hung app can't
-block the guard.</p>]]></content>
-        <author>
-            <name>Eron Greco Melo</name>
-            <uri>https://github.com/eronGreco</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Per-monitor brightness and more in Quick Settings 3.0]]></title>
-        <id>https://windhawk.net/mods/per-monitor-brightness#cbc35e8691aacc9d6809f1cc2318587e284b6c3c</id>
-        <link href="https://windhawk.net/mods/per-monitor-brightness"/>
-        <updated>2026-10-02T08:04:07.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li><strong>New name:</strong> "Per-monitor brightness in Quick Settings" is now <strong>"Per-monitor brightness and more in Quick Settings"</strong>, because it now does more than brightness.</li>
-<li><strong>Contrast slider</strong> for each monitor that supports it.</li>
-<li><strong>Volume slider</strong> for monitors with speakers or a headphone jack, with the same animated speaker icon Windows uses.</li>
-<li><strong>Input buttons</strong> (HDMI 1, DP 1, …) to switch what a monitor shows.</li>
-<li><strong>Power button</strong> at the end of a monitor's brightness slider, to turn it off and back on. Only on monitors that support it, and only while another screen is connected.</li>
-<li><strong>"All displays" sliders</strong> that set brightness or contrast on every monitor at once.</li>
-<li><strong>Two layouts:</strong> keep each monitor's extra controls in a dropdown, or show everything.</li>
-<li><strong>Show or hide anything:</strong> every slider and button has its own setting.</li>
-<li><strong>Per-monitor settings:</strong> give a monitor your own name, hide it, or hide some of its controls. Two monitors of the same model are numbered, and hovering a name shows its ID.</li>
-<li><strong>Mouse wheel</strong> moves the slider under the pointer, with an adjustable step (#5647).</li>
-<li><strong>Click a slider's icon</strong> to jump to a level; left, middle and right click each have their own. Off by default (#5697).</li>
-<li><strong>Titles show every value</strong>, for example "Samsung · 80% · 50%".</li>
-<li><strong>Fixes:</strong> the brightness icon sometimes not animating, the slider knob sometimes looking tall, and the percentage in titles sometimes getting stuck.</li>
-</ul>]]></content>
-        <author>
-            <name>bardelyne</name>
-            <uri>https://github.com/bardelyne</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Auto Refresh Rate 1.0.0]]></title>
-        <id>https://windhawk.net/mods/auto-refresh-rate#6d1e4a85f76a6ac1f893efcaec2401a9ab2813ca</id>
-        <link href="https://windhawk.net/mods/auto-refresh-rate"/>
-        <updated>2026-10-01T21:02:21.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="autorefreshrate">Auto Refresh Rate</h1>
-<p>Automates display refresh rates based on AC/battery power, fullscreen games, foreground apps, and docking.</p>
-<p>Runs as a standalone background tool process via <code>windhawk.exe</code> using native event subscriptions (<code>RegisterPowerSettingNotification</code>, <code>SetWinEventHook</code>) with zero polling loops and 0.0% idle CPU usage.</p>
-<p>Configure target rates, app rules, and hotkeys in the <strong>Settings</strong> tab above.</p>
-<p><em>Quick test: Toggle Windows Energy Saver in Quick Settings (<code>Win + A</code>), or enable the cycle hotkey (<code>Win + Ctrl + R</code>) under Settings.</em></p>
-<h2 id="evaluationpriority">Evaluation Priority</h2>
-<p>When multiple rules trigger at once, display frequency resolves in strict order:</p>
-<ol>
-<li><strong>Manual Hotkey Lock</strong> — <code>Win + Ctrl + R</code> override active</li>
-<li><strong>Protected Apps</strong> — Inhibit tools running (<code>obs64</code>)</li>
-<li><strong>Windows Energy Saver</strong> — Drops to configured battery-saver rate</li>
-<li><strong>Foreground App / Game</strong> — App rules (<code>blender</code>, <code>resolve</code>) or fullscreen 3D boost</li>
-<li><strong>Night Schedule</strong> — Evening low-Hz comfort window</li>
-<li><strong>Power Baseline</strong> — AC (Panel Max) vs Battery (60 Hz)</li>
-</ol>
-<h2 id="features">Features</h2>
-<ul>
-<li><strong>Power Baseline:</strong> Panel max on AC, 60 Hz (or minimum supported) on battery.</li>
-<li><strong>Game Boost:</strong> Boosts to highest supported refresh rate in borderless and exclusive fullscreen 3D games.</li>
-<li><strong>App Rules:</strong> Dedicated refresh rates for creative tools (<code>blender</code>, <code>resolve</code>, <code>affinity</code>) and media playback (<code>screenbox</code>, <code>netflix</code>).</li>
-<li><strong>Capture Protection:</strong> Freezes rate switching while capture or streaming tools run (<code>obs64</code>) to prevent capture drops or display flashes.</li>
-<li><strong>Smart Docking:</strong> Lowers only built-in laptop panels on battery; keeps external desktop monitors at full refresh rate.</li>
-<li><strong>Quiet Switching:</strong> Waits for keyboard and mouse activity to pause before lowering refresh rate.</li>
-<li><strong>Night Schedule:</strong> Optional time window to lock lower refresh rates during evening hours.</li>
-<li><strong>Native Notifications:</strong> Windows notification banner confirms rate changes and logs them to the Notification Center.</li>
-<li><strong>Cycle Hotkey:</strong> Optional <code>Win + Ctrl + R</code> shortcut to cycle supported panel frequencies.</li>
-</ul>
-<h2 id="troubleshooting">Troubleshooting</h2>
-<ul>
-<li><strong>Panel Flashing:</strong> Increase <strong>Anti-flicker cooldown</strong> (default: 3 seconds) under <strong>Display & transitions</strong>.</li>
-<li><strong>External Displays on Battery:</strong> Smart docking leaves external monitors at full rate by default. Set <strong>Target displays</strong> to <code>all</code> and disable <strong>Smart laptop docking</strong> to switch all connected screens.</li>
-<li><strong>Diagnostics:</strong> Check Windhawk's <strong>Log</strong> tab for real-time AC/DC transitions, active process detection, and display modes.</li>
-</ul>
-<h2 id="changelog">Changelog</h2>
-<h3 id="version10020260930">Version 1.0.0 (2026-09-30)</h3>
-<ul>
-<li>Initial release.</li>
-</ul>]]></content>
-        <author>
-            <name>roypriyanshu02</name>
-            <uri>https://github.com/roypriyanshu02</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Independent taskbar per monitor 1.5.0]]></title>
-        <id>https://windhawk.net/mods/taskbar-independent-per-monitor#004342fdf226b83a905abffd4a880249e2c47679</id>
-        <link href="https://windhawk.net/mods/taskbar-independent-per-monitor"/>
-        <updated>2026-10-01T19:00:04.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="independenttaskbarpermonitor">Independent taskbar per monitor</h1>
-<p>Each taskbar behaves like its own main taskbar.</p>
-<p><img src="https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ea374053f26cfbfe3865461bdd4adf86dce6b782/images/windows-per-monitor.png" alt="Each taskbar shows only the windows of its own monitor" /><br />
-<em>Each taskbar shows only the windows of its own monitor</em></p>
-<p><img src="https://raw.githubusercontent.com/2ndSky95/taskbar-independent-per-monitor/ea374053f26cfbfe3865461bdd4adf86dce6b782/images/pins-per-taskbar.png" alt="Separate pinned items for each taskbar" /><br />
-<em>Separate pinned items for each taskbar</em></p>
-<ul>
-<li>Pin/unpin from the jump list applies to that taskbar only.</li>
-<li>Pin <em>Properties</em> can differ per taskbar.</li>
-<li>Clicking the pin of a running app brings its window to the front (Shift+click
-or middle-click starts a new instance).</li>
-</ul>
-<p>Requires Windows 11 and <em>Show my taskbar on all displays</em>. Tested with <em>Combine
-taskbar buttons: Never</em>. Not compatible with <em>Disable grouping on the taskbar</em>.</p>]]></content>
-        <author>
-            <name>2ndSky95</name>
-            <uri>https://github.com/2ndSky95</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Cursor Override 1.0.0]]></title>
-        <id>https://windhawk.net/mods/cursor-override#eee6eb7fba4dc744cef023877595ef32736d411c</id>
-        <link href="https://windhawk.net/mods/cursor-override"/>
-        <updated>2026-10-01T16:01:22.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="cursoroverride">Cursor Override</h1>
-<p>Replaces common additional cursors with custom <code>.cur</code> or <code>.ani</code> files.</p>
-<p><img src="https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-grab.png" alt="Grab cursor before and after" /></p>
-<p><img src="https://raw.githubusercontent.com/sebastianheder01/Galaxy-Cursor/main/preview/comparison-cell.png" alt="Cell cursor before and after" /></p>
-<h2 id="howitworks">How it works</h2>
-<p>Identifies supported Mozilla, Chromium and RichEdit cursors based on their image and hotspot.
-Resource cursors are compared at a fixed size when their source resource is available; known bitmap signatures provide a fallback.
-Recognition can require an update when an application changes its cursor artwork.
-Supports <code>Grab</code>, <code>Grabbing</code>, <code>Cell</code>, <code>Copy</code>, <code>Alias</code>, <code>ZoomIn</code>, <code>ZoomOut</code>, <code>ColResize</code>, <code>RowResize</code>, <code>VerticalText</code> and <code>SelectionBar</code>.
-Standard Windows cursors remain unchanged.</p>
-<h2 id="usage">Usage</h2>
-<p>Under Settings, enter the full local path to each <code>.cur</code> or <code>.ani</code> file you want to change.
-Leave a field empty to keep the original cursor.
-Keep the cursor files in a permanent local folder. Network paths and mapped network drives are not supported.
-If a file cannot be loaded, the original cursor stays active. Check the path and save the settings again to retry.
-Windhawk debug logging reports the affected setting and error code without logging the file path.
-With all fields empty, the mod installs no hooks.</p>
-<h2 id="compatibility">Compatibility</h2>
-<p>This mod overlaps with <a href="https://windhawk.net/mods/chromium-cursor-remap">Chromium Cursor Remap</a> for Chromium-based applications and additionally recognizes Mozilla and RichEdit cursors.
-Do not enable both mods in the same applications.</p>
-<h2 id="optionalcursorpack">Optional cursor pack</h2>
-<p>For an optional cursor pack, check out <a href="https://github.com/sebastianheder01/Galaxy-Cursor">Galaxy Cursor</a>.</p>]]></content>
-        <author>
-            <name>Basti</name>
-            <uri>https://github.com/sebastianheder01</uri>
         </author>
     </entry>
 </feed>

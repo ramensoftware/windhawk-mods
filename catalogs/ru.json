@@ -57,6 +57,30 @@
         "version": "1.0"
       }
     },
+    "acrylic-color-glows": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791046905000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791046905000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "HaVeN80",
+        "compilerOptions": "-ldwmapi -lole32 -loleaut32 -lruntimeobject -lshcore -lshell32 -ladvapi32",
+        "description": "Animated light effects behind selected translucent windows",
+        "github": "https://github.com/haven80",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "GPL-3.0",
+        "name": "Acrylic Color Glows",
+        "version": "0.4.2"
+      }
+    },
     "acrylic-effect-radius-changer": {
       "details": {
         "defaultSorting": 3735,
@@ -3433,6 +3457,33 @@
         "version": "7.2"
       }
     },
+    "desktop-icon-section-autohide": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791046897000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791046897000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Piyush Das",
+        "compilerOptions": "-lcomctl32 -lole32 -lshell32 -luser32 -lgdi32 -lwinmm -luuid",
+        "description": "Auto-hides desktop icons with zero wallpaper dimming. Features 60 FPS Fluent alpha fade, per-app pinning whitelist, 4-state modes, multi-anchor detection, middle-click toggle, peek mode, and drag/rename shields.",
+        "github": "https://github.com/Piyushdas1624",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Desktop Icon Section Auto-Hide & Fluent Hover Reveal",
+        "version": "1.3.4"
+      }
+    },
     "desktop-icon-selection-style": {
       "details": {
         "defaultSorting": 10872,
@@ -6742,6 +6793,32 @@
         "version": "1.4"
       }
     },
+    "harmful-files-autoaccept": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791046912000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791046912000,
+        "users": 0
+      },
+      "metadata": {
+        "architecture": [
+          "x86-64"
+        ],
+        "author": "Arimodu",
+        "description": "Skips the harmful-files confirmation when dragging files in Explorer.",
+        "github": "https://github.com/Arimodu",
+        "include": [
+          "explorer.exe"
+        ],
+        "license": "MIT",
+        "name": "Skip harmful files confirmation",
+        "version": "0.3.0"
+      }
+    },
     "hide-action-center-icon": {
       "details": {
         "defaultSorting": 1250,
@@ -8673,6 +8750,31 @@
         "name": "Dark Paint",
         "twitter": "https://twitter.com/AhmedWalid605",
         "version": "1.0.1"
+      }
+    },
+    "multi-dpi-cursor": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791046908000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791046908000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Marco Kretz",
+        "compilerOptions": "-lshcore -lshell32 -ladvapi32",
+        "description": "Keeps the mouse cursor the same visual size across monitors with different display scaling",
+        "github": "https://github.com/marco-kretz",
+        "homepage": "https://github.com/marco-kretz/win11-multi-dpi-cursor",
+        "include": [
+          "windhawk.exe"
+        ],
+        "license": "MIT",
+        "name": "Multi-DPI Cursor",
+        "version": "1.0"
       }
     },
     "multiwm": {
@@ -11644,6 +11746,30 @@
         "license": "GPL-3.0",
         "name": "SnapSentry",
         "version": "0.21.2"
+      }
+    },
+    "snipping-tool-pen-text": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791046901000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791046901000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "Cris",
+        "compilerOptions": "-lgdi32 -luser32 -ldwmapi -ladvapi32 -lole32 -loleaut32",
+        "description": "Adds a text tool to the Windows 11 Snipping Tool that writes with the app's own pen",
+        "github": "https://github.com/cristianosm",
+        "include": [
+          "SnippingTool.exe"
+        ],
+        "license": "MIT",
+        "name": "Snipping Tool Pen Text",
+        "version": "1.0.2"
       }
     },
     "spoof-light-dark-theme": {
