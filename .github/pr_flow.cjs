@@ -66,7 +66,7 @@ function isFlowEnabled(prNumber) {
 
 // While the AI reviewer is being worked on, an accepted /ai-review posts a
 // notice instead of queueing a review.
-const AI_REVIEW_UNAVAILABLE = true;
+const AI_REVIEW_UNAVAILABLE = false;
 
 const AI_REVIEW_UNAVAILABLE_COMMENT_BODY =
   'The AI review bot is under construction, so no review was posted this time. ' +
