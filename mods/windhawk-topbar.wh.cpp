@@ -269,54 +269,30 @@ desktop are ignored.
 #include <winrt/Windows.Data.Json.h>
 #include <windows.ui.xaml.hosting.desktopwindowxamlsource.h>
 
-#if __has_include(<winrt/Windows.Media.Control.h>)
 #define TOPBAR_HAS_MEDIA_CONTROL 1
 #include <winrt/Windows.Media.Control.h>
-#else
-#define TOPBAR_HAS_MEDIA_CONTROL 0
-#endif
 
-#if __has_include(<winrt/Windows.Devices.Radios.h>)
 #define TOPBAR_HAS_RADIOS 1
 #include <winrt/Windows.Devices.Radios.h>
-#else
-#define TOPBAR_HAS_RADIOS 0
-#endif
 
-#if __has_include(<winrt/Windows.Networking.NetworkOperators.h>)
 #define TOPBAR_HAS_NETWORK_OPERATORS 1
 #include <winrt/Windows.Networking.NetworkOperators.h>
 #include <winrt/Windows.Networking.Connectivity.h>
-#else
-#define TOPBAR_HAS_NETWORK_OPERATORS 0
-#endif
 
-#if __has_include(<winrt/Windows.Devices.Bluetooth.h>)
 #define TOPBAR_HAS_BLUETOOTH_LE 1
 #include <winrt/Windows.Devices.Bluetooth.h>
 #include <winrt/Windows.Devices.Bluetooth.GenericAttributeProfile.h>
 #include <winrt/Windows.Devices.Enumeration.h>
 #include <winrt/Windows.Foundation.Collections.h>
-#else
-#define TOPBAR_HAS_BLUETOOTH_LE 0
-#endif
 
-#if __has_include(<winrt/Windows.Storage.Search.h>)
 #define TOPBAR_HAS_STORAGE_SEARCH 1
 #include <winrt/Windows.Storage.h>
 #include <winrt/Windows.Storage.Search.h>
-#else
-#define TOPBAR_HAS_STORAGE_SEARCH 0
-#endif
 
-#if __has_include(<winrt/Windows.Management.Deployment.h>)
 #define TOPBAR_HAS_PACKAGE_MANAGER 1
 #include <winrt/Windows.Management.Deployment.h>
 #include <winrt/Windows.ApplicationModel.h>
 #include <winrt/Windows.ApplicationModel.Core.h>
-#else
-#define TOPBAR_HAS_PACKAGE_MANAGER 0
-#endif
 
 #include <algorithm>
 #include <chrono>
@@ -1091,8 +1067,6 @@ void LoadSettings();
 double GetBarDpiScale();
 void UpdateResourceButton();
 void InvalidateStartAndSearchFlyouts();
-void RestartToolModProcess();
-extern HANDLE g_toolModProcessMutex;
 void OpenTopBarSettingsWindow();
 void CloseTopBarSettingsWindow();
 void CloseNativeStartMenuIfOpen();
@@ -1191,11 +1165,6 @@ bool g_prevDefaultStartMenu = true;
 bool g_prevDefaultSearch = true;
 std::wstring g_prevStartButtonAction = L"topbar";
 int g_prevMonitorIndex = 0;
-
-// Guards against the boot-rebuild timer restarting the topbar thread more
-// than once. The restarted thread runs TopBarThreadProc again, which would
-// otherwise re-arm the same timer and loop forever.
-std::atomic<bool> g_bootRebuildDone{false};
 
 struct WeatherState {
     bool valid = false;
@@ -1604,11 +1573,6 @@ static std::vector<wuxc::Primitives::FlyoutBase> g_openPopups;
 // touching XAML or dispatching back to the UI thread.
 volatile LONG g_shuttingDown = 0; 
 
-// Set true when the tool-mod process was spawned by our own cold-boot
-// restart. The restarted process must not itself try to restart again,
-// otherwise the sequence loops.
-bool g_modRestartedOnColdBoot = false;
-
 void PromoteChildFlyoutPopups();
 
 // Runs while any child flyout is open and forces DWM's Mica/Acrylic
@@ -1793,7 +1757,6 @@ HWND g_taskClickPendingHwnd = nullptr;
 [[clang::no_destroy]] DispatcherTimer g_bluetoothAutoRefreshTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_restoreTimer{nullptr};
 [[clang::no_destroy]] DispatcherTimer g_resourceTimer{nullptr};
-[[clang::no_destroy]] DispatcherTimer g_bootRebuildTimer{nullptr};
 [[clang::no_destroy]] wuxc::Button g_resourceButton{nullptr};
 [[clang::no_destroy]] wuxc::Flyout g_resourceFlyout{nullptr};
 [[clang::no_destroy]] wuxc::StackPanel g_resourcePanel{nullptr};
@@ -25869,10 +25832,6 @@ void RestartTopBarThreadForScaleChange() {
     try { if (g_startTileMenu) g_startTileMenu.Hide(); } catch (...) {}
     try { if (g_searchResultMenu) g_searchResultMenu.Hide(); } catch (...) {}
 
-    // Stop the fresh thread from re-arming the boot-rebuild timer and doing
-    // a second restart on top of this one.
-    g_bootRebuildDone.exchange(true);
-
     HANDLE oldThread = g_topBarThread;
     DWORD oldThreadId = g_topBarThreadId;
 
@@ -25900,10 +25859,35 @@ void RestartTopBarThreadForScaleChange() {
     if (g_topBarHwnd) PostMessage(g_topBarHwnd, WM_CLOSE, 0, 0);
 }
 
+void WaitForShellReadyIfColdBoot() {
+    if (!IsRecentColdBoot()) return;
+
+    // On a cold boot, WindowsXamlManager::InitializeForCurrentThread() can
+    // run before the shell's input stack is fully initialised. The popup
+    // input-site that XAML registers at that point is derived from an
+    // inconsistent snapshot and silently discards every mouse message,
+    // leaving the bar visually correct but inert to hover and clicks.
+    // Deferring XAML init until the shell is up avoids the broken
+    // registration entirely -- no respawn, no visible restart.
+    //
+    // Shell_TrayWnd is the taskbar's window class; its existence means the
+    // shell has started. The extra ~3 seconds let the shell finish bringing
+    // up its input stack and DWM composition.
+    for (int i = 0; i < 300; i++) {
+        if (FindWindowW(L"Shell_TrayWnd", nullptr)) break;
+        if (WaitForSingleObject(g_stopEvent, 100) == WAIT_OBJECT_0) return;
+    }
+    for (int i = 0; i < 30; i++) {
+        if (WaitForSingleObject(g_stopEvent, 100) == WAIT_OBJECT_0) return;
+    }
+}
+
 DWORD WINAPI TopBarThreadProc(LPVOID) {
     Wh_Log(L"TopBar: TopBarThreadProc started.");
     try {
         g_barStartTick = GetTickCount64();
+
+        WaitForShellReadyIfColdBoot();
 
         winrt::init_apartment(winrt::apartment_type::single_threaded);
 
@@ -26685,102 +26669,6 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
         //
         // The one-shot flag prevents the restarted thread from re-arming
         // the timer and looping forever.
-        if (!g_bootRebuildDone.load()) {
-            if (!g_bootRebuildTimer) {
-                g_bootRebuildTimer = DispatcherTimer();
-                // Cold boot gives DWM and XAML's compositor several extra seconds
-                // to come up before we conclude the popup is genuinely blank. A
-                // 3 s window is not enough on most machines and caused the
-                // rebuild to fire before XAML had even realised the popup HWND,
-                // which is why the topbar stayed invisible for the first few
-                // seconds after sign-in.
-                g_bootRebuildTimer.Interval(std::chrono::seconds(3));
-                g_bootRebuildTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
-                    g_bootRebuildTimer.Stop();
-                    if (g_bootRebuildDone.exchange(true)) return;
-                    // Only cold boots need this rebuild. On a mid-session mod
-                    // enable, WindowsXamlManager::InitializeForCurrentThread
-                    // registers the popup's input site correctly the first
-                    // time. On a cold boot Explorer's shell is still
-                    // initialising when the topbar thread first initialises
-                    // XAML, and the popup HWND that results renders correctly
-                    // but silently discards every mouse message -- the
-                    // "clickable nowhere" state. Only a fresh WindowsXaml-
-                    // Manager on a new thread restores input, which is why
-                    // toggling the mod off/on fixes it. Gating on cold boot
-                    // also removes the 10-15 s delay a previous unconditional
-                    // version of this timer added to every enable.
-                    if (!IsRecentColdBoot()) {
-                        Wh_Log(L"TopBar: boot rebuild skipped - not a recent cold boot");
-                        return;
-                    }
-                    if (!g_topBarThread || !g_topBarHwnd) return;
-                    // The rebuild does not need the old thread's popup HWND
-                    // to exist — the fresh thread creates its own from
-                    // scratch. Gating on it just turned a transient
-                    // "popup not yet realised" window into an infinite
-                    // retry loop. Restart unconditionally on a fresh mod
-                    // process.
-
-                    // Cold-boot XAML input-site bug: the popup HWND renders
-                    // correctly and reports visible, but XAML registered its
-                    // input-site coordinate transform against a stale state,
-                    // so every mouse message is silently dropped and hover
-                    // inside Start/Search flyouts is offset by roughly an
-                    // inch. The visual state looks healthy from a pixel-
-                    // variance test, so the rendering check cannot detect
-                    // it -- only a fresh WindowsXamlManager on a new thread
-                    // re-registers the input site correctly. Always restart
-                    // on a cold boot; non-cold-boot enables never reach
-                    // this code because of the IsRecentColdBoot guard above.
-                    Wh_Log(L"TopBar: boot rebuild - restarting topbar thread (cold boot)");
-
-                    // Hide every flyout and context menu before tearing the
-                    // old thread down. Their popup HWNDs are OS windows that
-                    // can outlive the XamlManager that created them, and
-                    // orphaned topmost popups from the old thread interfere
-                    // with the new thread's flyouts — the bar's own flyouts
-                    // end up dim (only the tint layer, no backdrop blur) and
-                    // with wrong z-order. Closing them here while the old
-                    // thread is still alive lets XAML tear the popups down
-                    // cleanly.
-                    try { if (g_startMenuFlyout) g_startMenuFlyout.Hide(); } catch (...) {}
-                    try { if (g_searchFlyout) g_searchFlyout.Hide(); } catch (...) {}
-                    try { if (g_displayFlyout) g_displayFlyout.Hide(); } catch (...) {}
-                    try { if (g_soundFlyout) g_soundFlyout.Hide(); } catch (...) {}
-                    try { if (g_wifiFlyout) g_wifiFlyout.Hide(); } catch (...) {}
-                    try { if (g_bluetoothFlyout) g_bluetoothFlyout.Hide(); } catch (...) {}
-                    try { if (g_batteryFlyout) g_batteryFlyout.Hide(); } catch (...) {}
-                    try { if (g_resourceFlyout) g_resourceFlyout.Hide(); } catch (...) {}
-                    try { if (g_mediaFlyout) g_mediaFlyout.Hide(); } catch (...) {}
-                    try { if (g_settingsFlyout) g_settingsFlyout.Hide(); } catch (...) {}
-                    try { if (g_startPowerMenu) g_startPowerMenu.Hide(); } catch (...) {}
-                    try { if (g_startAccountFlyout) g_startAccountFlyout.Hide(); } catch (...) {}
-                    try { if (g_startTileMenu) g_startTileMenu.Hide(); } catch (...) {}
-                    try { if (g_searchResultMenu) g_searchResultMenu.Hide(); } catch (...) {}
-                    try { if (g_taskContextMenu) g_taskContextMenu.Hide(); } catch (...) {}
-                    // Restart the process, not the thread. On a cold boot
-                    // XAML's input dispatcher initializes before the shell
-                    // finishes bringing its input stack up, and the
-                    // resulting popup HWND silently discards every hover
-                    // event. Restarting the thread in place does not clear
-                    // that broken state — it lives at the process level.
-                    // The only thing that reliably fixes it is a fresh
-                    // process, which is what the user does when they
-                    // toggle the mod off and on. Spawn a replacement and
-                    // exit; the replacement sees -cold-boot-restarted on
-                    // its command line and skips this branch.
-                    if (g_modRestartedOnColdBoot) {
-                        Wh_Log(L"TopBar: boot rebuild skipped - already restarted");
-                        return;
-                    }
-                    Wh_Log(L"TopBar: boot rebuild - respawning tool-mod process");
-                    RestartToolModProcess();
-                });
-            }
-            g_bootRebuildTimer.Stop();
-            g_bootRebuildTimer.Start();
-        }
 
         // PreTranslateMessage is what gives the island keyboard input -- without it
         // the Wi-Fi password box would never see a keystroke.
@@ -27262,73 +27150,6 @@ void KillStaleShellHosts(bool killStart, bool killSearch) {
     }
 }
 
-void RestartToolModProcess() {
-    // Spawn a fresh tool-mod process and exit this one. Reproduces exactly
-    // what the user does when they toggle the mod off and on — the only
-    // thing that reliably clears the broken XAML input state on a cold
-    // boot. Thread restart (ReloadTopBarFully, boot rebuild) does not fix
-    // it because the broken state lives at the process level in XAML's
-    // input dispatcher, not on the UI thread.
-    WCHAR currentProcessPath[MAX_PATH];
-    if (!GetModuleFileName(nullptr, currentProcessPath,
-                           ARRAYSIZE(currentProcessPath))) {
-        Wh_Log(L"RestartToolModProcess: GetModuleFileName failed");
-        return;
-    }
-
-    WCHAR commandLine[MAX_PATH + 2 +
-        (sizeof(L" -tool-mod \"" WH_MOD_ID "\" -cold-boot-restarted") / sizeof(WCHAR)) - 1];
-    swprintf_s(commandLine,
-               L"\"%s\" -tool-mod \"%s\" -cold-boot-restarted",
-               currentProcessPath, WH_MOD_ID);
-
-    // Drop the mutex before spawning, otherwise the replacement's
-    // Wh_ModInit sees ERROR_ALREADY_EXISTS and exits immediately.
-    if (g_toolModProcessMutex) {
-        ReleaseMutex(g_toolModProcessMutex);
-        CloseHandle(g_toolModProcessMutex);
-        g_toolModProcessMutex = nullptr;
-    }
-
-    HMODULE kernelModule = GetModuleHandle(L"kernelbase.dll");
-    if (!kernelModule) kernelModule = GetModuleHandle(L"kernel32.dll");
-    if (!kernelModule) {
-        Wh_Log(L"RestartToolModProcess: no kernel module");
-        ExitProcess(1);
-    }
-
-    using CreateProcessInternalW_t = BOOL(WINAPI*)(
-        HANDLE hUserToken, LPCWSTR lpApplicationName, LPWSTR lpCommandLine,
-        LPSECURITY_ATTRIBUTES lpProcessAttributes,
-        LPSECURITY_ATTRIBUTES lpThreadAttributes, WINBOOL bInheritHandles,
-        DWORD dwCreationFlags, LPVOID lpEnvironment, LPCWSTR lpCurrentDirectory,
-        LPSTARTUPINFOW lpStartupInfo,
-        LPPROCESS_INFORMATION lpProcessInformation,
-        PHANDLE hRestrictedUserToken);
-    auto pCreateProcessInternalW = (CreateProcessInternalW_t)GetProcAddress(
-        kernelModule, "CreateProcessInternalW");
-    if (!pCreateProcessInternalW) {
-        Wh_Log(L"RestartToolModProcess: no CreateProcessInternalW");
-        ExitProcess(1);
-    }
-
-    STARTUPINFOW si{};
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_FORCEOFFFEEDBACK;
-    PROCESS_INFORMATION pi{};
-    if (!pCreateProcessInternalW(nullptr, currentProcessPath, commandLine,
-                                 nullptr, nullptr, FALSE, NORMAL_PRIORITY_CLASS,
-                                 nullptr, nullptr, &si, &pi, nullptr)) {
-        Wh_Log(L"RestartToolModProcess: CreateProcess failed: %u", GetLastError());
-        ExitProcess(1);
-    }
-
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-    Wh_Log(L"RestartToolModProcess: replacement spawned, exiting");
-    ExitProcess(0);
-}
-
 BOOL WhTool_ModInit() {
     Wh_Log(L"TopBar: WhTool_ModInit called.");
     LoadSettings();
@@ -27575,13 +27396,6 @@ BOOL Wh_ModInit() {
             if (wcscmp(argv[i + 1], WH_MOD_ID) == 0) {
                 isCurrentToolModProcess = true;
             }
-            break;
-        }
-    }
-
-    for (int i = 1; i < argc; i++) {
-        if (wcscmp(argv[i], L"-cold-boot-restarted") == 0) {
-            g_modRestartedOnColdBoot = true;
             break;
         }
     }
