@@ -4,7 +4,7 @@
 // @description     A modern media controller for the Windows taskbar with popup player, themes (Acrylic / Mica / Glass / Solid / Transparent), and two layouts (Rounded Apple-style / Windows-style).
 // @version         1.8.0
 // @author          Touseef
-// @github          YOUR_GITHUB_USERNAME
+// @github          Touseeef
 // @include         explorer.exe
 // @compilerOptions -lole32 -ldwmapi -lgdi32 -luser32 -lshcore -lgdiplus -lshell32 -lwindowsapp -lruntimeobject
 // ==/WindhawkMod==
@@ -130,6 +130,7 @@ A sleek, native-style media controller that lives directly on your Windows taskb
 #include <mutex>
 #include <memory>
 #include <cstdio>
+#include <cmath>
 #include <algorithm>
 
 // WinRT
@@ -341,10 +342,41 @@ static bool g_IsHiddenByIdle     = false;
 static int  g_ScrollOffset = 0;
 static int  g_TextWidth    = 0;
 static bool g_IsScrolling  = false;
-static int  g_ScrollWait   = 188; // ~3s pause at 16ms/tick before scrolling
+static int  g_ScrollWait   = 94; // ~3s pause at 33ms/tick before scrolling
 
 static const wchar_t* g_IconFontName = L"Segoe MDL2 Assets";
 static const wchar_t* g_TextFontName = L"Segoe UI";
+
+// [PERF] Cached fonts — GDI+ FontFamily construction enumerates installed
+//        fonts, so building these every frame is very expensive.
+struct CachedFonts {
+    std::unique_ptr<FontFamily> iconFam;
+    std::unique_ptr<FontFamily> textFam;
+    std::unique_ptr<Font>       iconBar;      // compact bar icons
+    std::unique_ptr<Font>       titleBar;     // compact bar title
+    std::unique_ptr<Font>       iconPopup;    // popup small icons
+    std::unique_ptr<Font>       playPopup;    // popup play/pause
+    std::unique_ptr<Font>       titlePopup;
+    std::unique_ptr<Font>       artistPopup;
+    std::unique_ptr<Font>       albumPopup;
+    std::unique_ptr<Font>       timePopup;
+
+    void Rebuild() {
+        iconFam = std::make_unique<FontFamily>(g_IconFontName, nullptr);
+        textFam = std::make_unique<FontFamily>(g_TextFontName, nullptr);
+
+        iconBar   = std::make_unique<Font>(iconFam.get(), (REAL)g_Settings.iconSize,    FontStyleRegular, UnitPixel);
+        titleBar  = std::make_unique<Font>(textFam.get(), (REAL)g_Settings.fontSize,    FontStyleBold,    UnitPixel);
+
+        iconPopup  = std::make_unique<Font>(iconFam.get(), g_PopupLayout.iconSize,     FontStyleRegular, UnitPixel);
+        playPopup  = std::make_unique<Font>(iconFam.get(), g_PopupLayout.playIconSize, FontStyleRegular, UnitPixel);
+        titlePopup = std::make_unique<Font>(textFam.get(), g_PopupLayout.titleSize,    FontStyleBold,    UnitPixel);
+        artistPopup= std::make_unique<Font>(textFam.get(), g_PopupLayout.artistSize,   FontStyleRegular, UnitPixel);
+        albumPopup = std::make_unique<Font>(textFam.get(), g_PopupLayout.albumSize,    FontStyleRegular, UnitPixel);
+        timePopup  = std::make_unique<Font>(textFam.get(), 10.5f,                     FontStyleRegular, UnitPixel);
+    }
+};
+static CachedFonts g_Fonts;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Media State
@@ -361,6 +393,8 @@ struct MediaState {
     double positionSeconds = 0.0;
     double durationSeconds = 0.0;
     ULONGLONG positionTick = 0;
+    double lastPolledPos   = -1.0;   // [FIX] raw reported position from previous poll
+    bool   lastPlayingState = false; // [FIX] to detect play→pause transition
 
     bool shuffleActive    = false;
     bool shuffleAvailable = false;
@@ -376,6 +410,30 @@ static std::mutex                                       g_SessionLock;   // [FIX
 
 // [FIX] polling thread asks the UI thread to reset scroll state
 static std::atomic<bool> g_ResetScrollRequested{false};
+
+// [PERF] Forward declarations so CachedTheme::Refresh() can call the
+//        theme/color helpers defined later in the file.
+static DWORD GetCurrentTextColor();
+static bool  IsDarkSurface();
+static Color GetAccentGdiColor();
+
+// [PERF] Cached theme colors. Without this, every paint calls RegGetValueW
+//        (4x) and DwmGetColorizationColor (1x) — 300 registry reads/sec.
+struct CachedTheme {
+    Color  text{255, 255, 255, 255};
+    Color  accent{255, 0, 120, 212};
+    bool   dark = true;
+    DWORD  textColorRaw = 0xFFFFFFFF;
+
+    void Refresh() {
+        dark = IsDarkSurface();
+        textColorRaw = GetCurrentTextColor();
+        DWORD c = textColorRaw;
+        text = Color(255, (BYTE)((c>>16)&0xFF), (BYTE)((c>>8)&0xFF), (BYTE)(c&0xFF));
+        accent = GetAccentGdiColor();
+    }
+};
+static CachedTheme g_Theme;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Timer IDs
@@ -653,6 +711,8 @@ static void ComputePopupLayout() {
 
         g_PopupH = (int)(P.btnCenterY + P.playRadius) + 14;
     }
+
+    g_Fonts.Rebuild();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -726,7 +786,7 @@ static DWORD MakeTint(BYTE a, BYTE r, BYTE g, BYTE b) {
 }
 
 static DWORD GetAcrylicTint() {
-    bool dark = IsDarkSurface();
+    bool dark = g_Theme.dark;
     switch (g_Settings.theme) {
     case THEME_MICA:
         return dark ? MakeTint(0xD8, 0x1E, 0x1E, 0x1E) : MakeTint(0xE0, 0xF2, 0xF2, 0xF2);
@@ -780,7 +840,7 @@ static void SetupGfx(Graphics& gfx) {
 static void DrawSurface(Graphics& gfx, int w, int h, int radius) {
     if (g_Settings.theme == THEME_TRANSPARENT) return;
 
-    bool dark = IsDarkSurface();
+    bool dark = g_Theme.dark;
     int theme = g_Settings.theme;
     GraphicsPath sp; AddRoundedRect(sp, 0, 0, w, h, radius);
 
@@ -810,7 +870,7 @@ static void DrawSurface(Graphics& gfx, int w, int h, int radius) {
 }
 
 static void DrawPillSurface(Graphics& gfx, int x, int y, int w, int h, int radius, Color mainColor) {
-    bool dark = IsDarkSurface();
+    bool dark = g_Theme.dark;
     int theme = g_Settings.theme;
     GraphicsPath sp; AddRoundedRect(sp, x, y, w, h, radius);
 
@@ -914,10 +974,11 @@ static void UpdateMediaInfo() {
                     } catch (...) {}
                 }
                 g_ResetScrollRequested.store(true);
-                // [FIX] New track → drop the anchor so the next sample
-                // re-seats the interpolation clock cleanly.
+                // [FIX] New track → force a clean re-anchor on the next poll.
                 g_MediaState.positionSeconds = 0.0;
                 g_MediaState.positionTick    = 0;
+                g_MediaState.lastPolledPos   = -1.0;
+                g_MediaState.lastPlayingState = false;
             }
             g_MediaState.title     = newTitle;
             g_MediaState.artist    = props.Artist().c_str();
@@ -935,20 +996,34 @@ static void UpdateMediaInfo() {
                 if (dur > 0.0) {
                     g_MediaState.durationSeconds = dur;
 
-                    // [FIX] Re-anchor ONLY when the player's reported position
-                    // diverges from what we're already interpolating. If the
-                    // player keeps reporting the same value (some only publish
-                    // once per track), we keep the old anchor and let the UI
-                    // clock carry the bar forward.
-                    double expected = g_MediaState.positionSeconds +
-                        (g_MediaState.positionTick
-                            ? (double)(GetTickCount64() - g_MediaState.positionTick) / 1000.0
-                            : 0.0);
-                    if (g_MediaState.positionTick == 0 ||
-                        fabs(pos - expected) > 0.5) {
+                    // [FIX] On play→pause transition, capture the currently
+                    //       interpolated position so the bar doesn't snap back
+                    //       to the last anchor when the player fails to publish.
+                    bool nowPlaying = g_MediaState.isPlaying;
+                    if (!nowPlaying && g_MediaState.lastPlayingState &&
+                        g_MediaState.positionTick > 0) {
+                        double cur = g_MediaState.positionSeconds +
+                            (double)(GetTickCount64() - g_MediaState.positionTick) / 1000.0;
+                        if (cur > g_MediaState.durationSeconds) cur = g_MediaState.durationSeconds;
+                        g_MediaState.positionSeconds = cur;
+                        g_MediaState.positionTick    = GetTickCount64();
+                    }
+                    g_MediaState.lastPlayingState = nowPlaying;
+
+                    // [FIX] Only re-anchor when the player reports a NEW value.
+                    //       If the value is identical to the previous poll, the
+                    //       player is stale (many players publish only on seek /
+                    //       pause / track change) → keep the old anchor and let
+                    //       the UI clock interpolate forward.
+                    bool posChanged =
+                        (g_MediaState.lastPolledPos < 0.0) ||
+                        (fabs(pos - g_MediaState.lastPolledPos) > 0.10);
+
+                    if (posChanged) {
                         g_MediaState.positionSeconds = pos < 0 ? 0 : pos;
                         g_MediaState.positionTick    = GetTickCount64();
                     }
+                    g_MediaState.lastPolledPos = pos;
                 }
             } catch (...) { /* keep previous values */ }
 
@@ -1133,7 +1208,7 @@ static PopupHitTarget HitTestPopup(int x, int y) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Reusable GDI Back Buffer (avoids churning a bitmap every 16ms)
+// Reusable GDI Back Buffer (avoids churning a bitmap every frame)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 struct BackBuffer {
@@ -1179,8 +1254,8 @@ static void DrawMediaPanel(HDC hdc, int width, int height) {
 
     auto& L = g_Layout;
     bool rounded = IsRounded();
-    Color mainColor{ GetCurrentTextColor() };
-    Color accentColor = GetAccentGdiColor();
+    Color mainColor = g_Theme.text;
+    Color accentColor = g_Theme.accent;
     Color dimColor(145, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue());
     MediaSnap snap = TakeSnapshot();
 
@@ -1200,8 +1275,7 @@ static void DrawMediaPanel(HDC hdc, int width, int height) {
             SolidBrush pb(Color(24, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue()));
             gfx.FillPath(&pb, &artClip);
 
-            FontFamily iconFam(g_IconFontName, nullptr);
-            Font nf(&iconFam, (REAL)(L.artSize * 0.40f), FontStyleRegular, UnitPixel);
+            Font nf(g_Fonts.iconFam.get(), (REAL)(L.artSize * 0.40f), FontStyleRegular, UnitPixel);
             SolidBrush nb(Color(80, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue()));
             StringFormat sf; sf.SetAlignment(StringAlignmentCenter); sf.SetLineAlignment(StringAlignmentCenter);
             RectF ar((REAL)L.artX, (REAL)L.artY, (REAL)L.artSize, (REAL)L.artSize);
@@ -1222,8 +1296,7 @@ static void DrawMediaPanel(HDC hdc, int width, int height) {
 
     // ── 3. Media Buttons ─────────────────────────────────────────────────────
     {
-        FontFamily iconFam(g_IconFontName, nullptr);
-        Font iconFont(&iconFam, (REAL)g_Settings.iconSize, FontStyleRegular, UnitPixel);
+        Font* iconFont = g_Fonts.iconBar.get();
 
         SolidBrush normalBr(mainColor), accentBr(accentColor), dimBr(dimColor);
         SolidBrush hoverBg(Color(35, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue()));
@@ -1237,7 +1310,7 @@ static void DrawMediaPanel(HDC hdc, int width, int height) {
             float xOffset = (isPlay && !snap.isPlaying) ? -0.8f : 0.0f;
             RectF rc(cx - r + xOffset, cy - r, r * 2, r * 2);
             Brush* br = active ? (Brush*)&accentBr : dim ? (Brush*)&dimBr : (Brush*)&normalBr;
-            gfx.DrawString(icon, -1, &iconFont, rc, &sf, br);
+            gfx.DrawString(icon, -1, iconFont, rc, &sf, br);
         };
 
         if (g_Settings.showShuffleRepeat)
@@ -1258,38 +1331,45 @@ static void DrawMediaPanel(HDC hdc, int width, int height) {
 
     // ── 4. Title (with scrolling) ────────────────────────────────────────────
     {
-        FontFamily ff(g_TextFontName, nullptr);
-        Font titleFont(&ff, (REAL)g_Settings.fontSize, FontStyleBold, UnitPixel);
+        Font* titleFont = g_Fonts.titleBar.get();
         SolidBrush titleBr(mainColor);
 
-        RectF mr(0, 0, 4000, 200); RectF br;
-        gfx.MeasureString(snap.title.c_str(), -1, &titleFont, mr, &br);
-        g_TextWidth = (int)br.Width;
+        static wstring lastMeasuredTitle;
+        static int     lastMeasuredWidth = 0;
+        static REAL    lastMeasuredHeight = 0.0f;
+        if (snap.title != lastMeasuredTitle) {
+            RectF mr(0, 0, 4000, 200); RectF br;
+            gfx.MeasureString(snap.title.c_str(), -1, titleFont, mr, &br);
+            lastMeasuredTitle  = snap.title;
+            lastMeasuredWidth  = (int)br.Width;
+            lastMeasuredHeight = br.Height;
+        }
+        g_TextWidth = lastMeasuredWidth;
 
         Region textClip(Rect(L.textX, 0, L.textMaxW, height));
         gfx.SetClip(&textClip);
 
         float ty = L.progVisible
-            ? (rounded ? (float)L.pillY : 0.0f) + (((float)L.progY - (rounded ? (float)L.pillY : 0.0f)) - br.Height) / 2.0f
-            : (rounded ? (float)L.pillY + ((float)L.pillH - br.Height) / 2.0f : ((float)height - br.Height) / 2.0f);
+            ? (rounded ? (float)L.pillY : 0.0f) + (((float)L.progY - (rounded ? (float)L.pillY : 0.0f)) - lastMeasuredHeight) / 2.0f
+            : (rounded ? (float)L.pillY + ((float)L.pillH - lastMeasuredHeight) / 2.0f : ((float)height - lastMeasuredHeight) / 2.0f);
 
         if (g_TextWidth > L.textMaxW) {
             g_IsScrolling = true;
             float dx = (float)(L.textX - g_ScrollOffset);
             int spacer = 50;
-            gfx.DrawString(snap.title.c_str(), -1, &titleFont, PointF(dx, ty), &titleBr);
+            gfx.DrawString(snap.title.c_str(), -1, titleFont, PointF(dx, ty), &titleBr);
             if (dx + g_TextWidth < L.textX + L.textMaxW + spacer)
-                gfx.DrawString(snap.title.c_str(), -1, &titleFont, PointF(dx + g_TextWidth + spacer, ty), &titleBr);
+                gfx.DrawString(snap.title.c_str(), -1, titleFont, PointF(dx + g_TextWidth + spacer, ty), &titleBr);
         } else {
             g_IsScrolling = false; g_ScrollOffset = 0;
-            gfx.DrawString(snap.title.c_str(), -1, &titleFont, PointF((float)L.textX, ty), &titleBr);
+            gfx.DrawString(snap.title.c_str(), -1, titleFont, PointF((float)L.textX, ty), &titleBr);
         }
 
         gfx.ResetClip();
     }
-            bool darkSurface = IsDarkSurface();
     // ── 5. Progress Bar ──────────────────────────────────────────────────────
     if (L.progVisible && snap.durSec > 0.0 && snap.hasMedia) {
+        bool darkSurface = g_Theme.dark;
         double ratio = GetInterpolatedProgress(snap.posSec, snap.durSec, snap.posTick, snap.isPlaying);
         int fillW = (int)(ratio * L.progW);
         int tr = L.progH;
@@ -1352,8 +1432,8 @@ static void DrawPopupPanel(HDC hdc) {
     DrawSurface(gfx, g_PopupW, g_PopupH, PopupCornerRadius());
 
     auto& P = g_PopupLayout;
-    Color mainColor{ GetCurrentTextColor() };
-    Color accentColor = GetAccentGdiColor();
+    Color mainColor = g_Theme.text;
+    Color accentColor = g_Theme.accent;
     Color dimColor(140, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue());
     MediaSnap snap = TakeSnapshot();
 
@@ -1382,8 +1462,7 @@ static void DrawPopupPanel(HDC hdc) {
         } else {
             SolidBrush pb(Color(18, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue()));
             gfx.FillPath(&pb, &artClip);
-            FontFamily iconFam(g_IconFontName, nullptr);
-            Font nf(&iconFam, (REAL)(P.artSize * 0.28f), FontStyleRegular, UnitPixel);
+            Font nf(g_Fonts.iconFam.get(), (REAL)(P.artSize * 0.28f), FontStyleRegular, UnitPixel);
             SolidBrush nb(Color(45, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue()));
             StringFormat sf; sf.SetAlignment(StringAlignmentCenter); sf.SetLineAlignment(StringAlignmentCenter);
             RectF ar((REAL)P.artX, (REAL)P.artY, (REAL)P.artSize, (REAL)P.artSize);
@@ -1395,27 +1474,26 @@ static void DrawPopupPanel(HDC hdc) {
 
     // ── 2. Title / Artist / Album ────────────────────────────────────────────
     {
-        FontFamily ff(g_TextFontName, nullptr);
         StringFormat sf;
         sf.SetAlignment(P.centered ? StringAlignmentCenter : StringAlignmentNear);
         sf.SetTrimming(StringTrimmingEllipsisCharacter);
         sf.SetFormatFlags(StringFormatFlagsNoWrap);
 
-        Font titleFont(&ff, P.titleSize, FontStyleBold, UnitPixel);
+        Font* titleFont = g_Fonts.titlePopup.get();
         SolidBrush tb(mainColor);
         RectF trc((REAL)P.textX, (REAL)P.titleY, (REAL)P.textW, P.titleSize + 8.0f);
-        gfx.DrawString(snap.title.c_str(), -1, &titleFont, trc, &sf, &tb);
+        gfx.DrawString(snap.title.c_str(), -1, titleFont, trc, &sf, &tb);
 
-        Font artistFont(&ff, P.artistSize, FontStyleRegular, UnitPixel);
+        Font* artistFont = g_Fonts.artistPopup.get();
         SolidBrush ab(Color(210, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue()));
         RectF arc((REAL)P.textX, (REAL)P.artistY, (REAL)P.textW, P.artistSize + 6.0f);
-        gfx.DrawString(snap.artist.c_str(), -1, &artistFont, arc, &sf, &ab);
+        gfx.DrawString(snap.artist.c_str(), -1, artistFont, arc, &sf, &ab);
 
         if (!snap.album.empty()) {
-            Font albumFont(&ff, P.albumSize, FontStyleRegular, UnitPixel);
+            Font* albumFont = g_Fonts.albumPopup.get();
             SolidBrush alb(dimColor);
             RectF alrc((REAL)P.textX, (REAL)P.albumY, (REAL)P.textW, P.albumSize + 6.0f);
-            gfx.DrawString(snap.album.c_str(), -1, &albumFont, alrc, &sf, &alb);
+            gfx.DrawString(snap.album.c_str(), -1, albumFont, alrc, &sf, &alb);
         }
     }
 
@@ -1424,18 +1502,17 @@ static void DrawPopupPanel(HDC hdc) {
         double ratio = GetInterpolatedProgress(snap.posSec, snap.durSec, snap.posTick, snap.isPlaying);
         double curSec = snap.durSec * ratio;
 
-        FontFamily ff(g_TextFontName, nullptr);
-        Font tf(&ff, 10.5f, FontStyleRegular, UnitPixel);
+        Font* tf = g_Fonts.timePopup.get();
         SolidBrush timeBr(dimColor);
 
         wstring lt = FormatTime(curSec);
         StringFormat lsf; lsf.SetAlignment(StringAlignmentNear);
-        gfx.DrawString(lt.c_str(), -1, &tf, PointF((REAL)P.pad, (REAL)P.timeLabelY), &lsf, &timeBr);
+        gfx.DrawString(lt.c_str(), -1, tf, PointF((REAL)P.pad, (REAL)P.timeLabelY), &lsf, &timeBr);
 
         wstring rt = FormatTime(snap.durSec);
         StringFormat rsf; rsf.SetAlignment(StringAlignmentFar);
         RectF rrc(0.0f, (REAL)P.timeLabelY, (REAL)(g_PopupW - P.pad), 16.0f);
-        gfx.DrawString(rt.c_str(), -1, &tf, rrc, &rsf, &timeBr);
+        gfx.DrawString(rt.c_str(), -1, tf, rrc, &rsf, &timeBr);
 
         int tr = P.progH;
         GraphicsPath tp; AddRoundedRect(tp, P.progX, P.progY, P.progW, P.progH, tr);
@@ -1457,9 +1534,8 @@ static void DrawPopupPanel(HDC hdc) {
 
     // ── 4. Controls Row ──────────────────────────────────────────────────────
     {
-        FontFamily iconFam(g_IconFontName, nullptr);
-        Font iconFont(&iconFam, P.iconSize, FontStyleRegular, UnitPixel);
-        Font playFont(&iconFam, P.playIconSize, FontStyleRegular, UnitPixel);
+        Font* iconFont = g_Fonts.iconPopup.get();
+        Font* playFont = g_Fonts.playPopup.get();
         SolidBrush normalBr(mainColor), accentBr(accentColor), dimBr(dimColor);
         SolidBrush hoverBg(Color(35, mainColor.GetRed(), mainColor.GetGreen(), mainColor.GetBlue()));
         StringFormat sf; sf.SetAlignment(StringAlignmentCenter); sf.SetLineAlignment(StringAlignmentCenter);
@@ -1475,14 +1551,14 @@ static void DrawPopupPanel(HDC hdc) {
             gfx.DrawString(icon, -1, f, rc, &sf, br);
         };
 
-        drawBtn(P.btnShuffleX, P.btnCenterY, P.btnRadius, ICON_SHUFFLE, PHIT_SHUFFLE, &iconFont,
+        drawBtn(P.btnShuffleX, P.btnCenterY, P.btnRadius, ICON_SHUFFLE, PHIT_SHUFFLE, iconFont,
                 snap.shuffleActive, !snap.shuffleAvail);
-        drawBtn(P.btnPrevX, P.btnCenterY, P.btnRadius, ICON_PREVIOUS, PHIT_PREV, &iconFont);
+        drawBtn(P.btnPrevX, P.btnCenterY, P.btnRadius, ICON_PREVIOUS, PHIT_PREV, iconFont);
         drawBtn(P.btnPlayX, P.btnCenterY, P.playRadius, snap.isPlaying ? ICON_PAUSE : ICON_PLAY,
-                PHIT_PLAYPAUSE, &playFont, false, false, true);
-        drawBtn(P.btnNextX, P.btnCenterY, P.btnRadius, ICON_NEXT, PHIT_NEXT, &iconFont);
+                PHIT_PLAYPAUSE, playFont, false, false, true);
+        drawBtn(P.btnNextX, P.btnCenterY, P.btnRadius, ICON_NEXT, PHIT_NEXT, iconFont);
         const wchar_t* ri = (snap.repeatMode == 2) ? ICON_REPEAT_ONE : ICON_REPEAT_ALL;
-        drawBtn(P.btnRepeatX, P.btnCenterY, P.btnRadius, ri, PHIT_REPEAT, &iconFont,
+        drawBtn(P.btnRepeatX, P.btnCenterY, P.btnRadius, ri, PHIT_REPEAT, iconFont,
                 snap.repeatMode > 0, !snap.repeatAvail);
     }
 }
@@ -1596,6 +1672,11 @@ static LRESULT CALLBACK PopupWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         UpdateAppearance(hwnd);
         InvalidateRect(hwnd, NULL, TRUE);
         return 0;
+    case WM_DWMCOLORIZATIONCOLORCHANGED:
+        g_Theme.Refresh();
+        UpdateAppearance(hwnd);
+        InvalidateRect(hwnd, NULL, TRUE);
+        return 0;
     case WM_MOUSEMOVE: {
         PopupHitTarget nh = HitTestPopup(LOWORD(lParam), HIWORD(lParam));
         if (nh != g_PopupHover) { g_PopupHover = nh; InvalidateRect(hwnd, NULL, FALSE); }
@@ -1669,7 +1750,7 @@ static LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     case WM_CREATE:
         UpdateAppearance(hwnd);
         SetTimer(hwnd, IDT_POLL_MEDIA, 1000, NULL);
-        SetTimer(hwnd, IDT_ANIMATION, 16, NULL);
+        SetTimer(hwnd, IDT_ANIMATION, 33, NULL);
         RegisterTaskbarHook(hwnd);
         return 0;
     case WM_ERASEBKGND: return 1;
@@ -1685,9 +1766,15 @@ static LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         HidePopup();
         ComputeLayout();
         ComputePopupLayout();
+        g_Theme.Refresh();
         UpdateAppearance(hwnd);
         if (g_hPopupWindow) { UpdateAppearance(g_hPopupWindow); InvalidateRect(g_hPopupWindow, NULL, TRUE); }
-        g_ScrollOffset = 0; g_ScrollWait = 188;
+        g_ScrollOffset = 0; g_ScrollWait = 94;
+        InvalidateRect(hwnd, NULL, TRUE);
+        return 0;
+    case WM_DWMCOLORIZATIONCOLORCHANGED:
+        g_Theme.Refresh();
+        UpdateAppearance(hwnd);
         InvalidateRect(hwnd, NULL, TRUE);
         return 0;
     case WM_TIMER:
@@ -1724,7 +1811,7 @@ static LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     g_ScrollOffset += g_Settings.scrollSpeed;
                     if (g_ScrollOffset > g_TextWidth + 50) {
                         g_ScrollOffset = 0;
-                        g_ScrollWait = 188;
+                        g_ScrollWait = 94;
                     }
                     needRedraw = true;
                 }
@@ -1738,6 +1825,15 @@ static LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             // Redraw when playing, OR when we have a valid duration (covers
             // pause: bar should still reflect the paused position).
             if (g_Settings.showProgressBar && (playing || haveDur)) needRedraw = true;
+            // [PERF] Only redraw if the progress bar will visibly move or the
+            //        title is scrolling. A 3-minute track advances ~1 pixel every
+            //        500 ms on a ~300 px bar; redrawing every 33 ms is wasteful.
+            static ULONGLONG lastProgressRedraw = 0;
+            if (needRedraw && !g_IsScrolling) {
+                ULONGLONG now = GetTickCount64();
+                if (now - lastProgressRedraw < 250) needRedraw = false;
+                else lastProgressRedraw = now;
+            }
             if (needRedraw) InvalidateRect(hwnd, NULL, FALSE);
             if (g_PopupVisible && g_hPopupWindow && playing)
                 InvalidateRect(g_hPopupWindow, NULL, FALSE);
@@ -1746,7 +1842,7 @@ static LRESULT CALLBACK MediaWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     case WM_APP + 11: {   // [FIX] media state updated by polling thread
         if (g_ResetScrollRequested.exchange(false)) {
             g_ScrollOffset = 0;
-            g_ScrollWait = 188;
+            g_ScrollWait = 94;
         }
         InvalidateRect(hwnd, NULL, FALSE);
         if (g_PopupVisible && g_hPopupWindow) InvalidateRect(g_hPopupWindow, NULL, FALSE);
@@ -1860,6 +1956,7 @@ static void MediaThread() {
     GdiplusStartupInput gdipIn; ULONG_PTR gdipTok;
     GdiplusStartup(&gdipTok, &gdipIn, NULL);
     DetectFonts(); ComputeLayout(); ComputePopupLayout();
+    g_Theme.Refresh();
 
     HINSTANCE hInst = GetModuleHandle(NULL);
     WNDCLASS wc = {}; wc.lpfnWndProc = MediaWndProc; wc.hInstance = hInst;
@@ -1960,6 +2057,7 @@ void WhTool_ModUninit() {
 
 void WhTool_ModSettingsChanged() {
     LoadSettings(); ComputeLayout(); ComputePopupLayout();
+    g_Theme.Refresh();
     if (g_hMediaWindow) {
         PostMessage(g_hMediaWindow, WM_TIMER, IDT_POLL_MEDIA, 0);
         PostMessage(g_hMediaWindow, WM_SETTINGCHANGE, 0, 0);
