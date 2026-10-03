@@ -4,7 +4,7 @@
 // @description     Brings back the Windows 2000 WebView - the pane left of the file list with the icon and name of the folder or the selected item, a divider line, a description and See also links
 // @name:ru         Панель WebView как в Windows 2000
 // @description:ru  Возвращает панель WebView из Windows 2000 - панель слева от списка файлов со значком и именем папки или выбранного объекта, линией-разделителем, описанием и ссылками «Перейти к»
-// @version         2.15
+// @version         2.16
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         explorer.exe
@@ -872,6 +872,8 @@ static PaneColor ThemedOrCustomColor(PCWSTR sourceSetting,
     return ParseColor(custom.get(), customFallback);
 }
 
+static bool CanSyncSpacer();
+
 static void LoadSettings() {
     g_settings.paneWidth = Wh_GetIntSetting(L"paneWidth");
     if (g_settings.paneWidth < 40) {
@@ -1017,7 +1019,8 @@ static void LoadSettings() {
     g_settings.spacerXml =
         L"<Element id=\"atom(ClassicWebViewPane)\" layoutpos=\"" +
         std::wstring(g_settings.onRight ? L"right" : L"left") + L"\" width=\"" +
-        Px(g_settings.paneWidth) + L"\" background=\"" + g_settings.background.dui +
+        Px(CanSyncSpacer() ? 0 : g_settings.paneWidth) +
+        L"\" background=\"" + g_settings.background.dui +
         L"\"/>";
 }
 
@@ -1124,7 +1127,9 @@ struct Pane {
     int splitterGapDpi = 0;
 
     // The spacer was last seen collapsed, i.e. the pane has given way.
-    bool spacerCollapsed = false;
+    bool spacerCollapsed = true;
+    // No pane is shown until its spacer has been found and synchronized.
+    bool spacerReady = false;
     // Set while OnSyncSpacer resizes the spacer.
     bool spacerTransition = false;
     // How many more times the spacer is looked for before giving up.
@@ -2532,8 +2537,10 @@ static COLORREF MixColor(COLORREF first, COLORREF second, int firstWeight) {
                    255);
 }
 
-// The classic disk page and the Windows 2000 WebView built the chart from a
-// top ellipse plus a darker copy shifted down to form the visible side wall.
+// The classic disk page draws the wall as a region below the top ellipse.
+// A second Pie would put its radial edges on the wall and leave gaps at the
+// sides. Only the front half has a visible wall, split vertically at the
+// sector's endpoint when the used space exceeds one half.
 static void DrawDrivePie(HDC dc,
                          RECT bounds,
                          unsigned usedPer1000,
@@ -2555,44 +2562,56 @@ static void DrawDrivePie(HDC dc,
     int depth = std::max(2, height / 6);
     RECT top = bounds;
     top.bottom -= depth;
-    int cx = (top.left + top.right) / 2;
-    int cy = (top.top + top.bottom) / 2;
     int rx = (top.right - top.left) / 2;
     int ry = (top.bottom - top.top) / 2;
+    top.right = top.left + 2 * rx;
+    top.bottom = top.top + 2 * ry;
+    int cx = top.left + rx;
+    int cy = top.top + ry;
 
     usedPer1000 = std::min(usedPer1000, 1000u);
     double freeFraction = (1000.0 - usedPer1000) / 1000.0;
     constexpr double pi = 3.14159265358979323846;
     double angle = pi + freeFraction * 2.0 * pi;
-    POINT start = {top.left, cy};
-    POINT end = {cx + (int)(rx * cos(angle)),
-                 cy - (int)(ry * sin(angle))};
+    POINT end = {cx + (int)std::lround(rx * cos(angle)),
+                 cy - (int)std::lround(ry * sin(angle))};
+    // Pie accepts rays outside the ellipse. Keep their direction precise so
+    // a tiny sector cannot round back to the starting ray and fill the pie.
+    constexpr int rayLength = 10000;
+    POINT ray = {cx + (int)std::lround(rx * rayLength * cos(angle)),
+                 cy - (int)std::lround(ry * rayLength * sin(angle))};
 
     COLORREF frameColor = GetSysColor(COLOR_WINDOWFRAME);
     COLORREF usedShadow = MixColor(usedColor, RGB(0, 0, 0), 128);
     COLORREF freeShadow = MixColor(freeColor, RGB(0, 0, 0), 128);
     HPEN pen = CreatePen(PS_SOLID, 1, frameColor);
     HPEN oldPen = (HPEN)SelectObject(dc, pen);
+    int oldDirection = SetArcDirection(dc, AD_COUNTERCLOCKWISE);
 
-    RECT lower = top;
-    OffsetRect(&lower, 0, depth);
-    HBRUSH brush = CreateSolidBrush(usedShadow);
-    HBRUSH oldBrush = (HBRUSH)SelectObject(dc, brush);
-    Ellipse(dc, lower.left, lower.top, lower.right, lower.bottom);
-    SelectObject(dc, oldBrush);
+    HRGN ellipse = CreateEllipticRgnIndirect(&top);
+    OffsetRgn(ellipse, 0, depth);
+    HRGN wall = CreateRectRgn(top.left, cy, top.right, cy + depth);
+    CombineRgn(wall, wall, ellipse, RGN_OR);
+    OffsetRgn(ellipse, 0, -depth);
+    CombineRgn(wall, wall, ellipse, RGN_DIFF);
+
+    HBRUSH brush = CreateSolidBrush(usedPer1000 == 1000 ? usedShadow : freeShadow);
+    FillRgn(dc, wall, brush);
     DeleteObject(brush);
 
-    if (usedPer1000 > 0 && usedPer1000 < 1000) {
-        brush = CreateSolidBrush(freeShadow);
-        oldBrush = (HBRUSH)SelectObject(dc, brush);
-        Pie(dc, lower.left, lower.top, lower.right, lower.bottom,
-            start.x, start.y + depth, end.x, end.y + depth);
-        SelectObject(dc, oldBrush);
+    if (usedPer1000 > 500 && usedPer1000 < 1000) {
+        HRGN usedWall = CreateRectRgn(end.x, cy, top.right, top.bottom + depth);
+        CombineRgn(usedWall, wall, usedWall, RGN_AND);
+        brush = CreateSolidBrush(usedShadow);
+        FillRgn(dc, usedWall, brush);
         DeleteObject(brush);
+        DeleteObject(usedWall);
     }
+    DeleteObject(wall);
+    DeleteObject(ellipse);
 
-    brush = CreateSolidBrush(usedColor);
-    oldBrush = (HBRUSH)SelectObject(dc, brush);
+    brush = CreateSolidBrush(usedPer1000 == 0 ? freeColor : usedColor);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(dc, brush);
     Ellipse(dc, top.left, top.top, top.right, top.bottom);
     SelectObject(dc, oldBrush);
     DeleteObject(brush);
@@ -2600,25 +2619,27 @@ static void DrawDrivePie(HDC dc,
     if (usedPer1000 > 0 && usedPer1000 < 1000) {
         brush = CreateSolidBrush(freeColor);
         oldBrush = (HBRUSH)SelectObject(dc, brush);
-        Pie(dc, top.left, top.top, top.right, top.bottom, start.x, start.y,
-            end.x, end.y);
+        Pie(dc, top.left, top.top, top.right, top.bottom,
+            cx - rx * rayLength, cy,
+            ray.x, ray.y);
         SelectObject(dc, oldBrush);
         DeleteObject(brush);
 
-        if (end.y >= cy) {
+        if (usedPer1000 > 500) {
             MoveToEx(dc, end.x, end.y, nullptr);
             LineTo(dc, end.x, end.y + depth);
         }
     }
 
-    Arc(dc, lower.left, lower.top, lower.right, lower.bottom,
-        lower.left, cy + depth, lower.right, cy + depth);
+    Arc(dc, top.left, top.top + depth, top.right - 1, top.bottom + depth - 1,
+        top.left, cy + depth, top.right, cy + depth - 1);
     MoveToEx(dc, top.left, cy, nullptr);
     LineTo(dc, top.left, cy + depth);
     MoveToEx(dc, top.right - 1, cy, nullptr);
     LineTo(dc, top.right - 1, cy + depth);
 
     SelectObject(dc, oldPen);
+    SetArcDirection(dc, oldDirection);
     DeleteObject(pen);
 }
 
@@ -2979,6 +3000,10 @@ struct DuiApi {
 
 DuiApi g_dui;
 
+static bool CanSyncSpacer() {
+    return g_dui.ok;
+}
+
 // The host whose spacer OnSyncSpacer is resizing right now, on this thread,
 // and the one window in it that is let paint meanwhile, see RepaintFileList.
 thread_local HWND g_spacerTransitionHost;
@@ -3040,8 +3065,10 @@ static bool PaneFits(Pane* pane, HWND viewWindow) {
     }
 
     RECT hostClient;
-    if (!GetClientRect(pane->host, &hostClient)) {
-        return true;
+    if (!GetClientRect(pane->host, &hostClient) ||
+        hostClient.right <= hostClient.left ||
+        hostClient.bottom <= hostClient.top) {
+        return false;
     }
 
     UINT dpi = GetDpiForWindow(pane->host);
@@ -3103,7 +3130,11 @@ static void SyncSpacer(Pane* pane) {
     }
 
     if (GetWindowThreadProcessId(pane->hwnd, nullptr) == GetCurrentThreadId()) {
-        SetTimer(pane->hwnd, kSpacerTimer, USER_TIMER_MINIMUM, nullptr);
+        // A newly attached view starts with a collapsed spacer. Wait for a
+        // quiet layout interval before deciding how much room it has: its
+        // folder tree and the restored window size may still be changing.
+        SetTimer(pane->hwnd, kSpacerTimer,
+                 pane->spacerReady ? USER_TIMER_MINIMUM : 50, nullptr);
     } else {
         PostMessageW(pane->hwnd, WM_PANE_SPACER, 0, 0);
     }
@@ -3159,20 +3190,14 @@ static void OnSyncSpacer(Pane* pane) {
     void* spacer = FindSpacer(pane->host);
     if (!spacer) {
         // Right after a window opens, the view's layout is not always in the
-        // element tree of the host yet, and nothing moves once the window has
-        // settled to ask again: so look again in a moment. Until then the
-        // spacer is at the full width it was created with. Only if it never
-        // turns up the pane just hides where it would not fit (see LayOutPane).
+        // element tree yet. Keep the pane hidden while looking for it: an
+        // unconfirmed gap can belong to a folder tree that is still loading.
+        pane->spacerReady = false;
+        pane->spacerCollapsed = true;
+        ShowWindow(pane->hwnd, SW_HIDE);
         if (pane->spacerRetries > 0) {
             pane->spacerRetries--;
             SetTimer(pane->hwnd, kSpacerTimer, 150, nullptr);
-            if (pane->spacerCollapsed) {
-                pane->spacerCollapsed = false;
-                LayOutPane(pane->hwnd);
-            }
-        } else if (!pane->spacerCollapsed) {
-            pane->spacerCollapsed = true;
-            LayOutPane(pane->hwnd);
         }
         return;
     }
@@ -3191,13 +3216,14 @@ static void OnSyncSpacer(Pane* pane) {
         wanted = MulDiv(g_settings.paneWidth, dpi, 96);
     }
 
-    // The spacer of a view the window has navigated to starts out at its full
-    // width again, whatever the one before had.
+    // A new view starts collapsed, even when the preceding one was expanded.
     int current = g_dui.GetWidth(spacer);
     bool wasCollapsed = pane->spacerCollapsed;
+    bool wasReady = pane->spacerReady;
+    pane->spacerReady = true;
     pane->spacerCollapsed = current == 0;
     if (current == wanted) {
-        if (pane->spacerCollapsed != wasCollapsed) {
+        if (!wasReady || pane->spacerCollapsed != wasCollapsed) {
             LayOutPane(pane->hwnd);
         }
         return;
@@ -3214,12 +3240,19 @@ static void OnSyncSpacer(Pane* pane) {
 
     g_spacerTransitionHost = pane->host;
     pane->spacerTransition = true;
-    g_dui.SetWidth(spacer, wanted);
+    HRESULT hr = g_dui.SetWidth(spacer, wanted);
+    // SetWidth can run a nested layout pass. Recheck the resulting room
+    // before showing anything, including a tree created by that pass.
+    if (SUCCEEDED(hr) && wanted != 0 && !PaneFits(pane, viewWindow)) {
+        wanted = 0;
+        hr = g_dui.SetWidth(spacer, wanted);
+    }
     pane->spacerTransition = false;
     g_spacerTransitionHost = nullptr;
-    pane->spacerCollapsed = wanted == 0;
+    pane->spacerCollapsed = g_dui.GetWidth(spacer) == 0;
+    pane->spacerReady = SUCCEEDED(hr) && g_dui.GetWidth(spacer) == wanted;
 
-    if (wanted == 0) {
+    if (wanted == 0 || !pane->spacerReady) {
         // Hidden without repainting what it uncovers: that is the file list
         // now, which is repainted as a whole right below.
         SetWindowPos(pane->hwnd, nullptr, 0, 0, 0, 0,
@@ -3236,7 +3269,7 @@ static void OnSyncSpacer(Pane* pane) {
         RepaintFileList(viewWindow);
     }
 
-    if (wanted != 0) {
+    if (wanted != 0 && pane->spacerReady) {
         RedrawWindow(pane->hwnd, nullptr, nullptr,
                      RDW_INVALIDATE | RDW_UPDATENOW);
     }
@@ -3693,6 +3726,11 @@ static void LayOutPane(HWND paneWindow) {
 
     SyncSpacer(pane);
 
+    if (g_dui.ok && !pane->spacerReady) {
+        ShowWindow(paneWindow, SW_HIDE);
+        return;
+    }
+
     // Until the spacer has followed, the pane stays as it is: shown where it
     // was when it is about to give way - it is hidden only once the file list
     // has taken its place - and hidden when it is about to come back, until
@@ -3829,6 +3867,14 @@ static void AttachToDefViewOnItsThread(HWND defView) {
         return;
     }
 
+    if (pane->defView != defView) {
+        // Navigation can reuse the host and pane with a new, not yet laid
+        // out view. Its spacer must be checked before reusing a visible pane.
+        pane->spacerReady = false;
+        pane->spacerCollapsed = true;
+        pane->spacerRetries = kSpacerRetries;
+        ShowWindow(paneWindow, SW_HIDE);
+    }
     pane->host = host;
     pane->defView = defView;
     SetPropW(defView, kPaneProperty, paneWindow);
@@ -3936,8 +3982,6 @@ static void ClosePanes() {
 HMODULE g_dui70;
 
 BOOL Wh_ModInit() {
-    LoadSettings();
-
     g_adoptMessage = RegisterWindowMessageW(L"ClassicWebViewPane_Adopt");
 
     g_dui70 = LoadLibraryExW(L"dui70.dll", nullptr,
@@ -3948,6 +3992,7 @@ BOOL Wh_ModInit() {
     }
 
     LoadDuiApi(g_dui70);
+    LoadSettings();
 
     // public: long __cdecl DirectUI::DUIXmlParser::SetXML(unsigned short const *,
     //     struct HINSTANCE__ *, struct HINSTANCE__ *)
