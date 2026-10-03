@@ -18580,6 +18580,7 @@ namespace wut  = winrt::Windows::UI::Text;
 
 static HWND s_hwnd = nullptr;
 static HWND s_islandHwnd = nullptr;
+static std::shared_ptr<wuxc::ContentDialog> s_activeColorDialog;
 [[clang::no_destroy]] static wuxh::DesktopWindowXamlSource s_xamlSource{ nullptr };
 [[clang::no_destroy]] static winrt::com_ptr<IDesktopWindowXamlSourceNative2> s_native2;
 [[clang::no_destroy]] static wuxc::StackPanel s_contentPanel{ nullptr };
@@ -19159,8 +19160,9 @@ void AddColorRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
             auto xamlRoot = swatch.XamlRoot();
             if (!xamlRoot) return;
 
-            if (g_colorDialogOpen.load() && g_openColorPickers.load() == 0) {
+            if (g_openColorPickers.load() <= 0) {
                 g_colorDialogOpen = false;
+                g_openColorPickers.store(0);
             }
             if (g_colorDialogOpen.exchange(true)) return;
 
@@ -19234,6 +19236,7 @@ void AddColorRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
             card.Child(cardContent);
 
             auto dlg = std::make_shared<wuxc::ContentDialog>();
+            s_activeColorDialog = dlg;
             dlg->XamlRoot(xamlRoot);
             dlg->RequestedTheme(wux::ElementTheme::Dark);
             dlg->Content(card);
@@ -19294,16 +19297,21 @@ void AddColorRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
             } catch (...) {}
 
             auto committed = std::make_shared<bool>(false);
-            closeBtn.Click([dlg](auto&&, auto&&) {
-                try { dlg->Hide(); } catch (...) {}
+            std::weak_ptr<wuxc::ContentDialog> weakDlg = dlg;
+            closeBtn.Click([weakDlg](auto&&, auto&&) {
+                if (auto d = weakDlg.lock()) {
+                    try { d->Hide(); } catch (...) {}
+                }
             });
-            doneBtn.Click([dlg, committed](auto&&, auto&&) {
+            doneBtn.Click([weakDlg, committed](auto&&, auto&&) {
                 *committed = true;
-                try { dlg->Hide(); } catch (...) {}
+                if (auto d = weakDlg.lock()) {
+                    try { d->Hide(); } catch (...) {}
+                }
             });
 
             g_openColorPickers.fetch_add(1);
-            dlg->Closed([dlg, committed, original, commitColor](
+            dlg->Closed([committed, original, commitColor](
                     wuxc::ContentDialog const&,
                     wuxc::ContentDialogClosedEventArgs const&) {
                 if (!*committed) {
@@ -19314,10 +19322,11 @@ void AddColorRow(wuxc::StackPanel& panel, const std::wstring& label, PCWSTR key,
                     ScheduleReload();
                 }
                 g_colorDialogOpen = false;
+                s_activeColorDialog.reset();
             });
 
             auto asyncOp = dlg->ShowAsync();
-            asyncOp.Completed([dlg](auto&&, auto&& status) {
+            asyncOp.Completed([](auto&&, auto&& status) {
                 if (status != winrt::Windows::Foundation::AsyncStatus::Completed) {
                     g_openColorPickers.fetch_sub(1);
                     g_colorDialogOpen = false;
@@ -20984,6 +20993,7 @@ void DestroySettingsWindowNow() {
         s_applyTimer.Stop();
         s_applyTimer = nullptr;
     }
+    s_activeColorDialog.reset();
     if (s_hwnd && IsWindow(s_hwnd)) {
         DestroyWindow(s_hwnd);
     }
@@ -24383,13 +24393,34 @@ void EnsureTopBarPopupShown() {
         // Poll slowly — just enough to notice if XAML ever destroys the
         // popup (e.g. after a display mode change). The old 150 / 200 ms
         // interval existed only to spam ShowAt, which we no longer do.
+        bool popupStable = false;
+        {
+            RECT wantR = GetBarMonitorRect();
+            RECT actualR{};
+            if (GetWindowRect(g_topBarPopupHwnd, &actualR)) {
+                popupStable = (actualR.left == wantR.left &&
+                               actualR.top == wantR.top &&
+                               (actualR.right - actualR.left) == (wantR.right - wantR.left) &&
+                               (actualR.bottom - actualR.top) == g_barHeightPx &&
+                               IsWindowVisible(g_topBarPopupHwnd));
+                if (popupStable) {
+                    BOOL cloakedNow = FALSE;
+                    if (SUCCEEDED(DwmGetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAKED,
+                                                        &cloakedNow, sizeof(cloakedNow))) && cloakedNow) {
+                        popupStable = false;
+                    }
+                }
+            }
+        }
         if (!g_topBarPopupRetryTimer) {
             g_topBarPopupRetryTimer = DispatcherTimer();
             g_topBarPopupRetryTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
                 try { EnsureTopBarPopupShown(); } catch (...) {}
             });
         }
-        g_topBarPopupRetryTimer.Interval(std::chrono::milliseconds(500));
+        g_topBarPopupRetryTimer.Interval(popupStable
+            ? std::chrono::seconds(5)
+            : std::chrono::milliseconds(500));
         g_topBarPopupRetryTimer.Stop();
         g_topBarPopupRetryTimer.Start();
         return;
