@@ -1987,6 +1987,17 @@ static bool SeenRecentContentAndRemember(const std::array<BYTE, 32>& hash,
     return false;
 }
 
+// True when the path is directly inside the folder being watched.
+static bool IsDirectChildOf(const std::wstring& path, const std::wstring& folder) {
+    std::wstring parent = folder;
+    if (parent.size() > 1 && (parent.back() == L'\\' || parent.back() == L'/')) {
+        parent.pop_back();
+    }
+    auto split = path.find_last_of(L"\\/");
+    return split != std::wstring::npos &&
+           _wcsicmp(path.substr(0, split).c_str(), parent.c_str()) == 0;
+}
+
 class LockedCapture {
 public:
     HANDLE file = INVALID_HANDLE_VALUE;
@@ -2010,14 +2021,7 @@ public:
               bool shareDelete = true) {
         Close();
         auto split = path.find_last_of(L"\\/");
-        std::wstring comparisonParent = parent;
-        if (comparisonParent.size() > 1 &&
-            (comparisonParent.back() == L'\\' ||
-             comparisonParent.back() == L'/')) {
-            comparisonParent.pop_back();
-        }
-        if (split == std::wstring::npos ||
-            _wcsicmp(path.substr(0, split).c_str(), comparisonParent.c_str()) != 0 ||
+        if (!IsDirectChildOf(path, parent) ||
             path.find(L':', split) != std::wstring::npos) return false;
         folder = CreateFileW(parent.c_str(), FILE_READ_ATTRIBUTES,
                              FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
@@ -2077,18 +2081,6 @@ static AuditOutcome CleanupDuplicate(const std::wstring& path,
 // Defined with the worker below, which is also where it is normally called.
 static void SyncToastRegistration(bool wantPopup, bool unloading = false);
 
-// Same parent test LockedCapture::Open applies, for a path that has to be a plain
-// child of the folder being watched.
-static bool IsDirectChildOf(const std::wstring& path, const std::wstring& folder) {
-    std::wstring parent = folder;
-    if (parent.size() > 1 && (parent.back() == L'\\' || parent.back() == L'/')) {
-        parent.pop_back();
-    }
-    auto split = path.find_last_of(L"\\/");
-    return split != std::wstring::npos &&
-           _wcsicmp(path.substr(0, split).c_str(), parent.c_str()) == 0;
-}
-
 static void ProcessOne(std::wstring path) {
     ULONGLONG generation;
     Settings s = SnapshotSettings(&generation);
@@ -2106,14 +2098,12 @@ static void ProcessOne(std::wstring path) {
     if (g_generation.load() != generation) {
         // Nothing has been acted on yet, so the new settings simply apply.
         s = SnapshotSettings(&generation);
-        // The worker only syncs the toast registration when it wakes and between
-        // files, so a popup switched on during the wait would still get the dialog.
-        SyncToastRegistration(s.popup);
-        // A different folder is now being watched, and this file is not in it.
-        if (!IsDirectChildOf(path, s.folder)) {
-            AuditResult(s, AuditOutcome::Skipped, L"watched folder changed", path);
-            return;
-        }
+    }
+    // The file may come from a folder that is no longer watched, whether settings
+    // changed during the wait above or before it was taken off the queue.
+    if (!IsDirectChildOf(path, s.folder)) {
+        AuditResult(s, AuditOutcome::Skipped, L"watched folder changed", path);
+        return;
     }
     if (s.logDetails) {
         Wh_Log(L"stable in %lu ms: %s", GetTickCount() - t0, path.c_str());
@@ -2131,6 +2121,9 @@ static void ProcessOne(std::wstring path) {
         }
     }
 
+    // The popup setting decides whether the toast is registered, so follow the
+    // exact settings this file is about to be handled with.
+    SyncToastRegistration(s.popup);
     DWORD t1 = GetTickCount();
     int action = s.popup ? ChooseAction(path, s, generation) : ACTION_AUTO;
     if (s.logDetails) {
@@ -2258,8 +2251,9 @@ static void ProcessOne(std::wstring path) {
                     // check and is locked against writes. If it still hashes to
                     // what was recorded, the earlier copy is what changed, so drop
                     // its stale entry and remember this one in its place.
-                    std::array<BYTE, 32> current;
-                    if (HashFile(again.file, current) && current == digest) {
+                    std::array<BYTE, 32> incomingDigest;
+                    if (HashFile(again.file, incomingDigest) &&
+                        incomingDigest == digest) {
                         EnterCriticalSection(&g_lock);
                         if (generation == g_generation.load()) {
                             std::erase_if(g_recentContent, [&](const RecentContent& e) {
@@ -2526,9 +2520,6 @@ static DWORD WINAPI WorkerThread(LPVOID) {
         }
         std::wstring path;
         while (!WaitStop(0) && DequeueOne(path)) {
-            // Settings can change between files, and the popup setting decides
-            // whether the toast is registered.
-            SyncToastRegistration(SnapshotSettings().popup);
             ProcessOne(path);
             ReleaseInflight(path);
         }
