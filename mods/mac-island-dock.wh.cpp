@@ -2,9 +2,9 @@
 // @id              mac-island-dock
 // @name            Mac Island & Dock
 // @name:pt-BR      Ilha e Dock estilo Mac
-// @description     An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and optionally a macOS-like dock instead of the taskbar
-// @description:pt-BR Uma ilha no topo da tela como a barra de menus do macOS e a Dynamic Island do iPhone (relógio, central de controle, notificações, mídia, ícones da bandeja) e, se quiser, uma dock como a do macOS no lugar da barra de tarefas
-// @version         0.41.3
+// @description     An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)
+// @description:pt-BR Uma ilha no topo da tela como a barra de menus do macOS e a Dynamic Island do iPhone (relógio, central de controle, notificações, mídia, ícones da bandeja) e uma dock como a do macOS no lugar da barra de tarefas (ou a barra do Windows, transparente ou como ela é)
+// @version         0.42.3
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
@@ -71,7 +71,7 @@ the taskbar.
 * **New notifications in the pill**: the pill opens with the app, the title
   and the text for a few seconds, like the iPhone's Dynamic Island (not with
   "Do not disturb"), with the sender's picture when the notification has one
-  (like a contact's photo). Messaging apps that offer a reply box in their
+  on this computer (like a contact's photo). Messaging apps that offer a reply box in their
   Windows notifications (like WhatsApp) can be answered right there.
 * **Notifications** can be cleared from the island's list (all, or one by
   one), and "Do not disturb" can be switched there.
@@ -189,8 +189,11 @@ usable), or as it is (all of it, or only its apps).
     the next notification.
   * Replies go to the app the way Windows sends them from its own banners:
     through the notification handler the app registered.
-  * A notification's picture that's on the web (like WhatsApp's contact
-    photos) is downloaded over https to show it, as Windows does.
+  * The mod only goes online if "Download pictures from the web" is turned
+    on in the gear (it's off by default): then a notification's picture
+    that's on the web (like WhatsApp's contact photos) is downloaded over
+    https from the address the app put in it, like Windows does, and only
+    for apps allowed to go online. Otherwise the app's icon is shown.
 * **Similar mods**: [Dynamic Island for
   Windows](https://windhawk.net/mods/dynamic-island-for-windows) is a pill
   overlay that reacts to media, downloads and the clipboard; [Island Media
@@ -269,7 +272,7 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
 * **Notificações novas na pílula**: a pílula se abre com o app, o título e o
   texto por alguns segundos, como a Dynamic Island do iPhone (não com o "Não
   incomodar" ligado), com a foto de quem mandou quando a notificação tem uma
-  (como a foto de um contato). Apps de mensagem que oferecem resposta nas
+  neste computador (como a foto de um contato). Apps de mensagem que oferecem resposta nas
   notificações do Windows (como o WhatsApp) podem ser respondidos ali mesmo.
 * **Notificações** podem ser limpas na lista da ilha (todas, ou uma por uma),
   e o "Não incomodar" pode ser ligado e desligado ali.
@@ -388,9 +391,11 @@ apps, então o resto da parte de baixo da tela continua clicável), ou como ela
     novo na próxima notificação.
   * As respostas chegam ao app do jeito que o Windows as manda pelos avisos
     dele: pelo receptor de notificações que o app registrou.
-  * A imagem de uma notificação que está na internet (como as fotos dos
-    contatos do WhatsApp) é baixada por https para ser mostrada, como o
-    Windows faz.
+  * O mod só acessa a internet se "Baixar fotos da internet" for ligado na
+    engrenagem (vem desligado): aí a imagem de uma notificação que está na
+    internet (como as fotos dos contatos do WhatsApp) é baixada por https do
+    endereço que o app colocou nela, como o Windows faz, e só para apps com
+    permissão de internet. Senão, aparece o ícone do app.
 * **Mods parecidos**: o [Dynamic Island for
   Windows](https://windhawk.net/mods/dynamic-island-for-windows) é uma pílula
   que reage a mídia, downloads e área de transferência; o [Island Media
@@ -645,6 +650,9 @@ struct {
     bool islandBanner;
     bool islandBannerMinimized;
     bool islandHideWindowsBanners;
+    // Pictures of notifications that are on the web (like WhatsApp's contact
+    // photos) are downloaded: off unless chosen, since it goes online.
+    bool islandWebPictures;
     // The island's clock: seconds (-1 like the Windows clock), the day of the
     // week, the day and month, the year.
     int clockSeconds;
@@ -915,6 +923,14 @@ bool SendIpc(HWND to, HWND from, IpcKind kind, const void* data, DWORD size) {
                               kIpcTimeoutMs, &result) != 0;
 }
 
+// Whether a WM_COPYDATA came from the other part of the mod: the island's
+// window (in explorer), or the taskbar (in the island's process).
+bool IsIpcSender(HWND sender, PCWSTR className) {
+    WCHAR name[64];
+    return sender && GetClassName(sender, name, ARRAYSIZE(name)) &&
+           wcscmp(name, className) == 0;
+}
+
 HWND FindIslandWnd() {
     return FindWindow(kIslandClassName, nullptr);
 }
@@ -1159,10 +1175,11 @@ struct StyledProperty {
     // DependencyProperty::UnsetValue() if it had no local value.
     winrt::Windows::Foundation::IInspectable original{nullptr};
 };
-std::vector<StyledProperty> g_styledProperties;
-
-// The main taskbar's system tray (logged, for diagnostics).
-winrt::weak_ref<FrameworkElement> g_trayElement;
+// The globals below hold XAML objects. They're released on the taskbar's
+// thread when the mod unloads (see ApplySettingsFromTaskbarThread), and never
+// destroyed at process exit, when XAML is already gone (Windhawk wiki: "Global
+// objects and process shutdown").
+[[clang::no_destroy]] std::vector<StyledProperty> g_styledProperties;
 
 // Keeps the dock's width automatic, because the taskbar sets the frame's width
 // itself.
@@ -1170,7 +1187,7 @@ struct WidthWatch {
     winrt::weak_ref<FrameworkElement> element;
     int64_t token;
 };
-std::vector<WidthWatch> g_widthWatches;
+[[clang::no_destroy]] std::vector<WidthWatch> g_widthWatches;
 
 void SetStyled(DependencyObject const& element,
                DependencyProperty const& property,
@@ -1192,7 +1209,6 @@ void ResetDockBehavior();
 
 void ClearStyles() {
     ResetDockBehavior();
-    g_trayElement = nullptr;
 
     for (const auto& watch : g_widthWatches) {
         if (auto element = watch.element.get()) {
@@ -1369,14 +1385,14 @@ struct DockIcon {
     std::vector<Dot> dots;
 };
 
-std::vector<DockIcon> g_dockIcons;
+[[clang::no_destroy]] std::vector<DockIcon> g_dockIcons;
 HWND g_dockWnd;
-winrt::weak_ref<FrameworkElement> g_dockFrame;
-winrt::weak_ref<FrameworkElement> g_dockRepeater;
+[[clang::no_destroy]] winrt::weak_ref<FrameworkElement> g_dockFrame;
+[[clang::no_destroy]] winrt::weak_ref<FrameworkElement> g_dockRepeater;
 // The dock's visible background, which the icons are lined up with.
-winrt::weak_ref<FrameworkElement> g_dockBackground;
+[[clang::no_destroy]] winrt::weak_ref<FrameworkElement> g_dockBackground;
 // The transparent taskbar's shadow, and how strong it's shown.
-winrt::weak_ref<UIElement> g_shadowFill;
+[[clang::no_destroy]] winrt::weak_ref<UIElement> g_shadowFill;
 double g_shadowStrength = 0.6;
 // The transparent taskbar only takes the mouse around its apps: its window is
 // cut down to them (a window region), so clicks elsewhere reach the windows
@@ -1393,21 +1409,31 @@ std::atomic<int> g_appsAreaRight{0};
 constexpr double kAppsAreaMargin = 34;
 constexpr double kShadowMargin = 30;
 // The shadow's visual, drawn on its element.
-winrt::Windows::UI::Composition::SpriteVisual g_shadowVisual{nullptr};
+[[clang::no_destroy]] winrt::Windows::UI::Composition::SpriteVisual
+    g_shadowVisual{nullptr};
 int g_dockItemCount = -1;
 double g_dockSince;
 double g_lastRenderTime;
 
 // The boxed handler, kept to remove it again.
-winrt::Windows::Foundation::IInspectable g_pointerHandler{nullptr};
-winrt::Windows::Foundation::IInspectable g_pressedHandler{nullptr};
-winrt::weak_ref<FrameworkElement> g_pointerTarget;
-FrameworkElement::LayoutUpdated_revoker g_layoutRevoker;
-Media::CompositionTarget::Rendering_revoker g_renderingRevoker;
-DispatcherTimer g_badgeTimer{nullptr};
-std::vector<VisualStateGroup::CurrentStateChanged_revoker> g_stateRevokers;
-std::vector<FrameworkElement::SizeChanged_revoker> g_dotRevokers;
-std::vector<winrt::weak_ref<FrameworkElement>> g_watchedButtons;
+[[clang::no_destroy]] winrt::Windows::Foundation::IInspectable
+    g_pointerHandler{nullptr};
+[[clang::no_destroy]] winrt::Windows::Foundation::IInspectable
+    g_pressedHandler{nullptr};
+[[clang::no_destroy]] winrt::weak_ref<FrameworkElement> g_pointerTarget;
+[[clang::no_destroy]] FrameworkElement::LayoutUpdated_revoker g_layoutRevoker;
+[[clang::no_destroy]] Media::CompositionTarget::Rendering_revoker
+    g_renderingRevoker;
+[[clang::no_destroy]] DispatcherTimer g_badgeTimer{nullptr};
+// The whole dock shown for a notification (see ShowDockForNotification).
+[[clang::no_destroy]] DispatcherTimer g_notificationTimer{nullptr};
+[[clang::no_destroy]] std::vector<
+    VisualStateGroup::CurrentStateChanged_revoker>
+    g_stateRevokers;
+[[clang::no_destroy]] std::vector<FrameworkElement::SizeChanged_revoker>
+    g_dotRevokers;
+[[clang::no_destroy]] std::vector<winrt::weak_ref<FrameworkElement>>
+    g_watchedButtons;
 
 // Property callbacks on the notification badges, to remove them again.
 struct BadgeWatch {
@@ -1415,7 +1441,7 @@ struct BadgeWatch {
     DependencyProperty property{nullptr};
     int64_t token;
 };
-std::vector<BadgeWatch> g_badgeWatches;
+[[clang::no_destroy]] std::vector<BadgeWatch> g_badgeWatches;
 double g_lastBadgeScan;
 
 // Defined further down.
@@ -1629,29 +1655,34 @@ void ShowDockForNotification() {
     g_shownForNotification = true;
     SlideTo(g_dockWnd, shown, g_settings.showDuration, true);
 
-    DispatcherTimer timer;
-    timer.Interval(std::chrono::milliseconds(kNotificationShowMs));
-    timer.Tick([timer](winrt::Windows::Foundation::IInspectable const&,
-                       winrt::Windows::Foundation::IInspectable const&) {
-        if (!g_shownForNotification || g_trayShown || g_unloading ||
-            !g_dockWnd) {
+    if (g_notificationTimer) {
+        g_notificationTimer.Stop();
+    }
+    g_notificationTimer = DispatcherTimer();
+    g_notificationTimer.Interval(std::chrono::milliseconds(kNotificationShowMs));
+    g_notificationTimer.Tick(
+        [](winrt::Windows::Foundation::IInspectable const& sender,
+           winrt::Windows::Foundation::IInspectable const&) {
+            auto timer = sender.as<DispatcherTimer>();
+            if (!g_shownForNotification || g_trayShown || g_unloading ||
+                !g_dockWnd) {
+                timer.Stop();
+                g_shownForNotification = false;
+                return;
+            }
+            // Stays while the mouse is on it; asked again on the next tick.
+            POINT pt;
+            RECT rect;
+            if (GetCursorPos(&pt) && GetWindowRect(g_dockWnd, &rect) &&
+                PtInRect(&rect, pt)) {
+                return;
+            }
             timer.Stop();
             g_shownForNotification = false;
-            return;
-        }
-        // Stays while the mouse is on it; asked again on the next tick.
-        POINT pt;
-        RECT rect;
-        if (GetCursorPos(&pt) && GetWindowRect(g_dockWnd, &rect) &&
-            PtInRect(&rect, pt)) {
-            return;
-        }
-        timer.Stop();
-        g_shownForNotification = false;
-        SlideTo(g_dockWnd, g_notificationHiddenRect, g_settings.hideDuration,
-                false);
-    });
-    timer.Start();
+            SlideTo(g_dockWnd, g_notificationHiddenRect,
+                    g_settings.hideDuration, false);
+        });
+    g_notificationTimer.Start();
 }
 
 // An app has something new: a new count on its badge, or its button started
@@ -1732,7 +1763,7 @@ void SendBadgeApps() {
     AcquireSRWLockShared(&g_badgeAppsLock);
     const std::vector<std::wstring> apps = g_badgeApps;
     ReleaseSRWLockShared(&g_badgeAppsLock);
-    SendLines(island, g_dockWnd, kIpcBadgeApps, apps);
+    SendLines(island, FindCurrentProcessTaskbarWnd(), kIpcBadgeApps, apps);
 }
 
 void PublishBadgeApps() {
@@ -1755,10 +1786,6 @@ void PublishBadgeApps() {
     }
     ReleaseSRWLockExclusive(&g_badgeAppsLock);
     if (changed) {
-        std::wstring list;
-        for (const auto& app : g_badgeApps) {
-            list += L" " + app;
-        }
         SendBadgeApps();
     }
 }
@@ -1838,8 +1865,6 @@ void CheckBadge(DockIcon& icon) {
             const int oldCount = _wtoi(icon.badgeText.c_str());
             news = !(count > 0 && oldCount > 0 && count < oldCount);
         }
-    }
-    if (shown != icon.badgeShown || newText != icon.badgeText) {
     }
     icon.badgeAppId = appId;
     icon.badgeText = newText;
@@ -2192,7 +2217,6 @@ void UpdateAppsArea(double left, double right, bool withShadow) {
     g_appsAreaRight = window.left + region.right;
 }
 
-// The whole window takes the mouse again.
 // The shadow: an ellipse centered on the bottom edge, dark in its middle and
 // fading out to nothing at its edges, so it has no corners.
 void MakeShadow(UIElement const& element) {
@@ -2541,6 +2565,21 @@ void ResetDockBehavior() {
         g_badgeTimer.Stop();
         g_badgeTimer = nullptr;
     }
+    // The dock shown for a notification goes back down.
+    if (g_notificationTimer) {
+        g_notificationTimer.Stop();
+        g_notificationTimer = nullptr;
+    }
+    if (g_shownForNotification) {
+        g_shownForNotification = false;
+        if (g_dockWnd) {
+            const RECT& hidden = g_notificationHiddenRect;
+            SetWindowPos(g_dockWnd, nullptr, hidden.left, hidden.top,
+                         hidden.right - hidden.left,
+                         hidden.bottom - hidden.top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
 
     AcquireSRWLockExclusive(&g_badgeAppsLock);
     g_badgeApps.clear();
@@ -2695,9 +2734,6 @@ bool ApplyStyle(XamlRoot xamlRoot, HWND hWnd, bool mainTaskbar) {
     }
 
     if (auto tray = FindByClassName(content, L"SystemTray.SystemTrayFrame")) {
-        if (mainTaskbar) {
-            g_trayElement = winrt::make_weak(tray);
-        }
         if (g_settings.hideTray || g_settings.showIsland) {
             SetStyled(tray, UIElement::VisibilityProperty(),
                       winrt::box_value(Visibility::Collapsed));
@@ -2803,12 +2839,28 @@ BOOL CALLBACK ApplyToTaskbarWindowProc(HWND hWnd, LPARAM) {
 
 // Restyles every taskbar from the taskbar thread, or removes the style while
 // unloading.
+// Unloading: what the XAML globals still hold goes, on the taskbar's thread
+// (their destructors never run, see g_styledProperties).
+void FreeXamlGlobals() {
+    std::vector<StyledProperty>().swap(g_styledProperties);
+    std::vector<WidthWatch>().swap(g_widthWatches);
+    std::vector<DockIcon>().swap(g_dockIcons);
+    std::vector<VisualStateGroup::CurrentStateChanged_revoker>().swap(
+        g_stateRevokers);
+    std::vector<FrameworkElement::SizeChanged_revoker>().swap(g_dotRevokers);
+    std::vector<winrt::weak_ref<FrameworkElement>>().swap(g_watchedButtons);
+    std::vector<BadgeWatch>().swap(g_badgeWatches);
+    g_layoutRevoker = {};
+    g_renderingRevoker = {};
+}
+
 void ApplySettingsFromTaskbarThread() {
     Wh_Log(L"Applying settings");
 
     ClearStyles();
     g_mainTaskbarStyled = false;
     if (g_unloading) {
+        FreeXamlGlobals();
         return;
     }
 
@@ -2840,6 +2892,9 @@ CSecondaryTray_GetTrayWindow_t CSecondaryTray_GetTrayWindow_Original;
 using CSecondaryTray_InitModelAndHost_t = void(WINAPI*)(void* pThis,
                                                         void* taskbarModel);
 CSecondaryTray_InitModelAndHost_t CSecondaryTray_InitModelAndHost_Original;
+// Defined further down.
+void SubclassTaskbars();
+
 void WINAPI CSecondaryTray_InitModelAndHost_Hook(void* pThis,
                                                  void* taskbarModel) {
     Wh_Log(L">");
@@ -2849,6 +2904,7 @@ void WINAPI CSecondaryTray_InitModelAndHost_Hook(void* pThis,
     }
     HWND taskbarWnd = CSecondaryTray_GetTrayWindow_Original(pThis);
     ApplyToTaskbar(taskbarWnd, GetSecondaryTaskbarXamlRoot(taskbarWnd), false);
+    SubclassTaskbars();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3297,8 +3353,14 @@ std::wstring TrayIconKey(const TrayIcon& icon) {
 // On the taskbar's thread, as an app sends it (see TaskbarSubclassProc).
 void SendTrayIcons();
 
+// The island gets the tray icons a moment after they change (see
+// TaskbarSubclassProc).
+const UINT g_sendTrayIconsMessage =
+    RegisterWindowMessage(L"WindhawkMacIslandDock_SendTrayIcons");
+std::atomic<bool> g_trayIconsSendPending;
+
 void OnTrayNotify(const COPYDATASTRUCT* copyData) {
-    if (!g_settings.showIsland || !copyData ||
+    if (!copyData ||
         copyData->dwData != 1 ||
         copyData->cbData < offsetof(TrayNotifyData, nid) +
                                offsetof(NotifyIconData32, szTip)) {
@@ -3395,8 +3457,14 @@ void OnTrayNotify(const COPYDATASTRUCT* copyData) {
         changed = true;
     }
     ReleaseSRWLockExclusive(&g_trayIconsLock);
-    if (changed) {
-        SendTrayIcons();
+    // Sent a moment later, once for all the changes until then: the app
+    // that changed its icon is waiting for the taskbar meanwhile.
+    if (changed && !g_trayIconsSendPending.exchange(true)) {
+        if (HWND taskbar = FindWindow(L"Shell_TrayWnd", nullptr)) {
+            PostMessage(taskbar, g_sendTrayIconsMessage, 0, 0);
+        } else {
+            g_trayIconsSendPending = false;
+        }
     }
 }
 
@@ -3433,8 +3501,8 @@ void SendTrayIcons() {
         keptAlive.push_back(icon.icon);
     }
     ReleaseSRWLockShared(&g_trayIconsLock);
-    SendIpc(island, g_dockWnd, kIpcTrayIcons, writer.bytes.data(),
-            (DWORD)writer.bytes.size());
+    SendIpc(island, FindCurrentProcessTaskbarWnd(), kIpcTrayIcons,
+            writer.bytes.data(), (DWORD)writer.bytes.size());
 }
 
 // In the island's process: the icons explorer sent, each with the island's
@@ -3545,13 +3613,18 @@ LRESULT OnTrayIconRectRequest(const COPYDATASTRUCT* copyData) {
     return result;
 }
 
-// Asks the apps to add their icons again, once (again once the taskbar is
-// ready, when the mod loaded before it).
+// Asks the apps to add their icons again (the message Windows sends when the
+// taskbar restarts), at most once while Explorer runs: the icons are kept
+// from then on, for the island to ask for them (kIpcHello). Only once the
+// taskbar receives them (subclassed), and only for an island that shows them.
 std::atomic<bool> g_trayIconsRequested;
+// The taskbars subclassed (see SubclassTaskbars), defined further down.
+extern std::vector<HWND> g_subclassedTaskbars;
 
 void RequestTrayIcons() {
     if (g_trayIconsRequested || !g_settings.showIsland ||
-        !g_settings.islandTray || !OwnsTaskbar()) {
+        !g_settings.islandTray || !OwnsTaskbar() ||
+        g_subclassedTaskbars.empty()) {
         return;
     }
     g_trayIconsRequested = true;
@@ -3563,6 +3636,8 @@ void RequestTrayIcons() {
 // TaskbarSubclassProc).
 const UINT g_sendToIslandMessage =
     RegisterWindowMessage(L"WindhawkMacIslandDock_SendToIsland");
+const UINT g_requestTrayIconsMessage =
+    RegisterWindowMessage(L"WindhawkMacIslandDock_RequestTrayIcons");
 
 // Where the island drew the tray icons, sent by it.
 void ReceiveTrayPlaces(const COPYDATASTRUCT* copyData) {
@@ -3592,14 +3667,14 @@ void ReceiveTrayPlaces(const COPYDATASTRUCT* copyData) {
 
 void WINAPI NotifyToastApps(void* parameter);
 
-// Swallows the "show" timer while a full-screen app is in front, so the mouse
-// at the bottom edge doesn't bring the taskbar up. Other ways of showing it,
-// like the Windows key, aren't affected.
 // Defined further down.
 HICON AppIconForIsland(const COPYDATASTRUCT* copyData);
 void WatchTaskbarPlace();
 void StopWatchingTaskbarPlace();
 
+// Also swallows the "show" timer while a full-screen app is in front, so the
+// mouse at the bottom edge doesn't bring the taskbar up. Other ways of showing
+// it, like the Windows key, aren't affected.
 LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
                                      UINT uMsg,
                                      WPARAM wParam,
@@ -3619,6 +3694,15 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
     // From the island (in its own process): send everything later (not
     // while it waits for the answer), where the tray icons are, and apps with
     // a new notification.
+    if (uMsg == g_sendTrayIconsMessage && g_sendTrayIconsMessage) {
+        g_trayIconsSendPending = false;
+        SendTrayIcons();
+        return 0;
+    }
+    if (uMsg == g_requestTrayIconsMessage && g_requestTrayIconsMessage) {
+        RequestTrayIcons();
+        return 0;
+    }
     if (uMsg == g_sendToIslandMessage && g_sendToIslandMessage) {
         SendBadgeApps();
         SendTrayIcons();
@@ -3631,10 +3715,16 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
         IsTaskbarAtBottom() != g_taskbarAtBottom) {
         WatchTaskbarPlace();
     }
-    if (uMsg == WM_COPYDATA && lParam) {
+    if (uMsg == WM_COPYDATA && lParam &&
+        IsIpcSender((HWND)wParam, kIslandClassName)) {
         const auto* copyData = (const COPYDATASTRUCT*)lParam;
         switch (copyData->dwData) {
             case kIpcHello:
+                // The island shows the tray icons now: they're asked for if
+                // they haven't been yet.
+                g_settings.islandTray = Wh_GetIntValue(L"islandTray", 1) != 0;
+                g_settings.showIsland = true;
+                PostMessage(hWnd, g_requestTrayIconsMessage, 0, 0);
                 PostMessage(hWnd, g_sendToIslandMessage, 0, 0);
                 return TRUE;
             case kIpcTrayPlaces:
@@ -3778,7 +3868,6 @@ DWORD WINAPI LateStartThreadProc(LPVOID) {
             Wh_Log(L"Taskbar ready after %d s", tries + 1);
             UpdateAutoHide();
             StartTaskbarParts();
-            g_trayIconsRequested = false;
             RequestTrayIcons();
             return 0;
         }
@@ -4120,7 +4209,7 @@ struct IslandToast {
     // file, and whether it's cut round.
     std::wstring image;
     bool imageCircle = false;
-    // A picture on the web (like WhatsApp's), downloaded like Windows does.
+    // A picture on the web, downloaded (see islandWebPictures).
     std::vector<BYTE> imageData;
 };
 SRWLOCK g_islandToastsLock = SRWLOCK_INIT;
@@ -4136,6 +4225,7 @@ bool ToastImage(const std::wstring& appId,
                 std::wstring* path,
                 bool* circle);
 bool DownloadPicture(const std::wstring& url, std::vector<BYTE>* data);
+bool PackageGoesOnline(const std::wstring& appId);
 
 // The toasts newer than `lastId`: the AppUserModelIDs of their apps, and the
 // toasts themselves; moves `lastId` past them. Returns false if the database
@@ -4266,6 +4356,9 @@ std::string GetNotificationDatabasePath() {
     return path;
 }
 
+// New notifications are being read (the pill can show them).
+std::atomic<bool> g_toastWatchReady;
+
 DWORD WINAPI ToastThreadProc(LPVOID) {
     Sqlite sqlite;
     const std::string path = GetNotificationDatabasePath();
@@ -4277,6 +4370,7 @@ DWORD WINAPI ToastThreadProc(LPVOID) {
         return 0;
     }
     Wh_Log(L"Watching new notifications after %lld", lastId);
+    g_toastWatchReady = true;
 
     const HANDLE events[] = {g_toastStopEvent, g_toastChangedEvent};
     while (WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE,
@@ -4301,7 +4395,7 @@ DWORD WINAPI ToastThreadProc(LPVOID) {
             }
         }
         // Explorer makes their icons bounce.
-        SendLines(FindTaskbarWnd(), nullptr, kIpcNotifiedApps, apps);
+        SendLines(FindTaskbarWnd(), g_islandWnd, kIpcNotifiedApps, apps);
     }
     sqlite.Unload();
     return 0;
@@ -4349,6 +4443,7 @@ void StartToastWatch() {
 }
 
 void StopToastWatch() {
+    g_toastWatchReady = false;
     if (g_toastSubscription) {
         using Unsubscribe_t = LONG(NTAPI*)(void*);
         if (auto unsubscribe = (Unsubscribe_t)GetProcAddress(
@@ -4601,7 +4696,19 @@ HICON AppIconForIsland(const COPYDATASTRUCT* copyData) {
         ReleaseDC(nullptr, screen);
         DeleteObject(bitmap);
     }
-    // Remembered even when missing, so it isn't looked up again.
+    // Remembered even when missing, so it isn't looked up again; the oldest
+    // go past a limit (the island has copied them already).
+    constexpr size_t kMaxIslandAppIcons = 128;
+    if (g_islandAppIcons.size() >= kMaxIslandAppIcons) {
+        for (size_t i = 0; i < kMaxIslandAppIcons / 2; i++) {
+            if (g_islandAppIcons[i].second) {
+                DestroyIcon(g_islandAppIcons[i].second);
+            }
+        }
+        g_islandAppIcons.erase(g_islandAppIcons.begin(),
+                               g_islandAppIcons.begin() +
+                                   kMaxIslandAppIcons / 2);
+    }
     g_islandAppIcons.push_back({key, icon});
     return icon;
 }
@@ -5615,6 +5722,10 @@ constexpr UINT_PTR kMediaTimerId = 7;
 // A tray icon's pin shows after the mouse stays on it this long, so it isn't
 // clicked by accident; it then grows in.
 constexpr UINT_PTR kPinTimerId = 8;
+// A Windows banner hidden right away is put back if the pill hasn't shown the
+// notification by then (see OnWindowsBanner).
+constexpr UINT_PTR kBannerRestoreTimerId = 9;
+constexpr UINT kBannerRestoreMs = 1500;
 constexpr UINT kPinDelayMs = 2000;
 constexpr double kPinGrowSeconds = 0.22;
 // What's playing stays on the pill at least this long, and this long after it
@@ -7837,6 +7948,7 @@ enum class IslandPref {
     Banner,
     BannerMinimized,
     HideWindowsBanners,
+    WebPictures,
     ClockSeconds,
     ClockWeekday,
     ClockDate,
@@ -7877,6 +7989,9 @@ const IslandPrefInfo kIslandPrefs[] = {
      L"Also with the pill minimized", L"Também com a pílula minimizada"},
     {IslandPref::HideWindowsBanners, L"hideWindowsBanners", 0xED1A,
      L"Hide the Windows banners", L"Esconder os avisos do Windows"},
+    {IslandPref::WebPictures, L"bannerWebPictures", 0xE774,
+     L"Download pictures from the web (goes online)",
+     L"Baixar fotos da internet (acessa a internet)"},
     {IslandPref::ClockSeconds, L"clockSeconds", 0xE916, L"Seconds",
      L"Segundos"},
     {IslandPref::ClockWeekday, L"clockWeekday", 0xE787, L"Day of the week",
@@ -7925,6 +8040,7 @@ const int kPrefRows[] = {
     (int)IslandPref::Banner,
     (int)IslandPref::BannerMinimized,
     (int)IslandPref::HideWindowsBanners,
+    (int)IslandPref::WebPictures,
 };
 
 int GetIslandPref(IslandPref pref);
@@ -8549,7 +8665,9 @@ class ControlPanel : public Panel {
     static bool PrefDisabled(IslandPref pref) {
         return (pref == IslandPref::TrayOpen &&
                 !GetIslandPref(IslandPref::Tray)) ||
-               (pref == IslandPref::BannerMinimized &&
+               ((pref == IslandPref::BannerMinimized ||
+                 pref == IslandPref::HideWindowsBanners ||
+                 pref == IslandPref::WebPictures) &&
                 !GetIslandPref(IslandPref::Banner));
     }
     void DrawShortcut(ID2D1RenderTarget* target,
@@ -9341,6 +9459,10 @@ class Island {
     void OnDoNotDisturbChanged();
     void OpenNotifications();
     void OnPreferencesChanged();
+    // Tells explorer the island is there (it sends what it has).
+    void SayHello() {
+        SendIpc(FindTaskbarWnd(), m_hwnd, kIpcHello, nullptr, 0);
+    }
     // Another place (or one changed): it slides there.
     void OnPlacesChanged();
     // The app in front changed (its place may be another).
@@ -9365,6 +9487,7 @@ class Island {
     std::wstring VolumeGlyph();
     std::wstring BatteryGlyph();
     void UpdateFormats(float scale);
+    bool IsCovered() const;
     // The screen's scaling (m_scale also has the island's size in it).
     float m_dpiScale = 1;
     void Layout();
@@ -9607,6 +9730,15 @@ class Island {
     // seconds (longer under the mouse), and goes back.
     IslandToast m_banner;
     bool m_bannerWanted = false;
+    // When the pill last took a notification, when the Windows banner was
+    // hidden ahead of it and where it was, and when it was put back (see
+    // OnWindowsBanner).
+    double m_bannerTakenAt = -100;
+    double m_bannerHiddenAt = -100;
+    double m_bannerRestoredAt = -100;
+    LONG m_bannerHomeTop = 0;
+    bool CanTakeBanners() const;
+    void RestoreWindowsBanner();
     // The reply row: 0 hidden, 1 shown (under the mouse, or while typing).
     double m_bannerOpen = 0;
     double m_bannerOpenVelocity = 0;
@@ -10842,8 +10974,6 @@ void ControlPanel::SetEditing(bool editing) {
     m_dragId = -1;
     m_dragMoved = false;
     m_hover = {};
-    if (editing) {
-    }
     Layout();
     StartIslandAnimation();
 }
@@ -13550,7 +13680,8 @@ std::wstring XmlAttribute(std::string_view tag, std::string_view name) {
 
 // The picture a notification shows instead of its app's icon (its
 // "appLogoOverride" image, like a contact's photo), as a file on this
-// computer. Pictures on the web aren't fetched.
+// computer, or on the web when chosen (islandWebPictures), only for an app
+// allowed to go online, like Windows does (see PackageGoesOnline).
 bool ToastImage(const std::wstring& appId,
                 const char* xml,
                 int size,
@@ -13601,7 +13732,8 @@ bool ToastImage(const std::wstring& appId,
         file = packageFolder + L"TempState\\" + src.substr(19);
     } else if (src.size() > 2 && src[1] == L':' && src[2] == L'\\') {
         file = src;
-    } else if (startsWith(L"https://")) {
+    } else if (startsWith(L"https://") && g_settings.islandWebPictures &&
+               PackageGoesOnline(appId)) {
         // Downloaded (see DownloadPicture).
         *path = src;
         return true;
@@ -13639,8 +13771,10 @@ bool ToastImage(const std::wstring& appId,
     return true;
 }
 
-// A notification's picture on the web: downloaded like Windows does to show
-// it. Only over https, small, and not waiting long.
+// A notification's picture on the web, only when chosen in the island's
+// settings (off by default): downloaded like Windows does to show it, from
+// the address the app put in its notification. Only over https, small, not
+// waiting long, and kept in memory only.
 bool DownloadPicture(const std::wstring& url, std::vector<BYTE>* data) {
     constexpr size_t kMaxSize = 4 * 1024 * 1024;
     URL_COMPONENTS parts{sizeof(parts)};
@@ -13794,6 +13928,76 @@ constexpr GUID kIID_INotificationActivationCallback = {
 // Looked up from the notification threads and the island's.
 SRWLOCK g_toastActivatorsLock = SRWLOCK_INIT;
 
+// A packaged app's AppxManifest.xml (empty for other apps).
+std::string ReadAppxManifest(const std::wstring& appId) {
+    std::string xml;
+    const size_t bang = appId.find(L'!');
+    if (bang == std::wstring::npos) {
+        return xml;
+    }
+    const std::wstring family = appId.substr(0, bang);
+    UINT32 count = 0;
+    UINT32 length = 0;
+    if (GetPackagesByPackageFamily(family.c_str(), &count, nullptr, &length,
+                                   nullptr) != ERROR_INSUFFICIENT_BUFFER ||
+        !count) {
+        return xml;
+    }
+    std::vector<PWSTR> names(count);
+    std::vector<WCHAR> buffer(length);
+    UINT32 pathLength = 0;
+    if (GetPackagesByPackageFamily(family.c_str(), &count, names.data(),
+                                   &length, buffer.data()) != ERROR_SUCCESS ||
+        GetPackagePathByFullName(names[0], &pathLength, nullptr) !=
+            ERROR_INSUFFICIENT_BUFFER) {
+        return xml;
+    }
+    std::wstring path(pathLength, L'\0');
+    if (GetPackagePathByFullName(names[0], &pathLength, path.data()) !=
+        ERROR_SUCCESS) {
+        return xml;
+    }
+    path.resize(wcslen(path.c_str()));
+    path += L"\\AppxManifest.xml";
+    HANDLE file = CreateFile(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                             nullptr, OPEN_EXISTING, 0, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return xml;
+    }
+    const DWORD size = GetFileSize(file, nullptr);
+    xml.resize(size < 4 * 1024 * 1024 ? size : 0);
+    DWORD read = 0;
+    ReadFile(file, xml.data(), (DWORD)xml.size(), &read, nullptr);
+    xml.resize(read);
+    CloseHandle(file);
+    return xml;
+}
+
+// Whether a packaged app may go online (it declares the "internetClient"
+// capability): Windows only shows its notifications' pictures from the web
+// then. Remembered.
+SRWLOCK g_onlineAppsLock = SRWLOCK_INIT;
+
+bool PackageGoesOnline(const std::wstring& appId) {
+    static std::vector<std::pair<std::wstring, bool>> cache;
+    AcquireSRWLockShared(&g_onlineAppsLock);
+    for (const auto& [id, online] : cache) {
+        if (id == appId) {
+            ReleaseSRWLockShared(&g_onlineAppsLock);
+            return online;
+        }
+    }
+    ReleaseSRWLockShared(&g_onlineAppsLock);
+    const std::string xml = ReadAppxManifest(appId);
+    const bool online =
+        xml.find("Name=\"internetClient\"") != std::string::npos ||
+        xml.find("Name=\"internetClientServer\"") != std::string::npos;
+    AcquireSRWLockExclusive(&g_onlineAppsLock);
+    cache.push_back({appId, online});
+    ReleaseSRWLockExclusive(&g_onlineAppsLock);
+    return online;
+}
+
 bool FindToastActivator(const std::wstring& appId, CLSID* clsid) {
     static std::vector<std::pair<std::wstring, std::wstring>> cache;
     std::wstring found;
@@ -13916,8 +14120,20 @@ bool ActivateToast(const std::wstring& appId,
     // The app (or the page it opens) can come to the front.
     AllowSetForegroundWindow(ASFW_ANY);
     if (activationType == L"protocol") {
-        return (INT_PTR)ShellExecute(nullptr, L"open", arguments.c_str(),
-                                     nullptr, nullptr, SW_SHOWNORMAL) > 32;
+        // Only a URI with a scheme (like "https:" or an app's own), never a
+        // file or a path.
+        const size_t colon = arguments.find(L':');
+        const bool uri =
+            colon != std::wstring::npos && colon >= 2 &&
+            std::all_of(arguments.begin(), arguments.begin() + colon,
+                        [](WCHAR c) {
+                            return iswalnum(c) || c == L'+' || c == L'-' ||
+                                   c == L'.';
+                        }) &&
+            _wcsnicmp(arguments.c_str(), L"file:", 5) != 0;
+        return uri && (INT_PTR)ShellExecute(nullptr, L"open",
+                                            arguments.c_str(), nullptr,
+                                            nullptr, SW_SHOWNORMAL) > 32;
     }
     CLSID clsid;
     if (!FindToastActivator(appId, &clsid)) {
@@ -14416,7 +14632,9 @@ winrt::com_ptr<ID2D1Bitmap> LoadAppIcon(ID2D1RenderTarget* target,
         COPYDATASTRUCT copyData{kIpcAppIcon, (DWORD)writer.bytes.size(),
                                 writer.bytes.data()};
         DWORD_PTR result = 0;
-        if (SendMessageTimeout(taskbar, WM_COPYDATA, (WPARAM)from,
+        // From the island's window (explorer only takes requests from it).
+        if (SendMessageTimeout(taskbar, WM_COPYDATA,
+                               (WPARAM)(g_islandWnd ? (HWND)g_islandWnd : from),
                                (LPARAM)&copyData,
                                SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT, 2000,
                                &result) &&
@@ -15709,9 +15927,15 @@ HANDLE g_islandRestartThread;
 void StopIslandThread();
 void StartIslandThread();
 
+// Restarting the island, from Windhawk's settings change or from the island
+// itself (another style), one at a time.
+SRWLOCK g_islandLifeLock = SRWLOCK_INIT;
+
 DWORD WINAPI IslandRestartThreadProc(LPVOID) {
+    AcquireSRWLockExclusive(&g_islandLifeLock);
     StopIslandThread();
     StartIslandThread();
+    ReleaseSRWLockExclusive(&g_islandLifeLock);
     return 0;
 }
 
@@ -15780,6 +16004,8 @@ int GetIslandPref(IslandPref pref) {
             return g_bannerWhenMinimized;
         case IslandPref::HideWindowsBanners:
             return g_settings.islandHideWindowsBanners;
+        case IslandPref::WebPictures:
+            return g_settings.islandWebPictures;
         case IslandPref::ClockSeconds:
             return ClockShowsSeconds();
         case IslandPref::ClockWeekday:
@@ -15846,10 +16072,9 @@ void SetIslandPref(IslandPref pref, int value) {
             break;
         case IslandPref::Tray:
             g_settings.islandTray = on;
-            if (on) {
-                static const UINT taskbarCreated =
-                    RegisterWindowMessage(L"TaskbarCreated");
-                PostMessage(HWND_BROADCAST, taskbarCreated, 0, 0);
+            // Explorer asks the apps for their icons if it hasn't yet.
+            if (on && g_island) {
+                g_island->SayHello();
             }
             break;
         case IslandPref::TrayOpen:
@@ -15887,6 +16112,9 @@ void SetIslandPref(IslandPref pref, int value) {
             break;
         case IslandPref::HideWindowsBanners:
             g_settings.islandHideWindowsBanners = on;
+            break;
+        case IslandPref::WebPictures:
+            g_settings.islandWebPictures = on;
             break;
         case IslandPref::ClockSeconds:
             g_settings.clockSeconds = on;
@@ -16421,7 +16649,7 @@ bool Island::Create() {
     Render(true);
     // Explorer sends the badges and the tray icons when it hears from it
     // (and again whenever it restarts, see "TaskbarCreated").
-    SendIpc(FindTaskbarWnd(), m_hwnd, kIpcHello, nullptr, 0);
+    SayHello();
     // Shown right away, still off the screen and transparent: Windows' own
     // animation for showing a window draws it as a plain rectangle, so it
     // runs where it can't be seen (see m_away).
@@ -17307,6 +17535,11 @@ void Island::ShowBanner() {
     }
     m_banner = std::move(toasts.back());
     m_bannerWanted = true;
+    // The Windows banner can go now (see OnWindowsBanner).
+    m_bannerTakenAt = NowSeconds();
+    if (g_windowsBanner) {
+        OnWindowsBanner(g_windowsBanner);
+    }
     if (!m_banner.sticky) {
         SetTimer(m_hwnd, kBannerTimerId, kBannerShownMs, nullptr);
     } else {
@@ -18060,8 +18293,7 @@ ID2D1Bitmap* Island::GetBannerImage() {
                   SUCCEEDED(m_wic->CreateDecoderFromStream(
                       stream.get(), nullptr, WICDecodeMetadataCacheOnLoad,
                       decoder.put()));
-    if (decoded &&
-        SUCCEEDED(decoder->GetFrame(0, frame.put())) &&
+    if (decoded && SUCCEEDED(decoder->GetFrame(0, frame.put())) &&
         SUCCEEDED(m_wic->CreateFormatConverter(converter.put())) &&
         SUCCEEDED(converter->Initialize(
             frame.get(), GUID_WICPixelFormat32bppPBGRA,
@@ -18302,21 +18534,38 @@ void Island::UpdateMediaShown() {
     SetTimer(m_hwnd, kMediaTimerId, (UINT)((until - now) * 1000) + 10, nullptr);
 }
 
+// Whether a visible window of another app is above the island where it is.
+bool Island::IsCovered() const {
+    RECT island;
+    if (!GetWindowRect(m_hwnd, &island)) {
+        return false;
+    }
+    const DWORD self = GetCurrentProcessId();
+    for (HWND above = GetWindow(m_hwnd, GW_HWNDPREV); above;
+         above = GetWindow(above, GW_HWNDPREV)) {
+        DWORD processId = 0;
+        GetWindowThreadProcessId(above, &processId);
+        RECT rect;
+        RECT overlap;
+        int cloaked = 0;
+        if (processId != self && IsWindowVisible(above) &&
+            (FAILED(DwmGetWindowAttribute(above, DWMWA_CLOAKED, &cloaked,
+                                          sizeof(cloaked))) ||
+             !cloaked) &&
+            GetWindowRect(above, &rect) &&
+            IntersectRect(&overlap, &rect, &island)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Island::Tick() {
     // Not over a full-screen app (a game or a video).
     HWND taskbar = FindTaskbarWnd();
     const bool show = !(taskbar && IsFullscreenAppOnMonitor(taskbar));
     if (show != m_visible) {
         m_visible = show;
-        {
-            HWND foreground = GetForegroundWindow();
-            WCHAR className[64] = L"";
-            GetClassName(foreground, className, ARRAYSIZE(className));
-            RECT rect{};
-            GetWindowRect(foreground, &rect);
-            QUERY_USER_NOTIFICATION_STATE state{};
-            SHQueryUserNotificationState(&state);
-        }
         // Hidden once it has closed into the dot and faded (see
         // AnimationFrame).
         if (show) {
@@ -18345,14 +18594,16 @@ void Island::Tick() {
         m_raiseTicks = 0;
         m_control.Refresh();
         m_notifications.Refresh();
-        // Other always-on-top windows can cover it (and an open panel stays
-        // above it).
-        SetWindowPos(m_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        m_calendar.Raise();
-        m_control.Raise();
-        m_notifications.Raise();
-        m_mediaPanel.Raise();
+        // Other always-on-top windows can cover it: raised again only then (and
+        // an open panel stays above it), so it doesn't fight over the top.
+        if (IsCovered()) {
+            SetWindowPos(m_hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            m_calendar.Raise();
+            m_control.Raise();
+            m_notifications.Raise();
+            m_mediaPanel.Raise();
+        }
     }
     UpdateClock();
     m_calendar.Refresh();
@@ -18463,7 +18714,10 @@ void CALLBACK BannerWinEventProc(HWINEVENTHOOK,
         RECT rect;
         DWORD processId = 0;
         // Recognized when it first shows: no height yet.
-        if (GetClassName(hWnd, className, ARRAYSIZE(className)) &&
+        // Not a flyout the user opened (the notification center, the quick
+        // settings): those come to the front.
+        if (GetForegroundWindow() != hWnd &&
+            GetClassName(hWnd, className, ARRAYSIZE(className)) &&
             wcscmp(className, L"Windows.UI.Core.CoreWindow") == 0 &&
             GetWindowRect(hWnd, &rect) && rect.top == rect.bottom &&
             GetWindowThreadProcessId(hWnd, &processId) &&
@@ -18487,10 +18741,30 @@ void Island::WatchWindowsBannerMoves(DWORD processId) {
         BannerWinEventProc, processId, 0, WINEVENT_OUTOFCONTEXT);
 }
 
-// Moves the Windows banner off the screen, when the pill shows the
-// notification instead.
+// Whether the pill shows new notifications now (see ShowBanner): not in the
+// bar style, with its banners off, minimized without them, while a panel is
+// open, in full screen, or when new notifications can't be read.
+bool Island::CanTakeBanners() const {
+    return g_settings.islandHideWindowsBanners && g_bannerEnabled &&
+           g_toastWatchReady && !m_bar && m_visible && !m_bannerTyping &&
+           !(m_minimized && !g_bannerWhenMinimized) && !m_calendar.IsOpen() &&
+           !m_control.IsOpen() && !m_notifications.IsOpen() &&
+           !m_mediaPanel.IsOpen();
+}
+
+// Moves the Windows banner off the screen when the pill shows the
+// notification instead. It's moved as soon as it shows, when the pill can
+// show notifications, so it doesn't flash; if the pill doesn't take the
+// notification shortly after (one it can't read), it's put back. Never a
+// window that's in front (a flyout the user opened).
 void Island::OnWindowsBanner(HWND banner) {
-    if (!g_settings.islandHideWindowsBanners) {
+    const double now = NowSeconds();
+    const bool taken =
+        now - m_bannerTakenAt < kBannerShownMs / 1000.0 + 3;
+    const bool ahead = !taken && CanTakeBanners() &&
+                       now - m_bannerRestoredAt > kBannerShownMs / 1000.0 + 3;
+    if (!g_settings.islandHideWindowsBanners || (!taken && !ahead) ||
+        GetForegroundWindow() == banner) {
         return;
     }
     int cloaked = 0;
@@ -18502,9 +18776,32 @@ void Island::OnWindowsBanner(HWND banner) {
     }
     const int below = GetSystemMetrics(SM_YVIRTUALSCREEN) +
                       GetSystemMetrics(SM_CYVIRTUALSCREEN) + 200;
-    if (rect.top < below) {
-        SetWindowPos(banner, nullptr, rect.left, below, 0, 0,
-                     SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    if (rect.top >= below) {
+        return;
+    }
+    if (ahead && now - m_bannerHiddenAt > kBannerRestoreMs / 1000.0) {
+        m_bannerHiddenAt = now;
+        m_bannerHomeTop = rect.top;
+        SetTimer(m_hwnd, kBannerRestoreTimerId, kBannerRestoreMs, nullptr);
+    }
+    SetWindowPos(banner, nullptr, rect.left, below, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+// The pill didn't take the notification it hid the Windows banner for: the
+// banner comes back where it was.
+void Island::RestoreWindowsBanner() {
+    if (m_bannerTakenAt >= m_bannerHiddenAt || !g_windowsBanner ||
+        !IsWindow(g_windowsBanner)) {
+        return;
+    }
+    RECT rect;
+    const int below = GetSystemMetrics(SM_YVIRTUALSCREEN) +
+                      GetSystemMetrics(SM_CYVIRTUALSCREEN) + 200;
+    if (GetWindowRect(g_windowsBanner, &rect) && rect.top >= below) {
+        m_bannerRestoredAt = NowSeconds();
+        SetWindowPos(g_windowsBanner, nullptr, rect.left, m_bannerHomeTop, 0,
+                     0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 }
 
@@ -19049,7 +19346,7 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
     // the island is here.
     static const UINT taskbarCreated = RegisterWindowMessage(L"TaskbarCreated");
     if (msg == taskbarCreated && taskbarCreated) {
-        SendIpc(FindTaskbarWnd(), m_hwnd, kIpcHello, nullptr, 0);
+        SayHello();
         return 0;
     }
     switch (msg) {
@@ -19066,6 +19363,11 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             if (wParam == kMediaTimerId) {
                 KillTimer(m_hwnd, kMediaTimerId);
                 UpdateMediaShown();
+                return 0;
+            }
+            if (wParam == kBannerRestoreTimerId) {
+                KillTimer(m_hwnd, kBannerRestoreTimerId);
+                RestoreWindowsBanner();
                 return 0;
             }
             if (wParam == kPinTimerId) {
@@ -19113,7 +19415,7 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
         // From explorer: the apps with a badge, and the tray icons.
         case WM_COPYDATA: {
             const auto* copyData = (const COPYDATASTRUCT*)lParam;
-            if (!copyData) {
+            if (!copyData || !IsIpcSender((HWND)wParam, L"Shell_TrayWnd")) {
                 break;
             }
             // Taken now (the icons are copied while explorer waits), shown
@@ -19645,6 +19947,8 @@ void LoadSettings() {
         Wh_GetIntValue(L"bannerMinimized", 0) != 0;
     g_settings.islandHideWindowsBanners =
         Wh_GetIntValue(L"hideWindowsBanners", 1) != 0;
+    g_settings.islandWebPictures =
+        Wh_GetIntValue(L"bannerWebPictures", 0) != 0;
     g_settings.clockSeconds = Wh_GetIntValue(L"clockSeconds", -1);
     g_settings.clockWeekday = Wh_GetIntValue(L"clockWeekday", 1) != 0;
     g_settings.clockDate = Wh_GetIntValue(L"clockDate", 1) != 0;
@@ -19769,8 +20073,14 @@ void WatchTaskbarPlace() {
                                         nullptr, 0, nullptr);
 }
 
+// Windhawk's settings change and the taskbar moving to another edge (see
+// TaskbarPlaceThreadProc) apply them one at a time.
+SRWLOCK g_explorerSettingsLock = SRWLOCK_INIT;
+
 void ExplorerModSettingsChanged() {
     Wh_Log(L">");
+
+    AcquireSRWLockExclusive(&g_explorerSettingsLock);
 
     StopLateStart();
     LoadSettings();
@@ -19780,18 +20090,37 @@ void ExplorerModSettingsChanged() {
     // The bottom edge is only watched for the dock.
     StopEdgeWatch();
     StartEdgeWatch();
-    g_trayIconsRequested = false;
     RequestTrayIcons();
     StartLateStart();
+    ReleaseSRWLockExclusive(&g_explorerSettingsLock);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // The island's process (windhawk.exe): the island, and the new notifications
 // (for the island, and for the dock's icons to bounce).
 
+// Keeps the multithreaded apartment alive while the island's process runs.
+// Its threads (media, radios, notifications) come and go, and when the last
+// one leaves it, COM unloads Windows' DLLs while C++/WinRT still has their
+// factories cached: the next call (opening the control center after the
+// island restarted) would run code that's gone.
+// Looked up at run time (not in every import library).
+CO_MTA_USAGE_COOKIE g_mtaUsage;
+
+FARPROC GetComBaseProc(PCSTR name) {
+    HMODULE combase = GetModuleHandle(L"combase.dll");
+    return combase ? GetProcAddress(combase, name) : nullptr;
+}
+
 BOOL WhTool_ModInit() {
     Wh_Log(L">");
 
+    using CoIncrementMTAUsage_t = HRESULT(WINAPI*)(CO_MTA_USAGE_COOKIE*);
+    if (auto increment = (CoIncrementMTAUsage_t)GetComBaseProc(
+            "CoIncrementMTAUsage");
+        !increment || FAILED(increment(&g_mtaUsage))) {
+        g_mtaUsage = nullptr;
+    }
     LoadSettings();
     StartToastWatch();
     StartIslandThread();
@@ -19805,15 +20134,25 @@ void WhTool_ModUninit() {
     WaitForIslandRestart();
     StopIslandThread();
     StopToastWatch();
+    winrt::clear_factory_cache();
+    using CoDecrementMTAUsage_t = HRESULT(WINAPI*)(CO_MTA_USAGE_COOKIE);
+    if (auto decrement = (CoDecrementMTAUsage_t)GetComBaseProc(
+            "CoDecrementMTAUsage");
+        g_mtaUsage && decrement) {
+        decrement(g_mtaUsage);
+    }
+    g_mtaUsage = nullptr;
 }
 
 void WhTool_ModSettingsChanged() {
     Wh_Log(L">");
 
     WaitForIslandRestart();
+    AcquireSRWLockExclusive(&g_islandLifeLock);
     StopIslandThread();
     LoadSettings();
     StartIslandThread();
+    ReleaseSRWLockExclusive(&g_islandLifeLock);
 }
 
 bool g_isExplorer;
@@ -19854,6 +20193,11 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
+    // The mod's own module, for its window classes (both processes).
+    GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                          GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                      (LPCWSTR)&Wh_ModInit, &g_module);
+
     // explorer.exe part.
     if (IsExplorerProcess()) {
         g_isExplorer = true;
