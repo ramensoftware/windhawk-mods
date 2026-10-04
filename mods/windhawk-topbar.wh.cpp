@@ -24254,8 +24254,19 @@ void RepositionTopBarPopup() {
         g_topBarPopupCanvas.Width(widthDip);
         g_topBarPopupCanvas.Height(heightDip);
     }
+    // g_topBarPopup.Content() is the TopBarScaler Viewbox. Sizing the
+    // Viewbox itself to widthDip x heightDip makes its scale 1 (child is
+    // already that size), which defeats the point of the Viewbox and
+    // brings back the bottom input dead-zone at high OS DPI. Size the
+    // Viewbox's child instead; the Viewbox keeps stretch-filling the
+    // popup and scales the canonical content down.
     if (auto child = g_topBarPopup.Content()) {
-        if (auto fe = child.try_as<FrameworkElement>()) {
+        if (auto vb = child.try_as<wuxc::Viewbox>()) {
+            if (auto inner = vb.Child().try_as<FrameworkElement>()) {
+                inner.Width(widthDip);
+                inner.Height(heightDip);
+            }
+        } else if (auto fe = child.try_as<FrameworkElement>()) {
             fe.Width(widthDip);
             fe.Height(heightDip);
         }
