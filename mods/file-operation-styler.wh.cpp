@@ -34,7 +34,7 @@ The large progress circle can pause and resume operations, while optional settin
 
 ### Themes
 
-![File Operation Styler Themes](https://raw.githubusercontent.com/digart11/File-Operation-Styler/master/images/file-operation-styler-themes.png)
+![File Operation Styler Themes](https://raw.githubusercontent.com/digart11/File-Operation-Styler/master/images/file-operation-styler-themes-1.2.png)
 
 ## What's new in 1.2.0
 
