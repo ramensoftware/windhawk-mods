@@ -52,7 +52,7 @@ Windhawk debug logging and check for initialization or compatibility errors.
 /*
 - durationMs: 750
   $name: Release animation duration (ms)
-  $description: Clamped to 150–5000 ms. Default: 750 ms; 2000 gives a two-second release.
+  $description: "Clamped to 150–5000 ms. Default: 750 ms; 2000 gives a two-second release."
 - linearRelease: false
   $name: Constant-speed release
   $description: Use a linear curve to make the full duration visible.
@@ -66,10 +66,9 @@ Windhawk debug logging and check for initialization or compatibility errors.
 
 #include <windows.h>
 #include <windhawk_api.h>
+#include <windhawk_utils.h>
 #include <atomic>
 #include <algorithm>
-#include <cwchar>
-#include <string>
 #include <vector>
 #include <cstring>
 
@@ -161,34 +160,6 @@ bool CheckVersion(HMODULE module) {
            HIWORD(info->dwFileVersionLS) == 26100;
 }
 
-// Resolve the exact inspected signatures without depending on pointer-spacing
-// differences between symbol providers. Reject ambiguous matches.
-void* FindUnique(HMODULE module, const wchar_t* needle) {
-    WH_FIND_SYMBOL symbol{};
-    HANDLE search = Wh_FindFirstSymbol(module, nullptr, &symbol);
-    if (!search) { Wh_Log(L"Symbol enumeration failed, error=%lu", GetLastError()); return nullptr; }
-    void* found = nullptr; unsigned count = 0;
-    do {
-        if (!symbol.symbol) continue;
-        std::wstring normalized(symbol.symbol);
-        size_t p;
-        while ((p = normalized.find(L"__ptr64")) != std::wstring::npos)
-            normalized.erase(p, 7);
-        normalized.erase(std::remove_if(normalized.begin(), normalized.end(),
-            [](wchar_t ch) { return ch == L' ' || ch == L'\t'; }), normalized.end());
-        if (normalized.find(needle) != std::wstring::npos &&
-            normalized.find(L"dtor$") == std::wstring::npos &&
-            normalized.find(L"`") == std::wstring::npos) {
-            if (found != symbol.address) { found = symbol.address; ++count; }
-        }
-    } while (Wh_FindNextSymbol(search, &symbol));
-    Wh_FindCloseSymbol(search);
-    if (count != 1) { Wh_Log(L"symbol match count=%u for %s", count, needle); return nullptr; }
-    Wh_Log(L"Resolved symbol: %s", needle);
-    return found;
-}
-
-
 // Fail closed when the inspected register/stack entry layouts change.
 // These guards are compatibility checks, not proof of the complete animation path.
 bool CheckEntryCode(void* commit, void* transition) {
@@ -215,12 +186,37 @@ BOOL Wh_ModInit() {
     if (!CheckVersion(shell) || !CheckVersion(thumbnails)) {
         Wh_Log(L"Unsupported DLL version. No hooks installed."); return FALSE;
     }
-    void* commit = FindUnique(shell,
-        L"VirtualDesktopGestureWindow::Commit(structIVirtualDesktopGestureHandlerPrivate*,unsignedint,float,bool)");
-    void* transition = FindUnique(thumbnails,
-        L"CDCompAbstractThumbnail::_AddTransition(unsignedint,unsignedint,structTA_TIMINGFUNCTION*");
-    void* animationPolicy=FindUnique(thumbnails,L"CSwitchThumbnailDeviceManager::AnimationsEnabled(void)");
-    if (!commit || !transition || !animationPolicy) { Wh_Log(L"Required symbols missing. No hooks installed."); return FALSE; }
+    void* commit = nullptr;
+    void* transition = nullptr;
+    void* animationPolicy = nullptr;
+
+    // Resolve addresses first so entry-code checks run before any hook is installed.
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK shellHooks[] = {
+        {{
+             L"public: long __cdecl VirtualDesktopGestureWindow::Commit(struct IVirtualDesktopGestureHandlerPrivate *,unsigned int,float,bool)",
+         },
+         &commit,
+         nullptr},
+    };
+    WindhawkUtils::SYMBOL_HOOK twinuiDllHooks[] = {
+        {{
+             L"private: long __cdecl CDCompAbstractThumbnail::_AddTransition(unsigned int,unsigned int,struct TA_TIMINGFUNCTION *,struct IUIAnimationStoryboard2 *,struct IUIAnimationVariable2 *,double * const,unsigned int,bool)",
+         },
+         &transition,
+         nullptr},
+        {{
+             L"public: virtual bool __cdecl CSwitchThumbnailDeviceManager::AnimationsEnabled(void)",
+         },
+         &animationPolicy,
+         nullptr},
+    };
+    if (!WindhawkUtils::HookSymbols(shell, shellHooks, ARRAYSIZE(shellHooks)) ||
+        !WindhawkUtils::HookSymbols(thumbnails, twinuiDllHooks, ARRAYSIZE(twinuiDllHooks))) {
+        Wh_Log(L"Required symbols missing. No hooks installed.");
+        return FALSE;
+    }
+    if (!commit || !transition || !animationPolicy) return FALSE;
     if (!CheckEntryCode(commit, transition)) return FALSE;
     if (!Wh_SetFunctionHook(commit, reinterpret_cast<void*>(CommitHook),
                             reinterpret_cast<void**>(&g_originalCommit)) ||
@@ -240,5 +236,6 @@ BOOL Wh_ModInit() {
 
 void Wh_ModSettingsChanged() { LoadSettings(); }
 void Wh_ModUninit() { Wh_Log(L"Smooth release unloaded; native behavior restored."); }
+
 
 
