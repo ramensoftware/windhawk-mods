@@ -2,12 +2,64 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-03T17:01:52.000Z</updated>
+    <updated>2026-10-04T00:03:35.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Desktop Icon Ticker 0.5]]></title>
+        <id>https://windhawk.net/mods/desktop-icon-ticker#65f2a5c2a42f0f19abf69be7dc0eb5df90478051</id>
+        <link href="https://windhawk.net/mods/desktop-icon-ticker"/>
+        <updated>2026-10-04T00:03:35.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="desktopiconticker">Desktop Icon Ticker</h1>
+<p><img src="https://i.imgur.com/54urXw9.png" alt="Desktop Icon Ticker overview" /></p>
+<p>Draws live text on top of desktop icons: a scrolling ticker inside the
+"This PC" monitor, a badge on the Recycle Bin, free space on a drive
+shortcut, and so on.</p>
+<p><img src="https://i.imgur.com/xrokfYJ.png" alt="Desktop Icon Ticker" />
+<a href="https://i.imgur.com/vqLcdSN.mp4">Watch the overview video in full quality</a></p>
+<p>Each entry in <strong>Icons</strong> targets one desktop icon. Pick a system icon
+(This PC, Recycle Bin, User's Files, Network, Control Panel) and it is
+found automatically in any Windows language, even if it was renamed.
+For any other icon (shortcuts, files, folders) choose "Custom label"
+and type the label exactly as shown on the desktop.</p>
+<h2 id="placeholders">Placeholders</h2>
+<p>| Placeholder   | Shows                                   |
+|---------------|-----------------------------------------|
+| <code>{time}</code>      | Time (hh:mm, system format)             |
+| <code>{timesec}</code>   | Time with seconds                       |
+| <code>{date}</code>      | Short date                              |
+| <code>{datelong}</code>  | Long date                               |
+| <code>{day}</code>       | Day of the week                         |
+| <code>{cpu}</code>       | CPU usage %                             |
+| <code>{ram}</code>       | RAM usage %                             |
+| <code>{ramfree}</code>   | Free RAM                                |
+| <code>{disk:C}</code>    | Free space on drive C (any letter)      |
+| <code>{battery}</code>   | Battery % ("+" when charging, "AC" if none) |
+| <code>{uptime}</code>    | Time since boot                         |
+| <code>{bin}</code>       | Number of items in the Recycle Bin      |
+| <code>{binsize}</code>   | Size of the Recycle Bin                 |</p>
+<p>Example: <code>{time} • CPU {cpu} • C: {disk:C} free</code></p>
+<h2 id="tips">Tips</h2>
+<ul>
+<li>"Text area" decides where the text goes inside the icon. "Monitor
+screen" fits the Windows 11 This PC icon; use "Custom" plus the
+offsets for anything else.</li>
+<li>"Hide when text equals" lets you hide a badge, e.g. <code>0</code> for an empty
+Recycle Bin.</li>
+<li>The text follows the icon if you move it, no need to lock positions.</li>
+<li>Windows 11 hides the This PC icon by default. Enable it in Settings &gt;
+Personalization &gt; Themes &gt; Desktop icon settings.</li>
+<li>Animation pauses automatically while a maximized or full-screen window
+covers the monitor the icon is on, to save CPU and battery.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Skip harmful files confirmation 0.3.0]]></title>
         <id>https://windhawk.net/mods/harmful-files-autoaccept#8d6bcc826078ee6d87e70fb303f149e8165a6ace</id>
@@ -651,22 +703,6 @@ maximize their own windows through <code>ShowWindow</code> or <code>ShowWindowAs
         <author>
             <name>crazyboyybs</name>
             <uri>https://github.com/crazyboyybs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Instant Taskbar Thumbnail Previews 1.1.0]]></title>
-        <id>https://windhawk.net/mods/instant-taskbar-thumbnail-previews#0796806625b29f982264f16488f7e9b4d9f956dc</id>
-        <link href="https://windhawk.net/mods/instant-taskbar-thumbnail-previews"/>
-        <updated>2026-10-02T08:05:40.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>New "Delay after thumbnail removal" setting (default 500 ms). When a thumbnail is removed and others remain (close button, middle-click, keyboard, or the window closing externally), the remaining previews stay open for this long. The normal close delay applies when the last thumbnail is removed.</li>
-<li>The default "Thumbnail close delay" is now 200 ms instead of 1 ms. I find this provides optimal expected behavior; set it to 1 for the previous behavior.</li>
-<li>Fixed hook installation when the taskbar loads after the mod.</li>
-<li>Added a demo to the README.</li>
-</ul>]]></content>
-        <author>
-            <name>Alchemy</name>
-            <uri>https://github.com/alchemyyy</uri>
         </author>
     </entry>
 </feed>
