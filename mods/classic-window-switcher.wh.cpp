@@ -8,9 +8,11 @@
 // @twitter         https://twitter.com/ingan121
 // @homepage        https://www.ingan121.com/
 // @include         windhawk-mod-uiaccess.exe
+// @include         windhawk-mod.exe
 // @include         windhawk.exe
+// @include         explorer.exe
 // @license         gpl-2.0
-// @compilerOptions -ldwmapi -lcomctl32 -lgdiplus -lshcore -luxtheme -lruntimeobject -lgdi32 -lole32
+// @compilerOptions -ldwmapi -lcomctl32 -lgdiplus -lshcore -luxtheme -lgdi32 -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -155,13 +157,8 @@ DEFINE_GUID(LiveSetting_Property_GUID, 0xc12bcd8e, 0x2a8e, 0x4950, 0x8a, 0xe7, 0
 #define SWS_WINDOWSWITCHER_LAYOUTMODE_FULL 0
 #define SWS_WINDOWSWITCHER_LAYOUTMODE_MINI 1
 
-#define SWS_WINDOWSWITCHER_TIMER_TOGGLE_DESKTOP 11
-#define SWS_WINDOWSWITCHER_TIMER_STARTUP 12
-#define SWS_WINDOWSWITCHER_TIMER_STARTUP_DELAY 3000
-#define SWS_WINDOWSWITCHER_TIMER_PEEKATDESKTOP 13
 #define SWS_WINDOWSWITCHER_TIMER_ASYNCKEYCHECK 14
 #define SWS_WINDOWSWITCHER_TIMER_ASYNCKEYCHECK_DELAY 100
-#define SWS_WINDOWSWITCHER_TIMER_UPDATEACCESSIBLETEXT 15
 #define SWS_WINDOWSWITCHER_TIMER_PAINT 16
 #define SWS_WINDOWSWITCHER_TIMER_PAINT_GETICONASYNC_DELAY 500
 #define SWS_WINDOWSWITCHER_TIMER_CLOSEHWND 17
@@ -183,9 +180,6 @@ DEFINE_GUID(LiveSetting_Property_GUID, 0xc12bcd8e, 0x2a8e, 0x4950, 0x8a, 0xe7, 0
 #define SWS_VECTOR_CAPACITY 500
 
 #define SWS_SORT_DESCENDING 0b1
-
-#define SWS_WALLPAPERSUPPORT_NONE 0
-#define SWS_WALLPAPERSUPPORT_EXPLORER 1
 
 #define SWS_SCROLLWHEELBEHAVIOR_DISABLED 0
 #define SWS_SCROLLWHEELBEHAVIOR_ONLYCLIENTAREA 1
@@ -209,56 +203,22 @@ inline double sws_easing_easeOutQuad(double p)
 }
 
 // sws_error.h
-// References:
-// https://github.com/rioki/rex/blob/master/rex/dbg.h#L100
-
 typedef long long sws_error_t;
 
-#define SWS_ERROR_SUCCESS									S_OK
-#define SWS_ERROR_SUCCESS_TEXT								L"The operation completed successfully"
-#define SWS_ERROR_NO_MEMORY									0xA0010002
-#define SWS_ERROR_NO_MEMORY_TEXT							L"Insufficient memory. Please close some applications and try again"
-#define SWS_ERROR_NOT_INITIALIZED							0xA0010003
-#define SWS_ERROR_NOT_INITIALIZED_TEXT						L"Functionality is not initialized"
-#define SWS_ERROR_LOADLIBRARY_FAILED						0xA0010004
-#define SWS_ERROR_LOADLIBRARY_FAILED_TEXT					L"The requested library is not available"
-#define SWS_ERROR_FUNCTION_NOT_FOUND						0xA0010005
-#define SWS_ERROR_FUNCTION_NOT_FOUND_TEXT					L"The requested procedure was not found"
-#define SWS_ERROR_INVALID_PARAMETER                         0xA0010007
-#define SWS_ERROR_INVALID_PARAMETER_TEXT                    L"One or more of the parameters supplied is invalid"
-#define SWS_ERROR_APPRESOLVER_NOT_AVAILABLE					0xA001000A
-#define SWS_ERROR_APPRESOLVER_NOT_AVAILABLE_TEXT            L"Unable to initialize an instance of IAppResolver8"
+#define SWS_ERROR_SUCCESS                      S_OK
+#define SWS_ERROR_NO_MEMORY                    0xA0010002 // "Insufficient memory. Please close some applications and try again"
+#define SWS_ERROR_NOT_INITIALIZED              0xA0010003 // "Functionality is not initialized"
+#define SWS_ERROR_LOADLIBRARY_FAILED           0xA0010004 // "The requested library is not available"
+#define SWS_ERROR_FUNCTION_NOT_FOUND           0xA0010005 // "The requested procedure was not found"
+#define SWS_ERROR_INVALID_PARAMETER            0xA0010007 // "One or more of the parameters supplied is invalid"
+#define SWS_ERROR_APPRESOLVER_NOT_AVAILABLE	   0xA001000A // "Unable to initialize an instance of IAppResolver8"
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-	wchar_t* sws_error_NumToDescription(sws_error_t errnum, BOOL* bType);
-
-	sws_error_t sws_error_Report(sws_error_t errnum, void* data);
-
-	inline sws_error_t sws_error_GetFromInternalError(HRESULT hResult)
-	{
-		return hResult;
-	}
-
-	inline sws_error_t sws_error_GetFromHRESULT(HRESULT hResult)
-	{
-		return hResult;
-	}
-
-	inline sws_error_t sws_error_GetFromWin32Error(DWORD win32err)
-	{
-		return HRESULT_FROM_WIN32(win32err);
-	}
-
-	inline sws_error_t sws_error_GetFromGdiplusStatus(int err)
-	{
-		return err;
-	}
-#ifdef __cplusplus
-}
-#endif
+#define sws_error_Report(errnum, unused) \
+    errnum; if (errnum) Wh_Log(L"Error 0x%x", errnum);
+#define sws_error_GetFromInternalError(hResult) hResult
+#define sws_error_GetFromHRESULT(hResult) hResult
+#define sws_error_GetFromWin32Error(win32err) HRESULT_FROM_WIN32(win32err)
+#define sws_error_GetFromGdiplusStatus(err) err
 
 // sws_IconPainter.h
 typedef struct _sws_IconPainter_CallbackParams
@@ -375,9 +335,6 @@ DEFINE_GUID(__uuidof_AppUserModelIdProperty,
 // {c8900b66-a973-584b-8cae-355b7f55341b}
 DEFINE_GUID(CLSID_StartMenuCacheAndAppResolver, 0x660b90c8, 0x73a9, 0x4b58, 0x8c, 0xae, 0x35, 0x5b, 0x7f, 0x55, 0x34, 0x1b);
 
-// {46a6eeff-908e-4dc6-92a6-64be9177b41c}
-DEFINE_GUID(IID_IAppResolver_7, 0x46a6eeff, 0x908e, 0x4dc6, 0x92, 0xa6, 0x64, 0xbe, 0x91, 0x77, 0xb4, 0x1c);
-
 // {de25675a-72de-44b4-9373-05170450c140}
 DEFINE_GUID(IID_IAppResolver_8, 0xde25675a, 0x72de, 0x44b4, 0x93, 0x73, 0x05, 0x17, 0x04, 0x50, 0xc1, 0x40);
 
@@ -412,37 +369,6 @@ interface IAppResolver_8
 	CONST_VTBL struct IAppResolver_8Vtbl* lpVtbl;
 };
 
-#define STATUS_BUFFER_TOO_SMALL 0xC0000023
-typedef NTSTATUS(WINAPI* NtUserBuildHwndList)
-(
-	HDESK in_hDesk,
-	HWND  in_hWndNext,
-	BOOL  in_EnumChildren,
-	BOOL  in_RemoveImmersive,
-	DWORD in_ThreadID,
-	UINT  in_Max,
-	HWND* out_List,
-	UINT* out_Cnt
-	);
-extern HMODULE _sws_hWin32u;
-extern NtUserBuildHwndList _sws_pNtUserBuildHwndList;
-
-typedef struct
-{
-	int nAccentState;
-	int nFlags;
-	int nColor;
-	int nAnimationId;
-} ACCENTPOLICY;
-typedef struct
-{
-	int nAttribute;
-	PVOID pData;
-	ULONG ulDataSize;
-} WINCOMPATTRDATA;
-extern HINSTANCE _sws_hUser32;
-typedef BOOL(WINAPI* pSetWindowCompositionAttribute)(HWND, WINCOMPATTRDATA*);
-extern pSetWindowCompositionAttribute _sws_SetWindowCompositionAttribute;
 typedef BOOL(WINAPI* pIsShellManagedWindow)(HWND);
 extern pIsShellManagedWindow _sws_IsShellManagedWindow;
 extern pIsShellManagedWindow sws_IsShellFrameWindow;
@@ -450,8 +376,6 @@ typedef HWND(WINAPI* pHungWindowFromGhostWindow)(HWND);
 extern pHungWindowFromGhostWindow _sws_HungWindowFromGhostWindow;
 typedef HWND(WINAPI* pGhostWindowFromHungWindow)(HWND);
 extern pGhostWindowFromHungWindow _sws_GhostWindowFromHungWindow;
-typedef HICON(WINAPI* pInternalGetWindowIcon)(HWND,UINT);
-extern pInternalGetWindowIcon _sws_InternalGetWindowIcon;
 typedef HWND(WINAPI* pIsCoreWindow)(HWND);
 extern pIsCoreWindow _sws_IsCoreWindow;
 typedef BOOL(WINAPI* pSHWindowsPolicy)(REFGUID riid);
@@ -475,12 +399,6 @@ typedef HWND(WINAPI* pCreateWindowInBand)(
 	DWORD band
 	);
 extern pCreateWindowInBand _sws_CreateWindowInBand;
-
-typedef BOOL(WINAPI* pSetWindowBand)(HWND hWnd, HWND hwndInsertAfter, DWORD dwBand);
-extern pSetWindowBand _sws_SetWindowBand;
-
-typedef BOOL(WINAPI* pGetWindowBand)(HWND hWnd, PDWORD pdwBand);
-extern pGetWindowBand _sws_GetWindowBand;
 
 typedef BOOL(WINAPI* pIsTopLevelWindow)(HWND);
 extern pIsTopLevelWindow _sws_IsTopLevelWindow;
@@ -532,14 +450,6 @@ enum ZBID
 	ZBID_ABOVELOCK_UX = 18,
 };
 
-/********************************************************/
-/* enumerate all top level windows including metro apps */
-/********************************************************/
-sws_error_t sws_WindowHelpers_RealEnumWindows(
-	WNDENUMPROC in_Proc,
-	LPARAM in_Param
-);
-
 wchar_t* sws_WindowHelpers_GetAUMIDForHWND(HWND hWnd);
 
 inline void _sws_WindowHelpers_ToggleDesktop()
@@ -576,7 +486,6 @@ typedef struct _sws_WindowSwitcherLayout
 	BOOL bIncludeWallpaper;
 	BOOL bWallpaperAlwaysLast;
 	BOOL bWallpaperToggleBehavior;
-	HWND hWndWallpaper;
 	HFONT hFontRegular;
 	unsigned int cbFontHeight;
 	unsigned int cbBorderSize;
@@ -589,7 +498,6 @@ typedef struct _sws_WindowSwitcherSettings
     DWORD bIncludeWallpaper;
     DWORD bPerMonitor;
     DWORD bNoPerApplicationList;
-	DWORD dwWallpaperSupport;
 	DWORD bSwitcherIsPerApplication;
     DWORD bAlwaysUseWindowTitleAndIcon;
     DWORD dwScrollWheelBehavior;
@@ -602,7 +510,6 @@ typedef struct _sws_WindowSwitcher
 {
     BOOL bIsDynamic;
     HRESULT hrCo;
-    HRESULT hrRo;
     HMODULE hinstDLL;
     HWND hWnd;
     UINT msgShellHook;
@@ -623,10 +530,10 @@ typedef struct _sws_WindowSwitcher
     sws_vector pHWNDList;
     HDPA htshwnds;
     BOOL bWallpaperAlwaysLast;
-    HWND hWndWallpaper;
     UINT mode;
     HWND lastMiniModehWnd;
-    HWINEVENTHOOK global_hook;
+    HWINEVENTHOOK hookForeground;
+    HWINEVENTHOOK hookCreateDestroy;
     DWORD dwShowDelay;
     BOOL bPrimaryOnly;
     UINT vkTilde;
@@ -646,7 +553,6 @@ typedef struct _sws_WindowSwitcher
     HPAINTBUFFER hBufferedPaint;
     INT cwOldIndex;
     DWORD cwOldMask;
-    HDPA hLastClosedWnds;
     long long lastUpdateTime;
     BOOL bShouldStartFlashTimerWhenShowing;
     DWORD dwOriginalMouseRouting;
@@ -660,7 +566,6 @@ typedef struct _sws_WindowSwitcher
 typedef struct _sws_WindowSwitcher_EndTaskThreadParams
 {
     HWND hWnd;
-    sws_WindowSwitcher* sws;
     HDESK hDesktop;
 } sws_WindowSwitcher_EndTaskThreadParams;
 
@@ -687,81 +592,6 @@ typedef struct _sws_WindowSwitcherLayoutWindow
     WCHAR* wszAUMID;
     HDPA dpaGroupedWnds;
 } sws_WindowSwitcherLayoutWindow;
-
-// sws_error.c
-wchar_t* sws_error_NumToDescription(sws_error_t errnum, BOOL* bType)
-{
-    if (bType) *bType = FALSE;
-    wchar_t* ret = NULL;
-    switch (errnum)
-    {
-    case SWS_ERROR_SUCCESS:
-        ret = (wchar_t*)SWS_ERROR_SUCCESS_TEXT;
-        break;
-    case SWS_ERROR_NO_MEMORY:
-        ret = (wchar_t*)SWS_ERROR_NO_MEMORY_TEXT;
-        break;
-    case SWS_ERROR_NOT_INITIALIZED:
-        ret = (wchar_t*)SWS_ERROR_NOT_INITIALIZED_TEXT;
-        break;
-    case SWS_ERROR_LOADLIBRARY_FAILED:
-        ret = (wchar_t*)SWS_ERROR_LOADLIBRARY_FAILED_TEXT;
-        break;
-    case SWS_ERROR_FUNCTION_NOT_FOUND:
-        ret = (wchar_t*)SWS_ERROR_FUNCTION_NOT_FOUND_TEXT;
-        break;
-    case SWS_ERROR_INVALID_PARAMETER:
-        ret = (wchar_t*)SWS_ERROR_INVALID_PARAMETER_TEXT;
-        break;
-    case SWS_ERROR_APPRESOLVER_NOT_AVAILABLE:
-        ret = (wchar_t*)SWS_ERROR_APPRESOLVER_NOT_AVAILABLE_TEXT;
-        break;
-    default:
-        if (bType) *bType = TRUE;
-        FormatMessageW(
-            FORMAT_MESSAGE_ALLOCATE_BUFFER | 
-            FORMAT_MESSAGE_FROM_SYSTEM |
-            FORMAT_MESSAGE_IGNORE_INSERTS |
-            FORMAT_MESSAGE_MAX_WIDTH_MASK,
-            NULL,
-            errnum,
-            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-            (LPWSTR)(&ret),
-            0,
-            NULL
-        );
-        break;
-    }
-    return ret;
-}
-
-sws_error_t sws_error_Report(sws_error_t errnum, void* data)
-{
-    if (errnum == SWS_ERROR_SUCCESS)
-    {
-        return errnum;
-    }
-    wchar_t* errdesc = NULL;
-    _lock_file(stdout);
-    Wh_Log(L"====================================\nAn error occured in the application.\nError number: 0x%x\n", errnum);
-    BOOL bShouldFree = FALSE;
-    if ((errdesc = sws_error_NumToDescription(errnum, &bShouldFree)))
-    {
-        Wh_Log(L"Description: %s\n", errdesc);
-        if (bShouldFree) LocalFree(errdesc);
-    }
-    else
-    {
-        Wh_Log(L".");
-    }
-    if (data)
-    {
-        Wh_Log(L"Additional data: 0x%p\n", data);
-    }
-    Wh_Log(L"====================================");
-    _unlock_file(stdout);
-    return errnum;
-}
 
 // sws_IconPainter.c
 void sws_IconPainter_DrawIcon(HICON hIcon, HDC hDC, HBRUSH hBrush, Gdiplus::GpGraphics* pGdipGraphics, INT x, INT y, INT w, INT h, RGBQUAD bkcol, BOOL bShouldFillBackground)
@@ -1296,14 +1126,6 @@ sws_error_t sws_vector_Initialize(sws_vector* _this, unsigned int cbElementSize)
 }
 
 // sws_window.c
-extern NTSTATUS NTAPI NtQueryInformationProcess(
-	_In_ HANDLE ProcessHandle,
-	_In_ DWORD ProcessInformationClass,
-	_Out_writes_bytes_(ProcessInformationLength) PVOID ProcessInformation,
-	_In_ ULONG ProcessInformationLength,
-	_Out_opt_ PULONG ReturnLength);
-#define ProcessConsoleHostProcess 49
-
 sws_error_t sws_window_Initialize(sws_window* _this, HWND hWnd)
 {
 	sws_error_t rv = SWS_ERROR_SUCCESS;
@@ -1328,27 +1150,12 @@ sws_error_t sws_window_Initialize(sws_window* _this, HWND hWnd)
 		if (hProcess)
 		{
 			GetModuleFileNameExW(hProcess, NULL, _this->wszPath, MAX_PATH);
-			//NtQueryInformationProcess(hProcess, ProcessConsoleHostProcess, &(_this->dwConhostPID), sizeof(UINT_PTR), NULL);
-			//_this->dwConhostPID--;
-			//Wh_Log(L"%d - %s\n", _this->dwConhostPID, _this->wszPath);
 			CloseHandle(hProcess);
 		}
 	}
 	if (!rv)
 	{
-		/*
-		wchar_t path[MAX_PATH];
-		ZeroMemory(path, MAX_PATH);
-		memcpy(path, _this->wszPath, MAX_PATH);
-		wchar_t syspath[MAX_PATH];
-		ZeroMemory(syspath, MAX_PATH);
-		GetSystemDirectoryW(syspath, MAX_PATH);
-		wcscat_s(syspath, MAX_PATH, L"\\ApplicationFrameHost.exe");
-		//Wh_Log(L"%s %s\n", path, syspath);
-		_this->bIsApplicationFrameHost = !_wcsicmp(path, syspath);
-		*/
 		_this->bIsApplicationFrameHost = sws_IsShellFrameWindow(hWnd);
-		//_this->bIsApplicationFrameHost = sws_WindowHelpers_IsWindowUWP(hWnd);
 		_this->tshWnd = NULL;
 		_this->pNextWindow = NULL;
 	}
@@ -1363,25 +1170,17 @@ sws_error_t sws_window_Initialize(sws_window* _this, HWND hWnd)
 ULONG_PTR _sws_gdiplus_token;
 RTL_OSVERSIONINFOW sws_global_rovi;
 DWORD32 sws_global_ubr;
-NtUserBuildHwndList _sws_pNtUserBuildHwndList;
 pCreateWindowInBand _sws_CreateWindowInBand;
-pSetWindowCompositionAttribute _sws_SetWindowCompositionAttribute;
 pIsShellManagedWindow _sws_IsShellManagedWindow;
 pIsShellManagedWindow sws_IsShellFrameWindow;
-pGetWindowBand _sws_GetWindowBand;
-pSetWindowBand _sws_SetWindowBand;
 pIsTopLevelWindow _sws_IsTopLevelWindow;
 HMODULE _sws_hComctl32 = 0;
-HMODULE _sws_hShlwapi = 0;
-HMODULE _sws_hWin32u = 0;
 HINSTANCE _sws_hUser32 = 0;
-HINSTANCE _sws_hUxtheme = 0;
 HINSTANCE _sws_hShcore = 0;
 HMODULE _sws_ExplorerFrame = 0;
 HMODULE _sws_Explorer = 0;
 pHungWindowFromGhostWindow _sws_HungWindowFromGhostWindow;
 pGhostWindowFromHungWindow _sws_GhostWindowFromHungWindow;
-pInternalGetWindowIcon _sws_InternalGetWindowIcon;
 pIsCoreWindow _sws_IsCoreWindow;
 pSHWindowsPolicy sws_SHWindowsPolicy;
 
@@ -1397,162 +1196,6 @@ BOOL CALLBACK sws_WindowHelpers_IsValidMonitor(HMONITOR hMonitor, HDC unnamedPar
 		return FALSE;
 	}
 	return TRUE;
-}
-
-HWND* _sws_WindowHelpers_Gui_BuildWindowList
-(
-	NtUserBuildHwndList pNtUserBuildHwndList,
-	HDESK in_hDesk,
-	HWND  in_hWnd,
-	BOOL  in_EnumChildren,
-	BOOL  in_RemoveImmersive,
-	UINT  in_ThreadID,
-	INT* out_Cnt
-)
-{
-	/* locals */
-	UINT  lv_Max;
-	UINT  lv_Cnt;
-	UINT  lv_NtStatus;
-	HWND* lv_List;
-
-	// initial size of list
-	lv_Max = 512;
-
-	// retry to get list
-	for (;;)
-	{
-		// allocate list
-		if ((lv_List = (HWND*)malloc(lv_Max * sizeof(HWND))) == NULL)
-			break;
-
-		// call the api
-		lv_NtStatus = pNtUserBuildHwndList(
-			in_hDesk, in_hWnd,
-			in_EnumChildren, in_RemoveImmersive, in_ThreadID,
-			lv_Max, lv_List, &lv_Cnt);
-
-		// success?
-		if (lv_NtStatus == NOERROR)
-			break;
-
-		// free allocated list
-		free(lv_List);
-
-		// clear
-		lv_List = NULL;
-
-		// other error then buffersize? or no increase in size?
-		if (lv_NtStatus != STATUS_BUFFER_TOO_SMALL || lv_Cnt <= lv_Max)
-			break;
-
-		// update max plus some extra to take changes in number of windows into account
-		lv_Max = lv_Cnt + 16;
-	}
-
-	// return the count
-	*out_Cnt = lv_Cnt;
-
-	// return the list, or NULL when failed
-	return lv_List;
-}
-
-/********************************************************/
-/* enumerate all top level windows including metro apps */
-/********************************************************/
-sws_error_t sws_WindowHelpers_RealEnumWindows(
-	WNDENUMPROC in_Proc,
-	LPARAM in_Param
-)
-{
-	if (!_sws_pNtUserBuildHwndList)
-	{
-		return sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_NOT_INITIALIZED), NULL);
-	}
-
-	/* locals */
-	INT   lv_Cnt;
-	HWND  lv_hWnd;
-	BOOL  lv_Result;
-	HWND  lv_hFirstWnd;
-	HWND  lv_hDeskWnd;
-	HWND* lv_List;
-
-	// no error yet
-	lv_Result = TRUE;
-
-	// first try api to get full window list including immersive/metro apps
-	lv_List = _sws_WindowHelpers_Gui_BuildWindowList(_sws_pNtUserBuildHwndList, 0, 0, 0, 0, 0, &lv_Cnt);
-
-	// success?
-	if (lv_List)
-	{
-		// loop through list
-		while (lv_Cnt-- > 0 && lv_Result)
-		{
-			// get handle
-			lv_hWnd = lv_List[lv_Cnt];
-
-			// filter out the invalid entry (0x00000001) then call the callback
-			if (IsWindow(lv_hWnd))
-				lv_Result = in_Proc(lv_hWnd, in_Param);
-		}
-
-		// free the list
-		free(lv_List);
-	}
-	else
-	{
-		// get desktop window, this is equivalent to specifying NULL as hwndParent
-		lv_hDeskWnd = GetDesktopWindow();
-
-		// fallback to using FindWindowEx, get first top-level window
-		lv_hFirstWnd = FindWindowEx(lv_hDeskWnd, 0, 0, 0);
-
-		// init the enumeration
-		lv_Cnt = 0;
-		lv_hWnd = lv_hFirstWnd;
-
-		// loop through windows found
-		// - since 2012 the EnumWindows API in windows has a problem (on purpose by MS)
-		//   that it does not return all windows (no metro apps, no start menu etc)
-		// - luckally the FindWindowEx() still is clean and working
-		while (lv_hWnd && lv_Result)
-		{
-			// call the callback
-			lv_Result = in_Proc(lv_hWnd, in_Param);
-
-			// get next window
-			lv_hWnd = FindWindowEx(lv_hDeskWnd, lv_hWnd, 0, 0);
-
-			// protect against changes in window hierachy during enumeration
-			if (lv_hWnd == lv_hFirstWnd || lv_Cnt++ > 10000)
-				break;
-		}
-	}
-
-	return SWS_ERROR_SUCCESS;
-}
-
-BOOL _sws_WindowHelpers_IsWindowNotDesktopOrTrayHelper(HWND hWnd)
-{
-	ATOM SecondaryTaskbarAtom = RegisterWindowMessageW(L"Shell_SecondaryTrayWnd");
-	if (GetClassWord(hWnd, GCW_ATOM) == SecondaryTaskbarAtom)
-	{
-		return (SecondaryTaskbarAtom == 0);
-	}
-	return TRUE;
-}
-
-BOOL _sws_WindowHelpers_IsWindowNotDesktopOrTray(HWND hWnd, HWND hWndDesktop)
-{
-	if (IsWindow(hWnd) &&
-		hWnd != FindWindowW(L"Shell_TrayWnd", NULL) &&
-		hWnd != hWndDesktop)
-	{
-		return _sws_WindowHelpers_IsWindowNotDesktopOrTrayHelper(hWnd);
-	}
-	return FALSE;
 }
 
 BOOL _sws_TestExStyle(HWND hWnd, DWORD dwExStyle)
@@ -1708,71 +1351,6 @@ void sws_WindowHelpers_GetDesktopText(wchar_t* wszTitle)
 	}
 }
 
-static BOOL CALLBACK _sws_WindowHelpers_GetWallpaperHWNDCallback(HWND hwnd, LPARAM lParam)
-{
-	HWND* ret = (HWND*)lParam;
-
-	HWND p = FindWindowExW(hwnd, NULL, L"SHELLDLL_DefView", NULL);
-	if (p)
-	{
-		HWND t = FindWindowExW(NULL, hwnd, L"WorkerW", NULL);
-		if (t)
-		{
-			*ret = t;
-		}
-	}
-	return TRUE;
-}
-
-BOOL sws_WindowHelpers_EnsureWallpaperHWND()
-{
-	BOOL bRet = FALSE;
-
-	// See: https://github.com/valinet/ExplorerPatcher/issues/525
-	HWND hProgman = GetShellWindow();
-	if (hProgman)
-	{
-		DWORD_PTR res0 = -1, res1 = -1, res2 = -1, res3 = -1;
-		// CDesktopBrowser::_IsDesktopWallpaperInitialized and CWallpaperRenderer::ExpireImages
-		SendMessageTimeoutW(hProgman, 0x052C, 10, 0, SMTO_NORMAL, 1000, &res0);
-		if (SUCCEEDED(res0))
-		{
-			// Generate wallpaper window
-			SendMessageTimeoutW(hProgman, 0x052C, 13, 0, SMTO_NORMAL, 1000, &res1);
-			SendMessageTimeoutW(hProgman, 0x052C, 13, 1, SMTO_NORMAL, 1000, &res2);
-			SendMessageTimeoutW(hProgman, 0x052C, 0, 0, SMTO_NORMAL, 1000, &res3);
-			bRet = !res1 && !res2 && !res3;
-		}
-	}
-
-	return bRet;
-}
-
-HWND sws_WindowHelpers_GetWallpaperHWND()
-{
-	HWND hWnd = NULL;
-
-	// 24H2 has the Progman window as the whole desktop (icons + wallpaper)
-	// Check if SHELLDLL_DefView is a direct child of Progman
-	HWND hWndProgman = GetShellWindow();
-	if (hWndProgman)
-	{
-		HWND hWndDefView = FindWindowExW(hWndProgman, NULL, L"SHELLDLL_DefView", NULL);
-		if (hWndDefView)
-		{
-			hWnd = hWndProgman; // We're running on 24H2 or newer
-		}
-	}
-
-	// Otherwise find a top-level WorkerW window with a SHELLDLL_DefView child, that's our desktop icons
-	if (!hWnd)
-	{
-		EnumWindows((WNDENUMPROC)_sws_WindowHelpers_GetWallpaperHWNDCallback, (LPARAM)&hWnd);
-	}
-
-	return hWnd;
-}
-
 BOOL CALLBACK sws_WindowHelpers_AddAltTabWindowsToTimeStampedHWNDList(HWND hWnd, LPARAM hdpa)
 {
 	if (!hdpa)
@@ -1819,7 +1397,7 @@ void sws_WindowHelpers_GetWindowText(HWND hWnd, LPWSTR lpWStr, DWORD dwLength)
 
 void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_WindowSwitcherLayoutWindow& window, LPWSTR wszTitle)
 {
-    if (_this->layout.bIncludeWallpaper && window.hWnd == _this->layout.hWndWallpaper)
+    if (_this->layout.bIncludeWallpaper && window.hWnd == GetShellWindow())
     {
         sws_WindowHelpers_GetDesktopText(wszTitle);
     }
@@ -1933,20 +1511,10 @@ void sws_WindowHelpers_Clear()
 		DestroyIcon(sws_DefAppIcon);
 		sws_DefAppIcon = NULL;
 	}
-	if (_sws_hWin32u)
-	{
-		FreeLibrary(_sws_hWin32u);
-		_sws_hWin32u = NULL;
-	}
 	if (_sws_hUser32)
 	{
 		FreeLibrary(_sws_hUser32);
 		_sws_hUser32 = NULL;
-	}
-	if (_sws_hShlwapi)
-	{
-		FreeLibrary(_sws_hShlwapi);
-		_sws_hShlwapi = NULL;
 	}
 	if (_sws_hComctl32)
 	{
@@ -2016,28 +1584,6 @@ sws_error_t sws_WindowHelpers_Initialize()
 	}
 	if (!rv)
 	{
-		if (!_sws_hWin32u)
-		{
-			_sws_hWin32u = LoadLibraryExW(L"win32u.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
-			if (!_sws_hWin32u)
-			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_LOADLIBRARY_FAILED), NULL);
-			}
-		}
-	}
-	if (!rv)
-	{
-		if (!_sws_pNtUserBuildHwndList)
-		{
-			_sws_pNtUserBuildHwndList = (NtUserBuildHwndList)GetProcAddress(_sws_hWin32u, "NtUserBuildHwndList");
-			if (!_sws_pNtUserBuildHwndList)
-			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
-			}
-		}
-	}
-	if (!rv)
-	{
 		if (!_sws_hUser32)
 		{
 			_sws_hUser32 = LoadLibraryExW(L"user32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
@@ -2064,17 +1610,6 @@ sws_error_t sws_WindowHelpers_Initialize()
 		{
 			_sws_GhostWindowFromHungWindow = (pGhostWindowFromHungWindow)GetProcAddress(_sws_hUser32, "GhostWindowFromHungWindow");
 			if (!_sws_GhostWindowFromHungWindow)
-			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
-			}
-		}
-	}
-	if (!rv)
-	{
-		if (!_sws_SetWindowCompositionAttribute)
-		{
-			_sws_SetWindowCompositionAttribute = (pSetWindowCompositionAttribute)GetProcAddress(_sws_hUser32, "SetWindowCompositionAttribute");
-			if (!_sws_SetWindowCompositionAttribute)
 			{
 				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
 			}
@@ -2115,43 +1650,10 @@ sws_error_t sws_WindowHelpers_Initialize()
 	}
 	if (!rv)
 	{
-		if (!_sws_GetWindowBand)
-		{
-			_sws_GetWindowBand = (pGetWindowBand)GetProcAddress(_sws_hUser32, "GetWindowBand");
-			if (!_sws_GetWindowBand)
-			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
-			}
-		}
-	}
-	if (!rv)
-	{
-		if (!_sws_SetWindowBand)
-		{
-			_sws_SetWindowBand = (pSetWindowBand)GetProcAddress(_sws_hUser32, "SetWindowBand");
-			if (!_sws_SetWindowBand)
-			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
-			}
-		}
-	}
-	if (!rv)
-	{
 		if (!_sws_IsTopLevelWindow)
 		{
 			_sws_IsTopLevelWindow = (pIsTopLevelWindow)GetProcAddress(_sws_hUser32, "IsTopLevelWindow");
 			if (!_sws_IsTopLevelWindow)
-			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
-			}
-		}
-	}
-	if (!rv)
-	{
-		if (!_sws_InternalGetWindowIcon)
-		{
-			_sws_InternalGetWindowIcon = (pInternalGetWindowIcon)GetProcAddress(_sws_hUser32, "InternalGetWindowIcon");
-			if (!_sws_InternalGetWindowIcon)
 			{
 				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
 			}
@@ -2190,25 +1692,14 @@ sws_error_t sws_WindowHelpers_Initialize()
 			}
 		}
 	}
-    if (!rv)
-    {
-        if (!_sws_ExplorerFrame) {
-            _sws_ExplorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32 | LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
-            if (!_sws_ExplorerFrame)
-            {
-                rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_LOADLIBRARY_FAILED), NULL);
-            }
-        }
+    if (!_sws_ExplorerFrame) {
+        _sws_ExplorerFrame = LoadLibraryExW(L"ExplorerFrame.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32 | LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
     }
-    if (!rv)
-    {
-        if (!_sws_Explorer) {
-            _sws_Explorer = LoadLibraryExW(L"C:\\Windows\\explorer.exe", NULL, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
-            if (!_sws_Explorer)
-            {
-                rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_LOADLIBRARY_FAILED), NULL);
-            }
-        }
+    if (!_sws_Explorer) {
+        wchar_t explorerPath[MAX_PATH] = {};
+        GetWindowsDirectoryW(explorerPath, MAX_PATH);
+        wcscat_s(explorerPath, L"\\explorer.exe");
+        _sws_Explorer = LoadLibraryExW(explorerPath, NULL, LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
     }
 	return rv;
 }
@@ -2436,8 +1927,7 @@ sws_error_t sws_WindowSwitcherLayout_Initialize(
 	HWND hWnd, 
 	sws_WindowSwitcherSettings settings, 
 	sws_vector* pHWNDList, 
-	HWND hWndTarget,
-	HWND hWndWallpaper
+	HWND hWndTarget
 )
 {
 	sws_error_t rv = SWS_ERROR_SUCCESS;
@@ -2473,15 +1963,14 @@ sws_error_t sws_WindowSwitcherLayout_Initialize(
 	{
 		_this->bWallpaperAlwaysLast = SWS_WINDOWSWITCHERLAYOUT_WALLPAPER_ALWAYS_LAST;
 		_this->bIncludeWallpaper = SWS_WINDOWSWITCHERLAYOUT_INCLUDE_WALLPAPER;
-		_this->bIncludeWallpaper = settings.bIncludeWallpaper && settings.dwWallpaperSupport;
+		_this->bIncludeWallpaper = settings.bIncludeWallpaper;
 		_this->bWallpaperToggleBehavior = SWS_WINDOWSWITCHERLAYOUT_WALLPAPER_TOGGLE;
-		_this->hWndWallpaper = hWndWallpaper;
 		if (_this->bIncludeWallpaper)
 		{
 			if (_this->bWallpaperAlwaysLast && !hWndTarget)
 			{
 				sws_WindowSwitcherLayoutWindow swsLayoutWindow;
-				sws_WindowSwitcherLayoutWindow_Initialize(&swsLayoutWindow, _this->hWndWallpaper, NULL);
+				sws_WindowSwitcherLayoutWindow_Initialize(&swsLayoutWindow, GetShellWindow(), NULL);
 				sws_vector_PushBack(&_this->pWindowList, &swsLayoutWindow);
 			}
 		}
@@ -2508,7 +1997,6 @@ sws_error_t sws_WindowSwitcherLayout_Initialize(
 				WCHAR wszRundll32Path[MAX_PATH];
 				GetSystemDirectoryW(wszRundll32Path, MAX_PATH);
 				wcscat_s(wszRundll32Path, MAX_PATH, L"\\rundll32.exe");
-				//HWND hWndForeground = GetForegroundWindow();
 				for (int i = pHWNDList->cbSize - 1; i >= 0; i--)
 				{
 					BOOL isCloaked = FALSE;
@@ -2692,7 +2180,7 @@ void CALLBACK _sws_WindowSwitcher_Wineventproc(
     DWORD dwmsEventTime
 )
 {
-    if ((event == EVENT_OBJECT_CREATE) && hwnd && idObject == OBJID_WINDOW)
+    if ((event == EVENT_OBJECT_CREATE) && hwnd && idObject == OBJID_WINDOW && idChild == CHILDID_SELF && GetAncestor(hwnd, GA_PARENT) == GetDesktopWindow())
     {
         PostMessageW(FindWindowW(SWS_WINDOWSWITCHER_CLASSNAME, NULL), RegisterWindowMessageW(L"SHELLHOOK"), HSHELL_WINDOWCREATED, (LPARAM)hwnd);
     }
@@ -2723,8 +2211,7 @@ static void WINAPI _sws_WindowSwitcher_Calculate(sws_WindowSwitcher* _this, HWND
             _this->hWnd,
             _this->settings,
             &(_this->pHWNDList),
-            (_this->mode ? _this->lastMiniModehWnd : NULL),
-            _this->hWndWallpaper
+            (_this->mode ? _this->lastMiniModehWnd : NULL)
         );
         long long init = sws_milliseconds_now();
         sws_WindowSwitcherLayout_ComputeLayout(&(_this->layout), SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_INITIAL, NULL, _this->settings.dwGridColumns, _this->settings.dwGridRows);
@@ -2840,7 +2327,7 @@ static void WINAPI _sws_WindowSwitcher_Calculate(sws_WindowSwitcher* _this, HWND
 void _sws_WindowSwitcher_SwitchToSelectedItemAndDismiss(sws_WindowSwitcher* _this)
 {
     sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->layout.pWindowList.pList;
-    if (_this->layout.bIncludeWallpaper && pWindowList[_this->layout.iIndex].hWnd == _this->layout.hWndWallpaper)
+    if (_this->layout.bIncludeWallpaper && pWindowList[_this->layout.iIndex].hWnd == GetShellWindow())
     {
         _sws_WindowHelpers_ToggleDesktop();
     }
@@ -2910,16 +2397,16 @@ sws_error_t sws_WindowSwitcher_RegisterHotkeys(sws_WindowSwitcher* _this, HKL hk
         _this->vkTilde = MapVirtualKeyW(0x29, MAPVK_VSC_TO_VK_EX);
     }
 
-    if (!rv)
+    if (!_this->settings.bNoPerApplicationList)
     {
-        if (!RegisterHotKey(_this->hWnd, 1, MOD_ALT, VK_TAB))
-        {
-            rv = sws_error_GetFromWin32Error(GetLastError());
-        }
+        RegisterHotKey(_this->hWnd, -1, MOD_ALT, _this->vkTilde);
+        RegisterHotKey(_this->hWnd, -2, MOD_ALT | MOD_SHIFT, _this->vkTilde);
+        RegisterHotKey(_this->hWnd, -3, MOD_ALT | MOD_CONTROL, _this->vkTilde);
+        RegisterHotKey(_this->hWnd, -4, MOD_ALT | MOD_SHIFT | MOD_CONTROL, _this->vkTilde);
     }
     if (!rv)
     {
-        if (!RegisterHotKey(_this->hWnd, -1, MOD_ALT, _this->vkTilde))
+        if (!RegisterHotKey(_this->hWnd, 1, MOD_ALT, VK_TAB))
         {
             rv = sws_error_GetFromWin32Error(GetLastError());
         }
@@ -2933,13 +2420,6 @@ sws_error_t sws_WindowSwitcher_RegisterHotkeys(sws_WindowSwitcher* _this, HKL hk
     }
     if (!rv)
     {
-        if (!RegisterHotKey(_this->hWnd, -2, MOD_ALT | MOD_SHIFT, _this->vkTilde))
-        {
-            rv = sws_error_GetFromWin32Error(GetLastError());
-        }
-    }
-    if (!rv)
-    {
         if (!RegisterHotKey(_this->hWnd, 3, MOD_ALT | MOD_CONTROL, VK_TAB))
         {
             rv = sws_error_GetFromWin32Error(GetLastError());
@@ -2947,21 +2427,7 @@ sws_error_t sws_WindowSwitcher_RegisterHotkeys(sws_WindowSwitcher* _this, HKL hk
     }
     if (!rv)
     {
-        if (!RegisterHotKey(_this->hWnd, -3, MOD_ALT | MOD_CONTROL, _this->vkTilde))
-        {
-            rv = sws_error_GetFromWin32Error(GetLastError());
-        }
-    }
-    if (!rv)
-    {
         if (!RegisterHotKey(_this->hWnd, 4, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB))
-        {
-            rv = sws_error_GetFromWin32Error(GetLastError());
-        }
-    }
-    if (!rv)
-    {
-        if (!RegisterHotKey(_this->hWnd, -4, MOD_ALT | MOD_SHIFT | MOD_CONTROL, _this->vkTilde))
         {
             rv = sws_error_GetFromWin32Error(GetLastError());
         }
@@ -3589,37 +3055,6 @@ std::vector<HANDLE> g_endTaskThreads;
 
 static void WINAPI _sws_WindowSwitcher_Show(sws_WindowSwitcher* _this)
 {
-    long long a1 = sws_milliseconds_now();
-    if (_this->settings.dwWallpaperSupport == SWS_WALLPAPERSUPPORT_EXPLORER)
-    {
-        LONG_PTR atom = 0;
-        RECT rc;
-        SetRect(&rc, 0, 0, 0, 0);
-        BOOL bIsWindowWallpaperWindow = IsWindow(_this->hWndWallpaper);
-        if (bIsWindowWallpaperWindow)
-        {
-            GetWindowRect(_this->hWndWallpaper, &rc);
-            atom = GetClassWord(_this->hWndWallpaper, GCW_ATOM);
-        }
-        if (!bIsWindowWallpaperWindow || rc.right - rc.left == 0 || rc.bottom - rc.top == 0 || atom != RegisterWindowMessageW(L"WorkerW"))
-        {
-            //Wh_Log(L"[sws] Invalid wallpaper window detected, reobtaining correct window.\n");
-            _this->hWndWallpaper = NULL;
-            if (sws_WindowHelpers_EnsureWallpaperHWND())
-            {
-                _this->hWndWallpaper = sws_WindowHelpers_GetWallpaperHWND();
-            }
-            else
-            {
-                _this->settings.dwWallpaperSupport = SWS_WALLPAPERSUPPORT_NONE;
-            }
-        }
-    }
-    if (_this->hLastClosedWnds)
-    {
-        DPA_Destroy(_this->hLastClosedWnds);
-        _this->hLastClosedWnds = NULL;
-    }
     POINT pt;
     if (_this->bPrimaryOnly)
     {
@@ -3669,7 +3104,6 @@ static void WINAPI _sws_WindowSwitcher_Show(sws_WindowSwitcher* _this)
     sws_vector_Initialize(&(_this->pHWNDList), sizeof(sws_window));
     HDPA hdpa = DPA_Create(SWS_VECTOR_CAPACITY);
     EnumWindows(sws_WindowHelpers_AddAltTabWindowsToTimeStampedHWNDList, (LPARAM)hdpa);
-    long long a2 = sws_milliseconds_now();
     for (int i = 0; i < DPA_GetPtrCount(hdpa); ++i)
     {
         sws_tshwnd* tshWnd = (sws_tshwnd*)DPA_FastGetPtr(hdpa, i);
@@ -3681,9 +3115,7 @@ static void WINAPI _sws_WindowSwitcher_Show(sws_WindowSwitcher* _this)
         }
         else tshWnd->hWnd = (HWND)INVALID_HANDLE_VALUE;
     }
-    long long a3 = sws_milliseconds_now();
     DPA_Sort(hdpa, (PFNDACOMPARE)sws_tshwnd_CompareTimestamp, SWS_SORT_DESCENDING);
-    long long a4 = sws_milliseconds_now();
     for (int i = 0; i < DPA_GetPtrCount(hdpa); ++i)
     {
         sws_tshwnd* tshWnd = (sws_tshwnd*)DPA_FastGetPtr(hdpa, i);
@@ -3695,10 +3127,9 @@ static void WINAPI _sws_WindowSwitcher_Show(sws_WindowSwitcher* _this)
         }
     }
     DPA_DestroyCallback(hdpa, _sws_WindowSwitcher_free_stub, 0);
-    long long a5 = sws_milliseconds_now();
-    Wh_Log(L"[sws] WindowSwitcher::Show %x [[ %lld + %lld + %lld + %lld = %lld ]]\n", _this->hWndWallpaper, a2 - a1, a3 - a2, a4 - a3, a5 - a4, a5 - a1);
     _sws_WindowSwitcher_Calculate(_this, pOldHWNDs, cntOldHWNDSs, dwOldIndex);
     if (pOldHWNDs) free(pOldHWNDs);
+    pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->layout.pWindowList.pList;
     if (_this->layout.pWindowList.cbSize == 0)
     {
         ShowWindow(_this->hWnd, SW_HIDE);
@@ -3707,7 +3138,7 @@ static void WINAPI _sws_WindowSwitcher_Show(sws_WindowSwitcher* _this)
     if (_this->layout.pWindowList.cbSize == 1 && _this->bSkipIfOneWindow && _this->mode == SWS_WINDOWSWITCHER_LAYOUTMODE_FULL)
     {
         ShowWindow(_this->hWnd, SW_HIDE);
-        if (pWindowList[0].hWnd != _this->hWndWallpaper)
+        if (pWindowList[0].hWnd != GetShellWindow())
         {
             HWND hLastActivePopup = sws_WindowHelpers_GetLastActivePopup(pWindowList[_this->layout.iIndex].hWnd);
             SwitchToThisWindow(IsWindowVisible(hLastActivePopup) ? hLastActivePopup : pWindowList[_this->layout.iIndex].hWnd, TRUE);
@@ -3733,7 +3164,6 @@ static void WINAPI _sws_WindowSwitcher_Show(sws_WindowSwitcher* _this)
         SetRect(&rc, 0, 0, _this->layout.iWidth, _this->layout.iHeight);
         _this->hBufferedPaint = BeginBufferedPaint(_this->hdcWindow, &rc, BPBF_TOPDOWNDIB, &params, &(_this->hdcPaint));
     }
-    pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->layout.pWindowList.pList;
     sws_tshwnd* tshWnd = (sws_tshwnd*)malloc(sizeof(sws_tshwnd));
     if (pWindowList && tshWnd)
     {
@@ -3816,7 +3246,7 @@ static void WINAPI _sws_WindowSwitcher_Show(sws_WindowSwitcher* _this)
                     _this->layout.timestamp = sws_milliseconds_now();
                 }
                 params->timestamp = _this->layout.timestamp;
-                params->bIsDesktop = (_this->layout.bIncludeWallpaper && pWindowList[iCurrentWindow].hWnd == _this->hWndWallpaper);
+                params->bIsDesktop = (_this->layout.bIncludeWallpaper && pWindowList[iCurrentWindow].hWnd == GetShellWindow());
                 if (!sws_IconPainter_ExtractAndDrawIconAsync(pWindowList[iCurrentWindow].hWnd, params))
                 {
                     pWindowList[iCurrentWindow].hIcon = sws_LegacyDefAppIcon;
@@ -3841,8 +3271,7 @@ static DWORD CALLBACK _sws_WindowSwitcher_EndTaskThreadProc(sws_WindowSwitcher_E
         if (tshWnd)
         {
             sws_tshwnd_Initialize(tshWnd, params->hWnd);
-            int rv = DPA_Search(params->sws->htshwnds, tshWnd, 0, (PFNDACOMPARE)sws_tshwnd_CompareHWND, 0, 0);
-            if (rv != -1)
+            if (IsWindow(params->hWnd))
             {
                 EndTask(params->hWnd, FALSE, FALSE);
             }
@@ -3865,7 +3294,6 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
         CREATESTRUCT* pCreate = (CREATESTRUCT*)(lParam);
         _this = (sws_WindowSwitcher*)(pCreate->lpCreateParams);
         SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)_this);
-        SetTimer(hWnd, SWS_WINDOWSWITCHER_TIMER_STARTUP, SWS_WINDOWSWITCHER_TIMER_STARTUP_DELAY, 0);
     }
     else
     {
@@ -3883,60 +3311,10 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
             return 0;
         }
     }
-    else if (uMsg == WM_TIMER && wParam == SWS_WINDOWSWITCHER_TIMER_UPDATEACCESSIBLETEXT)
-    {
-        _sws_WindowSwitcher_UpdateAccessibleText(_this);
-        KillTimer(_this->hWnd, SWS_WINDOWSWITCHER_TIMER_UPDATEACCESSIBLETEXT);
-    }
     else if (uMsg == WM_TIMER && wParam == SWS_WINDOWSWITCHER_TIMER_PAINT)
     {
         SendMessageW(_this->hWnd, SWS_WINDOWSWITCHER_PAINT_MSG, SWS_WINDOWSWITCHER_PAINTFLAGS_REDRAWENTIRE, 0);
         KillTimer(_this->hWnd, SWS_WINDOWSWITCHER_TIMER_PAINT);
-    }
-    else if (uMsg == WM_TIMER && wParam == SWS_WINDOWSWITCHER_TIMER_CLOSEHWND)
-    {
-        sws_tshwnd* tshWnd = (sws_tshwnd*)malloc(sizeof(sws_tshwnd));
-        if (tshWnd)
-        {
-            if (_this->hLastClosedWnds)
-            {
-                for (int j = 0; j < DPA_GetPtrCount(_this->hLastClosedWnds); ++j)
-                {
-                    HWND hLastClosedWnd = (HWND)DPA_FastGetPtr(_this->hLastClosedWnds, j);
-                    if (hLastClosedWnd)
-                    {
-                        sws_tshwnd_Initialize(tshWnd, hLastClosedWnd);
-                        int rv = DPA_Search(_this->htshwnds, tshWnd, 0, (PFNDACOMPARE)sws_tshwnd_CompareHWND, 0, 0);
-                        if (rv != -1)
-                        {
-                            sws_tshwnd* found = (sws_tshwnd*)DPA_FastGetPtr(_this->htshwnds, rv);
-                            if (!found->bFlash)
-                            {
-                                if (sws_WindowHelpers_GetLastActivePopup(hLastClosedWnd) != hLastClosedWnd)
-                                {
-                                    sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->layout.pWindowList.pList;
-                                    if (pWindowList)
-                                    {
-                                        for (int i = 0; i < _this->layout.pWindowList.cbSize; ++i)
-                                        {
-                                            if (hLastClosedWnd == pWindowList[i].hWnd)
-                                            {
-                                                _this->layout.iIndex = i;
-                                                _sws_WindowSwitcher_SwitchToSelectedItemAndDismiss(_this);
-                                                DPA_SetPtr(_this->hLastClosedWnds, j, NULL);
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            free(tshWnd);
-        }
-        KillTimer(_this->hWnd, SWS_WINDOWSWITCHER_TIMER_CLOSEHWND);
     }
     else if (uMsg == SWS_WINDOWSWITCHER_PAINT_MSG)
     {
@@ -4113,35 +3491,6 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                 }
                 free(tshWnd);
             }
-            for (int i = 0; i < 2; ++i)
-            {
-                HWND hWnd = (HWND)lParam;
-                if (!i)
-                {
-                    HWND hOwner = GetWindow(hWnd, GW_OWNER);
-                    if (hOwner)
-                    {
-                        hWnd = hOwner;
-                    }
-                    else
-                    {
-                        continue;
-                    }
-                }
-
-                if (_this->hLastClosedWnds)
-                {
-                    for (int j = 0; j < DPA_GetPtrCount(_this->hLastClosedWnds); ++j)
-                    {
-                        HWND hLastClosedWnd = (HWND)DPA_FastGetPtr(_this->hLastClosedWnds, j);
-                        if (hLastClosedWnd && hLastClosedWnd == hWnd)
-                        {
-                            ShowWindow(_this->hWnd, SW_HIDE);
-                            SwitchToThisWindow(sws_WindowHelpers_GetLastActivePopup(hLastClosedWnd), TRUE);
-                        }
-                    }
-                }
-            }
         }
         if (wParam == HSHELL_REDRAW)
         {
@@ -4224,7 +3573,7 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                                                 _this->layout.timestamp = sws_milliseconds_now();
                                             }
                                             params->timestamp = _this->layout.timestamp;
-                                            params->bIsDesktop = (_this->layout.bIncludeWallpaper && pWindowList[i].hWnd == _this->hWndWallpaper);
+                                            params->bIsDesktop = (_this->layout.bIncludeWallpaper && pWindowList[i].hWnd == GetShellWindow());
                                             if (!sws_IconPainter_ExtractAndDrawIconAsync(pWindowList[i].hWnd, params))
                                             {
                                                 pWindowList[i].hIcon = sws_LegacyDefAppIcon;
@@ -4294,10 +3643,6 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
     {
         PostQuitMessage(0);
         return 0;
-    }
-    else if (0 && uMsg == WM_NCHITTEST)
-    {
-        return HTCAPTION;
     }
     else if (uMsg == WM_SHOWWINDOW)
     {
@@ -4433,7 +3778,7 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                     bShouldClose = TRUE,
                     i >= 0 && i < _this->layout.pWindowList.cbSize
                     ) &&
-            (bShouldClose ? !(_this->layout.bIncludeWallpaper && pWindowList[i].hWnd == _this->layout.hWndWallpaper) : TRUE)
+            (bShouldClose ? !(_this->layout.bIncludeWallpaper && pWindowList[i].hWnd == GetShellWindow()) : TRUE)
             )
         {
             if (!bShouldClose)
@@ -4442,9 +3787,9 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                 _sws_WindowSwitcher_SwitchToSelectedItemAndDismiss(_this);
                 return 0;
             }
-            for (int j = 0; j < DPA_GetPtrCount(pWindowList[i].dpaGroupedWnds/*_this->hLastClosedWnds*/); ++j)
+            for (int j = 0; j < DPA_GetPtrCount(pWindowList[i].dpaGroupedWnds); ++j)
             {
-                HWND hWnd = (HWND)DPA_FastGetPtr(pWindowList[i].dpaGroupedWnds/*_this->hLastClosedWnds*/, j);
+                HWND hWnd = (HWND)DPA_FastGetPtr(pWindowList[i].dpaGroupedWnds, j);
                 if (IsHungAppWindow(hWnd))
                 {
                     ShowWindow(_this->hWnd, SW_HIDE);
@@ -4452,7 +3797,6 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                     if (pEndTaskParams)
                     {
                         pEndTaskParams->hWnd = hWnd;
-                        pEndTaskParams->sws = _this;
                         pEndTaskParams->hDesktop = GetThreadDesktop(GetCurrentThreadId());
                         HANDLE hThread = nullptr;
                         if (SHCreateThreadWithHandle((LPTHREAD_START_ROUTINE)_sws_WindowSwitcher_EndTaskThreadProc, pEndTaskParams, CTF_NOADDREFLIB, NULL, &hThread))
@@ -4528,7 +3872,7 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
 
                 if ((((uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) && wParam == _this->vkTilde) ||
                     (uMsg == WM_HOTKEY && ((int)wParam < 0))) &&
-                    _this->mode == SWS_WINDOWSWITCHER_LAYOUTMODE_FULL && pWindowList[_this->layout.iIndex].hWnd != _this->hWndWallpaper)
+                    _this->mode == SWS_WINDOWSWITCHER_LAYOUTMODE_FULL && pWindowList[_this->layout.iIndex].hWnd != GetShellWindow())
                 {
                     HWND hFw = pWindowList[_this->layout.iIndex].hWnd;
                     HWND hOwner = GetWindow(hFw, GW_OWNER);
@@ -4645,7 +3989,7 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
         }
         return 0;
     }
-    else if (uMsg == WM_INPUTLANGCHANGE || uMsg == SWS_WINDOWSWITCHER_RELOAD_HOTKEY_MSG)
+    else if (uMsg == WM_INPUTLANGCHANGE || uMsg == SWS_WINDOWSWITCHER_RELOAD_HOTKEY_MSG || uMsg == SWS_WINDOWSWITCHER_RELOAD_CONFIG_MSG)
     {
         sws_WindowSwitcher_UnregisterHotkeys(_this);
         sws_WindowSwitcher_RegisterHotkeys(_this, (HKL)lParam);
@@ -4738,7 +4082,6 @@ void sws_WindowSwitcher_LoadSettings(sws_WindowSwitcher* _this)
 {
     _this->dwShowDelay = Wh_GetIntSetting(L"ShowDelay");
     _this->settings.bIncludeWallpaper = Wh_GetIntSetting(L"IncludeWallpaper");
-    _this->settings.dwWallpaperSupport = _this->settings.bIncludeWallpaper;
     _this->bPrimaryOnly = Wh_GetIntSetting(L"PrimaryMonitorOnly");
     _this->settings.bPerMonitor = Wh_GetIntSetting(L"PerMonitor");
     _this->settings.bNoPerApplicationList = Wh_GetIntSetting(L"NoPerApplicationList");
@@ -4755,12 +4098,12 @@ void sws_WindowSwitcher_LoadSettings(sws_WindowSwitcher* _this)
     _this->bSkipIfOneWindow = Wh_GetIntSetting(L"SkipIfOneWindow");
 
     _this->settings.dwGridColumns = Wh_GetIntSetting(L"CoolSwitchColumns");
-    if (_this->settings.dwGridColumns < 1)
+    if (_this->settings.dwGridColumns < 1 || _this->settings.dwGridColumns > 50)
     {
         _this->settings.dwGridColumns = SWS_WINDOWSWITCHERLAYOUT_DEFAULT_GRID_COLUMNS;
     }
     _this->settings.dwGridRows = Wh_GetIntSetting(L"CoolSwitchRows");
-    if (_this->settings.dwGridRows < 1)
+    if (_this->settings.dwGridRows < 1 || _this->settings.dwGridRows > 25)
     {
         _this->settings.dwGridRows = SWS_WINDOWSWITCHERLAYOUT_DEFAULT_GRID_ROWS;
     }
@@ -4815,8 +4158,11 @@ void sws_WindowSwitcher_Clear(sws_WindowSwitcher* _this)
             DPA_DestroyCallback(_this->htshwnds, _sws_WindowSwitcher_free_stub, 0);
         }
         sws_WindowSwitcher_UnregisterHotkeys(_this);
-        if (_this->global_hook) {
-            UnhookWinEvent(_this->global_hook);
+        if (_this->hookForeground) {
+            UnhookWinEvent(_this->hookForeground);
+        }
+        if (_this->hookCreateDestroy) {
+            UnhookWinEvent(_this->hookCreateDestroy);
         }
         if (_this->hWnd) {
             DestroyWindow(_this->hWnd);
@@ -4841,10 +4187,6 @@ void sws_WindowSwitcher_Clear(sws_WindowSwitcher* _this)
         }
         UnregisterClassW(SWS_WINDOWSWITCHER_CLASSNAME, HINST_THISCOMPONENT);
         sws_WindowHelpers_Clear();
-        if (SUCCEEDED(_this->hrRo))
-        {
-            RoUninitialize();
-        }
         if (SUCCEEDED(_this->hrCo))
         {
             CoUninitialize();
@@ -4905,19 +4247,10 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
     if (!rv)
     {
         _this->hrCo = E_FAIL;
-        _this->hrRo = E_FAIL;
         _this->hrCo = CoInitializeEx(NULL, COINIT_MULTITHREADED);
         if (_this->hrCo != S_OK && _this->hrCo != S_FALSE)
         {
             rv = sws_error_Report(sws_error_GetFromHRESULT(_this->hrCo), NULL);
-        }
-    }
-    if (!rv)
-    {
-        _this->hrRo = RoInitialize(RO_INIT_MULTITHREADED);
-        if (_this->hrRo != S_OK && _this->hrRo != S_FALSE)
-        {
-            rv = sws_error_Report(sws_error_GetFromHRESULT(_this->hrRo), NULL);
         }
     }
     if (!rv)
@@ -5026,16 +4359,31 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
     }
     if (!rv)
     {
-        _this->global_hook = SetWinEventHook(
-            EVENT_MIN,
-            EVENT_MAX,
+        _this->hookForeground = SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND,
+            EVENT_SYSTEM_FOREGROUND,
             NULL,
             _sws_WindowSwitcher_Wineventproc,
             0,
             0,
             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
         );
-        if (!_this->global_hook) {
+        if (!_this->hookForeground) {
+            rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+        }
+    }
+    if (!rv)
+    {
+        _this->hookCreateDestroy = SetWinEventHook(
+            EVENT_OBJECT_CREATE,
+            EVENT_OBJECT_DESTROY,
+            NULL,
+            _sws_WindowSwitcher_Wineventproc,
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
+        );
+        if (!_this->hookCreateDestroy) {
             rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
         }
     }
@@ -5045,19 +4393,25 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         {
             sws_WindowSwitcher_LoadSettings(_this);
         }
-        BOOL bExcludedFromPeek = TRUE;
-        DwmSetWindowAttribute(_this->hWnd, DWMWA_EXCLUDED_FROM_PEEK, &bExcludedFromPeek, sizeof(BOOL));
     }
     if (!rv)
     {
-        if (sws_WindowSwitcher_RegisterHotkeys(_this, NULL) != ERROR_SUCCESS) {
+        if (sws_WindowSwitcher_RegisterHotkeys(_this, NULL) == ERROR_HOTKEY_ALREADY_REGISTERED) {
             if (MessageBoxW(NULL, L"Explorer restart required. Restart now?", L"ClassicWindowSwitcher - Windhawk", MB_YESNO | MB_ICONWARNING) == IDYES) {
-                TerminateProcessByName(L"explorer.exe");
+                DWORD pid = 0;
+                HWND hShell = GetShellWindow();
+                if (hShell && GetWindowThreadProcessId(hShell, &pid)) {
+                    HANDLE hProcess = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid);
+                    if (hProcess) {
+                        TerminateProcess(hProcess, 1);
+                        WaitForSingleObject(hProcess, 5000);
+                        CloseHandle(hProcess);
+                    }
+                }
                 // Winlogon auto restarts explorer after termination
                 // Try registering again now, before explorer registers it
-                // Note: hooking RegisterHotKeys in explorer is ineffective on 11 (24H2). It seems to use a different API, maybe WinRT
-                // Winning the hotkey registry race works there too
-                rv = sws_error_Report(sws_WindowSwitcher_RegisterHotkeys(_this, NULL), NULL);
+                sws_WindowSwitcher_UnregisterHotkeys(_this);
+                sws_WindowSwitcher_RegisterHotkeys(_this, NULL);
             }
         }
     }
@@ -5100,36 +4454,6 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
 
     if (!rv)
     {
-        if (_this->settings.dwWallpaperSupport == SWS_WALLPAPERSUPPORT_EXPLORER)
-        {
-            int k = 0;
-            //Sleep(500);
-            while (!sws_WindowHelpers_EnsureWallpaperHWND())
-            {
-                Wh_Log(L"[sws] Ensuring wallpaper\n");
-                k++;
-                if (k == 100)
-                {
-                    break;
-                }
-                Sleep(100);
-            }
-            Sleep(100);
-            _this->hWndWallpaper = sws_WindowHelpers_GetWallpaperHWND();
-            if (_this->hWndWallpaper)
-            {
-                RECT rc;
-                GetWindowRect(_this->hWndWallpaper, &rc);
-                Wh_Log(L"[sws] Wallpaper RECT %d %d %d %d\n", rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top);
-            }
-            else
-            {
-                _this->settings.dwWallpaperSupport = SWS_WALLPAPERSUPPORT_NONE;
-            }
-        }
-    }
-    if (!rv)
-    {
         _this->bIsInitialized = TRUE;
     }
 
@@ -5142,8 +4466,15 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
 }
 
 // main.c
+DWORD g_threadId;
+HANDLE g_hQueueReady;
+
 DWORD WINAPI sws_main(LPVOID)
 {
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE); // create the queue
+    SetEvent(g_hQueueReady);
+
     sws_WindowSwitcher* switcher = NULL;
 	sws_error_t rv = SWS_ERROR_SUCCESS;
 	if (!rv)
@@ -5172,26 +4503,42 @@ HANDLE g_hThread = NULL;
 // initialization stuff if required.
 BOOL WhTool_ModInit() {
     Wh_Log(L"Init");
-    g_hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)sws_main, (LPVOID)0, 0, NULL);
+
+    g_hQueueReady = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!g_hQueueReady)
+        return FALSE;
+
+    g_hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)sws_main, (LPVOID)0, 0, &g_threadId);
+    if (!g_hThread)
+        return FALSE;
+
+    WaitForSingleObject(g_hQueueReady, INFINITE);
     return TRUE;
 }
 
 // The mod is being unloaded, free all allocated resources.
 void WhTool_ModUninit() {
     Wh_Log(L"Uninit");
-    HWND hSwitcher = FindWindowW(SWS_WINDOWSWITCHER_CLASSNAME, NULL);
-    if (hSwitcher)
-    {
-		PostMessageW(hSwitcher, WM_CLOSE, 0, 0);
+    PostThreadMessageW(g_threadId, WM_QUIT, 0, 0);
+    WaitForSingleObject(g_hThread, INFINITE);
+    CloseHandle(g_hThread);
+    CloseHandle(g_hQueueReady);
+}
+
+using RegisterHotKey_t = decltype(&RegisterHotKey);
+RegisterHotKey_t RegisterHotKey_original;
+BOOL NTAPI RegisterHotKey_hook(HWND hWnd, int id, UINT fsModifiers, UINT vk) {
+    if ((fsModifiers & MOD_ALT) == MOD_ALT && vk == VK_TAB) {
+        Wh_Log(L"Blocked Explorer from registering Alt+Tab, id=%d", id);
+        SetLastError(ERROR_HOTKEY_ALREADY_REGISTERED);
+        return FALSE;
     }
-    if (g_hThread) {
-        WaitForSingleObject(g_hThread, INFINITE);
-        CloseHandle(g_hThread);
-    }
+    return RegisterHotKey_original(hWnd, id, fsModifiers, vk);
 }
 
 bool g_isToolModProcessLauncher;
 HANDLE g_toolModProcessMutex;
+bool g_isExplorer;
 
 void WINAPI EntryPoint_Hook() {
     Wh_Log(L">");
@@ -5199,6 +4546,21 @@ void WINAPI EntryPoint_Hook() {
 }
 
 BOOL Wh_ModInit() {
+    wchar_t exeName[MAX_PATH];
+    GetModuleFileNameW(NULL, exeName, MAX_PATH);
+    g_isExplorer = wcsstr(_wcsupr(exeName), L"\\EXPLORER.EXE") != NULL;
+    if (g_isExplorer) {
+        g_isToolModProcessLauncher = true;
+        if (WindhawkUtils::SetFunctionHook(RegisterHotKey, RegisterHotKey_hook, &RegisterHotKey_original)) {
+            Wh_Log(L"Explorer hooked");
+        }
+        HWND hSwitcher = FindWindowW(SWS_WINDOWSWITCHER_CLASSNAME, NULL);
+        if (hSwitcher) {
+            PostMessageW(hSwitcher, SWS_WINDOWSWITCHER_RELOAD_HOTKEY_MSG, 0, 0);
+        }
+        return TRUE;
+    }
+
     DWORD sessionId;
     if (ProcessIdToSessionId(GetCurrentProcessId(), &sessionId) &&
         sessionId == 0) {
@@ -5278,7 +4640,7 @@ BOOL Wh_ModInit() {
 }
 
 void Wh_ModAfterInit() {
-    if (!g_isToolModProcessLauncher) {
+    if (!g_isToolModProcessLauncher || g_isExplorer) {
         return;
     }
 
@@ -5339,7 +4701,7 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModSettingsChanged() {
-    if (g_isToolModProcessLauncher) {
+    if (g_isToolModProcessLauncher || g_isExplorer) {
         return;
     }
 
@@ -5347,7 +4709,7 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher) {
+    if (g_isToolModProcessLauncher || g_isExplorer) {
         return;
     }
 
