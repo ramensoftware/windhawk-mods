@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         3.7.0
+// @version         3.7.1
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -2417,7 +2417,7 @@ ExpandAudioProcessShield(const std::unordered_set<DWORD>& rawAudioPids,
             }
 
             // For headless/background workers, require genuine sustained streaming throughput
-            // (>= 16 KB/s continuous transfer) or active decoding (>= 1.0% CPU) over >= 1 second
+            // (>= 64 KB/s continuous transfer) or active decoding (>= 2.0% CPU) over >= 1 second
             HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, dPid);
             if (hProc) {
                 bool isLively = false;
@@ -2459,11 +2459,11 @@ ExpandAudioProcessShield(const std::unordered_set<DWORD>& rawAudioPids,
                                 (cpuTimeMs / (deltaSec * 1000.0)) * 100.0 /
                                 GetSystemCoreCount();
 
-                            // Threshold: >= 16 KB/s streaming throughput or >= 1.0% CPU decoding
-                            if (bytesPerSec >= 16384.0 || cpuPercent >= 1.0) {
+                            // Threshold: >= 64 KB/s streaming throughput or >= 2.0% CPU decoding
+                            if (bytesPerSec >= 65536.0 || cpuPercent >= 2.0) {
                                 isLively = true;
                                 g_audioWorkerActiveUntil[dPid] =
-                                    now + std::chrono::seconds(15);
+                                    now + std::chrono::seconds(5);
                             }
                             itSample->second = {curStreamBytes, curCpu100ns,
                                                 now};
