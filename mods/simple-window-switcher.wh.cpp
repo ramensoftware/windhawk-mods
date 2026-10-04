@@ -51,17 +51,16 @@ Additional improvements made by [Asteski](https://github.com/Asteski) and [bropi
 
   Enable **Touchpad → Enable Three-Finger Gestures** and leave **Sticky Switcher
   from Upward Swipe** enabled to use the Raw HID reader. With Sticky Switcher
-  from Upward Swipe enabled, the mod attempts to arm a temporary foreground
-  shield from contact-down. When the documented Windows gesture controller is
-  available and the foreground handoff succeeds, Windows' up, down, and tap
-  actions are suppressed. A foreground handoff or shell-routing race can still
-  occur because Windows only routes the controller for the foreground process.
-  An upward stroke opens sticky mode; a downward stroke or tap is consumed
-  without opening it when ownership is acquired.
+   from Upward Swipe enabled, an upward stroke opens sticky mode. Outside a
+   switcher session, downward swipes and taps keep their configured Windows
+   actions. Horizontal motion can open a normal switcher in either launch mode.
   While the switcher is active and owns the foreground, the documented Windows
-  touchpad takeover claims both three-finger manipulations and three-finger
-  actions, so Windows' Task View, Show desktop, native switcher, and
-  three-finger tap actions are blocked for that session. Normal horizontal-swipe
+   touchpad takeover claims both three-finger manipulations and three-finger
+   actions. Explorer-side hooks also filter native actions belonging to an
+   owned raw stroke, including its bounded release grace. The native tap filter
+   runs before the configured action (such as Search or a custom Start shortcut)
+   is dispatched; it does not intercept physical keyboard or Start-button input.
+   Normal horizontal-swipe
   sessions still commit when all fingers lift. In sticky mode (Alt+Ctrl+Tab, or an upward swipe), swipes
 only navigate; lift, then make a fresh stationary three-finger tap to commit.
 Enter/click still commits and Esc/click-away cancels. In sticky mode, a fresh
@@ -75,9 +74,9 @@ Reverse Scroll Direction reverses selection navigation, not the physical up/down
 commands for opening/dismissing sticky mode or entering/leaving groups.
 
   Windows gesture takeover requires a supported TouchpadGesturesController API
-  (documented minimum: Windows 11). Sticky launch uses a temporary transparent
-  foreground shield to reduce the contact-down routing race, but the shield is
-  best-effort because background controllers are ignored by Windows. When
+   (documented minimum: Windows 11). Background controllers are ignored by
+   Windows; Explorer filtering additionally depends on matching shell symbols
+   and is available on the 64-bit architectures. When
   Sticky Switcher from Upward Swipe is disabled, Windows owns outside up/down/
   tap actions; horizontal drag invocation remains available. If the API or raw
   reader is unavailable, touchpad takeover is not claimed; keyboard/mouse
@@ -743,7 +742,7 @@ commands for opening/dismissing sticky mode or entering/leaving groups.
       $description: Read precision-touchpad Raw HID reports and request three-finger manipulation and action control while the switcher owns the foreground. Windows Task View, Show desktop, native switching, and three-finger tap actions are blocked during supported active sessions. Horizontal swipes open the normal switcher; drag to navigate and lift all fingers to select. In sticky mode, dragging never commits; lift and make a fresh stationary three-finger tap to select. No legacy fallback is used.
     - stickyLaunch: true
       $name: Sticky Switcher from Upward Swipe
-      $description: "When enabled, the mod attempts to claim every outside three-finger stroke from contact-down: upward opens the switcher in sticky mode, while downward swipes and taps are suppressed without opening it when foreground ownership is acquired. Windows may win a contact-down or shell-routing race because its documented controller is foreground-only. When disabled, Windows keeps its default outside up/down/tap gestures. Horizontal touchpad invocation remains available in either mode, opens normal mode, and commits on lift."
+      $description: "When enabled, an upward three-finger swipe opens the switcher in sticky mode. Outside a switcher session, downward swipes and taps keep their configured Windows actions. When disabled, Windows also keeps its default outside upward gesture. Horizontal swipes open normal mode in either setting and commit on lift. Gesture takeover during an active session requires a supported foreground-only Windows controller."
   $name: Touchpad
   $description: Raw HID three-finger support with an optional sticky upward-swipe launcher. Outside an active switcher session, the sticky launcher setting controls whether upward launch and the associated gesture suppression are enabled.
 - ExcludedWindows:
@@ -793,6 +792,9 @@ commands for opening/dismissing sticky mode or entering/leaving groups.
 #include <hidpi.h>
 #include <vector>
 #include <atomic>
+#include <deque>
+#include <memory>
+#include <exception>
 #include <map>
 #include <string>
 #include <algorithm>
@@ -845,13 +847,58 @@ commands for opening/dismissing sticky mode or entering/leaving groups.
 // elevated foreground window. Retry it briefly while the raw stroke remains
 // active instead of releasing ownership after one foreground check.
 #define SWS_TOUCHPAD_SHIELD_FOCUS_RETRY_TIMER_ID 110
+// Retry the selected-window activation briefly when foreground-lock rules reject
+// the first handoff after a raw touchpad session.
+#define SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID 112
+// Marker expiry never extends the invisible foreground shield's lifetime.
+#define SWS_RAW_SWIPE_MARKER_EXPIRY_TIMER_ID 111
+// Short post-commit polling closes the gap when Start reuses an existing shell
+// window without emitting a usable OBJECT_SHOW notification.
+// Captures show 1828/1937 ms gaps between active reports before Show Desktop
+// runs, not after lift. Cover those gaps without claiming a lost reader forever.
+#define SWS_RAW_SWIPE_OWNER_MS 3000
+// The confirmed post-lift call arrived 184 ms after release. Keep a separate,
+// shorter marker-only grace; its physical expiry is measured from the lift.
+#define SWS_RAW_SWIPE_LIFT_GRACE_MS 1000
 // Posted by the low-level mouse hook so the heavy CycleLinear work runs in the
 // wndproc instead of on the synchronous raw-input path. WPARAM is the direction.
 #define WM_SWS_SCROLL           (WM_APP + 1)
 #define WM_SWS_SETTINGS_CHANGED (WM_APP + 2)
 #define WM_SWS_TOUCHPAD_READER_CHANGED (WM_APP + 3)
 #define WM_SWS_CANCEL_INPUT (WM_APP + 4)
+#define WM_SWS_ICON_READY (WM_APP + 5)
+#define WM_SWS_TOUCHPAD_DIAGNOSTICS (WM_APP + 6)
+#define WM_SWS_TOUCHPAD_READER_DIAGNOSTICS (WM_APP + 7)
+#define WM_SWS_NATIVE_TOUCHPAD (WM_APP + 8)
+// Pointer-free IPC: WPARAM carries a 29-bit UI epoch and a 3-bit boundary
+// (Start left/up/right = 1/2/3, End = 5, Cancel = 6); LPARAM is a stroke token.
+#define SWS_NATIVE_TOUCHPAD_END 5u
+#define SWS_NATIVE_TOUCHPAD_CANCEL 6u
+#define SWS_NATIVE_TOUCHPAD_START_MAX_AGE_MS 1000u
+#define SWS_NATIVE_TOUCHPAD_COMPLETION_TIMER_ID 114
+// Let the reader adopt reports after a foreground/context handoff. This is a
+// single bounded wait, not a synthetic lift or a foreground retry loop.
+#define SWS_NATIVE_TOUCHPAD_HANDOFF_MS 50u
 #define SWS_RAW_SWIPE_PROP L"WindhawkSWSRawSwipe"
+#define SWS_RAW_SWIPE_SESSION_PROP L"WindhawkSWSRawSwipeSession"
+#define SWS_RAW_SWIPE_UP_PROP L"WindhawkSWSRawSwipeUp"
+// The tool publishes readiness independently of raw direction classification.
+// Bits 0/1 declare enabled/usable reader, bit 2 enables outside sticky-up.
+// Higher bits are an epoch: disable/reader loss invalidates existing decisions.
+#define SWS_NATIVE_SWIPE_POLICY_PROP L"WindhawkSWSNativeSwipePolicy"
+#define SWS_NATIVE_SWIPE_ACTIVE_PROP L"WindhawkSWSNativeSwipeActive"
+#define SWS_NATIVE_TOUCHPAD_EPOCH_PROP L"WindhawkSWSNativeTouchpadEpoch"
+// Explorer publishes source-gate availability on its own taskbar window so
+// both processes can retire the source-ambiguous window-show recovery path.
+#define SWS_NATIVE_SWIPE_GATE_PROP L"WindhawkSWSNativeSwipeGate"
+// The generic marker keeps the full 31-bit timestamp range. A separate session
+// property distinguishes active switcher ownership from an outside sticky-launch
+// candidate without reducing wraparound coverage.
+#define SWS_RAW_SWIPE_LIFT_FLAG 0x80000000u
+#define SWS_RAW_SWIPE_TIMESTAMP_MASK 0x7FFFFFFFu
+#ifndef EVENT_SYSTEM_FOREGROUND
+#define EVENT_SYSTEM_FOREGROUND 0x0003
+#endif
 
 typedef BOOL (WINAPI *IsShellWindow_t)(HWND);
 typedef HWND (WINAPI *GhostWindowFromHungWindow_t)(HWND);
@@ -893,8 +940,51 @@ static HWND CreateSWSWindow(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWind
                            X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
 }
 
+struct MotionTrackClock {
+    LARGE_INTEGER origin = {};
+    float initial = 0.0f;
+    float lastProgress = 0.0f;
+    bool started = false;
+};
+
+struct OpacityMotionTrack {
+    MotionTrackClock clock;
+    float progress = 1.0f;
+    float start = 0.0f;
+    float target = 0.0f;
+};
+
+struct ItemTransitionMotion {
+    OpacityMotionTrack opacity;
+    MotionTrackClock scaleClock;
+    float scaleProgress = 1.0f;
+    float scaleFrom = 1.0f;
+    float scaleTo = 1.0f;
+};
+
+struct OwnedWindowIcon {
+    HICON handle;
+    explicit OwnedWindowIcon(HICON icon) : handle(icon) {}
+    ~OwnedWindowIcon() { if (handle) DestroyIcon(handle); }
+};
+
+// Shared by live entries and transition snapshots; only the UI changes a cell.
+struct WindowIconCell {
+    HWND hWnd = NULL;
+    DWORD processId = 0, threadId = 0;
+    int sizePx = 0;
+    ULONGLONG settingsGeneration = 0, requestGeneration = 0;
+    ULONGLONG retryAfter = 0;
+    bool pending = false;
+    bool lastFailed = false;
+    std::atomic<ULONGLONG> discardedGeneration{0};
+    std::atomic<bool> retired{false};
+    std::shared_ptr<OwnedWindowIcon> icon;
+};
+
 struct WindowEntry {
     HWND hWnd; HICON hIcon; WCHAR title[256]; std::map<HWND, HTHUMBNAIL> hThumbs;
+    std::shared_ptr<WindowIconCell> iconCell;
     RECT rcCell; RECT rcThumbActual; RECT rcThumbSlot;
     SIZE sourceSize;           // Raw DWM surface size
     RECT rcSourceCrop;         // Source crop rect for DWM_TNP_RECTSOURCE
@@ -907,15 +997,27 @@ struct WindowEntry {
     RECT rcCellTarget = {};
     RECT rcThumbStart = {};
     RECT rcThumbTarget = {};
+    RECT rcThumbSlotStart = {};
+    RECT rcThumbSlotTarget = {};
+    RECT rcCellLayoutCurrent = {};
+    RECT rcThumbLayoutCurrent = {};
     bool isNewEntry = false;
     float enterAlpha = 1.0f;
     float enterScale = 1.0f;
+    ItemTransitionMotion entryMotion;
     float closeBtnAlpha = 0.0f;
+    OpacityMotionTrack closeBtnMotion;
+    float closeBtnScale = 0.85f;
+    float closeBtnScaleStart = 0.85f;
+    float closeBtnScaleTarget = 0.85f;
+    float closeBtnScaleProgress = 1.0f;
+    MotionTrackClock closeBtnScaleClock;
     float hoverScale = 1.0f;
     float hoverScaleStart = 1.0f;
     float hoverScaleTarget = 1.0f;
     float hoverScaleProgress = 1.0f;
-    float hoverScaleDuration = 0.150f;
+    float hoverScaleDuration = 0.167f;
+    MotionTrackClock hoverScaleClock;
 };
 struct Settings {
     WCHAR theme[32]; WCHAR colorScheme[32]; WCHAR cornerPreference[32]; WCHAR scrollWheelBehavior[32]; WCHAR scrollWheelAction[32]; WCHAR scrollSecondaryAction[32]; WCHAR scrollSecondaryModifier[32]; WCHAR taskListOrientation[32]; WCHAR headerContentOrientation[32]; WCHAR iconSize[32]; WCHAR backwardShortcut[32]; WCHAR altBacktickBehavior[32]; WCHAR thumbnailPosition[32]; WCHAR thumbnailAlignment[32]; WCHAR switcherDisplayBehavior[32];
@@ -1146,6 +1248,7 @@ static IVirtualDesktopManager* g_pVirtualDesktopManager = NULL;
 static bool g_showAllMonitors = false;
 static HHOOK g_hMouseHook = NULL;
 static HWINEVENTHOOK s_hWinEventHook = NULL;
+static HWINEVENTHOOK s_hForegroundEventHook = NULL;
 static void AddWindowEntry(HWND hWnd);
 static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime);
 static std::vector<WindowEntry> g_windows;
@@ -1198,20 +1301,23 @@ static Settings g_settings;
 // zero cost when disabled.
 // ============================================================================
 #define SWS_BACKDROP_CLASSNAME L"WindhawkSWS_Backdrop"
+// Presentation timing does not change any theme's per-pixel alpha/material.
+#define SWS_PRESENTATION_ANIMATION_MS 167
+// A small shared travel distance keeps the reveal/exit visible on non-layered
+// Mica/Acrylic windows, where a global HWND alpha is not available.
+#define SWS_PRESENTATION_OFFSET_PX 6
 // g_hBackdropWnd is declared above, near the other switcher window handles.
 static bool g_backdropClassRegistered = false;
 static Gdiplus::Bitmap* g_backdropBitmap = NULL; // blurred backdrop, dim veil baked in
 
 // Layered-window fade. The backdrop is applied at full opacity *before* the switcher is
 // presented (see ShowBackdropBlur), so the blur is always fully in place first and
-// nothing waits on a timer. The fade-out runs with the switcher's exit dissolve so the
-// desktop never shows through a half-faded switcher.
-#define SWS_BACKDROP_FADE_OUT_MS 167
+// nothing waits on a timer. Exit uses the switcher's capped presentation timeline,
+// including partial reversal, rather than an independent wall-clock fade.
 static float g_backdropFadeAlpha = 0.0f;
 static float g_backdropFadeFrom = 0.0f;
-static float g_backdropFadeTarget = 0.0f;
-static ULONGLONG g_backdropFadeStartTick = 0;
-static DWORD g_backdropFadeDurationMs = 0;
+static float g_backdropExitStartAlpha = 1.0f;
+static bool g_backdropExitFadeActive = false;
 
 static bool AreAnimationsGloballyEnabled(); // defined further down
 static bool IsWin11OrGreater();             // defined further down
@@ -1229,35 +1335,25 @@ static void BackdropApplyAlpha(HWND hWnd, float alpha) {
 }
 
 static void BackdropStopFade() {
-    g_backdropFadeDurationMs = 0;
+    g_backdropExitFadeActive = false;
 }
 
-static float BackdropEase(float t) {
-    if (t <= 0.0f) return 0.0f;
-    if (t >= 1.0f) return 1.0f;
-    return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f); // smootherstep
-}
-
-static void BackdropStartFade(HWND hWnd, float target, DWORD durationMs) {
+static void BackdropStartExitFade(HWND hWnd, float timelineAlpha) {
     if (!hWnd || !IsWindow(hWnd)) return;
     g_backdropFadeFrom = g_backdropFadeAlpha;
-    g_backdropFadeTarget = target;
-    g_backdropFadeStartTick = GetTickCount64();
-    g_backdropFadeDurationMs = durationMs;
+    g_backdropExitStartAlpha = timelineAlpha;
+    g_backdropExitFadeActive = true;
 }
 
-static void BackdropFadeTick() {
-    if (!g_backdropFadeDurationMs) {
-        return;
-    }
-    float t = (float)(GetTickCount64() - g_backdropFadeStartTick) / (float)g_backdropFadeDurationMs;
-    BackdropApplyAlpha(g_hBackdropWnd, g_backdropFadeFrom +
-                                 (g_backdropFadeTarget - g_backdropFadeFrom) * BackdropEase(t));
-    if (t >= 1.0f) {
-        BackdropStopFade();
-        ShowWindow(g_hBackdropWnd, SW_HIDE);
-        BackdropFreeBitmap();
-    }
+static void BackdropFadeTick(float timelineAlpha) {
+    if (!g_backdropExitFadeActive || !g_hBackdropWnd || !IsWindow(g_hBackdropWnd)) return;
+    // The plate starts fully applied even during entrance. Normalize E(p) by
+    // E(p_start) to preserve that opacity at reversal and reach zero with p.
+    float remaining = g_backdropExitStartAlpha > 0.0f
+        ? timelineAlpha / g_backdropExitStartAlpha : 0.0f;
+    remaining = (std::clamp)(remaining, 0.0f, 1.0f);
+    BackdropApplyAlpha(g_hBackdropWnd, g_backdropFadeFrom * remaining);
+    // HideSwitcher owns hiding/freeing the plate together with all surfaces.
 }
 
 static LRESULT CALLBACK BackdropWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -1554,11 +1650,11 @@ static void ShowBackdropBlur() {
     UpdateWindow(g_hBackdropWnd); // paint the finished plate before it appears
 }
 
-// The switcher's exit dissolve drives the fade-out so both end together.
-static void FadeOutBackdropBlur() {
+// The sampled shared exit alpha is independent of the theme's alpha policy.
+static void FadeOutBackdropBlur(float timelineAlpha) {
     if (!g_hBackdropWnd || !IsWindowVisible(g_hBackdropWnd)) return;
     if (!AreAnimationsGloballyEnabled()) return;
-    BackdropStartFade(g_hBackdropWnd, 0.0f, SWS_BACKDROP_FADE_OUT_MS);
+    BackdropStartExitFade(g_hBackdropWnd, timelineAlpha);
 }
 
 static void HideBackdropBlur() {
@@ -1792,19 +1888,34 @@ struct ThumbCacheState {
     RECT dst;
     BYTE alpha;
     BOOL visible;
+    RECT source = {};
+    bool hasSource = false;
 };
 static std::map<HTHUMBNAIL, ThumbCacheState> g_lastThumbState;
+// DWM retains rcSource when a later update omits DWM_TNP_RECTSOURCE. This
+// physical state outlives invalidation of the destination/opacity cache.
+static std::map<HTHUMBNAIL, RECT> g_thumbSourceRects;
+
+static void InvalidateThumbCache(HTHUMBNAIL thumbnail) {
+    g_lastThumbState.erase(thumbnail);
+}
 
 static HRESULT UpdateDwmThumbnail(HTHUMBNAIL thumbnail, const DWM_THUMBNAIL_PROPERTIES* properties) {
     // Direct layout/visibility writes invalidate the animation cache too.
-    g_lastThumbState.erase(thumbnail);
-    return DwmUpdateThumbnailProperties(thumbnail, properties);
+    InvalidateThumbCache(thumbnail);
+    HRESULT result = DwmUpdateThumbnailProperties(thumbnail, properties);
+    if (SUCCEEDED(result) && (properties->dwFlags & DWM_TNP_RECTSOURCE)) {
+        g_thumbSourceRects[thumbnail] = properties->rcSource;
+    }
+    return result;
 }
 
 static inline HRESULT SafeDwmUnregisterThumbnail(HTHUMBNAIL h) {
     if (!h) return S_OK;
-    g_lastThumbState.erase(h);
-    return DwmUnregisterThumbnail(h);
+    InvalidateThumbCache(h);
+    HRESULT result = DwmUnregisterThumbnail(h);
+    if (SUCCEEDED(result)) g_thumbSourceRects.erase(h);
+    return result;
 }
 
 // Forward declarations
@@ -1838,10 +1949,46 @@ static void RestoreWindowIfIconic(HWND hWnd);
 static void UpdateChevronAnimationTargets(bool immediate = false);
 static int HitTestChevron(HWND hWnd, int x, int y);
 static void EnterAppGroup();
-static void ApplyExitMotion(int offsetY);
 static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreWindows);
+static void TapUnassignedKeyForForeground();
+static bool ActivateRawTouchpadWindow();
 
 static inline int DpiScale(int val, int dpi) { return MulDiv(val, dpi, 96); }
+
+using SwsGetDpiForWindow_t = UINT(WINAPI*)(HWND);
+using SwsGetDpiForMonitor_t = HRESULT(WINAPI*)(HMONITOR, int, UINT*, UINT*);
+
+static UINT QueryWindowDpi(HWND hWnd) {
+    if (!hWnd || !IsWindow(hWnd)) return 0;
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    auto getDpi = user32 ? (SwsGetDpiForWindow_t)GetProcAddress(user32, "GetDpiForWindow") : nullptr;
+    return getDpi ? getDpi(hWnd) : 0;
+}
+
+// GetDpiForMonitor is retained only as the monitor-only fallback: Microsoft
+// documents it as not DPI-aware and recommends GetDpiForWindow for PM-aware
+// windows. Prefer the real window's DPI whenever that window is already on the
+// requested monitor, which avoids mixing virtualized and physical coordinates.
+static bool QueryMonitorDpi(HMONITOR hMon, UINT* dpiX, UINT* dpiY) {
+    if (!dpiX || !dpiY) return false;
+    *dpiX = *dpiY = 96;
+    if (g_hSwitcher && IsWindow(g_hSwitcher) &&
+        MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST) == hMon) {
+        UINT dpi = QueryWindowDpi(g_hSwitcher);
+        if (dpi) {
+            *dpiX = *dpiY = dpi;
+            return true;
+        }
+    }
+    HMODULE shcore = GetModuleHandleW(L"shcore.dll");
+    if (!shcore) shcore = LoadLibraryW(L"shcore.dll");
+    auto getDpi = shcore ? (SwsGetDpiForMonitor_t)GetProcAddress(shcore, "GetDpiForMonitor") : nullptr;
+    if (!getDpi || FAILED(getDpi(hMon, 0, dpiX, dpiY)) || !*dpiX || !*dpiY) {
+        *dpiX = *dpiY = 96;
+        return false;
+    }
+    return true;
+}
 
 // Helper: check if a window is truncated (not placed in current layout)
 static bool IsWindowTruncated(int idx) {
@@ -2109,60 +2256,82 @@ static inline RectF LerpRect(const RectF& a, const RectF& b, float t) {
 static CubicBezierEasing g_easeEntrance(0.0f, 0.0f, 0.0f, 1.0f);
 static CubicBezierEasing g_easeSlide(0.55f, 0.55f, 0.0f, 1.0f);
 static CubicBezierEasing g_easeHover(0.55f, 0.55f, 0.0f, 1.0f);
-static CubicBezierEasing g_easeHoverEnter(0.0f, 0.0f, 0.2f, 1.0f);
+static CubicBezierEasing g_easeHoverEnter(0.0f, 0.0f, 0.0f, 1.0f);
 static CubicBezierEasing g_easeSelection(0.55f, 0.55f, 0.0f, 1.0f);
 static CubicBezierEasing g_easeExit(0.0f, 0.0f, 0.0f, 1.0f);
 
 static bool g_animActive = false;
 static LARGE_INTEGER g_animPerfFreq = {};
 static LARGE_INTEGER g_animLastTickTime = {};
+static double g_animNextFrameDeadline = 0.0;
+static bool g_animTickInProgress = false;
+static bool g_animEntranceFrameZeroPending = false;
+static void StartMotionTrack(float& progress, float initial = 0.0f);
+static bool StepMotionTrack(float& progress, float duration, float dt);
+static void StartOpacityMotion(OpacityMotionTrack& track, float current, float target);
+static bool StepOpacityMotion(OpacityMotionTrack& track, float& current, float dt);
 
-// Exit animation state (167ms Windows direct exit + short downward travel)
+// Exit animation state (the entrance presentation curve played in reverse)
 static bool g_animExitActive = false;
 static float g_animExitProgress = 1.0f;
-static float g_animExitDuration = 0.167f;
+static float g_animExitDuration = SWS_PRESENTATION_ANIMATION_MS / 1000.0f;
 static float g_animExitCurrentAlpha = 1.0f;
 static bool g_animExitActivateSelected = false;
 static HWND g_animExitTargetWindow = NULL;
 static std::vector<HWND> g_animExitRestoreWindows;
-static RECT g_animExitStartRect = { 0, 0, 0, 0 };
-static std::vector<RECT> g_animExitMirrorStartRects;
 
-// Animation target frame interval (updated from DWM composition refresh rate)
+// Monitor timing is cached across track starts. DWM timing is a session-wide
+// fallback, not a per-monitor measurement; 60 Hz is the final explicit fallback.
 static double s_animTargetIntervalMs = 1000.0 / 60.0;
+static HMONITOR s_animTimingMonitor = NULL;
+static bool s_animTimingValid = false;
 
-static void UpdateRefreshRateTiming() {
+static void UpdateRefreshRateTiming(bool force = false) {
+    HWND targetWnd = g_hSwitcher ? g_hSwitcher : GetDesktopWindow();
+    HMONITOR hMon = MonitorFromWindow(targetWnd, MONITOR_DEFAULTTONEAREST);
+    if (!force && s_animTimingValid && hMon == s_animTimingMonitor) return;
+    s_animTimingMonitor = hMon;
+    s_animTimingValid = true;
     double hz = 0.0;
-    DWM_TIMING_INFO ti = {};
-    ti.cbSize = sizeof(ti);
-    if (SUCCEEDED(DwmGetCompositionTimingInfo(NULL, &ti)) && ti.rateRefresh.uiDenominator > 0) {
-        hz = (double)ti.rateRefresh.uiNumerator / (double)ti.rateRefresh.uiDenominator;
-    }
-    if (hz <= 0.0) {
-        HWND targetWnd = g_hSwitcher ? g_hSwitcher : GetDesktopWindow();
-        HMONITOR hMon = MonitorFromWindow(targetWnd, MONITOR_DEFAULTTONEAREST);
-        MONITORINFOEXW mi = {};
-        mi.cbSize = sizeof(mi);
-        if (GetMonitorInfoW(hMon, &mi)) {
-            DEVMODEW dm = {};
-            dm.dmSize = sizeof(dm);
-            if (EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency >= 48) {
-                hz = (double)dm.dmDisplayFrequency;
-            }
+    MONITORINFOEXW mi = {};
+    mi.cbSize = sizeof(mi);
+    if (GetMonitorInfoW(hMon, &mi)) {
+        DEVMODEW dm = {};
+        dm.dmSize = sizeof(dm);
+        if (EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) &&
+            dm.dmDisplayFrequency >= 24 && dm.dmDisplayFrequency <= 1000) {
+            hz = (double)dm.dmDisplayFrequency;
         }
     }
-    if (hz >= 48.0 && hz <= 360.0) {
-        s_animTargetIntervalMs = 1000.0 / hz;
+    if (hz <= 0.0) {
+        DWM_TIMING_INFO ti = {};
+        ti.cbSize = sizeof(ti);
+        if (SUCCEEDED(DwmGetCompositionTimingInfo(NULL, &ti)) && ti.rateRefresh.uiDenominator > 0) {
+            double fallbackHz = (double)ti.rateRefresh.uiNumerator / (double)ti.rateRefresh.uiDenominator;
+            if (fallbackHz >= 24.0 && fallbackHz <= 1000.0) hz = fallbackHz;
+        }
     }
+    s_animTargetIntervalMs = 1000.0 / (hz > 0.0 ? hz : 60.0);
 }
 
-// Entrance animation state (250ms Windows direct entrance)
+// Entrance/exit transform state. Reversing entrance gives a gentle exit with
+// continuous interrupted motion; layered opacity has its own 83 ms clock.
 static bool g_animEntranceActive = false;
 static float g_animEntranceProgress = 1.0f;
-static float g_animEntranceDuration = 0.250f;
+static float g_animEntranceDuration = SWS_PRESENTATION_ANIMATION_MS / 1000.0f;
 static float g_animEntranceCurrentAlpha = 1.0f;
+static OpacityMotionTrack g_presentationOpacity;
+static float g_presentationOpacityCurrent = 1.0f;
 
-// Selection focus animation state (WinUI 3 Decelerate cubic-bezier, consistent with inner hover border)
+struct PresentationWindowState {
+    RECT layoutRect;
+    UINT dpiY;
+};
+static std::map<HWND, PresentationWindowState> g_presentationWindows;
+static void SetSwitcherLayoutBounds(int x, int y, int w, int h,
+                                    UINT flags = SWP_NOACTIVATE);
+
+// Selection focus: documented 167 ms existing-element point-to-point motion.
 static bool g_animSelectionActive = false;
 static RectF g_animSelectionStart = {};
 static RectF g_animSelectionTarget = {};
@@ -2180,14 +2349,158 @@ static inline void SnapSelectionTo(const RectF& r) {
     g_animSelectionActive = false;
 }
 
-static inline int GetAnimationOffsetY() {
-    // WinUI 3 FadeInThemeAnimation / FadeOutThemeAnimation operates purely via opacity
-    // in-place. Eliminating physical vertical window translation prevents coordinate
-    // desynchronization between non-layered host windows and the layered overlay.
-    return 0;
+static inline float CurrentPresentationAlpha() {
+    // Native Mica/Acrylic clients and materials cannot share a whole-window
+    // alpha without changing their rendering contract. Keep their thumbnails
+    // and overlay opaque too; the entire native surface uses motion only.
+    if (!ThemeIs(L"none")) return 1.0f;
+    float alpha = g_presentationOpacityCurrent;
+    if (alpha < 0.0f) alpha = 0.0f;
+    if (alpha > 1.0f) alpha = 1.0f;
+    return alpha;
 }
 
-// Hover focus animation state (150ms enter/glide, 120ms exit)
+static inline BYTE CurrentPresentationAlphaByte() {
+    return (BYTE)roundf(CurrentPresentationAlpha() * 255.0f);
+}
+
+static inline int GetAnimationOffsetY(UINT dpiY) {
+    // Exit decreases the very same linear timeline used by entrance. This
+    // retraces E(p), including when entrance is interrupted before p reaches 1.
+    float p = g_animExitActive ? g_animExitProgress : g_animEntranceProgress;
+    float e = g_easeEntrance.Solve(p);
+    return (int)roundf((1.0f - e) * SWS_PRESENTATION_OFFSET_PX * dpiY / 96.0f);
+}
+
+static bool GetPresentationLayoutRect(HWND hWnd, RECT* rect) {
+    if (hWnd == g_hSwitcher && g_isPendingShow &&
+        g_pendingSwitcherRect.right > g_pendingSwitcherRect.left) {
+        *rect = g_pendingSwitcherRect;
+        return true;
+    }
+    auto it = g_presentationWindows.find(hWnd);
+    if (it != g_presentationWindows.end()) {
+        *rect = it->second.layoutRect;
+        return true;
+    }
+    return GetWindowRect(hWnd, rect);
+}
+
+static UINT GetPresentationDpiY(HWND hWnd, const RECT& layoutRect) {
+    // Mirrors use their own monitor's DPI, not the main layout's DPI. Resolve
+    // from the untransformed rect so a tiny motion near an edge cannot change it.
+    HMONITOR hMon = MonitorFromRect(&layoutRect, MONITOR_DEFAULTTONEAREST);
+    if (hWnd && IsWindow(hWnd) && MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST) == hMon) {
+        UINT dpi = QueryWindowDpi(hWnd);
+        if (dpi) return dpi;
+    }
+    UINT dpiX = 96, dpiY = 96;
+    QueryMonitorDpi(hMon, &dpiX, &dpiY);
+    return dpiY;
+}
+
+static bool GetPresentationWindowRect(HWND hWnd, RECT* rect) {
+    auto it = g_presentationWindows.find(hWnd);
+    if (it == g_presentationWindows.end()) return GetWindowRect(hWnd, rect);
+    *rect = it->second.layoutRect;
+    int offset = GetAnimationOffsetY(it->second.dpiY);
+    rect->top += offset;
+    rect->bottom += offset;
+    return true;
+}
+
+static void PositionPresentationWindow(HWND hWnd,
+                                       UINT flags = SWP_NOACTIVATE | SWP_NOZORDER) {
+    if (!hWnd || !IsWindow(hWnd)) return;
+    RECT target = {}, actual = {};
+    if (!GetPresentationWindowRect(hWnd, &target) ||
+        target.right <= target.left || target.bottom <= target.top) return;
+    if (GetWindowRect(hWnd, &actual) && EqualRect(&actual, &target) &&
+        !(flags & (SWP_FRAMECHANGED | SWP_SHOWWINDOW))) return;
+    SetWindowPos(hWnd, HWND_TOPMOST, target.left, target.top,
+                 target.right - target.left, target.bottom - target.top, flags);
+}
+
+static void SetPresentationWindowLayout(HWND hWnd, int x, int y, int w, int h,
+                                        UINT flags = SWP_NOACTIVATE) {
+    if (!hWnd || !IsWindow(hWnd)) return;
+    RECT rect = { x, y, x + w, y + h };
+    g_presentationWindows[hWnd] = { rect, GetPresentationDpiY(hWnd, rect) };
+    PositionPresentationWindow(hWnd, flags);
+}
+
+static void AnchorPresentationOverlay() {
+    if (!g_hCloseBtnWnd || !IsWindow(g_hCloseBtnWnd)) return;
+    HWND target = g_hoverWnd && IsWindow(g_hoverWnd) ? g_hoverWnd : g_hSwitcher;
+    auto it = g_presentationWindows.find(target);
+    if (it != g_presentationWindows.end()) {
+        // Copy the target's layout AND DPI. The overlay follows that surface's
+        // physical pixels even when hovering a mirror on a mixed-DPI monitor.
+        g_presentationWindows[g_hCloseBtnWnd] = it->second;
+    }
+}
+
+// Absolute layout coordinates are never inferred from an animated HWND. Every
+// surface gets its offset exactly once, including after resize/reflow and in
+// frame zero. Settled paints cause no redundant SetWindowPos/WM_SIZE traffic.
+static void ApplyPresentationWindowOffset() {
+    PositionPresentationWindow(g_hSwitcher);
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        PositionPresentationWindow(hMirror);
+    }
+    AnchorPresentationOverlay();
+    PositionPresentationWindow(g_hCloseBtnWnd);
+}
+
+static void ResetPresentationAnimation() {
+    g_animEntranceFrameZeroPending = false;
+    g_animEntranceActive = false;
+    g_animEntranceProgress = 1.0f;
+    g_animEntranceCurrentAlpha = 1.0f;
+    g_animExitActive = false;
+    g_animExitProgress = 1.0f;
+    g_animExitCurrentAlpha = 1.0f;
+    g_presentationOpacity = {};
+    g_presentationOpacityCurrent = 1.0f;
+    BackdropStopFade();
+    if (g_hBackdropWnd && IsWindowVisible(g_hBackdropWnd)) {
+        BackdropApplyAlpha(g_hBackdropWnd, 1.0f);
+    }
+    ApplyPresentationWindowOffset();
+    if (!g_hSwitcher || !IsWindowVisible(g_hSwitcher)) {
+        g_presentationWindows.clear();
+    }
+}
+
+static void StartEntranceAnimation() {
+    g_animExitActive = false;
+    g_animExitProgress = 1.0f;
+    g_animExitCurrentAlpha = 1.0f;
+    g_animEntranceDuration = SWS_PRESENTATION_ANIMATION_MS / 1000.0f;
+    g_animEntranceActive = AreAnimationsGloballyEnabled() && g_settings.enableEntranceAnimation;
+    StartMotionTrack(g_animEntranceProgress, g_animEntranceActive ? 0.0f : 1.0f);
+    g_animEntranceCurrentAlpha = g_animEntranceActive ? 0.0f : 1.0f;
+    g_animEntranceFrameZeroPending = g_animEntranceActive;
+    g_presentationOpacityCurrent = g_animEntranceActive ? 0.0f : 1.0f;
+    g_presentationOpacity = {};
+    StartOpacityMotion(g_presentationOpacity, g_presentationOpacityCurrent, 1.0f);
+}
+
+static void AdvancePresentationAnimation(float dt) {
+    if (g_animEntranceActive) {
+        StepMotionTrack(g_animEntranceProgress, g_animEntranceDuration, dt);
+        g_animEntranceCurrentAlpha = g_easeEntrance.Solve(g_animEntranceProgress);
+        if (g_animEntranceProgress == 1.0f) g_animEntranceActive = false;
+    }
+    if (g_animExitActive) {
+        StepMotionTrack(g_animExitProgress, -g_animExitDuration, dt);
+        g_animExitCurrentAlpha = g_easeEntrance.Solve(g_animExitProgress);
+        BackdropFadeTick(g_animExitCurrentAlpha);
+    }
+    StepOpacityMotion(g_presentationOpacity, g_presentationOpacityCurrent, dt);
+}
+
+// Hover contour: 167 ms transform, with an independent 83 ms linear opacity.
 static bool g_animHoverActive = false;
 static RectF g_animHoverStart = {};
 static RectF g_animHoverTarget = {};
@@ -2197,6 +2510,7 @@ static float g_animHoverAlphaTarget = 0.0f;
 static float g_animHoverAlphaCurrent = 0.0f;
 static float g_animHoverProgress = 1.0f;
 static float g_animHoverDuration = 0.167f;
+static OpacityMotionTrack g_hoverOpacity;
 
 static inline void SnapHoverTo(const RectF& r) {
     g_animHoverCurrent = r;
@@ -2207,7 +2521,7 @@ static inline void SnapHoverTo(const RectF& r) {
 }
 
 // Hover thumbnail zoom animation state (per-entry concurrent WinUI 3 curves)
-static constexpr float SWS_HOVER_ZOOM_DELTA = 0.025f; // 2.5% subtle zoom (1.025x), WinUI 3 Fluent standard
+static constexpr float SWS_HOVER_ZOOM_DELTA = 0.025f; // Preserve the existing subtle zoom amplitude.
 static bool g_animHoverScaleActive = false;
 
 static inline RECT GetScaledThumbRect(const WindowEntry& e) {
@@ -2245,6 +2559,15 @@ static float g_animChevronStartAlphaNext = 0.0f;
 static float g_animChevronHoverAlphaPrev = 0.0f;
 static float g_animChevronHoverAlphaNext = 0.0f;
 static float g_animChevronDuration = 0.167f;
+static float g_animChevronTransformPrev = 0.0f;
+static float g_animChevronTransformNext = 0.0f;
+static float g_animChevronTransformStartPrev = 0.0f;
+static float g_animChevronTransformStartNext = 0.0f;
+static OpacityMotionTrack g_chevronRevealPrev;
+static OpacityMotionTrack g_chevronRevealNext;
+static OpacityMotionTrack g_chevronHoverPrev;
+static OpacityMotionTrack g_chevronHoverNext;
+static OpacityMotionTrack g_closeBtnHover;
 
 // Dual-surface Row and Page Slide animation state
 enum ScrollNavType {
@@ -2260,12 +2583,18 @@ struct OutgoingItemSnapshot {
     RECT rcThumbSlot;
     WCHAR title[256];
     HICON hIcon;
+    std::shared_ptr<WindowIconCell> iconCell;
     std::map<HWND, HTHUMBNAIL> hThumbs;
     int drawnIconX, drawnIconY, drawnIconSz;
     std::vector<HWND> groupWindows;
     SIZE sourceSize;
     RECT rcSourceCrop;
     SIZE effectiveSourceSize;
+    float alpha = 1.0f;
+    float scale = 1.0f;
+    RECT rcCellLayout = {};
+    RECT rcThumbLayout = {};
+    ItemTransitionMotion entryMotion;
 };
 
 struct ScrollTransitionState {
@@ -2279,6 +2608,8 @@ struct ScrollTransitionState {
     float duration = 0.167f;
     int travelDistanceX = 0;
     int travelDistanceY = 0;
+    float capturedOffsetX = 0.0f;
+    float capturedOffsetY = 0.0f;
     std::vector<OutgoingItemSnapshot> outgoingItems;
 };
 static ScrollTransitionState g_scrollTransition;
@@ -2291,10 +2622,16 @@ struct DepartingEntrySnapshot {
     RECT rcThumbCurrent;
     float alpha;
     float scale;
+    ItemTransitionMotion motion;
+    RECT rcCellTarget = {};
+    RECT rcThumbTarget = {};
     HICON hIcon;
+    std::shared_ptr<WindowIconCell> iconCell;
     WCHAR title[256];
     std::map<HWND, HTHUMBNAIL> hThumbs;
     std::vector<HWND> groupWindows;
+    SIZE sourceSize = {};
+    RECT rcSourceCrop = {};
 };
 
 struct LayoutTransitionState {
@@ -2306,10 +2643,13 @@ struct LayoutTransitionState {
     RECT rcDockStripStart = {}, rcDockStripTarget = {};
     RECT rcDockPreviewStart = {}, rcDockPreviewTarget = {};
     RECT rcDockTitleStart = {}, rcDockTitleTarget = {};
+    RECT rcDockSlotStart = {}, rcDockSlotTarget = {};
+    bool scrollReflow = false;
     std::vector<DepartingEntrySnapshot> departingItems;
 };
 static LayoutTransitionState g_layoutTransition;
-static CubicBezierEasing g_easeLayout(0.1f, 0.9f, 0.2f, 1.0f);
+static CubicBezierEasing g_easeLayout(0.55f, 0.55f, 0.0f, 1.0f);
+static CubicBezierEasing g_easeItemExit(1.0f, 0.0f, 1.0f, 1.0f);
 
 struct DockPreviewSlideTransition {
     bool active = false;
@@ -2320,6 +2660,527 @@ struct DockPreviewSlideTransition {
     float currentAlpha = 1.0f;
 };
 static DockPreviewSlideTransition g_dockPreviewSlide;
+
+static bool g_calculatingLayoutTargets = false;
+static void StartAnimationTicker();
+static void RegisterThumbnailsEarly();
+static void ComputeLayout(HMONITOR hMon);
+static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY,
+                                int width, int height);
+static void StartMotionTrack(float& progress, MotionTrackClock& clock, float initial);
+static bool StepMotionTrack(float& progress, MotionTrackClock& clock, float duration, float dt);
+static void StartOpacityMotion(OpacityMotionTrack& track, float current, float target);
+static bool StepOpacityMotion(OpacityMotionTrack& track, float& current, float dt);
+
+static bool IsItemTransitionActive(const ItemTransitionMotion& motion) {
+    return motion.opacity.progress < 1.0f || motion.scaleProgress < 1.0f;
+}
+
+static void StartItemTransition(ItemTransitionMotion& motion, float alpha, float scale,
+                                float targetAlpha, float targetScale) {
+    StartOpacityMotion(motion.opacity, alpha, targetAlpha);
+    if (scale == targetScale) {
+        motion.scaleProgress = 1.0f;
+        motion.scaleFrom = motion.scaleTo = targetScale;
+    } else if (motion.scaleProgress >= 1.0f || motion.scaleTo != targetScale) {
+        motion.scaleFrom = scale;
+        motion.scaleTo = targetScale;
+        StartMotionTrack(motion.scaleProgress, motion.scaleClock, 0.0f);
+    }
+}
+
+static float ItemScaleEasing(const ItemTransitionMotion& motion) {
+    return motion.scaleTo < motion.scaleFrom
+        ? g_easeItemExit.Solve(motion.scaleProgress)
+        : g_easeEntrance.Solve(motion.scaleProgress);
+}
+
+static bool StepItemTransition(ItemTransitionMotion& motion, float& alpha, float& scale, float dt) {
+    bool opacityActive = StepOpacityMotion(motion.opacity, alpha, dt);
+    bool scaleDone = StepMotionTrack(motion.scaleProgress, motion.scaleClock, 0.167f, dt);
+    scale = scaleDone ? motion.scaleTo :
+        motion.scaleFrom + (motion.scaleTo - motion.scaleFrom) * ItemScaleEasing(motion);
+    return opacityActive || !scaleDone;
+}
+
+static bool HasLayoutRect(const RECT& rect) {
+    return rect.right > rect.left && rect.bottom > rect.top;
+}
+
+static RECT InterpolateLayoutRect(const RECT& start, const RECT& target, float t) {
+    RectF rect = LerpRect(ToRectF(start), ToRectF(target), t);
+    return { (LONG)roundf(rect.left), (LONG)roundf(rect.top),
+             (LONG)roundf(rect.right), (LONG)roundf(rect.bottom) };
+}
+
+static RECT ScaleLayoutRect(const RECT& rect, float scale) {
+    int width = (int)roundf((rect.right - rect.left) * scale);
+    int height = (int)roundf((rect.bottom - rect.top) * scale);
+    int x = (rect.left + rect.right - width) / 2;
+    int y = (rect.top + rect.bottom - height) / 2;
+    return { x, y, x + width, y + height };
+}
+
+static void ApplyEntryPresentationGeometry(WindowEntry& entry) {
+    entry.rcCell = ScaleLayoutRect(entry.rcCellLayoutCurrent, entry.enterScale);
+    entry.rcThumbActual = ScaleLayoutRect(entry.rcThumbLayoutCurrent, entry.enterScale);
+}
+
+static void ApplyEntryLayoutGeometry(WindowEntry& entry, float t) {
+    if (!HasLayoutRect(entry.rcCellTarget)) {
+        entry.rcCellLayoutCurrent = entry.rcThumbLayoutCurrent = {};
+        entry.rcCell = entry.rcThumbActual = entry.rcThumbSlot = {};
+        return;
+    }
+    entry.rcCellLayoutCurrent = g_layoutTransition.scrollReflow ? entry.rcCellTarget :
+        InterpolateLayoutRect(entry.rcCellStart, entry.rcCellTarget, t);
+    entry.rcThumbLayoutCurrent = InterpolateLayoutRect(entry.rcThumbStart, entry.rcThumbTarget, t);
+    entry.rcThumbSlot = InterpolateLayoutRect(entry.rcThumbSlotStart, entry.rcThumbSlotTarget, t);
+    if (DockLayoutActive()) {
+        bool selected = g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() &&
+                        &entry == &g_windows[g_selectedIndex] && DockShowPreview();
+        entry.rcThumbLayoutCurrent = selected ? g_rcCentralPreview : RECT{};
+        entry.rcThumbSlot = selected ? g_rcCentralPreviewSlot : RECT{};
+    }
+    ApplyEntryPresentationGeometry(entry);
+}
+
+static void SampleDepartingEntry(DepartingEntrySnapshot& entry, float dt) {
+    StepItemTransition(entry.motion, entry.alpha, entry.scale, dt);
+    float t = ItemScaleEasing(entry.motion);
+    entry.rcCellCurrent = InterpolateLayoutRect(entry.rcCellStart, entry.rcCellTarget, t);
+    entry.rcThumbCurrent = InterpolateLayoutRect(entry.rcThumbStart, entry.rcThumbTarget, t);
+}
+
+static void SampleOutgoingEntry(OutgoingItemSnapshot& entry, float dt) {
+    StepItemTransition(entry.entryMotion, entry.alpha, entry.scale, dt);
+    entry.rcCell = ScaleLayoutRect(entry.rcCellLayout, entry.scale);
+    entry.rcThumbActual = ScaleLayoutRect(entry.rcThumbLayout, entry.scale);
+}
+
+static void RestoreCurrentLayoutGeometry() {
+    float t = g_easeLayout.Solve(g_layoutTransition.progress);
+    for (auto& entry : g_windows) {
+        bool hadEntryMotion = entry.isNewEntry;
+        if (entry.isNewEntry) {
+            entry.isNewEntry = StepItemTransition(entry.entryMotion, entry.enterAlpha, entry.enterScale, 0.0f);
+        }
+        // Dry-run navigation writes rcCell but does not change track targets.
+        // Reconstruct the last presented frame before capturing a new owner.
+        if (g_layoutTransition.active) ApplyEntryLayoutGeometry(entry, t);
+        else if (hadEntryMotion) ApplyEntryPresentationGeometry(entry);
+    }
+    for (auto& entry : g_layoutTransition.departingItems) {
+        SampleDepartingEntry(entry, 0.0f);
+    }
+    for (auto& entry : g_scrollTransition.outgoingItems) {
+        SampleOutgoingEntry(entry, 0.0f);
+    }
+}
+
+static void CaptureLayoutTransitionStart() {
+    RestoreCurrentLayoutGeometry();
+    RECT bounds = {};
+    GetPresentationLayoutRect(g_hSwitcher, &bounds);
+    g_layoutTransition.rcWndStart = ToRectF(bounds);
+    g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
+    g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
+    g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
+    g_layoutTransition.rcDockSlotStart = g_rcCentralPreviewSlot;
+    for (auto& entry : g_windows) {
+        entry.rcCellStart = HasLayoutRect(entry.rcCellLayoutCurrent) ? entry.rcCellLayoutCurrent : entry.rcCell;
+        entry.rcThumbStart = HasLayoutRect(entry.rcThumbLayoutCurrent) ? entry.rcThumbLayoutCurrent : entry.rcThumbActual;
+        entry.rcThumbSlotStart = entry.rcThumbSlot;
+    }
+}
+
+static DepartingEntrySnapshot CaptureDepartingEntry(const WindowEntry& entry) {
+    DepartingEntrySnapshot snapshot = {};
+    snapshot.hWnd = entry.hWnd;
+    snapshot.rcCellStart = snapshot.rcCellCurrent = entry.rcCell;
+    snapshot.rcThumbStart = snapshot.rcThumbCurrent = entry.rcThumbActual;
+    snapshot.alpha = entry.isNewEntry ? entry.enterAlpha : 1.0f;
+    snapshot.scale = entry.isNewEntry ? entry.enterScale : 1.0f;
+    float targetRatio = 0.92f / snapshot.scale;
+    snapshot.rcCellTarget = ScaleLayoutRect(entry.rcCell, targetRatio);
+    snapshot.rcThumbTarget = ScaleLayoutRect(entry.rcThumbActual, targetRatio);
+    StartItemTransition(snapshot.motion, snapshot.alpha, snapshot.scale, 0.0f, 0.92f);
+    snapshot.hIcon = entry.hIcon;
+    snapshot.iconCell = entry.iconCell;
+    wcsncpy_s(snapshot.title, entry.title, _TRUNCATE);
+    snapshot.hThumbs = entry.hThumbs;
+    snapshot.groupWindows = entry.groupWindows;
+    snapshot.sourceSize = entry.sourceSize;
+    snapshot.rcSourceCrop = entry.rcSourceCrop;
+    return snapshot;
+}
+
+static void CaptureGroupTransitionStart() {
+    RestoreCurrentLayoutGeometry();
+    if (g_scrollTransition.active) {
+        int x = (int)roundf(g_scrollTransition.offsetCurrentX);
+        int y = (int)roundf(g_scrollTransition.offsetCurrentY);
+        // Group navigation takes over the viewport from the scroll. Preserve
+        // displayed positions and transfer the outgoing handles to the fade.
+        for (const auto& item : g_scrollTransition.outgoingItems) {
+            int index = FindWindowIndexByHwnd(item.hWnd);
+            if (index >= 0 && HasLayoutRect(g_windows[index].rcCell)) continue;
+            WindowEntry frame = {};
+            frame.hWnd = item.hWnd;
+            frame.rcCell = item.rcCell;
+            frame.rcThumbActual = item.rcThumbActual;
+            OffsetRect(&frame.rcCell, x - g_scrollTransition.travelDistanceX,
+                       y - g_scrollTransition.travelDistanceY);
+            if (HasLayoutRect(frame.rcThumbActual)) {
+                OffsetRect(&frame.rcThumbActual, x - g_scrollTransition.travelDistanceX,
+                           y - g_scrollTransition.travelDistanceY);
+            }
+            frame.hIcon = item.hIcon;
+            frame.iconCell = item.iconCell;
+            wcsncpy_s(frame.title, item.title, _TRUNCATE);
+            frame.hThumbs = item.hThumbs;
+            frame.groupWindows = item.groupWindows;
+            frame.sourceSize = item.sourceSize;
+            frame.rcSourceCrop = item.rcSourceCrop;
+            frame.enterAlpha = item.alpha;
+            frame.enterScale = item.scale;
+            frame.isNewEntry = item.alpha < 1.0f || item.scale != 1.0f;
+            if (index >= 0) {
+                for (const auto& thumbnail : item.hThumbs) {
+                    auto owned = g_windows[index].hThumbs.find(thumbnail.first);
+                    if (owned != g_windows[index].hThumbs.end() && owned->second == thumbnail.second) {
+                        g_windows[index].hThumbs.erase(owned);
+                    }
+                }
+            }
+            g_layoutTransition.departingItems.push_back(CaptureDepartingEntry(frame));
+        }
+        for (auto& entry : g_windows) {
+            if (!HasLayoutRect(entry.rcCell)) continue;
+            OffsetRect(&entry.rcCell, x, y);
+            if (HasLayoutRect(entry.rcCellLayoutCurrent)) OffsetRect(&entry.rcCellLayoutCurrent, x, y);
+            if (!DockLayoutActive()) {
+                if (HasLayoutRect(entry.rcThumbActual)) OffsetRect(&entry.rcThumbActual, x, y);
+                if (HasLayoutRect(entry.rcThumbLayoutCurrent)) OffsetRect(&entry.rcThumbLayoutCurrent, x, y);
+                if (HasLayoutRect(entry.rcThumbSlot)) OffsetRect(&entry.rcThumbSlot, x, y);
+            }
+        }
+    }
+    g_scrollTransition.active = false;
+    g_scrollTransition.offsetCurrentX = g_scrollTransition.offsetCurrentY = 0.0f;
+    g_scrollTransition.outgoingItems.clear();
+    g_scrollTransition.preservingThumbnails = false;
+    // The viewport has already been sampled above; avoid reconstructing its
+    // pre-scroll cells a second time in CaptureLayoutTransitionStart.
+    g_layoutTransition.active = false;
+    CaptureLayoutTransitionStart();
+}
+
+static void ComputeTransitionLayout(HMONITOR monitor) {
+    g_calculatingLayoutTargets = true;
+    ComputeLayout(monitor);
+    if (DockLayoutActive()) UpdateDockPreviewForSelection();
+    g_calculatingLayoutTargets = false;
+}
+
+// Restore one complete frame zero before thumbnail submission or painting.
+// Every reflow replaces the previous geometry targets, including navigation.
+static void CommitLayoutTransition(HMONITOR monitor, bool scrollReflow = false) {
+    MONITORINFO info = { sizeof(info) };
+    GetMonitorInfoW(monitor, &info);
+    int x, y;
+    GetSwitcherPosition(info.rcWork, &x, &y, g_winW, g_winH);
+    g_layoutTransition.rcWndTarget = { (float)x, (float)y,
+        (float)(x + g_winW), (float)(y + g_winH) };
+    g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
+    g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
+    g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
+    g_layoutTransition.rcDockSlotTarget = g_rcCentralPreviewSlot;
+    g_layoutTransition.scrollReflow = scrollReflow;
+    bool animate = g_isVisible && !g_isPendingShow && !g_animExitActive &&
+                   AreAnimationsGloballyEnabled();
+    for (auto& entry : g_windows) {
+        entry.rcCellTarget = entry.rcCell;
+        entry.rcThumbTarget = entry.rcThumbActual;
+        entry.rcThumbSlotTarget = entry.rcThumbSlot;
+        if (!HasLayoutRect(entry.rcCellTarget)) {
+            entry.rcCellStart = entry.rcCell = {};
+            entry.rcThumbStart = entry.rcThumbActual = {};
+            entry.rcThumbSlotStart = entry.rcThumbSlot = {};
+            entry.rcCellLayoutCurrent = entry.rcThumbLayoutCurrent = {};
+            if (!animate) {
+                entry.entryMotion = {};
+                entry.isNewEntry = false;
+                entry.enterAlpha = entry.enterScale = 1.0f;
+            }
+            continue;
+        }
+        if (!HasLayoutRect(entry.rcCellStart) && !scrollReflow) {
+            if (!IsItemTransitionActive(entry.entryMotion)) {
+                entry.isNewEntry = true;
+                entry.enterAlpha = 0.0f;
+                entry.enterScale = 0.94f;
+                StartItemTransition(entry.entryMotion, entry.enterAlpha, entry.enterScale, 1.0f, 1.0f);
+            }
+            // New children fade/scale in place; only existing children reflow.
+            // Pagination is a viewport slide, never an entry from empty bounds.
+            entry.rcCellStart = entry.rcCellTarget;
+            entry.rcThumbStart = entry.rcThumbTarget;
+            entry.rcThumbSlotStart = entry.rcThumbSlotTarget;
+        }
+        if (!animate) {
+            entry.isNewEntry = false;
+            entry.entryMotion = {};
+            entry.enterAlpha = entry.enterScale = 1.0f;
+            entry.rcCellLayoutCurrent = entry.rcCellTarget;
+            entry.rcThumbLayoutCurrent = entry.rcThumbTarget;
+        } else {
+            if (scrollReflow) {
+                // Viewport translation belongs to the slide, not stale cells
+                // from the layout that happened to precede this page change.
+                entry.rcCellStart = entry.rcCellTarget;
+                entry.rcThumbStart = entry.rcThumbTarget;
+                entry.rcThumbSlotStart = entry.rcThumbSlotTarget;
+            }
+            entry.rcCellLayoutCurrent = entry.rcCellStart;
+            entry.rcThumbLayoutCurrent = entry.rcThumbStart;
+            entry.rcThumbSlot = entry.rcThumbSlotStart;
+            ApplyEntryPresentationGeometry(entry);
+        }
+    }
+    g_layoutTransition.active = animate;
+    g_layoutTransition.duration = 0.250f;
+    if (animate) {
+        if (DockLayoutActive()) {
+            g_rcDockIconStrip = g_layoutTransition.rcDockStripStart;
+            g_rcCentralPreview = g_layoutTransition.rcDockPreviewStart;
+            g_rcDockTitleBar = g_layoutTransition.rcDockTitleStart;
+            g_rcCentralPreviewSlot = g_layoutTransition.rcDockSlotStart;
+            if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
+                g_windows[g_selectedIndex].rcThumbActual = g_rcCentralPreview;
+                g_windows[g_selectedIndex].rcThumbSlot = g_rcCentralPreviewSlot;
+                g_windows[g_selectedIndex].rcThumbLayoutCurrent = g_rcCentralPreview;
+                ApplyEntryPresentationGeometry(g_windows[g_selectedIndex]);
+            }
+        }
+        StartMotionTrack(g_layoutTransition.progress, 0.0f);
+        StartAnimationTicker();
+    } else {
+        g_layoutTransition.progress = 1.0f;
+        SetSwitcherLayoutBounds(x, y, g_winW, g_winH);
+        for (auto& entry : g_layoutTransition.departingItems) {
+            for (const auto& thumbnail : entry.hThumbs) {
+                if (thumbnail.second) SafeDwmUnregisterThumbnail(thumbnail.second);
+            }
+        }
+        g_layoutTransition.departingItems.clear();
+    }
+    if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
+        SnapSelectionTo(ToRectF(g_windows[g_selectedIndex].rcCell));
+    }
+    InvalidateStaticCache();
+    UpdateThumbnailAnimations();
+}
+
+static bool AdvanceItemTransitions(float dt) {
+    bool anyActive = false;
+    bool changed = false;
+    for (auto& entry : g_windows) {
+        if (!entry.isNewEntry) continue;
+        changed = true;
+        entry.isNewEntry = StepItemTransition(entry.entryMotion, entry.enterAlpha, entry.enterScale, dt);
+        anyActive |= entry.isNewEntry;
+        ApplyEntryPresentationGeometry(entry);
+    }
+    for (auto& entry : g_scrollTransition.outgoingItems) {
+        if (!IsItemTransitionActive(entry.entryMotion)) continue;
+        changed = true;
+        SampleOutgoingEntry(entry, dt);
+        anyActive |= IsItemTransitionActive(entry.entryMotion);
+    }
+    auto& departing = g_layoutTransition.departingItems;
+    for (auto it = departing.begin(); it != departing.end();) {
+        changed = true;
+        SampleDepartingEntry(*it, dt);
+        if (IsItemTransitionActive(it->motion)) {
+            anyActive = true;
+            ++it;
+        } else {
+            for (const auto& thumbnail : it->hThumbs) {
+                if (thumbnail.second) SafeDwmUnregisterThumbnail(thumbnail.second);
+            }
+            it = departing.erase(it);
+        }
+    }
+    if (changed) {
+        if (g_layoutTransition.active && g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
+            g_animSelectionCurrent = ToRectF(g_windows[g_selectedIndex].rcCell);
+            g_animSelectionTarget = g_animSelectionStart = g_animSelectionCurrent;
+        }
+        if (g_layoutTransition.active && g_hoverThumbIndex >= 0 && g_hoverThumbIndex < (int)g_windows.size() &&
+            HasLayoutRect(g_windows[g_hoverThumbIndex].rcThumbActual)) {
+            g_animHoverCurrent = ToRectF(g_windows[g_hoverThumbIndex].rcThumbActual);
+            g_animHoverTarget = g_animHoverStart = g_animHoverCurrent;
+        }
+        InvalidateStaticCache();
+        // Include the terminal sample even when the layout track is inactive.
+        UpdateThumbnailAnimations();
+    }
+    return anyActive;
+}
+
+// Only static progress variables use this fixed registry. Per-entry clocks live
+// with their WindowEntry, so vector relocation/erase/copy cannot leave stale keys.
+static MotionTrackClock& GetMotionTrackClock(float& progress) {
+    static struct {
+        float* progress;
+        MotionTrackClock clock;
+    } tracks[] = {
+        { &g_animEntranceProgress, {} }, { &g_animExitProgress, {} },
+        { &g_animSelectionProgress, {} }, { &g_animHoverProgress, {} },
+        { &g_animChevronProgressPrev, {} }, { &g_animChevronProgressNext, {} },
+        { &g_scrollTransition.progress, {} }, { &g_layoutTransition.progress, {} },
+        { &g_dockPreviewSlide.progress, {} },
+    };
+    for (auto& track : tracks) {
+        if (track.progress == &progress) return track.clock;
+    }
+    // Per-window callers must use the overload taking their owned clock.
+    std::terminate();
+}
+
+static void StartMotionTrack(float& progress, MotionTrackClock& clock, float initial = 0.0f) {
+    if (g_animPerfFreq.QuadPart == 0) QueryPerformanceFrequency(&g_animPerfFreq);
+    QueryPerformanceCounter(&clock.origin);
+    progress = initial;
+    clock.initial = initial;
+    clock.lastProgress = initial;
+    clock.started = true;
+}
+
+static void StartMotionTrack(float& progress, float initial) {
+    StartMotionTrack(progress, GetMotionTrackClock(progress), initial);
+}
+
+static bool StepMotionTrack(float& progress, MotionTrackClock& clock, float duration, float dt) {
+    const bool reverse = duration < 0.0f;
+    const float endpoint = reverse ? 0.0f : 1.0f;
+    if ((!reverse && progress >= endpoint) || (reverse && progress <= endpoint)) return true;
+    // Defensive legacy-reset detection. Actual starts must call StartMotionTrack
+    // at the trigger, including a retarget at progress zero in the same frame.
+    if (!clock.started || (!reverse && progress < clock.lastProgress) ||
+        (reverse && progress > clock.lastProgress)) {
+        StartMotionTrack(progress, clock, progress);
+    }
+    double elapsed;
+    if (g_animPerfFreq.QuadPart > 0) {
+        LARGE_INTEGER now;
+        QueryPerformanceCounter(&now);
+        elapsed = (std::max)(0.0, (double)(now.QuadPart - clock.origin.QuadPart) /
+                                   (double)g_animPerfFreq.QuadPart);
+    } else {
+        elapsed = (std::max)(0.0f, dt);
+        clock.initial = progress;
+    }
+    if (duration == 0.0f) {
+        progress = endpoint;
+    } else {
+        float value = clock.initial + (float)(elapsed / duration);
+        progress = reverse ? (std::max)(endpoint, value) : (std::min)(endpoint, value);
+    }
+    clock.lastProgress = progress;
+    return progress == endpoint;
+}
+
+static bool StepMotionTrack(float& progress, float duration, float dt) {
+    return StepMotionTrack(progress, GetMotionTrackClock(progress), duration, dt);
+}
+
+static void StartOpacityMotion(OpacityMotionTrack& track, float current, float target) {
+    if (current == target) {
+        track.progress = 1.0f;
+        track.start = track.target = target;
+        return;
+    }
+    if (track.target == target && track.progress < 1.0f) return;
+    track.start = current;
+    track.target = target;
+    StartMotionTrack(track.progress, track.clock);
+}
+
+static bool StepOpacityMotion(OpacityMotionTrack& track, float& current, float dt) {
+    if (track.progress >= 1.0f) return false;
+    bool done = StepMotionTrack(track.progress, track.clock, 0.083f, dt);
+    current = done ? track.target : track.start + (track.target - track.start) * track.progress;
+    return !done;
+}
+
+static void SnapCloseButtonMotion(WindowEntry& entry, float alpha) {
+    entry.closeBtnAlpha = alpha;
+    entry.closeBtnMotion = {};
+    entry.closeBtnMotion.start = entry.closeBtnMotion.target = alpha;
+    float scale = alpha > 0.0f ? 1.0f : 0.85f;
+    entry.closeBtnScale = entry.closeBtnScaleStart = entry.closeBtnScaleTarget = scale;
+    entry.closeBtnScaleProgress = 1.0f;
+    entry.closeBtnScaleClock = {};
+}
+
+static void UpdateCloseButtonMotionTarget(WindowEntry& entry, float targetAlpha) {
+    if (!AreAnimationsGloballyEnabled() || !g_settings.enableHoverAnimation) {
+        SnapCloseButtonMotion(entry, targetAlpha);
+        return;
+    }
+    StartOpacityMotion(entry.closeBtnMotion, entry.closeBtnAlpha, targetAlpha);
+    float targetScale = targetAlpha > 0.0f ? 1.0f : 0.85f;
+    if (targetScale != entry.closeBtnScaleTarget) {
+        // Capture the presented transform, independently of the fade. A rapid
+        // hover reversal neither jumps scale nor restarts any concurrent clock.
+        entry.closeBtnScaleStart = entry.closeBtnScale;
+        entry.closeBtnScaleTarget = targetScale;
+        StartMotionTrack(entry.closeBtnScaleProgress, entry.closeBtnScaleClock);
+    }
+}
+
+static bool StepCloseButtonMotion(WindowEntry& entry, float dt) {
+    bool opacityActive = StepOpacityMotion(entry.closeBtnMotion, entry.closeBtnAlpha, dt);
+    bool scaleDone = StepMotionTrack(entry.closeBtnScaleProgress, entry.closeBtnScaleClock, 0.167f, dt);
+    if (scaleDone) {
+        entry.closeBtnScale = entry.closeBtnScaleTarget;
+    } else {
+        float eased = entry.closeBtnScaleTarget < entry.closeBtnScaleStart
+            ? g_easeItemExit.Solve(entry.closeBtnScaleProgress)
+            : g_easeEntrance.Solve(entry.closeBtnScaleProgress);
+        entry.closeBtnScale = entry.closeBtnScaleStart +
+            (entry.closeBtnScaleTarget - entry.closeBtnScaleStart) * eased;
+    }
+    // The fade can finish at 83 ms; keep the invisible collapse clock alive to
+    // its own 167 ms endpoint so a later hover starts from a settled transform.
+    return opacityActive || !scaleDone;
+}
+
+// Called at input/hover triggers as well as on ticks for geometry-driven changes.
+// Starting one of these tracks never changes another track's origin or deadline.
+static void UpdateMicrointeractionTargets() {
+    StartOpacityMotion(g_chevronHoverPrev, g_animChevronHoverAlphaPrev, g_hoverChevron == -1 ? 1.0f : 0.0f);
+    StartOpacityMotion(g_chevronHoverNext, g_animChevronHoverAlphaNext, g_hoverChevron == 1 ? 1.0f : 0.0f);
+    for (int i = 0; i < (int)g_windows.size(); i++) {
+        auto& w = g_windows[i];
+        float targetAlpha = (i == g_hoverIndex && g_settings.showCloseButton && !IsWindowTruncated(i)) ? 1.0f : 0.0f;
+        if (DockLayoutActive() && DockCloseButtonIsHidden()) targetAlpha = 0.0f;
+        UpdateCloseButtonMotionTarget(w, targetAlpha);
+        float targetScale = (ThumbnailHoverIsZoom() && i == g_hoverThumbIndex && !IsWindowTruncated(i)) ?
+                                (1.0f + SWS_HOVER_ZOOM_DELTA) : 1.0f;
+        if (fabsf(targetScale - w.hoverScaleTarget) > 0.0001f) {
+            w.hoverScaleStart = w.hoverScale;
+            w.hoverScaleTarget = targetScale;
+            w.hoverScaleDuration = 0.167f;
+            StartMotionTrack(w.hoverScaleProgress, w.hoverScaleClock);
+        }
+    }
+    float targetHover = (g_isCloseHovered && g_hoverIndex >= 0 &&
+                        g_hoverIndex < (int)g_windows.size()) ? 1.0f : 0.0f;
+    StartOpacityMotion(g_closeBtnHover, g_animCloseBtnHoverAlpha, targetHover);
+}
 
 // Cached GDI buffers for 0-allocation rendering
 static HDC s_cachedMemDC = NULL;
@@ -2362,6 +3223,8 @@ static HBITMAP s_cachedScrollToBitmap = NULL;
 static HBITMAP s_cachedScrollToOldBitmap = NULL;
 static void* s_cachedScrollToBits = NULL;
 static int s_cachedScrollToW = 0, s_cachedScrollToH = 0;
+static bool s_scrollIconCanvasDirty = false;
+static bool s_iconRepaintPending = false;
 
 static void EnsureScrollBuffers(int w, int h) {
     if (w <= 0 || h <= 0) return;
@@ -2429,10 +3292,28 @@ static HRGN GetCachedRoundRectRgn(int w, int h, int radius) {
 struct IconAlphaScratch { HDC hdc = nullptr; HBITMAP dib = nullptr; void* bits = nullptr; };
 static std::map<int, IconAlphaScratch> s_iconAlphaScratch;
 
-// Cache of rendered icon shadow bitmaps, keyed by icon handle + size. The shadow
-// alpha multiplier is a constant (0.08f) at the single call site, so it is not
-// part of the key. Owned here; flushed in FreeCachedBuffers() and on unload.
-static std::map<std::pair<HICON, int>, Gdiplus::Bitmap*> s_iconShadowCache;
+// UI-owned shadow records retain the exact icon allocation, even after its
+// window/cell retires. A draw also holds the record across reentrant cache
+// removal. The bitmap is destroyed before the retained icon is released.
+struct WindowIconShadow {
+    std::shared_ptr<OwnedWindowIcon> owner;
+    std::unique_ptr<Gdiplus::Bitmap> bitmap;
+};
+static std::map<std::pair<HICON, int>, std::shared_ptr<WindowIconShadow>> s_iconShadowCache;
+static void SweepWindowIconShadows();
+
+// Only actual presentation (or the scheduled scroll finish-copy) rebuilds a
+// canvas dirtied by icon results. Clearing first preserves reentrant dirties.
+static void RefreshScrollIconCanvas() {
+    if (!s_scrollIconCanvasDirty || !s_cachedScrollToDC ||
+        s_cachedScrollToW <= 0 || s_cachedScrollToH <= 0) return;
+    s_scrollIconCanvasDirty = false;
+    if (s_cachedScrollToBits)
+        memset(s_cachedScrollToBits, 0, (size_t)s_cachedScrollToW * s_cachedScrollToH * sizeof(DWORD));
+    SelectClipRgn(s_cachedScrollToDC,
+                  GetCachedRoundRectRgn(s_cachedScrollToW, s_cachedScrollToH, GetWindowCornerRadiusPx()));
+    DrawSwitcherStaticContent(s_cachedScrollToDC, ShouldFillBackground(), g_hSwitcher);
+}
 
 static void FreeCachedBuffers() {
     if (s_cachedRoundRectRgn) {
@@ -2513,10 +3394,9 @@ static void FreeCachedBuffers() {
         if (kv.second.hdc) DeleteDC(kv.second.hdc);
     }
     s_iconAlphaScratch.clear();
-    for (auto& kv : s_iconShadowCache) {
-        delete kv.second;
-    }
     s_iconShadowCache.clear();
+    s_scrollIconCanvasDirty = false;
+    s_iconRepaintPending = false;
     g_staticContentDirty = true;
 }
 
@@ -2538,12 +3418,13 @@ static bool AreAnimationsGloballyEnabled() {
 
 static void StartAnimationTicker() {
     if (!g_hSwitcher) return;
-    UpdateRefreshRateTiming();
     if (!g_animActive) {
+        UpdateRefreshRateTiming();
         if (g_animPerfFreq.QuadPart == 0) {
             QueryPerformanceFrequency(&g_animPerfFreq);
         }
         QueryPerformanceCounter(&g_animLastTickTime);
+        g_animNextFrameDeadline = (double)g_animLastTickTime.QuadPart;
         g_animActive = true;
         SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
         PostMessageW(g_hSwitcher, WM_NULL, 0, 0); // Wake wait loop immediately
@@ -2556,9 +3437,7 @@ static void StopAnimationTicker() {
 }
 
 static void FinishAnimations() {
-    g_animEntranceActive = false;
-    g_animEntranceProgress = 1.0f;
-    g_animEntranceCurrentAlpha = 1.0f;
+    ResetPresentationAnimation();
     if (g_layoutTransition.active) {
         g_layoutTransition.active = false;
         g_layoutTransition.progress = 1.0f;
@@ -2573,6 +3452,13 @@ static void FinishAnimations() {
             w.rcThumbActual = w.rcThumbTarget;
             w.isNewEntry = false;
         }
+    }
+    for (auto& w : g_windows) {
+        w.entryMotion = {};
+        w.enterAlpha = w.enterScale = 1.0f;
+        w.isNewEntry = false;
+        w.rcCellLayoutCurrent = w.rcCell;
+        w.rcThumbLayoutCurrent = w.rcThumbActual;
     }
     g_animSelectionActive = false;
     if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
@@ -2603,33 +3489,76 @@ static void FinishAnimations() {
     g_animHoverAlphaCurrent = 0.0f;
     g_animChevronAlphaPrev = g_animChevronAlphaTargetPrev;
     g_animChevronAlphaNext = g_animChevronAlphaTargetNext;
+    g_animChevronTransformPrev = g_animChevronAlphaTargetPrev;
+    g_animChevronTransformNext = g_animChevronAlphaTargetNext;
+    g_chevronRevealPrev = {};
+    g_chevronRevealNext = {};
     g_animChevronProgressPrev = 1.0f;
     g_animChevronProgressNext = 1.0f;
     g_animHoverScaleActive = false;
     g_animCloseBtnAlpha = (g_hoverIndex >= 0 && g_settings.showCloseButton && !IsWindowTruncated(g_hoverIndex)) ? 1.0f : 0.0f;
     g_animCloseBtnHoverAlpha = g_isCloseHovered ? 1.0f : 0.0f;
     for (int i = 0; i < (int)g_windows.size(); i++) {
-        g_windows[i].closeBtnAlpha = (i == g_hoverIndex && g_settings.showCloseButton && !IsWindowTruncated(i)) ? 1.0f : 0.0f;
+        SnapCloseButtonMotion(g_windows[i], (i == g_hoverIndex && g_settings.showCloseButton && !IsWindowTruncated(i)) ? 1.0f : 0.0f);
         g_windows[i].hoverScale = 1.0f;
         g_windows[i].hoverScaleStart = 1.0f;
         g_windows[i].hoverScaleTarget = 1.0f;
         g_windows[i].hoverScaleProgress = 1.0f;
-        g_windows[i].hoverScaleDuration = 0.150f;
+        g_windows[i].hoverScaleDuration = 0.167f;
+        g_windows[i].hoverScaleClock = {};
     }
     g_animExitActivateSelected = false;
     g_animExitTargetWindow = NULL;
     g_animExitRestoreWindows.clear();
-    g_animExitStartRect = { 0, 0, 0, 0 };
-    g_animExitMirrorStartRects.clear();
+    g_hoverOpacity = {};
+    g_chevronHoverPrev = {};
+    g_chevronHoverNext = {};
+    g_closeBtnHover = {};
+}
+
+static void CompleteExitAnimation() {
+    if (!g_animExitActive) return;
+    // Save the accepted decision before HideSwitcher/FinishAnimations clear it.
+    // Both normal completion and accessibility interruption use this handoff.
+    bool activate = g_animExitActivateSelected;
+    HWND hTarget = g_animExitTargetWindow;
+    std::vector<HWND> restoreWindows = std::move(g_animExitRestoreWindows);
+    g_animExitActive = false;
+    g_animExitProgress = 0.0f;
+    g_animExitCurrentAlpha = 0.0f;
+    g_animExitActivateSelected = false;
+    g_animExitTargetWindow = NULL;
+    BackdropFadeTick(0.0f);
+    HideSwitcher();
+    if (activate) ActivateExitedWindow(hTarget, restoreWindows);
 }
 
 static void CaptureOutgoingSnapshot() {
-    if (g_hSwitcher && g_staticContentDirty) {
+    RestoreCurrentLayoutGeometry();
+    g_scrollTransition.capturedOffsetX = g_scrollTransition.offsetCurrentX;
+    g_scrollTransition.capturedOffsetY = g_scrollTransition.offsetCurrentY;
+    if (g_hSwitcher && (g_staticContentDirty || g_scrollTransition.active)) {
         RECT rc; GetClientRect(g_hSwitcher, &rc);
         int w = rc.right, h = rc.bottom;
         if (w > 0 && h > 0 && s_cachedStaticDC && s_cachedStaticW == w && s_cachedStaticH == h) {
             if (g_scrollTransition.active && s_cachedScrollToDC && s_cachedScrollToW == w && s_cachedScrollToH == h) {
-                BitBlt(s_cachedStaticDC, 0, 0, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
+                if (s_cachedStaticBits) memset(s_cachedStaticBits, 0, (size_t)w * h * sizeof(DWORD));
+                int offsetX = (int)roundf(g_scrollTransition.offsetCurrentX);
+                int offsetY = (int)roundf(g_scrollTransition.offsetCurrentY);
+                if (DockLayoutActive()) {
+                    BitBlt(s_cachedStaticDC, 0, 0, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
+                    HRGN strip = CreateRectRgn(g_rcDockIconStrip.left, g_rcDockIconStrip.top,
+                                              g_rcDockIconStrip.right, g_rcDockIconStrip.bottom);
+                    SelectClipRgn(s_cachedStaticDC, strip);
+                    DeleteObject(strip);
+                }
+                if (s_cachedScrollFromDC) {
+                    BitBlt(s_cachedStaticDC, offsetX - g_scrollTransition.travelDistanceX,
+                           offsetY - g_scrollTransition.travelDistanceY, w, h,
+                           s_cachedScrollFromDC, 0, 0, SRCCOPY);
+                }
+                BitBlt(s_cachedStaticDC, offsetX, offsetY, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
+                SelectClipRgn(s_cachedStaticDC, NULL);
                 g_staticContentDirty = false;
             } else {
                 int radius = GetWindowCornerRadiusPx();
@@ -2641,20 +3570,25 @@ static void CaptureOutgoingSnapshot() {
             }
         }
     }
-    if (g_scrollTransition.active && !g_scrollTransition.outgoingItems.empty()) {
-        for (auto& item : g_scrollTransition.outgoingItems) {
+    auto previousOutgoing = std::move(g_scrollTransition.outgoingItems);
+    g_scrollTransition.outgoingItems.clear();
+    if (g_scrollTransition.active) {
+        for (auto& item : previousOutgoing) {
             int curIdx = FindWindowIndexByHwnd(item.hWnd);
             if (curIdx == -1 || IsWindowTruncated(curIdx)) {
-                for (const auto& kv : item.hThumbs) {
-                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
-                }
-                if (curIdx != -1) {
-                    g_windows[curIdx].hThumbs.clear();
-                }
+                int x = (int)roundf(g_scrollTransition.offsetCurrentX) - g_scrollTransition.travelDistanceX;
+                int y = (int)roundf(g_scrollTransition.offsetCurrentY) - g_scrollTransition.travelDistanceY;
+                OffsetRect(&item.rcCell, x, y);
+                OffsetRect(&item.rcThumbActual, x, y);
+                OffsetRect(&item.rcThumbSlot, x, y);
+                OffsetRect(&item.rcCellLayout, x, y);
+                OffsetRect(&item.rcThumbLayout, x, y);
+                item.drawnIconX += x;
+                item.drawnIconY += y;
+                g_scrollTransition.outgoingItems.push_back(std::move(item));
             }
         }
     }
-    g_scrollTransition.outgoingItems.clear();
     for (int i = 0; i < (int)g_windows.size(); i++) {
         const auto& w = g_windows[i];
         if (w.rcCell.left == 0 && w.rcCell.right == 0 &&
@@ -2666,16 +3600,29 @@ static void CaptureOutgoingSnapshot() {
         snap.rcCell = w.rcCell;
         snap.rcThumbActual = w.rcThumbActual;
         snap.rcThumbSlot = w.rcThumbSlot;
+        snap.rcCellLayout = HasLayoutRect(w.rcCellLayoutCurrent) ? w.rcCellLayoutCurrent : w.rcCell;
+        snap.rcThumbLayout = HasLayoutRect(w.rcThumbLayoutCurrent) ? w.rcThumbLayoutCurrent : w.rcThumbActual;
+        int x = (int)roundf(g_scrollTransition.offsetCurrentX);
+        int y = (int)roundf(g_scrollTransition.offsetCurrentY);
+        OffsetRect(&snap.rcCell, x, y);
+        OffsetRect(&snap.rcThumbActual, x, y);
+        OffsetRect(&snap.rcThumbSlot, x, y);
+        OffsetRect(&snap.rcCellLayout, x, y);
+        OffsetRect(&snap.rcThumbLayout, x, y);
         wcsncpy_s(snap.title, w.title, _countof(snap.title));
         snap.hIcon = w.hIcon;
+        snap.iconCell = w.iconCell;
         snap.hThumbs = w.hThumbs;
-        snap.drawnIconX = w.drawnIconX;
-        snap.drawnIconY = w.drawnIconY;
+        snap.drawnIconX = w.drawnIconX + x;
+        snap.drawnIconY = w.drawnIconY + y;
         snap.drawnIconSz = w.drawnIconSz;
         snap.groupWindows = w.groupWindows;
         snap.sourceSize = w.sourceSize;
         snap.rcSourceCrop = w.rcSourceCrop;
         snap.effectiveSourceSize = w.effectiveSourceSize;
+        snap.alpha = w.isNewEntry ? w.enterAlpha : 1.0f;
+        snap.scale = w.isNewEntry ? w.enterScale : 1.0f;
+        snap.entryMotion = w.entryMotion;
         g_scrollTransition.outgoingItems.push_back(snap);
     }
     g_scrollTransition.preservingThumbnails = true;
@@ -2704,7 +3651,7 @@ static void TriggerSelectionAnimation(int prevSelected) {
 
     g_animSelectionStart = g_animSelectionCurrent;
     g_animSelectionTarget = targetRect;
-    g_animSelectionProgress = 0.0f;
+    StartMotionTrack(g_animSelectionProgress);
     g_animSelectionDuration = 0.167f;
     g_animSelectionActive = true;
     StartAnimationTicker();
@@ -2733,6 +3680,7 @@ static void PreRenderScrollCanvases() {
     if (s_cachedScrollToBits) memset(s_cachedScrollToBits, 0, (size_t)w * h * sizeof(DWORD));
     HRGN hClip = GetCachedRoundRectRgn(w, h, radius);
     SelectClipRgn(s_cachedScrollToDC, hClip);
+    s_scrollIconCanvasDirty = false;
     DrawSwitcherStaticContent(s_cachedScrollToDC, ShouldFillBackground(), g_hSwitcher);
 }
 
@@ -2848,22 +3796,12 @@ static void TriggerScrollAnimationEx(int dir, ScrollNavType type) {
         deltaY = vertical ? 0.0f : (float)(dir * travel);
     }
 
-    if (g_scrollTransition.active) {
-        // Continuous Retargeting: accumulate offset smoothly
-        g_scrollTransition.offsetStartX = g_scrollTransition.offsetCurrentX + deltaX;
-        g_scrollTransition.offsetStartY = g_scrollTransition.offsetCurrentY + deltaY;
-        g_scrollTransition.offsetCurrentX = g_scrollTransition.offsetStartX;
-        g_scrollTransition.offsetCurrentY = g_scrollTransition.offsetStartY;
-        g_scrollTransition.progress = 0.0f;
-        g_scrollTransition.duration = (type == SCROLL_PAGE) ? 0.250f : 0.167f;
-    } else {
-        g_scrollTransition.offsetStartX = deltaX;
-        g_scrollTransition.offsetStartY = deltaY;
-        g_scrollTransition.offsetCurrentX = deltaX;
-        g_scrollTransition.offsetCurrentY = deltaY;
-        g_scrollTransition.progress = 0.0f;
-        g_scrollTransition.duration = (type == SCROLL_PAGE) ? 0.250f : 0.167f;
-    }
+    g_scrollTransition.offsetStartX = deltaX + (computedFromShared ? 0.0f : g_scrollTransition.capturedOffsetX);
+    g_scrollTransition.offsetStartY = deltaY + (computedFromShared ? 0.0f : g_scrollTransition.capturedOffsetY);
+    g_scrollTransition.offsetCurrentX = g_scrollTransition.offsetStartX;
+    g_scrollTransition.offsetCurrentY = g_scrollTransition.offsetStartY;
+    StartMotionTrack(g_scrollTransition.progress, 0.0f);
+    g_scrollTransition.duration = (type == SCROLL_PAGE) ? 0.250f : 0.167f;
 
     g_scrollTransition.travelDistanceX = (int)roundf(g_scrollTransition.offsetStartX);
     g_scrollTransition.travelDistanceY = (int)roundf(g_scrollTransition.offsetStartY);
@@ -2890,13 +3828,14 @@ static void TriggerHoverAnimation(int thumbIdx) {
         g_animCloseBtnAlpha = (g_hoverIndex >= 0 && g_settings.showCloseButton && !IsWindowTruncated(g_hoverIndex)) ? 1.0f : 0.0f;
         g_animCloseBtnHoverAlpha = (g_isCloseHovered && g_animCloseBtnAlpha > 0.05f) ? 1.0f : 0.0f;
         for (int i = 0; i < (int)g_windows.size(); i++) {
-            g_windows[i].closeBtnAlpha = (i == g_hoverIndex && g_settings.showCloseButton && !IsWindowTruncated(i)) ? 1.0f : 0.0f;
+            SnapCloseButtonMotion(g_windows[i], (i == g_hoverIndex && g_settings.showCloseButton && !IsWindowTruncated(i)) ? 1.0f : 0.0f);
             float s = (ThumbnailHoverIsZoom() && i == thumbIdx && !IsWindowTruncated(i)) ? (1.0f + SWS_HOVER_ZOOM_DELTA) : 1.0f;
             g_windows[i].hoverScale = s;
             g_windows[i].hoverScaleStart = s;
             g_windows[i].hoverScaleTarget = s;
             g_windows[i].hoverScaleProgress = 1.0f;
-            g_windows[i].hoverScaleDuration = 0.150f;
+            g_windows[i].hoverScaleDuration = 0.167f;
+            g_windows[i].hoverScaleClock = {};
         }
         if (ThumbnailHoverIsZoom()) {
             UpdateThumbnailAnimations();
@@ -2905,6 +3844,7 @@ static void TriggerHoverAnimation(int thumbIdx) {
         return;
     }
 
+    UpdateMicrointeractionTargets();
     if (ThumbnailHoverIsZoom()) {
         StartAnimationTicker();
     }
@@ -2917,8 +3857,9 @@ static void TriggerHoverAnimation(int thumbIdx) {
                 g_animHoverTarget = g_animHoverCurrent;
                 g_animHoverAlphaStart = g_animHoverAlphaCurrent;
                 g_animHoverAlphaTarget = 0.0f;
-                g_animHoverProgress = 0.0f;
-                g_animHoverDuration = 0.120f;
+                StartMotionTrack(g_animHoverProgress);
+                StartOpacityMotion(g_hoverOpacity, g_animHoverAlphaCurrent, 0.0f);
+                g_animHoverDuration = 0.083f;
                 g_animHoverActive = true;
                 StartAnimationTicker();
             }
@@ -2945,16 +3886,17 @@ static void TriggerHoverAnimation(int thumbIdx) {
             g_animHoverTarget = targetRectF;
             g_animHoverAlphaStart = 0.0f;
             g_animHoverAlphaTarget = 1.0f;
-            g_animHoverDuration = 0.150f; // 150ms WinUI 3 Decelerate
+            g_animHoverDuration = 0.167f; // Direct entrance transform
         } else {
             // Glide between thumbnails
             g_animHoverStart = g_animHoverCurrent;
             g_animHoverTarget = targetRectF;
             g_animHoverAlphaStart = g_animHoverAlphaCurrent;
             g_animHoverAlphaTarget = 1.0f;
-            g_animHoverDuration = 0.150f; // 150ms WinUI 3 Decelerate
+            g_animHoverDuration = 0.167f; // Existing-element point-to-point
         }
-        g_animHoverProgress = 0.0f;
+        StartMotionTrack(g_animHoverProgress);
+        StartOpacityMotion(g_hoverOpacity, g_animHoverAlphaCurrent, 1.0f);
         g_animHoverActive = true;
         StartAnimationTicker();
     } else {
@@ -2963,11 +3905,75 @@ static void TriggerHoverAnimation(int thumbIdx) {
             g_animHoverTarget = g_animHoverCurrent;
             g_animHoverAlphaStart = g_animHoverAlphaCurrent;
             g_animHoverAlphaTarget = 0.0f;
-            g_animHoverProgress = 0.0f;
-            g_animHoverDuration = 0.120f; // 120ms WinUI 3 FastOutLinearIn
+            StartMotionTrack(g_animHoverProgress);
+            StartOpacityMotion(g_hoverOpacity, g_animHoverAlphaCurrent, 0.0f);
+            g_animHoverDuration = 0.083f; // Opacity-only fade
             g_animHoverActive = true;
             StartAnimationTicker();
         }
+    }
+}
+
+static void SubmitAnimatedThumbnail(HTHUMBNAIL thumbnail, HWND sourceWindow,
+                                     const RECT& destination, BYTE alpha,
+                                     SIZE sourceSize, RECT sourceCrop,
+                                     const RECT& contentClip) {
+    if (!thumbnail) return;
+    auto cached = g_lastThumbState.find(thumbnail);
+    ThumbCacheState previous = cached != g_lastThumbState.end()
+        ? cached->second : ThumbCacheState{};
+    RECT clipped = {};
+    if (!alpha || !IntersectRect(&clipped, &destination, &contentClip)) {
+        if (cached != g_lastThumbState.end() && !previous.visible) return;
+        DWM_THUMBNAIL_PROPERTIES properties = {};
+        properties.dwFlags = DWM_TNP_VISIBLE;
+        properties.fVisible = FALSE;
+        if (SUCCEEDED(UpdateDwmThumbnail(thumbnail, &properties))) {
+            previous.visible = FALSE;
+            previous.alpha = 0;
+            g_lastThumbState[thumbnail] = previous;
+        }
+        return;
+    }
+    RECT fullSource = { 0, 0, sourceSize.cx, sourceSize.cy };
+    if (!HasLayoutRect(sourceCrop)) sourceCrop = fullSource;
+    bool partial = !EqualRect(&clipped, &destination);
+    // Use the caller's already-queried source size to reset a retained crop;
+    // destination/opacity invalidation must not turn it back into default mode.
+    bool useSource = partial || g_thumbSourceRects.count(thumbnail) || IsIconic(sourceWindow) ||
+                      !EqualRect(&sourceCrop, &fullSource);
+    RECT submittedSource = sourceCrop;
+    if (partial && HasLayoutRect(sourceCrop)) {
+        int width = destination.right - destination.left;
+        int height = destination.bottom - destination.top;
+        int sourceWidth = sourceCrop.right - sourceCrop.left;
+        int sourceHeight = sourceCrop.bottom - sourceCrop.top;
+        submittedSource = {
+            sourceCrop.left + MulDiv(clipped.left - destination.left, sourceWidth, width),
+            sourceCrop.top + MulDiv(clipped.top - destination.top, sourceHeight, height),
+            sourceCrop.left + MulDiv(clipped.right - destination.left, sourceWidth, width),
+            sourceCrop.top + MulDiv(clipped.bottom - destination.top, sourceHeight, height)
+        };
+    }
+    if (cached != g_lastThumbState.end() && previous.visible &&
+        EqualRect(&previous.dst, &clipped) && previous.alpha == alpha &&
+        previous.hasSource == useSource &&
+        (!useSource || EqualRect(&previous.source, &submittedSource))) return;
+    DWM_THUMBNAIL_PROPERTIES properties = {};
+    properties.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_OPACITY |
+                         DWM_TNP_VISIBLE | DWM_TNP_SOURCECLIENTAREAONLY;
+    properties.rcDestination = clipped;
+    properties.opacity = alpha;
+    properties.fVisible = TRUE;
+    properties.fSourceClientAreaOnly = FALSE;
+    if (useSource && HasLayoutRect(submittedSource)) {
+        properties.dwFlags |= DWM_TNP_RECTSOURCE;
+        properties.rcSource = submittedSource;
+    } else {
+        useSource = false;
+    }
+    if (SUCCEEDED(UpdateDwmThumbnail(thumbnail, &properties))) {
+        g_lastThumbState[thumbnail] = { clipped, alpha, TRUE, submittedSource, useSource };
     }
 }
 
@@ -2979,10 +3985,7 @@ static void UpdateThumbnailAnimations() {
     }
     int offX = (int)roundf(g_scrollTransition.offsetCurrentX);
     int offY = (int)roundf(g_scrollTransition.offsetCurrentY);
-    float combinedAlpha = g_animEntranceCurrentAlpha * g_animExitCurrentAlpha;
-    if (combinedAlpha < 0.0f) combinedAlpha = 0.0f;
-    if (combinedAlpha > 1.0f) combinedAlpha = 1.0f;
-    BYTE thumbAlpha = (BYTE)roundf(combinedAlpha * 255.0f);
+    BYTE thumbAlpha = CurrentPresentationAlphaByte();
 
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
     int masterPadX = DpiScale(g_settings.switcherPadding, g_dpiX);
@@ -2991,40 +3994,11 @@ static void UpdateThumbnailAnimations() {
 
     // Uses global g_lastThumbState tracked by SafeDwmUnregisterThumbnail
 
-    auto updateThumb = [&](HTHUMBNAIL hThumb, const RECT& dst, BYTE alpha) {
-        if (!hThumb) return;
-        if (alpha <= 0) {
-            auto it = g_lastThumbState.find(hThumb);
-            if (it == g_lastThumbState.end() || it->second.visible) {
-                DWM_THUMBNAIL_PROPERTIES p = {};
-                p.dwFlags = DWM_TNP_VISIBLE;
-                p.fVisible = FALSE;
-                if (SUCCEEDED(UpdateDwmThumbnail(hThumb, &p))) g_lastThumbState[hThumb] = { {}, 0, FALSE };
-            }
-            return;
-        }
-        RECT rcIntersect;
-        if (!IntersectRect(&rcIntersect, &rcContentClip, &dst)) {
-            auto it = g_lastThumbState.find(hThumb);
-            if (it == g_lastThumbState.end() || it->second.visible) {
-                DWM_THUMBNAIL_PROPERTIES p = {};
-                p.dwFlags = DWM_TNP_VISIBLE;
-                p.fVisible = FALSE;
-                if (SUCCEEDED(UpdateDwmThumbnail(hThumb, &p))) g_lastThumbState[hThumb] = { {}, 0, FALSE };
-            }
-            return;
-        }
-        auto it = g_lastThumbState.find(hThumb);
-        if (it != g_lastThumbState.end() && it->second.visible &&
-            EqualRect(&it->second.dst, &dst) && it->second.alpha == alpha) {
-            return; // Skip redundant IPC
-        }
-        DWM_THUMBNAIL_PROPERTIES p = {};
-        p.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_OPACITY | DWM_TNP_VISIBLE;
-        p.rcDestination = dst;
-        p.opacity = alpha;
-        p.fVisible = TRUE;
-        if (SUCCEEDED(UpdateDwmThumbnail(hThumb, &p))) g_lastThumbState[hThumb] = { dst, alpha, TRUE };
+    auto updateThumb = [&](HTHUMBNAIL hThumb, HWND sourceWindow,
+                           const RECT& dst, BYTE alpha, SIZE sourceSize,
+                           const RECT& sourceCrop) {
+        SubmitAnimatedThumbnail(hThumb, sourceWindow, dst, alpha,
+                                sourceSize, sourceCrop, rcContentClip);
     };
 
     // 1. Incoming items
@@ -3035,7 +4009,7 @@ static void UpdateThumbnailAnimations() {
                 if (kv.second) {
                     auto it = g_lastThumbState.find(kv.second);
                     if (it == g_lastThumbState.end() || it->second.visible) {
-                        updateThumb(kv.second, { 0, 0, 0, 0 }, 0);
+                        updateThumb(kv.second, w.hWnd, {}, 0, w.sourceSize, w.rcSourceCrop);
                     }
                 }
             }
@@ -3070,7 +4044,7 @@ static void UpdateThumbnailAnimations() {
             itemAlpha = (BYTE)roundf(thumbAlpha * w.enterAlpha);
         }
         for (const auto& kv : w.hThumbs) {
-            updateThumb(kv.second, dst, itemAlpha);
+            updateThumb(kv.second, w.hWnd, dst, itemAlpha, w.sourceSize, w.rcSourceCrop);
         }
     }
 
@@ -3111,7 +4085,7 @@ static void UpdateThumbnailAnimations() {
             }
 
             for (const auto& kv : snap.hThumbs) {
-                updateThumb(kv.second, dst, thumbAlpha);
+                updateThumb(kv.second, snap.hWnd, dst, (BYTE)roundf(thumbAlpha * snap.alpha), snap.sourceSize, snap.rcSourceCrop);
             }
         }
     }
@@ -3122,7 +4096,7 @@ static void UpdateThumbnailAnimations() {
             BYTE departAlpha = (BYTE)roundf(thumbAlpha * item.alpha);
             RECT dst = item.rcThumbCurrent;
             for (const auto& kv : item.hThumbs) {
-                updateThumb(kv.second, dst, departAlpha);
+                updateThumb(kv.second, item.hWnd, dst, departAlpha, item.sourceSize, item.rcSourceCrop);
             }
         }
     }
@@ -3136,48 +4110,32 @@ static void OnAnimationTick() {
     float dt = (float)(s_animTargetIntervalMs / 1000.0);
     if (g_animPerfFreq.QuadPart > 0 && g_animLastTickTime.QuadPart > 0) {
         float measuredDt = (float)(now.QuadPart - g_animLastTickTime.QuadPart) / (float)g_animPerfFreq.QuadPart;
-        if (measuredDt > 0.0f) {
+        if (measuredDt >= 0.0f) {
             dt = measuredDt;
         }
     }
     g_animLastTickTime = now;
 
-    // A stalled message queue must not turn the next frame into a large visual jump.
-    // The animation remains time-based, but no single frame is allowed to advance by
-    // more than three nominal refresh intervals.
-    float maxFrameDt = (float)(s_animTargetIntervalMs / 1000.0 * 3.0);
-    if (maxFrameDt < 0.025f) maxFrameDt = 0.025f;
-    if (maxFrameDt > 0.1f) maxFrameDt = 0.1f;
-    if (dt > maxFrameDt) dt = maxFrameDt;
-    if (dt <= 0.0f) dt = 0.001f;
+    // Finite tracks use their own absolute trigger times. After a stall they
+    // settle on the next available frame, without discarding elapsed time.
+    if (dt < 0.0f) dt = 0.0f;
+    struct TickScope {
+        TickScope() { g_animTickInProgress = true; }
+        ~TickScope() { g_animTickInProgress = false; }
+    } tickScope;
+    UpdateMicrointeractionTargets();
 
-    bool backdropActive = false;
-    if (g_hBackdropWnd && g_backdropFadeDurationMs) {
-        BackdropFadeTick();
-        backdropActive = g_backdropFadeDurationMs != 0;
-    }
-
-    bool anyActive = backdropActive;
+    bool anyActive = false;
     bool hadThumbMotion = (g_animEntranceActive || g_scrollTransition.active || g_animExitActive || g_layoutTransition.active || g_dockPreviewSlide.active || g_animHoverScaleActive);
     bool hadScrollOrEntrance = hadThumbMotion;
 
-    // 1. Entrance animation
-    if (g_animEntranceActive) {
-        g_animEntranceProgress += dt / g_animEntranceDuration;
-        if (g_animEntranceProgress >= 1.0f) {
-            g_animEntranceProgress = 1.0f;
-            g_animEntranceActive = false;
-            g_animEntranceCurrentAlpha = 1.0f;
-        } else {
-            anyActive = true;
-            g_animEntranceCurrentAlpha = g_easeEntrance.Solve(g_animEntranceProgress);
-        }
-    }
+    // 1. Shared entrance/exit timeline
+    AdvancePresentationAnimation(dt);
+    if (g_animEntranceActive) anyActive = true;
 
-    // 2. Selection focus animation (WinUI 3 Decelerate cubic-bezier, consistent with inner hover border)
+    // 2. Selection focus: 167 ms existing-element point-to-point motion.
     if (g_animSelectionActive && !g_layoutTransition.active) {
-        g_animSelectionProgress += dt / g_animSelectionDuration;
-        if (g_animSelectionProgress >= 1.0f) {
+        if (StepMotionTrack(g_animSelectionProgress, g_animSelectionDuration, dt)) {
             g_animSelectionProgress = 1.0f;
             g_animSelectionActive = false;
             g_animSelectionCurrent = g_animSelectionTarget;
@@ -3190,13 +4148,13 @@ static void OnAnimationTick() {
 
     // 3. Scroll / Page Slide animation
     if (g_scrollTransition.active) {
-        g_scrollTransition.progress += dt / g_scrollTransition.duration;
-        if (g_scrollTransition.progress >= 1.0f) {
+        if (StepMotionTrack(g_scrollTransition.progress, g_scrollTransition.duration, dt)) {
             g_scrollTransition.progress = 1.0f;
+            RefreshScrollIconCanvas();
             g_scrollTransition.active = false;
             g_scrollTransition.offsetCurrentX = 0.0f;
             g_scrollTransition.offsetCurrentY = 0.0f;
-            if (s_cachedStaticDC && s_cachedScrollToDC && s_cachedStaticW == s_cachedScrollToW && s_cachedStaticH == s_cachedScrollToH) {
+            if (!s_scrollIconCanvasDirty && s_cachedStaticDC && s_cachedScrollToDC && s_cachedStaticW == s_cachedScrollToW && s_cachedStaticH == s_cachedScrollToH) {
                 BitBlt(s_cachedStaticDC, 0, 0, s_cachedStaticW, s_cachedStaticH, s_cachedScrollToDC, 0, 0, SRCCOPY);
                 g_staticContentDirty = false;
             } else {
@@ -3239,19 +4197,18 @@ static void OnAnimationTick() {
 
     // 4. Hover animation
     if (g_animHoverActive) {
-        g_animHoverProgress += dt / g_animHoverDuration;
-        if (g_animHoverProgress >= 1.0f) {
+        bool opacityActive = StepOpacityMotion(g_hoverOpacity, g_animHoverAlphaCurrent, dt);
+        if (StepMotionTrack(g_animHoverProgress, g_animHoverDuration, dt) && !opacityActive) {
             g_animHoverProgress = 1.0f;
             g_animHoverActive = false;
             g_animHoverCurrent = g_animHoverTarget;
             g_animHoverAlphaCurrent = g_animHoverAlphaTarget;
         } else {
             anyActive = true;
-            float e = (g_animHoverAlphaTarget >= g_animHoverAlphaStart)
+            float e = (g_animHoverAlphaStart < 0.05f)
                 ? g_easeHoverEnter.Solve(g_animHoverProgress)
-                : g_easeExit.Solve(g_animHoverProgress);
+                : g_easeHover.Solve(g_animHoverProgress);
             g_animHoverCurrent = LerpRect(g_animHoverStart, g_animHoverTarget, e);
-            g_animHoverAlphaCurrent = g_animHoverAlphaStart + (g_animHoverAlphaTarget - g_animHoverAlphaStart) * e;
         }
     }
 
@@ -3261,26 +4218,16 @@ static void OnAnimationTick() {
     if (ThumbnailHoverIsZoom()) {
         for (int i = 0; i < (int)g_windows.size(); i++) {
             auto& w = g_windows[i];
-            float targetScale = (i == g_hoverThumbIndex && !IsWindowTruncated(i)) ? (1.0f + SWS_HOVER_ZOOM_DELTA) : 1.0f;
-            if (fabsf(targetScale - w.hoverScaleTarget) > 0.0001f) {
-                // Target changed: seamless transition from instantaneous scale
-                w.hoverScaleStart = w.hoverScale;
-                w.hoverScaleTarget = targetScale;
-                w.hoverScaleProgress = 0.0f;
-                float dist = fabsf(w.hoverScaleTarget - w.hoverScaleStart);
-                float baseDuration = (targetScale > w.hoverScaleStart) ? 0.150f : 0.140f;
-                w.hoverScaleDuration = (SWS_HOVER_ZOOM_DELTA > 0.0f) ? (baseDuration * (dist / SWS_HOVER_ZOOM_DELTA)) : baseDuration;
-                if (w.hoverScaleDuration < 0.060f) w.hoverScaleDuration = 0.060f;
-            }
-
             if (w.hoverScaleProgress < 1.0f) {
-                hoverScaleAnimActive = true;
-                w.hoverScaleProgress += dt / w.hoverScaleDuration;
-                if (w.hoverScaleProgress >= 1.0f) {
+                // Even a first frame arriving after this track's deadline must
+                // submit its terminal thumbnail transform once.
+                s_hadHoverScaleMotion = true;
+                if (StepMotionTrack(w.hoverScaleProgress, w.hoverScaleClock, w.hoverScaleDuration, dt)) {
                     w.hoverScaleProgress = 1.0f;
                     w.hoverScale = w.hoverScaleTarget;
                 } else {
-                    float e = g_easeHoverEnter.Solve(w.hoverScaleProgress);
+                    hoverScaleAnimActive = true;
+                    float e = g_easeHover.Solve(w.hoverScaleProgress);
                     w.hoverScale = w.hoverScaleStart + (w.hoverScaleTarget - w.hoverScaleStart) * e;
                 }
             } else {
@@ -3293,7 +4240,7 @@ static void OnAnimationTick() {
             w.hoverScaleStart = 1.0f;
             w.hoverScaleTarget = 1.0f;
             w.hoverScaleProgress = 1.0f;
-            w.hoverScaleDuration = 0.150f;
+            w.hoverScaleDuration = 0.167f;
         }
     }
     if (hoverScaleAnimActive) {
@@ -3305,108 +4252,67 @@ static void OnAnimationTick() {
         s_hadHoverScaleMotion = false; // final tick IPC flush complete
     }
 
-    // 5. Exit animation: short direct-exit travel plus opacity where the host
-    // supports it. The travel keeps Mica/Acrylic exits visible as well.
+    // 5. Exit retraces the entrance timeline at the same speed. Remaining
+    // duration is 167ms * p. A full reverse is the documented gentle-exit curve
+    // (1,0,1,1), permitted for native material motion-only presentation.
     if (g_animExitActive) {
-        g_animExitProgress += dt / g_animExitDuration;
-        if (g_animExitProgress >= 1.0f) {
-            g_animExitProgress = 1.0f;
-            g_animExitActive = false;
-            g_animExitCurrentAlpha = 0.0f;
-            ApplyExitMotion(12);
-            bool activate = g_animExitActivateSelected;
-            HWND hTarget = g_animExitTargetWindow;
-            std::vector<HWND> restoreWindows = std::move(g_animExitRestoreWindows);
-            g_animExitActivateSelected = false;
-            g_animExitTargetWindow = NULL;
-            HideSwitcher();
-            if (activate) ActivateExitedWindow(hTarget, restoreWindows);
+        if (g_animExitProgress <= 0.0f &&
+            (!ThemeIs(L"none") || g_presentationOpacity.progress >= 1.0f)) {
+            CompleteExitAnimation();
             return;
         } else {
             anyActive = true;
-            float e = g_easeExit.Solve(g_animExitProgress);
-            g_animExitCurrentAlpha = 1.0f - e;
-            ApplyExitMotion((int)roundf(12.0f * e));
         }
     }
 
     // 6. Chevron reveal / fade animation with cubic-bezier easing & spatial glide
     if (g_animChevronProgressPrev < 1.0f) {
-        anyActive = true;
-        g_animChevronProgressPrev += dt / g_animChevronDuration;
-        if (g_animChevronProgressPrev >= 1.0f) {
+        if (StepMotionTrack(g_animChevronProgressPrev, g_animChevronDuration, dt)) {
             g_animChevronProgressPrev = 1.0f;
-            g_animChevronAlphaPrev = g_animChevronAlphaTargetPrev;
+            g_animChevronTransformPrev = g_animChevronAlphaTargetPrev;
         } else {
-            float e = (g_animChevronAlphaTargetPrev > g_animChevronStartAlphaPrev)
+            anyActive = true;
+            float e = g_animChevronAlphaTargetPrev > g_animChevronTransformStartPrev
                 ? g_easeEntrance.Solve(g_animChevronProgressPrev)
                 : g_easeExit.Solve(g_animChevronProgressPrev);
-            g_animChevronAlphaPrev = g_animChevronStartAlphaPrev + (g_animChevronAlphaTargetPrev - g_animChevronStartAlphaPrev) * e;
+            g_animChevronTransformPrev = g_animChevronTransformStartPrev + (g_animChevronAlphaTargetPrev - g_animChevronTransformStartPrev) * e;
         }
     } else {
-        g_animChevronAlphaPrev = g_animChevronAlphaTargetPrev;
+        g_animChevronTransformPrev = g_animChevronAlphaTargetPrev;
     }
 
     if (g_animChevronProgressNext < 1.0f) {
-        anyActive = true;
-        g_animChevronProgressNext += dt / g_animChevronDuration;
-        if (g_animChevronProgressNext >= 1.0f) {
+        if (StepMotionTrack(g_animChevronProgressNext, g_animChevronDuration, dt)) {
             g_animChevronProgressNext = 1.0f;
-            g_animChevronAlphaNext = g_animChevronAlphaTargetNext;
+            g_animChevronTransformNext = g_animChevronAlphaTargetNext;
         } else {
-            float e = (g_animChevronAlphaTargetNext > g_animChevronStartAlphaNext)
+            anyActive = true;
+            float e = g_animChevronAlphaTargetNext > g_animChevronTransformStartNext
                 ? g_easeEntrance.Solve(g_animChevronProgressNext)
                 : g_easeExit.Solve(g_animChevronProgressNext);
-            g_animChevronAlphaNext = g_animChevronStartAlphaNext + (g_animChevronAlphaTargetNext - g_animChevronStartAlphaNext) * e;
+            g_animChevronTransformNext = g_animChevronTransformStartNext + (g_animChevronAlphaTargetNext - g_animChevronTransformStartNext) * e;
         }
     } else {
-        g_animChevronAlphaNext = g_animChevronAlphaTargetNext;
+        g_animChevronTransformNext = g_animChevronAlphaTargetNext;
     }
+    if (StepOpacityMotion(g_chevronRevealPrev, g_animChevronAlphaPrev, dt)) anyActive = true;
+    if (StepOpacityMotion(g_chevronRevealNext, g_animChevronAlphaNext, dt)) anyActive = true;
 
-    // Hover bloom transitions for chevrons (80ms in / 120ms out)
-    float targetHoverPrev = (g_hoverChevron == -1) ? 1.0f : 0.0f;
-    float hoverStepPrev = (targetHoverPrev > g_animChevronHoverAlphaPrev) ? (dt / 0.080f) : (dt / 0.120f);
-    if (fabsf(g_animChevronHoverAlphaPrev - targetHoverPrev) > 0.01f) {
-        anyActive = true;
-        if (targetHoverPrev > g_animChevronHoverAlphaPrev) {
-            g_animChevronHoverAlphaPrev = (std::min)(1.0f, g_animChevronHoverAlphaPrev + hoverStepPrev);
-        } else {
-            g_animChevronHoverAlphaPrev = (std::max)(0.0f, g_animChevronHoverAlphaPrev - hoverStepPrev);
-        }
-    } else {
-        g_animChevronHoverAlphaPrev = targetHoverPrev;
-    }
-
-    float targetHoverNext = (g_hoverChevron == 1) ? 1.0f : 0.0f;
-    float hoverStepNext = (targetHoverNext > g_animChevronHoverAlphaNext) ? (dt / 0.080f) : (dt / 0.120f);
-    if (fabsf(g_animChevronHoverAlphaNext - targetHoverNext) > 0.01f) {
-        anyActive = true;
-        if (targetHoverNext > g_animChevronHoverAlphaNext) {
-            g_animChevronHoverAlphaNext = (std::min)(1.0f, g_animChevronHoverAlphaNext + hoverStepNext);
-        } else {
-            g_animChevronHoverAlphaNext = (std::max)(0.0f, g_animChevronHoverAlphaNext - hoverStepNext);
-        }
-    } else {
-        g_animChevronHoverAlphaNext = targetHoverNext;
-    }
+    // Independent 83 ms linear hover-opacity tracks.
+    if (StepOpacityMotion(g_chevronHoverPrev, g_animChevronHoverAlphaPrev, dt)) anyActive = true;
+    if (StepOpacityMotion(g_chevronHoverNext, g_animChevronHoverAlphaNext, dt)) anyActive = true;
 
     // 7. Dynamic Layout Transition (Window resize + Card rearrange + Add/Remove animation)
     if (g_layoutTransition.active) {
-        g_layoutTransition.progress += dt / g_layoutTransition.duration;
-        if (g_layoutTransition.progress >= 1.0f) {
+        if (StepMotionTrack(g_layoutTransition.progress, g_layoutTransition.duration, dt)) {
             g_layoutTransition.progress = 1.0f;
             g_layoutTransition.active = false;
 
             for (auto& w : g_windows) {
-                w.rcCell = w.rcCellTarget;
-                if (!DockLayoutActive()) {
-                    w.rcThumbActual = w.rcThumbTarget;
-                } else {
-                    w.rcThumbActual = (&w == &g_windows[g_selectedIndex] && DockShowPreview()) ? g_rcCentralPreview : RECT{ 0, 0, 0, 0 };
-                }
-                w.isNewEntry = false;
-                w.enterAlpha = 1.0f;
-                w.enterScale = 1.0f;
+                w.rcCellLayoutCurrent = w.rcCellTarget;
+                w.rcThumbLayoutCurrent = w.rcThumbTarget;
+                w.rcThumbSlot = w.rcThumbSlotTarget;
+                ApplyEntryPresentationGeometry(w);
             }
 
             if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
@@ -3426,35 +4332,24 @@ static void OnAnimationTick() {
             int finalCy = (int)roundf(g_layoutTransition.rcWndTarget.top);
             int finalW = (int)roundf(g_layoutTransition.rcWndTarget.right - g_layoutTransition.rcWndTarget.left);
             int finalH = (int)roundf(g_layoutTransition.rcWndTarget.bottom - g_layoutTransition.rcWndTarget.top);
-            HDWP hdwp = BeginDeferWindowPos(2);
-            if (hdwp) {
-                hdwp = DeferWindowPos(hdwp, g_hSwitcher, HWND_TOPMOST, finalCx, finalCy, finalW, finalH, SWP_NOACTIVATE);
-                if (hdwp && g_hCloseBtnWnd) {
-                    hdwp = DeferWindowPos(hdwp, g_hCloseBtnWnd, HWND_TOPMOST, finalCx, finalCy, finalW, finalH, SWP_NOACTIVATE);
-                }
-                if (hdwp) EndDeferWindowPos(hdwp);
-            }
+            SetSwitcherLayoutBounds(finalCx, finalCy, finalW, finalH);
             g_switcherBaseX = finalCx;
             g_switcherBaseY = finalCy;
             g_switcherBaseInitialized = true;
             ApplySwitcherRegion();
 
-            for (auto& dep : g_layoutTransition.departingItems) {
-                for (const auto& kv : dep.hThumbs) {
-                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
-                }
-            }
-            g_layoutTransition.departingItems.clear();
-
             InvalidateStaticCache();
             if (DockLayoutActive()) {
-                if (g_layoutTransition.rcDockStripTarget.right > g_layoutTransition.rcDockStripTarget.left)
-                    g_rcDockIconStrip = g_layoutTransition.rcDockStripTarget;
-                if (g_layoutTransition.rcDockPreviewTarget.right > g_layoutTransition.rcDockPreviewTarget.left)
-                    g_rcCentralPreview = g_layoutTransition.rcDockPreviewTarget;
-                if (g_layoutTransition.rcDockTitleTarget.right > g_layoutTransition.rcDockTitleTarget.left)
-                    g_rcDockTitleBar = g_layoutTransition.rcDockTitleTarget;
-                UpdateDockPreviewForSelection();
+                g_rcDockIconStrip = g_layoutTransition.rcDockStripTarget;
+                g_rcCentralPreview = g_layoutTransition.rcDockPreviewTarget;
+                g_rcDockTitleBar = g_layoutTransition.rcDockTitleTarget;
+                g_rcCentralPreviewSlot = g_layoutTransition.rcDockSlotTarget;
+                if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
+                    g_windows[g_selectedIndex].rcThumbActual = g_rcCentralPreview;
+                    g_windows[g_selectedIndex].rcThumbSlot = g_rcCentralPreviewSlot;
+                    g_windows[g_selectedIndex].rcThumbLayoutCurrent = g_rcCentralPreview;
+                    ApplyEntryPresentationGeometry(g_windows[g_selectedIndex]);
+                }
             }
             UpdateHoverFromCursor(true);
             UpdateChevronAnimationTargets(false);
@@ -3467,110 +4362,20 @@ static void OnAnimationTick() {
             int curCy = (int)roundf(curWnd.top);
             int curW = (int)roundf(curWnd.right - curWnd.left);
             int curH = (int)roundf(curWnd.bottom - curWnd.top);
-            HDWP hdwp = BeginDeferWindowPos(2);
-            if (hdwp) {
-                hdwp = DeferWindowPos(hdwp, g_hSwitcher, HWND_TOPMOST, curCx, curCy, curW, curH, SWP_NOACTIVATE);
-                if (hdwp && g_hCloseBtnWnd) {
-                    hdwp = DeferWindowPos(hdwp, g_hCloseBtnWnd, HWND_TOPMOST, curCx, curCy, curW, curH, SWP_NOACTIVATE);
-                }
-                if (hdwp) EndDeferWindowPos(hdwp);
-            }
+            SetSwitcherLayoutBounds(curCx, curCy, curW, curH);
             g_switcherBaseX = curCx;
             g_switcherBaseY = curCy;
             g_switcherBaseInitialized = true;
 
             if (DockLayoutActive()) {
-                if (g_layoutTransition.rcDockStripTarget.right > g_layoutTransition.rcDockStripTarget.left) {
-                    RectF s = LerpRect(ToRectF(g_layoutTransition.rcDockStripStart), ToRectF(g_layoutTransition.rcDockStripTarget), t);
-                    g_rcDockIconStrip = { (LONG)roundf(s.left), (LONG)roundf(s.top), (LONG)roundf(s.right), (LONG)roundf(s.bottom) };
-                }
-                if (g_layoutTransition.rcDockPreviewTarget.right > g_layoutTransition.rcDockPreviewTarget.left) {
-                    RectF p = LerpRect(ToRectF(g_layoutTransition.rcDockPreviewStart), ToRectF(g_layoutTransition.rcDockPreviewTarget), t);
-                    g_rcCentralPreview = { (LONG)roundf(p.left), (LONG)roundf(p.top), (LONG)roundf(p.right), (LONG)roundf(p.bottom) };
-                }
-                if (g_layoutTransition.rcDockTitleTarget.right > g_layoutTransition.rcDockTitleTarget.left) {
-                    RectF tit = LerpRect(ToRectF(g_layoutTransition.rcDockTitleStart), ToRectF(g_layoutTransition.rcDockTitleTarget), t);
-                    g_rcDockTitleBar = { (LONG)roundf(tit.left), (LONG)roundf(tit.top), (LONG)roundf(tit.right), (LONG)roundf(tit.bottom) };
-                }
+                g_rcDockIconStrip = InterpolateLayoutRect(g_layoutTransition.rcDockStripStart, g_layoutTransition.rcDockStripTarget, t);
+                g_rcCentralPreview = InterpolateLayoutRect(g_layoutTransition.rcDockPreviewStart, g_layoutTransition.rcDockPreviewTarget, t);
+                g_rcDockTitleBar = InterpolateLayoutRect(g_layoutTransition.rcDockTitleStart, g_layoutTransition.rcDockTitleTarget, t);
+                g_rcCentralPreviewSlot = InterpolateLayoutRect(g_layoutTransition.rcDockSlotStart, g_layoutTransition.rcDockSlotTarget, t);
             }
 
             for (auto& w : g_windows) {
-                if (w.isNewEntry) {
-                    w.enterAlpha = t;
-                    w.enterScale = 0.94f + 0.06f * t;
-
-                    if (!DockLayoutActive()) {
-                        int tw = w.rcThumbTarget.right - w.rcThumbTarget.left;
-                        int th = w.rcThumbTarget.bottom - w.rcThumbTarget.top;
-                        int curW = (int)roundf(tw * w.enterScale);
-                        int curH = (int)roundf(th * w.enterScale);
-                        int mx = (w.rcThumbTarget.left + w.rcThumbTarget.right) / 2;
-                        int my = (w.rcThumbTarget.top + w.rcThumbTarget.bottom) / 2;
-                        w.rcThumbActual = { mx - curW / 2, my - curH / 2, mx + curW / 2, my + curH / 2 };
-                    } else {
-                        w.rcThumbActual = (&w == &g_windows[g_selectedIndex] && DockShowPreview()) ? g_rcCentralPreview : RECT{ 0, 0, 0, 0 };
-                    }
-
-                    int cw = w.rcCellTarget.right - w.rcCellTarget.left;
-                    int ch = w.rcCellTarget.bottom - w.rcCellTarget.top;
-                    int curCw = (int)roundf(cw * w.enterScale);
-                    int curCh = (int)roundf(ch * w.enterScale);
-                    int mcx = (w.rcCellTarget.left + w.rcCellTarget.right) / 2;
-                    int mcy = (w.rcCellTarget.top + w.rcCellTarget.bottom) / 2;
-                    w.rcCell = { mcx - curCw / 2, mcy - curCh / 2, mcx + curCw / 2, mcy + curCh / 2 };
-                } else {
-                    w.enterAlpha = 1.0f;
-                    w.enterScale = 1.0f;
-                    if (DockLayoutActive()) {
-                        if (g_scrollTransition.active) {
-                            w.rcCell = w.rcCellTarget;
-                        } else if (w.rcCellStart.right > w.rcCellStart.left && w.rcCellTarget.right > w.rcCellTarget.left) {
-                            RectF c = LerpRect(ToRectF(w.rcCellStart), ToRectF(w.rcCellTarget), t);
-                            w.rcCell = { (LONG)roundf(c.left), (LONG)roundf(c.top), (LONG)roundf(c.right), (LONG)roundf(c.bottom) };
-                        } else {
-                            w.rcCell = w.rcCellTarget;
-                        }
-                        w.rcThumbActual = (&w == &g_windows[g_selectedIndex] && DockShowPreview()) ? g_rcCentralPreview : RECT{ 0, 0, 0, 0 };
-                    } else {
-                        if (w.rcCellStart.left == 0 && w.rcCellStart.right == 0 &&
-                            w.rcCellStart.top == 0 && w.rcCellStart.bottom == 0) {
-                            w.rcCellStart = w.rcCellTarget;
-                        }
-                        if (w.rcCellTarget.left == 0 && w.rcCellTarget.right == 0 &&
-                            w.rcCellTarget.top == 0 && w.rcCellTarget.bottom == 0) {
-                            w.rcCell = {};
-                            w.rcThumbActual = {};
-                            continue; // Empty targets are authoritative overflow, not missing geometry.
-                        }
-                        RectF c = LerpRect(ToRectF(w.rcCellStart), ToRectF(w.rcCellTarget), t);
-                        w.rcCell = { (LONG)roundf(c.left), (LONG)roundf(c.top), (LONG)roundf(c.right), (LONG)roundf(c.bottom) };
-                        if (w.rcThumbStart.left == 0 && w.rcThumbStart.right == 0) w.rcThumbStart = w.rcThumbTarget;
-                        if (w.rcThumbTarget.left == 0 && w.rcThumbTarget.right == 0) w.rcThumbTarget = w.rcThumbStart;
-                        RectF th = LerpRect(ToRectF(w.rcThumbStart), ToRectF(w.rcThumbTarget), t);
-                        w.rcThumbActual = { (LONG)roundf(th.left), (LONG)roundf(th.top), (LONG)roundf(th.right), (LONG)roundf(th.bottom) };
-                    }
-                }
-            }
-
-            for (auto& dep : g_layoutTransition.departingItems) {
-                dep.alpha = 1.0f - t;
-                dep.scale = 1.0f - 0.08f * t; // 1.0 -> 0.92 subtle shrink
-
-                int startW = dep.rcThumbStart.right - dep.rcThumbStart.left;
-                int startH = dep.rcThumbStart.bottom - dep.rcThumbStart.top;
-                int curW = (int)roundf(startW * dep.scale);
-                int curH = (int)roundf(startH * dep.scale);
-                int midX = (dep.rcThumbStart.left + dep.rcThumbStart.right) / 2;
-                int midY = (dep.rcThumbStart.top + dep.rcThumbStart.bottom) / 2;
-                dep.rcThumbCurrent = { midX - curW / 2, midY - curH / 2, midX + curW / 2, midY + curH / 2 };
-
-                int cellW = dep.rcCellStart.right - dep.rcCellStart.left;
-                int cellH = dep.rcCellStart.bottom - dep.rcCellStart.top;
-                int curCellW = (int)roundf(cellW * dep.scale);
-                int curCellH = (int)roundf(cellH * dep.scale);
-                int midCellX = (dep.rcCellStart.left + dep.rcCellStart.right) / 2;
-                int midCellY = (dep.rcCellStart.top + dep.rcCellStart.bottom) / 2;
-                dep.rcCellCurrent = { midCellX - curCellW / 2, midCellY - curCellH / 2, midCellX + curCellW / 2, midCellY + curCellH / 2 };
+                ApplyEntryLayoutGeometry(w, t);
             }
 
             if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
@@ -3590,10 +4395,13 @@ static void OnAnimationTick() {
         }
     }
 
+    // 7a. Owned child opacity (83 ms linear) and scale (167 ms), independent
+    // of the 250 ms repositioning and of every other child's original clock.
+    if (AdvanceItemTransitions(dt)) anyActive = true;
+
     // 7b. Dock Layout Central Preview Directional Slide Transition (Window close)
     if (g_dockPreviewSlide.active) {
-        g_dockPreviewSlide.progress += dt / g_dockPreviewSlide.duration;
-        if (g_dockPreviewSlide.progress >= 1.0f) {
+        if (StepMotionTrack(g_dockPreviewSlide.progress, g_dockPreviewSlide.duration, dt)) {
             g_dockPreviewSlide.progress = 1.0f;
             g_dockPreviewSlide.active = false;
             g_dockPreviewSlide.currentOffset = 0.0f;
@@ -3602,7 +4410,7 @@ static void OnAnimationTick() {
             anyActive = true;
             float t = g_easeSlide.Solve(g_dockPreviewSlide.progress);
             g_dockPreviewSlide.currentOffset = (1.0f - t) * g_dockPreviewSlide.travelDistance;
-            g_dockPreviewSlide.currentAlpha = t;
+            g_dockPreviewSlide.currentAlpha = (std::min)(1.0f, g_dockPreviewSlide.progress * g_dockPreviewSlide.duration / 0.083f);
         }
         if (DockLayoutActive()) {
             UpdateDockThumbnailDwm();
@@ -3610,39 +4418,17 @@ static void OnAnimationTick() {
         }
     }
 
-    // 8. Close button fade & hover plate transitions (per-entry WinUI 3 concurrent cross-fade)
+    // 8. Close buttons: independent 83 ms linear fades and 167 ms entrance /
+    // gentle-exit scale transforms, including each invisible terminal sample.
     bool closeBtnAnimActive = false;
     for (int i = 0; i < (int)g_windows.size(); i++) {
-        float target = (i == g_hoverIndex && g_settings.showCloseButton && !IsWindowTruncated(i)) ? 1.0f : 0.0f;
-        if (DockLayoutActive() && DockCloseButtonIsHidden()) target = 0.0f;
-        if (fabsf(g_windows[i].closeBtnAlpha - target) > 0.01f) {
-            closeBtnAnimActive = true;
-            float step = (target > g_windows[i].closeBtnAlpha) ? (dt / 0.150f) : (dt / 0.100f);
-            if (target > g_windows[i].closeBtnAlpha) {
-                g_windows[i].closeBtnAlpha = (std::min)(1.0f, g_windows[i].closeBtnAlpha + step);
-            } else {
-                g_windows[i].closeBtnAlpha = (std::max)(0.0f, g_windows[i].closeBtnAlpha - step);
-            }
-        } else {
-            g_windows[i].closeBtnAlpha = target;
-        }
+        if (StepCloseButtonMotion(g_windows[i], dt)) closeBtnAnimActive = true;
     }
     if (closeBtnAnimActive) anyActive = true;
 
     g_animCloseBtnAlpha = (g_hoverIndex >= 0 && g_hoverIndex < (int)g_windows.size()) ? g_windows[g_hoverIndex].closeBtnAlpha : 0.0f;
 
-    float targetHoverAlpha = (g_isCloseHovered && g_hoverIndex >= 0 && g_hoverIndex < (int)g_windows.size() && g_windows[g_hoverIndex].closeBtnAlpha > 0.05f) ? 1.0f : 0.0f;
-    float hoverStep = (targetHoverAlpha > g_animCloseBtnHoverAlpha) ? (dt / 0.100f) : (dt / 0.120f);
-    if (fabsf(g_animCloseBtnHoverAlpha - targetHoverAlpha) > 0.01f) {
-        anyActive = true;
-        if (targetHoverAlpha > g_animCloseBtnHoverAlpha) {
-            g_animCloseBtnHoverAlpha = (std::min)(1.0f, g_animCloseBtnHoverAlpha + hoverStep);
-        } else {
-            g_animCloseBtnHoverAlpha = (std::max)(0.0f, g_animCloseBtnHoverAlpha - hoverStep);
-        }
-    } else {
-        g_animCloseBtnHoverAlpha = targetHoverAlpha;
-    }
+    if (StepOpacityMotion(g_closeBtnHover, g_animCloseBtnHoverAlpha, dt)) anyActive = true;
 
     if (g_settings.showThumbnails && (hadThumbMotion || g_animHoverScaleActive || hadScrollOrEntrance || g_animEntranceActive || g_scrollTransition.active || g_animExitActive || g_layoutTransition.active)) {
         UpdateThumbnailAnimations();
@@ -3650,7 +4436,7 @@ static void OnAnimationTick() {
 
     PaintSwitcher();
 
-    if (!anyActive) {
+    if (!anyActive && !(s_iconRepaintPending && g_isVisible)) {
         StopAnimationTicker();
     }
 }
@@ -3678,12 +4464,46 @@ static int GetHeaderIconSizePx() {
     }
     return px;
 }
+static HFONT CreateScaledFont(int dpiY);
+
 static int GetHeaderTitleHeightPx() {
-    return MulDiv(18, g_dpiY, 96);
+    // Keep the original band when it fits. Measure the configured font at the
+    // layout DPI: g_hFont can still belong to the previous monitor until paint.
+    static struct {
+        int dpi = 0;
+        int size = 0;
+        WCHAR family[64] = {};
+        WCHAR style[32] = {};
+        HFONT renderedFont = NULL;
+        int lineHeight = 0;
+    } metrics;
+    if (metrics.dpi != g_dpiY || metrics.size != g_settings.fontSize ||
+        wcscmp(metrics.family, g_settings.fontFamily) != 0 ||
+        wcscmp(metrics.style, g_settings.fontStyle) != 0 ||
+        metrics.renderedFont != g_hFont) {
+        metrics.lineHeight = 0;
+        HFONT font = CreateScaledFont(g_dpiY);
+        HDC dc = GetDC(NULL);
+        if (font && dc) {
+            HGDIOBJ previous = SelectObject(dc, font);
+            TEXTMETRICW tm = {};
+            if (GetTextMetricsW(dc, &tm)) metrics.lineHeight = tm.tmHeight;
+            SelectObject(dc, previous);
+        }
+        if (dc) ReleaseDC(NULL, dc);
+        if (font) DeleteObject(font);
+        metrics.dpi = g_dpiY;
+        metrics.size = g_settings.fontSize;
+        wcscpy_s(metrics.family, g_settings.fontFamily);
+        wcscpy_s(metrics.style, g_settings.fontStyle);
+        metrics.renderedFont = g_hFont;
+    }
+    return std::max(MulDiv(18, g_dpiY, 96), metrics.lineHeight);
 }
 static int GetHeaderRowHeightPx() {
     if (DockLayoutActive()) {
-        return MulDiv(20, g_dpiY, 96);
+        int h = MulDiv(20, g_dpiY, 96);
+        return g_settings.showTitle ? std::max(h, GetHeaderTitleHeightPx()) : h;
     }
     if (!g_settings.showTitle && !g_settings.showIcon) {
         return 0;
@@ -3692,6 +4512,7 @@ static int GetHeaderRowHeightPx() {
     if (!HeaderIsVertical()) {
         int h = MulDiv(SWS_ROW_TITLE_HEIGHT, g_dpiY, 96);
         if (g_settings.showIcon && GetHeaderIconSizePx() > h) h = GetHeaderIconSizePx();
+        if (g_settings.showTitle) h = std::max(h, GetHeaderTitleHeightPx());
         return h;
     }
 
@@ -3810,28 +4631,40 @@ static int GetBadgeIconBackgroundCornerRadiusPx(int maxRadius) {
     return (r > maxRadius) ? maxRadius : r;
 }
 
-static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY) {
+static void GetSwitcherPosition(const RECT& workArea, int* outX, int* outY,
+                                 int width = g_winW, int height = g_winH) {
     int w = workArea.right - workArea.left;
     int h = workArea.bottom - workArea.top;
-    int m = MulDiv(g_settings.switcherPositionMargin, g_dpiX, 96);
+    // Position margins are DIP settings, so mirrored windows must use the
+    // target monitor's DPI rather than the main switcher's cached DPI.
+    UINT positionDpiX = g_dpiX;
+    UINT positionDpiY = g_dpiY;
+    HMONITOR hMon = MonitorFromRect(&workArea, MONITOR_DEFAULTTONEAREST);
+    UINT monitorDpiX = 96, monitorDpiY = 96;
+    if (QueryMonitorDpi(hMon, &monitorDpiX, &monitorDpiY)) {
+        positionDpiX = monitorDpiX;
+        positionDpiY = monitorDpiY;
+    }
+    int marginX = MulDiv(g_settings.switcherPositionMargin, positionDpiX, 96);
+    int marginY = MulDiv(g_settings.switcherPositionMargin, positionDpiY, 96);
     if (wcscmp(g_settings.switcherPosition, L"topLeft") == 0) {
-        *outX = workArea.left + m; *outY = workArea.top + m;
+        *outX = workArea.left + marginX; *outY = workArea.top + marginY;
     } else if (wcscmp(g_settings.switcherPosition, L"topCenter") == 0) {
-        *outX = workArea.left + (w - g_winW) / 2; *outY = workArea.top + m;
+        *outX = workArea.left + (w - width) / 2; *outY = workArea.top + marginY;
     } else if (wcscmp(g_settings.switcherPosition, L"topRight") == 0) {
-        *outX = workArea.right - g_winW - m; *outY = workArea.top + m;
+        *outX = workArea.right - width - marginX; *outY = workArea.top + marginY;
     } else if (wcscmp(g_settings.switcherPosition, L"centerLeft") == 0) {
-        *outX = workArea.left + m; *outY = workArea.top + (h - g_winH) / 2;
+        *outX = workArea.left + marginX; *outY = workArea.top + (h - height) / 2;
     } else if (wcscmp(g_settings.switcherPosition, L"centerRight") == 0) {
-        *outX = workArea.right - g_winW - m; *outY = workArea.top + (h - g_winH) / 2;
+        *outX = workArea.right - width - marginX; *outY = workArea.top + (h - height) / 2;
     } else if (wcscmp(g_settings.switcherPosition, L"bottomLeft") == 0) {
-        *outX = workArea.left + m; *outY = workArea.bottom - g_winH - m;
+        *outX = workArea.left + marginX; *outY = workArea.bottom - height - marginY;
     } else if (wcscmp(g_settings.switcherPosition, L"bottomCenter") == 0) {
-        *outX = workArea.left + (w - g_winW) / 2; *outY = workArea.bottom - g_winH - m;
+        *outX = workArea.left + (w - width) / 2; *outY = workArea.bottom - height - marginY;
     } else if (wcscmp(g_settings.switcherPosition, L"bottomRight") == 0) {
-        *outX = workArea.right - g_winW - m; *outY = workArea.bottom - g_winH - m;
+        *outX = workArea.right - width - marginX; *outY = workArea.bottom - height - marginY;
     } else { // center
-        *outX = workArea.left + (w - g_winW) / 2; *outY = workArea.top + (h - g_winH) / 2;
+        *outX = workArea.left + (w - width) / 2; *outY = workArea.top + (h - height) / 2;
     }
 }
 
@@ -4014,6 +4847,8 @@ static bool CanCloseWindow(HWND hWnd) {
 
 static std::vector<HWND> s_pendingCloseWindows;
 static int s_pendingCloseRetries = 0;
+static std::map<HWND, ULONGLONG> s_pendingCloseDeadlines;
+static constexpr ULONGLONG SWS_CLOSE_COOLDOWN_MS = 3000;
 
 // Activation MRU (Most Recently Used) tracking
 static std::vector<HWND> g_mruWindows;
@@ -4069,67 +4904,170 @@ static int GetMruRank(HWND h) {
 
 static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx);
 
-// Cache of crisp icons extracted from exe files at a specific pixel size.
-// Owned here (DestroyIcon at unload); keyed by "<exePath>_<sizePx>".
-static std::map<std::wstring, HICON> g_exeIconCache;
-
-// WM_GETICON returns a fixed (usually 32px) icon that looks blurry when scaled
-// up to 48/64. PrivateExtractIconsW pulls the best-matching frame from the
-// exe's icon resource at the exact requested size for a crisp result.
-static HICON TryGetCrispExeIcon(HWND hWnd, int desiredSizePx) {
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hWnd, &pid);
-    if (!pid) return NULL;
-    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!hProc) return NULL;
-    WCHAR exePath[MAX_PATH] = {0};
-    DWORD size = MAX_PATH;
-    BOOL ok = QueryFullProcessImageNameW(hProc, 0, exePath, &size);
-    CloseHandle(hProc);
-    if (!ok || !exePath[0]) return NULL;
-
-    std::wstring key = std::wstring(exePath) + L"_" + std::to_wstring(desiredSizePx);
-    auto it = g_exeIconCache.find(key);
-    if (it != g_exeIconCache.end()) return it->second;
-
-    HICON hIcon = NULL;
-    if (PrivateExtractIconsW(exePath, 0, desiredSizePx, desiredSizePx,
-                             &hIcon, NULL, 1, 0) == 1 && hIcon) {
-        g_exeIconCache[key] = hIcon;
-        return hIcon;
-    }
-    return NULL;
-}
-
-// === Custom per-process header (icon and/or application name) ===
-
 struct CustomHeaderRule {
     std::wstring pattern;   // executable name pattern; wildcards * and ? supported
     std::wstring iconPath;  // .ico / .exe / .dll to extract the icon from (optional)
     std::wstring appName;   // custom display name overriding the detected one (optional)
 };
 static std::vector<CustomHeaderRule> g_customHeaderRules;
-// Owned cache of icons loaded from custom paths; keyed by "<path>_<sizePx>".
-static std::map<std::wstring, HICON> g_customIconCache;
 
-static HICON LoadCustomIconFromPath(const std::wstring& path, int sizePx) {
-    if (path.empty() || sizePx <= 0) return NULL;
-    std::wstring key = path + L"_" + std::to_wstring(sizePx);
-    auto it = g_customIconCache.find(key);
-    if (it != g_customIconCache.end()) return it->second;
-    HICON hIcon = NULL;
-    if (PrivateExtractIconsW(path.c_str(), 0, sizePx, sizePx,
-                             &hIcon, NULL, 1, 0) == 1 && hIcon) {
-        g_customIconCache[key] = hIcon;
-        return hIcon;
-    }
-    return NULL;
+// No shell I/O, application messages or resolution occur while holding either
+// lock. Pending includes the active request AND results awaiting UI consumption.
+static constexpr size_t SWS_ICON_MAX_PENDING = 128;
+static constexpr size_t SWS_ICON_MAX_CELLS = 512;
+static constexpr size_t SWS_ICON_MAX_SOURCE_CACHE = 128;
+static constexpr DWORD SWS_ICON_NEGATIVE_RETRY_MS = 5000;
+static constexpr DWORD SWS_ICON_POSITIVE_RETRY_MS = 30000;
+static constexpr DWORD SWS_ICON_SHUTDOWN_WAIT_MS = 1500;
+
+struct WindowIconRequest {
+    std::shared_ptr<WindowIconCell> cell;
+    ULONGLONG generation = 0;
+    std::shared_ptr<const std::vector<CustomHeaderRule>> rules;
+};
+struct WindowIconResult {
+    WindowIconRequest request;
+    std::shared_ptr<OwnedWindowIcon> icon;
+};
+using IconSourceCache = std::map<std::wstring, std::shared_ptr<OwnedWindowIcon>>;
+struct WindowIconWorkerState {
+    SRWLOCK lock = SRWLOCK_INIT;
+    std::atomic<bool> stop{false};
+    HWND target = NULL;
+    HANDLE wake = NULL;
+    HMODULE module = NULL;
+    DWORD threadId = 0;
+    size_t pending = 0;
+    std::deque<WindowIconRequest> queue;
+    std::deque<WindowIconResult> results;
+    IconSourceCache exeIcons, customIcons, uwpIcons;
+    ~WindowIconWorkerState() { if (wake) CloseHandle(wake); }
+};
+static SRWLOCK s_iconLifecycleLock = SRWLOCK_INIT;
+static std::shared_ptr<WindowIconWorkerState> s_iconWorkerState;
+static HANDLE s_iconWorkerThread = NULL; // Switcher thread owns the handle.
+static std::atomic<bool> s_iconShutdownRequested{false};
+static std::map<HWND, std::shared_ptr<WindowIconCell>> s_windowIconCells;
+static std::shared_ptr<const std::vector<CustomHeaderRule>> s_iconRules;
+static ULONGLONG s_iconSettingsGeneration = 0, s_iconRequestGeneration = 0;
+static HICON s_iconPlaceholder = NULL; // LR_SHARED system icon; never destroyed.
+static thread_local WindowIconWorkerState* s_resolvingIcons = nullptr;
+static thread_local const WindowIconRequest* s_resolvingIconRequest = nullptr;
+static thread_local ULONGLONG s_iconMessageDeadline = 0;
+
+static bool IconWindowIdentityMatches(const WindowIconCell& cell) {
+    DWORD pid = 0;
+    DWORD tid = GetWindowThreadProcessId(cell.hWnd, &pid);
+    return tid && tid == cell.threadId && pid == cell.processId;
 }
 
-// If the window's executable name matches a user-defined rule, return its
-// custom icon. The first matching rule wins; this overrides all other sources.
-static HICON TryGetCustomIcon(HWND hWnd, int sizePx) {
-    if (g_customHeaderRules.empty()) return NULL;
+static bool IconResolutionCancelled() {
+    return s_resolvingIcons &&
+           (s_resolvingIcons->stop.load() ||
+            s_resolvingIconRequest->cell->retired.load() ||
+            !IconWindowIdentityMatches(*s_resolvingIconRequest->cell));
+}
+
+// Worker-only. The three WM_GETICON waits plus Explorer IPC share a 1300ms
+// deadline, with cancellation between stages. Shell/file/COM calls themselves
+// have no Win32 hard timeout (see the bounded shutdown and module reference).
+static bool GetWindowIconTimeout(HWND window, UINT message, WPARAM wParam,
+                                 LPARAM lParam, DWORD timeout, DWORD_PTR* result) {
+    *result = 0;
+    if (!s_resolvingIcons || IconResolutionCancelled()) return false;
+    ULONGLONG now = GetTickCount64();
+    if (now >= s_iconMessageDeadline) return false;
+    timeout = (std::min)(timeout, (DWORD)(s_iconMessageDeadline - now));
+    return SendMessageTimeoutW(window, message, wParam, lParam,
+                               SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_ERRORONEXIT,
+                               timeout, result) != 0;
+}
+
+// A worker retained across bounded teardown must not call Windhawk APIs.
+// Wh_Log concatenates a literal prefix, so keep its format literal at the call
+// site instead of forwarding a runtime string through a template.
+#define IconResolverLog(format, ...)                  \
+    do {                                             \
+        if (!s_resolvingIcons) {                      \
+            Wh_Log(format __VA_OPT__(,) __VA_ARGS__); \
+        }                                            \
+    } while (0)
+
+static HICON CacheWorkerSourceIcon(IconSourceCache& cache,
+                                   const std::wstring& key, HICON icon) {
+    if (!icon) return NULL;
+    auto owned = std::make_shared<OwnedWindowIcon>(icon);
+    if (cache.size() >= SWS_ICON_MAX_SOURCE_CACHE) cache.erase(cache.begin());
+    cache[key] = std::move(owned);
+    return icon;
+}
+
+static void ForgetWindowIconShadows(HICON icon) {
+    for (auto it = s_iconShadowCache.begin(); it != s_iconShadowCache.end();) {
+        if (it->first.first == icon) {
+            it = s_iconShadowCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// Switcher UI only. Retired snapshots still drawing their icons are live here;
+// once they drop, the next presented frame releases their cache records. The
+// record's strong owner prevents handle reuse before this liveness check, so
+// neither worker releases nor reentrant UI invalidation can leave an ABA key.
+static void SweepWindowIconShadows() {
+    if (s_iconShadowCache.empty()) return;
+    // One contiguous allocation per sweep, rather than one node per live icon.
+    std::vector<const OwnedWindowIcon*> live;
+    live.reserve(s_windowIconCells.size() + g_windows.size() + g_savedAppList.size() +
+                 g_scrollTransition.outgoingItems.size() + g_layoutTransition.departingItems.size());
+    for (const auto& pair : s_windowIconCells) {
+        if (pair.second->icon) live.push_back(pair.second->icon.get());
+    }
+    auto collect = [&](const auto& entries) {
+        for (const auto& entry : entries) {
+            if (entry.iconCell && entry.iconCell->icon &&
+                entry.hIcon == entry.iconCell->icon->handle)
+                live.push_back(entry.iconCell->icon.get());
+        }
+    };
+    collect(g_windows);
+    collect(g_savedAppList);
+    collect(g_scrollTransition.outgoingItems);
+    collect(g_layoutTransition.departingItems);
+    auto order = std::less<const OwnedWindowIcon*>{};
+    std::sort(live.begin(), live.end(), order);
+    for (auto it = s_iconShadowCache.begin(); it != s_iconShadowCache.end();) {
+        const auto& owner = it->second->owner;
+        if (owner ? !std::binary_search(live.begin(), live.end(), owner.get(), order)
+                  : it->first.first != s_iconPlaceholder)
+            it = s_iconShadowCache.erase(it);
+        else
+            ++it;
+    }
+}
+
+// Called by LoadSettings on the UI, publishing an immutable rules snapshot.
+static void ResetWindowIconSettings() {
+    for (const auto& pair : s_windowIconCells) pair.second->retired.store(true);
+    ++s_iconSettingsGeneration;
+    s_iconRules = std::make_shared<const std::vector<CustomHeaderRule>>(g_customHeaderRules);
+}
+
+static void InvalidateWindowIcon(HWND window) {
+    auto it = s_windowIconCells.find(window);
+    if (it == s_windowIconCells.end()) return;
+    it->second->retired.store(true);
+    if (it->second->icon) ForgetWindowIconShadows(it->second->icon->handle);
+    s_windowIconCells.erase(it);
+}
+
+// WM_GETICON returns a fixed (usually 32px) icon that looks blurry when scaled
+// up to 48/64. PrivateExtractIconsW pulls the best-matching frame from the
+// exe's icon resource at the exact requested size for a crisp result.
+static HICON TryGetCrispExeIcon(HWND hWnd, int desiredSizePx) {
+    if (!s_resolvingIcons || IconResolutionCancelled()) return NULL;
     DWORD pid = 0;
     GetWindowThreadProcessId(hWnd, &pid);
     if (!pid) return NULL;
@@ -4137,11 +5075,60 @@ static HICON TryGetCustomIcon(HWND hWnd, int sizePx) {
     if (!hProc) return NULL;
     WCHAR exePath[MAX_PATH] = {0};
     DWORD size = MAX_PATH;
-    BOOL ok = QueryFullProcessImageNameW(hProc, 0, exePath, &size);
+    BOOL ok = !IconResolutionCancelled() && QueryFullProcessImageNameW(hProc, 0, exePath, &size);
+    CloseHandle(hProc);
+    if (!ok || !exePath[0]) return NULL;
+
+    std::wstring key = std::wstring(exePath) + L"_" + std::to_wstring(desiredSizePx);
+    auto& cache = s_resolvingIcons->exeIcons;
+    auto it = cache.find(key);
+    if (it != cache.end()) return it->second->handle;
+
+    HICON hIcon = NULL;
+    if (IconResolutionCancelled()) return NULL;
+    if (PrivateExtractIconsW(exePath, 0, desiredSizePx, desiredSizePx,
+                             &hIcon, NULL, 1, 0) == 1 && hIcon) {
+        return CacheWorkerSourceIcon(cache, key, hIcon);
+    }
+    if (hIcon) DestroyIcon(hIcon);
+    return NULL;
+}
+
+// === Custom per-process header (icon and/or application name) ===
+
+static HICON LoadCustomIconFromPath(const std::wstring& path, int sizePx) {
+    if (!s_resolvingIcons || IconResolutionCancelled() || path.empty() || sizePx <= 0) return NULL;
+    std::wstring key = path + L"_" + std::to_wstring(sizePx);
+    auto& cache = s_resolvingIcons->customIcons;
+    auto it = cache.find(key);
+    if (it != cache.end()) return it->second->handle;
+    HICON hIcon = NULL;
+    if (PrivateExtractIconsW(path.c_str(), 0, sizePx, sizePx,
+                             &hIcon, NULL, 1, 0) == 1 && hIcon) {
+        return CacheWorkerSourceIcon(cache, key, hIcon);
+    }
+    if (hIcon) DestroyIcon(hIcon);
+    return NULL;
+}
+
+// If the window's executable name matches a user-defined rule, return its
+// custom icon. The first matching rule wins; this overrides all other sources.
+static HICON TryGetCustomIcon(HWND hWnd, int sizePx) {
+    if (!s_resolvingIcons || IconResolutionCancelled()) return NULL;
+    const auto& rules = *s_resolvingIconRequest->rules;
+    if (rules.empty()) return NULL;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hWnd, &pid);
+    if (!pid) return NULL;
+    HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!hProc) return NULL;
+    WCHAR exePath[MAX_PATH] = {0};
+    DWORD size = MAX_PATH;
+    BOOL ok = !IconResolutionCancelled() && QueryFullProcessImageNameW(hProc, 0, exePath, &size);
     CloseHandle(hProc);
     if (!ok || !exePath[0]) return NULL;
     WCHAR* fileName = PathFindFileNameW(exePath);
-    for (const auto& rule : g_customHeaderRules) {
+    for (const auto& rule : rules) {
         if (PathMatchSpecW(fileName, rule.pattern.c_str())) {
             return LoadCustomIconFromPath(rule.iconPath, sizePx);
         }
@@ -4175,9 +5162,10 @@ static bool TryGetCustomAppName(HWND hWnd, WCHAR* out, size_t cch) {
     return false;
 }
 
-static HICON LoadWindowIcon(HWND hWnd) {
+static HICON ResolveWindowIcon(HWND hWnd, int sizePx) {
+    if (!s_resolvingIcons || IconResolutionCancelled()) return NULL;
     // User-assigned custom icon takes priority over everything else.
-    HICON hIcon = TryGetCustomIcon(hWnd, GetHeaderIconSizePx());
+    HICON hIcon = TryGetCustomIcon(hWnd, sizePx);
     if (hIcon) return hIcon;
 
     // A crisp exe icon extracted at the exact target size beats the WM_GETICON
@@ -4185,19 +5173,278 @@ static HICON LoadWindowIcon(HWND hWnd) {
     // pixelated when downscaled to 16 (GDI does no smoothing in DrawIconEx).
     // PrivateExtractIconsW picks the best-matching frame at the requested size.
     if (!hIcon) {
-        hIcon = TryGetCrispExeIcon(hWnd, GetHeaderIconSizePx());
+        hIcon = TryGetCrispExeIcon(hWnd, sizePx);
     }
-    if (!hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&hIcon);
-    if (!hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_SMALL2, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&hIcon);
-    if (!hIcon) SendMessageTimeoutW(hWnd, WM_GETICON, ICON_SMALL, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 100, (DWORD_PTR*)&hIcon);
+    DWORD_PTR iconResult = 0;
+    for (WPARAM kind : {ICON_BIG, ICON_SMALL2, ICON_SMALL}) {
+        if (hIcon || IconResolutionCancelled()) break;
+        if (GetWindowIconTimeout(hWnd, WM_GETICON, kind, 0, 100, &iconResult))
+            hIcon = (HICON)iconResult;
+    }
+    if (IconResolutionCancelled()) return NULL;
     if (!hIcon) hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
     if (!hIcon) hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
     // UWP / Modern Packaged apps: Explorer IPC extracts authentic AUMID/IShellItem icons
     if (!hIcon) {
-        hIcon = TryGetUwpIconFromExplorer(hWnd, GetHeaderIconSizePx());
+        hIcon = TryGetUwpIconFromExplorer(hWnd, sizePx);
     }
-    if (!hIcon) hIcon = LoadIconW(NULL, IDI_APPLICATION);
+    // NULL is a negative result, cached briefly by the UI. The UI already has
+    // the shared application placeholder; never turn a failure into a warm hit.
     return hIcon;
+}
+
+static std::shared_ptr<WindowIconWorkerState> GetWindowIconWorkerState() {
+    AcquireSRWLockShared(&s_iconLifecycleLock);
+    auto state = s_iconWorkerState;
+    ReleaseSRWLockShared(&s_iconLifecycleLock);
+    return state;
+}
+
+static HICON LoadWindowIcon(HWND hWnd, std::shared_ptr<WindowIconCell>* outCell,
+                            bool refresh = false) {
+    // UI fast path: identity query, bounded cache lookup and queue insertion.
+    // In particular, no process metadata, shell calls, CopyIcon or app messages.
+    outCell->reset();
+    DWORD pid = 0;
+    DWORD tid = GetWindowThreadProcessId(hWnd, &pid);
+    if (!tid || !pid || s_iconShutdownRequested.load()) return s_iconPlaceholder;
+    auto it = s_windowIconCells.find(hWnd);
+    int sizePx = GetHeaderIconSizePx();
+    if (it != s_windowIconCells.end() &&
+        (it->second->processId != pid || it->second->threadId != tid ||
+         it->second->sizePx != sizePx ||
+         it->second->settingsGeneration != s_iconSettingsGeneration)) {
+        it->second->retired.store(true);
+        if (it->second->icon) ForgetWindowIconShadows(it->second->icon->handle);
+        s_windowIconCells.erase(it);
+        it = s_windowIconCells.end();
+    }
+    if (it == s_windowIconCells.end()) {
+        // Prune only unreferenced, non-pending cells. Entries/snapshots retain
+        // ownership, including after HWND destruction or cache replacement.
+        if (s_windowIconCells.size() >= SWS_ICON_MAX_CELLS) {
+            auto victim = std::find_if(s_windowIconCells.begin(), s_windowIconCells.end(),
+                [](const auto& pair) { return pair.second.use_count() == 1 && !pair.second->pending; });
+            if (victim == s_windowIconCells.end()) return s_iconPlaceholder;
+            if (victim->second->icon) ForgetWindowIconShadows(victim->second->icon->handle);
+            s_windowIconCells.erase(victim);
+        }
+        auto cell = std::make_shared<WindowIconCell>();
+        cell->hWnd = hWnd;
+        cell->processId = pid;
+        cell->threadId = tid;
+        cell->sizePx = sizePx;
+        cell->settingsGeneration = s_iconSettingsGeneration;
+        it = s_windowIconCells.emplace(hWnd, std::move(cell)).first;
+    }
+    const auto& cell = it->second;
+    *outCell = cell;
+    if (cell->pending && cell->discardedGeneration.load() == cell->requestGeneration)
+        cell->pending = false;
+    ULONGLONG now = GetTickCount64();
+    // Live redraws can refresh successful icons, but never bypass failure TTLs
+    // or repeatedly queue the same request while it is active/awaiting commit.
+    bool due = now >= cell->retryAfter || (refresh && cell->icon && !cell->lastFailed);
+    auto state = GetWindowIconWorkerState();
+    if (due && !cell->pending && state && !state->stop.load()) {
+        AcquireSRWLockExclusive(&state->lock);
+        if (!state->stop.load() && state->pending < SWS_ICON_MAX_PENDING) {
+            cell->requestGeneration = ++s_iconRequestGeneration;
+            cell->pending = true;
+            ++state->pending;
+            state->queue.push_back({cell, cell->requestGeneration, s_iconRules});
+            SetEvent(state->wake);
+        }
+        ReleaseSRWLockExclusive(&state->lock);
+    }
+    return cell->icon ? cell->icon->handle : s_iconPlaceholder;
+}
+
+static DWORD WINAPI WindowIconWorkerThread(LPVOID parameter) {
+    auto* holder = static_cast<std::shared_ptr<WindowIconWorkerState>*>(parameter);
+    auto state = std::move(*holder);
+    delete holder;
+    HMODULE module = state->module;
+    s_resolvingIcons = state.get();
+    HRESULT apartment = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    HRESULT cancellation = CoEnableCallCancellation(NULL);
+    while (!state->stop.load()) {
+        WindowIconRequest request;
+        AcquireSRWLockExclusive(&state->lock);
+        if (!state->queue.empty()) {
+            request = std::move(state->queue.front());
+            state->queue.pop_front();
+        } else {
+            ResetEvent(state->wake);
+        }
+        ReleaseSRWLockExclusive(&state->lock);
+        if (!request.cell) {
+            // Stop may have signaled just before the empty-queue ResetEvent.
+            // Check after resetting so that signal cannot become a lost wake.
+            if (!state->stop.load()) WaitForSingleObject(state->wake, INFINITE);
+            continue;
+        }
+        s_resolvingIconRequest = &request;
+        s_iconMessageDeadline = GetTickCount64() + 1300;
+        HICON borrowed = SUCCEEDED(apartment)
+                             ? ResolveWindowIcon(request.cell->hWnd, request.cell->sizePx)
+                             : NULL;
+        // Never destroy the WM_GETICON/class/IPC handle. Every delivered icon
+        // is our own CopyIcon, separate from worker caches and Explorer's cache.
+        HICON copy = borrowed && !IconResolutionCancelled() ? CopyIcon(borrowed) : NULL;
+        WindowIconResult result{request, copy ? std::make_shared<OwnedWindowIcon>(copy) : nullptr};
+        s_resolvingIconRequest = nullptr;
+        AcquireSRWLockExclusive(&state->lock);
+        if (!state->stop.load() && state->target) {
+            bool notify = state->results.empty();
+            state->results.push_back(std::move(result));
+            // Payload stays in the bounded inbox, not a raw pointer in the
+            // HWND message queue. Failed posts/teardown cannot leak HICONs.
+            if (notify && !PostMessageW(state->target, WM_SWS_ICON_READY, 0, 0)) {
+                state->results.pop_back();
+                --state->pending;
+                request.cell->discardedGeneration.store(request.generation);
+            }
+        }
+        ReleaseSRWLockExclusive(&state->lock);
+    }
+    state->exeIcons.clear();
+    state->customIcons.clear();
+    state->uwpIcons.clear();
+    if (SUCCEEDED(cancellation)) CoDisableCallCancellation(NULL);
+    if (SUCCEEDED(apartment)) CoUninitialize();
+    s_resolvingIcons = nullptr;
+    state.reset();
+    // Release the code reference atomically with thread exit; a timed-out shell
+    // call can safely finish after Windhawk has returned from mod teardown.
+    FreeLibraryAndExitThread(module, 0);
+}
+
+static void StartWindowIconWorker() {
+    s_iconPlaceholder = LoadIconW(NULL, IDI_APPLICATION);
+    if (s_iconShutdownRequested.load()) return;
+    auto state = std::make_shared<WindowIconWorkerState>();
+    state->target = g_hSwitcher;
+    state->wake = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!state->wake || !GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+        reinterpret_cast<PCWSTR>(&WindowIconWorkerThread), &state->module)) return;
+    auto* holder = new std::shared_ptr<WindowIconWorkerState>(state);
+    s_iconWorkerThread = CreateThread(NULL, 0, WindowIconWorkerThread, holder, 0, &state->threadId);
+    if (!s_iconWorkerThread) {
+        delete holder;
+        FreeLibrary(state->module);
+        return;
+    }
+    AcquireSRWLockExclusive(&s_iconLifecycleLock);
+    s_iconWorkerState = state;
+    if (s_iconShutdownRequested.load()) {
+        state->stop.store(true);
+        SetEvent(state->wake);
+    }
+    ReleaseSRWLockExclusive(&s_iconLifecycleLock);
+}
+
+// Can be called from WhTool_ModUninit while the UI is still starting up.
+static void RequestWindowIconWorkerStop() {
+    s_iconShutdownRequested.store(true);
+    auto state = GetWindowIconWorkerState();
+    if (!state) return;
+    state->stop.store(true);
+    SetEvent(state->wake);
+    CoCancelCall(state->threadId, 0); // Best effort, never wait for COM cancellation.
+}
+
+static void StopWindowIconWorker() {
+    RequestWindowIconWorkerStop();
+    auto state = GetWindowIconWorkerState();
+    if (state) {
+        std::deque<WindowIconRequest> queue;
+        std::deque<WindowIconResult> results;
+        AcquireSRWLockExclusive(&state->lock);
+        state->target = NULL; // Serialized with posting, before HWND destruction.
+        queue.swap(state->queue);
+        results.swap(state->results);
+        state->pending = 0;
+        ReleaseSRWLockExclusive(&state->lock);
+    }
+    if (s_iconWorkerThread) {
+        // Message waits are <=1300ms. In-process shell extensions/file I/O may
+        // exceed this; retain their private state/code instead of killing a
+        // thread, unloading executing code, or blocking mod unload indefinitely.
+        WaitForSingleObject(s_iconWorkerThread, SWS_ICON_SHUTDOWN_WAIT_MS);
+        CloseHandle(s_iconWorkerThread);
+        s_iconWorkerThread = NULL;
+    }
+    AcquireSRWLockExclusive(&s_iconLifecycleLock);
+    s_iconWorkerState.reset();
+    ReleaseSRWLockExclusive(&s_iconLifecycleLock);
+    for (const auto& pair : s_windowIconCells) {
+        if (pair.second->icon) ForgetWindowIconShadows(pair.second->icon->handle);
+    }
+    s_windowIconCells.clear();
+    s_iconRules.reset();
+}
+
+static void ConsumeWindowIconResults() {
+    auto state = GetWindowIconWorkerState();
+    if (!state || state->stop.load()) return;
+    std::deque<WindowIconResult> results;
+    AcquireSRWLockExclusive(&state->lock);
+    results.swap(state->results);
+    state->pending -= results.size();
+    ReleaseSRWLockExclusive(&state->lock);
+    if (results.empty()) return;
+    bool changed = false;
+    for (auto& result : results) {
+        const auto& cell = result.request.cell;
+        if (cell->requestGeneration != result.request.generation) continue;
+        cell->pending = false;
+        auto current = s_windowIconCells.find(cell->hWnd);
+        if (s_iconShutdownRequested.load() || current == s_windowIconCells.end() ||
+            current->second != cell || cell->settingsGeneration != s_iconSettingsGeneration ||
+            !IconWindowIdentityMatches(*cell)) continue;
+        cell->retryAfter = GetTickCount64() + (result.icon ? SWS_ICON_POSITIVE_RETRY_MS
+                                                         : SWS_ICON_NEGATIVE_RETRY_MS);
+        cell->lastFailed = !result.icon;
+        if (!result.icon) continue; // Preserve a previously successful icon.
+        if (cell->icon) ForgetWindowIconShadows(cell->icon->handle);
+        cell->icon = std::move(result.icon);
+        auto update = [&](auto& entries) {
+            for (auto& entry : entries) {
+                if (entry.hWnd == cell->hWnd && entry.iconCell == cell) {
+                    entry.hIcon = cell->icon->handle;
+                    changed = true;
+                }
+            }
+        };
+        update(g_windows);
+        update(g_savedAppList);
+        update(g_scrollTransition.outgoingItems);
+        update(g_layoutTransition.departingItems);
+    }
+    // Overflow was intentionally deferred. Revisit live and saved UI cells
+    // after freeing slots, without enumeration or any synchronous resolver.
+    auto refill = [&](auto& entries) {
+        for (auto& entry : entries) {
+            if (entry.iconCell && (entry.iconCell->retired.load() ||
+                                  !IconWindowIdentityMatches(*entry.iconCell))) continue;
+            HICON previous = entry.hIcon;
+            entry.hIcon = LoadWindowIcon(entry.hWnd, &entry.iconCell);
+            changed |= entry.hIcon != previous;
+        }
+    };
+    refill(g_windows);
+    refill(g_savedAppList);
+    if (changed) {
+        InvalidateStaticCache();
+        if (g_scrollTransition.active) s_scrollIconCanvasDirty = true;
+        if (g_isVisible) {
+            // Use a single ticker turn even when idle: many ready batches before
+            // its deadline must not each perform a complete static repaint.
+            s_iconRepaintPending = true;
+            StartAnimationTicker();
+        }
+    }
 }
 
 static void GetWindowGroupKey(HWND hWnd, WCHAR* out, size_t cch);
@@ -4345,7 +5592,7 @@ static bool IsEligibleWindow(HWND hWnd, WindowEntry* outEntry = nullptr) {
     if (outEntry) {
         outEntry->hWnd = hWnd;
         wcscpy_s(outEntry->title, title);
-        outEntry->hIcon = LoadWindowIcon(hWnd);
+        outEntry->hIcon = LoadWindowIcon(hWnd, &outEntry->iconCell);
     }
     return true;
 }
@@ -4365,9 +5612,132 @@ UINT g_WM_SWS_GET_UWP_ICON = 0;
 UINT g_WM_SWS_TOUCHPAD_FRAME = 0;
 static bool g_isTouchpadGestureActive = false;
 static std::atomic<bool> g_touchpadReaderAvailable{false};
+static std::atomic<bool> g_touchpadReaderStopping{false};
 static std::atomic<bool> g_touchpadGesturesEnabled{true};
+// Published to the raw-reader thread so an already-visible switcher can claim
+// the next three-finger stroke before its UI message is dispatched.
+static std::atomic<bool> g_touchpadSwitcherActive{false};
 static std::atomic<bool> g_touchpadStickyLaunchEnabled{true};
 static std::atomic<bool> g_touchpadGestureTakeoverAvailable{true};
+// Settings callbacks run outside the switcher thread. These atomics are the
+// cross-thread source of truth until WM_SWS_SETTINGS_CHANGED reloads the full
+// UI settings snapshot on the switcher thread.
+static bool TouchpadHandlingEnabled() {
+    return g_touchpadGesturesEnabled.load() && !g_touchpadReaderStopping.load();
+}
+static bool TouchpadStickyLaunchEnabled() {
+    return g_touchpadStickyLaunchEnabled.load();
+}
+// Diagnostic totals are process-lifetime counters, not gesture ownership.
+// Atomics let the UI sample the reader without delaying its input thread.
+struct TouchpadInputDiagnostics {
+    std::atomic<DWORD> rawMessages{0};
+    std::atomic<DWORD> hidReports{0};
+    std::atomic<DWORD> rejectedDevices{0};
+    std::atomic<DWORD> readFailures{0};
+    std::atomic<DWORD> frames{0};
+    std::atomic<DWORD> posted{0};
+    std::atomic<DWORD> postFailures{0};
+    std::atomic<DWORD> uiFrames{0};
+    std::atomic<DWORD> lastReadError{0};
+    std::atomic<DWORD> lastPostError{0};
+    std::atomic<ULONG> lastTips{0};
+    std::atomic<ULONGLONG> lastRawTick{0};
+    std::atomic<ULONGLONG> lastFrameTick{0};
+    std::atomic<ULONGLONG> lastUiTick{0};
+};
+static TouchpadInputDiagnostics s_touchpadInputDiagnostics;
+static std::atomic<HWND> g_touchpadReaderWindow{nullptr};
+static std::wstring FormatTouchpadInputDiagnostics();
+
+struct TouchpadProcessSecurity {
+    DWORD integrity = 0;
+    int elevated = -1;
+    int uiAccess = -1;
+    DWORD error = ERROR_SUCCESS;
+};
+
+static TouchpadProcessSecurity ReadTouchpadProcessSecurity(DWORD pid) {
+    TouchpadProcessSecurity result;
+    HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!process) {
+        result.error = GetLastError();
+        return result;
+    }
+    HANDLE token = nullptr;
+    BOOL opened = OpenProcessToken(process, TOKEN_QUERY, &token);
+    DWORD error = opened ? ERROR_SUCCESS : GetLastError();
+    CloseHandle(process);
+    if (!opened) {
+        result.error = error;
+        return result;
+    }
+
+    DWORD returned = 0;
+    TOKEN_ELEVATION elevation{};
+    if (GetTokenInformation(token, TokenElevation, &elevation,
+                            sizeof(elevation), &returned)) {
+        result.elevated = elevation.TokenIsElevated != 0;
+    } else {
+        result.error = GetLastError();
+    }
+    DWORD uiAccess = 0;
+    if (GetTokenInformation(token, TokenUIAccess, &uiAccess,
+                            sizeof(uiAccess), &returned)) {
+        result.uiAccess = uiAccess != 0;
+    } else if (!result.error) {
+        result.error = GetLastError();
+    }
+    alignas(TOKEN_MANDATORY_LABEL) BYTE labelBuffer[
+        sizeof(TOKEN_MANDATORY_LABEL) + SECURITY_MAX_SID_SIZE]{};
+    if (GetTokenInformation(token, TokenIntegrityLevel, labelBuffer,
+                            sizeof(labelBuffer), &returned)) {
+        auto* label = reinterpret_cast<TOKEN_MANDATORY_LABEL*>(labelBuffer);
+        if (IsValidSid(label->Label.Sid) &&
+            *GetSidSubAuthorityCount(label->Label.Sid)) {
+            BYTE count = *GetSidSubAuthorityCount(label->Label.Sid);
+            result.integrity = *GetSidSubAuthority(label->Label.Sid, count - 1);
+        } else if (!result.error) {
+            result.error = ERROR_INVALID_SID;
+        }
+    } else if (!result.error) {
+        result.error = GetLastError();
+    }
+    CloseHandle(token);
+    return result;
+}
+
+// Called inside Wh_Log arguments so token queries/formatting run only while
+// debug logging is enabled. Unknown/denied token access is never labeled medium.
+static std::wstring FormatTouchpadForegroundDiagnostic(HWND foreground, HWND target) {
+    DWORD sourcePid = 0, targetPid = 0;
+    GetWindowThreadProcessId(foreground, &sourcePid);
+    if (target) GetWindowThreadProcessId(target, &targetPid);
+    DWORD selfPid = GetCurrentProcessId();
+    auto self = ReadTouchpadProcessSecurity(selfPid);
+    auto source = ReadTouchpadProcessSecurity(sourcePid);
+    auto destination = target ? ReadTouchpadProcessSecurity(targetPid) : TouchpadProcessSecurity{};
+    WCHAR text[768];
+    swprintf_s(text,
+        L"callerPid=%u callerIL=0x%X callerElevated=%d callerUIAccess=%d callerTokenError=%u "
+        L"foreground=%p foregroundPid=%u foregroundIL=0x%X foregroundElevated=%d foregroundUIAccess=%d foregroundTokenError=%u "
+        L"target=%p targetPid=%u targetIL=0x%X targetElevated=%d targetUIAccess=%d targetTokenError=%u",
+        selfPid, self.integrity, self.elevated, self.uiAccess, self.error,
+        foreground, sourcePid, source.integrity, source.elevated, source.uiAccess, source.error,
+        target, targetPid, destination.integrity, destination.elevated, destination.uiAccess, destination.error);
+    return text;
+}
+
+static void RequestTouchpadInputDiagnostics(HWND endpoint, UINT event) {
+    if (!endpoint) return;
+    // Diagnostic-only, asynchronous sampling. No cross-process pointers or
+    // waits; this message cannot launch, navigate, suppress, or activate SWS.
+    if (!PostMessageW(endpoint, WM_SWS_TOUCHPAD_DIAGNOSTICS, event, 0)) {
+        DWORD error = GetLastError();
+        Wh_Log(L"SWS: native input snapshot post failed (event=0x%X endpoint=%p error=%u)",
+               event, endpoint, error);
+    }
+}
 // Raw-frame gesture state; switcher thread only.
 // Refreshed only by a three-finger stroke and its lift, not ordinary panning.
 static ULONGLONG s_rawTouchpadLastFrameTick = 0;
@@ -4389,9 +5759,204 @@ static bool s_rawSwipePassedToWindows = false;
 static bool s_rawTouchpadShieldActive = false;
 static bool s_rawTouchpadShieldReleasePending = false;
 static bool s_rawSwipeMarkerActive = false;
+// Physical-stroke evidence survives UI cancellation, but never a complete lift.
+static bool s_rawStrokeOwned = false;
 static ULONGLONG s_rawTouchpadShieldFocusStartTick = 0;
 static HWND s_rawShieldRestoreForeground = NULL;
+static HWND s_touchpadActivationRetryTarget = NULL;
+static ULONGLONG s_touchpadActivationRetryDeadline = 0;
+static bool s_touchpadCommitActivation = false;
+struct NativeTouchpadInvocation {
+    DWORD token = 0;
+    DWORD epoch = 0;
+    bool rawAdopted = false;
+    bool upward = false;
+    UINT completion = 0;
+    DWORD completionTick = 0;
+    ULONGLONG completionDeadline = 0;
+};
+static NativeTouchpadInvocation s_nativeTouchpadInvocation;
+static DWORD s_nativeTouchpadRawDiscardTick = 0;
+static bool s_nativeTouchpadRawDiscardPending = false;
 static bool SwitcherOwnsRawSwipe();
+static bool SwitcherOwnsActiveRawSwipe();
+static bool NativeSwipeSourceGateActive();
+
+// Serialize the two in-process publishers with expiry/removal. Explorer only
+// reads the property and never takes this lock or waits on the switcher queue.
+static SRWLOCK s_rawSwipeMarkerLock = SRWLOCK_INIT;
+
+// Protected by the publisher lock; Explorer reads properties, never tool globals.
+static DWORD s_nativeSwipePolicyEpoch = 1;
+static bool s_nativeSwipePolicyReady = false;
+static std::atomic<DWORD> s_nativeTouchpadRelayEpoch{1};
+
+static void PublishNativeSwipePolicy() {
+    AcquireSRWLockExclusive(&s_rawSwipeMarkerLock);
+    bool enabled = g_touchpadGesturesEnabled.load();
+    bool reader = g_touchpadReaderAvailable.load() && !g_touchpadReaderStopping.load();
+    bool ready = enabled && reader;
+    if (s_nativeSwipePolicyReady && !ready) {
+        s_nativeSwipePolicyEpoch = (s_nativeSwipePolicyEpoch + 1) & 0x1FFFFFFFu;
+        if (!s_nativeSwipePolicyEpoch) s_nativeSwipePolicyEpoch = 1;
+        s_nativeTouchpadRelayEpoch = (s_nativeTouchpadRelayEpoch + 1) & 0x1FFFFFFFu;
+        if (!s_nativeTouchpadRelayEpoch) s_nativeTouchpadRelayEpoch = 1;
+    }
+    s_nativeSwipePolicyReady = ready;
+    if (g_hSwitcher) {
+        DWORD policy = (s_nativeSwipePolicyEpoch << 3) | (enabled ? 1u : 0u) |
+                       (reader ? 2u : 0u) |
+                       (g_touchpadStickyLaunchEnabled.load() ? 4u : 0u);
+        if (SetPropW(g_hSwitcher, SWS_NATIVE_SWIPE_POLICY_PROP,
+                     (HANDLE)(ULONG_PTR)policy) &&
+            SetPropW(g_hSwitcher, SWS_NATIVE_TOUCHPAD_EPOCH_PROP,
+                     (HANDLE)(ULONG_PTR)s_nativeTouchpadRelayEpoch.load())) {
+            if (ready && g_touchpadSwitcherActive.load()) {
+                SetPropW(g_hSwitcher, SWS_NATIVE_SWIPE_ACTIVE_PROP,
+                         (HANDLE)(ULONG_PTR)1);
+            } else {
+                RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_ACTIVE_PROP);
+            }
+        } else {
+            // Fail open if readiness cannot be published reliably.
+            RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_POLICY_PROP);
+            RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_ACTIVE_PROP);
+            RemovePropW(g_hSwitcher, SWS_NATIVE_TOUCHPAD_EPOCH_PROP);
+        }
+    }
+    ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
+}
+
+static void RemoveNativeSwipePolicy() {
+    AcquireSRWLockExclusive(&s_rawSwipeMarkerLock);
+    if (g_hSwitcher) {
+        RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_POLICY_PROP);
+        RemovePropW(g_hSwitcher, SWS_NATIVE_SWIPE_ACTIVE_PROP);
+        RemovePropW(g_hSwitcher, SWS_NATIVE_TOUCHPAD_EPOCH_PROP);
+    }
+    ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
+}
+
+static HANDLE EncodeRawSwipeMarker(ULONGLONG tick, bool liftGrace) {
+    DWORD stamp = (DWORD)tick & SWS_RAW_SWIPE_TIMESTAMP_MASK;
+    if (!stamp) {
+        // Zero means no property. Use the previous tick at wrap, not a future
+        // tick (which modular age arithmetic would immediately expire).
+        stamp = SWS_RAW_SWIPE_TIMESTAMP_MASK;
+    }
+    if (liftGrace) stamp |= SWS_RAW_SWIPE_LIFT_FLAG;
+    return (HANDLE)(ULONG_PTR)stamp;
+}
+
+static DWORD RawSwipeMarkerRemainingMs(HANDLE marker, ULONGLONG tick) {
+    if (!marker) return 0;
+    DWORD encoded = (DWORD)(ULONG_PTR)marker;
+    DWORD age = ((DWORD)tick - (encoded & SWS_RAW_SWIPE_TIMESTAMP_MASK)) &
+                SWS_RAW_SWIPE_TIMESTAMP_MASK;
+    DWORD lifetime = (encoded & SWS_RAW_SWIPE_LIFT_FLAG)
+                         ? SWS_RAW_SWIPE_LIFT_GRACE_MS
+                         : SWS_RAW_SWIPE_OWNER_MS;
+    return age < lifetime ? lifetime - age : 0;
+}
+
+static void SetRawSwipeUpMarker(bool upward) {
+    if (!g_hSwitcher) return;
+    AcquireSRWLockExclusive(&s_rawSwipeMarkerLock);
+    if (upward && TouchpadHandlingEnabled() &&
+        g_touchpadReaderAvailable.load()) {
+        SetPropW(g_hSwitcher, SWS_RAW_SWIPE_UP_PROP, (HANDLE)(ULONG_PTR)1);
+    } else {
+        RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_UP_PROP);
+    }
+    ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
+}
+
+static BOOL SetRawSwipeMarker(bool liftGrace, bool stickyLaunchOnly = false,
+                              bool sessionOwned = true) {
+    AcquireSRWLockExclusive(&s_rawSwipeMarkerLock);
+    BOOL result = FALSE;
+    if (g_hSwitcher && TouchpadHandlingEnabled() &&
+        g_touchpadReaderAvailable.load() &&
+        (!stickyLaunchOnly || TouchpadStickyLaunchEnabled())) {
+        HANDLE encoded = EncodeRawSwipeMarker(GetTickCount64(), liftGrace);
+        result = SetPropW(g_hSwitcher, SWS_RAW_SWIPE_PROP, encoded);
+        if (result && sessionOwned) {
+            SetPropW(g_hSwitcher, SWS_RAW_SWIPE_SESSION_PROP, encoded);
+        } else {
+            RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_SESSION_PROP);
+        }
+    }
+    ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
+    return result;
+}
+
+// Switcher-thread only. A queued old timer rechecks the latest timestamp under
+// the publisher lock, so it cannot erase a new reader-thread publication.
+static void UpdateRawSwipeMarkerTimer() {
+    if (!g_hSwitcher) return;
+    KillTimer(g_hSwitcher, SWS_RAW_SWIPE_MARKER_EXPIRY_TIMER_ID);
+    AcquireSRWLockExclusive(&s_rawSwipeMarkerLock);
+    HANDLE marker = GetPropW(g_hSwitcher, SWS_RAW_SWIPE_PROP);
+    HANDLE sessionMarker = GetPropW(g_hSwitcher, SWS_RAW_SWIPE_SESSION_PROP);
+    ULONGLONG now = GetTickCount64();
+    DWORD remaining = RawSwipeMarkerRemainingMs(marker, now);
+    DWORD sessionRemaining = RawSwipeMarkerRemainingMs(sessionMarker, now);
+    if (marker && !remaining) {
+        RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_PROP);
+        RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_UP_PROP);
+    }
+    if (sessionMarker && !sessionRemaining) {
+        RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_SESSION_PROP);
+    }
+    DWORD timerRemaining = (std::min)(remaining ? remaining : 0xFFFFFFFFu,
+                                      sessionRemaining ? sessionRemaining : 0xFFFFFFFFu);
+    if (timerRemaining == 0xFFFFFFFFu) timerRemaining = 0;
+    ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
+    if ((marker && !remaining) || (sessionMarker && !sessionRemaining)) {
+        Wh_Log(L"SWS: raw swipe marker expiry update (marker=%p session=%p)",
+               marker, sessionMarker);
+    }
+    if (timerRemaining) {
+        SetTimer(g_hSwitcher, SWS_RAW_SWIPE_MARKER_EXPIRY_TIMER_ID,
+                 timerRemaining, NULL);
+    }
+}
+
+static void ClearRawSwipeMarker() {
+    if (g_hSwitcher) {
+        KillTimer(g_hSwitcher, SWS_RAW_SWIPE_MARKER_EXPIRY_TIMER_ID);
+        AcquireSRWLockExclusive(&s_rawSwipeMarkerLock);
+        RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_PROP);
+        RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_SESSION_PROP);
+        RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_UP_PROP);
+        ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
+    }
+    s_rawSwipeMarkerActive = false;
+    s_rawStrokeOwned = false;
+    s_rawSwipePublishTick = 0;
+}
+
+// The reader thread cannot safely manipulate the switcher thread's timer, but
+// it can retire the property under the same publisher lock. This prevents a
+// new outside stroke from inheriting the previous session's lift grace before
+// the posted frame reaches the switcher window procedure.
+static void ClearRawSwipeMarkerPropertyFromReader() {
+    if (!g_hSwitcher) return;
+    AcquireSRWLockExclusive(&s_rawSwipeMarkerLock);
+    RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_PROP);
+    RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_SESSION_PROP);
+    RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_UP_PROP);
+    ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
+}
+
+static bool ExplicitShellInputDown() {
+    return (GetAsyncKeyState(VK_LBUTTON) & 0x8000) ||
+           (GetAsyncKeyState(VK_RBUTTON) & 0x8000) ||
+           (GetAsyncKeyState(VK_MBUTTON) & 0x8000) ||
+           (GetAsyncKeyState(VK_LWIN) & 0x8000) ||
+           (GetAsyncKeyState(VK_RWIN) & 0x8000);
+}
+
 // A fresh vertical stroke is a command; horizontal-first movement is a drag.
 // Once a command is consumed, the same contacts cannot execute another command.
 static bool s_rawCommandEligible = false;
@@ -4403,20 +5968,11 @@ static int s_rawVerticalTravelDir = 0;
 static int s_rawLastFrameX = 0;
 static int s_rawLastFrameY = 0;
 
-static void FinishRawTouchpadShield();
+static void FinishRawTouchpadShield(bool keepMarkerGrace = false);
 static void ScheduleRawTouchpadShieldRelease();
 
-static bool RawTouchpadClaimsLaunchStroke() {
-    // Sticky mode owns the complete three-finger stroke, including a stationary
-    // tap or a downward swipe that does not open the switcher. The shield is an
-    // invisible foreground window used long enough for the documented gesture
-    // controller to suppress Windows' global action routing.
-    return g_settings.handleTouchpadGestures && g_settings.stickyTouchpadMode &&
-           s_rawTouchpadShieldActive;
-}
-
 static bool RawTouchpadOwnsInput() {
-    return g_settings.handleTouchpadGestures && g_touchpadReaderAvailable.load() &&
+    return TouchpadHandlingEnabled() && g_touchpadReaderAvailable.load() &&
            (s_rawSessionOwned || s_rawTouchpadShieldActive) &&
            (g_isVisible || g_isPendingShow || s_rawTouchpadShieldActive) &&
            !g_animExitActive && !g_isHidingSwitcher;
@@ -4424,24 +5980,42 @@ static bool RawTouchpadOwnsInput() {
 
 // The raw reader can identify a three-finger stroke before the foreground
 // controller has won routing. Explorer-side hooks use this marker to suppress
-// shell actions during that short race; it is deliberately narrower than the
-// switcher's input ownership and is only armed for an actual raw three-finger
-// stroke.
+// shell actions during that short race, but only after a switcher session has
+// actually been opened. An outside stroke remains Windows' gesture, including
+// Show Desktop and the configured outside tap action.
 static bool RawTouchpadShellSuppressionActive() {
-    return g_settings.handleTouchpadGestures && g_touchpadReaderAvailable.load() &&
-           (s_rawSwipeMarkerActive || SwitcherOwnsRawSwipe());
+    return TouchpadHandlingEnabled() && g_touchpadReaderAvailable.load() &&
+           !ExplicitShellInputDown() &&
+           SwitcherOwnsRawSwipe();
+}
+
+static void CancelNativeTouchpadInvocation() {
+    s_nativeTouchpadInvocation = {};
+    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_NATIVE_TOUCHPAD_COMPLETION_TIMER_ID);
+    // The endpoint publishes this epoch. Invalidate queued starts/completions
+    // without changing the source gate's ownership of the cancelled stroke.
+    AcquireSRWLockExclusive(&s_rawSwipeMarkerLock);
+    s_nativeTouchpadRelayEpoch = (s_nativeTouchpadRelayEpoch + 1) & 0x1FFFFFFFu;
+    if (!s_nativeTouchpadRelayEpoch) s_nativeTouchpadRelayEpoch = 1;
+    if (g_hSwitcher && GetPropW(g_hSwitcher, SWS_NATIVE_SWIPE_POLICY_PROP)) {
+        if (!SetPropW(g_hSwitcher, SWS_NATIVE_TOUCHPAD_EPOCH_PROP,
+                      (HANDLE)(ULONG_PTR)s_nativeTouchpadRelayEpoch.load())) {
+            RemovePropW(g_hSwitcher, SWS_NATIVE_TOUCHPAD_EPOCH_PROP);
+        }
+    }
+    ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
 }
 
 static void CancelRawTouchpadStroke() {
-    if (s_rawTouchpadShieldActive) {
-        if (!g_settings.handleTouchpadGestures || !g_touchpadReaderAvailable.load()) {
-            FinishRawTouchpadShield();
-        } else {
-            // Keep the controller alive until the contacts actually lift, so
-            // cancelling the UI cannot release a Windows action on the same
-            // physical stroke.
-            ScheduleRawTouchpadShieldRelease();
-        }
+    CancelNativeTouchpadInvocation();
+    if (!TouchpadHandlingEnabled() ||
+        !g_touchpadReaderAvailable.load()) {
+        FinishRawTouchpadShield();
+    } else if (s_rawTouchpadShieldActive) {
+        // Keep the controller alive until the contacts actually lift, so
+        // cancelling the UI cannot release a Windows action on the same
+        // physical stroke.
+        ScheduleRawTouchpadShieldRelease();
     } else if (s_rawSwipeMarkerActive) {
         // A foreground handoff may have failed, but the shell marker still has
         // to cover the release edge of this physical stroke.
@@ -4491,71 +6065,72 @@ static BOOL CALLBACK FindCoreWindowProc(HWND hChild, LPARAM lParam) {
 }
 
 static HICON ResolveIconFromAumid(const WCHAR* aumid, int desiredSizePx) {
+    if (IconResolutionCancelled()) return NULL;
     HICON hIcon = NULL;
-    Wh_Log(L"ResolveIconFromAumid: aumid=%s, desiredSizePx=%d", aumid, desiredSizePx);
+    IconResolverLog(L"ResolveIconFromAumid: aumid=%s, desiredSizePx=%d", aumid, desiredSizePx);
     
     IShellItem* psi = NULL;
     HRESULT hr = SHCreateItemInKnownFolder(
             FOLDERID_AppsFolder, KF_FLAG_DONT_VERIFY,
             aumid, IID_PPV_ARGS(&psi));
     if (SUCCEEDED(hr) && psi) {
-        Wh_Log(L"ResolveIconFromAumid: SHCreateItemInKnownFolder succeeded");
+        IconResolverLog(L"ResolveIconFromAumid: SHCreateItemInKnownFolder succeeded");
         IShellItemImageFactory* psiif = NULL;
-        hr = psi->QueryInterface(IID_PPV_ARGS(&psiif));
+        hr = IconResolutionCancelled() ? E_ABORT : psi->QueryInterface(IID_PPV_ARGS(&psiif));
         if (SUCCEEDED(hr) && psiif) {
-            Wh_Log(L"ResolveIconFromAumid: QueryInterface(IShellItemImageFactory) succeeded");
+            IconResolverLog(L"ResolveIconFromAumid: QueryInterface(IShellItemImageFactory) succeeded");
             SIZE sz = { desiredSizePx, desiredSizePx };
             HBITMAP hBitmap = NULL;
-            hr = psiif->GetImage(sz, SIIGBF_RESIZETOFIT | SIIGBF_ICONONLY, &hBitmap);
+            hr = IconResolutionCancelled() ? E_ABORT : psiif->GetImage(sz, SIIGBF_RESIZETOFIT | SIIGBF_ICONONLY, &hBitmap);
             if (SUCCEEDED(hr) && hBitmap) {
-                Wh_Log(L"ResolveIconFromAumid: GetImage succeeded");
+                IconResolverLog(L"ResolveIconFromAumid: GetImage succeeded");
                 HIMAGELIST hImageList = ImageList_Create(sz.cx, sz.cy, ILC_COLOR32, 1, 0);
                 if (hImageList) {
                     if (ImageList_Add(hImageList, hBitmap, NULL) != -1) {
                         hIcon = ImageList_GetIcon(hImageList, 0, 0);
-                        if (hIcon) Wh_Log(L"ResolveIconFromAumid: Successfully converted to HICON");
-                        else Wh_Log(L"ResolveIconFromAumid: ImageList_GetIcon failed");
+                        if (hIcon) IconResolverLog(L"ResolveIconFromAumid: Successfully converted to HICON");
+                        else IconResolverLog(L"ResolveIconFromAumid: ImageList_GetIcon failed");
                     } else {
-                        Wh_Log(L"ResolveIconFromAumid: ImageList_Add failed");
+                        IconResolverLog(L"ResolveIconFromAumid: ImageList_Add failed");
                     }
                     ImageList_Destroy(hImageList);
                 } else {
-                    Wh_Log(L"ResolveIconFromAumid: ImageList_Create failed");
+                    IconResolverLog(L"ResolveIconFromAumid: ImageList_Create failed");
                 }
                 DeleteObject(hBitmap);
             } else {
-                Wh_Log(L"ResolveIconFromAumid: GetImage failed, hr=0x%08X", hr);
+                IconResolverLog(L"ResolveIconFromAumid: GetImage failed, hr=0x%08X", hr);
             }
             psiif->Release();
         } else {
-            Wh_Log(L"ResolveIconFromAumid: QueryInterface failed, hr=0x%08X", hr);
+            IconResolverLog(L"ResolveIconFromAumid: QueryInterface failed, hr=0x%08X", hr);
         }
         psi->Release();
     } else {
-        Wh_Log(L"ResolveIconFromAumid: SHCreateItemInKnownFolder failed, hr=0x%08X", hr);
+        IconResolverLog(L"ResolveIconFromAumid: SHCreateItemInKnownFolder failed, hr=0x%08X", hr);
     }
     
     // Fallback: SHParseDisplayName + SHGetFileInfo
-    if (!hIcon) {
-        Wh_Log(L"ResolveIconFromAumid: Falling back to SHParseDisplayName");
+    if (!hIcon && !IconResolutionCancelled()) {
+        IconResolverLog(L"ResolveIconFromAumid: Falling back to SHParseDisplayName");
         WCHAR appsFolderPath[768];
         if (swprintf_s(appsFolderPath, L"shell:AppsFolder\\%s", aumid) > 0) {
             PIDLIST_ABSOLUTE pidl = NULL;
             hr = SHParseDisplayName(appsFolderPath, NULL, &pidl, 0, NULL);
             if (SUCCEEDED(hr) && pidl) {
-                Wh_Log(L"ResolveIconFromAumid: SHParseDisplayName succeeded");
+                IconResolverLog(L"ResolveIconFromAumid: SHParseDisplayName succeeded");
                 SHFILEINFOW sfi = {};
                 UINT flags = SHGFI_PIDL | SHGFI_ICON | (desiredSizePx > 24 ? SHGFI_LARGEICON : SHGFI_SMALLICON);
-                if (SHGetFileInfoW((LPCWSTR)pidl, 0, &sfi, sizeof(sfi), flags)) {
+                if (!IconResolutionCancelled() && SHGetFileInfoW((LPCWSTR)pidl, 0, &sfi, sizeof(sfi), flags)) {
                     hIcon = sfi.hIcon;
-                    if (hIcon) Wh_Log(L"ResolveIconFromAumid: SHGetFileInfoW succeeded");
-                    else Wh_Log(L"ResolveIconFromAumid: SHGetFileInfoW returned no icon");
+                    if (hIcon) IconResolverLog(L"ResolveIconFromAumid: SHGetFileInfoW succeeded");
+                    else IconResolverLog(L"ResolveIconFromAumid: SHGetFileInfoW returned no icon");
                 } else {
-                    Wh_Log(L"ResolveIconFromAumid: SHGetFileInfoW failed");
+                    IconResolverLog(L"ResolveIconFromAumid: SHGetFileInfoW failed");
                 }
                 CoTaskMemFree(pidl);
             } else {
-                Wh_Log(L"ResolveIconFromAumid: SHParseDisplayName failed, hr=0x%08X", hr);
+                IconResolverLog(L"ResolveIconFromAumid: SHParseDisplayName failed, hr=0x%08X", hr);
             }
         }
     }
@@ -4729,9 +6304,9 @@ static DWORD WINAPI ExplorerIpcThread(LPVOID) {
 }
 
 static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
+    if (!s_resolvingIcons || IconResolutionCancelled()) return NULL;
     if (!g_WM_SWS_GET_UWP_ICON) {
         g_WM_SWS_GET_UWP_ICON = RegisterWindowMessageW(L"Windhawk_SWS_GetUwpIcon");
-        Wh_Log(L"TryGetUwpIconFromExplorer: Registered message %u", g_WM_SWS_GET_UWP_ICON);
     }
     HWND hIpc = FindWindowExW(HWND_MESSAGE, NULL, L"WindhawkSWS_IpcWindow", NULL);
     if (!hIpc) {
@@ -4739,8 +6314,8 @@ static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
     }
     if (hIpc) {
         DWORD_PTR res = 0;
-        LRESULT sendRes = SendMessageTimeoutW(hIpc, g_WM_SWS_GET_UWP_ICON, (WPARAM)hWnd, desiredSizePx, SMTO_ABORTIFHUNG | SMTO_BLOCK, 1000, &res);
-        Wh_Log(L"TryGetUwpIconFromExplorer: SendMessageTimeoutW to %p returned %ld, res = %p", hIpc, sendRes, res);
+        GetWindowIconTimeout(hIpc, g_WM_SWS_GET_UWP_ICON, (WPARAM)hWnd, desiredSizePx, 1000, &res);
+        if (IconResolutionCancelled()) return NULL;
         if (res) {
             // On Windows 11 explorer returns usable icon handles via IPC in our environment.
             if (g_isWin11OrGreater) {
@@ -4750,43 +6325,40 @@ static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
             IPropertyStore* ps = NULL;
             if (SUCCEEDED(SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&ps))) && ps) {
                 PROPVARIANT pv; PropVariantInit(&pv);
-                if (SUCCEEDED(ps->GetValue(PKEY_AppUserModel_ID, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal && pv.pwszVal[0]) {
+                if (!IconResolutionCancelled() && SUCCEEDED(ps->GetValue(PKEY_AppUserModel_ID, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal && pv.pwszVal[0]) {
                     aumidLocal = pv.pwszVal;
-                    Wh_Log(L"TryGetUwpIconFromExplorer: Got AUMID locally = %s", aumidLocal.c_str());
                 }
                 PropVariantClear(&pv);
                 ps->Release();
             }
             if (!aumidLocal.empty()) {
                 std::wstring cacheKey = aumidLocal + L"_" + std::to_wstring(desiredSizePx);
-                auto it = g_uwpIconCache.find(cacheKey);
-                if (it != g_uwpIconCache.end()) return it->second;
+                auto& cache = s_resolvingIcons->uwpIcons;
+                auto it = cache.find(cacheKey);
+                if (it != cache.end()) return it->second->handle;
+                if (IconResolutionCancelled()) return NULL;
                 HICON hLocal = ResolveIconFromAumid(aumidLocal.c_str(), desiredSizePx);
                 if (hLocal) {
-                    g_uwpIconCache[cacheKey] = hLocal;
-                    Wh_Log(L"TryGetUwpIconFromExplorer: Resolved local icon %p from AUMID", hLocal);
-                    return hLocal;
+                    return CacheWorkerSourceIcon(cache, cacheKey, hLocal);
                 }
-                Wh_Log(L"TryGetUwpIconFromExplorer: Local ResolveIconFromAumid failed for %s", aumidLocal.c_str());
             }
             return (HICON)res;
         }
-    } else {
-        Wh_Log(L"TryGetUwpIconFromExplorer: WindhawkSWS_IpcWindow not found");
     }
 
     // Local fallback if Explorer IPC is unavailable
+    if (IconResolutionCancelled()) return NULL;
     std::wstring aumidLocal;
     IPropertyStore* ps = NULL;
     if (SUCCEEDED(SHGetPropertyStoreForWindow(hWnd, IID_PPV_ARGS(&ps))) && ps) {
         PROPVARIANT pv; PropVariantInit(&pv);
-        if (SUCCEEDED(ps->GetValue(PKEY_AppUserModel_ID, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal && pv.pwszVal[0]) {
+        if (!IconResolutionCancelled() && SUCCEEDED(ps->GetValue(PKEY_AppUserModel_ID, &pv)) && pv.vt == VT_LPWSTR && pv.pwszVal && pv.pwszVal[0]) {
             aumidLocal = pv.pwszVal;
         }
         PropVariantClear(&pv);
         ps->Release();
     }
-    if (aumidLocal.empty()) {
+    if (aumidLocal.empty() && !IconResolutionCancelled()) {
         DWORD pid = 0;
         GetWindowThreadProcessId(hWnd, &pid);
         if (pid) {
@@ -4805,12 +6377,13 @@ static HICON TryGetUwpIconFromExplorer(HWND hWnd, int desiredSizePx) {
     }
     if (!aumidLocal.empty()) {
         std::wstring cacheKey = aumidLocal + L"_" + std::to_wstring(desiredSizePx);
-        auto it = g_uwpIconCache.find(cacheKey);
-        if (it != g_uwpIconCache.end()) return it->second;
+        auto& cache = s_resolvingIcons->uwpIcons;
+        auto it = cache.find(cacheKey);
+        if (it != cache.end()) return it->second->handle;
+        if (IconResolutionCancelled()) return NULL;
         HICON hLocal = ResolveIconFromAumid(aumidLocal.c_str(), desiredSizePx);
         if (hLocal) {
-            g_uwpIconCache[cacheKey] = hLocal;
-            return hLocal;
+            return CacheWorkerSourceIcon(cache, cacheKey, hLocal);
         }
     }
     return NULL;
@@ -5183,7 +6756,7 @@ static void RegisterThumbnailsEarly() {
 }
 
 static void UpdateDockThumbnailDwm() {
-    if (!DockLayoutActive() || !DockShowPreview() || !g_hSwitcher) return;
+    if (g_calculatingLayoutTargets || !DockLayoutActive() || !DockShowPreview() || !g_hSwitcher) return;
     int n = (int)g_windows.size();
     if (g_selectedIndex < 0 || g_selectedIndex >= n) return;
 
@@ -5212,10 +6785,10 @@ static void UpdateDockThumbnailDwm() {
             }
         }
 
-        float combinedAlpha = g_animEntranceCurrentAlpha * g_animExitCurrentAlpha;
-        if (combinedAlpha < 0.0f) combinedAlpha = 0.0f;
-        if (combinedAlpha > 1.0f) combinedAlpha = 1.0f;
-        BYTE alpha = (BYTE)roundf(combinedAlpha * 255.0f);
+        BYTE alpha = CurrentPresentationAlphaByte();
+        if (g_layoutTransition.active && selWnd.isNewEntry) {
+            alpha = (BYTE)roundf(alpha * selWnd.enterAlpha);
+        }
 
         RECT curDst = selWnd.rcThumbActual;
         if (g_dockPreviewSlide.active) {
@@ -5228,34 +6801,21 @@ static void UpdateDockThumbnailDwm() {
         for (const auto& kv : selWnd.hThumbs) {
             HTHUMBNAIL hThumb = kv.second;
             if (!hThumb) continue;
-            DWM_THUMBNAIL_PROPERTIES p = {};
-            p.dwFlags = DWM_TNP_SOURCECLIENTAREAONLY | DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE | DWM_TNP_OPACITY;
-            p.fSourceClientAreaOnly = FALSE;
-            p.rcDestination = curDst;
-            p.opacity = alpha;
-            p.fVisible = (alpha > 0);
-
-            bool needsCrop = (IsIconic(selWnd.hWnd) ||
-                             (selWnd.rcSourceCrop.left != 0 || selWnd.rcSourceCrop.top != 0 ||
-                              selWnd.rcSourceCrop.right != selWnd.sourceSize.cx || selWnd.rcSourceCrop.bottom != selWnd.sourceSize.cy))
-                             && (selWnd.rcSourceCrop.right > selWnd.rcSourceCrop.left && selWnd.rcSourceCrop.bottom > selWnd.rcSourceCrop.top);
-            if (needsCrop) {
-                p.dwFlags |= DWM_TNP_RECTSOURCE;
-                p.rcSource = selWnd.rcSourceCrop;
-            }
-            UpdateDwmThumbnail(hThumb, &p);
+            RECT client = {};
+            GetClientRect(g_hSwitcher, &client);
+            SubmitAnimatedThumbnail(hThumb, selWnd.hWnd, curDst, alpha,
+                                    selWnd.sourceSize, selWnd.rcSourceCrop, client);
         }
     }
 
     // 2. Hide all non-selected windows' thumbnails
     for (int i = 0; i < n; i++) {
-        if (i == g_selectedIndex) continue;
+        if (i == g_selectedIndex && HasLayoutRect(selWnd.rcThumbActual)) continue;
         for (const auto& kv : g_windows[i].hThumbs) {
             if (kv.second) {
-                DWM_THUMBNAIL_PROPERTIES p = {};
-                p.dwFlags = DWM_TNP_VISIBLE;
-                p.fVisible = FALSE;
-                UpdateDwmThumbnail(kv.second, &p);
+                SubmitAnimatedThumbnail(kv.second, g_windows[i].hWnd, {}, 0,
+                                        g_windows[i].sourceSize,
+                                        g_windows[i].rcSourceCrop, {});
             }
         }
     }
@@ -5324,6 +6884,12 @@ static void ComputeDockLayout(HMONITOR hMon, const MONITORINFO& mi, UINT dpiX, U
     if ((cellH - iconSz) % 2 != 0) { cellH++; }
     int spacing = DpiScale(g_settings.dockIconSpacing, dpiX);
 
+    // A percentage smaller than one usable icon must not clip that icon. Keep
+    // configured padding and controls, reserving overflow edges before fitting.
+    int minimumStripW = cellW + ((g_settings.showOverflowIndicator && n > 1) ? DpiScale(52, dpiX) : 0);
+    if (g_settings.showTitle) minimumStripW = std::max(minimumStripW, DpiScale(80, dpiX));
+    maxW = std::max(maxW, 2 * masterPadX + minimumStripW);
+
     int availStripW = maxW - 2 * masterPadX;
     int fitCount = 0;
     int testW = 0;
@@ -5355,25 +6921,28 @@ static void ComputeDockLayout(HMONITOR hMon, const MONITORINFO& mi, UINT dpiX, U
 
     int titleH = g_settings.showTitle ? GetHeaderRowHeightPx() : 0;
     if (g_settings.showTitle && titleH < DpiScale(20, dpiY)) titleH = DpiScale(20, dpiY);
-    int divPad = DpiScale(8, dpiY);
 
     if (showPreview) {
         int maxPrevH = DpiScale(g_settings.dockPreviewHeight > 0 ? g_settings.dockPreviewHeight : 280, dpiY);
-        int reservedH = 2 * masterPadY + cellH + titleH + (1 + divPad * 2) * 2;
-        if (maxPrevH > maxH - reservedH) maxPrevH = maxH - reservedH;
-        if (maxPrevH < DpiScale(80, dpiY)) maxPrevH = DpiScale(80, dpiY);
+        // Match the actual top/bottom strip, preview-slot and title spacings.
+        // Only the preview is shrinkable; do not clip icons, title or padding.
+        int reservedH = 2 * masterPadY + cellH + titleH +
+                        DpiScale(12, dpiY) + 1 + DpiScale(8, dpiY) +
+                        DpiScale(12, dpiY) +
+                        (g_settings.showTitle ? DpiScale(12, dpiY) : 0);
+        int minimumPreviewH = DpiScale(16, dpiY);
+        maxH = std::max(maxH, reservedH + minimumPreviewH);
+        maxPrevH = std::clamp(maxPrevH, minimumPreviewH, maxH - reservedH);
 
         prevW = maxPrevH;
         prevH = maxPrevH;
         if (g_selectedIndex >= 0 && g_selectedIndex < n) {
             const auto& selWnd = g_windows[g_selectedIndex];
             if (selWnd.effectiveSourceSize.cx > 0 && selWnd.effectiveSourceSize.cy > 0) {
-                prevW = (int)((double)selWnd.effectiveSourceSize.cx * maxPrevH / selWnd.effectiveSourceSize.cy);
-                int maxPrevW = maxW - 2 * masterPadX - DpiScale(24, dpiX);
-                if (maxPrevW > 0 && prevW > maxPrevW) {
-                    prevH = (int)((double)maxPrevW * prevH / prevW);
-                    prevW = maxPrevW;
-                }
+                int maxPrevW = std::max(1, maxW - 2 * masterPadX - DpiScale(24, dpiX));
+                double aspect = (double)selWnd.effectiveSourceSize.cx / selWnd.effectiveSourceSize.cy;
+                prevW = std::max(1, (int)std::min((double)maxPrevW, maxPrevH * aspect));
+                prevH = std::max(1, (int)std::min((double)maxPrevH, maxPrevW / aspect));
             }
         }
         previewSlotH = prevH + DpiScale(12, dpiY);
@@ -5498,16 +7067,7 @@ static void ComputeLayout(HMONITOR hMon) {
     MONITORINFO mi = { sizeof(mi) }; GetMonitorInfoW(hMon, &mi);
     int monW = mi.rcWork.right - mi.rcWork.left, monH = mi.rcWork.bottom - mi.rcWork.top;
     UINT dpiX = 96, dpiY = 96;
-    // shcore.dll is always loaded in a modern Windows process; resolve the
-    // GetDpiForMonitor pointer once instead of LoadLibrary/GetProcAddress/FreeLibrary
-    // on every ComputeLayout (which runs on hot animation-adjacent paths).
-    typedef HRESULT(WINAPI*GDPFM)(HMONITOR,int,UINT*,UINT*);
-    static GDPFM s_pfnGetDpiForMonitor = []() -> GDPFM {
-        HMODULE hShcore = GetModuleHandleW(L"shcore.dll");
-        if (!hShcore) hShcore = LoadLibraryW(L"shcore.dll");
-        return hShcore ? (GDPFM)GetProcAddress(hShcore, "GetDpiForMonitor") : nullptr;
-    }();
-    if (s_pfnGetDpiForMonitor) s_pfnGetDpiForMonitor(hMon, 0, &dpiX, &dpiY);
+    QueryMonitorDpi(hMon, &dpiX, &dpiY);
     g_dpiX = dpiX; g_dpiY = dpiY;
 
     g_settings.switcherPadding = GetActiveSwitcherPadding();
@@ -5546,7 +7106,9 @@ static void ComputeLayout(HMONITOR hMon) {
 
     // EP: cbThumbnailAvailableHeight = cbRowHeight - cbRowTitleHeight - cbTopPadding - 2 * cbBottomPadding
     // All values are DPI-scaled at this point (matching EP lines 826-844)
-    int scaledRowH = DpiScale(g_settings.rowHeight, dpiY);
+    // A row taller than the work area will be fitted below; avoid overflowing
+    // DPI/auto-fit arithmetic for an arbitrarily large integer setting.
+    int scaledRowH = DpiScale(std::min(g_settings.rowHeight, std::max(230, monH)), dpiY);
     if (g_autoFitScalePct != 100) {
         scaledRowH = ScaleAutoFit(scaledRowH);
         int floorH = DpiScale(SWS_AUTOFIT_MIN_ROWHEIGHT, dpiY);
@@ -5560,7 +7122,8 @@ static void ComputeLayout(HMONITOR hMon) {
         if (thumbH < 0) thumbH = 0;
     }
     // EP: cbMaxTileWidth = cbRowHeight * MAX_TILE_WIDTH (computed before DPI, then scaled)
-    int maxTileW = ScaleAutoFit(DpiScale((int)(g_settings.rowHeight * SWS_MAX_TILE_ASPECT), dpiX));
+    int maxTileW = (int)std::min((double)std::max(1, monW),
+        g_settings.rowHeight * SWS_MAX_TILE_ASPECT * dpiX / 96.0 * g_autoFitScalePct / 100.0);
 
     // EP helper equivalents:
     // initialLeft  = elemPadLeft + padLeft
@@ -5631,21 +7194,65 @@ static void ComputeLayout(HMONITOR hMon) {
     g_activePadDivider = activePadDivider;
     
     int headerAndDividerH = rowTitleH + activePadDivider;
+    int maxW = monW * g_settings.maxWidthPercent / 100;
+    int maxH = monH * g_settings.maxHeightPercent / 100;
+    int minimumThumbH = showThumbs ? DpiScale(16, dpiY) : 0;
+    if (BadgeLayoutActive() && g_settings.showIcon) minimumThumbH = std::max(minimumThumbH, GetHeaderIconSizePx());
+    if (showThumbs && rowTitleH == 0 && g_settings.showCloseButton) minimumThumbH = std::max(minimumThumbH, DpiScale(32, dpiY));
+    int fixedHeight = 2 * masterPad + elemPadTop + elemPadBot + padTop + padBot +
+                      (thumbSide ? 0 : headerAndDividerH);
+    int minimumBodyH = thumbSide ? std::max(rowTitleH, minimumThumbH) : minimumThumbH;
+    // Header, controls and chosen padding are not shrinkable. If the percentage
+    // is below their minimum, use that minimum and fit the preview into it.
+    maxH = std::max(maxH, fixedHeight + minimumBodyH);
+    if (showThumbs) thumbH = std::clamp(thumbH, minimumThumbH, maxH - fixedHeight);
     int thumbTopOffset = padTop + (thumbBottom ? headerAndDividerH : 0);
     int initialTop  = elemPadTop + thumbTopOffset;
     int baseContentH = thumbSide ? std::max(thumbH, rowTitleH) : thumbH;
     int bottomInc   = (baseContentH + padBot) + elemPadBot + initialTop + (thumbTop ? headerAndDividerH : 0);
     int sideHeaderWidth = DpiScale(HeaderIsVertical() ? 96 : 150, dpiX);
 
-    int maxW = monW * g_settings.maxWidthPercent / 100;
-    int maxH = monH * g_settings.maxHeightPercent / 100;
+    int minimumHeaderW = (!BadgeLayoutActive() && g_settings.showIcon) ? GetHeaderIconSizePx() : 0;
+    if (g_settings.showTitle) {
+        if (minimumHeaderW && !HeaderIsVertical()) minimumHeaderW += padLeft;
+        if (HeaderIsVertical()) minimumHeaderW = std::max(minimumHeaderW, DpiScale(48, dpiX));
+        else minimumHeaderW += DpiScale(48, dpiX);
+        if (!BadgeLayoutActive() && !HeaderIsVertical() && g_settings.showCloseButton) minimumHeaderW += DpiScale(28, dpiX);
+    } else if (!showThumbs && g_settings.showIcon) {
+        minimumHeaderW += DpiScale(g_settings.centerTaskContent ? 16 : 20, dpiX);
+    }
+    sideHeaderWidth = std::max(sideHeaderWidth, minimumHeaderW);
+    int minimumThumbW = showThumbs ? DpiScale(16, dpiX) : 0;
+    if (BadgeLayoutActive() && g_settings.showIcon) minimumThumbW = std::max(minimumThumbW, GetHeaderIconSizePx());
+    int minimumContentW = thumbSide
+        ? minimumThumbW + (rowTitleH > 0 ? sideHeaderWidth + padDivider : 0)
+        : std::max(minimumThumbW, minimumHeaderW);
+    maxW = std::max(maxW, 2 * masterPad + rightInc + minimumContentW);
+    maxTileW = std::min(std::max(1, maxTileW), maxW - 2 * masterPad - rightInc);
+
+    auto fitTaskWidth = [&](int& width, int& thumbWidth, int& actualThumbH) {
+        width = std::clamp(width, minimumContentW, maxW - 2 * masterPad - rightInc);
+        int availableThumbW = width - (thumbSide && rowTitleH > 0 ? sideHeaderWidth + padDivider : 0);
+        if (showThumbs && StretchThumbsToTaskWidth() && !thumbSide && g_settings.rowWidth > 0) {
+            thumbWidth = width;
+            actualThumbH = thumbH;
+        } else if (showThumbs && thumbWidth > availableThumbW) {
+            actualThumbH = std::max(1, (int)((double)availableThumbW * actualThumbH / thumbWidth));
+            thumbWidth = availableThumbW;
+        }
+        if (showThumbs) {
+            thumbWidth = std::clamp(thumbWidth, 1, availableThumbW);
+            actualThumbH = std::max(1, actualThumbH);
+        }
+    };
 
     int sideThumbSlotW = 0;
     if (g_settings.showThumbnails && sidePlacement && thumbH > 0) {
         for (const auto& w : g_windows) {
             int slotW = thumbH;
             if (w.effectiveSourceSize.cx > 0 && w.effectiveSourceSize.cy > 0) {
-                slotW = (int)((double)w.effectiveSourceSize.cx * thumbH / w.effectiveSourceSize.cy);
+                slotW = std::max(1, (int)std::min((double)INT_MAX,
+                    (double)w.effectiveSourceSize.cx * thumbH / w.effectiveSourceSize.cy));
             }
             if (slotW > maxTileW) slotW = maxTileW;
             if (w.effectiveSourceSize.cx > 0 && slotW > w.effectiveSourceSize.cx) slotW = w.effectiveSourceSize.cx;
@@ -5719,7 +7326,8 @@ static void ComputeLayout(HMONITOR hMon) {
 
             if (g_settings.showThumbnails && thumbH > 0) {
                 if (w.effectiveSourceSize.cx > 0 && w.effectiveSourceSize.cy > 0) {
-                    thumbWidth = (int)((double)w.effectiveSourceSize.cx * thumbH / w.effectiveSourceSize.cy);
+                    thumbWidth = std::max(1, (int)std::min((double)INT_MAX,
+                        (double)w.effectiveSourceSize.cx * thumbH / w.effectiveSourceSize.cy));
                 } else {
                     thumbWidth = thumbH;
                 }
@@ -5728,7 +7336,7 @@ static void ComputeLayout(HMONITOR hMon) {
                 if (thumbWidth > maxTileW) thumbWidth = maxTileW;
                 if (w.effectiveSourceSize.cx > 0 && thumbWidth > w.effectiveSourceSize.cx) thumbWidth = w.effectiveSourceSize.cx;
                 if (naturalThumbWidth > 0 && thumbWidth != naturalThumbWidth) {
-                    actualThumbH = (int)((double)thumbWidth * thumbH / naturalThumbWidth);
+                    actualThumbH = std::max(1, (int)((double)thumbWidth * thumbH / naturalThumbWidth));
                 }
 
                 width = thumbWidth;
@@ -5775,6 +7383,8 @@ static void ComputeLayout(HMONITOR hMon) {
                 thumbWidth = width;
             }
 
+            fitTaskWidth(width, thumbWidth, actualThumbH);
+
             if (curX + width + rightInc - initialLeft > maxW - masterPad && curX > initialLeft + masterPad) {
                 if (curX - initialLeft > maxRowW) maxRowW = curX - initialLeft;
                 curX = initialLeft + masterPad;
@@ -5793,13 +7403,13 @@ static void ComputeLayout(HMONITOR hMon) {
             w.rcCell.bottom = curY + bottomInc - initialTop - elemPadBot;
             if (g_settings.showThumbnails) {
                 if (sidePlacement) {
-                    int contentH = std::max(actualThumbH, rowTitleH);
+                    int contentH = std::max(actualThumbH, minimumBodyH);
                     int baseH = std::max(thumbH, rowTitleH);
                     if (contentH < baseH) {
                         w.rcCell.bottom -= (baseH - contentH);
                     }
                 } else if (actualThumbH < thumbH) {
-                    w.rcCell.bottom -= (thumbH - actualThumbH);
+                    w.rcCell.bottom -= (thumbH - std::max(actualThumbH, minimumThumbH));
                 }
             } else if (!g_settings.showTitle && g_settings.showIcon) {
                 int iconSz = GetHeaderIconSizePx();
@@ -5904,7 +7514,8 @@ static void ComputeLayout(HMONITOR hMon) {
 
             if (g_settings.showThumbnails && thumbH > 0) {
                 if (w.effectiveSourceSize.cx > 0 && w.effectiveSourceSize.cy > 0) {
-                    thumbWidth = (int)((double)w.effectiveSourceSize.cx * thumbH / w.effectiveSourceSize.cy);
+                    thumbWidth = std::max(1, (int)std::min((double)INT_MAX,
+                        (double)w.effectiveSourceSize.cx * thumbH / w.effectiveSourceSize.cy));
                 } else {
                     thumbWidth = thumbH;
                 }
@@ -5913,7 +7524,7 @@ static void ComputeLayout(HMONITOR hMon) {
                 if (thumbWidth > maxTileW) thumbWidth = maxTileW;
                 if (w.effectiveSourceSize.cx > 0 && thumbWidth > w.effectiveSourceSize.cx) thumbWidth = w.effectiveSourceSize.cx;
                 if (naturalThumbWidth > 0 && thumbWidth != naturalThumbWidth) {
-                    actualThumbH = (int)((double)thumbWidth * thumbH / naturalThumbWidth);
+                    actualThumbH = std::max(1, (int)((double)thumbWidth * thumbH / naturalThumbWidth));
                 }
 
                 width = thumbWidth;
@@ -5957,6 +7568,8 @@ static void ComputeLayout(HMONITOR hMon) {
                 thumbWidth = width;
             }
 
+            fitTaskWidth(width, thumbWidth, actualThumbH);
+
             if (curY + bottomInc - initialTop > maxH - masterPad && curY > initialTop + masterPad) {
                 curY = initialTop + masterPad;
                 curX = curX + curColMaxW + rightInc;
@@ -5974,13 +7587,13 @@ static void ComputeLayout(HMONITOR hMon) {
             w.rcCell.bottom = curY + bottomInc - initialTop - elemPadBot;
             if (g_settings.showThumbnails) {
                 if (sidePlacement) {
-                    int contentH = std::max(actualThumbH, rowTitleH);
+                    int contentH = std::max(actualThumbH, minimumBodyH);
                     int baseH = std::max(thumbH, rowTitleH);
                     if (contentH < baseH) {
                         w.rcCell.bottom -= (baseH - contentH);
                     }
                 } else if (actualThumbH < thumbH) {
-                    w.rcCell.bottom -= (thumbH - actualThumbH);
+                    w.rcCell.bottom -= (thumbH - std::max(actualThumbH, minimumThumbH));
                 }
             } else if (!g_settings.showTitle && g_settings.showIcon) {
                 int iconSz = GetHeaderIconSizePx();
@@ -6113,16 +7726,16 @@ static void RegisterThumbnails() {
                 OffsetRect(&p.rcDestination, offX, offY);
             }
             float _itemAlpha = (g_layoutTransition.active && w.isNewEntry) ? w.enterAlpha : 1.0f;
-            p.opacity = (BYTE)roundf(g_animEntranceCurrentAlpha * _itemAlpha * 255.0f);
+            p.opacity = (BYTE)roundf(CurrentPresentationAlpha() * _itemAlpha * 255.0f);
             p.fVisible = TRUE;
-            // Only set DWM_TNP_RECTSOURCE when the crop is non-trivial (e.g. maximized
-            // windows with invisible frame borders) or when the window is minimized.
+            // Set DWM_TNP_RECTSOURCE for a non-trivial crop, minimized windows,
+            // or to reset a rectangle retained by an earlier clipping update.
             // For restored non-maximized windows, omitting DWM_TNP_RECTSOURCE preserves
             // the window's visual style including rounded corners on Windows 11.
             // For iconic windows, DWM's default style introduces an extraneous drop shadow
             // halo around the cached thumbnail that spills past rcDestination; setting
             // RECTSOURCE clips it strictly to rcThumbActual.
-            bool needsCrop = (IsIconic(w.hWnd) ||
+            bool needsCrop = (IsIconic(w.hWnd) || g_thumbSourceRects.count(hThumb) ||
                              (w.rcSourceCrop.left != 0 || w.rcSourceCrop.top != 0 ||
                               w.rcSourceCrop.right != w.sourceSize.cx || w.rcSourceCrop.bottom != w.sourceSize.cy))
                              && (w.rcSourceCrop.right > w.rcSourceCrop.left && w.rcSourceCrop.bottom > w.rcSourceCrop.top);
@@ -6268,37 +7881,46 @@ static Gdiplus::Bitmap* CreateIconShadowBitmap(HICON hIcon, int width, int heigh
     DeleteDC(hdcMem);
     ReleaseDC(NULL, hdc);
     
-    // Compute alpha and create shadow bitmap
-    BYTE* shadowBits = new BYTE[width * height * 4];
+    // Write into storage owned by the returned bitmap. Cloning a bitmap over
+    // temporary scan0 memory can retain that backing after the buffer is freed.
+    Gdiplus::Bitmap* shadowBmp = new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB);
+    Gdiplus::Rect shadowRect(0, 0, width, height);
+    Gdiplus::BitmapData shadowData = {};
+    if (shadowBmp->GetLastStatus() != Gdiplus::Ok ||
+        shadowBmp->LockBits(&shadowRect, Gdiplus::ImageLockModeWrite,
+                            PixelFormat32bppARGB, &shadowData) != Gdiplus::Ok) {
+        delete shadowBmp;
+        DeleteObject(hBmpBlack);
+        DeleteObject(hBmpWhite);
+        return nullptr;
+    }
     BYTE* blackPtr = (BYTE*)pBlackBits;
     BYTE* whitePtr = (BYTE*)pWhiteBits;
-    
-    for (int i = 0; i < width * height; ++i) {
-        int idx = i * 4;
-        int whiteB = whitePtr[idx];
-        int blackB = blackPtr[idx];
-        
-        int a = 255 - (whiteB - blackB);
-        if (a < 0) a = 0;
-        if (a > 255) a = 255;
-        
-        int finalAlpha = (int)(a * shadowAlphaMult);
-        if (finalAlpha > 255) finalAlpha = 255;
-        
-        shadowBits[idx] = 0;     // B
-        shadowBits[idx+1] = 0;   // G
-        shadowBits[idx+2] = 0;   // R
-        shadowBits[idx+3] = (BYTE)finalAlpha; // A
+    for (int y = 0; y < height; ++y) {
+        BYTE* shadowRow = (BYTE*)shadowData.Scan0 + y * shadowData.Stride;
+        for (int x = 0; x < width; ++x) {
+            int idx = (y * width + x) * 4;
+            int whiteB = whitePtr[idx];
+            int blackB = blackPtr[idx];
+            int a = 255 - (whiteB - blackB);
+            if (a < 0) a = 0;
+            if (a > 255) a = 255;
+            int finalAlpha = (int)(a * shadowAlphaMult);
+            if (finalAlpha > 255) finalAlpha = 255;
+            shadowRow[x * 4] = 0;     // B
+            shadowRow[x * 4 + 1] = 0; // G
+            shadowRow[x * 4 + 2] = 0; // R
+            shadowRow[x * 4 + 3] = (BYTE)finalAlpha;
+        }
     }
-    
-    Gdiplus::Bitmap* shadowBmp = new Gdiplus::Bitmap(width, height, width * 4, PixelFormat32bppARGB, shadowBits);
-    Gdiplus::Bitmap* shadowBmpCopy = shadowBmp->Clone(0, 0, width, height, PixelFormat32bppARGB);
-    delete shadowBmp;
-    delete[] shadowBits;
+    Gdiplus::Status unlockStatus = shadowBmp->UnlockBits(&shadowData);
     DeleteObject(hBmpBlack);
     DeleteObject(hBmpWhite);
-    
-    return shadowBmpCopy;
+    if (unlockStatus != Gdiplus::Ok) {
+        delete shadowBmp;
+        return nullptr;
+    }
+    return shadowBmp;
 }
 
 // (s_iconAlphaScratch is defined above, near FreeCachedBuffers.)
@@ -6350,6 +7972,26 @@ static void DrawIconWithAlpha(HDC hdc, int x, int y, HICON hIcon, int size, floa
 }
 
 // (s_iconShadowCache is defined above, near FreeCachedBuffers.)
+
+static std::shared_ptr<WindowIconShadow> GetWindowIconShadow(
+    HICON icon, int size, std::shared_ptr<OwnedWindowIcon> owner) {
+    // Unknown borrowed handles are drawn with an uncached record. The shared
+    // application placeholder is permanent; every other cache key has an owner.
+    if (owner && owner->handle != icon) return {};
+    bool cacheable = owner || icon == s_iconPlaceholder;
+    auto key = std::make_pair(icon, size);
+    if (cacheable) {
+        auto it = s_iconShadowCache.find(key);
+        if (it != s_iconShadowCache.end() && it->second->owner == owner)
+            return it->second;
+    }
+    auto record = std::make_shared<WindowIconShadow>();
+    record->owner = std::move(owner); // Pin before entering the GDI factory.
+    record->bitmap.reset(CreateIconShadowBitmap(icon, size, size, 0.08f));
+    if (!record->bitmap) return {};
+    if (cacheable) s_iconShadowCache[key] = record;
+    return record;
+}
 
 static void DrawDockIconWithAlpha(HDC hdc, const WindowEntry& e, int iconX, int iconY, int iconSz, float alphaMult = 1.0f) {
     if (!e.hIcon || iconSz <= 0) return;
@@ -6715,15 +8357,15 @@ static bool HitTestCloseButton(const WindowEntry& e, POINT ptClient) {
     return PtInRect(&rcHit, ptClient) != FALSE;
 }
 
-static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float hoverAlpha, bool isPressed) {
+static void DrawCloseButton(HDC hdc, const RECT& btnRc, float btnAlpha, float hoverAlpha, bool isPressed, float btnScale) {
     if (btnAlpha <= 0.01f) return;
 
     float origW = (float)(btnRc.right - btnRc.left);
     float origH = (float)(btnRc.bottom - btnRc.top);
     if (origW <= 0.0f || origH <= 0.0f) return;
 
-    // WinUI 3 Fluent scale blossom: gently expand from 85% to 100% as opacity fades in
-    float scale = (AreAnimationsGloballyEnabled() && btnAlpha < 1.0f) ? (0.85f + 0.15f * btnAlpha) : 1.0f;
+    // Transform is sampled from its own 167 ms track, never from 83 ms opacity.
+    float scale = btnScale;
     float btnW = origW * scale;
     float btnH = origH * scale;
     float bx = (float)btnRc.left + (origW - btnW) * 0.5f;
@@ -6926,6 +8568,61 @@ static void DrawThumbnailShadow(HDC hdc, const RECT& rc, int cornerRadius, float
 static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int rowTitleH, int iconSz, int cornerRadius, int closeBtnReserve, bool isHovered, float alpha = 1.0f) {
     if (alpha <= 0.01f) return;
 
+    // DrawText's rectangle clips negative side bearings and ClearType fringes.
+    // Keep its logical alignment/ellipsis width, but clip ink to the card and
+    // the caller's existing clip instead of cutting it at the advance bounds.
+    auto drawTitle = [&](RECT rcText, UINT flags) {
+        ABC firstGlyph = {}, lastGlyph = {};
+        int leftOverhang = 1, rightOverhang = 1;
+        if (e.title[0]) {
+            if (GetCharABCWidthsW(hdc, e.title[0], e.title[0], &firstGlyph)) {
+                leftOverhang += std::max(0, -firstGlyph.abcA);
+            }
+            WCHAR last = e.title[wcslen(e.title) - 1];
+            if (GetCharABCWidthsW(hdc, last, last, &lastGlyph)) {
+                rightOverhang += std::max(0, -lastGlyph.abcC);
+            }
+        }
+        if (!(flags & (DT_CENTER | DT_RIGHT)) && e.title[0]) {
+            // Only move a left-aligned origin when its measured ink would
+            // escape the card (e.g. italic text with zero entry padding).
+            rcText.left = std::max(rcText.left, e.rcCell.left + leftOverhang);
+            if (rcText.right < rcText.left) rcText.right = rcText.left;
+        }
+        int savedDC = SaveDC(hdc);
+        IntersectClipRect(hdc, e.rcCell.left, e.rcCell.top,
+                          e.rcCell.right, e.rcCell.bottom);
+        if (g_hTheme) {
+            // The composited theme buffer can still cut off a tight measured
+            // width despite DT_NOCLIP. Give its bitmap ink room, while the
+            // callback retains the original alignment and ellipsis rectangle.
+            struct InkInsets {
+                int left, right;
+                static int CALLBACK Draw(HDC dc, LPWSTR text, int count,
+                                         LPRECT rect, UINT flags, LPARAM data) {
+                    auto* insets = reinterpret_cast<const InkInsets*>(data);
+                    RECT logical = *rect;
+                    logical.left += insets->left;
+                    logical.right -= insets->right;
+                    return DrawTextW(dc, text, count, &logical, flags | DT_NOCLIP);
+                }
+            } insets = { leftOverhang, rightOverhang };
+            DTTOPTS opts = { sizeof(DTTOPTS) };
+            opts.dwFlags = DTT_COMPOSITED | DTT_TEXTCOLOR | DTT_CALLBACK;
+            opts.crText = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
+            opts.pfnDrawTextCallback = InkInsets::Draw;
+            opts.lParam = reinterpret_cast<LPARAM>(&insets);
+            rcText.left -= leftOverhang;
+            rcText.right += rightOverhang;
+            DrawThemeTextEx(g_hTheme, hdc, 0, 0, e.title, -1,
+                            flags | DT_NOCLIP, &rcText, &opts);
+        } else {
+            SetTextColor(hdc, g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT);
+            DrawTextW(hdc, e.title, -1, &rcText, flags | DT_NOCLIP);
+        }
+        if (savedDC) RestoreDC(hdc, savedDC);
+    };
+
     // Drop shadow behind the thumbnail (below the DWM thumbnail layer).
     // During active layout transition, shadows are rendered dynamically per-frame in PaintSwitcher to track resizing smoothly.
     if (g_settings.showThumbnails && g_settings.showThumbnailShadow && !g_layoutTransition.active &&
@@ -6961,16 +8658,9 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
                 Gdiplus::RectF r((Gdiplus::REAL)rcText.left, (Gdiplus::REAL)rcText.top,
                                 (Gdiplus::REAL)(rcText.right - rcText.left), (Gdiplus::REAL)(rcText.bottom - rcText.top));
                 gfx.DrawString(e.title, -1, &font, r, &sf, &brush);
-            } else if (g_hTheme) {
-                DTTOPTS opts = { sizeof(DTTOPTS) };
-                opts.dwFlags = DTT_COMPOSITED | DTT_TEXTCOLOR;
-                opts.crText = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
-                DrawThemeTextEx(g_hTheme, hdc, 0, 0, e.title, -1,
-                    DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX, &rcText, &opts);
             } else {
-                SetTextColor(hdc, g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT);
-                DrawTextW(hdc, e.title, -1, &rcText,
-                          DT_SINGLELINE | DT_CENTER | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
+                drawTitle(rcText, DT_SINGLELINE | DT_CENTER | DT_VCENTER |
+                                  DT_END_ELLIPSIS | DT_NOPREFIX);
             }
         }
         return;
@@ -7120,16 +8810,10 @@ static void DrawTaskEntry(HDC hdc, WindowEntry& e, HWND hWnd, int padLeft, int r
             Gdiplus::RectF r((Gdiplus::REAL)rcText.left, (Gdiplus::REAL)rcText.top,
                             (Gdiplus::REAL)(rcText.right - rcText.left), (Gdiplus::REAL)(rcText.bottom - rcText.top));
             gfx.DrawString(e.title, -1, &font, r, &sf, &brush);
-        } else if (g_hTheme) {
-            DTTOPTS opts = { sizeof(DTTOPTS) };
-            opts.dwFlags = DTT_COMPOSITED | DTT_TEXTCOLOR;
-            opts.crText = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
-            DrawThemeTextEx(g_hTheme, hdc, 0, 0, e.title, -1,
-                DT_SINGLELINE | (HeaderIsVertical() ? DT_CENTER : DT_VCENTER) | DT_END_ELLIPSIS | DT_NOPREFIX, &rcText, &opts);
         } else {
-            SetTextColor(hdc, g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT);
-            DrawTextW(hdc, e.title, -1, &rcText,
-                      DT_SINGLELINE | (HeaderIsVertical() ? DT_CENTER : DT_VCENTER) | DT_END_ELLIPSIS | DT_NOPREFIX);
+            drawTitle(rcText, DT_SINGLELINE |
+                              (HeaderIsVertical() ? DT_CENTER : DT_VCENTER) |
+                              DT_END_ELLIPSIS | DT_NOPREFIX);
         }
     }
 }
@@ -7434,7 +9118,8 @@ static void DrawSwitcherStaticContent(HDC hdc, bool fillBg, HWND hWnd) {
 
 // Rendering
 
-static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon, int* pOutIconX = NULL, int* pOutIconY = NULL, int* pOutIconSz = NULL, bool isMinimized = false, HWND hWnd = NULL) {
+static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon, int* pOutIconX = NULL, int* pOutIconY = NULL, int* pOutIconSz = NULL, bool isMinimized = false, HWND hWnd = NULL, float motionAlpha = 1.0f,
+                                 std::shared_ptr<OwnedWindowIcon> iconOwner = {}) {
     if (!BadgeLayoutActive() || !g_settings.showIcon || !hIcon) return;
     int iconSz = GetHeaderIconSizePx();
     int thumbW = rcThumbActual.right - rcThumbActual.left;
@@ -7467,6 +9152,8 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
     if (pOutIconX) *pOutIconX = bIconX;
     if (pOutIconY) *pOutIconY = bIconY;
     if (pOutIconSz) *pOutIconSz = iconSz;
+    motionAlpha = (std::clamp)(motionAlpha, 0.0f, 1.0f);
+    if (motionAlpha <= 0.001f) return;
 
     bool isMin = g_settings.showMinimizedIndicator && isMinimized;
     float iconDim = 1.0f;
@@ -7485,7 +9172,7 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
         COLORREF bgC = GetIconBackgroundColor();
         int op = g_isDarkMode ? g_settings.iconBgOpacityDark : g_settings.iconBgOpacityLight;
         float baseAlpha = (float)op * 2.55f;
-        int alpha = (int)roundf(baseAlpha * (isMin && MinimizedStyleUsesDimming() ? iconDim : 1.0f));
+        int alpha = (int)roundf(baseAlpha * (isMin && MinimizedStyleUsesDimming() ? iconDim : 1.0f) * motionAlpha);
         if (alpha > 255) alpha = 255;
         if (alpha < 0) alpha = 0;
         Gdiplus::SolidBrush bgBrush(Gdiplus::Color(alpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
@@ -7496,6 +9183,7 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
             for (int pass = 5; pass > 0; --pass) {
                 int shadowAlpha = 15 - (pass * 2);
                 if (shadowAlpha < 1) shadowAlpha = 1;
+                shadowAlpha = (int)roundf(shadowAlpha * motionAlpha);
                 Gdiplus::SolidBrush shadowBrush(Gdiplus::Color(shadowAlpha, 0, 0, 0));
                 int sp = pass;
                 if (r > 0) {
@@ -7533,35 +9221,44 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
         } else {
             gfx.FillRectangle(&bgBrush, bgX, bgY, bgSize, bgSize);
         }
-        if (iconDim < 0.99f) {
-            DrawIconWithAlpha(hdc, bIconX, bIconY, hIcon, iconSz, iconDim);
+        if (iconDim * motionAlpha < 0.99f) {
+            DrawIconWithAlpha(hdc, bIconX, bIconY, hIcon, iconSz, iconDim * motionAlpha);
         } else {
             DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
         }
     } else {
         bool drawShadow = IsWin11OrGreater() || g_settings.showThumbnailShadow;
         if (drawShadow) {
-            auto shadowKey = std::make_pair(hIcon, iconSz);
-            Gdiplus::Bitmap* pBmp = nullptr;
-            auto shadowIt = s_iconShadowCache.find(shadowKey);
-            if (shadowIt != s_iconShadowCache.end()) {
-                pBmp = shadowIt->second;
-            } else {
-                pBmp = CreateIconShadowBitmap(hIcon, iconSz, iconSz, 0.08f);
-                if (pBmp) s_iconShadowCache[shadowKey] = pBmp; // cache owns it now
-            }
+            auto shadow = GetWindowIconShadow(hIcon, iconSz, iconOwner);
+            Gdiplus::Bitmap* pBmp = shadow ? shadow->bitmap.get() : nullptr;
             if (pBmp) {
                 int dx[] = { 0, 1, 0, -1, 1 };
                 int dy[] = { 1, 0, -1, 0, 1 };
                 for (int p = 0; p < 5; ++p) {
-                    gfx.DrawImage(pBmp, bIconX + DpiScale(dx[p], g_dpiX), bIconY + DpiScale(dy[p] + 2, g_dpiY), iconSz, iconSz);
+                    int x = bIconX + DpiScale(dx[p], g_dpiX);
+                    int y = bIconY + DpiScale(dy[p] + 2, g_dpiY);
+                    if (motionAlpha < 1.0f) {
+                        Gdiplus::ColorMatrix matrix = {{
+                            {1, 0, 0, 0, 0},
+                            {0, 1, 0, 0, 0},
+                            {0, 0, 1, 0, 0},
+                            {0, 0, 0, motionAlpha, 0},
+                            {0, 0, 0, 0, 1}
+                        }};
+                        Gdiplus::ImageAttributes attributes;
+                        attributes.SetColorMatrix(&matrix);
+                        gfx.DrawImage(pBmp, Gdiplus::Rect(x, y, iconSz, iconSz),
+                                      0, 0, iconSz, iconSz, Gdiplus::UnitPixel, &attributes);
+                    } else {
+                        gfx.DrawImage(pBmp, x, y, iconSz, iconSz);
+                    }
                 }
-                // Do not delete pBmp: owned by s_iconShadowCache, flushed in
-                // FreeCachedBuffers().
+                // The local record pins the bitmap and icon through this draw,
+                // even if a reentrant UI callback removes its cache entry.
             }
         }
-        if (iconDim < 0.99f) {
-            DrawIconWithAlpha(hdc, bIconX, bIconY, hIcon, iconSz, iconDim);
+        if (iconDim * motionAlpha < 0.99f) {
+            DrawIconWithAlpha(hdc, bIconX, bIconY, hIcon, iconSz, iconDim * motionAlpha);
         } else {
             DrawIconEx(hdc, bIconX, bIconY, hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
         }
@@ -7575,7 +9272,7 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
         gfxBadge.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         COLORREF bgC = g_isDarkMode ? RGB(40, 40, 40) : RGB(235, 235, 235);
         COLORREF fgC = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
-        BYTE bAlpha = 230;
+        BYTE bAlpha = (BYTE)roundf(230 * motionAlpha);
         Gdiplus::SolidBrush bgBrush(Gdiplus::Color(bAlpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
         gfxBadge.FillEllipse(&bgBrush, badgeX, badgeY, badgeSz, badgeSz);
         Gdiplus::Pen pen(Gdiplus::Color(bAlpha, GetRValue(fgC), GetGValue(fgC), GetBValue(fgC)), 1.5f);
@@ -7593,7 +9290,7 @@ static void DrawBadgeIconOverlay(HDC hdc, const RECT& rcThumbActual, HICON hIcon
         Gdiplus::Graphics gfxDot(hdc);
         gfxDot.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
         COLORREF dotCol = g_isDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0);
-        BYTE dotAlpha = g_isDarkMode ? 180 : 140;
+        BYTE dotAlpha = (BYTE)roundf((g_isDarkMode ? 180 : 140) * motionAlpha);
         Gdiplus::SolidBrush dotBrush(Gdiplus::Color(dotAlpha, GetRValue(dotCol), GetGValue(dotCol), GetBValue(dotCol)));
         gfxDot.FillEllipse(&dotBrush, dotX, dotY, dotSz, dotSz);
     }
@@ -7699,7 +9396,8 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 MaskRectCorners(hdc, snapThumb, cornerRadius, true, maskColor);
             }
 
-            DrawBadgeIconOverlay(hdc, snapThumb, snap.hIcon, NULL, NULL, NULL, false, snap.hWnd);
+            DrawBadgeIconOverlay(hdc, snapThumb, snap.hIcon, NULL, NULL, NULL, false, snap.hWnd, snap.alpha,
+                                 snap.iconCell ? snap.iconCell->icon : nullptr);
         }
     }
 
@@ -7713,7 +9411,8 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 COLORREF maskColor = GetBgColor();
                 MaskRectCorners(hdc, depThumb, cornerRadius, true, maskColor);
             }
-            DrawBadgeIconOverlay(hdc, depThumb, dep.hIcon, NULL, NULL, NULL, false, dep.hWnd);
+            DrawBadgeIconOverlay(hdc, depThumb, dep.hIcon, NULL, NULL, NULL, false, dep.hWnd, dep.alpha,
+                                 dep.iconCell ? dep.iconCell->icon : nullptr);
         }
     }
 
@@ -7748,7 +9447,9 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
         int drawnIconY = e.drawnIconY + offY;
         int drawnIconSz = e.drawnIconSz;
         if (!DockLayoutActive()) {
-            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e), e.hWnd);
+            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e), e.hWnd,
+                                 (g_layoutTransition.active && e.isNewEntry) ? e.enterAlpha : 1.0f,
+                                 e.iconCell ? e.iconCell->icon : nullptr);
         }
 
         // Close button (rendered for any entry with closeBtnAlpha > 0.01f, enabling smooth cross-fades between entries)
@@ -7758,7 +9459,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
                 if (btnRc.right > btnRc.left && btnRc.bottom > btnRc.top) {
                     float hoverPlateAlpha = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isCloseHovered) ? g_animCloseBtnHoverAlpha : 0.0f;
                     bool isBtnPressed = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isClosePressed);
-                    DrawCloseButton(hdc, btnRc, e.closeBtnAlpha, hoverPlateAlpha, isBtnPressed);
+                    DrawCloseButton(hdc, btnRc, e.closeBtnAlpha, hoverPlateAlpha, isBtnPressed, e.closeBtnScale);
                 }
             }
         }
@@ -7948,7 +9649,8 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
             gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
             bool verticalLayout = LayoutIsVertical() || DockLayoutActive();
-            float slideDist = (float)DpiScale(4, verticalLayout ? g_dpiX : g_dpiY) * (1.0f - alpha);
+            float motion = dir < 0 ? g_animChevronTransformPrev : g_animChevronTransformNext;
+            float slideDist = (float)DpiScale(4, verticalLayout ? g_dpiX : g_dpiY) * (1.0f - motion);
             float offsetX = 0.0f;
             float offsetY = 0.0f;
 
@@ -7985,7 +9687,7 @@ static void DrawSwitcherOverlay(HDC hdc, HWND hWnd) {
 
             // Hover bloom & tactile click state without background:
             // Idle: Subtle secondary text opacity (~70% alpha)
-            // Hover: Smooth bloom to primary text opacity (100% alpha) via 80ms/120ms eased transition
+            // Hover: Linear 83 ms bloom to primary text opacity (100% alpha)
             // Pressed: Full primary opacity + 1.5px tactile displacement
             float hoverA = (dir < 0) ? g_animChevronHoverAlphaPrev : g_animChevronHoverAlphaNext;
             bool isPressed = (g_pressedChevron == dir);
@@ -8071,7 +9773,9 @@ static void DrawSwitcherOverlayStaticContent(HDC hdc, HWND hWnd) {
         int drawnIconY = e.drawnIconY;
         int drawnIconSz = e.drawnIconSz;
         if (!DockLayoutActive()) {
-            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e), e.hWnd);
+            DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e), e.hWnd,
+                                 (g_layoutTransition.active && e.isNewEntry) ? e.enterAlpha : 1.0f,
+                                 e.iconCell ? e.iconCell->icon : nullptr);
         }
 
         // Grouped window count badge
@@ -8222,7 +9926,9 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
             int drawnIconY = e.drawnIconY;
             int drawnIconSz = e.drawnIconSz;
             if (!DockLayoutActive()) {
-                DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e), e.hWnd);
+                DrawBadgeIconOverlay(hdc, rcThumbActual, e.hIcon, &drawnIconX, &drawnIconY, &drawnIconSz, IsEntryMinimized(e), e.hWnd,
+                                     (g_layoutTransition.active && e.isNewEntry) ? e.enterAlpha : 1.0f,
+                                     e.iconCell ? e.iconCell->icon : nullptr);
             }
         }
     }
@@ -8239,7 +9945,7 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
                     if (btnRc.right > btnRc.left && btnRc.bottom > btnRc.top) {
                         float hoverPlateAlpha = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isCloseHovered) ? g_animCloseBtnHoverAlpha : 0.0f;
                         bool isBtnPressed = (i == g_hoverIndex && g_hoverWnd == hWnd && g_isClosePressed);
-                        DrawCloseButton(hdc, btnRc, e.closeBtnAlpha, hoverPlateAlpha, isBtnPressed);
+                        DrawCloseButton(hdc, btnRc, e.closeBtnAlpha, hoverPlateAlpha, isBtnPressed, e.closeBtnScale);
                     }
                 }
             }
@@ -8284,7 +9990,8 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
             gfx.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
             bool verticalLayout = LayoutIsVertical() || DockLayoutActive();
-            float slideDist = (float)DpiScale(4, verticalLayout ? g_dpiX : g_dpiY) * (1.0f - alpha);
+            float motion = dir < 0 ? g_animChevronTransformPrev : g_animChevronTransformNext;
+            float slideDist = (float)DpiScale(4, verticalLayout ? g_dpiX : g_dpiY) * (1.0f - motion);
             float offsetX = 0.0f;
             float offsetY = 0.0f;
 
@@ -8373,6 +10080,9 @@ static void DrawSwitcherOverlayDynamicContent(HDC hdc, HWND hWnd) {
 
 static void PaintSwitcherOverlay() {
     if (!g_hCloseBtnWnd || !g_isVisible) return;
+    if (g_animActive && !g_animTickInProgress && !g_animEntranceFrameZeroPending) return;
+    AnchorPresentationOverlay();
+    PositionPresentationWindow(g_hCloseBtnWnd);
     HWND targetWnd = g_hoverWnd ? g_hoverWnd : g_hSwitcher;
     RECT rc; GetClientRect(targetWnd, &rc);
     int w = rc.right, h = rc.bottom;
@@ -8450,27 +10160,10 @@ static void PaintSwitcherOverlay() {
     }
 
     POINT ptSrc = {0,0}; SIZE sz = {w, h};
-    int currentOffsetY = GetAnimationOffsetY();
-    int baseX = 0;
-    int baseY = 0;
-    if (g_isPendingShow && targetWnd == g_hSwitcher && (g_pendingSwitcherRect.right > g_pendingSwitcherRect.left)) {
-        baseX = g_pendingSwitcherRect.left;
-        baseY = g_pendingSwitcherRect.top;
-    } else if (targetWnd) {
-        RECT wr; GetWindowRect(targetWnd, &wr);
-        baseX = wr.left;
-        baseY = wr.top;
-        if (targetWnd == g_hSwitcher) {
-            g_switcherBaseX = baseX;
-            g_switcherBaseY = baseY;
-            g_switcherBaseInitialized = true;
-        }
-    }
-    POINT ptDst = { baseX, baseY + currentOffsetY };
-    float combinedAlpha = g_animEntranceCurrentAlpha * g_animExitCurrentAlpha;
-    if (combinedAlpha < 0.0f) combinedAlpha = 0.0f;
-    if (combinedAlpha > 1.0f) combinedAlpha = 1.0f;
-    BYTE finalAlpha = (BYTE)roundf(combinedAlpha * 255.0f);
+    RECT presentationRect = {};
+    GetPresentationWindowRect(g_hCloseBtnWnd, &presentationRect);
+    POINT ptDst = { presentationRect.left, presentationRect.top };
+    BYTE finalAlpha = CurrentPresentationAlphaByte();
     BLENDFUNCTION bf = {AC_SRC_OVER, 0, finalAlpha, AC_SRC_ALPHA};
     HDC hdcScreen = GetDC(NULL);
     UpdateLayeredWindow(g_hCloseBtnWnd, hdcScreen, &ptDst, &sz, s_cachedOverlayDC, &ptSrc, 0, &bf, ULW_ALPHA);
@@ -8479,6 +10172,19 @@ static void PaintSwitcherOverlay() {
 
 static void PaintSwitcher() {
     if (!g_hSwitcher || !g_isVisible) return;
+    // Input handlers publish state immediately; an active ticker presents it at
+    // the next deadline. Keep the initial entrance paint before first visibility.
+    if (g_animActive && !g_animTickInProgress && !g_animEntranceFrameZeroPending) return;
+    struct PaintScope {
+        bool wasInProgress = g_animTickInProgress;
+        PaintScope() { g_animTickInProgress = true; }
+        ~PaintScope() { g_animTickInProgress = wasInProgress; }
+    } paintScope;
+    g_animEntranceFrameZeroPending = false;
+    s_iconRepaintPending = false;
+    SweepWindowIconShadows();
+    if (g_scrollTransition.active) RefreshScrollIconCanvas();
+    ApplyPresentationWindowOffset();
     if (ThemeIs(L"none")) {
         // Layered window path: draw to off-screen DIB, UpdateLayeredWindow
         RECT rc; GetClientRect(g_hSwitcher, &rc);
@@ -8708,30 +10414,18 @@ static void PaintSwitcher() {
         }
 
         POINT ptSrc = {0,0}; SIZE sz = {w, h};
-        int currentOffsetY = GetAnimationOffsetY();
-        int baseX = g_switcherBaseX;
-        int baseY = g_switcherBaseY;
-        if (g_isPendingShow && (g_pendingSwitcherRect.right > g_pendingSwitcherRect.left)) {
-            baseX = g_pendingSwitcherRect.left;
-            baseY = g_pendingSwitcherRect.top;
-        } else if (!g_switcherBaseInitialized) {
-            RECT wr; GetWindowRect(g_hSwitcher, &wr);
-            baseX = wr.left;
-            baseY = wr.top;
-        }
-        POINT ptDst = { baseX, baseY + currentOffsetY };
-        float combinedAlpha = g_animEntranceCurrentAlpha * g_animExitCurrentAlpha;
-        if (combinedAlpha < 0.0f) combinedAlpha = 0.0f;
-        if (combinedAlpha > 1.0f) combinedAlpha = 1.0f;
-        BYTE finalAlpha = (BYTE)roundf(combinedAlpha * 255.0f);
+        RECT presentationRect = {};
+        GetPresentationWindowRect(g_hSwitcher, &presentationRect);
+        POINT ptDst = { presentationRect.left, presentationRect.top };
+        BYTE finalAlpha = CurrentPresentationAlphaByte();
         BLENDFUNCTION bf = {AC_SRC_OVER, 0, finalAlpha, AC_SRC_ALPHA};
         HDC hdcScreen = GetDC(NULL);
         UpdateLayeredWindow(g_hSwitcher, hdcScreen, &ptDst, &sz, s_cachedMemDC, &ptSrc, 0, &bf, ULW_ALPHA);
         for (HWND hMirror : g_hMirrorSwitchers) {
             if (IsWindow(hMirror)) {
                 DrawSwitcherContent(s_cachedMemDC, true, hMirror);
-                RECT mwr; GetWindowRect(hMirror, &mwr);
-                POINT mPtDst = { mwr.left, mwr.top + currentOffsetY };
+                RECT mwr = {}; GetPresentationWindowRect(hMirror, &mwr);
+                POINT mPtDst = { mwr.left, mwr.top };
                 UpdateLayeredWindow(hMirror, hdcScreen, &mPtDst, &sz, s_cachedMemDC, &ptSrc, 0, &bf, ULW_ALPHA);
             }
         }
@@ -8795,6 +10489,20 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
         g_ctrlTapPending = false;
         bool ok = ScrollIs(L"always") || (ScrollIs(L"stickyOnly") && g_isSticky);
         if (ok) {
+            bool modActive = false;
+            if (wcscmp(g_settings.scrollSecondaryModifier, L"shift") == 0) modActive = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+            else if (wcscmp(g_settings.scrollSecondaryModifier, L"ctrl") == 0) modActive = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+            else if (wcscmp(g_settings.scrollSecondaryModifier, L"alt") == 0) modActive = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+            const WCHAR* actionStr = modActive ? g_settings.scrollSecondaryAction : g_settings.scrollWheelAction;
+            int action = 0;
+            if (wcscmp(actionStr, L"selection") == 0) action = 1;
+            else if (wcscmp(actionStr, L"page") == 0) action = 2;
+            if (!action) {
+                // None passes every original packet, including sub-notch input.
+                // Do not carry partial owned motion across a pass-through action.
+                s_wheelDeltaAccum = s_hwheelDeltaAccum = 0;
+                return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
+            }
             short rawDelta = (short)HIWORD(pMouseStruct->mouseData);
             int notches = 0;
             if (wParam == WM_MOUSEWHEEL) {
@@ -8821,28 +10529,16 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
 
             if (notches != 0) {
                 if (g_settings.reverseScrollDirection) notches = -notches;
-                
-                bool modActive = false;
-                if (wcscmp(g_settings.scrollSecondaryModifier, L"shift") == 0) modActive = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-                else if (wcscmp(g_settings.scrollSecondaryModifier, L"ctrl") == 0) modActive = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
-                else if (wcscmp(g_settings.scrollSecondaryModifier, L"alt") == 0) modActive = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
-
-                const WCHAR* actionStr = modActive ? g_settings.scrollSecondaryAction : g_settings.scrollWheelAction;
-                
-                int action = 0; // 0 = none, 1 = selection, 2 = page
-                if (wcscmp(actionStr, L"selection") == 0) action = 1;
-                else if (wcscmp(actionStr, L"page") == 0) action = 2;
-
-                if (action > 0) {
-                    s_lastTouchpadScrollTick = GetTickCount64();
-                    PostMessage(g_hSwitcher, WM_SWS_SCROLL, (WPARAM)notches, (LPARAM)action);
-                    return 1;
-                }
+                s_lastTouchpadScrollTick = GetTickCount64();
+                PostMessage(g_hSwitcher, WM_SWS_SCROLL, (WPARAM)notches, (LPARAM)action);
+                return 1;
             } else {
                 // Absorbed sub-notch delta, swallow to prevent background window scrolling
                 s_lastTouchpadScrollTick = GetTickCount64();
                 return 1;
             }
+        } else {
+            s_wheelDeltaAccum = s_hwheelDeltaAccum = 0;
         }
     }
     return CallNextHookEx(g_hMouseHook, nCode, wParam, lParam);
@@ -8851,12 +10547,27 @@ static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lPara
 // Show the switcher, its overlay and the mirrors, then start the entrance animation.
 // Kept in one place because both the pending-show reveal and the immediate show use it.
 static void PresentSwitcherWindows() {
+    // All HWNDs must carry frame zero before any of them becomes visible.
+    ApplyPresentationWindowOffset();
     if (g_hCloseBtnWnd) {
         ShowWindow(g_hCloseBtnWnd, SW_SHOWNA);
     }
     ShowWindow(g_hSwitcher, SW_SHOWNA);
     BringWindowToTop(g_hSwitcher);
-    SetForegroundWindow(g_hSwitcher);
+    if (g_isTouchpadGestureActive) {
+        Wh_Log(L"SWS: touchpad presentation context %s",
+               FormatTouchpadForegroundDiagnostic(GetForegroundWindow(), g_hSwitcher).c_str());
+        // Best-effort legacy foreground request; SendInput's return alone does
+        // not prove last-input eligibility or routing across an elevated app.
+        if (!s_nativeTouchpadInvocation.token) TapUnassignedKeyForForeground();
+    }
+    BOOL foreground = SetForegroundWindow(g_hSwitcher);
+    if (g_isTouchpadGestureActive && GetForegroundWindow() != g_hSwitcher) {
+        SwitchToThisWindow(g_hSwitcher, TRUE);
+        foreground = GetForegroundWindow() == g_hSwitcher;
+    }
+    Wh_Log(L"SWS: presented switcher foreground=%d active=%d", foreground,
+           GetForegroundWindow() == g_hSwitcher);
     // Mirrors already carry frame 0 (pushed by PaintSwitcher above); show them
     // now so no unpainted white frame is ever composed.
     ShowMirrorSwitchers();
@@ -8871,6 +10582,26 @@ static void PresentSwitcherWindows() {
             UpdateWindow(g_hCloseBtnWnd);
         }
     }
+}
+
+// A Task View window can briefly win the system-tools z-order after the raw
+// reader has already opened SWS. Restore our topmost presentation without
+// requiring foreground activation; the latter is unavailable across UIPI.
+static void ReassertVisibleSwitcherPresentation() {
+    if (!g_hSwitcher || !g_isVisible || !IsWindow(g_hSwitcher)) return;
+    RECT rc = {};
+    if (!GetWindowRect(g_hSwitcher, &rc) || rc.right <= rc.left || rc.bottom <= rc.top) {
+        return;
+    }
+    PositionPresentationWindow(g_hSwitcher, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    BringWindowToTop(g_hSwitcher);
+    if (g_hCloseBtnWnd) {
+        AnchorPresentationOverlay();
+        PositionPresentationWindow(g_hCloseBtnWnd, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+    BOOL foreground = SetForegroundWindow(g_hSwitcher);
+    Wh_Log(L"SWS: reasserted visible switcher foreground=%d active=%d",
+           foreground, GetForegroundWindow() == g_hSwitcher);
 }
 
 static void RevealPendingSwitcher() {
@@ -8928,10 +10659,11 @@ static void RevealPendingSwitcher() {
     ApplyThemeToWindow(g_hSwitcher);
     ApplySwitcherRegion();
 
-    SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED | SWP_NOACTIVATE);
+    StartEntranceAnimation();
+    SetPresentationWindowLayout(g_hSwitcher, x, y, w, h, SWP_FRAMECHANGED | SWP_NOACTIVATE);
     CreateMirrorSwitchers();
     if (g_hCloseBtnWnd) {
-        SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
+        SetPresentationWindowLayout(g_hCloseBtnWnd, x, y, w, h);
     }
     g_pendingSwitcherRect = { 0, 0, 0, 0 };
 
@@ -8946,20 +10678,6 @@ static void RevealPendingSwitcher() {
     g_scrollTransition.preservingThumbnails = false;
     g_animHoverAlphaCurrent = 0.0f;
     g_animHoverActive = false;
-
-    g_animExitActive = false;
-    g_animExitProgress = 1.0f;
-    g_animExitCurrentAlpha = 1.0f;
-
-    if (AreAnimationsGloballyEnabled() && g_settings.enableEntranceAnimation) {
-        g_animEntranceActive = true;
-        g_animEntranceProgress = 0.0f;
-        g_animEntranceDuration = 0.250f;
-        g_animEntranceCurrentAlpha = 0.0f;
-    } else {
-        g_animEntranceActive = false;
-        g_animEntranceProgress = 1.0f;
-    }
 
     UpdateChevronLayout(g_hSwitcher);
     UpdateChevronAnimationTargets(true);
@@ -9136,7 +10854,7 @@ static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
         if (hMirror) {
             ApplyThemeToWindow(hMirror);
             g_hMirrorSwitchers.push_back(hMirror);
-            SetWindowPos(hMirror, HWND_TOPMOST, mx, my, g_winW, g_winH, SWP_NOACTIVATE);
+            SetPresentationWindowLayout(hMirror, mx, my, g_winW, g_winH);
             // NOTE: mirrors stay hidden here on purpose. They are shown by
             // ShowMirrorSwitchers() only after PaintSwitcher() has pushed frame 0
             // into them, so DWM never composes an unpainted (white border) frame.
@@ -9147,6 +10865,7 @@ static BOOL WINAPI MirrorEnumProc(HMONITOR hM, HDC, LPRECT, LPARAM) {
 
 static void DestroyMirrorSwitchers() {
     for (HWND hMirror : g_hMirrorSwitchers) {
+        g_presentationWindows.erase(hMirror);
         if (IsWindow(hMirror)) {
             if (IsWin11OrGreater()) {
                 COLORREF colorNone = 0xFFFFFFFE;
@@ -9157,6 +10876,29 @@ static void DestroyMirrorSwitchers() {
         }
     }
     g_hMirrorSwitchers.clear();
+}
+
+static void SetSwitcherLayoutBounds(int x, int y, int w, int h, UINT flags) {
+    if (g_isPendingShow) {
+        g_pendingSwitcherRect = { x, y, x + w, y + h };
+        return;
+    }
+    SetPresentationWindowLayout(g_hSwitcher, x, y, w, h, flags);
+    g_switcherBaseX = x;
+    g_switcherBaseY = y;
+    g_switcherBaseInitialized = true;
+    for (HWND hMirror : g_hMirrorSwitchers) {
+        if (!IsWindow(hMirror)) continue;
+        RECT layout = {};
+        if (!GetPresentationLayoutRect(hMirror, &layout)) continue;
+        MONITORINFO mi = { sizeof(mi) };
+        if (!GetMonitorInfoW(MonitorFromRect(&layout, MONITOR_DEFAULTTONEAREST), &mi)) continue;
+        int mx, my;
+        GetSwitcherPosition(mi.rcWork, &mx, &my, w, h);
+        SetPresentationWindowLayout(hMirror, mx, my, w, h);
+    }
+    AnchorPresentationOverlay();
+    PositionPresentationWindow(g_hCloseBtnWnd);
 }
 
 static void CreateMirrorSwitchers() {
@@ -9190,8 +10932,18 @@ static void ApplySwitcherRegion() {
     }
 }
 
-static void ShowSwitcher(bool sticky, bool immediate = false) {
-    HWND invocationWindow = GetAncestor(GetForegroundWindow(), GA_ROOTOWNER);
+static void ShowSwitcher(bool sticky, bool immediate = false, HWND invocationSource = nullptr) {
+    // A new invocation supersedes a previous denied activation request.
+    if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
+    s_touchpadActivationRetryTarget = NULL;
+    s_touchpadActivationRetryDeadline = 0;
+    s_touchpadCommitActivation = false;
+    // Publish intent before layout/icon work so the raw reader can mark a
+    // three-finger stroke during this invocation's scheduling window.
+    g_touchpadSwitcherActive.store(true);
+    PublishNativeSwipePolicy();
+    HWND invocationWindow = GetAncestor(
+        invocationSource ? invocationSource : GetForegroundWindow(), GA_ROOTOWNER);
     g_sameAppSessionKey[0] = L'\0';
     if (g_isAltBacktickSameApp) {
         GetWindowGroupKey(invocationWindow, g_sameAppSessionKey, ARRAYSIZE(g_sameAppSessionKey));
@@ -9262,6 +11014,8 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
         // already registered DWM thumbnails for the new list; release them so this
         // failed show doesn't leak HTHUMBNAIL handles.
         UnregisterThumbnails();
+        g_touchpadSwitcherActive.store(false);
+        PublishNativeSwipePolicy();
         return;
     }
     if (DockLayoutActive()) {
@@ -9304,6 +11058,14 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
     if (!s_hWinEventHook) {
         s_hWinEventHook = SetWinEventHook(
             EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
+            NULL, WinEventShowHideProc,
+            0, 0,
+            WINEVENT_OUTOFCONTEXT
+        );
+    }
+    if (!s_hForegroundEventHook) {
+        s_hForegroundEventHook = SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
             NULL, WinEventShowHideProc,
             0, 0,
             WINEVENT_OUTOFCONTEXT
@@ -9363,26 +11125,12 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
     ApplyThemeToWindow(g_hSwitcher);
     ApplySwitcherRegion();
 
-    SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
+    StartEntranceAnimation();
+    SetPresentationWindowLayout(g_hSwitcher, cx, cy, g_winW, g_winH);
     CreateMirrorSwitchers();
     
     if (g_hCloseBtnWnd) {
-        SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
-    }
-
-    g_animExitActive = false;
-    g_animExitProgress = 1.0f;
-    g_animExitCurrentAlpha = 1.0f;
-
-    if (AreAnimationsGloballyEnabled() && g_settings.enableEntranceAnimation) {
-        g_animEntranceActive = true;
-        g_animEntranceProgress = 0.0f;
-        g_animEntranceDuration = 0.250f;
-        g_animEntranceCurrentAlpha = 0.0f;
-    } else {
-        g_animEntranceActive = false;
-        g_animEntranceProgress = 1.0f;
-        g_animEntranceCurrentAlpha = 1.0f;
+        SetPresentationWindowLayout(g_hCloseBtnWnd, cx, cy, g_winW, g_winH);
     }
 
     UpdateChevronLayout(g_hSwitcher);
@@ -9409,18 +11157,17 @@ static void ShowSwitcher(bool sticky, bool immediate = false) {
 
 static void HideSwitcher() {
     if (g_isHidingSwitcher) return;
+    g_touchpadSwitcherActive.store(false);
+    PublishNativeSwipePolicy();
     g_isHidingSwitcher = true;
     Wh_Log(L"SWS: hiding session (sticky=%d, raw=%d, tips=%d, foreground=%p)",
            g_isSticky, s_rawSessionOwned, s_rawGestureTips, GetForegroundWindow());
     CancelRawTouchpadStroke();
     RefreshTouchpadGestureKinds();
-    if (g_hSwitcher && s_rawGestureTips == 0 && !s_rawTouchpadShieldActive &&
-        !s_rawSwipeMarkerActive) {
-        RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_PROP);
-    }
-    if (s_rawGestureTips == 0 && !s_rawTouchpadShieldActive) {
-        s_rawSwipeMarkerActive = false;
-    }
+    // UI dismissal is not a physical lift. The reader owns both markers until
+    // this stroke's release grace expires or a new outside stroke replaces it.
+    // A cancelled owned stroke must not release its native tap action either.
+    UpdateRawSwipeMarkerTimer();
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_DYNAMIC_RESIZE_TIMER_ID);
     }
@@ -9474,6 +11221,10 @@ static void HideSwitcher() {
 
     g_animChevronAlphaPrev = 0.0f;
     g_animChevronAlphaNext = 0.0f;
+    g_animChevronTransformPrev = 0.0f;
+    g_animChevronTransformNext = 0.0f;
+    g_chevronRevealPrev = {};
+    g_chevronRevealNext = {};
     g_animChevronAlphaTargetPrev = 0.0f;
     g_animChevronAlphaTargetNext = 0.0f;
     g_animChevronProgressPrev = 1.0f;
@@ -9483,7 +11234,7 @@ static void HideSwitcher() {
     g_animCloseBtnAlpha = 0.0f;
     g_animCloseBtnHoverAlpha = 0.0f;
     for (auto& w : g_windows) {
-        w.closeBtnAlpha = 0.0f;
+        SnapCloseButtonMotion(w, 0.0f);
     }
     if (g_hSwitcher && GetCapture() == g_hSwitcher) {
         ReleaseCapture();
@@ -9524,6 +11275,9 @@ static void HideSwitcher() {
     s_pendingCloseWindows.clear();
     s_pendingCloseRetries = 0;
     g_isHidingSwitcher = false;
+    // Once hidden, a background controller cannot suppress shell gestures.
+    // Explorer's source-specific PTP hook covers the reader's release grace.
+    RefreshTouchpadGestureKinds();
 }
 
 // Never wait synchronously on another application's window procedure. These
@@ -9536,41 +11290,11 @@ static void RestoreWindowIfIconic(HWND hWnd) {
     }
 }
 
-// Non-layered Mica/Acrylic windows cannot be given a reliable whole-window alpha.
-// Keep their exit motion visible by using the same short downward travel that the
-// layered path combines with its opacity fade. The switcher remains fully rendered;
-// only its top-level presentation rect moves during the transition.
-static void ApplyExitMotion(int offsetY) {
-    if (!g_hSwitcher || g_animExitStartRect.right <= g_animExitStartRect.left ||
-        g_animExitStartRect.bottom <= g_animExitStartRect.top) {
+static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreWindows) {
+    if (!hTarget || !IsWindow(hTarget)) {
+        s_touchpadCommitActivation = false;
         return;
     }
-
-    int width = g_animExitStartRect.right - g_animExitStartRect.left;
-    int height = g_animExitStartRect.bottom - g_animExitStartRect.top;
-    int x = g_animExitStartRect.left;
-    int y = g_animExitStartRect.top + offsetY;
-    SetWindowPos(g_hSwitcher, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE);
-    g_switcherBaseX = x;
-    g_switcherBaseY = y;
-    g_switcherBaseInitialized = true;
-
-    if (g_hCloseBtnWnd) {
-        SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE);
-    }
-
-    for (size_t i = 0; i < g_hMirrorSwitchers.size() && i < g_animExitMirrorStartRects.size(); ++i) {
-        HWND hMirror = g_hMirrorSwitchers[i];
-        if (!IsWindow(hMirror)) continue;
-        const RECT& start = g_animExitMirrorStartRects[i];
-        SetWindowPos(hMirror, HWND_TOPMOST, start.left, start.top + offsetY,
-                     start.right - start.left, start.bottom - start.top,
-                     SWP_NOACTIVATE);
-    }
-}
-
-static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreWindows) {
-    if (!hTarget || !IsWindow(hTarget)) return;
 
     for (HWND hWindow : restoreWindows) {
         if (IsWindow(hWindow) && hWindow != hTarget && IsIconic(hWindow)) {
@@ -9578,18 +11302,49 @@ static void ActivateExitedWindow(HWND hTarget, const std::vector<HWND>& restoreW
         }
     }
 
+    const bool retrying = s_touchpadActivationRetryTarget != NULL;
     HWND hPopup = GetLastActivePopup(hTarget);
     HWND hForegroundTarget = IsWindowVisible(hPopup) ? hPopup : hTarget;
     RestoreWindowIfIconic(hTarget);
     if (hForegroundTarget != hTarget) RestoreWindowIfIconic(hForegroundTarget);
+    if (s_touchpadCommitActivation && !retrying) {
+        Wh_Log(L"SWS: touchpad commit context %s",
+               FormatTouchpadForegroundDiagnostic(GetForegroundWindow(), hForegroundTarget).c_str());
+        // Make one foreground-eligibility request for this handoff, not one
+        // synthetic key for every rejected retry (which can keep stealing
+        // last-input eligibility while a different app owns the foreground).
+        TapUnassignedKeyForForeground();
+    }
     BOOL foregroundOk = SetForegroundWindow(hForegroundTarget);
-    Wh_Log(L"SWS: activate %p -> SetForegroundWindow=%d", hForegroundTarget, foregroundOk);
     if (!foregroundOk) SwitchToThisWindow(hForegroundTarget, TRUE);
-    UpdateMruWindow(hTarget);
+    bool active = GetForegroundWindow() == hForegroundTarget;
+    if (!retrying || active) {
+        Wh_Log(L"SWS: activate %p -> SetForegroundWindow=%d active=%d", hForegroundTarget,
+               foregroundOk, active);
+    }
+    if (active) {
+        s_touchpadActivationRetryTarget = NULL;
+        s_touchpadActivationRetryDeadline = 0;
+        if (g_hSwitcher) KillTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
+        UpdateMruWindow(hTarget);
+        s_touchpadCommitActivation = false;
+    } else if (g_hSwitcher && !g_isVisible && !g_isPendingShow) {
+        // Foreground activation may be denied transiently after the raw input
+        // process releases the switcher. Retry without blocking this message
+        // pump; never attach to or send synchronously to the target thread.
+        if (!retrying) {
+            // The absolute deadline is established once. Resetting it here on
+            // each failed attempt made the 600 ms retry run for many seconds.
+            s_touchpadActivationRetryDeadline = GetTickCount64() + 600;
+            SetTimer(g_hSwitcher, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID, 40, NULL);
+        }
+        s_touchpadActivationRetryTarget = hForegroundTarget;
+    }
 }
 
 static void StartExitAnimation(bool activateSelectedWindow) {
     if ((!g_isVisible && !g_isPendingShow) || g_animExitActive) return;
+    if (!activateSelectedWindow) s_touchpadCommitActivation = false;
     // A lift during cancellation must not commit; continuing the cancelled
     // stroke must not reopen the switcher before all fingers have lifted.
     CancelRawTouchpadStroke();
@@ -9607,7 +11362,8 @@ static void StartExitAnimation(bool activateSelectedWindow) {
 
     // Pending or accessibility-disabled sessions close immediately. Animated
     // sessions use the shared exit path below for both cancel and selection.
-    if (g_isPendingShow || !AreAnimationsGloballyEnabled()) {
+    if (g_isPendingShow || !AreAnimationsGloballyEnabled() ||
+        !g_settings.enableEntranceAnimation) {
         HWND hTarget = g_animExitTargetWindow;
         std::vector<HWND> restoreWindows = std::move(g_animExitRestoreWindows);
         bool activate = g_animExitActivateSelected;
@@ -9618,24 +11374,26 @@ static void StartExitAnimation(bool activateSelectedWindow) {
         return;
     }
 
-    if (g_hSwitcher) {
-        GetWindowRect(g_hSwitcher, &g_animExitStartRect);
-    }
-    g_animExitMirrorStartRects.clear();
-    for (HWND hMirror : g_hMirrorSwitchers) {
-        RECT r = {};
-        if (IsWindow(hMirror)) GetWindowRect(hMirror, &r);
-        g_animExitMirrorStartRects.push_back(r);
-    }
+    // Reverse the shared linear timeline at its current point, before resetting
+    // entrance. E(p) and physical position are unchanged at this handoff.
+    StartMotionTrack(g_animExitProgress, g_animEntranceProgress);
+    g_animExitCurrentAlpha = g_easeEntrance.Solve(g_animExitProgress);
+    // Capture the actually presented layered alpha, independently of transform
+    // progress, so interruption keeps its frame-zero opacity continuous.
+    StartOpacityMotion(g_presentationOpacity, g_presentationOpacityCurrent, 0.0f);
+    g_animEntranceActive = false;
+    g_animEntranceProgress = 1.0f;
+    g_animEntranceCurrentAlpha = 1.0f;
 
     g_animExitActive = true;
     RefreshTouchpadGestureKinds();
-    if (g_hSwitcher) RemovePropW(g_hSwitcher, L"WindhawkSWSRawSwipe");
-    g_animExitProgress = 0.0f;
-    g_animExitDuration = 0.167f;
-    g_animExitCurrentAlpha = 1.0f;
-    FadeOutBackdropBlur(); // same 167 ms, so the desktop never shows through mid-dissolve
+    // Decreasing p at the entrance speed gives a remaining duration of 167ms*p.
+    g_animExitDuration = g_animEntranceDuration;
+    FadeOutBackdropBlur(g_animExitCurrentAlpha);
 
+    // Keep the touchpad controller and early marker ownership through the
+    // visible exit animation. HideSwitcher releases them at the real close.
+    // Native material presentation is motion-only; layered opacity is linear.
     // Make switcher and overlay click-through during dissolve
     if (g_hSwitcher) {
         LONG_PTR ex = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
@@ -9695,9 +11453,8 @@ static void RecomputeAndReposition() {
         }
     }
 
-    if (!g_scrollTransition.preservingThumbnails) {
-        UnregisterThumbnails();
-    }
+    bool scrollReflow = g_scrollTransition.preservingThumbnails;
+    CaptureLayoutTransitionStart();
     RegisterThumbnailsEarly();
     // Refresh DWM source sizes (GetWindowRect fallback) before layout so that
     // aspect ratios used in ComputeLayout are near-final on the first pass.
@@ -9708,70 +11465,25 @@ static void RecomputeAndReposition() {
                     ? g_hCurrentMonitor
                     : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
     g_hCurrentMonitor = hMon;
-    ComputeLayout(hMon);
-    if (DockLayoutActive()) {
-        UpdateDockPreviewForSelection();
-    }
+    ComputeTransitionLayout(hMon);
     UpdateChevronLayout(g_hSwitcher);
     UpdateChevronAnimationTargets(false);
     InvalidateStaticCache();
-    MONITORINFO mi = { sizeof(mi) };
-    GetMonitorInfoW(hMon, &mi);
-    int cx, cy;
-    GetSwitcherPosition(mi.rcWork, &cx, &cy);
-    g_switcherBaseX = cx;
-    g_switcherBaseY = cy;
-    g_switcherBaseInitialized = true;
-
-    if (g_isPendingShow) {
-        g_pendingSwitcherRect = {
-            cx,
-            cy,
-            cx + g_winW,
-            cy + g_winH
-        };
-        return;
-    } else {
-        g_pendingSwitcherRect = { 0, 0, 0, 0 };
-    }
-
-    // Only call SetWindowPos when the size or position has actually changed.
-    // An unconditional SetWindowPos sends WM_SIZE which triggers a WM_PAINT
-    // before our own rendering pass completes, causing a momentary flicker.
-    RECT curWndRect = {};
-    GetWindowRect(g_hSwitcher, &curWndRect);
-    bool posChanged = (curWndRect.left != cx || curWndRect.top != cy
-                       || (curWndRect.right - curWndRect.left) != g_winW
-                       || (curWndRect.bottom - curWndRect.top) != g_winH);
-    if (posChanged) {
-        SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
-    } else {
-        SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH,
-                     SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOMOVE | SWP_NOREDRAW);
-    }
+    CommitLayoutTransition(hMon, scrollReflow);
+    if (g_isPendingShow) return;
+    g_pendingSwitcherRect = { 0, 0, 0, 0 };
     if (IsWin11OrGreater()) {
         COLORREF colorNone = 0xFFFFFFFE;
         DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
     }
     for (HWND hMirror : g_hMirrorSwitchers) {
         if (!IsWindow(hMirror)) continue;
-        MONITORINFO mInfo = { sizeof(mInfo) };
-        GetMonitorInfoW(MonitorFromWindow(hMirror, MONITOR_DEFAULTTONEAREST), &mInfo);
-        int mx, my; GetSwitcherPosition(mInfo.rcWork, &mx, &my);
-        SetWindowPos(hMirror, HWND_TOPMOST, mx, my, g_winW, g_winH, SWP_NOACTIVATE);
         if (IsWin11OrGreater()) {
             COLORREF colorNone = 0xFFFFFFFE;
             DwmSetWindowAttribute(hMirror, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
         }
     }
-    if (g_hCloseBtnWnd && g_isVisible && !g_isPendingShow) {
-        SetWindowPos(g_hCloseBtnWnd, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
-    }
     ApplySwitcherRegion();
-    RegisterThumbnails();
-    if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-        SnapSelectionTo(ToRectF(g_windows[g_selectedIndex].rcCell));
-    }
     if (g_hoverThumbIndex >= 0 && g_hoverThumbIndex < (int)g_windows.size() && !IsWindowTruncated(g_hoverThumbIndex)) {
         SnapHoverTo(ToRectF(g_windows[g_hoverThumbIndex].rcThumbActual));
     }
@@ -9785,49 +11497,15 @@ static void EnterAppGroup() {
     std::vector<HWND> members = g_windows[g_selectedIndex].groupWindows;
     if (members.size() <= 1) return;  // nothing to expand
 
+    CaptureGroupTransitionStart();
     if (AreAnimationsGloballyEnabled() && g_settings.enableAnimations) {
         // ── Animated drill-down path ──────────────────────────────────
-
-        // 1. Abort any in-flight layout transition cleanly
-        if (g_layoutTransition.active) {
-            g_layoutTransition.active   = false;
-            g_layoutTransition.progress = 1.0f;
-            for (auto& dep : g_layoutTransition.departingItems) {
-                for (const auto& kv : dep.hThumbs) {
-                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
-                }
-            }
-            g_layoutTransition.departingItems.clear();
-            for (auto& w : g_windows) {
-                w.rcCell        = w.rcCellTarget;
-                w.rcThumbActual = w.rcThumbTarget;
-                w.isNewEntry    = false;
-            }
-        }
-
-        // 2. Capture current window rect as animation start
-        RECT curWnd = {};
-        GetWindowRect(g_hSwitcher, &curWnd);
-        g_layoutTransition.rcWndStart = ToRectF(curWnd);
-        g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
-        g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
-        g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
 
         // 3. Snapshot visible app-list items as departing entries
         for (auto& w : g_windows) {
             if (w.rcCell.left == 0 && w.rcCell.right == 0 &&
                 w.rcCell.top == 0  && w.rcCell.bottom == 0) continue;
-            DepartingEntrySnapshot snap = {};
-            snap.hWnd            = w.hWnd;
-            snap.rcCellStart     = w.rcCell;
-            snap.rcCellCurrent   = w.rcCell;
-            snap.rcThumbStart    = w.rcThumbActual;
-            snap.rcThumbCurrent  = w.rcThumbActual;
-            snap.alpha           = 1.0f;
-            snap.scale           = 1.0f;
-            snap.hIcon           = w.hIcon;
-            wcsncpy_s(snap.title, w.title, _TRUNCATE);
-            snap.groupWindows    = w.groupWindows;
+            DepartingEntrySnapshot snap = CaptureDepartingEntry(w);
             if (DockLayoutActive()) {
                 // Dock: unregister live thumbnails; icon cross-fade via DrawSwitcherStaticContent
                 for (const auto& kv : w.hThumbs) {
@@ -9855,7 +11533,7 @@ static void EnterAppGroup() {
             e.hWnd = hw;
             GetWindowTextW(hw, e.title, 256);
             if (!e.title[0]) InternalGetWindowText(hw, e.title, 256);
-            e.hIcon = LoadWindowIcon(hw);
+            e.hIcon = LoadWindowIcon(hw, &e.iconCell);
             g_windows.push_back(std::move(e));
         }
         if (g_windows.empty()) {  // every window closed in the meantime; abort
@@ -9893,76 +11571,14 @@ static void EnterAppGroup() {
         RegisterThumbnailsEarly();
         HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
         for (auto& w : g_windows) RefreshEntrySourceSize(w);
-        ComputeLayout(hMon);
-        if (DockLayoutActive()) UpdateDockPreviewForSelection();
-        g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
-        g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
-        g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
-
-        if (DockLayoutActive()) {
-            g_rcDockIconStrip = g_layoutTransition.rcDockStripStart;
-            g_rcCentralPreview = g_layoutTransition.rcDockPreviewStart;
-            g_rcDockTitleBar = g_layoutTransition.rcDockTitleStart;
+        ComputeTransitionLayout(hMon);
+        for (auto& w : g_windows) {
+            w.rcCellStart = {};
+            w.entryMotion = {};
         }
-
         UpdateChevronLayout(g_hSwitcher);
         UpdateChevronAnimationTargets(false);
-
-        // 6. Compute target window rect
-        MONITORINFO mi = { sizeof(mi) };
-        GetMonitorInfoW(hMon, &mi);
-        int cx, cy;
-        GetSwitcherPosition(mi.rcWork, &cx, &cy);
-        g_layoutTransition.rcWndTarget = { (float)cx, (float)cy, (float)(cx + g_winW), (float)(cy + g_winH) };
-
-        // 7. Mark incoming entries: blossom in from 0.94x / alpha=0
-        for (auto& w : g_windows) {
-            w.rcCellTarget  = w.rcCell;
-            w.rcThumbTarget = w.rcThumbActual;
-            w.isNewEntry    = true;
-            w.enterAlpha    = 0.0f;
-            w.enterScale    = 0.94f;
-            int cw  = w.rcCellTarget.right  - w.rcCellTarget.left;
-            int ch  = w.rcCellTarget.bottom - w.rcCellTarget.top;
-            int mcx = (w.rcCellTarget.left + w.rcCellTarget.right)  / 2;
-            int mcy = (w.rcCellTarget.top  + w.rcCellTarget.bottom) / 2;
-            int curCw = (int)roundf(cw * 0.94f);
-            int curCh = (int)roundf(ch * 0.94f);
-            w.rcCellStart = { mcx - curCw / 2, mcy - curCh / 2, mcx + curCw / 2, mcy + curCh / 2 };
-            w.rcCell      = w.rcCellStart;
-            if (!DockLayoutActive()) {
-                int tw  = w.rcThumbTarget.right  - w.rcThumbTarget.left;
-                int th  = w.rcThumbTarget.bottom - w.rcThumbTarget.top;
-                int tmx = (w.rcThumbTarget.left + w.rcThumbTarget.right)  / 2;
-                int tmy = (w.rcThumbTarget.top  + w.rcThumbTarget.bottom) / 2;
-                int curTw = (int)roundf(tw * 0.94f);
-                int curTh = (int)roundf(th * 0.94f);
-                w.rcThumbStart  = { tmx - curTw / 2, tmy - curTh / 2, tmx + curTw / 2, tmy + curTh / 2 };
-                w.rcThumbActual = w.rcThumbStart;
-            }
-        }
-
-        // 8. Register thumbnails at initial opacity (enterAlpha=0 applied in RegisterThumbnails)
-        RegisterThumbnails();
-
-        // 9. Snap selection indicator to target cell - no glide across the drill boundary
-        g_animSelectionCurrent = ToRectF(g_windows[0].rcCellTarget);
-        g_animSelectionTarget  = g_animSelectionCurrent;
-        g_animSelectionStart   = g_animSelectionCurrent;
-        g_animSelectionActive  = false;
-
-        g_scrollTransition.active           = false;
-        g_scrollTransition.offsetCurrentX   = 0.0f;
-        g_scrollTransition.offsetCurrentY   = 0.0f;
-        g_scrollTransition.outgoingItems.clear();
-        g_scrollTransition.preservingThumbnails = false;
-
-        // 10. Launch the 250ms Windows existing-element layout transition
-        g_layoutTransition.progress = 0.0f;
-        g_layoutTransition.duration = 0.250f;
-        g_layoutTransition.active   = true;
-        InvalidateStaticCache();
-        StartAnimationTicker();
+        CommitLayoutTransition(hMon);
         PaintSwitcher();
     } else {
         // ── Instant fallback path (animations disabled) ───────────────
@@ -9978,7 +11594,7 @@ static void EnterAppGroup() {
             e.hWnd = hw;
             GetWindowTextW(hw, e.title, 256);
             if (!e.title[0]) InternalGetWindowText(hw, e.title, 256);
-            e.hIcon = LoadWindowIcon(hw);
+            e.hIcon = LoadWindowIcon(hw, &e.iconCell);
             g_windows.push_back(std::move(e));
         }
         if (g_windows.empty()) {
@@ -10016,49 +11632,15 @@ static void EnterAppGroup() {
 static void ExitAppGroup() {
     if (!g_drilledIn) return;
 
+    CaptureGroupTransitionStart();
     if (AreAnimationsGloballyEnabled() && g_settings.enableAnimations) {
         // ── Animated return path ──────────────────────────────────────
-
-        // 1. Abort any in-flight layout transition cleanly
-        if (g_layoutTransition.active) {
-            g_layoutTransition.active   = false;
-            g_layoutTransition.progress = 1.0f;
-            for (auto& dep : g_layoutTransition.departingItems) {
-                for (const auto& kv : dep.hThumbs) {
-                    if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
-                }
-            }
-            g_layoutTransition.departingItems.clear();
-            for (auto& w : g_windows) {
-                w.rcCell        = w.rcCellTarget;
-                w.rcThumbActual = w.rcThumbTarget;
-                w.isNewEntry    = false;
-            }
-        }
-
-        // 2. Capture current window rect as animation start
-        RECT curWnd = {};
-        GetWindowRect(g_hSwitcher, &curWnd);
-        g_layoutTransition.rcWndStart = ToRectF(curWnd);
-        g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
-        g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
-        g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
 
         // 3. Snapshot visible drilled-in items as departing entries
         for (auto& w : g_windows) {
             if (w.rcCell.left == 0 && w.rcCell.right == 0 &&
                 w.rcCell.top == 0  && w.rcCell.bottom == 0) continue;
-            DepartingEntrySnapshot snap = {};
-            snap.hWnd            = w.hWnd;
-            snap.rcCellStart     = w.rcCell;
-            snap.rcCellCurrent   = w.rcCell;
-            snap.rcThumbStart    = w.rcThumbActual;
-            snap.rcThumbCurrent  = w.rcThumbActual;
-            snap.alpha           = 1.0f;
-            snap.scale           = 1.0f;
-            snap.hIcon           = w.hIcon;
-            wcsncpy_s(snap.title, w.title, _TRUNCATE);
-            snap.groupWindows    = w.groupWindows;
+            DepartingEntrySnapshot snap = CaptureDepartingEntry(w);
             if (DockLayoutActive()) {
                 for (const auto& kv : w.hThumbs) {
                     if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
@@ -10103,78 +11685,14 @@ static void ExitAppGroup() {
         for (auto& w : g_windows) {
             RefreshEntrySourceSize(w);
         }
-        ComputeLayout(hMon);
-        if (DockLayoutActive()) UpdateDockPreviewForSelection();
-        g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
-        g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
-        g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
-
-        if (DockLayoutActive()) {
-            g_rcDockIconStrip = g_layoutTransition.rcDockStripStart;
-            g_rcCentralPreview = g_layoutTransition.rcDockPreviewStart;
-            g_rcDockTitleBar = g_layoutTransition.rcDockTitleStart;
+        ComputeTransitionLayout(hMon);
+        for (auto& w : g_windows) {
+            w.rcCellStart = {};
+            w.entryMotion = {};
         }
-
         UpdateChevronLayout(g_hSwitcher);
         UpdateChevronAnimationTargets(false);
-
-        // 6. Compute target window rect
-        MONITORINFO mi = { sizeof(mi) };
-        GetMonitorInfoW(hMon, &mi);
-        int cx, cy;
-        GetSwitcherPosition(mi.rcWork, &cx, &cy);
-        g_layoutTransition.rcWndTarget = { (float)cx, (float)cy, (float)(cx + g_winW), (float)(cy + g_winH) };
-
-        // 7. Mark incoming app-list entries: blossom in from 0.94x / alpha=0
-        for (auto& w : g_windows) {
-            w.rcCellTarget  = w.rcCell;
-            w.rcThumbTarget = w.rcThumbActual;
-            w.isNewEntry    = true;
-            w.enterAlpha    = 0.0f;
-            w.enterScale    = 0.94f;
-            int cw  = w.rcCellTarget.right  - w.rcCellTarget.left;
-            int ch  = w.rcCellTarget.bottom - w.rcCellTarget.top;
-            int mcx = (w.rcCellTarget.left + w.rcCellTarget.right)  / 2;
-            int mcy = (w.rcCellTarget.top  + w.rcCellTarget.bottom) / 2;
-            int curCw = (int)roundf(cw * 0.94f);
-            int curCh = (int)roundf(ch * 0.94f);
-            w.rcCellStart = { mcx - curCw / 2, mcy - curCh / 2, mcx + curCw / 2, mcy + curCh / 2 };
-            w.rcCell      = w.rcCellStart;
-            if (!DockLayoutActive()) {
-                int tw  = w.rcThumbTarget.right  - w.rcThumbTarget.left;
-                int th  = w.rcThumbTarget.bottom - w.rcThumbTarget.top;
-                int tmx = (w.rcThumbTarget.left + w.rcThumbTarget.right)  / 2;
-                int tmy = (w.rcThumbTarget.top  + w.rcThumbTarget.bottom) / 2;
-                int curTw = (int)roundf(tw * 0.94f);
-                int curTh = (int)roundf(th * 0.94f);
-                w.rcThumbStart  = { tmx - curTw / 2, tmy - curTh / 2, tmx + curTw / 2, tmy + curTh / 2 };
-                w.rcThumbActual = w.rcThumbStart;
-            }
-        }
-
-        // 8. Register thumbnails at initial opacity (enterAlpha=0 in RegisterThumbnails)
-        RegisterThumbnails();
-
-        // 9. Snap selection indicator
-        if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-            g_animSelectionCurrent = ToRectF(g_windows[g_selectedIndex].rcCellTarget);
-            g_animSelectionTarget  = g_animSelectionCurrent;
-            g_animSelectionStart   = g_animSelectionCurrent;
-            g_animSelectionActive  = false;
-        }
-
-        g_scrollTransition.active           = false;
-        g_scrollTransition.offsetCurrentX   = 0.0f;
-        g_scrollTransition.offsetCurrentY   = 0.0f;
-        g_scrollTransition.outgoingItems.clear();
-        g_scrollTransition.preservingThumbnails = false;
-
-        // 10. Launch the 250ms Windows existing-element layout transition
-        g_layoutTransition.progress = 0.0f;
-        g_layoutTransition.duration = 0.250f;
-        g_layoutTransition.active   = true;
-        InvalidateStaticCache();
-        StartAnimationTicker();
+        CommitLayoutTransition(hMon);
         PaintSwitcher();
         UpdateHoverFromCursor(false);
     } else {
@@ -10218,11 +11736,7 @@ static void ToggleAppDrill() {
 static void ScrollDockWithDynamicResize(int targetStart, int targetSelected, int dir, ScrollNavType scrollType) {
     CaptureOutgoingSnapshot();
 
-    RECT curWnd = {};
-    GetWindowRect(g_hSwitcher, &curWnd);
-    RECT startPreview = g_rcCentralPreview;
-    RECT startStrip = g_rcDockIconStrip;
-    RECT startTitle = g_rcDockTitleBar;
+    CaptureLayoutTransitionStart();
 
     g_layoutStartIndex = targetStart;
     g_selectedIndex = targetSelected;
@@ -10243,59 +11757,8 @@ static void ScrollDockWithDynamicResize(int targetStart, int targetSelected, int
     }
 
     HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
-    ComputeLayout(hMon);
-    UpdateDockPreviewForSelection();
-
-    RECT targetPreview = g_rcCentralPreview;
-    RECT targetStrip = g_rcDockIconStrip;
-    RECT targetTitle = g_rcDockTitleBar;
-
-    MONITORINFO mi = { sizeof(mi) };
-    GetMonitorInfoW(hMon, &mi);
-    int cx, cy;
-    GetSwitcherPosition(mi.rcWork, &cx, &cy);
-    RectF targetWnd = { (float)cx, (float)cy, (float)(cx + g_winW), (float)(cy + g_winH) };
-
-    bool boundsChanged = (fabsf((targetWnd.right - targetWnd.left) - (float)(curWnd.right - curWnd.left)) > 1.0f ||
-                          fabsf((targetWnd.bottom - targetWnd.top) - (float)(curWnd.bottom - curWnd.top)) > 1.0f ||
-                          !EqualRect(&startPreview, &targetPreview));
-
-    if (boundsChanged) {
-        g_layoutTransition.rcWndStart = ToRectF(curWnd);
-        g_layoutTransition.rcWndTarget = targetWnd;
-        g_layoutTransition.rcDockPreviewStart = startPreview;
-        g_layoutTransition.rcDockPreviewTarget = targetPreview;
-        g_layoutTransition.rcDockStripStart = startStrip;
-        g_layoutTransition.rcDockStripTarget = targetStrip;
-        g_layoutTransition.rcDockTitleStart = startTitle;
-        g_layoutTransition.rcDockTitleTarget = targetTitle;
-
-        // Restore start visual state for smooth lerp
-        g_rcDockIconStrip = startStrip;
-        g_rcCentralPreview = startPreview;
-        g_rcDockTitleBar = startTitle;
-        if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-            g_windows[g_selectedIndex].rcThumbActual = startPreview;
-        }
-
-        for (auto& w : g_windows) {
-            w.rcCellStart = w.rcCell;
-            w.rcCellTarget = w.rcCell;
-            w.isNewEntry = false;
-        }
-
-        RegisterThumbnails();
-        g_layoutTransition.progress = 0.0f;
-        g_layoutTransition.duration = 0.250f; // 250ms WinUI 3 RepositionThemeAnimation standard
-        g_layoutTransition.active = true;
-    } else {
-        SetWindowPos(g_hSwitcher, HWND_TOPMOST, cx, cy, g_winW, g_winH, SWP_NOACTIVATE);
-        if (IsWin11OrGreater()) {
-            COLORREF colorNone = 0xFFFFFFFE;
-            DwmSetWindowAttribute(g_hSwitcher, 34 /* DWMWA_BORDER_COLOR */, &colorNone, sizeof(colorNone));
-        }
-        RegisterThumbnails();
-    }
+    ComputeTransitionLayout(hMon);
+    CommitLayoutTransition(hMon, true);
 
     TriggerScrollAnimationEx(dir, scrollType);
     if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
@@ -10323,60 +11786,12 @@ static void UpdateDockSelectionWithDynamicResize(int prevSelected) {
         return;
     }
 
-    RECT curWnd = {};
-    GetWindowRect(g_hSwitcher, &curWnd);
-    RECT startPreview = g_rcCentralPreview;
-    RECT startStrip = g_rcDockIconStrip;
-    RECT startTitle = g_rcDockTitleBar;
+    (void)prevSelected;
+    CaptureLayoutTransitionStart();
 
     HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
-    ComputeLayout(hMon);
-    UpdateDockPreviewForSelection();
-
-    RECT targetPreview = g_rcCentralPreview;
-    RECT targetStrip = g_rcDockIconStrip;
-    RECT targetTitle = g_rcDockTitleBar;
-
-    MONITORINFO mi = { sizeof(mi) };
-    GetMonitorInfoW(hMon, &mi);
-    int cx, cy;
-    GetSwitcherPosition(mi.rcWork, &cx, &cy);
-    RectF targetWnd = { (float)cx, (float)cy, (float)(cx + g_winW), (float)(cy + g_winH) };
-
-    bool boundsChanged = (fabsf((targetWnd.right - targetWnd.left) - (float)(curWnd.right - curWnd.left)) > 1.0f ||
-                          fabsf((targetWnd.bottom - targetWnd.top) - (float)(curWnd.bottom - curWnd.top)) > 1.0f ||
-                          !EqualRect(&startPreview, &targetPreview));
-
-    if (boundsChanged) {
-        g_layoutTransition.rcWndStart = ToRectF(curWnd);
-        g_layoutTransition.rcWndTarget = targetWnd;
-        g_layoutTransition.rcDockPreviewStart = startPreview;
-        g_layoutTransition.rcDockPreviewTarget = targetPreview;
-        g_layoutTransition.rcDockStripStart = startStrip;
-        g_layoutTransition.rcDockStripTarget = targetStrip;
-        g_layoutTransition.rcDockTitleStart = startTitle;
-        g_layoutTransition.rcDockTitleTarget = targetTitle;
-
-        // Restore start visual state for smooth lerp
-        g_rcDockIconStrip = startStrip;
-        g_rcCentralPreview = startPreview;
-        g_rcDockTitleBar = startTitle;
-        g_windows[g_selectedIndex].rcThumbActual = startPreview;
-
-        for (auto& w : g_windows) {
-            w.rcCellStart = w.rcCell;
-            w.rcCellTarget = w.rcCell;
-            w.isNewEntry = false;
-        }
-
-        RegisterThumbnails();
-        g_layoutTransition.progress = 0.0f;
-        g_layoutTransition.duration = 0.250f; // 250ms WinUI 3 RepositionThemeAnimation standard
-        g_layoutTransition.active = true;
-        StartAnimationTicker();
-    } else {
-        UpdateDockThumbnailDwm();
-    }
+    ComputeTransitionLayout(hMon);
+    CommitLayoutTransition(hMon);
 }
 
 // Linear navigation: Tab, Shift+Tab, Left, Right, Hotkeys, Scroll
@@ -11001,24 +12416,28 @@ static void UpdateChevronAnimationTargets(bool immediate) {
 
     if (newTargetPrev != g_animChevronAlphaTargetPrev) {
         g_animChevronStartAlphaPrev = g_animChevronAlphaPrev;
-        g_animChevronProgressPrev = 0.0f;
+        g_animChevronTransformStartPrev = g_animChevronTransformPrev;
+        StartOpacityMotion(g_chevronRevealPrev, g_animChevronAlphaPrev, newTargetPrev);
+        StartMotionTrack(g_animChevronProgressPrev);
         g_animChevronAlphaTargetPrev = newTargetPrev;
     }
     if (newTargetNext != g_animChevronAlphaTargetNext) {
         g_animChevronStartAlphaNext = g_animChevronAlphaNext;
-        g_animChevronProgressNext = 0.0f;
+        g_animChevronTransformStartNext = g_animChevronTransformNext;
+        StartOpacityMotion(g_chevronRevealNext, g_animChevronAlphaNext, newTargetNext);
+        StartMotionTrack(g_animChevronProgressNext);
         g_animChevronAlphaTargetNext = newTargetNext;
     }
 
-    if (g_scrollTransition.active) {
-        g_animChevronDuration = g_scrollTransition.duration;
-    } else {
-        g_animChevronDuration = 0.167f;
-    }
+    g_animChevronDuration = 0.167f;
 
     if (immediate || !AreAnimationsGloballyEnabled()) {
         g_animChevronAlphaPrev = g_animChevronAlphaTargetPrev;
         g_animChevronAlphaNext = g_animChevronAlphaTargetNext;
+        g_animChevronTransformPrev = g_animChevronAlphaTargetPrev;
+        g_animChevronTransformNext = g_animChevronAlphaTargetNext;
+        g_chevronRevealPrev = {};
+        g_chevronRevealNext = {};
         g_animChevronProgressPrev = 1.0f;
         g_animChevronProgressNext = 1.0f;
     } else if (g_animChevronProgressPrev < 1.0f || g_animChevronProgressNext < 1.0f ||
@@ -11092,7 +12511,7 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
             g_animCloseBtnAlpha = 0.0f;
             g_animCloseBtnHoverAlpha = 0.0f;
             for (auto& w : g_windows) {
-                w.closeBtnAlpha = 0.0f;
+                SnapCloseButtonMotion(w, 0.0f);
             }
         }
         return;
@@ -11150,7 +12569,8 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
             if (thumbHoverChanged || rectChanged) {
                 TriggerHoverAnimation(thumbIdx);
             }
-            if (closeHoverChanged || entryHoverChanged) {
+            UpdateMicrointeractionTargets();
+            if (closeHoverChanged || entryHoverChanged || chevronHoverChanged) {
                 StartAnimationTicker();
             }
         } else {
@@ -11171,13 +12591,14 @@ static void UpdateHoverAtPoint(HWND hWnd, int x, int y, bool allowAnimation) {
             for (int i = 0; i < (int)g_windows.size(); i++) {
                 bool shouldShowClose = (i == entryIdx && g_settings.showCloseButton && !IsWindowTruncated(i));
                 if (DockLayoutActive() && DockCloseButtonIsHidden()) shouldShowClose = false;
-                g_windows[i].closeBtnAlpha = shouldShowClose ? 1.0f : 0.0f;
+                SnapCloseButtonMotion(g_windows[i], shouldShowClose ? 1.0f : 0.0f);
                 float s = (ThumbnailHoverIsZoom() && i == thumbIdx && !IsWindowTruncated(i)) ? (1.0f + SWS_HOVER_ZOOM_DELTA) : 1.0f;
                 g_windows[i].hoverScale = s;
                 g_windows[i].hoverScaleStart = s;
                 g_windows[i].hoverScaleTarget = s;
                 g_windows[i].hoverScaleProgress = 1.0f;
-                g_windows[i].hoverScaleDuration = 0.150f;
+                g_windows[i].hoverScaleDuration = 0.167f;
+                g_windows[i].hoverScaleClock = {};
             }
             if (ThumbnailHoverIsZoom()) {
                 UpdateThumbnailAnimations();
@@ -11225,7 +12646,7 @@ static void UpdateHoverFromCursor(bool allowAnimation) {
                 g_animCloseBtnHoverAlpha = 0.0f;
                 g_animChevronHoverAlphaPrev = g_animChevronHoverAlphaNext = 0.0f;
                 for (auto& w : g_windows) {
-                    w.closeBtnAlpha = 0.0f;
+                    SnapCloseButtonMotion(w, 0.0f);
                     w.hoverScale = w.hoverScaleStart = w.hoverScaleTarget = 1.0f;
                     w.hoverScaleProgress = 1.0f;
                 }
@@ -11249,7 +12670,7 @@ static void UpdateEntryForWindow(WindowEntry& e) {
     InvalidateStaticCache();
     GetWindowTextW(e.hWnd, e.title, 256);
     if (!e.title[0]) InternalGetWindowText(e.hWnd, e.title, 256);
-    e.hIcon = LoadWindowIcon(e.hWnd);
+    e.hIcon = LoadWindowIcon(e.hWnd, &e.iconCell, true);
 
     if (g_settings.showApplications && wcscmp(g_settings.showTitles, L"windowTitle") != 0) {
         WCHAR appName[256] = {0};
@@ -11274,20 +12695,51 @@ static void UpdateEntryForWindow(WindowEntry& e) {
     }
 }
 
+// Keep collapsed and saved groups in the same member-MRU order used by
+// BuildWindowList. The app's card/index stays put when its representative changes.
+static bool RefreshGroupRepresentative(WindowEntry& entry) {
+    auto& members = entry.groupWindows;
+    members.erase(std::remove_if(members.begin(), members.end(), [](HWND h) {
+        return !IsWindow(h);
+    }), members.end());
+    if (members.empty()) return false;
+    std::stable_sort(members.begin(), members.end(), [](HWND a, HWND b) {
+        return GetMruRank(a) < GetMruRank(b);
+    });
+    if (entry.hWnd == members.front()) return false;
+    for (const auto& kv : entry.hThumbs) {
+        if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
+    }
+    entry.hThumbs.clear();
+    entry.hWnd = members.front();
+    entry.sourceSize = {};
+    entry.effectiveSourceSize = {};
+    entry.rcSourceCrop = {};
+    UpdateEntryForWindow(entry);
+    RefreshEntrySourceSize(entry);
+    return true;
+}
+
 static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
+    if (!IsWindow(hDestroyed)) InvalidateWindowIcon(hDestroyed);
     if ((!g_isVisible && !g_isPendingShow) || g_windows.empty()) return;
     InvalidateStaticCache();
+    // Filtering a minimized drill-in member is not destruction: keep that live
+    // member in the saved app unless the entire app is now minimized/hidden.
+    bool minimizedOnly = g_settings.hideMinimizedWindows && IsWindow(hDestroyed) &&
+                         IsIconic(hDestroyed) && IsEligibleWindow(hDestroyed);
 
     if (g_drilledIn) {
         for (auto it = g_savedAppList.begin(); it != g_savedAppList.end();) {
             auto& grp = it->groupWindows;
-            grp.erase(std::remove(grp.begin(), grp.end(), hDestroyed), grp.end());
-            if (it->hWnd == hDestroyed) {
+            if (!minimizedOnly) grp.erase(std::remove(grp.begin(), grp.end(), hDestroyed), grp.end());
+            bool hideGroup = g_settings.hideMinimizedWindows && IsEntryMinimized(*it);
+            if (it->hWnd == hDestroyed || hideGroup) {
                 for (const auto& kv : it->hThumbs) {
                     if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
                 }
                 it->hThumbs.clear();
-                if (grp.empty()) {
+                if (grp.empty() || hideGroup) {
                     int erased = (int)(it - g_savedAppList.begin());
                     if (erased < g_savedSelectedIndex) --g_savedSelectedIndex;
                     if (erased < g_savedLayoutStartIndex) --g_savedLayoutStartIndex;
@@ -11297,10 +12749,29 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
                     g_savedLayoutStartIndex = std::clamp(g_savedLayoutStartIndex, 0, last);
                     continue;
                 }
-                it->hWnd = grp.front();
-                UpdateEntryForWindow(*it);
+                if (!RefreshGroupRepresentative(*it)) UpdateEntryForWindow(*it);
             }
             ++it;
+        }
+    }
+
+    // Handle non-representative membership changes before the departing-entry
+    // transition code. If only minimized survivors remain, retire the app card.
+    if (g_settings.showApplications && !g_drilledIn) {
+        for (auto& entry : g_windows) {
+            auto& members = entry.groupWindows;
+            auto member = std::find(members.begin(), members.end(), hDestroyed);
+            if (entry.hWnd == hDestroyed || member == members.end()) continue;
+            if (!minimizedOnly) members.erase(member);
+            if (g_settings.hideMinimizedWindows && IsEntryMinimized(entry)) {
+                HWND representative = entry.hWnd;
+                RemoveWindowEntryByHwnd(representative);
+                return;
+            }
+            if (RefreshGroupRepresentative(entry)) RecomputeAndReposition();
+            else UpdateEntryForWindow(entry);
+            PaintSwitcher();
+            return;
         }
     }
 
@@ -11308,14 +12779,9 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
         if (g_windows[i].hWnd == hDestroyed) {
             if (g_settings.showApplications && g_windows[i].groupWindows.size() > 1) {
                 auto& group = g_windows[i].groupWindows;
-                group.erase(std::remove(group.begin(), group.end(), hDestroyed), group.end());
-                if (!group.empty()) {
-                    g_windows[i].hWnd = group[0];
-                    UpdateEntryForWindow(g_windows[i]);
-                    for (const auto& kv : g_windows[i].hThumbs) {
-                        if (kv.second) SafeDwmUnregisterThumbnail(kv.second);
-                    }
-                    g_windows[i].hThumbs.clear();
+                if (!minimizedOnly) group.erase(std::remove(group.begin(), group.end(), hDestroyed), group.end());
+                if (!group.empty() && !(g_settings.hideMinimizedWindows && IsEntryMinimized(g_windows[i]))) {
+                    if (!RefreshGroupRepresentative(g_windows[i])) UpdateEntryForWindow(g_windows[i]);
                     for (auto& rem : g_windows) {
                         RefreshEntrySourceSize(rem);
                     }
@@ -11330,17 +12796,8 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
                 int closedIndex = i;
                 int oldSize = (int)g_windows.size();
 
-                DepartingEntrySnapshot snap = {};
-                snap.hWnd = hDestroyed;
-                snap.rcCellStart = g_windows[i].rcCell;
-                snap.rcCellCurrent = g_windows[i].rcCell;
-                snap.rcThumbStart = g_windows[i].rcThumbActual;
-                snap.rcThumbCurrent = g_windows[i].rcThumbActual;
-                snap.alpha = 1.0f;
-                snap.scale = 1.0f;
-                snap.hIcon = g_windows[i].hIcon;
-                wcsncpy_s(snap.title, g_windows[i].title, _TRUNCATE);
-                snap.groupWindows = g_windows[i].groupWindows;
+                CaptureLayoutTransitionStart();
+                DepartingEntrySnapshot snap = CaptureDepartingEntry(g_windows[i]);
 
                 if (DockLayoutActive()) {
                     for (const auto& kv : g_windows[i].hThumbs) {
@@ -11377,7 +12834,7 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
                     int slideDir = (closedIndex < oldSize - 1) ? 1 : -1;
                     int travelDist = DpiScale(48, g_dpiX) * slideDir;
                     g_dockPreviewSlide.active = true;
-                    g_dockPreviewSlide.progress = 0.0f;
+                    StartMotionTrack(g_dockPreviewSlide.progress, 0.0f);
                     g_dockPreviewSlide.duration = 0.250f;
                     g_dockPreviewSlide.travelDistance = (float)travelDist;
                     g_dockPreviewSlide.currentOffset = (float)travelDist;
@@ -11389,89 +12846,16 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
                     g_dockPreviewSlide.currentAlpha = 1.0f;
                 }
 
-                RECT curWnd = {};
-                GetWindowRect(g_hSwitcher, &curWnd);
-                g_layoutTransition.rcWndStart = ToRectF(curWnd);
-                g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
-                g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
-                g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
-
-                for (auto& w : g_windows) {
-                    w.rcCellStart = w.rcCell;
-                    w.rcThumbStart = w.rcThumbActual;
-                    w.isNewEntry = false;
-                }
-
                 for (auto& rem : g_windows) {
                     RefreshEntrySourceSize(rem);
                 }
 
                 HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
-                ComputeLayout(hMon);
-                if (DockLayoutActive()) {
-                    UpdateDockPreviewForSelection();
-                }
-                g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
-                g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
-                g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
+                RegisterThumbnailsEarly();
+                ComputeTransitionLayout(hMon);
+                CommitLayoutTransition(hMon);
                 UpdateChevronLayout(g_hSwitcher);
                 UpdateChevronAnimationTargets(false);
-
-                MONITORINFO mi = { sizeof(mi) };
-                GetMonitorInfoW(hMon, &mi);
-                int cx, cy;
-                GetSwitcherPosition(mi.rcWork, &cx, &cy);
-                g_layoutTransition.rcWndTarget = { (float)cx, (float)cy, (float)(cx + g_winW), (float)(cy + g_winH) };
-
-                for (auto& w : g_windows) {
-                    w.rcCellTarget = w.rcCell;
-                    w.rcThumbTarget = w.rcThumbActual;
-                    if (DockLayoutActive()) {
-                        if (&w == &g_windows[g_selectedIndex] && DockShowPreview()) {
-                            w.rcThumbStart = g_rcCentralPreview;
-                            w.rcThumbTarget = g_rcCentralPreview;
-                            w.rcThumbActual = g_rcCentralPreview;
-                        } else {
-                            w.rcThumbStart = { 0, 0, 0, 0 };
-                            w.rcThumbTarget = { 0, 0, 0, 0 };
-                            w.rcThumbActual = { 0, 0, 0, 0 };
-                        }
-                    }
-
-                    bool wasNotVisible = (w.rcCellStart.left == 0 && w.rcCellStart.right == 0 &&
-                                          w.rcCellStart.top == 0 && w.rcCellStart.bottom == 0);
-                    bool isNowVisible = (w.rcCellTarget.left != 0 || w.rcCellTarget.right != 0 ||
-                                         w.rcCellTarget.top != 0 || w.rcCellTarget.bottom != 0);
-
-                    if (w.isNewEntry || (wasNotVisible && isNowVisible)) {
-                        // Newly revealed entry from overflow: blossom in place with smooth fade and subtle scale, never animating from (0,0)
-                        w.isNewEntry = true;
-                        w.enterAlpha = 0.0f;
-                        w.enterScale = 0.94f;
-                        w.rcCellStart = w.rcCellTarget;
-                        w.rcThumbStart = w.rcThumbTarget;
-                        w.rcCell = w.rcCellTarget;
-                        w.rcThumbActual = w.rcThumbTarget;
-                    } else if (!isNowVisible && !wasNotVisible) {
-                        // Overflow must remain empty after the reflow settles.
-                        w.rcCellStart = w.rcCellTarget = w.rcCell = {};
-                        w.rcThumbStart = w.rcThumbTarget = w.rcThumbActual = {};
-                    } else if (wasNotVisible && !isNowVisible) {
-                        // Remained overflown / truncated
-                        w.rcCellStart = { 0, 0, 0, 0 };
-                        w.rcThumbStart = { 0, 0, 0, 0 };
-                        w.rcCellTarget = { 0, 0, 0, 0 };
-                        w.rcThumbTarget = { 0, 0, 0, 0 };
-                        w.rcCell = { 0, 0, 0, 0 };
-                        w.rcThumbActual = { 0, 0, 0, 0 };
-                    } else {
-                        // Surviving visible entry: glides from old cell to new cell
-                        w.rcCell = w.rcCellStart;
-                        if (!DockLayoutActive()) {
-                            w.rcThumbActual = w.rcThumbStart;
-                        }
-                    }
-                }
 
                 g_hoverIndex = -1;
                 g_hoverThumbIndex = -1;
@@ -11480,10 +12864,6 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
                 g_animHoverActive = false;
                 g_animHoverAlphaCurrent = 0.0f;
                 g_animHoverAlphaTarget = 0.0f;
-                g_layoutTransition.progress = 0.0f;
-                g_layoutTransition.duration = 0.250f;
-                g_layoutTransition.active = true;
-                StartAnimationTicker();
                 return;
             } else {
                 for (const auto& kv : g_windows[i].hThumbs) {
@@ -11549,8 +12929,32 @@ static void AddWindowEntry(HWND hWnd) {
         return;
     }
 
-    // Check if hWnd already exists in g_windows
+    // A redraw/foreground event can refresh an already visible drill member.
+    // Reconcile the saved app before the visible-entry early returns below.
+    if (g_drilledIn) {
+        for (auto& saved : g_savedAppList) {
+            if (std::find(saved.groupWindows.begin(), saved.groupWindows.end(), hWnd) != saved.groupWindows.end()) {
+                RefreshGroupRepresentative(saved);
+                break;
+            }
+        }
+    }
+
+    // Existing tasks must obey live minimized filtering too, before the early
+    // metadata/member returns. A mixed restored/minimized app remains listed.
     for (size_t i = 0; i < g_windows.size(); i++) {
+        auto& entry = g_windows[i];
+        bool member = g_settings.showApplications && !g_drilledIn &&
+                      std::find(entry.groupWindows.begin(), entry.groupWindows.end(), hWnd) != entry.groupWindows.end();
+        if ((entry.hWnd == hWnd || member) && g_settings.hideMinimizedWindows && IsEntryMinimized(entry)) {
+            RemoveWindowEntryByHwnd(entry.hWnd);
+            return;
+        }
+        if (member && RefreshGroupRepresentative(entry)) {
+            RecomputeAndReposition();
+            if (g_isVisible) PaintSwitcher();
+            return;
+        }
         if (g_windows[i].hWnd == hWnd) {
             WCHAR curTitle[256] = {0};
             GetWindowTextW(hWnd, curTitle, 256);
@@ -11570,18 +12974,31 @@ static void AddWindowEntry(HWND hWnd) {
     }
 
     if (g_drilledIn) {
-        for (const auto& w : g_savedAppList) {
-            if (w.hWnd == hWnd) return;
+        for (auto& w : g_savedAppList) {
             auto& grp = w.groupWindows;
-            if (std::find(grp.begin(), grp.end(), hWnd) != grp.end()) return;
+            if (w.hWnd == hWnd || std::find(grp.begin(), grp.end(), hWnd) != grp.end()) {
+                if (g_settings.hideMinimizedWindows && IsEntryMinimized(w)) {
+                    RemoveWindowEntryByHwnd(w.hWnd);
+                    return;
+                }
+                RefreshGroupRepresentative(w);
+                WCHAR drilledKey[MAX_PATH] = {}, memberKey[MAX_PATH] = {};
+                GetWindowGroupKey(g_windows.front().hWnd, drilledKey, ARRAYSIZE(drilledKey));
+                GetWindowGroupKey(hWnd, memberKey, ARRAYSIZE(memberKey));
+                // A restored member of the current drill must continue through
+                // insertion; saved membership alone does not make it visible.
+                if (!drilledKey[0] || wcscmp(drilledKey, memberKey) != 0) return;
+                break;
+            }
         }
     }
 
     WindowEntry e = {};
     if (!IsEligibleWindow(hWnd, &e)) return;
 
-    // If hideMinimizedWindows is enabled and window is iconic, ignore
-    if (g_settings.hideMinimizedWindows && IsIconic(hWnd)) return;
+    // Collapsed apps retain minimized members while another member is restored.
+    if (g_settings.hideMinimizedWindows && IsIconic(hWnd) &&
+        (!g_settings.showApplications || g_drilledIn || g_isAltBacktickSameApp)) return;
 
     // ── Defensive cleanup: purge pending-close tracking and any departing ghost
     // for this window. With lazy removal (CloseSwitcherEntry no longer removes the
@@ -11629,7 +13046,10 @@ static void AddWindowEntry(HWND hWnd) {
                 WCHAR savedKey[MAX_PATH] = {0};
                 GetWindowGroupKey(saved.hWnd, savedKey, ARRAYSIZE(savedKey));
                 if (wcscmp(savedKey, newKey) == 0) {
-                    saved.groupWindows.push_back(hWnd);
+                    if (std::find(saved.groupWindows.begin(), saved.groupWindows.end(), hWnd) == saved.groupWindows.end()) {
+                        saved.groupWindows.push_back(hWnd);
+                    }
+                    RefreshGroupRepresentative(saved);
                     break;
                 }
             }
@@ -11640,6 +13060,7 @@ static void AddWindowEntry(HWND hWnd) {
                 GetWindowGroupKey(saved.hWnd, savedKey, ARRAYSIZE(savedKey));
                 if (wcscmp(savedKey, newKey) == 0) {
                     saved.groupWindows.push_back(hWnd);
+                    RefreshGroupRepresentative(saved);
                     foundInSaved = true;
                     break;
                 }
@@ -11659,12 +13080,14 @@ static void AddWindowEntry(HWND hWnd) {
             GetWindowGroupKey(g_windows[i].hWnd, existingKey, ARRAYSIZE(existingKey));
             if (newKey[0] && wcscmp(newKey, existingKey) == 0) {
                 g_windows[i].groupWindows.push_back(hWnd);
+                if (RefreshGroupRepresentative(g_windows[i])) RecomputeAndReposition();
                 InvalidateStaticCache();
                 if (g_isVisible) PaintSwitcher();
                 return;
             }
         }
         e.groupWindows.push_back(hWnd);
+        if (g_settings.hideMinimizedWindows && IsEntryMinimized(e)) return;
         UpdateEntryForWindow(e);
 
         // MRU-ranked insertion: same comparator as InitWindowList's stable_sort.
@@ -11716,91 +13139,14 @@ static void AddWindowEntry(HWND hWnd) {
 
     if (g_isVisible) {
         if (AreAnimationsGloballyEnabled() && g_settings.enableAnimations) {
-            RECT curWnd = {};
-            GetWindowRect(g_hSwitcher, &curWnd);
-            g_layoutTransition.rcWndStart = ToRectF(curWnd);
-            g_layoutTransition.rcDockStripStart = g_rcDockIconStrip;
-            g_layoutTransition.rcDockPreviewStart = g_rcCentralPreview;
-            g_layoutTransition.rcDockTitleStart = g_rcDockTitleBar;
-
-            for (auto& w : g_windows) {
-                w.rcCellStart = w.rcCell;
-                w.rcThumbStart = w.rcThumbActual;
-                w.isNewEntry = (w.hWnd == hWnd);
-                if (w.isNewEntry) {
-                    w.enterAlpha = 0.0f;
-                    w.enterScale = 0.94f;
-                } else {
-                    w.enterAlpha = 1.0f;
-                    w.enterScale = 1.0f;
-                }
-            }
-
+            CaptureLayoutTransitionStart();
             HMONITOR hMon = g_hCurrentMonitor ? g_hCurrentMonitor : MonitorFromWindow(g_hSwitcher, MONITOR_DEFAULTTONEAREST);
-            ComputeLayout(hMon);
-            g_layoutTransition.rcDockStripTarget = g_rcDockIconStrip;
-            g_layoutTransition.rcDockPreviewTarget = g_rcCentralPreview;
-            g_layoutTransition.rcDockTitleTarget = g_rcDockTitleBar;
+            RegisterThumbnailsEarly();
+            for (auto& entry : g_windows) RefreshEntrySourceSize(entry);
+            ComputeTransitionLayout(hMon);
+            CommitLayoutTransition(hMon);
             UpdateChevronLayout(g_hSwitcher);
             UpdateChevronAnimationTargets(false);
-
-            MONITORINFO mi = { sizeof(mi) };
-            GetMonitorInfoW(hMon, &mi);
-            int cx, cy;
-            GetSwitcherPosition(mi.rcWork, &cx, &cy);
-            g_layoutTransition.rcWndTarget = { (float)cx, (float)cy, (float)(cx + g_winW), (float)(cy + g_winH) };
-
-            for (auto& w : g_windows) {
-                w.rcCellTarget = w.rcCell;
-                w.rcThumbTarget = w.rcThumbActual;
-                if (DockLayoutActive()) {
-                    if (&w == &g_windows[g_selectedIndex] && DockShowPreview()) {
-                        w.rcThumbStart = g_rcCentralPreview;
-                        w.rcThumbTarget = g_rcCentralPreview;
-                        w.rcThumbActual = g_rcCentralPreview;
-                    } else {
-                        w.rcThumbStart = { 0, 0, 0, 0 };
-                        w.rcThumbTarget = { 0, 0, 0, 0 };
-                        w.rcThumbActual = { 0, 0, 0, 0 };
-                    }
-                }
-
-                bool wasNotVisible = (w.rcCellStart.left == 0 && w.rcCellStart.right == 0 &&
-                                      w.rcCellStart.top == 0 && w.rcCellStart.bottom == 0);
-                bool isNowVisible = (w.rcCellTarget.left != 0 || w.rcCellTarget.right != 0 ||
-                                     w.rcCellTarget.top != 0 || w.rcCellTarget.bottom != 0);
-
-                if (w.isNewEntry || (wasNotVisible && isNowVisible)) {
-                    // Newly added or newly revealed entry from overflow: blossom in place with smooth fade and subtle scale
-                    w.isNewEntry = true;
-                    w.enterAlpha = 0.0f;
-                    w.enterScale = 0.94f;
-                    w.rcCellStart = w.rcCellTarget;
-                    w.rcThumbStart = w.rcThumbTarget;
-                    w.rcCell = w.rcCellTarget;
-                    w.rcThumbActual = w.rcThumbTarget;
-                } else if (!isNowVisible && !wasNotVisible) {
-                    // Overflow must remain empty after the reflow settles.
-                    w.rcCellStart = w.rcCellTarget = w.rcCell = {};
-                    w.rcThumbStart = w.rcThumbTarget = w.rcThumbActual = {};
-                } else if (wasNotVisible && !isNowVisible) {
-                    // Remained overflown / truncated
-                    w.rcCellStart = { 0, 0, 0, 0 };
-                    w.rcThumbStart = { 0, 0, 0, 0 };
-                    w.rcCellTarget = { 0, 0, 0, 0 };
-                    w.rcThumbTarget = { 0, 0, 0, 0 };
-                    w.rcCell = { 0, 0, 0, 0 };
-                    w.rcThumbActual = { 0, 0, 0, 0 };
-                } else {
-                    // Surviving visible entry: glides from old cell to new cell
-                    w.rcCell = w.rcCellStart;
-                    if (!DockLayoutActive()) {
-                        w.rcThumbActual = w.rcThumbStart;
-                    }
-                }
-            }
-
-            RegisterThumbnails();
             g_hoverIndex = -1;
             g_hoverThumbIndex = -1;
             g_hoverWnd = NULL;
@@ -11808,10 +13154,6 @@ static void AddWindowEntry(HWND hWnd) {
             g_animHoverActive = false;
             g_animHoverAlphaCurrent = 0.0f;
             g_animHoverAlphaTarget = 0.0f;
-            g_layoutTransition.progress = 0.0f;
-            g_layoutTransition.duration = 0.250f;
-            g_layoutTransition.active = true;
-            StartAnimationTicker();
         } else {
             RecomputeAndReposition();
             g_hoverIndex = -1;
@@ -11861,16 +13203,18 @@ static bool IsTaskViewWindow(HWND hWnd) {
 }
 
 static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND hwnd, LONG idObject, LONG idChild, DWORD dwEventThread, DWORD dwmsEventTime) {
-    if (idObject != OBJID_WINDOW || idChild != CHILDID_SELF) return;
+    if (event != 0x0003 /* EVENT_SYSTEM_FOREGROUND */ &&
+        (idObject != OBJID_WINDOW || idChild != CHILDID_SELF)) return;
     if (!hwnd) return;
     if (event == EVENT_OBJECT_DESTROY) {
+        InvalidateWindowIcon(hwnd);
         RemoveWindowEntryByHwnd(hwnd);
         return;
     }
     if (!IsWindow(hwnd)) return;
 
-    if (event == EVENT_OBJECT_SHOW && RawTouchpadShellSuppressionActive() &&
-        IsTaskViewWindow(hwnd)) {
+    if ((event == EVENT_OBJECT_SHOW || event == 0x0003 /* EVENT_SYSTEM_FOREGROUND */) &&
+        RawTouchpadShellSuppressionActive() && IsTaskViewWindow(hwnd)) {
         ShellFocusRecoveryScope recovery;
         Wh_Log(L"SWS: hid Task View shown by a 3-finger swipe");
         // Hiding the window alone leaves the shell believing Task View is still open, which
@@ -11891,28 +13235,88 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
             Wh_Log(L"SWS: Task View was not foreground, hid it without dismissing");
         }
         ShowWindow(hwnd, SW_HIDE);
-        if (g_hSwitcher && (g_isVisible || g_isPendingShow)) {
+        if (g_hSwitcher && g_isVisible) {
             // Hiding the island can hand the foreground to the shell; keep the switcher
-            // owned so the commit can still activate the selection afterwards.
+            // visible and topmost even when UIPI prevents reactivation.
+            ReassertVisibleSwitcherPresentation();
+        } else if (g_hSwitcher && s_rawTouchpadShieldActive) {
+            ShowWindow(g_hSwitcher, 1);
+            BringWindowToTop(g_hSwitcher);
             SetForegroundWindow(g_hSwitcher);
         }
         return;
     }
+    // A hidden sticky shield can still race the native shell switcher. Handle
+    // this before the visible-session filter, but never restore a hidden shield
+    // as a visible window.
+    if (event == EVENT_OBJECT_SHOW && RawTouchpadShellSuppressionActive() &&
+        IsNativeSwitcherWindow(hwnd)) {
+        ShellFocusRecoveryScope recovery;
+        ShowWindow(hwnd, SW_HIDE);
+        if (g_isVisible && g_hSwitcher) {
+            ReassertVisibleSwitcherPresentation();
+        } else if (s_rawTouchpadShieldActive && g_hSwitcher) {
+            ShowWindow(g_hSwitcher, 1);
+            BringWindowToTop(g_hSwitcher);
+            SetForegroundWindow(g_hSwitcher);
+        }
+        return;
+    }
+
     if (!g_isVisible && !g_isPendingShow) return;
 
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     if (style & WS_CHILD) return;
     if (GetAncestor(hwnd, GA_ROOT) != hwnd) return;
 
-    if (event == EVENT_OBJECT_SHOW) {
-        // Shell windows are suppression-only; they never navigate or commit.
-        if (RawTouchpadShellSuppressionActive() &&
-            IsNativeSwitcherWindow(hwnd)) {
-            ShellFocusRecoveryScope recovery;
-            ShowWindow(hwnd, SW_HIDE);
-            if (g_hSwitcher) SetForegroundWindow(g_hSwitcher);
+    if (event == EVENT_OBJECT_HIDE && IsIconic(hwnd)) {
+        if (!g_settings.hideMinimizedWindows) return;
+        if (g_settings.showApplications && !g_drilledIn && !g_isAltBacktickSameApp) {
+            // A minimized member still belongs to its live app. Filter only
+            // when every member is minimized; do not report member destruction.
+            for (const auto& entry : g_windows) {
+                if (entry.hWnd == hwnd ||
+                    std::find(entry.groupWindows.begin(), entry.groupWindows.end(), hwnd) != entry.groupWindows.end()) {
+                    if (IsEntryMinimized(entry)) RemoveWindowEntryByHwnd(entry.hWnd);
+                    return;
+                }
+            }
             return;
         }
+
+        // The removal helper can regard a hidden HWND as ineligible. Preserve
+        // the saved live membership of a mixed app while it filters the drill
+        // and performs its existing selection/reflow handling.
+        std::vector<HWND> savedMembers;
+        HWND survivingMember = NULL;
+        if (g_drilledIn) {
+            for (const auto& saved : g_savedAppList) {
+                if (std::find(saved.groupWindows.begin(), saved.groupWindows.end(), hwnd) == saved.groupWindows.end()) continue;
+                for (HWND member : saved.groupWindows) {
+                    if (IsWindow(member) && !IsIconic(member)) {
+                        survivingMember = member;
+                        savedMembers = saved.groupWindows;
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        RemoveWindowEntryByHwnd(hwnd);
+        if (g_drilledIn && survivingMember) {
+            for (auto& saved : g_savedAppList) {
+                if (std::find(saved.groupWindows.begin(), saved.groupWindows.end(), survivingMember) != saved.groupWindows.end()) {
+                    saved.groupWindows = std::move(savedMembers);
+                    RefreshGroupRepresentative(saved);
+                    break;
+                }
+            }
+        }
+        return;
+    }
+
+    if (event == EVENT_OBJECT_SHOW) {
+        // Shell windows are suppression-only; they never navigate or commit.
         AddWindowEntry(hwnd);
     } else if (event == EVENT_OBJECT_HIDE || event == EVENT_OBJECT_DESTROY) {
         if (!IsWindowVisible(hwnd) || event == EVENT_OBJECT_DESTROY) {
@@ -11939,11 +13343,28 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
 // key presses can't queue duplicate SC_CLOSE messages (which could re-trigger or
 // dismiss an app's confirmation dialog).
 static void QueueCloseWindow(HWND hw) {
-    if (std::find(s_pendingCloseWindows.begin(), s_pendingCloseWindows.end(), hw) != s_pendingCloseWindows.end()) {
-        return; // close already in flight for this window
+    // Other lifecycle paths can retire the HWND vector while the session closes.
+    // Prune those timestamps before recording a new request.
+    for (auto it = s_pendingCloseDeadlines.begin(); it != s_pendingCloseDeadlines.end();) {
+        if (std::find(s_pendingCloseWindows.begin(), s_pendingCloseWindows.end(), it->first) == s_pendingCloseWindows.end()) {
+            it = s_pendingCloseDeadlines.erase(it);
+        } else {
+            ++it;
+        }
     }
-    PostMessage(hw, WM_SYSCOMMAND, SC_CLOSE, 0);
-    s_pendingCloseWindows.push_back(hw);
+    ULONGLONG now = GetTickCount64();
+    auto pending = std::find(s_pendingCloseWindows.begin(), s_pendingCloseWindows.end(), hw);
+    if (pending != s_pendingCloseWindows.end()) {
+        auto deadline = s_pendingCloseDeadlines.find(hw);
+        if (deadline != s_pendingCloseDeadlines.end() && now < deadline->second) return;
+        s_pendingCloseWindows.erase(pending);
+        s_pendingCloseDeadlines.erase(hw);
+    }
+    // A failed post is not an in-flight close and must remain retryable.
+    if (PostMessage(hw, WM_SYSCOMMAND, SC_CLOSE, 0)) {
+        s_pendingCloseWindows.push_back(hw);
+        s_pendingCloseDeadlines[hw] = now + SWS_CLOSE_COOLDOWN_MS;
+    }
 }
 
 static void CloseSwitcherEntry(int idx) {
@@ -11972,12 +13393,10 @@ static void CloseSwitcherEntry(int idx) {
     }
 }
 
-// The raw path has no hotkey and no Explorer grant for the foreground,
-// so the switcher could fail to become the
-// foreground window and the commit then could not activate the selected window. Tapping
-// an unassigned key first makes this process the one that received the last input, which
-// is what the foreground rules check; the reference mod uses the same key, the one
-// AutoHotkey masks menu keys with.
+// The raw path has no hotkey or Explorer foreground grant. The legacy
+// unassigned-key request is best-effort: UIPI can reject injection and a
+// successful SendInput does not establish foreground eligibility. Log both the
+// request and the actual activation result rather than assuming it succeeded.
 #define SWS_RAW_FOREGROUND_TAP_VK 0xE8
 // The backstop must not end a raw session while the fingers are still down.
 // Every frame refreshes this, so only a lost reader or a missed lift can reach it.
@@ -11988,8 +13407,11 @@ static void TapUnassignedKeyForForeground() {
     inputs[0].ki.wVk = SWS_RAW_FOREGROUND_TAP_VK;
     inputs[1] = inputs[0];
     inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SetLastError(ERROR_SUCCESS);
     UINT sent = SendInput(ARRAYSIZE(inputs), inputs, sizeof(INPUT));
-    Wh_Log(L"SWS: foreground eligibility tap sent=%u/2", sent);
+    DWORD error = sent == ARRAYSIZE(inputs) ? ERROR_SUCCESS : GetLastError();
+    Wh_Log(L"SWS: foreground eligibility tap sent=%u/2 error=%u foreground=%p",
+           sent, error, GetForegroundWindow());
 }
 
 // SetForegroundWindow is the supported cross-process foreground handoff. Do
@@ -12001,7 +13423,11 @@ static bool ActivateRawTouchpadWindow() {
     if (GetForegroundWindow() == g_hSwitcher) return true;
 
     HWND hForeground = GetForegroundWindow();
+    Wh_Log(L"SWS: touchpad handoff context %s",
+           FormatTouchpadForegroundDiagnostic(hForeground, g_hSwitcher).c_str());
+    SetLastError(ERROR_SUCCESS);
     BOOL setForegroundResult = SetForegroundWindow(g_hSwitcher);
+    DWORD foregroundError = setForegroundResult ? ERROR_SUCCESS : GetLastError();
     if (GetForegroundWindow() != g_hSwitcher) {
         // This legacy fallback is retained for the shell's asynchronous
         // activation path; it is not used to manipulate the source window.
@@ -12011,59 +13437,8 @@ static bool ActivateRawTouchpadWindow() {
     bool active = GetForegroundWindow() == g_hSwitcher;
     Wh_Log(L"SWS: touchpad foreground handoff set=%d active=%d source=%p error=%u",
            setForegroundResult, active, hForeground,
-           setForegroundResult ? ERROR_SUCCESS : GetLastError());
+           foregroundError);
     return active;
-}
-
-// The documented TouchpadGesturesController only wins routing while its
-// process is foreground. Sticky launch therefore briefly makes the existing
-// switcher HWND a 1x1 transparent foreground window before the gesture is
-// classified. Horizontal/upward motion promotes that same HWND into the real
-// switcher; a suppressed tap/down stroke keeps the shield until release and
-// then restores the previous foreground window.
-static void BeginRawTouchpadShield() {
-    if (!g_hSwitcher || g_isVisible || g_isPendingShow || s_rawTouchpadShieldActive) {
-        if (s_rawTouchpadShieldActive && g_hSwitcher) {
-            s_rawTouchpadShieldReleasePending = false;
-            KillTimer(g_hSwitcher, SWS_TOUCHPAD_SHIELD_RELEASE_TIMER_ID);
-        }
-        return;
-    }
-
-    HWND hForeground = GetForegroundWindow();
-    if (hForeground && !IsSwitcherWindow(hForeground)) {
-        s_rawShieldRestoreForeground = hForeground;
-    }
-    s_rawTouchpadShieldActive = true;
-    s_rawTouchpadShieldReleasePending = false;
-
-    LONG_PTR exStyle = GetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE);
-    if (!(exStyle & WS_EX_LAYERED)) {
-        SetWindowLongPtrW(g_hSwitcher, GWL_EXSTYLE, exStyle | WS_EX_LAYERED);
-    }
-    SetLayeredWindowAttributes(g_hSwitcher, 0, 0, LWA_ALPHA);
-    SetWindowPos(g_hSwitcher, HWND_TOPMOST, -32000, -32000, 1, 1,
-                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    BringWindowToTop(g_hSwitcher);
-    bool foregroundAcquired = ActivateRawTouchpadWindow();
-    SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID,
-             SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
-    if (foregroundAcquired) {
-        TapUnassignedKeyForForeground();
-        if (!RefreshTouchpadGestureKinds()) {
-            g_touchpadGestureTakeoverAvailable.store(false);
-            Wh_Log(L"SWS: sticky raw gesture shield controller unavailable; shell fallback marker remains active");
-        }
-    } else {
-        // Do not drop the shield here. The raw marker below still suppresses
-        // shell actions for this stroke, and a short retry can win the
-        // foreground before the gesture is classified.
-        s_rawTouchpadShieldFocusStartTick = GetTickCount64();
-        SetTimer(g_hSwitcher, SWS_TOUCHPAD_SHIELD_FOCUS_RETRY_TIMER_ID, 8, NULL);
-        Wh_Log(L"SWS: sticky raw gesture shield foreground pending; retaining raw ownership marker");
-    }
-    Wh_Log(L"SWS: sticky raw gesture shield active (foreground=%d)",
-           GetForegroundWindow() == g_hSwitcher);
 }
 
 static void PromoteRawTouchpadShieldToSession() {
@@ -12081,11 +13456,7 @@ static void PromoteRawTouchpadShieldToSession() {
     RefreshTouchpadGestureKinds();
 }
 
-static void FinishRawTouchpadShield() {
-    if (!s_rawTouchpadShieldActive && !s_rawTouchpadShieldReleasePending &&
-        !s_rawSwipeMarkerActive) {
-        return;
-    }
+static void FinishRawTouchpadShield(bool keepMarkerGrace) {
     HWND hRestore = s_rawShieldRestoreForeground;
     bool restoreForeground = hRestore && GetForegroundWindow() == g_hSwitcher;
     if (g_hSwitcher) {
@@ -12101,10 +13472,14 @@ static void FinishRawTouchpadShield() {
     if (g_hSwitcher && !g_isVisible && !g_isPendingShow && IsWindowVisible(g_hSwitcher)) {
         ShowWindow(g_hSwitcher, SW_HIDE);
     }
-    if (g_hSwitcher && !g_isVisible && !g_isPendingShow) {
-        RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_PROP);
-    }
     s_rawSwipeMarkerActive = false;
+    s_rawStrokeOwned = false;
+    if (keepMarkerGrace) {
+        // Do not republish here: release latency must not extend lift grace.
+        UpdateRawSwipeMarkerTimer();
+    } else {
+        ClearRawSwipeMarker();
+    }
     RefreshTouchpadGestureKinds();
     if (restoreForeground && IsWindow(hRestore)) {
         SetForegroundWindow(hRestore);
@@ -12117,8 +13492,9 @@ static void ScheduleRawTouchpadShieldRelease() {
     SetTimer(g_hSwitcher, SWS_TOUCHPAD_SHIELD_RELEASE_TIMER_ID, 220, NULL);
 }
 
-// Only Raw HID controls the gesture lifecycle. Shell show/hide notifications
-// are never interpreted as finger movement or release.
+// Raw HID controls fallback invocation and navigation. The typed native PTP
+// boundaries can also invoke when Windows blocks background HID delivery.
+// Shell show/hide notifications are never interpreted as finger movement/lift.
 static void BeginTouchpadGesture(int step) {
     // Re-entrant: a new gesture must always be able to (re)open the switcher even if a
     // previous gesture left stale state. Force a clean slate if we are mid-exit.
@@ -12139,6 +13515,7 @@ static void BeginTouchpadGesture(int step) {
     }
     if (g_hSwitcher) {
         BringWindowToTop(g_hSwitcher);
+        TapUnassignedKeyForForeground();
         if (ActivateRawTouchpadWindow()) {
             TapUnassignedKeyForForeground();
         }
@@ -12147,6 +13524,7 @@ static void BeginTouchpadGesture(int step) {
 }
 
 static void EndTouchpadGesture() {
+    s_touchpadCommitActivation = true;
     g_isTouchpadGestureActive = false;
     if (g_hSwitcher) {
         KillTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID);
@@ -12158,10 +13536,9 @@ static void EndTouchpadGesture() {
 
 // Raw-HID frames drive the switcher: the selection follows the finger position.
 // Normal sessions commit on lift; sticky sessions commit only on a fresh tap.
-// With sticky launch enabled, the invisible shield owns hidden three-finger
-// strokes from contact-down: up opens sticky mode, while down and tap are
-// consumed. With it disabled, hidden up/down/tap gestures stay with Windows;
-// horizontal motion still opens the normal switcher. Only exactly three
+// Sticky launch reserves upward motion outside SWS; downward strokes and taps
+// remain Windows-owned. Horizontal motion opens the normal switcher regardless
+// of the sticky-launch setting. Only exactly three
 // fingers navigate.
 // Lift frames can contain bogus edge coordinates, so they never navigate.
 #define SWS_RAW_SWIPE_FINGERS 3
@@ -12177,10 +13554,8 @@ static void EndTouchpadGesture() {
 // While a raw session or sticky shield is open the switcher publishes it on its own window
 // (a window property, so the Explorer side can read it without a cross-process call), and
 // Explorer drops the shell's 'show desktop' swipe action for that gesture (see RaiseDesktop_Hook).
-// The published value is the low 32 bits of GetTickCount64 and it is refreshed as long as
-// three fingers are down, so this window only has to cover the gap between reports plus the
-// moment the fingers lift, where the shell can still run the action it recognised.
-#define SWS_RAW_SWIPE_OWNER_MS 600
+// The low 31 bits encode the last report's tick; bit 31 distinguishes lift grace.
+// Active-report gaps and post-lift shell actions have separate bounded lifetimes.
 // Pacing for the vertical axis: one row (or page) per this interval, which keeps a long drag
 // from walking the layout through itself while still covering several rows when needed.
 #define SWS_RAW_SWIPE_ROW_INTERVAL_MS 140
@@ -12190,20 +13565,35 @@ static void EndTouchpadGesture() {
 #define SWS_RAW_DIRECTION_TRAVEL (SWS_RAW_SWIPE_ENTRY_PITCH / 3)
 
 static void PublishRawSwipe(bool liftGrace = false) {
-    bool stickyFallback = g_settings.stickyTouchpadMode && s_rawGestureSawThree;
-    if (!g_hSwitcher || (!RawTouchpadOwnsInput() && !RawTouchpadClaimsLaunchStroke() &&
-                         !stickyFallback)) {
+    bool cancelledStroke = s_rawStrokeOwned && (s_rawIgnoreUntilLift || liftGrace);
+    // A raw contact outside a visible/pending session is only observed for
+    // classification. It must never publish the shell-suppression marker merely
+    // because sticky mode is enabled; otherwise Explorer drops Show Desktop and
+    // the configured three-finger tap action while the switcher is closed.
+    if (!g_hSwitcher || !TouchpadHandlingEnabled() ||
+        (!RawTouchpadOwnsInput() && !cancelledStroke)) {
         return;
     }
-    s_rawSwipeMarkerActive = true;
-    s_rawSwipePublishTick = GetTickCount64();
-    // Keep the high bit as a short post-lift grace marker. Explorer can then
-    // block an action already queued by the shell without treating a later
-    // Win+Tab/Win+D as part of the previous touchpad stroke.
-    DWORD stamp = (DWORD)s_rawSwipePublishTick & 0x7FFFFFFF;
-    if (liftGrace) stamp |= 0x80000000u;
-    SetPropW(g_hSwitcher, SWS_RAW_SWIPE_PROP,
-             (HANDLE)(ULONG_PTR)(stamp ? stamp : 1));
+    // Only the reader timestamps physical contact/lift. A delayed UI message
+    // must not renew grace, replace a reader-observed lift with live ownership,
+    // or re-own the next outside tap. The UI can promote a live launch candidate
+    // when that same contact actually opens a switcher, copying its timestamp.
+    AcquireSRWLockExclusive(&s_rawSwipeMarkerLock);
+    HANDLE marker = GetPropW(g_hSwitcher, SWS_RAW_SWIPE_PROP);
+    HANDLE session = GetPropW(g_hSwitcher, SWS_RAW_SWIPE_SESSION_PROP);
+    ULONGLONG now = GetTickCount64();
+    bool liveMarker = RawSwipeMarkerRemainingMs(marker, now) != 0;
+    if (!liftGrace && !s_rawIgnoreUntilLift && RawTouchpadOwnsInput() &&
+        (g_isVisible || g_isPendingShow) && liveMarker && !session &&
+        !((DWORD)(ULONG_PTR)marker & SWS_RAW_SWIPE_LIFT_FLAG) &&
+        g_touchpadGesturesEnabled.load() && g_touchpadReaderAvailable.load()) {
+        SetPropW(g_hSwitcher, SWS_RAW_SWIPE_SESSION_PROP, marker);
+    }
+    ReleaseSRWLockExclusive(&s_rawSwipeMarkerLock);
+    s_rawSwipeMarkerActive = liveMarker;
+    s_rawStrokeOwned = liveMarker && !liftGrace;
+    s_rawSwipePublishTick = now;
+    UpdateRawSwipeMarkerTimer();
 }
 
 static bool PreserveRawStrokeOnFocusLoss() {
@@ -12329,19 +13719,173 @@ static bool NavigateRawTouchpad(bool horizontal, int delta, int travel) {
     return moved;
 }
 
+static bool ActivateNativeTouchpadWindow() {
+    if (!g_hSwitcher || !IsWindow(g_hSwitcher)) return false;
+    // Consume Explorer's supported grant before expensive list/layout/icon work
+    // or another input packet can revoke it. The endpoint is revealed offscreen
+    // without activation, never with an old painted frame on the desktop.
+    SetWindowPos(g_hSwitcher, nullptr, -32000, -32000, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    ShowWindow(g_hSwitcher, SW_SHOWNA);
+    SetLastError(ERROR_SUCCESS);
+    BOOL granted = SetForegroundWindow(g_hSwitcher);
+    DWORD error = granted ? ERROR_SUCCESS : GetLastError();
+    bool active = GetForegroundWindow() == g_hSwitcher;
+    Wh_Log(L"SWS: native PTP foreground handoff set=%d active=%d error=%u",
+           granted, active, error);
+    if (!active) ShowWindow(g_hSwitcher, SW_HIDE);
+    return active;
+}
+
+static void CompleteNativeTouchpadInvocation() {
+    if (!s_nativeTouchpadInvocation.token || !s_nativeTouchpadInvocation.completion) return;
+    ULONGLONG now = GetTickCount64();
+    if (!s_nativeTouchpadInvocation.rawAdopted &&
+        now < s_nativeTouchpadInvocation.completionDeadline &&
+        SetTimer(g_hSwitcher, SWS_NATIVE_TOUCHPAD_COMPLETION_TIMER_ID,
+                 (UINT)(s_nativeTouchpadInvocation.completionDeadline - now), nullptr)) {
+        return; // A queued timer from an old invocation must not shorten this wait.
+    }
+    UINT event = s_nativeTouchpadInvocation.completion;
+    DWORD token = s_nativeTouchpadInvocation.token;
+    DWORD tick = s_nativeTouchpadInvocation.completionTick;
+    bool valid = s_nativeTouchpadInvocation.epoch == s_nativeTouchpadRelayEpoch.load() &&
+                 g_touchpadGesturesEnabled.load() && g_touchpadReaderAvailable.load() &&
+                 !g_touchpadReaderStopping.load();
+    bool rawOwnsStroke = s_nativeTouchpadInvocation.rawAdopted &&
+                        s_rawGestureSawThree && s_rawGestureTips > 0;
+    CancelNativeTouchpadInvocation();
+    Wh_Log(L"SWS: native PTP completion (event=%u token=%u rawOwnsStroke=%d sticky=%d)",
+           event, token, rawOwnsStroke, g_isSticky);
+    // Moving focus to SWS can finish/cancel the old native context while reports
+    // now arrive in SWS. Once adopted, only the actual HID lift commits it.
+    if (!valid || rawOwnsStroke) return;
+    s_nativeTouchpadRawDiscardTick = tick;
+    s_nativeTouchpadRawDiscardPending = true;
+    g_isTouchpadGestureActive = false;
+    KillTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID);
+    if (!s_rawSessionOwned || (!g_isVisible && !g_isPendingShow)) return;
+    if (event == SWS_NATIVE_TOUCHPAD_CANCEL) StartExitAnimation(false);
+    else if (!g_isSticky) EndTouchpadGesture();
+    // Sticky invocation's original swipe ends without accepting the selection.
+}
+
+static void HandleNativeTouchpadBoundary(DWORD packet, DWORD token) {
+    DWORD event = packet & 7u;
+    DWORD epoch = packet >> 3;
+    DWORD policy = (DWORD)(ULONG_PTR)GetPropW(g_hSwitcher, SWS_NATIVE_SWIPE_POLICY_PROP);
+    if (!token || !epoch || epoch != s_nativeTouchpadRelayEpoch.load() ||
+        !TouchpadHandlingEnabled() ||
+        !g_touchpadReaderAvailable.load() || g_touchpadReaderStopping.load() ||
+        (policy & 3u) != 3u) {
+        return;
+    }
+    if (event == 1 || event == 2 || event == 3) {
+        DWORD age = (DWORD)GetTickCount64() - (DWORD)GetMessageTime();
+        if (age > SWS_NATIVE_TOUCHPAD_START_MAX_AGE_MS ||
+            (event == 2 && !(policy & 4u)) || !NativeSwipeSourceGateActive() ||
+            g_isVisible || g_isPendingShow || g_animExitActive || g_isHidingSwitcher ||
+            ExplicitShellInputDown()) {
+            return;
+        }
+        HWND source = GetForegroundWindow();
+        s_nativeTouchpadInvocation = {token, epoch,
+            s_rawGestureSawThree && s_rawGestureTips > 0 &&
+                GetTickCount64() - s_rawTouchpadLastFrameTick < 1000,
+            event == 2};
+        if (!ActivateNativeTouchpadWindow()) {
+            CancelNativeTouchpadInvocation();
+            return;
+        }
+        s_rawSessionOwned = true;
+        g_isTouchpadGestureActive = true;
+        s_rawIgnoreUntilLift = false;
+        s_rawSwipePassedToWindows = false;
+        s_rawGestureMoved = true;
+        s_rawTapEligible = false;
+        s_rawCommandEligible = false;
+        s_rawVerticalActionDir = event == 2 ? -1 : 0;
+        s_rawGestureAnchorX = s_rawDirectionAnchorX = s_rawLastFrameX;
+        s_rawGestureAnchorY = s_rawDirectionAnchorY = s_rawLastFrameY;
+        s_rawAppliedX = 0;
+        s_rawRowTick = 0;
+        if (!s_nativeTouchpadInvocation.rawAdopted) {
+            // Discard stale state, not a fabricated HID contact or lift.
+            s_rawGestureTips = 0;
+            s_rawGestureSawThree = false;
+            s_rawGestureArmed = false;
+        }
+        ShowSwitcher(event == 2, true, source);
+        if (!s_nativeTouchpadInvocation.token ||
+            s_nativeTouchpadInvocation.epoch != s_nativeTouchpadRelayEpoch.load() ||
+            !TouchpadHandlingEnabled() ||
+            !g_touchpadReaderAvailable.load() || g_touchpadReaderStopping.load() || !g_isVisible ||
+            GetForegroundWindow() != g_hSwitcher) {
+            HideSwitcher();
+            return;
+        }
+        PromoteRawTouchpadShieldToSession();
+        PublishRawSwipe();
+        if (event != 2) {
+            int step = event == 3 ? 1 : -1;
+            if (g_settings.reverseScrollDirection) step = -step;
+            NavigateRawTouchpad(true, step, 0);
+        }
+        KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
+        SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, nullptr);
+        Wh_Log(L"SWS: native PTP invoked (direction=%u token=%u epoch=%u rawAdopted=%d)",
+               event, token, epoch, s_nativeTouchpadInvocation.rawAdopted);
+        return;
+    }
+    if ((event != SWS_NATIVE_TOUCHPAD_END && event != SWS_NATIVE_TOUCHPAD_CANCEL) ||
+        s_nativeTouchpadInvocation.token != token || s_nativeTouchpadInvocation.epoch != epoch) {
+        return;
+    }
+    if (s_nativeTouchpadInvocation.completion) return; // Do not extend the wait.
+    s_nativeTouchpadInvocation.completion = event;
+    s_nativeTouchpadInvocation.completionTick = (DWORD)GetMessageTime();
+    s_nativeTouchpadInvocation.completionDeadline = GetTickCount64() + SWS_NATIVE_TOUCHPAD_HANDOFF_MS;
+    CompleteNativeTouchpadInvocation();
+}
+
 static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     const ULONGLONG now = GetTickCount64();
+    ++s_touchpadInputDiagnostics.uiFrames;
+    s_touchpadInputDiagnostics.lastUiTick.store(now);
+    if (s_nativeTouchpadRawDiscardPending) {
+        if ((LONG)((DWORD)GetMessageTime() - s_nativeTouchpadRawDiscardTick) <= 0) return;
+        s_nativeTouchpadRawDiscardPending = false;
+    }
     const int prevTips = s_rawGestureTips;
     s_rawGestureTips = (int)tips;
 
-    if (!g_settings.handleTouchpadGestures || !g_touchpadReaderAvailable.load()) {
+    if (!TouchpadHandlingEnabled() ||
+        !g_touchpadReaderAvailable.load()) {
         CancelRawTouchpadStroke();
         return;
     }
 
-    if (tips == SWS_RAW_SWIPE_FINGERS || (tips == 0 && s_rawGestureSawThree)) {
+    // Even an ignored frame can carry an early reader-thread publication.
+    // Arrange physical cleanup without depending on UI gesture classification.
+    if (!s_rawSwipeMarkerActive) UpdateRawSwipeMarkerTimer();
+
+    if (tips == SWS_RAW_SWIPE_FINGERS && prevTips != SWS_RAW_SWIPE_FINGERS &&
+        !s_rawGestureSawThree && !s_rawIgnoreUntilLift &&
+        !g_isVisible && !g_isPendingShow) {
+        // A stroke which has not opened the switcher belongs to Windows. In
+        // particular, an outside downward swipe must remain Show Desktop even
+        // when sticky launch is enabled. Do not let a previous session's lift
+        // grace consume this new physical stroke.
+        ClearRawSwipeMarker();
+    }
+    if (tips == SWS_RAW_SWIPE_FINGERS || (tips > 0 && s_rawStrokeOwned)) {
         s_rawTouchpadLastFrameTick = now;
         if (prevTips != (int)tips || now - s_rawSwipePublishTick >= 150) PublishRawSwipe();
+    } else if (tips == 0 && prevTips > 0 && s_rawStrokeOwned) {
+        // Publish before the ignore/exit paths: cancellation clears SawThree,
+        // and a partial 3 -> 2 -> 0 lift is still the same owned stroke.
+        s_rawTouchpadLastFrameTick = now;
+        PublishRawSwipe(true);
     }
 
     if (g_animExitActive || (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0) {
@@ -12365,9 +13909,6 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         const ULONGLONG held = now - s_rawGestureStartTick;
         const bool isTap = hadThree && s_rawTapEligible && !s_rawGestureMoved &&
                            held <= SWS_RAW_TAP_MAX_MS;
-        if (hadThree && (s_rawSessionOwned || g_settings.stickyTouchpadMode)) {
-            PublishRawSwipe(true);
-        }
         s_rawGestureArmed = false;
         s_rawGestureSawThree = false;
         s_rawTapEligible = false;
@@ -12375,6 +13916,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         s_rawCommandEligible = false;
         s_rawVerticalActionDir = 0;
         if (hadThree && s_rawSessionOwned && (g_isVisible || g_isPendingShow)) {
+            CancelNativeTouchpadInvocation();
             if (g_isSticky && !isTap) {
                 // Keep the session, not the physical stroke. Focus loss must still
                 // dismiss sticky mode between swipes; no idle commit is needed.
@@ -12438,11 +13980,14 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
             KillTimer(g_hSwitcher, SWS_ALT_POLL_TIMER_ID);
             if (g_isPendingShow) RevealPendingSwitcher();
             SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
-        } else if (g_settings.stickyTouchpadMode) {
-            // Own every three-finger stroke from contact-down in sticky mode.
-            // This is what suppresses Windows' tap and downward actions before
-            // the raw classifier has enough travel to choose a direction.
-            BeginRawTouchpadShield();
+        }
+        if (s_nativeTouchpadInvocation.token) {
+            s_nativeTouchpadInvocation.rawAdopted = true;
+            s_rawGestureMoved = true;
+            s_rawTapEligible = false;
+            s_rawCommandEligible = false;
+            s_rawVerticalActionDir = s_nativeTouchpadInvocation.upward ? -1 : 0;
+            if (s_nativeTouchpadInvocation.completion) CompleteNativeTouchpadInvocation();
         }
         if (RawTouchpadOwnsInput()) {
             PublishRawSwipe();
@@ -12524,6 +14069,10 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
     int dx = x - s_rawGestureAnchorX;
     int dy = y - s_rawGestureAnchorY;
     bool sessionOpen = g_isVisible || g_isPendingShow;
+    // With a complete native source gate, only its typed Start opens SWS.
+    // Raw reports remain the spatial navigation source; an unavailable gate
+    // retains the original raw-only fallback without a second launch race.
+    if (!sessionOpen && NativeSwipeSourceGateActive()) return;
     // Foreground recovery for identified native shell windows is handled by the
     // focus/WinEvent paths. Never fight an unrelated app the user switched to.
     if (axis == 1) {
@@ -12554,6 +14103,7 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
             if (g_hSwitcher && GetForegroundWindow() != g_hSwitcher) {
                 // The tap did not land (seen in a capture): the switcher has to own the
                 // foreground, or the commit cannot activate the selection.
+                TapUnassignedKeyForForeground();
                 ActivateRawTouchpadWindow();
             }
             Wh_Log(L"SWS: raw gesture opened (switcher foreground=%d)", GetForegroundWindow() == g_hSwitcher);
@@ -12583,9 +14133,16 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
         if (!sessionOpen) {
             if (s_rawSwipePassedToWindows) return;
             s_rawGestureMoved = true;
+            // The reader normally publishes the upward candidate before this
+            // UI message arrives. Repeat it here as a fallback for devices that
+            // coalesce HID reports, so the shell's restore-windows action cannot
+            // win the scheduling race.
+            if (TouchpadStickyLaunchEnabled()) {
+                SetRawSwipeUpMarker(physicalDir < 0);
+            }
             // Up/down actions retain their physical meaning even when selection
             // scrolling is reversed. Normal horizontal opening stays non-sticky.
-            if (!g_settings.stickyTouchpadMode) {
+            if (!TouchpadStickyLaunchEnabled()) {
                 s_rawSwipePassedToWindows = true;
                 Wh_Log(L"SWS: raw vertical swipe outside session -> Windows");
             } else if (physicalDir < 0) {
@@ -12609,12 +14166,15 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
                 s_rawGestureAnchorY = y;
                 SetTimer(g_hSwitcher, SWS_TOUCHPAD_IDLE_TIMER_ID, SWS_RAW_SESSION_LOST_TIMEOUT_MS, NULL);
             } else {
-                // Sticky mode owns downward strokes too; they are intentionally
-                // consumed without opening or dismissing a switcher that is not
-                // present. Windows must not receive Show desktop here.
+                // Sticky mode changes only the upward launch gesture while the
+                // switcher is closed. Downward strokes and stationary taps remain
+                // Windows' gestures; the raw reader observes them but does not
+                // claim them or publish a shell-suppression marker.
+                s_rawSwipePassedToWindows = true;
                 s_rawVerticalActionDir = physicalDir;
                 s_rawCommandEligible = false;
-                Wh_Log(L"SWS: suppressed raw touchpad downward swipe outside session");
+                Wh_Log(L"SWS: raw vertical swipe outside session -> Windows (sticky launch=%d)",
+                        TouchpadStickyLaunchEnabled());
             }
             return;
         }
@@ -12644,7 +14204,10 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
                     ExitAppGroup();
                 } else {
                     Wh_Log(L"SWS: raw touchpad down -> dismissing sticky switcher");
-                    HideSwitcher();
+                    // Use the same reverse reveal animation as every other
+                    // non-commit dismissal; HideSwitcher would snap the window
+                    // away and release the controller immediately.
+                    StartExitAnimation(false);
                 }
                 return;
             }
@@ -12665,6 +14228,29 @@ static void HandleRawTouchpadFrame(ULONG tips, ULONG packedPos) {
 }
 
 static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_SWS_NATIVE_TOUCHPAD) {
+        if (hWnd == g_hSwitcher) HandleNativeTouchpadBoundary((DWORD)wParam, (DWORD)lParam);
+        return 0;
+    }
+    if (uMsg == WM_SWS_TOUCHPAD_DIAGNOSTICS) {
+        Wh_Log(L"SWS: native input snapshot event=0x%X %s", (UINT)wParam,
+               FormatTouchpadInputDiagnostics().c_str());
+        // The UI being responsive does not prove the separate reader pump is.
+        // Ask that thread to sample itself; a reply with unchanged raw counters
+        // distinguishes absent delivery from a stalled reader message pump.
+        HWND reader = g_touchpadReaderWindow.load();
+        if (reader && !PostMessageW(reader, WM_SWS_TOUCHPAD_READER_DIAGNOSTICS,
+                                   wParam, (LPARAM)(DWORD)GetTickCount64())) {
+            DWORD error = GetLastError();
+            Wh_Log(L"SWS: reader input snapshot post failed (event=0x%X reader=%p error=%u)",
+                   (UINT)wParam, reader, error);
+        }
+        return 0;
+    }
+    if (uMsg == WM_SWS_ICON_READY) {
+        if (hWnd == g_hSwitcher) ConsumeWindowIconResults();
+        return 0;
+    }
     const bool controlKey = wParam == VK_CONTROL || wParam == VK_LCONTROL || wParam == VK_RCONTROL;
     if (uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) {
         if (!controlKey) g_ctrlTapPending = false;
@@ -12703,6 +14289,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
     }
 
     if (uMsg == WM_TIMER) {
+        if (wParam == SWS_NATIVE_TOUCHPAD_COMPLETION_TIMER_ID) {
+            KillTimer(hWnd, SWS_NATIVE_TOUCHPAD_COMPLETION_TIMER_ID);
+            CompleteNativeTouchpadInvocation();
+            return 0;
+        }
         if (wParam == SWS_HOTKEY_RETRY_TIMER_ID) {
             SWS_RegisterHotkeys();
             return 0;
@@ -12727,23 +14318,53 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             return 0;
         }
 
+        if (wParam == SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID) {
+            if (g_isVisible || g_isPendingShow || !s_touchpadActivationRetryTarget ||
+                !IsWindow(s_touchpadActivationRetryTarget) ||
+                GetTickCount64() >= s_touchpadActivationRetryDeadline ||
+                ExplicitShellInputDown()) {
+                if (s_touchpadActivationRetryTarget && !g_isVisible && !g_isPendingShow) {
+                    Wh_Log(L"SWS: selected-window activation retry ended");
+                }
+                KillTimer(hWnd, SWS_TOUCHPAD_TARGET_FOCUS_RETRY_TIMER_ID);
+                s_touchpadActivationRetryTarget = NULL;
+                s_touchpadActivationRetryDeadline = 0;
+                s_touchpadCommitActivation = false;
+                return 0;
+            }
+            HWND target = s_touchpadActivationRetryTarget;
+            ActivateExitedWindow(target, {});
+            return 0;
+        }
+
         if (wParam == SWS_TOUCHPAD_SHIELD_RELEASE_TIMER_ID) {
             KillTimer(hWnd, SWS_TOUCHPAD_SHIELD_RELEASE_TIMER_ID);
             if ((s_rawTouchpadShieldActive || s_rawSwipeMarkerActive) && !s_rawSessionOwned &&
                 !g_isVisible && !g_isPendingShow) {
                 if (s_rawTouchpadShieldReleasePending && s_rawGestureTips == 0) {
-                    FinishRawTouchpadShield();
+                    FinishRawTouchpadShield(true);
                 } else if (s_rawTouchpadShieldReleasePending) {
-                    // A cancelled stroke is still physically down. Keep the
-                    // shield until the lift rather than releasing Windows'
-                    // action routing mid-stroke.
-                    SetTimer(hWnd, SWS_TOUCHPAD_SHIELD_RELEASE_TIMER_ID, 220, NULL);
+                    if (GetTickCount64() - s_rawTouchpadLastFrameTick >=
+                        SWS_RAW_SESSION_LOST_TIMEOUT_MS) {
+                        // A cancelled, hidden session must not retain a marker
+                        // or keep retrying forever when the lift report is lost.
+                        FinishRawTouchpadShield();
+                    } else {
+                        SetTimer(hWnd, SWS_TOUCHPAD_SHIELD_RELEASE_TIMER_ID, 220, NULL);
+                    }
                 }
             } else {
                 s_rawTouchpadShieldReleasePending = false;
             }
             return 0;
         }
+
+        if (wParam == SWS_RAW_SWIPE_MARKER_EXPIRY_TIMER_ID) {
+            UpdateRawSwipeMarkerTimer();
+            RefreshTouchpadGestureKinds();
+            return 0;
+        }
+
 
         if (wParam == SWS_TOUCHPAD_SHIELD_FOCUS_RETRY_TIMER_ID) {
             KillTimer(hWnd, SWS_TOUCHPAD_SHIELD_FOCUS_RETRY_TIMER_ID);
@@ -12808,21 +14429,26 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (wParam == SWS_CLOSE_VERIFY_TIMER_ID) {
             KillTimer(hWnd, SWS_CLOSE_VERIFY_TIMER_ID);
             std::vector<HWND> toRemove;
+            ULONGLONG now = GetTickCount64();
             for (auto it = s_pendingCloseWindows.begin(); it != s_pendingCloseWindows.end(); ) {
                 HWND h = *it;
-                if (!IsWindow(h) || !IsWindowVisible(h)) {
+                auto deadline = s_pendingCloseDeadlines.find(h);
+                if (!IsWindow(h) || (!IsWindowVisible(h) && !IsIconic(h))) {
                     // Window truly closed (or hid itself) — remove its entry now.
                     // With lazy removal, the entry was never taken out eagerly, so
                     // this is the single point of removal and the departing fade
                     // starts from the entry's real position.
                     toRemove.push_back(h);
+                    s_pendingCloseDeadlines.erase(h);
+                    it = s_pendingCloseWindows.erase(it);
+                } else if (!CanCloseWindow(h) || deadline == s_pendingCloseDeadlines.end() || now >= deadline->second) {
+                    // A modal refusal is protected by CanCloseWindow. Otherwise
+                    // retain deduplication for a bounded asynchronous cooldown,
+                    // then permit a fresh user request without reposting here.
+                    s_pendingCloseDeadlines.erase(h);
                     it = s_pendingCloseWindows.erase(it);
                 } else {
-                    // Window is still alive and visible — it survived the close
-                    // attempt (e.g. it showed a modal "save changes?" dialog).
-                    // The entry was never removed, so it stays exactly where it
-                    // was; just stop tracking the pending close.
-                    it = s_pendingCloseWindows.erase(it);
+                    ++it;
                 }
             }
             for (HWND h : toRemove) {
@@ -12830,14 +14456,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 RemoveWindowEntryByHwnd(h);
             }
             if (!s_pendingCloseWindows.empty()) {
-                if (++s_pendingCloseRetries < 15) { // Try up to ~3 seconds
-                    SetTimer(hWnd, SWS_CLOSE_VERIFY_TIMER_ID, 200, NULL);
-                } else {
-                    s_pendingCloseWindows.clear();
-                    s_pendingCloseRetries = 0;
-                }
+                SetTimer(hWnd, SWS_CLOSE_VERIFY_TIMER_ID, 200, NULL);
             } else {
                 s_pendingCloseRetries = 0;
+                s_pendingCloseDeadlines.clear();
             }
             return 0;
         }
@@ -13339,15 +14961,14 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         return 0;
     case WM_SWS_CANCEL_INPUT:
-        if (g_isVisible || g_isPendingShow) HideSwitcher();
+        if (g_isVisible || g_isPendingShow) StartExitAnimation(false);
         return 0;
     case WM_SWS_TOUCHPAD_READER_CHANGED:
         if (!g_touchpadReaderAvailable.load()) {
             if (s_rawSessionOwned) HideSwitcher();
             CancelRawTouchpadStroke();
             s_rawTouchpadLastFrameTick = 0;
-            RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_PROP);
-            s_rawSwipeMarkerActive = false;
+            FinishRawTouchpadShield();
         }
         RefreshTouchpadGestureKinds();
         return 0;
@@ -13355,9 +14976,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (g_isVisible || g_isPendingShow) HideSwitcher();
         CancelRawTouchpadStroke();
         s_rawTouchpadLastFrameTick = 0;
-        s_rawSwipePublishTick = 0;
-        RemovePropW(g_hSwitcher, SWS_RAW_SWIPE_PROP);
-        s_rawSwipeMarkerActive = false;
+        FinishRawTouchpadShield();
         FreeCachedBuffers();
         g_staticContentDirty = true;
         // Reset the touchpad grace window so a mid-gesture settings reload doesn't
@@ -13425,7 +15044,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         RefreshClientAreaAnimCache();
         if (!AreAnimationsGloballyEnabled()) {
             if (g_animExitActive) {
-                HideSwitcher();
+                CompleteExitAnimation();
                 return 0;
             }
             FinishAnimations();
@@ -13437,13 +15056,13 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         }
         return 0;
     case WM_DISPLAYCHANGE:
-        UpdateRefreshRateTiming();
+        UpdateRefreshRateTiming(true);
         if (hWnd == g_hSwitcher && (g_isVisible || g_isPendingShow)) {
             PostMessageW(hWnd, WM_SWS_CANCEL_INPUT, 0, 0);
         }
         return 0;
     case WM_DPICHANGED:
-        UpdateRefreshRateTiming();
+        UpdateRefreshRateTiming(true);
         // Dismiss safely instead of retaining stale monitor handles/pixel bounds.
         // The next invocation resolves the monitor, DPI, fonts and backdrop anew.
         if (hWnd == g_hSwitcher && (g_isVisible || g_isPendingShow) &&
@@ -13610,16 +15229,17 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (g_animExitActive || g_isHidingSwitcher || g_recoveringShellFocus) return 0;
             HWND hNewActive = (HWND)lParam;
             HWND hCheck = hNewActive ? hNewActive : GetForegroundWindow();
-            if (RawTouchpadOwnsInput() && hCheck && IsNativeSwitcherWindow(hCheck)) {
+            if (RawTouchpadShellSuppressionActive() && hCheck && IsNativeSwitcherWindow(hCheck)) {
                 ShellFocusRecoveryScope recovery;
                 ShowWindow(hCheck, SW_HIDE);
                 BringWindowToTop(g_hSwitcher);
                 SetForegroundWindow(g_hSwitcher);
                 return 0;
             }
-            if (RawTouchpadOwnsInput() && s_rawGestureSawThree && s_rawGestureTips == 3 && hCheck &&
-                s_rawTouchpadLastFrameTick && GetTickCount64() - s_rawTouchpadLastFrameTick < 600 &&
-                IsTaskViewWindow(hCheck)) {
+            if (RawTouchpadShellSuppressionActive() && hCheck && IsTaskViewWindow(hCheck)) {
+                // Task View can take focus after physical lift, before its SHOW
+                // event is delivered. Preserve only this identified shell race.
+                Wh_Log(L"SWS: retaining raw session for Task View recovery (tips=%d)", s_rawGestureTips);
                 return 0; // The WinEvent handler dismisses this shell interference.
             }
             if (PreserveRawStrokeOnFocusLoss()) {
@@ -13628,7 +15248,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 return 0;
             }
             if ((s_rawSessionOwned || g_isSticky) && hCheck && !IsSwitcherWindow(hCheck)) {
-                HideSwitcher(); // Intentional focus change: cancel, never fight it.
+                StartExitAnimation(false); // Intentional focus change: cancel with the normal close animation.
                 return 0;
             }
             if (g_isTouchpadGestureActive) {
@@ -13644,7 +15264,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 }
             }
             if (!IsSwitcherWindow(hNewActive)) {
-                HideSwitcher();
+                StartExitAnimation(false);
             }
             return 0;
         }
@@ -13654,16 +15274,15 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
             if (g_animExitActive || g_isHidingSwitcher || g_recoveringShellFocus) return 0;
             HWND hNewFocus = (HWND)wParam;
             HWND hCheck = hNewFocus ? hNewFocus : GetForegroundWindow();
-            if (RawTouchpadOwnsInput() && hCheck && IsNativeSwitcherWindow(hCheck)) {
+            if (RawTouchpadShellSuppressionActive() && hCheck && IsNativeSwitcherWindow(hCheck)) {
                 ShellFocusRecoveryScope recovery;
                 ShowWindow(hCheck, SW_HIDE);
                 BringWindowToTop(g_hSwitcher);
                 SetForegroundWindow(g_hSwitcher);
                 return 0;
             }
-            if (RawTouchpadOwnsInput() && s_rawGestureSawThree && s_rawGestureTips == 3 && hCheck &&
-                s_rawTouchpadLastFrameTick && GetTickCount64() - s_rawTouchpadLastFrameTick < 600 &&
-                IsTaskViewWindow(hCheck)) {
+            if (RawTouchpadShellSuppressionActive() && hCheck && IsTaskViewWindow(hCheck)) {
+                Wh_Log(L"SWS: retaining raw session for Task View recovery (tips=%d)", s_rawGestureTips);
                 return 0;
             }
             if (PreserveRawStrokeOnFocusLoss()) {
@@ -13672,7 +15291,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 return 0;
             }
             if ((s_rawSessionOwned || g_isSticky) && hCheck && !IsSwitcherWindow(hCheck)) {
-                HideSwitcher();
+                StartExitAnimation(false);
                 return 0;
             }
             if (g_isTouchpadGestureActive) {
@@ -13688,7 +15307,7 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                 }
             }
             if (!IsSwitcherWindow(hNewFocus)) {
-                HideSwitcher();
+                StartExitAnimation(false);
             }
             return 0;
         }
@@ -13708,6 +15327,10 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
         if (s_hWinEventHook) {
             UnhookWinEvent(s_hWinEventHook);
             s_hWinEventHook = NULL;
+        }
+        if (s_hForegroundEventHook) {
+            UnhookWinEvent(s_hForegroundEventHook);
+            s_hForegroundEventHook = NULL;
         }
         UnregisterThumbnails();
         return 0;
@@ -14277,6 +15900,7 @@ static void LoadSettings() {
     g_settings.stickyTouchpadMode = LoadBoolSetting(L"Touchpad.stickyLaunch", true);
     g_touchpadGesturesEnabled.store(g_settings.handleTouchpadGestures);
     g_touchpadStickyLaunchEnabled.store(g_settings.stickyTouchpadMode);
+    PublishNativeSwipePolicy();
 
     // Custom per-process header (array of { process, iconPath, appName }).
     g_customHeaderRules.clear();
@@ -14308,6 +15932,7 @@ static void LoadSettings() {
     }
     UpdateCachedSettings();
     g_settings.switcherPadding = GetActiveSwitcherPadding();
+    ResetWindowIconSettings();
     InvalidateStaticCache();
 }
 
@@ -14342,20 +15967,25 @@ static bool s_twinuiAltTabHookGaveUp = false;
 static int s_twinuiAltTabHookAttempts = 0;
 
 static bool SwitcherOwnsRawSwipe() {
+    // The typed dispatcher is authoritative when available. Window-show
+    // callbacks arrive later and cannot distinguish three from four fingers.
+    if (NativeSwipeSourceGateActive()) return false;
     HWND hSwitcher = FindWindowW(SWS_CLASSNAME, SWS_MAIN_WINDOW_TITLE);
     if (!hSwitcher) return false;
     HANDLE hSession = GetPropW(hSwitcher, SWS_RAW_SWIPE_PROP);
     if (!hSession) return false;
-    DWORD encoded = (DWORD)(ULONG_PTR)hSession;
-    bool liftGrace = (encoded & 0x80000000u) != 0;
-    DWORD lastFrame = encoded & 0x7FFFFFFFu;
-    DWORD now = (DWORD)GetTickCount64() & 0x7FFFFFFFu;
-    DWORD age = (now - lastFrame) & 0x7FFFFFFFu;
-    return age < (liftGrace ? 180u : SWS_RAW_SWIPE_OWNER_MS);
+    return RawSwipeMarkerRemainingMs(hSession, GetTickCount64()) != 0;
+}
+
+static bool SwitcherOwnsActiveRawSwipe() {
+    HWND hSwitcher = FindWindowW(SWS_CLASSNAME, SWS_MAIN_WINDOW_TITLE);
+    if (!hSwitcher) return false;
+    HANDLE hSession = GetPropW(hSwitcher, SWS_RAW_SWIPE_SESSION_PROP);
+    return hSession && RawSwipeMarkerRemainingMs(hSession, GetTickCount64()) != 0;
 }
 
 static HRESULT WINAPI XamlAltTabViewHost_Show_Hook(void* pThis, void* param1, int param2, void* param3) {
-    if (SwitcherOwnsRawSwipe()) {
+    if (!ExplicitShellInputDown() && SwitcherOwnsRawSwipe()) {
         Wh_Log(L"SWS: suppressed Win11 native switcher during owned raw stroke");
         return S_OK;
     }
@@ -14363,7 +15993,7 @@ static HRESULT WINAPI XamlAltTabViewHost_Show_Hook(void* pThis, void* param1, in
 }
 
 static HRESULT WINAPI CAltTabViewHost_Show_Hook(void* pThis, void* param1, int param2, void* param3) {
-    if (SwitcherOwnsRawSwipe()) {
+    if (!ExplicitShellInputDown() && SwitcherOwnsRawSwipe()) {
         Wh_Log(L"SWS: suppressed Win10 native switcher during owned raw stroke");
         return S_OK;
     }
@@ -14374,8 +16004,13 @@ using ShowWindow_t = decltype(&ShowWindow);
 static ShowWindow_t ShowWindow_Original = nullptr;
 
 static BOOL WINAPI ShowWindow_Hook(HWND hWnd, int nCmdShow) {
-    if (nCmdShow != SW_HIDE && SwitcherOwnsRawSwipe() && IsNativeAltTabWindow(hWnd)) {
-        return IsWindowVisible(hWnd); // BOOL reports previous visibility, not success.
+    if (nCmdShow != SW_HIDE && !ExplicitShellInputDown()) {
+        bool genericShell = SwitcherOwnsRawSwipe() &&
+                            (IsNativeAltTabWindow(hWnd) || IsTaskViewWindow(hWnd));
+        if (genericShell) {
+            Wh_Log(L"SWS: suppressed native switcher/Task View ShowWindow call");
+            return IsWindowVisible(hWnd); // BOOL reports previous visibility, not success.
+        }
     }
     return ShowWindow_Original(hWnd, nCmdShow);
 }
@@ -14390,14 +16025,29 @@ static bool TryHookTwinuiAltTab() {
     return true;
 }
 #else
+static bool QueueTwinuiShellHooks(HMODULE hTwinui) {
+    // Add only unresolved paths, so a retry never hooks a trampoline twice.
+    // twinui.pcshell.dll
+    WindhawkUtils::SYMBOL_HOOK hooks[2];
+    size_t count = 0;
+    if (!XamlAltTabViewHost_Show_Original) {
+        hooks[count++] = {
+            {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
+            &XamlAltTabViewHost_Show_Original, XamlAltTabViewHost_Show_Hook, true,
+        };
+    }
+    if (!CAltTabViewHost_Show_Original) {
+        hooks[count++] = {
+            {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
+            &CAltTabViewHost_Show_Original, CAltTabViewHost_Show_Hook, true,
+        };
+    }
+    return !count || WindhawkUtils::HookSymbols(hTwinui, hooks, count);
+}
+
 static bool TryHookTwinuiAltTab() {
     if (s_twinuiAltTabHooksApplied || s_twinuiAltTabHookGaveUp) return true;
-    if (XamlAltTabViewHost_Show_Original ||
-        CAltTabViewHost_Show_Original) {
-        s_twinuiAltTabHooksApplied = true;
-        Wh_Log(L"SWS: twinui Alt+Tab/Task View hooks active");
-        return true;
-    }
+    // Native tap filtering has its own independent explorer.exe hook/retry.
 
     HMODULE hTwinui = GetModuleHandleW(L"twinui.pcshell.dll");
     if (!hTwinui) {
@@ -14407,49 +16057,474 @@ static bool TryHookTwinuiAltTab() {
 
     if (++s_twinuiAltTabHookAttempts > 30) {
         s_twinuiAltTabHookGaveUp = true;
-        Wh_Log(L"SWS: twinui Alt+Tab/Task View hook retries exhausted");
+        Wh_Log(L"SWS: twinui hook retries exhausted (Alt+Tab=%d)",
+               XamlAltTabViewHost_Show_Original || CAltTabViewHost_Show_Original);
         return true;
     }
 
-    // twinui.pcshell.dll
-    WindhawkUtils::SYMBOL_HOOK hooks[] = {
-        {
-            {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
-            (void**)&XamlAltTabViewHost_Show_Original,
-            (void*)XamlAltTabViewHost_Show_Hook,
-            true,
-        },
-        {
-            {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
-            (void**)&CAltTabViewHost_Show_Original,
-            (void*)CAltTabViewHost_Show_Hook,
-            true,
-        },
-    };
-    if (!WindhawkUtils::HookSymbols(hTwinui, hooks, ARRAYSIZE(hooks))) {
-        return false;
-    }
+    if (!QueueTwinuiShellHooks(hTwinui)) return false;
 
     if (!Wh_ApplyHookOperations()) {
         Wh_Log(L"SWS: applying late twinui Alt+Tab/Task View hooks failed");
         return false;
     }
-    s_twinuiAltTabHooksApplied = true;
-    Wh_Log(L"SWS: late twinui Alt+Tab/Task View hooks active");
+    s_twinuiAltTabHooksApplied =
+        XamlAltTabViewHost_Show_Original || CAltTabViewHost_Show_Original;
+    Wh_Log(L"SWS: twinui hooks applied (Alt+Tab=%d)",
+           s_twinuiAltTabHooksApplied);
+    return s_twinuiAltTabHooksApplied;
+}
+#endif
+
+// --- Native PTP manipulation source gate (twinui.dll) ----------------------------------
+static std::atomic<bool> s_nativeSwipeHooksAvailable{false};
+static std::atomic<bool> s_nativeSwipeShutdownRequested{false};
+static std::atomic<HWND> s_nativeSwipeStatusWindow{nullptr};
+
+static bool NativeSwipeSourceGateActive() {
+    if (s_nativeSwipeShutdownRequested.load()) return false;
+    if (s_nativeSwipeHooksAvailable.load()) return true;
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    return taskbar && GetPropW(taskbar, SWS_NATIVE_SWIPE_GATE_PROP) != nullptr;
+}
+
+static bool PublishNativeSwipeHookStatus(bool active) {
+    if (!active) {
+        HWND window = s_nativeSwipeStatusWindow.exchange(nullptr);
+        if (window) RemovePropW(window, SWS_NATIVE_SWIPE_GATE_PROP);
+        return true;
+    }
+    if (s_nativeSwipeShutdownRequested.load()) return false;
+    HWND published = s_nativeSwipeStatusWindow.load();
+    if (published && GetPropW(published, SWS_NATIVE_SWIPE_GATE_PROP)) return true;
+    s_nativeSwipeStatusWindow.store(nullptr);
+    HWND taskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+    if (!taskbar) return false; // The retry timer or first native report retries.
+    DWORD owner = 0;
+    GetWindowThreadProcessId(taskbar, &owner);
+    if (owner != GetCurrentProcessId()) return true; // Secondary Explorer.
+    if (!SetPropW(taskbar, SWS_NATIVE_SWIPE_GATE_PROP, (HANDLE)(ULONG_PTR)1)) return false;
+    s_nativeSwipeStatusWindow.store(taskbar);
+    if (s_nativeSwipeShutdownRequested.load()) {
+        PublishNativeSwipeHookStatus(false);
+        return false;
+    }
     return true;
+}
+
+#if defined(_M_IX86)
+static bool TryHookNativeSwipe() {
+    return true; // No guessed x86 private member-function ABI.
+}
+#else
+// Exact public symbols and call sites were checked on Windows 26100.9549.
+// Private context pointers are opaque: none of their fields/layouts are read.
+using NativeSwipeProcess_t = HRESULT(__cdecl*)(void*, const void*, const void*);
+using NativeSwipeStart_t = void(__cdecl*)(void*, const void*, int, int);
+using NativeSwipeFinish_t = void(__cdecl*)(void*, const void*, int, int, int, int);
+using NativeSwipeCancel_t = void(__cdecl*)(void*);
+using NativeSwipeTarget_t = HRESULT(__cdecl*)(void*, int, int, void**);
+static NativeSwipeProcess_t NativeSwipeProcess_Original = nullptr;
+static NativeSwipeStart_t NativeSwipeStart_Original = nullptr;
+static NativeSwipeFinish_t NativeSwipeFinish_Original = nullptr;
+static NativeSwipeCancel_t NativeSwipeCancel_Original = nullptr;
+static NativeSwipeTarget_t NativeSwipeTarget_Original = nullptr;
+
+struct NativeSwipePolicy {
+    HWND endpoint = nullptr;
+    DWORD value = 0;
+    bool active = false;
+    DWORD relayEpoch = 0;
+};
+
+static NativeSwipePolicy ReadNativeSwipePolicy() {
+    NativeSwipePolicy policy;
+    policy.endpoint = FindWindowW(SWS_CLASSNAME, SWS_MAIN_WINDOW_TITLE);
+    if (policy.endpoint) {
+        policy.value = (DWORD)(ULONG_PTR)GetPropW(
+            policy.endpoint, SWS_NATIVE_SWIPE_POLICY_PROP);
+        policy.active = GetPropW(policy.endpoint, SWS_NATIVE_SWIPE_ACTIVE_PROP) != nullptr;
+        policy.relayEpoch = (DWORD)(ULONG_PTR)GetPropW(
+            policy.endpoint, SWS_NATIVE_TOUCHPAD_EPOCH_PROP);
+    }
+    return policy;
+}
+
+static bool NativeTouchpadPolicyReady(const NativeSwipePolicy& policy) {
+    return (policy.value & 3u) == 3u && !s_nativeSwipeShutdownRequested.load();
+}
+
+// Grant only the current endpoint PID, never ASFW_ANY. This runs independently
+// of debug logging; it grants permission but does not itself activate a window.
+static BOOL GrantNativeSwipeForeground(const NativeSwipePolicy& expected) {
+    NativeSwipePolicy current = ReadNativeSwipePolicy();
+    if (!s_nativeSwipeHooksAvailable.load() || !NativeTouchpadPolicyReady(current) ||
+        current.active || current.endpoint != expected.endpoint ||
+        current.value != expected.value || !current.relayEpoch ||
+        current.relayEpoch != expected.relayEpoch) {
+        return FALSE;
+    }
+    DWORD pid = 0;
+    if (!GetWindowThreadProcessId(current.endpoint, &pid) || !pid) {
+        Wh_Log(L"SWS: native PTP foreground grant not attempted (endpoint=%p pid=%u)",
+               current.endpoint, pid);
+        return FALSE;
+    }
+    HWND foreground = GetForegroundWindow();
+    SetLastError(ERROR_SUCCESS);
+    BOOL granted = AllowSetForegroundWindow(pid);
+    DWORD error = granted ? ERROR_SUCCESS : GetLastError();
+    Wh_Log(L"SWS: native PTP foreground grant callerPid=%u targetPid=%u granted=%d error=%u foregroundBefore=%p foregroundAfter=%p",
+           GetCurrentProcessId(), pid, granted, error, foreground, GetForegroundWindow());
+    return granted;
+}
+
+enum class NativeSwipeDecision { Undecided, Allowed, Suppressed };
+
+struct NativeSwipeHandlerState {
+    void* handler = nullptr;
+    ULONGLONG generation = 0;
+    NativeSwipeDecision decision = NativeSwipeDecision::Undecided;
+    HWND endpoint = nullptr;
+    DWORD policyEpoch = 0;
+    DWORD relayEpoch = 0;
+    DWORD relayToken = 0;
+};
+
+static std::atomic<DWORD> s_nativeSwipeNextRelayToken{0};
+
+static DWORD BeginNativeSwipeInvocation(const NativeSwipePolicy& policy, UINT direction) {
+    if (!GrantNativeSwipeForeground(policy)) return 0;
+    NativeSwipePolicy current = ReadNativeSwipePolicy();
+    if (!NativeTouchpadPolicyReady(current) || current.active ||
+        current.endpoint != policy.endpoint || current.value != policy.value ||
+        current.relayEpoch != policy.relayEpoch) {
+        return 0;
+    }
+    DWORD token = ++s_nativeSwipeNextRelayToken;
+    if (!token) token = ++s_nativeSwipeNextRelayToken;
+    if (!PostMessageW(policy.endpoint, WM_SWS_NATIVE_TOUCHPAD,
+                      (WPARAM)((policy.relayEpoch << 3) | direction), (LPARAM)token)) {
+        DWORD error = GetLastError();
+        Wh_Log(L"SWS: native PTP invocation post failed (endpoint=%p error=%u)",
+               policy.endpoint, error);
+        return 0;
+    }
+    return token;
+}
+
+static void PostNativeSwipeCompletion(const NativeSwipeHandlerState& state, UINT event) {
+    if (!state.relayToken || !s_nativeSwipeHooksAvailable.load()) return;
+    NativeSwipePolicy policy = ReadNativeSwipePolicy();
+    if (!NativeTouchpadPolicyReady(policy) || policy.endpoint != state.endpoint ||
+        (policy.value >> 3) != state.policyEpoch || policy.relayEpoch != state.relayEpoch) {
+        return;
+    }
+    if (!PostMessageW(state.endpoint, WM_SWS_NATIVE_TOUCHPAD,
+                      (WPARAM)((state.relayEpoch << 3) | event), (LPARAM)state.relayToken)) {
+        DWORD error = GetLastError();
+        Wh_Log(L"SWS: native PTP completion post failed (event=%u token=%u error=%u)",
+               event, state.relayToken, error);
+        // The existing lost-input timer cancels; a failed post never commits.
+    }
+}
+
+struct NativeSwipeScope;
+struct NativeSwipeThreadState {
+    // Fixed storage: stale/missing End callbacks cannot allocate without bound,
+    // and no heap allocation or TLS destructor remains on Explorer threads at unload.
+    NativeSwipeHandlerState handlers[32]{};
+    NativeSwipeScope* current = nullptr;
+    ULONGLONG nextGeneration = 0;
+};
+static_assert(std::is_trivially_destructible_v<NativeSwipeThreadState>);
+static thread_local NativeSwipeThreadState s_nativeSwipeThread;
+static NativeSwipeHandlerState* FindNativeSwipeState(void* handler);
+
+struct NativeSwipeScope {
+    void* handler;
+    ULONGLONG generation;
+    bool starting;
+    NativeSwipeScope* previous;
+    NativeSwipeHandlerState state;
+
+    NativeSwipeScope(void* handler, ULONGLONG generation = 0, bool starting = false)
+        : handler(handler), generation(generation), starting(starting),
+          previous(s_nativeSwipeThread.current) {
+        auto* current = FindNativeSwipeState(handler);
+        if (current && (!generation || current->generation == generation)) state = *current;
+        s_nativeSwipeThread.current = this;
+    }
+    ~NativeSwipeScope() { s_nativeSwipeThread.current = previous; }
+    NativeSwipeScope(const NativeSwipeScope&) = delete;
+    NativeSwipeScope& operator=(const NativeSwipeScope&) = delete;
+};
+
+static NativeSwipeHandlerState* FindNativeSwipeState(void* handler) {
+    if (!handler) return nullptr;
+    for (auto& state : s_nativeSwipeThread.handlers) {
+        if (state.handler == handler) return &state;
+    }
+    return nullptr;
+}
+
+static NativeSwipeHandlerState* BeginNativeSwipeState(void* handler) {
+    if (!handler) return nullptr;
+    NativeSwipeHandlerState* state = FindNativeSwipeState(handler);
+    if (!state) {
+        for (auto& candidate : s_nativeSwipeThread.handlers) {
+            if (!candidate.handler) {
+                state = &candidate;
+                break;
+            }
+        }
+    }
+    // Fail open for additional handlers; never evict a live suppressed stroke.
+    if (!state) return nullptr;
+    *state = {};
+    state->handler = handler;
+    if (!++s_nativeSwipeThread.nextGeneration) ++s_nativeSwipeThread.nextGeneration;
+    state->generation = s_nativeSwipeThread.nextGeneration;
+    return state;
+}
+
+static void EndNativeSwipeState(void* handler, ULONGLONG generation) {
+    auto* state = FindNativeSwipeState(handler);
+    // A reentrant Start during original cleanup owns a new generation.
+    if (state && state->generation == generation) *state = {};
+}
+
+static void CommitNativeSwipeState(const NativeSwipeHandlerState& decision) {
+    auto* current = FindNativeSwipeState(decision.handler);
+    if (current && current->generation == decision.generation) *current = decision;
+}
+
+static HRESULT __cdecl NativeSwipeProcess_Hook(void* pThis, const void* info,
+                                               const void* output) {
+    if (s_nativeSwipeHooksAvailable.load()) PublishNativeSwipeHookStatus(true);
+    NativeSwipeScope scope(pThis);
+    return NativeSwipeProcess_Original(pThis, info, output);
+}
+
+static void __cdecl NativeSwipeStart_Hook(void* pThis, const void* info, int x, int y) {
+    auto* state = s_nativeSwipeHooksAvailable.load() ? BeginNativeSwipeState(pThis) : nullptr;
+    NativeSwipeScope scope(pThis, state ? state->generation : 0, true);
+    NativeSwipeStart_Original(pThis, info, x, y);
+    if (scope.state.endpoint) {
+        // Verified ProcessInteractionContextOutput call site passes the public
+        // manipulation's cumulative translations here, not raw HID centroids.
+        Wh_Log(L"SWS: native PTP start boundary cumulativeX=%d cumulativeY=%d generation=%llu",
+               x, y, (unsigned long long)scope.state.generation);
+    }
+}
+
+static void __cdecl NativeSwipeFinish_Hook(void* pThis, const void* info,
+                                         int x, int y, int vx, int vy) {
+    auto* state = FindNativeSwipeState(pThis);
+    ULONGLONG generation = state ? state->generation : 0;
+    NativeSwipeScope scope(pThis, generation);
+    // The native End still queries its target and resets its own gesture state.
+    NativeSwipeFinish_Original(pThis, info, x, y, vx, vy);
+    if (scope.state.endpoint) {
+        // End receives the final delta and cached velocity, not cumulative XY.
+        Wh_Log(L"SWS: native PTP end boundary deltaX=%d deltaY=%d velocityX=%d velocityY=%d generation=%llu",
+               x, y, vx, vy, (unsigned long long)scope.state.generation);
+    }
+    RequestTouchpadInputDiagnostics(scope.state.endpoint, 0x100);
+    PostNativeSwipeCompletion(scope.state, SWS_NATIVE_TOUCHPAD_END);
+    EndNativeSwipeState(pThis, generation);
+}
+
+static void __cdecl NativeSwipeCancel_Hook(void* pThis) {
+    auto* state = FindNativeSwipeState(pThis);
+    ULONGLONG generation = state ? state->generation : 0;
+    NativeSwipeScope scope(pThis, generation);
+    NativeSwipeCancel_Original(pThis);
+    RequestTouchpadInputDiagnostics(scope.state.endpoint, 0x200);
+    PostNativeSwipeCompletion(scope.state, SWS_NATIVE_TOUCHPAD_CANCEL);
+    EndNativeSwipeState(pThis, generation);
+}
+
+static HRESULT __cdecl NativeSwipeTarget_Hook(void* pThis, int type, int direction,
+                                             void** target) {
+    NativeSwipeScope* scope = s_nativeSwipeThread.current;
+    auto* state = scope ? &scope->state : nullptr;
+    if (s_nativeSwipeShutdownRequested.load() || !s_nativeSwipeHooksAvailable.load() ||
+        !target || type != 1 || !state ||
+        !state->handler || !state->generation) {
+        return NativeSwipeTarget_Original(pThis, type, direction, target);
+    }
+    if (state->decision == NativeSwipeDecision::Allowed ||
+        (state->decision == NativeSwipeDecision::Undecided && !scope->starting)) {
+        return NativeSwipeTarget_Original(pThis, type, direction, target);
+    }
+
+    bool deciding = state->decision == NativeSwipeDecision::Undecided;
+    // Property reads/logging may notify reentrantly. Until this Start's read
+    // completes, nested queries for the same generation are conservative.
+    if (deciding) {
+        state->decision = NativeSwipeDecision::Allowed;
+        CommitNativeSwipeState(*state);
+    }
+    NativeSwipePolicy policy = ReadNativeSwipePolicy();
+    // Each scope retains its generation's decision even if a reentrant Start
+    // replaces the map entry. In particular, old End must not finish a handler
+    // whose old Start was suppressed, or overwrite the new stroke's decision.
+    bool ready = NativeTouchpadPolicyReady(policy);
+    if (deciding) {
+        // The native args already retain input provenance. Explicit Win/mouse
+        // state must not veto this PTP source gate. Outside down/tap stay native.
+        bool reserved = direction == 1 || direction == 3 ||
+                        (direction == 2 && (policy.value & 4u));
+        bool suppress = ready && direction >= 1 && direction <= 4 &&
+                        (policy.active || reserved);
+        if (suppress && !policy.active) {
+            state->relayToken = BeginNativeSwipeInvocation(policy, (UINT)direction);
+            state->relayEpoch = policy.relayEpoch;
+            if (!state->relayToken) {
+                // Fail open outside if either the grant or the queue handoff
+                // fails. A concurrently opened session still owns its input.
+                policy = ReadNativeSwipePolicy();
+                suppress = NativeTouchpadPolicyReady(policy) && policy.active;
+            }
+        }
+        state->decision = suppress ? NativeSwipeDecision::Suppressed : NativeSwipeDecision::Allowed;
+        state->endpoint = policy.endpoint;
+        state->policyEpoch = policy.value >> 3;
+        CommitNativeSwipeState(*state);
+        if (suppress) Wh_Log(L"SWS: suppressed native PTP start (direction=%d active=%d)",
+                             direction, policy.active);
+        else Wh_Log(L"SWS: native PTP start left to Windows (direction=%d active=%d ready=%d sticky=%d)",
+                    direction, policy.active, ready, (policy.value & 4u) != 0);
+        Wh_Log(L"SWS: native PTP start context %s",
+               FormatTouchpadForegroundDiagnostic(GetForegroundWindow(), policy.endpoint).c_str());
+        RequestTouchpadInputDiagnostics(policy.endpoint, (UINT)direction);
+    } else if (!ready || state->endpoint != policy.endpoint ||
+               state->policyEpoch != (policy.value >> 3)) {
+        // Master-off/reader loss is immediate and irreversible for this stroke,
+        // including a disable/re-enable interval between native callbacks.
+        state->decision = NativeSwipeDecision::Allowed;
+        CommitNativeSwipeState(*state);
+    }
+    if (state->decision == NativeSwipeDecision::Suppressed &&
+        !s_nativeSwipeShutdownRequested.load() && s_nativeSwipeHooksAvailable.load()) {
+        // Verified native contract: no selected service returns S_OK/null too.
+        // Keep it through Update/End/Cancel regardless of raw marker expiry.
+        *target = nullptr;
+        return S_OK;
+    }
+    return NativeSwipeTarget_Original(pThis, type, direction, target);
+}
+
+static void* s_nativeSwipeTargets[5]{};
+static size_t s_nativeSwipeQueuedCount = 0;
+static unsigned int s_nativeSwipeRemoveMask = 0;
+static bool s_nativeSwipeRollbackPending = false;
+static bool s_nativeSwipeHookGaveUp = false;
+static int s_nativeSwipeHookAttempts = 0;
+
+static bool RollbackNativeSwipeHooks() {
+    bool removed = true;
+    for (size_t i = 0; i < s_nativeSwipeQueuedCount; ++i) {
+        if (!(s_nativeSwipeRemoveMask & (1u << i))) {
+            if (Wh_RemoveFunctionHook(s_nativeSwipeTargets[i])) {
+                s_nativeSwipeRemoveMask |= 1u << i;
+            } else {
+                removed = false;
+            }
+        }
+    }
+    if (!removed || !Wh_ApplyHookOperations()) return false;
+    s_nativeSwipeQueuedCount = 0;
+    s_nativeSwipeRemoveMask = 0;
+    s_nativeSwipeRollbackPending = false;
+    return true;
+}
+
+static bool TryHookNativeSwipe() {
+    if (s_nativeSwipeShutdownRequested.load()) return true;
+    if (s_nativeSwipeHooksAvailable.load()) return PublishNativeSwipeHookStatus(true);
+    if (s_nativeSwipeHookGaveUp) return true;
+    if (s_nativeSwipeRollbackPending && !RollbackNativeSwipeHooks()) return false;
+    if (!s_nativeSwipeQueuedCount) {
+        HMODULE module = GetModuleHandleW(L"twinui.dll");
+        if (!module) return false; // Independent late-module retry, no load/reference leak.
+        void* targets[5]{};
+        // HookSymbols uses undecorated names by default. Include the legacy
+        // MS DIA __ptr64 spelling as well; both describe the same verified ABI.
+        WindhawkUtils::SYMBOL_HOOK twinuiDllHooks[] = {
+            {{L"public: virtual long __cdecl TouchpadGestureHandler::ProcessInteractionContextOutput(struct InteractionContextOutputInfo const *,struct INTERACTION_CONTEXT_OUTPUT const *)",
+              L"public: virtual long __cdecl TouchpadGestureHandler::ProcessInteractionContextOutput(struct InteractionContextOutputInfo const * __ptr64,struct INTERACTION_CONTEXT_OUTPUT const * __ptr64) __ptr64"}, &targets[0], nullptr},
+            {{L"private: void __cdecl TouchpadGestureHandler::_StartGesture(struct InteractionContextOutputInfo const *,int,int)",
+              L"private: void __cdecl TouchpadGestureHandler::_StartGesture(struct InteractionContextOutputInfo const * __ptr64,int,int) __ptr64"}, &targets[1], nullptr},
+            {{L"private: void __cdecl TouchpadGestureHandler::_FinishGesture(struct InteractionContextOutputInfo const *,int,int,int,int)",
+              L"private: void __cdecl TouchpadGestureHandler::_FinishGesture(struct InteractionContextOutputInfo const * __ptr64,int,int,int,int) __ptr64"}, &targets[2], nullptr},
+            {{L"private: void __cdecl TouchpadGestureHandler::_CancelGesture(void)",
+              L"private: void __cdecl TouchpadGestureHandler::_CancelGesture(void) __ptr64"}, &targets[3], nullptr},
+            // MSDIA separates the pointer levels as "* *", not "**". Exact
+            // matching is required; one missing target disables this whole set.
+            {{L"public: virtual long __cdecl TouchpadSettingsManager::GetGestureTarget(enum TOUCHPAD_GESTURE_TYPE,enum TOUCHPAD_GESTURE_DIRECTION,struct ITouchpadGesture * *)",
+              L"public: virtual long __cdecl TouchpadSettingsManager::GetGestureTarget(enum TOUCHPAD_GESTURE_TYPE,enum TOUCHPAD_GESTURE_DIRECTION,struct ITouchpadGesture * __ptr64 * __ptr64) __ptr64"}, &targets[4], nullptr},
+        };
+        bool resolved = WindhawkUtils::HookSymbols(module, twinuiDllHooks,
+                                                  ARRAYSIZE(twinuiDllHooks));
+        for (void* target : targets) resolved = resolved && target;
+        if (!resolved) {
+            ++s_nativeSwipeHookAttempts;
+            if (s_nativeSwipeHookAttempts == 1 || s_nativeSwipeHookAttempts % 5 == 0) {
+                unsigned int resolvedMask = 0;
+                for (size_t i = 0; i < ARRAYSIZE(targets); ++i) {
+                    if (targets[i]) resolvedMask |= 1u << i;
+                }
+                Wh_Log(L"SWS: native PTP swipe symbol resolution failed (attempt=%d resolved=0x%02X expected=0x1F)",
+                       s_nativeSwipeHookAttempts, resolvedMask);
+            }
+            if (s_nativeSwipeHookAttempts >= 30) {
+                s_nativeSwipeHookGaveUp = true;
+                Wh_Log(L"SWS: native PTP swipe symbols unavailable; source gate stays disabled");
+            }
+            return s_nativeSwipeHookGaveUp;
+        }
+        void* hooks[] = {(void*)NativeSwipeProcess_Hook, (void*)NativeSwipeStart_Hook,
+                        (void*)NativeSwipeFinish_Hook, (void*)NativeSwipeCancel_Hook,
+                        (void*)NativeSwipeTarget_Hook};
+        void** originals[] = {(void**)&NativeSwipeProcess_Original, (void**)&NativeSwipeStart_Original,
+                              (void**)&NativeSwipeFinish_Original, (void**)&NativeSwipeCancel_Original,
+                              (void**)&NativeSwipeTarget_Original};
+        for (size_t i = 0; i < ARRAYSIZE(targets); ++i) {
+            s_nativeSwipeTargets[i] = targets[i];
+            if (!Wh_SetFunctionHook(targets[i], hooks[i], originals[i])) {
+                // Other independent installers may apply operations meanwhile.
+                // Every wrapper remains passthrough until this whole set is active.
+                s_nativeSwipeRollbackPending = true;
+                RollbackNativeSwipeHooks();
+                return false;
+            }
+            ++s_nativeSwipeQueuedCount;
+        }
+    }
+    if (!Wh_ApplyHookOperations()) return false; // Retry apply, never queue twice.
+    if (s_nativeSwipeShutdownRequested.load()) return true;
+    s_nativeSwipeHooksAvailable.store(true);
+    if (s_nativeSwipeShutdownRequested.load()) {
+        s_nativeSwipeHooksAvailable.store(false);
+        return true;
+    }
+    Wh_Log(L"SWS: native PTP swipe source gate active (all five hooks applied)");
+    return PublishNativeSwipeHookStatus(true);
 }
 #endif
 
 // --- 3-finger 'show desktop' swipe ------------------------------------------------------
 // The shell runs the touchpad show-desktop swipe through CTray::_RaiseDesktop, the same
 // entry point as Win+D and the taskbar button (the win-d-per-monitor mod hooks it for the
-// same reason). While the switcher owns a 3-finger gesture, that action is the OS acting on
-// a swipe the switcher is navigating with, so it is dropped: minimizing every window under
-// the session tears the grid and the session apart, and the gesture is supposed to navigate
-// rows or pages until the fingers are lifted. The switcher publishes its raw session as a
-// window property (see HandleRawTouchpadFrame), so this side only reads it and the shell's
-// gesture thread never has to wait on another process. A vertical swipe with no sticky shield
-// in progress stays with Windows.
+// same reason). The typed twinui source gate owns the decision when installed:
+// pcshell posts this action asynchronously with flags 3 and no finger count.
+// A late active-session veto would also block an allowed four-finger gesture or
+// reclaim an outside stroke which began before SWS opened. Without the complete
+// source gate, retain the raw-marker fallback for proven three-finger strokes.
+// All policy/evidence is published cross-process, so Explorer never waits on
+// the switcher queue or depends on its foreground controller.
 #if defined(_M_IX86)
 // The receiver of a member function arrives in ECX on x86, which a plain hook signature
 // cannot describe, and the 32-bit shell is only reachable on 32-bit Windows: skip the hook
@@ -14474,15 +16549,38 @@ static void __cdecl RaiseDesktop_Hook(void* pThis, int flags) {
     // flags 2 and 3 are the touchpad swipe paths (as documented by the win-d-per-monitor
     // mod, which hooks this function for the same gesture); the Win+D hotkey and the
     // taskbar button use other values and always pass through. The block additionally
-    // requires the physical 3-finger swipe to be in flight (published by the switcher), so a
-    // hotkey pressed during a gesture is never affected either.
+    // requires a usable policy and physical-stroke evidence on the fallback
+    // path. Keep this flags filter: lift-grace must not turn into a Win+D block.
     bool isTouchpadSwipe = (flags == 2 || flags == 3);
-    if (isTouchpadSwipe && SwitcherOwnsRawSwipe()) {
-        Wh_Log(L"SWS: dropped show desktop from a 3-finger swipe (flags=%d)", flags);
-        return;
-    }
     if (isTouchpadSwipe) {
-        Wh_Log(L"SWS: show desktop from a 3-finger swipe passed through (flags=%d)", flags);
+        NativeSwipePolicy policy = ReadNativeSwipePolicy();
+        HWND hSwitcher = policy.endpoint;
+        bool ready = NativeTouchpadPolicyReady(policy);
+        bool sourceGate = s_nativeSwipeHooksAvailable.load();
+        HANDLE marker = hSwitcher ? GetPropW(hSwitcher, SWS_RAW_SWIPE_PROP) : NULL;
+        HANDLE session = hSwitcher ? GetPropW(hSwitcher, SWS_RAW_SWIPE_SESSION_PROP) : NULL;
+        HANDLE upward = hSwitcher ? GetPropW(hSwitcher, SWS_RAW_SWIPE_UP_PROP) : NULL;
+        ULONGLONG now = GetTickCount64();
+        DWORD remaining = RawSwipeMarkerRemainingMs(marker, now);
+        DWORD sessionRemaining = RawSwipeMarkerRemainingMs(session, now);
+        bool liftGrace = marker && ((DWORD)(ULONG_PTR)marker & SWS_RAW_SWIPE_LIFT_FLAG) != 0;
+        // Session-owned grace covers this stroke's delayed native finish even
+        // after commit/close. The reader clears it at the next outside stroke;
+        // a launch-only candidate must not acquire that release ownership.
+        bool sessionMarker = session && sessionRemaining != 0;
+        bool owns = ready && !sourceGate &&
+                    (sessionMarker || (remaining != 0 && !liftGrace && upward));
+        // This hook can run for every touchpad report. Log at most once per
+        // half-second instead of two OutputDebugString calls per frame.
+        static std::atomic<ULONGLONG> lastLogTick{0};
+        ULONGLONG previous = lastLogTick.load();
+        if ((!previous || now - previous >= 500) &&
+            lastLogTick.compare_exchange_strong(previous, now)) {
+            Wh_Log(L"SWS: RaiseDesktop touch flags=%d owns=%d active=%d ready=%d swipeGate=%d remaining=%u lift=%d session=%d up=%d",
+                   flags, owns, policy.active, ready, sourceGate,
+                   remaining, liftGrace, sessionMarker, upward != NULL);
+        }
+        if (owns) return;
     }
     RaiseDesktop_Original(pThis, flags);
 }
@@ -14502,6 +16600,10 @@ static bool TryHookRaiseDesktop() {
     if (!hExplorerModule) return true;
 
     s_raiseDesktopHookAttempts++;
+    if (s_raiseDesktopHookAttempts == 1 || (s_raiseDesktopHookAttempts % 5) == 0) {
+        Wh_Log(L"SWS: trying CTray::_RaiseDesktop hook attempt=%d",
+               s_raiseDesktopHookAttempts);
+    }
     WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
         {
             {LR"(protected: void __cdecl CTray::_RaiseDesktop(enum RAISEDESKTOPFLAGS))"},
@@ -14523,8 +16625,77 @@ static bool TryHookRaiseDesktop() {
 }
 #endif
 
+// Native PTP actions retain their input source here, before Search/media actions
+// or custom keyboard shortcuts are dispatched. Verified against explorer.exe's
+// public symbols/call sites: 0xF selects ThreeFingerTapEnabled, 0x10 four-finger.
+// Filtering downstream Start requests loses this provenance and can mistake an
+// injected Win key for explicit keyboard input (or block a real Start request).
+#if defined(_M_IX86)
+static bool TryHookTouchpadTap() {
+    return true; // Do not guess the private x86 member-function ABI.
+}
+#else
+using HandlePTPTap_t = void(__cdecl*)(void* pThis, int settingIdentifier);
+static HandlePTPTap_t HandlePTPTap_Original = nullptr;
+static bool s_touchpadTapHooked = false;
+static bool s_touchpadTapHookQueued = false;
+static bool s_touchpadTapHookGaveUp = false;
+static int s_touchpadTapHookAttempts = 0;
+
+static void __cdecl HandlePTPTap_Hook(void* pThis, int settingIdentifier) {
+    NativeSwipePolicy policy = ReadNativeSwipePolicy();
+    bool ready = NativeTouchpadPolicyReady(policy);
+    // A source-specific tap can arrive before the reader or between strokes
+    // in an idle sticky session. Session intent does not expire with the last
+    // raw marker; that marker is needed only for completion after UI teardown.
+    bool owned = settingIdentifier == 0xF && ready &&
+                 (policy.active || SwitcherOwnsActiveRawSwipe());
+    // Action-edge logging only; no HID-frame or paint-path logging here.
+    Wh_Log(L"SWS: native PTP tap setting=0x%X owned=%d active=%d ready=%d swipeGate=%d",
+           settingIdentifier, owned, policy.active, ready, s_nativeSwipeHooksAvailable.load());
+    if (owned) return;
+    HandlePTPTap_Original(pThis, settingIdentifier);
+}
+
+static bool TryHookTouchpadTap() {
+    if (s_touchpadTapHooked || s_touchpadTapHookGaveUp) return true;
+    if (s_touchpadTapHookQueued) {
+        if (!Wh_ApplyHookOperations()) return false;
+        s_touchpadTapHooked = true;
+        Wh_Log(L"SWS: hooked CTray::HandlePTPTap (native three-finger action filtering active)");
+        return true;
+    }
+    HMODULE hExplorerModule = GetModuleHandleW(L"explorer.exe");
+    if (!hExplorerModule) return false;
+    ++s_touchpadTapHookAttempts;
+    WindhawkUtils::SYMBOL_HOOK explorerExeHooks[] = {
+        {
+            {LR"(protected: void __cdecl CTray::HandlePTPTap(enum SETTING_IDENTIFIER))"},
+            &HandlePTPTap_Original, HandlePTPTap_Hook,
+        },
+    };
+    if (WindhawkUtils::HookSymbols(hExplorerModule, explorerExeHooks,
+                                   ARRAYSIZE(explorerExeHooks))) {
+        s_touchpadTapHookQueued = true;
+        return TryHookTouchpadTap();
+    }
+    if (s_touchpadTapHookAttempts >= 30) {
+        s_touchpadTapHookGaveUp = true;
+        Wh_Log(L"SWS: CTray::HandlePTPTap unavailable; native tap filtering requires foreground controller routing");
+        return true;
+    }
+    return false;
+}
+#endif
+
 static bool TryHookExplorerSuppression() {
-    return TryHookRaiseDesktop() && TryHookTwinuiAltTab();
+    // Attempt each path independently. An unresolved swipe/Alt+Tab symbol must
+    // not postpone tap filtering while Explorer's symbol cache is loading.
+    bool tapReady = TryHookTouchpadTap();
+    bool desktopReady = TryHookRaiseDesktop();
+    bool altTabReady = TryHookTwinuiAltTab();
+    bool swipeReady = TryHookNativeSwipe();
+    return tapReady && desktopReady && altTabReady && swipeReady;
 }
 
 // Background thread for tool mod process
@@ -14533,11 +16704,10 @@ static bool TryHookExplorerSuppression() {
 // Windows.UI.Input.TouchpadGesturesController is the documented way for the *foreground*
 // application to receive global (three or more finger) touchpad gestures instead of the
 // system's own handler. Registered from the switcher process, the system routes 3-finger
-// swipes to it while this process owns the foreground - while the switcher is visible or the
-// temporary sticky-launch shield is active - so the OS performs none of its own actions for
-// those strokes (Task View, Show desktop, Switch apps, or tap actions). When sticky launch is
-// disabled and no horizontal session has started, this process does not claim the foreground
-// and Windows keeps its default up/down/tap gestures.
+// swipes to it while this process owns the foreground - while the switcher is visible or
+// closing - so the OS performs none of its own actions for those strokes (Task View, Show
+// desktop, Switch apps, or tap actions). Outside a switcher session this process does not
+// claim the foreground and Windows keeps its default up/down/tap gestures.
 //
 // The compiler's copy of windows.ui.input.h predates the class, so the ABI is declared here.
 // The layout is not guessed: it was read from the Windows.UI.winmd shipped with the system:
@@ -14569,11 +16739,12 @@ static SwsTouchpadGestureController* g_touchpadGestureController = nullptr;
 // Whether the current settings want the mod to own three-finger touchpad
 // manipulations and actions while the switcher owns the foreground.
 static bool TouchpadGestureTakeoverWanted() {
-    return g_settings.handleTouchpadGestures && g_touchpadReaderAvailable.load() &&
+    // Windows ignores background controllers. The reader's cross-process
+    // marker and Explorer PTP dispatch hook cover release after UI teardown.
+    return TouchpadHandlingEnabled() &&
+           g_touchpadReaderAvailable.load() &&
            g_touchpadGestureTakeoverAvailable.load() &&
-           (g_isVisible || g_isPendingShow || s_rawTouchpadShieldActive ||
-            g_settings.stickyTouchpadMode) &&
-           !g_isHidingSwitcher && !g_animExitActive;
+            (g_isVisible || g_isPendingShow || g_animExitActive);
 }
 
 static UINT TouchpadGestureKinds() {
@@ -14687,6 +16858,15 @@ static bool RefreshTouchpadGestureKinds() {
 
 static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     Wh_Log(L"SwitcherThread starting");
+    // The switcher owns top-level windows whose coordinates are physical
+    // monitor pixels. Keep this UI thread in PMv2 before creating any HWND so
+    // Windows does not virtualize mixed-DPI monitor coordinates.
+    using SetThreadDpiAwarenessContext_t = HANDLE(WINAPI*)(HANDLE);
+    auto setThreadDpiAwarenessContext = (SetThreadDpiAwarenessContext_t)GetProcAddress(
+        GetModuleHandleW(L"user32.dll"), "SetThreadDpiAwarenessContext");
+    if (setThreadDpiAwarenessContext) {
+        setThreadDpiAwarenessContext((HANDLE)-4); // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+    }
     struct RuntimeApartment {
         HRESULT result = RoInitialize(RO_INIT_SINGLETHREADED);
         ~RuntimeApartment() { if (SUCCEEDED(result)) RoUninitialize(); }
@@ -14698,7 +16878,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     g_easeEntrance.Init(0.0f, 0.0f, 0.0f, 1.0f);
     g_easeSlide.Init(0.55f, 0.55f, 0.0f, 1.0f);
     g_easeHover.Init(0.55f, 0.55f, 0.0f, 1.0f);
-    g_easeHoverEnter.Init(0.0f, 0.0f, 0.2f, 1.0f);
+    g_easeHoverEnter.Init(0.0f, 0.0f, 0.0f, 1.0f);
     QueryPerformanceFrequency(&g_animPerfFreq);
     // Create the virtual desktop manager on this thread so it lives in the same
     // apartment that uses it (EnumWindowsProc runs here). An STA interface
@@ -14729,14 +16909,20 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     g_hSwitcher = CreateSWSWindow(exStyle, SWS_CLASSNAME, SWS_MAIN_WINDOW_TITLE,
         dwStyle, 0, 0, 0, 0, NULL, NULL, GetModuleHandleW(NULL), NULL);
     if (!g_hSwitcher) { Wh_Log(L"Failed to create switcher window"); return 1; }
+    PublishNativeSwipePolicy();
+    StartWindowIconWorker();
 
     // Installed for the thread's lifetime (see CancelPendingShow): the raw-HID path needs it
     // while the switcher is hidden, to hide a Task View the OS shows for its own 3-finger
     // up gesture.
     s_hWinEventHook = SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE, NULL,
                                       WinEventShowHideProc, 0, 0, WINEVENT_OUTOFCONTEXT);
-    if (!s_hWinEventHook) {
-        Wh_Log(L"SWS: SetWinEventHook failed (%u)", GetLastError());
+    s_hForegroundEventHook = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, NULL,
+        WinEventShowHideProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    if (!s_hWinEventHook || !s_hForegroundEventHook) {
+        Wh_Log(L"SWS: SetWinEventHook failed (object=%p foreground=%p error=%u)",
+               s_hWinEventHook, s_hForegroundEventHook, GetLastError());
     }
 
     g_hCloseBtnWnd = CreateSWSWindow(
@@ -14785,9 +16971,14 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
 
     MSG msg;
     while (true) {
-        // Do not drain an unbounded input queue before rendering. Shell and raw-input
-        // traffic can otherwise starve the animation ticker during a busy transition.
+        // Keep reports and discrete commands in queue order. Bound dispatch by
+        // elapsed time, not only count; a single synchronous handler can still
+        // overrun this budget, but no additional batch is run before a due frame.
         constexpr int kMaxMessagesBeforeFrame = 128;
+        LARGE_INTEGER dispatchStart, now;
+        QueryPerformanceCounter(&dispatchStart);
+        double dispatchBudget = (std::min)(2.0, s_animTargetIntervalMs * 0.5) *
+                                (double)g_animPerfFreq.QuadPart / 1000.0;
         int messagesThisTurn = 0;
         while (messagesThisTurn < kMaxMessagesBeforeFrame &&
                PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -14795,23 +16986,32 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
             messagesThisTurn++;
+            QueryPerformanceCounter(&now);
+            if ((double)(now.QuadPart - dispatchStart.QuadPart) >= dispatchBudget ||
+                (g_animActive && (double)now.QuadPart >= g_animNextFrameDeadline)) break;
         }
 
         if (g_animActive) {
-            LARGE_INTEGER frameStart, frameEnd;
-            QueryPerformanceCounter(&frameStart);
-
-            OnAnimationTick();
+            QueryPerformanceCounter(&now);
+            if ((double)now.QuadPart >= g_animNextFrameDeadline) {
+                OnAnimationTick();
+                QueryPerformanceCounter(&now);
+                double interval = s_animTargetIntervalMs * (double)g_animPerfFreq.QuadPart / 1000.0;
+                // Advance from the absolute deadline, skipping missed frames.
+                // Never replay a backlog or shift the cadence on an input wake.
+                double missed = floor(((double)now.QuadPart - g_animNextFrameDeadline) / interval);
+                g_animNextFrameDeadline += ((std::max)(0.0, missed) + 1.0) * interval;
+            }
 
             if (g_animActive) {
-                QueryPerformanceCounter(&frameEnd);
-                double spentMs = (double)(frameEnd.QuadPart - frameStart.QuadPart) * 1000.0 / (double)g_animPerfFreq.QuadPart;
-                double waitMs = s_animTargetIntervalMs - spentMs;
-                if (waitMs > 0.5) {
+                QueryPerformanceCounter(&now);
+                double waitMs = (g_animNextFrameDeadline - (double)now.QuadPart) *
+                                1000.0 / (double)g_animPerfFreq.QuadPart;
+                if (waitMs > 0.0) {
                     BOOL timerArmed = FALSE;
                     if (hAnimTimer) {
                         LARGE_INTEGER dueTime;
-                        dueTime.QuadPart = -(LONGLONG)round(waitMs * 10000.0);
+                        dueTime.QuadPart = -(LONGLONG)(std::max)(1.0, ceil(waitMs * 10000.0));
                         timerArmed = SetWaitableTimer(hAnimTimer, &dueTime, 0, NULL, NULL, FALSE);
                     }
                     if (timerArmed) {
@@ -14827,13 +17027,11 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
                         // timeout wait so the animation can't stall indefinitely.
                         MsgWaitForMultipleObjectsEx(
                             0, NULL,
-                            (DWORD)floor(waitMs),
+                            (DWORD)ceil(waitMs),
                             QS_ALLINPUT,
                             MWMO_ALERTABLE | MWMO_INPUTAVAILABLE
                         );
                     }
-                } else if (waitMs > 0.0) {
-                    SwitchToThread();
                 }
             }
         } else {
@@ -14847,6 +17045,7 @@ static DWORD WINAPI SwitcherThread(LPVOID lpParam) {
     }
 
 thread_exit:
+    StopWindowIconWorker();
     if (hAnimTimer) {
         CloseHandle(hAnimTimer);
         hAnimTimer = NULL;
@@ -14863,13 +17062,17 @@ thread_exit:
         CloseHandle(g_hDwmCornerWatchStopEvent);
         g_hDwmCornerWatchStopEvent = NULL;
     }
+    g_touchpadGesturesEnabled.store(false);
+    PublishNativeSwipePolicy();
     if (g_isVisible || g_isPendingShow) HideSwitcher();
+    FinishRawTouchpadShield();
     ReleaseTouchpadGestureTakeover();
     UnregisterThumbnails();
     g_windows.clear();
     g_mruWindows.clear();
     DestroyBackdropWindow();
     if (g_hCloseBtnWnd) { DestroyWindow(g_hCloseBtnWnd); g_hCloseBtnWnd = NULL; }
+    RemoveNativeSwipePolicy();
     if (g_hSwitcher) { DeregisterShellHookWindow(g_hSwitcher); DestroyWindow(g_hSwitcher); g_hSwitcher = NULL; }
     UnregisterClassW(SWS_CLASSNAME, GetModuleHandleW(NULL));
     if (g_hFont) { DeleteObject(g_hFont); g_hFont = NULL; }
@@ -15010,13 +17213,40 @@ static const TouchpadDevice* TouchpadDeviceFor(HANDLE hDevice) {
     return dev.valid ? &dev : NULL;
 }
 
+// Reader-thread state, reset after reader shutdown and on device removal. It
+// must not survive a disable/re-enable cycle as function-local static contacts.
+struct TouchpadReaderStroke {
+    ULONG lastTips = 0;
+    bool markerStrokeOwned = false;
+    bool markerSessionOwned = false;
+    double lastX = -1.0;
+    double lastY = -1.0;
+    ULONGLONG lastPostTick = 0;
+};
+static TouchpadReaderStroke s_touchpadReaderStroke;
+
 static void TouchpadReaderSetAvailable(bool available) {
-    if (g_touchpadReaderAvailable.exchange(available) != available && g_hSwitcher) {
+    if (available && g_touchpadReaderStopping.load()) return;
+    if (!available) {
+        // Retire cross-process evidence now, not after a queued UI notification.
+        ClearRawSwipeMarkerPropertyFromReader();
+        s_touchpadReaderStroke = {};
+    }
+    bool changed = g_touchpadReaderAvailable.exchange(available) != available;
+    if (changed || !available) PublishNativeSwipePolicy();
+    if (changed && g_hSwitcher) {
         PostMessageW(g_hSwitcher, WM_SWS_TOUCHPAD_READER_CHANGED, 0, 0);
     }
 }
 
 static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
+    ++s_touchpadInputDiagnostics.frames;
+    s_touchpadInputDiagnostics.lastFrameTick.store(GetTickCount64());
+    if (!g_touchpadGesturesEnabled.load()) {
+        ClearRawSwipeMarkerPropertyFromReader();
+        s_touchpadReaderStroke = {};
+        return;
+    }
     // Registration alone does not prove this device supplies usable reports.
     // Do not enable takeover until a usable frame arrives.
     TouchpadReaderSetAvailable(true);
@@ -15034,20 +17264,23 @@ static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
         cx /= tips;
         cy /= tips;
     }
+    s_touchpadInputDiagnostics.lastTips.store(tips);
     double nx = dev.rangeX > 0 ? cx / dev.rangeX : 0.0;
     double ny = dev.rangeY > 0 ? cy / dev.rangeY : 0.0;
 
     if (!g_hSwitcher || !g_WM_SWS_TOUCHPAD_FRAME || !IsWindow(g_hSwitcher)) {
         return;
     }
-    static ULONG s_lastTips = 0;
-    static double s_lastX = -1.0;
-    static double s_lastY = -1.0;
-    static ULONGLONG s_lastPostTick = 0;
-    double dx = cx - s_lastX;
-    double dy = cy - s_lastY;
-    if (dx < 0) dx = -dx;
-    if (dy < 0) dy = -dy;
+    auto& s_lastTips = s_touchpadReaderStroke.lastTips;
+    auto& s_markerStrokeOwned = s_touchpadReaderStroke.markerStrokeOwned;
+    auto& s_markerSessionOwned = s_touchpadReaderStroke.markerSessionOwned;
+    auto& s_lastX = s_touchpadReaderStroke.lastX;
+    auto& s_lastY = s_touchpadReaderStroke.lastY;
+    auto& s_lastPostTick = s_touchpadReaderStroke.lastPostTick;
+    double signedDx = cx - s_lastX;
+    double signedDy = cy - s_lastY;
+    double dx = signedDx < 0 ? -signedDx : signedDx;
+    double dy = signedDy < 0 ? -signedDy : signedDy;
     ULONGLONG now = GetTickCount64();
     // Heartbeat while any finger is still down: the switcher keeps a raw session open
     // until the lift, so resting fingers have to keep producing posts.
@@ -15057,22 +17290,67 @@ static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
         return;
     }
 
-    // Publish the sticky ownership marker from the raw-input thread before
-    // posting the frame to the switcher thread. Explorer can otherwise decide
-    // Task View/Show desktop in the small scheduling window before the shield
-    // message has been handled. This marker is only enabled for sticky mode;
-    // the toggle-off path leaves Windows' outside gestures untouched.
-    if (g_touchpadGesturesEnabled.load() && g_touchpadStickyLaunchEnabled.load() &&
-        g_hSwitcher && (tips == 3 || (tips == 0 && s_lastTips == 3))) {
-        bool strokeStart = tips == 3 && s_lastTips != 3;
-        DWORD stamp = (DWORD)GetTickCount64() & 0x7FFFFFFF;
-        if (tips == 0) stamp |= 0x80000000u;
-        BOOL markerSet = SetPropW(g_hSwitcher, SWS_RAW_SWIPE_PROP,
-                                  (HANDLE)(ULONG_PTR)(stamp ? stamp : 1));
-        if (strokeStart || !markerSet) {
-            Wh_Log(L"SWS: early raw swipe marker %s (tips=%u error=%u)",
-                   markerSet ? L"published" : L"failed", tips,
-                   markerSet ? ERROR_SUCCESS : GetLastError());
+    // Publish a marker from the raw-input thread before posting the frame. A
+    // sticky outside stroke needs this early candidate marker only to suppress
+    // Task View while an upward launch is being classified. It is explicitly
+    // marked as non-session, so Show Desktop and Start remain Windows-owned.
+    bool sessionOwnsStroke = g_touchpadSwitcherActive.load();
+    bool launchOwnsStroke = g_touchpadStickyLaunchEnabled.load() &&
+                            (tips == 3 || s_markerStrokeOwned);
+    if (tips > 0 && s_lastTips == 0 &&
+        !sessionOwnsStroke && !s_markerStrokeOwned) {
+        // A fresh outside stroke must not inherit the previous session's
+        // post-lift grace, even during the reader/UI scheduling gap.
+        ClearRawSwipeMarkerPropertyFromReader();
+        s_markerSessionOwned = false;
+    }
+    if (s_markerStrokeOwned) {
+        // The UI may have opened SWS from this live horizontal/upward launch
+        // candidate. Remember that promotion before a closing UI clears its
+        // active bit, so the reader's eventual lift retains the same owner.
+        HANDLE session = GetPropW(g_hSwitcher, SWS_RAW_SWIPE_SESSION_PROP);
+        if (RawSwipeMarkerRemainingMs(session, now)) s_markerSessionOwned = true;
+    }
+    if (!g_touchpadGesturesEnabled.load() ||
+        (!sessionOwnsStroke && !launchOwnsStroke && !s_markerStrokeOwned)) {
+        s_markerStrokeOwned = false;
+        s_markerSessionOwned = false;
+    } else {
+        bool strokeStart = tips == 3 && !s_markerStrokeOwned;
+        // Once a stroke has been marked, retain it through close and partial
+        // lift even if the session bit changes before the reader sees the lift.
+        // A normal horizontal launch can be opened by the preceding posted
+        // three-contact frame while outside candidate marking was disabled.
+        // If the very next report is partial/full lift, adopt that same stroke
+        // now; requiring another three-contact report leaves its release unowned.
+        if ((tips == 3 || s_lastTips == 3) && sessionOwnsStroke) {
+            s_markerStrokeOwned = true;
+            s_markerSessionOwned = true;
+        } else if (tips == 3 && launchOwnsStroke) {
+            s_markerStrokeOwned = true;
+        }
+        if (s_markerStrokeOwned) {
+            BOOL markerSet = SetRawSwipeMarker(tips == 0, false,
+                                                sessionOwnsStroke ||
+                                                s_markerSessionOwned);
+            if (tips == SWS_RAW_SWIPE_FINGERS && s_lastTips == SWS_RAW_SWIPE_FINGERS &&
+                !sessionOwnsStroke && launchOwnsStroke &&
+                dy >= dev.rangeY * 0.01 && dy * 2.0 >= dx * 3.0) {
+                // Explorer's RaiseDesktop path can run before the UI thread
+                // classifies the vertical direction. Mark only upward sticky
+                // candidates so downward Show Desktop remains untouched.
+                SetRawSwipeUpMarker(signedDy < 0);
+            }
+            if (strokeStart || tips == 0 || !markerSet) {
+                Wh_Log(L"SWS: early raw swipe marker %s (tips=%u session=%d error=%u)",
+                       markerSet ? L"published" : L"failed", tips,
+                       sessionOwnsStroke,
+                       markerSet ? ERROR_SUCCESS : GetLastError());
+            }
+        }
+        if (tips == 0) {
+            s_markerStrokeOwned = false;
+            s_markerSessionOwned = false;
         }
     }
     s_lastTips = tips;
@@ -15081,7 +17359,13 @@ static void TouchpadReaderProcessFrame(const TouchpadDevice& dev) {
     s_lastPostTick = now;
 
     ULONG packedPos = ((ULONG)(nx * 65535.0) & 0xFFFF) | (((ULONG)(ny * 65535.0) & 0xFFFF) << 16);
-    PostMessageW(g_hSwitcher, g_WM_SWS_TOUCHPAD_FRAME, (WPARAM)tips, (LPARAM)packedPos);
+    if (PostMessageW(g_hSwitcher, g_WM_SWS_TOUCHPAD_FRAME, (WPARAM)tips, (LPARAM)packedPos)) {
+        ++s_touchpadInputDiagnostics.posted;
+    } else {
+        DWORD error = GetLastError();
+        s_touchpadInputDiagnostics.lastPostError.store(error);
+        ++s_touchpadInputDiagnostics.postFailures;
+    }
 }
 
 static void TouchpadReaderOnReport(const TouchpadDevice& dev, PCHAR report, ULONG length) {
@@ -15136,14 +17420,22 @@ static void TouchpadReaderOnReport(const TouchpadDevice& dev, PCHAR report, ULON
 }
 
 static void TouchpadReaderOnRawInput(HRAWINPUT hRawInput) {
+    ++s_touchpadInputDiagnostics.rawMessages;
+    s_touchpadInputDiagnostics.lastRawTick.store(GetTickCount64());
     UINT size = 0;
     if (GetRawInputData(hRawInput, RID_INPUT, NULL, &size, sizeof(RAWINPUTHEADER)) != 0 || !size) {
+        DWORD error = GetLastError();
+        s_touchpadInputDiagnostics.lastReadError.store(error);
+        ++s_touchpadInputDiagnostics.readFailures;
         return;
     }
 
     static std::vector<BYTE> buffer;
     buffer.resize(size);
     if (GetRawInputData(hRawInput, RID_INPUT, buffer.data(), &size, sizeof(RAWINPUTHEADER)) == (UINT)-1) {
+        DWORD error = GetLastError();
+        s_touchpadInputDiagnostics.lastReadError.store(error);
+        ++s_touchpadInputDiagnostics.readFailures;
         return;
     }
 
@@ -15151,9 +17443,11 @@ static void TouchpadReaderOnRawInput(HRAWINPUT hRawInput) {
     if (raw->header.dwType != RIM_TYPEHID) {
         return;
     }
+    s_touchpadInputDiagnostics.hidReports.fetch_add(raw->data.hid.dwCount);
 
     const TouchpadDevice* dev = TouchpadDeviceFor(raw->header.hDevice);
     if (!dev) {
+        ++s_touchpadInputDiagnostics.rejectedDevices;
         return;
     }
 
@@ -15166,12 +17460,54 @@ static void TouchpadReaderOnRawInput(HRAWINPUT hRawInput) {
 // A handle can be reused by another device, and a device that goes away takes the
 // fingers on it with it.
 static void TouchpadReaderOnDeviceChange(HANDLE hDevice) {
+    s_touchpadReaderStroke = {};
+    ClearRawSwipeMarkerPropertyFromReader();
     g_touchpadDevices.erase(hDevice);
     g_touchpadFrame.clear();
     g_touchpadFrameExpected = 0;
     bool anyValid = std::any_of(g_touchpadDevices.begin(), g_touchpadDevices.end(),
         [](const auto& entry) { return entry.second.valid; });
     if (!anyValid) TouchpadReaderSetAvailable(false);
+}
+
+static std::wstring FormatTouchpadInputDiagnostics() {
+    auto& stats = s_touchpadInputDiagnostics;
+    ULONGLONG now = GetTickCount64();
+    auto age = [now](ULONGLONG tick) -> long long {
+        // The reader can publish a newer tick while this UI snapshot is read.
+        return tick ? (tick <= now ? (long long)(now - tick) : 0) : -1;
+    };
+    UINT count = 0;
+    DWORD registrationError = ERROR_SUCCESS, flags = 0;
+    HWND registeredTarget = nullptr;
+    if (GetRegisteredRawInputDevices(nullptr, &count, sizeof(RAWINPUTDEVICE)) == (UINT)-1) {
+        registrationError = GetLastError();
+    } else if (count) {
+        std::vector<RAWINPUTDEVICE> devices(count);
+        if (GetRegisteredRawInputDevices(devices.data(), &count, sizeof(RAWINPUTDEVICE)) == (UINT)-1) {
+            registrationError = GetLastError();
+        } else {
+            for (const auto& device : devices) {
+                if (device.usUsagePage == SWS_HID_PAGE_DIGITIZER &&
+                    device.usUsage == SWS_HID_USAGE_TOUCHPAD) {
+                    registeredTarget = device.hwndTarget;
+                    flags = device.dwFlags;
+                }
+            }
+        }
+    }
+    WCHAR text[768];
+    swprintf_s(text,
+        L"raw=%u reports=%u rejectedDevices=%u readFailures=%u frames=%u posted=%u postFailures=%u uiFrames=%u "
+        L"rawAgeMs=%lld frameAgeMs=%lld uiAgeMs=%lld tips=%u readError=%u postError=%u "
+        L"reader=%p registeredTarget=%p registrationFlags=0x%X registrationError=%u enabled=%d available=%d stopping=%d",
+        stats.rawMessages.load(), stats.hidReports.load(), stats.rejectedDevices.load(), stats.readFailures.load(),
+        stats.frames.load(), stats.posted.load(), stats.postFailures.load(), stats.uiFrames.load(),
+        age(stats.lastRawTick.load()), age(stats.lastFrameTick.load()), age(stats.lastUiTick.load()),
+        stats.lastTips.load(), stats.lastReadError.load(), stats.lastPostError.load(),
+        g_touchpadReaderWindow.load(), registeredTarget, flags, registrationError,
+        g_touchpadGesturesEnabled.load(), g_touchpadReaderAvailable.load(), g_touchpadReaderStopping.load());
+    return text;
 }
 
 // "One registration per process" check, so a leftover registration is visible in the
@@ -15188,13 +17524,18 @@ static void TouchpadReaderLogRegistrations(const WCHAR* tag) {
         return;
     }
     for (const RAWINPUTDEVICE& rid : devices) {
-        Wh_Log(L"SWS touchpad reader: %s: usagePage=0x%X usage=0x%X flags=0x%X", tag, rid.usUsagePage,
-               rid.usUsage, rid.dwFlags);
+        Wh_Log(L"SWS touchpad reader: %s: usagePage=0x%X usage=0x%X flags=0x%X target=%p", tag, rid.usUsagePage,
+               rid.usUsage, rid.dwFlags, rid.hwndTarget);
     }
 }
 
 static LRESULT CALLBACK TouchpadReaderWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
+        case WM_SWS_TOUCHPAD_READER_DIAGNOSTICS:
+            Wh_Log(L"SWS: reader-thread input snapshot event=0x%X replyMs=%u foreground=%p %s",
+                   (UINT)wParam, (DWORD)GetTickCount64() - (DWORD)lParam,
+                   GetForegroundWindow(), FormatTouchpadInputDiagnostics().c_str());
+            return 0;
         case WM_INPUT:
             TouchpadReaderOnRawInput((HRAWINPUT)lParam);
             break;
@@ -15206,6 +17547,7 @@ static LRESULT CALLBACK TouchpadReaderWndProc(HWND hWnd, UINT uMsg, WPARAM wPara
 }
 
 static DWORD WINAPI TouchpadReaderThread(LPVOID) {
+    s_touchpadReaderStroke = {};
     // Same thread setup as the reference mod: PMv2 DPI for the window and high priority
     // so a busy frame cannot delay report parsing. The DPI call is resolved dynamically
     // to stay independent of the SDK's DPI headers.
@@ -15240,6 +17582,10 @@ static DWORD WINAPI TouchpadReaderThread(LPVOID) {
         return 0;
     }
 
+    g_touchpadReaderWindow.store(hReaderWnd);
+    Wh_Log(L"SWS touchpad reader: host context %s",
+           FormatTouchpadForegroundDiagnostic(GetForegroundWindow(), g_hSwitcher).c_str());
+
     TouchpadReaderLogRegistrations(L"before register");
     RAWINPUTDEVICE rid = {};
     rid.usUsagePage = SWS_HID_PAGE_DIGITIZER;
@@ -15252,6 +17598,7 @@ static DWORD WINAPI TouchpadReaderThread(LPVOID) {
     } else {
         Wh_Log(L"SWS touchpad reader: RegisterRawInputDevices failed (%u)", GetLastError());
     }
+    Wh_Log(L"SWS touchpad reader: initial input snapshot %s", FormatTouchpadInputDiagnostics().c_str());
 
     MSG msg;
     while (registered) {
@@ -15283,6 +17630,7 @@ static DWORD WINAPI TouchpadReaderThread(LPVOID) {
     TouchpadReaderSetAvailable(false);
     g_touchpadFrame.clear();
     g_touchpadFrameExpected = 0;
+    g_touchpadReaderWindow.store(nullptr);
     DestroyWindow(hReaderWnd);
     UnregisterClassW(SWS_TOUCHPAD_READER_CLASSNAME, hInstance);
     Wh_Log(L"SWS touchpad reader: stopped");
@@ -15297,6 +17645,7 @@ static void StartTouchpadReader() {
     if (g_hTouchpadReaderThread) {
         return;
     }
+    g_touchpadReaderStopping.store(false);
     g_hTouchpadReaderStopEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!g_hTouchpadReaderStopEvent) {
         return;
@@ -15311,7 +17660,16 @@ static void StartTouchpadReader() {
 }
 
 static void StopTouchpadReader() {
+    g_touchpadReaderStopping.store(true);
+    bool wasAvailable = g_touchpadReaderAvailable.exchange(false);
+    PublishNativeSwipePolicy();
+    ClearRawSwipeMarkerPropertyFromReader();
+    if (wasAvailable && g_hSwitcher) {
+        PostMessageW(g_hSwitcher, WM_SWS_TOUCHPAD_READER_CHANGED, 0, 0);
+    }
+    // Reader-owned frame/stroke storage is reset only after its thread stops.
     if (!g_hTouchpadReaderThread) {
+        TouchpadReaderSetAvailable(false);
         return;
     }
     Wh_Log(L"SWS touchpad reader: stopping");
@@ -15321,6 +17679,7 @@ static void StopTouchpadReader() {
     g_hTouchpadReaderThread = NULL;
     CloseHandle(g_hTouchpadReaderStopEvent);
     g_hTouchpadReaderStopEvent = NULL;
+    Wh_Log(L"SWS touchpad reader: stopped input snapshot %s", FormatTouchpadInputDiagnostics().c_str());
     TouchpadReaderSetAvailable(false);
 }
 
@@ -15331,11 +17690,17 @@ BOOL WhTool_ModInit() {
     if (!g_WM_SWS_TOUCHPAD_FRAME) {
         g_WM_SWS_TOUCHPAD_FRAME = RegisterWindowMessageW(L"Windhawk_SWS_TouchpadFrame");
     }
-    g_hSwitcherThread = CreateThread(NULL, 0, SwitcherThread, NULL, 0, &g_dwSwitcherThreadId);
     bool touchpadEnabled = TouchpadRawInputRequested();
     g_touchpadGesturesEnabled.store(touchpadEnabled);
     g_touchpadStickyLaunchEnabled.store(
         LoadBoolSetting(L"Touchpad.stickyLaunch", true));
+    PublishNativeSwipePolicy();
+    // Seed the cross-thread touchpad snapshot before the switcher thread can
+    // load its full UI settings. Starting the thread first allowed its initial
+    // LoadSettings call to temporarily overwrite stickyLaunch with the old
+    // value, producing one native upward swipe that went to Task View after a
+    // settings reload.
+    g_hSwitcherThread = CreateThread(NULL, 0, SwitcherThread, NULL, 0, &g_dwSwitcherThreadId);
     if (touchpadEnabled) {
         StartTouchpadReader();
     }
@@ -15344,10 +17709,14 @@ BOOL WhTool_ModInit() {
 
 void WhTool_ModUninit() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModUninit");
+    RequestWindowIconWorkerStop();
     // Controller teardown is performed by its owning switcher thread before
     // apartment teardown. Never race startup/settings with a cross-thread release.
     // The reader owns a window class and a raw input registration: stop and join it
     // before anything else is torn down.
+    g_touchpadGesturesEnabled.store(false);
+    g_touchpadSwitcherActive.store(false);
+    PublishNativeSwipePolicy();
     StopTouchpadReader();
     while (g_dwSwitcherThreadId &&
            !PostThreadMessage(g_dwSwitcherThreadId, WM_QUIT, 0, 0)) {
@@ -15376,22 +17745,18 @@ void WhTool_ModUninit() {
         if (pair.second) DestroyIcon(pair.second);
     }
     g_uwpIconCache.clear();
-    for (auto& pair : g_exeIconCache) {
-        if (pair.second) DestroyIcon(pair.second);
-    }
-    g_exeIconCache.clear();
-    for (auto& pair : g_customIconCache) {
-        if (pair.second) DestroyIcon(pair.second);
-    }
-    g_customIconCache.clear();
 }
 
 void WhTool_ModSettingsChanged() {
     Wh_Log(L"Simple Window Switcher: WhTool_ModSettingsChanged");
     bool touchpadEnabled = TouchpadRawInputRequested();
+    // Publish the new cross-thread snapshot before starting/stopping the reader
+    // or allowing a native callback to arrive. UI-only settings are reloaded by
+    // WM_SWS_SETTINGS_CHANGED on the switcher thread.
     g_touchpadGesturesEnabled.store(touchpadEnabled);
     g_touchpadStickyLaunchEnabled.store(
         LoadBoolSetting(L"Touchpad.stickyLaunch", true));
+    PublishNativeSwipePolicy();
     if (touchpadEnabled) {
         StartTouchpadReader();
     } else {
@@ -15478,26 +17843,13 @@ BOOL Wh_ModInit() {
 #if !defined(_M_IX86)
         HMODULE hTwinui = LoadLibraryW(L"twinui.pcshell.dll");
         if (hTwinui) {
-            // twinui.pcshell.dll
-            // twinui.pcshell.dll
-            WindhawkUtils::SYMBOL_HOOK hooks[] = {
-                {
-                    {LR"(public: virtual long __cdecl XamlAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
-                    (void**)&XamlAltTabViewHost_Show_Original,
-                    (void*)XamlAltTabViewHost_Show_Hook,
-                    true,
-                },
-                {
-                    {LR"(public: virtual long __cdecl CAltTabViewHost::Show(struct IImmersiveMonitor *,enum ALT_TAB_VIEW_FLAGS,struct IApplicationView *))"},
-                    (void**)&CAltTabViewHost_Show_Original,
-                    (void*)CAltTabViewHost_Show_Hook,
-                    true,
-                },
-            };
-            if (WindhawkUtils::HookSymbols(hTwinui, hooks, ARRAYSIZE(hooks))) {
-            } else {
-                Wh_Log(L"SWS: HookSymbols on twinui.pcshell.dll failed or symbols still loading");
+            // Queue the same complete hook set on both initial and retry paths.
+            // Windhawk applies initial hooks after Wh_ModInit returns.
+            if (!QueueTwinuiShellHooks(hTwinui)) {
+                Wh_Log(L"SWS: twinui initial symbol lookup failed or still loading");
             }
+            Wh_Log(L"SWS: twinui hooks queued (Alt+Tab=%d)",
+                   XamlAltTabViewHost_Show_Original || CAltTabViewHost_Show_Original);
         }
 
 #endif
@@ -15693,6 +18045,9 @@ void Wh_ModSettingsChanged() {
 
 void Wh_ModBeforeUninit() {
     if (g_isExplorer) {
+        s_nativeSwipeShutdownRequested.store(true);
+        s_nativeSwipeHooksAvailable.store(false);
+        PublishNativeSwipeHookStatus(false);
         // Stop late symbol retries before Windhawk removes hooks. Uninit is too
         // late: its thread must not queue/apply another detour during teardown.
         while (g_explorerIpcThreadId &&
@@ -15706,6 +18061,8 @@ void Wh_ModBeforeUninit() {
             g_explorerIpcThread = NULL;
             g_explorerIpcThreadId = 0;
         }
+        s_nativeSwipeHooksAvailable.store(false);
+        PublishNativeSwipeHookStatus(false);
     }
 }
 
@@ -15718,14 +18075,6 @@ void Wh_ModUninit() {
             if (pair.second) DestroyIcon(pair.second);
         }
         g_uwpIconCache.clear();
-        for (auto& pair : g_exeIconCache) {
-            if (pair.second) DestroyIcon(pair.second);
-        }
-        g_exeIconCache.clear();
-        for (auto& pair : g_customIconCache) {
-            if (pair.second) DestroyIcon(pair.second);
-        }
-        g_customIconCache.clear();
 
         if (g_isExplorer && IsMainExplorer()) {
             if (!GetSystemMetrics(SM_SHUTTINGDOWN)) {
