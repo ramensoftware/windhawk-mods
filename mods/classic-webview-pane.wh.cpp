@@ -790,6 +790,42 @@ HICON ReferenceIcon(UINT id);
 HMENU ReferenceMenu();
 } }
 
+namespace ce { namespace win2kwebview {
+static bool WindowHasClass(HWND window,PCWSTR expected) {
+    wchar_t name[256]{};
+    return window && GetClassNameW(window,name,ARRAYSIZE(name)) && wcscmp(name,expected)==0;
+}
+static bool IsExplorerFolderView(HWND window) {
+    if(!IsWindow(window) || !WindowHasClass(window,L"SHELLDLL_DefView")) return false;
+    // Desktop/tray views also use SHELLDLL_DefView. Only browser frames are
+    // eligible; neither the desktop surface nor arbitrary Shell dialogs are.
+    HWND root=GetAncestor(window,GA_ROOT);
+    if(!WindowHasClass(root,L"CabinetWClass") && !WindowHasClass(root,L"ExploreWClass")) return false;
+    for(HWND parent=GetParent(window);parent;parent=GetParent(parent)) {
+        if(WindowHasClass(parent,L"Progman") || WindowHasClass(parent,L"WorkerW") ||
+           WindowHasClass(parent,L"Shell_TrayWnd") || WindowHasClass(parent,L"Shell_SecondaryTrayWnd")) return false;
+    }
+    return true;
+}
+static bool ShellViewMatchesWindow(IShellView* view,HWND expected) {
+    HWND actual=nullptr;
+    return view && IsWindow(expected) && SUCCEEDED(view->GetWindow(&actual)) && actual &&
+           (actual==expected || IsChild(expected,actual));
+}
+static IShellItem* FolderItemFromView(IShellView* view) {
+    CComQIPtr<IFolderView> folderView(view);
+    CComPtr<IPersistFolder2> folder;
+    CComPtr<IShellItem> item;
+    PIDLIST_ABSOLUTE pidl=nullptr;
+    if(folderView && SUCCEEDED(folderView->GetFolder(IID_PPV_ARGS(&folder))) && folder &&
+       SUCCEEDED(folder->GetCurFolder(&pidl)) && pidl) {
+        SHCreateItemFromIDList(pidl,IID_PPV_ARGS(&item));
+    }
+    CoTaskMemFree(pidl);
+    return item.Detach();
+}
+} }
+
 // Readers hold one complete appearance snapshot throughout a callback. Only
 // the loading thread builds a mutable unpublished copy. The thread-local value
 // is a plain pointer; its lifetime is owned by the callback's stack scope, so no
@@ -7949,7 +7985,7 @@ public:
     bool m_isControlPanel=false, m_isEntireNetwork=false, m_isMeDriveRoot=false;
     bool m_isMyComputer=false, m_isMyDocuments=false, m_isMyNetworkPlaces=false;
     bool m_isNetworkConnections=false, m_isPrinters=false, m_isRecycleBin=false;
-    bool m_isMyPictures=false, m_isImgViewTemplate=false;
+    bool m_isMyPictures=false, m_isImgViewTemplate=false, m_isDesktop=false;
     bool m_isWin98SystemFolder=false, m_isWin98ProgramFiles=false;
     bool m_showFiles=true;
     std::wstring folderKey;
@@ -7963,7 +7999,7 @@ public:
     std::unique_ptr<PreviewResult> preview;
     std::wstring previewPath, signature;
     bool fullResolution=false, printable=false;
-    bool forceRefresh=true;
+    bool forceRefresh=true, viewReady=false;
     DWORD selectedCount=0;
     ULONGLONG refreshedAt=0,pendingSince=0;
     ImgPreviewState previewState=ImgPreviewState::NoSelection;
@@ -7972,6 +8008,7 @@ public:
     void Refresh(IShellView*,IShellItem*,HWND,bool force=false);
     void AcceptPreview();
     void ClearPreview();
+    void ResetView();
     void PreviewStatus(ImgPreviewState state,SIZE size={});
     void EnsureViewer();
     void DestroyViewer();
@@ -7996,7 +8033,7 @@ public:
     }
     bool UsesImgViewProfile() const noexcept {
         const auto options=g_webOptions.load();
-        return options->preview && options->imageViewer &&
+        return options->preview && options->imageViewer && options->profile!=1 && !m_isDesktop &&
                (m_isMyPictures||m_isImgViewTemplate);
     }
     void SetImgViewPreview(ImgPreviewState state,SIZE size={}) noexcept { PreviewStatus(state,size); }
@@ -10853,6 +10890,18 @@ void ReferenceContent::ClearPreview() {
     zoom.SetBitmap(nullptr); detached.SetBitmap(nullptr);
     m_pane.SetThumbnail(nullptr); preview.reset();
 }
+void ReferenceContent::ResetView() {
+    viewReady=false;
+    CancelPreview(lifetime); ClearPreview(); DestroyViewer();
+    previewPath.clear(); folderKey.clear(); signature.clear();
+    pendingSince=0; selectedCount=0; fullResolution=false; printable=false; forceRefresh=true;
+    m_isDesktop=false; m_isMyPictures=false; m_isImgViewTemplate=false;
+    m_isEntireNetwork=false; m_isMeDriveRoot=false; m_isWin98SystemFolder=false;
+    m_showFiles=true; bannerHeight=0;
+    m_pane.SetProfile(PaneProfile::Standard); m_pane.SetCapacityPie(-1);
+    m_pane.SetBarricade(BarricadeMode::None); m_pane.SetLines({});
+    navigate={}; isActiveView={}; m_selection.Release(); m_spView.Release();
+}
 void ReferenceContent::PreviewStatus(ImgPreviewState state,SIZE size) {
     previewState=state;
     m_pane.SetImgPreview(state,size);
@@ -10868,6 +10917,8 @@ void ReferenceContent::PreviewStatus(ImgPreviewState state,SIZE size) {
     detached.SetStatusText(ReferenceCaption(status));
 }
 void ReferenceContent::Refresh(IShellView* view,IShellItem* folder,HWND hwnd,bool force) {
+    if(!view || !folder || !IsWindow(hwnd)) { ResetView(); return; }
+    viewReady=true;
     window=hwnd;
     { std::lock_guard lock(lifetime->mutex); lifetime->window=hwnd; }
     const auto options=g_webOptions.load();
@@ -10906,6 +10957,8 @@ void ReferenceContent::Refresh(IShellView* view,IShellItem* folder,HWND hwnd,boo
         m_pane.SetFontSmoothingDisabled(options->disableSmoothing);
         m_pane.SetDimensionsVisible(options->metadata);
         m_pane.EnsureResources();
+        m_isDesktop=IsCsidl(folder,CSIDL_DESKTOP) || IsCsidl(folder,CSIDL_DESKTOPDIRECTORY) ||
+                    IsCsidl(folder,CSIDL_COMMON_DESKTOPDIRECTORY);
         m_isMyComputer=options->specialFolders && IsCsidl(folder,CSIDL_DRIVES);
         m_isMyDocuments=options->specialFolders && IsCsidl(folder,CSIDL_PERSONAL);
         m_isMyNetworkPlaces=options->specialFolders && IsCsidl(folder,CSIDL_NETWORK);
@@ -10915,17 +10968,17 @@ void ReferenceContent::Refresh(IShellView* view,IShellItem* folder,HWND hwnd,boo
         m_isNetworkConnections=options->specialFolders && IsCsidl(folder,CSIDL_CONNECTIONS);
         const auto path=DisplayName(folder,SIGDN_FILESYSPATH);
         const auto name=DisplayName(folder,SIGDN_NORMALDISPLAY);
-        m_isEntireNetwork=options->specialFolders && path.empty() &&
+        m_isEntireNetwork=!m_isDesktop && options->specialFolders && path.empty() &&
             (name==L"Entire Network" || name==L"Вся сеть");
-        m_isMyPictures=IsCsidl(folder,CSIDL_MYPICTURES);
-        m_isImgViewTemplate=!path.empty() && FolderWebViewTemplate(path)==L"imgview.htt";
+        m_isMyPictures=!m_isDesktop && IsCsidl(folder,CSIDL_MYPICTURES);
+        m_isImgViewTemplate=!m_isDesktop && !path.empty() && FolderWebViewTemplate(path)==L"imgview.htt";
         // Same shell classification query as the reference; no ATL dependency.
         struct FolderType : IUnknown {
             virtual HRESULT STDMETHODCALLTYPE GetFolderType(FOLDERTYPEID*)=0;
         };
         const GUID folderTypeIID={0x053b4a86,0x0dc9,0x40a3,{0xb7,0xed,0xbc,0x6a,0x2e,0x95,0x1f,0x48}};
         CComPtr<FolderType> folderType;
-        if (SUCCEEDED(view->QueryInterface(folderTypeIID,reinterpret_cast<void**>(&folderType))) && folderType) {
+        if (!m_isDesktop && SUCCEEDED(view->QueryInterface(folderTypeIID,reinterpret_cast<void**>(&folderType))) && folderType) {
             FOLDERTYPEID type{};
             if (SUCCEEDED(folderType->GetFolderType(&type)) && IsEqualGUID(type,FOLDERTYPEID_Pictures)) m_isMyPictures=true;
         }
@@ -10945,12 +10998,12 @@ void ReferenceContent::Refresh(IShellView* view,IShellItem* folder,HWND hwnd,boo
         wchar_t windows[MAX_PATH]{},programFiles[MAX_PATH]{};
         GetWindowsDirectoryW(windows,ARRAYSIZE(windows));
         SHGetFolderPathW(nullptr,CSIDL_PROGRAM_FILES,nullptr,0,programFiles);
-        m_isWin98SystemFolder=options->specialFolders && options->profile==1 &&
+        m_isWin98SystemFolder=!m_isDesktop && options->specialFolders && options->profile==1 &&
             (SamePath(path.c_str(),windows) || SamePath(path.c_str(),(std::wstring(windows)+L"\\System").c_str()) ||
              SamePath(path.c_str(),(std::wstring(windows)+L"\\System32").c_str()));
-        m_isWin98ProgramFiles=options->specialFolders && options->profile==1 && SamePath(path.c_str(),programFiles);
+        m_isWin98ProgramFiles=!m_isDesktop && options->specialFolders && options->profile==1 && SamePath(path.c_str(),programFiles);
         wchar_t root[MAX_PATH]{}; GetVolumePathNameW(windows,root,ARRAYSIZE(root));
-        m_isMeDriveRoot=options->specialFolders && options->profile==2 && SamePath(path.c_str(),root);
+        m_isMeDriveRoot=!m_isDesktop && options->specialFolders && options->profile==2 && SamePath(path.c_str(),root);
         m_win98Template=m_isMyComputer ? Win98TemplateKind::MyComputer :
             m_isRecycleBin ? Win98TemplateKind::RecycleBin : m_isPrinters ? Win98TemplateKind::Printers :
             m_isControlPanel ? Win98TemplateKind::ControlPanel : m_isNetworkConnections ? Win98TemplateKind::DialUpNetworking :
@@ -11742,6 +11795,8 @@ constexpr PCWSTR kPaneClassName = L"ClassicWebViewPane";
 constexpr UINT_PTR kRefreshTimer = 1;
 // Retries finding the spacer, see OnSyncSpacer.
 constexpr UINT_PTR kSpacerTimer = 2;
+constexpr UINT_PTR kPreviewStatusTimer = 3;
+constexpr UINT_PTR kPrinterRefreshTimer = 4;
 constexpr int kSpacerRetries = 20;
 constexpr UINT WM_PANE_CLOSE = WM_APP + 1;
 // Posted to the pane to widen or collapse its DirectUI spacer, see SyncSpacer.
@@ -11764,6 +11819,7 @@ struct Pane {
     HWND host = nullptr;     // the DirectUIHWND the pane lives in
     HWND defView = nullptr;  // the folder view the contents come from
     ce::win2kwebview::ReferenceContent reference;
+    unsigned referenceRetries=12;
     HWND tooltip=nullptr;
     int hotTip=-1, heldLink=-1, syncedBannerHeight=0;
     std::wstring tooltipText;
@@ -11928,6 +11984,7 @@ static int Scale(const Pane* pane, int value) {
 // the file dialogs Explorer shows. The pointer carries no reference of its
 // own; the browser outlives the view it belongs to.
 static IShellBrowser* GetShellBrowser(HWND defView) {
+    if (!ce::win2kwebview::IsExplorerFolderView(defView)) return nullptr;
     if (!defView || !IsWindow(defView)) {
         return nullptr;
     }
@@ -12335,7 +12392,8 @@ static void RefreshReferencePane(Pane*,bool force=false);
 static void RefreshPane(Pane* pane) {
     if (g_webOptions.load()->classicLayout) { RefreshReferencePane(pane); return; }
     ce::win2kwebview::CancelPreview(pane->reference.lifetime);
-    pane->reference.ClearPreview(); pane->reference.DestroyViewer(); KillTimer(pane->hwnd,3);
+    pane->reference.ClearPreview(); pane->reference.DestroyViewer();
+    KillTimer(pane->hwnd,kPreviewStatusTimer); KillTimer(pane->hwnd,kPrinterRefreshTimer);
     if (g_settings.skipControlPanel && IsControlPanelFolder(pane->defView)) {
         if (!pane->suppressed) {
             pane->suppressed = true;
@@ -13737,7 +13795,7 @@ static void* FindSpacer(HWND host,PCWSTR name=L"ClassicWebViewPane") {
 static int ReferencePanelWidth(Pane* pane);
 static RECT ReferenceAvailableRect(Pane* pane);
 static bool PaneFits(Pane* pane, HWND viewWindow) {
-    if (g_webOptions.load()->classicLayout) return ReferencePanelWidth(pane)>0;
+    if (g_webOptions.load()->classicLayout) return pane->reference.viewReady && ReferencePanelWidth(pane)>0;
     if (g_settings.minListWidth <= 0 || !g_dui.ok) {
         return true;
     }
@@ -13975,23 +14033,23 @@ static void OnSyncSpacer(Pane* pane) {
 }
 
 using namespace ce::win2kwebview;
-static IShellItem* GetCurrentFolder(HWND defView) {
-    CComPtr<IFolderView> view; view.Attach(GetFolderView(defView));
-    CComPtr<IPersistFolder2> folder; PIDLIST_ABSOLUTE pidl=nullptr;
-    CComPtr<IShellItem> item;
-    if (view && SUCCEEDED(view->GetFolder(IID_PPV_ARGS(&folder))) && folder &&
-        SUCCEEDED(folder->GetCurFolder(&pidl))) {
-        SHCreateItemFromIDList(pidl,IID_PPV_ARGS(&item)); CoTaskMemFree(pidl);
-    }
-    return item.Detach();
-}
 static void RefreshReferencePane(Pane* pane,bool force) {
     if (!pane->defView || g_unloading) return;
     CComPtr<IShellBrowser> browser=GetShellBrowser(pane->defView);
     CComPtr<IShellView> view; CComPtr<IShellItem> folder;
     if (browser) browser->QueryActiveShellView(&view);
-    folder.Attach(GetCurrentFolder(pane->defView));
-    if (!view || !folder) return;
+    if(IsExplorerFolderView(pane->defView) && ShellViewMatchesWindow(view,pane->defView))
+        folder.Attach(FolderItemFromView(view));
+    if (!view || !folder) {
+        pane->reference.ResetView();
+        ShowWindow(pane->hwnd,SW_HIDE); LayOutPane(pane->hwnd);
+        if(pane->referenceRetries>0) {
+            --pane->referenceRetries;
+            SetTimer(pane->hwnd,kRefreshTimer,120,nullptr);
+        }
+        return;
+    }
+    pane->referenceRetries=12;
     const auto name=GetItemText(folder,SIGDN_NORMALDISPLAY);
     const auto key=GetItemText(folder,SIGDN_DESKTOPABSOLUTEPARSING);
     if (force || key!=pane->reference.folderKey || name!=pane->title) {
@@ -14007,15 +14065,22 @@ static void RefreshReferencePane(Pane* pane,bool force) {
     pane->reference.isActiveView=[defView=pane->defView](IShellView* expected) {
         CComPtr<IShellBrowser> browser=GetShellBrowser(defView);
         CComPtr<IShellView> current;
-        if(!browser || FAILED(browser->QueryActiveShellView(&current)) || !current) return false;
+        if(!browser || FAILED(browser->QueryActiveShellView(&current)) || !ShellViewMatchesWindow(current,defView)) return false;
         CComQIPtr<IUnknown> currentIdentity(current), expectedIdentity(expected);
         return currentIdentity && currentIdentity.p==expectedIdentity.p;
     };
     pane->reference.Refresh(view,folder,pane->hwnd,force);
+    KillTimer(pane->hwnd,kPreviewStatusTimer);
+    if(pane->reference.pendingSince) {
+        const ULONGLONG elapsed=GetTickCount64()-pane->reference.pendingSince;
+        if(elapsed<1000) SetTimer(pane->hwnd,kPreviewStatusTimer,static_cast<UINT>(1000-elapsed),nullptr);
+    }
+    KillTimer(pane->hwnd,kPrinterRefreshTimer);
+    if(pane->reference.m_isPrinters && g_webOptions.load()->printerRefresh)
+        SetTimer(pane->hwnd,kPrinterRefreshTimer,5000,nullptr);
     // Existing switches still apply in the faithful layout.
     if (!g_settings.showDriveSpace) pane->reference.m_pane.SetCapacityPie(-1);
     pane->suppressed=g_settings.skipControlPanel && IsControlPanelFolder(pane->defView);
-    SetTimer(pane->hwnd,3,500,nullptr);
     LayOutPane(pane->hwnd);
 }
 static void SetReferenceStatus(Pane* pane,int index) {
@@ -14267,7 +14332,17 @@ static LRESULT CALLBACK PaneWndProc(HWND hWnd,
                     g_webOptions.load()->detached,g_webOptions.load()->print,pane->reference.printable,lParam);
             return 0;
         case WM_TIMER: {
-            if (pane && wParam==3) { RefreshReferencePane(pane,false); return 0; }
+            if (pane && wParam==kPreviewStatusTimer) {
+                KillTimer(hWnd,kPreviewStatusTimer);
+                if(pane->reference.pendingSince) {
+                    pane->reference.m_pane.SetThumbnailPending(true); InvalidateRect(hWnd,nullptr,FALSE);
+                }
+                return 0;
+            }
+            if (pane && wParam==kPrinterRefreshTimer) {
+                KillTimer(hWnd,kPrinterRefreshTimer);
+                RefreshReferencePane(pane,false); return 0;
+            }
             if (pane && wParam == kSpacerTimer) {
                 KillTimer(hWnd, kSpacerTimer);
                 OnSyncSpacer(pane);
@@ -14629,6 +14704,9 @@ static void LayOutPane(HWND paneWindow) {
         return;
     }
 
+    if (g_webOptions.load()->classicLayout && !pane->reference.viewReady) {
+        ShowWindow(paneWindow,SW_HIDE); SyncSpacer(pane); return;
+    }
     if (pane->suppressed) {
         ShowWindow(paneWindow, SW_HIDE);
         return;
@@ -14769,6 +14847,7 @@ LRESULT CALLBACK DefViewSubclassProc(HWND hWnd,
 }
 
 static void AttachToDefViewOnItsThread(HWND defView) {
+    if (!ce::win2kwebview::IsExplorerFolderView(defView)) return;
     if (g_unloading) {
         return;
     }
@@ -14802,6 +14881,9 @@ static void AttachToDefViewOnItsThread(HWND defView) {
     }
 
     if (pane->defView != defView) {
+        if(pane->defView) RemovePropW(pane->defView,kPaneProperty);
+        pane->reference.ResetView();
+        pane->referenceRetries=12;
         // Navigation can reuse the host and pane with a new, not yet laid
         // out view. Its spacer must be checked before reusing a visible pane.
         pane->spacerReady = false;
@@ -14831,6 +14913,7 @@ static void AttachToDefViewOnItsThread(HWND defView) {
 // own. A window has to be created by the thread that pumps its parent, so the
 // work is handed over to the view itself.
 static void AttachToDefView(HWND defView) {
+    if (!ce::win2kwebview::IsExplorerFolderView(defView)) return;
     if (!AddSubclass(defView, DefViewSubclassProc, 0)) {
         return;
     }
