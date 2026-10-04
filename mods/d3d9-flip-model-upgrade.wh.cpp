@@ -87,7 +87,8 @@ instead.
 - Games that create their device with mixed vertex processing aren't upgraded,
   as their managed vertex buffers can't be emulated.
 - Some games with anti-tamper protection hang or close with the mod enabled.
-  Turn on **SafeHook** for them, so that the mod hooks no system DLL.
+  Turn on **SafeHook** for them, so that the mod doesn't hook `LoadLibraryExW`
+  in `kernelbase.dll`. It hooks `d3d9.dll` either way.
 - No guarantees of anti-cheat compatibility.
 
 Enable the mod's logging (Advanced → Debug logging) to see exactly what was
@@ -132,12 +133,13 @@ changed and any failure codes.
   $name: SafeHook
   $description: >-
     For games whose anti-tamper protection hangs or closes them with the mod
-    enabled. Off: d3d9.dll is noticed by hooking LoadLibraryExW in
-    kernelbase.dll, so the mod's hooks are in place before the game can use it.
-    On: a Windows DLL load notification is used instead, and no system DLL is
-    hooked. The hooks are installed a moment after d3d9.dll loads, so a game
-    that uses it right away may start without the upgrade. Applies the next time
-    the game starts.
+    enabled. Off: if d3d9.dll isn't loaded yet when the mod starts, its loading
+    is noticed by hooking LoadLibraryExW in kernelbase.dll, so the mod's hooks
+    are in place before the game can use it. On: a Windows DLL load
+    notification is used instead, and kernelbase.dll isn't hooked. d3d9.dll is
+    hooked either way. The hooks are installed a moment after d3d9.dll loads,
+    so a game that uses it right away may start without the upgrade. Applies the
+    next time the game starts.
 */
 // ==/WindhawkModSettings==
 
@@ -1827,6 +1829,16 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
         return callOriginal();
     }
 
+    // pp is set, see ShouldUpgrade. Another device of the window, e.g. of an
+    // overlay, would only be refused FLIPEX.
+    HWND window = pp->hDeviceWindow ? pp->hDeviceWindow : focusWindow;
+    if (g_settings.flipModel && !IsFlipWindowAvailable(window, nullptr)) {
+        Wh_Log(L"Window %p already has a flip model device, creating a "
+               L"regular device",
+               window);
+        return callOriginal();
+    }
+
     IDirect3D9Ex* d3dEx = nullptr;
     if (FAILED(d3d->QueryInterface(__uuidof(IDirect3D9Ex),
                                    (void**)&d3dEx))) {
@@ -1954,28 +1966,29 @@ HRESULT WINAPI Direct3DCreate9Ex_Hook(UINT sdkVersion, IDirect3D9Ex** d3d) {
 ////////////////////////////////////////////////////////////////////////////////
 // d3d9.dll load handling
 
+// Where the system DLL is: System32, or SysWOW64, under which 32-bit processes
+// may have it recorded. Empty if unknown.
+std::wstring GetSystemDllPath(bool wow64, PCWSTR name) {
+    WCHAR dir[MAX_PATH];
+    UINT len = wow64 ? GetSystemWow64DirectoryW(dir, ARRAYSIZE(dir))
+                     : GetSystemDirectoryW(dir, ARRAYSIZE(dir));
+    if (!len || len >= ARRAYSIZE(dir)) {
+        return std::wstring();
+    }
+    return std::wstring(dir) + L"\\" + name;
+}
+
 // Only the system d3d9.dll is hooked. It's never loaded by the mod, as that
 // would make the loader skip a d3d9.dll proxy in the game's folder.
 HMODULE GetSystemD3D9Module() {
-    WCHAR dir[MAX_PATH];
-
-    UINT len = GetSystemDirectoryW(dir, ARRAYSIZE(dir));
-    if (len && len < ARRAYSIZE(dir)) {
-        std::wstring path = std::wstring(dir) + L"\\d3d9.dll";
-        if (HMODULE module = GetModuleHandleW(path.c_str())) {
-            return module;
+    for (bool wow64 : {false, true}) {
+        std::wstring path = GetSystemDllPath(wow64, L"d3d9.dll");
+        if (!path.empty()) {
+            if (HMODULE module = GetModuleHandleW(path.c_str())) {
+                return module;
+            }
         }
     }
-
-    // 32-bit processes may have it recorded under SysWOW64.
-    len = GetSystemWow64DirectoryW(dir, ARRAYSIZE(dir));
-    if (len && len < ARRAYSIZE(dir)) {
-        std::wstring path = std::wstring(dir) + L"\\d3d9.dll";
-        if (HMODULE module = GetModuleHandleW(path.c_str())) {
-            return module;
-        }
-    }
-
     return nullptr;
 }
 
@@ -2052,19 +2065,31 @@ HANDLE g_dllLoadedEvent;
 HANDLE g_hookThreadStopEvent;
 HANDLE g_hookThread;
 
+// The paths the system d3d9.dll may be recorded under. Set before the
+// notification is registered, so that the callback only compares strings.
+std::wstring g_systemDllPaths[2];
+std::atomic<int> g_loadedPathIndex{-1};
+
+bool PathEquals(const LdrUnicodeString& string, const std::wstring& path) {
+    return !path.empty() && string.length == path.size() * sizeof(WCHAR) &&
+           _wcsnicmp(string.buffer, path.c_str(), path.size()) == 0;
+}
+
 VOID CALLBACK OnDllNotification(ULONG reason,
                                 const LdrDllLoadedData* data,
                                 PVOID context) {
-    if (reason != kLdrDllLoaded || !data || !data->baseDllName ||
-        !data->baseDllName->buffer) {
+    if (reason != kLdrDllLoaded || !data || !data->fullDllName ||
+        !data->fullDllName->buffer) {
         return;
     }
 
-    const LdrUnicodeString& name = *data->baseDllName;
-    constexpr USHORT kNameLength = 8;  // d3d9.dll
-    if (name.length == kNameLength * sizeof(WCHAR) &&
-        _wcsnicmp(name.buffer, L"d3d9.dll", kNameLength) == 0) {
-        SetEvent(g_dllLoadedEvent);
+    // Only the system d3d9.dll, not a proxy of the game with the same name.
+    for (int i = 0; i < (int)ARRAYSIZE(g_systemDllPaths); i++) {
+        if (PathEquals(*data->fullDllName, g_systemDllPaths[i])) {
+            g_loadedPathIndex = i;
+            SetEvent(g_dllLoadedEvent);
+            return;
+        }
     }
 }
 
@@ -2076,28 +2101,38 @@ DWORD WINAPI HookThreadProc(void* parameter) {
             break;
         }
 
-        // A d3d9.dll proxy of the game, the system one loads later.
-        HMODULE module = GetSystemD3D9Module();
-        if (!module) {
+        // It's already loaded, so this only waits until the loader is done
+        // with it, so that it's initialized, and keeps it loaded meanwhile.
+        HMODULE reference = LoadLibraryExW(
+            g_systemDllPaths[g_loadedPathIndex].c_str(), nullptr, 0);
+        if (!reference) {
             continue;
-        }
-
-        // Waits until the loader is done with it, so that it's initialized.
-        WCHAR path[MAX_PATH];
-        if (GetModuleFileNameW(module, path, ARRAYSIZE(path))) {
-            if (HMODULE reference = LoadLibraryExW(path, nullptr, 0)) {
-                FreeLibrary(reference);
-            }
         }
 
         if (HookD3D9ExportsIfLoaded()) {
             Wh_ApplyHookOperations();
         }
+        FreeLibrary(reference);
     }
     return 0;
 }
 
+void CloseWatchEvents() {
+    if (g_dllLoadedEvent) {
+        CloseHandle(g_dllLoadedEvent);
+        g_dllLoadedEvent = nullptr;
+    }
+    if (g_hookThreadStopEvent) {
+        CloseHandle(g_hookThreadStopEvent);
+        g_hookThreadStopEvent = nullptr;
+    }
+}
+
 bool StartWatchingDllLoad() {
+    for (int i = 0; i < (int)ARRAYSIZE(g_systemDllPaths); i++) {
+        g_systemDllPaths[i] = GetSystemDllPath(i == 1, L"d3d9.dll");
+    }
+
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     auto registerNotification =
         ntdll ? (LdrRegisterDllNotification_t)GetProcAddress(
@@ -2111,6 +2146,8 @@ bool StartWatchingDllLoad() {
         registerNotification(0, OnDllNotification, nullptr,
                              &g_dllNotificationCookie) != 0) {
         g_dllNotificationCookie = nullptr;
+        // Wh_ModInit fails, so nothing else would close them.
+        CloseWatchEvents();
         Wh_Log(L"Registering for DLL load notifications failed");
         return false;
     }
@@ -2139,14 +2176,7 @@ void StopWatchingDllLoad() {
         g_hookThread = nullptr;
     }
 
-    if (g_dllLoadedEvent) {
-        CloseHandle(g_dllLoadedEvent);
-        g_dllLoadedEvent = nullptr;
-    }
-    if (g_hookThreadStopEvent) {
-        CloseHandle(g_hookThreadStopEvent);
-        g_hookThreadStopEvent = nullptr;
-    }
+    CloseWatchEvents();
 }
 
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
@@ -2191,10 +2221,16 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     // Hooks set here are applied by Windhawk once Wh_ModInit returns.
-    bool hooked = HookD3D9ExportsIfLoaded();
+    HookD3D9ExportsIfLoaded();
+
+    // Already loaded, nothing to wait for. Then LoadLibraryExW isn't hooked
+    // either, which some anti-tamper protection doesn't tolerate.
+    if (g_exportsHooked) {
+        return TRUE;
+    }
 
     if (g_settings.safeHook) {
-        return hooked || StartWatchingDllLoad();
+        return StartWatchingDllLoad();
     }
 
     HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
