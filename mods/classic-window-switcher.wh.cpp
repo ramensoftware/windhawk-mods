@@ -1319,6 +1319,13 @@ void sws_WindowHelpers_GetDesktopText(wchar_t* wszTitle)
 	if (_sws_ExplorerFrame)
 	{
 		LoadStringW((HINSTANCE)_sws_ExplorerFrame, 13140, wszTitle, MAX_PATH);
+        // Strip CJK "(D)" from it
+        auto titleText = std::wstring(wszTitle);
+        size_t pos = titleText.find(L"(&D)");
+        if (pos != std::wstring::npos) {
+            titleText.replace(pos, 4, L"");
+        }
+        wcscpy(wszTitle, titleText.c_str());
 	}
 	else
 	{
