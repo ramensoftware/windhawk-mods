@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              smooth-virtual-desktop-switching
 // @name            Smooth Virtual Desktop Switching
-// @description     Adjustable settling duration for native touchpad desktop swipes.
+// @description     Smooth native touchpad and Ctrl+Win+Arrow virtual desktop transitions.
 // @version         1.0.0
 // @author          enesky
 // @github          https://github.com/enesky
@@ -15,7 +15,8 @@
 # Smooth Virtual Desktop Switching
 
 Adjusts the animation that finishes a native three- or four-finger touchpad
-swipe between virtual desktops after you lift your fingers.
+swipe between virtual desktops after you lift your fingers. The same duration
+and curve also apply to Ctrl+Win+Left/Right Arrow desktop switches.
 
 ## Settings
 
@@ -26,9 +27,12 @@ swipe between virtual desktops after you lift your fingers.
 - **Debug logging:** optional Windhawk logs; no files are written.
 
 Windows' gesture direction, finger tracking, and desktop selection threshold
-remain native. Keyboard shortcuts and touchscreen swipes are not changed.
+remain native. Keyboard shortcuts keep their native desktop selection; touchscreen
+swipes are not changed.
 The mod permits thumbnail animations during the release even if Windows'
 client-area animation preference is off; it does not change that system setting.
+For native keyboard cycling, the client-area animation query is overridden only
+on the calling thread while the desktop hotkey handler runs.
 
 ## Compatibility
 
@@ -82,22 +86,31 @@ std::atomic<unsigned> g_duration{750};
 std::atomic<bool> g_easeOut{false}, g_logging{false};
 std::atomic<bool> g_linear{false};
 thread_local unsigned g_commitDepth = 0;
+thread_local unsigned g_keyboardDepth = 0;
+using HotkeyCommit = HRESULT (*)(void*, void*, float);
+using CycleInDirection = HRESULT (*)(void*, int);
+HotkeyCommit g_originalHotkeyCommit;
+CycleInDirection g_originalCycle;
+decltype(&SystemParametersInfoW) g_originalSystemParametersInfo;
 
 
 using AnimationsEnabledFunction = bool (*)(void*);
 AnimationsEnabledFunction g_animationsEnabledOriginal;
 bool AnimationsEnabledHook(void* self) {
     bool enabled = g_animationsEnabledOriginal(self);
-    if (g_commitDepth && !enabled) {
-        if (g_logging.load()) Wh_Log(L"Allowing animation inside trackpad release");
+    if ((g_commitDepth || g_keyboardDepth) && !enabled) {
+        if (g_logging.load()) Wh_Log(L"Allowing animation inside desktop transition");
         return true;
     }
     return enabled;
 }
 
-struct CommitScope {
-    CommitScope() { ++g_commitDepth; }
-    ~CommitScope() { --g_commitDepth; }
+struct DepthScope {
+    unsigned& depth;
+    explicit DepthScope(unsigned& value) : depth(value) { ++depth; }
+    ~DepthScope() { --depth; }
+    DepthScope(const DepthScope&) = delete;
+    DepthScope& operator=(const DepthScope&) = delete;
 };
 
 HRESULT CommitHook(void* self, void* handler, unsigned token,
@@ -106,8 +119,29 @@ HRESULT CommitHook(void* self, void* handler, unsigned token,
     if (touch) return g_originalCommit(self, handler, token, target, touch);
     if (g_logging.load())
         Wh_Log(L"gesture window commit: target=%f touch=%d token=%u", target, touch, token);
-    CommitScope scope;
+    DepthScope scope(g_commitDepth);
     return g_originalCommit(self, handler, token, target, touch);
+}
+
+HRESULT HotkeyCommitHook(void* self, void* animator, float target) {
+    if (g_logging.load()) Wh_Log(L"keyboard window commit: target=%f", target);
+    DepthScope scope(g_commitDepth);
+    return g_originalHotkeyCommit(self, animator, target);
+}
+
+HRESULT CycleInDirectionHook(void* self, int direction) {
+    // Windows checks SPI_GETCLIENTAREAANIMATION before choosing its animated path.
+    // Keep this permission scoped separately from duration changes in Commit.
+    DepthScope scope(g_keyboardDepth);
+    return g_originalCycle(self, direction);
+}
+
+BOOL WINAPI SystemParametersInfoHook(UINT action, UINT param, PVOID value, UINT flags) {
+    if (g_keyboardDepth && action == SPI_GETCLIENTAREAANIMATION && value) {
+        *static_cast<BOOL*>(value) = TRUE;
+        return TRUE;
+    }
+    return g_originalSystemParametersInfo(action, param, value, flags);
 }
 
 HRESULT TransitionHook(void* self, unsigned delayMs, unsigned durationMs,
@@ -115,7 +149,7 @@ HRESULT TransitionHook(void* self, unsigned delayMs, unsigned durationMs,
                        const double* values, unsigned count, bool force) {
     static TA_CUBIC_BEZIER ease{{TTFT_CUBIC_BEZIER}, .22f, 1.f, .36f, 1.f};
     static TA_CUBIC_BEZIER linear{{TTFT_CUBIC_BEZIER}, 1.f/3.f, 1.f/3.f, 2.f/3.f, 2.f/3.f};
-    // Only animated cubic transitions within a gesture commit are changed.
+    // Only animated cubic transitions within a gesture or hotkey commit are changed.
     // Instantaneous updates during dragging stay untouched.
     if (g_commitDepth && durationMs && timing &&
         timing->eTimingFunctionType == TTFT_CUBIC_BEZIER) {
@@ -157,6 +191,16 @@ BOOL Wh_ModInit() {
          },
          &g_originalCommit,
          CommitHook},
+        {{
+             L"public: long __cdecl VirtualDesktopHotKeyWindow::Commit(struct IVirtualDesktopSwitchAnimator2 *,float)",
+         },
+         &g_originalHotkeyCommit,
+         HotkeyCommitHook},
+        {{
+             L"private: long __cdecl CVirtualDesktopHotkeyHandler::_CycleInDirection(enum VirtualDesktopSwitchDirection)",
+         },
+         &g_originalCycle,
+         CycleInDirectionHook},
     };
     WindhawkUtils::SYMBOL_HOOK twinuiDllHooks[] = {
         {{
@@ -173,6 +217,12 @@ BOOL Wh_ModInit() {
     if (!WindhawkUtils::HookSymbols(shell, shellHooks, ARRAYSIZE(shellHooks)) ||
         !WindhawkUtils::HookSymbols(thumbnails, twinuiDllHooks, ARRAYSIZE(twinuiDllHooks))) {
         Wh_Log(L"Failed to hook required symbols; initialization aborted.");
+        return FALSE;
+    }
+    if (!WindhawkUtils::SetFunctionHook(SystemParametersInfoW,
+                                        SystemParametersInfoHook,
+                                        &g_originalSystemParametersInfo)) {
+        Wh_Log(L"Failed to hook the desktop hotkey animation preference query");
         return FALSE;
     }
     Wh_Log(L"Smooth release initialized; duration=%u ms. Ready.", g_duration.load());
