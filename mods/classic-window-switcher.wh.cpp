@@ -2,7 +2,7 @@
 // @id              classic-window-switcher
 // @name            ClassicWindowSwitcher
 // @description     Bring back the classic Alt+Tab dialog
-// @version         1.2
+// @version         1.3
 // @author          Ingan121
 // @github          https://github.com/Ingan121
 // @twitter         https://twitter.com/Ingan121
