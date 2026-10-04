@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              npp-taskdlg-textcolor
-// @name            Notepad++ Save Dialog Text Color
-// @description     Fixes dark-on-dark text in Notepad++ Save/confirm dialogs
+// @name            Notepad++ Dark Dialog Fix
+// @description     Readable text in Notepad++ Save and confirm dialogs when dark mode is on
 // @version         1.0.1
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
@@ -13,11 +13,19 @@
 
 // ==WindhawkModReadme==
 /*
-# Notepad++ Save Dialog Text Color
+# Notepad++ Dark Dialog Fix
 
-Notepad++ dark mode paints Save/confirm dialogs dark while theme text stays
-black. Forces readable light text for TaskDialog/Static/Button theme text
-colors inside notepad++.exe only.
+In dark mode, Notepad++ paints its Save and confirm dialogs dark but leaves the
+text black, so you can barely read it. This mod makes that text light again.
+
+![Notepad++ Dark Dialog Fix preview](https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/npp-taskdlg-textcolor.png)
+
+## Features
+
+- **Readable dialog text** in Save, Save changes and other confirm dialogs.
+- **Fixes labels and buttons** drawn with the theme's text color.
+- **Only touches Notepad++.** No other app is affected, and nothing is changed
+  on disk.
 */
 // ==/WindhawkModReadme==
 
