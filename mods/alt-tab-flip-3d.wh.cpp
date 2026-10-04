@@ -4,7 +4,7 @@
 // @name:pt-BR      Alt+Tab Flip 3D (estilo Vista)
 // @description     Replaces Alt+Tab with a fluid, Windows Vista-style Flip 3D stack of live windows
 // @description:pt-BR Substitui o Alt+Tab por uma pilha 3D fluida de janelas ao vivo, no estilo Flip 3D do Windows Vista
-// @version         1.5.2
+// @version         1.5.3
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
@@ -437,16 +437,12 @@ constexpr WPARAM kStartBackwards = 1;
 // the keys, usually because an elevated window has the focus.
 constexpr WPARAM kStartFromHotkey = 2;
 
-// Explorer's threads that can receive the Alt+Tab hotkey, found by their
-// names: "Immersive Shell" gets it on current Windows 11 builds (once it's
-// hooked, no more looking), and "MultitaskingView" (the native switcher's own
-// thread) is hooked too when it exists, in case another build delivers it
-// there. Until the first is found, it's looked for again, less and less often
-// (see ExplorerThreadProc).
-constexpr PCWSTR kAltTabThreadNames[] = {L"Immersive Shell",
-                                         L"MultitaskingView"};
-constexpr DWORD kFindAltTabThreadsIntervalMs = 2000;
-constexpr DWORD kFindAltTabThreadsMaxIntervalMs = 60000;
+// The explorer thread that receives the Alt+Tab hotkey, found by its name.
+// Until it's found, it's looked for again, less and less often (see
+// ExplorerThreadProc).
+constexpr PCWSTR kAltTabThreadName = L"Immersive Shell";
+constexpr DWORD kFindAltTabThreadIntervalMs = 2000;
+constexpr DWORD kFindAltTabThreadMaxIntervalMs = 60000;
 // How often explorer checks whether the taskbar has been created yet.
 constexpr DWORD kWaitForTaskbarIntervalMs = 1000;
 
@@ -824,18 +820,13 @@ DWORD WINAPI HookThreadProc(LPVOID parameter) {
 // the hotkey is handed to the switcher instead of opening the native one.
 //
 // This is the only part of the mod that runs inside explorer. The hotkey
-// arrives on one of explorer's named threads (see kAltTabThreadNames), which
-// are found by their names: only those threads are hooked, with thread hooks
+// arrives on explorer's "Immersive Shell" thread (see kAltTabThreadName),
+// which is found by its name: only that thread is hooked, with a thread hook
 // inside explorer itself.
 
-struct MessageHook {
-    DWORD threadId;
-    int nameIndex;  // In kAltTabThreadNames.
-    HANDLE thread;  // To know when it ends.
-    HHOOK hook;
-};
-
-std::vector<MessageHook> g_messageHooks;  // Explorer thread only.
+// Explorer thread only.
+HHOOK g_messageHook;
+HANDLE g_messageHookThread;  // To know when it ends.
 std::atomic<int> g_messageHookCalls;
 HANDLE g_explorerStopEvent;
 HANDLE g_explorerThread;
@@ -878,15 +869,10 @@ LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam) {
     return result;
 }
 
-struct NamedThread {
-    DWORD threadId;
-    int nameIndex;  // In kAltTabThreadNames.
-};
-
-// Explorer's threads that can receive the hotkey (see kAltTabThreadNames) and
+// The ID of explorer's thread that receives the hotkey, or 0 if it doesn't
 // exist now.
-std::vector<NamedThread> FindAltTabThreads() {
-    std::vector<NamedThread> found;
+DWORD FindAltTabThread() {
+    DWORD found = 0;
     const DWORD processId = GetCurrentProcessId();
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
     if (snapshot == INVALID_HANDLE_VALUE) {
@@ -894,7 +880,7 @@ std::vector<NamedThread> FindAltTabThreads() {
     }
 
     THREADENTRY32 entry{sizeof(entry)};
-    for (BOOL more = Thread32First(snapshot, &entry); more;
+    for (BOOL more = Thread32First(snapshot, &entry); more && !found;
          more = Thread32Next(snapshot, &entry)) {
         if (entry.th32OwnerProcessID != processId) {
             continue;
@@ -905,12 +891,9 @@ std::vector<NamedThread> FindAltTabThreads() {
             continue;
         }
         PWSTR name = nullptr;
-        if (SUCCEEDED(GetThreadDescription(thread, &name)) && name) {
-            for (int i = 0; i < (int)ARRAYSIZE(kAltTabThreadNames); i++) {
-                if (wcscmp(name, kAltTabThreadNames[i]) == 0) {
-                    found.push_back({entry.th32ThreadID, i});
-                }
-            }
+        if (SUCCEEDED(GetThreadDescription(thread, &name)) && name &&
+            wcscmp(name, kAltTabThreadName) == 0) {
+            found = entry.th32ThreadID;
         }
         if (name) {
             LocalFree(name);
@@ -922,63 +905,43 @@ std::vector<NamedThread> FindAltTabThreads() {
     return found;
 }
 
-// Hooks the threads found that aren't hooked yet. Returns true if one was
-// hooked now.
-bool HookAltTabThreads() {
-    bool hookedNew = false;
-    for (const NamedThread& found : FindAltTabThreads()) {
-        if (std::any_of(g_messageHooks.begin(), g_messageHooks.end(),
-                        [&found](const MessageHook& entry) {
-                            return entry.threadId == found.threadId;
-                        })) {
-            continue;
-        }
-        HANDLE thread = OpenThread(SYNCHRONIZE, FALSE, found.threadId);
-        if (!thread) {
-            continue;
-        }
-        // A thread of this process: no module (SetWindowsHookEx docs).
-        HHOOK hook = SetWindowsHookExW(WH_GETMESSAGE, GetMessageProc, nullptr,
-                                       found.threadId);
-        if (!hook) {
-            Wh_Log(L"SetWindowsHookEx(WH_GETMESSAGE) failed: %u",
-                   GetLastError());
-            CloseHandle(thread);
-            continue;
-        }
-        Wh_Log(L"Hooked explorer's thread %u (%s)", found.threadId,
-               kAltTabThreadNames[found.nameIndex]);
-        g_messageHooks.push_back({found.threadId, found.nameIndex, thread, hook});
-        hookedNew = true;
+// Hooks the thread that receives the hotkey, if it exists now. Returns true if
+// it's hooked.
+bool HookAltTabThread() {
+    const DWORD threadId = FindAltTabThread();
+    if (!threadId) {
+        return false;
     }
-    return hookedNew;
-}
-
-// Whether the thread that gets the hotkey on current builds is hooked: then
-// no more looking.
-bool IsMainAltTabThreadHooked() {
-    return std::any_of(g_messageHooks.begin(), g_messageHooks.end(),
-                       [](const MessageHook& entry) {
-                           return entry.nameIndex == 0;
-                       });
-}
-
-// Removes the hook of a thread that ended (its ID can be reused).
-void UnhookEndedThread(size_t index) {
-    UnhookWindowsHookEx(g_messageHooks[index].hook);
-    CloseHandle(g_messageHooks[index].thread);
-    g_messageHooks.erase(g_messageHooks.begin() + index);
-}
-
-void UnhookAltTabThreads() {
-    for (const MessageHook& entry : g_messageHooks) {
-        UnhookWindowsHookEx(entry.hook);
-        CloseHandle(entry.thread);
+    HANDLE thread = OpenThread(SYNCHRONIZE, FALSE, threadId);
+    if (!thread) {
+        return false;
     }
-    g_messageHooks.clear();
+    // A thread of this process: no module (SetWindowsHookEx docs).
+    HHOOK hook =
+        SetWindowsHookExW(WH_GETMESSAGE, GetMessageProc, nullptr, threadId);
+    if (!hook) {
+        Wh_Log(L"SetWindowsHookEx(WH_GETMESSAGE) failed: %u", GetLastError());
+        CloseHandle(thread);
+        return false;
+    }
+    Wh_Log(L"Hooked explorer's thread %u (%s)", threadId, kAltTabThreadName);
+    g_messageHook = hook;
+    g_messageHookThread = thread;
+    return true;
+}
 
-    // Let calls already running on explorer's threads leave the module before
-    // it gets unloaded. No new calls can start after the hooks are removed, so
+void UnhookAltTabThread() {
+    if (g_messageHook) {
+        UnhookWindowsHookEx(g_messageHook);
+        g_messageHook = nullptr;
+    }
+    if (g_messageHookThread) {
+        CloseHandle(g_messageHookThread);
+        g_messageHookThread = nullptr;
+    }
+
+    // Let calls already running on explorer's thread leave the module before
+    // it gets unloaded. No new calls can start after the hook is removed, so
     // this always ends.
     const ULONGLONG start = GetTickCount64();
     bool logged = false;
@@ -1012,43 +975,34 @@ DWORD WINAPI ExplorerThreadProc(LPVOID) {
         }
     }
 
-    // Hooks the named threads, and again if one is ever made anew. Until the
-    // main one is hooked, it's looked for again, less and less often.
-    DWORD interval = kFindAltTabThreadsIntervalMs;
+    // Hooks the thread, and again if it's ever made anew. Until it's hooked,
+    // it's looked for again, less and less often.
+    DWORD interval = kFindAltTabThreadIntervalMs;
     bool loggedMissing = false;
     for (;;) {
-        if (HookAltTabThreads()) {
-            interval = kFindAltTabThreadsIntervalMs;
-        }
-        const bool mainHooked = IsMainAltTabThreadHooked();
-        if (!mainHooked && !loggedMissing) {
+        if (!g_messageHook && !HookAltTabThread() && !loggedMissing) {
             Wh_Log(L"Explorer's \"%s\" thread wasn't found yet",
-                   kAltTabThreadNames[0]);
+                   kAltTabThreadName);
             loggedMissing = true;
         }
 
-        std::vector<HANDLE> events{g_explorerStopEvent};
-        for (const MessageHook& entry : g_messageHooks) {
-            if (events.size() < MAXIMUM_WAIT_OBJECTS) {
-                events.push_back(entry.thread);
-            }
-        }
+        const HANDLE events[] = {g_explorerStopEvent, g_messageHookThread};
         const DWORD result = WaitForMultipleObjects(
-            (DWORD)events.size(), events.data(), FALSE,
-            mainHooked ? INFINITE : interval);
+            g_messageHook ? 2 : 1, events, FALSE,
+            g_messageHook ? INFINITE : interval);
         if (result == WAIT_TIMEOUT) {
-            interval = std::min(interval * 2, kFindAltTabThreadsMaxIntervalMs);
-        } else if (result > WAIT_OBJECT_0 &&
-                   result < WAIT_OBJECT_0 + events.size()) {
-            UnhookEndedThread(result - WAIT_OBJECT_0 - 1);
-            interval = kFindAltTabThreadsIntervalMs;
+            interval = std::min(interval * 2, kFindAltTabThreadMaxIntervalMs);
+        } else if (result == WAIT_OBJECT_0 + 1) {
+            // The thread ended (its ID can be reused).
+            UnhookAltTabThread();
+            interval = kFindAltTabThreadIntervalMs;
             loggedMissing = false;
         } else {
             break;
         }
     }
 
-    UnhookAltTabThreads();
+    UnhookAltTabThread();
     return 0;
 }
 
