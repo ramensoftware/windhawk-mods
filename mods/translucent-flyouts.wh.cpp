@@ -1,8 +1,8 @@
 // ==WindhawkMod==
 // @id              translucent-flyouts
 // @name            Translucent Flyouts
-// @description     Translucent/acrylic Win32 flyouts (context menus, dropdowns, tooltips)
-// @version         0.6.1
+// @description     Acrylic, Mica and blur backgrounds for context menus, dropdowns and tooltips in every app
+// @version         0.6.6
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
 // @homepage        https://github.com/DavidHiFi/davids-windhawk-mods
@@ -673,43 +673,33 @@
 /*
 # Translucent Flyouts
 
-Applies translucent/acrylic effects to Win32 flyouts - context menus, dropdown
-menus and tooltips - across applications, with the full
-[TranslucentFlyouts](https://github.com/ALTaleX531/TranslucentFlyouts)
-configuration surface (Global / DropDown / Menu / Tooltip categories).
+Give the classic menus, dropdowns and tooltips in every app a modern acrylic,
+Mica or blur background. The TranslucentFlyouts app, rebuilt as one mod with
+no helper program.
 
-This is a Windhawk-native port of the TranslucentFlyouts engine (LGPL-3.0,
-author ALTaleX531). It does **not** require the original application, its
-service, or any registry bridge: the mod hooks uxtheme's menu/tooltip drawing
-inside each process and applies the backdrop effects there.
+![Translucent Flyouts preview](https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/translucent-flyouts.png)
 
-## Categories
+## Features
 
-- **Global** - defaults inherited by the other categories via "Use Global
-  Setting"
-- **Menu** - context menus and menu bars
-- **DropDown** - combo box dropdown lists
-- **Tooltip** - tooltips
-- **Advanced Functions** - per-process block/disable lists
+- **Context menus, menu bars, dropdown lists and tooltips** in 64-bit and
+  32-bit apps.
+- **Modern Acrylic, Acrylic, Mica, blur, transparent or solid** backgrounds.
+- **Rounded or square corners**, drop shadows and accent-colored borders.
+- **Separate styles** for menus, dropdowns and tooltips, or one global style.
+- **Light and dark mode colors**, set independently.
+- **Fluent animations** for menus and dropdowns.
 
-Effect types: None, Fully Transparent, Solid Color, Blurred, Acrylic, Modern
-Acrylic, Acrylic Background Layer, Mica Background Layer, Mica Variant
-Background Layer.
+## Tips
 
-## Notes
+- Pair it with [Dark Menus](https://windhawk.net/mods/dark-menus) and turn on
+  its TranslucentFlyouts option for dark menus in every app.
+- Programs listed in this mod's exclusions are left untouched. Add any app
+  that should keep its original menus.
 
-- Enabled for all processes except the protected chain (Discord, Voicemeeter,
-  VB-Audio Matrix, Stream Deck) and `dwm.exe`. Ableton Live is included: its
-  menu bar is a native Win32 menu (`CreateMenu`/`SetMenu`), so its dropdowns
-  are ordinary themed popups.
-- Dark/light mode colors follow the menu's own theme detection.
-- "Enable Immersive Style" matches the Windows 11 menu measurements.
-- Corner Style is applied through DWM's corner-preference attribute, so with
-  the "Custom Window Corner Radius" mod the actual radius follows that mod:
-  Large Round = its Corner radius, Small Round = its Small corner radius.
-- Some applications draw their menus themselves (Qt widgets, Chromium/Electron
-  in-app menus, custom owner-draw); those menus cannot be styled and are
-  automatically left alone.
+## Credits
+
+A port of [TranslucentFlyouts](https://github.com/ALTaleX531/TranslucentFlyouts)
+by ALTaleX531. The settings follow its configuration schema. LGPL-3.0.
 */
 // ==/WindhawkModReadme==
 
@@ -3088,6 +3078,13 @@ HRESULT WINAPI DrawThemeTextHook(HTHEME hTheme, HDC hdc, int iPartId, int iState
         return g_drawThemeTextOrig(hTheme, hdc, iPartId, iStateId, pszText, cchText, dwTextFlags,
                                    dwTextFlags2, pRect);
     }
+    if (type == Handler::FlyoutType::Tooltip && !IsRectEmpty(pRect)) {
+        DTTOPTS options{sizeof(DTTOPTS), DTT_TEXTCOLOR | DTT_COMPOSITED};
+        const auto& tip = Cfg::Get().tooltipExtras;
+        options.crText = Utils::MakeCOLORREF(state->darkMode ? tip.darkModeColor : tip.lightModeColor);
+        return g_drawThemeTextExOrig(hTheme, hdc, iPartId, iStateId, pszText, cchText,
+                                    dwTextFlags, const_cast<LPRECT>(pRect), &options);
+    }
     if (type != Handler::FlyoutType::Menu || IsRectEmpty(pRect)) {
         return g_drawThemeTextOrig(hTheme, hdc, iPartId, iStateId, pszText, cchText, dwTextFlags,
                                    dwTextFlags2, pRect);
@@ -3143,10 +3140,12 @@ HRESULT WINAPI DrawThemeTextExHook(HTHEME hTheme, HDC hdc, int iPartId, int iSta
             ~Restore() { Handler::g_paintingState = previous; }
         } restore{previous};
         Cfg::TooltipExtras& tip = Cfg::Get().tooltipExtras;
-        SetTextColor(hdc,
-                     Utils::MakeCOLORREF(state->darkMode ? tip.darkModeColor : tip.lightModeColor));
+        DTTOPTS options = pOptions ? *pOptions : DTTOPTS{};
+        options.dwSize = sizeof(options);
+        options.dwFlags |= DTT_TEXTCOLOR;
+        options.crText = Utils::MakeCOLORREF(state->darkMode ? tip.darkModeColor : tip.lightModeColor);
         return g_drawThemeTextExOrig(hTheme, hdc, iPartId, iStateId, pszText, cchText, dwTextFlags,
-                                     pRect, pOptions);
+                                     pRect, &options);
     }
     return g_drawThemeTextExOrig(hTheme, hdc, iPartId, iStateId, pszText, cchText, dwTextFlags,
                                  pRect, pOptions);
@@ -3175,19 +3174,29 @@ struct TooltipDrawTextParams {
     LPRECT rect;
     UINT format;
     int result;
+    COLORREF color;
 };
 
 void TooltipDrawTextCallback(HDC memoryDC, HPAINTBUFFER, RGBQUAD*, int, LPARAM lParam) {
     auto* p = reinterpret_cast<TooltipDrawTextParams*>(lParam);
-    p->result = DrawTextW(memoryDC, p->text, p->cch, p->rect, p->format);
+    SetTextColor(memoryDC, p->color);
+    SetBkMode(memoryDC, TRANSPARENT);
+    p->result = g_drawTextWOrig(memoryDC, p->text, p->cch, p->rect, p->format);
 }
 }  // namespace
 
 int WINAPI DrawTextWHook(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, UINT format) {
     // Tooltip text with alpha (upstream TooltipHooks::MyDrawTextW).
     HWND hWnd = WindowFromDC(hdc);
+    // Common controls paint tooltip text into a buffered DC with no HWND.
+    if (!hWnd && GetObjectType(hdc) == OBJ_MEMDC) {
+        HWND tip = Handler::FindFlyoutWindowOnCurrentThread(Handler::FlyoutType::Tooltip);
+        if (tip && IsWindowVisible(tip)) {
+            hWnd = tip;
+        }
+    }
     if (hWnd && Handler::IsTooltipWindow(hWnd) &&
-        !(format & (DT_CALCRECT | DT_INTERNAL | DT_NOCLIP))) {
+        !(format & (DT_CALCRECT | DT_INTERNAL))) {
         Handler::WindowState& state = Handler::GetOrCreateWindowState(hWnd);
         if (state.type == Handler::FlyoutType::Tooltip ||
             state.type == Handler::FlyoutType::Unknown) {
@@ -3195,7 +3204,7 @@ int WINAPI DrawTextWHook(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, UI
             COLORREF color =
                 Utils::MakeCOLORREF(state.darkMode ? tip.darkModeColor : tip.lightModeColor);
             COLORREF oldColor = SetTextColor(hdc, color);
-            TooltipDrawTextParams params{lpchText, cchText, lprc, format, 0};
+            TooltipDrawTextParams params{lpchText, cchText, lprc, format, 0, color};
             HRESULT hr = ThemeHelper::DrawThemeContent(
                 hdc, *lprc, nullptr, nullptr, 0, TooltipDrawTextCallback,
                 reinterpret_cast<LPARAM>(&params));
