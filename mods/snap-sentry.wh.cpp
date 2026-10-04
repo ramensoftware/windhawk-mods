@@ -38,13 +38,15 @@ notification.
   straight into notes or a bug report. Deletion is disabled.
 * **None** leaves the clipboard unchanged.
 
-![The clipboard and deletion settings](https://raw.githubusercontent.com/mario0318/SnapSentry/4ba4a265d8f3b527071fb25a4fe5c35f44cd358a/assets/settings.png)
+![A Markdown image link pasted into a note](https://raw.githubusercontent.com/mario0318/SnapSentry/70157e72808d7788583e09480e4011e95e8e8868/assets/demo-markdown.png)
 
 ## Naming
 
 You can have SnapSentry rename each new screenshot from the window that was in
 front when it was taken, together with a timestamp, so a file ends up named for
 what it shows instead of Screenshot (1). The file stays in the same folder.
+
+![Screenshots renamed after the window they were taken from](https://raw.githubusercontent.com/mario0318/SnapSentry/70157e72808d7788583e09480e4011e95e8e8868/assets/demo-rename.png)
 
 ## Identical recent screenshots
 
@@ -63,7 +65,7 @@ restarts, and does not scan or touch files that were already in the folder when
 watching began. Images with different embedded metadata are kept even if they
 look the same.
 
-![The duplicate removal and popup settings](https://raw.githubusercontent.com/mario0318/SnapSentry/4ba4a265d8f3b527071fb25a4fe5c35f44cd358a/assets/settings-duplicates.png)
+![An identical screenshot in the Recycle Bin after it was removed](https://raw.githubusercontent.com/mario0318/SnapSentry/70157e72808d7788583e09480e4011e95e8e8868/assets/demo-duplicate.png)
 
 ## Which folder it watches
 
