@@ -2,12 +2,143 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-04T00:03:35.000Z</updated>
+    <updated>2026-10-04T15:02:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[OverhauldedWin Alt+Tab 1.2.1]]></title>
+        <id>https://windhawk.net/mods/overhaulded-alt-tab#44918b3fcd5111318f1ebf7d663b788826688f95</id>
+        <link href="https://windhawk.net/mods/overhaulded-alt-tab"/>
+        <updated>2026-10-04T15:02:37.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="overhauldedtaskswitcher">Overhaulded Task Switcher</h1>
+<p>A modern, fluid and highly visual replacement for the native Windows Alt+Tab experience.</p>
+<p>Built from scratch in native C++ as a project to explore Windows APIs, graphics, animation systems and desktop customization. </p>
+<blockquote>
+  <p>Ofc, made as a C++ practice project. Hope you enjoy it as much as I enjoy developing it.</p>
+</blockquote>
+<h2 id="screenshot">Screenshot</h2>
+<p><img src="https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/TaskManager.jpg" alt="OverhauldedWin Task Switcher" /></p>
+<h2 id="features">Features</h2>
+<ul>
+<li>Modern horizontal task switcher interface</li>
+<li>App grouping by application/process</li>
+<li>Real DWM window previews</li>
+<li>Dynamic Obsidian visual system</li>
+<li>CPU-based desktop blur</li>
+<li>Rounded cards with subtle downward shadows</li>
+<li>Floating task switcher surface</li>
+<li>Fluid opening animation</li>
+<li>Smooth horizontal navigation</li>
+<li>Interruptible navigation animations</li>
+<li>Subtle center-card snap animation</li>
+<li>Hover interactions</li>
+<li>Window closing</li>
+<li>Resolution-aware UI scaling</li>
+<li>High-DPI support</li>
+<li>Alt + Tab support</li>
+<li>Alt + Shift + Tab support</li>
+<li>AltGr + Tab support</li>
+<li>Lightweight native C++ implementation</li>
+<li>Background execution for fast activation</li>
+</ul>
+<h3 id="anotherfeatures">Another Features</h3>
+<ul>
+<li>Visual continuity between selections</li>
+<li>Smooth carousel-style navigation </li>
+<li>Real window previews</li>
+<li>Application-aware grouping</li>
+<li>Subtle depth and lighting</li>
+<li>Fast activation through background execution</li>
+</ul>
+<p>Overhaulded also aims to remain visually distinct from other Windows task-switcher projects while exploring its own interaction and visual language.</p>
+<h2 id="design">Design</h2>
+<p>Overhaulded focuses on a dark, minimal interface inspired by modern desktop UI design while keeping the selector feeling native to Windows.</p>
+<p>The visual system uses a Black Obsidian surface with:</p>
+<ul>
+<li>Rounded cards</li>
+<li>Subtle downward shadows</li>
+<li>Content-based illumination</li>
+<li>Soft depth separation</li>
+<li>Smooth transitions</li>
+<li>A fixed central visualizer</li>
+</ul>
+<p>The central visualizer remains fixed while the cards move through the carousel, creating the impression of navigating through a physical stack of windows rather than moving the entire interface.</p>
+<h2 id="smoothanimations">Smooth Animations</h2>
+<h3 id="openclose">Open / Close</h3>
+<p><img src="https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Open_n'_Close.webp" alt="OverhauldedWin Open Animation" /></p>
+<h3 id="navigation">Navigation</h3>
+<p><img src="https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/Desplacement.webp" alt="OverhauldedWin" /></p>
+<h3 id="windowclose">Window Close</h3>
+<p><img src="https://raw.githubusercontent.com/IMiloDev/OverhauldedWin/main/assets/icons/abort.webp" alt="OverhauldedWin" /></p>
+<h2 id="backgroundexecution">Background Execution</h2>
+<p>Overhaulded remains prepared in the background instead of creating the entire task-switcher interface from scratch every time Alt+Tab is pressed.</p>
+<p>This allows the selector to appear immediately while keeping the visual opening animation smooth.</p>
+<p>The architecture separates global input handling from the UI/rendering system so that heavy graphics and window-management operations do not run directly inside low-level keyboard hooks.</p>
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Windows 11 only</li>
+<li>Windhawk</li>
+</ul>
+<h2 id="installation">Installation</h2>
+<ol>
+<li>Install Windhawk.</li>
+<li>Open the Overhaulded Win Task Switcher mod.</li>
+<li>Install or compile the latest release.</li>
+<li>Enable the mod.</li>
+<li>Press <code>Alt + Tab</code> to open Overhaulded.</li>
+</ol>
+<h2 id="controls">Controls</h2>
+<p>| Shortcut                                            | Action                        |
+| --------------------------------------------------- | ----------------------------- |
+| <code>Alt + Tab</code>                                         | Move to the next window       |
+| <code>Alt + Shift + Tab</code>                                 | Move to the previous window   |
+| <code>Alt + Tab</code> + release <code>Alt</code>                         | Activate the selected window  |
+| <code>Esc</code>                                               | Cancel the switcher           |
+| <code>Ctrl + Alt + Tab + Arrow</code> <code>Alt + Tab Arrow</code>        | Additional navigation/control |</p>
+<h2 id="compatibility">Compatibility</h2>
+<p>Overhaulded is currently designed specifically for Windows 11.</p>
+<p>The project is still under active development, so behavior may vary depending on:</p>
+<ul>
+<li>Display scaling</li>
+<li>Multiple-monitor configurations</li>
+<li>Windows configuration</li>
+<li>Application window types</li>
+<li>Other Alt+Tab/task-switcher modifications</li>
+</ul>
+<p>Running multiple applications that replace the native Windows task switcher at the same time may cause conflicts.</p>
+<h2 id="knownlimitations">Known Limitations</h2>
+<p>Overhaulded is still a pre-release project.</p>
+<p>Some applications may behave differently from standard desktop windows, particularly applications that use unusual window structures, custom rendering or multiple processes.</p>
+<p>Additional compatibility improvements are planned as development continues.</p>
+<h2 id="development">Development</h2>
+<p>Overhaulded is primarily a C++ project focused on exploring:</p>
+<ul>
+<li>Win32 APIs</li>
+<li>Windows hooks</li>
+<li>DWM</li>
+<li>Direct2D</li>
+<li>DirectWrite</li>
+<li>GDI</li>
+<li>Window management</li>
+<li>High-DPI rendering</li>
+<li>Desktop animation systems</li>
+<li>Native Windows UI</li>
+</ul>
+<p>The project is continuously evolving as new ideas and technical improvements are explored.</p>
+<h2 id="license">License</h2>
+<p>This project is licensed under the <strong>MIT License</strong>.</p>
+<p>See the <a href="https://github.com/IMiloDev/OverhauldedWin/blob/main/LICENSE">LICENSE</a> file for the complete license text.</p>
+<hr />
+<p><strong>Overhaulded Task Switcher</strong>
+Native C++ • Windows 11 • Windhawk</p>]]></content>
+        <author>
+            <name>IMiloDev</name>
+            <uri>https://github.com/IMiloDev</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Icon Ticker 0.5]]></title>
         <id>https://windhawk.net/mods/desktop-icon-ticker#65f2a5c2a42f0f19abf69be7dc0eb5df90478051</id>
@@ -893,78 +1024,6 @@ shake over such a window won't be detected until focus moves elsewhere.</li>
         <author>
             <name>Darius Varnelis</name>
             <uri>https://github.com/Darius-Varnelis</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Real Names in Pre-Vista Recycle Bin Prompts 1.3]]></title>
-        <id>https://windhawk.net/mods/recycle-bin-original-names#8d182407fc4554abe9d11208031a46747b4ff3f3</id>
-        <link href="https://windhawk.net/mods/recycle-bin-original-names"/>
-        <updated>2026-09-28T17:03:31.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="realnamesinprevistarecyclebinprompts">Real Names in Pre-Vista Recycle Bin Prompts</h1>
-<blockquote>
-  <p><strong>Tested only on Windows 11 24H2 (build 26100).</strong> It has not been tried on any other version of Windows and may not work there.</p>
-</blockquote>
-<p>Delete something out of the Recycle Bin with the XP-style prompts of
-<a href="https://windhawk.net/mods/prevista-file-copy">Pre-Vista File Operation Dialogs</a>
-enabled, and the confirmation asks about a file you never had:</p>
-<blockquote>
-  <p>Are you sure you want to delete "$RVAZ2WZ.b"?</p>
-</blockquote>
-<p>This mod puts the real name back:</p>
-<p><img src="https://raw.githubusercontent.com/appEW/images/main/recycle-bin-original-names/before.png" alt="Before: the prompt names the $R stub" /></p>
-<p><img src="https://raw.githubusercontent.com/appEW/images/main/recycle-bin-original-names/after.png" alt="After: the prompt names the file that was deleted" /></p>
-<p>The stock Windows 11 prompt already shows the right name; the mod is for prompts
-that look the name up the way Pre-Vista File Operation Dialogs does.</p>
-<h2 id="whythenameiswrong">Why the name is wrong</h2>
-<p>The Recycle Bin does not keep a deleted file under its own name. It renames it
-to <code>$R</code> plus a few random characters, keeping only the extension, and writes the
-real path into a companion <code>$I</code> file next to it. Everything that asks the
-Recycle Bin folder for a display name gets the original name back; anything that
-only looks at the file on disk sees the stub.</p>
-<p>The XP-style prompt looks at the file on disk: it asks <code>SHGetFileInfo</code> for the
-display name of <code>C:\$Recycle.Bin\&lt;SID&gt;\$RVAZ2WZ.b</code>, and for a plain file path
-that is just the file name - the stub.</p>
-<h2 id="whatthemoddoes">What the mod does</h2>
-<p>When <code>SHGetFileInfo</code> is asked for the display name of a <code>$R</code> file inside a
-<code>$Recycle.Bin</code> folder, the mod answers with the name recorded in the <code>$I</code> file
-next to it - one small file read, no searching. With <em>Show the full original
-path</em> on, it answers with the whole path the file was deleted from.</p>
-<p>Anything else is passed straight through, and a <code>$R</code> file with no <code>$I</code> file next
-to it keeps its own name.</p>
-<p>Nothing about the Recycle Bin's contents, its folder view, or the files
-themselves changes. This only changes the name a prompt is about to display.</p>
-<hr />
-<h2 id="">По-русски</h2>
-<p>Если включён мод
-<a href="https://windhawk.net/mods/prevista-file-copy">Pre-Vista File Operation Dialogs</a>
-с запросами в стиле XP, то при удалении чего-нибудь из Корзины подтверждение
-спрашивает об удалении файла, которого у вас никогда не было, - например,
-«$RVAZ2WZ.b». Мод возвращает в такой запрос настоящее имя (скриншоты - выше, в
-английской части). Стандартный запрос Windows 11 и так показывает правильное
-имя; мод нужен для запросов, которые узнают имя так же, как Pre-Vista File
-Operation Dialogs.</p>
-<p>Корзина не хранит удалённый файл под его настоящим именем. Она переименовывает
-его в <code>$R</code> и несколько случайных символов, сохраняя только расширение, а
-настоящий путь записывает в парный файл <code>$I</code> рядом. Всё, что спрашивает имя у
-папки Корзины, получает настоящее имя; всё, что смотрит на сам файл на диске,
-видит служебное.</p>
-<p>Запрос в стиле XP смотрит на файл на диске: он спрашивает у <code>SHGetFileInfo</code>
-отображаемое имя пути <code>C:\$Recycle.Bin\&lt;SID&gt;\$RVAZ2WZ.b</code>, а для обычного пути к
-файлу это просто имя файла, то есть служебное.</p>
-<p>Когда у <code>SHGetFileInfo</code> спрашивают отображаемое имя <code>$R</code>-файла в папке
-<code>$Recycle.Bin</code>, мод отвечает именем, записанным в соседнем файле <code>$I</code>, - это
-одно чтение маленького файла, без всякого поиска. Если включено «Показывать
-полный исходный путь», ответом будет весь путь, откуда файл был удалён.
-Всё остальное проходит без изменений, а <code>$R</code>-файл без соседнего <code>$I</code> остаётся
-со своим именем.</p>
-<p>Мод ничего не меняет в содержимом Корзины, в её окне и в самих файлах - только
-имя, которое запрос собирается показать.</p>
-<blockquote>
-  <p><strong>Проверено только на Windows 11 24H2 (сборка 26100).</strong> На других версиях Windows мод не проверялся и может не работать.</p>
-</blockquote>]]></content>
-        <author>
-            <name>appEW</name>
-            <uri>https://github.com/appEW</uri>
         </author>
     </entry>
 </feed>
