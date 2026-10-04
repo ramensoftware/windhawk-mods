@@ -22514,10 +22514,20 @@ RECT g_startButtonScreenRect{};
 RECT g_searchButtonScreenRect{};
 std::vector<RECT> g_taskbarScreenRects;
 std::atomic<bool> g_taskbarButtonRectsValid{false};
+std::atomic<bool> g_taskbarRectRefreshRunning{false};
+std::atomic<ULONGLONG> g_taskbarRectLastRefreshTick{0};
 UINT_PTR g_taskbarRectDebounceTimer = 0;
 
 void RefreshTaskbarButtonRectsAsync() {
+    bool expected = false;
+    if (!g_taskbarRectRefreshRunning.compare_exchange_strong(expected, true)) {
+        return;
+    }
+    g_taskbarRectLastRefreshTick.store(GetTickCount64());
     RunInBackground([] {
+        struct FlagGuard {
+            ~FlagGuard() { g_taskbarRectRefreshRunning = false; }
+        } flagGuard;
         RECT startRect{};
         RECT searchRect{};
         bool foundStart = false;
@@ -22673,23 +22683,51 @@ static bool TaskbarClickRemap(POINT pt) {
     // running it inside the WH_MOUSE_LL callback stalls all system mouse
     // input; if Explorer is busy enough to exceed LowLevelHooksTimeout,
     // Windows silently removes the hook and the remap stops working until
-    // the mod restarts. Use cached button rects instead, refreshed on
-    // every shell window create/destroy and on display change.
-    if (!g_taskbarButtonRectsValid.load()) {
-        RefreshTaskbarButtonRectsAsync();
+    // the mod restarts. Use cached button rects instead.
+
+    // Cache check #1: is the click even on a taskbar? g_taskbarScreenRects
+    // is filled by every refresh, even if the button IDs aren't found, so
+    // clicks elsewhere on the system exit here without ever touching the
+    // refresh path.
+    bool inAnyTaskbar = false;
+    bool screenRectsEmpty = false;
+    {
+        std::lock_guard<std::mutex> lock(g_taskbarButtonRectMutex);
+        screenRectsEmpty = g_taskbarScreenRects.empty();
+        if (!screenRectsEmpty) {
+            for (const auto& r : g_taskbarScreenRects) {
+                if (PtInRect(&r, pt)) { inAnyTaskbar = true; break; }
+            }
+        }
+    }
+
+    // Empty screen-rect cache: the very first refresh hasn't landed yet, or
+    // every refresh so far failed to find any taskbar. Kick one off (rate-
+    // limited) and bail out so the click falls through to the native path.
+    if (screenRectsEmpty) {
+        ULONGLONG now = GetTickCount64();
+        ULONGLONG last = g_taskbarRectLastRefreshTick.load();
+        if (now - last > 3000) {
+            RefreshTaskbarButtonRectsAsync();
+        }
         return false;
     }
 
-    // Only clicks inside a taskbar rect can be Start / Search. Cache check
-    // is cheap; the alternative (ElementFromPoint) is what we're avoiding.
-    bool inAnyTaskbar = false;
-    {
-        std::lock_guard<std::mutex> lock(g_taskbarButtonRectMutex);
-        for (const auto& r : g_taskbarScreenRects) {
-            if (PtInRect(&r, pt)) { inAnyTaskbar = true; break; }
-        }
-    }
     if (!inAnyTaskbar) return false;
+
+    // Cache check #2: the button rects. If they aren't valid, kick off a
+    // refresh but rate-limit it. On systems where the AutomationIds never
+    // resolve (Windows 10 taskbar, taskbar replacements), the cache stays
+    // invalid forever and a per-click refresh would spawn a UIA search
+    // thread on every left click on the system.
+    if (!g_taskbarButtonRectsValid.load()) {
+        ULONGLONG now = GetTickCount64();
+        ULONGLONG last = g_taskbarRectLastRefreshTick.load();
+        if (now - last > 3000) {
+            RefreshTaskbarButtonRectsAsync();
+        }
+        return false;
+    }
 
     RECT sr{};
     RECT qr{};
@@ -23692,6 +23730,30 @@ int g_nativeSmCloseTicks = 0;
 std::mutex g_hiddenShellWindowsMutex;
 std::map<HWND, std::pair<bool, bool>> g_hiddenShellWindows;
 
+// Serialize the currently-hidden HWNDs to Wh storage so a crash between
+// hide and restore can be recovered on the next startup. Dead HWNDs are
+// pruned here so the persisted list doesn't grow over the process lifetime.
+void PersistHiddenShellHosts() {
+    std::wstring serialized;
+    {
+        std::lock_guard<std::mutex> lock(g_hiddenShellWindowsMutex);
+        for (auto it = g_hiddenShellWindows.begin();
+             it != g_hiddenShellWindows.end();) {
+            if (!IsWindow(it->first)) {
+                it = g_hiddenShellWindows.erase(it);
+                continue;
+            }
+            if (!serialized.empty()) serialized += L",";
+            wchar_t buf[32];
+            swprintf_s(buf, L"%llX", static_cast<unsigned long long>(
+                reinterpret_cast<uintptr_t>(it->first)));
+            serialized += buf;
+            ++it;
+        }
+    }
+    Wh_SetStringValue(L"topbarHiddenShellHosts", serialized.c_str());
+}
+
 void HideNativeShellHostWindow(HWND hwnd, const wchar_t* exeName, bool isStart, bool isSearch) {
     if (!hwnd || !IsWindow(hwnd)) return;
 
@@ -23708,6 +23770,7 @@ void HideNativeShellHostWindow(HWND hwnd, const wchar_t* exeName, bool isStart, 
         g_hiddenShellWindows[hwnd] = { isStart, isSearch };
     }
     ShowWindow(hwnd, SW_HIDE);
+    PersistHiddenShellHosts();
 }
 
 bool IsShellHostExe(std::wstring_view exeLower, bool* isStart, bool* isSearch) {
@@ -23823,9 +23886,92 @@ void RestoreNativeShellHostWindows(bool restoreStart, bool restoreSearch) {
         int x = mi.rcMonitor.left + ((mi.rcMonitor.right - mi.rcMonitor.left) - w) / 2;
         int y = mi.rcMonitor.top + ((mi.rcMonitor.bottom - mi.rcMonitor.top) - hh) / 2;
         SetWindowPos(h, nullptr, x, y, w, hh,
-                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        ShowWindow(h, SW_SHOWNOACTIVATE);
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW |
+                     SWP_ASYNCWINDOWPOS);
+        ShowWindowAsync(h, SW_SHOWNOACTIVATE);
     }
+    PersistHiddenShellHosts();
+}
+
+void RestorePersistedShellHosts() {
+    // Crash recovery for a previous run that hid shell host windows and
+    // then died before restoring them. The HWNDs were persisted by
+    // PersistHiddenShellHosts. Re-show any that still exist and still
+    // belong to one of the shell host executables, whatever the current
+    // remap settings are.
+    std::wstring serialized = GetStringSettingCopy(L"topbarHiddenShellHosts");
+    if (serialized.empty()) return;
+
+    std::vector<HWND> toRestore;
+    size_t pos = 0;
+    while (pos <= serialized.size()) {
+        size_t comma = serialized.find(L',', pos);
+        std::wstring token = serialized.substr(
+            pos, comma == std::wstring::npos ? std::wstring::npos : comma - pos);
+        if (!token.empty()) {
+            try {
+                uintptr_t val = std::stoull(token, nullptr, 16);
+                HWND h = reinterpret_cast<HWND>(val);
+                if (h && IsWindow(h)) {
+                    DWORD pid = 0;
+                    GetWindowThreadProcessId(h, &pid);
+                    if (pid && pid != GetCurrentProcessId()) {
+                        HANDLE proc = OpenProcess(
+                            PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+                        if (proc) {
+                            wchar_t path[MAX_PATH]{};
+                            DWORD size = ARRAYSIZE(path);
+                            bool ok = QueryFullProcessImageNameW(
+                                proc, 0, path, &size) != FALSE;
+                            CloseHandle(proc);
+                            if (ok) {
+                                std::wstring exe = path;
+                                size_t slash = exe.find_last_of(L"\\/");
+                                if (slash != std::wstring::npos) {
+                                    exe.erase(0, slash + 1);
+                                }
+                                std::wstring exeLower = ToLowerCopy(exe);
+                                bool isStart = false, isSearch = false;
+                                if (IsShellHostExe(exeLower, &isStart, &isSearch)) {
+                                    toRestore.push_back(h);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (...) {}
+        }
+        if (comma == std::wstring::npos) break;
+        pos = comma + 1;
+    }
+
+    for (HWND h : toRestore) {
+        if (!IsWindow(h)) continue;
+        // Only touch windows we (or the shell) hid. If it's already visible,
+        // the shell recovered on its own and we must not reposition it.
+        if (IsWindowVisible(h)) continue;
+        RECT r{};
+        if (!GetWindowRect(h, &r)) continue;
+        int w = r.right - r.left;
+        int hh = r.bottom - r.top;
+        if (w <= 0 || hh <= 0) continue;
+        HMONITOR mon = MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi{};
+        mi.cbSize = sizeof(mi);
+        if (!GetMonitorInfo(mon, &mi)) continue;
+        int x = mi.rcMonitor.left +
+                ((mi.rcMonitor.right - mi.rcMonitor.left) - w) / 2;
+        int y = mi.rcMonitor.top +
+                ((mi.rcMonitor.bottom - mi.rcMonitor.top) - hh) / 2;
+        SetWindowPos(h, nullptr, x, y, w, hh,
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW |
+                     SWP_ASYNCWINDOWPOS);
+        ShowWindowAsync(h, SW_SHOWNOACTIVATE);
+    }
+
+    Wh_Log(L"RestorePersistedShellHosts: restored %zu window(s)",
+           toRestore.size());
+    Wh_SetStringValue(L"topbarHiddenShellHosts", L"");
 }
 
 void ScheduleNativeStartMenuClose() {
@@ -25888,10 +26034,39 @@ void RestartTopBarThreadForScaleChange() {
     if (g_topBarHwnd) PostMessage(g_topBarHwnd, WM_CLOSE, 0, 0);
 }
 
+void WaitForShellReadyIfColdBoot() {
+    // On a genuine cold boot, Windhawk spawns the tool-mod process the
+    // moment the shell starts. WindowsXamlManager::InitializeForCurrentThread
+    // can then run before Explorer has finished bringing its input stack
+    // up, and the popup input-site that XAML registers at that point is
+    // derived from an inconsistent snapshot. The bar renders fine but every
+    // mouse message is silently dropped -- hover dead, clicks dropped,
+    // Start menu hit-testing offset. Only a fresh XAML input dispatcher
+    // (process restart) or a properly-timed init avoids it.
+    //
+    // Fire only on the very first thread of a fresh process. On scale-change
+    // thread restarts, the process has been running for minutes, so
+    // IsRecentColdBoot returns false and the new thread starts immediately
+    // without an artificial shell-ready wait.
+    if (!IsRecentColdBoot()) return;
+
+    // Wait for the taskbar to exist (shell is up), then a short grace period
+    // for DWM composition and the input stack.
+    for (int i = 0; i < 300; i++) {
+        if (FindWindowW(L"Shell_TrayWnd", nullptr)) break;
+        if (WaitForSingleObject(g_stopEvent, 100) == WAIT_OBJECT_0) return;
+    }
+    for (int i = 0; i < 20; i++) {
+        if (WaitForSingleObject(g_stopEvent, 100) == WAIT_OBJECT_0) return;
+    }
+}
+
 DWORD WINAPI TopBarThreadProc(LPVOID) {
     Wh_Log(L"TopBar: TopBarThreadProc started.");
     try {
         g_barStartTick = GetTickCount64();
+
+        WaitForShellReadyIfColdBoot();
 
         winrt::init_apartment(winrt::apartment_type::single_threaded);
 
@@ -27155,12 +27330,7 @@ BOOL WhTool_ModInit() {
     g_prevDefaultSearch = g_settings.defaultSearch;
     g_prevStartButtonAction = g_settings.startButtonAction;
 
-    if (g_settings.defaultStartMenu) {
-        KillStaleShellHosts(true, false);
-    }
-    if (g_settings.defaultSearch) {
-        KillStaleShellHosts(false, true);
-    }
+    RestorePersistedShellHosts();
 
     g_taskbarCreatedMsg = RegisterWindowMessage(L"TaskbarCreated");
 
