@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              alt-snap-drag
-// @name            AltSnap Drag
-// @description     AltDrag window movement with configurable AltSnap mouse actions and keyboard shortcuts
+// @name            AltSnap
+// @description     Move and resize any window with Alt+drag, plus AltSnap's window shortcuts
 // @version         1.2.2
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
@@ -22,42 +22,54 @@
 
 // ==WindhawkModReadme==
 /*
-# AltSnap Drag
+# AltSnap
 
-Move any window by holding Alt and dragging it from anywhere, without having to
-grab the title bar. Resize any window by holding Alt and dragging it with the
-right mouse button: the edge or corner which follows the mouse is the one
-closest to where the drag starts.
+Move and resize any window by holding Alt, and maximize, minimize or close it
+with AltSnap-style shortcuts. Everything AltSnap does day to day, with no
+separate app running.
 
-The mouse buttons and the keys can be changed in the mod settings. A delay can
-be set for each as well, so that a click keeps its usual meaning and only a
-longer press starts a drag.
+![AltSnap preview](https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/alt-snap-drag.gif)
 
-By default, the mod is applied for all programs. To exclude specific programs,
-add them to the custom process exclusion list in the Advanced tab of this mod.
+## Features
 
-This fork adds configurable window actions and shortcuts. Its defaults match
-the local AltSnap setup: Alt+F toggles maximize, Alt+M minimizes,
-Alt+Shift+Q closes, and Alt+middle click opens a window menu. The mouse action
-settings also support double clicks and X buttons. A shortcut can be written
-as `Alt+F` or as the decimal value from AltSnap.ini.
+- **Alt+drag to move.** Grab a window anywhere, not just by its title bar.
+- **Alt+right-drag to resize** from the edge or corner nearest the cursor.
+- **Window shortcuts** to maximize, minimize and close the active window.
+- **Mouse actions** for middle, double and X-button clicks, such as opening
+  the window menu or toggling always on top.
+- **Right-click while moving** to toggle maximize, just like AltSnap.
+- **Fully configurable** buttons, keys and an optional hold delay, so normal
+  clicks keep working. Shortcuts accept `Alt+F` or the values from
+  `AltSnap.ini`.
 
-While a window is being moved with the mouse, the right button toggles its
-maximized state, the same as AltSnap.
+## Default controls
 
-The drag implementation is by m417z and was inspired by [the original AltDrag
-tool](https://stefansundin.github.io/altdrag/). AltSnap is by RamonUnch.
+| Hold Alt and... | Action |
+| --- | --- |
+| Left drag | Move the window |
+| Right drag | Resize the window |
+| Press F | Toggle maximize |
+| Press M | Minimize |
+| Press Shift+Q | Close |
+| Middle click | Window menu |
+| Right click while moving | Toggle maximize |
 
-## Compatibility with Slick Window Arrangement
+## Notes
 
-The mod works together with the [Slick Window
-Arrangement](https://windhawk.net/mods/slick-window-arrangement) mod, but note
-that by default, that mod uses the Alt key to temporarily disable snapping, so
-windows won't snap while being dragged with Alt. To have snapping while
-dragging, change the "Keys to temporarily disable snapping" setting of Slick
-Window Arrangement to a different key, or change the key used by this mod.
+- Disable AltDrag before enabling this mod.
+- To exclude a program, add it to the custom exclusion list in this mod's
+  Advanced tab.
+- Slick Window Arrangement uses Alt to pause snapping by default. Change that
+  key in its settings if you want windows to snap while you Alt+drag them.
+- For keyboard snapping and monitor hotkeys as well, use Window Manager, which
+  includes everything in this mod.
 
-![Demonstration](https://i.imgur.com/PY0arDE.gif)
+## Credits
+
+Based on [AltDrag](https://windhawk.net/mods/alt-drag) by m417z, with
+shortcuts and gestures from [AltSnap](https://github.com/RamonUnch/AltSnap) by
+RamonUnch. Both trace back to the original
+[AltDrag](https://stefansundin.github.io/altdrag/) by Stefan Sundin. GPL-3.0.
 */
 // ==/WindhawkModReadme==
 
