@@ -55,7 +55,7 @@ reduce that work; fewer moving windows do:
 Frozen effects resume exactly where they stopped. When nothing is moving, the
 shared clock stops too.
 
-## Audio reactivity
+## Audio reactivity (EXPERIMENTAL)
 
 When **React to audio** is on, every effect speeds up while sound is playing:
 "Cycle duration" is used in silence and "Cycle duration at full volume" at the
