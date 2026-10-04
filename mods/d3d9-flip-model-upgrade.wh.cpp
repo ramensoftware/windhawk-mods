@@ -166,6 +166,7 @@ enum {
     kSlotCreateDevice = 16,
     kSlotCreateDeviceEx = 20,
     kSlotDeviceQueryInterface = 0,
+    kSlotDeviceRelease = 2,
     kSlotReset = 16,
     kSlotPresent = 17,
     kSlotSetTexture = 65,
@@ -200,8 +201,9 @@ std::mutex g_hookMutex;
 std::atomic<bool> g_exportsHooked;
 bool g_deviceHooked;
 
-// Devices are not removed when released, an entry is overwritten once a new
-// device shows up at the same address.
+// Devices are removed when they're destroyed, see DeviceRelease_Hook. A device
+// of an unexpected implementation is overwritten once a new device shows up at
+// the same address.
 struct DeviceSet {
     SRWLOCK lock = SRWLOCK_INIT;
     std::vector<IDirect3DDevice9*> devices;
@@ -234,29 +236,47 @@ DeviceSet g_upgradedDevices;
 // Set once the managed pool emulation is in use.
 std::atomic<bool> g_emulatedTexturesUsed;
 
-// The flip model requires exclusive use of the window, so only the first device
-// of a window is upgraded. In-game overlays create a second device of their own,
-// which has to keep the swap effect it asked for. Entries are never removed, a
-// window which is gone can't be presented to anyway.
+// The flip model requires exclusive use of the window. A window belongs to the
+// device presenting to it with FLIPEX, until that device stops using FLIPEX or
+// is destroyed. Other devices on it, such as the ones of in-game overlays, keep
+// the swap effect they asked for.
+struct FlipWindow {
+    HWND hWnd;
+    IDirect3DDevice9* device;  // For comparing only.
+};
 SRWLOCK g_flipWindowsLock = SRWLOCK_INIT;
-std::vector<HWND> g_flipWindows;
+std::vector<FlipWindow> g_flipWindows;
 
-// The device of hWnd may use the flip model, unless another one already does.
-bool ClaimFlipWindow(HWND hWnd, IDirect3DDevice9* dev) {
+// Whether dev may use the flip model on hWnd. dev is nullptr for a device which
+// is being created.
+bool IsFlipWindowAvailable(HWND hWnd, IDirect3DDevice9* dev) {
     if (!hWnd) {
         return false;
     }
 
+    AcquireSRWLockShared(&g_flipWindowsLock);
+    bool available = true;
+    for (const FlipWindow& flipWindow : g_flipWindows) {
+        if (flipWindow.hWnd == hWnd) {
+            available = flipWindow.device == dev;
+            break;
+        }
+    }
+    ReleaseSRWLockShared(&g_flipWindowsLock);
+    return available;
+}
+
+// Records that dev presents to hWnd with FLIPEX, or that it no longer presents
+// to any window with FLIPEX.
+void SetFlipWindow(HWND hWnd, IDirect3DDevice9* dev, bool flip) {
     AcquireSRWLockExclusive(&g_flipWindowsLock);
-    auto it = std::find(g_flipWindows.begin(), g_flipWindows.end(), hWnd);
-    bool claimed = it == g_flipWindows.end();
-    if (claimed) {
-        g_flipWindows.push_back(hWnd);
+    std::erase_if(g_flipWindows, [&](const FlipWindow& flipWindow) {
+        return flipWindow.device == dev || (flip && flipWindow.hWnd == hWnd);
+    });
+    if (flip && hWnd) {
+        g_flipWindows.push_back({hWnd, dev});
     }
     ReleaseSRWLockExclusive(&g_flipWindowsLock);
-
-    // Resetting an upgraded device claims its window again.
-    return claimed || (dev && g_flipDevices.Contains(dev));
 }
 
 HMODULE g_d3d9Module;
@@ -272,8 +292,10 @@ void** GetVtbl(void* obj) {
     return *reinterpret_cast<void***>(obj);
 }
 
-void SetFlipDevice(IDirect3DDevice9* dev, bool flip) {
+// hWnd is the window dev presents to, nullptr if unknown.
+void SetFlipDevice(IDirect3DDevice9* dev, HWND hWnd, bool flip) {
     g_flipDevices.Set(dev, flip);
+    SetFlipWindow(hWnd, dev, flip);
 }
 
 bool IsFlipDevice(IDirect3DDevice9* dev) {
@@ -394,8 +416,13 @@ void WriteBackPresentParams(D3DPRESENT_PARAMETERS* gamePp,
     }
 }
 
-void MakeBorderless(HWND hWnd) {
-    if (!g_settings.forceBorderless || !hWnd || !IsWindow(hWnd)) {
+// Borderless, covering the monitor. Changing the style sends WM_STYLECHANGING
+// and WM_STYLECHANGED to the window's thread and waits for it, which may in turn
+// wait for the calling thread, e.g. for a render thread to finish resetting the
+// device. So a window of another thread is changed by the borderless thread,
+// which nothing waits for.
+void ApplyBorderless(HWND hWnd) {
+    if (!IsWindow(hWnd)) {
         return;
     }
 
@@ -414,21 +441,11 @@ void MakeBorderless(HWND hWnd) {
         exStyle & ~(WS_EX_CLIENTEDGE | WS_EX_WINDOWEDGE |
                     WS_EX_DLGMODALFRAME | WS_EX_STATICEDGE);
 
-    // The window may belong to a thread that is waiting for this one, e.g. for
-    // a render thread to finish resetting the device, so nothing may be sent to
-    // it synchronously.
-    DWORD windowThread = GetWindowThreadProcessId(hWnd, nullptr);
-    bool otherThread = windowThread != GetCurrentThreadId();
+    bool otherThread =
+        GetWindowThreadProcessId(hWnd, nullptr) != GetCurrentThreadId();
 
     UINT flags = SWP_NOACTIVATE;
     if (newStyle != style || newExStyle != exStyle) {
-        if (otherThread) {
-            // WM_STYLECHANGING and WM_STYLECHANGED can only be sent.
-            Wh_Log(L"Skipping borderless, window %p belongs to thread %u", hWnd,
-                   windowThread);
-            return;
-        }
-
         SetWindowLongPtrW(hWnd, GWL_STYLE, newStyle);
         SetWindowLongPtrW(hWnd, GWL_EXSTYLE, newExStyle);
         flags |= SWP_FRAMECHANGED;
@@ -442,6 +459,73 @@ void MakeBorderless(HWND hWnd) {
                  rc.bottom - rc.top, flags);
     Wh_Log(L"Made window %p borderless: %dx%d", hWnd, rc.right - rc.left,
            rc.bottom - rc.top);
+}
+
+constexpr UINT kMakeBorderlessMessage = WM_APP + 1;
+
+std::mutex g_borderlessThreadMutex;
+HANDLE g_borderlessThread;
+DWORD g_borderlessThreadId;
+
+DWORD WINAPI BorderlessThreadProc(void* parameter) {
+    // Creates the message queue before anyone posts to it.
+    MSG msg;
+    PeekMessageW(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    SetEvent((HANDLE)parameter);
+
+    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+        if (msg.message == kMakeBorderlessMessage) {
+            ApplyBorderless((HWND)msg.wParam);
+        }
+    }
+    return 0;
+}
+
+bool EnsureBorderlessThread() {
+    std::lock_guard<std::mutex> guard(g_borderlessThreadMutex);
+    if (g_borderlessThread) {
+        return true;
+    }
+
+    HANDLE ready = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!ready) {
+        return false;
+    }
+    g_borderlessThread = CreateThread(nullptr, 0, BorderlessThreadProc, ready,
+                                      0, &g_borderlessThreadId);
+    if (g_borderlessThread) {
+        WaitForSingleObject(ready, INFINITE);
+    }
+    CloseHandle(ready);
+    return g_borderlessThread != nullptr;
+}
+
+void StopBorderlessThread() {
+    std::lock_guard<std::mutex> guard(g_borderlessThreadMutex);
+    if (!g_borderlessThread) {
+        return;
+    }
+    PostThreadMessageW(g_borderlessThreadId, WM_QUIT, 0, 0);
+    WaitForSingleObject(g_borderlessThread, INFINITE);
+    CloseHandle(g_borderlessThread);
+    g_borderlessThread = nullptr;
+}
+
+void MakeBorderless(HWND hWnd) {
+    if (!g_settings.forceBorderless || !hWnd || !IsWindow(hWnd)) {
+        return;
+    }
+
+    if (GetWindowThreadProcessId(hWnd, nullptr) == GetCurrentThreadId()) {
+        ApplyBorderless(hWnd);
+        return;
+    }
+
+    if (!EnsureBorderlessThread() ||
+        !PostThreadMessageW(g_borderlessThreadId, kMakeBorderlessMessage,
+                            (WPARAM)hWnd, 0)) {
+        Wh_Log(L"Making window %p borderless failed", hWnd);
+    }
 }
 
 HWND GetDeviceWindow(IDirect3DDevice9* dev, const D3DPRESENT_PARAMETERS* pp) {
@@ -497,7 +581,7 @@ HRESULT ResetCommon(IDirect3DDevice9* dev,
     D3DPRESENT_PARAMETERS local = *pp;
     bool adjusted = false;
     HWND window = GetDeviceWindow(dev, &local);
-    if (window && ClaimFlipWindow(window, dev)) {
+    if (window && IsFlipWindowAvailable(window, dev)) {
         adjusted = AdjustPresentParams(&local, window);
     } else {
         Wh_Log(L"Window %p has another device, not upgrading", window);
@@ -516,7 +600,8 @@ HRESULT ResetCommon(IDirect3DDevice9* dev,
     IDirect3DDevice9Ex* devEx = (IDirect3DDevice9Ex*)dev;
 
     if (SUCCEEDED(hr)) {
-        SetFlipDevice(dev, local.SwapEffect == D3DSWAPEFFECT_FLIPEX);
+        SetFlipDevice(dev, GetDeviceWindow(dev, &local),
+                      local.SwapEffect == D3DSWAPEFFECT_FLIPEX);
         WriteBackPresentParams(pp, local);
         ApplyFrameLatency(devEx);
         MakeBorderless(GetDeviceWindow(dev, &local));
@@ -528,7 +613,8 @@ HRESULT ResetCommon(IDirect3DDevice9* dev,
     g_inReset = false;
     Wh_Log(L"Reset%s with the game's params: 0x%08X", useEx ? L"Ex" : L"", hr);
     if (SUCCEEDED(hr)) {
-        SetFlipDevice(dev, pp->SwapEffect == D3DSWAPEFFECT_FLIPEX);
+        SetFlipDevice(dev, GetDeviceWindow(dev, pp),
+                      pp->SwapEffect == D3DSWAPEFFECT_FLIPEX);
         ApplyFrameLatency(devEx);
         if (pp->Windowed) {
             MakeBorderless(GetDeviceWindow(dev, pp));
@@ -1509,6 +1595,21 @@ bool HasHookedDeviceFunctions(IDirect3DDevice9* dev) {
     return true;
 }
 
+// A destroyed device gives up its window, so that the next device the game
+// creates for it can use the flip model.
+using DeviceRelease_t = ULONG(STDMETHODCALLTYPE*)(IUnknown*);
+DeviceRelease_t DeviceRelease_Original;
+ULONG STDMETHODCALLTYPE DeviceRelease_Hook(IUnknown* self) {
+    ULONG count = DeviceRelease_Original(self);
+    if (count == 0) {
+        // Only used for comparing, the device is gone.
+        auto* dev = (IDirect3DDevice9*)self;
+        SetFlipDevice(dev, nullptr, false);
+        g_upgradedDevices.Set(dev, false);
+    }
+    return count;
+}
+
 void EnsureDeviceHooks(IDirect3DDevice9Ex* dev) {
     std::lock_guard<std::mutex> guard(g_hookMutex);
     if (g_deviceHooked) {
@@ -1524,6 +1625,9 @@ void EnsureDeviceHooks(IDirect3DDevice9Ex* dev) {
     WindhawkUtils::SetFunctionHook(
         (DeviceQueryInterface_t)vtbl[kSlotDeviceQueryInterface],
         DeviceQueryInterface_Hook, &DeviceQueryInterface_Original);
+    WindhawkUtils::SetFunctionHook((DeviceRelease_t)vtbl[kSlotDeviceRelease],
+                                   DeviceRelease_Hook,
+                                   &DeviceRelease_Original);
     WindhawkUtils::SetFunctionHook((Reset_t)vtbl[kSlotReset], Reset_Hook,
                                    &Reset_Original);
     WindhawkUtils::SetFunctionHook((Present_t)vtbl[kSlotPresent], Present_Hook,
@@ -1616,7 +1720,7 @@ HRESULT STDMETHODCALLTYPE CreateDeviceEx_Hook(IDirect3D9Ex* d3d,
     if (pp && device && !(behaviorFlags & D3DCREATE_ADAPTERGROUP_DEVICE)) {
         local = *pp;
         HWND window = local.hDeviceWindow ? local.hDeviceWindow : focusWindow;
-        if (window && ClaimFlipWindow(window, nullptr)) {
+        if (window && IsFlipWindowAvailable(window, nullptr)) {
             adjusted = AdjustPresentParams(&local, window);
         } else {
             Wh_Log(L"Window %p already has a device, not upgrading", window);
@@ -1634,7 +1738,9 @@ HRESULT STDMETHODCALLTYPE CreateDeviceEx_Hook(IDirect3D9Ex* d3d,
         EnsureDeviceHooks(*device);
         g_upgradedDevices.Set(*device, false);
         ClearBoundTextures(*device);
-        SetFlipDevice(*device, local.SwapEffect == D3DSWAPEFFECT_FLIPEX);
+        SetFlipDevice(*device,
+                      local.hDeviceWindow ? local.hDeviceWindow : focusWindow,
+                      local.SwapEffect == D3DSWAPEFFECT_FLIPEX);
         WriteBackPresentParams(pp, local);
         ApplyFrameLatency(*device);
         MakeBorderless(local.hDeviceWindow ? local.hDeviceWindow : focusWindow);
@@ -1648,6 +1754,8 @@ HRESULT STDMETHODCALLTYPE CreateDeviceEx_Hook(IDirect3D9Ex* d3d,
             g_upgradedDevices.Set(*device, false);
             ClearBoundTextures(*device);
             SetFlipDevice(*device,
+                          pp && pp->hDeviceWindow ? pp->hDeviceWindow
+                                                  : focusWindow,
                           pp && pp->SwapEffect == D3DSWAPEFFECT_FLIPEX);
             ApplyFrameLatency(*device);
             if (pp && pp->Windowed) {
@@ -1687,7 +1795,7 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
                                               device);
         if (SUCCEEDED(hr) && device && *device) {
             // In case a stale pointer of a released device is still listed.
-            SetFlipDevice(*device, false);
+            SetFlipDevice(*device, nullptr, false);
             g_upgradedDevices.Set(*device, false);
             ClearBoundTextures(*device);
         }
@@ -1730,6 +1838,8 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
 
     if (!HasHookedDeviceFunctions(deviceEx)) {
         Wh_Log(L"Unexpected device implementation, creating a regular device");
+        // Its Release isn't hooked.
+        SetFlipDevice(deviceEx, nullptr, false);
         deviceEx->Release();
         return callOriginal();
     }
@@ -1737,6 +1847,7 @@ HRESULT STDMETHODCALLTYPE CreateDevice_Hook(IDirect3D9* d3d,
     if (g_settings.flipModel && !IsFlipDevice(deviceEx)) {
         // FLIPEX was refused, no reason to keep the Ex device.
         Wh_Log(L"FLIPEX refused, creating a regular device");
+        SetFlipDevice(deviceEx, nullptr, false);
         deviceEx->Release();
         return callOriginal();
     }
@@ -1962,6 +2073,9 @@ void Wh_ModUninit() {
     // thread of the game, and Direct3D 9 reference counting is only thread safe
     // for multithreaded devices. The game has to be closed at this point anyway,
     // see the readme.
+
+    // Its code is in this module.
+    StopBorderlessThread();
 
     // The hooks are gone by now.
     if (g_d3d9Module) {
