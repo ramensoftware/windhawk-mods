@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              taskbar-ai-quota-opencode
-// @name            Taskbar AI Quota Bars - OpenCode Fork
-// @description     Shows configurable AI agent/LLM subscription quota bars for Anthropic, OpenAI, Google Antigravity, and OpenCode Go on the Windows 11 taskbar
+// @name            Taskbar AI Quota Bars Plus
+// @description     Claude, Codex, Antigravity and OpenCode Go usage limits as bars on the taskbar
 // @version         1.6.5.1
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
@@ -19,40 +19,43 @@
 
 // ==WindhawkModReadme==
 /*
-# Taskbar AI Quota Bars - OpenCode Fork
+# Taskbar AI Quota Bars Plus
 
-A Windows 11 taskbar mod that shows subscription quota bars next to the system tray.
-Fork of Cleroth's Taskbar AI Quota Bars with OpenCode Go support added, so Go
-subscription usage shows on the taskbar beside Anthropic, OpenAI, and Google.
+See how much of your AI subscription limits you have used, right on the
+taskbar. Taskbar AI Quota Bars, plus OpenCode Go.
 
-Supported providers and quotas:
+![Taskbar AI Quota Bars Plus preview](https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/taskbar-ai-quota-opencode.png)
 
-- **Anthropic Claude:** 5-hour, weekly, Fable weekly, and monthly extra usage
-- **OpenAI/Codex:** 5-hour, weekly, and prepaid credits against a max you set
-- **Google Antigravity:** Gemini pool
-- **OpenCode Go:** 5-hour, weekly, and monthly dollar-usage windows
+## Features
 
-Optional notifications warn when usage crosses the configured red threshold.
+- **Anthropic Claude:** 5-hour, weekly and per-model weekly limits, plus
+  extra usage.
+- **OpenAI Codex:** 5-hour and weekly limits, plus prepaid credits.
+- **Google Antigravity:** the Gemini pool.
+- **OpenCode Go:** 5-hour, weekly and monthly usage.
+- **Color-coded bars** with pace markers, so you can tell if you are on track
+  to run out early.
+- **Alerts** when usage crosses your warning level.
+- **Your layout:** horizontal or vertical bars, labels, colors and which
+  monitors show them.
+- **Private by design.** Sign-ins and keys stay on your PC, encrypted with
+  Windows DPAPI.
 
 ## Setup
 
-Open the native Settings window from the taskbar to add accounts. Anthropic and OpenAI
-use browser sign-in; tokens are encrypted locally with Windows DPAPI. Antigravity uses
-its signed-in local app or CLI session, which must remain running. OpenCode Go uses
-your Go API key: in the mod settings choose Accounts > Add..., pick provider
-"OpenCode (Go)", and paste the key from the OpenCode console. The key stays local and
-is encrypted with Windows DPAPI.
+Right-click the bars and choose **Settings...** to add accounts.
 
-## Settings
+- **Claude and OpenAI** sign in through your browser.
+- **Antigravity** reads the signed-in local app or CLI, which must be running.
+- **OpenCode Go** uses an API key: choose **Accounts > Add...**, pick
+  **OpenCode (Go)** and paste the key from the OpenCode console.
 
-- **Accounts and quota bars:** Add, order, or hide accounts and choose quota windows.
-- **Layout and appearance:** Set orientation, size, labels, pace ticks, and colors.
-- **Taskbar behavior:** Choose displays, click actions, polling, and alerts.
+Disable the original Taskbar AI Quota Bars before enabling this mod.
 
-## Suggestions & bugs
+## Credits
 
-Fork-specific changes are local to this machine; upstream issues and suggestions go to
-[the original mod](https://github.com/Cleroth/windhawk-taskbar-ai-quota/issues/new).
+Based on [Taskbar AI Quota Bars](https://windhawk.net/mods/taskbar-ai-quota)
+by Cleroth. MIT.
 */
 // ==/WindhawkModReadme==
 
