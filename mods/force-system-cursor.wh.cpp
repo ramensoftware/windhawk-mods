@@ -53,6 +53,7 @@ program starts.
 
 #include <windows.h>
 
+#include <atomic>
 #include <vector>
 
 static const unsigned char kCursorData[] = {
@@ -479,7 +480,9 @@ static const unsigned char kCursorData[] = {
 
 using SetCursor_t = HCURSOR(WINAPI*)(HCURSOR);
 SetCursor_t originalSetCursor = nullptr;
-HCURSOR customCursor = nullptr;
+// Read once per call rather than repeatedly, so the handle cannot be swapped
+// and destroyed underneath this call.
+std::atomic<HCURSOR> customCursor{nullptr};
 
 // The embedded image is an ICO: a 6-byte ICONDIR, a 16-byte ICONDIRENTRY, then
 // the DIB. A cursor resource is the same DIB prefixed with a hotspot, so it can
@@ -502,21 +505,26 @@ HCURSOR LoadBuiltinCursor() {
                                              LR_DEFAULTCOLOR);
 }
 
+// Loads the cursor the settings ask for, without one when custom cursors are
+// off or loading fails. The new handle is put in place before the old one is
+// destroyed, since the hook may be reading it on another thread.
 void LoadCustomCursor() {
-    if (customCursor) {
-        DestroyCursor(customCursor);
-        customCursor = nullptr;
+    HCURSOR newCursor = nullptr;
+
+    if (Wh_GetIntSetting(L"useCustomCursor")) {
+        WindhawkUtils::StringSetting path =
+            WindhawkUtils::StringSetting::make(L"cursorPath");
+
+        if (*path.get() != L'\0') {
+            newCursor = (HCURSOR)LoadImageW(nullptr, path.get(), IMAGE_CURSOR,
+                                            0, 0, LR_LOADFROMFILE);
+        } else {
+            newCursor = LoadBuiltinCursor();
+        }
     }
-    if (!Wh_GetIntSetting(L"useCustomCursor")) return;
 
-    WindhawkUtils::StringSetting path =
-        WindhawkUtils::StringSetting::make(L"cursorPath");
-
-    if (*path.get() != L'\0') {
-        customCursor = (HCURSOR)LoadImageW(nullptr, path.get(), IMAGE_CURSOR, 0,
-                                           0, LR_LOADFROMFILE);
-    } else {
-        customCursor = LoadBuiltinCursor();
+    if (HCURSOR oldCursor = customCursor.exchange(newCursor)) {
+        DestroyCursor(oldCursor);
     }
 }
 
@@ -524,20 +532,24 @@ HCURSOR WINAPI SetCursor_Hook(HCURSOR hCursor) {
     if (hCursor == nullptr) {
         return originalSetCursor(nullptr);
     }
-    HCURSOR target = customCursor ? customCursor : LoadCursor(nullptr, IDC_ARROW);
+    HCURSOR custom = customCursor;
+    HCURSOR target = custom ? custom : LoadCursor(nullptr, IDC_ARROW);
     return originalSetCursor(target);
 }
 
 BOOL Wh_ModInit() {
     LoadCustomCursor();
-    Wh_SetFunctionHook(
-        (void*)SetCursor,
-        (void*)SetCursor_Hook,
-        (void**)&originalSetCursor
-    );
+    WindhawkUtils::SetFunctionHook(SetCursor, SetCursor_Hook,
+                                   &originalSetCursor);
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
     LoadCustomCursor();
+}
+
+void Wh_ModUninit() {
+    if (HCURSOR oldCursor = customCursor.exchange(nullptr)) {
+        DestroyCursor(oldCursor);
+    }
 }
