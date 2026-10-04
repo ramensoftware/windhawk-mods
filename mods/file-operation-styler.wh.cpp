@@ -2179,7 +2179,8 @@ namespace
     constexpr UINT kCurrentFileAnimationMessage = WM_APP + 0x51;
     constexpr UINT_PTR kCurrentFileAnimationTimer = 0xF0510020;
     constexpr UINT_PTR kCircleHoverAnimationTimer = 0xF0510021;
-    constexpr UINT kCircleInteractionAnimationIntervalMs = 16;
+    constexpr UINT kCircleHoverAnimationIntervalMs = 16;
+    constexpr UINT kPausedBreathingIntervalMs = 66;
 
     struct CurrentFileAnimation
     {
@@ -3255,10 +3256,18 @@ namespace
                 SetTimer(
                     infoWindow,
                     kCircleHoverAnimationTimer,
-                    kCircleInteractionAnimationIntervalMs,
+                    kCircleHoverAnimationIntervalMs,
                     nullptr);
             }
-            else if (!paused)
+            else if (paused)
+            {
+                SetTimer(
+                    infoWindow,
+                    kCircleHoverAnimationTimer,
+                    kPausedBreathingIntervalMs,
+                    nullptr);
+            }
+            else
             {
                 KillTimer(
                     infoWindow,
@@ -5029,14 +5038,24 @@ namespace
                 SetTimer(
                     infoWindow,
                     kCircleHoverAnimationTimer,
-                    kCircleInteractionAnimationIntervalMs,
+                    hovered
+                        ? kCircleHoverAnimationIntervalMs
+                        : kPausedBreathingIntervalMs,
                     nullptr);
             }
             else
             {
                 // Hover still owns the animation timer while the pointer
                 // remains over the interactive circle.
-                if (!hovered)
+                if (hovered)
+                {
+                    SetTimer(
+                        infoWindow,
+                        kCircleHoverAnimationTimer,
+                        kCircleHoverAnimationIntervalMs,
+                        nullptr);
+                }
+                else
                 {
                     KillTimer(
                         infoWindow,
@@ -8507,6 +8526,11 @@ namespace
             }
         }
 
+        bool hostIconic =
+            hostWindow &&
+            IsWindow(hostWindow) &&
+            IsIconic(hostWindow);
+
         if (infoWindow && IsWindow(infoWindow))
         {
             // Progress may arrive outside this HWND's thread. Marshal all
@@ -8516,12 +8540,16 @@ namespace
             {
                 PostMessageW(infoWindow, kCurrentFileAnimationMessage, 0, 0);
             }
-            InvalidateRect(infoWindow, nullptr, FALSE);
+            if (!hostIconic)
+            {
+                InvalidateRect(infoWindow, nullptr, FALSE);
+            }
         }
 
         if (IsGlassTheme() &&
             hostWindow &&
-            IsWindow(hostWindow))
+            IsWindow(hostWindow) &&
+            !hostIconic)
         {
             InvalidateRect(
                 hostWindow,
