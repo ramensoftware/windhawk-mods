@@ -25,9 +25,7 @@
 /*
 # Taskbar Margin
 
-Shifts the taskbar **content** to the right by a configurable number of pixels,
-leaving an empty margin on the left. The taskbar background stays full width,
-and the taskbar context menu follows the content.
+Shifts the taskbar **content** to the right by a configurable number of pixels, leaving an empty margin on the left. The taskbar background stays full width, and the taskbar context menu follows the content.
 
 Only the taskbar itself is affected.
 
@@ -57,42 +55,32 @@ The taskbar must be:
 - **left-aligned** (Settings → Personalization → Taskbar → Taskbar icon alignment)
 - **Bottom** or **Top** (New in Windows 11 26H2, Settings → Personalization → Taskbar → Taskbar position)
 
-The taskbar is not mirrored correctly on right-to-left display languages:
-the margin is applied to the physical left regardless of the taskbar's flow direction,
-while the context menu is moved to the right.
+The taskbar is not mirrored correctly on right-to-left display languages: the margin is applied to the physical left regardless of the taskbar's flow direction, while the context menu is moved to the right.
 
 ## Compatibility
 
 - **TranslucentTB** is confirmed compatible and can be used alongside this mod.
+- **Windows 11 Taskbar Styler** is not an alternative to this mod. It changes the taskbar itself, while this mod changes the position of the elements inside it. A taskbar restyled that way loses the taskbar's effects on the margin area, while this mod keeps them across the whole taskbar, margin included. It also cannot move the context menu (the jump list), which this mod does.
+- **Taskbar jump list on cursor pos** changes the same anchor point. Both mods offset it, so depending on the hook order the menu can open offset from the cursor. Use one or the other.
 - Tested on Windows 11 26H2.
 
 ## Suggested use
 
-For example, together with [FluentFlyout](https://github.com/unchihugo/FluentFlyout):
-enable the taskbar widget there, set its position to the bottom left corner,
-and turn on the fixed widget width. The taskbar elements then tile linearly instead of overlapping each other.
+For example, together with [FluentFlyout](https://github.com/unchihugo/FluentFlyout): enable the taskbar widget there, set its position to the bottom left corner, and turn on the fixed widget width. The taskbar elements then tile linearly instead of overlapping each other.
 
 ## Implementation notes
 
-The taskbar context menu (the jump list) is not laid out by XAML. Its anchor
-point is computed in `explorer.exe` by `CTaskListWnd::_ComputeJumpViewPosition`
-in `taskbar.dll`, and handed to the process that draws the menu. The point is in
-physical screen pixels.
+The taskbar context menu (the jump list) is not laid out by XAML. Its anchor point is computed in `explorer.exe` by `CTaskListWnd::_ComputeJumpViewPosition` in `taskbar.dll`, and handed to the process that draws the menu. The point is in physical screen pixels.
 
-Shifting the taskbar's XAML content therefore does not move the menu on its own,
-because the menu is not placed relative to it. The mod adjusts the anchor point
-instead, which is why it hooks that function.
+Shifting the taskbar's XAML content therefore does not move the menu on its own, because the menu is not placed relative to it. The mod adjusts the anchor point instead, which is why it hooks that function.
 
 ## License
 
-GPL-3.0. The taskbar XAML access is based on the
-[Start button always on the left](https://github.com/m417z/my-windhawk-mods) mod
-by m417z, which is also licensed under GPL-3.0.
+GPL-3.0. The taskbar XAML access is based on the [Start button always on the left](https://github.com/m417z/my-windhawk-mods) mod by m417z, which is also licensed under GPL-3.0.
 
 ## Feedback
 
-Bug reports and feature requests are welcome in
-[Issues](https://github.com/loliri/windhawk-taskbar-margin/issues).
+Bug reports and feature requests are welcome in [Issues](https://github.com/loliri/windhawk-taskbar-margin/issues).
 */
 // ==/WindhawkModReadme==
 
@@ -134,9 +122,11 @@ Bug reports and feature requests are welcome in
 */
 // ==/WindhawkModSettings==
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <functional>
+#include <mutex>
 #include <vector>
 
 #undef GetCurrentTime
@@ -169,19 +159,38 @@ struct
 
 std::atomic<bool> g_unloading;
 
-// Set once the margin has been applied to a taskbar, and cleared when it is
-// removed, so that the anchor is only shifted while the padding is in place.
-std::atomic<bool> g_marginApplied;
+// Which property the mod set on an element. The property itself is a WinRT
+// object, and keeping it in a global container would leave a strong reference
+// to release at process shutdown, where the XAML objects may already be gone.
+// The tag is resolved back to the static property when it is cleared.
+enum class AppliedProperty
+{
+    GridPadding,
+    FrameworkElementMargin,
+};
 
 // Elements whose value the mod set, so it can be cleared again.
 struct AppliedElement
 {
     winrt::weak_ref<FrameworkElement> element;
-    DependencyProperty property;
+    AppliedProperty property;
 };
 
-// The elements the mod has changed.
-thread_local std::vector<AppliedElement> g_appliedElements;
+// The elements the mod set on one taskbar, together with the thread that
+// applied them and the display that taskbar is on. The thread id keeps the
+// apply/remove pass scoped to its own taskbar, and the display lets the jump
+// list hook look up whether this taskbar actually has the margin.
+struct AppliedTaskbar
+{
+    DWORD threadId;
+    HMONITOR monitor;
+    std::vector<AppliedElement> elements;
+};
+
+// The taskbars the mod has changed. Guarded in case the jump list hook runs on
+// a different thread than the apply pass.
+std::mutex g_appliedTaskbarsMutex;
+std::vector<AppliedTaskbar> g_appliedTaskbars;
 
 void *CTaskBand_ITaskListWndSite_vftable;
 
@@ -433,20 +442,21 @@ double GetMarginInDips(FrameworkElement const &element, int marginPixels)
     return static_cast<double>(marginPixels);
 }
 
-void ApplyMarginToTaskbar(HWND hTaskbarWnd, XamlRoot xamlRoot)
+// Returns whether the margin was applied to this taskbar.
+bool ApplyMarginToTaskbar(HWND hTaskbarWnd, XamlRoot xamlRoot)
 {
     HMONITOR monitor =
         MonitorFromWindow(hTaskbarWnd, MONITOR_DEFAULTTONEAREST);
     if (!ShouldApplyToMonitor(monitor))
     {
-        return;
+        return true;
     }
 
     auto content = xamlRoot.Content().try_as<FrameworkElement>();
     if (!content)
     {
         Wh_Log(L"Failed to get the taskbar content element");
-        return;
+        return false;
     }
 
     auto taskbarFrame = FindChildByClassName(content, L"Taskbar.TaskbarFrame");
@@ -455,60 +465,110 @@ void ApplyMarginToTaskbar(HWND hTaskbarWnd, XamlRoot xamlRoot)
     if (!rootGrid)
     {
         Wh_Log(L"Failed to find the taskbar RootGrid");
-        return;
+        return false;
     }
 
     auto grid = rootGrid.try_as<Controls::Grid>();
     if (!grid)
     {
         Wh_Log(L"RootGrid is not a Grid, skipping");
-        return;
+        return false;
     }
 
     double leftMargin =
         GetMarginInDips(taskbarFrame, g_settings.leftMargin);
 
+    AppliedTaskbar appliedTaskbar;
+    appliedTaskbar.threadId = GetCurrentThreadId();
+    appliedTaskbar.monitor = monitor;
+
     // The padding shifts the taskbar content, and the background is pulled back
     // by the same amount so that it keeps spanning the full width.
     grid.Padding(Thickness{leftMargin, 0, 0, 0});
-    g_appliedElements.push_back(
-        {winrt::make_weak(rootGrid), Controls::Grid::PaddingProperty()});
+    appliedTaskbar.elements.push_back(
+        {winrt::make_weak(rootGrid), AppliedProperty::GridPadding});
 
     auto taskbarBackground =
         FindChildByClassName(rootGrid, L"Taskbar.TaskbarBackground");
     if (taskbarBackground)
     {
         taskbarBackground.Margin(Thickness{-leftMargin, 0, 0, 0});
-        g_appliedElements.push_back({winrt::make_weak(taskbarBackground),
-                                     FrameworkElement::MarginProperty()});
+        appliedTaskbar.elements.push_back({winrt::make_weak(taskbarBackground),
+                                           AppliedProperty::FrameworkElementMargin});
     }
     else
     {
         Wh_Log(L"Failed to find TaskbarBackground");
     }
 
-    g_marginApplied.store(true);
+    std::lock_guard<std::mutex> lock(g_appliedTaskbarsMutex);
+    g_appliedTaskbars.push_back(std::move(appliedTaskbar));
+
+    return true;
 }
 
+// Clears the values the mod set on the taskbars of the calling thread.
 void RemoveAppliedMargins()
 {
-    for (const auto &applied : g_appliedElements)
+    DWORD dwThreadId = GetCurrentThreadId();
+
+    std::vector<AppliedTaskbar> appliedTaskbars;
+
     {
-        if (auto element = applied.element.get())
+        std::lock_guard<std::mutex> lock(g_appliedTaskbarsMutex);
+
+        for (auto it = g_appliedTaskbars.begin();
+             it != g_appliedTaskbars.end();)
         {
-            try
+            if (it->threadId == dwThreadId)
             {
-                element.ClearValue(applied.property);
+                appliedTaskbars.push_back(std::move(*it));
+                it = g_appliedTaskbars.erase(it);
             }
-            catch (winrt::hresult_error const &ex)
+            else
             {
-                Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+                ++it;
             }
         }
     }
 
-    g_appliedElements.clear();
-    g_marginApplied.store(false);
+    for (const auto &appliedTaskbar : appliedTaskbars)
+    {
+        for (const auto &applied : appliedTaskbar.elements)
+        {
+            if (auto element = applied.element.get())
+            {
+                try
+                {
+                    element.ClearValue(
+                        applied.property == AppliedProperty::GridPadding
+                            ? Controls::Grid::PaddingProperty()
+                            : FrameworkElement::MarginProperty());
+                }
+                catch (winrt::hresult_error const &ex)
+                {
+                    Wh_Log(L"Error %08X: %s", ex.code(), ex.message().c_str());
+                }
+            }
+        }
+    }
+}
+
+// Whether the margin is currently applied to the taskbar on this display. The
+// jump list hook uses this instead of a single global flag, so that a taskbar
+// which does not have the margin never gets its anchor shifted.
+bool IsMarginAppliedToMonitor(HMONITOR monitor)
+{
+    std::lock_guard<std::mutex> lock(g_appliedTaskbarsMutex);
+    for (const auto &appliedTaskbar : g_appliedTaskbars)
+    {
+        if (appliedTaskbar.monitor == monitor)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 using ComputeJumpViewPosition_t = HRESULT(WINAPI *)(
@@ -532,8 +592,7 @@ HRESULT WINAPI ComputeJumpViewPosition_Hook(
     HRESULT hr = ComputeJumpViewPosition_Original(pThis, pTaskBtnGroup, param2,
                                                   point, hAlign, vAlign);
 
-    if (FAILED(hr) || !point || g_unloading || !g_marginApplied.load() ||
-        !g_settings.leftMargin)
+    if (FAILED(hr) || !point || g_unloading || !g_settings.leftMargin)
     {
         return hr;
     }
@@ -544,7 +603,7 @@ HRESULT WINAPI ComputeJumpViewPosition_Hook(
     HMONITOR monitor =
         MonitorFromPoint(POINT{(LONG)point->X, (LONG)point->Y},
                          MONITOR_DEFAULTTONEAREST);
-    if (!ShouldApplyToMonitor(monitor))
+    if (!IsMarginAppliedToMonitor(monitor))
     {
         return hr;
     }
@@ -630,12 +689,13 @@ bool RunFromWindowThread(HWND hWnd,
     return true;
 }
 
-void ApplySettingsFromTaskbarThread();
+bool ApplySettingsFromTaskbarThread();
 
 // The taskbar's XAML tree is not ready when the taskbar window is created, so
 // the XamlRoot lookup fails at that point. Applying once and giving up is what
 // breaks a late start, where the taskbar is built after the mod loads, so the
-// apply is retried on a timer until it takes.
+// apply is retried on a timer until every taskbar on the thread has it. The
+// timer is per thread, so that each taskbar thread keeps its own retry state.
 thread_local winrt::Windows::System::DispatcherQueueTimer g_retryTimer{nullptr};
 thread_local winrt::Windows::System::DispatcherQueueTimer::Tick_revoker
     g_retryTimerRevoker;
@@ -672,9 +732,7 @@ void RetryTimerTick(winrt::Windows::System::DispatcherQueueTimer const &,
         return;
     }
 
-    ApplySettingsFromTaskbarThread();
-
-    if (g_marginApplied.load())
+    if (ApplySettingsFromTaskbarThread())
     {
         Wh_Log(L"Applied on attempt %d", g_retryAttempts + 1);
         StopRetryTimer();
@@ -719,7 +777,10 @@ void StartRetryTimer()
     }
 }
 
-void ApplySettingsFromTaskbarThread()
+// Applies the margin to every taskbar on the calling thread. Returns whether
+// all of them got it, so that a taskbar whose XAML is not built yet keeps the
+// retry going instead of being skipped because another one succeeded.
+bool ApplySettingsFromTaskbarThread()
 {
     Wh_Log(L">");
 
@@ -727,12 +788,14 @@ void ApplySettingsFromTaskbarThread()
 
     if (g_unloading)
     {
-        return;
+        return true;
     }
+
+    bool allApplied = true;
 
     EnumThreadWindows(
         GetCurrentThreadId(),
-        [](HWND hWnd, LPARAM) -> BOOL
+        [](HWND hWnd, LPARAM lParam) -> BOOL
         {
             WCHAR szClassName[32];
             if (GetClassName(hWnd, szClassName, ARRAYSIZE(szClassName)) == 0)
@@ -757,21 +820,25 @@ void ApplySettingsFromTaskbarThread()
             if (!xamlRoot)
             {
                 Wh_Log(L"Getting XamlRoot failed");
+                *reinterpret_cast<bool *>(lParam) = false;
                 return TRUE;
             }
 
-            ApplyMarginToTaskbar(hWnd, xamlRoot);
+            if (!ApplyMarginToTaskbar(hWnd, xamlRoot))
+            {
+                *reinterpret_cast<bool *>(lParam) = false;
+            }
 
             return TRUE;
         },
-        0);
+        reinterpret_cast<LPARAM>(&allApplied));
+
+    return allApplied;
 }
 
 void ApplySettingsOnTaskbarThread()
 {
-    ApplySettingsFromTaskbarThread();
-
-    if (!g_unloading && !g_marginApplied.load())
+    if (!ApplySettingsFromTaskbarThread() && !g_unloading)
     {
         Wh_Log(L"Taskbar XAML not ready, will retry");
         StartRetryTimer();
@@ -799,13 +866,24 @@ void RemoveSettings(HWND hTaskbarWnd)
         nullptr);
 }
 
-// Every taskbar lives on its own thread with its own thread-local state, so
-// each has to be visited on its own thread.
+// Every taskbar window lives on the taskbar thread, and the apply pass already
+// covers all the taskbars on the thread it runs on, so each thread is visited
+// only once even when it owns several taskbar windows.
 void ForEachTaskbarWindow(void (*proc)(HWND))
 {
+    struct ENUM_PARAM
+    {
+        void (*proc)(HWND);
+        std::vector<DWORD> visitedThreadIds;
+    };
+
+    ENUM_PARAM param{proc};
+
     EnumWindows(
         [](HWND hWnd, LPARAM lParam) -> BOOL
         {
+            auto *param = reinterpret_cast<ENUM_PARAM *>(lParam);
+
             DWORD dwProcessId = 0;
             if (!GetWindowThreadProcessId(hWnd, &dwProcessId) ||
                 dwProcessId != GetCurrentProcessId())
@@ -819,15 +897,26 @@ void ForEachTaskbarWindow(void (*proc)(HWND))
                 return TRUE;
             }
 
-            if (_wcsicmp(szClassName, L"Shell_TrayWnd") == 0 ||
-                _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") == 0)
+            if (_wcsicmp(szClassName, L"Shell_TrayWnd") != 0 &&
+                _wcsicmp(szClassName, L"Shell_SecondaryTrayWnd") != 0)
             {
-                reinterpret_cast<void (*)(HWND)>(lParam)(hWnd);
+                return TRUE;
             }
+
+            DWORD dwThreadId = GetWindowThreadProcessId(hWnd, nullptr);
+            if (std::find(param->visitedThreadIds.begin(),
+                          param->visitedThreadIds.end(),
+                          dwThreadId) != param->visitedThreadIds.end())
+            {
+                return TRUE;
+            }
+
+            param->visitedThreadIds.push_back(dwThreadId);
+            param->proc(hWnd);
 
             return TRUE;
         },
-        reinterpret_cast<LPARAM>(proc));
+        reinterpret_cast<LPARAM>(&param));
 }
 
 void OnWindowCreated(HWND hWnd, LPCWSTR lpClassName)
@@ -961,30 +1050,6 @@ HWND WINAPI CreateWindowInBandEx_Hook(DWORD dwExStyle,
     OnWindowCreated(hWnd, lpClassName);
 
     return hWnd;
-}
-
-HWND FindCurrentProcessTaskbarWnd()
-{
-    HWND hTaskbarWnd = nullptr;
-
-    EnumWindows(
-        [](HWND hWnd, LPARAM lParam) -> BOOL
-        {
-            DWORD dwProcessId;
-            WCHAR className[32];
-            if (GetWindowThreadProcessId(hWnd, &dwProcessId) &&
-                dwProcessId == GetCurrentProcessId() &&
-                GetClassName(hWnd, className, ARRAYSIZE(className)) &&
-                _wcsicmp(className, L"Shell_TrayWnd") == 0)
-            {
-                *reinterpret_cast<HWND *>(lParam) = hWnd;
-                return FALSE;
-            }
-            return TRUE;
-        },
-        reinterpret_cast<LPARAM>(&hTaskbarWnd));
-
-    return hTaskbarWnd;
 }
 
 bool HookTaskbarDllSymbols()
