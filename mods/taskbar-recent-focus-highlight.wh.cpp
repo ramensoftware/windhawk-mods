@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.10.13
+// @version         0.11.0
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -768,11 +768,8 @@ constexpr UINT_PTR kMinFocusTimerId = 1;
 constexpr UINT_PTR kDecayTimerId = 2;
 constexpr UINT_PTR kPreviewMinFocusTimerId = 3;
 constexpr UINT_PTR kFullRebindTimerId = 4;
-constexpr UINT_PTR kForegroundRecheckTimerId = 5;
-constexpr ULONGLONG kForegroundRecheckWindowMs = 2000;
-constexpr UINT kForegroundRecheckIntervalMs = 100;
-// Focus-thread-only deadline. Shell events do not extend an active window.
-ULONGLONG g_foregroundRecheckDeadline = 0;
+// Owned and accessed only by the focus thread.
+UINT g_shellHookMessage = 0;
 constexpr UINT kDecayCheckIntervalMs = 30 * 1000;
 constexpr ULONGLONG kIsRunningGraceMs = 400;
 // Full identity rebind (all buttons). UVS only re-paints the cached rank;
@@ -3644,6 +3641,8 @@ using CTaskListWnd_HandleClick_t = HRESULT(WINAPI*)(void* pThis,
 CTaskListWnd_HandleClick_t CTaskListWnd_HandleClick_Original;
 HWND GetWindowFromTaskItem(void* taskItem);
 auto GetWindowForThumbnailTaskItem(void* taskItem) -> HWND;
+
+
 
 HRESULT WINAPI CTaskListWnd_HandleClick_Hook(void* pThis,
                                              void* taskGroup,
@@ -7214,43 +7213,6 @@ void SchedulePreviewConfirm(bool windowAlreadyTracked) {
                  static_cast<ULONGLONG>(previewMin) * 1000ULL);
 }
 
-// Some hosted-app activations change foreground without notifying either our
-// WinEvent listener or an independent listener. A taskbar/flyout foreground
-// event precedes the observed gap. Reconcile only briefly after that signal;
-// never stamp the previous pending app or infer focus from a clicked card.
-void StopForegroundRecheck() {
-    g_foregroundRecheckDeadline = 0;
-    DisarmHookTimer(kForegroundRecheckTimerId);
-}
-
-void ObserveForegroundForRecheck(HWND hwnd) {
-    if (!hwnd || g_unloading.load()) {
-        return;
-    }
-    DWORD pid = PidFromHwnd(hwnd);
-    const std::wstring cls = GetWindowClassName(hwnd);
-    const bool shellSurface = IsOwnExplorerProcess(pid) &&
-        (cls == L"Shell_TrayWnd" || cls == L"Shell_SecondaryTrayWnd" ||
-         cls == L"XamlExplorerHostIslandWindow" || cls == L"TaskListThumbnailWnd");
-    if (shellSurface) {
-        if (!g_foregroundRecheckDeadline) {
-            g_foregroundRecheckDeadline =
-                GetTickCount64() + kForegroundRecheckWindowMs;
-            HWND owner = HookThreadWindow();
-            if (!owner || !SetTimer(owner, kForegroundRecheckTimerId,
-                                    kForegroundRecheckIntervalMs, nullptr)) {
-                g_foregroundRecheckDeadline = 0;
-                Wh_Log(L"Could not start foreground reconciliation timer");
-            }
-        }
-    } else if (g_foregroundRecheckDeadline && hwnd == GetForegroundWindow() &&
-               !IsTransientForeground(hwnd)) {
-        // A normal event already reached the actual app. Do not confirm twice
-        // or restart its minimum-focus clock when our timer arrives later.
-        StopForegroundRecheck();
-    }
-}
-
 void HandleForegroundChanged(HWND hWnd) {
     if (g_unloading.load()) {
         return;
@@ -7258,7 +7220,6 @@ void HandleForegroundChanged(HWND hWnd) {
     ProcessImagePathCacheScope pathCacheScope;
 
     hWnd = NormalizeFocusHwnd(hWnd);
-    ObserveForegroundForRecheck(hWnd);
 
     if (IsTransientForeground(hWnd)) {
         // Alt-Tab frame, taskbar, desktop, IME. Do not cancel min-focus.
@@ -7394,8 +7355,12 @@ void HandleForegroundChanged(HWND hWnd) {
     if (sameAppPending) {
         // Same app: keep app min-focus timer; re-schedule preview if HWND moved
         // between instances (multi-window VS Code / Terminal).
-        if (hwndChanged || !windowAlreadyTracked) {
+        if (hwndChanged) {
             SchedulePreviewConfirm(windowAlreadyTracked);
+        } else {
+            // WinEvent and shell activation can describe the same episode.
+            // Preserve its deadline rather than restarting the preview wait.
+            EnsurePendingPreviewTimer();
         }
         EnsurePendingAppTimer();
         return;
@@ -7423,23 +7388,6 @@ void HandleForegroundChanged(HWND hWnd) {
     }
 
     ArmHookTimer(kMinFocusTimerId, static_cast<ULONGLONG>(minSeconds) * 1000ULL);
-}
-
-void OnForegroundRecheckTimer() {
-    if (!g_foregroundRecheckDeadline) {
-        return;  // Includes stale WM_TIMER after cancellation.
-    }
-    if (g_unloading.load() || GetTickCount64() >= g_foregroundRecheckDeadline) {
-        StopForegroundRecheck();
-        return;
-    }
-    HWND foreground = NormalizeFocusHwnd(GetForegroundWindow());
-    if (!foreground || IsTransientForeground(foreground)) {
-        return;  // Periodic timer continues only until the original deadline.
-    }
-    StopForegroundRecheck();
-    Wh_Log(L"Foreground reconciled after taskbar/flyout: hwnd=%p", foreground);
-    HandleForegroundChanged(foreground);
 }
 
 void OnDecayTimer() {
@@ -7501,6 +7449,25 @@ void OnDecayTimer() {
 // WinEvent hook thread
 // ---------------------------------------------------------------------------
 
+// Notification targets can already be stale when the focus worker receives
+// them. Background creation/attention is identity information, not recency.
+void HandleForegroundNotification(HWND target) {
+    if (g_unloading.load() || !target) {
+        return;
+    }
+    HWND foreground = NormalizeFocusHwnd(GetForegroundWindow());
+    if (!foreground || NormalizeFocusHwnd(target) != foreground) {
+        return;
+    }
+    HandleForegroundChanged(foreground);
+}
+
+void HandleShellActivation(WPARAM code, HWND target) {
+    if (code == HSHELL_WINDOWACTIVATED || code == HSHELL_RUDEAPPACTIVATED) {
+        HandleForegroundNotification(target);
+    }
+}
+
 void CALLBACK WinEventProc(HWINEVENTHOOK /*hWinEventHook*/,
                            DWORD event,
                            HWND hWnd,
@@ -7529,16 +7496,21 @@ LRESULT CALLBACK HookThreadWndProc(HWND hWnd,
                                    UINT msg,
                                    WPARAM wParam,
                                    LPARAM lParam) {
+    if (g_shellHookMessage && msg == g_shellHookMessage) {
+        HandleShellActivation(wParam, reinterpret_cast<HWND>(lParam));
+        return 0;
+    }
     switch (msg) {
+        case WM_CLOSE:
+            // This hidden notification window is owned by worker shutdown.
+            return 0;
         case WM_APP_FOREGROUND_CHANGED:
-            HandleForegroundChanged(reinterpret_cast<HWND>(wParam));
+            HandleForegroundNotification(reinterpret_cast<HWND>(wParam));
             return 0;
         case WM_APP_DESKTOP_SWITCHED:
-            StopForegroundRecheck();
             OnVirtualDesktopSwitched();
             return 0;
         case WM_APP_SHUTDOWN:
-            StopForegroundRecheck();
             PostQuitMessage(0);
             return 0;
         case WM_APP_REQUEST_APPLY_DEBOUNCED:
@@ -7609,8 +7581,6 @@ LRESULT CALLBACK HookThreadWndProc(HWND hWnd,
             } else if (wParam == kPreviewMinFocusTimerId) {
                 KillTimer(hWnd, kPreviewMinFocusTimerId);
                 OnPreviewMinFocusTimerElapsed();
-            } else if (wParam == kForegroundRecheckTimerId) {
-                OnForegroundRecheckTimer();
             } else if (wParam == kDecayTimerId) {
                 OnDecayTimer();
             } else if (wParam == kFullRebindTimerId) {
@@ -7620,7 +7590,6 @@ LRESULT CALLBACK HookThreadWndProc(HWND hWnd,
             }
             return 0;
         case WM_DESTROY:
-            StopForegroundRecheck();
             KillTimer(hWnd, kMinFocusTimerId);
             KillTimer(hWnd, kPreviewMinFocusTimerId);
             KillTimer(hWnd, kDecayTimerId);
@@ -7635,7 +7604,7 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
     g_hookThreadId.store(GetCurrentThreadId(), std::memory_order_release);
     g_decayTimerArmed.store(false);
     g_fullRebindTimerArmed = false;
-    g_foregroundRecheckDeadline = 0;
+    g_shellHookMessage = 0;
 
     HMODULE hMod = nullptr;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -7665,7 +7634,8 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
     }
 
     HWND hwnd =
-        CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE,
+        CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, wc.lpszClassName,
+                        L"", WS_POPUP, 0, 0, 0, 0, nullptr,
                         nullptr, wc.hInstance, nullptr);
     if (!hwnd) {
         Wh_Log(L"Failed to create message window: %u", GetLastError());
@@ -7674,6 +7644,18 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
         SignalHookThreadReady();
         return 1;
     }
+    // Shell notifications require a desktop window. Never show or activate it.
+    g_shellHookMessage = RegisterWindowMessageW(L"SHELLHOOK");
+    if (!g_shellHookMessage || !RegisterShellHookWindow(hwnd)) {
+        Wh_Log(L"Shell activation registration failed: %u", GetLastError());
+        DestroyWindow(hwnd);
+        UnregisterClassW(wc.lpszClassName, wc.hInstance);
+        g_shellHookMessage = 0;
+        g_hookThreadId.store(0, std::memory_order_release);
+        SignalHookThreadReady();
+        return 1;
+    }
+    Wh_Log(L"Shell activation notifications registered (no foreground polling)");
     g_hookThreadHwnd.store(hwnd, std::memory_order_release);
 
     HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -7691,7 +7673,9 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
         UnsubscribeAccentChanges();
         ReleaseVdm();
         g_hookThreadHwnd.store(nullptr, std::memory_order_release);
+        DeregisterShellHookWindow(hwnd);
         DestroyWindow(hwnd);
+        g_shellHookMessage = 0;
         UnregisterClassW(wc.lpszClassName, wc.hInstance);
         g_hookThreadId.store(0, std::memory_order_release);
         if (SUCCEEDED(coHr)) {
@@ -7744,7 +7728,9 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
 
     g_decayTimerArmed.store(false);
     g_hookThreadHwnd.store(nullptr, std::memory_order_release);
+    DeregisterShellHookWindow(hwnd);
     DestroyWindow(hwnd);
+    g_shellHookMessage = 0;
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
     g_hookThreadId.store(0, std::memory_order_release);
 
