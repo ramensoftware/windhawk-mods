@@ -20,6 +20,7 @@
 # ClassicWindowSwitcher
 * This mod brings back the classic Alt+Tab dialog, even on Windows 11 24H2+, which removed the old switcher in win32kfull.sys.
 * This is a direct port of my [ClassicWindowSwitcher](https://github.com/Ingan121/ClassicWindowSwitcher), which is a fork of valinet's [SimpleWindowSwitcher](https://github.com/valinet/sws).
+* Please do not use this mod with other Alt+Tab mods. They might conflict with this mod.
 
 ![Animated Screenshot](https://raw.githubusercontent.com/Ingan121/ClassicWindowSwitcher/refs/heads/master/cws.webp)
 ## Differences with the original classic switcher
@@ -35,10 +36,16 @@
 
 // ==WindhawkModSettings==
 /*
+- CoolSwitchColumns: 7
+  $name: Number of grid columns
+  $name:ko-KR: 그리드 열 수
+- CoolSwitchRows: 3
+  $name: Number of grid rows
+  $name:ko-KR: 그리드 행 수
 - ShowDelay: 100
   $name: Show delay (ms)
   $name:ko-KR: 표시 지연 시간 (ms)
-  $description: Set to the number of milliseconds to wait before showing the switcher. Set to 0 to show the switcher immediately. Maximum value is 10 seconds.
+  $description: Set to the number of milliseconds to wait before showing the switcher. Set to 0 to show the switcher immediately. Maximum supported value is 10 seconds.
   $description:ko-KR: 전환기를 표시하기 전에 대기할 시간을 밀리세컨드 단위로 입력하십시오. 0을 입력하면 전환기가 즉시 표시됩니다. 최대 10초까지 입력 가능합니다.
 - IncludeWallpaper: false
   $name: Include 'show desktop' item
@@ -97,12 +104,6 @@
   $name:ko-KR: 한 창만 있으면 전환기 생략
   $description: Skip showing the switcher and immediately switch to the only window if there is just one window to switch to.
   $description:ko-KR: 전환 가능한 창이 하나만 있을 경우 전환기 표시를 건너뛰고 바로 해당 창으로 전환합니다.
-- CoolSwitchColumns: 7
-  $name: Number of grid columns
-  $name:ko-KR: 그리드 열 수
-- CoolSwitchRows: 3
-  $name: Number of grid rows
-  $name:ko-KR: 그리드 행 수
 */
 // ==/WindhawkModSettings==
 
@@ -124,6 +125,7 @@
 #include <Propkey.h>
 #include <processthreadsapi.h>
 #include <vector>
+#include <string>
 
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
@@ -208,7 +210,7 @@ typedef long long sws_error_t;
 
 // (always_)inline function still doesn't keep the line and function name in the Wh_Log output
 #define sws_error_Report(errnum) \
-    errnum; if (rv) Wh_Log(L"Error 0x%x", rv); // this must be only used when assigning to a variable named "rv"
+    errnum; if (rv) Wh_Log(L"Error 0x%llx", rv); // this must be only used when assigning to a variable named "rv"
 
 // sws_IconPainter.h
 typedef struct _sws_IconPainter_CallbackParams
@@ -495,6 +497,7 @@ typedef struct _sws_WindowSwitcher
     HWND hWnd;
     UINT msgShellHook;
     sws_WindowSwitcherLayout layout;
+    int initialDirection;
     int direction;
 	int scrollDirection;
     int lastKey;
@@ -1453,14 +1456,19 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
                     LoadStringW((HINSTANCE)_sws_Explorer, 11114, wszFormat, MAX_PATH);
                 }
             }
+            auto titleText = std::wstring(wszFormat);
+            size_t pos = titleText.find(L"%s");
+            if (pos != std::wstring::npos) {
+                titleText.replace(pos, 2, wszTitle2);
+            }
             if (window.dwCount)
             {
-                swprintf_s(wszTitle, MAX_PATH, wszFormat, wszTitle2, window.dwCount);
+                pos = titleText.find(L"%d");
+                if (pos != std::wstring::npos) {
+                    titleText.replace(pos, 2, std::to_wstring(window.dwCount));
+                }
             }
-            else
-            {
-                swprintf_s(wszTitle, MAX_PATH, wszFormat, wszTitle2);
-            }
+            wcscpy(wszTitle, titleText.c_str());
         }
         else
         {
@@ -1808,10 +1816,6 @@ sws_error_t sws_WindowSwitcherLayout_ComputeLayout(sws_WindowSwitcherLayout* _th
 
 			for (int iCurrentWindow = iObtainedIndex ? iObtainedIndex : _this->iIndex; iCurrentWindow >= 0; iCurrentWindow--)
 			{
-				//TCHAR name[200];
-				//GetWindowTextW(pWindowList[iCurrentWindow].hWnd, name, 200);
-				//Wh_Log(L"%d %s ", pWindowList[iCurrentWindow].hWnd, name);
-
 				if (pWindowList[iCurrentWindow].hWnd == _this->hWnd)
 				{
 					continue;
@@ -2351,10 +2355,8 @@ static void _sws_WindowSwitcher_DrawContour(sws_WindowSwitcher* _this, HDC hdcPa
         DIB_RGB_COLORS, SRCCOPY);
 }
 
-sws_error_t sws_WindowSwitcher_RegisterHotkeys(sws_WindowSwitcher* _this, HKL hkl)
+void sws_WindowSwitcher_RegisterHotkeys(sws_WindowSwitcher* _this, HKL hkl)
 {
-    sws_error_t rv = SWS_ERROR_SUCCESS;
-
     if (hkl)
     {
         _this->vkTilde = MapVirtualKeyExW(0x29, MAPVK_VSC_TO_VK_EX, hkl);
@@ -2371,37 +2373,11 @@ sws_error_t sws_WindowSwitcher_RegisterHotkeys(sws_WindowSwitcher* _this, HKL hk
         RegisterHotKey(_this->hWnd, -3, MOD_ALT | MOD_CONTROL, _this->vkTilde);
         RegisterHotKey(_this->hWnd, -4, MOD_ALT | MOD_SHIFT | MOD_CONTROL, _this->vkTilde);
     }
-    if (!rv)
-    {
-        if (!RegisterHotKey(_this->hWnd, 1, MOD_ALT, VK_TAB))
-        {
-            rv = HRESULT_FROM_WIN32(GetLastError());
-        }
-    }
-    if (!rv)
-    {
-        if (!RegisterHotKey(_this->hWnd, 2, MOD_ALT | MOD_SHIFT, VK_TAB))
-        {
-            rv = HRESULT_FROM_WIN32(GetLastError());
-        }
-    }
-    if (!rv)
-    {
-        if (!RegisterHotKey(_this->hWnd, 3, MOD_ALT | MOD_CONTROL, VK_TAB))
-        {
-            rv = HRESULT_FROM_WIN32(GetLastError());
-        }
-    }
-    if (!rv)
-    {
-        if (!RegisterHotKey(_this->hWnd, 4, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB))
-        {
-            rv = HRESULT_FROM_WIN32(GetLastError());
-        }
-    }
-    //Wh_Log(L"[sws] Hotkey registration result: %d\n", rv);
 
-    return rv;
+    RegisterHotKey(_this->hWnd, 1, MOD_ALT, VK_TAB);
+    RegisterHotKey(_this->hWnd, 2, MOD_ALT | MOD_SHIFT, VK_TAB);
+    RegisterHotKey(_this->hWnd, 3, MOD_ALT | MOD_CONTROL, VK_TAB);
+    RegisterHotKey(_this->hWnd, 4, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB);
 }
 
 void sws_WindowSwitcher_UnregisterHotkeys(sws_WindowSwitcher* _this)
@@ -3113,7 +3089,15 @@ static void WINAPI _sws_WindowSwitcher_Show(sws_WindowSwitcher* _this)
         return;
     }
     _this->layout.iFirstItemIndex = _this->layout.pWindowList.cbSize;
-    Wh_Log(L"[sws] cbSize=%d\n", _this->layout.pWindowList.cbSize);
+    int col = _this->settings.dwGridColumns;
+    Wh_Log(L"[sws] cbSize=%d col=%d", _this->layout.pWindowList.cbSize, col);
+    int row = _this->settings.dwGridRows;
+    if (_this->initialDirection == SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_BACKWARD) {
+        _this->layout.iIndex = 0;
+        if (_this->layout.pWindowList.cbSize > col * row) {
+            _this->layout.iFirstItemIndex = col * (row / 2) + col / 2;
+        }
+    }
     if (_this->hdcWindow)
     {
         EndBufferedPaint(_this->hBufferedPaint, FALSE);
@@ -3495,6 +3479,59 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                     }
                     free(tshWnd);
                 }
+
+                if (IsWindowVisible(_this->hWnd))
+                {
+                    sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->layout.pWindowList.pList;
+                    if (pWindowList)
+                    {
+                        for (int i = 0; i < _this->layout.pWindowList.cbSize; ++i)
+                        {
+                            if (hWnd == pWindowList[i].hWnd)
+                            {
+                                sws_IconPainter_CallbackParams* params = (sws_IconPainter_CallbackParams*)malloc(sizeof(sws_IconPainter_CallbackParams));
+                                if (params)
+                                {
+                                    WCHAR wszRundll32Path[MAX_PATH];
+                                    GetSystemDirectoryW(wszRundll32Path, MAX_PATH);
+                                    wcscat_s(wszRundll32Path, MAX_PATH, L"\\rundll32.exe");
+                                    params->bUseApplicationIcon = FALSE;
+                                    if (!_this->settings.bAlwaysUseWindowTitleAndIcon &&
+                                        _wcsicmp(pWindowList[i].wszPath, wszRundll32Path) &&
+                                        !(pWindowList[i].dwWindowFlags & SWS_WINDOWSWITCHERLAYOUT_WINDOWFLAGS_ISUWP) &&
+                                        _this->settings.bSwitcherIsPerApplication &&
+                                        _this->mode == SWS_WINDOWSWITCHER_LAYOUTMODE_FULL &&
+                                        pWindowList[i].dwCount > 1)
+                                    {
+                                        params->bUseApplicationIcon = TRUE;
+                                    }
+                                    if (!params->bUseApplicationIcon)
+                                    {
+                                        params->hWnd = _this->hWnd;
+                                        params->index = i;
+                                        if (!_this->layout.timestamp)
+                                        {
+                                            _this->layout.timestamp = sws_milliseconds_now();
+                                        }
+                                        params->timestamp = _this->layout.timestamp;
+                                        params->bIsDesktop = (_this->layout.bIncludeWallpaper && pWindowList[i].hWnd == GetShellWindow());
+                                        if (!sws_IconPainter_ExtractAndDrawIconAsync(pWindowList[i].hWnd, params))
+                                        {
+                                            pWindowList[i].hIcon = sws_LegacyDefAppIcon;
+                                            free(params);
+                                            SendMessageW(_this->hWnd, SWS_WINDOWSWITCHER_PAINT_MSG, SWS_WINDOWSWITCHER_PAINTFLAGS_REDRAWENTIRE, 0);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        free(params);
+                                        SendMessageW(_this->hWnd, SWS_WINDOWSWITCHER_PAINT_MSG, SWS_WINDOWSWITCHER_PAINTFLAGS_REDRAWENTIRE, 0);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -3770,6 +3807,10 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                 else
                 {
                     _this->mode = SWS_WINDOWSWITCHER_LAYOUTMODE_FULL;
+                }
+                _this->initialDirection = SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_FORWARD;
+                if (uMsg == WM_HOTKEY && (LOWORD(lParam) & MOD_SHIFT)) {
+                    _this->initialDirection = SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_BACKWARD;
                 }
                 _sws_WindowSwitcher_Show(_this);
                 return 0;
@@ -4250,7 +4291,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
             rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
     }
-    if (!ChangeWindowMessageFilterEx(_this->hWnd, SWS_WINDOWSWITCHER_RELOAD_HOTKEY_MSG, MSGFLT_ALLOW, NULL)) {
+    if (!ChangeWindowMessageFilterEx(_this->hWnd, WM_HOTKEY, MSGFLT_ALLOW, NULL)) {
         rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
     }
     if (!rv)
@@ -4290,27 +4331,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
             sws_WindowSwitcher_LoadSettings(_this);
         }
     }
-    if (!rv)
-    {
-        if (sws_WindowSwitcher_RegisterHotkeys(_this, NULL) & ERROR_HOTKEY_ALREADY_REGISTERED) {
-            if (MessageBoxW(NULL, L"Explorer restart required. Restart now?", L"ClassicWindowSwitcher - Windhawk", MB_YESNO | MB_ICONWARNING) == IDYES) {
-                DWORD pid = 0;
-                HWND hShell = GetShellWindow();
-                if (hShell && GetWindowThreadProcessId(hShell, &pid)) {
-                    HANDLE hProcess = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid);
-                    if (hProcess) {
-                        // Exit code 0 makes winlogon auto restart explorer. Manually restarting it with CreateProcess somehow makes it launch in file browser mode
-                        TerminateProcess(hProcess, 0);
-                        WaitForSingleObject(hProcess, 5000);
-                        CloseHandle(hProcess);
-                    }
-                }
-                // Try registering again now, before explorer registers it
-                sws_WindowSwitcher_UnregisterHotkeys(_this);
-                sws_WindowSwitcher_RegisterHotkeys(_this, NULL);
-            }
-        }
-    }
+    sws_WindowSwitcher_RegisterHotkeys(_this, NULL);
     if (!rv)
     {
         if (_this->hWnd && !RegisterShellHookWindow(_this->hWnd))
@@ -4421,13 +4442,29 @@ void WhTool_ModUninit() {
     CloseHandle(g_hQueueReady);
 }
 
+HHOOK g_hHotKeyHook;
+
+LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam) {
+    auto* msg = reinterpret_cast<MSG*>(lParam);
+    if (code == HC_ACTION && wParam == PM_REMOVE && msg->message == WM_HOTKEY &&
+        HIWORD(msg->lParam) == VK_TAB && (LOWORD(msg->lParam) & MOD_ALT)) {
+        HWND hSwitcher = FindWindowW(SWS_WINDOWSWITCHER_CLASSNAME, nullptr);
+        DWORD pid = 0;
+        if (hSwitcher && GetWindowThreadProcessId(hSwitcher, &pid)) {
+            AllowSetForegroundWindow(pid); // let the switcher take the focus
+            PostMessageW(hSwitcher, WM_HOTKEY, msg->wParam, msg->lParam);
+            msg->message = WM_NULL; // prevent showing the default switcher
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
+}
+
 using RegisterHotKey_t = decltype(&RegisterHotKey);
 RegisterHotKey_t RegisterHotKey_original;
 BOOL NTAPI RegisterHotKey_hook(HWND hWnd, int id, UINT fsModifiers, UINT vk) {
-    if ((fsModifiers & MOD_ALT) == MOD_ALT && vk == VK_TAB) {
-        Wh_Log(L"Blocked Explorer from registering Alt+Tab, id=%d", id);
-        SetLastError(ERROR_HOTKEY_ALREADY_REGISTERED);
-        return FALSE;
+    if (!g_hHotKeyHook && (fsModifiers & MOD_ALT) == MOD_ALT && vk == VK_TAB) {
+        g_hHotKeyHook = SetWindowsHookExW(WH_GETMESSAGE, GetMessageProc, NULL, GetCurrentThreadId());
+        Wh_Log(L"Set Alt+Tab hook, id=%d, hWnd=%p, hook=%p", id, hWnd, g_hHotKeyHook);
     }
     return RegisterHotKey_original(hWnd, id, fsModifiers, vk);
 }
@@ -4446,13 +4483,13 @@ BOOL Wh_ModInit() {
     GetModuleFileNameW(NULL, exeName, MAX_PATH);
     g_isExplorer = wcsstr(_wcsupr(exeName), L"\\EXPLORER.EXE") != NULL;
     if (g_isExplorer) {
-        g_isToolModProcessLauncher = true;
-        if (WindhawkUtils::SetFunctionHook(RegisterHotKey, RegisterHotKey_hook, &RegisterHotKey_original)) {
-            Wh_Log(L"Explorer hooked");
+        HWND hImmersive = FindWindowW(L"ApplicationManager_ImmersiveShellWindow", NULL);
+        if (hImmersive) {
+            g_hHotKeyHook = SetWindowsHookExW(WH_GETMESSAGE, GetMessageProc, NULL, GetWindowThreadProcessId(hImmersive, NULL));
+            Wh_Log(L"Set Alt+Tab hook, hook=%p", g_hHotKeyHook);
         }
-        HWND hSwitcher = FindWindowW(SWS_WINDOWSWITCHER_CLASSNAME, NULL);
-        if (hSwitcher) {
-            PostMessageW(hSwitcher, SWS_WINDOWSWITCHER_RELOAD_HOTKEY_MSG, 0, 0);
+        if (!g_hHotKeyHook && WindhawkUtils::SetFunctionHook(RegisterHotKey, RegisterHotKey_hook, &RegisterHotKey_original)) {
+            Wh_Log(L"Explorer hooked");
         }
         return TRUE;
     }
@@ -4605,7 +4642,14 @@ void Wh_ModSettingsChanged() {
 }
 
 void Wh_ModUninit() {
-    if (g_isToolModProcessLauncher || g_isExplorer) {
+    if (g_isExplorer) {
+        if (g_hHotKeyHook) {
+            UnhookWindowsHookEx(g_hHotKeyHook);
+        }
+        return;
+    }
+
+    if (g_isToolModProcessLauncher) {
         return;
     }
 
