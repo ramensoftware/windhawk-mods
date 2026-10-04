@@ -4,7 +4,7 @@
 // @description     Replaces the Windows 11 "not responding" dialog with the End Program dialog of Windows 2000, in English or Russian
 // @name:ru         Окно «Завершение программы» из Windows 2000
 // @description:ru  Заменяет окно Windows 11 о зависшей программе окном «Завершение программы» из Windows 2000 - на русском или английском
-// @version         1.3.0
+// @version         1.4.0
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         explorer.exe
@@ -18,94 +18,80 @@
 /*
 # Windows 2000 End Program Dialog
 
-When a program stops responding and you try to close it, Windows 11 shows its
-Windows Error Reporting dialog ("... is not responding" with *Close the
-program* and *Wait for the program to respond*). This mod shows the End Program
-dialog of Windows 2000 in its place, before the Windows 11 one ever appears:
+Replaces the Windows Error Reporting dialog shown when you try to close a
+program that is not responding. It does not change the Windows shutdown screen.
 
-> **End Program - Notepad**
->
-> This program is not responding.
->
-> To return to Windows and check the status of the program, click Cancel.
->
-> If you choose to end the program immediately, you will lose any unsaved
-> data. To end the program now, click End Now.
->
-> [ End Now ] [ Cancel ]
+The replacement uses the original `DIALOG #10` and messages from the installed
+`winsrv.dll.mui`, with the Windows 2000 warning overlay on the application's
+icon. The layout, font and wording come from Windows, not a recreated dialog.
+The display language is selected automatically, with English as a fallback;
+the language setting can also request English or Russian. That language must
+be installed in Windows. The window frame follows your current Windows theme.
 
-The dialog is not a copy: it is the original `DIALOG #10` of `winsrv.dll.mui`,
-which Windows 11 24H2 still ships, together with the messages of the Windows
-2000 dialog, so its wording, layout and font are exactly those of Windows 2000.
-Like the original, it shows the icon of the hung program with the Windows 2000
-warning sign over it, and has no icon in its title bar.
+**Tested on Windows 11 24H2 (build 26100).** Other Windows versions are not
+verified. If the resources or WER window cannot be validated, the mod leaves
+the original dialog available.
 
-The dialog is shown in the Windows display language when Windows has it in
-that language, and in English otherwise; the *Language of the dialog* setting
-can force English or Russian. The Windows 11 dialog is recognised in English
-and in Russian.
+## Behavior and safety
 
-> **Tested only on Windows 11 24H2 (build 26100).** It has not been tried on any other version of Windows and may not work there.
+The original WER dialog stays alive. End Now forwards WER's Close button;
+Cancel, Escape and the title-bar close button forward WER's Wait button.
+Windows performs these actions; the mod never terminates the hung process
+directly. End Now can still lose unsaved data, just as the original button can.
 
-## How it works
+A broker thread owns the replacement windows, accessibility notifications and
+fallback timers. Public ShowWindow/SetWindowPos hooks try to cloak the original
+dialog before display. No TaskDialog callback is replaced, and no DLL is pinned.
+Disabling or updating the mod joins the worker and restores any original
+dialog that is still alive before the DLL can unload.
 
-The Explorer instance quietly pre-warms the on-demand Windows Error Reporting
-service and asks Windhawk to scan its service host, so Windhawk can inject the
-`WerFault.exe` child before its entry point. An early hook then cloaks the WER
-TaskDialog during `TDN_DIALOG_CONSTRUCTED`, before Windows displays it. A
-synchronous in-process accessibility hook covers the short interval after
-construction as well. A dedicated broker thread validates the WER window, its
-DWM ghost owner and its visual tree, and then displays `DIALOG #10`.
-Enumeration of already created windows remains as a fallback for late
-injection.
+Windhawk can inject into WER after its window is already visible. In that case
+a brief appearance of the modern dialog is possible.
 
-The original WER TaskDialog stays alive. The Windows 2000 buttons forward the
-original WER button IDs with `TDM_CLICK_BUTTON`, so the operating system's own
-end/wait logic runs exactly as before. The stock dialog is brought back if the
-mod is unloaded, forwarding fails, or WER does not react in time.
+## Optional WerSvc pre-warm
 
-The watcher is limited to the current `WerFault.exe` process. Running beside
-the WER window also avoids the cross-integrity UIPI restrictions on
-`TDM_CLICK_BUTTON`.
+**Keep Windows Error Reporting service running** is off by default. Enabling
+it starts a worker only in the main Explorer shell. It sends WerSvc's configured
+ETW start trigger once a minute to keep the demand-start service available.
+This can improve the chance of early Windhawk injection and avoid the modern
+dialog's flash, but cannot guarantee it on every system or immediately after
+enabling the setting.
 
----
+This option deliberately keeps a system service resident and can increase
+background memory use. It uses Windows service/ETW APIs, not Windhawk's private
+scan events or semaphores. It does not modify service startup settings, registry
+policies or system files. Turning it off stops the heartbeat; Windows decides
+when to stop an idle service. No extra download or helper executable is needed.
 
 ## По-русски
 
-Когда программа перестаёт отвечать и вы пытаетесь её закрыть, Windows 11
-показывает окно отчётов об ошибках («... не отвечает» с кнопками «Закрыть
-программу» и «Ожидание отклика программы»). Мод показывает вместо него окно
-«Завершение программы» из Windows 2000 - ещё до того, как окно Windows 11
-появится на экране:
+Заменяет окно Windows о зависшей программе, которое появляется при попытке
+её закрыть. Экран завершения работы Windows мод не меняет.
 
-> **Завершение программы - Блокнот**
->
-> Эта программа не отвечает.
->
-> Чтобы вернуться в Windows и проверить состояние приложения, нажмите кнопку
-> "Отмена".
->
-> Если закрыть программу прямо сейчас, то можно потерять все несохраненные
-> данные. Чтобы завершить программу сейчас, нажмите кнопку "Завершить сейчас".
->
-> [ Завершить сейчас ] [ Отмена ]
+Используется оригинальное окно `DIALOG #10` и тексты из установленного
+`winsrv.dll.mui`, со знаком предупреждения Windows 2000 поверх значка программы.
+Расположение, шрифт и формулировки берутся из системных ресурсов. Язык
+выбирается автоматически с английским в качестве резервного. В настройках можно
+запросить русский или английский; этот язык должен быть установлен в Windows.
+Оформление рамки зависит от текущей темы Windows.
 
-Это не копия, а оригинальный `DIALOG #10` из `winsrv.dll.mui`, который до сих
-пор есть в Windows 11 24H2, вместе с сообщениями окна Windows 2000, поэтому
-текст, расположение и шрифт в точности как в Windows 2000. Как и в оригинале,
-в окне показан значок зависшей программы со знаком предупреждения Windows 2000,
-а в заголовке значка нет.
+«Завершить сейчас» нажимает штатную кнопку закрытия WER. «Отмена», Escape
+и крестик означают ожидание отклика. Мод сам не завершает зависший процесс,
+но при выборе завершения несохранённые данные могут потеряться.
+При отключении мода живое штатное окно возвращается, а DLL выгружается.
 
-Окно показывается на языке интерфейса Windows, если в Windows есть его версия
-на этом языке, иначе - на английском; параметр «Язык окна» позволяет выбрать
-английский или русский принудительно. Окно Windows 11 распознаётся на
-английском и на русском.
+Опция **«Поддерживать службу отчётов об ошибках Windows активной»** по умолчанию
+выключена. Если её включить, основной Проводник раз в минуту посылает службе
+WerSvc её системный ETW-триггер запуска. Это помогает раннему внедрению Windhawk
+и может убрать вспышку современного окна, но не гарантирует её отсутствие
+на любой конфигурации или сразу после включения опции. Служба остаётся в памяти.
+Внутренние события и семафоры Windhawk не используются; настройки службы,
+системные файлы и политики не меняются. После отключения прогрева служба
+останавливается по обычным правилам Windows, а не принудительно.
 
-Кнопки окна Windows 2000 нажимают соответствующие кнопки исходного окна
-Windows 11, поэтому завершение или ожидание программы выполняет сама Windows.
-Если что-то пойдёт не так, возвращается обычное окно Windows 11.
-
-> **Проверено только на Windows 11 24H2 (сборка 26100).** На других версиях Windows мод не проверялся и может не работать.
+**Проверено на Windows 11 24H2 (сборка 26100).** Другие версии не проверены.
+При позднем внедрении возможно краткое появление современного окна.
+Дополнительные файлы или загрузки для мода не нужны.
 */
 // ==/WindhawkModReadme==
 
@@ -129,20 +115,31 @@ Windows 11, поэтому завершение или ожидание прог
   - auto: Автоматически
   - en-US: Английский
   - ru-RU: Русский
+- keepWerSvcRunning: false
+  $name: Keep Windows Error Reporting service running
+  $name:ru: Поддерживать службу отчётов об ошибках Windows активной
+  $description: >-
+    Opt in to a WerSvc heartbeat in the main Explorer shell (one ETW event
+    per minute). Can prevent a flash caused by late injection, but keeps
+    the service in memory. No service settings are changed.
+  $description:ru: >-
+    Включает прогрев WerSvc в основном Проводнике (одно ETW-событие в минуту).
+    Может убрать вспышку при позднем внедрении, но оставляет службу в памяти.
+    Настройки службы не меняются.
 */
 // ==/WindhawkModSettings==
 
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <evntprov.h>
+#include <windhawk_utils.h>
 #include <windows.h>
 
 #include <atomic>
-#include <cwctype>
 #include <map>
 #include <memory>
-#include <new>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -153,36 +150,27 @@ constexpr int kEndNowButtonId = 259;
 constexpr int kIconControlId = 0x7FFE;
 constexpr UINT_PTR kActionTimerId = 1;
 constexpr UINT_PTR kDiscoveryTimerId = 2;
-constexpr UINT_PTR kEarlyCloakTimerId = 0x5748324B;
+constexpr UINT_PTR kPendingCloakTimerId = 3;
 constexpr UINT kActionPollMs = 250;
 constexpr UINT kDiscoveryPollMs = 100;
 constexpr UINT kEarlyCloakFallbackMs = 1500;
 constexpr ULONGLONG kDiscoveryLifetimeMs = 10000;
 constexpr ULONGLONG kActionTimeoutMs = 15000;
 constexpr DWORD kTextTimeoutMs = 100;
-constexpr DWORD kDwmwaCloak = 13;
 constexpr int kWerCloseButtonId = 10;
 constexpr int kWerWaitButtonId = 8;
 
 constexpr UINT kBrokerCandidateMessage = WM_APP + 1;
 constexpr UINT kBrokerStockDestroyedMessage = WM_APP + 2;
 constexpr UINT kBrokerFinalizeMessage = WM_APP + 3;
-constexpr UINT kBrokerEarlyCloakFailOpenMessage = WM_APP + 4;
+constexpr UINT kBrokerPrepareMessage = WM_APP + 4;
 
-constexpr wchar_t kBrokerWindowClass[] =
-    L"Win2000HungAppDialogBrokerWindow";
-constexpr wchar_t kEarlyCloakProperty[] =
-    L"Win2000HungAppDialogRu.EarlyCloak";
+constexpr wchar_t kBrokerWindowClass[] = L"Win2000HungAppDialogBrokerWindow";
+constexpr wchar_t kReleasedDialogProperty[] =
+    L"Win2000HungAppDialog.ReleasedDialog";
+constexpr wchar_t kOwnedStockProperty[] = L"Win2000HungAppDialog.OwnedStock";
 constexpr wchar_t kClassicDialogProperty[] =
-    L"Win2000HungAppDialogRu.ClassicDialog";
-constexpr wchar_t kWindhawkScanEvent[] =
-    L"Global\\WindhawkScanForProcesses";
-constexpr GUID kWerSvcTriggerProvider = {
-    0xE46EEAD8,
-    0x0C54,
-    0x4489,
-    {0x98, 0x98, 0x8F, 0xA7, 0x9D, 0x05, 0x9E, 0x0E},
-};
+    L"Win2000HungAppDialog.ClassicDialog";
 // winsrv.dll.mui keeps the Windows 2000 texts of this dialog in its message
 // table. They are read from the same MUI file as the dialog, so the status
 // line always matches the language of the dialog itself; the English texts
@@ -193,6 +181,22 @@ constexpr wchar_t kDefaultNotResponding[] = L"This program is not responding.";
 constexpr wchar_t kDefaultEnding[] = L"Ending Program...Please wait";
 constexpr wchar_t kDefaultAppName[] = L"Program";
 constexpr wchar_t kRussianAppName[] = L"Программа";
+
+// Windows SDK layouts for SERVICE_TRIGGER[_INFO]. The MinGW headers shipped
+// with some Windhawk versions have the config constants but not these types.
+struct ServiceTrigger {
+    DWORD dwTriggerType;
+    DWORD dwAction;
+    GUID* pTriggerSubtype;
+    DWORD cDataItems;
+    void* pDataItems;
+};
+
+struct ServiceTriggerInfo {
+    DWORD cTriggers;
+    ServiceTrigger* pTriggers;
+    BYTE* pReserved;
+};
 
 // The original 16x16 four-bit Windows 2000 warning overlay. The bytes are
 // the RT_ICON payload, so the mod stays a single self-contained source file.
@@ -224,23 +228,11 @@ constexpr BYTE kWin2000WarningIcon16[] = {
     0xF8, 0x3F, 0x00, 0x00, 0xFC, 0x7F, 0x00, 0x00,
 };
 
-struct HangButtons {
-    int closeId = kWerCloseButtonId;
-    int waitId = kWerWaitButtonId;
-};
-
-using WerUIpTaskDialogIndirect_t = HRESULT(WINAPI*)(
-    const TASKDIALOGCONFIG* config);
-
-struct EarlyTaskDialogCallbackState {
-    PFTASKDIALOGCALLBACK originalCallback = nullptr;
-    LONG_PTR originalCallbackData = 0;
-};
-
-enum class HostMode {
-    None,
-    ExplorerPrewarm,
-    WerFault,
+struct PendingCloak {
+    DWORD threadId = 0;
+    HWND ghostOwner = nullptr;
+    HWND hungWindow = nullptr;
+    ULONGLONG deadline = 0;
 };
 
 struct Session {
@@ -250,7 +242,6 @@ struct Session {
     HWND hungWindow = nullptr;
     DWORD stockProcessId = 0;
     DWORD stockThreadId = 0;
-    HangButtons buttons;
     std::wstring applicationName;
     std::wstring caption;
     HICON applicationIcon = nullptr;
@@ -260,7 +251,17 @@ struct Session {
     bool stockHiddenByUs = false;
     bool selectionSent = false;
     bool closing = false;
+    bool initialized = false;
     ULONGLONG actionDeadline = 0;
+
+    ~Session() {
+        if (warningIcon) {
+            DestroyIcon(warningIcon);
+        }
+        if (applicationIcon) {
+            DestroyIcon(applicationIcon);
+        }
+    }
 };
 
 HMODULE g_resourceModule = nullptr;
@@ -268,18 +269,19 @@ std::wstring g_notResponding = kDefaultNotResponding;
 std::wstring g_ending = kDefaultEnding;
 std::wstring g_fallbackAppName = kDefaultAppName;
 HMODULE g_selfModule = nullptr;
-WerUIpTaskDialogIndirect_t g_werUIpTaskDialogIndirectOriginal = nullptr;
+decltype(&ShowWindow) g_showWindowOriginal = nullptr;
+decltype(&ShowWindowAsync) g_showWindowAsyncOriginal = nullptr;
+decltype(&SetWindowPos) g_setWindowPosOriginal = nullptr;
 HANDLE g_stopEvent = nullptr;
 HANDLE g_readyEvent = nullptr;
 HANDLE g_brokerThread = nullptr;
 std::atomic<HWND> g_brokerWindow{nullptr};
-std::atomic<bool> g_brokerInitialized{false};
 std::atomic<bool> g_active{false};
-HostMode g_hostMode = HostMode::None;
 
 // The following state is accessed only on the broker thread.
 HWINEVENTHOOK g_winEventHook = nullptr;
 std::map<HWND, std::unique_ptr<Session>> g_sessions;
+std::map<HWND, PendingCloak> g_pendingCloaks;
 HINSTANCE g_windowClassInstance = nullptr;
 bool g_windowClassRegistered = false;
 ULONGLONG g_discoveryDeadline = 0;
@@ -291,10 +293,6 @@ std::wstring Lowercase(std::wstring value) {
     return value;
 }
 
-bool ContainsInsensitive(const std::wstring& value, const wchar_t* needle) {
-    return Lowercase(value).find(Lowercase(needle)) != std::wstring::npos;
-}
-
 void Trim(std::wstring& value) {
     constexpr wchar_t kWhitespace[] = L" \t\r\n";
     const size_t first = value.find_first_not_of(kWhitespace);
@@ -304,73 +302,6 @@ void Trim(std::wstring& value) {
     }
     const size_t last = value.find_last_not_of(kWhitespace);
     value = value.substr(first, last - first + 1);
-}
-
-std::wstring ResolveTaskDialogText(HINSTANCE instance, PCWSTR text) {
-    if (!text) {
-        return {};
-    }
-    if (!IS_INTRESOURCE(text)) {
-        return text;
-    }
-
-    wchar_t buffer[2048] = {};
-    const int length =
-        LoadStringW(instance, LOWORD(reinterpret_cast<ULONG_PTR>(text)),
-                    buffer, ARRAYSIZE(buffer));
-    return length > 0 ? std::wstring(buffer, length) : std::wstring{};
-}
-
-bool IsWerHangPromptConfig(const TASKDIALOGCONFIG* config) {
-    if (!config || config->cbSize != sizeof(TASKDIALOGCONFIG) ||
-        config->cButtons < 2 || config->cButtons > 3 ||
-        !config->pButtons) {
-        return false;
-    }
-
-    const std::wstring instruction =
-        ResolveTaskDialogText(config->hInstance, config->pszMainInstruction);
-    if (!ContainsInsensitive(instruction, L"не отвечает") &&
-        !ContainsInsensitive(instruction, L"not responding")) {
-        return false;
-    }
-
-    bool hasClose = false;
-    bool hasWait = false;
-    for (UINT index = 0; index < config->cButtons; ++index) {
-        const TASKDIALOG_BUTTON& button = config->pButtons[index];
-        const std::wstring text =
-            ResolveTaskDialogText(config->hInstance, button.pszButtonText);
-        if (button.nButtonID == kWerWaitButtonId &&
-            (ContainsInsensitive(text, L"ожидание отклика программы") ||
-             ContainsInsensitive(text, L"wait for the program"))) {
-            hasWait = true;
-        } else if (button.nButtonID == kWerCloseButtonId &&
-                   (ContainsInsensitive(text, L"закрыть программу") ||
-                    ContainsInsensitive(text, L"close the program") ||
-                    ContainsInsensitive(text, L"end task"))) {
-            hasClose = true;
-        } else if (button.nButtonID != 4) {
-            return false;
-        }
-    }
-    return hasClose && hasWait;
-}
-
-std::wstring WindowTextWithTimeout(HWND window) {
-    if (!window || !IsWindow(window)) {
-        return {};
-    }
-
-    wchar_t text[2048] = {};
-    DWORD_PTR ignored = 0;
-    if (!SendMessageTimeoutW(window, WM_GETTEXT, ARRAYSIZE(text),
-                             reinterpret_cast<LPARAM>(text),
-                             SMTO_ABORTIFHUNG | SMTO_BLOCK, kTextTimeoutMs,
-                             &ignored)) {
-        return {};
-    }
-    return text;
 }
 
 std::wstring ProcessPath(DWORD processId) {
@@ -389,8 +320,7 @@ std::wstring ProcessPath(DWORD processId) {
 
 std::wstring CurrentProcessBaseName() {
     wchar_t path[32768] = {};
-    const DWORD length =
-        GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
+    const DWORD length = GetModuleFileNameW(nullptr, path, ARRAYSIZE(path));
     if (!length || length >= ARRAYSIZE(path)) {
         return {};
     }
@@ -435,10 +365,8 @@ bool IsSystemWerProcess(DWORD processId) {
     }
 
     wchar_t wow64Directory[MAX_PATH] = {};
-    if (GetSystemWow64DirectoryW(wow64Directory,
-                                 ARRAYSIZE(wow64Directory))) {
-        if (EqualPath(processPath,
-                      JoinPath(wow64Directory, L"WerFault.exe")) ||
+    if (GetSystemWow64DirectoryW(wow64Directory, ARRAYSIZE(wow64Directory))) {
+        if (EqualPath(processPath, JoinPath(wow64Directory, L"WerFault.exe")) ||
             EqualPath(processPath,
                       JoinPath(wow64Directory, L"WerFaultSecure.exe"))) {
             return true;
@@ -462,8 +390,7 @@ BOOL CALLBACK InspectWerTreeCallback(HWND window, LPARAM parameter) {
 
     if (_wcsicmp(className, L"DirectUIHWND") == 0) {
         context->hasDirectUiWindow = true;
-    } else if (_wcsicmp(className, L"Button") == 0 &&
-               IsWindowVisible(window)) {
+    } else if (_wcsicmp(className, L"Button") == 0 && IsWindowVisible(window)) {
         ++context->visibleButtonCount;
     }
     return TRUE;
@@ -479,9 +406,9 @@ bool HasInitialWerConsentTree(HWND taskDialog) {
 using HungWindowFromGhostWindow_t = HWND(WINAPI*)(HWND);
 
 HWND ResolveHungWindow(HWND ghostWindow) {
-    static const auto function = reinterpret_cast<HungWindowFromGhostWindow_t>(
-        GetProcAddress(GetModuleHandleW(L"user32.dll"),
-                       "HungWindowFromGhostWindow"));
+    static const auto function =
+        reinterpret_cast<HungWindowFromGhostWindow_t>(GetProcAddress(
+            GetModuleHandleW(L"user32.dll"), "HungWindowFromGhostWindow"));
     return function ? function(ghostWindow) : nullptr;
 }
 
@@ -511,177 +438,152 @@ bool IsPotentialWerHangDialog(HWND window) {
            ResolveHungWindow(owner) != nullptr;
 }
 
-void CALLBACK EarlyCloakFallbackTimerProc(HWND window, UINT, UINT_PTR timerId,
-                                          DWORD) {
-    KillTimer(window, timerId);
-    const HWND broker = g_brokerWindow.load();
-    DWORD_PTR ignored = 0;
-    if (g_active.load() && broker &&
-        SendMessageTimeoutW(
-            broker, kBrokerEarlyCloakFailOpenMessage,
-            reinterpret_cast<WPARAM>(window), 0,
-            SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_ERRORONEXIT, 250,
-            &ignored)) {
+bool IsOwnedStockWindow(HWND window, DWORD expectedThreadId) {
+    DWORD processId = 0;
+    wchar_t className[64] = {};
+    return window && IsWindow(window) &&
+           GetPropW(window, kOwnedStockProperty) ==
+               reinterpret_cast<HANDLE>(g_selfModule) &&
+           GetWindowThreadProcessId(window, &processId) == expectedThreadId &&
+           processId == GetCurrentProcessId() &&
+           GetClassNameW(window, className, ARRAYSIZE(className)) &&
+           wcscmp(className, L"#32770") == 0;
+}
+
+bool IsSamePendingWindow(HWND window, const PendingCloak& pending) {
+    return IsOwnedStockWindow(window, pending.threadId) &&
+           IsPotentialWerHangDialog(window) &&
+           GetWindow(window, GW_OWNER) == pending.ghostOwner &&
+           ResolveHungWindow(pending.ghostOwner) == pending.hungWindow;
+}
+
+void ReleasePendingCloak(HWND window, bool suppressRetry) {
+    const auto iterator = g_pendingCloaks.find(window);
+    if (iterator == g_pendingCloaks.end()) {
         return;
     }
-
-    // With no broker there cannot be an active replacement session. Fail open
-    // immediately instead of leaving a stock WER window permanently cloaked.
-    if (reinterpret_cast<ULONG_PTR>(
-            GetPropW(window, kEarlyCloakProperty)) == 1) {
+    const PendingCloak pending = iterator->second;
+    g_pendingCloaks.erase(iterator);
+    // The ghost may disappear when the app recovers. That must not prevent
+    // rollback of our cloak on a still-live, identity-marked stock window.
+    if (IsOwnedStockWindow(window, pending.threadId)) {
+        if (suppressRetry) {
+            SetPropW(window, kReleasedDialogProperty,
+                     reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(1)));
+        }
         BOOL cloak = FALSE;
-        DwmSetWindowAttribute(
-            window, static_cast<DWMWINDOWATTRIBUTE>(kDwmwaCloak), &cloak,
-            sizeof(cloak));
-        RemovePropW(window, kEarlyCloakProperty);
+        DwmSetWindowAttribute(window, DWMWA_CLOAK, &cloak, sizeof(cloak));
+        RemovePropW(window, kOwnedStockProperty);
+    }
+    if (g_pendingCloaks.empty()) {
+        KillTimer(g_brokerWindow.load(), kPendingCloakTimerId);
     }
 }
 
-bool EarlyCloakStockDialog(HWND window) {
-    if (!IsPotentialWerHangDialog(window)) {
+bool PrepareStockDialog(HWND window) {
+    // This function and the pending map are confined to the broker thread.
+    // No callback or timer is installed on a WER-owned window.
+    if (!g_active.load() || GetPropW(window, kReleasedDialogProperty) ||
+        !IsPotentialWerHangDialog(window)) {
         return false;
     }
-
-    const ULONG_PTR existing =
-        reinterpret_cast<ULONG_PTR>(GetPropW(window, kEarlyCloakProperty));
-    if (existing == 2) {
+    if (g_sessions.contains(window) || g_pendingCloaks.contains(window)) {
         return true;
     }
 
-    BOOL cloak = TRUE;
-    if (FAILED(DwmSetWindowAttribute(
-            window, static_cast<DWMWINDOWATTRIBUTE>(kDwmwaCloak), &cloak,
-            sizeof(cloak)))) {
+    DWORD cloaked = 0;
+    if (FAILED(DwmGetWindowAttribute(window, DWMWA_CLOAKED, &cloaked,
+                                     sizeof(cloaked))) ||
+        cloaked) {
+        return false;  // Do not take ownership of another component's cloak.
+    }
+
+    try {
+        PendingCloak pending;
+        pending.threadId = GetWindowThreadProcessId(window, nullptr);
+        pending.ghostOwner = GetWindow(window, GW_OWNER);
+        pending.hungWindow = ResolveHungWindow(pending.ghostOwner);
+        pending.deadline = GetTickCount64() + kEarlyCloakFallbackMs;
+        g_pendingCloaks.emplace(window, pending);
+    } catch (...) {
         return false;
     }
 
-    if (!SetPropW(window, kEarlyCloakProperty,
-                  reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(1))) ||
-        !SetTimer(window, kEarlyCloakTimerId, kEarlyCloakFallbackMs,
-                  EarlyCloakFallbackTimerProc)) {
-        KillTimer(window, kEarlyCloakTimerId);
-        RemovePropW(window, kEarlyCloakProperty);
-        cloak = FALSE;
-        DwmSetWindowAttribute(
-            window, static_cast<DWMWINDOWATTRIBUTE>(kDwmwaCloak), &cloak,
-            sizeof(cloak));
+    const HWND broker = g_brokerWindow.load();
+    BOOL cloak = TRUE;
+    if (!SetTimer(broker, kPendingCloakTimerId, kDiscoveryPollMs, nullptr) ||
+        !SetPropW(window, kOwnedStockProperty,
+                  reinterpret_cast<HANDLE>(g_selfModule)) ||
+        FAILED(DwmSetWindowAttribute(window, DWMWA_CLOAK, &cloak,
+                                     sizeof(cloak)))) {
+        ReleasePendingCloak(window, false);
         return false;
     }
     return true;
 }
 
-void QueueEarlyWerCandidate(HWND taskDialog) {
-    if (!g_active.load()) {
-        return;
-    }
-    if (!EarlyCloakStockDialog(taskDialog)) {
-        return;
-    }
-
+void PrepareToShowDialog(HWND window) {
     const HWND broker = g_brokerWindow.load();
-    if (broker) {
-        PostMessageW(broker, kBrokerCandidateMessage,
-                     reinterpret_cast<WPARAM>(taskDialog), 0);
+    if (!g_active.load() || !broker ||
+        GetCurrentThreadId() == GetWindowThreadProcessId(broker, nullptr) ||
+        !IsPotentialWerHangDialog(window)) {
+        return;
     }
+    DWORD_PTR ignored = 0;
+    // Bound the delay to the WER UI thread. A timed-out request is still owned
+    // by the broker and will be rolled back by its timer or during unload.
+    SendMessageTimeoutW(
+        broker, kBrokerPrepareMessage, reinterpret_cast<WPARAM>(window), 0,
+        SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_ERRORONEXIT, 250, &ignored);
 }
 
-HRESULT CALLBACK EarlyTaskDialogCallback(HWND taskDialog, UINT notification,
-                                         WPARAM wParam, LPARAM lParam,
-                                         LONG_PTR callbackData) {
-    auto* state = reinterpret_cast<EarlyTaskDialogCallbackState*>(callbackData);
-    if (notification == TDN_DIALOG_CONSTRUCTED ||
-        notification == TDN_CREATED || notification == TDN_NAVIGATED) {
-        QueueEarlyWerCandidate(taskDialog);
+BOOL WINAPI ShowWindowHook(HWND window, int command) {
+    if (command != SW_HIDE) {
+        PrepareToShowDialog(window);
     }
-
-    if (state && state->originalCallback) {
-        return state->originalCallback(taskDialog, notification, wParam,
-                                       lParam,
-                                       state->originalCallbackData);
-    }
-    return S_OK;
+    return g_showWindowOriginal(window, command);
 }
 
-HRESULT WINAPI WerUIpTaskDialogIndirectHook(
-    const TASKDIALOGCONFIG* config) {
-    bool isHangPrompt = false;
-    try {
-        isHangPrompt = IsWerHangPromptConfig(config);
-    } catch (...) {
-        Wh_Log(L"Early WER hook failed; using stock TaskDialog path");
-        return g_werUIpTaskDialogIndirectOriginal(config);
+BOOL WINAPI ShowWindowAsyncHook(HWND window, int command) {
+    if (command != SW_HIDE) {
+        PrepareToShowDialog(window);
     }
-
-    if (!isHangPrompt) {
-        return g_werUIpTaskDialogIndirectOriginal(config);
-    }
-
-    TASKDIALOGCONFIG proxyConfig = *config;
-    EarlyTaskDialogCallbackState state = {
-        config->pfCallback,
-        config->lpCallbackData,
-    };
-    proxyConfig.pfCallback = EarlyTaskDialogCallback;
-    proxyConfig.lpCallbackData = reinterpret_cast<LONG_PTR>(&state);
-    Wh_Log(L"Using pre-display WER TaskDialog cloak");
-    return g_werUIpTaskDialogIndirectOriginal(&proxyConfig);
+    return g_showWindowAsyncOriginal(window, command);
 }
 
-struct InstructionSearchContext {
-    std::wstring applicationName;
-};
-
-void StripNotRespondingSuffix(std::wstring& value) {
-    constexpr const wchar_t* suffixes[] = {
-        L" не отвечает",
-        L" is not responding",
-        L" not responding",
-    };
-    const std::wstring lowerValue = Lowercase(value);
-    for (const wchar_t* suffix : suffixes) {
-        const std::wstring lowerSuffix = Lowercase(suffix);
-        if (lowerValue.size() >= lowerSuffix.size() &&
-            lowerValue.compare(lowerValue.size() - lowerSuffix.size(),
-                               lowerSuffix.size(), lowerSuffix) == 0) {
-            value.resize(value.size() - lowerSuffix.size());
-            break;
-        }
+BOOL WINAPI SetWindowPosHook(HWND window,
+                             HWND insertAfter,
+                             int x,
+                             int y,
+                             int width,
+                             int height,
+                             UINT flags) {
+    // TaskDialog's internal display path can bypass exported ShowWindow.
+    // Its initial positioning occurs before display, without SWP_SHOWWINDOW.
+    // Ignore broker-owned windows above so we never cloak our own DIALOG #10.
+    if (!(flags & SWP_HIDEWINDOW)) {
+        PrepareToShowDialog(window);
     }
-    Trim(value);
+    return g_setWindowPosOriginal(window, insertAfter, x, y, width, height,
+                                  flags);
 }
 
-BOOL CALLBACK FindInstructionCallback(HWND window, LPARAM parameter) {
-    auto* context = reinterpret_cast<InstructionSearchContext*>(parameter);
-    const std::wstring text = WindowTextWithTimeout(window);
-    if (!ContainsInsensitive(text, L" не отвечает") &&
-        !ContainsInsensitive(text, L" is not responding")) {
-        return TRUE;
+std::wstring GetApplicationName(HWND hungWindow) {
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hungWindow, &processId);
+
+    // For a top-level window in another process, GetWindowText reads the
+    // cached caption instead of sending WM_GETTEXT to its hung UI thread.
+    wchar_t caption[2048] = {};
+    if (processId != GetCurrentProcessId() &&
+        GetWindowTextW(hungWindow, caption, ARRAYSIZE(caption)) > 0) {
+        return caption;
     }
 
-    context->applicationName = text;
-    const size_t lineBreak = context->applicationName.find_first_of(L"\r\n");
-    if (lineBreak != std::wstring::npos) {
-        context->applicationName.resize(lineBreak);
-    }
-    StripNotRespondingSuffix(context->applicationName);
-    return context->applicationName.empty();
-}
-
-std::wstring GetApplicationName(HWND taskDialog) {
-    std::wstring name = WindowTextWithTimeout(taskDialog);
-    StripNotRespondingSuffix(name);
-
-    if (name.empty() || ContainsInsensitive(name, L"microsoft windows") ||
-        ContainsInsensitive(name, L"отчеты об ошибках windows") ||
-        ContainsInsensitive(name, L"windows error reporting")) {
-        InstructionSearchContext context;
-        EnumChildWindows(taskDialog, FindInstructionCallback,
-                         reinterpret_cast<LPARAM>(&context));
-        if (!context.applicationName.empty()) {
-            name = std::move(context.applicationName);
-        }
-    }
-
+    const std::wstring path = ProcessPath(processId);
+    const size_t separator = path.find_last_of(L"\\/");
+    const std::wstring name =
+        separator == std::wstring::npos ? path : path.substr(separator + 1);
     return name.empty() ? g_fallbackAppName : name;
 }
 
@@ -694,18 +596,16 @@ HICON CopyWindowIcon(HWND window) {
     constexpr WPARAM kIconTypes[] = {ICON_BIG, ICON_SMALL2, ICON_SMALL};
     for (WPARAM iconType : kIconTypes) {
         if (SendMessageTimeoutW(window, WM_GETICON, iconType, 0,
-                                SMTO_ABORTIFHUNG | SMTO_BLOCK,
-                                kTextTimeoutMs, &result) &&
+                                SMTO_ABORTIFHUNG | SMTO_BLOCK, kTextTimeoutMs,
+                                &result) &&
             result) {
             return CopyIcon(reinterpret_cast<HICON>(result));
         }
     }
 
-    HICON icon =
-        reinterpret_cast<HICON>(GetClassLongPtrW(window, GCLP_HICON));
+    HICON icon = reinterpret_cast<HICON>(GetClassLongPtrW(window, GCLP_HICON));
     if (!icon) {
-        icon = reinterpret_cast<HICON>(
-            GetClassLongPtrW(window, GCLP_HICONSM));
+        icon = reinterpret_cast<HICON>(GetClassLongPtrW(window, GCLP_HICONSM));
     }
     return icon ? CopyIcon(icon) : nullptr;
 }
@@ -722,10 +622,9 @@ HICON GetApplicationIcon(HWND hungWindow, HWND taskDialog) {
 }
 
 HICON LoadWindows2000WarningIcon() {
-    return CreateIconFromResourceEx(
-        const_cast<PBYTE>(kWin2000WarningIcon16),
-        sizeof(kWin2000WarningIcon16), TRUE, 0x00030000, 16, 16,
-        LR_DEFAULTCOLOR);
+    return CreateIconFromResourceEx(const_cast<PBYTE>(kWin2000WarningIcon16),
+                                    sizeof(kWin2000WarningIcon16), TRUE,
+                                    0x00030000, 16, 16, LR_DEFAULTCOLOR);
 }
 
 void CenterDialog(HWND dialog, HWND referenceWindow) {
@@ -734,7 +633,8 @@ void CenterDialog(HWND dialog, HWND referenceWindow) {
         return;
     }
 
-    MONITORINFO monitorInfo = {sizeof(monitorInfo)};
+    MONITORINFO monitorInfo = {};
+    monitorInfo.cbSize = sizeof(monitorInfo);
     HMONITOR monitor = MonitorFromWindow(
         referenceWindow ? referenceWindow : dialog, MONITOR_DEFAULTTONEAREST);
     if (!GetMonitorInfoW(monitor, &monitorInfo)) {
@@ -779,13 +679,13 @@ void AddApplicationIcon(HWND dialog, Session* session) {
     CreateWindowExW(
         0, L"STATIC", nullptr, WS_CHILD | WS_VISIBLE | SS_OWNERDRAW,
         iconOrigin.left, iconOrigin.top, iconWidth, iconHeight, dialog,
-        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIconControlId)),
-        nullptr, nullptr);
+        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIconControlId)), nullptr,
+        nullptr);
 }
 
 bool IsSameStockWindow(const Session* session) {
-    if (!session || !session->stockDialog ||
-        !IsWindow(session->stockDialog)) {
+    if (!session ||
+        !IsOwnedStockWindow(session->stockDialog, session->stockThreadId)) {
         return false;
     }
 
@@ -798,8 +698,7 @@ bool IsSameStockWindow(const Session* session) {
     }
 
     wchar_t className[64] = {};
-    if (!GetClassNameW(session->stockDialog, className,
-                       ARRAYSIZE(className)) ||
+    if (!GetClassNameW(session->stockDialog, className, ARRAYSIZE(className)) ||
         wcscmp(className, L"#32770") != 0 ||
         GetWindow(session->stockDialog, GW_OWNER) != session->ghostOwner) {
         return false;
@@ -809,38 +708,38 @@ bool IsSameStockWindow(const Session* session) {
            ResolveHungWindow(session->ghostOwner) == session->hungWindow;
 }
 
-void HideStockDialog(Session* session) {
+bool HideStockDialog(Session* session) {
     if (!session || !IsSameStockWindow(session)) {
-        return;
+        return false;
     }
 
-    session->stockWasVisible = IsWindowVisible(session->stockDialog);
+    session->stockWasVisible =
+        session->stockWasVisible || IsWindowVisible(session->stockDialog);
     BOOL cloak = TRUE;
-    if (SUCCEEDED(DwmSetWindowAttribute(
-            session->stockDialog,
-            static_cast<DWMWINDOWATTRIBUTE>(kDwmwaCloak), &cloak,
-            sizeof(cloak)))) {
+    if (SUCCEEDED(DwmSetWindowAttribute(session->stockDialog, DWMWA_CLOAK,
+                                        &cloak, sizeof(cloak)))) {
         session->stockCloakedByUs = true;
-        return;
+        return true;
     }
 
     if (session->stockWasVisible &&
         ShowWindowAsync(session->stockDialog, SW_HIDE)) {
         session->stockHiddenByUs = true;
+        return true;
     }
+    return false;
 }
 
 void RestoreStockDialog(Session* session) {
-    if (!session || !IsSameStockWindow(session)) {
+    if (!session ||
+        !IsOwnedStockWindow(session->stockDialog, session->stockThreadId)) {
         return;
     }
 
     if (session->stockCloakedByUs) {
         BOOL cloak = FALSE;
-        DwmSetWindowAttribute(
-            session->stockDialog,
-            static_cast<DWMWINDOWATTRIBUTE>(kDwmwaCloak), &cloak,
-            sizeof(cloak));
+        DwmSetWindowAttribute(session->stockDialog, DWMWA_CLOAK, &cloak,
+                              sizeof(cloak));
         session->stockCloakedByUs = false;
     }
     if (session->stockHiddenByUs && session->stockWasVisible) {
@@ -848,6 +747,7 @@ void RestoreStockDialog(Session* session) {
         session->stockHiddenByUs = false;
     }
     SetForegroundWindow(session->stockDialog);
+    RemovePropW(session->stockDialog, kOwnedStockProperty);
 }
 
 void RequestFinalize(Session* session, bool restoreStock) {
@@ -860,8 +760,7 @@ void RequestFinalize(Session* session, bool restoreStock) {
 }
 
 void SendSelection(Session* session, int buttonId, bool hideClassicDialog) {
-    if (!session || session->selectionSent ||
-        !IsSameStockWindow(session)) {
+    if (!session || session->selectionSent || !IsSameStockWindow(session)) {
         return;
     }
 
@@ -899,10 +798,12 @@ void SendSelection(Session* session, int buttonId, bool hideClassicDialog) {
     }
 }
 
-INT_PTR CALLBACK ClassicDialogProc(HWND dialog, UINT message, WPARAM wParam,
+INT_PTR CALLBACK ClassicDialogProc(HWND dialog,
+                                   UINT message,
+                                   WPARAM wParam,
                                    LPARAM lParam) {
-    auto* session = reinterpret_cast<Session*>(
-        GetWindowLongPtrW(dialog, DWLP_USER));
+    auto* session =
+        reinterpret_cast<Session*>(GetWindowLongPtrW(dialog, DWLP_USER));
 
     switch (message) {
         case WM_INITDIALOG:
@@ -916,9 +817,8 @@ INT_PTR CALLBACK ClassicDialogProc(HWND dialog, UINT message, WPARAM wParam,
                      reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(1)));
             {
                 BOOL cloak = FALSE;
-                DwmSetWindowAttribute(
-                    dialog, static_cast<DWMWINDOWATTRIBUTE>(kDwmwaCloak),
-                    &cloak, sizeof(cloak));
+                DwmSetWindowAttribute(dialog, DWMWA_CLOAK, &cloak,
+                                      sizeof(cloak));
             }
             session->classicDialog = dialog;
             {
@@ -926,16 +826,20 @@ INT_PTR CALLBACK ClassicDialogProc(HWND dialog, UINT message, WPARAM wParam,
                 // in the language of the MUI file it was loaded from.
                 wchar_t prefix[256] = {};
                 GetWindowTextW(dialog, prefix, ARRAYSIZE(prefix));
-                session->caption = prefix;
-                session->caption += session->applicationName;
+                try {
+                    session->caption = prefix;
+                    session->caption += session->applicationName;
+                } catch (...) {
+                    return FALSE;
+                }
             }
             SetWindowTextW(dialog, session->caption.c_str());
-            SetDlgItemTextW(dialog, kStatusControlId,
-                            g_notResponding.c_str());
+            SetDlgItemTextW(dialog, kStatusControlId, g_notResponding.c_str());
             AddApplicationIcon(dialog, session);
             CenterDialog(dialog, session->ghostOwner);
             SendMessageW(dialog, DM_SETDEFID, IDCANCEL, 0);
             SetFocus(GetDlgItem(dialog, IDCANCEL));
+            session->initialized = true;
             return FALSE;
 
         case WM_COMMAND:
@@ -943,11 +847,11 @@ INT_PTR CALLBACK ClassicDialogProc(HWND dialog, UINT message, WPARAM wParam,
                 break;
             }
             if (LOWORD(wParam) == kEndNowButtonId) {
-                SendSelection(session, session->buttons.closeId, false);
+                SendSelection(session, kWerCloseButtonId, false);
                 return TRUE;
             }
             if (LOWORD(wParam) == IDCANCEL) {
-                SendSelection(session, session->buttons.waitId, true);
+                SendSelection(session, kWerWaitButtonId, true);
                 return TRUE;
             }
             break;
@@ -960,14 +864,12 @@ INT_PTR CALLBACK ClassicDialogProc(HWND dialog, UINT message, WPARAM wParam,
                 }
                 FillRect(draw->hDC, &draw->rcItem,
                          GetSysColorBrush(COLOR_3DFACE));
-                const int iconWidth =
-                    draw->rcItem.right - draw->rcItem.left;
-                const int iconHeight =
-                    draw->rcItem.bottom - draw->rcItem.top;
+                const int iconWidth = draw->rcItem.right - draw->rcItem.left;
+                const int iconHeight = draw->rcItem.bottom - draw->rcItem.top;
                 if (session->applicationIcon) {
-                    DrawIconEx(draw->hDC, draw->rcItem.left,
-                               draw->rcItem.top, session->applicationIcon,
-                               iconWidth, iconHeight, 0, nullptr, DI_NORMAL);
+                    DrawIconEx(draw->hDC, draw->rcItem.left, draw->rcItem.top,
+                               session->applicationIcon, iconWidth, iconHeight,
+                               0, nullptr, DI_NORMAL);
                 }
                 if (session->warningIcon) {
                     UINT dpi = GetDpiForWindow(dialog);
@@ -977,20 +879,19 @@ INT_PTR CALLBACK ClassicDialogProc(HWND dialog, UINT message, WPARAM wParam,
                     int badgeWidth = GetSystemMetricsForDpi(SM_CXSMICON, dpi);
                     int badgeHeight = GetSystemMetricsForDpi(SM_CYSMICON, dpi);
                     if (badgeWidth <= 0) {
-                        badgeWidth =
-                            MulDiv(16, dpi, USER_DEFAULT_SCREEN_DPI);
+                        badgeWidth = MulDiv(16, dpi, USER_DEFAULT_SCREEN_DPI);
                     }
                     if (badgeHeight <= 0) {
-                        badgeHeight =
-                            MulDiv(16, dpi, USER_DEFAULT_SCREEN_DPI);
+                        badgeHeight = MulDiv(16, dpi, USER_DEFAULT_SCREEN_DPI);
                     }
-                    badgeWidth = badgeWidth < iconWidth ? badgeWidth : iconWidth;
+                    badgeWidth =
+                        badgeWidth < iconWidth ? badgeWidth : iconWidth;
                     badgeHeight =
                         badgeHeight < iconHeight ? badgeHeight : iconHeight;
                     DrawIconEx(draw->hDC, draw->rcItem.left,
                                draw->rcItem.bottom - badgeHeight,
-                               session->warningIcon, badgeWidth, badgeHeight,
-                               0, nullptr, DI_NORMAL);
+                               session->warningIcon, badgeWidth, badgeHeight, 0,
+                               nullptr, DI_NORMAL);
                 }
                 return TRUE;
             }
@@ -998,13 +899,12 @@ INT_PTR CALLBACK ClassicDialogProc(HWND dialog, UINT message, WPARAM wParam,
 
         case WM_CLOSE:
             if (session) {
-                SendSelection(session, session->buttons.waitId, true);
+                SendSelection(session, kWerWaitButtonId, true);
             }
             return TRUE;
 
         case WM_TIMER:
-            if (wParam == kActionTimerId && session &&
-                session->selectionSent) {
+            if (wParam == kActionTimerId && session && session->selectionSent) {
                 if (!IsSameStockWindow(session)) {
                     KillTimer(dialog, kActionTimerId);
                     RequestFinalize(session, false);
@@ -1013,8 +913,9 @@ INT_PTR CALLBACK ClassicDialogProc(HWND dialog, UINT message, WPARAM wParam,
 
                 if (GetTickCount64() >= session->actionDeadline) {
                     KillTimer(dialog, kActionTimerId);
-                    Wh_Log(L"WER action timed out for hwnd=%p; restoring stock UI",
-                           session->stockDialog);
+                    Wh_Log(
+                        L"WER action timed out for hwnd=%p; restoring stock UI",
+                        session->stockDialog);
                     RequestFinalize(session, true);
                     return TRUE;
                 }
@@ -1044,80 +945,43 @@ void CloseSession(HWND stockDialog, bool restoreStock) {
     std::unique_ptr<Session> session = std::move(iterator->second);
     g_sessions.erase(iterator);
     session->closing = true;
-
-    if (session->stockDialog && IsWindow(session->stockDialog)) {
-        KillTimer(session->stockDialog, kEarlyCloakTimerId);
-        RemovePropW(session->stockDialog, kEarlyCloakProperty);
-    }
-
     if (restoreStock) {
-        RestoreStockDialog(session.get());
+        // Do not re-hide a fail-open dialog on its next SHOW notification.
+        if (IsOwnedStockWindow(session->stockDialog, session->stockThreadId)) {
+            SetPropW(session->stockDialog, kReleasedDialogProperty,
+                     reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(1)));
+        }
     }
+    // Even an unexpected replacement-window destruction must not orphan a
+    // live stock dialog. Destroyed/reused HWNDs fail the ownership check.
+    RestoreStockDialog(session.get());
     if (session->classicDialog && IsWindow(session->classicDialog)) {
         KillTimer(session->classicDialog, kActionTimerId);
         DestroyWindow(session->classicDialog);
-        session->classicDialog = nullptr;
-    }
-    if (session->warningIcon) {
-        DestroyIcon(session->warningIcon);
-        session->warningIcon = nullptr;
-    }
-    if (session->applicationIcon) {
-        DestroyIcon(session->applicationIcon);
-        session->applicationIcon = nullptr;
     }
 }
 
-bool IsWerHangTaskDialog(HWND window, DWORD* processId, HWND* ghostOwner,
+bool IsWerHangTaskDialog(HWND window,
+                         DWORD* processId,
+                         HWND* ghostOwner,
                          HWND* hungWindow) {
-    if (!window || !IsWindow(window) ||
-        GetAncestor(window, GA_ROOT) != window ||
-        !IsWindowVisible(window)) {
+    if (!IsPotentialWerHangDialog(window) || !IsWindowVisible(window) ||
+        !HasInitialWerConsentTree(window)) {
         return false;
     }
 
-    wchar_t className[64] = {};
-    if (!GetClassNameW(window, className, ARRAYSIZE(className)) ||
-        wcscmp(className, L"#32770") != 0) {
-        return false;
-    }
-
-    DWORD candidateProcessId = 0;
-    GetWindowThreadProcessId(window, &candidateProcessId);
-    if (candidateProcessId != GetCurrentProcessId() ||
-        !IsSystemWerProcess(candidateProcessId)) {
-        return false;
-    }
-
-    const HWND candidateGhostOwner = GetWindow(window, GW_OWNER);
-    wchar_t ownerClassName[64] = {};
-    if (!candidateGhostOwner ||
-        !GetClassNameW(candidateGhostOwner, ownerClassName,
-                       ARRAYSIZE(ownerClassName)) ||
-        _wcsicmp(ownerClassName, L"Ghost") != 0) {
-        return false;
-    }
-
-    const HWND candidateHungWindow = ResolveHungWindow(candidateGhostOwner);
-    if (!candidateHungWindow || !IsWindow(candidateHungWindow)) {
-        return false;
-    }
-
-    if (!HasInitialWerConsentTree(window)) {
-        return false;
-    }
-
-    *processId = candidateProcessId;
-    *ghostOwner = candidateGhostOwner;
-    *hungWindow = candidateHungWindow;
-    return true;
+    *processId = GetCurrentProcessId();
+    *ghostOwner = GetWindow(window, GW_OWNER);
+    *hungWindow = ResolveHungWindow(*ghostOwner);
+    return *hungWindow && IsWindow(*hungWindow);
 }
 
-void StartSession(HWND stockDialog) {
+void StartSessionImpl(HWND stockDialog) {
+    if (!g_active.load() || GetPropW(stockDialog, kReleasedDialogProperty)) {
+        return;
+    }
     const auto existingSession = g_sessions.find(stockDialog);
     if (existingSession != g_sessions.end()) {
-        // WER can show the same TaskDialog again while changing state. Keep
-        // it cloaked for as long as the Windows 2000 replacement is active.
         HideStockDialog(existingSession->second.get());
         return;
     }
@@ -1129,55 +993,73 @@ void StartSession(HWND stockDialog) {
                              &hungWindow)) {
         return;
     }
-
-    auto session = std::unique_ptr<Session>(new (std::nothrow) Session);
-    if (!session) {
-        return;
+    if (!g_pendingCloaks.contains(stockDialog)) {
+        DWORD cloaked = 0;
+        if (FAILED(DwmGetWindowAttribute(stockDialog, DWMWA_CLOAKED, &cloaked,
+                                         sizeof(cloaked))) ||
+            cloaked) {
+            return;
+        }
     }
 
+    auto session = std::make_unique<Session>();
     session->stockDialog = stockDialog;
     session->stockProcessId = processId;
-    session->stockThreadId =
-        GetWindowThreadProcessId(stockDialog, nullptr);
+    session->stockThreadId = GetWindowThreadProcessId(stockDialog, nullptr);
     session->ghostOwner = ghostOwner;
     session->hungWindow = hungWindow;
-    session->applicationName = GetApplicationName(stockDialog);
-    session->applicationIcon =
-        GetApplicationIcon(session->hungWindow, stockDialog);
+    session->applicationName = GetApplicationName(hungWindow);
+    session->applicationIcon = GetApplicationIcon(hungWindow, stockDialog);
     session->warningIcon = LoadWindows2000WarningIcon();
 
     Session* sessionPointer = session.get();
+    g_sessions.emplace(stockDialog, std::move(session));
+    if (!SetPropW(stockDialog, kOwnedStockProperty,
+                  reinterpret_cast<HANDLE>(g_selfModule))) {
+        CloseSession(stockDialog, true);
+        ReleasePendingCloak(stockDialog, true);
+        return;
+    }
+    const auto pending = g_pendingCloaks.find(stockDialog);
+    if (pending != g_pendingCloaks.end()) {
+        sessionPointer->stockCloakedByUs =
+            IsSamePendingWindow(stockDialog, pending->second);
+        g_pendingCloaks.erase(pending);
+        if (g_pendingCloaks.empty()) {
+            KillTimer(g_brokerWindow.load(), kPendingCloakTimerId);
+        }
+    }
+
     HWND classicDialog = CreateDialogParamW(
         g_resourceModule, MAKEINTRESOURCEW(kDialogResourceId),
-        session->ghostOwner, ClassicDialogProc,
+        sessionPointer->ghostOwner, ClassicDialogProc,
         reinterpret_cast<LPARAM>(sessionPointer));
-    if (!classicDialog) {
+    if (!classicDialog || !sessionPointer->initialized) {
         Wh_Log(L"CreateDialogParamW(DIALOG #10) failed, GLE=%u",
                GetLastError());
-        if (session->warningIcon) {
-            DestroyIcon(session->warningIcon);
-        }
-        if (session->applicationIcon) {
-            DestroyIcon(session->applicationIcon);
-        }
+        CloseSession(stockDialog, true);
         return;
     }
 
-    session->classicDialog = classicDialog;
-    SetPropW(stockDialog, kEarlyCloakProperty,
-             reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(2)));
-    KillTimer(stockDialog, kEarlyCloakTimerId);
-    g_sessions.emplace(stockDialog, std::move(session));
-
-    HideStockDialog(sessionPointer);
+    if (!HideStockDialog(sessionPointer)) {
+        CloseSession(stockDialog, true);
+        return;
+    }
     ShowWindow(classicDialog, SW_SHOW);
     SetForegroundWindow(classicDialog);
     SetActiveWindow(classicDialog);
+    Wh_Log(L"Attached to WER hwnd=%p pid=%u app=%s", stockDialog, processId,
+           sessionPointer->applicationName.c_str());
+}
 
-    Wh_Log(L"Late-attached to WER hwnd=%p pid=%u app=%s close=%d wait=%d",
-           stockDialog, processId, sessionPointer->applicationName.c_str(),
-           sessionPointer->buttons.closeId,
-           sessionPointer->buttons.waitId);
+void StartSession(HWND stockDialog) {
+    try {
+        StartSessionImpl(stockDialog);
+    } catch (...) {
+        Wh_Log(L"WER replacement failed; restoring stock UI");
+        CloseSession(stockDialog, true);
+        ReleasePendingCloak(stockDialog, true);
+    }
 }
 
 BOOL CALLBACK EnumerateExistingWindowsCallback(HWND window, LPARAM) {
@@ -1185,8 +1067,13 @@ BOOL CALLBACK EnumerateExistingWindowsCallback(HWND window, LPARAM) {
     return TRUE;
 }
 
-void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND window,
-                           LONG objectId, LONG childId, DWORD, DWORD) {
+void CALLBACK WinEventProc(HWINEVENTHOOK,
+                           DWORD event,
+                           HWND window,
+                           LONG objectId,
+                           LONG childId,
+                           DWORD,
+                           DWORD) {
     if (!g_active.load() || !window || objectId != OBJID_WINDOW ||
         childId != CHILDID_SELF) {
         return;
@@ -1198,11 +1085,8 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND window,
     }
 
     if (event == EVENT_OBJECT_SHOW) {
-        // WINEVENT_INCONTEXT runs on the UI thread. Cloak the strongly
-        // fingerprinted stock dialog before queueing the slower DirectUI
-        // validation to the broker, so it never reaches a compositor frame.
+        // OUTOFCONTEXT dispatches on this broker's message-loop thread.
         const HWND rootWindow = GetAncestor(window, GA_ROOT);
-        EarlyCloakStockDialog(rootWindow ? rootWindow : window);
         PostMessageW(broker, kBrokerCandidateMessage,
                      reinterpret_cast<WPARAM>(rootWindow ? rootWindow : window),
                      0);
@@ -1212,7 +1096,9 @@ void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND window,
     }
 }
 
-LRESULT CALLBACK BrokerWindowProc(HWND window, UINT message, WPARAM wParam,
+LRESULT CALLBACK BrokerWindowProc(HWND window,
+                                  UINT message,
+                                  WPARAM wParam,
                                   LPARAM lParam) {
     switch (message) {
         case WM_TIMER:
@@ -1224,7 +1110,26 @@ LRESULT CALLBACK BrokerWindowProc(HWND window, UINT message, WPARAM wParam,
                 }
                 return 0;
             }
+            if (wParam == kPendingCloakTimerId) {
+                for (auto iterator = g_pendingCloaks.begin();
+                     iterator != g_pendingCloaks.end();) {
+                    const HWND stockDialog = iterator->first;
+                    const PendingCloak pending = iterator->second;
+                    ++iterator;
+                    if (!IsSamePendingWindow(stockDialog, pending)) {
+                        ReleasePendingCloak(stockDialog, false);
+                    } else if (GetTickCount64() >= pending.deadline) {
+                        ReleasePendingCloak(stockDialog, true);
+                    } else {
+                        StartSession(stockDialog);
+                    }
+                }
+                return 0;
+            }
             break;
+
+        case kBrokerPrepareMessage:
+            return PrepareStockDialog(reinterpret_cast<HWND>(wParam));
 
         case kBrokerCandidateMessage:
             StartSession(reinterpret_cast<HWND>(wParam));
@@ -1232,26 +1137,12 @@ LRESULT CALLBACK BrokerWindowProc(HWND window, UINT message, WPARAM wParam,
 
         case kBrokerStockDestroyedMessage:
             CloseSession(reinterpret_cast<HWND>(wParam), false);
+            ReleasePendingCloak(reinterpret_cast<HWND>(wParam), false);
             return 0;
 
         case kBrokerFinalizeMessage:
             CloseSession(reinterpret_cast<HWND>(wParam), lParam != 0);
             return 0;
-
-        case kBrokerEarlyCloakFailOpenMessage: {
-            const HWND stockDialog = reinterpret_cast<HWND>(wParam);
-            if (g_sessions.find(stockDialog) == g_sessions.end() &&
-                reinterpret_cast<ULONG_PTR>(
-                    GetPropW(stockDialog, kEarlyCloakProperty)) == 1) {
-                BOOL cloak = FALSE;
-                DwmSetWindowAttribute(
-                    stockDialog,
-                    static_cast<DWMWINDOWATTRIBUTE>(kDwmwaCloak), &cloak,
-                    sizeof(cloak));
-                RemovePropW(stockDialog, kEarlyCloakProperty);
-            }
-            return 0;
-        }
     }
     return DefWindowProcW(window, message, wParam, lParam);
 }
@@ -1275,54 +1166,47 @@ void CloseAllSessions(bool restoreStock) {
     }
 }
 
-bool TriggerWerService() {
-    REGHANDLE provider = 0;
-    if (EventRegister(&kWerSvcTriggerProvider, nullptr, nullptr, &provider) !=
-        ERROR_SUCCESS) {
+bool QueryWerServiceTrigger(GUID* providerId) {
+    SC_HANDLE manager = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
+    if (!manager) {
+        return false;
+    }
+    SC_HANDLE service = OpenServiceW(manager, L"WerSvc", SERVICE_QUERY_CONFIG);
+    CloseServiceHandle(manager);
+    if (!service) {
         return false;
     }
 
-    EVENT_DESCRIPTOR event = {};
-    event.Id = 0;
-    event.Version = 0;
-    event.Channel = 16;
-    event.Level = 4;  // TRACE_LEVEL_INFORMATION
-    event.Opcode = 0;
-    event.Task = 1;
-    event.Keyword = 0x8000000000000001ULL;
-    const ULONG result = EventWrite(provider, &event, 0, nullptr);
-    EventUnregister(provider);
-    return result == ERROR_SUCCESS;
-}
-
-void SignalWindhawkProcessScan() {
-    HANDLE event =
-        OpenEventW(EVENT_MODIFY_STATE, FALSE, kWindhawkScanEvent);
-    if (event) {
-        SetEvent(event);
-        CloseHandle(event);
+    bool found = false;
+    try {
+        DWORD size = 0;
+        QueryServiceConfig2W(service, SERVICE_CONFIG_TRIGGER_INFO, nullptr, 0,
+                             &size);
+        if (size >= sizeof(ServiceTriggerInfo) && size <= 65536) {
+            std::vector<BYTE> data(size);
+            if (QueryServiceConfig2W(service, SERVICE_CONFIG_TRIGGER_INFO,
+                                     data.data(), size, &size)) {
+                const auto* info =
+                    reinterpret_cast<const ServiceTriggerInfo*>(data.data());
+                for (DWORD i = 0; i < info->cTriggers; ++i) {
+                    const ServiceTrigger& trigger = info->pTriggers[i];
+                    if (trigger.dwTriggerType == SERVICE_TRIGGER_TYPE_CUSTOM &&
+                        trigger.dwAction ==
+                            1 &&  // SERVICE_TRIGGER_ACTION_SERVICE_START
+                        trigger.pTriggerSubtype &&
+                        trigger.cDataItems == 0) {
+                        *providerId = *trigger.pTriggerSubtype;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+        }
+    } catch (...) {
+        // Failure to pre-warm must never affect Explorer or WER's normal path.
     }
-}
-
-bool HasWindhawkCustomizationSession(DWORD processId) {
-    wchar_t name[128] = {};
-    _snwprintf_s(name, ARRAYSIZE(name), _TRUNCATE,
-                 L"Global\\WindhawkCustomizationSessionSemaphore-pid=%lu",
-                 processId);
-    HANDLE semaphore = OpenSemaphoreW(SYNCHRONIZE, FALSE, name);
-    if (semaphore) {
-        CloseHandle(semaphore);
-        return true;
-    }
-    return GetLastError() == ERROR_ACCESS_DENIED;
-}
-
-bool QueryWerService(SC_HANDLE service, SERVICE_STATUS_PROCESS* status) {
-    DWORD bytesNeeded = 0;
-    return QueryServiceStatusEx(
-               service, SC_STATUS_PROCESS_INFO,
-               reinterpret_cast<LPBYTE>(status), sizeof(*status),
-               &bytesNeeded) != FALSE;
+    CloseServiceHandle(service);
+    return found;
 }
 
 DWORD WINAPI WerServicePrewarmThreadProc(void*) {
@@ -1333,7 +1217,7 @@ DWORD WINAPI WerServicePrewarmThreadProc(void*) {
             DWORD shellProcessId = 0;
             GetWindowThreadProcessId(shellWindow, &shellProcessId);
             if (shellProcessId != GetCurrentProcessId()) {
-                return 0;
+                return 0;  // No heartbeat from secondary Explorer processes.
             }
             isShellProcess = true;
             break;
@@ -1343,90 +1227,54 @@ DWORD WINAPI WerServicePrewarmThreadProc(void*) {
         }
     }
     if (!isShellProcess) {
-        return 3;
+        return 0;
     }
 
-    SC_HANDLE manager =
-        OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
-    if (!manager) {
-        return 1;
+    // Read the service's existing custom start trigger. Never change its
+    // configuration, and never poke Windhawk's private named objects.
+    GUID providerId = {};
+    if (!QueryWerServiceTrigger(&providerId)) {
+        Wh_Log(L"WerSvc has no supported start trigger; pre-warm skipped");
+        return 0;
     }
-    SC_HANDLE service =
-        OpenServiceW(manager, L"WerSvc", SERVICE_QUERY_STATUS);
-    if (!service) {
-        CloseServiceHandle(manager);
-        return 2;
+    REGHANDLE provider = 0;
+    if (EventRegister(&providerId, nullptr, nullptr, &provider) !=
+        ERROR_SUCCESS) {
+        Wh_Log(L"WerSvc trigger provider could not be registered");
+        return 0;
     }
 
-    DWORD injectedProcessId = 0;
-    ULONGLONG nextTriggerAttempt = 0;
-    ULONGLONG nextHeartbeat = 0;
+    EVENT_DESCRIPTOR event = {};
+    event.Channel = 16;
+    event.Level = 4;
+    event.Task = 1;
+    event.Keyword = 0x8000000000000001ULL;
+    Wh_Log(L"Opt-in WerSvc heartbeat started (once per minute)");
     while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
-        SERVICE_STATUS_PROCESS status = {};
-        if (!QueryWerService(service, &status)) {
+        const ULONG result = EventWrite(provider, &event, 0, nullptr);
+        if (result != ERROR_SUCCESS) {
+            Wh_Log(L"WerSvc heartbeat failed, error=%u", result);
             break;
         }
-
-        if (status.dwCurrentState != SERVICE_RUNNING ||
-            !status.dwProcessId) {
-            injectedProcessId = 0;
-            nextHeartbeat = 0;
-            const ULONGLONG now = GetTickCount64();
-            if (now >= nextTriggerAttempt) {
-                TriggerWerService();
-                nextTriggerAttempt = now + 5000;
-            }
-        } else {
-            const ULONGLONG now = GetTickCount64();
-            if (now >= nextHeartbeat) {
-                TriggerWerService();
-                nextHeartbeat = now + 60000;
-            }
-
-            if (status.dwProcessId != injectedProcessId ||
-                !HasWindhawkCustomizationSession(status.dwProcessId)) {
-                bool injected = false;
-                SignalWindhawkProcessScan();
-                for (int attempt = 0; attempt < 60; ++attempt) {
-                    if (HasWindhawkCustomizationSession(status.dwProcessId)) {
-                        injected = true;
-                        break;
-                    }
-                    if (WaitForSingleObject(g_stopEvent, 50) != WAIT_TIMEOUT) {
-                        break;
-                    }
-                }
-                if (injected) {
-                    // The semaphore is published immediately before the
-                    // injected session finishes installing CreateProcess
-                    // hooks. Give that short initialization tail time to
-                    // complete before treating the service host as ready.
-                    if (WaitForSingleObject(g_stopEvent, 100) != WAIT_TIMEOUT) {
-                        break;
-                    }
-                    injectedProcessId = status.dwProcessId;
-                    Wh_Log(L"Pre-warmed WerSvc host pid=%u",
-                           injectedProcessId);
-                }
-            }
-        }
-
-        // Poll quickly only while the service host is being started and
-        // injected. Once ready, a five-second health check is sufficient;
-        // the 60-second heartbeat is well inside WerSvc's idle timeout.
-        const DWORD pollIntervalMs = injectedProcessId ? 5000 : 250;
-        if (WaitForSingleObject(g_stopEvent, pollIntervalMs) != WAIT_TIMEOUT) {
+        if (WaitForSingleObject(g_stopEvent, 60000) != WAIT_TIMEOUT) {
             break;
         }
     }
-
-    CloseServiceHandle(service);
-    CloseServiceHandle(manager);
+    EventUnregister(provider);
     return 0;
 }
 
+BOOL CALLBACK RemoveReleasedProperty(HWND window, LPARAM) {
+    DWORD processId = 0;
+    GetWindowThreadProcessId(window, &processId);
+    if (processId == GetCurrentProcessId()) {
+        RemovePropW(window, kReleasedDialogProperty);
+    }
+    return TRUE;
+}
+
 DWORD WINAPI BrokerThreadProc(void*) {
-    g_windowClassInstance = GetModuleHandleW(nullptr);
+    g_windowClassInstance = g_selfModule;
     WNDCLASSEXW windowClass = {};
     windowClass.cbSize = sizeof(windowClass);
     windowClass.lpfnWndProc = BrokerWindowProc;
@@ -1438,9 +1286,9 @@ DWORD WINAPI BrokerThreadProc(void*) {
     }
     g_windowClassRegistered = true;
 
-    HWND broker = CreateWindowExW(
-        0, kBrokerWindowClass, nullptr, 0, 0, 0, 0, 0, HWND_MESSAGE,
-        nullptr, g_windowClassInstance, nullptr);
+    HWND broker =
+        CreateWindowExW(0, kBrokerWindowClass, nullptr, 0, 0, 0, 0, 0,
+                        HWND_MESSAGE, nullptr, g_windowClassInstance, nullptr);
     if (!broker) {
         UnregisterClassW(kBrokerWindowClass, g_windowClassInstance);
         g_windowClassRegistered = false;
@@ -1450,8 +1298,8 @@ DWORD WINAPI BrokerThreadProc(void*) {
     g_brokerWindow.store(broker);
 
     g_winEventHook = SetWinEventHook(
-        EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, g_selfModule, WinEventProc,
-        GetCurrentProcessId(), 0, WINEVENT_INCONTEXT);
+        EVENT_OBJECT_DESTROY, EVENT_OBJECT_SHOW, nullptr, WinEventProc,
+        GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT);
     if (!g_winEventHook) {
         g_brokerWindow.store(nullptr);
         DestroyWindow(broker);
@@ -1461,7 +1309,6 @@ DWORD WINAPI BrokerThreadProc(void*) {
         return 3;
     }
 
-    g_brokerInitialized.store(true);
     SetEvent(g_readyEvent);
 
     // Installing the hook before enumeration closes the show/enumerate race.
@@ -1481,7 +1328,8 @@ DWORD WINAPI BrokerThreadProc(void*) {
         }
 
         MSG message;
-        while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+        while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT &&
+               PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
             if (message.message == WM_QUIT) {
                 stop = true;
                 break;
@@ -1497,7 +1345,12 @@ DWORD WINAPI BrokerThreadProc(void*) {
     UnhookWinEvent(g_winEventHook);
     g_winEventHook = nullptr;
     KillTimer(broker, kDiscoveryTimerId);
+    KillTimer(broker, kPendingCloakTimerId);
     CloseAllSessions(true);
+    while (!g_pendingCloaks.empty()) {
+        ReleasePendingCloak(g_pendingCloaks.begin()->first, false);
+    }
+    EnumWindows(RemoveReleasedProperty, 0);
 
     g_brokerWindow.store(nullptr);
     DestroyWindow(broker);
@@ -1508,49 +1361,21 @@ DWORD WINAPI BrokerThreadProc(void*) {
     return 0;
 }
 
-bool PinCurrentModuleUntilProcessExit() {
-    HMODULE self = nullptr;
+bool GetCurrentModModule() {
     const auto address = reinterpret_cast<LPCWSTR>(
-        reinterpret_cast<ULONG_PTR>(&PinCurrentModuleUntilProcessExit));
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
-                               GET_MODULE_HANDLE_EX_FLAG_PIN,
-                           address, &self)) {
-        Wh_Log(L"GetModuleHandleExW(PIN) failed, GLE=%u", GetLastError());
-        return false;
-    }
-    g_selfModule = self;
-    return true;
+        reinterpret_cast<ULONG_PTR>(&GetCurrentModModule));
+    return GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                  GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                              address, &g_selfModule) != FALSE;
 }
 
-bool InstallEarlyWerHook() {
-    HMODULE werui = GetModuleHandleW(L"werui.dll");
-    if (!werui) {
-        werui = LoadLibraryExW(L"werui.dll", nullptr,
-                               LOAD_LIBRARY_SEARCH_SYSTEM32);
-    }
-    if (!werui) {
-        Wh_Log(L"werui.dll is unavailable, GLE=%u", GetLastError());
-        return false;
-    }
-
-    FARPROC function = GetProcAddress(werui, "WerUIpTaskDialogIndirect");
-    if (!function) {
-        Wh_Log(L"WerUIpTaskDialogIndirect is unavailable, GLE=%u",
-               GetLastError());
-        return false;
-    }
-
-    if (!Wh_SetFunctionHook(
-            reinterpret_cast<void*>(function),
-            reinterpret_cast<void*>(WerUIpTaskDialogIndirectHook),
-            reinterpret_cast<void**>(
-                &g_werUIpTaskDialogIndirectOriginal))) {
-        Wh_Log(L"Failed to hook WerUIpTaskDialogIndirect");
-        return false;
-    }
-
-    Wh_Log(L"Pre-display WER hook queued");
-    return true;
+bool InstallEarlyShowHooks() {
+    return WindhawkUtils::SetFunctionHook(ShowWindow, ShowWindowHook,
+                                          &g_showWindowOriginal) &&
+           WindhawkUtils::SetFunctionHook(ShowWindowAsync, ShowWindowAsyncHook,
+                                          &g_showWindowAsyncOriginal) &&
+           WindhawkUtils::SetFunctionHook(SetWindowPos, SetWindowPosHook,
+                                          &g_setWindowPosOriginal);
 }
 
 std::wstring LoadResourceMessage(DWORD messageId) {
@@ -1569,11 +1394,10 @@ std::wstring LoadResourceMessage(DWORD messageId) {
 std::vector<std::wstring> DialogLanguages() {
     std::vector<std::wstring> languages;
 
-    PCWSTR setting = Wh_GetStringSetting(L"language");
-    if (setting && *setting && wcscmp(setting, L"auto") != 0) {
-        languages.emplace_back(setting);
+    const auto setting = WindhawkUtils::StringSetting::make(L"language");
+    if (*setting.get() && wcscmp(setting, L"auto") != 0) {
+        languages.emplace_back(setting.get());
     }
-    Wh_FreeStringSetting(setting);
 
     wchar_t userLanguage[LOCALE_NAME_MAX_LENGTH] = {};
     if (LCIDToLocaleName(MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT),
@@ -1594,8 +1418,8 @@ bool LoadWindows2000DialogResource() {
     }
 
     for (const std::wstring& language : DialogLanguages()) {
-        const std::wstring path = JoinPath(
-            systemDirectory, (language + L"\\winsrv.dll.mui").c_str());
+        const std::wstring path =
+            JoinPath(systemDirectory, (language + L"\\winsrv.dll.mui").c_str());
         HMODULE module = LoadLibraryExW(
             path.c_str(), nullptr,
             LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE);
@@ -1616,9 +1440,9 @@ bool LoadWindows2000DialogResource() {
         g_notResponding = message.empty() ? kDefaultNotResponding : message;
         message = LoadResourceMessage(kEndingMessageId);
         g_ending = message.empty() ? kDefaultEnding : message;
-        g_fallbackAppName =
-            _wcsnicmp(language.c_str(), L"ru", 2) == 0 ? kRussianAppName
-                                                       : kDefaultAppName;
+        g_fallbackAppName = _wcsnicmp(language.c_str(), L"ru", 2) == 0
+                                ? kRussianAppName
+                                : kDefaultAppName;
         Wh_Log(L"Using DIALOG #10 from %s", path.c_str());
         return true;
     }
@@ -1649,48 +1473,27 @@ void CleanupInitializationObjects() {
 BOOL Wh_ModInit() {
     Wh_Log(L"Init " WH_MOD_ID L" version " WH_MOD_VERSION);
 
-    const std::wstring processName = CurrentProcessBaseName();
-    if (processName == L"explorer.exe") {
-        g_hostMode = HostMode::ExplorerPrewarm;
-        g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-        if (!g_stopEvent) {
-            CleanupInitializationObjects();
-            g_hostMode = HostMode::None;
-            return FALSE;
+    if (CurrentProcessBaseName() == L"explorer.exe") {
+        // Stay initialized so changing this setting can reload the mod. When
+        // disabled (the default), Explorer gets no worker, timer or heartbeat.
+        if (!Wh_GetIntSetting(L"keepWerSvcRunning")) {
+            return TRUE;
         }
-
-        g_brokerThread = CreateThread(
-            nullptr, 0, WerServicePrewarmThreadProc, nullptr, 0, nullptr);
+        g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (g_stopEvent) {
+            g_brokerThread = CreateThread(
+                nullptr, 0, WerServicePrewarmThreadProc, nullptr, 0, nullptr);
+        }
         if (!g_brokerThread) {
             CleanupInitializationObjects();
-            g_hostMode = HostMode::None;
             return FALSE;
         }
-
-        Wh_Log(L"WerSvc pre-warm worker started");
         return TRUE;
     }
 
-    if (processName != L"werfault.exe" &&
-        processName != L"werfaultsecure.exe") {
-        return FALSE;
-    }
-    g_hostMode = HostMode::WerFault;
-    g_active.store(true);
-
-    if (!PinCurrentModuleUntilProcessExit()) {
-        g_active.store(false);
-        g_hostMode = HostMode::None;
-        return FALSE;
-    }
-
-    // Queue this first and return promptly below. Windhawk commits hook
-    // operations automatically immediately after Wh_ModInit returns.
-    InstallEarlyWerHook();
-
-    if (!LoadWindows2000DialogResource()) {
-        g_active.store(false);
-        g_hostMode = HostMode::None;
+    if (!IsSystemWerProcess(GetCurrentProcessId()) || !GetCurrentModModule() ||
+        !LoadWindows2000DialogResource()) {
+        CleanupInitializationObjects();
         return FALSE;
     }
 
@@ -1698,25 +1501,37 @@ BOOL Wh_ModInit() {
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_stopEvent || !g_readyEvent) {
         CleanupInitializationObjects();
-        g_active.store(false);
-        g_hostMode = HostMode::None;
         return FALSE;
     }
 
+    g_active.store(true);
     g_brokerThread =
         CreateThread(nullptr, 0, BrokerThreadProc, nullptr, 0, nullptr);
     if (!g_brokerThread) {
-        CleanupInitializationObjects();
         g_active.store(false);
-        g_hostMode = HostMode::None;
+        CleanupInitializationObjects();
         return FALSE;
     }
 
-    // Don't wait here: returning promptly lets Windhawk commit the early hook
-    // before WerFault reaches its TaskDialog call. The broker signals its own
-    // readiness and the early-cloak timer fails open if initialization fails.
-    Wh_Log(L"WER broker started asynchronously");
+    HANDLE events[] = {g_readyEvent, g_brokerThread};
+    const DWORD ready =
+        WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE, 5000);
+    if (ready != WAIT_OBJECT_0 || !g_brokerWindow.load() ||
+        !InstallEarlyShowHooks()) {
+        g_active.store(false);
+        SetEvent(g_stopEvent);
+        WaitForSingleObject(g_brokerThread, INFINITE);
+        CleanupInitializationObjects();
+        return FALSE;
+    }
+
+    Wh_Log(L"WER broker ready; public pre-display hooks queued");
     return TRUE;
+}
+
+void Wh_ModBeforeUninit() {
+    // Stop new cloak requests before Windhawk disables the function hooks.
+    g_active.store(false);
 }
 
 void Wh_ModUninit() {
@@ -1737,6 +1552,9 @@ void Wh_ModUninit() {
     }
 
     CleanupInitializationObjects();
-    g_brokerInitialized.store(false);
-    g_hostMode = HostMode::None;
+}
+
+BOOL Wh_ModSettingsChanged(BOOL* reload) {
+    *reload = TRUE;
+    return TRUE;
 }
