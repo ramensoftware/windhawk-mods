@@ -124,6 +124,7 @@
 #include <ShlGuid.h>
 #include <Propkey.h>
 #include <tlhelp32.h>
+#include <processthreadsapi.h>
 #include <vector>
 
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
@@ -141,10 +142,6 @@ DEFINE_GUID(LiveSetting_Property_GUID, 0xc12bcd8e, 0x2a8e, 0x4950, 0x8a, 0xe7, 0
 
 #define SWS_WINDOWFLAG_IS_ON_WINDOW    0b001
 
-#define SWS_WINDOWSWITCHERLAYOUT_INCLUDE_WALLPAPER FALSE
-#define SWS_WINDOWSWITCHERLAYOUT_WALLPAPER_ALWAYS_LAST TRUE
-#define SWS_WINDOWSWITCHERLAYOUT_WALLPAPER_TOGGLE TRUE
-
 #define SWS_WINDOWSWITCHERLAYOUT_ITEMSIZE 43
 #define SWS_WINDOWSWITCHERLAYOUT_ICONSIZE 32
 
@@ -152,7 +149,7 @@ DEFINE_GUID(LiveSetting_Property_GUID, 0xc12bcd8e, 0x2a8e, 0x4950, 0x8a, 0xe7, 0
 #define SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_FORWARD 1
 #define SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_BACKWARD -1
 
-#define SWS_WINDOWSWITCHERLAYOUT_WINDOWFLAGS_ISUWP                   0b00000001
+#define SWS_WINDOWSWITCHERLAYOUT_WINDOWFLAGS_ISUWP 0b00000001
 
 #define SWS_WINDOWSWITCHER_LAYOUTMODE_FULL 0
 #define SWS_WINDOWSWITCHER_LAYOUTMODE_MINI 1
@@ -484,8 +481,6 @@ typedef struct _sws_WindowSwitcherLayout
 	MONITORINFO mi;
 	unsigned int numTopMost;
 	BOOL bIncludeWallpaper;
-	BOOL bWallpaperAlwaysLast;
-	BOOL bWallpaperToggleBehavior;
 	HFONT hFontRegular;
 	unsigned int cbFontHeight;
 	unsigned int cbBorderSize;
@@ -529,7 +524,6 @@ typedef struct _sws_WindowSwitcher
     long long last_change;
     sws_vector pHWNDList;
     HDPA htshwnds;
-    BOOL bWallpaperAlwaysLast;
     UINT mode;
     HWND lastMiniModehWnd;
     HWINEVENTHOOK hookForeground;
@@ -1961,13 +1955,10 @@ sws_error_t sws_WindowSwitcherLayout_Initialize(
 	}
 	if (!rv)
 	{
-		_this->bWallpaperAlwaysLast = SWS_WINDOWSWITCHERLAYOUT_WALLPAPER_ALWAYS_LAST;
-		_this->bIncludeWallpaper = SWS_WINDOWSWITCHERLAYOUT_INCLUDE_WALLPAPER;
 		_this->bIncludeWallpaper = settings.bIncludeWallpaper;
-		_this->bWallpaperToggleBehavior = SWS_WINDOWSWITCHERLAYOUT_WALLPAPER_TOGGLE;
 		if (_this->bIncludeWallpaper)
 		{
-			if (_this->bWallpaperAlwaysLast && !hWndTarget)
+			if (!hWndTarget)
 			{
 				sws_WindowSwitcherLayoutWindow swsLayoutWindow;
 				sws_WindowSwitcherLayoutWindow_Initialize(&swsLayoutWindow, GetShellWindow(), NULL);
@@ -2309,9 +2300,7 @@ static void WINAPI _sws_WindowSwitcher_Calculate(sws_WindowSwitcher* _this, HWND
         {
             _this->layout.iIndex = 0;
         }
-        if (_this->settings.bIncludeWallpaper && _this->bWallpaperAlwaysLast &&
-            _this->layout.pWindowList.cbSize == 2 && IsIconic(pWindowList[1].hWnd)
-            )
+        if (_this->settings.bIncludeWallpaper && _this->layout.pWindowList.cbSize == 2 && IsIconic(pWindowList[1].hWnd))
         {
             _this->layout.iIndex = 1;
         }
@@ -3801,6 +3790,15 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                         HANDLE hThread = nullptr;
                         if (SHCreateThreadWithHandle((LPTHREAD_START_ROUTINE)_sws_WindowSwitcher_EndTaskThreadProc, pEndTaskParams, CTF_NOADDREFLIB, NULL, &hThread))
                         {
+                            std::erase_if(g_endTaskThreads, [](HANDLE hThread) {
+                                DWORD exitCode = STILL_ACTIVE;
+                                GetExitCodeThread(hThread, &exitCode);
+                                if (exitCode == 0) {
+                                    CloseHandle(hThread);
+                                    return true;
+                                }
+                                return false;
+                            });
                             g_endTaskThreads.push_back(hThread);
                         } else {
                             free(pEndTaskParams);
@@ -4081,6 +4079,10 @@ sws_error_t sws_WindowSwitcher_RunMessageQueue(sws_WindowSwitcher* _this)
 void sws_WindowSwitcher_LoadSettings(sws_WindowSwitcher* _this)
 {
     _this->dwShowDelay = Wh_GetIntSetting(L"ShowDelay");
+    if (_this->dwShowDelay > 10000) {
+        _this->dwShowDelay = 100;
+    }
+
     _this->settings.bIncludeWallpaper = Wh_GetIntSetting(L"IncludeWallpaper");
     _this->bPrimaryOnly = Wh_GetIntSetting(L"PrimaryMonitorOnly");
     _this->settings.bPerMonitor = Wh_GetIntSetting(L"PerMonitor");
@@ -4307,7 +4309,6 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         _this->hBackgroundBrush = GetSysColorBrush(COLOR_BTNFACE);
         _this->hFlashBrush = GetSysColorBrush(COLOR_HIGHLIGHT);
         _this->last_change = 0;
-        _this->bWallpaperAlwaysLast = SWS_WINDOWSWITCHERLAYOUT_WALLPAPER_ALWAYS_LAST;
         _this->mode = SWS_WINDOWSWITCHER_LAYOUTMODE_FULL;
         _this->lastMiniModehWnd = NULL;
         _this->dwOriginalMouseRouting = -1;
