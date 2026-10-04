@@ -4292,19 +4292,19 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
     }
     if (!rv)
     {
-        if (sws_WindowSwitcher_RegisterHotkeys(_this, NULL) == ERROR_HOTKEY_ALREADY_REGISTERED) {
+        if (sws_WindowSwitcher_RegisterHotkeys(_this, NULL) & ERROR_HOTKEY_ALREADY_REGISTERED) {
             if (MessageBoxW(NULL, L"Explorer restart required. Restart now?", L"ClassicWindowSwitcher - Windhawk", MB_YESNO | MB_ICONWARNING) == IDYES) {
                 DWORD pid = 0;
                 HWND hShell = GetShellWindow();
                 if (hShell && GetWindowThreadProcessId(hShell, &pid)) {
                     HANDLE hProcess = OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, FALSE, pid);
                     if (hProcess) {
-                        TerminateProcess(hProcess, 1);
+                        // Exit code 0 makes winlogon auto restart explorer. Manually restarting it with CreateProcess somehow makes it launch in file browser mode
+                        TerminateProcess(hProcess, 0);
                         WaitForSingleObject(hProcess, 5000);
                         CloseHandle(hProcess);
                     }
                 }
-                // Winlogon auto restarts explorer after termination
                 // Try registering again now, before explorer registers it
                 sws_WindowSwitcher_UnregisterHotkeys(_this);
                 sws_WindowSwitcher_RegisterHotkeys(_this, NULL);
