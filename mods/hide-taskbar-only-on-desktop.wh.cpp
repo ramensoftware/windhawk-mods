@@ -43,53 +43,6 @@ separately. Each display is evaluated independently.
 - Minimize-aware filtering of animation-session surfaces to avoid delaying
   desktop-only taskbar hiding when the last application is minimized
 
-## Recent Changes
-
-### Version 8.1.38
-
-- Removed redundant `MonitorList` plumbing and now-unused monitor snapshots from the `windows-animations` close-session scanner.
-- Removed an unused intersection output parameter from the cross-monitor geometry helper.
-- No behavioral changes; the tested v8.1.37 taskbar behavior is preserved.
-
-### Version 8.1.37
-
-- Fixed delayed taskbar reappearance after application close when Windows
-  focuses the taskbar after the closing window has already been destroyed.
-- Automatic close-focus suppression now remains active through the normal
-  transition window and no longer requires the departed HWND to remain valid.
-- Preserved explicit keyboard taskbar access when the Windows key is held.
-- Restored the session-0 guard in the tool-mod launcher to match the current
-  Windhawk wiki boilerplate exactly.
-
-### Version 8.1.36
-
-- Removed unused automatic-taskbar-focus bookkeeping that was written and
-  cleared but never read by the state model.
-- Removed redundant early `extern` declarations whose definitions already
-  precede their first use.
-- Replaced the tool-mod launcher section with the current Windhawk wiki
-  boilerplate verbatim, including its documented `CreateProcessInternalW` path.
-- Kept the v8.1.34 application-close handling and v8.1.35 cross-monitor
-  transition behavior unchanged.
-
-### Version 8.1.35
-
-- Prevents primary-display open/close transitions from temporarily hiding a
-  secondary taskbar that has a real application or fullscreen window.
-- Cross-monitor transition protection now applies only to genuinely
-  desktop-only secondary monitors, preserving the independent per-display
-  state model.
-
-### Version 8.1.34
-
-- Prevents the taskbar focus Windows emits automatically after the last
-  application leaves the foreground from being mistaken for Win+T/Win+B.
-- Records the actual application hide/destroy departure for only 250 ms, with process-ID validation to avoid HWND reuse, covering
-  packaged `ApplicationFrameWindow` apps such as Microsoft Store and Settings
-  even when `windows-animations` does not create a close session.
-- Keeps mouse activation, Start menu access, and normal keyboard taskbar
-  navigation unchanged outside that short automatic-focus sequence.
-
 ## Settings
 
 **Extra hover margin (px)** adds to the taskbar-height-based bottom-edge hover
