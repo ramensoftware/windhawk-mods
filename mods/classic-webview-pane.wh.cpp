@@ -108,8 +108,8 @@
 - minListWidth: 200
   $name: Room kept for the file list
   $name:ru: Место для списка файлов
-  $description: "Applies only when Original WebView layout is off. When the window gets so narrow that the file list would be left with less     than this many pixels (at 100% scaling), the pane gives way and the list     gets its room, as in Windows 2000. 0 keeps the pane at any width."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Когда окно становится настолько узким, что списку файлов осталось бы     меньше этого числа пикселей (при масштабе 100%), панель уступает место     списку, как в Windows 2000. 0 - панель остаётся при любой ширине."
+  $description: "Applies only when Original WebView layout is off. When the window gets so narrow that the file list would be left with less than this many pixels (at 100% scaling), the pane gives way and the list gets its room, as in Windows 2000. 0 keeps the pane at any width."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Когда окно становится настолько узким, что списку файлов осталось бы меньше этого числа пикселей (при масштабе 100%), панель уступает место списку, как в Windows 2000. 0 - панель остаётся при любой ширине."
 - position: left
   $name: Position
   $name:ru: Расположение
@@ -142,8 +142,12 @@
 - showItemType: true
   $name: Type and size under the name
   $name:ru: Тип и размер под именем
-  $description: "Applies only when Original WebView layout is off. Add the kind of the item, and its size when it has one, under its name -     the line Windows 2000 put there for a selected file."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Добавлять под именем тип объекта и, если он есть, размер - строку, которую     Windows 2000 показывала для выбранного файла."
+  $description: >-
+    Add the kind of the item, and its size when it has one, under its name -
+    the line Windows 2000 put there for a selected file.
+  $description:ru: >-
+    Добавлять под именем тип объекта и, если он есть, размер - строку, которую
+    Windows 2000 показывала для выбранного файла.
 - showDriveSpace: true
   $name: Drive space chart
   $name:ru: Диаграмма занятого места
@@ -156,23 +160,23 @@
 - usedLabel: 'Used:'
   $name: Caption of the used space
   $name:ru: Подпись занятого места
-  $description: "Applies only when Original WebView layout is off. The default text is shown in Russian on a Russian Windows."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Текст по умолчанию в русской Windows показывается по-русски."
+  $description: The default text is shown in Russian on a Russian Windows.
+  $description:ru: Текст по умолчанию в русской Windows показывается по-русски.
 - freeLabel: 'Free:'
   $name: Caption of the free space
   $name:ru: Подпись свободного места
-  $description: "Applies only when Original WebView layout is off. The default text is shown in Russian on a Russian Windows."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Текст по умолчанию в русской Windows показывается по-русски."
+  $description: The default text is shown in Russian on a Russian Windows.
+  $description:ru: Текст по умолчанию в русской Windows показывается по-русски.
 - totalLabel: 'Capacity:'
   $name: Caption of the capacity
   $name:ru: Подпись ёмкости
-  $description: "Applies only when Original WebView layout is off. The default text is shown in Russian on a Russian Windows."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Текст по умолчанию в русской Windows показывается по-русски."
+  $description: The default text is shown in Russian on a Russian Windows.
+  $description:ru: Текст по умолчанию в русской Windows показывается по-русски.
 - barColorSource: theme
   $name: Bar colour source
   $name:ru: Источник цвета индикатора
-  $description: "Applies only when Original WebView layout is off. Use the selection colour supplied by the current Windows theme, or the     custom colour below."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Использовать цвет выделения, установленный текущей темой Windows, либо     заданный ниже собственный цвет."
+  $description: "Applies only when Original WebView layout is off. Use the selection colour supplied by the current Windows theme, or the custom colour below."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Использовать цвет выделения, установленный текущей темой Windows, либо заданный ниже собственный цвет."
   $options:
   - theme: Windows theme
   - custom: Custom colour
@@ -187,23 +191,37 @@
 - descriptionText: Select an item to view its description.
   $name: Text under the divider
   $name:ru: Текст под разделителем
-  $description: "Applies only when Original WebView layout is off. The line Windows 2000 showed while nothing was selected. The default text is     shown in the wording of the Russian Windows 2000 on a Russian Windows.     Leave empty to omit it."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Строка, которую Windows 2000 показывала, пока ничего не выделено. Текст по     умолчанию в русской Windows показывается в формулировке русской Windows     2000. Оставьте пустым, чтобы убрать её."
+  $description: >-
+    The line Windows 2000 showed while nothing was selected. The default text is
+    shown in the wording of the Russian Windows 2000 on a Russian Windows.
+    Leave empty to omit it.
+  $description:ru: >-
+    Строка, которую Windows 2000 показывала, пока ничего не выделено. Текст по
+    умолчанию в русской Windows показывается в формулировке русской Windows
+    2000. Оставьте пустым, чтобы убрать её.
 - showFolderDescription: true
   $name: Description of a system folder
   $name:ru: Описание системной папки
-  $description: "Applies only when Original WebView layout is off. Show a Windows 2000-style information box whose text is chosen for the     current system folder, such as Documents, This PC or Recycle Bin."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Показывать информационное поле в стиле Windows 2000 с текстом, подходящим     текущей системной папке: «Документы», «Мой компьютер», «Корзина» и другим."
+  $description: >-
+    Show a Windows 2000-style information box whose text is chosen for the
+    current system folder, such as Documents, This PC or Recycle Bin.
+  $description:ru: >-
+    Показывать информационное поле в стиле Windows 2000 с текстом, подходящим
+    текущей системной папке: «Документы», «Мой компьютер», «Корзина» и другим.
 - showSeeAlso: true
   $name: See also links
   $name:ru: Ссылки «Перейти к»
-  $description: "Applies only when Original WebView layout is off. Show the list of links at the bottom of the pane."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Показывать список ссылок внизу панели."
+  $description: Show the list of links at the bottom of the pane.
+  $description:ru: Показывать список ссылок внизу панели.
 - seeAlsoTitle: 'See also:'
   $name: See also caption
   $name:ru: Заголовок списка ссылок
-  $description: "Applies only when Original WebView layout is off. The caption over the links. The default text is shown in the wording of the     Russian Windows 2000 on a Russian Windows."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Заголовок над ссылками. Текст по умолчанию в русской Windows показывается в     формулировке русской Windows 2000 - «Перейти к:»."
+  $description: >-
+    The caption over the links. The default text is shown in the wording of the
+    Russian Windows 2000 on a Russian Windows.
+  $description:ru: >-
+    Заголовок над ссылками. Текст по умолчанию в русской Windows показывается в
+    формулировке русской Windows 2000 - «Перейти к:».
 - seeAlso:
   - - label: My Documents
       $name: Text
@@ -229,13 +247,13 @@
     - target: shell:MyComputerFolder
   $name: Links
   $name:ru: Ссылки
-  $description: "Applies only when Original WebView layout is off. The links under the See also caption."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Ссылки под заголовком «Перейти к»."
+  $description: "In the original layout, only the labels of the three default links (My Documents, My Computer, My Network Places) are used. Custom targets and extra links apply when Original WebView layout is off."
+  $description:ru: "В исходной компоновке используются только подписи трёх стандартных ссылок («Мои документы», «Мой компьютер», «Сетевое окружение»). Собственные адреса и дополнительные ссылки действуют при отключённой Исходной компоновке WebView."
 - underlineLinks: true
   $name: Underline the links
   $name:ru: Подчёркивать ссылки
-  $description: "Applies only when Original WebView layout is off. Keep the links underlined the way the web view of Windows 2000 did, rather     than only under the pointer."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Держать ссылки подчёркнутыми, как в веб-виде Windows 2000, а не только под     курсором."
+  $description: "Applies only when Original WebView layout is off. Keep the links underlined the way the web view of Windows 2000 did, rather than only under the pointer."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Держать ссылки подчёркнутыми, как в веб-виде Windows 2000, а не только под курсором."
 - picture: win2000
   $name: Picture
   $name:ru: Картинка
@@ -271,8 +289,8 @@
 - imagePosition: background
   $name: Where the picture goes
   $name:ru: Где картинка
-  $description: "Applies only when Original WebView layout is off. Windows 2000 had it in the top left corner of the pane, with the icon and     the name drawn over it."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. В Windows 2000 она была в левом верхнем углу панели, а значок и имя     рисовались поверх неё."
+  $description: "Applies only when Original WebView layout is off. Windows 2000 had it in the top left corner of the pane, with the icon and the name drawn over it."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. В Windows 2000 она была в левом верхнем углу панели, а значок и имя рисовались поверх неё."
   $options:
   - background: In the top left corner, behind the icon and the name
   - top: Above the icon and the name
@@ -295,18 +313,18 @@
 - imageSmooth: false
   $name: Smooth the picture when it is scaled
   $name:ru: Сглаживать картинку при масштабировании
-  $description: "Applies only when Original WebView layout is off. Off keeps the pixels as they are, which is what a picture out of Windows     2000 wants. On smooths them, which suits a photograph."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Выключено - пиксели остаются как есть, что и нужно картинке из Windows 2000.     Включено - сглаживать, что подходит фотографии."
+  $description: "Applies only when Original WebView layout is off. Off keeps the pixels as they are, which is what a picture out of Windows 2000 wants. On smooths them, which suits a photograph."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Выключено - пиксели остаются как есть, что и нужно картинке из Windows 2000. Включено - сглаживать, что подходит фотографии."
 - imageBlendWhite: true
   $name: Let the picture's white background through
   $name:ru: Растворять белый фон картинки
-  $description: "Applies only when Original WebView layout is off. Pictures like the Windows 2000 one are drawn on white, which shows as a     white block on a pane that is not white. With this on, a picture without an     alpha channel of its own is multiplied into the background instead: white     leaves it untouched, everything else tints it. Pictures that do carry alpha     are drawn by it either way."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Картинки вроде той, что была в Windows 2000, нарисованы на белом, и на     небелой панели белое лезет прямоугольником. Если включено, картинка без     своего альфа-канала умножается на фон: белое фон не трогает, остальное его     подкрашивает. Картинки с альфа-каналом рисуются по нему в любом случае."
+  $description: "Applies only when Original WebView layout is off. Pictures like the Windows 2000 one are drawn on white, which shows as a white block on a pane that is not white. With this on, a picture without an alpha channel of its own is multiplied into the background instead: white leaves it untouched, everything else tints it. Pictures that do carry alpha are drawn by it either way."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Картинки вроде той, что была в Windows 2000, нарисованы на белом, и на небелой панели белое лезет прямоугольником. Если включено, картинка без своего альфа-канала умножается на фон: белое фон не трогает, остальное его подкрашивает. Картинки с альфа-каналом рисуются по нему в любом случае."
 - titleFontSize: 12
   $name: Size of the name
   $name:ru: Размер имени
-  $description: "Applies only when Original WebView layout is off. Size of the folder or item name in points, at 100% scaling. Windows 2000     set it well above the rest of the pane. 0 keeps the size of the other text."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Размер имени папки или объекта в пунктах при масштабе 100%. В Windows 2000     оно заметно крупнее остального текста в панели. 0 - как остальной текст."
+  $description: "Applies only when Original WebView layout is off. Size of the folder or item name in points, at 100% scaling. Windows 2000 set it well above the rest of the pane. 0 keeps the size of the other text."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Размер имени папки или объекта в пунктах при масштабе 100%. В Windows 2000 оно заметно крупнее остального текста в панели. 0 - как остальной текст."
 - paneBorder: true
   $name: Take the pane inside the border of the file list
   $name:ru: Панель внутри рамки списка файлов
@@ -342,11 +360,11 @@
     Убрать из раскладки панель сведений Windows справа, чтобы новая панель
     осталась единственной. В Windows 2000 панели сведений не было. Действует
     для папок, открытых после изменения.
-- skipControlPanel: false
+- skipControlPanel: true
   $name: Leave the pages of Control Panel items alone
   $name:ru: Не показывать на страницах элементов панели управления
-  $description: "Hide the pane in Control Panel. Off by default so the original Control Panel template is available; the retained custom layout can overlap the existing task column."
-  $description:ru: "Скрывать панель в панели управления. По умолчанию выключено для доступности исходного шаблона; прежнее собственное оформление может перекрывать колонку задач."
+  $description: "Hide the pane on the pages of registered Control Panel items, such as Programs and Features, to avoid overlapping their task column. On by default. The Control Panel folder itself keeps its WebView template either way."
+  $description:ru: "Скрывать панель на страницах зарегистрированных элементов панели управления, например «Программы и компоненты», чтобы не перекрывать их колонку задач. По умолчанию включено. Шаблон самой папки панели управления доступен при любом положении переключателя."
 - backgroundColorSource: theme
   $name: Background colour source
   $name:ru: Источник цвета фона
@@ -411,8 +429,8 @@
 - colorLink: '#0000FF'
   $name: Custom link colour
   $name:ru: Собственный цвет ссылок
-  $description: "Applies only when Original WebView layout is off. The blue of a link, as the web view had it. It is a colour of its own rather     than the system hotlight colour, which classic colour schemes are free to     set to anything and often do."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Синий цвет ссылки, как в веб-виде. Задан отдельным цветом, а не системным     hotlight: классические схемы вольны ставить туда что угодно и часто ставят."
+  $description: "Applies only when Original WebView layout is off. The blue of a link, as the web view had it. It is a colour of its own rather than the system hotlight colour, which classic colour schemes are free to set to anything and often do."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Синий цвет ссылки, как в веб-виде. Задан отдельным цветом, а не системным hotlight: классические схемы вольны ставить туда что угодно и часто ставят."
 - dividerColorSource: custom
   $name: Divider colour source
   $name:ru: Источник цвета разделителя
@@ -432,8 +450,8 @@
 - divider: win2000
   $name: Divider
   $name:ru: Разделитель
-  $description: "Applies only when Original WebView layout is off. The line under the name. Windows 2000 drew it from a picture, a bar in the     four colours of the Windows logo, which comes built into the mod."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Линия под именем. Windows 2000 рисовала её из картинки - полоски в четырёх     цветах логотипа Windows; она встроена в мод."
+  $description: "Applies only when Original WebView layout is off. The line under the name. Windows 2000 drew it from a picture, a bar in the four colours of the Windows logo, which comes built into the mod."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Линия под именем. Windows 2000 рисовала её из картинки - полоски в четырёх цветах логотипа Windows; она встроена в мод."
   $options:
   - win2000: Windows 2000 colour bar
   - file: The divider picture file below
@@ -445,13 +463,13 @@
 - dividerImagePath: ''
   $name: Divider picture file
   $name:ru: Файл картинки разделителя
-  $description: "Applies only when Original WebView layout is off. Used when the divider is set to a file. It is stretched across the pane and     keeps its own height."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Используется, если для разделителя выбран файл. Картинка растягивается на     всю ширину панели и сохраняет свою высоту."
+  $description: "Applies only when Original WebView layout is off. Used when the divider is set to a file. It is stretched across the pane and keeps its own height."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Используется, если для разделителя выбран файл. Картинка растягивается на всю ширину панели и сохраняет свою высоту."
 - dividerGradient: true
   $name: Fade the divider out
   $name:ru: Разделитель с переходом в фон
-  $description: "Applies only when Original WebView layout is off. The line under the name of Windows 2000 was a gradient that started in     colour on the left and faded into the background on the right, not a line     of one colour all the way across."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Линия под именем в Windows 2000 была градиентом: слева цветная, справа     уходила в фон, а не сплошной одноцветной через всю панель."
+  $description: "Applies only when Original WebView layout is off. The line under the name of Windows 2000 was a gradient that started in colour on the left and faded into the background on the right, not a line of one colour all the way across."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Линия под именем в Windows 2000 была градиентом: слева цветная, справа уходила в фон, а не сплошной одноцветной через всю панель."
 */
 // ==/WindhawkModSettings==
 
@@ -7160,6 +7178,11 @@ bool QueryPrinterEta(const std::wstring& name,PrinterEta& answer) noexcept {
 
 // Independent property reading with a valid zero size and 64-bit file sizes.
 std::wstring ItemSizeText(IShellItem2* properties,FolderItem* item,IShellFolderViewDual* view) {
+    SFGAOF attributes=0;
+    if(properties && SUCCEEDED(properties->GetAttributes(SFGAO_FOLDER,&attributes)) &&
+       (attributes&SFGAO_FOLDER)) return {};
+    VARIANT_BOOL folder=VARIANT_FALSE;
+    if(item && SUCCEEDED(item->get_IsFolder(&folder)) && folder!=VARIANT_FALSE) return {};
     ULONGLONG bytes=0;
     if(properties && SUCCEEDED(properties->GetUInt64(PKEY_Size,&bytes))) return FormatBytes(bytes);
     LONG legacyBytes=0;
@@ -7616,6 +7639,7 @@ public:
     void AcceptPreview();
     void ClearPreview();
     void ResetView();
+    void SuspendView();
     void PreviewStatus(ImgPreviewState state,SIZE size={});
     void EnsureViewer();
     void DestroyViewer();
@@ -10398,6 +10422,26 @@ static bool IsCsidl(IShellItem* item,int csidl) {
               ILIsEqual(current,expected);
     CoTaskMemFree(current); CoTaskMemFree(expected); return same;
 }
+static bool IsDesktopFolder(IShellItem* item) {
+    if(!item) return false;
+    if(IsCsidl(item,CSIDL_DESKTOP) || IsCsidl(item,CSIDL_DESKTOPDIRECTORY) ||
+       IsCsidl(item,CSIDL_COMMON_DESKTOPDIRECTORY)) return true;
+    // This PC and redirected-folder aliases can use a different PIDL for the
+    // same Desktop directory. Recognize the known-folder path before accepting
+    // the view's remembered Pictures type.
+    auto path=DisplayName(item,SIGDN_FILESYSPATH);
+    while(path.size()>3 && (path.back()==L'\\' || path.back()==L'/')) path.pop_back();
+    if(path.empty()) return false;
+    for(const KNOWNFOLDERID* folder:{&FOLDERID_Desktop,&FOLDERID_PublicDesktop}) {
+        PWSTR value=nullptr;
+        const HRESULT status=SHGetKnownFolderPath(*folder,KF_FLAG_DONT_VERIFY,nullptr,&value);
+        std::wstring expected=SUCCEEDED(status) && value ? value : L"";
+        CoTaskMemFree(value);
+        while(expected.size()>3 && (expected.back()==L'\\' || expected.back()==L'/')) expected.pop_back();
+        if(!expected.empty() && SamePath(path.c_str(),expected.c_str())) return true;
+    }
+    return false;
+}
 ReferenceContent::~ReferenceContent() {
     CancelPreview(lifetime,true);
     CancelPrinterInfo(printerLifetime,true);
@@ -10406,6 +10450,17 @@ ReferenceContent::~ReferenceContent() {
 void ReferenceContent::ClearPreview() {
     zoom.SetBitmap(nullptr); detached.SetBitmap(nullptr);
     m_pane.SetThumbnail(nullptr); preview.reset();
+}
+void ReferenceContent::SuspendView() {
+    // Keep the last complete picture until the replacement view is ready,
+    // but release the retired Shell objects and reject all actions on it.
+    viewReady=false; forceRefresh=true;
+    CancelPrinterInfo(printerLifetime); CancelPreview(lifetime);
+    pendingSince=0; printable=false;
+    navigate={}; isActiveView={}; m_selection.Release(); m_spView.Release();
+    zoom.SetInteractionEnabled(false);
+    if(toolbar) EnableWindow(toolbar,FALSE);
+    detached.Destroy();
 }
 void ReferenceContent::ResetView() {
     viewReady=false;
@@ -10476,8 +10531,7 @@ void ReferenceContent::Refresh(IShellView* view,IShellItem* folder,HWND hwnd,boo
         m_pane.SetFontSmoothingDisabled(options->disableSmoothing);
         m_pane.SetDimensionsVisible(options->metadata);
         m_pane.EnsureResources();
-        m_isDesktop=IsCsidl(folder,CSIDL_DESKTOP) || IsCsidl(folder,CSIDL_DESKTOPDIRECTORY) ||
-                    IsCsidl(folder,CSIDL_COMMON_DESKTOPDIRECTORY);
+        m_isDesktop=IsDesktopFolder(folder);
         m_isMyComputer=options->specialFolders && IsCsidl(folder,CSIDL_DRIVES);
         m_isMyDocuments=options->specialFolders && IsCsidl(folder,CSIDL_PERSONAL);
         m_isMyNetworkPlaces=options->specialFolders && IsCsidl(folder,CSIDL_NETWORK);
@@ -10574,6 +10628,7 @@ void ReferenceContent::AcceptPreview() {
     InvalidateRect(window,nullptr,FALSE);
 }
 bool ReferenceContent::SelectionMatches() const {
+    if(!viewReady) return false;
     if(isActiveView && !isActiveView(m_spView)) return false;
     CComQIPtr<IFolderView2> view(m_spView);
     CComPtr<IShellItemArray> selection; DWORD count=0; CComPtr<IShellItem> item;
@@ -10583,6 +10638,7 @@ bool ReferenceContent::SelectionMatches() const {
            SamePath(DisplayName(item,SIGDN_FILESYSPATH).c_str(),previewPath.c_str());
 }
 HRESULT ReferenceContent::CanonicalVerb(UINT items,PCWSTR verb,bool invoke,HWND owner) {
+    if(!viewReady) return S_FALSE;
     if (!m_spView) return E_FAIL;
     if(isActiveView && !isActiveView(m_spView)) return S_FALSE;
     if (items==SVGIO_SELECTION) {
@@ -10624,6 +10680,7 @@ HRESULT ReferenceContent::CanonicalVerb(UINT items,PCWSTR verb,bool invoke,HWND 
     DestroyMenu(popup); return found ? hr : FAILED(hr) ? hr : S_FALSE;
 }
 void ReferenceContent::Activate(int index) {
+    if(!viewReady) return;
     if(isActiveView && !isActiveView(m_spView)) return;
     const auto* selected=m_pane.Line(index); if (!selected) return;
     const PaneLine line=*selected; // nested Shell calls can trigger a refresh
@@ -10749,19 +10806,28 @@ void ReferenceContent::DestroyViewer() {
 }
 void ReferenceContent::LayoutViewer(const RECT& client,int dpi,bool visible) {
     visible=visible && UsesImgViewProfile() && !bannerHeight && CurrentBarricade()==BarricadeMode::None;
-    if (zoom.Window()) ShowWindow(zoom.Window(),visible ? SW_SHOWNOACTIVATE : SW_HIDE);
-    if (toolbar) ShowWindow(toolbar,visible ? SW_SHOWNOACTIVATE : SW_HIDE);
-    if (!visible || !toolbar) return;
-    RECT logical={0,0,MulDiv(client.right,dpi ? 96 : 1,dpi ? dpi : 1),MulDiv(client.bottom,96,dpi)};
+    if(!visible || !toolbar) {
+        if(zoom.Window()) ShowWindow(zoom.Window(),SW_HIDE);
+        if(toolbar) ShowWindow(toolbar,SW_HIDE);
+        return;
+    }
+    if(dpi<=0) dpi=96;
+    RECT logical={MulDiv(client.left,96,dpi),MulDiv(client.top,96,dpi),
+        MulDiv(client.right,96,dpi),MulDiv(client.bottom,96,dpi)};
     RECT canvas=m_pane.ImgPreviewRect(logical);
     RECT pixels={MulDiv(canvas.left,dpi,96),MulDiv(canvas.top,dpi,96),
                  MulDiv(canvas.right,dpi,96),MulDiv(canvas.bottom,dpi,96)};
     SetWindowPos(zoom.Window(),HWND_TOP,pixels.left,pixels.top,max(0L,pixels.right-pixels.left),
-                 max(0L,pixels.bottom-pixels.top),SWP_NOACTIVATE);
+                 max(0L,pixels.bottom-pixels.top),SWP_NOACTIVATE|SWP_NOREDRAW);
     const int height=MulDiv(30,dpi,96);
-    SetWindowPos(toolbar,HWND_TOP,pixels.left,pixels.bottom,max(0L,pixels.right-pixels.left),height,SWP_NOACTIVATE);
+    SetWindowPos(toolbar,HWND_TOP,pixels.left,pixels.top-height,
+        max(0L,pixels.right-pixels.left),height,SWP_NOACTIVATE|SWP_NOREDRAW);
+    zoom.SetInteractionEnabled(viewReady && g_webOptions.load()->zoom);
+    EnableWindow(toolbar,viewReady);
+    ShowWindow(zoom.Window(),SW_SHOWNOACTIVATE); ShowWindow(toolbar,SW_SHOWNOACTIVATE);
 }
 void ReferenceContent::Command(UINT command,HWND source) {
+    if(!viewReady) return;
     const auto options=g_webOptions.load();
     if (!options->preview || !UsesImgViewProfile()) return;
     if (command==ID_WIN2K_IMGVIEW_PRINT) {
@@ -11269,7 +11335,7 @@ HRESULT WINAPI SetXML_Hook(void* pThis,
     }
 
     std::wstring modified(pszXML, viewHost);
-    modified += L"<Element id=\"atom(ClassicWebViewBanner)\" layoutpos=\"top\" height=\"0rp\"/>";
+    modified += L"<Element id=\"atom(ClassicWebViewBanner)\" layoutpos=\"top\" height=\"0rp\" visible=\"false\" background=\""+g_settings.background.dui+L"\"/>";
     modified += g_settings.spacerXml;
     modified += viewHost;
 
@@ -11325,6 +11391,7 @@ struct Pane {
     HWND defView = nullptr;  // the folder view the contents come from
     ce::win2kwebview::ReferenceContent reference;
     unsigned referenceRetries=12;
+    bool referencePending=false,referenceUpdating=false,referenceLayoutCommitting=false,referenceLayoutChanged=false;
     HWND tooltip=nullptr;
     int hotTip=-1, heldLink=-1, syncedBannerHeight=0;
     std::wstring tooltipText;
@@ -11893,6 +11960,7 @@ static SystemFolderDescription DescribeSystemFolder(IShellItem* item,
 
 static void LayOutPane(HWND paneWindow);
 static void RefreshReferencePane(Pane*,bool force=false);
+static void BeginReferenceNavigation(Pane*);
 
 static void RefreshPane(Pane* pane) {
     if (g_webOptions.load()->classicLayout) { RefreshReferencePane(pane); return; }
@@ -13231,6 +13299,8 @@ struct DuiApi {
     HRESULT(__cdecl* SetWidth)(void* element, int width) = nullptr;
     int(__cdecl* GetHeight)(void* element)=nullptr;
     HRESULT(__cdecl* SetHeight)(void* element,int height)=nullptr;
+    bool(__cdecl* GetVisible)(void* element)=nullptr;
+    HRESULT(__cdecl* SetVisible)(void* element,bool visible)=nullptr;
     HWND(__cdecl* GetHWND)(void* hwndElement) = nullptr;
 };
 
@@ -13256,6 +13326,8 @@ static void LoadDuiApi(HMODULE dui70) {
         dui70, "?SetWidth@Element@DirectUI@@QEAAJH@Z");
     g_dui.GetHeight=(decltype(g_dui.GetHeight))GetProcAddress(dui70,"?GetHeight@Element@DirectUI@@QEAAHXZ");
     g_dui.SetHeight=(decltype(g_dui.SetHeight))GetProcAddress(dui70,"?SetHeight@Element@DirectUI@@QEAAJH@Z");
+    g_dui.GetVisible=(decltype(g_dui.GetVisible))GetProcAddress(dui70,"?GetVisible@Element@DirectUI@@QEAA_NXZ");
+    g_dui.SetVisible=(decltype(g_dui.SetVisible))GetProcAddress(dui70,"?SetVisible@Element@DirectUI@@QEAAJ_N@Z");
     g_dui.GetHWND = (decltype(g_dui.GetHWND))GetProcAddress(
         dui70, "?GetHWND@HWNDElement@DirectUI@@UEAAPEAUHWND__@@XZ");
     g_dui.ok = g_dui.StrToID && g_dui.FindDescendent && g_dui.GetWidth &&
@@ -13300,7 +13372,7 @@ static void* FindSpacer(HWND host,PCWSTR name=L"ClassicWebViewPane") {
 static int ReferencePanelWidth(Pane* pane);
 static RECT ReferenceAvailableRect(Pane* pane);
 static bool PaneFits(Pane* pane, HWND viewWindow) {
-    if (g_webOptions.load()->classicLayout) return pane->reference.viewReady && ReferencePanelWidth(pane)>0;
+    if (g_webOptions.load()->classicLayout) return (pane->reference.viewReady || pane->referencePending) && ReferencePanelWidth(pane)>0;
     if (g_settings.minListWidth <= 0 || !g_dui.ok) {
         return true;
     }
@@ -13460,17 +13532,27 @@ static void OnSyncSpacer(Pane* pane) {
     bool bannerChanged=false;
     const int oldBannerHeight=pane->syncedBannerHeight;
     pane->syncedBannerHeight=0;
-    if (g_dui.GetHeight && g_dui.SetHeight) {
+    if (g_dui.GetHeight && g_dui.SetHeight && g_dui.GetVisible && g_dui.SetVisible) {
         if (void* banner=FindSpacer(pane->host,L"ClassicWebViewBanner")) {
-            const int height=g_webOptions.load()->classicLayout && !pane->suppressed ? MulDiv(pane->reference.bannerHeight,dpi,96) : 0;
-            if (g_dui.GetHeight(banner)!=height) {
-                pane->spacerTransition=true; g_dui.SetHeight(banner,height); pane->spacerTransition=false;
+            const auto bannerOptions=g_webOptions.load();
+            const int height=bannerOptions->classicLayout && bannerOptions->profile==1 &&
+                pane->reference.viewReady && !pane->suppressed ? MulDiv(pane->reference.bannerHeight,dpi,96) : 0;
+            const bool visible=height>0;
+            if (g_dui.GetHeight(banner)!=height || g_dui.GetVisible(banner)!=visible) {
+                pane->spacerTransition=true;
+                g_dui.SetVisible(banner,false);
+                const HRESULT sized=g_dui.SetHeight(banner,height);
+                if(SUCCEEDED(sized) && g_dui.GetHeight(banner)==height && visible)
+                    g_dui.SetVisible(banner,true);
+                pane->spacerTransition=false;
                 bannerChanged=true;
             }
-            if(g_dui.GetHeight(banner)==height) pane->syncedBannerHeight=height;
+            if(g_dui.GetHeight(banner)==height && g_dui.GetVisible(banner)==visible)
+                pane->syncedBannerHeight=height;
         }
     }
     bannerChanged= bannerChanged || oldBannerHeight!=pane->syncedBannerHeight;
+    if(bannerChanged && pane->referenceUpdating) pane->referenceLayoutChanged=true;
     // A new view starts collapsed, even when the preceding one was expanded.
     int current = g_dui.GetWidth(spacer);
     bool wasCollapsed = pane->spacerCollapsed;
@@ -13520,6 +13602,7 @@ static void OnSyncSpacer(Pane* pane) {
         LayOutPane(pane->hwnd);
     }
 
+    if(pane->referenceUpdating) { pane->referenceLayoutChanged=true; return; }
     if (viewWindow) {
         RepaintFileList(viewWindow);
     }
@@ -13538,22 +13621,39 @@ static void OnSyncSpacer(Pane* pane) {
 }
 
 using namespace ce::win2kwebview;
+static void BeginReferenceNavigation(Pane* pane) {
+    pane->referencePending=g_webOptions.load()->classicLayout && !pane->suppressed &&
+        IsShown(pane->hwnd) && pane->spacerReady && !pane->spacerCollapsed &&
+        pane->reference.sideWidth>0 && !pane->reference.bannerHeight &&
+        pane->reference.CurrentBarricade()==BarricadeMode::None;
+    if(pane->referencePending) pane->reference.SuspendView();
+    else pane->reference.ResetView();
+    pane->heldLink=-1; pane->hotLink=-1; pane->hotTip=-1;
+    pane->reference.m_pane.SetPressedButton(-1);
+    if(GetCapture()==pane->hwnd) ReleaseCapture();
+    KillTimer(pane->hwnd,kPreviewStatusTimer); KillTimer(pane->hwnd,kPrinterRefreshTimer);
+}
 static void RefreshReferencePane(Pane* pane,bool force) {
-    if (!pane->defView || g_unloading) return;
+    if (!pane->defView || g_unloading || pane->referenceUpdating) return;
     CComPtr<IShellBrowser> browser=GetShellBrowser(pane->defView);
     CComPtr<IShellView> view; CComPtr<IShellItem> folder;
     if (browser) browser->QueryActiveShellView(&view);
     if(IsExplorerFolderView(pane->defView) && ShellViewMatchesWindow(view,pane->defView))
         folder.Attach(FolderItemFromView(view));
     if (!view || !folder) {
-        pane->reference.ResetView();
-        ShowWindow(pane->hwnd,SW_HIDE); LayOutPane(pane->hwnd);
+        if(!pane->referencePending) BeginReferenceNavigation(pane);
         if(pane->referenceRetries>0) {
             --pane->referenceRetries;
             SetTimer(pane->hwnd,kRefreshTimer,120,nullptr);
+        } else {
+            pane->referencePending=false; pane->reference.ResetView();
         }
+        LayOutPane(pane->hwnd);
         return;
     }
+    // Shell/property callbacks can run nested message loops. Hold paints and
+    // layout until both the new model and its final reservation are ready.
+    pane->referenceUpdating=true; pane->referenceLayoutChanged=false;
     pane->referenceRetries=12;
     const auto name=GetItemText(folder,SIGDN_NORMALDISPLAY);
     const auto key=GetItemText(folder,SIGDN_DESKTOPABSOLUTEPARSING);
@@ -13575,6 +13675,7 @@ static void RefreshReferencePane(Pane* pane,bool force) {
         return currentIdentity && currentIdentity.p==expectedIdentity.p;
     };
     pane->reference.Refresh(view,folder,pane->hwnd,force);
+    pane->referencePending=false;
     KillTimer(pane->hwnd,kPreviewStatusTimer);
     if(pane->reference.pendingSince) {
         const ULONGLONG elapsed=GetTickCount64()-pane->reference.pendingSince;
@@ -13586,7 +13687,14 @@ static void RefreshReferencePane(Pane* pane,bool force) {
     // Existing switches still apply in the faithful layout.
     if (!g_settings.showDriveSpace) pane->reference.m_pane.SetCapacityPie(-1);
     pane->suppressed=g_settings.skipControlPanel && IsControlPanelFolder(pane->defView);
-    LayOutPane(pane->hwnd);
+    pane->referenceLayoutCommitting=true;
+    OnSyncSpacer(pane); LayOutPane(pane->hwnd);
+    pane->referenceLayoutCommitting=false; pane->referenceUpdating=false;
+    if(pane->referenceLayoutChanged) {
+        const HWND viewWindow=GetHostChildOf(pane->host,pane->defView);
+        if(viewWindow) RepaintFileList(viewWindow);
+    }
+    RedrawWindow(pane->hwnd,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW|RDW_ALLCHILDREN);
 }
 static void SetReferenceStatus(Pane* pane,int index) {
     CComPtr<IShellBrowser> browser=GetShellBrowser(pane->defView);
@@ -13614,10 +13722,12 @@ static void SetReferenceStatus(Pane* pane,int index) {
     }
 }
 static int ReferenceLinkAt(Pane* pane,POINT point) {
+    if(!pane->reference.viewReady) return -1;
     point.x=MulDiv(point.x,96,pane->dpi); point.y=MulDiv(point.y,96,pane->dpi);
     return pane->reference.m_pane.HitTestLink(point);
 }
 static int ReferenceTooltipAt(Pane* pane,POINT point) {
+    if(!pane->reference.viewReady) return -1;
     point.x=MulDiv(point.x,96,pane->dpi); point.y=MulDiv(point.y,96,pane->dpi);
     return pane->reference.m_pane.HitTestTooltip(point);
 }
@@ -13647,14 +13757,36 @@ static int ReferencePanelWidth(Pane* pane) {
     if (pane->reference.CurrentBarricade()!=BarricadeMode::None) pane->reference.bannerHeight=0;
     return panel;
 }
+static RECT ReferencePaneContentRect(const Pane* pane,const RECT& client) {
+    RECT content=client;
+    if(g_settings.paneBorder && !g_settings.removeViewBorder && !pane->reference.bannerHeight) {
+        // The pane covers the adjacent edge of the list. Keep the other three
+        // edges and their insets exactly as in the pre-viewer layout.
+        const int horizontal=GetSystemMetricsForDpi(SM_CXEDGE,pane->dpi);
+        const int vertical=GetSystemMetricsForDpi(SM_CYEDGE,pane->dpi);
+        if(g_settings.onRight) content.right-=horizontal;
+        else content.left+=horizontal;
+        content.top+=vertical; content.bottom-=vertical;
+        content.right=std::max(content.left,content.right);
+        content.bottom=std::max(content.top,content.bottom);
+    }
+    return content;
+}
 static void PaintReferencePane(Pane* pane,HDC target,const RECT& client) {
     const int width=client.right-client.left,height=client.bottom-client.top;
     if (width<=0 || height<=0) return;
     HDC dc=CreateCompatibleDC(target); HBITMAP buffer=CreateCompatibleBitmap(target,width,height);
     if (!dc || !buffer) { if(dc) DeleteDC(dc); if(buffer) DeleteObject(buffer); return; }
     const auto old=SelectObject(dc,buffer);
-    const RECT logical{0,0,MulDiv(width,96,pane->dpi),MulDiv(height,96,pane->dpi)};
+    HBRUSH background=CreateSolidBrush(g_settings.background.Get());
+    FillRect(dc,&client,background); DeleteObject(background);
+    const RECT content=ReferencePaneContentRect(pane,client);
+    const RECT logical{MulDiv(content.left,96,pane->dpi),MulDiv(content.top,96,pane->dpi),
+        MulDiv(content.right,96,pane->dpi),MulDiv(content.bottom,96,pane->dpi)};
+    const int saved=SaveDC(dc);
+    if(!saved) { SelectObject(dc,old); DeleteObject(buffer); DeleteDC(dc); return; }
     SetMapMode(dc,MM_ANISOTROPIC); SetWindowExtEx(dc,96,96,nullptr); SetViewportExtEx(dc,pane->dpi,pane->dpi,nullptr);
+    IntersectClipRect(dc,logical.left,logical.top,logical.right,logical.bottom);
     auto& reference=pane->reference;
     reference.m_pane.EnsureResources();
     {
@@ -13683,10 +13815,14 @@ static void PaintReferencePane(Pane* pane,HDC target,const RECT& client) {
             reference.m_pane.Paint(dc,logical,96);
         }
     }
-    SetMapMode(dc,MM_TEXT);
+    RestoreDC(dc,saved);
+    if(g_settings.paneBorder && !g_settings.removeViewBorder && !reference.bannerHeight) {
+        RECT frame=client;
+        DrawEdge(dc,&frame,EDGE_SUNKEN,(g_settings.onRight ? BF_RIGHT : BF_LEFT)|BF_TOP|BF_BOTTOM);
+    }
     BitBlt(target,0,0,width,height,dc,0,0,SRCCOPY);
     SelectObject(dc,old); DeleteObject(buffer); DeleteDC(dc);
-    reference.LayoutViewer(client,pane->dpi,IsWindowVisible(pane->hwnd));
+    reference.LayoutViewer(content,pane->dpi,IsWindowVisible(pane->hwnd));
 }
 
 static LRESULT CALLBACK PaneWndProc(HWND hWnd,
@@ -13709,6 +13845,7 @@ static LRESULT CALLBACK PaneWndProc(HWND hWnd,
         }
 
         case WM_PAINT: {
+            if(pane && pane->referenceUpdating) return 0;
             if (pane) {
                 PAINTSTRUCT paint;
                 HDC dc = BeginPaint(hWnd, &paint);
@@ -13899,7 +14036,10 @@ static LRESULT CALLBACK PaneWndProc(HWND hWnd,
             if (pane && pane->host) {
                 if (void* spacer = FindSpacer(pane->host)) {
                     g_dui.SetWidth(spacer, 0);
-                    if (g_dui.SetHeight) if (void* banner=FindSpacer(pane->host,L"ClassicWebViewBanner")) g_dui.SetHeight(banner,0);
+                    if (void* banner=FindSpacer(pane->host,L"ClassicWebViewBanner")) {
+                        if(g_dui.SetVisible) g_dui.SetVisible(banner,false);
+                        if(g_dui.SetHeight) g_dui.SetHeight(banner,0);
+                    }
                 }
             }
             DestroyWindow(hWnd);
@@ -14215,7 +14355,8 @@ static void LayOutPane(HWND paneWindow) {
         return;
     }
 
-    if (g_webOptions.load()->classicLayout && !pane->reference.viewReady) {
+    if(pane->referenceUpdating && !pane->referenceLayoutCommitting) return;
+    if (g_webOptions.load()->classicLayout && !pane->reference.viewReady && !pane->referencePending) {
         ShowWindow(paneWindow,SW_HIDE); SyncSpacer(pane); return;
     }
     if (pane->suppressed) {
@@ -14279,7 +14420,8 @@ static void LayOutPane(HWND paneWindow) {
     // left edge of its frame actually covers it.
     SetWindowPos(paneWindow, HWND_TOP, rect.left, rect.top,
                  rect.right - rect.left, rect.bottom - rect.top,
-                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW |
+                     (pane->referenceUpdating ? SWP_NOREDRAW|SWP_NOCOPYBITS : 0));
 }
 
 // -----------------------------------------------------------------------------
@@ -14375,7 +14517,7 @@ static void AttachToDefViewOnItsThread(HWND defView) {
     if (!paneWindow) {
         paneWindow = CreateWindowExW(
             0, kPaneClassName, nullptr,
-            WS_CHILD | WS_CLIPSIBLINGS, 0, 0, 0, 0, host, nullptr,
+            WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN, 0, 0, 0, 0, host, nullptr,
             GetModuleHandleW(nullptr), nullptr);
         if (!paneWindow) {
             Wh_Log(L"The pane window could not be created");
@@ -14393,14 +14535,16 @@ static void AttachToDefViewOnItsThread(HWND defView) {
 
     if (pane->defView != defView) {
         if(pane->defView) RemovePropW(pane->defView,kPaneProperty);
-        pane->reference.ResetView();
+        BeginReferenceNavigation(pane);
         pane->referenceRetries=12;
         // Navigation can reuse the host and pane with a new, not yet laid
         // out view. Its spacer must be checked before reusing a visible pane.
-        pane->spacerReady = false;
-        pane->spacerCollapsed = true;
+        if(!pane->referencePending) {
+            pane->spacerReady = false;
+            pane->spacerCollapsed = true;
+            ShowWindow(paneWindow, SW_HIDE);
+        }
         pane->spacerRetries = kSpacerRetries;
-        ShowWindow(paneWindow, SW_HIDE);
     }
     pane->host = host;
     pane->defView = defView;
@@ -14412,7 +14556,8 @@ static void AttachToDefViewOnItsThread(HWND defView) {
         g_settings.skipControlPanel && IsControlPanelFolder(defView);
 
     ApplyViewBorder(defView);
-    LayOutPane(paneWindow);
+    if(g_webOptions.load()->classicLayout) RefreshReferencePane(pane,false);
+    else LayOutPane(paneWindow);
 
     // The view has only just been created; it needs a moment before it can
     // answer for its folder.
