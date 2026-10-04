@@ -2,7 +2,7 @@
 // @id              acrylic-color-glows
 // @name            Acrylic Color Glows
 // @description     Animated light effects behind selected translucent windows
-// @version         0.4.2
+// @version         0.5.0
 // @author          HaVeN80
 // @github          https://github.com/haven80
 // @include         windhawk.exe
@@ -13,9 +13,6 @@
 // ==WindhawkModReadme==
 /*
 # Acrylic Color Glows
-
-![Acrylic Glow](https://i.imgur.com/qvqqV2I.png)
-[Watch the overview video in full quality](https://i.imgur.com/huCSr8H.mp4)
 
 Animated light effects behind the windows you choose: drifting glows, sweeping
 light beams, orbs moving in the directions you pick, or flowing waves. The
@@ -57,6 +54,23 @@ reduce that work; fewer moving windows do:
 
 Frozen effects resume exactly where they stopped. When nothing is moving, the
 shared clock stops too.
+
+## Audio reactivity
+
+When **React to audio** is on, every effect speeds up while sound is playing:
+"Cycle duration" is used in silence and "Cycle duration at full volume" at the
+loudest level, with smooth transitions in between. The effect speeds up
+quickly and calms down gently when the sound stops.
+
+Only the peak level of the default output device is read, the same value that
+drives the bar in the Windows volume mixer. No audio is recorded, analyzed or
+sent anywhere, and the microphone is never used. The level is read only while
+an effect is moving, and the mod follows changes of the default device, for
+example when headphones are plugged in.
+
+While it's on, the mod advances the motion itself, about 60 times per second
+(about 30 with reduced smoothness), instead of leaving it to the compositor.
+If the effect barely reacts at low volume, raise the sensitivity.
 
 The effect sits behind the window's blur, so fine details are softened: large,
 slow, soft shapes work best. Speeds are rounded very slightly so that every
@@ -149,6 +163,17 @@ tooltips, menus, flyouts and drop-down lists are never decorated.
 - seconds: 12
   $name: Cycle duration (seconds)
   $description: 2 to 120. Higher values make every effect slower.
+- audio:
+  - reactive: false
+    $name: React to audio
+    $description: Speeds up the effect while sound is playing. Only the output level is read, never the audio itself.
+  - fastestSeconds: 3
+    $name: Cycle duration at full volume (seconds)
+    $description: 1 to 120. Shorter than "Cycle duration" makes the effect faster with sound.
+  - sensitivity: 100
+    $name: Sensitivity (%)
+    $description: A percentage from 25 to 400 (100 = normal). Raise it if the effect barely reacts at low volume.
+  $name: Audio reactivity
 - opacity: 32
   $name: Intensity (1-100)
 - diameter: 380
@@ -242,6 +267,7 @@ tooltips, menus, flyouts and drop-down lists are never decorated.
 #include <dwmapi.h>
 #include <shellapi.h>
 #include <shellscalingapi.h>
+#include <mmdeviceapi.h>
 
 #include <algorithm>
 #include <array>
@@ -300,8 +326,15 @@ constexpr UINT kSettleDelayMs = 250;
 constexpr int kFadeInMs = 180;
 constexpr UINT_PTR kPollTimerId = 1;
 constexpr UINT_PTR kSettleTimerId = 2;
-constexpr UINT_PTR kFrameTimerId = 3;   // Reduced smoothness only.
-constexpr UINT kFrameIntervalMs = 33;
+constexpr UINT_PTR kFrameTimerId = 3;  // Clock advanced by the worker.
+// USER timers fire on the system tick (15.6 ms by default), so these land on
+// one and two ticks: about 64 and 32 updates per second.
+constexpr UINT kFrameIntervalMs = 15;
+constexpr UINT kReducedFrameIntervalMs = 30;
+constexpr double kMaxFrameStepSeconds = 0.25;  // Don't leap ahead after a stall.
+constexpr double kAudioAttackSeconds = 0.12;   // Level smoothing when it rises.
+constexpr double kAudioReleaseSeconds = 0.9;   // ...and when it falls.
+constexpr ULONGLONG kAudioRetryMs = 3000;      // Retry a missing output device.
 constexpr UINT kRefreshMessage = WM_APP + 1;
 constexpr UINT kSettingsMessage = WM_APP + 2;
 constexpr int kMinTargetSize = 32;             // Physical pixels.
@@ -388,6 +421,25 @@ constexpr GUID kVirtualDesktopManagerClsid = {
 constexpr GUID kVirtualDesktopManagerIid = {
     0xA5CD92FF, 0x29BE, 0x454C, {0x8D, 0x04, 0xD8, 0x28, 0x79, 0xFB, 0x3F, 0x1B}};
 
+// IAudioMeterInformation. The compiler's endpointvolume.h only forward-declares
+// it, so the documented layout is declared here.
+struct AudioMeterInformation : ::IUnknown {
+    virtual HRESULT STDMETHODCALLTYPE GetPeakValue(float* peak) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetMeteringChannelCount(UINT* channelCount) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetChannelsPeakValues(UINT32 channelCount,
+                                                            float* peakValues) = 0;
+    virtual HRESULT STDMETHODCALLTYPE QueryHardwareSupport(DWORD* hardwareSupportMask) = 0;
+};
+
+// MMDeviceEnumerator, IMMDeviceEnumerator and IAudioMeterInformation, so the
+// mod doesn't need the uuid library.
+constexpr GUID kMMDeviceEnumeratorClsid = {
+    0xBCDE0395, 0xE52F, 0x467C, {0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E}};
+constexpr GUID kMMDeviceEnumeratorIid = {
+    0xA95664D2, 0x9614, 0x4F35, {0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6}};
+constexpr GUID kAudioMeterInformationIid = {
+    0xC02216F6, 0x8C67, 0x4B5B, {0x9D, 0x00, 0xD0, 0x08, 0xE7, 0x3E, 0x00, 0x64}};
+
 // DispatcherQueueOptions / CreateDispatcherQueueController
 struct DispatcherQueueOptionsAbi {
     DWORD dwSize;
@@ -439,6 +491,11 @@ struct Settings {
         bool reduceMotion = true;
         bool transparency = true;
     } power;
+    struct {
+        bool reactive = false;
+        int fastestSeconds = 3;
+        int sensitivity = 100;
+    } audio;
 };
 
 // Owned by the worker thread: loaded and read only there.
@@ -458,6 +515,7 @@ struct Layout {
     int waveAmplitude;
     int waveLength;
     bool reducedSmoothness;
+    bool audioReactive;  // Changes how the clock is driven.
 
     bool operator==(Layout const& other) const {
         return effect == other.effect && seconds == other.seconds &&
@@ -465,7 +523,8 @@ struct Layout {
                beamOrigin == other.beamOrigin && beamSweep == other.beamSweep &&
                orbs == other.orbs && orbEdges == other.orbEdges &&
                waveAmplitude == other.waveAmplitude && waveLength == other.waveLength &&
-               reducedSmoothness == other.reducedSmoothness;
+               reducedSmoothness == other.reducedSmoothness &&
+               audioReactive == other.audioReactive;
     }
     bool operator!=(Layout const& other) const { return !(*this == other); }
 };
@@ -474,7 +533,8 @@ Layout CurrentLayout() {
     Layout layout{g_settings.effect,     g_settings.seconds,   g_settings.diameter,
                   g_settings.beamCount,  g_settings.beamOrigin, g_settings.beamSweep,
                   {},                    g_settings.orbEdges,  g_settings.waveAmplitude,
-                  g_settings.waveLength, g_settings.reducedSmoothness};
+                  g_settings.waveLength, g_settings.reducedSmoothness,
+                  g_settings.audio.reactive};
     for (auto const& orb : g_settings.orbs) {
         layout.orbs.emplace_back(orb.angle, orb.speed);
     }
@@ -629,6 +689,10 @@ void LoadSettings() {
     s.power.fullscreen = Wh_GetIntSetting(L"powerSaving.fullscreen") != 0;
     s.power.reduceMotion = Wh_GetIntSetting(L"powerSaving.reduceMotion") != 0;
     s.power.transparency = Wh_GetIntSetting(L"powerSaving.transparency") != 0;
+
+    s.audio.reactive = Wh_GetIntSetting(L"audio.reactive") != 0;
+    s.audio.fastestSeconds = std::clamp(Wh_GetIntSetting(L"audio.fastestSeconds"), 1, 120);
+    s.audio.sensitivity = std::clamp(Wh_GetIntSetting(L"audio.sensitivity"), 25, 400);
 }
 
 bool Contains(std::vector<std::wstring> const& list, std::wstring const& name) {
@@ -726,10 +790,13 @@ struct Resources {
 
     bool ClockRunning() const { return clockRunning_; }
 
-    // Full smoothness: the compositor animates the clock at the monitor's
-    // refresh rate. Reduced: the worker updates it from a timer (TickClock).
+    // Animated: the compositor advances the clock at the monitor's refresh
+    // rate. Otherwise the worker advances it from a timer (TickClock), at a
+    // speed that may change over time without any jump.
     void StartClock(bool animated) {
         clockStart_ = std::chrono::steady_clock::now();
+        lastTick_ = clockStart_;
+        manualTime_ = 0.0;
         clockAnimated_ = animated;
         clockRunning_ = true;
         clock.InsertScalar(L"T", 0.0f);
@@ -754,17 +821,28 @@ struct Resources {
         clockRunning_ = false;
     }
 
-    void TickClock() {
-        if (clockRunning_ && !clockAnimated_) {
-            clock.InsertScalar(L"T", ClockNow());
+    // Advances a worker-driven clock by the time elapsed since the last tick,
+    // multiplied by `rate` (1 = normal speed).
+    void TickClock(double rate) {
+        if (!clockRunning_ || clockAnimated_) {
+            return;
         }
+        auto now = std::chrono::steady_clock::now();
+        double step = std::chrono::duration<double>(now - lastTick_).count();
+        lastTick_ = now;
+        step = std::clamp(step, 0.0, kMaxFrameStepSeconds);
+        manualTime_ = std::fmod(manualTime_ + step * rate, static_cast<double>(kLoopSeconds));
+        clock.InsertScalar(L"T", static_cast<float>(manualTime_));
     }
 
-    // CPU-side estimate of the clock, used to freeze and resume effects
-    // without a visible jump.
+    // Current clock time, used to freeze and resume effects without a jump.
+    // For the animated clock it's a CPU-side estimate.
     float ClockNow() const {
         if (!clockRunning_) {
             return 0.0f;
+        }
+        if (!clockAnimated_) {
+            return static_cast<float>(manualTime_);
         }
         std::chrono::duration<double> elapsed = std::chrono::steady_clock::now() - clockStart_;
         return static_cast<float>(std::fmod(elapsed.count(), static_cast<double>(kLoopSeconds)));
@@ -879,6 +957,8 @@ struct Resources {
     }
 
     std::chrono::steady_clock::time_point clockStart_{};
+    std::chrono::steady_clock::time_point lastTick_{};
+    double manualTime_ = 0.0;
     bool clockRunning_ = false;
     bool clockAnimated_ = false;
     winrt::com_ptr<VirtualDesktopManager> desktops_;
@@ -1368,6 +1448,106 @@ class ProcessEntry {
     std::wstring name_;
 };
 
+// Peak level of the default output device: the value behind the bar in the
+// Windows volume mixer. No audio data is captured.
+class AudioMeter {
+   public:
+    // 0 to 1; 0 when there's no output device or it can't be read.
+    float Peak() {
+        if (!meter_ && !Connect()) {
+            return 0.0f;
+        }
+        float peak = 0.0f;
+        if (FAILED(meter_->GetPeakValue(&peak))) {
+            Disconnect();  // Device removed or disabled.
+            return 0.0f;
+        }
+        return std::clamp(peak, 0.0f, 1.0f);
+    }
+
+    // Follows a change of the default device (headphones plugged in, and so
+    // on). Called from the periodic refresh, only while connected.
+    void CheckDefaultDevice() {
+        if (meter_ && DefaultDeviceId() != deviceId_) {
+            Disconnect();
+            retryAt_ = 0;  // Reconnect on the next read.
+        }
+    }
+
+    // COM objects must be released before the apartment goes away.
+    void Release() noexcept {
+        meter_ = nullptr;
+        enumerator_ = nullptr;
+        deviceId_.clear();
+        retryAt_ = 0;
+    }
+
+   private:
+    bool Connect() {
+        ULONGLONG now = GetTickCount64();
+        if (now < retryAt_) {
+            return false;
+        }
+        retryAt_ = now + kAudioRetryMs;
+
+        HRESULT hr = S_OK;
+        if (!enumerator_) {
+            hr = CoCreateInstance(kMMDeviceEnumeratorClsid, nullptr, CLSCTX_ALL,
+                                  kMMDeviceEnumeratorIid, enumerator_.put_void());
+        }
+        winrt::com_ptr<IMMDevice> device;
+        if (SUCCEEDED(hr)) {
+            hr = enumerator_->GetDefaultAudioEndpoint(eRender, eMultimedia, device.put());
+        }
+        if (SUCCEEDED(hr)) {
+            hr = device->Activate(kAudioMeterInformationIid, CLSCTX_ALL, nullptr,
+                                  meter_.put_void());
+        }
+        if (FAILED(hr)) {
+            meter_ = nullptr;
+            // No output device at all is normal: don't log it.
+            if (hr != HRESULT_FROM_WIN32(ERROR_NOT_FOUND) && !errorLogged_) {
+                Wh_Log(L"Audio level unavailable: %08X", static_cast<unsigned>(hr));
+                errorLogged_ = true;
+            }
+            return false;
+        }
+        deviceId_ = DeviceId(device.get());
+        Wh_Log(L"Audio level: reading the default output device");
+        return true;
+    }
+
+    void Disconnect() {
+        meter_ = nullptr;
+        deviceId_.clear();
+    }
+
+    static std::wstring DeviceId(IMMDevice* device) {
+        LPWSTR id = nullptr;
+        std::wstring result;
+        if (SUCCEEDED(device->GetId(&id)) && id) {
+            result = id;
+            CoTaskMemFree(id);
+        }
+        return result;
+    }
+
+    std::wstring DefaultDeviceId() {
+        winrt::com_ptr<IMMDevice> device;
+        if (!enumerator_ ||
+            FAILED(enumerator_->GetDefaultAudioEndpoint(eRender, eMultimedia, device.put()))) {
+            return {};
+        }
+        return DeviceId(device.get());
+    }
+
+    winrt::com_ptr<IMMDeviceEnumerator> enumerator_;
+    winrt::com_ptr<AudioMeterInformation> meter_;
+    std::wstring deviceId_;
+    ULONGLONG retryAt_ = 0;
+    bool errorLogged_ = false;
+};
+
 // Conditions read from Windows on every refresh.
 struct PowerState {
     bool freeze = false;  // Keep effects visible but still.
@@ -1425,6 +1605,9 @@ struct Worker {
     std::unordered_map<DWORD, ProcessEntry> processes;
     HWND controller = nullptr;
     PowerState power;
+    AudioMeter meter;
+    double audioLevel = 0.0;  // Smoothed, 0 to 1.
+    std::chrono::steady_clock::time_point audioSampledAt{};
     ULONGLONG failedResetAt = 0;
     bool refreshQueued = false;
     bool settingsPending = false;
@@ -1458,11 +1641,44 @@ void ArmSettleTimer(Worker& worker) {
     }
 }
 
+// The compositor can't change the speed of a running animation, so with audio
+// reactivity (or reduced smoothness) the worker advances the clock itself.
 void StartClock(Worker& worker) {
-    worker.resources.StartClock(!g_settings.reducedSmoothness);
-    if (g_settings.reducedSmoothness && worker.controller) {
-        SetTimer(worker.controller, kFrameTimerId, kFrameIntervalMs, nullptr);
+    auto const& s = g_settings;
+    bool workerDriven = s.reducedSmoothness || s.audio.reactive;
+    worker.resources.StartClock(!workerDriven);
+    worker.audioLevel = 0.0;
+    worker.audioSampledAt = std::chrono::steady_clock::now();
+    if (workerDriven && worker.controller) {
+        SetTimer(worker.controller, kFrameTimerId,
+                 s.reducedSmoothness ? kReducedFrameIntervalMs : kFrameIntervalMs, nullptr);
     }
+}
+
+// Clock speed for this frame: 1 in silence, up to "Cycle duration" divided by
+// "Cycle duration at full volume" at the loudest level.
+double ClockRate(Worker& worker) {
+    auto const& s = g_settings;
+    if (!s.audio.reactive) {
+        return 1.0;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    double step = std::chrono::duration<double>(now - worker.audioSampledAt).count();
+    worker.audioSampledAt = now;
+    step = std::clamp(step, 0.0, kMaxFrameStepSeconds);
+
+    // The square root follows loudness as heard more closely than the raw
+    // peak, so music at a normal or low volume still visibly speeds things up.
+    double target = std::clamp(std::sqrt(static_cast<double>(worker.meter.Peak())) *
+                                   s.audio.sensitivity / 100.0,
+                               0.0, 1.0);
+    double smoothing = target > worker.audioLevel ? kAudioAttackSeconds : kAudioReleaseSeconds;
+    worker.audioLevel += (target - worker.audioLevel) * (1.0 - std::exp(-step / smoothing));
+
+    double duration =
+        s.seconds + (s.audio.fastestSeconds - s.seconds) * worker.audioLevel;
+    return s.seconds / std::max(duration, 0.5);
 }
 
 void StopClock(Worker& worker) {
@@ -1670,6 +1886,10 @@ void Refresh(Worker& worker) {
         return;
     }
 
+    if (g_settings.audio.reactive && worker.resources.ClockRunning()) {
+        worker.meter.CheckDefaultDevice();
+    }
+
     worker.power = QueryPowerState();
     if (worker.power.hide) {
         worker.backdrops.clear();
@@ -1855,6 +2075,9 @@ void ApplySettings(Worker& worker) {
         } else {
             worker.resources.ApplyColors();
         }
+        if (!g_settings.audio.reactive) {
+            worker.meter.Release();
+        }
         Wh_Log(L"Settings applied");
     } catch (...) {
         Wh_Log(L"Can't apply settings: %08X", static_cast<unsigned>(winrt::to_hresult()));
@@ -1883,9 +2106,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             return 0;
         }
         if (msg == WM_TIMER && wParam == kFrameTimerId) {
-            try {
-                worker->resources.TickClock();
-            } catch (...) {
+            // Reading the audio level is a COM call that may dispatch messages,
+            // so the tick counts as busy like a refresh.
+            if (!worker->busy) {
+                {
+                    BusyScope scope(worker->busy);
+                    try {
+                        worker->resources.TickClock(ClockRate(*worker));
+                    } catch (...) {
+                    }
+                }
+                FlushPendingSettings(*worker);
             }
             return 0;
         }
@@ -2035,10 +2266,12 @@ DWORD WINAPI WorkerThread(void*) {
     }
     StopClock(worker);
 
-    // Composition objects must go before the dispatcher queue.
+    // Composition objects must go before the dispatcher queue, and every COM
+    // object before the apartment.
     worker.backdrops.clear();
     worker.failed.clear();
     worker.resources.Release();
+    worker.meter.Release();
 
     g_controller = nullptr;
     if (worker.controller) {
