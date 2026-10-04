@@ -7,6 +7,7 @@
 // @version         1.0
 // @author          loliri
 // @github          https://github.com/loliri
+// @license         MIT
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
