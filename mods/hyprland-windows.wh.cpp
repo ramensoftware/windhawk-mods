@@ -2,7 +2,7 @@
 // @id              hyprland-windows
 // @name            Hyprland Windows
 // @description     Hyprland-style window handling: move, resize, maximize and close windows with Win + mouse from anywhere on them, hide title bars, color window borders, and go round the virtual desktops with Win+Tab
-// @version         1.1.1
+// @version         1.1.2
 // @author          hiword9
 // @github          https://github.com/HiWord9
 // @include         *
@@ -2843,7 +2843,7 @@ DWORD WINAPI DesktopThread(LPVOID ready) {
         SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr,
                         OnFrontChanged, 0, 0, WINEVENT_OUTOFCONTEXT);
     SetEvent(static_cast<HANDLE>(ready));
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+    while (!g_uninitializing && GetMessageW(&msg, nullptr, 0, 0) > 0) {
         if (g_uninitializing) {
             continue;
         }
@@ -3101,7 +3101,7 @@ bool StartMove(HWND root, POINT pt, MSG* msg) {
     if (IsIconic(root)) {
         return false;
     }
-    if (!(GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+    if (!(GetAsyncKeyState(PhysicalButtonVk(false)) & 0x8000)) {
         return false;  // released already; the loop would stick to the cursor
     }
     ForceLeftButtonDown();
@@ -4752,25 +4752,6 @@ void JoinModThreads() {
     }
 }
 
-// How long the unload waits for what of ours is still running before it
-// leaves the rest to ReleaseImageThread.
-constexpr DWORD kUnloadWaitMs = 1000;
-// What the last of it still runs after dropping its reference: the way out
-// of its function.
-constexpr DWORD kEpilogueGraceMs = 200;
-
-// Lets go of the reference the image took on itself at unload, once nothing
-// of ours is left running. FreeLibraryAndExitThread, because this thread runs
-// in the image too and must not return into it once it is gone.
-DWORD WINAPI ReleaseImageThread(LPVOID module) {
-    while (g_modRefCount > 0) {
-        Sleep(100);
-    }
-    JoinModThreads();
-    Sleep(kEpilogueGraceMs);
-    FreeLibraryAndExitThread(static_cast<HMODULE>(module), 0);
-}
-
 // Has the window's own thread carry out a teardown request, and waits for it.
 // A subclass procedure left behind in an unmapped image crashes its
 // application the next time the window gets a message, so a window that does
@@ -4874,38 +4855,8 @@ void Wh_ModUninit() {
     ChangeWindowMessageFilter(g_msgDrag, MSGFLT_REMOVE);
 
     // UnhookWindowsHookEx does not wait for a hook procedure that is running
-    // on another thread, and threads of ours are on their way out, so the
-    // image can only be let go once they are all done with it. That takes a
-    // moment, as a rule.
-    for (DWORD waited = 0; g_modRefCount > 0 && waited < kUnloadWaitMs;
-         waited += 20) {
-        Sleep(20);
-    }
-    if (g_modRefCount == 0) {
-        JoinModThreads();
-        return;
-    }
-
-    // Not always: a frameless window passes every message through a
-    // procedure of ours, and the application may answer one with a modal
-    // loop - a "Save changes?" prompt, a drag - which keeps that call on its
-    // stack until the user is done. It returns into the image then, so the
-    // image can't go before, and waiting for it here would hold the unload up
-    // for as long as the prompt is open. The image keeps a reference of its
-    // own instead, and lets go of it once nothing of ours is left running.
-    HMODULE self = nullptr;
-    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                           reinterpret_cast<LPCWSTR>(&ReleaseImageThread),
-                           &self)) {
-        HANDLE thread =
-            CreateThread(nullptr, 0, ReleaseImageThread, self, 0, nullptr);
-        if (thread) {
-            CloseHandle(thread);
-            Wh_Log(L"Still in use, the image goes once it is not");
-            return;
-        }
-        FreeLibrary(self);
-    }
+    // on another thread, and the resize watcher is a thread of ours, so the
+    // image can only be let go once both are done with it.
     while (g_modRefCount > 0) {
         Sleep(100);
     }
