@@ -86,6 +86,8 @@ instead.
   Independent Flip. Turn the overlay off to get the full effect.
 - Games that create their device with mixed vertex processing aren't upgraded,
   as their managed vertex buffers can't be emulated.
+- Some games with anti-tamper protection hang or close with the mod enabled.
+  Turn on **SafeHook** for them, so that the mod hooks no system DLL.
 - No guarantees of anti-cheat compatibility.
 
 Enable the mod's logging (Advanced → Debug logging) to see exactly what was
@@ -126,6 +128,16 @@ changed and any failure codes.
   $description: >-
     If the game requests a multisampled back buffer, skip the upgrade instead of
     dropping the multisampling.
+- safeHook: false
+  $name: SafeHook
+  $description: >-
+    For games whose anti-tamper protection hangs or closes them with the mod
+    enabled. Off: d3d9.dll is noticed by hooking LoadLibraryExW in
+    kernelbase.dll, so the mod's hooks are in place before the game can use it.
+    On: a Windows DLL load notification is used instead, and no system DLL is
+    hooked. The hooks are installed a moment after d3d9.dll loads, so a game
+    that uses it right away may start without the upgrade. Applies the next time
+    the game starts.
 */
 // ==/WindhawkModSettings==
 
@@ -195,6 +207,7 @@ struct {
     int maxFrameLatency;
     bool keepMsaa;
     bool flipModel;
+    bool safeHook;
 } g_settings;
 
 std::mutex g_hookMutex;
@@ -2001,6 +2014,141 @@ bool HookD3D9ExportsIfLoaded() {
     return true;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// SafeHook: waiting for d3d9.dll without hooking LoadLibraryExW
+//
+// Hooking LoadLibraryExW in kernelbase.dll makes games with anti-tamper
+// protection hang, e.g. Warcraft III. A DLL load notification patches no code.
+// It's called with the loader lock held, so it only signals the hook thread,
+// which hooks d3d9.dll right after. The game may already use it by then.
+
+struct LdrUnicodeString {
+    USHORT length;
+    USHORT maximumLength;
+    PWSTR buffer;
+};
+
+struct LdrDllLoadedData {
+    ULONG flags;
+    const LdrUnicodeString* fullDllName;
+    const LdrUnicodeString* baseDllName;
+    PVOID dllBase;
+    ULONG sizeOfImage;
+};
+
+constexpr ULONG kLdrDllLoaded = 1;
+
+using LdrDllNotification_t = VOID(CALLBACK*)(ULONG,
+                                             const LdrDllLoadedData*,
+                                             PVOID);
+using LdrRegisterDllNotification_t = LONG(NTAPI*)(ULONG,
+                                                  LdrDllNotification_t,
+                                                  PVOID,
+                                                  PVOID*);
+using LdrUnregisterDllNotification_t = LONG(NTAPI*)(PVOID);
+
+PVOID g_dllNotificationCookie;
+HANDLE g_dllLoadedEvent;
+HANDLE g_hookThreadStopEvent;
+HANDLE g_hookThread;
+
+VOID CALLBACK OnDllNotification(ULONG reason,
+                                const LdrDllLoadedData* data,
+                                PVOID context) {
+    if (reason != kLdrDllLoaded || !data || !data->baseDllName ||
+        !data->baseDllName->buffer) {
+        return;
+    }
+
+    const LdrUnicodeString& name = *data->baseDllName;
+    constexpr USHORT kNameLength = 8;  // d3d9.dll
+    if (name.length == kNameLength * sizeof(WCHAR) &&
+        _wcsnicmp(name.buffer, L"d3d9.dll", kNameLength) == 0) {
+        SetEvent(g_dllLoadedEvent);
+    }
+}
+
+DWORD WINAPI HookThreadProc(void* parameter) {
+    HANDLE events[] = {g_hookThreadStopEvent, g_dllLoadedEvent};
+    while (!g_exportsHooked) {
+        if (WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE,
+                                   INFINITE) != WAIT_OBJECT_0 + 1) {
+            break;
+        }
+
+        // A d3d9.dll proxy of the game, the system one loads later.
+        HMODULE module = GetSystemD3D9Module();
+        if (!module) {
+            continue;
+        }
+
+        // Waits until the loader is done with it, so that it's initialized.
+        WCHAR path[MAX_PATH];
+        if (GetModuleFileNameW(module, path, ARRAYSIZE(path))) {
+            if (HMODULE reference = LoadLibraryExW(path, nullptr, 0)) {
+                FreeLibrary(reference);
+            }
+        }
+
+        if (HookD3D9ExportsIfLoaded()) {
+            Wh_ApplyHookOperations();
+        }
+    }
+    return 0;
+}
+
+bool StartWatchingDllLoad() {
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    auto registerNotification =
+        ntdll ? (LdrRegisterDllNotification_t)GetProcAddress(
+                    ntdll, "LdrRegisterDllNotification")
+              : nullptr;
+
+    g_dllLoadedEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    g_hookThreadStopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!registerNotification || !g_dllLoadedEvent ||
+        !g_hookThreadStopEvent ||
+        registerNotification(0, OnDllNotification, nullptr,
+                             &g_dllNotificationCookie) != 0) {
+        g_dllNotificationCookie = nullptr;
+        Wh_Log(L"Registering for DLL load notifications failed");
+        return false;
+    }
+    Wh_Log(L"SafeHook: waiting for d3d9.dll");
+    return true;
+}
+
+// The notification callback and the thread are in this module, so this must
+// happen before it's unloaded.
+void StopWatchingDllLoad() {
+    if (g_dllNotificationCookie) {
+        HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        auto unregisterNotification =
+            (LdrUnregisterDllNotification_t)GetProcAddress(
+                ntdll, "LdrUnregisterDllNotification");
+        if (unregisterNotification) {
+            unregisterNotification(g_dllNotificationCookie);
+        }
+        g_dllNotificationCookie = nullptr;
+    }
+
+    if (g_hookThread) {
+        SetEvent(g_hookThreadStopEvent);
+        WaitForSingleObject(g_hookThread, INFINITE);
+        CloseHandle(g_hookThread);
+        g_hookThread = nullptr;
+    }
+
+    if (g_dllLoadedEvent) {
+        CloseHandle(g_dllLoadedEvent);
+        g_dllLoadedEvent = nullptr;
+    }
+    if (g_hookThreadStopEvent) {
+        CloseHandle(g_hookThreadStopEvent);
+        g_hookThreadStopEvent = nullptr;
+    }
+}
+
 using LoadLibraryExW_t = decltype(&LoadLibraryExW);
 LoadLibraryExW_t LoadLibraryExW_Original;
 HMODULE WINAPI LoadLibraryExW_Hook(LPCWSTR lpLibFileName,
@@ -2034,6 +2182,7 @@ void LoadSettings() {
 
     g_settings.keepMsaa = Wh_GetIntSetting(L"keepMsaa");
     g_settings.flipModel = Wh_GetIntSetting(L"flipModel");
+    g_settings.safeHook = Wh_GetIntSetting(L"safeHook");
 }
 
 BOOL Wh_ModInit() {
@@ -2042,7 +2191,11 @@ BOOL Wh_ModInit() {
     LoadSettings();
 
     // Hooks set here are applied by Windhawk once Wh_ModInit returns.
-    HookD3D9ExportsIfLoaded();
+    bool hooked = HookD3D9ExportsIfLoaded();
+
+    if (g_settings.safeHook) {
+        return hooked || StartWatchingDllLoad();
+    }
 
     HMODULE kernelBaseModule = GetModuleHandleW(L"kernelbase.dll");
     auto pKernelBaseLoadLibraryExW = (LoadLibraryExW_t)GetProcAddress(
@@ -2064,6 +2217,20 @@ void Wh_ModAfterInit() {
     if (HookD3D9ExportsIfLoaded()) {
         Wh_ApplyHookOperations();
     }
+
+    // SafeHook: hooks can only be applied from now on.
+    if (!g_exportsHooked && g_dllNotificationCookie) {
+        g_hookThread =
+            CreateThread(nullptr, 0, HookThreadProc, nullptr, 0, nullptr);
+        if (!g_hookThread) {
+            Wh_Log(L"Creating the hook thread failed");
+        }
+    }
+}
+
+void Wh_ModBeforeUninit() {
+    // Hooks can't be applied anymore after this.
+    StopWatchingDllLoad();
 }
 
 void Wh_ModUninit() {
