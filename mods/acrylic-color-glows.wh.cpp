@@ -14,6 +14,9 @@
 /*
 # Acrylic Color Glows
 
+![Acrylic Glow](https://i.imgur.com/qvqqV2I.png)
+[Watch the overview video in full quality](https://i.imgur.com/huCSr8H.mp4)
+
 Animated light effects behind the windows you choose: drifting glows, sweeping
 light beams, orbs moving in the directions you pick, or flowing waves. The
 effect is drawn by a separate, click-through window placed directly below each
@@ -55,7 +58,7 @@ reduce that work; fewer moving windows do:
 Frozen effects resume exactly where they stopped. When nothing is moving, the
 shared clock stops too.
 
-## Audio reactivity (EXPERIMENTAL)
+## Audio reactivity
 
 When **React to audio** is on, every effect speeds up while sound is playing:
 "Cycle duration" is used in silence and "Cycle duration at full volume" at the
