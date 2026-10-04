@@ -440,18 +440,20 @@
   $options:ru:
   - theme: Из темы Windows
   - custom: Собственный цвет
-  $description: "Applies only when Original WebView layout is off."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView."
 - colorDivider: '#0000FF'
   $name: Custom divider colour
   $name:ru: Собственный цвет разделителя
-  $description: "Applies only when Original WebView layout is off. Only used when the divider is drawn as a line."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Используется, только если разделитель рисуется линией."
+  $description: Only used when the divider is drawn as a line.
+  $description:ru: Используется, только если разделитель рисуется линией.
 - divider: win2000
   $name: Divider
   $name:ru: Разделитель
-  $description: "Applies only when Original WebView layout is off. The line under the name. Windows 2000 drew it from a picture, a bar in the four colours of the Windows logo, which comes built into the mod."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Линия под именем. Windows 2000 рисовала её из картинки - полоски в четырёх цветах логотипа Windows; она встроена в мод."
+  $description: >-
+    The line under the name. Windows 2000 drew it from a picture, a bar in the
+    four colours of the Windows logo, which comes built into the mod.
+  $description:ru: >-
+    Линия под именем. Windows 2000 рисовала её из картинки - полоски в четырёх
+    цветах логотипа Windows; она встроена в мод.
   $options:
   - win2000: Windows 2000 colour bar
   - file: The divider picture file below
@@ -463,13 +465,22 @@
 - dividerImagePath: ''
   $name: Divider picture file
   $name:ru: Файл картинки разделителя
-  $description: "Applies only when Original WebView layout is off. Used when the divider is set to a file. It is stretched across the pane and keeps its own height."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Используется, если для разделителя выбран файл. Картинка растягивается на всю ширину панели и сохраняет свою высоту."
+  $description: >-
+    Used when the divider is set to a file. It is stretched across the pane and
+    keeps its own height.
+  $description:ru: >-
+    Используется, если для разделителя выбран файл. Картинка растягивается на
+    всю ширину панели и сохраняет свою высоту.
 - dividerGradient: true
   $name: Fade the divider out
   $name:ru: Разделитель с переходом в фон
-  $description: "Applies only when Original WebView layout is off. The line under the name of Windows 2000 was a gradient that started in colour on the left and faded into the background on the right, not a line of one colour all the way across."
-  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Линия под именем в Windows 2000 была градиентом: слева цветная, справа уходила в фон, а не сплошной одноцветной через всю панель."
+  $description: >-
+    The line under the name of Windows 2000 was a gradient that started in
+    colour on the left and faded into the background on the right, not a line
+    of one colour all the way across.
+  $description:ru: >-
+    Линия под именем в Windows 2000 была градиентом: слева цветная, справа
+    уходила в фон, а не сплошной одноцветной через всю панель.
 */
 // ==/WindhawkModSettings==
 
@@ -2621,6 +2632,48 @@ void FreeReferenceSharedResources() {
 } }
 
 // Adapted from the matching ClassicExplorer webview source: reference-renderer.inc
+namespace ce::win2kwebview {
+// The image is borrowed from the mod cache under its rendering lock.
+struct ReferenceDivider {
+    bool configured=false,alpha=false,gradient=false;
+    HBITMAP bitmap=nullptr;
+    SIZE size{};
+    COLORREF color=RGB(0,0,255),background=RGB(255,255,255);
+    void Set(HBITMAP image,SIZE dimensions,bool hasAlpha,COLORREF line,COLORREF backdrop,bool fade) noexcept {
+        configured=true; bitmap=image; size=dimensions; alpha=hasAlpha;
+        color=line; background=backdrop; gradient=fade;
+    }
+    void Paint(HDC dc,int x,int y,int width,int height) const noexcept {
+        if(width<=0 || height<=0) return;
+        if(bitmap && size.cx>0 && size.cy>0) {
+            HDC source=CreateCompatibleDC(dc);
+            if(!source) return;
+            HGDIOBJ old=SelectObject(source,bitmap);
+            if(alpha) {
+                BLENDFUNCTION blend{AC_SRC_OVER,0,255,AC_SRC_ALPHA};
+                AlphaBlend(dc,x,y,width,height,source,0,0,size.cx,size.cy,blend);
+            } else {
+                const int mode=SetStretchBltMode(dc,HALFTONE);
+                POINT origin{}; SetBrushOrgEx(dc,0,0,&origin);
+                StretchBlt(dc,x,y,width,height,source,0,0,size.cx,size.cy,SRCCOPY);
+                SetBrushOrgEx(dc,origin.x,origin.y,nullptr); SetStretchBltMode(dc,mode);
+            }
+            SelectObject(source,old); DeleteDC(source); return;
+        }
+        if(gradient) {
+            const auto channel=[](BYTE value) { return static_cast<COLOR16>(value*257u); };
+            TRIVERTEX vertices[]={{x,y,channel(GetRValue(color)),channel(GetGValue(color)),channel(GetBValue(color)),0},
+                {x+width,y+height,channel(GetRValue(background)),channel(GetGValue(background)),channel(GetBValue(background)),0}};
+            GRADIENT_RECT rectangle{0,1};
+            GradientFill(dc,vertices,2,&rectangle,1,GRADIENT_FILL_RECT_H);
+        } else {
+            const RECT rectangle{x,y,x+width,y+height};
+            HBRUSH brush=CreateSolidBrush(color); FillRect(dc,&rectangle,brush); DeleteObject(brush);
+        }
+    }
+};
+}
+
 namespace ce
 {
 namespace win2kwebview
@@ -3030,6 +3083,9 @@ namespace win2kwebview
             void UseProfileDecoration(bool divider,bool header) noexcept {
                 m_useProfileCorner=true; m_showDivider=divider; m_showHeader=header;
             }
+            void SetDivider(HBITMAP image,SIZE size,bool alpha,COLORREF color,COLORREF background,bool gradient) noexcept {
+                m_divider.Set(image,size,alpha,color,background,gradient);
+            }
             void SetDimensionsVisible(bool show) noexcept { m_showDimensions=show; }
 
 			// Content for the current folder and selection. Rebuilt per navigation, never cached
@@ -3182,6 +3238,7 @@ namespace win2kwebview
 			HICON m_customCornerIcon=nullptr;
             HBITMAP m_customCorner=nullptr; // borrowed from the mod cache
             SIZE m_customCornerSize{};
+            ReferenceDivider m_divider;
             int m_customCornerWidth=0;
             bool m_showDivider=true, m_showHeader=true, m_showDimensions=true, m_customCornerAlpha=false, m_useProfileCorner=false;
             HBITMAP m_leftBitmap = nullptr;   // embedded wvleft.bmp/gif
@@ -4240,13 +4297,14 @@ namespace win2kwebview
 		// The negative top margin pulls the rule back under the title, and margin-left/right 0
 		// is why this one element spans the full panel while everything else is inset by 15.
 		y += w98::kLogoLineTop;
-		if (m_lineBitmap)
+		if (m_showDivider && (m_lineBitmap || m_divider.configured))
 		{
 			// The rule is an inline image on a text baseline, so it sits 10px down inside the
 			// paragraph's 13px line box rather than at its top edge.
-			DrawBitmapAt(dc, m_lineBitmap, m_lineSize, paneRect.left,
-			             y + w98::kLogoLineRuleOffset,
-			             paneRect.right - paneRect.left);
+			if(m_divider.configured) m_divider.Paint(dc,paneRect.left,y+w98::kLogoLineRuleOffset,
+                paneRect.right-paneRect.left,1);
+            else DrawBitmapAt(dc,m_lineBitmap,m_lineSize,paneRect.left,y+w98::kLogoLineRuleOffset,
+                paneRect.right-paneRect.left);
 		}
 		y += w98::kLogoLineBoxHeight;
 
@@ -4595,9 +4653,10 @@ namespace win2kwebview
 
 		// #LogoLine {width: 100%; height: 2px; margin-top: 4px} — wvline.gif stretched across.
 		y = paneRect.top + (imgView ? kImgLogoLineTop : kLogoLineTop) + folderNameShift;
-		if (m_showDivider && m_lineBitmap && !barricadeFull)
+		if (m_showDivider && (m_lineBitmap || m_divider.configured) && !barricadeFull)
 		{
-			DrawBitmapAt(dc, m_lineBitmap, m_lineSize, paneRect.left, y, flowRight - paneRect.left);
+			if(m_divider.configured) m_divider.Paint(dc,paneRect.left,y,flowRight-paneRect.left,2);
+            else DrawBitmapAt(dc,m_lineBitmap,m_lineSize,paneRect.left,y,flowRight-paneRect.left);
 		}
 
 		// #Details {padding-left: 12px; margin-top: 8px}, or #Brand's own
@@ -13792,11 +13851,15 @@ static void PaintReferencePane(Pane* pane,HDC target,const RECT& client) {
     {
         std::lock_guard lock(g_imageMutex);
         const auto* image=EnsureImage(g_picture,g_settings.imagePath);
+        const auto* divider=EnsureImage(g_dividerPicture,g_settings.dividerImagePath);
+        reference.m_pane.SetDivider(divider ? divider->bitmap : nullptr,
+            divider ? SIZE{divider->width,divider->height} : SIZE{},divider && divider->alpha,
+            g_settings.divider.Get(),g_settings.background.Get(),g_settings.dividerGradient);
         reference.m_pane.SetDecoration(image ? image->bitmap : nullptr,
             image ? SIZE{image->width,image->height} : SIZE{},g_settings.imageWidth,
-            !g_settings.dividerImagePath.empty(),g_settings.showHeader,image && image->alpha,image ? image->icon : nullptr);
+            true,g_settings.showHeader,image && image->alpha,image ? image->icon : nullptr);
         if(g_settings.imagePath.starts_with(L"*profile")) reference.m_pane.UseProfileDecoration(
-            !g_settings.dividerImagePath.empty(),g_settings.showHeader);
+            true,g_settings.showHeader);
         if (reference.bannerHeight) reference.m_pane.PaintWin98MiniBanner(dc,logical);
         else if (reference.CurrentBarricade()!=BarricadeMode::None) {
             const int viewWidth=logical.right;
