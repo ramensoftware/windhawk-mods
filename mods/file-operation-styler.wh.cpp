@@ -8,7 +8,7 @@
 // @license         GPL-3.0
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lgdi32 -lgdiplus -lshlwapi -ladvapi32
+// @compilerOptions -lcomctl32 -lgdi32 -lgdiplus -lshlwapi -ladvapi32 -luxtheme
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -42,18 +42,10 @@ The large progress circle can pause and resume operations, while optional settin
 - Added current-file progress while the circular indicator continues to show overall operation progress.
 - Added interactive Pause / Resume behavior to the large progress circle.
 - Added an option to hide the small Pause / Resume and Cancel buttons in the upper-right corner. The large progress-circle control and bottom Cancel button remain available.
-- Added an option to hide the percentage from the file-operation window title.\*
+- Added an option to hide the percentage from the file-operation window title.
 - Improved multiple-operation support, including synchronized More / Fewer Details behavior.
 - Improved fallback to the native Windows UI for conflicts, errors, and unsupported presentation states.
 - Improved restoration and teardown when the mod is disabled, reloaded, or settings are changed.
-
-### About hiding the title percentage
-
-\* **Hide title-bar percentage** removes the normal progress percentage from the file-operation window title.
-
-Windows also reuses this window-title text in places such as taskbar previews, Alt+Tab, and other shell UI. Because of this, enabling the option can also remove the percentage from those locations.
-
-There is currently no reliable way for File Operation Styler to hide only the percentage in the window title without also affecting those Windows surfaces.
 
 ## Features
 
@@ -101,7 +93,7 @@ File Operation Styler has been tested on Windows 11 24H2 x64. It relies on priva
 
 - hideTitleBarPercentage: false
   $name: Hide title-bar percentage
-  $description: Hides the normal progress percentage from the window title. This can also remove progress text from taskbar previews, Alt+Tab, and other Windows UI.
+  $description: Hide the normal progress percentage from the visible window title bar.
 
 
 - customization:
@@ -972,7 +964,7 @@ namespace
         std::wstring circleFont = L"Segoe UI Variable Display";
         std::wstring circleLabelFont = L"Segoe UI Variable";
         std::wstring nativeFont = L"Segoe UI Variable";
-        int circlePercentSize = 25;
+        int circlePercentSize = 26;
         int circleLabelSize = 11;
         int bodySize = 11;
         int graphValueSize = 10;
@@ -1844,11 +1836,6 @@ namespace
             HWND hwnd,
             GlassFrameMargins const *margins);
 
-    using DwmEnableBlurBehindWindow_t =
-        HRESULT(WINAPI *)(
-            HWND hwnd,
-            const DWM_BLURBEHIND *blurBehind);
-
     void SetGlassDwmBlurRegion(
         HWND hostWindow,
         bool enabled)
@@ -2192,6 +2179,7 @@ namespace
     constexpr UINT kCurrentFileAnimationMessage = WM_APP + 0x51;
     constexpr UINT_PTR kCurrentFileAnimationTimer = 0xF0510020;
     constexpr UINT_PTR kCircleHoverAnimationTimer = 0xF0510021;
+    constexpr UINT kCircleInteractionAnimationIntervalMs = 16;
 
     struct CurrentFileAnimation
     {
@@ -2260,7 +2248,6 @@ namespace
         // Excludes incomplete registration so ordinary tile activation does
         // not enter the post-conflict measured-rate recovery path.
         bool nativeSpecialState;
-        std::wstring suppressedProgressCaption;
     };
 
     struct HostNativeGeometry
@@ -3231,6 +3218,7 @@ namespace
 
         OperationTileElement *tile = nullptr;
         bool changed = false;
+        bool paused = false;
 
         {
             std::lock_guard<std::mutex> lock(g_circleMutex);
@@ -3249,6 +3237,9 @@ namespace
             }
 
             tile = it->tile;
+            paused =
+                it->pausedStateKnown &&
+                it->paused;
 
             if (it->circleHovered != hovered)
             {
@@ -3257,21 +3248,29 @@ namespace
             }
         }
 
-        if (hovered)
+        if (changed)
         {
-            SetTimer(
-                infoWindow,
-                kCircleHoverAnimationTimer,
-                32,
-                nullptr);
-        }
+            if (hovered)
+            {
+                SetTimer(
+                    infoWindow,
+                    kCircleHoverAnimationTimer,
+                    kCircleInteractionAnimationIntervalMs,
+                    nullptr);
+            }
+            else if (!paused)
+            {
+                KillTimer(
+                    infoWindow,
+                    kCircleHoverAnimationTimer);
+            }
 
-        if (changed && tile)
-        {
-            InvalidateInfoPanelForTile(tile, false);
+            if (tile)
+            {
+                InvalidateInfoPanelForTile(tile, false);
+            }
         }
     }
-
     void ClearCircleHoverStatesForHost(HWND hostWindow)
     {
         if (!hostWindow)
@@ -5000,6 +4999,8 @@ namespace
         bool paused)
     {
         HWND infoWindow = nullptr;
+        bool hovered = false;
+
         {
             std::lock_guard<std::mutex> lock(g_circleMutex);
             auto it = std::find_if(
@@ -5014,6 +5015,7 @@ namespace
             it->paused = paused;
             it->pausedStateKnown = true;
             infoWindow = it->infoWindow;
+            hovered = it->circleHovered;
         }
 
         if (infoWindow && IsWindow(infoWindow))
@@ -5022,25 +5024,35 @@ namespace
             {
                 StopCurrentFileAnimation(infoWindow);
 
+                // Paused is an intentionally animated state. Keep the
+                // breathing effect active until the operation resumes.
                 SetTimer(
                     infoWindow,
                     kCircleHoverAnimationTimer,
-                    32,
+                    kCircleInteractionAnimationIntervalMs,
                     nullptr);
             }
             else
             {
-                PostMessageW(infoWindow, kCurrentFileAnimationMessage, 0, 0);
+                // Hover still owns the animation timer while the pointer
+                // remains over the interactive circle.
+                if (!hovered)
+                {
+                    KillTimer(
+                        infoWindow,
+                        kCircleHoverAnimationTimer);
+                }
+
+                PostMessageW(
+                    infoWindow,
+                    kCurrentFileAnimationMessage,
+                    0,
+                    0);
             }
 
-            // In Glass mode the visible presentation is rendered into the
-            // OperationStatusWindow host, while infoWindow is only the
-            // logical per-tile anchor. Invalidate through the shared helper
-            // so both Glass and normal presentation repaint correctly.
             InvalidateInfoPanelForTile(tile, false);
         }
     }
-
     bool InvokeNativeActionFromInfoPanel(HWND infoWindow,
                                          PCWSTR elementName,
                                          PCWSTR actionName)
@@ -5471,13 +5483,17 @@ namespace
                     {
                         tile = it->tile;
                         hovered = it->circleHovered;
-                        paused = it->pausedStateKnown && it->paused;
+                        paused =
+                            it->pausedStateKnown &&
+                            it->paused;
                     }
                 }
 
                 if (!hovered && !paused)
                 {
-                    KillTimer(window, kCircleHoverAnimationTimer);
+                    KillTimer(
+                        window,
+                        kCircleHoverAnimationTimer);
                     return 0;
                 }
 
@@ -6708,43 +6724,33 @@ namespace
                it->specialOperationState;
     }
 
-    bool RememberSuppressedProgressCaption(
+    void SetHostCaptionDrawingSuppressed(
         HWND hostWindow,
-        PCWSTR caption)
+        bool suppressed)
     {
-        if (!hostWindow || !caption || !*caption)
+        if (!hostWindow || !IsWindow(hostWindow))
         {
-            return false;
+            return;
         }
 
-        std::lock_guard<std::mutex> lock(g_hostPresentationMutex);
-        auto it = std::find_if(
-            g_hostPresentationStates.begin(),
-            g_hostPresentationStates.end(),
-            [hostWindow](HostPresentationState const &state)
-            { return state.hostWindow == hostWindow; });
+        WTA_OPTIONS options{};
+        options.dwFlags =
+            suppressed ? WTNCA_NODRAWCAPTION : 0;
+        options.dwMask = WTNCA_NODRAWCAPTION;
 
-        if (it == g_hostPresentationStates.end())
+        HRESULT result = SetWindowThemeAttribute(
+            hostWindow,
+            WTA_NONCLIENT,
+            &options,
+            sizeof(options));
+
+        if (FAILED(result))
         {
-            return false;
+            Wh_Log(
+                L"Caption drawing update failed result=0x%08X hwnd=%p",
+                static_cast<unsigned int>(result),
+                reinterpret_cast<void *>(hostWindow));
         }
-
-        it->suppressedProgressCaption = caption;
-        return true;
-    }
-
-    std::wstring GetSuppressedProgressCaption(HWND hostWindow)
-    {
-        std::lock_guard<std::mutex> lock(g_hostPresentationMutex);
-        auto it = std::find_if(
-            g_hostPresentationStates.begin(),
-            g_hostPresentationStates.end(),
-            [hostWindow](HostPresentationState const &state)
-            { return state.hostWindow == hostWindow; });
-
-        return it != g_hostPresentationStates.end()
-                   ? it->suppressedProgressCaption
-                   : std::wstring{};
     }
 
     void ForgetHostPresentationState(HWND hostWindow)
@@ -7010,6 +7016,8 @@ namespace
 
     void HideCustomPresentationForHost(HWND hostWindow)
     {
+        SetHostCaptionDrawingSuppressed(hostWindow, false);
+
         // Special Explorer states must temporarily leave the
         // full-client Acrylic presentation before native DirectUI
         // becomes visible again.
@@ -7047,6 +7055,7 @@ namespace
                 }
 
                 state.positionValid = false;
+                state.circleHovered = false;
                 if (state.circleWindow)
                 {
                     windows.push_back(state.circleWindow);
@@ -7063,6 +7072,9 @@ namespace
             if (child && IsWindow(child))
             {
                 StopCurrentFileAnimation(child);
+                KillTimer(
+                    child,
+                    kCircleHoverAnimationTimer);
             }
             if (child && IsWindow(child) && IsWindowVisible(child))
             {
@@ -7080,6 +7092,10 @@ namespace
     void ScheduleCustomReapplyForHost(HWND hostWindow,
                                       bool resumeTransferState)
     {
+        SetHostCaptionDrawingSuppressed(
+            hostWindow,
+            g_settings.hideTitleBarPercentage);
+
         if (IsGlassTheme())
         {
             ApplyUnifiedHostChrome(hostWindow);
@@ -7335,18 +7351,11 @@ namespace
                 HPAINTBUFFER,
                 BOOL);
 
-        using SetAlpha_t =
-            HRESULT(WINAPI *)(
-                HPAINTBUFFER,
-                RECT const *,
-                BYTE);
-
         HMODULE module = nullptr;
         Init_t init = nullptr;
         UnInit_t uninit = nullptr;
         Begin_t begin = nullptr;
         End_t end = nullptr;
-        SetAlpha_t setAlpha = nullptr;
     };
 
     GlassBufferedPaintApi g_glassBufferedPaintApi{};
@@ -7371,7 +7380,10 @@ namespace
             if (!api.module)
             {
                 api.module =
-                    LoadLibraryW(L"uxtheme.dll");
+                    LoadLibraryExW(
+                        L"uxtheme.dll",
+                        nullptr,
+                        LOAD_LIBRARY_SEARCH_SYSTEM32);
 
                 if (api.module)
                 {
@@ -7405,19 +7417,13 @@ namespace
                             api.module,
                             "EndBufferedPaint"));
 
-                api.setAlpha =
-                    reinterpret_cast<GlassBufferedPaintApi::SetAlpha_t>(
-                        GetProcAddress(
-                            api.module,
-                            "BufferedPaintSetAlpha"));
             }
         }
 
         if (!api.init ||
             !api.uninit ||
             !api.begin ||
-            !api.end ||
-            !api.setAlpha)
+            !api.end)
         {
             return nullptr;
         }
@@ -7580,42 +7586,6 @@ namespace
                 lParam);
         }
 
-        // Optional title cleanup. Feed Explorer's real incoming normal-
-        // progress caption directly to our lifecycle state machine, but
-        // never store or paint that caption when suppression is enabled.
-        // Special/conflict/error captions continue through unchanged.
-        if (message == WM_SETTEXT &&
-            g_settings.hideTitleBarPercentage &&
-            lParam)
-        {
-            PCWSTR incomingCaption =
-                reinterpret_cast<PCWSTR>(lParam);
-
-            if (LooksLikeNativeProgressCaption(incomingCaption))
-            {
-                // Feed Explorer's real caption into lifecycle state
-                // first. Suppress it only when the language-independent
-                // DirectUI state still confirms a normal operation.
-                RefreshHostPresentationStateFromCaption(
-                    window, incomingCaption);
-
-                if (!IsHostInSpecialOperationState(window) &&
-                    RememberSuppressedProgressCaption(
-                        window, incomingCaption))
-                {
-                    static constexpr wchar_t
-                        kEmptyProgressCaption[] = L"";
-
-                    return DefSubclassProc(
-                        window,
-                        message,
-                        wParam,
-                        reinterpret_cast<LPARAM>(
-                            kEmptyProgressCaption));
-                }
-            }
-        }
-
         if (g_removeHostSubclassMessage &&
             message == g_removeHostSubclassMessage &&
             wParam == kRemoveProgressWindowSubclassCommand)
@@ -7645,6 +7615,9 @@ namespace
         if (g_removeHostSubclassMessage &&
             message == g_removeHostSubclassMessage)
         {
+            // Restore Explorer's normal non-client caption drawing.
+            SetHostCaptionDrawingSuppressed(window, false);
+
             // Restore anything hidden by the custom Glass presentation.
             RestoreGlassDirectUiForHost(window);
 
@@ -7660,26 +7633,6 @@ namespace
             if (!DestroyProgressCirclesForHost(window))
             {
                 return FALSE;
-            }
-
-            std::wstring suppressedProgressCaption =
-                GetSuppressedProgressCaption(window);
-
-            if (!suppressedProgressCaption.empty() &&
-                !IsHostInSpecialOperationState(window))
-            {
-                wchar_t currentCaption[2]{};
-                if (GetWindowTextW(
-                        window, currentCaption,
-                        ARRAYSIZE(currentCaption)) == 0)
-                {
-                    DefSubclassProc(
-                        window,
-                        WM_SETTEXT,
-                        0,
-                        reinterpret_cast<LPARAM>(
-                            suppressedProgressCaption.c_str()));
-                }
             }
 
             CancelDeferredDisplaySnapshotsForHost(window);
@@ -8037,6 +7990,8 @@ namespace
 
             BP_PAINTPARAMS params{};
             params.cbSize = sizeof(params);
+            // Custom Blur depends on a transparent host surface. This clears
+            // the top-down DIB to ARGB {0, 0, 0, 0} before any drawing.
             params.dwFlags = BPPF_ERASE;
 
             HDC bufferDc = nullptr;
@@ -8062,23 +8017,6 @@ namespace
                 EndPaint(window, &paint);
                 RestoreGlassDirectUiForHost(window);
                 return 0;
-            }
-
-            // Custom Blur needs a transparent host paint surface so the
-            // DWM blur behind the client remains visible. Acrylic keeps
-            // the existing Windows SystemBackdrop composition path.
-            if (g_settings.glassEffect == L"blur")
-            {
-                HRESULT alphaResult =
-                    bp->setAlpha(buffer, &client, 0);
-                if (FAILED(alphaResult))
-                {
-                    Wh_Log(
-                        L"Glass: BufferedPaintSetAlpha failed "
-                        L"result=0x%08X hwnd=%p",
-                        static_cast<unsigned int>(alphaResult),
-                        reinterpret_cast<void *>(window));
-                }
             }
 
             // The custom paint surface is ready. Only now hide Explorer's
@@ -9021,6 +8959,10 @@ namespace
             }
             return false;
         }
+
+        SetHostCaptionDrawingSuppressed(
+            hostWindow,
+            g_settings.hideTitleBarPercentage);
 
         // Capture Explorer's current native size before any mod-owned
         // resize can occur. Later genuine native size changes may
@@ -10558,7 +10500,8 @@ namespace
                 return;
             }
 
-            if (EnsureSharedProgressBridge())
+            if (g_showCurrentFileProgressBar &&
+                EnsureSharedProgressBridge())
             {
                 ULONGLONG readNow = GetTickCount64();
                 bool foundSharedCurrentFile = false;
@@ -11665,7 +11608,9 @@ namespace
         COperationDataProvider *thisPtr,
         IShellItem *currentItem)
     {
-        if (currentItem)
+        bool trackCurrentFile = g_showCurrentFileProgressBar;
+
+        if (trackCurrentFile && currentItem)
         {
             currentItem->AddRef();
         }
@@ -11674,7 +11619,8 @@ namespace
             COperationDataProvider_WriteCurrentItem_Original(
                 thisPtr, currentItem);
 
-        if (!g_unloading.load(std::memory_order_acquire))
+        if (trackCurrentFile &&
+            !g_unloading.load(std::memory_order_acquire))
         {
             PWSTR filePath = nullptr;
 
@@ -11750,7 +11696,7 @@ namespace
             }
         }
 
-        if (currentItem)
+        if (trackCurrentFile && currentItem)
         {
             currentItem->Release();
         }
@@ -11767,7 +11713,7 @@ namespace
         unsigned long long value4,
         unsigned long long value5)
     {
-
+        if (g_showCurrentFileProgressBar)
         {
             std::lock_guard<std::mutex> lock(g_transferSummaryMutex);
 
@@ -12414,7 +12360,8 @@ namespace
 BOOL Wh_ModInit()
 {
     g_unloading.store(false, std::memory_order_release);
-    Wh_Log(L"File Operation Styler 1.2.0 initialization started");
+    Wh_Log(L"File Operation Styler " WH_MOD_VERSION
+           L" initialization started");
 
     LoadSettings();
 
@@ -12431,7 +12378,8 @@ BOOL Wh_ModInit()
         return FALSE;
     }
 
-    Wh_Log(L"File Operation Styler 1.2.0 initialization complete");
+    Wh_Log(L"File Operation Styler " WH_MOD_VERSION
+           L" initialization complete");
     return TRUE;
 }
 
@@ -12442,7 +12390,8 @@ void Wh_ModBeforeUninit()
         return;
     }
 
-    Wh_Log(L"File Operation Styler 1.2.0 presentation teardown started");
+    Wh_Log(L"File Operation Styler " WH_MOD_VERSION
+           L" presentation teardown started");
     {
         std::unique_lock<std::mutex> lock(g_presentationActivationMutex);
         g_presentationActivationCondition.wait(
@@ -12450,7 +12399,8 @@ void Wh_ModBeforeUninit()
             { return g_presentationActivations == 0; });
     }
     DestroyAllProgressCircles();
-    Wh_Log(L"File Operation Styler 1.2.0 presentation teardown complete");
+    Wh_Log(L"File Operation Styler " WH_MOD_VERSION
+           L" presentation teardown complete");
 }
 
 void Wh_ModUninit()
@@ -12467,7 +12417,8 @@ void Wh_ModUninit()
     ShutdownGlassBufferedPaintApi();
     ShutdownDwmApi();
     ShutdownShellMemoryApi();
-    Wh_Log(L"File Operation Styler 1.2.0 uninitialization complete");
+    Wh_Log(L"File Operation Styler " WH_MOD_VERSION
+           L" uninitialization complete");
 }
 
 BOOL Wh_ModSettingsChanged(BOOL *bReload)
