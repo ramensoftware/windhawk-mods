@@ -2,42 +2,54 @@
 // @id              universal-dll-injector
 // @name            Universal DLL Injector
 // @name:zh-CN      通用 DLL 注入器
-// @description     Inject one or more custom DLLs into the target process on load
-// @description:zh-CN 在目标进程启动时注入一个或多个自定义 DLL
+// @description     Loads one or more DLLs of your choice into the target process when it starts
+// @description:zh-CN 目标进程启动时加载一个或多个你指定的 DLL
 // @version         1.0
 // @author          loliri
 // @github          https://github.com/loliri
-// @include         mspaint.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
 /*
 # Universal DLL Injector
 
-Injects custom DLLs into the target process. Fill in the full paths of the
-DLLs in the settings, and the mod calls `LoadLibraryW` for each of them in
-turn when the target process starts.
+Loads DLLs of your choice into a process you choose, when that process starts.
+
+> **Note:** This mod loads prebuilt DLLs that are not part of the mod's source
+> and that nobody has reviewed. That is what it is for, but it means the mod is
+> only as trustworthy as the DLLs you point it at. Only use DLLs you built
+> yourself or obtained from a source you trust.
 
 ## Usage
 
-1. Open the mod in Windhawk, go to **Details** → **Advanced settings**, and put
-   the executable name of your target in the **process inclusion list** there.
-   It is set to `mspaint.exe` (Paint) as a placeholder, so nothing is injected
-   until you change it. No source code changes are needed.
-2. Fill in the full paths of the DLLs to inject under mod settings →
+1. Open the mod in Windhawk, go to the **Advanced** tab, and put the executable
+   name of your target in the **Custom process inclusion list**. The mod targets
+   nothing until you do.
+2. Fill in the full paths of the DLLs to load under mod settings →
    **DLL path list**.
-3. Once the mod is enabled, every listed DLL is loaded automatically each time
-   the target process starts.
+3. Every listed DLL is loaded each time the target process starts.
+
+Removing an entry from the list unloads that DLL; disabling the mod unloads all
+of them. A DLL that started threads or installed hooks of its own cannot be
+fully unloaded by `FreeLibrary`, so those effects can remain until the target
+process restarts.
 
 ## Notes
 
 - A DLL must match the target process architecture (64-bit process → 64-bit
   DLL).
-- DLL paths support environment variables, for example
-  `%USERPROFILE%\my.dll`.
-- The injection result can be seen in Windhawk's **Log** panel.
+- DLL paths support environment variables, for example `%APPDATA%\my.dll`.
+- **Paths must not be writable by anyone but you.** If the target process runs
+  elevated and the DLL sits in a folder that other users or programs can write
+  to, that DLL is loaded with elevated privileges, which lets anything that can
+  replace the file run code at that level. Keep such DLLs under a location only
+  administrators can write to, such as `C:\Program Files\`.
+- Because of that, injection into processes running above medium integrity is
+  skipped unless **Allow elevated targets** is turned on. Turn it on only if you
+  understand the risk above.
+- The result for each DLL is written to Windhawk's **Log** panel.
 */
-// ==/WindhawkModReadme==
+// ==WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
@@ -45,69 +57,133 @@ turn when the target process starts.
     - - Path: ""
         $name: DLL path
         $name:zh-CN: DLL 路径
-        $description: The full path of the DLL to inject, for example C:\tools\my.dll
-        $description:zh-CN: 要注入的 DLL 完整路径，例如 C:\tools\my.dll
+        $description: The full path of the DLL to load, for example C:\tools\my.dll
+        $description:zh-CN: 要加载的 DLL 完整路径，例如 C:\tools\my.dll
   $name: DLL path list
   $name:zh-CN: DLL 路径列表
-  $description: Injected in order; each entry holds the full path of one DLL.
-  $description:zh-CN: 按顺序注入，每条记录填写一个 DLL 的完整路径
+  $description: Loaded in order; each entry holds the full path of one DLL.
+  $description:zh-CN: 按顺序加载，每条记录填写一个 DLL 的完整路径
+- allowElevated: false
+  $name: Allow elevated targets
+  $name:zh-CN: 允许提权目标
+  $description: >-
+    Load the DLLs even when the target process runs elevated. Only turn this on
+    if the DLL paths are in a location only administrators can write to.
+  $description:zh-CN: >-
+    目标进程以管理员权限运行时也加载 DLL。仅当 DLL 所在位置只有管理员可写时才开启。
 */
 // ==/WindhawkModSettings==
 
 #include <windows.h>
+
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // ──────────────────────────────────────────────
-// Reads the settings and returns the list of DLL paths
+// Settings
 // ──────────────────────────────────────────────
-static std::vector<std::wstring> LoadDllPaths() {
+
+std::vector<std::wstring> LoadDllPaths() {
     std::vector<std::wstring> paths;
 
-    for (int i = 0; ; i++) {
+    for (int i = 0;; i++) {
         PCWSTR raw = Wh_GetStringSetting(L"DllPaths[%d].Path", i);
-        // An empty string marks the end of the list
-        if (!raw || raw[0] == L'\0') {
-            Wh_FreeStringSetting(raw);
+        bool empty = !raw || !raw[0];
+        if (!empty) {
+            // Environment variables are expanded so entries can be written
+            // without hardcoding a user name.
+            WCHAR expanded[MAX_PATH * 2];
+            if (ExpandEnvironmentStringsW(raw, expanded,
+                                          ARRAYSIZE(expanded)) > 0) {
+                paths.emplace_back(expanded);
+            } else {
+                paths.emplace_back(raw);
+            }
+        }
+        Wh_FreeStringSetting(raw);
+        if (empty) {
             break;
         }
-
-        // Expand environment variables (supports %USERPROFILE% and the like)
-        wchar_t expanded[MAX_PATH * 2];
-        if (ExpandEnvironmentStringsW(raw, expanded, ARRAYSIZE(expanded)) > 0) {
-            paths.emplace_back(expanded);
-        } else {
-            paths.emplace_back(raw);
-        }
-
-        Wh_FreeStringSetting(raw);
     }
 
     return paths;
 }
 
 // ──────────────────────────────────────────────
-// Injects every DLL
+// Integrity check
 // ──────────────────────────────────────────────
-static void InjectAll() {
+
+// Whether this process runs above medium integrity, i.e. elevated. Loading a
+// DLL from a user-writable path into such a process would let unelevated code
+// run at high integrity, so it is skipped unless the user opts in.
+bool IsAboveMediumIntegrity() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        // Be conservative: if the level can't be read, treat it as elevated.
+        return true;
+    }
+
+    alignas(TOKEN_MANDATORY_LABEL) BYTE buffer[sizeof(TOKEN_MANDATORY_LABEL) +
+                                               SECURITY_MAX_SID_SIZE];
+    DWORD size = 0;
+    bool aboveMedium = true;
+    if (GetTokenInformation(token, TokenIntegrityLevel, buffer, sizeof(buffer),
+                            &size)) {
+        PSID sid = reinterpret_cast<TOKEN_MANDATORY_LABEL*>(buffer)->Label.Sid;
+        DWORD rid = *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
+        aboveMedium = rid > SECURITY_MANDATORY_MEDIUM_RID;
+    }
+
+    CloseHandle(token);
+    return aboveMedium;
+}
+
+// ──────────────────────────────────────────────
+// Loading
+// ──────────────────────────────────────────────
+
+// The DLLs this mod loaded, so they can be unloaded when they leave the list
+// and when the mod is disabled.
+std::unordered_map<std::wstring, HMODULE> g_loaded;
+
+void SyncDlls() {
     auto paths = LoadDllPaths();
 
-    if (paths.empty()) {
-        Wh_Log(L"[custom-dll-injector] No DLL path configured, skipping injection");
-        return;
-    }
-
-    for (const auto& path : paths) {
-        Wh_Log(L"[custom-dll-injector] Loading: %s", path.c_str());
-
-        HMODULE hMod = LoadLibraryW(path.c_str());
-        if (hMod) {
-            Wh_Log(L"[custom-dll-injector] Succeeded: %s (handle=0x%p)", path.c_str(), (void*)hMod);
+    // Unload whatever is no longer listed.
+    for (auto it = g_loaded.begin(); it != g_loaded.end();) {
+        if (std::find(paths.begin(), paths.end(), it->first) == paths.end()) {
+            Wh_Log(L"Unloading %s", it->first.c_str());
+            FreeLibrary(it->second);
+            it = g_loaded.erase(it);
         } else {
-            DWORD err = GetLastError();
-            Wh_Log(L"[custom-dll-injector] Failed: %s (error=%lu)", path.c_str(), err);
+            ++it;
         }
     }
+
+    // Load what is listed and not loaded yet.
+    for (const auto& path : paths) {
+        if (g_loaded.contains(path)) {
+            continue;
+        }
+
+        HMODULE module = LoadLibraryW(path.c_str());
+        if (module) {
+            Wh_Log(L"Loaded %s", path.c_str());
+            g_loaded.emplace(path, module);
+        } else {
+            Wh_Log(L"Failed to load %s (error %u)", path.c_str(),
+                   GetLastError());
+        }
+    }
+}
+
+void UnloadAllDlls() {
+    for (const auto& [path, module] : g_loaded) {
+        Wh_Log(L"Unloading %s", path.c_str());
+        FreeLibrary(module);
+    }
+    g_loaded.clear();
 }
 
 // ──────────────────────────────────────────────
@@ -115,28 +191,27 @@ static void InjectAll() {
 // ──────────────────────────────────────────────
 
 BOOL Wh_ModInit() {
-    Wh_Log(L"[custom-dll-injector] Wh_ModInit");
-    InjectAll();
+    Wh_Log(L">");
+
+    if (IsAboveMediumIntegrity() &&
+        !Wh_GetIntSetting(L"allowElevated")) {
+        Wh_Log(L"Target runs elevated, skipping (see the mod settings)");
+        return FALSE;
+    }
+
+    SyncDlls();
+
     return TRUE;
 }
 
-void Wh_ModAfterInit() {
-    Wh_Log(L"[custom-dll-injector] Wh_ModAfterInit");
-}
-
-void Wh_ModBeforeUninit() {
-    Wh_Log(L"[custom-dll-injector] Wh_ModBeforeUninit");
-    // Note: a DLL already loaded through LoadLibraryW is not unloaded here.
-    // To unload it, keep its HMODULE and call FreeLibrary at this point.
-}
-
 void Wh_ModUninit() {
-    Wh_Log(L"[custom-dll-injector] Wh_ModUninit");
+    Wh_Log(L">");
+
+    UnloadAllDlls();
 }
 
-// Re-injects when the settings change (only newly added DLLs are loaded; the
-// ones already loaded are not loaded again)
 void Wh_ModSettingsChanged() {
-    Wh_Log(L"[custom-dll-injector] Settings changed, injecting again");
-    InjectAll();
+    Wh_Log(L">");
+
+    SyncDlls();
 }
