@@ -2671,7 +2671,13 @@ static void RestoreWindowStyle(AnimSlot* slot, HWND hwnd) {
         // and it would stay invisible the next time the app shows it.
         // SetLayeredWindowAttributes sends nothing to the window's thread, so this cannot
         // block and does not need the pumping check.
-        SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+        // The check is for this being the second call (the tail of the animation and the
+        // unload cleanup both land here): a window that no longer has the style would just
+        // fail the call, and one the app layered again in between must keep its own alpha.
+        // No style also means no alpha, so a window that is not layered is visible anyway.
+        if (GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED) {
+            SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+        }
         // Only the style removal is gated: SetWindowLong on another thread's window is a
         // synchronous send, and Wh_ModUninit waits for this thread with INFINITE, so a hung
         // app would hold up the unload. Keeping WS_EX_LAYERED is harmless there, since the
