@@ -8,7 +8,6 @@
 // @license         MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lversion
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -33,11 +32,12 @@ client-area animation preference is off; it does not change that system setting.
 
 ## Compatibility
 
-Targets Explorer on x64 Windows 11. Tested by the author on Windows 11 25H2
-with 26100-family shell DLLs, including revision 9444. Other versions are not
-claimed to be supported. Required symbols and inspected function-entry code
-must match; otherwise initialization stops. A Windows update can require an update
-to this mod. The first load can take time while Microsoft symbols are downloaded.
+Targets Explorer on Windows 11. Tested by the author on x64 Windows 11 25H2
+with 26100-family shell DLLs, including revision 9444. Other builds and ARM64
+have not been tested. Required function symbols must resolve; otherwise
+initialization stops. Windows updates can change the private animation behavior
+and require a mod update. The first load can take time while Microsoft symbols
+are downloaded.
 
 The taskbar may disappear during the native desktop slide and return when it
 finishes. This mod does not change taskbar visibility.
@@ -64,21 +64,17 @@ Windhawk debug logging and check for initialization or compatibility errors.
 */
 // ==/WindhawkModSettings==
 
+#define _WIN32_WINNT 0x0A00
 #include <windows.h>
 #include <windhawk_api.h>
 #include <windhawk_utils.h>
 #include <atomic>
 #include <algorithm>
-#include <vector>
-#include <cstring>
+#include <uxtheme.h>
 
 
-// ABI of TA_TIMINGFUNCTION_CUBICBEZIER verified from twinui::_AddTransition:
-// type at +0, control points at +4, +8, +12, +16. Type 1 is cubic Bezier.
-struct TimingCurve { unsigned type; float x1, y1, x2, y2; };
-static_assert(sizeof(TimingCurve) == 20);
 using WindowCommit = HRESULT (*)(void*, void*, unsigned, float, bool);
-using AddTransition = HRESULT (*)(void*, unsigned, unsigned, void*, void*,
+using AddTransition = HRESULT (*)(void*, unsigned, unsigned, TA_TIMINGFUNCTION*, void*,
                                   void*, const double*, unsigned, bool);
 WindowCommit g_originalCommit;
 AddTransition g_originalTransition;
@@ -111,26 +107,25 @@ HRESULT CommitHook(void* self, void* handler, unsigned token,
     if (g_logging.load())
         Wh_Log(L"gesture window commit: target=%f touch=%d token=%u", target, touch, token);
     CommitScope scope;
-    HRESULT result = g_originalCommit(self, handler, token, target, touch);
-    return result;
+    return g_originalCommit(self, handler, token, target, touch);
 }
 
 HRESULT TransitionHook(void* self, unsigned delayMs, unsigned durationMs,
-                       void* timing, void* storyboard, void* variable,
+                       TA_TIMINGFUNCTION* timing, void* storyboard, void* variable,
                        const double* values, unsigned count, bool force) {
-    TimingCurve ease{1, .22f, 1.f, .36f, 1.f};
-    TimingCurve linear{1, 1.f/3.f, 1.f/3.f, 2.f/3.f, 2.f/3.f};
+    static TA_CUBIC_BEZIER ease{{TTFT_CUBIC_BEZIER}, .22f, 1.f, .36f, 1.f};
+    static TA_CUBIC_BEZIER linear{{TTFT_CUBIC_BEZIER}, 1.f/3.f, 1.f/3.f, 2.f/3.f, 2.f/3.f};
     // Only animated cubic transitions within a gesture commit are changed.
     // Instantaneous updates during dragging stay untouched.
     if (g_commitDepth && durationMs && timing &&
-        *static_cast<const unsigned*>(timing) == 1) {
+        timing->eTimingFunctionType == TTFT_CUBIC_BEZIER) {
         unsigned chosen = g_duration.load();
         if (g_logging.load())
             Wh_Log(L"settle transition: delay=%u native=%u requested=%u dimensions=%u",
                    delayMs, durationMs, chosen, count);
         durationMs = chosen;
-        if (g_linear.load()) timing = &linear;
-        else if (g_easeOut.load()) timing = &ease;
+        if (g_linear.load()) timing = &linear.header;
+        else if (g_easeOut.load()) timing = &ease.header;
     }
     return g_originalTransition(self, delayMs, durationMs, timing, storyboard,
                                 variable, values, count, force);
@@ -143,91 +138,41 @@ void LoadSettings() {
     g_logging = Wh_GetIntSetting(L"debugLogging") != 0;
 }
 
-bool CheckVersion(HMODULE module) {
-    wchar_t path[MAX_PATH];
-    if (!GetModuleFileNameW(module, path, MAX_PATH)) return false;
-    DWORD size = GetFileVersionInfoSizeW(path, nullptr);
-    if (!size) return false;
-    std::vector<BYTE> data(size);
-    if (!GetFileVersionInfoW(path, 0, size, data.data())) return false;
-    VS_FIXEDFILEINFO* info = nullptr; UINT len = 0;
-    if (!VerQueryValueW(data.data(), L"\\", reinterpret_cast<void**>(&info), &len)
-        || len < sizeof(*info)) return false;
-    Wh_Log(L"DLL version: %u.%u.%u.%u", HIWORD(info->dwFileVersionMS),
-           LOWORD(info->dwFileVersionMS), HIWORD(info->dwFileVersionLS),
-           LOWORD(info->dwFileVersionLS));
-    return info->dwFileVersionMS == static_cast<DWORD>(MAKELONG(0, 10)) &&
-           HIWORD(info->dwFileVersionLS) == 26100;
-}
-
-// Fail closed when the inspected register/stack entry layouts change.
-// These guards are compatibility checks, not proof of the complete animation path.
-bool CheckEntryCode(void* commit, void* transition) {
-    const BYTE commitPrefix[] = {0x48,0x8b,0xc4,0x48,0x89,0x58,0x10,0x48,0x89,0x70,0x18,0x55,0x41,0x56,0x41,0x57,0x48,0x8d,0x68,0xa9,0x48,0x81,0xec,0xb0,0,0,0,0x0f,0x29,0x78,0xd8};
-    const BYTE transitionPrefix[] = {0x48,0x8b,0xc4,0x55,0x53,0x56,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57,0x48,0x8d,0x68,0xb9,0x48,0x81,0xec,0xc8,0,0,0,0x0f,0x29,0x70,0xa8,0x44,0x0f,0x29,0x40,0x98};
-    const BYTE commitArguments[] = {0x0f,0x28,0xfb,0x41,0x8b,0xd8,0x48,0x8b,0xf2,0x4c,0x8b,0xf1};
-    const BYTE transitionArguments[] = {0x4d,0x8b,0xe1,0x41,0x8b,0xd8,0x89,0x5d,0x97,0x8b,0xf2,0x89,0x55,0x9f};
-    const BYTE* c = static_cast<const BYTE*>(commit);
-    const BYTE* a = static_cast<const BYTE*>(transition);
-    bool valid = !std::memcmp(c, commitPrefix, sizeof(commitPrefix)) &&
-                 !std::memcmp(a, transitionPrefix, sizeof(transitionPrefix)) &&
-                 !std::memcmp(c+45, commitArguments, sizeof(commitArguments)) &&
-                 !std::memcmp(a+49, transitionArguments, sizeof(transitionArguments));
-    Wh_Log(L"Entry-code compatibility: %s", valid ? L"matched" : L"FAILED; no hooks installed");
-    return valid;
-}
-
 BOOL Wh_ModInit() {
     Wh_Log(L"v1.0.0 initialization entered");
     LoadSettings();
-    HMODULE shell = GetModuleHandleW(L"twinui.pcshell.dll");
-    HMODULE thumbnails = GetModuleHandleW(L"twinui.dll");
-    if (!shell || !thumbnails) { Wh_Log(L"Required shell modules not loaded; reload mod after Explorer is ready."); return FALSE; }
-    if (!CheckVersion(shell) || !CheckVersion(thumbnails)) {
-        Wh_Log(L"Unsupported DLL version. No hooks installed."); return FALSE;
+    HMODULE shell = LoadLibraryExW(L"twinui.pcshell.dll", nullptr,
+                                   LOAD_LIBRARY_SEARCH_SYSTEM32);
+    HMODULE thumbnails = LoadLibraryExW(L"twinui.dll", nullptr,
+                                        LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!shell || !thumbnails) {
+        Wh_Log(L"Failed to load required shell modules");
+        return FALSE;
     }
-    void* commit = nullptr;
-    void* transition = nullptr;
-    void* animationPolicy = nullptr;
 
-    // Resolve addresses first so entry-code checks run before any hook is installed.
     // twinui.pcshell.dll
     WindhawkUtils::SYMBOL_HOOK shellHooks[] = {
         {{
              L"public: long __cdecl VirtualDesktopGestureWindow::Commit(struct IVirtualDesktopGestureHandlerPrivate *,unsigned int,float,bool)",
          },
-         &commit,
-         nullptr},
+         &g_originalCommit,
+         CommitHook},
     };
     WindhawkUtils::SYMBOL_HOOK twinuiDllHooks[] = {
         {{
              L"private: long __cdecl CDCompAbstractThumbnail::_AddTransition(unsigned int,unsigned int,struct TA_TIMINGFUNCTION *,struct IUIAnimationStoryboard2 *,struct IUIAnimationVariable2 *,double * const,unsigned int,bool)",
          },
-         &transition,
-         nullptr},
+         &g_originalTransition,
+         TransitionHook},
         {{
              L"public: virtual bool __cdecl CSwitchThumbnailDeviceManager::AnimationsEnabled(void)",
          },
-         &animationPolicy,
-         nullptr},
+         &g_animationsEnabledOriginal,
+         AnimationsEnabledHook},
     };
     if (!WindhawkUtils::HookSymbols(shell, shellHooks, ARRAYSIZE(shellHooks)) ||
         !WindhawkUtils::HookSymbols(thumbnails, twinuiDllHooks, ARRAYSIZE(twinuiDllHooks))) {
-        Wh_Log(L"Required symbols missing. No hooks installed.");
-        return FALSE;
-    }
-    if (!commit || !transition || !animationPolicy) return FALSE;
-    if (!CheckEntryCode(commit, transition)) return FALSE;
-    if (!Wh_SetFunctionHook(commit, reinterpret_cast<void*>(CommitHook),
-                            reinterpret_cast<void**>(&g_originalCommit)) ||
-        !Wh_SetFunctionHook(transition, reinterpret_cast<void*>(TransitionHook),
-                            reinterpret_cast<void**>(&g_originalTransition))) { Wh_Log(L"Hook registration failed"); return FALSE; }
-
-
-    if (!animationPolicy || !Wh_SetFunctionHook(animationPolicy,
-        reinterpret_cast<void*>(AnimationsEnabledHook),
-        reinterpret_cast<void**>(&g_animationsEnabledOriginal))) {
-        Wh_Log(L"Animation-policy hook failed; mod initialization aborted");
+        Wh_Log(L"Failed to hook required symbols; initialization aborted.");
         return FALSE;
     }
     Wh_Log(L"Smooth release initialized; duration=%u ms. Ready.", g_duration.load());
@@ -236,6 +181,3 @@ BOOL Wh_ModInit() {
 
 void Wh_ModSettingsChanged() { LoadSettings(); }
 void Wh_ModUninit() { Wh_Log(L"Smooth release unloaded; native behavior restored."); }
-
-
-
