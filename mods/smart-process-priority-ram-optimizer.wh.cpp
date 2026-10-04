@@ -2,11 +2,12 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         3.6.0
+// @version         3.7.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
-// @compilerOptions -lpsapi -lole32 -lshell32 -ldwmapi
+// @compilerOptions -lpsapi -lole32 -lshell32 -ldwmapi -ladvapi32
+// @donateUrl       https://ko-fi.com/gilnet
 // @license         GPL-3.0
 // ==/WindhawkMod==
 
@@ -14,67 +15,53 @@
 /*
 # Smart Process Priority & RAM Optimizer
 
-An intelligent system responsiveness and memory optimization engine for Windows. It automatically prioritizes your active foreground applications, restrains runaway background tasks to preserve CPU performance, shields real-time audio, network streams, and local AI workloads, and safely reclaims unused memory without causing disk stutter.
+Dynamically manages process priorities and memory allocation to keep foreground applications responsive and prevent background tasks from causing system hitches.
+
+## Expectations
+- **What it does**: Mitigates micro-stutters and input latency spikes caused by background processes competing for CPU resources.
+- **What it does not do**: It does not increase maximum hardware performance or raw gaming FPS.
 
 ## Key Features
 
-### 1. Instant Foreground Priority Boost (ProBalance)
-- Automatically boosts the responsiveness of the active application the instant you switch to it.
-- Elevates both the main application and its background helpers (renderers, GPU workers) to eliminate micro-stutters.
-- On modern hybrid processors (Intel 12th+ Gen and AMD), keeps your primary application focused on high-performance cores.
-- Fully supports modern Windows Store and Game Pass games.
+### 1. Foreground Priority Boost
+- Elevates the CPU priority of the active window and its related child processes.
+- Optionally assigns the active application to performance cores on hybrid CPU architectures.
 
-### 2. Smart Background Restraint
-- Continuously monitors background CPU consumption to protect your system from slowdowns.
-- Temporarily lowers the priority of runaway background programs that try to monopolize processor resources.
-- On hybrid CPUs, confines heavy background tasks to efficiency cores to keep performance cores dedicated to your active task.
-- Safeguards active disk writes and IPC trees so background transfers and UI helpers are never degraded.
+### 2. Background Throttling
+- Temporarily reduces the CPU priority of background processes exceeding defined utilization thresholds.
+- Optionally applies deep thread-level I/O background mode (`THREAD_MODE_BACKGROUND_BEGIN`) to minimize disk I/O and SSD latency.
+- Optionally restricts throttled tasks to efficiency cores or applies Windows EcoQoS.
 
-### 3. Audio & Network Activity Protection
-- Automatically detects active audio playback (music players, video streaming, DAWs) and active network transfers (downloads, streams, VoIP).
-- Topological audio sanctuary: shields the exact audio pipeline and active rendering workers without blindly immunizing dormant sibling processes or tabs.
-- Pre-emptive memory staging: gently demotes memory priority to the standby list when audio stops so memory is ready in advance for heavy workloads.
-- Instant elastic rebound: immediately restores memory priority and priority shields the instant audio playback resumes.
-- Prevents audio dropouts and download throttling by guaranteeing that processes streaming or transferring data are never throttled or memory-trimmed.
+### 3. Audio & Network Protection
+- Shields processes with active audio playback from throttling and memory trimming.
+- Shields processes performing active network transfers from throttling.
 
-### 4. Local AI Model Sanctuary
-- Automatically identifies local AI engines (Ollama, LM Studio, KoboldCPP, ComfyUI, etc.).
-- Shields AI generation from interruption and preserves model weights in memory while actively generating.
-- Once idle, allows memory to transition into the fast standby cache so it reloads instantly on the next prompt.
+### 4. Compute & AI Workload Protection
+- Prevents throttling of intensive background computation and model inference tasks.
 
-### 5. Gaming & Fullscreen Detection
-- Detects fullscreen games and major gaming platforms (Steam, Epic, Xbox, GOG).
-- Performs a proactive memory sweep before launching a game to ensure maximum physical RAM is free for game textures.
+### 5. Memory Optimization
+- Gradually trims unused working set memory from idle applications via Windows memory APIs.
+- Automatically suspends trimming on battery power and during post-sleep transitions.
+- Includes a configurable hotkey (`Ctrl+Alt+F11`) for manual memory cleanup.
 
-### 6. Safe & SSD-Friendly Memory Optimization
-- Reclaims unused physical memory from idle applications using safe Windows memory prioritization.
-- Features a 30-second post-sleep warm-up grace period to prevent hard page fault storms after waking up.
-- Strictly respects cooldown intervals and activity timers to prevent unnecessary SSD wear.
-- Automatically pauses background memory cleaning when running on battery power.
-- Emergency Hotkey: Press `Ctrl+Alt+F11` at any time to run an immediate memory cleanup pass and log session statistics (plays a Windows system confirmation chime).
+### 6. Dynamic Power Scheme
+- Automatically engages the High Performance power plan during demanding workloads on AC power.
+- Restores the original system power plan when returning to the desktop or entering sleep.
 
-### 7. Dynamic High-Performance Power Scheme
-- Automatically engages the Windows High Performance power plan when a demanding foreground application or game is active on AC power.
-- Eliminates CPU frequency ramp-up lag and core-parking latency during heavy workloads.
-- Restores your original power scheme instantly upon returning to the desktop or when the PC enters sleep.
-- Built-in crash and reboot recovery preserves and guarantees your original power plan across system restarts.
+### 7. Inactive Browser Tab Trimming
+- Detects dormant background browser renderers and trims their unused memory while keeping active tabs intact.
 
-### 8. Smart Inactive Browser Tab Trimming
-- Specifically detects dormant renderer processes belonging to modern web browsers (Chrome, Edge, Brave, Firefox, Opera, Vivaldi, Zen).
-- Safely trims unused memory from background tabs inactive for over 10 minutes, reclaiming 1 to 2 GB of RAM without closing tabs.
-- Full immunity for active tabs, background downloads, and video/audio playback streams.
-
-## Settings
-The mod provides comprehensive configuration options accessible via the Windhawk interface:
-- **Foreground Boost (ProBalance)**: Select priority level (Above Normal or High) and optionally suggest P-cores on hybrid processors.
-- **Background Restraint**: Set CPU threshold percentages, system contention triggers, and target throttle priority classes.
-- **Memory Optimization**: Customize physical free RAM thresholds, idle triggers, and application memory caps.
-- **Workload Shields**: Enable or fine-tune protection for audio playback, active network downloads, and local AI model inference.
+### 8. Passive Environment Diagnostics
+- Passively detects and logs Hardware-Accelerated GPU Scheduling (HAGS), Virtualization-Based Security (VBS/Core Isolation), and Memory Compression status.
 
 ## Compatibility
 - Supported OS: Windows 10 (version 1809 and later) and Windows 11 (all versions including 24H2).
 - Supported Architectures: x86 (32-bit), x64 (64-bit), and ARM64.
 - Works seamlessly on standard and hybrid CPU topologies (Intel Core 12th+ Gen P/E-cores and AMD heterogeneous architectures).
+
+## Support
+If you find this mod useful, you can support its development and maintenance:
+- [Support on Ko-fi](https://ko-fi.com/gilnet)
 
 ## Credits & Acknowledgments
 - **Process Lasso (Bitsum)**: Inspiration for the ProBalance concept and foreground responsiveness prioritization.
@@ -88,117 +75,83 @@ The mod provides comprehensive configuration options accessible via the Windhawk
 // ==WindhawkModSettings==
 /*
 - enableProBalance: true
-  $name: Elevate Foreground Priority (ProBalance)
-  $description: Increases the CPU priority of the active foreground window family and restrains background CPU/IO contention for maximum responsiveness.
+  $name: 1. Foreground Priority Boost (ProBalance)
+  $description: Automatically increases the CPU priority of the active foreground window family for maximum responsiveness.
 - foregroundPriorityLevel: "aboveNormal"
   $name: Foreground Priority Level
-  $description: CPU priority class assigned to the active foreground application.
+  $description: Priority class assigned to the active foreground application.
   $options:
     - "aboveNormal": Above Normal (Balanced & Safe)
     - "high": High (Maximum Performance)
 - enableForegroundCpuSets: false
-  $name: Suggest P-Cores to Foreground Window (Gaming & Low Latency)
-  $description: Directs the main active window to Performance Cores (P-cores) on hybrid Intel/AMD CPUs to prevent micro-stutter. Recommended for gaming; disable if running heavy multi-threaded workloads like 3D rendering or video encoding.
+  $name: Suggest P-Cores to Foreground Window
+  $description: Directs the active foreground app to Performance Cores (P-cores) on hybrid Intel/AMD CPUs to eliminate micro-stutter.
+- enableDynamicPowerPlan: false
+  $name: Dynamic High-Performance Power Scheme
+  $description: Automatically engages the High Performance power plan while a heavy application or game is active on AC power, and restores your plan on desktop.
+- enableBackgroundThrottling: true
+  $name: 2. Throttle CPU-Heavy Background Processes
+  $description: Temporarily lowers the priority of background processes consuming excessive CPU while you are working.
+- enableThreadBackgroundMode: false
+  $name: Deep Background I/O & CPU Mode
+  $description: Places threads of throttled background processes into Windows background mode (THREAD_MODE_BACKGROUND_BEGIN) to minimize disk I/O and SSD latency.
 - enableBackgroundCpuSets: false
   $name: Restrict Throttled Background Apps to E-Cores
-  $description: Confines throttled background processes to Efficiency Cores (E-cores) on hybrid Intel/AMD CPUs, preserving full P-core throughput and L3 cache for the foreground app.
-- enableBackgroundThrottling: true
-  $name: Throttle CPU-Heavy Background Processes
-  $description: Temporarily lowers the priority of background processes that consume excessive CPU while a foreground app is active.
+  $description: Confines throttled background tasks to Efficiency Cores (E-cores) on hybrid Intel/AMD CPUs, reserving P-cores for your active app.
+- enableEcoQosManagement: false
+  $name: Windows Efficiency Mode (EcoQoS)
+  $description: Applies Windows power throttling to background processes, scheduling them on efficiency cores.
 - backgroundCpuThrottleThresholdPercent: 15
   $name: Background CPU Threshold (%)
   $description: Percentage of CPU usage required to throttle a background process (5% to 50%).
 - systemCpuContentionThresholdPercent: 60
-  $name: Total System CPU Contention Threshold (%)
-  $description: Overall system CPU load required before background throttling activates (0% to 95%).
+  $name: System Contention Trigger Threshold (%)
+  $description: Total system CPU usage (load) required before background throttling can engage (e.g. 60% CPU in use, not idle).
 - backgroundThrottlePriorityLevel: "belowNormal"
   $name: Background Throttle Priority Level
   $description: Priority class applied to throttled background processes.
   $options:
     - "belowNormal": Below Normal (Recommended)
     - "idle": Idle (Strict Throttling)
-- enableEcoQosManagement: false
-  $name: Windows Efficiency Mode (EcoQoS)
-  $description: Applies Windows power throttling to background processes, scheduling them on efficiency cores.
+- enableAudioShielding: true
+  $name: 3. Audio & Music Protection Shield
+  $description: Shields applications actively streaming or playing audio (Spotify, YouTube, DAWs, games) against throttling and memory sweeps.
 - enableNetworkShielding: true
   $name: Network Activity Shield (Streaming & Downloads)
-  $description: Protects background applications actively downloading files, streaming media, or handling VoIP calls from being throttled or memory-trimmed.
-- freeRamThresholdPercent: 20
-  $name: Standard Free RAM Threshold (%)
-  $description: Percentage of available physical memory below which background memory cleanup is triggered (5% to 50%).
-- enableTieredRamThreshold: true
-  $name: Multi-Tiered Memory Thresholds
-  $description: Performs an early cleanup of minimized inactive heavy applications before the standard threshold is reached.
-- tieredHogThresholdPercent: 40
-  $name: Inactive Apps Free RAM Threshold (%)
-  $description: Free RAM percentage threshold to clean minimized heavy applications inactive for over 15 minutes (10% to 80%).
-- recentActivityGraceMinutes: 3
-  $name: Inactivity Grace Period (Minutes)
-  $description: Minimum minutes an application must remain inactive in the background before its memory can be reclaimed (1 to 60 minutes).
+  $description: Protects background applications actively downloading files, streaming media, or handling VoIP calls.
+- enableSmartAiOptimization: true
+  $name: Protect Local AI & Shader Compilers
+  $description: Prevents throttling or memory trimming during local AI generation (Ollama, LM Studio) or background shader compilation.
+- freeRamThresholdPercent: 0
+  $name: 4. Standard Free RAM Threshold (%)
+  $description: Percentage of available physical memory below which background memory cleanup is triggered (0 = Auto-Adaptive, 5% to 80%). Automatically adapts thresholds to your installed RAM (e.g. cleans at 60% free RAM on 32 GB).
 - trimMinimizedWindows: true
   $name: Clean Minimized Windows
-  $description: Reclaims unused memory from applications minimized to the taskbar.
-- enableElectronMemoryCap: true
-  $name: Memory Cap for Heavy Applications
-  $description: Reclaims memory from listed heavy applications once their memory usage exceeds the configured cap.
-- electronMemoryCapMb: 500
-  $name: Heavy Applications Memory Cap (MB)
-  $description: Maximum memory threshold before an inactive listed application is cleaned (100 to 4000 MB).
-- enableIdleBoost: true
-  $name: Idle System Memory Optimization
-  $description: Automatically reclaims unused memory when the computer is completely idle.
-- enableSmartAiOptimization: true
-  $name: Protect Local AI Workloads
-  $description: Prevents throttling or memory trimming during active local AI model inference.
-- aiInactivityGraceMinutes: 5
-  $name: AI Inactivity Grace Period (Minutes)
-  $description: Minutes of inactivity before dormant local AI model memory can be released (1 to 30 minutes).
+  $description: Reclaims unused memory in the background from applications minimized to the taskbar.
+- enableBrowserTabTrim: true
+  $name: Inactive Browser Tabs Memory Trim
+  $description: Safely reclaims unused memory from dormant background browser renderer tabs without closing tabs or affecting active ones.
 - pauseOnBattery: true
   $name: Pause on Battery Power
   $description: Suspends memory cleanups and background throttling on battery to maximize laptop battery life.
+- enableElectronMemoryCap: true
+  $name: Early Memory Cap for Heavy Apps
+  $description: Reclaims memory from listed heavy apps once their memory exceeds the configured cap, without waiting for system-wide RAM pressure.
+- electronMemoryCapMb: 300
+  $name: Heavy Apps Memory Cap (MB)
+  $description: Maximum memory threshold before an inactive listed application is cleaned (100 to 2000 MB).
 - customTargetList: "zen.exe, chrome.exe, msedge.exe, brave.exe, firefox.exe, opera.exe, vivaldi.exe, discord.exe, slack.exe, teams.exe, telegram.exe, whatsapp.exe, signal.exe, skype.exe, spotify.exe, steam.exe, epicgameslauncher.exe, code.exe, obs64.exe"
   $name: Heavy Memory Hogs Process List
-  $description: Comma-separated list of executable names targeted by the memory cap and tiered inactive cleanup.
-- excludedProcesses: "explorer.exe, windhawk.exe, dwm.exe, csrss.exe, lsass.exe, smss.exe, services.exe, system, wininit.exe, winlogon.exe, logonui.exe, lockapp.exe, consent.exe, credentialuibroker.exe, smartscreen.exe, svchost.exe, memcompression, registry, fontdrvhost.exe, audiodg.exe, sihost.exe, taskhostw.exe, ctfmon.exe, wlanext.exe, dashost.exe, syntpenh.exe, syntphelper.exe, etdcontrol.exe, etdctrl.exe, alpspad.exe, hcontrol.exe, wireguard.exe, openvpn.exe, tailscale.exe, splwow64.exe, printfilterpipelinesvc.exe, spoolsv.exe, wudfhost.exe, devicecensus.exe"
-  $name: Excluded Processes (Immunity List)
-  $description: Comma-separated list of executable names that must never be throttled or trimmed.
+  $description: All background apps are optimized when RAM drops; this list is only for preemptive memory trimming on heavy web/Electron apps exceeding the cap above.
 - enablePanicHotkey: true
-  $name: Emergency Clean Hotkey (Ctrl+Alt+F11)
+  $name: 5. Emergency Clean Hotkey (Ctrl+Alt+F11)
   $description: Enables the Ctrl+Alt+F11 shortcut to trigger an immediate memory reclamation pass.
 - enableHotkeySound: true
   $name: Emergency Hotkey Audio Feedback
   $description: Emits a subtle confirmation chime when memory reclamation initiated by Ctrl+Alt+F11 is completely finished.
-- enableDynamicPowerPlan: false
-  $name: Dynamic High-Performance Power Scheme
-  $description: Automatically switches Windows to the High Performance power plan when an active game or heavy application is in the foreground on AC power, and restores your original plan on desktop or battery.
-- enableBrowserTabTrim: true
-  $name: Smart Inactive Browser Tabs Memory Trim
-  $description: Safely reclaims unused memory from inactive background browser renderer tabs without affecting active tabs or interrupting streaming audio.
-- browserTabInactivityMinutes: 10
-  $name: Browser Tab Inactivity Threshold (Minutes)
-  $description: Minimum minutes a background browser tab must remain completely idle before its unused memory is released (5 to 60 minutes).
-- gameAltTabGracePeriodSeconds: 180
-  $name: Game Alt-Tab Grace Period (Seconds)
-  $description: Duration to completely freeze memory sweeps after switching away from a game (30 to 600 seconds).
-- ioActivityWriteThresholdKbps: 250
-  $name: Disk Write Activity Threshold (KB/s)
-  $description: Minimum continuous disk write throughput to shield a process from throttling (50 to 5000 KB/s).
-- ioActivityTransferThresholdKbps: 100
-  $name: Network/IO Transfer Activity Threshold (KB/s)
-  $description: Minimum continuous network or general IO throughput to shield a process from throttling (20 to 2000 KB/s).
-- compressionBurstHysteresisSeconds: 20
-  $name: Archive Decompression Burst Hysteresis (Seconds)
-  $description: Grace period preserving write immunity during CPU-heavy archive compression/decompression pauses (5 to 120 seconds).
-- enableLogging: true
-  $name: Diagnostic Logging
-  $description: Logs memory reclamation statistics and hardware profile information in Windhawk.
-- logDetailLevel: "detailed"
-  $name: Diagnostic Logging Verbosity
-  $description: Depth of diagnostic and telemetry output in Windhawk logs.
-  $options:
-    - "minimal": Minimal (Key milestones & major cleanups only)
-    - "detailed": Detailed (Priority transitions, process family tracking, I/O states)
-    - "debug": Debug (Full engine heartbeats, core topology, snapshot metrics)
+- excludedProcesses: "explorer.exe, windhawk.exe, dwm.exe, csrss.exe, lsass.exe, smss.exe, services.exe, system, wininit.exe, winlogon.exe, logonui.exe, lockapp.exe, consent.exe, credentialuibroker.exe, smartscreen.exe, svchost.exe, memcompression, registry, fontdrvhost.exe, audiodg.exe, sihost.exe, taskhostw.exe, ctfmon.exe, wlanext.exe, dashost.exe, syntpenh.exe, syntphelper.exe, etdcontrol.exe, etdctrl.exe, alpspad.exe, hcontrol.exe, wireguard.exe, openvpn.exe, tailscale.exe, splwow64.exe, printfilterpipelinesvc.exe, spoolsv.exe, wudfhost.exe, devicecensus.exe"
+  $name: Excluded Processes (Immunity List)
+  $description: Comma-separated list of executable names that must never be throttled or trimmed.
 */
 // ==/WindhawkModSettings==
 // clang-format on
@@ -228,7 +181,6 @@ The mod provides comprehensive configuration options accessible via the Windhawk
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cmath>
 #include <cstdint>
 #include <deque>
 #include <mutex>
@@ -338,12 +290,15 @@ static DWORD GetSystemCoreCount() {
 struct SystemHardwareProfile {
     double totalRamGb = 0.0;
     DWORD coreCount = 0;
-    bool isLowRamTier = false;         // < 12 GB
-    bool isHighRamTier = false;        // >= 24 GB
-    bool isLowCoreCount = false;       // <= 4 cores
-    bool isHybridCpu = false;          // Heterogeneous CPU architecture
-    std::vector<ULONG> pCoreCpuSetIds; // Performance core IDs
-    std::vector<ULONG> eCoreCpuSetIds; // Efficiency core IDs
+    bool isLowRamTier = false;              // < 12 GB
+    bool isHighRamTier = false;             // >= 24 GB
+    bool isLowCoreCount = false;            // <= 4 cores
+    bool isHybridCpu = false;               // Heterogeneous CPU architecture
+    bool isHagsEnabled = false;             // Hardware-Accelerated GPU Scheduling
+    bool isVbsEnabled = false;              // Virtualization-Based Security (Core Isolation)
+    bool isMemoryCompressionActive = false; // Windows Memory Compression
+    std::vector<ULONG> pCoreCpuSetIds;      // Performance core IDs
+    std::vector<ULONG> eCoreCpuSetIds;      // Efficiency core IDs
 };
 
 static SystemHardwareProfile GetHardwareProfile() {
@@ -358,6 +313,47 @@ static SystemHardwareProfile GetHardwareProfile() {
         p.isLowRamTier = (p.totalRamGb > 0.0 && p.totalRamGb < 12.0);
         p.isHighRamTier = (p.totalRamGb >= 24.0);
         p.isLowCoreCount = (p.coreCount <= 4);
+
+        HKEY hKeyGfx = nullptr;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                          L"SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers",
+                          0, KEY_READ, &hKeyGfx) == ERROR_SUCCESS) {
+            DWORD val = 0;
+            DWORD sz = sizeof(val);
+            if (RegQueryValueExW(hKeyGfx, L"HwSchMode", nullptr, nullptr,
+                                 reinterpret_cast<LPBYTE>(&val), &sz) == ERROR_SUCCESS) {
+                p.isHagsEnabled = (val == 2);
+            }
+            RegCloseKey(hKeyGfx);
+        }
+
+        HKEY hKeyDg = nullptr;
+        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
+                          L"SYSTEM\\CurrentControlSet\\Control\\DeviceGuard",
+                          0, KEY_READ, &hKeyDg) == ERROR_SUCCESS) {
+            DWORD val = 0;
+            DWORD sz = sizeof(val);
+            if (RegQueryValueExW(hKeyDg, L"EnableVirtualizationBasedSecurity", nullptr,
+                                 nullptr, reinterpret_cast<LPBYTE>(&val), &sz) == ERROR_SUCCESS) {
+                p.isVbsEnabled = (val == 1);
+            }
+            RegCloseKey(hKeyDg);
+        }
+
+        SC_HANDLE hSCM = OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT);
+        if (hSCM) {
+            SC_HANDLE hSvc = OpenServiceW(hSCM, L"SysMain", SERVICE_QUERY_STATUS);
+            if (hSvc) {
+                SERVICE_STATUS_PROCESS ssp{};
+                DWORD bytesNeeded = 0;
+                if (QueryServiceStatusEx(hSvc, SC_STATUS_PROCESS_INFO,
+                                         reinterpret_cast<LPBYTE>(&ssp), sizeof(ssp), &bytesNeeded)) {
+                    p.isMemoryCompressionActive = (ssp.dwCurrentState == SERVICE_RUNNING);
+                }
+                CloseServiceHandle(hSvc);
+            }
+            CloseServiceHandle(hSCM);
+        }
 
         HMODULE hK32 = GetModuleHandleW(L"kernel32.dll");
         if (hK32) {
@@ -424,14 +420,35 @@ static SystemHardwareProfile GetHardwareProfile() {
     return profile;
 }
 
-// Adapts the free RAM threshold sub-linearly based on total physical RAM capacity.
-static double GetAdaptiveRamThreshold(double userThresholdPercent, double totalRamGb) {
-    if (totalRamGb <= 0.0) {
-        return userThresholdPercent;
+// Calculates effective free RAM threshold based on installed hardware and user setting.
+// If userSettingPercent <= 0 (Auto Mode):
+// Dynamically selects proactive thresholds tailored to memory capacity so systems with abundant
+// RAM (e.g. 32 GB / 64 GB) maintain performance and prevent memory pressure before it affects foreground apps:
+// - <= 8 GB:  25% standard / 40% tiered hogs (leaves 2.0 GB - 3.2 GB buffer)
+// - <= 16 GB: 30% standard / 50% tiered hogs (leaves 4.8 GB - 8.0 GB buffer)
+// - <= 32 GB: 45% standard / 60% tiered hogs (leaves 14.4 GB - 19.2 GB buffer)
+// - > 32 GB:  50% standard / 65% tiered hogs (leaves 32.0 GB - 41.6 GB buffer)
+// If userSettingPercent > 0:
+// The explicit user setting overrides automatic calculation directly.
+static double GetEffectiveRamThreshold(int userSettingPercent, double totalRamGb, bool isTieredHogs = false) {
+    if (userSettingPercent > 0) {
+        double base = static_cast<double>(userSettingPercent);
+        double minLimit = isTieredHogs ? 10.0 : 5.0;
+        double maxLimit = isTieredHogs ? 95.0 : 90.0;
+        double target = isTieredHogs ? (base + 15.0) : base;
+        return std::clamp(target, minLimit, maxLimit);
     }
-    double scale = std::sqrt(16.0 / totalRamGb);
-    double adaptivePercent = userThresholdPercent * scale;
-    return std::clamp(adaptivePercent, 5.0, 60.0);
+
+    if (totalRamGb <= 8.5) {
+        return isTieredHogs ? 40.0 : 25.0;
+    }
+    if (totalRamGb <= 16.5) {
+        return isTieredHogs ? 50.0 : 30.0;
+    }
+    if (totalRamGb <= 32.5) {
+        return isTieredHogs ? 60.0 : 45.0;
+    }
+    return isTieredHogs ? 65.0 : 50.0;
 }
 
 // ---------------------------------------------------------------------------
@@ -467,6 +484,7 @@ struct ModSettings {
     bool enableForegroundCpuSets = false;
     bool enableBackgroundCpuSets = false;
     bool enableBackgroundThrottling = true;
+    bool enableThreadBackgroundMode = false;
     int backgroundCpuThrottleThresholdPercent = 15;
     int systemCpuContentionThresholdPercent = 60;
     ThrottlePrioritySetting backgroundThrottlePriorityLevel =
@@ -479,7 +497,7 @@ struct ModSettings {
     bool enableMultitaskingAdaptation = true;
     bool enableGameModeDetection = true;
     CleanMode cleanMode = CleanMode::SmartThreshold;
-    int freeRamThresholdPercent = 20;
+    int freeRamThresholdPercent = 0;
     bool enableTieredRamThreshold = true;
     int tieredHogThresholdPercent = 40;
     bool enableIdleBoost = true;
@@ -489,7 +507,7 @@ struct ModSettings {
     int recentActivityGraceMinutes = 3;
     bool enableProcessTreeTrimming = true;
     bool enableElectronMemoryCap = true;
-    int electronMemoryCapMb = 500;
+    int electronMemoryCapMb = 300;
     bool cleanBackgroundWorkingSets = true;
     DWORD minProcessMemoryToTrimMb = 50;
     int periodicIntervalMinutes = 10;
@@ -507,7 +525,6 @@ struct ModSettings {
     int compressionBurstHysteresisSeconds = 20;
     bool pauseOnBattery = true;
     int checkIntervalSec = 10;
-    bool enableLogging = true;
     LogDetailLevel logDetailLevel = LogDetailLevel::Detailed;
 };
 
@@ -565,6 +582,7 @@ struct ProcessContext {
     ULONG originalMemoryPriority = 5; // MEMORY_PRIORITY_NORMAL
     bool ecoQosApplied = false;
     bool cpuSetsApplied = false;
+    bool threadBackgroundApplied = false;
     std::chrono::steady_clock::time_point stateEnteredAt{};
 };
 static std::unordered_map<DWORD, ProcessContext> g_processContexts;
@@ -759,6 +777,7 @@ struct ThrottledProcessInfo {
     ULONG originalMemoryPriority = 5; // MEMORY_PRIORITY_NORMAL
     bool ecoQosApplied = false;
     bool cpuSetsApplied = false;
+    bool threadBackgroundApplied = false;
     DWORD staleSampleCount = 0;
 };
 static std::unordered_map<DWORD, ThrottledProcessInfo>
@@ -956,13 +975,7 @@ enum class LogCategory : uint8_t {
     Shutdown,
 };
 
-static void LogEvent(LogCategory cat, LogDetailLevel minLevel, const wchar_t* format, ...) {
-    ModSettings settings = GetSettingsSnapshot();
-    if (!settings.enableLogging)
-        return;
-    if (static_cast<int>(settings.logDetailLevel) < static_cast<int>(minLevel))
-        return;
-
+static void LogEvent(LogCategory cat, LogDetailLevel /*minLevel*/, const wchar_t* format, ...) {
     const wchar_t* prefix = L"[SmartOptimizer]";
     switch (cat) {
     case LogCategory::Boot:
@@ -1700,6 +1713,37 @@ static bool ResetProcessEcoQoS(HANDLE hProcess) {
                                  &state, sizeof(state)) != 0;
 }
 
+// Applies or clears Windows thread background processing mode (THREAD_MODE_BACKGROUND_BEGIN / END)
+// on all threads of the target process. This sets disk I/O and memory priorities to very low,
+// eliminating storage contention and micro-stutters during heavy background operations.
+static bool SetProcessThreadsBackgroundMode(DWORD pid, bool enable) {
+    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (hSnap == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    THREADENTRY32 te{};
+    te.dwSize = sizeof(te);
+    bool anyApplied = false;
+    if (Thread32First(hSnap, &te)) {
+        do {
+            if (te.th32OwnerProcessID == pid) {
+                HANDLE hThread = OpenThread(
+                    THREAD_SET_INFORMATION | THREAD_QUERY_LIMITED_INFORMATION,
+                    FALSE, te.th32ThreadID);
+                if (hThread) {
+                    if (SetThreadPriority(hThread, enable ? THREAD_MODE_BACKGROUND_BEGIN
+                                                          : THREAD_MODE_BACKGROUND_END)) {
+                        anyApplied = true;
+                    }
+                    CloseHandle(hThread);
+                }
+            }
+        } while (Thread32Next(hSnap, &te));
+    }
+    CloseHandle(hSnap);
+    return anyApplied;
+}
+
 // ---------------------------------------------------------------------------
 // Foreground Priority Boost (Process Family Zero-Stutter)
 // ---------------------------------------------------------------------------
@@ -2187,6 +2231,7 @@ static bool RestoreAndEraseThrottledProcess(DWORD pid) {
     ULONG originalMemoryPriority = it->second.originalMemoryPriority;
     bool ecoQosApplied = it->second.ecoQosApplied;
     bool cpuSetsApplied = it->second.cpuSetsApplied;
+    bool threadBackgroundApplied = it->second.threadBackgroundApplied;
     g_throttledProcesses.erase(it);
 
     auto itCtx = g_processContexts.find(pid);
@@ -2205,6 +2250,9 @@ static bool RestoreAndEraseThrottledProcess(DWORD pid) {
             }
             if (cpuSetsApplied && g_pfnSetProcessDefaultCpuSets) {
                 g_pfnSetProcessDefaultCpuSets(hSaved, nullptr, 0);
+            }
+            if (threadBackgroundApplied) {
+                SetProcessThreadsBackgroundMode(pid, false);
             }
         }
         CloseHandle(hSaved);
@@ -2232,6 +2280,9 @@ static void RestoreAllThrottledProcesses() {
                 }
                 if (info.cpuSetsApplied && g_pfnSetProcessDefaultCpuSets) {
                     g_pfnSetProcessDefaultCpuSets(info.hProcess, nullptr, 0);
+                }
+                if (info.threadBackgroundApplied) {
+                    SetProcessThreadsBackgroundMode(kv.first, false);
                 }
             }
             CloseHandle(info.hProcess);
@@ -3107,6 +3158,7 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
                     ULONG prevMem = GetProcessMemoryPriorityHint(hProc);
                     bool appliedEcoQos = false;
                     bool appliedCpuSets = false;
+                    bool appliedThreadBackground = false;
                     {
                         std::lock_guard<std::mutex> lock(g_priorityMutex);
                         if (pid != g_currentBoostedPid.load(std::memory_order_relaxed) &&
@@ -3114,12 +3166,16 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
                             if (SetPriorityClass(hProc, targetThrottlePrio)) {
                                 SetProcessMemoryPriorityHint(hProc, 1 /* MEMORY_PRIORITY_VERY_LOW */);
 
-                                // Never degrade I/O priority or apply EcoQoS on active disk/network transfers
+                                // Never degrade I/O priority, apply EcoQoS, or thread background mode on active disk/network transfers
                                 if (!ioAct.isWritingDisk && !ioAct.isTransferringNetworkOrIo) {
                                     SetProcessIoPriorityHint(hProc, IoPriorityLow);
                                     if (settings.enableEcoQosManagement) {
                                         appliedEcoQos =
                                             SetProcessEcoQoS(hProc, /*enableThrottling=*/true);
+                                    }
+                                    if (settings.enableThreadBackgroundMode) {
+                                        appliedThreadBackground =
+                                            SetProcessThreadsBackgroundMode(pid, true);
                                     }
                                 }
 
@@ -3136,15 +3192,17 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
 
                                 g_sessionThrottleTransitions.fetch_add(1, std::memory_order_relaxed);
                                 LogEvent(LogCategory::Throttler, LogDetailLevel::Detailed,
-                                         L"Throttling background %s (PID %u): CPU load %.1f%% >= %d%% -> Priority: %s | I/O: Low%s%s",
+                                         L"Throttling background %s (PID %u): CPU load %.1f%% >= %d%% -> Priority: %s | I/O: Low%s%s%s",
                                          name.c_str(), pid, cpuPercent,
                                          settings.backgroundCpuThrottleThresholdPercent,
                                          (targetThrottlePrio == IDLE_PRIORITY_CLASS) ? L"Idle" : L"BelowNormal",
                                          appliedEcoQos ? L" | EcoQoS" : L"",
-                                         appliedCpuSets ? L" | E-Cores Confined" : L"");
+                                         appliedCpuSets ? L" | E-Cores Confined" : L"",
+                                         appliedThreadBackground ? L" | Thread Background Mode" : L"");
 
                                 g_throttledProcesses[pid] = {hProc, prevPriority, prevIo,
-                                                             prevMem, appliedEcoQos, appliedCpuSets, 0};
+                                                             prevMem, appliedEcoQos, appliedCpuSets,
+                                                             appliedThreadBackground, 0};
 
                                 // ARCH-01: Update unified process state machine
                                 auto& ctx = g_processContexts[pid];
@@ -3157,6 +3215,7 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
                                 ctx.originalMemoryPriority = prevMem;
                                 ctx.ecoQosApplied = appliedEcoQos;
                                 ctx.cpuSetsApplied = appliedCpuSets;
+                                ctx.threadBackgroundApplied = appliedThreadBackground;
                                 ctx.stateEnteredAt = now;
 
                                 hProc = nullptr; // Transferred ownership to
@@ -3822,7 +3881,7 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
     }
 
     DWORD accessDenied = g_accessDeniedCount.exchange(0);
-    if (accessDenied > 0 && settings.enableLogging) {
+    if (accessDenied > 0) {
         LogEvent(LogCategory::Sanctuary, LogDetailLevel::Detailed,
                  L"Notice: %u elevated/system processes skipped (access denied; mod runs in user session).",
                  accessDenied);
@@ -3839,9 +3898,9 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
         100.0;
     DWORD fgPid = GetForegroundProcessId();
 
-    // Below 5% free RAM, relax the anti-thrashing cooldowns so the mod can
+    // Below 10% free RAM, relax the anti-thrashing cooldowns so the mod can
     // react before the system runs out of memory.
-    bool emergency = freeRamPercent <= 5.0;
+    bool emergency = freeRamPercent <= 10.0;
 
     TrimStats trimStats;
     if (settings.cleanBackgroundWorkingSets && allowWorkingSetTrim) {
@@ -3868,59 +3927,57 @@ static void PerformMemoryCleanup(const wchar_t* triggerReason,
     g_sessionBytesStandbyDemoted.fetch_add(static_cast<ULONGLONG>(trimStats.bytesStandbyDemoted), std::memory_order_relaxed);
     g_sessionProcessesTrimmedTotal.fetch_add(trimStats.processesTrimmed, std::memory_order_relaxed);
 
-    if (settings.enableLogging) {
-        double freedMb = freedTotalBytes / (1024.0 * 1024.0);
-        double standbyMb = trimStats.bytesStandbyDemoted / (1024.0 * 1024.0);
-        double availAfterGb = memAfter.ullAvailPhys / (1024.0 * 1024.0 * 1024.0);
-        double totalGb = memBefore.ullTotalPhys / (1024.0 * 1024.0 * 1024.0);
-        double sessionGb = g_sessionBytesReclaimed.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0);
-        double sessionStandbyGb = g_sessionBytesStandbyDemoted.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0);
-        std::wstring uptime =
-            FormatUptime(g_modStartTime, std::chrono::steady_clock::now());
+    double freedMb = freedTotalBytes / (1024.0 * 1024.0);
+    double standbyMb = trimStats.bytesStandbyDemoted / (1024.0 * 1024.0);
+    double availAfterGb = memAfter.ullAvailPhys / (1024.0 * 1024.0 * 1024.0);
+    double totalGb = memBefore.ullTotalPhys / (1024.0 * 1024.0 * 1024.0);
+    double sessionGb = g_sessionBytesReclaimed.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0);
+    double sessionStandbyGb = g_sessionBytesStandbyDemoted.load(std::memory_order_relaxed) / (1024.0 * 1024.0 * 1024.0);
+    std::wstring uptime =
+        FormatUptime(g_modStartTime, std::chrono::steady_clock::now());
 
-        wchar_t detailStr[256];
-        if (trimStats.processesSoftTrimmed > 0 && trimStats.processesHardTrimmed > 0) {
-            swprintf_s(detailStr, _countof(detailStr),
-                       L"+%.1f MB freed (hard), +%.1f MB marked for standby (soft)",
-                       freedMb, standbyMb);
-        } else if (trimStats.processesSoftTrimmed > 0) {
-            swprintf_s(detailStr, _countof(detailStr),
-                       L"+%.1f MB marked for standby", standbyMb);
-        } else {
-            swprintf_s(detailStr, _countof(detailStr),
-                       L"+%.1f MB freed", freedMb);
-        }
+    wchar_t detailStr[256];
+    if (trimStats.processesSoftTrimmed > 0 && trimStats.processesHardTrimmed > 0) {
+        swprintf_s(detailStr, _countof(detailStr),
+                   L"+%.1f MB freed (hard), +%.1f MB marked for standby (soft)",
+                   freedMb, standbyMb);
+    } else if (trimStats.processesSoftTrimmed > 0) {
+        swprintf_s(detailStr, _countof(detailStr),
+                   L"+%.1f MB marked for standby", standbyMb);
+    } else {
+        swprintf_s(detailStr, _countof(detailStr),
+                   L"+%.1f MB freed", freedMb);
+    }
 
-        LogEvent(LogCategory::Memory, LogDetailLevel::Minimal,
-                 L"%s -> %s (Avail: %.2f/%.1f GB | %u trimmed [%u soft, %u hard], %u kept warm) | Session: %.2f GB freed, %.2f GB standby over %u passes (%u procs), %s uptime",
-                 triggerReason, detailStr, availAfterGb, totalGb,
-                 trimStats.processesTrimmed, trimStats.processesSoftTrimmed, trimStats.processesHardTrimmed,
-                 trimStats.processesSkippedRecent,
-                 sessionGb, sessionStandbyGb,
-                 g_sessionCleanupPasses.load(std::memory_order_relaxed),
-                 g_sessionProcessesTrimmedTotal.load(std::memory_order_relaxed),
-                 uptime.c_str());
+    LogEvent(LogCategory::Memory, LogDetailLevel::Minimal,
+             L"%s -> %s (Avail: %.2f/%.1f GB | %u trimmed [%u soft, %u hard], %u kept warm) | Session: %.2f GB freed, %.2f GB standby over %u passes (%u procs), %s uptime",
+             triggerReason, detailStr, availAfterGb, totalGb,
+             trimStats.processesTrimmed, trimStats.processesSoftTrimmed, trimStats.processesHardTrimmed,
+             trimStats.processesSkippedRecent,
+             sessionGb, sessionStandbyGb,
+             g_sessionCleanupPasses.load(std::memory_order_relaxed),
+             g_sessionProcessesTrimmedTotal.load(std::memory_order_relaxed),
+             uptime.c_str());
 
-        bool gainWorthLogging =
-            (freedTotalBytes + trimStats.bytesStandbyDemoted) >=
-            static_cast<DWORDLONG>(kTopAppsLogThresholdMb) * 1024 * 1024;
-        if (!trimStats.topApps.empty() && gainWorthLogging) {
-            LogEvent(LogCategory::Memory, LogDetailLevel::Detailed, L"--- Top Reclaimed Memory Hogs ---");
-            int rank = 1;
-            for (const auto& app : trimStats.topApps) {
-                double beforeMb = app.beforeBytes / (1024.0 * 1024.0);
-                double afterMb = app.afterBytes / (1024.0 * 1024.0);
-                if (app.isSoftTrim) {
-                    double demotedMb = app.standbyDemotedBytes / (1024.0 * 1024.0);
-                    LogEvent(LogCategory::Memory, LogDetailLevel::Detailed,
-                             L"  #%d. %s (PID %u): ~%.1f MB marked for standby (working set: %.1f MB)",
-                             rank++, app.procName.c_str(), app.pid, demotedMb, beforeMb);
-                } else {
-                    double appFreedMb = app.bytesFreed / (1024.0 * 1024.0);
-                    LogEvent(LogCategory::Memory, LogDetailLevel::Detailed,
-                             L"  #%d. %s (PID %u): -%.1f MB (was %.1f MB -> now %.1f MB)",
-                             rank++, app.procName.c_str(), app.pid, appFreedMb, beforeMb, afterMb);
-                }
+    bool gainWorthLogging =
+        (freedTotalBytes + trimStats.bytesStandbyDemoted) >=
+        static_cast<DWORDLONG>(kTopAppsLogThresholdMb) * 1024 * 1024;
+    if (!trimStats.topApps.empty() && gainWorthLogging) {
+        LogEvent(LogCategory::Memory, LogDetailLevel::Detailed, L"--- Top Reclaimed Memory Hogs ---");
+        int rank = 1;
+        for (const auto& app : trimStats.topApps) {
+            double beforeMb = app.beforeBytes / (1024.0 * 1024.0);
+            double afterMb = app.afterBytes / (1024.0 * 1024.0);
+            if (app.isSoftTrim) {
+                double demotedMb = app.standbyDemotedBytes / (1024.0 * 1024.0);
+                LogEvent(LogCategory::Memory, LogDetailLevel::Detailed,
+                         L"  #%d. %s (PID %u): ~%.1f MB marked for standby (working set: %.1f MB)",
+                         rank++, app.procName.c_str(), app.pid, demotedMb, beforeMb);
+            } else {
+                double appFreedMb = app.bytesFreed / (1024.0 * 1024.0);
+                LogEvent(LogCategory::Memory, LogDetailLevel::Detailed,
+                         L"  #%d. %s (PID %u): -%.1f MB (was %.1f MB -> now %.1f MB)",
+                         rank++, app.procName.c_str(), app.pid, appFreedMb, beforeMb, afterMb);
             }
         }
     }
@@ -4260,10 +4317,10 @@ static void MemoryOptimizerWorker() {
                 }
 
                 SystemHardwareProfile hw = GetHardwareProfile();
-                double effectiveFreeRamThreshold = GetAdaptiveRamThreshold(
-                    static_cast<double>(settings.freeRamThresholdPercent), hw.totalRamGb);
-                double effectiveTieredThreshold = GetAdaptiveRamThreshold(
-                    static_cast<double>(settings.tieredHogThresholdPercent), hw.totalRamGb);
+                double effectiveFreeRamThreshold = GetEffectiveRamThreshold(
+                    settings.freeRamThresholdPercent, hw.totalRamGb, /*isTieredHogs=*/false);
+                double effectiveTieredThreshold = GetEffectiveRamThreshold(
+                    settings.freeRamThresholdPercent, hw.totalRamGb, /*isTieredHogs=*/true);
 
                 // Smart threshold trigger
                 bool hogsOnly = false;
@@ -4274,7 +4331,8 @@ static void MemoryOptimizerWorker() {
                         shouldClean = true;
                         hogsOnly = false;
                         wchar_t buf[160];
-                        swprintf_s(buf, L"[Standard Threshold: Free RAM %.1f%% <= %.1f%% (adapted for %.1f GB)]",
+                        swprintf_s(buf, L"[%s: Free RAM %.1f%% <= %.1f%% (adapted for %.1f GB)]",
+                                   (settings.freeRamThresholdPercent <= 0) ? L"Auto Standard Threshold" : L"Custom Standard Threshold",
                                    freePercent, effectiveFreeRamThreshold, hw.totalRamGb);
                         reason = buf;
                         g_lastTriggerCleanTime = now;
@@ -4286,7 +4344,8 @@ static void MemoryOptimizerWorker() {
                         wchar_t buf[160];
                         swprintf_s(
                             buf,
-                            L"[Tiered Threshold: Free RAM %.1f%% <= %.1f%% (adapted for %.1f GB, Inactive Hogs Only)]",
+                            L"[%s: Free RAM %.1f%% <= %.1f%% (adapted for %.1f GB, Inactive Hogs Only)]",
+                            (settings.freeRamThresholdPercent <= 0) ? L"Auto Tiered Threshold" : L"Custom Tiered Threshold",
                             freePercent, effectiveTieredThreshold, hw.totalRamGb);
                         reason = buf;
                         g_lastTriggerCleanTime = now;
@@ -4348,13 +4407,13 @@ static void MemoryOptimizerWorker() {
                     }
                 }
 
-                // 4. Critical emergency safety: if free RAM drops to <= 5.0%,
+                // 4. Critical emergency safety: if free RAM drops to <= 10.0%,
                 // intervene immediately even during the first cycle.
-                if (!shouldClean && freePercent <= 5.0 && triggerCooldownElapsed) {
+                if (!shouldClean && freePercent <= 10.0 && triggerCooldownElapsed) {
                     shouldClean = true;
                     hogsOnly = false;
                     wchar_t buf[128];
-                    swprintf_s(buf, L"[Critical Emergency: Free RAM %.1f%% <= 5.0%%]",
+                    swprintf_s(buf, L"[Critical Emergency: Free RAM %.1f%% <= 10.0%%]",
                                freePercent);
                     reason = buf;
                     g_lastTriggerCleanTime = now;
@@ -4436,6 +4495,9 @@ static void LoadSettings() {
     g_settings.enableBackgroundThrottling =
         Wh_GetIntSetting(L"enableBackgroundThrottling") != 0;
 
+    g_settings.enableThreadBackgroundMode =
+        Wh_GetIntSetting(L"enableThreadBackgroundMode") != 0;
+
     int bgThrottle =
         (int)Wh_GetIntSetting(L"backgroundCpuThrottleThresholdPercent");
     g_settings.backgroundCpuThrottleThresholdPercent =
@@ -4458,24 +4520,23 @@ static void LoadSettings() {
     g_settings.enableEcoQosManagement =
         Wh_GetIntSetting(L"enableEcoQosManagement") != 0;
 
+    g_settings.enableAudioShielding =
+        Wh_GetIntSetting(L"enableAudioShielding") != 0;
+
     g_settings.enableNetworkShielding =
         Wh_GetIntSetting(L"enableNetworkShielding") != 0;
 
     // Section 2: Smart Memory Management
     int thresh = (int)Wh_GetIntSetting(L"freeRamThresholdPercent");
-    g_settings.freeRamThresholdPercent = std::clamp(thresh, 5, 50);
-
-    g_settings.enableTieredRamThreshold =
-        Wh_GetIntSetting(L"enableTieredRamThreshold") != 0;
-
-    int tieredThresh = (int)Wh_GetIntSetting(L"tieredHogThresholdPercent");
-    g_settings.tieredHogThresholdPercent = std::clamp(tieredThresh, 10, 80);
-
-    int graceMin = (int)Wh_GetIntSetting(L"recentActivityGraceMinutes");
-    g_settings.recentActivityGraceMinutes = std::clamp(graceMin, 1, 60);
+    g_settings.freeRamThresholdPercent = std::clamp(thresh, 0, 80);
 
     g_settings.trimMinimizedWindows =
         Wh_GetIntSetting(L"trimMinimizedWindows") != 0;
+
+    g_settings.enableBrowserTabTrim =
+        Wh_GetIntSetting(L"enableBrowserTabTrim") != 0;
+
+    g_settings.pauseOnBattery = Wh_GetIntSetting(L"pauseOnBattery") != 0;
 
     g_settings.enableElectronMemoryCap =
         Wh_GetIntSetting(L"enableElectronMemoryCap") != 0;
@@ -4483,16 +4544,9 @@ static void LoadSettings() {
     int capMb = (int)Wh_GetIntSetting(L"electronMemoryCapMb");
     g_settings.electronMemoryCapMb = std::clamp(capMb, 100, 4000);
 
-    g_settings.enableIdleBoost = Wh_GetIntSetting(L"enableIdleBoost") != 0;
-
     // Section 3: Hardware & Workload Protection
     g_settings.enableSmartAiOptimization =
         Wh_GetIntSetting(L"enableSmartAiOptimization") != 0;
-
-    int aiGraceMin = (int)Wh_GetIntSetting(L"aiInactivityGraceMinutes");
-    g_settings.aiInactivityGraceMinutes = std::clamp(aiGraceMin, 1, 30);
-
-    g_settings.pauseOnBattery = Wh_GetIntSetting(L"pauseOnBattery") != 0;
 
     g_settings.enableDynamicPowerPlan =
         Wh_GetIntSetting(L"enableDynamicPowerPlan") != 0;
@@ -4500,25 +4554,7 @@ static void LoadSettings() {
         RestoreOriginalPowerScheme();
     }
 
-    g_settings.enableBrowserTabTrim =
-        Wh_GetIntSetting(L"enableBrowserTabTrim") != 0;
-
-    int tabInactMin = (int)Wh_GetIntSetting(L"browserTabInactivityMinutes");
-    g_settings.browserTabInactivityMinutes = std::clamp(tabInactMin, 5, 60);
-
-    int altTabSec = (int)Wh_GetIntSetting(L"gameAltTabGracePeriodSeconds");
-    g_settings.gameAltTabGracePeriodSeconds = std::clamp(altTabSec, 30, 600);
-
-    int ioWriteKbps = (int)Wh_GetIntSetting(L"ioActivityWriteThresholdKbps");
-    g_settings.ioActivityWriteThresholdKbps = std::clamp(ioWriteKbps, 50, 5000);
-
-    int ioTransferKbps = (int)Wh_GetIntSetting(L"ioActivityTransferThresholdKbps");
-    g_settings.ioActivityTransferThresholdKbps = std::clamp(ioTransferKbps, 20, 2000);
-
-    int compHystSec = (int)Wh_GetIntSetting(L"compressionBurstHysteresisSeconds");
-    g_settings.compressionBurstHysteresisSeconds = std::clamp(compHystSec, 5, 120);
-
-    // Section 4: Process Lists & Diagnostics
+    // Section 4: Process Lists & Hotkeys
     auto customListStr = WindhawkUtils::StringSetting::make(L"customTargetList");
     g_settings.customTargetList =
         ParseProcessList(customListStr.get() ? customListStr.get() : L"");
@@ -4529,21 +4565,19 @@ static void LoadSettings() {
 
     g_settings.enablePanicHotkey = Wh_GetIntSetting(L"enablePanicHotkey") != 0;
     g_settings.enableHotkeySound = Wh_GetIntSetting(L"enableHotkeySound") != 0;
-    g_settings.enableLogging = Wh_GetIntSetting(L"enableLogging") != 0;
+    g_settings.logDetailLevel = LogDetailLevel::Detailed;
 
-    auto logLevelStr = WindhawkUtils::StringSetting::make(L"logDetailLevel");
-    if (logLevelStr.get()) {
-        if (wcscmp(logLevelStr.get(), L"minimal") == 0) {
-            g_settings.logDetailLevel = LogDetailLevel::Minimal;
-        } else if (wcscmp(logLevelStr.get(), L"debug") == 0) {
-            g_settings.logDetailLevel = LogDetailLevel::Debug;
-        } else {
-            g_settings.logDetailLevel = LogDetailLevel::Detailed;
-        }
-    }
-
-    // Core safety guards and defaults:
-    g_settings.enableAudioShielding = true;
+    // Architectural defaults and internal safety heuristics:
+    g_settings.enableTieredRamThreshold = true;
+    g_settings.tieredHogThresholdPercent = 40;
+    g_settings.recentActivityGraceMinutes = 3;
+    g_settings.enableIdleBoost = true;
+    g_settings.aiInactivityGraceMinutes = 5;
+    g_settings.browserTabInactivityMinutes = 10;
+    g_settings.gameAltTabGracePeriodSeconds = 180;
+    g_settings.ioActivityWriteThresholdKbps = 250;
+    g_settings.ioActivityTransferThresholdKbps = 100;
+    g_settings.compressionBurstHysteresisSeconds = 20;
     g_settings.enableMultitaskingAdaptation = true;
     g_settings.enableGameModeDetection = true;
     g_settings.enableProcessTreeTrimming = true;
@@ -4556,8 +4590,8 @@ static void LoadSettings() {
     // Automatically adapt thresholds to the machine's physical hardware capacity.
     SystemHardwareProfile hw = GetHardwareProfile();
     if (hw.isLowRamTier) {
-        if (g_settings.electronMemoryCapMb > 350) {
-            g_settings.electronMemoryCapMb = 350;
+        if (g_settings.electronMemoryCapMb > 250) {
+            g_settings.electronMemoryCapMb = 250;
         }
     }
     if (hw.isLowCoreCount) {
@@ -4597,13 +4631,16 @@ BOOL WhTool_ModInit() {
 
     SystemHardwareProfile hw = GetHardwareProfile();
     LogEvent(LogCategory::Boot, LogDetailLevel::Minimal,
-             L"Hardware Profile: %.1f GB RAM (%s), %u CPU cores (%s)%s.",
+             L"Hardware Profile: %.1f GB RAM (%s), %u CPU cores (%s)%s | HAGS: %s | VBS: %s | Memory Compression: %s.",
              hw.totalRamGb,
              hw.isLowRamTier ? L"Low-RAM Tier / iGPU Buffer Elevated"
                              : (hw.isHighRamTier ? L"High-RAM Tier" : L"Standard RAM Tier"),
              hw.coreCount,
              hw.isLowCoreCount ? L"Aggressive Contention Guard" : L"Standard Contention Guard",
-             hw.isHybridCpu ? L", Intel/AMD Hybrid P/E-Cores Active" : L"");
+             hw.isHybridCpu ? L", Intel/AMD Hybrid P/E-Cores Active" : L"",
+             hw.isHagsEnabled ? L"Enabled" : L"Disabled",
+             hw.isVbsEnabled ? L"Enabled" : L"Disabled",
+             hw.isMemoryCompressionActive ? L"Active" : L"Inactive");
 
     HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
     if (hNtdll) {
