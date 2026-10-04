@@ -2,7 +2,7 @@
 // @id              smooth-desktop-icons-auto-hide
 // @name            Smooth Desktop Icons Auto-Hide
 // @description     Smoothly auto-hide Windows desktop icons with click-to-show, double-click-to-hide, drag reveal and configurable fade animation.
-// @version         0.14.0
+// @version         0.14.1
 // @author          HeyOkay
 // @github           https://github.com/HeyOkay
 // @license          MIT
@@ -261,24 +261,6 @@ static bool IsWindowOwnedByCurrentProcess(HWND hwnd) {
 static bool IsExpectedDesktopShell(HWND shell) {
     return IsWindowOwnedByCurrentProcess(shell) &&
            IsClass(shell, L"SHELLDLL_DefView");
-}
-
-static bool IsExpectedDesktopList(
-    DesktopState* state,
-    HWND list) {
-
-    if (!state ||
-        !IsWindowOwnedByCurrentProcess(list) ||
-        !IsClass(list, L"SysListView32"))
-        return false;
-
-    HWND parent = GetParent(list);
-    if (!parent ||
-        !IsWindowOwnedByCurrentProcess(parent) ||
-        !IsClass(parent, L"SHELLDLL_DefView"))
-        return false;
-
-    return !state->shell || parent == state->shell;
 }
 
 static bool SupportsNativeDoubleClick(HWND hwnd) {
@@ -1646,7 +1628,10 @@ LRESULT CALLBACK DesktopListSubclassProc(
         // Alt+Enter...). Modifier keys alone pass through, so shortcuts like
         // Alt+Tab or Win+D keep working.
         if (state->state == IconState::Hidden && !g_unloading) {
-            if (IsModifierKey(wParam))
+            // Alt+F4 doesn't act on any item; let it open the shutdown
+            // dialog on the first press.
+            if (IsModifierKey(wParam) ||
+                (uMsg == WM_SYSKEYDOWN && wParam == VK_F4))
                 break;
             if (!(lParam & (1 << 30)))  // not an auto-repeat
                 RequestShowIcons(state);
@@ -1660,7 +1645,7 @@ LRESULT CALLBACK DesktopListSubclassProc(
     case WM_SYSCHAR:
         if (state->state == IconState::Hidden && !g_unloading &&
             !((uMsg == WM_KEYUP || uMsg == WM_SYSKEYUP) &&
-              IsModifierKey(wParam)))
+              (IsModifierKey(wParam) || wParam == VK_F4)))
             return 0;
         break;
 
