@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-04T00:03:35.000Z</updated>
+    <updated>2026-10-04T07:00:33.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Classic WebView Pane 2.16]]></title>
+        <id>https://windhawk.net/mods/classic-webview-pane#f79c82018ed58eb880450f0b94f74ecfc5083c15</id>
+        <link href="https://windhawk.net/mods/classic-webview-pane"/>
+        <updated>2026-10-04T07:00:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Fix the disk usage pie chart's side wall and outlines.</li>
+<li>Correct the colours of fully empty drives and prevent tiny sectors from rounding into a full pie.</li>
+<li>Keep the WebView pane hidden until its spacer and folder layout are ready, preventing a brief initial appearance in small windows.</li>
+</ul>]]></content>
+        <author>
+            <name>appEW</name>
+            <uri>https://github.com/appEW</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Desktop Icon Ticker 0.5]]></title>
         <id>https://windhawk.net/mods/desktop-icon-ticker#65f2a5c2a42f0f19abf69be7dc0eb5df90478051</id>
@@ -620,89 +635,6 @@ maximize their own windows through <code>ShowWindow</code> or <code>ShowWindowAs
         <author>
             <name>bbmaster123</name>
             <uri>https://github.com/bbmaster123</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Win32 UI Modernizer 1.0.3]]></title>
-        <id>https://windhawk.net/mods/win32-ui-modernizer#50f4b88cfb44c00344966688db3b0a275614857b</id>
-        <link href="https://windhawk.net/mods/win32-ui-modernizer"/>
-        <updated>2026-10-02T18:03:21.000Z</updated>
-        <content type="html"><![CDATA[<h3 id="added">Added</h3>
-<ul>
-<li>Mica surface for File Explorer, with content-pane and opaque variants</li>
-<li>Open/Save dialogs follow that surface, with matching shades, dividers and scrollbars</li>
-<li>Collapsible navigation pane, with an animated hamburger button and an icon rail</li>
-<li>Optional automatic collapse the way WinUI's NavigationView does it</li>
-<li>Expand and collapse animation for navigation pane folders</li>
-<li>Multi-color Fluent icons for the navigation pane</li>
-<li>Modern shortcut overlay arrow</li>
-<li>DirectWrite text in Explorer, file pickers and desktop icon labels</li>
-<li>Single-line property-sheet tabs</li>
-<li>Insertion mark extended to list views and the desktop</li>
-<li>About dialog also covered in the Registry Editor and MMC consoles, with an animated logo</li>
-<li>Accent logo in the Alt+F4 "Shut Down Windows" banner</li>
-<li>Acrylic menus in light mode</li>
-<li>Experimental MMC support</li>
-<li>Mica background for the Registry Editor, with its value list as a card</li>
-<li>Task dialogs laid out like WinUI's ContentDialog</li>
-<li>Buttons, check boxes, radios, ComboBox and list selection restyled from WinUI's own templates</li>
-<li>Control borders antialiased with WinUI's corner radius, matching the modern GroupBox</li>
-<li>Legacy address and search boxes styled like the other text fields</li>
-<li>Progress bar colors taken from WinUI's ProgressBar</li>
-<li>Control Panel home page text in WinUI colors</li>
-<li>Dark surfaces on WinUI's tokens: #202020 base outside File Explorer, #2B2B2B for property sheets and tab panes</li>
-<li>Group headers without the separator line, like current File Explorer</li>
-<li>Drag and drop redrawn with rounded backgrounds, Fluent action badges and DirectWrite text</li>
-<li>Disk usage chart redrawn as an animated WinUI ring</li>
-<li>Hover pill on hyperlinks, modern rename editors</li>
-<li>Pill, selection and ReBar glyph motion retimed from WinUI's own keyframes</li>
-<li>Scrollbars continue the background of the control they scroll</li>
-<li>Trackbars fill the track up to the thumb, in accent, like WinUI's Slider</li>
-<li>Trackbar track and thumb take their colors and elevation border from WinUI's Slider</li>
-<li>Simplified Chinese translation, by SS3-4001</li>
-<li>Related settings merged into fewer options</li>
-</ul>
-<h3 id="fixed">Fixed</h3>
-<ul>
-<li>Dark mode now changes 7 system-wide colors instead of 30, the rest resolved in-process</li>
-<li>System colors restored on unload, including entries left behind by earlier versions</li>
-<li>Threads, timers and window changes left behind after the mod unloads</li>
-<li>Crash when a file picker's breadcrumb drop-down closed</li>
-<li>Crash when reloading the mod inside Explorer</li>
-<li>Registry Editor freezing on locales that parse decimal numbers differently</li>
-<li>Registry Editor tree scrollbars opening white or keeping stale pixels after a resize</li>
-<li>Dark mode following the system theme instead of the app theme</li>
-<li>Dark mode forcing the modern scrollbar on, with no way to turn it off</li>
-<li>Dark mode leaking into excluded processes, including accent colors resolved from the system instead of the window</li>
-<li>Disabled and read-only fields painted dark in excluded processes</li>
-<li>Edit focus line using the dark accent in light apps under a dark system</li>
-<li>Primary buttons enabled after a dialog opens missing their accent fill until hovered</li>
-<li>Progress bar fill using the system accent variant instead of the window's</li>
-<li>Progress bar track not scaling with the DPI</li>
-<li>Navigation pane chevron and pill animations interfering between windows</li>
-<li>Desktop icons covering the wallpaper with an opaque dark fill</li>
-<li>White backgrounds in the permissions dialog and on the second AeroWizard page</li>
-<li>Seam around a focused edit in ComboBoxEx32, in both light and dark</li>
-<li>Menu borders never reaching light mode</li>
-<li>Tooltip border color never being applied</li>
-<li>"Previous Versions" DirectUI list staying light</li>
-<li>Legacy address bar breadcrumb repaint desync and drop-down recursion</li>
-<li>Modern borders drawn around scrollbars</li>
-<li>Tooltip text rendering over acrylic</li>
-<li>Black hover text on tree items in dark mode</li>
-<li>Gradient showing through the property-sheet tabs of the permissions editor</li>
-<li>Dark system colors not restored after an external theme change</li>
-<li>A dialog's own background brush being overridden in dark mode</li>
-<li>The mod reverting Explorer's app-mode preference on unload</li>
-<li>Shared color data opened to any process instead of the current user and SYSTEM</li>
-</ul>
-<h3 id="performance">Performance</h3>
-<ul>
-<li>Hot paint paths moved off Direct2D to GDI+ and direct pixel writes, idle animation threads blocked instead of polling, accent/theme lookups cached, and private symbols resolved once per module</li>
-</ul>]]></content>
-        <author>
-            <name>crazyboyybs</name>
-            <uri>https://github.com/crazyboyybs</uri>
         </author>
     </entry>
 </feed>

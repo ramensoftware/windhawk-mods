@@ -2552,7 +2552,7 @@
         "ratingUsers": 8,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790751762000,
+        "updated": 1791097233000,
         "users": 20
       },
       "metadata": {
@@ -2567,7 +2567,7 @@
           "explorer.exe"
         ],
         "name": "Classic WebView Pane",
-        "version": "2.15"
+        "version": "2.16"
       }
     },
     "classic-winver": {

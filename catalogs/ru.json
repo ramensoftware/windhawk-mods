@@ -2544,7 +2544,7 @@
         "ratingUsers": 8,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790751762000,
+        "updated": 1791097233000,
         "users": 20
       },
       "metadata": {
@@ -2559,7 +2559,7 @@
           "explorer.exe"
         ],
         "name": "Панель WebView как в Windows 2000",
-        "version": "2.15"
+        "version": "2.16"
       },
       "metadataEnglish": {
         "description": "Brings back the Windows 2000 WebView - the pane left of the file list with the icon and name of the folder or the selected item, a divider line, a description and See also links",
