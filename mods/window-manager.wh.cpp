@@ -1,8 +1,8 @@
 // ==WindhawkMod==
-// @id              david-window-pack
-// @name            David's Window Pack
-// @description     Alt-drag window movement, keyboard snapping, monitor hotkeys and AltSnap keyboard shortcuts in one mod
-// @version         1.0.0
+// @id              window-manager
+// @name            Window Manager
+// @description     Move, resize, snap and send windows to other monitors with Alt+drag and keyboard shortcuts
+// @version         1.1.0
 // @author          DavidHiFi
 // @github          https://github.com/DavidHiFi
 // @homepage        https://github.com/DavidHiFi/davids-windhawk-mods
@@ -14,53 +14,62 @@
 
 // ==WindhawkModReadme==
 /*
-# David's Window Pack
+# Window Manager
 
-One mod combining the three window-management mods it replaces:
+Move, resize and snap windows from anywhere, and send them to another monitor,
+with the mouse or the keyboard. Works on administrator windows too.
 
-* **AltSnap drag** (from local@alt-snap-drag, a fork of alt-drag by m417z,
-  based on AltSnap by RamonUnch): hold Alt and drag with the left button to
-  move a window, with the right button to resize it; Alt+F maximizes,
-  Alt+M minimizes, Alt+Shift+Q closes, and a right click while moving
-  toggles maximize.
-* **Snap Commander** (by Asteski): move the active window to screen halves
-  and corners with keyboard shortcuts (Alt+Q/W/E/R, Alt+U/I/J/K, Alt+G
-  center, Alt+H maximize, Alt+M minimize, Alt+]/[ next/previous display
-  and more; see the settings).
-* **Move Window to Monitor** (by TomberWolf): move the active window to
-  another monitor with hotkeys (default Ctrl+Alt+arrow keys).
+![Window Manager preview](https://raw.githubusercontent.com/DavidHiFi/davids-windhawk-mods/main/media/previews/window-manager.gif)
 
-Settings from all three mods are preserved in one settings page. The
-mouse and in-process shortcut behaviour is unchanged from
-local@alt-snap-drag; the keyboard tools run in one dedicated elevated
-Windhawk tool process instead of two. The tool runs elevated so it can move
-administrator windows. A saved monitor index that is no longer present uses
-the nearest monitor in the requested direction.
+## Features
 
-Published under GPL-3.0 because the drag code derives from alt-drag.
+- **Alt+drag to move.** Grab a window anywhere, not just by its title bar.
+- **Alt+right-drag to resize** from the nearest edge or corner.
+- **Snap with the keyboard** to halves, quarters, the center or almost
+  maximized, with optional gaps around windows.
+- **Send to another monitor** with a hotkey. Maximized windows stay maximized
+  on the new screen.
+- **Quick actions:** maximize, minimize, close or open the window menu without
+  reaching for the title bar.
+- **Auto-snap rules** place chosen apps in a set position.
+- **Works on elevated windows** such as Task Manager and Task Scheduler.
 
-## Installation
+## Default shortcuts
 
-Disable Snap Commander, Move Window to Monitor, AltDrag and AltSnap Drag before
-enabling this mod. Also close a standalone AltSnap or AltDrag application if it
-owns the same shortcuts. This mod replaces their window controls.
+| Shortcut | Action |
+| --- | --- |
+| Alt + left drag | Move the window |
+| Alt + right drag | Resize the window |
+| Alt + Q / W / E / R | Left, right, top or bottom half |
+| Alt + U / I / J / K | Top-left, top-right, bottom-left or bottom-right quarter |
+| Alt + T | Center half |
+| Alt + H / Y / G | Maximize, almost maximize, center |
+| Alt + ] / [ | Next or previous monitor |
+| Ctrl + Alt + arrow keys | Monitor in that direction |
+| Alt + Z | Undo the snap |
+| Alt + F | Toggle maximize |
+| Alt + M | Minimize |
+| Alt + Shift + Q | Close |
+| Alt + middle click | Window menu |
 
-Until this mod is accepted into the official catalog, create a new mod in
-Windhawk, paste this complete source and compile it. Configure the combined
-settings page to choose your shortcuts and screen gaps. Existing separate-mod
-settings are not imported automatically by a fresh editor installation.
+Every shortcut can be changed or turned off in the settings. For Alt+arrow
+snapping like the preview, set the four half keys to `left`, `right`, `up` and
+`down`.
 
-The keyboard helper runs elevated. Windows can request administrator permission
-when it starts. Allow that request to use the keyboard controls on administrator
-windows. Declining the request prevents the keyboard helper from starting.
+## Notes
 
-The default monitor shortcuts are Ctrl+Alt+arrows. Select Alt+Shift in Modifier
-Keys to use Alt+Shift+arrows. Monitor targets default to automatic spatial
-movement. A saved monitor target that no longer exists also uses spatial movement.
+- This mod replaces AltDrag, AltSnap, Snap Commander and Move Window to
+  Monitor. Disable those before you enable it.
+- Keyboard shortcuts run in a small elevated Windhawk helper, which is what
+  lets them move administrator windows.
 
-The source, installation instructions and licensing notices are available at
-https://github.com/DavidHiFi/davids-windhawk-mods/tree/main/mods/local/david-window-pack.
+## Credits
 
+Combines [AltDrag](https://windhawk.net/mods/alt-drag) by m417z (inspired by
+[AltSnap](https://github.com/RamonUnch/AltSnap) by RamonUnch),
+[Snap Commander](https://windhawk.net/mods/snap-commander) by Asteski and
+[Move Window to Monitor](https://windhawk.net/mods/move-window-to-monitor) by
+TomberWolf. GPL-3.0, following AltDrag.
 */
 // ==/WindhawkModReadme==
 
@@ -3998,6 +4007,7 @@ static void LoadSettings() {
 struct MonitorInfo {
     HMONITOR hMon;
     RECT     rcWork;
+    RECT     rcMonitor;
     UINT     dpiX;
     UINT     dpiY;
 };
@@ -4010,6 +4020,7 @@ static BOOL CALLBACK MonitorEnumProc(HMONITOR hMon, HDC, LPRECT, LPARAM lParam) 
     MonitorInfo info;
     info.hMon   = hMon;
     info.rcWork = mi.rcWork;
+    info.rcMonitor = mi.rcMonitor;
     info.dpiX   = 96;
     info.dpiY   = 96;
 
@@ -4065,12 +4076,36 @@ static void LogAllMonitors(const std::vector<MonitorInfo>& monitors) {
 
 enum class Direction { Up, Down, Left, Right };
 
-static void MoveWindowToMonitor(HWND hwnd, const MonitorInfo& src, const MonitorInfo& dst) {
-    bool wasMaximized = IsZoomed(hwnd);
-    if (wasMaximized) ShowWindowAsync(hwnd, SW_RESTORE);
+// rcNormalPosition is in workspace coordinates (offset by the work area of
+// the window's monitor) unless the window is a tool window, which uses screen
+// coordinates.
+static POINT WorkspaceOffset(HWND hwnd, const MonitorInfo& mon) {
+    if (GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) return { 0, 0 };
+    return { mon.rcWork.left - mon.rcMonitor.left, mon.rcWork.top - mon.rcMonitor.top };
+}
 
+static void MoveWindowToMonitor(HWND hwnd, const MonitorInfo& src, const MonitorInfo& dst) {
+    // Maximized and minimized windows: move the restored rectangle with
+    // SetWindowPlacement so the window keeps its state on the new monitor.
+    bool usePlacement = IsZoomed(hwnd) || IsIconic(hwnd);
+
+    WINDOWPLACEMENT wp = { sizeof(wp) };
     RECT rcWin = {};
-    GetWindowRect(hwnd, &rcWin);
+    if (usePlacement) {
+        if (!GetWindowPlacement(hwnd, &wp)) return;
+        rcWin = wp.rcNormalPosition;
+        POINT ofs = WorkspaceOffset(hwnd, src);
+        OffsetRect(&rcWin, ofs.x, ofs.y);
+    } else {
+        GetWindowRect(hwnd, &rcWin);
+        // Borderless fullscreen: cover the destination monitor instead.
+        if (EqualRect(&rcWin, &src.rcMonitor)) {
+            const RECT& m = dst.rcMonitor;
+            SetWindowPos(hwnd, nullptr, m.left, m.top, m.right - m.left,
+                         m.bottom - m.top, SWP_NOZORDER | SWP_NOACTIVATE);
+            return;
+        }
+    }
 
     int ww   = rcWin.right  - rcWin.left;
     int wh   = rcWin.bottom - rcWin.top;
@@ -4109,10 +4144,24 @@ static void MoveWindowToMonitor(HWND hwnd, const MonitorInfo& src, const Monitor
     if (newX < dst.rcWork.left)          newX = dst.rcWork.left;
     if (newY < dst.rcWork.top)           newY = dst.rcWork.top;
 
-    SetWindowPos(hwnd, nullptr, newX, newY, newW, newH,
-                 SWP_NOZORDER | SWP_NOACTIVATE);
+    if (!usePlacement) {
+        SetWindowPos(hwnd, nullptr, newX, newY, newW, newH,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        return;
+    }
 
-    if (wasMaximized) ShowWindowAsync(hwnd, SW_MAXIMIZE);
+    POINT ofs = WorkspaceOffset(hwnd, dst);
+    wp.rcNormalPosition = { newX - ofs.x, newY - ofs.y,
+                            newX - ofs.x + newW, newY - ofs.y + newH };
+    wp.flags &= ~WPF_SETMINPOSITION;
+    SetWindowPlacement(hwnd, &wp);
+
+    // If the window stayed maximized on the old monitor, restore (onto the new
+    // normal rectangle) and re-maximize synchronously.
+    if (IsZoomed(hwnd) && MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) != dst.hMon) {
+        ShowWindow(hwnd, SW_RESTORE);
+        ShowWindow(hwnd, SW_MAXIMIZE);
+    }
 }
 
 static void MoveActiveWindowInDirection(Direction dir) {
