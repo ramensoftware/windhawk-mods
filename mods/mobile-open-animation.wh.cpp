@@ -299,11 +299,13 @@ Windhawk's process exclusion list.
   $name: Panel background
   $name:zh-CN: 占位面板底色
   $description: >-
-    auto tries to infer the app's own background from the window class so that
-    the handover does not flash a different colour. Falls back to dark.
+    auto tries to infer the app's own background from the window class, so that the
+    handover does not flash a different colour. Most modern apps paint their background
+    themselves instead of setting a class brush, in which case the system light/dark app
+    mode is used.
   $description:zh-CN: >-
-    auto 会尝试从窗口类的背景画刷推断出应用自己的底色，让交接时不会闪色。
-    推断失败时用深色。
+    auto 会尝试从窗口类的背景画刷推断出应用自己的底色，让交接时不会闪色。多数现代应用
+    是自己画背景、不设类画刷，这种情况下跟随系统的浅色/深色应用模式。
   $options:
   - auto: Automatic (follow the window background)
   - dark: Dark
@@ -348,7 +350,6 @@ Windhawk's process exclusion list.
 #include <cstdarg>
 #include <cstdio>
 #include <cwchar>
-#include <new>
 #include <string>
 #include <vector>
 #ifndef WS_EX_NOREDIRECTIONBITMAP
@@ -379,7 +380,7 @@ struct AnimParams {
     int readyTimeoutMs;
     int originMode;      // 0 cursor, 1 window centre, 2 screen bottom
     bool shellUiAnchor;  // also anchor on the Start menu / taskbar (origin=cursor only)
-    int easing;          // 0 easeOutCubic, 1 easeOutQuint, 2 linear
+    int easing;          // index into kEasingKeys
     int frameIntervalMs;
     int splashBgMode;    // 0 auto, 1 dark, 2 light
     bool animateDialogs;
@@ -418,9 +419,9 @@ struct LaunchClick {
     wchar_t targetExe[64];        // lowercase exe name
 };
 
-static void Diag(const char* fmt, ...);  // needed below, declared up front
 static void ToLowerInPlace(std::wstring& s);  // used by ExtractExeName, defined later
 static void WideToUtf8(PCWSTR w, char* out, int outChars);  // the exe name is printed in the log
+static bool IsThreadPumping(HWND hwnd);  // used by RestoreWindowStyle, defined later
 
 // The log is narrow (UTF-8), so a wchar_t* handed straight to %s prints only the low
 // byte of each character - the exe name in every INIT line came out as "w" for
@@ -503,7 +504,7 @@ static std::wstring ExtractExeName(const wchar_t* path) {
 static void ClickShareRecord(const char* why, const wchar_t* targetExe,
                             const POINT* pt = nullptr) {
     if (!g_clickShared) {
-        if (why) Diag("  record click failed (shared memory unavailable) why=%s", why);
+        if (why) Wh_Log(L"  record click failed (shared memory unavailable) why=%S", why);
         return;
     }
     // pt is the position the message was queued with, which under load is not the same
@@ -539,7 +540,7 @@ static void ClickShareRecord(const char* why, const wchar_t* targetExe,
     if (why) {
         char targetUtf8[64] = "(unknown)";
         if (!exe.empty()) WideToUtf8(exe.c_str(), targetUtf8, sizeof(targetUtf8));
-        Diag("  record click (%ld,%ld) why=%s target=%s", p.x, p.y, why, targetUtf8);
+        Wh_Log(L"  record click (%ld,%ld) why=%S target=%S", p.x, p.y, why, targetUtf8);
     }
 }
 
@@ -564,7 +565,7 @@ static bool ClickShareRead(POINT* out, bool* ours) {
         static bool logged = false;
         if (!logged) {
             logged = true;
-            Diag("  click record: shared memory unavailable (skipping, later attempts follow)");
+            Wh_Log(L"  click record: shared memory unavailable (skipping, later attempts follow)");
         }
         return false;
     }
@@ -573,7 +574,7 @@ static bool ClickShareRead(POINT* out, bool* ours) {
     if (!InterlockedCompareExchange(&g_clickShared->targetReady, 0, 0)) return false;
     const DWORD age = (DWORD)GetTickCount64() - (DWORD)tick;
     if (age > kClickValidMs) {
-        Diag("  click record: too old (%lu ms > %lu ms)", (unsigned long)age,
+        Wh_Log(L"  click record: too old (%lu ms > %lu ms)", (unsigned long)age,
              (unsigned long)kClickValidMs);
         return false;
     }
@@ -598,7 +599,7 @@ static bool ClickShareRead(POINT* out, bool* ours) {
         // which every File Explorer window grew out of that stale spot.
         const DWORD limit = spawnedByThisClick ? kClickValidMs : kClickUnknownTargetMs;
         if (age > limit) {
-            Diag("  click record: unknown target and already %lu ms old (limit %lu ms)",
+            Wh_Log(L"  click record: unknown target and already %lu ms old (limit %lu ms)",
                  (unsigned long)age, (unsigned long)limit);
             return false;
         }
@@ -618,7 +619,7 @@ static bool ClickShareRead(POINT* out, bool* ours) {
             age > kClickNameMismatchMs) {
             char targetUtf8[64] = "?";
             WideToUtf8(target, targetUtf8, sizeof(targetUtf8));
-            Diag("  click record: target is %s, this is %s (recorded %lu ms ago)", targetUtf8,
+            Wh_Log(L"  click record: target is %S, this is %S (recorded %lu ms ago)", targetUtf8,
                  ExeNameUtf8(), (unsigned long)age);
             return false;
         }
@@ -627,7 +628,7 @@ static bool ClickShareRead(POINT* out, bool* ours) {
     out->x = InterlockedCompareExchange(&g_clickShared->x, 0, 0);
     out->y = InterlockedCompareExchange(&g_clickShared->y, 0, 0);
     *ours = spawnedByThisClick;
-    Diag("  click record ok (%ld,%ld) recorded %lu ms ago target=%s launch delay=%lu ms%s",
+    Wh_Log(L"  click record ok (%ld,%ld) recorded %lu ms ago target=%S launch delay=%lu ms%S",
          out->x, out->y, (unsigned long)age, len > 0 ? "matched" : "unknown (1500ms window)",
          (unsigned long)clickToProcess,
          spawnedByThisClick ? " (launch of this process)" : " (left by another process)");
@@ -720,40 +721,19 @@ static bool g_launchAnchorValid = false;
 // anchor the main window falls back to the current cursor position.
 static const ULONGLONG kLaunchAnchorMs = 15000;
 
-// Diagnostics
-//
-// Everything goes to Windhawk's own log through Wh_Log: no file of our own, no ring
+// Diagnostics go to Windhawk's own log through Wh_Log: no file of our own, no ring
 // buffer, no state, and the on/off switch is Windhawk's own log toggle for this mod.
 //
-// Wh_Log takes a wide format string while the call sites below take narrow ones with
-// UTF-8 arguments. Formatting narrow and widening here, in one place, is deliberate:
-// mixing the two is what produced the earlier "wide string handed to %s prints one
-// byte per character" lines, and doing it per call site invites the same mistake.
+// Wh_Log is called directly at every site rather than through a helper. The macro
+// prefixes each line with the call site's line and function, and it only evaluates its
+// arguments when logging is enabled for the mod - a helper takes both away, and it made
+// every line report the helper's own line number.
+//
+// The format strings are wide, so %s takes a wchar_t* and %S a narrow (ASCII) one.
 static void WideToUtf8(PCWSTR w, char* out, int outChars) {
     out[0] = '\0';
     if (!w || !w[0]) return;
     WideCharToMultiByte(CP_UTF8, 0, w, -1, out, outChars, nullptr, nullptr);
-}
-
-static void Diag(const char* fmt, ...) {
-    char body[320];
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(body, sizeof(body), fmt, args);
-    va_end(args);
-
-    char exe[160] = "?";
-    if (!g_thisExeName.empty()) WideToUtf8(g_thisExeName.c_str(), exe, sizeof(exe));
-
-    // Wh_Log adds the timestamp; the process is what its output misses when the same
-    // mod is loaded in a hundred processes at once.
-    char line[512];
-    snprintf(line, sizeof(line), "[%s:%lu] %s", exe, GetCurrentProcessId(), body);
-
-    wchar_t wide[512];
-    if (MultiByteToWideChar(CP_UTF8, 0, line, -1, wide, 512) > 0) {
-        Wh_Log(L"%s", wide);
-    }
 }
 
 // "Skipped" logging that includes the window class, so it is obvious which rule
@@ -788,7 +768,7 @@ static void DiagSkip(const char* where, HWND hwnd, const char* reason) {
     // try-lock: a hook path must never block on a lock (a suspended thread would
     // freeze everything behind it)
     if (!TryAcquireSRWLockExclusive(&seenLock)) {
-        Diag("  skip %s: class=? (dedup table busy) reason: %s", where,
+        Wh_Log(L"  skip %S: class=? (dedup table busy) reason=%S", where,
              reason ? reason : "unknown");
         return;
     }
@@ -810,13 +790,10 @@ static void DiagSkip(const char* where, HWND hwnd, const char* reason) {
     ReleaseSRWLockExclusive(&seenLock);
     if (dup) return;
 
-    char clsUtf8[256];
-    WideToUtf8(key, clsUtf8, sizeof(clsUtf8));
-    RECT rc = {};
-    GetWindowRect(hwnd, &rc);
-    Diag("  skip %s: class=%s hwnd=%p %dx%d reason: %s", where, clsUtf8, (void*)hwnd,
-         (int)(rc.right - rc.left), (int)(rc.bottom - rc.top),
-         reason ? reason : "unknown");
+    // The window rect is not printed any more: it adds nothing to a skip line, and this
+    // path runs for every rejected window show whether or not logging is enabled.
+    Wh_Log(L"  skip %S: class=%s hwnd=%p reason=%S", where, key, (void*)hwnd,
+           reason ? reason : "unknown");
 }
 
 // Settings access
@@ -1629,28 +1606,26 @@ static std::atomic<bool> g_unloading{false};
 // They are deliberately never closed from inside the threads themselves: that would
 // turn the join into a wait on an invalid handle, which is no wait at all.
 static SRWLOCK g_threadsLock = SRWLOCK_INIT;
-static HANDLE g_modThreads[2 * kMaxAnimations] = {};
+// A vector rather than a fixed array: an animation thread releases its slot before it
+// exits, so the slot can be reused while that thread is still in its last few
+// instructions, and a burst can put more threads in flight than there are slots. A fixed
+// array would silently drop a handle there, and a thread that is not joined is exactly
+// the crash this is here to prevent.
+static std::vector<HANDLE> g_modThreads;
 
 static void RegisterModThread(HANDLE h) {
     if (!h) return;
     AcquireSRWLockExclusive(&g_threadsLock);
-    for (auto& t : g_modThreads) {
-        if (t && WaitForSingleObject(t, 0) == WAIT_OBJECT_0) {
-            CloseHandle(t);
-            t = nullptr;
+    for (auto it = g_modThreads.begin(); it != g_modThreads.end();) {
+        if (WaitForSingleObject(*it, 0) == WAIT_OBJECT_0) {
+            CloseHandle(*it);
+            it = g_modThreads.erase(it);
+        } else {
+            ++it;
         }
     }
-    for (auto& t : g_modThreads) {
-        if (!t) {
-            t = h;
-            ReleaseSRWLockExclusive(&g_threadsLock);
-            return;
-        }
-    }
+    g_modThreads.push_back(h);
     ReleaseSRWLockExclusive(&g_threadsLock);
-    // Unreachable: at most kMaxAnimations animations, each with its own deferred thread,
-    // are alive at the same time, which is exactly the size of the array.
-    CloseHandle(h);
 }
 
 static void JoinModThreads() {
@@ -1659,18 +1634,15 @@ static void JoinModThreads() {
     // registered while the first pass is running. Nothing else can appear - the hooks
     // are already removed by the time Wh_ModUninit is called.
     for (int pass = 0; pass < 2; pass++) {
-        bool waited = false;
-        for (auto& t : g_modThreads) {
-            AcquireSRWLockExclusive(&g_threadsLock);
-            HANDLE h = t;
-            t = nullptr;
-            ReleaseSRWLockExclusive(&g_threadsLock);
-            if (!h) continue;
-            waited = true;
+        std::vector<HANDLE> take;
+        AcquireSRWLockExclusive(&g_threadsLock);
+        take.swap(g_modThreads);
+        ReleaseSRWLockExclusive(&g_threadsLock);
+        if (take.empty()) break;
+        for (HANDLE h : take) {
             WaitForSingleObject(h, INFINITE);
             CloseHandle(h);
         }
-        if (!waited) break;
     }
 }
 
@@ -1702,10 +1674,9 @@ using CreateWindowExA_t = decltype(&CreateWindowExA);
 static CreateWindowExA_t pOrigCreateWindowExA = nullptr;
 
 static const wchar_t* const kSplashClass = L"WhMobileOpenAnimationSplash";
-// The version in the log is the engine's own macro, built from @version, so it can never
-// disagree with the published metadata the way a hand-kept copy does - it said "v3.12"
-// for a while after @version had moved to 1.0.0. No fallback is needed: windhawk_api.h
-// always defines it, as a placeholder when the compiler does not pass the real one.
+// The version the log prints is the engine's macro, built from @version, so it cannot
+// disagree with the published metadata the way a hand-kept copy can - it said "v3.12" for a
+// while after @version had moved to 1.0.0.
 
 static int FindSlot(HWND hwnd) {
     if (g_activeAnimations.load(std::memory_order_relaxed) == 0) return -1;
@@ -2180,14 +2151,14 @@ static HICON ShellFolderJumboIcon(HWND hwnd) {
                 if (SUCCEEDED(SHGetImageList(SHIL_JUMBO, kIID_IImageList, (void**)&il)) && il) {
                     il->GetIcon(sfi.iIcon, ILD_TRANSPARENT, &icon);
                     il->Release();
-                    if (icon) Diag("  folder icon iIcon=%d", sfi.iIcon);
+                    if (icon) Wh_Log(L"  folder icon iIcon=%d", sfi.iIcon);
                 }
             }
             ILFree(pidl);
         }
     }
 
-    if (!icon) Diag("  folder icon unavailable, falling back to the window icon");
+    if (!icon) Wh_Log(L"  folder icon unavailable, falling back to the window icon");
     CoUninitialize();
     return icon;
 }
@@ -2489,11 +2460,13 @@ static bool CreateSplash(AnimSlot* slot, HWND owner) {
     const int h = rc.bottom - rc.top;
     if (w <= 0 || h <= 0) return false;
     if ((long long)w * h > kMaxPanelPixels) {
-        Diag("  splash: panel too big %dx%d, using real-window path", w, h);
+        Wh_Log(L"  splash: panel too big %dx%d, using real-window path", w, h);
         return false;
     }
-    if (!RegisterSplashClass()) {
-        Diag("  splash: RegisterClassEx failed (%lu)", GetLastError());
+    // Registration happens in Wh_ModInit. Reading the flag here rather than calling
+    // RegisterSplashClass() again keeps animation threads from racing on the registration.
+    if (!g_splashClassRegistered) {
+        Wh_Log(L"  splash: window class is not registered, using the real-window path");
         return false;
     }
 
@@ -2513,7 +2486,7 @@ static bool CreateSplash(AnimSlot* slot, HWND owner) {
     slot->splashDC = CreateCompatibleDC(screenDC);
     ReleaseDC(nullptr, screenDC);
     if (!slot->splashBitmap || !slot->splashDC || !bits) {
-        Diag("  splash: CreateDIBSection/DC failed (%lu)", GetLastError());
+        Wh_Log(L"  splash: CreateDIBSection/DC failed (%lu)", GetLastError());
         DestroySplash(slot);
         return false;
     }
@@ -2558,13 +2531,13 @@ static bool CreateSplash(AnimSlot* slot, HWND owner) {
     }
 
     if (!slot->splash) {
-        Diag("  splash: CreateWindowEx failed (%lu)", GetLastError());
+        Wh_Log(L"  splash: CreateWindowEx failed (%lu)", GetLastError());
         DestroySplash(slot);
         return false;
     }
 
     
-    Diag("  splash: created start %dx%d at (%d,%d) -> target %dx%d at (%d,%d), bg=%08X, icon=%s",
+    Wh_Log(L"  splash: created start %dx%d at (%d,%d) -> target %dx%d at (%d,%d), bg=%08X, icon=%S",
          start.right - start.left, start.bottom - start.top, start.left, start.top, w, h,
          (int)slot->target.left, (int)slot->target.top, slot->bg,
          slot->icon ? "yes" : "NO");
@@ -2618,7 +2591,7 @@ static void ApplySplashFrame(AnimSlot* slot, const RECT& r, BYTE alpha, int radi
     if (!UpdateLayeredWindow(slot->splash, screenDC, &dst, &size, slot->splashDC,
                              &src, 0, &blend, ULW_ALPHA)) {
         if (++slot->ulwFailures <= 3) {
-            Diag("  splash: UpdateLayeredWindow failed (%lu) size=%dx%d", GetLastError(),
+            Wh_Log(L"  splash: UpdateLayeredWindow failed (%lu) size=%dx%d", GetLastError(),
                  fw, fh);
         }
     }
@@ -2695,8 +2668,12 @@ static void RestoreWindowStyle(AnimSlot* slot, HWND hwnd) {
     g_internalMove = true;
     if (slot->wasLayered) {
         SetLayeredWindowAttributes(hwnd, 0, slot->originalAlpha, LWA_ALPHA);
-    } else if (slot->addedLayered &&
+    } else if (slot->addedLayered && IsThreadPumping(hwnd) &&
                (GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED)) {
+        // The pumping check is what keeps the unload from waiting on a hung app:
+        // SetWindowLong on another thread's window is a synchronous send, and Wh_ModUninit
+        // now waits for this thread with INFINITE. Leaving the style in place is harmless
+        // then - the alpha below is restored either way, so the window is still visible.
         // Remove only the style we added. "Remove WS_EX_LAYERED if present" would also
         // remove the layering WinUI, WPF and Office set themselves, and removing layering
         // always makes DWM recreate the surface, which is one frame of flicker.
@@ -2823,8 +2800,8 @@ static void RunSplashZoom(AnimSlot* slot, HWND hwnd) {
     }
 
     const float totalMs = QpcSinceMs(t0);
-    Diag("  zoom done: %d frames in %.1f ms (%.1f fps, target %.1f ms/frame); "
-         "filled %.2fM pixels (full repaints would cost %.2fM, saving %.0f%%)",
+    Wh_Log(L"  zoom done: %d frames in %.1f ms (%.1f fps, target %.1f ms/frame); "
+         L"filled %.2fM pixels (full repaints would cost %.2fM, saving %.0f%%)",
          frames, totalMs, totalMs > 0.1f ? frames * 1000.0f / totalMs : 0.0f,
          (double)slot->frameIntervalMs, (double)slot->fillPixels / 1e6,
          (double)slot->fullPixels / 1e6,
@@ -2857,7 +2834,7 @@ static void RunWaitReady(AnimSlot* slot, HWND hwnd, ULONGLONG showTick) {
         PumpMessages();
         Sleep(15);
     }
-    Diag("  ready after %llu ms (painted=%d cloaked=%d)",
+    Wh_Log(L"  ready after %llu ms (painted=%d cloaked=%d)",
          (unsigned long long)(GetTickCount64() - t0), slot->painted.load() ? 1 : 0,
          IsCloaked(hwnd) ? 1 : 0);
 }
@@ -2905,7 +2882,7 @@ static void RunFadeOutPanel(AnimSlot* slot, uint32_t bgTo) {
         Sleep(spentMs + 0.5f < interval ? (DWORD)lround(interval - spentMs) : 1);
     }
     if (outOfTime) {
-        Diag("  !! handoff fade still running after %llu ms, forcing the teardown",
+        Wh_Log(L"  !! handoff fade still running after %llu ms, forcing the teardown",
              (unsigned long long)kHandoffWallClockMs);
     }
 }
@@ -2963,7 +2940,7 @@ static void RunAnimationBody(AnimSlot* slot, HWND hwnd) {
     const ULONGLONG createStart = GetTickCount64();
     bool splashOk = slot->params.splash && CreateSplash(slot, hwnd);
     const ULONGLONG createCost = GetTickCount64() - createStart;
-    if (createCost > 5) Diag("  splash create cost %llu ms", (unsigned long long)createCost);
+    if (createCost > 5) Wh_Log(L"  splash create cost %llu ms", (unsigned long long)createCost);
 
     if (splashOk) {
         const RECT start = StartRect(SnapshotOrigin(slot), slot->params.startSizePx);
@@ -2985,10 +2962,10 @@ static void RunAnimationBody(AnimSlot* slot, HWND hwnd) {
             if (sampled != 0xFFFFFFFF) {
                 bgTo = MakePixel(255, GetRValue(sampled), GetGValue(sampled),
                                  GetBValue(sampled));
-                Diag("  handoff colour %08X -> %08X (fade %llu ms)", slot->bg, bgTo,
+                Wh_Log(L"  handoff colour %08X -> %08X (fade %llu ms)", slot->bg, bgTo,
                      (unsigned long long)slot->params.handoffMs);
             } else {
-                Diag("  handoff colour sampling failed, keeping the panel colour %08X", slot->bg);
+                Wh_Log(L"  handoff colour sampling failed, keeping the panel colour %08X", slot->bg);
             }
             RestoreWindowStyle(slot, hwnd);
             RunFadeOutPanel(slot, bgTo);
@@ -3003,24 +2980,24 @@ static void RunAnimationBody(AnimSlot* slot, HWND hwnd) {
         if (handedOff && !g_unloading.load(std::memory_order_relaxed)) {
             if (IsWindow(hwnd) && !IsWindowVisible(hwnd)) {
                 const int n = g_handoffFailStreak.fetch_add(1, std::memory_order_relaxed) + 1;
-                Diag("  !! window still not visible after handoff, %d in a row", n);
+                Wh_Log(L"  !! window still not visible after handoff, %d in a row", n);
                 if (n >= kHandoffFailLimit) {
                     g_compatDisabled.store(true, std::memory_order_relaxed);
-                    Diag("  !!! cutting this process off, no more animations here");
+                    Wh_Log(L"  !!! cutting this process off, no more animations here");
                 }
             } else {
                 g_handoffFailStreak.store(0, std::memory_order_relaxed);
             }
         }
     } else {
-        if (slot->params.splash) Diag("  falling back to real-window animation");
+        if (slot->params.splash) Wh_Log(L"  falling back to real-window animation");
         RunRealZoom(slot, hwnd, showTick);
     }
 
     DestroySplash(slot);
     RestoreWindowStyle(slot, hwnd);
     ReleaseSlot(slot);
-    Diag("  done [%s] total %llu ms", ExeNameUtf8(),
+    Wh_Log(L"  done [%S] total %llu ms", ExeNameUtf8(),
          (unsigned long long)(GetTickCount64() - showTick));
 }
 
@@ -3106,8 +3083,8 @@ static bool StartAnimation(int index, HWND hwnd) {
     GetClassNameW(hwnd, clsName, 128);
     char clsUtf8[256];
     WideToUtf8(clsName, clsUtf8, sizeof(clsUtf8));
-    Diag("  accepted class=%s %dx%d at (%d,%d) anchor=(%d,%d) source=%s frame=%.1fms(%.0ffps) "
-         "display=%.1fms",
+    Wh_Log(L"  accepted class=%S %dx%d at (%d,%d) anchor=(%d,%d) source=%S frame=%.1fms(%.0ffps) "
+         L"display=%.1fms",
          clsUtf8, rc.right - rc.left, rc.bottom - rc.top, rc.left, rc.top,
          slot->origin.x, slot->origin.y, originSource, (double)slot->frameIntervalMs,
          1000.0 / (double)slot->frameIntervalMs, (double)slot->displayPeriodMs);
@@ -3293,7 +3270,7 @@ HWND WINAPI HookedCreateWindowExW(DWORD exStyle, LPCWSTR className, LPCWSTR wind
         GetClassNameW(hwnd, clsNow, 256);
         char clsUtf8[256];
         WideToUtf8(clsNow, clsUtf8, sizeof(clsUtf8));
-        Diag("  visible on creation: CreateWindowExW class=%s style=%08lX exStyle=%08lX parent=%p owner=%p",
+        Wh_Log(L"  visible on creation: CreateWindowExW class=%S style=%08lX exStyle=%08lX parent=%p owner=%p",
              clsUtf8[0] ? clsUtf8 : "(empty)", (unsigned long)style, (unsigned long)exStyle,
              (void*)parent, (void*)GetWindow(hwnd, GW_OWNER));
         HandleWindowCreatedVisible(hwnd, "CreateWindowExW(WS_VISIBLE)");
@@ -3325,7 +3302,7 @@ HWND WINAPI HookedCreateWindowExA(DWORD exStyle, LPCSTR className, LPCSTR window
         GetClassNameW(hwnd, clsNow, 256);
         char clsUtf8[256];
         WideToUtf8(clsNow, clsUtf8, sizeof(clsUtf8));
-        Diag("  visible on creation: CreateWindowExA class=%s style=%08lX exStyle=%08lX parent=%p owner=%p",
+        Wh_Log(L"  visible on creation: CreateWindowExA class=%S style=%08lX exStyle=%08lX parent=%p owner=%p",
              clsUtf8[0] ? clsUtf8 : "(empty)", (unsigned long)style,
              (unsigned long)exStyle, (void*)parent, (void*)GetWindow(hwnd, GW_OWNER));
         HandleWindowCreatedVisible(hwnd, "CreateWindowExA(WS_VISIBLE)");
@@ -3389,6 +3366,18 @@ BOOL WINAPI HookedShowWindowAsync(HWND hwnd, int nCmdShow) {
     const char* reason = nullptr;
     if (!ShouldAnimateShow(hwnd, p, cls, 256, &reason)) {
         DiagSkip("ShowWindowAsync", hwnd, reason);
+        return pOrigShowWindowAsync(hwnd, nCmdShow);
+    }
+
+    // ShowWindowAsync exists so that the caller does not wait for the window's thread:
+    // apps call it from a worker thread precisely because the UI thread is blocked, often
+    // on that same worker. The real-window path changes GWL_EXSTYLE, which for a window
+    // owned by another thread is a synchronous send (WM_STYLECHANGING/WM_STYLECHANGED),
+    // so taking the window over here would turn this call back into a blocking one and can
+    // hang both threads. The splash path only sets a DWM attribute and sends no messages.
+    if (!p.splash && GetWindowThreadProcessId(hwnd, nullptr) != GetCurrentThreadId()) {
+        DiagSkip("ShowWindowAsync (another thread's window)", hwnd,
+                 "the real-window path would block the caller");
         return pOrigShowWindowAsync(hwnd, nCmdShow);
     }
 
@@ -3535,31 +3524,24 @@ BOOL Wh_ModInit() {
     LoadSettings();
     char versionUtf8[64] = {};
     WideToUtf8(WH_MOD_VERSION, versionUtf8, sizeof(versionUtf8));
-    Diag("INIT [%s] v%s splash=%d", ExeNameUtf8(), versionUtf8, g_params.splash ? 1 : 0);
-
-    // Registered once, up front: if it fails, every window takes the real-window path
-    // instead of the splash path, which is better to learn from the first log line than
-    // from an animation that looks different from the screenshots.
-    if (!RegisterSplashClass()) {
-        Diag("splash window class registration failed, using the real-window path");
-    }
+    Wh_Log(L"INIT [%S] v%S splash=%d", ExeNameUtf8(), versionUtf8, g_params.splash ? 1 : 0);
 
     if (!WindhawkUtils::SetFunctionHook(ShowWindow, HookedShowWindow, &pOrigShowWindow)) {
-        Diag("FAILED to hook ShowWindow");
+        Wh_Log(L"FAILED to hook ShowWindow");
         return FALSE;
     }
     if (!WindhawkUtils::SetFunctionHook(ShowWindowAsync, HookedShowWindowAsync,
                                         &pOrigShowWindowAsync)) {
-        Diag("failed to hook ShowWindowAsync (non-fatal)");
+        Wh_Log(L"failed to hook ShowWindowAsync (non-fatal)");
     }
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, HookedCreateWindowExW,
                                         &pOrigCreateWindowExW)) {
-        Diag("failed to hook CreateWindowExW (windows created with WS_VISIBLE "
-             "won't animate)");
+        Wh_Log(L"failed to hook CreateWindowExW (windows created with WS_VISIBLE "
+             L"won't animate)");
     }
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExA, HookedCreateWindowExA,
                                         &pOrigCreateWindowExA)) {
-        Diag("failed to hook CreateWindowExA (ANSI programs will not animate)");
+        Wh_Log(L"failed to hook CreateWindowExA (ANSI programs will not animate)");
     }
 
     // ShellExecuteExW is hooked only in the shell process, where its meaning is
@@ -3570,9 +3552,9 @@ BOOL Wh_ModInit() {
     if (g_isShell) {
         if (WindhawkUtils::SetFunctionHook(ShellExecuteExW, HookedShellExecuteExW,
                                            &pOrigShellExecuteExW)) {
-            Diag("hooked ShellExecuteExW (shell process: records the click position)");
+            Wh_Log(L"hooked ShellExecuteExW (shell process: records the click position)");
         } else {
-            Diag("failed to hook ShellExecuteExW");
+            Wh_Log(L"failed to hook ShellExecuteExW");
         }
         // The mouse-down recorder is installed here too, and only here. Explorer
         // owns the desktop and the taskbar, so this catches the icon click itself;
@@ -3580,26 +3562,34 @@ BOOL Wh_ModInit() {
         // HookedDispatchMessageW), and GetMessageW is not usable at all.
         if (WindhawkUtils::SetFunctionHook(DispatchMessageW, HookedDispatchMessageW,
                                            &pOrigDispatchMessageW)) {
-            Diag("hooked DispatchMessageW (shell process: records mouse downs)");
+            Wh_Log(L"hooked DispatchMessageW (shell process: records mouse downs)");
         } else {
-            Diag("failed to hook DispatchMessageW (click position relies on ShellExecuteExW alone)");
+            Wh_Log(L"failed to hook DispatchMessageW (click position relies on ShellExecuteExW alone)");
         }
     }
 
     if (!WindhawkUtils::SetFunctionHook(EndPaint, HookedEndPaint, &pOrigEndPaint)) {
-        Diag("failed to hook EndPaint (readiness falls back to timeout)");
+        Wh_Log(L"failed to hook EndPaint (readiness falls back to timeout)");
     }
     if (!WindhawkUtils::SetFunctionHook(SetWindowPos, HookedSetWindowPos,
                                         &pOrigSetWindowPos)) {
-        Diag("FAILED to hook SetWindowPos");
+        Wh_Log(L"FAILED to hook SetWindowPos");
         return FALSE;
+    }
+
+    // Registered last, and only once: every path below this point that returns FALSE
+    // leaves the mod uninited, and Wh_ModUninit is not called for it, so a class
+    // registered earlier would stay registered with a procedure in an unloaded image.
+    // Failing here is not fatal - every window takes the real-window path instead.
+    if (!RegisterSplashClass()) {
+        Wh_Log(L"splash window class registration failed, using the real-window path");
     }
     return TRUE;
 }
 
 void Wh_ModSettingsChanged() {
     LoadSettings();
-    Diag("settings reloaded: splash=%d", g_params.splash ? 1 : 0);
+    Wh_Log(L"settings reloaded: splash=%d", g_params.splash ? 1 : 0);
 }
 
 void Wh_ModBeforeUninit() {
