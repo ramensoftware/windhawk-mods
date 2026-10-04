@@ -5,7 +5,7 @@
 // @version         1.2
 // @author          Ingan121
 // @github          https://github.com/Ingan121
-// @twitter         https://twitter.com/ingan121
+// @twitter         https://twitter.com/Ingan121
 // @homepage        https://www.ingan121.com/
 // @include         windhawk-mod-uiaccess.exe
 // @include         windhawk-mod.exe
