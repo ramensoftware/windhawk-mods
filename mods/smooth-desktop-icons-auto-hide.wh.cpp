@@ -2,13 +2,13 @@
 // @id              smooth-desktop-icons-auto-hide
 // @name            Smooth Desktop Icons Auto-Hide
 // @description     Smoothly auto-hide Windows desktop icons with click-to-show, double-click-to-hide, drag reveal and configurable fade animation.
-// @version         0.10.5
+// @version         0.13.0
 // @author          HeyOkay
 // @github           https://github.com/HeyOkay
 // @license          MIT
 // @include         explorer.exe
 // @architecture    x86-64
-// @compilerOptions -lcomctl32 -lshell32
+// @compilerOptions -lcomctl32 -lshell32 -lgdi32 -luxtheme -lwinmm -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -44,8 +44,18 @@
   - After the user interacts with the desktop, auto-hide is paused while the desktop remains the active surface.
   - When the desktop becomes inactive, a new full auto-hide countdown starts.
 
-- **Win+D support**
-  - The mod tracks the standard Windows `Win+D` desktop shortcut and keeps icon visibility and auto-hide state synchronized with desktop activation.
+- **Win+D and "Show desktop" support**
+  - Activating the desktop with `Win+D`, the taskbar's **Show desktop** button, or by minimizing the last window reveals the icons; leaving it the same way starts a fresh countdown.
+
+## How this differs from similar mods
+
+- **[ZenDesktop: Desktop Icon Toggle and Auto-Hide](https://windhawk.net/mods/zen-desktop-toggle-icons)** toggles icons by double-click and hides them after N seconds without any input anywhere in the system (`GetLastInputInfo()`), restoring them on any input. This mod instead ties auto-hide to the desktop itself: the countdown starts when the desktop stops being the active surface and is paused while you're on it. It also adds a smooth fade, reveals the icons with a *single* click on empty desktop, and reveals them when a file is dragged onto the desktop.
+- **[Desktop Icon Section Auto-Hide & Fluent Hover Reveal](https://windhawk.net/mods/desktop-icon-section-autohide)** reveals icons on hover and offers modes, per-app pinning and click-and-hold peek. This mod deliberately does **not** react to mouse movement: icons appear only on an explicit action (click, drag, desktop activation) and stay while the desktop is in use. It has no modes or whitelist and only three settings.
+
+## Credits
+
+- The paint-time opacity technique (blending icon and label drawing instead of making the ListView layered) follows [desktop-icon-section-autohide](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icon-section-autohide.wh.cpp) by Piyush Das, which builds on [desktop-icons-transparency](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icons-transparency.wh.cpp) by zed712969-crypto.
+- Inspired by [ZenDesktop: Desktop Icon Toggle and Auto-Hide](https://github.com/ramensoftware/windhawk-mods/blob/main/mods/zen-desktop-toggle-icons.wh.cpp) by Lanbo, including its desktop window discovery approach (CreateWindowExW hook, `Progman`/`WorkerW` enumeration, subclassing `SHELLDLL_DefView` and `SysListView32`).
 
 
 ## How It Works
@@ -73,65 +83,35 @@ SysListView32
 
 The mod monitors creation of Explorer windows and looks for:
 
-- `SHELLDLL_DefView` — the desktop ShellView.
+- `SHELLDLL_DefView` — the desktop ShellView, accepted only when its parent is `Progman` or `WorkerW`. File Explorer folder views and dialogs are never touched.
 - `SysListView32` — the ListView that contains the desktop icons.
 
-Existing desktop windows are also discovered when the mod starts.
+Existing desktop windows are also discovered when the mod starts. All mod state is created and used on the desktop window's own thread.
 
 The mod subclasses both relevant windows so that it can process their messages without replacing or recreating the desktop ListView.
 
 ### Showing and hiding icons
 
-The mod directly controls the existing desktop `SysListView32` with:
+The desktop `SysListView32` is **never hidden with `ShowWindow` and never made layered**.
 
-```text
-ShowWindow(list, SW_SHOW)
-ShowWindow(list, SW_HIDE)
-```
+Instead the mod controls how the ListView *paints*. While the ListView handles `WM_PAINT`, the calls Explorer uses to draw the desktop items are intercepted:
 
-The existing ListView remains in place. The mod does not use Explorer's internal desktop-icon toggle command for normal show/hide operations.
+- `ImageList_DrawIndirect` — icons and overlays (drawn with `ILS_ALPHA`);
+- `GdiAlphaBlend` — thumbnails, label shadows and other pre-blended bitmaps;
+- `DrawShadowText` / `ExtTextOutW` — icon labels;
+- `DrawThemeBackground` — selection and hover highlights.
 
-Keeping the same ListView preserves its existing icon state and avoids an unnecessary Explorer desktop-icon refresh during visibility changes.
+Each of them is blended onto the already painted wallpaper with the current opacity. At opacity 0 nothing is drawn, so the ListView is fully transparent.
+
+While the icons are hidden, the ListView returns `HTTRANSPARENT` from `WM_NCHITTEST` and ignores keyboard input, so invisible icons cannot be clicked, opened or selected; clicks go straight to `SHELLDLL_DefView` exactly as if the ListView were hidden.
+
+Because there is no layered redirection surface and no show/hide transition, Explorer has nothing it can expose as a black background while Virtual Desktops are created or switched.
 
 ### Fade animation
 
-The fade effect is implemented on the existing ListView using `WS_EX_LAYERED` and `SetLayeredWindowAttributes`.
+Opacity uses the full 0–255 range. Progress is measured with `QueryPerformanceCounter`, frames are driven at ~8 ms with 1 ms timer resolution requested only while a fade is running, and every frame repaints the ListView once.
 
-When showing:
-
-```text
-ListView hidden
-      │
-      ▼
-ShowWindow(SW_SHOW)
-      │
-      ▼
-Alpha = 0
-      │
-      ▼
-Gradually increase alpha
-      │
-      ▼
-Alpha = 255
-      │
-      ▼
-Fully visible
-```
-
-When hiding, the same process runs in reverse:
-
-```text
-Alpha = 255
-      │
-      ▼
-Gradually decrease alpha
-      │
-      ▼
-Alpha = 0
-      │
-      ▼
-ShowWindow(SW_HIDE)
-```
+An interrupted fade continues from the current opacity, and its duration is scaled to the remaining distance so the perceived speed stays constant.
 
 The animation uses smoothstep easing:
 
@@ -206,40 +186,31 @@ This prevents the icons from disappearing while the user is actively working wit
 
 ### Drag detection
 
-The mod does not install a global low-level mouse hook.
+The mod does not poll the mouse and does not install a low-level mouse hook.
 
-Instead, a lightweight polling timer checks the physical left-button state and the window under the cursor. When the left button is held and the cursor enters the desktop surface, the mod treats this as a drag/desktop interaction and reveals the icons.
+The desktop registers an OLE `IDropTarget`. Every drag over the desktop, from any application, calls that object's `DragEnter`, `DragLeave` and `Drop` on the desktop thread. The mod hooks these three methods (reacting only to the desktop's own drop target) and reveals the icons the moment a drag enters the desktop. Auto-hide stays paused until the drag leaves or the item is dropped.
 
-This allows a drag that started in another Explorer window to reveal the desktop icons before the file is dropped.
+### Desktop activation, Win+D and Show desktop
 
-Mouse movement with no button held does not reveal the icons.
-
-
-### Win+D handling
-
-`Win+D` is handled through lightweight key-state polling because Explorer does not always send a reliable mouse or focus message to the desktop ShellView when the shortcut changes the active surface.
-
-The mod uses this state to distinguish:
+The mod installs an out-of-context `EVENT_SYSTEM_FOREGROUND` WinEvent hook on the desktop thread. When the foreground window changes:
 
 ```text
-Win+D
-  │
-  ├── Application → Desktop
-  │       └── reveal icons / pause auto-hide
-  │
-  └── Desktop → Application
-          └── start a fresh auto-hide countdown
+Application → Desktop   (Win+D, Show desktop button, last window minimized, click)
+        └── reveal icons / pause auto-hide
+
+Desktop → Application   (second Win+D / Show desktop, switching windows)
+        └── start a fresh auto-hide countdown
 ```
+
+`Win+D` and the taskbar's **Show desktop** button go through exactly the same path: both make the desktop the foreground surface, so the mod doesn't need to know which one was used. No keyboard state is polled.
 
 ### Timers
 
-The implementation uses separate timers for different jobs:
+- **Auto-hide timer** — the user-configured inactivity timeout.
+- **Animation timer** — runs only during a fade.
+- **Menu check timer** — runs only while a desktop context menu is open, to notice the menu closing when Explorer doesn't deliver `WM_EXITMENULOOP`.
 
-- **Auto-hide timer** — controls the user-configured inactivity timeout.
-- **Interaction/drag polling timer** — uses an adaptive interval: fast during active mouse/menu interaction and progressively relaxed while the desktop is merely active or idle. It detects drag entry, reconciles desktop activity, recovers menu/button state, and tracks `Win+D`.
-- **Animation timer** — updates the ListView alpha during fade transitions.
-
-These responsibilities are kept separate so that interaction polling does not reset the user's auto-hide countdown.
+When the icons are idle (hidden or visible) and no menu is open, the mod runs no periodic timers at all.
 
 ## Cleanup and Safety
 
@@ -248,11 +219,11 @@ When the mod is unloaded or disabled, it restores the desktop ListView to a norm
 Cleanup:
 
 1. Stops active timers.
-2. Restores full opacity.
-3. Removes the temporary layered-window style.
-4. Makes the desktop ListView visible if it was hidden by the mod.
-5. Removes the ListView and ShellView subclasses.
-6. Resets the internal state.
+2. Restores full opacity and repaints the icons.
+3. Removes the ListView and ShellView subclasses.
+4. Releases the offscreen drawing buffer.
+
+Restoration runs on the desktop window's own thread.
 
 This prevents the mod from leaving desktop icons permanently hidden after the mod is disabled or Explorer is restarted.
 
@@ -276,15 +247,6 @@ Duration of the fade animation.
 - **Range:** 50–1000 ms
 - **Default:** 250 ms
 
-## Known Issue
-
-### Virtual Desktops
-
-When switching to a newly created Windows Virtual Desktop, a **black background/visual artifact** may occasionally appear behind the desktop icons while the icons are visible.
-
-This is related to the interaction between the layered `SysListView32` window and Explorer's rendering/composition behavior during Virtual Desktop transitions.
-
-The issue does not affect the core functionality of the mod and is currently considered a known issue.
 */
 // ==/WindhawkModReadme==
 
@@ -306,23 +268,30 @@ The issue does not affect the core functionality of the mod and is currently con
 #include <windowsx.h>
 #include <commctrl.h>
 #include <shellapi.h>
+#include <oleidl.h>
+#include <uxtheme.h>
+#include <mmsystem.h>
+#include <atomic>
 #include <windhawk_utils.h>
 
 static constexpr UINT_PTR kTimerAutoHide = 0x53444901;
 static constexpr UINT_PTR kTimerAnimation = 0x53444902;
-static constexpr UINT_PTR kTimerDragPoll = 0x53444903;
-// Adaptive interaction polling:
-// - fast while a physical mouse/menu interaction is in progress;
-// - relaxed while Desktop is the active surface;
-// - slow while the desktop is idle/in the background.
-static constexpr UINT kDragPollFastMs = 50;
-static constexpr UINT kDragPollDesktopMs = 150;
-static constexpr UINT kDragPollIdleMs = 500;
-
+// Runs only while a desktop context menu is open, to notice the menu closing
+// when WM_EXITMENULOOP doesn't reach the desktop view.
+static constexpr UINT_PTR kTimerMenuCheck = 0x53444903;
+static constexpr UINT kMenuCheckMs = 150;
+// Ignore "menu not visible yet" for this long after the menu was requested;
+// building a shell context menu can take a moment.
+static constexpr DWORD kMenuGraceMs = 400;
+// Animation frame interval. Progress is time based, so this only sets how
+// often a new frame is drawn.
+static constexpr UINT kAnimFrameMs = 8;
 static UINT g_msgRefresh = 0;
 static UINT g_msgShow = 0;
 static UINT g_msgHide = 0;
-static UINT g_msgFinalizeHide = 0;
+static UINT g_msgUninit = 0;
+static UINT g_msgDragEnter = 0;
+static UINT g_msgDragLeave = 0;
 
 struct Settings {
     bool autoHideEnabled = true;
@@ -347,26 +316,31 @@ struct DesktopState {
     BYTE alpha = 0;
     BYTE animFrom = 0;
     BYTE animTo = 0;
-    DWORD animStart = 0;
+    LONGLONG animStart = 0;
+    float animDurationMs = 0.0f;
+    bool precisionHeld = false;
 
     bool dragActive = false;
     bool interactionActive = false;
-    bool suppressDragPoll = false;
     bool suppressDesktopFocusUntilClick = false;
     bool contextMenuActive = false;
     // Once the user clicks the desktop, keep auto-hide paused while the
     // desktop remains the active/focused surface. This lets the user inspect
     // icons without the list disappearing underneath their eyes.
     bool desktopFocusActive = false;
-    // Prevent interaction polling from restarting the 5-second countdown.
+    // Prevent repeated StartAutoHide() calls from restarting the countdown.
     bool autoHideTimerArmed = false;
 
-    // Win+D is polled because it does not reliably produce mouse/focus
-    // messages for the desktop ShellView. These flags debounce the chord
-    // and prevent the focus reconciliation from immediately undoing the
-    // second Win+D transition.
-    bool winDPressed = false;
-    bool winDExitPending = false;
+    DWORD menuStartTick = 0;
+
+    // Whether the desktop was the foreground surface at the previous
+    // EVENT_SYSTEM_FOREGROUND. Used to tell a real activation of the desktop
+    // (Win+D, last window minimized) from focus returning after a menu.
+    bool lastForegroundDesktop = false;
+
+    // EVENT_SYSTEM_FOREGROUND hook, installed and removed on the desktop
+    // thread.
+    HWINEVENTHOOK foregroundHook = nullptr;
 
     // If a show request came from a real desktop click, keyboard focus must
     // move to the ListView only after the asynchronous show has completed.
@@ -379,11 +353,11 @@ struct DesktopState {
     POINT manualClickPoint{};
     HWND manualClickWindow = nullptr;
 
-    UINT dragPollIntervalMs = 0;
-
 };
 
-static DesktopState g_states[16]{};
+// All DesktopState entries are created, changed and read on the desktop
+// window's own thread. Only the desktop SHELLDLL_DefView is ever subclassed.
+static DesktopState g_states[4]{};
 static int g_stateCount = 0;
 
 using CreateWindowExW_t = decltype(&CreateWindowExW);
@@ -400,6 +374,8 @@ static bool IsEmptyListPoint(HWND list, LPARAM lParam);
 static bool IsEmptyDesktopPoint(DesktopState* state, LPARAM shellLParam);
 
 static DesktopState* FindStateByShell(HWND shell) {
+    if (!shell)
+        return nullptr;
     for (int i = 0; i < g_stateCount; ++i) {
         if (g_states[i].shell == shell)
             return &g_states[i];
@@ -408,6 +384,8 @@ static DesktopState* FindStateByShell(HWND shell) {
 }
 
 static DesktopState* FindStateByList(HWND list) {
+    if (!list)
+        return nullptr;
     for (int i = 0; i < g_stateCount; ++i) {
         if (g_states[i].list == list)
             return &g_states[i];
@@ -419,10 +397,21 @@ static DesktopState* GetOrCreateState(HWND shell) {
     if (auto* existing = FindStateByShell(shell))
         return existing;
 
-    if (g_stateCount >= static_cast<int>(_countof(g_states)))
-        return nullptr;
+    // Reuse a slot whose DefView has been destroyed.
+    DesktopState* state = nullptr;
+    for (int i = 0; i < g_stateCount; ++i) {
+        if (!g_states[i].shell) {
+            state = &g_states[i];
+            break;
+        }
+    }
 
-    auto* state = &g_states[g_stateCount++];
+    if (!state) {
+        if (g_stateCount >= static_cast<int>(_countof(g_states)))
+            return nullptr;
+        state = &g_states[g_stateCount++];
+    }
+
     *state = {};
     state->shell = shell;
     return state;
@@ -623,8 +612,8 @@ static void StartAutoHide(DesktopState* state) {
     // open. The timer callback decides whether it is currently allowed to hide.
     // Explorer doesn't always deliver every menu-loop transition to the
     // desktop view, so timer creation must not depend on those messages alone.
-    // PollDragReveal() is periodic. Do not restart the countdown on every
-    // poll; doing so makes a 5-second timer effectively never expire.
+    // Callers invoke this on many events; never restart a running
+    // countdown, or a 5-second timer would effectively never expire.
     if (state->autoHideTimerArmed)
         return;
 
@@ -638,40 +627,429 @@ static void StartAutoHide(DesktopState* state) {
     state->autoHideTimerArmed = true;
 }
 
-// Directly show/hide the already-created desktop ListView. The ListView is
-// kept alive so Explorer doesn't rebuild its desktop icon state on each
-// visibility change.
-static bool ToggleDesktopIconsDirect(DesktopState* state) {
-    if (!state || !state->list || !IsWindow(state->list))
-        return false;
+// ---------------------------------------------------------------------------
+// Opacity rendering
+//
+// The desktop ListView is never hidden with ShowWindow and never made
+// WS_EX_LAYERED. While it paints, icon, label and highlight drawing calls are
+// intercepted and blended onto the already painted wallpaper with the current
+// opacity. At opacity 0 nothing is drawn, so the ListView is simply
+// transparent. Without a layered surface and without show/hide transitions
+// there is nothing Explorer can expose as a black background during Virtual
+// Desktop creation or switching.
+// ---------------------------------------------------------------------------
 
-    const bool visible =
-        IsWindowVisible(state->list) != FALSE;
+static std::atomic<bool> g_unloading{false};
 
-    ShowWindow(
-        state->list,
-        visible ? SW_HIDE : SW_SHOW);
+// Opacity the paint hooks apply on the current thread; -1 means "not inside a
+// desktop ListView paint", so every hook passes straight through.
+static thread_local int tl_paintAlpha = -1;
+// Nesting depth of our own wrapped drawing. Calls made by the original
+// function (e.g. ImageList -> GdiAlphaBlend, DrawShadowText -> ExtTextOutW)
+// draw into the offscreen DC unmodified so alpha is applied exactly once.
+static thread_local int tl_drawDepth = 0;
 
-    return (IsWindowVisible(state->list) != FALSE) != visible;
+using GdiAlphaBlend_t = BOOL(WINAPI*)(
+    HDC, int, int, int, int, HDC, int, int, int, int, BLENDFUNCTION);
+static GdiAlphaBlend_t g_GdiAlphaBlend = nullptr;
+
+using ExtTextOutW_t = decltype(&ExtTextOutW);
+static ExtTextOutW_t g_ExtTextOutW = nullptr;
+
+using DrawThemeBackground_t = decltype(&DrawThemeBackground);
+static DrawThemeBackground_t g_DrawThemeBackground = nullptr;
+
+using DrawShadowText_t = int(WINAPI*)(
+    HDC, LPCWSTR, UINT, RECT*, DWORD, COLORREF, COLORREF, int, int);
+static DrawShadowText_t g_DrawShadowText = nullptr;
+
+using ImageList_DrawIndirect_t = BOOL(WINAPI*)(IMAGELISTDRAWPARAMS*);
+static ImageList_DrawIndirect_t g_ImageList_DrawIndirect = nullptr;
+
+static std::atomic<bool> g_comctlHooked{false};
+static std::atomic<bool> g_initDone{false};
+
+// One offscreen buffer, used only on the desktop thread while it paints.
+// Plain struct (no destructor) so nothing runs after the mod DLL unloads.
+struct OffscreenDC {
+    HDC dc;
+    HBITMAP bmp;
+    HBITMAP oldBmp;
+    int w;
+    int h;
+};
+static OffscreenDC g_offscreen{};
+
+static void FreeOffscreen() {
+    if (g_offscreen.dc) {
+        if (g_offscreen.oldBmp)
+            SelectObject(g_offscreen.dc, g_offscreen.oldBmp);
+        if (g_offscreen.bmp)
+            DeleteObject(g_offscreen.bmp);
+        DeleteDC(g_offscreen.dc);
+    }
+    g_offscreen = {};
 }
 
-static bool SetDesktopIconsVisible(
-    DesktopState* state,
-    bool visible) {
+static HDC GetOffscreen(HDC ref, int w, int h) {
+    if (!g_offscreen.dc) {
+        g_offscreen.dc = CreateCompatibleDC(ref);
+        if (!g_offscreen.dc)
+            return nullptr;
+    }
 
+    if (!g_offscreen.bmp || w > g_offscreen.w || h > g_offscreen.h) {
+        const int newW = w > g_offscreen.w ? w : g_offscreen.w;
+        const int newH = h > g_offscreen.h ? h : g_offscreen.h;
+
+        HBITMAP bmp = CreateCompatibleBitmap(
+            ref, newW < 256 ? 256 : newW, newH < 128 ? 128 : newH);
+        if (!bmp)
+            return nullptr;
+
+        HBITMAP old =
+            static_cast<HBITMAP>(SelectObject(g_offscreen.dc, bmp));
+        if (g_offscreen.bmp)
+            DeleteObject(g_offscreen.bmp);
+        else
+            g_offscreen.oldBmp = old;
+
+        g_offscreen.bmp = bmp;
+        g_offscreen.w = newW < 256 ? 256 : newW;
+        g_offscreen.h = newH < 128 ? 128 : newH;
+    }
+
+    return g_offscreen.dc;
+}
+
+static BOOL RealAlphaBlend(
+    HDC dst, int x, int y, int w, int h,
+    HDC src, int sx, int sy, int sw, int sh,
+    BLENDFUNCTION bf) {
+    return (g_GdiAlphaBlend ? g_GdiAlphaBlend : GdiAlphaBlend)(
+        dst, x, y, w, h, src, sx, sy, sw, sh, bf);
+}
+
+static bool ShouldIntercept() {
+    return tl_paintAlpha >= 0 && tl_drawDepth == 0 && !g_unloading;
+}
+
+// Copy what is already painted under rc into an offscreen DC, let draw()
+// render into it using the same logical coordinates, then blend the result
+// back with the requested constant alpha.
+template <typename Draw>
+static bool DrawWithOpacity(HDC hdc, RECT rc, int alpha, Draw&& draw) {
+    const int w = rc.right - rc.left;
+    const int h = rc.bottom - rc.top;
+    if (w <= 0 || h <= 0 || w > 4096 || h > 4096)
+        return false;
+
+    HDC mem = GetOffscreen(hdc, w, h);
+    if (!mem)
+        return false;
+
+    BitBlt(mem, 0, 0, w, h, hdc, rc.left, rc.top, SRCCOPY);
+
+    POINT oldOrg{};
+    SetViewportOrgEx(mem, -rc.left, -rc.top, &oldOrg);
+    HGDIOBJ oldFont = SelectObject(mem, GetCurrentObject(hdc, OBJ_FONT));
+    const COLORREF oldText = SetTextColor(mem, GetTextColor(hdc));
+    const COLORREF oldBk = SetBkColor(mem, GetBkColor(hdc));
+    const int oldBkMode = SetBkMode(mem, GetBkMode(hdc));
+    const UINT oldAlign = SetTextAlign(mem, GetTextAlign(hdc));
+
+    ++tl_drawDepth;
+    draw(mem);
+    --tl_drawDepth;
+
+    SetTextAlign(mem, oldAlign);
+    SetBkMode(mem, oldBkMode);
+    SetBkColor(mem, oldBk);
+    SetTextColor(mem, oldText);
+    SelectObject(mem, oldFont);
+    SetViewportOrgEx(mem, oldOrg.x, oldOrg.y, nullptr);
+
+    BLENDFUNCTION bf{};
+    bf.BlendOp = AC_SRC_OVER;
+    bf.SourceConstantAlpha = static_cast<BYTE>(alpha);
+    RealAlphaBlend(hdc, rc.left, rc.top, w, h, mem, 0, 0, w, h, bf);
+    return true;
+}
+
+static BOOL WINAPI HookGdiAlphaBlend(
+    HDC dst, int x, int y, int w, int h,
+    HDC src, int sx, int sy, int sw, int sh,
+    BLENDFUNCTION bf) {
+
+    if (ShouldIntercept()) {
+        const int a = tl_paintAlpha;
+        if (a <= 0)
+            return TRUE;
+        bf.SourceConstantAlpha =
+            static_cast<BYTE>((bf.SourceConstantAlpha * a + 127) / 255);
+    }
+
+    return g_GdiAlphaBlend(dst, x, y, w, h, src, sx, sy, sw, sh, bf);
+}
+
+static BOOL WINAPI HookImageList_DrawIndirect(IMAGELISTDRAWPARAMS* p) {
+    if (!p || !ShouldIntercept())
+        return g_ImageList_DrawIndirect(p);
+
+    const int a = tl_paintAlpha;
+    if (a <= 0)
+        return TRUE;
+
+    if (p->cbSize < sizeof(IMAGELISTDRAWPARAMS)) {
+        // Old structure without fState/Frame: draw unmodified.
+        return g_ImageList_DrawIndirect(p);
+    }
+
+    IMAGELISTDRAWPARAMS params = *p;
+    const DWORD baseAlpha = (params.fState & ILS_ALPHA) ? params.Frame : 255;
+    params.fState |= ILS_ALPHA;
+    params.Frame = (baseAlpha * static_cast<DWORD>(a) + 127) / 255;
+
+    ++tl_drawDepth;
+    const BOOL result = g_ImageList_DrawIndirect(&params);
+    --tl_drawDepth;
+    return result;
+}
+
+static int WINAPI HookDrawShadowText(
+    HDC hdc, LPCWSTR text, UINT cch, RECT* prc, DWORD flags,
+    COLORREF crText, COLORREF crShadow, int ox, int oy) {
+
+    if (!ShouldIntercept() || !prc || (flags & DT_CALCRECT))
+        return g_DrawShadowText(
+            hdc, text, cch, prc, flags, crText, crShadow, ox, oy);
+
+    const int a = tl_paintAlpha;
+    if (a <= 0)
+        return 1;
+
+    const int padX = (ox < 0 ? -ox : ox) + 4;
+    const int padY = (oy < 0 ? -oy : oy) + 4;
+    RECT rc{prc->left - padX, prc->top - padY,
+            prc->right + padX, prc->bottom + padY};
+
+    int result = 0;
+    if (DrawWithOpacity(hdc, rc, a, [&](HDC mem) {
+            result = g_DrawShadowText(
+                mem, text, cch, prc, flags, crText, crShadow, ox, oy);
+        }))
+        return result;
+
+    return g_DrawShadowText(
+        hdc, text, cch, prc, flags, crText, crShadow, ox, oy);
+}
+
+static BOOL WINAPI HookExtTextOutW(
+    HDC hdc, int x, int y, UINT options, const RECT* lprect,
+    LPCWSTR str, UINT c, const INT* dx) {
+
+    if (!ShouldIntercept())
+        return g_ExtTextOutW(hdc, x, y, options, lprect, str, c, dx);
+
+    const int a = tl_paintAlpha;
+    if (a <= 0)
+        return TRUE;
+
+    const UINT align = GetTextAlign(hdc);
+    if (align & TA_UPDATECP)
+        return g_ExtTextOutW(hdc, x, y, options, lprect, str, c, dx);
+
+    SIZE sz{};
+    if (str && c) {
+        if (options & ETO_GLYPH_INDEX)
+            GetTextExtentPointI(
+                hdc, reinterpret_cast<LPWORD>(const_cast<LPWSTR>(str)),
+                static_cast<int>(c), &sz);
+        else
+            GetTextExtentPoint32W(hdc, str, static_cast<int>(c), &sz);
+    }
+
+    if (dx && c) {
+        const UINT step = (options & ETO_PDY) ? 2 : 1;
+        LONG sum = 0;
+        for (UINT i = 0; i < c; ++i)
+            sum += dx[i * step];
+        if (sum > sz.cx)
+            sz.cx = sum;
+    }
+
+    TEXTMETRICW tm{};
+    GetTextMetricsW(hdc, &tm);
+    if (tm.tmHeight > sz.cy)
+        sz.cy = tm.tmHeight;
+
+    int left = x;
+    if ((align & TA_CENTER) == TA_CENTER)
+        left = x - sz.cx / 2;
+    else if (align & TA_RIGHT)
+        left = x - sz.cx;
+
+    int top = y;
+    if ((align & TA_BASELINE) == TA_BASELINE)
+        top = y - tm.tmAscent;
+    else if (align & TA_BOTTOM)
+        top = y - sz.cy;
+
+    RECT rc{left - 3, top - 3,
+            left + sz.cx + tm.tmOverhang + tm.tmMaxCharWidth / 4 + 3,
+            top + sz.cy + 3};
+
+    if (lprect) {
+        if (options & ETO_OPAQUE)
+            UnionRect(&rc, &rc, lprect);
+        if (options & ETO_CLIPPED)
+            IntersectRect(&rc, &rc, lprect);
+    }
+
+    BOOL result = TRUE;
+    if (DrawWithOpacity(hdc, rc, a, [&](HDC mem) {
+            result = g_ExtTextOutW(mem, x, y, options, lprect, str, c, dx);
+        }))
+        return result;
+
+    return g_ExtTextOutW(hdc, x, y, options, lprect, str, c, dx);
+}
+
+static HRESULT WINAPI HookDrawThemeBackground(
+    HTHEME theme, HDC hdc, int part, int stateId,
+    LPCRECT pRect, LPCRECT pClip) {
+
+    if (!ShouldIntercept() || !pRect)
+        return g_DrawThemeBackground(theme, hdc, part, stateId, pRect, pClip);
+
+    const int a = tl_paintAlpha;
+    if (a <= 0)
+        return S_OK;
+
+    RECT rc = *pRect;
+    if (pClip)
+        IntersectRect(&rc, &rc, pClip);
+
+    HRESULT result = S_OK;
+    if (DrawWithOpacity(hdc, rc, a, [&](HDC mem) {
+            result = g_DrawThemeBackground(
+                theme, mem, part, stateId, pRect, pClip);
+        }))
+        return result;
+
+    return g_DrawThemeBackground(theme, hdc, part, stateId, pRect, pClip);
+}
+
+// Hook the comctl32 that actually owns SysListView32 (the v6 side-by-side
+// copy), not whichever comctl32 this DLL happens to be linked against.
+static bool HookComctl32For(HWND list, bool applyNow) {
+    if (g_comctlHooked)
+        return true;
+
+    HMODULE comctl = nullptr;
+    if (list && IsWindow(list)) {
+        comctl = reinterpret_cast<HMODULE>(
+            GetClassLongPtrW(list, GCLP_HMODULE));
+    }
+    if (!comctl)
+        return false;
+
+    void* drawIndirect = reinterpret_cast<void*>(
+        GetProcAddress(comctl, "ImageList_DrawIndirect"));
+    void* drawShadow = reinterpret_cast<void*>(
+        GetProcAddress(comctl, "DrawShadowText"));
+
+    bool any = false;
+    if (drawIndirect &&
+        Wh_SetFunctionHook(
+            drawIndirect,
+            reinterpret_cast<void*>(HookImageList_DrawIndirect),
+            reinterpret_cast<void**>(&g_ImageList_DrawIndirect)))
+        any = true;
+
+    if (drawShadow &&
+        Wh_SetFunctionHook(
+            drawShadow,
+            reinterpret_cast<void*>(HookDrawShadowText),
+            reinterpret_cast<void**>(&g_DrawShadowText)))
+        any = true;
+
+    if (!any)
+        return false;
+
+    g_comctlHooked = true;
+    if (applyNow)
+        Wh_ApplyHookOperations();
+
+    Wh_Log(L"[SmoothDesktop] comctl32 hooks set (module %p)", comctl);
+    return true;
+}
+
+static bool InstallGdiHooks() {
+    HMODULE gdi = GetModuleHandleW(L"gdi32full.dll");
+    void* alphaBlend =
+        gdi ? reinterpret_cast<void*>(GetProcAddress(gdi, "GdiAlphaBlend"))
+            : nullptr;
+    if (!alphaBlend) {
+        gdi = GetModuleHandleW(L"gdi32.dll");
+        alphaBlend = gdi ? reinterpret_cast<void*>(
+                               GetProcAddress(gdi, "GdiAlphaBlend"))
+                         : nullptr;
+    }
+
+    bool ok = true;
+
+    if (!alphaBlend ||
+        !Wh_SetFunctionHook(
+            alphaBlend,
+            reinterpret_cast<void*>(HookGdiAlphaBlend),
+            reinterpret_cast<void**>(&g_GdiAlphaBlend)))
+        ok = false;
+
+    if (!Wh_SetFunctionHook(
+            reinterpret_cast<void*>(ExtTextOutW),
+            reinterpret_cast<void*>(HookExtTextOutW),
+            reinterpret_cast<void**>(&g_ExtTextOutW)))
+        ok = false;
+
+    if (!Wh_SetFunctionHook(
+            reinterpret_cast<void*>(DrawThemeBackground),
+            reinterpret_cast<void*>(HookDrawThemeBackground),
+            reinterpret_cast<void**>(&g_DrawThemeBackground)))
+        ok = false;
+
+    return ok;
+}
+
+static void RepaintList(DesktopState* state) {
+    if (!state || !state->list || !IsWindow(state->list))
+        return;
+
+    InvalidateRect(state->list, nullptr, FALSE);
+    UpdateWindow(state->list);
+}
+
+static bool IsLabelEditActive(DesktopState* state) {
     if (!state || !state->list || !IsWindow(state->list))
         return false;
 
-    const bool currentVisible = IsWindowVisible(state->list) != FALSE;
-    if (currentVisible == visible)
-        return true;
+    HWND edit = reinterpret_cast<HWND>(
+        SendMessageW(state->list, LVM_GETEDITCONTROL, 0, 0));
+    return edit && IsWindowVisible(edit);
+}
 
-    if (!ToggleDesktopIconsDirect(state))
-        return false;
+static void BeginTimerPrecision(DesktopState* state) {
+    if (state && !state->precisionHeld) {
+        timeBeginPeriod(1);
+        state->precisionHeld = true;
+    }
+}
 
-    // ShowWindow acts synchronously for the existing ListView. Confirm the
-    // resulting state before updating our own state machine.
-    return (IsWindowVisible(state->list) != FALSE) == visible;
+static void EndTimerPrecision(DesktopState* state) {
+    if (state && state->precisionHeld) {
+        timeEndPeriod(1);
+        state->precisionHeld = false;
+    }
 }
 
 static void SetAlpha(
@@ -681,25 +1059,27 @@ static void SetAlpha(
     if (!state || !state->list)
         return;
 
-    LONG_PTR exStyle =
-        GetWindowLongPtrW(
-            state->list,
-            GWL_EXSTYLE);
-
-    if (!(exStyle & WS_EX_LAYERED)) {
-        SetWindowLongPtrW(
-            state->list,
-            GWL_EXSTYLE,
-            exStyle | WS_EX_LAYERED);
-    }
-
-    SetLayeredWindowAttributes(
-        state->list,
-        0,
-        alpha,
-        LWA_ALPHA);
+    if (state->alpha == alpha)
+        return;
 
     state->alpha = alpha;
+    RepaintList(state);
+}
+
+static LONGLONG QpcNow() {
+    LARGE_INTEGER v{};
+    QueryPerformanceCounter(&v);
+    return v.QuadPart;
+}
+
+static double QpcToMs(LONGLONG ticks) {
+    static LONGLONG freq = 0;
+    if (!freq) {
+        LARGE_INTEGER f{};
+        QueryPerformanceFrequency(&f);
+        freq = f.QuadPart ? f.QuadPart : 1;
+    }
+    return static_cast<double>(ticks) * 1000.0 / static_cast<double>(freq);
 }
 
 static BYTE EaseAlpha(
@@ -735,27 +1115,17 @@ static BYTE EaseAlpha(
 static void FinishAnimation(
     DesktopState* state) {
 
-    if (!state || !state->list)
+    if (!state)
         return;
 
-    KillTimer(
-        state->shell,
-        kTimerAnimation);
+    if (state->shell)
+        KillTimer(state->shell, kTimerAnimation);
+    EndTimerPrecision(state);
 
-    SetAlpha(
-        state,
-        state->animTo);
+    SetAlpha(state, state->animTo);
 
-    if (state->animTo == 0) {
-        // Leave the WM_TIMER stack before changing ListView visibility.
-        PostMessageW(
-            state->shell,
-            g_msgFinalizeHide,
-            0,
-            0);
-    } else {
-        state->state = IconState::Visible;
-    }
+    state->state =
+        state->animTo == 0 ? IconState::Hidden : IconState::Visible;
 }
 
 static void TickAnimation(
@@ -764,14 +1134,11 @@ static void TickAnimation(
     if (!state || !state->list)
         return;
 
-    DWORD elapsed =
-        GetTickCount() -
-        state->animStart;
-
-    float progress =
-        static_cast<float>(elapsed) /
-        static_cast<float>(
-            g_settings.animationDuration);
+    const double elapsed = QpcToMs(QpcNow() - state->animStart);
+    const float progress =
+        state->animDurationMs > 0.0f
+            ? static_cast<float>(elapsed / state->animDurationMs)
+            : 1.0f;
 
     if (progress >= 1.0f) {
         FinishAnimation(state);
@@ -797,47 +1164,39 @@ static void AnimateTo(
         state->shell,
         kTimerAnimation);
 
-    if (targetAlpha == state->alpha &&
-        ((targetAlpha == 0 &&
-          state->state == IconState::Hidden) ||
-         (targetAlpha == 255 &&
-          state->state == IconState::Visible))) {
+    if (targetAlpha == state->alpha) {
+        // Already there (possibly an interrupted fade that just reached the
+        // target): settle the state machine without animating.
+        state->animTo = targetAlpha;
+        FinishAnimation(state);
         return;
     }
 
-    if (targetAlpha != 0 &&
-        !IsWindowVisible(state->list)) {
+    const int delta = targetAlpha > state->alpha
+                          ? targetAlpha - state->alpha
+                          : state->alpha - targetAlpha;
 
-        // Prepare the hidden ListView at alpha 0 before making it visible,
-        // so the fade-in starts from a fully transparent state.
-        SetAlpha(
-            state,
-            0);
-
-        if (!SetDesktopIconsVisible(state, true)) {
-            SetAlpha(state, 255);
-            return;
-        }
-    }
-
-    state->animFrom =
-        state->alpha;
-
-    state->animTo =
-        targetAlpha;
-
-    state->animStart =
-        GetTickCount();
+    state->animFrom = state->alpha;
+    state->animTo = targetAlpha;
+    state->animStart = QpcNow();
+    // An interrupted fade only covers part of the range; scale its duration
+    // so the perceived speed stays constant.
+    state->animDurationMs =
+        static_cast<float>(g_settings.animationDuration) *
+        static_cast<float>(delta) / 255.0f;
+    if (state->animDurationMs < 40.0f)
+        state->animDurationMs = 40.0f;
 
     state->state =
         targetAlpha > state->alpha
             ? IconState::Showing
             : IconState::Hiding;
 
+    BeginTimerPrecision(state);
     SetTimer(
         state->shell,
         kTimerAnimation,
-        15,
+        kAnimFrameMs,
         nullptr);
 }
 
@@ -871,7 +1230,8 @@ static void HideIcons(
 
     if (state->dragActive ||
         state->interactionActive ||
-        state->contextMenuActive)
+        state->contextMenuActive ||
+        IsLabelEditActive(state))
         return;
 
     CancelAutoHide(state);
@@ -987,43 +1347,6 @@ static bool IsExplorerMenuLoopStillActive() {
     return false;
 }
 
-static bool IsCursorOverDesktop(DesktopState* state) {
-    if (!state || !state->shell || !IsWindow(state->shell))
-        return false;
-
-    POINT pt{};
-    if (!GetCursorPos(&pt))
-        return false;
-
-    // Do not use the SHELLDLL_DefView rectangle as the test. DefView/WorkerW
-    // can cover the whole monitor, so that would also classify clicks in
-    // other Explorer/application windows as desktop clicks.
-    //
-    // Instead compare the real window under the cursor with the desktop's
-    // root window. When the ListView is hidden, WindowFromPoint normally
-    // resolves to WorkerW (or one of its children), whose root is the same
-    // root that contains SHELLDLL_DefView.
-    HWND hit = WindowFromPoint(pt);
-    if (!hit)
-        return false;
-
-    HWND desktopRoot = GetAncestor(state->shell, GA_ROOT);
-    HWND hitRoot = GetAncestor(hit, GA_ROOT);
-
-    if (desktopRoot && hitRoot == desktopRoot)
-        return true;
-
-    // If the icon ListView is visible, its descendants are also valid.
-    HWND p = hit;
-    for (int depth = 0; depth < 16 && p; ++depth) {
-        if (p == state->shell || p == state->list)
-            return true;
-        p = GetParent(p);
-    }
-
-    return false;
-}
-
 static bool IsDesktopFocusStillActive(DesktopState* state) {
     if (!state || !state->shell || !IsWindow(state->shell))
         return false;
@@ -1038,7 +1361,18 @@ static bool IsDesktopFocusStillActive(DesktopState* state) {
     // The foreground/root-window relationship is the authoritative signal
     // for whether the user is currently on the desktop. GetFocus() is
     // thread-local and isn't suitable for this cross-window check.
-    return desktopRoot && foregroundRoot == desktopRoot;
+    if (desktopRoot && foregroundRoot == desktopRoot)
+        return true;
+
+    // Win+D and the taskbar's "Show desktop" button may activate a different
+    // top-level desktop window than the one hosting SHELLDLL_DefView (e.g.
+    // WorkerW vs Progman, depending on the Windows build and wallpaper
+    // setup). Any Progman/WorkerW owned by this Explorer counts as the
+    // desktop.
+    return foregroundRoot &&
+           IsWindowOwnedByCurrentProcess(foregroundRoot) &&
+           (IsClass(foregroundRoot, L"Progman") ||
+            IsClass(foregroundRoot, L"WorkerW"));
 }
 
 static void UpdateDesktopFocusState(DesktopState* state) {
@@ -1055,16 +1389,8 @@ static void UpdateDesktopFocusState(DesktopState* state) {
     // The desktop can become the active surface without sending a mouse
     // message to our ShellView/ListView. Win+D is the important example:
     // Windows dismisses the foreground application and activates the desktop
-    // directly. Therefore do not only test this while our flag is already
-    // set; continuously reconcile the flag with the real desktop foreground
-    // state.
-    //
-    // When the user presses Win+D a second time, we deliberately suppress
-    // this reconciliation for the duration of the chord. Otherwise the
-    // desktop can still look active for a few polling ticks and immediately
-    // restore desktopFocusActive after we have decided to leave it.
-    if (state->winDExitPending)
-        return;
+    // directly. This is called from EVENT_SYSTEM_FOREGROUND, so it sees every
+    // such transition without any key or mouse polling.
 
     if (desktopActive) {
         if (!state->desktopFocusActive) {
@@ -1094,189 +1420,267 @@ static void UpdateDesktopFocusState(DesktopState* state) {
     }
 }
 
-static void PollWinDToggle(DesktopState* state) {
-    if (!state)
-        return;
+// The vtable methods may be shared with File Explorer folder views, so the
+// hooks only react to the desktop's own drop target object.
+static std::atomic<IDropTarget*> g_desktopDropTarget{nullptr};
+static std::atomic<HWND> g_desktopShell{nullptr};
 
-    const bool leftWin = (GetAsyncKeyState(VK_LWIN) & 0x8000) != 0;
-    const bool rightWin = (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0;
-    const bool dDown = (GetAsyncKeyState('D') & 0x8000) != 0;
-    const bool chordDown = (leftWin || rightWin) && dDown;
-
-    if (chordDown && !state->winDPressed) {
-        state->winDPressed = true;
-
-        // Win+D is an explicit desktop command, so it must be able to recover
-        // from the context-menu suppression state. Unlike a focus poll, this
-        // is an intentional user action.
-        state->suppressDesktopFocusUntilClick = false;
-
-        // If Desktop is already our active surface, this is the second
-        // Win+D: leave Desktop mode and start the normal auto-hide countdown.
-        if (state->desktopFocusActive) {
-            state->desktopFocusActive = false;
-            state->winDExitPending = true;
-            // Win+D is an explicit Desktop -> inactive transition. Reset the
-            // countdown so it always starts from this exact moment.
-            CancelAutoHide(state);
-            StartAutoHide(state);
-        } else {
-            // First Win+D activates the desktop. If the icons are hidden, the
-            // explicit command must reveal them even though no mouse message
-            // reaches SHELLDLL_DefView.
-            state->desktopFocusActive = true;
-            state->winDExitPending = false;
-            if (state->state == IconState::Hidden ||
-                state->state == IconState::Hiding) {
-                RequestShowIcons(state);
-            } else {
-                CancelAutoHide(state);
-            }
-        }
-    }
-
-    if (!chordDown) {
-        state->winDPressed = false;
-
-        if (state->winDExitPending) {
-            state->winDExitPending = false;
-        }
-    }
+static bool IsMenuWindow(HWND hwnd) {
+    return hwnd && IsClass(hwnd, L"#32768");
 }
 
-static UINT GetDesiredDragPollInterval(
-    DesktopState* state) {
-
-    if (!state)
-        return kDragPollIdleMs;
-
-    const bool leftButtonDown =
-        (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-    const bool rightButtonDown =
-        (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
-
-    // Use the fastest polling interval only while a real mouse/menu
-    // interaction is underway or while a double-click suppression sequence
-    // is being reconciled.
-    if (leftButtonDown ||
-        rightButtonDown ||
-        state->dragActive ||
-        state->interactionActive ||
-        state->contextMenuActive ||
-        state->suppressDragPoll) {
-        return kDragPollFastMs;
-    }
-
-    // While the user is on Desktop we still reconcile focus/Win+D reasonably
-    // quickly, but there is no reason to wake Explorer 20 times per second.
-    if (state->desktopFocusActive ||
-        IsDesktopFocusStillActive(state)) {
-        return kDragPollDesktopMs;
-    }
-
-    return kDragPollIdleMs;
+static bool AnyMouseButtonDown() {
+    return (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 ||
+           (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
 }
 
-static void ScheduleDragPoll(
-    DesktopState* state,
-    UINT intervalMs) {
-
-    if (!state ||
-        !state->shell ||
-        !IsWindow(state->shell))
+// Explorer doesn't always deliver a matching button-up/menu-loop message to
+// the desktop view (e.g. capture taken by another window). Called only at
+// event boundaries, never periodically.
+static void RecoverInteractionState(DesktopState* state) {
+    if (!state || AnyMouseButtonDown())
         return;
 
-    if (state->dragPollIntervalMs == intervalMs)
-        return;
+    if (state->interactionActive && !state->contextMenuActive)
+        state->interactionActive = false;
 
-    SetTimer(
-        state->shell,
-        kTimerDragPoll,
-        intervalMs,
-        nullptr);
-
-    state->dragPollIntervalMs = intervalMs;
+    // An OLE drag always holds a mouse button; with none held, a missed
+    // DragLeave/Drop must not block auto-hide forever.
+    state->dragActive = false;
 }
 
-static void PollDragReveal(DesktopState* state) {
+static void BeginContextMenu(DesktopState* state) {
+    if (!state || !state->shell)
+        return;
+
+    state->contextMenuActive = true;
+    state->interactionActive = false;
+    state->desktopFocusActive = false;
+    state->suppressDesktopFocusUntilClick = true;
+    state->menuStartTick = GetTickCount();
+    CancelAutoHide(state);
+
+    // Bounded check, only while the menu is open.
+    SetTimer(state->shell, kTimerMenuCheck, kMenuCheckMs, nullptr);
+}
+
+static void EndContextMenu(DesktopState* state) {
+    if (!state || !state->shell)
+        return;
+
+    KillTimer(state->shell, kTimerMenuCheck);
+    state->contextMenuActive = false;
+    RecoverInteractionState(state);
+    StartAutoHide(state);
+}
+
+static void EnsureDropTargetHook(DesktopState* state, bool applyNow);
+
+static void OnForegroundChanged(DesktopState* state, HWND foreground) {
     if (!state || !state->shell || !IsWindow(state->shell))
         return;
 
-    PollWinDToggle(state);
+    // The desktop may register its drop target after our first refresh.
+    if (g_initDone && !g_desktopDropTarget.load())
+        EnsureDropTargetHook(state, true);
 
-    // Explorer does not reliably deliver WM_EXITMENULOOP to the desktop
-    // ListView/SHELLDLL_DefView. If that happens, contextMenuActive can stay
-    // stuck forever and StartAutoHide() will refuse to arm the hide timer.
-    // Poll the actual menu window instead and release the guard as soon as
-    // the context menu has really disappeared.
-    const bool leftButtonDown =
-        (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-    const bool rightButtonDown =
-        (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+    RecoverInteractionState(state);
 
-    if (state->contextMenuActive && !IsExplorerMenuLoopStillActive()) {
-        state->contextMenuActive = false;
-    }
+    // A menu taking the foreground says nothing about the desktop.
+    if (IsMenuWindow(foreground))
+        return;
 
-    // Recover interaction state from the physical mouse buttons if Explorer
-    // doesn't deliver a matching button/menu-loop transition.
-    if (state->interactionActive &&
-        !leftButtonDown &&
-        !rightButtonDown &&
-        !state->contextMenuActive) {
-        state->interactionActive = false;
-    }
+    const bool desktopNow = IsDesktopFocusStillActive(state);
 
-    if (!state->interactionActive &&
-        !state->contextMenuActive) {
-        // If the context menu just closed and no mouse interaction is active,
-        // re-arm the normal auto-hide countdown.
-        StartAutoHide(state);
-    }
+    // Switching *to* the desktop from another window is a deliberate
+    // activation (Win+D, the taskbar's Show desktop button, minimizing the
+    // last window, clicking the desktop),
+    // so it lifts the suppression left by a context menu or double-click
+    // hide. Focus merely returning to the desktop after its own menu does
+    // not, because the desktop was already the previous foreground.
+    if (desktopNow && !state->lastForegroundDesktop)
+        state->suppressDesktopFocusUntilClick = false;
+
+    state->lastForegroundDesktop = desktopNow;
 
     UpdateDesktopFocusState(state);
+}
 
-    // A deliberate double-click on empty desktop is a hide command.
-    // Suppress the drag poll until the second mouse button release so the
-    // polling fallback cannot immediately turn the icons back on.
-    if (state->suppressDragPoll) {
-        if (!leftButtonDown) {
-            state->suppressDragPoll = false;
-            state->dragActive = false;
+static void CALLBACK ForegroundWinEventProc(
+    HWINEVENTHOOK hook,
+    DWORD event,
+    HWND hwnd,
+    LONG idObject,
+    LONG idChild,
+    DWORD,
+    DWORD) {
+
+    if (g_unloading || event != EVENT_SYSTEM_FOREGROUND)
+        return;
+
+    // Out-of-context events are delivered on the thread that installed the
+    // hook, which is the desktop thread.
+    for (int i = 0; i < g_stateCount; ++i) {
+        if (g_states[i].shell && g_states[i].foregroundHook == hook) {
+            OnForegroundChanged(&g_states[i], hwnd);
+            break;
         }
+    }
+}
 
-        ScheduleDragPoll(
-            state,
-            GetDesiredDragPollInterval(state));
+static void InstallForegroundHook(DesktopState* state) {
+    if (!state || state->foregroundHook)
+        return;
+
+    state->foregroundHook = SetWinEventHook(
+        EVENT_SYSTEM_FOREGROUND,
+        EVENT_SYSTEM_FOREGROUND,
+        nullptr,
+        ForegroundWinEventProc,
+        0,
+        0,
+        WINEVENT_OUTOFCONTEXT);
+
+    if (!state->foregroundHook)
+        Wh_Log(L"[SmoothDesktop] SetWinEventHook failed: %lu", GetLastError());
+
+    state->lastForegroundDesktop = IsDesktopFocusStillActive(state);
+}
+
+static void RemoveForegroundHook(DesktopState* state) {
+    if (state && state->foregroundHook) {
+        UnhookWinEvent(state->foregroundHook);
+        state->foregroundHook = nullptr;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Drag reveal
+//
+// The desktop registers an IDropTarget with OLE. Every drag over the desktop,
+// from any process, ends up calling that object's DragEnter / DragLeave / Drop
+// on the desktop thread. Hooking those three methods reveals the icons exactly
+// when a drag enters the desktop, with no mouse polling at all.
+// ---------------------------------------------------------------------------
+
+using DropTargetDragEnter_t = HRESULT(STDMETHODCALLTYPE*)(
+    IDropTarget*, IDataObject*, DWORD, POINTL, DWORD*);
+using DropTargetDragLeave_t = HRESULT(STDMETHODCALLTYPE*)(IDropTarget*);
+using DropTargetDrop_t = HRESULT(STDMETHODCALLTYPE*)(
+    IDropTarget*, IDataObject*, DWORD, POINTL, DWORD*);
+
+static DropTargetDragEnter_t g_DropTargetDragEnter = nullptr;
+static DropTargetDragLeave_t g_DropTargetDragLeave = nullptr;
+static DropTargetDrop_t g_DropTargetDrop = nullptr;
+static std::atomic<bool> g_dropHooked{false};
+
+
+static void NotifyDesktopDrag(IDropTarget* self, UINT msg) {
+    if (g_unloading || !self || self != g_desktopDropTarget.load())
+        return;
+
+    HWND shell = g_desktopShell.load();
+    if (shell)
+        PostMessageW(shell, msg, 0, 0);
+}
+
+static HRESULT STDMETHODCALLTYPE HookDropTargetDragEnter(
+    IDropTarget* self, IDataObject* data, DWORD keys, POINTL pt,
+    DWORD* effect) {
+    NotifyDesktopDrag(self, g_msgDragEnter);
+    return g_DropTargetDragEnter(self, data, keys, pt, effect);
+}
+
+static HRESULT STDMETHODCALLTYPE HookDropTargetDragLeave(IDropTarget* self) {
+    NotifyDesktopDrag(self, g_msgDragLeave);
+    return g_DropTargetDragLeave(self);
+}
+
+static HRESULT STDMETHODCALLTYPE HookDropTargetDrop(
+    IDropTarget* self, IDataObject* data, DWORD keys, POINTL pt,
+    DWORD* effect) {
+    NotifyDesktopDrag(self, g_msgDragLeave);
+    return g_DropTargetDrop(self, data, keys, pt, effect);
+}
+
+static bool IsCodeInLoadedModule(void* p) {
+    HMODULE module = nullptr;
+    return p &&
+           GetModuleHandleExW(
+               GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+               static_cast<LPCWSTR>(p), &module) &&
+           module;
+}
+
+static IDropTarget* FindDesktopDropTarget(DesktopState* state) {
+    HWND candidates[] = {
+        state->list,
+        state->shell,
+        state->shell ? GetParent(state->shell) : nullptr,
+    };
+
+    for (HWND hwnd : candidates) {
+        if (!hwnd)
+            continue;
+
+        // RegisterDragDrop stores the in-process IDropTarget in this window
+        // property.
+        auto* target = static_cast<IDropTarget*>(
+            GetPropW(hwnd, L"OleDropTargetInterface"));
+        if (!target)
+            continue;
+
+        void** vtbl = *reinterpret_cast<void***>(target);
+        if (IsCodeInLoadedModule(vtbl[3]) && IsCodeInLoadedModule(vtbl[5]) &&
+            IsCodeInLoadedModule(vtbl[6]))
+            return target;
+    }
+
+    return nullptr;
+}
+
+static void EnsureDropTargetHook(DesktopState* state, bool applyNow) {
+    if (!state)
+        return;
+
+    IDropTarget* target = FindDesktopDropTarget(state);
+    g_desktopShell = state->shell;
+    g_desktopDropTarget = target;
+
+    if (!target) {
+        Wh_Log(L"[SmoothDesktop] Desktop drop target not found yet");
         return;
     }
 
-    const bool overDesktop =
-        leftButtonDown && IsCursorOverDesktop(state);
+    if (g_dropHooked)
+        return;
 
-    if (overDesktop) {
-        // This is deliberately gated by the physical left button state, so
-        // ordinary mouse movement never reveals hidden icons. It catches both
-        // a file being dragged from Explorer and a normal click/hold on the
-        // empty desktop.
-        if (!state->dragActive) {
-            state->dragActive = true;
-            CancelAutoHide(state);
-        }
+    // IDropTarget vtable: QueryInterface, AddRef, Release, DragEnter,
+    // DragOver, DragLeave, Drop.
+    void** vtbl = *reinterpret_cast<void***>(target);
 
-        if (state->state == IconState::Hidden ||
-            state->state == IconState::Hiding) {
-            RequestShowIcons(state);
-        }
-    } else if (state->dragActive && !leftButtonDown) {
-        state->dragActive = false;
-        state->interactionActive = false;
-        StartAutoHide(state);
+    const bool ok =
+        Wh_SetFunctionHook(
+            vtbl[3], reinterpret_cast<void*>(HookDropTargetDragEnter),
+            reinterpret_cast<void**>(&g_DropTargetDragEnter)) &&
+        Wh_SetFunctionHook(
+            vtbl[5], reinterpret_cast<void*>(HookDropTargetDragLeave),
+            reinterpret_cast<void**>(&g_DropTargetDragLeave)) &&
+        Wh_SetFunctionHook(
+            vtbl[6], reinterpret_cast<void*>(HookDropTargetDrop),
+            reinterpret_cast<void**>(&g_DropTargetDrop));
+
+    if (!ok) {
+        Wh_Log(L"[SmoothDesktop] Drop target hooks failed");
+        return;
     }
 
-    ScheduleDragPoll(
-        state,
-        GetDesiredDragPollInterval(state));
+    g_dropHooked = true;
+    if (applyNow)
+        Wh_ApplyHookOperations();
+
+    Wh_Log(L"[SmoothDesktop] Drop target hooks set");
 }
 
 static void HandleTimer(
@@ -1291,8 +1695,16 @@ static void HandleTimer(
         return;
     }
 
-    if (timerId == kTimerDragPoll) {
-        PollDragReveal(state);
+    if (timerId == kTimerMenuCheck) {
+        if (!state->contextMenuActive) {
+            KillTimer(state->shell, kTimerMenuCheck);
+            return;
+        }
+
+        if (GetTickCount() - state->menuStartTick >= kMenuGraceMs &&
+            !IsExplorerMenuLoopStillActive()) {
+            EndContextMenu(state);
+        }
         return;
     }
 
@@ -1311,11 +1723,14 @@ static void HandleTimer(
             return;
         }
 
+        RecoverInteractionState(state);
+
         // Dragging or a context menu can end without a foreground transition,
         // so keep a short retry while those states remain active.
         if (state->dragActive ||
             state->interactionActive ||
-            state->contextMenuActive) {
+            state->contextMenuActive ||
+            IsLabelEditActive(state)) {
             SetTimer(
                 state->shell,
                 kTimerAutoHide,
@@ -1346,14 +1761,45 @@ LRESULT CALLBACK DesktopListSubclassProc(
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
     switch (uMsg) {
+    case WM_NCHITTEST:
+        // Hidden icons must not be clickable: let the click fall through to
+        // SHELLDLL_DefView, exactly as if the ListView were hidden.
+        if (state->state == IconState::Hidden && !g_unloading)
+            return HTTRANSPARENT;
+        break;
+
+    case WM_PAINT:
+    case WM_PRINTCLIENT: {
+        if (state->alpha >= 255 || g_unloading)
+            break;
+
+        const int prevAlpha = tl_paintAlpha;
+        tl_paintAlpha = state->alpha;
+        const LRESULT result =
+            DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        tl_paintAlpha = prevAlpha;
+        return result;
+    }
+
+    case WM_KEYDOWN:
+    case WM_KEYUP:
+    case WM_CHAR:
+        // Don't let type-to-select / Enter / Delete act on invisible icons.
+        if (state->state == IconState::Hidden && !g_unloading)
+            return 0;
+        break;
+
     case WM_LBUTTONDOWN:
+        // A click while the icons are fading out brings them back.
+        if (state->state == IconState::Hiding)
+            RequestShowIcons(state);
+
         if (IsManualDoubleClick(state, hWnd, lParam, false) &&
             (state->state == IconState::Visible ||
              state->state == IconState::Showing)) {
             state->contextMenuActive = false;
             state->interactionActive = false;
             state->dragActive = false;
-            state->suppressDragPoll = true;
             state->suppressDesktopFocusUntilClick = true;
             state->desktopFocusActive = false;
             RequestHideIcons(state);
@@ -1371,12 +1817,6 @@ LRESULT CALLBACK DesktopListSubclassProc(
     case WM_LBUTTONUP:
         state->interactionActive = false;
         state->dragActive = false;
-        // Do NOT clear suppressDragPoll here. The drag-poll timer must keep
-        // the suppression active until it observes that the physical left
-        // button has actually been released. Otherwise the WM_LBUTTONUP that
-        // follows WM_LBUTTONDBLCLK clears the flag too early and the polling
-        // fallback immediately shows the icons again while the button is still
-        // part of the double-click sequence.
         StartAutoHide(state);
         break;
 
@@ -1399,11 +1839,7 @@ LRESULT CALLBACK DesktopListSubclassProc(
         // Explorer may route WM_CONTEXTMENU differently from the mouse/menu
         // loop messages. Treat it as the authoritative beginning of a desktop
         // context-menu interaction as well.
-        state->contextMenuActive = true;
-        state->interactionActive = false;
-        state->desktopFocusActive = false;
-        state->suppressDesktopFocusUntilClick = true;
-        CancelAutoHide(state);
+        BeginContextMenu(state);
         break;
 
     case WM_ENTERMENULOOP:
@@ -1411,15 +1847,11 @@ LRESULT CALLBACK DesktopListSubclassProc(
         // surface. Suspend desktop-focus tracking for this menu invocation so
         // it cannot immediately re-block the auto-hide timer after the menu
         // closes. A subsequent left-click on the desktop re-enables it.
-        state->contextMenuActive = true;
-        state->desktopFocusActive = false;
-        state->suppressDesktopFocusUntilClick = true;
-        CancelAutoHide(state);
+        BeginContextMenu(state);
         break;
 
     case WM_EXITMENULOOP:
-        state->contextMenuActive = false;
-        StartAutoHide(state);
+        EndContextMenu(state);
         break;
 
     case WM_LBUTTONDBLCLK:
@@ -1428,27 +1860,17 @@ LRESULT CALLBACK DesktopListSubclassProc(
         if (SupportsNativeDoubleClick(hWnd) &&
             IsEmptyListPoint(hWnd, lParam)) {
             // WM_LBUTTONDOWN arrives immediately before WM_LBUTTONDBLCLK and
-            // marks the interaction as active. Clear that transient flag so
-            // the deliberate double-click can hide the icons.
-                // Clear any stale menu state before applying the deliberate
-            // double-click hide action.
+            // marks the interaction as active. Clear that transient flag (and
+            // any stale menu state) so the deliberate double-click can hide
+            // the icons.
             state->contextMenuActive = false;
             state->interactionActive = false;
             state->dragActive = false;
-            state->suppressDragPoll = true;
             state->suppressDesktopFocusUntilClick = true;
             state->desktopFocusActive = false;
             RequestHideIcons(state);
             return 0;
         }
-        break;
-
-    case WM_TIMER:
-        HandleTimer(state, wParam);
-        if (wParam == kTimerAnimation ||
-            wParam == kTimerAutoHide ||
-            wParam == kTimerDragPoll)
-            return 0;
         break;
 
     case WM_KILLFOCUS:
@@ -1458,8 +1880,9 @@ LRESULT CALLBACK DesktopListSubclassProc(
         break;
 
     case WM_NCDESTROY:
-        KillTimer(state->shell, kTimerAnimation);
-        KillTimer(state->shell, kTimerAutoHide);
+        // The ListView is going away; forget it so nothing touches a dead
+        // HWND. A new one is picked up through CreateWindowExW.
+        state->list = nullptr;
         break;
     }
 
@@ -1473,9 +1896,50 @@ LRESULT CALLBACK DesktopShellSubclassProc(
     LPARAM lParam,
     DWORD_PTR) {
 
-    DesktopState* state = GetOrCreateState(hWnd);
+    // The state is created only by the initial refresh, which runs on this
+    // (desktop) thread. Every other message just looks it up.
+    DesktopState* state =
+        (uMsg == g_msgRefresh && wParam == 0)
+            ? GetOrCreateState(hWnd)
+            : FindStateByShell(hWnd);
     if (!state)
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+    if (uMsg == g_msgRefresh && wParam == 1) {
+        // Settings changed: keep the current visual state, only restart the
+        // auto-hide countdown with the new delay.
+        CancelAutoHide(state);
+        if (!g_settings.autoHideEnabled && state->state != IconState::Visible &&
+            state->state != IconState::Showing)
+            RequestShowIcons(state);
+        else
+            StartAutoHide(state);
+        return 0;
+    }
+
+    if (uMsg == g_msgRefresh && wParam == 2) {
+        // Hooks that need live desktop objects, applied after Wh_ModInit.
+        HookComctl32For(state->list, true);
+        EnsureDropTargetHook(state, true);
+        return 0;
+    }
+
+    if (uMsg == g_msgDragEnter) {
+        state->dragActive = true;
+        CancelAutoHide(state);
+        if (state->state == IconState::Hidden ||
+            state->state == IconState::Hiding) {
+            ShowIcons(state);
+        }
+        return 0;
+    }
+
+    if (uMsg == g_msgDragLeave) {
+        state->dragActive = false;
+        RecoverInteractionState(state);
+        StartAutoHide(state);
+        return 0;
+    }
 
     if (uMsg == g_msgRefresh) {
         HWND newList = FindDesktopList(hWnd);
@@ -1490,34 +1954,42 @@ LRESULT CALLBACK DesktopShellSubclassProc(
         if (state->list) {
             KillTimer(hWnd, kTimerAutoHide);
             KillTimer(hWnd, kTimerAnimation);
-            KillTimer(hWnd, kTimerDragPoll);
-            state->dragPollIntervalMs = 0;
-            ScheduleDragPoll(
-                state,
-                kDragPollDesktopMs);
+            KillTimer(hWnd, kTimerMenuCheck);
 
-            // Required startup state: icons are hidden. Keep the existing
-            // ListView and prepare it at alpha 0 for the fade-in path.
-            if (IsWindowVisible(state->list)) {
-                ToggleDesktopIconsDirect(state);
+            InstallForegroundHook(state);
+            if (g_initDone) {
+                HookComctl32For(state->list, true);
+                EnsureDropTargetHook(state, true);
             }
+
+            // Undo a layered style left behind by older versions of the mod.
+            const LONG_PTR exStyle =
+                GetWindowLongPtrW(state->list, GWL_EXSTYLE);
+            if (exStyle & WS_EX_LAYERED) {
+                SetWindowLongPtrW(
+                    state->list, GWL_EXSTYLE,
+                    exStyle & ~static_cast<LONG_PTR>(WS_EX_LAYERED));
+            }
+
+            // Required startup state: icons are hidden (opacity 0). The
+            // ListView itself stays visible; it simply paints nothing.
+            EndTimerPrecision(state);
+            state->alpha = 255;
             SetAlpha(state, 0);
             state->state = IconState::Hidden;
             state->dragActive = false;
             state->interactionActive = false;
-            state->suppressDragPoll = false;
             state->suppressDesktopFocusUntilClick = false;
             state->contextMenuActive = false;
             state->desktopFocusActive = false;
             state->autoHideTimerArmed = false;
-            state->winDPressed = false;
-            state->winDExitPending = false;
             state->focusListAfterShow = false;
             state->manualDoubleClickArmed = false;
             state->manualClickTime = 0;
             state->manualClickPoint = {};
             state->manualClickWindow = nullptr;
-            state->dragPollIntervalMs = kDragPollDesktopMs;
+            state->menuStartTick = 0;
+            state->lastForegroundDesktop = IsDesktopFocusStillActive(state);
         }
 
         return 0;
@@ -1544,13 +2016,32 @@ LRESULT CALLBACK DesktopShellSubclassProc(
         return 0;
     }
 
-    if (uMsg == g_msgFinalizeHide) {
-        if (state->animTo == 0 &&
-            state->state == IconState::Hiding) {
-            SetDesktopIconsVisible(state, false);
-            state->state = IconState::Hidden;
+    if (uMsg == g_msgUninit) {
+        // Runs on the desktop thread, so timers and GDI objects created here
+        // can be released reliably.
+        KillTimer(hWnd, kTimerAutoHide);
+        KillTimer(hWnd, kTimerAnimation);
+        KillTimer(hWnd, kTimerMenuCheck);
+        EndTimerPrecision(state);
+        RemoveForegroundHook(state);
+        g_desktopDropTarget = nullptr;
+        g_desktopShell = nullptr;
+
+        state->state = IconState::Visible;
+        state->alpha = 255;
+
+        if (state->list && IsWindow(state->list)) {
+            WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+                state->list, DesktopListSubclassProc);
+            InvalidateRect(state->list, nullptr, TRUE);
         }
-        return 0;
+
+        FreeOffscreen();
+        WindhawkUtils::RemoveWindowSubclassFromAnyThread(
+            hWnd, DesktopShellSubclassProc);
+        state->shell = nullptr;
+        state->list = nullptr;
+        return 1;
     }
 
     switch (uMsg) {
@@ -1563,7 +2054,6 @@ LRESULT CALLBACK DesktopShellSubclassProc(
             IsEmptyDesktopPoint(state, lParam)) {
             state->interactionActive = false;
             state->dragActive = false;
-            state->suppressDragPoll = true;
             state->suppressDesktopFocusUntilClick = true;
             state->desktopFocusActive = false;
             RequestHideIcons(state);
@@ -1577,7 +2067,6 @@ LRESULT CALLBACK DesktopShellSubclassProc(
              state->state == IconState::Showing)) {
             state->interactionActive = false;
             state->dragActive = false;
-            state->suppressDragPoll = true;
             state->suppressDesktopFocusUntilClick = true;
             state->desktopFocusActive = false;
             RequestHideIcons(state);
@@ -1604,9 +2093,6 @@ LRESULT CALLBACK DesktopShellSubclassProc(
 
     case WM_LBUTTONUP:
         state->interactionActive = false;
-        // suppressDragPoll is cleared by PollDragReveal only after the
-        // physical left button is released. Keeping it set here prevents the
-        // polling fallback from undoing a deliberate double-click hide.
         StartAutoHide(state);
         break;
 
@@ -1630,22 +2116,18 @@ LRESULT CALLBACK DesktopShellSubclassProc(
         // surface. Suspend desktop-focus tracking for this menu invocation so
         // it cannot immediately re-block the auto-hide timer after the menu
         // closes. A subsequent left-click on the desktop re-enables it.
-        state->contextMenuActive = true;
-        state->desktopFocusActive = false;
-        state->suppressDesktopFocusUntilClick = true;
-        CancelAutoHide(state);
+        BeginContextMenu(state);
         break;
 
     case WM_EXITMENULOOP:
-        state->contextMenuActive = false;
-        StartAutoHide(state);
+        EndContextMenu(state);
         break;
 
     case WM_TIMER:
         HandleTimer(state, wParam);
         if (wParam == kTimerAnimation ||
             wParam == kTimerAutoHide ||
-            wParam == kTimerDragPoll)
+            wParam == kTimerMenuCheck)
             return 0;
         break;
 
@@ -1658,17 +2140,34 @@ LRESULT CALLBACK DesktopShellSubclassProc(
     case WM_NCDESTROY:
         KillTimer(hWnd, kTimerAnimation);
         KillTimer(hWnd, kTimerAutoHide);
-        KillTimer(hWnd, kTimerDragPoll);
+        KillTimer(hWnd, kTimerMenuCheck);
+        EndTimerPrecision(state);
+        RemoveForegroundHook(state);
+        if (g_desktopShell.load() == hWnd) {
+            g_desktopDropTarget = nullptr;
+            g_desktopShell = nullptr;
+        }
+        state->shell = nullptr;
+        state->list = nullptr;
         break;
     }
 
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
+static bool IsDesktopShellView(HWND shell) {
+    // Only the desktop's DefView (under Progman or a WorkerW). File Explorer
+    // folder windows and common dialogs create SHELLDLL_DefView too and must
+    // be left alone.
+    HWND parent = shell ? GetParent(shell) : nullptr;
+    return parent &&
+           (IsClass(parent, L"Progman") || IsClass(parent, L"WorkerW"));
+}
+
 static void SubclassDesktopShell(
     HWND shell) {
 
-    if (!shell)
+    if (!shell || !IsDesktopShellView(shell))
         return;
 
     if (!WindhawkUtils::
@@ -1765,26 +2264,16 @@ static HWND WINAPI HookCreateWindowExW(
         parent &&
         IsClass(
             parent,
-            L"SHELLDLL_DefView")) {
+            L"SHELLDLL_DefView") &&
+        IsDesktopShellView(parent)) {
 
-        DesktopState* state =
-            FindStateByShell(parent);
-
-        if (state) {
-            state->list = hWnd;
-
-            WindhawkUtils::
-                SetWindowSubclassFromAnyThread(
-                    hWnd,
-                    DesktopListSubclassProc,
-                    0);
-
-            PostMessageW(
-                parent,
-                g_msgRefresh,
-                0,
-                0);
-        }
+        // Don't touch DesktopState here; the refresh handler picks up and
+        // subclasses the new ListView on the desktop thread.
+        PostMessageW(
+            parent,
+            g_msgRefresh,
+            0,
+            0);
     }
 
     return hWnd;
@@ -1799,65 +2288,58 @@ static void Cleanup() {
         DesktopState* state =
             &g_states[i];
 
-        const bool validShell =
-            IsExpectedDesktopShell(state->shell);
+        if (!IsExpectedDesktopShell(state->shell))
+            continue;
 
-        const bool validList =
-            IsExpectedDesktopList(
-                state,
-                state->list);
-
-        if (validShell) {
-            KillTimer(
+        // Preferred path: restore everything on the desktop thread itself.
+        DWORD_PTR handled = 0;
+        if (SendMessageTimeoutW(
                 state->shell,
-                kTimerAutoHide);
-
-            KillTimer(
-                state->shell,
-                kTimerAnimation);
-
-            KillTimer(
-                state->shell,
-                kTimerDragPoll);
+                g_msgUninit,
+                0,
+                0,
+                SMTO_ABORTIFHUNG,
+                2000,
+                &handled) &&
+            handled == 1) {
+            continue;
         }
 
-        if (validList) {
-
-            // Only touch a live SysListView32 that still belongs to this
-            // explorer.exe process and to the expected SHELLDLL_DefView.
-            SetAlpha(state, 255);
-
-            if (!IsWindowVisible(state->list)) {
-                SetDesktopIconsVisible(state, true);
-            }
-
-            LONG_PTR exStyle =
-                GetWindowLongPtrW(
-                    state->list,
-                    GWL_EXSTYLE);
-            if (exStyle & WS_EX_LAYERED) {
-                SetWindowLongPtrW(
-                    state->list,
-                    GWL_EXSTYLE,
-                    exStyle & ~static_cast<LONG_PTR>(WS_EX_LAYERED));
-            }
-
+        // Fallback: the desktop thread didn't answer. g_unloading already
+        // makes every hook pass through and every subclass case inert, so
+        // only the subclasses need removing and the icons repainting.
+        if (IsExpectedDesktopList(state, state->list)) {
             WindhawkUtils::
                 RemoveWindowSubclassFromAnyThread(
                     state->list,
                     DesktopListSubclassProc);
+            InvalidateRect(state->list, nullptr, TRUE);
         }
 
-        if (validShell) {
-
-            WindhawkUtils::
-                RemoveWindowSubclassFromAnyThread(
-                    state->shell,
-                    DesktopShellSubclassProc);
-        }
+        WindhawkUtils::
+            RemoveWindowSubclassFromAnyThread(
+                state->shell,
+                DesktopShellSubclassProc);
     }
 
     g_stateCount = 0;
+}
+
+static HWND FindExistingDesktopList() {
+    HWND progman = FindWindowW(L"Progman", nullptr);
+    HWND shell = progman
+        ? FindWindowExW(progman, nullptr, L"SHELLDLL_DefView", nullptr)
+        : nullptr;
+
+    // With some wallpaper setups the DefView lives under a WorkerW.
+    for (HWND worker = nullptr; !shell;) {
+        worker = FindWindowExW(nullptr, worker, L"WorkerW", nullptr);
+        if (!worker)
+            break;
+        shell = FindWindowExW(worker, nullptr, L"SHELLDLL_DefView", nullptr);
+    }
+
+    return shell ? FindDesktopList(shell) : nullptr;
 }
 
 BOOL Wh_ModInit() {
@@ -1879,14 +2361,24 @@ BOOL Wh_ModInit() {
         RegisterWindowMessageW(
             L"Windhawk.SmoothDesktop.Hide");
 
-    g_msgFinalizeHide =
+    g_msgUninit =
         RegisterWindowMessageW(
-            L"Windhawk.SmoothDesktop.FinalizeHide");
+            L"Windhawk.SmoothDesktop.Uninit");
+
+    g_msgDragEnter =
+        RegisterWindowMessageW(
+            L"Windhawk.SmoothDesktop.DragEnter");
+
+    g_msgDragLeave =
+        RegisterWindowMessageW(
+            L"Windhawk.SmoothDesktop.DragLeave");
 
     if (!g_msgRefresh ||
         !g_msgShow ||
         !g_msgHide ||
-        !g_msgFinalizeHide) {
+        !g_msgUninit ||
+        !g_msgDragEnter ||
+        !g_msgDragLeave) {
 
         Wh_Log(
             L"[SmoothDesktop] Failed to register messages");
@@ -1908,8 +2400,14 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
-    DiscoverExistingDesktop();
+    if (!InstallGdiHooks()) {
+        Wh_Log(
+            L"[SmoothDesktop] GDI paint hooks failed");
 
+        return FALSE;
+    }
+
+    DiscoverExistingDesktop();
 
     Wh_Log(
         L"[SmoothDesktop] Init complete");
@@ -1917,10 +2415,23 @@ BOOL Wh_ModInit() {
     return TRUE;
 }
 
+void Wh_ModAfterInit() {
+    g_initDone = true;
+
+    // Hooks that depend on live desktop objects (the comctl32 copy owning the
+    // ListView, the desktop's IDropTarget) are installed on the desktop
+    // thread. Later desktops get them from their own refresh.
+    HWND list = FindExistingDesktopList();
+    if (list)
+        PostMessageW(GetParent(list), g_msgRefresh, 2, 0);
+}
+
 void Wh_ModUninit() {
 
     Wh_Log(
         L"[SmoothDesktop] Uninit");
+
+    g_unloading = true;
 
     Cleanup();
 }
@@ -1932,17 +2443,8 @@ void Wh_ModSettingsChanged() {
 
     LoadSettings();
 
-    for (int i = 0;
-         i < g_stateCount;
-         ++i) {
-
-        if (g_states[i].shell) {
-
-            PostMessageW(
-                g_states[i].shell,
-                g_msgRefresh,
-                0,
-                0);
-        }
-    }
+    // Let the desktop thread apply the new settings to its own state.
+    HWND list = FindExistingDesktopList();
+    if (list)
+        PostMessageW(GetParent(list), g_msgRefresh, 1, 0);
 }
