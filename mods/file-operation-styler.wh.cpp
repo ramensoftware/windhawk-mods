@@ -7,7 +7,7 @@
 // @github          https://github.com/digart11
 // @license         GPL-3.0
 // @include         explorer.exe
-// @architecture    amd64
+// @architecture    x86-64
 // @compilerOptions -lcomctl32 -lgdi32 -lgdiplus -lshlwapi -ladvapi32
 // ==/WindhawkMod==
 
