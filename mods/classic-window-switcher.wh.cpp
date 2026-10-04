@@ -293,7 +293,6 @@ typedef struct _sws_window
 extern ULONG_PTR _sws_gdiplus_token;
 
 // References:
-// RealEnumWindows: https://stackoverflow.com/questions/38205375/enumwindows-function-in-win10-enumerates-only-desktop-apps
 // IsAltTabWindow: https://devblogs.microsoft.com/oldnewthing/20071008-00/?p=24863
 // GetIconFromHWND: https://github.com/cairoshell/ManagedShell/blob/master/src/ManagedShell.WindowsTasks/ApplicationWindow.cs
 
