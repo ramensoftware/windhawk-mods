@@ -2,12 +2,27 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-04T15:02:37.000Z</updated>
+    <updated>2026-10-04T19:04:37.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[On-Screen Indicator Position 1.4.4]]></title>
+        <id>https://windhawk.net/mods/on-screen-indicator-position#bb8f7a130795448ce79edf3fa5d3e199796b95ec</id>
+        <link href="https://windhawk.net/mods/on-screen-indicator-position"/>
+        <updated>2026-10-04T19:04:37.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>The readme's migration note now names the right setting, Other indicators.</li>
+<li>After a settings change, the log now repeats the warning that the Desktop N popup can't use its own position.</li>
+<li>Tightened the wording of that warning.</li>
+</ul>]]></content>
+        <author>
+            <name>mario0318</name>
+            <uri>https://github.com/mario0318</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[OverhauldedWin Alt+Tab 1.2.1]]></title>
         <id>https://windhawk.net/mods/overhaulded-alt-tab#44918b3fcd5111318f1ebf7d663b788826688f95</id>
@@ -722,32 +737,6 @@ maximize their own windows through <code>ShowWindow</code> or <code>ShowWindowAs
         <author>
             <name>MCheng404</name>
             <uri>https://github.com/MCheng404</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Custom Shortcuts 1.5.0]]></title>
-        <id>https://windhawk.net/mods/explorer-custom-shortcuts#efe709cf5a54c20c661b4322a8367d278a95f9f1</id>
-        <link href="https://windhawk.net/mods/explorer-custom-shortcuts"/>
-        <updated>2026-10-02T18:03:29.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added <code>internal:showProperties</code> command to open native properties dialogs for selected items (capped at 15 windows to prevent Explorer hangs).</li>
-<li>Added <code>internal:openCmd</code> and <code>internal:openCmdAdmin</code> commands to launch Command Prompt with <code>pushd</code> directory resolution.</li>
-<li>Added <code>internal:createShortcut</code> command to generate <code>.lnk</code> files using the <code>IShellLink</code> interface with native collision renaming.</li>
-<li>Added <code>internal:packIntoFolder</code> command to move selected items into a new group folder with native <code>Ctrl+Z</code> undo support.</li>
-<li>Added <code>internal:bulkDuplicate</code> command to duplicate selected items in-place.</li>
-<li>Added <code>internal:openTerminal</code> and <code>internal:openTerminalAdmin</code> commands with automatic PowerShell fallback.</li>
-<li>Added <code>internal:openWithNotepad</code> command to open all selected files simultaneously in Notepad.</li>
-<li>Added <code>internal:toggleCheckboxes</code> command to toggle the native Windows item checkboxes setting globally.</li>
-<li>Rebuilt the toast notification engine with distinct visual states (<strong>Info</strong>, <strong>Success</strong>, <strong>Error</strong>) and colorblind-friendly error indicators.</li>
-<li>Added customizable screen positioning (9 anchor points) and display duration settings for notifications.</li>
-<li>Implemented multi-monitor dynamic anchoring and per-monitor DPI scaling for toast notifications.</li>
-<li>Added the <code>%d_name</code> token to extract only the active tab's folder name.</li>
-<li>Added <code>Ctrl+Alt+Enter</code> mapped to <code>internal:showProperties</code> in the default settings configuration.</li>
-<li>Improved notification fade-out animations by calculating dynamic timing instead of using hardcoded sleep loops.</li>
-</ul>]]></content>
-        <author>
-            <name>ArvindSaini978</name>
-            <uri>https://github.com/ArvindSaini978</uri>
         </author>
     </entry>
 </feed>

@@ -1,3 +1,9 @@
+## 1.4.4 ([Oct 4, 2026](https://github.com/ramensoftware/windhawk-mods/blob/bb8f7a130795448ce79edf3fa5d3e199796b95ec/mods/on-screen-indicator-position.wh.cpp))
+
+* The readme's migration note now names the right setting, Other indicators.
+* After a settings change, the log now repeats the warning that the Desktop N popup can't use its own position.
+* Tightened the wording of that warning.
+
 ## 1.4.3 ([Sep 22, 2026](https://github.com/ramensoftware/windhawk-mods/blob/6300d15608cf4ff49c749bced382b1ab27cc9340/mods/on-screen-indicator-position.wh.cpp))
 
 * Bug reports and feature requests now go to the mod's own issues page on GitHub.
