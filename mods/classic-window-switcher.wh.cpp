@@ -38,8 +38,8 @@
 - ShowDelay: 100
   $name: Show delay (ms)
   $name:ko-KR: 표시 지연 시간 (ms)
-  $description: Set to the number of milliseconds to wait before showing the switcher. Set to 0 to show the switcher immediately.
-  $description:ko-KR: 전환기를 표시하기 전에 대기할 시간을 밀리세컨드 단위로 입력하십시오. 0을 입력하면 전환기가 즉시 표시됩니다.
+  $description: Set to the number of milliseconds to wait before showing the switcher. Set to 0 to show the switcher immediately. Maximum value is 10 seconds.
+  $description:ko-KR: 전환기를 표시하기 전에 대기할 시간을 밀리세컨드 단위로 입력하십시오. 0을 입력하면 전환기가 즉시 표시됩니다. 최대 10초까지 입력 가능합니다.
 - IncludeWallpaper: false
   $name: Include 'show desktop' item
   $name:ko-KR: "'바탕 화면 표시' 항목 표시"
@@ -113,7 +113,6 @@
 #include <windhawk_utils.h>
 #include <initguid.h>
 #include <windowsx.h>
-#include <roapi.h>
 #include <oleacc.h>
 #include <shellscalingapi.h>
 #include <gdiplus.h>
@@ -123,7 +122,6 @@
 #include <ShlObj.h>
 #include <ShlGuid.h>
 #include <Propkey.h>
-#include <tlhelp32.h>
 #include <processthreadsapi.h>
 #include <vector>
 
@@ -158,8 +156,6 @@ DEFINE_GUID(LiveSetting_Property_GUID, 0xc12bcd8e, 0x2a8e, 0x4950, 0x8a, 0xe7, 0
 #define SWS_WINDOWSWITCHER_TIMER_ASYNCKEYCHECK_DELAY 100
 #define SWS_WINDOWSWITCHER_TIMER_PAINT 16
 #define SWS_WINDOWSWITCHER_TIMER_PAINT_GETICONASYNC_DELAY 500
-#define SWS_WINDOWSWITCHER_TIMER_CLOSEHWND 17
-#define SWS_WINDOWSWITCHER_TIMER_CLOSEHWND_DELAY 300
 
 #define SWS_WINDOWSWITCHER_ANIMATOR_FLASH_DELAY 25
 #define SWS_WINDOWSWITCHER_ANIMATOR_FLASH_STEP 0.05
@@ -210,12 +206,9 @@ typedef long long sws_error_t;
 #define SWS_ERROR_INVALID_PARAMETER            0xA0010007 // "One or more of the parameters supplied is invalid"
 #define SWS_ERROR_APPRESOLVER_NOT_AVAILABLE	   0xA001000A // "Unable to initialize an instance of IAppResolver8"
 
-#define sws_error_Report(errnum, unused) \
-    errnum; if (errnum) Wh_Log(L"Error 0x%x", errnum);
-#define sws_error_GetFromInternalError(hResult) hResult
-#define sws_error_GetFromHRESULT(hResult) hResult
-#define sws_error_GetFromWin32Error(win32err) HRESULT_FROM_WIN32(win32err)
-#define sws_error_GetFromGdiplusStatus(err) err
+// (always_)inline function still doesn't keep the line and function name in the Wh_Log output
+#define sws_error_Report(errnum) \
+    errnum; if (rv) Wh_Log(L"Error 0x%x", rv); // this must be only used when assigning to a variable named "rv"
 
 // sws_IconPainter.h
 typedef struct _sws_IconPainter_CallbackParams
@@ -307,12 +300,6 @@ DEFINE_GUID(__uuidof_IShellItemImageFactory,
 	0xbcc18b79,
 	0xba16, 0x442f, 0x80, 0xc4,
 	0x8a, 0x59, 0xc3, 0x0c, 0x46, 0x3b
-);
-
-DEFINE_GUID(__uuidof_IShellItem2,
-	0x7e9fb0d3,
-	0x919f, 0x4307, 0xab, 0x2e,
-	0x9b, 0x18, 0x60, 0x31, 0x0c, 0x93
 );
 
 DEFINE_GUID(__uuidof_IPropertyStore,
@@ -505,7 +492,6 @@ typedef struct _sws_WindowSwitcher
 {
     BOOL bIsDynamic;
     HRESULT hrCo;
-    HMODULE hinstDLL;
     HWND hWnd;
     UINT msgShellHook;
     sws_WindowSwitcherLayout layout;
@@ -514,14 +500,12 @@ typedef struct _sws_WindowSwitcher
     int lastKey;
     HBRUSH hBackgroundBrush;
     BOOL bPartialRedraw;
-    ITaskbarList* pTaskList;
     HWND hWndLast;
     BOOL bWasControl;
     HMONITOR hMonitor;
     INT cwIndex;
     DWORD cwMask;
     BOOL bIsMouseClicking;
-    long long last_change;
     sws_vector pHWNDList;
     HDPA htshwnds;
     UINT mode;
@@ -531,8 +515,6 @@ typedef struct _sws_WindowSwitcher
     DWORD dwShowDelay;
     BOOL bPrimaryOnly;
     UINT vkTilde;
-    UINT dwOverrideMode;
-    UINT opacity;
     HANDLE hShowThread;
     HANDLE hShowSignal;
     BOOL bIsInitialized;
@@ -1052,7 +1034,7 @@ sws_error_t sws_vector_PushBack(sws_vector* _this, void* pElement)
 	{
 		if (_this->cbCapacity == 0 || _this->cbElementSize == 0)
 		{
-			rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_NO_MEMORY), NULL);
+			rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
 		}
 	}
 	if (!rv)
@@ -1067,7 +1049,7 @@ sws_error_t sws_vector_PushBack(sws_vector* _this, void* pElement)
 				_this->cbElementSize = 0;
 				_this->cbCapacity = 0;
 				_this->cbSize = 0;
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_NO_MEMORY), NULL);
+				rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
 			}
 			else
 			{
@@ -1101,7 +1083,7 @@ sws_error_t sws_vector_Initialize(sws_vector* _this, unsigned int cbElementSize)
 	{
 		if (!_this)
 		{
-			rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_NO_MEMORY), NULL);
+			rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
 		}
 	}
 	if (!rv)
@@ -1109,7 +1091,7 @@ sws_error_t sws_vector_Initialize(sws_vector* _this, unsigned int cbElementSize)
 		_this->pList = calloc(SWS_VECTOR_CAPACITY, cbElementSize);
 		if (!_this->pList)
 		{
-			rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_NO_MEMORY), NULL);
+			rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
 		}
 		_this->cbElementSize = cbElementSize;
 		_this->cbCapacity = SWS_VECTOR_CAPACITY;
@@ -1135,7 +1117,7 @@ sws_error_t sws_window_Initialize(sws_window* _this, HWND hWnd)
 		if (!hWndOfInterest) hWndOfInterest = hWnd;
 		if (!GetWindowThreadProcessId(hWndOfInterest, &(_this->dwProcessId)))
 		{
-			rv = sws_error_GetFromWin32Error(GetLastError());
+			rv = HRESULT_FROM_WIN32(GetLastError());
 		}
 	}
 	if (!rv)
@@ -1162,8 +1144,6 @@ sws_error_t sws_window_Initialize(sws_window* _this, HWND hWnd)
 
 // sws_WindowHelpers.c
 ULONG_PTR _sws_gdiplus_token;
-RTL_OSVERSIONINFOW sws_global_rovi;
-DWORD32 sws_global_ubr;
 pCreateWindowInBand _sws_CreateWindowInBand;
 pIsShellManagedWindow _sws_IsShellManagedWindow;
 pIsShellManagedWindow sws_IsShellFrameWindow;
@@ -1175,7 +1155,6 @@ HMODULE _sws_ExplorerFrame = 0;
 HMODULE _sws_Explorer = 0;
 pHungWindowFromGhostWindow _sws_HungWindowFromGhostWindow;
 pGhostWindowFromHungWindow _sws_GhostWindowFromHungWindow;
-pIsCoreWindow _sws_IsCoreWindow;
 pSHWindowsPolicy sws_SHWindowsPolicy;
 
 DEFINE_GUID(POLID_TurnOffSPIAnimations, 0xD7AF00A, 0xB468, 0x4A39, 0xB0, 0x16, 0x33, 0x3E, 0x22, 0x77, 0xAB, 0xED);
@@ -1550,7 +1529,7 @@ sws_error_t sws_WindowHelpers_Initialize()
 		_sws_hComctl32 = LoadLibraryExW(L"Comctl32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
 		if (!_sws_hComctl32)
 		{
-			rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_LOADLIBRARY_FAILED), NULL);
+			rv = sws_error_Report(SWS_ERROR_LOADLIBRARY_FAILED);
 		}
 	}
 	if (!rv)
@@ -1569,12 +1548,11 @@ sws_error_t sws_WindowHelpers_Initialize()
 			(int)32,
 			(HICON*)(&(sws_LegacyDefAppIcon))
 		);
-		//sws_LegacyDefAppIcon = LoadIconW(NULL, MAKEINTRESOURCEW(IDI_APPLICATION));
 	}
 	if (!rv)
 	{
         Gdiplus::GdiplusStartupInput gdiplusStartupInput = { 0 };
-		rv = sws_error_Report(sws_error_GetFromGdiplusStatus(Gdiplus::GdiplusStartup(&_sws_gdiplus_token, &gdiplusStartupInput, NULL)), NULL);
+		rv = Gdiplus::GdiplusStartup(&_sws_gdiplus_token, &gdiplusStartupInput, NULL);
 	}
 	if (!rv)
 	{
@@ -1583,7 +1561,7 @@ sws_error_t sws_WindowHelpers_Initialize()
 			_sws_hUser32 = LoadLibraryExW(L"user32.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
 			if (!_sws_hUser32)
 			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_LOADLIBRARY_FAILED), NULL);
+				rv = SWS_ERROR_LOADLIBRARY_FAILED;
 			}
 		}
 	}
@@ -1594,7 +1572,7 @@ sws_error_t sws_WindowHelpers_Initialize()
 			_sws_HungWindowFromGhostWindow = (pHungWindowFromGhostWindow)GetProcAddress(_sws_hUser32, "HungWindowFromGhostWindow");
 			if (!_sws_HungWindowFromGhostWindow)
 			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
+				rv = SWS_ERROR_FUNCTION_NOT_FOUND;
 			}
 		}
 	}
@@ -1605,7 +1583,7 @@ sws_error_t sws_WindowHelpers_Initialize()
 			_sws_GhostWindowFromHungWindow = (pGhostWindowFromHungWindow)GetProcAddress(_sws_hUser32, "GhostWindowFromHungWindow");
 			if (!_sws_GhostWindowFromHungWindow)
 			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
+				rv = SWS_ERROR_FUNCTION_NOT_FOUND;
 			}
 		}
 	}
@@ -1616,7 +1594,7 @@ sws_error_t sws_WindowHelpers_Initialize()
 			_sws_IsShellManagedWindow = (pIsShellManagedWindow)GetProcAddress(_sws_hUser32, (LPCSTR)2574);
 			if (!_sws_IsShellManagedWindow)
 			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
+				rv = SWS_ERROR_FUNCTION_NOT_FOUND;
 			}
 		}
 	}
@@ -1627,7 +1605,7 @@ sws_error_t sws_WindowHelpers_Initialize()
 			sws_IsShellFrameWindow = (pIsShellManagedWindow)GetProcAddress(_sws_hUser32, (LPCSTR)2573);
 			if (!sws_IsShellFrameWindow)
 			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
+				rv = SWS_ERROR_FUNCTION_NOT_FOUND;
 			}
 		}
 	}
@@ -1638,7 +1616,7 @@ sws_error_t sws_WindowHelpers_Initialize()
 			_sws_CreateWindowInBand = (pCreateWindowInBand)GetProcAddress(_sws_hUser32, "CreateWindowInBand");
 			if (!_sws_CreateWindowInBand)
 			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
+				rv = SWS_ERROR_FUNCTION_NOT_FOUND;
 			}
 		}
 	}
@@ -1649,7 +1627,7 @@ sws_error_t sws_WindowHelpers_Initialize()
 			_sws_IsTopLevelWindow = (pIsTopLevelWindow)GetProcAddress(_sws_hUser32, "IsTopLevelWindow");
 			if (!_sws_IsTopLevelWindow)
 			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
+				rv = SWS_ERROR_FUNCTION_NOT_FOUND;
 			}
 		}
 	}
@@ -1660,7 +1638,7 @@ sws_error_t sws_WindowHelpers_Initialize()
 			_sws_hShcore = LoadLibraryExW(L"shcore.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
 			if (!_sws_hShcore)
 			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_LOADLIBRARY_FAILED), NULL);
+				rv = SWS_ERROR_LOADLIBRARY_FAILED;
 			}
 		}
 	}
@@ -1671,7 +1649,7 @@ sws_error_t sws_WindowHelpers_Initialize()
 			sws_SHWindowsPolicy = (pSHWindowsPolicy)GetProcAddress(_sws_hShcore, (LPCSTR)190);
 			if (!sws_SHWindowsPolicy)
 			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_FUNCTION_NOT_FOUND), NULL);
+				rv = SWS_ERROR_FUNCTION_NOT_FOUND;
 			}
 		}
 	}
@@ -1682,7 +1660,7 @@ sws_error_t sws_WindowHelpers_Initialize()
 			CoCreateInstance(CLSID_StartMenuCacheAndAppResolver, NULL, CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER, IID_IAppResolver_8, (void**)&sws_AppResolver);
 			if (!sws_AppResolver)
 			{
-				rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_APPRESOLVER_NOT_AVAILABLE), NULL);
+				rv = SWS_ERROR_APPRESOLVER_NOT_AVAILABLE;
 			}
 		}
 	}
@@ -1747,7 +1725,7 @@ sws_error_t sws_WindowSwitcherLayoutWindow_Initialize(sws_WindowSwitcherLayoutWi
     {
         if (!_this)
         {
-            rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_NO_MEMORY), NULL);
+            rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
         }
     }
     if (!rv)
@@ -1772,7 +1750,7 @@ sws_error_t sws_WindowSwitcherLayoutWindow_Initialize(sws_WindowSwitcherLayoutWi
         _this->dpaGroupedWnds = DPA_Create(SWS_VECTOR_CAPACITY);
         if (!_this->dpaGroupedWnds)
         {
-            rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_NO_MEMORY), NULL);
+            rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
         }
     }
 
@@ -1930,13 +1908,13 @@ sws_error_t sws_WindowSwitcherLayout_Initialize(
 	{
 		if (!_this)
 		{
-			rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_NO_MEMORY), NULL);
+			rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
 		}
 		memset(_this, 0, sizeof(sws_WindowSwitcherLayout));
 	}
 	if (!rv)
 	{
-		rv = sws_WindowHelpers_Initialize();
+		rv = sws_error_Report(sws_WindowHelpers_Initialize());
 	}
 	if (!rv)
 	{
@@ -1950,7 +1928,7 @@ sws_error_t sws_WindowSwitcherLayout_Initialize(
 			&(_this->mi)
 		))
 		{
-			rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+			rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
 		}
 	}
 	if (!rv)
@@ -2066,7 +2044,7 @@ sws_error_t sws_WindowSwitcherLayout_Initialize(
 			&(_this->cbDpiX),
 			&(_this->cbDpiY)
 		);
-		rv = sws_error_Report(sws_error_GetFromHRESULT(hr), NULL);
+		rv = sws_error_Report(hr);
 	}
 	if (!rv)
 	{
@@ -2089,14 +2067,14 @@ sws_error_t sws_WindowSwitcherLayout_Initialize(
 		NONCLIENTMETRICS ncm;
 		ncm.cbSize = sizeof(NONCLIENTMETRICS);
 		if (!SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICS), &ncm, 0, _this->cbDpiX)) {
-			rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+			rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         } else {
             _this->cbBorderSize = ncm.iBorderWidth;
 
             _this->hFontRegular = CreateFontIndirectW(&ncm.lfCaptionFont);
             if (!_this->hFontRegular)
             {
-                rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+                rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
             }
             else
             {
@@ -2397,28 +2375,28 @@ sws_error_t sws_WindowSwitcher_RegisterHotkeys(sws_WindowSwitcher* _this, HKL hk
     {
         if (!RegisterHotKey(_this->hWnd, 1, MOD_ALT, VK_TAB))
         {
-            rv = sws_error_GetFromWin32Error(GetLastError());
+            rv = HRESULT_FROM_WIN32(GetLastError());
         }
     }
     if (!rv)
     {
         if (!RegisterHotKey(_this->hWnd, 2, MOD_ALT | MOD_SHIFT, VK_TAB))
         {
-            rv = sws_error_GetFromWin32Error(GetLastError());
+            rv = HRESULT_FROM_WIN32(GetLastError());
         }
     }
     if (!rv)
     {
         if (!RegisterHotKey(_this->hWnd, 3, MOD_ALT | MOD_CONTROL, VK_TAB))
         {
-            rv = sws_error_GetFromWin32Error(GetLastError());
+            rv = HRESULT_FROM_WIN32(GetLastError());
         }
     }
     if (!rv)
     {
         if (!RegisterHotKey(_this->hWnd, 4, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB))
         {
-            rv = sws_error_GetFromWin32Error(GetLastError());
+            rv = HRESULT_FROM_WIN32(GetLastError());
         }
     }
     //Wh_Log(L"[sws] Hotkey registration result: %d\n", rv);
@@ -3254,18 +3232,9 @@ static void WINAPI _sws_WindowSwitcher_Show(sws_WindowSwitcher* _this)
 static DWORD CALLBACK _sws_WindowSwitcher_EndTaskThreadProc(sws_WindowSwitcher_EndTaskThreadParams* params)
 {
     SetThreadDesktop(params->hDesktop);
-    if (IsHungAppWindow(params->hWnd))
+    if (IsWindow(params->hWnd) && IsHungAppWindow(params->hWnd))
     {
-        sws_tshwnd* tshWnd = (sws_tshwnd*)malloc(sizeof(sws_tshwnd));
-        if (tshWnd)
-        {
-            sws_tshwnd_Initialize(tshWnd, params->hWnd);
-            if (IsWindow(params->hWnd))
-            {
-                EndTask(params->hWnd, FALSE, FALSE);
-            }
-            free(tshWnd);
-        }
+        EndTask(params->hWnd, FALSE, FALSE);
     }
     else
     {
@@ -3313,6 +3282,8 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
     else if (uMsg == SWS_WINDOWSWITCHER_RELOAD_CONFIG_MSG)
     {
         sws_WindowSwitcher_LoadSettings(_this);
+        sws_WindowSwitcher_UnregisterHotkeys(_this);
+        sws_WindowSwitcher_RegisterHotkeys(_this, (HKL)lParam);
     }
     else if (uMsg == WM_ERASEBKGND)
     {
@@ -3499,7 +3470,6 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                     }
                 }
 
-                BOOL bWasForFlashingOff = FALSE;
                 sws_tshwnd* tshWnd = (sws_tshwnd*)malloc(sizeof(sws_tshwnd));
                 if (tshWnd)
                 {
@@ -3524,62 +3494,6 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                         }
                     }
                     free(tshWnd);
-                }
-
-                if (!bWasForFlashingOff)
-                {
-                    if (IsWindowVisible(_this->hWnd))
-                    {
-                        sws_WindowSwitcherLayoutWindow* pWindowList = (sws_WindowSwitcherLayoutWindow*)_this->layout.pWindowList.pList;
-                        if (pWindowList)
-                        {
-                            for (int i = 0; i < _this->layout.pWindowList.cbSize; ++i)
-                            {
-                                if (hWnd == pWindowList[i].hWnd)
-                                {
-                                    sws_IconPainter_CallbackParams* params = (sws_IconPainter_CallbackParams*)malloc(sizeof(sws_IconPainter_CallbackParams));
-                                    if (params)
-                                    {
-                                        WCHAR wszRundll32Path[MAX_PATH];
-                                        GetSystemDirectoryW(wszRundll32Path, MAX_PATH);
-                                        wcscat_s(wszRundll32Path, MAX_PATH, L"\\rundll32.exe");
-                                        params->bUseApplicationIcon = FALSE;
-                                        if (!_this->settings.bAlwaysUseWindowTitleAndIcon &&
-                                            _wcsicmp(pWindowList[i].wszPath, wszRundll32Path) &&
-                                            !(pWindowList[i].dwWindowFlags & SWS_WINDOWSWITCHERLAYOUT_WINDOWFLAGS_ISUWP) &&
-                                            _this->settings.bSwitcherIsPerApplication &&
-                                            _this->mode == SWS_WINDOWSWITCHER_LAYOUTMODE_FULL &&
-                                            pWindowList[i].dwCount > 1)
-                                        {
-                                            params->bUseApplicationIcon = TRUE;
-                                        }
-                                        if (!params->bUseApplicationIcon)
-                                        {
-                                            params->hWnd = _this->hWnd;
-                                            params->index = i;
-                                            if (!_this->layout.timestamp)
-                                            {
-                                                _this->layout.timestamp = sws_milliseconds_now();
-                                            }
-                                            params->timestamp = _this->layout.timestamp;
-                                            params->bIsDesktop = (_this->layout.bIncludeWallpaper && pWindowList[i].hWnd == GetShellWindow());
-                                            if (!sws_IconPainter_ExtractAndDrawIconAsync(pWindowList[i].hWnd, params))
-                                            {
-                                                pWindowList[i].hIcon = sws_LegacyDefAppIcon;
-                                                free(params);
-                                                SendMessageW(_this->hWnd, SWS_WINDOWSWITCHER_PAINT_MSG, SWS_WINDOWSWITCHER_PAINTFLAGS_REDRAWENTIRE, 0);
-                                            }
-                                        }
-                                        else
-                                        {
-                                            free(params);
-                                            SendMessageW(_this->hWnd, SWS_WINDOWSWITCHER_PAINT_MSG, SWS_WINDOWSWITCHER_PAINTFLAGS_REDRAWENTIRE, 0);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -3637,7 +3551,6 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
     {
         if (wParam == FALSE)
         {
-            KillTimer(_this->hWnd, SWS_WINDOWSWITCHER_TIMER_CLOSEHWND);
             KillTimer(hWnd, SWS_WINDOWSWITCHER_TIMER_ASYNCKEYCHECK);
             _this->lastMiniModehWnd = NULL;
             if (_this->dwOriginalMouseRouting != DWORD(-1) &&
@@ -3811,7 +3724,6 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                     PostMessageW(hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
                 }
             }
-            //SetTimer(_this->hWnd, SWS_WINDOWSWITCHER_TIMER_CLOSEHWND, SWS_WINDOWSWITCHER_TIMER_CLOSEHWND_DELAY, NULL);
         }
         return 0;
     }
@@ -3987,7 +3899,7 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
         }
         return 0;
     }
-    else if (uMsg == WM_INPUTLANGCHANGE || uMsg == SWS_WINDOWSWITCHER_RELOAD_HOTKEY_MSG || uMsg == SWS_WINDOWSWITCHER_RELOAD_CONFIG_MSG)
+    else if (uMsg == WM_INPUTLANGCHANGE || uMsg == SWS_WINDOWSWITCHER_RELOAD_HOTKEY_MSG)
     {
         sws_WindowSwitcher_UnregisterHotkeys(_this);
         sws_WindowSwitcher_RegisterHotkeys(_this, (HKL)lParam);
@@ -4051,14 +3963,15 @@ static sws_error_t _sws_WindowSwitcher_RegisterWindowClass(sws_WindowSwitcher* _
     ATOM a = RegisterClassExW(&wc);
     if (!a)
     {
-        return sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+        sws_error_t rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
+        return rv;
     }
     return SWS_ERROR_SUCCESS;
 }
 
 sws_error_t sws_WindowSwitcher_RunMessageQueue(sws_WindowSwitcher* _this)
 {
-    if (!_this) return sws_error_GetFromInternalError(SWS_ERROR_INVALID_PARAMETER);
+    if (!_this) return SWS_ERROR_INVALID_PARAMETER;
 
     MSG msg;
     BOOL bRet;
@@ -4067,7 +3980,7 @@ sws_error_t sws_WindowSwitcher_RunMessageQueue(sws_WindowSwitcher* _this)
     {
         if (bRet == -1)
         {
-            return sws_error_GetFromWin32Error(GetLastError());
+            return HRESULT_FROM_WIN32(GetLastError());
         }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
@@ -4080,7 +3993,7 @@ void sws_WindowSwitcher_LoadSettings(sws_WindowSwitcher* _this)
 {
     _this->dwShowDelay = Wh_GetIntSetting(L"ShowDelay");
     if (_this->dwShowDelay > 10000) {
-        _this->dwShowDelay = 100;
+        _this->dwShowDelay = 10000;
     }
 
     _this->settings.bIncludeWallpaper = Wh_GetIntSetting(L"IncludeWallpaper");
@@ -4204,26 +4117,6 @@ void sws_WindowSwitcher_Clear(sws_WindowSwitcher* _this)
     }
 }
 
-// https://github.com/ramensoftware/windhawk-mods/blob/f79c82018ed58eb880450f0b94f74ecfc5083c15/mods/block-windows-startmenu-and-hosts.wh.cpp#L107
-void TerminateProcessByName(const wchar_t* filename) {
-    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (hSnap == INVALID_HANDLE_VALUE) return;
-    PROCESSENTRY32W pe;
-    pe.dwSize = sizeof(pe);
-    if (Process32FirstW(hSnap, &pe)) {
-        do {
-            if (_wcsicmp(pe.szExeFile, filename) == 0) {
-                HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
-                if (hProcess) {
-                    TerminateProcess(hProcess, 0);
-                    CloseHandle(hProcess);
-                }
-            }
-        } while (Process32NextW(hSnap, &pe));
-    }
-    CloseHandle(hSnap);
-}
-
 sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
 {
     sws_error_t rv = SWS_ERROR_SUCCESS;
@@ -4236,7 +4129,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
             *__this = (sws_WindowSwitcher*)calloc(1, sizeof(sws_WindowSwitcher));
             if (!*__this)
             {
-                rv = sws_error_Report(sws_error_GetFromInternalError(SWS_ERROR_NO_MEMORY), NULL);
+                rv = sws_error_Report(SWS_ERROR_NO_MEMORY);
             }
             (*__this)->bIsDynamic = TRUE;
         }
@@ -4252,12 +4145,12 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         _this->hrCo = CoInitializeEx(NULL, COINIT_MULTITHREADED);
         if (_this->hrCo != S_OK && _this->hrCo != S_FALSE)
         {
-            rv = sws_error_Report(sws_error_GetFromHRESULT(_this->hrCo), NULL);
+            rv = sws_error_Report(_this->hrCo);
         }
     }
     if (!rv)
     {
-        rv = sws_error_Report(sws_error_GetFromInternalError(sws_WindowHelpers_Initialize()), NULL);
+        rv = sws_error_Report(sws_WindowHelpers_Initialize());
     }
     if (!rv)
     {
@@ -4268,7 +4161,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         _this->hShowSignal = CreateEventW(NULL, FALSE, FALSE, NULL);
         if (!_this->hShowSignal)
         {
-            rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
     }
     if (!rv)
@@ -4276,7 +4169,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         _this->hShowThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)_sws_WindowSwitcher_ShowAsyncProcedure, _this, 0, NULL);
         if (!_this->hShowThread)
         {
-            rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
     }
     if (!rv)
@@ -4284,7 +4177,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         _this->hFlashAnimationSignal = CreateEventW(NULL, TRUE, FALSE, NULL);
         if (!_this->hFlashAnimationSignal)
         {
-            rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
     }
     if (!rv)
@@ -4292,7 +4185,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         _this->hFlashAnimationThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)_sws_WindowSwitcher_FlashAnimationProcedure, _this, 0, NULL);
         if (!_this->hFlashAnimationThread)
         {
-            rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
     }
     if (!rv)
@@ -4300,7 +4193,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         _this->htshwnds = DPA_Create(SWS_VECTOR_CAPACITY);
         if (!_this->htshwnds)
         {
-            rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
         EnumWindows(sws_WindowHelpers_AddAltTabWindowsToTimeStampedHWNDList, (LPARAM)_this->htshwnds);
     }
@@ -4308,7 +4201,6 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
     {
         _this->hBackgroundBrush = GetSysColorBrush(COLOR_BTNFACE);
         _this->hFlashBrush = GetSysColorBrush(COLOR_HIGHLIGHT);
-        _this->last_change = 0;
         _this->mode = SWS_WINDOWSWITCHER_LAYOUTMODE_FULL;
         _this->lastMiniModehWnd = NULL;
         _this->dwOriginalMouseRouting = -1;
@@ -4319,7 +4211,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         _this->msgShellHook = RegisterWindowMessageW(L"SHELLHOOK");
         if (!_this->msgShellHook)
         {
-            rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
     }
     if (!SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
@@ -4327,7 +4219,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
     }
     if (!rv)
     {
-        rv = sws_error_Report(sws_error_GetFromInternalError(_sws_WindowSwitcher_RegisterWindowClass(_this)), NULL);
+        rv = sws_error_Report(_sws_WindowSwitcher_RegisterWindowClass(_this));
     }
     if (!rv)
     {
@@ -4355,8 +4247,11 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         }
         if (!_this->hWnd)
         {
-            rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
+    }
+    if (!ChangeWindowMessageFilterEx(_this->hWnd, SWS_WINDOWSWITCHER_RELOAD_HOTKEY_MSG, MSGFLT_ALLOW, NULL)) {
+        rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
     }
     if (!rv)
     {
@@ -4370,7 +4265,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
         );
         if (!_this->hookForeground) {
-            rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
     }
     if (!rv)
@@ -4385,7 +4280,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
             WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS
         );
         if (!_this->hookCreateDestroy) {
-            rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
     }
     if (!rv)
@@ -4420,7 +4315,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
     {
         if (_this->hWnd && !RegisterShellHookWindow(_this->hWnd))
         {
-            rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
     }
     if (!rv)
@@ -4438,19 +4333,19 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
         );
         if (!_this->hWndAccessible)
         {
-            rv = sws_error_Report(sws_error_GetFromWin32Error(GetLastError()), NULL);
+            rv = sws_error_Report(HRESULT_FROM_WIN32(GetLastError()));
         }
     }
     if (!rv)
     {
-        rv = sws_error_GetFromHRESULT(CoCreateInstance(CLSID_AccPropServices, NULL, CLSCTX_INPROC, IID_IAccPropServices, (void**)&(_this->pAccPropServices)));
+        rv = sws_error_Report(CoCreateInstance(CLSID_AccPropServices, NULL, CLSCTX_INPROC, IID_IAccPropServices, (void**)&(_this->pAccPropServices)));
     }
     if (!rv)
     {
         VARIANT var;
         var.vt = VT_I4;
         var.lVal = 2; //Assertive;
-        rv = sws_error_GetFromHRESULT(_this->pAccPropServices->SetHwndProp(_this->hWndAccessible, OBJID_CLIENT, CHILDID_SELF, LiveSetting_Property_GUID, var));
+        rv = sws_error_Report(_this->pAccPropServices->SetHwndProp(_this->hWndAccessible, OBJID_CLIENT, CHILDID_SELF, LiveSetting_Property_GUID, var));
     }
 
     if (!rv)
