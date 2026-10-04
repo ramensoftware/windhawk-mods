@@ -68,6 +68,10 @@ was changed for each swap chain, and why something wasn't.
   to exclusive fullscreen behind the mod's back.
 - With **Waitable swap chain**, games that already use a waitable swap chain
   keep their own settings.
+- If the game loads `dxgi.dll` only after it started, the mod's hooks are
+  installed a moment after that, and a swap chain the game creates right away
+  may keep the blt model. The log then shows no "Hooked" lines before that swap
+  chain.
 
 ## Anti-cheat
 **Don't use this mod in online games protected by anti-cheat.** It loads code
@@ -77,12 +81,13 @@ into the game and hooks DXGI and Direct3D 11 functions:
 `IDXGISwapChain::Present`, `Present1`, `ResizeBuffers`, `ResizeBuffers1`,
 `SetFullscreenState`, `GetFullscreenState` and `ResizeTarget`,
 `IDXGIDevice1::SetMaximumFrameLatency` and
-`ID3D11Device::CreateRenderTargetView`. It hooks no functions of system DLLs
-such as `kernelbase.dll`: it learns that `dxgi.dll` was loaded through a
-Windows DLL load notification, and a thread of the mod installs the hooks. With
-**Force borderless**, another thread changes the game window. Present hooks are also how cheats draw overlays, so
-anti-cheat software may block the game, kick you or ban your account. There
-are no guarantees for any game.
+`ID3D11Device::CreateRenderTargetView`. It hooks no Windows loader or kernel
+functions, such as `LoadLibraryExW` in `kernelbase.dll`: if `dxgi.dll` isn't
+loaded yet when the mod starts, the mod learns about it through a Windows DLL
+load notification, and a thread of the mod installs the hooks. With **Force
+borderless**, another thread changes the game window. Present hooks are also
+how cheats draw overlays, so anti-cheat software may block the game, kick you
+or ban your account. There are no guarantees for any game.
 
 Enable the mod's logging (Advanced → Debug logging) to see what happens.
 */
@@ -125,7 +130,6 @@ Enable the mod's logging (Advanced → Debug logging) to see what happens.
 #include <windhawk_utils.h>
 
 #include <d3d11.h>
-#include <d3d12.h>
 #include <dxgi1_6.h>
 
 #include <algorithm>
@@ -145,18 +149,25 @@ std::mutex g_hookMutex;
 std::atomic<bool> g_dxgiHooked;
 HMODULE g_dxgiModule;
 
+// Hooks can't be set anymore after Wh_ModBeforeUninit. Guarded by g_hookMutex.
+bool g_unloading;
+
+// Modules with hooked code, which must stay around while the mod is loaded.
+// Guarded by g_hookMutex.
+std::vector<HMODULE> g_pinnedModules;
+
 // Set during a swap chain creation, which may call another hooked creation
 // method internally.
 thread_local bool g_inCreateSwapChain;
 
 // The sRGB format the game asked for, on swap chains and back buffers whose
 // format had to become the non-sRGB one for the flip model.
-// {4B1F3A2E-8C5D-4E6F-9A7B-2C3D4E5F6A7B}
+// {F1AE8A51-3E58-4FE2-8CBE-6BC781B08E29}
 static const GUID kSrgbFormatGuid = {
-    0x4B1F3A2E,
-    0x8C5D,
-    0x4E6F,
-    {0x9A, 0x7B, 0x2C, 0x3D, 0x4E, 0x5F, 0x6A, 0x7B}};
+    0xF1AE8A51,
+    0x3E58,
+    0x4FE2,
+    {0x8C, 0xBE, 0x6B, 0xC7, 0x81, 0xB0, 0x8E, 0x29}};
 
 // Vtable slots, checked against the C declarations of the SDK headers.
 enum {
@@ -270,18 +281,38 @@ struct HookedMethod {
     T originals[kMaxImplementations];
 };
 
+// Must be called with g_hookMutex held.
+void PinModuleLocked(void* address) {
+    HMODULE module;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCWSTR)address, &module) ||
+        std::find(g_pinnedModules.begin(), g_pinnedModules.end(), module) !=
+            g_pinnedModules.end()) {
+        return;
+    }
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                           (LPCWSTR)address, &module)) {
+        g_pinnedModules.push_back(module);
+    }
+}
+
 // Must be called with g_hookMutex held. Returns true if a hook was set.
 template <typename T>
 bool HookImplementation(void* target,
                         HookedMethod<T>& hooked,
                         const T (&hooks)[kMaxImplementations],
                         PCWSTR name) {
+    if (g_unloading) {
+        return false;
+    }
     for (int i = 0; i < kMaxImplementations; i++) {
         if (hooked.targets[i] == target) {
             return false;
         }
         if (!hooked.targets[i]) {
             hooked.targets[i] = target;
+            PinModuleLocked(target);
             WindhawkUtils::SetFunctionHook((T)target, hooks[i],
                                            &hooked.originals[i]);
             Wh_Log(L"Hooked %s (%d)", name, i);
@@ -501,25 +532,14 @@ bool IsTearingSupported(IUnknown* factory) {
     return tearing;
 }
 
-enum class DeviceApi { d3d11, d3d12, other };
-
-DeviceApi GetDeviceApi(IUnknown* device) {
-    if (!device) {
-        return DeviceApi::other;
+bool IsD3D11Device(IUnknown* device) {
+    ID3D11Device* device11 = nullptr;
+    if (!device || FAILED(device->QueryInterface(__uuidof(ID3D11Device),
+                                                 (void**)&device11))) {
+        return false;
     }
-
-    IUnknown* object = nullptr;
-    if (SUCCEEDED(device->QueryInterface(__uuidof(ID3D11Device),
-                                         (void**)&object))) {
-        object->Release();
-        return DeviceApi::d3d11;
-    }
-    if (SUCCEEDED(device->QueryInterface(__uuidof(ID3D12CommandQueue),
-                                         (void**)&object))) {
-        object->Release();
-        return DeviceApi::d3d12;
-    }
-    return DeviceApi::other;
+    device11->Release();
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -735,8 +755,14 @@ HRESULT PresentCommon(IDXGISwapChain* swapChain,
     HRESULT hr = callOriginal(flags);
 
     if (context) {
-        context->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT,
-                                    views, depthView);
+        // Only the slots the game used, pixel shader UAVs share the others.
+        UINT count = D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT;
+        while (count > 0 && !views[count - 1]) {
+            count--;
+        }
+        if (count > 0 || depthView) {
+            context->OMSetRenderTargets(count, views, depthView);
+        }
         for (auto*& view : views) {
             SafeRelease(view);
         }
@@ -903,7 +929,15 @@ template <int N>
 HRESULT STDMETHODCALLTYPE SetFullscreenState_Hook(IDXGISwapChain* swapChain,
                                                   BOOL fullscreen,
                                                   IDXGIOutput* target) {
-    if (fullscreen && g_forceBorderless) {
+    // Real exclusive fullscreen, entered before Force borderless was turned
+    // on, stays real, so that the game can leave it.
+    BOOL realFullscreen = FALSE;
+    if (fullscreen && g_forceBorderless &&
+        !g_fakeFullscreenSwapChains.Contains(swapChain)) {
+        swapChain->GetFullscreenState(&realFullscreen, nullptr);
+    }
+
+    if (fullscreen && g_forceBorderless && !realFullscreen) {
         g_fakeFullscreenSwapChains.Set(swapChain, true);
         PostWindowMessage(kMakeBorderlessMessage,
                           GetSwapChainWindow(swapChain));
@@ -1057,7 +1091,7 @@ SwapChainChange AdjustSwapChain(IUnknown* factory,
         DXGI_FORMAT stripped = StripSrgb(*format);
 
         PCWSTR reason = nullptr;
-        if (GetDeviceApi(device) != DeviceApi::d3d11) {
+        if (!IsD3D11Device(device)) {
             reason = L"not a Direct3D 11 device";
         } else if (!*windowed) {
             reason = L"created in exclusive fullscreen";
@@ -1334,37 +1368,36 @@ HRESULT WINAPI CreateDXGIFactory2_Hook(UINT flags, REFIID riid, void** factory) 
     return hr;
 }
 
+// Where the system DLL is: System32, or SysWOW64, under which 32-bit processes
+// may have it recorded. Empty if unknown.
+std::wstring GetSystemDllPath(bool wow64, PCWSTR name) {
+    WCHAR dir[MAX_PATH];
+    UINT len = wow64 ? GetSystemWow64DirectoryW(dir, ARRAYSIZE(dir))
+                     : GetSystemDirectoryW(dir, ARRAYSIZE(dir));
+    if (!len || len >= ARRAYSIZE(dir)) {
+        return std::wstring();
+    }
+    return std::wstring(dir) + L"\\" + name;
+}
+
 // Only the system dxgi.dll is hooked. It's never loaded by the mod, as that
 // would make the loader skip a dxgi.dll proxy in the game's folder.
 HMODULE GetSystemModule(PCWSTR name) {
-    WCHAR dir[MAX_PATH];
-
-    UINT len = GetSystemDirectoryW(dir, ARRAYSIZE(dir));
-    if (len && len < ARRAYSIZE(dir)) {
-        std::wstring path = std::wstring(dir) + L"\\" + name;
-        if (HMODULE module = GetModuleHandleW(path.c_str())) {
-            return module;
+    for (bool wow64 : {false, true}) {
+        std::wstring path = GetSystemDllPath(wow64, name);
+        if (!path.empty()) {
+            if (HMODULE module = GetModuleHandleW(path.c_str())) {
+                return module;
+            }
         }
     }
-
-    // 32-bit processes may have it recorded under SysWOW64.
-    len = GetSystemWow64DirectoryW(dir, ARRAYSIZE(dir));
-    if (len && len < ARRAYSIZE(dir)) {
-        std::wstring path = std::wstring(dir) + L"\\" + name;
-        if (HMODULE module = GetModuleHandleW(path.c_str())) {
-            return module;
-        }
-    }
-
     return nullptr;
 }
 
-// Returns true if new hooks were set and need to be applied. probeFactory:
-// hook the factory implementation right away, which calls into dxgi.dll, so
-// only once it's initialized and not under the loader lock.
-bool HookDxgiIfLoaded(bool probeFactory) {
-    std::lock_guard<std::mutex> guard(g_hookMutex);
-    if (g_dxgiHooked) {
+// Must be called with g_hookMutex held. Returns true if new hooks were set and
+// need to be applied.
+bool HookDxgiLocked() {
+    if (g_dxgiHooked || g_unloading) {
         return false;
     }
 
@@ -1395,15 +1428,13 @@ bool HookDxgiIfLoaded(bool probeFactory) {
     // CreateDXGIFactory2, are hooked when created. When dxgi.dll was already
     // loaded, the game may have one already, so the implementation is hooked
     // right away. The exports aren't hooked yet, this calls the original.
-    if (probeFactory) {
-        IDXGIFactory1* factory = nullptr;
-        HRESULT hr = createFactory1(__uuidof(IDXGIFactory1), (void**)&factory);
-        if (SUCCEEDED(hr) && factory) {
-            HookFactoryLocked(factory);
-            SafeRelease(factory);
-        } else {
-            Wh_Log(L"CreateDXGIFactory1 failed: 0x%08X", hr);
-        }
+    IDXGIFactory1* factory = nullptr;
+    HRESULT hr = createFactory1(__uuidof(IDXGIFactory1), (void**)&factory);
+    if (SUCCEEDED(hr) && factory) {
+        HookFactoryLocked(factory);
+        SafeRelease(factory);
+    } else {
+        Wh_Log(L"CreateDXGIFactory1 failed: 0x%08X", hr);
     }
 
     WindhawkUtils::SetFunctionHook(createFactory, CreateDXGIFactory_Hook,
@@ -1418,6 +1449,33 @@ bool HookDxgiIfLoaded(bool probeFactory) {
 
     Wh_Log(L"Hooked dxgi.dll (%p)", module);
     return true;
+}
+
+// Returns true if new hooks were set and need to be applied. Hooking calls into
+// dxgi.dll, which another thread may still be loading. Taking a reference waits
+// until the loader is done with it. That happens before g_hookMutex is taken,
+// so that the loader lock is never waited for while it's held.
+bool HookDxgiIfLoaded() {
+    HMODULE reference = nullptr;
+    if (!g_dxgiHooked) {
+        if (HMODULE module = GetSystemModule(L"dxgi.dll")) {
+            WCHAR path[MAX_PATH];
+            if (GetModuleFileNameW(module, path, ARRAYSIZE(path))) {
+                reference = LoadLibraryExW(path, nullptr, 0);
+            }
+        }
+    }
+
+    bool hooked;
+    {
+        std::lock_guard<std::mutex> guard(g_hookMutex);
+        hooked = HookDxgiLocked();
+    }
+
+    if (reference) {
+        FreeLibrary(reference);
+    }
+    return hooked;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1458,19 +1516,31 @@ HANDLE g_dxgiLoadedEvent;
 HANDLE g_hookThreadStopEvent;
 HANDLE g_hookThread;
 
+// The paths the system dxgi.dll may be recorded under. Set before the
+// notification is registered, so that the callback only compares strings.
+std::wstring g_systemDllPaths[2];
+std::atomic<int> g_loadedPathIndex{-1};
+
+bool PathEquals(const LdrUnicodeString& string, const std::wstring& path) {
+    return !path.empty() && string.length == path.size() * sizeof(WCHAR) &&
+           _wcsnicmp(string.buffer, path.c_str(), path.size()) == 0;
+}
+
 VOID CALLBACK OnDllNotification(ULONG reason,
                                 const LdrDllLoadedData* data,
                                 PVOID context) {
-    if (reason != kLdrDllLoaded || !data || !data->baseDllName ||
-        !data->baseDllName->buffer) {
+    if (reason != kLdrDllLoaded || !data || !data->fullDllName ||
+        !data->fullDllName->buffer) {
         return;
     }
 
-    const LdrUnicodeString& name = *data->baseDllName;
-    constexpr USHORT kNameLength = 8;  // dxgi.dll
-    if (name.length == kNameLength * sizeof(WCHAR) &&
-        _wcsnicmp(name.buffer, L"dxgi.dll", kNameLength) == 0) {
-        SetEvent(g_dxgiLoadedEvent);
+    // Only the system dxgi.dll, not a proxy of the game with the same name.
+    for (int i = 0; i < (int)ARRAYSIZE(g_systemDllPaths); i++) {
+        if (PathEquals(*data->fullDllName, g_systemDllPaths[i])) {
+            g_loadedPathIndex = i;
+            SetEvent(g_dxgiLoadedEvent);
+            return;
+        }
     }
 }
 
@@ -1482,28 +1552,38 @@ DWORD WINAPI HookThreadProc(void* parameter) {
             break;
         }
 
-        // A dxgi.dll proxy of the game, the system one loads later.
-        HMODULE module = GetSystemModule(L"dxgi.dll");
-        if (!module) {
+        // It's already loaded, so this only waits until the loader is done
+        // with it, so that it's initialized, and keeps it loaded meanwhile.
+        HMODULE reference = LoadLibraryExW(
+            g_systemDllPaths[g_loadedPathIndex].c_str(), nullptr, 0);
+        if (!reference) {
             continue;
         }
 
-        // Waits until the loader is done with it, so that it's initialized.
-        WCHAR path[MAX_PATH];
-        if (GetModuleFileNameW(module, path, ARRAYSIZE(path))) {
-            if (HMODULE reference = LoadLibraryExW(path, nullptr, 0)) {
-                FreeLibrary(reference);
-            }
-        }
-
-        if (HookDxgiIfLoaded(true)) {
+        if (HookDxgiIfLoaded()) {
             Wh_ApplyHookOperations();
         }
+        FreeLibrary(reference);
     }
     return 0;
 }
 
+void CloseWatchEvents() {
+    if (g_dxgiLoadedEvent) {
+        CloseHandle(g_dxgiLoadedEvent);
+        g_dxgiLoadedEvent = nullptr;
+    }
+    if (g_hookThreadStopEvent) {
+        CloseHandle(g_hookThreadStopEvent);
+        g_hookThreadStopEvent = nullptr;
+    }
+}
+
 bool StartWatchingDxgiLoad() {
+    for (int i = 0; i < (int)ARRAYSIZE(g_systemDllPaths); i++) {
+        g_systemDllPaths[i] = GetSystemDllPath(i == 1, L"dxgi.dll");
+    }
+
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     auto registerNotification =
         ntdll ? (LdrRegisterDllNotification_t)GetProcAddress(
@@ -1517,6 +1597,8 @@ bool StartWatchingDxgiLoad() {
         registerNotification(0, OnDllNotification, nullptr,
                              &g_dllNotificationCookie) != 0) {
         g_dllNotificationCookie = nullptr;
+        // Wh_ModInit fails, so nothing else would close them.
+        CloseWatchEvents();
         Wh_Log(L"Registering for DLL load notifications failed");
         return false;
     }
@@ -1544,14 +1626,7 @@ void StopWatchingDxgiLoad() {
         g_hookThread = nullptr;
     }
 
-    if (g_dxgiLoadedEvent) {
-        CloseHandle(g_dxgiLoadedEvent);
-        g_dxgiLoadedEvent = nullptr;
-    }
-    if (g_hookThreadStopEvent) {
-        CloseHandle(g_hookThreadStopEvent);
-        g_hookThreadStopEvent = nullptr;
-    }
+    CloseWatchEvents();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1570,18 +1645,18 @@ BOOL Wh_ModInit() {
 
     LoadSettings();
 
-    // Registered first, so that no load is missed. Hooks set here are applied
-    // by Windhawk once Wh_ModInit returns.
-    if (!HookDxgiIfLoaded(true) && !StartWatchingDxgiLoad()) {
-        return FALSE;
+    // Hooks set here are applied by Windhawk once Wh_ModInit returns.
+    HookDxgiIfLoaded();
+    if (g_dxgiHooked) {
+        return TRUE;
     }
 
-    return TRUE;
+    return StartWatchingDxgiLoad();
 }
 
 void Wh_ModAfterInit() {
     // In case dxgi.dll was loaded while the mod was initializing.
-    if (HookDxgiIfLoaded(true)) {
+    if (HookDxgiIfLoaded()) {
         Wh_ApplyHookOperations();
     }
 
@@ -1596,7 +1671,11 @@ void Wh_ModAfterInit() {
 }
 
 void Wh_ModBeforeUninit() {
-    // Hooks can't be applied anymore after this.
+    // Hooks can't be set anymore after this, also from game threads.
+    {
+        std::lock_guard<std::mutex> guard(g_hookMutex);
+        g_unloading = true;
+    }
     StopWatchingDxgiLoad();
 }
 
@@ -1611,6 +1690,18 @@ void Wh_ModUninit() {
         FreeLibrary(g_dxgiModule);
         g_dxgiModule = nullptr;
     }
+    for (HMODULE module : g_pinnedModules) {
+        FreeLibrary(module);
+    }
+    g_pinnedModules.clear();
+
+    // Nothing waits on them anymore.
+    AcquireSRWLockExclusive(&g_waitablesLock);
+    for (const Waitable& waitable : g_waitables) {
+        CloseHandle(waitable.handle);
+    }
+    g_waitables.clear();
+    ReleaseSRWLockExclusive(&g_waitablesLock);
 }
 
 void Wh_ModSettingsChanged() {
