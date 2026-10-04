@@ -41,6 +41,12 @@ program, and it stays there until you remove it.
 - **Left or right edge**, adjustable icon size, tooltips with the item name.
 - Does not use the taskbar, does not hook any functions and does not modify system files. Disabling the mod removes the dock completely.
 
+## How it differs from existing mods
+
+- **Quick Launch & Media Panel** is a collapsible panel at the top of the screen with shortcut pages and media controls. This mod is a minimal vertical dock on the left or right screen edge: a column of icons and a "+" slot, with no pages and no media controls.
+- **Left Taskbar Quick Pin Dock** is attached to the taskbar next to the Start button. This mod floats on the screen edge independently of the taskbar.
+- What is specific to this mod: auto-hide into a thin strip that smoothly slides out on hover, hide-in-fullscreen, per-item "Run as administrator" and "Show in folder", and configurable colors.
+
 ## How to use
 
 1. Enable the mod. A dock appears at the right edge of the primary monitor (vertically centered).
@@ -91,6 +97,12 @@ program, and it stays there until you remove it.
 - **Настраиваемые цвета** — фон, подсветка, акцент (плюс и полоска) и рамка задаются в формате `#RRGGBB`.
 - **Левый или правый край**, размер иконок, подсказки с названием элемента.
 - Не использует панель задач, не перехватывает функции и не меняет системные файлы. При отключении мода панель полностью исчезает.
+
+## Чем отличается от существующих модов
+
+- **Quick Launch & Media Panel** — сворачиваемая панель у верхнего края экрана со страницами ярлыков и управлением медиа. Этот мод — минимальная вертикальная панель у левого или правого края экрана: колонка иконок и слот «+», без страниц и без медиа-кнопок.
+- **Left Taskbar Quick Pin Dock** — панель, прикреплённая к панели задач рядом с кнопкой «Пуск». Этот мод свободно располагается у края экрана и от панели задач не зависит.
+- Особенности этого мода: автоскрытие в тонкую полоску с плавным выездом при наведении, скрытие в полноэкранных приложениях, «Запуск от имени администратора» и «Показать в папке» для каждого элемента, настраиваемые цвета.
 
 ## Как пользоваться
 
