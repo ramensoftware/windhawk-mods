@@ -41,8 +41,8 @@
 - autoPictureWidth: true
   $name: Set built-in picture width automatically
   $name:ru: Автоматическая ширина встроенных картинок
-  $description: Clouds set Picture width to 0; squares set it to 127 (the DLL's 127 x 56 image).
-  $description:ru: Облака задают Picture width 0, квадраты — 127 (изображение 127 x 56, как в DLL).
+  $description: Draw clouds with width 0 (automatic) and squares with width 127 (the DLL's 127 x 56 image). Overrides the manual width without changing its saved value; also works in portable Windhawk.
+  $description:ru: Рисовать облака с шириной 0 (автоматически), квадраты с шириной 127 (изображение 127 x 56, как в DLL). Применяется вместо ручной ширины без изменения её сохранённого значения; работает и в переносном Windhawk.
 - filePreview: true
   $name: File thumbnails
   $name:ru: Миниатюры файлов
@@ -62,8 +62,8 @@
   $name: File dates, size and document metadata
   $name:ru: Даты, размер и метаданные файлов
 - fileAttributes: true
-  $name: File attributes and Properties link
-  $name:ru: Атрибуты файлов и ссылка на свойства
+  $name: File attributes
+  $name:ru: Атрибуты файлов
 - multiSelectionInfo: true
   $name: Multiple selection details
   $name:ru: Сведения о множественном выделении
@@ -103,20 +103,13 @@
 - paneWidth: 200
   $name: Pane width
   $name:ru: Ширина панели
-  $description: Width of the pane in pixels, at 100% scaling. Windows 2000 used about 200.
-  $description:ru: >-
-    Ширина панели в пикселях при масштабе 100%. В Windows 2000 она была около 200.
+  $description: "Applies only when Original WebView layout is off. Width of the pane in pixels, at 100% scaling. Windows 2000 used about 200."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Ширина панели в пикселях при масштабе 100%. В Windows 2000 она была около 200."
 - minListWidth: 200
   $name: Room kept for the file list
   $name:ru: Место для списка файлов
-  $description: >-
-    When the window gets so narrow that the file list would be left with less
-    than this many pixels (at 100% scaling), the pane gives way and the list
-    gets its room, as in Windows 2000. 0 keeps the pane at any width.
-  $description:ru: >-
-    Когда окно становится настолько узким, что списку файлов осталось бы
-    меньше этого числа пикселей (при масштабе 100%), панель уступает место
-    списку, как в Windows 2000. 0 - панель остаётся при любой ширине.
+  $description: "Applies only when Original WebView layout is off. When the window gets so narrow that the file list would be left with less     than this many pixels (at 100% scaling), the pane gives way and the list     gets its room, as in Windows 2000. 0 keeps the pane at any width."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Когда окно становится настолько узким, что списку файлов осталось бы     меньше этого числа пикселей (при масштабе 100%), панель уступает место     списку, как в Windows 2000. 0 - панель остаётся при любой ширине."
 - position: left
   $name: Position
   $name:ru: Расположение
@@ -144,17 +137,13 @@
 - iconSize: 32
   $name: Icon size
   $name:ru: Размер значка
-  $description: Size of the icon in the header, in pixels at 100% scaling.
-  $description:ru: Размер значка в шапке, в пикселях при масштабе 100%.
+  $description: "Applies only when Original WebView layout is off. Size of the icon in the header, in pixels at 100% scaling."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Размер значка в шапке, в пикселях при масштабе 100%."
 - showItemType: true
   $name: Type and size under the name
   $name:ru: Тип и размер под именем
-  $description: >-
-    Add the kind of the item, and its size when it has one, under its name -
-    the line Windows 2000 put there for a selected file.
-  $description:ru: >-
-    Добавлять под именем тип объекта и, если он есть, размер - строку, которую
-    Windows 2000 показывала для выбранного файла.
+  $description: "Applies only when Original WebView layout is off. Add the kind of the item, and its size when it has one, under its name -     the line Windows 2000 put there for a selected file."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Добавлять под именем тип объекта и, если он есть, размер - строку, которую     Windows 2000 показывала для выбранного файла."
 - showDriveSpace: true
   $name: Drive space chart
   $name:ru: Диаграмма занятого места
@@ -167,27 +156,23 @@
 - usedLabel: 'Used:'
   $name: Caption of the used space
   $name:ru: Подпись занятого места
-  $description: The default text is shown in Russian on a Russian Windows.
-  $description:ru: Текст по умолчанию в русской Windows показывается по-русски.
+  $description: "Applies only when Original WebView layout is off. The default text is shown in Russian on a Russian Windows."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Текст по умолчанию в русской Windows показывается по-русски."
 - freeLabel: 'Free:'
   $name: Caption of the free space
   $name:ru: Подпись свободного места
-  $description: The default text is shown in Russian on a Russian Windows.
-  $description:ru: Текст по умолчанию в русской Windows показывается по-русски.
+  $description: "Applies only when Original WebView layout is off. The default text is shown in Russian on a Russian Windows."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Текст по умолчанию в русской Windows показывается по-русски."
 - totalLabel: 'Capacity:'
   $name: Caption of the capacity
   $name:ru: Подпись ёмкости
-  $description: The default text is shown in Russian on a Russian Windows.
-  $description:ru: Текст по умолчанию в русской Windows показывается по-русски.
+  $description: "Applies only when Original WebView layout is off. The default text is shown in Russian on a Russian Windows."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Текст по умолчанию в русской Windows показывается по-русски."
 - barColorSource: theme
   $name: Bar colour source
   $name:ru: Источник цвета индикатора
-  $description: >-
-    Use the selection colour supplied by the current Windows theme, or the
-    custom colour below.
-  $description:ru: >-
-    Использовать цвет выделения, установленный текущей темой Windows, либо
-    заданный ниже собственный цвет.
+  $description: "Applies only when Original WebView layout is off. Use the selection colour supplied by the current Windows theme, or the     custom colour below."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Использовать цвет выделения, установленный текущей темой Windows, либо     заданный ниже собственный цвет."
   $options:
   - theme: Windows theme
   - custom: Custom colour
@@ -197,42 +182,28 @@
 - colorBar: '#000080'
   $name: Custom colour of the chart
   $name:ru: Собственный цвет диаграммы
-  $description: Used only when "Custom colour" is selected above.
-  $description:ru: Используется только при выборе «Собственный цвет» выше.
+  $description: "Applies only when Original WebView layout is off. Used only when \"Custom colour\" is selected above."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Используется только при выборе «Собственный цвет» выше."
 - descriptionText: Select an item to view its description.
   $name: Text under the divider
   $name:ru: Текст под разделителем
-  $description: >-
-    The line Windows 2000 showed while nothing was selected. The default text is
-    shown in the wording of the Russian Windows 2000 on a Russian Windows.
-    Leave empty to omit it.
-  $description:ru: >-
-    Строка, которую Windows 2000 показывала, пока ничего не выделено. Текст по
-    умолчанию в русской Windows показывается в формулировке русской Windows
-    2000. Оставьте пустым, чтобы убрать её.
+  $description: "Applies only when Original WebView layout is off. The line Windows 2000 showed while nothing was selected. The default text is     shown in the wording of the Russian Windows 2000 on a Russian Windows.     Leave empty to omit it."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Строка, которую Windows 2000 показывала, пока ничего не выделено. Текст по     умолчанию в русской Windows показывается в формулировке русской Windows     2000. Оставьте пустым, чтобы убрать её."
 - showFolderDescription: true
   $name: Description of a system folder
   $name:ru: Описание системной папки
-  $description: >-
-    Show a Windows 2000-style information box whose text is chosen for the
-    current system folder, such as Documents, This PC or Recycle Bin.
-  $description:ru: >-
-    Показывать информационное поле в стиле Windows 2000 с текстом, подходящим
-    текущей системной папке: «Документы», «Мой компьютер», «Корзина» и другим.
+  $description: "Applies only when Original WebView layout is off. Show a Windows 2000-style information box whose text is chosen for the     current system folder, such as Documents, This PC or Recycle Bin."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Показывать информационное поле в стиле Windows 2000 с текстом, подходящим     текущей системной папке: «Документы», «Мой компьютер», «Корзина» и другим."
 - showSeeAlso: true
   $name: See also links
   $name:ru: Ссылки «Перейти к»
-  $description: Show the list of links at the bottom of the pane.
-  $description:ru: Показывать список ссылок внизу панели.
+  $description: "Applies only when Original WebView layout is off. Show the list of links at the bottom of the pane."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Показывать список ссылок внизу панели."
 - seeAlsoTitle: 'See also:'
   $name: See also caption
   $name:ru: Заголовок списка ссылок
-  $description: >-
-    The caption over the links. The default text is shown in the wording of the
-    Russian Windows 2000 on a Russian Windows.
-  $description:ru: >-
-    Заголовок над ссылками. Текст по умолчанию в русской Windows показывается в
-    формулировке русской Windows 2000 - «Перейти к:».
+  $description: "Applies only when Original WebView layout is off. The caption over the links. The default text is shown in the wording of the     Russian Windows 2000 on a Russian Windows."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Заголовок над ссылками. Текст по умолчанию в русской Windows показывается в     формулировке русской Windows 2000 - «Перейти к:»."
 - seeAlso:
   - - label: My Documents
       $name: Text
@@ -258,17 +229,13 @@
     - target: shell:MyComputerFolder
   $name: Links
   $name:ru: Ссылки
-  $description: The links under the See also caption.
-  $description:ru: Ссылки под заголовком «Перейти к».
+  $description: "Applies only when Original WebView layout is off. The links under the See also caption."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Ссылки под заголовком «Перейти к»."
 - underlineLinks: true
   $name: Underline the links
   $name:ru: Подчёркивать ссылки
-  $description: >-
-    Keep the links underlined the way the web view of Windows 2000 did, rather
-    than only under the pointer.
-  $description:ru: >-
-    Держать ссылки подчёркнутыми, как в веб-виде Windows 2000, а не только под
-    курсором.
+  $description: "Applies only when Original WebView layout is off. Keep the links underlined the way the web view of Windows 2000 did, rather     than only under the pointer."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Держать ссылки подчёркнутыми, как в веб-виде Windows 2000, а не только под     курсором."
 - picture: win2000
   $name: Picture
   $name:ru: Картинка
@@ -304,12 +271,8 @@
 - imagePosition: background
   $name: Where the picture goes
   $name:ru: Где картинка
-  $description: >-
-    Windows 2000 had it in the top left corner of the pane, with the icon and
-    the name drawn over it.
-  $description:ru: >-
-    В Windows 2000 она была в левом верхнем углу панели, а значок и имя
-    рисовались поверх неё.
+  $description: "Applies only when Original WebView layout is off. Windows 2000 had it in the top left corner of the pane, with the icon and     the name drawn over it."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. В Windows 2000 она была в левом верхнем углу панели, а значок и имя     рисовались поверх неё."
   $options:
   - background: In the top left corner, behind the icon and the name
   - top: Above the icon and the name
@@ -332,35 +295,18 @@
 - imageSmooth: false
   $name: Smooth the picture when it is scaled
   $name:ru: Сглаживать картинку при масштабировании
-  $description: >-
-    Off keeps the pixels as they are, which is what a picture out of Windows
-    2000 wants. On smooths them, which suits a photograph.
-  $description:ru: >-
-    Выключено - пиксели остаются как есть, что и нужно картинке из Windows 2000.
-    Включено - сглаживать, что подходит фотографии.
+  $description: "Applies only when Original WebView layout is off. Off keeps the pixels as they are, which is what a picture out of Windows     2000 wants. On smooths them, which suits a photograph."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Выключено - пиксели остаются как есть, что и нужно картинке из Windows 2000.     Включено - сглаживать, что подходит фотографии."
 - imageBlendWhite: true
   $name: Let the picture's white background through
   $name:ru: Растворять белый фон картинки
-  $description: >-
-    Pictures like the Windows 2000 one are drawn on white, which shows as a
-    white block on a pane that is not white. With this on, a picture without an
-    alpha channel of its own is multiplied into the background instead: white
-    leaves it untouched, everything else tints it. Pictures that do carry alpha
-    are drawn by it either way.
-  $description:ru: >-
-    Картинки вроде той, что была в Windows 2000, нарисованы на белом, и на
-    небелой панели белое лезет прямоугольником. Если включено, картинка без
-    своего альфа-канала умножается на фон: белое фон не трогает, остальное его
-    подкрашивает. Картинки с альфа-каналом рисуются по нему в любом случае.
+  $description: "Applies only when Original WebView layout is off. Pictures like the Windows 2000 one are drawn on white, which shows as a     white block on a pane that is not white. With this on, a picture without an     alpha channel of its own is multiplied into the background instead: white     leaves it untouched, everything else tints it. Pictures that do carry alpha     are drawn by it either way."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Картинки вроде той, что была в Windows 2000, нарисованы на белом, и на     небелой панели белое лезет прямоугольником. Если включено, картинка без     своего альфа-канала умножается на фон: белое фон не трогает, остальное его     подкрашивает. Картинки с альфа-каналом рисуются по нему в любом случае."
 - titleFontSize: 12
   $name: Size of the name
   $name:ru: Размер имени
-  $description: >-
-    Size of the folder or item name in points, at 100% scaling. Windows 2000
-    set it well above the rest of the pane. 0 keeps the size of the other text.
-  $description:ru: >-
-    Размер имени папки или объекта в пунктах при масштабе 100%. В Windows 2000
-    оно заметно крупнее остального текста в панели. 0 - как остальной текст.
+  $description: "Applies only when Original WebView layout is off. Size of the folder or item name in points, at 100% scaling. Windows 2000     set it well above the rest of the pane. 0 keeps the size of the other text."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Размер имени папки или объекта в пунктах при масштабе 100%. В Windows 2000     оно заметно крупнее остального текста в панели. 0 - как остальной текст."
 - paneBorder: true
   $name: Take the pane inside the border of the file list
   $name:ru: Панель внутри рамки списка файлов
@@ -399,18 +345,8 @@
 - skipControlPanel: false
   $name: Leave the pages of Control Panel items alone
   $name:ru: Не показывать на страницах элементов панели управления
-  $description: >-
-    The page of a single Control Panel item - Programs and Features, Appearance
-    and Personalization - draws a column of task links of its own in the very
-    place the pane goes, and neither knows about the other, so the two end up
-    drawn on top of each other. With this on, the pane stays off those pages.
-    The Control Panel folder itself has no such column and keeps the pane.
-  $description:ru: >-
-    Страница отдельного элемента панели управления - «Программы и компоненты»,
-    «Оформление и персонализация» - рисует на месте панели собственную колонку
-    ссылок, и они накладываются друг на друга. Если включено, на таких
-    страницах панель не появляется. В самой папке панели управления такой
-    колонки нет, и панель там остаётся.
+  $description: "Hide the pane in Control Panel. Off by default so the original Control Panel template is available; the retained custom layout can overlap the existing task column."
+  $description:ru: "Скрывать панель в панели управления. По умолчанию выключено для доступности исходного шаблона; прежнее собственное оформление может перекрывать колонку задач."
 - backgroundColorSource: theme
   $name: Background colour source
   $name:ru: Источник цвета фона
@@ -438,9 +374,13 @@
   $options:ru:
   - theme: Из темы Windows
   - custom: Собственный цвет
+  $description: "Applies only when Original WebView layout is off."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView."
 - colorTitle: windowtext
   $name: Custom name colour
   $name:ru: Собственный цвет имени
+  $description: "Applies only when Original WebView layout is off."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView."
 - textColorSource: theme
   $name: Text colour source
   $name:ru: Источник цвета текста
@@ -450,9 +390,13 @@
   $options:ru:
   - theme: Из темы Windows
   - custom: Собственный цвет
+  $description: "Applies only when Original WebView layout is off."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView."
 - colorText: windowtext
   $name: Custom text colour
   $name:ru: Собственный цвет текста
+  $description: "Applies only when Original WebView layout is off."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView."
 - linkColorSource: custom
   $name: Link colour source
   $name:ru: Источник цвета ссылок
@@ -462,16 +406,13 @@
   $options:ru:
   - theme: Из темы Windows
   - custom: Собственный цвет
+  $description: "Applies only when Original WebView layout is off."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView."
 - colorLink: '#0000FF'
   $name: Custom link colour
   $name:ru: Собственный цвет ссылок
-  $description: >-
-    The blue of a link, as the web view had it. It is a colour of its own rather
-    than the system hotlight colour, which classic colour schemes are free to
-    set to anything and often do.
-  $description:ru: >-
-    Синий цвет ссылки, как в веб-виде. Задан отдельным цветом, а не системным
-    hotlight: классические схемы вольны ставить туда что угодно и часто ставят.
+  $description: "Applies only when Original WebView layout is off. The blue of a link, as the web view had it. It is a colour of its own rather     than the system hotlight colour, which classic colour schemes are free to     set to anything and often do."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Синий цвет ссылки, как в веб-виде. Задан отдельным цветом, а не системным     hotlight: классические схемы вольны ставить туда что угодно и часто ставят."
 - dividerColorSource: custom
   $name: Divider colour source
   $name:ru: Источник цвета разделителя
@@ -481,20 +422,18 @@
   $options:ru:
   - theme: Из темы Windows
   - custom: Собственный цвет
+  $description: "Applies only when Original WebView layout is off."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView."
 - colorDivider: '#0000FF'
   $name: Custom divider colour
   $name:ru: Собственный цвет разделителя
-  $description: Only used when the divider is drawn as a line.
-  $description:ru: Используется, только если разделитель рисуется линией.
+  $description: "Applies only when Original WebView layout is off. Only used when the divider is drawn as a line."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Используется, только если разделитель рисуется линией."
 - divider: win2000
   $name: Divider
   $name:ru: Разделитель
-  $description: >-
-    The line under the name. Windows 2000 drew it from a picture, a bar in the
-    four colours of the Windows logo, which comes built into the mod.
-  $description:ru: >-
-    Линия под именем. Windows 2000 рисовала её из картинки - полоски в четырёх
-    цветах логотипа Windows; она встроена в мод.
+  $description: "Applies only when Original WebView layout is off. The line under the name. Windows 2000 drew it from a picture, a bar in the     four colours of the Windows logo, which comes built into the mod."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Линия под именем. Windows 2000 рисовала её из картинки - полоски в четырёх     цветах логотипа Windows; она встроена в мод."
   $options:
   - win2000: Windows 2000 colour bar
   - file: The divider picture file below
@@ -506,22 +445,13 @@
 - dividerImagePath: ''
   $name: Divider picture file
   $name:ru: Файл картинки разделителя
-  $description: >-
-    Used when the divider is set to a file. It is stretched across the pane and
-    keeps its own height.
-  $description:ru: >-
-    Используется, если для разделителя выбран файл. Картинка растягивается на
-    всю ширину панели и сохраняет свою высоту.
+  $description: "Applies only when Original WebView layout is off. Used when the divider is set to a file. It is stretched across the pane and     keeps its own height."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Используется, если для разделителя выбран файл. Картинка растягивается на     всю ширину панели и сохраняет свою высоту."
 - dividerGradient: true
   $name: Fade the divider out
   $name:ru: Разделитель с переходом в фон
-  $description: >-
-    The line under the name of Windows 2000 was a gradient that started in
-    colour on the left and faded into the background on the right, not a line
-    of one colour all the way across.
-  $description:ru: >-
-    Линия под именем в Windows 2000 была градиентом: слева цветная, справа
-    уходила в фон, а не сплошной одноцветной через всю панель.
+  $description: "Applies only when Original WebView layout is off. The line under the name of Windows 2000 was a gradient that started in     colour on the left and faded into the background on the right, not a line     of one colour all the way across."
+  $description:ru: "Действует только при отключённой Исходной компоновке WebView. Линия под именем в Windows 2000 была градиентом: слева цветная, справа     уходила в фон, а не сплошной одноцветной через всю панель."
 */
 // ==/WindhawkModSettings==
 
@@ -557,7 +487,8 @@ keep the original placeholders such as `%ld`; incompatible replacements are
 ignored. File and folder names continue to come from Explorer.
 
 **Set built-in picture width automatically** sets **Picture width** to **0 for
-clouds** and **127 for squares**, including the value stored in settings.
+clouds** and **127 for squares**. Automatic width overrides the manual drawing
+width while preserving the manual value in settings.
 The square artwork is 127 x 56 pixels, as in the reference DLL. Disable this
 switch to enter a width manually. Custom pictures keep their chosen width.
 The Picture option for the selected style uses that style's original artwork.
@@ -567,6 +498,14 @@ from the [matching ClassicExplorer WebView source](https://github.com/arceuss/Cl
 The adapted WebView code is included under MIT with its author's permission.
 The mod draws its own child pane and reserves space through Explorer's DirectUI
 layout. A patched shell32 WebView should be disabled to avoid duplicate panes.
+
+## Examples from the previous custom layout
+
+![This PC](https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/my-computer.png)
+
+![Drive capacity](https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/drive.png)
+
+![Recycle Bin](https://raw.githubusercontent.com/appEW/images/main/classic-webview-pane/recycle-bin.png)
 
 ## По-русски
 
@@ -596,7 +535,8 @@ layout. A patched shell32 WebView should be disabled to avoid duplicate panes.
 обозначения; несовместимая замена игнорируется. Имена файлов/папок берутся из Shell.
 
 **Автоматическая ширина встроенных картинок** задаёт **Picture width = 0
-для облаков**, **127 для квадратов**. Меняется и само значение в настройках.
+для облаков**, **127 для квадратов**. Автоматическая ширина применяется при
+отрисовке; ручное значение в настройках сохраняется.
 Размер квадратов в DLL-эталоне — 127 x 56 пикселей. Для ручной ширины отключите
 этот переключатель. Ширина собственной картинки сохраняется.
 Вариант картинки «Исходная картинка выбранного стиля WebView» использует
@@ -830,6 +770,13 @@ static IShellItem* FolderItemFromView(IShellView* view) {
 // the loading thread builds a mutable unpublished copy. The thread-local value
 // is a plain pointer; its lifetime is owned by the callback's stack scope, so no
 // DLL-owned destructor is registered for Explorer threads at thread exit.
+static int EffectivePictureWidth(const std::wstring& path,int profile,bool automatic,int manual) {
+    if(!automatic) return manual;
+    if(path==L"*win2000-clouds") return 0;
+    if(path==L"*win2000-squares") return 127;
+    if(path.starts_with(L"*profile")) return profile==1 ? 0 : profile==2 ? 150 : 127;
+    return manual;
+}
 template<class T> class LegacySettingSnapshots {
     std::mutex mutex;
     std::shared_ptr<T> value=std::make_shared<T>();
@@ -2588,6 +2535,8 @@ PCWSTR ReferenceCaption(PCWSTR original);
 std::mutex g_referenceCursorMutex;
 HCURSOR g_referenceCursors[4]={};
 HICON g_referenceIcon=nullptr;
+bool g_referenceZoomRegistered=false, g_referenceDetachedRegistered=false;
+bool RegisterReferenceViewerClasses() noexcept;
 
 HCURSOR ReferenceCursor(UINT id) {
     if (id<IDC_WIN2K_IMGVIEW_OPENHAND || id>IDC_WIN2K_IMGVIEW_ZOOMIN)
@@ -2647,8 +2596,9 @@ void FreeReferenceSharedResources() {
     std::lock_guard<std::mutex> lock(g_referenceCursorMutex);
     for(auto& cursor:g_referenceCursors) { if(cursor) DestroyCursor(cursor); cursor=nullptr; }
     if(g_referenceIcon) DestroyIcon(std::exchange(g_referenceIcon,nullptr));
-    UnregisterClassW(L"ClassicWebViewPane.Reference.ImgViewZoom",ReferenceModule());
-    UnregisterClassW(L"ClassicWebViewPane.Reference.ImgViewDetached",ReferenceModule());
+    if(g_referenceZoomRegistered) UnregisterClassW(L"ClassicWebViewPane.Reference.ImgViewZoom",ReferenceModule());
+    if(g_referenceDetachedRegistered) UnregisterClassW(L"ClassicWebViewPane.Reference.ImgViewDetached",ReferenceModule());
+    g_referenceZoomRegistered=false; g_referenceDetachedRegistered=false;
 }
 } }
 
@@ -4119,16 +4069,7 @@ namespace win2kwebview
 
 	namespace
 	{
-		// Defined below, next to IntSqrt — both are transcriptions and belong together.
-		/*
-		 * Transcribed from XP's CThumbCtl::Draw3dPie, itself derived from NT4's drawpie.c.
-		 *
-		 * One known divergence from the Windows 98 original, left in deliberately: NT4 and the 9x
-		 * webvw.dll draw the front arc with the bounding right/bottom unadjusted, where XP
-		 * subtracts one from each. Since GDI excludes those edges, XP's form renders the declared
-		 * 100x50 graph as 100x49. Matching the 9x extent was tried and made the filled wedge look
-		 * worse along the bottom, so the XP form stands and the one-pixel difference is accepted.
-		 */
+		// Implemented below using sampled ellipse surfaces.
 		void Draw3dPie(HDC hdc, RECT rc, DWORD dwPer1000) noexcept;
 	}
 
@@ -5067,193 +5008,65 @@ namespace win2kwebview
 		}
 	}
 
-	namespace
-	{
-		/*
-		 * The Windows 2000 drive-capacity pie.
-		 *
-		 * Transcribed from CThumbCtl::Draw3dPie, which is the control that actually drew this
-		 * surface — nt5src/Source/XPSP1/NT/shell/ext/webvw/thumbctl.cpp:569. That file is XP's
-		 * copy of the Windows 2000 WebView controls (webvw.cpp:17-22 registers them against the
-		 * W2K CLSIDs), and its own comment says "the majority of this code came from drawpie.c",
-		 * which is present here as win2k/private/shell/shell32/drawpie.c and agrees line for line
-		 * apart from the aspect-ratio and shadow-depth handling added here.
-		 *
-		 * Kept as a transcription rather than a tidy-up on purpose: the integer square root, the
-		 * triangle-area approximation and the quadrant switch are what give the slice its exact
-		 * shape, and "improving" any of them changes the picture.
-		 */
-		int IntSqrt(unsigned long dwNum) noexcept
-		{
-			// drawpie.c:4 — two bits per iteration, sixteen iterations.
-			DWORD dwSqrt = 0, dwRemain = 0, dwTry;
-			for (int i = 0; i < 16; ++i)
-			{
-				dwRemain = (dwRemain << 2) | (dwNum >> 30);
-				dwSqrt <<= 1;
-				dwTry = dwSqrt * 2 + 1;
-				if (dwRemain >= dwTry)
-				{
-					dwRemain -= dwTry;
-					dwSqrt |= 0x01;
-				}
-				dwNum <<= 2;
-			}
-			return static_cast<int>(dwSqrt);
-		}
+// Independent renderer: sampled ellipse surfaces and radial sectors, using the
+// public GDI Polygon/Ellipse APIs. The palette/2:1 silhouette/depth are visual
+// requirements; this uses angular coverage and no legacy integer square root.
+namespace {
+void Draw3dPie(HDC dc,RECT box,DWORD used) noexcept {
+    const int width=box.right-box.left,height=box.bottom-box.top;
+    if(!dc || width<4 || height<4) return;
+    const int discHeight=std::min(height,width/2),discWidth=discHeight*2;
+    const int depth=std::max(1,discHeight/6);
+    const RECT top{box.left+(width-discWidth)/2,box.top+(height-discHeight)/2,
+        box.left+(width+discWidth)/2,box.top+(height+discHeight)/2-depth};
+    const double rx=(top.right-top.left-1)*0.5,ry=(top.bottom-top.top-1)*0.5;
+    if(rx<1 || ry<1) return;
+    const double cx=top.left+rx,cy=top.top+ry;
+    constexpr double pi=3.14159265358979323846;
+    used=std::min<DWORD>(used,1000);
+    const double freeArc=(1000-used)*2*pi/1000;
+    const int saved=SaveDC(dc);
+    if(!saved) return;
+    const HPEN pen=CreatePen(PS_SOLID,1,GetSysColor(COLOR_WINDOWFRAME));
+    if(!pen) { RestoreDC(dc,saved); return; }
+    SelectObject(dc,pen);
+    auto point=[&](double angle,int offset=0) -> POINT {
+        return {static_cast<LONG>(std::lround(cx+rx*std::cos(angle))),
+                static_cast<LONG>(std::lround(cy+ry*std::sin(angle)))+offset};
+    };
+    auto polygon=[&](const POINT* points,int count,COLORREF colour) {
+        HBRUSH brush=CreateSolidBrush(colour);
+        if(!brush) return;
+        const HGDIOBJ old=SelectObject(dc,brush);
+        Polygon(dc,points,count);
+        SelectObject(dc,old); DeleteObject(brush);
+    };
+    auto front=[&](double last,COLORREF colour) {
+        POINT points[258]{};
+        constexpr int segments=128;
+        for(int i=0;i<=segments;++i) points[i]=point(last*i/segments);
+        for(int i=0;i<=segments;++i) points[segments+1+i]=point(last*(segments-i)/segments,depth);
+        polygon(points,ARRAYSIZE(points),colour);
+    };
+    front(pi,GetSysColor(COLOR_3DFACE));
+    if(used>500) front(pi-freeArc,GetSysColor(COLOR_3DSHADOW));
+    HBRUSH topBrush=CreateSolidBrush(GetSysColor(used==0 ? COLOR_3DHILIGHT : COLOR_3DFACE));
+    if(topBrush) {
+        const HGDIOBJ old=SelectObject(dc,topBrush);
+        Ellipse(dc,top.left,top.top,top.right,top.bottom);
+        SelectObject(dc,old); DeleteObject(topBrush);
+    }
+    if(used>0 && used<1000) {
+        POINT sector[514]{};
+        const int segments=std::max(1,static_cast<int>(std::ceil(freeArc*512/(2*pi))));
+        sector[0]={static_cast<LONG>(std::lround(cx)),static_cast<LONG>(std::lround(cy))};
+        for(int i=0;i<=segments;++i) sector[i+1]=point(pi-freeArc*i/segments);
+        polygon(sector,segments+2,GetSysColor(COLOR_3DHILIGHT));
+    }
+    RestoreDC(dc,saved); DeleteObject(pen);
+}
+}
 
-		void Draw3dPie(HDC hdc, RECT rc, DWORD dwPer1000) noexcept
-		{
-			// thumbctl.cpp:850-853. Note free-shadow is 3DFACE, not 3DSHADOW — the underside of
-			// the free wedge is lit differently from the used one, and that asymmetry is what
-			// makes the disc read as solid.
-			const COLORREF colours[4] = {
-				GetSysColor(COLOR_3DFACE),      // COLOR_UP       — used
-				GetSysColor(COLOR_3DHILIGHT),   // COLOR_DN       — free
-				GetSysColor(COLOR_3DSHADOW),    // COLOR_UPSHADOW
-				GetSysColor(COLOR_3DFACE),      // COLOR_DNSHADOW
-			};
-			enum { COLOR_UP = 0, COLOR_DN, COLOR_UPSHADOW, COLOR_DNSHADOW };
-
-			const LONG c_lAspectRatio = 2;   // ratio of width : height of ellipse
-
-			// Preserve the 2:1 aspect regardless of the box we are given, and centre it.
-			LONG lHeight = rc.bottom - rc.top;
-			LONG lWidth = rc.right - rc.left;
-			LONG lTargetHeight = (lHeight * c_lAspectRatio <= lWidth) ? lHeight : lWidth / c_lAspectRatio;
-			LONG lTargetWidth = lTargetHeight * c_lAspectRatio;
-
-			rc.top += (lHeight - lTargetHeight) / 2;
-			rc.bottom = rc.top + lTargetHeight;
-			rc.left += (lWidth - lTargetWidth) / 2;
-			rc.right = rc.left + lTargetWidth;
-
-			// Both eras divide by six; see the 9x `push 6` at 0x78A88B4B.
-			const LONG c_lShadowScale = 6;   // ratio of shadow depth to height
-			const LONG lShadowDepth = lTargetHeight / c_lShadowScale;
-
-			if (dwPer1000 > 1000)
-			{
-				dwPer1000 = 1000;
-			}
-
-			RECT rcItem = rc;
-			rcItem.right = rc.right - rcItem.left;
-			rcItem.bottom = rc.bottom - rcItem.top - lShadowDepth;
-
-			const int rx = rcItem.right / 2;
-			const int cx = rcItem.left + rx - 1;
-			const int ry = rcItem.bottom / 2;
-			const int cy = rcItem.top + ry - 1;
-			if (rx <= 10 || ry <= 10)
-			{
-				return;
-			}
-
-			rcItem.right = rcItem.left + 2 * rx;
-			rcItem.bottom = rcItem.top + 2 * ry;
-
-			// Translate to the first quadrant of a Cartesian system.
-			int uQPctX10 = static_cast<int>(dwPer1000 % 500) - 250;
-			if (uQPctX10 < 0)
-			{
-				uQPctX10 = -uQPctX10;
-			}
-
-			// Area by triangle approximation — drawpie.c's own admission, kept verbatim.
-			int x, y;
-			if (uQPctX10 < 120)
-			{
-				x = IntSqrt((static_cast<DWORD>(rx) * rx * uQPctX10 * uQPctX10)
-					/ (static_cast<DWORD>(uQPctX10) * uQPctX10 + (250L - static_cast<DWORD>(uQPctX10)) * (250L - static_cast<DWORD>(uQPctX10))));
-				y = IntSqrt((static_cast<DWORD>(rx) * rx - static_cast<DWORD>(x) * x) * ry * ry / (static_cast<DWORD>(rx) * rx));
-			}
-			else
-			{
-				y = IntSqrt(static_cast<DWORD>(ry) * ry * (250L - static_cast<DWORD>(uQPctX10)) * (250L - static_cast<DWORD>(uQPctX10))
-					/ (static_cast<DWORD>(uQPctX10) * uQPctX10 + (250L - static_cast<DWORD>(uQPctX10)) * (250L - static_cast<DWORD>(uQPctX10))));
-				x = IntSqrt((static_cast<DWORD>(ry) * ry - static_cast<DWORD>(y) * y) * rx * rx / (static_cast<DWORD>(ry) * ry));
-			}
-
-			switch (dwPer1000 / 250)
-			{
-				case 1:  y = -y; break;
-				case 2:  break;
-				case 3:  x = -x; break;
-				default: x = -x; y = -y; break;   // 0 and 4
-			}
-
-			x += cx;
-			y += cy;
-			x = x < 0 ? 0 : x;   // works around an NTGDI bug, per the original
-
-			// Shadows via regions, to reduce flicker.
-			HRGN hEllipticRgn = CreateEllipticRgnIndirect(&rcItem);
-			OffsetRgn(hEllipticRgn, 0, lShadowDepth);
-			HRGN hEllRect = CreateRectRgn(rcItem.left, cy, rcItem.right, cy + lShadowDepth);
-			HRGN hRectRgn = CreateRectRgn(0, 0, 0, 0);
-			CombineRgn(hRectRgn, hEllipticRgn, hEllRect, RGN_OR);
-			OffsetRgn(hEllipticRgn, 0, -lShadowDepth);
-			CombineRgn(hEllRect, hRectRgn, hEllipticRgn, RGN_DIFF);
-
-			HBRUSH hBrush = CreateSolidBrush(colours[COLOR_DNSHADOW]);
-			if (hBrush)
-			{
-				FillRgn(hdc, hEllRect, hBrush);
-				DeleteObject(hBrush);
-			}
-
-			// The used shadow shows only once the disc is at least half used.
-			if (dwPer1000 > 500 && (hBrush = CreateSolidBrush(colours[COLOR_UPSHADOW])) != nullptr)
-			{
-				DeleteObject(hRectRgn);
-				hRectRgn = CreateRectRgn(x, cy, rcItem.right, rc.bottom);
-				CombineRgn(hEllipticRgn, hEllRect, hRectRgn, RGN_AND);
-				FillRgn(hdc, hEllipticRgn, hBrush);
-				DeleteObject(hBrush);
-			}
-
-			DeleteObject(hRectRgn);
-			DeleteObject(hEllipticRgn);
-			DeleteObject(hEllRect);
-
-			HPEN hPen = CreatePen(PS_SOLID, 1, GetSysColor(COLOR_WINDOWFRAME));
-			HGDIOBJ hOldPen = SelectObject(hdc, hPen);
-
-			hBrush = CreateSolidBrush(colours[(dwPer1000 < 500 && y == cy && x < cx) ? COLOR_DN : COLOR_UP]);
-			HGDIOBJ hOldBrush = SelectObject(hdc, hBrush);
-			Ellipse(hdc, rcItem.left, rcItem.top, rcItem.right, rcItem.bottom);
-			SelectObject(hdc, hOldBrush);
-			DeleteObject(hBrush);
-
-			if (dwPer1000 != 0 && dwPer1000 != 1000)
-			{
-				hBrush = CreateSolidBrush(colours[COLOR_DN]);
-				hOldBrush = SelectObject(hdc, hBrush);
-				// y+1 when y == cy: Pie() otherwise draws the larger portion. The original
-				// carries this as NTRAID#087993.
-				Pie(hdc, rcItem.left, rcItem.top, rcItem.right, rcItem.bottom,
-				    rcItem.left, cy, x, (y == cy) ? (y + 1) : y);
-				SelectObject(hdc, hOldBrush);
-				DeleteObject(hBrush);
-			}
-
-			Arc(hdc, rcItem.left, rcItem.top + lShadowDepth, rcItem.right - 1, rcItem.bottom + lShadowDepth - 1,
-			    rcItem.left, cy + lShadowDepth, rcItem.right, cy + lShadowDepth - 1);
-			MoveToEx(hdc, rcItem.left, cy, nullptr);
-			LineTo(hdc, rcItem.left, cy + lShadowDepth);
-			MoveToEx(hdc, rcItem.right - 1, cy, nullptr);
-			LineTo(hdc, rcItem.right - 1, cy + lShadowDepth);
-			if (dwPer1000 > 500 && dwPer1000 < 1000)
-			{
-				MoveToEx(hdc, x, y, nullptr);
-				LineTo(hdc, x, y + lShadowDepth);
-			}
-
-			SelectObject(hdc, hOldPen);
-			DeleteObject(hPen);
-		}
-	} // namespace
 
 	int WebViewNativePane::HitTestLink(POINT pt) const noexcept
 	{
@@ -5338,7 +5151,8 @@ namespace win2kwebview
 				LONG cy = 1;
 			};
 
-			static bool EnsureClassRegistered() noexcept;
+			friend bool RegisterReferenceViewerClasses() noexcept;
+            static bool EnsureClassRegistered() noexcept;
 			static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam,
 			                                   LPARAM lParam) noexcept;
 
@@ -5397,7 +5211,8 @@ namespace win2kwebview
 			bool HandleToolbarCommand(UINT command) noexcept;
 
 		private:
-			static bool EnsureClassRegistered() noexcept;
+			friend bool RegisterReferenceViewerClasses() noexcept;
+            static bool EnsureClassRegistered() noexcept;
 			static LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wParam,
 			                                   LPARAM lParam) noexcept;
 			static LRESULT CALLBACK ToolbarSubclassProc(HWND hwnd, UINT message, WPARAM wParam,
@@ -5515,8 +5330,7 @@ namespace win2kwebview
 
 	bool ImgViewZoomWindow::EnsureClassRegistered() noexcept
 	{
-		WNDCLASSEXW existing{sizeof(existing)};
-        if (GetClassInfoExW(ReferenceModule(),kZoomClassName,&existing)) return true;
+
 
 		WNDCLASSEXW wc{};
 		wc.cbSize = sizeof(wc);
@@ -5525,7 +5339,7 @@ namespace win2kwebview
 		wc.lpszClassName = kZoomClassName;
 		wc.hbrBackground = GetSysColorBrush(COLOR_WINDOW);
 		wc.style = CS_HREDRAW | CS_VREDRAW;
-		if (!RegisterClassExW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+		if (!RegisterClassExW(&wc))
 		{
 			return false;
 		}
@@ -5539,7 +5353,7 @@ namespace win2kwebview
 		{
 			return true;
 		}
-		if (!parent || !IsWindow(parent) || !EnsureClassRegistered())
+		if (!parent || !IsWindow(parent) || !g_referenceZoomRegistered)
 		{
 			return false;
 		}
@@ -6136,8 +5950,7 @@ namespace win2kwebview
 
 	bool ImgViewDetachedPreview::EnsureClassRegistered() noexcept
 	{
-		WNDCLASSEXW existing{sizeof(existing)};
-        if (GetClassInfoExW(ReferenceModule(),kDetachedClassName,&existing)) return true;
+
 		WNDCLASSEXW wc{};
 		wc.cbSize = sizeof(wc);
 		wc.lpfnWndProc = &ImgViewDetachedPreview::WindowProc;
@@ -6146,7 +5959,7 @@ namespace win2kwebview
 		wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
 		wc.hbrBackground = GetSysColorBrush(COLOR_WINDOW);
 		wc.style = CS_HREDRAW | CS_VREDRAW;
-		if (!RegisterClassExW(&wc) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return false;
+		if (!RegisterClassExW(&wc)) return false;
 
 		return true;
 	}
@@ -6165,7 +5978,7 @@ namespace win2kwebview
 			return true;
 		}
 		if (!owner || !IsWindow(owner) || !commandTarget || !IsWindow(commandTarget) ||
-		    !images || !hotImages || !EnsureClassRegistered())
+		    !images || !hotImages || !g_referenceDetachedRegistered)
 		{
 			return false;
 		}
@@ -6467,103 +6280,46 @@ namespace win2kwebview
 } // namespace win2kwebview
 } // namespace ce
 
-namespace ce
-{
-namespace win2kwebview
-{
-namespace printerjobeta
-{
-	// CPrinter's DWERROR: "no usable answer", distinct from a genuine zero.
-	constexpr DWORD kError = static_cast<DWORD>(-1);
+namespace ce { namespace win2kwebview {
+bool RegisterReferenceViewerClasses() noexcept {
+    if(g_referenceZoomRegistered || g_referenceDetachedRegistered) return false;
+    if(!ImgViewZoomWindow::EnsureClassRegistered()) return false;
+    g_referenceZoomRegistered=true;
+    if(!ImgViewDetachedPreview::EnsureClassRegistered()) {
+        FreeReferenceSharedResources(); return false;
+    }
+    g_referenceDetachedRegistered=true;
+    return true;
+}
+} }
 
-	// printer.cpp:9-15. A paused, printed, deleting, offline or still-spooling job contributes
-	// nothing; a job in an error state voids the whole estimate rather than being skipped.
-	constexpr DWORD kIgnoredJob = JOB_STATUS_PAUSED | JOB_STATUS_PRINTED | JOB_STATUS_DELETING |
-	                              JOB_STATUS_OFFLINE | JOB_STATUS_SPOOLING;
-	constexpr DWORD kErrorJob = JOB_STATUS_ERROR | JOB_STATUS_PAPEROUT;
-
-	// printer.cpp:15. A job that reports no page count is charged one page per 4800 bytes.
-	constexpr DWORD kCharsPerPage = 4800;
-
-	// Just the fields GetWaitingMinutes reads out of JOB_INFO_2.
-	struct Job
-	{
-		DWORD status = 0;
-		DWORD totalPages = 0;
-		DWORD size = 0;
-	};
-
-	// CPrinter::GetWaitingMinutes (printer.cpp:217-249).
-	//
-	// An empty queue is zero minutes, not an error — that is the ordinary idle printer, and the
-	// template renders it as the literal "0". kError means the caller must suppress the row.
-	//
-	// Note the order: the empty-queue test comes *before* the print-rate test, so a driver that
-	// reports no rate still yields a clean 0 while its queue is idle. That ordering is load
-	// bearing. A real Windows 2000 capture of this pane shows "Waiting Time: 0" for a ThinPrint
-	// "TP Output Gateway" queue — a virtual printer, of the same kind that reports no
-	// DC_PRINTRATE — so treating a missing rate as blanket suppression would drop a row Windows
-	// 2000 displayed. The rate is only consulted once there are pages to divide by it.
-	inline DWORD WaitingMinutes(DWORD pagesPerMinute, const Job *jobs, size_t count) noexcept
-	{
-		if (count == 0)
-		{
-			return 0;
-		}
-		if (pagesPerMinute == 0 || pagesPerMinute == kError)
-		{
-			return kError;
-		}
-
-		DWORD totalPages = 0;
-		for (size_t i = 0; i < count; ++i)
-		{
-			if (jobs[i].status & kIgnoredJob)
-			{
-				continue;
-			}
-			if (jobs[i].status & kErrorJob)
-			{
-				return kError;
-			}
-
-			if (jobs[i].totalPages > 0)
-			{
-				totalPages += jobs[i].totalPages;
-			}
-			else if (jobs[i].size > 0)
-			{
-				totalPages += 1 + (jobs[i].size / kCharsPerPage);
-			}
-		}
-
-		// The +1 is the original's, and it is why any non-empty page count reads as at least one
-		// minute rather than rounding down to zero.
-		return (totalPages > 0) ? (1 + totalPages / pagesPerMinute) : 0;
-	}
-
-	// printers.htt:122-149 getJobEtaHtml(). The bands and their exact wording — including the
-	// "(s)" plurals and the bare "0" — are the template's, not ours.
-	inline std::wstring FormatWaitingTime(DWORD minutes)
-	{
-		if (minutes == 0)
-		{
-			return L"0";                        // L_NoETA_Text
-		}
-		if (minutes > 480)
-		{
-			return ReferenceCaption(L"longer than 8 hours");      // L_LongHour_Text
-		}
-		if (minutes > 60)
-		{
-			// Math.round(iMinute / 60): JScript rounds halves up, which integer +30 reproduces.
-			return ReferenceCaption(L"about ") + std::to_wstring((minutes + 30) / 60) + ReferenceCaption(L" hour(s)");
-		}
-		return ReferenceCaption(L"about ") + std::to_wstring(minutes) + ReferenceCaption(L" minute(s)");
-	}
-} // namespace printerjobeta
-} // namespace win2kwebview
-} // namespace ce
+namespace ce { namespace win2kwebview { namespace printerjobeta {
+constexpr DWORD kError=MAXDWORD;
+struct Job { DWORD status=0,totalPages=0,size=0; };
+// A deliberately simple estimate. Idle queues remain valid with an unknown
+// driver rate; byte-only jobs use the reference UI's nominal 4800-byte page.
+inline DWORD WaitingMinutes(DWORD rate,const Job* jobs,size_t count) noexcept {
+    if(!count) return 0;
+    if(!jobs || !rate || rate==kError) return kError;
+    unsigned long long pages=0;
+    for(size_t i=0;i<count;++i) {
+        const auto& job=jobs[i];
+        constexpr DWORD inactive=JOB_STATUS_PAUSED|JOB_STATUS_PRINTED|JOB_STATUS_DELETING|
+            JOB_STATUS_OFFLINE|JOB_STATUS_SPOOLING;
+        if(job.status&inactive) continue;
+        if(job.status&(JOB_STATUS_ERROR|JOB_STATUS_PAPEROUT)) return kError;
+        pages+=job.totalPages ? job.totalPages : (job.size ? job.size/4800ULL+1 : 0);
+    }
+    if(!pages) return 0;
+    return static_cast<DWORD>(std::min<unsigned long long>(pages/rate+1,kError-1ULL));
+}
+inline std::wstring FormatWaitingTime(DWORD minutes) {
+    if(!minutes) return L"0";
+    if(minutes>480) return ReferenceCaption(L"longer than 8 hours");
+    return ReferenceCaption(L"about ")+std::to_wstring(minutes>60 ? (minutes+30)/60 : minutes)+
+        (minutes>60 ? ReferenceCaption(L" hour(s)") : ReferenceCaption(L" minute(s)"));
+}
+} } }
 namespace ce { namespace win2kwebview { namespace {
 		unsigned long long ThumbnailPathHash(const std::wstring &path) noexcept
 		{
@@ -6811,25 +6567,24 @@ namespace ce { namespace win2kwebview { namespace {
 			return buffer;
 		}
 
-		// CFileListWrapper::GetItemComment asks FolderItem2 for the shell's Comment property.
-		// Use its canonical property-system name: the short legacy name is empty for Windows 10
-		// Control Panel items, while System.Comment returns the historical applet description.
-		std::wstring CommentOf(FolderItem *pItem) noexcept
-		{
-			CComQIPtr<FolderItem2> item2(pItem);
-			if (!item2)
-			{
-				return {};
-			}
-
-			CComVariant value;
-			CComBSTR property(L"System.Comment");
-			if (FAILED(item2->ExtendedProperty(property, &value)) || value.vt != VT_BSTR || !value.bstrVal)
-			{
-				return {};
-			}
-			return value.bstrVal;
-		}
+		std::wstring CommentOf(FolderItem* item) noexcept {
+    try {
+        CComBSTR path;
+        CComPtr<IShellItem2> properties;
+        if(item && SUCCEEDED(item->get_Path(&path)) && path &&
+           SUCCEEDED(SHCreateItemFromParsingName(path,nullptr,IID_PPV_ARGS(&properties)))) {
+            PWSTR value=nullptr;
+            const HRESULT status=properties->GetString(PKEY_Comment,&value);
+            const std::unique_ptr<wchar_t,decltype(&CoTaskMemFree)> owned(value,CoTaskMemFree);
+            if(SUCCEEDED(status) && owned) return owned.get();
+        }
+        CComQIPtr<FolderItem2> automation(item);
+        CComVariant value;
+        if(automation && SUCCEEDED(automation->ExtendedProperty(CComBSTR(L"System.Comment"),&value)) && value.vt==VT_BSTR)
+            return value.bstrVal ? value.bstrVal : L"";
+    } catch(...) {}
+    return {};
+}
 
 		std::wstring StringPropertyOf(FolderItem *pItem, const wchar_t *propertyName) noexcept
 		{
@@ -7050,33 +6805,17 @@ namespace ce { namespace win2kwebview { namespace {
 			return result.empty() ? std::wstring(ReferenceCaption(L"(normal)")) : result;
 		}
 
-		bool TryFileAttributeCodes(FolderItem *item, IShellItem2 *shellItem,
-		                           std::wstring &codes) noexcept
-		{
-			// CFileListWrapper::GetItemAttributes first requested the legacy "Attributes"
-			// FolderItem2 property. Windows 10 may expose only System.FileAttributes, whose
-			// numeric flags are translated back into the exact code string standard.htt expects.
-			const bool legacyAvailable = TryBstrPropertyOf(item, L"Attributes", codes);
-			if (legacyAvailable && !codes.empty())
-			{
-				return true;
-			}
-
-			ULONG attributes = 0;
-			if (!shellItem || FAILED(shellItem->GetUInt32(PKEY_FileAttributes, &attributes)))
-			{
-				return legacyAvailable;
-			}
-
-			codes.clear();
-			if (attributes & FILE_ATTRIBUTE_READONLY)   codes += L'R';
-			if (attributes & FILE_ATTRIBUTE_HIDDEN)     codes += L'H';
-			if (attributes & FILE_ATTRIBUTE_SYSTEM)     codes += L'S';
-			if (attributes & FILE_ATTRIBUTE_ARCHIVE)    codes += L'A';
-			if (attributes & FILE_ATTRIBUTE_COMPRESSED) codes += L'C';
-			if (attributes & FILE_ATTRIBUTE_ENCRYPTED)  codes += L'E';
-			return true;
-		}
+bool TryFileAttributeCodes(FolderItem* item,IShellItem2* properties,std::wstring& codes) noexcept {
+    ULONG flags=0;
+    if(!properties || FAILED(properties->GetUInt32(PKEY_FileAttributes,&flags)))
+        return TryBstrPropertyOf(item,L"Attributes",codes);
+    const std::pair<DWORD,wchar_t> labels[]={{FILE_ATTRIBUTE_READONLY,L'R'},
+        {FILE_ATTRIBUTE_HIDDEN,L'H'},{FILE_ATTRIBUTE_SYSTEM,L'S'},{FILE_ATTRIBUTE_ARCHIVE,L'A'},
+        {FILE_ATTRIBUTE_COMPRESSED,L'C'},{FILE_ATTRIBUTE_ENCRYPTED,L'E'}};
+    codes.clear();
+    for(const auto& [mask,letter]:labels) if(flags&mask) codes.push_back(letter);
+    return true;
+}
 
 		// `shownComment` is whatever the caller already rendered as the folder-description Message
 		// box. The Comments detail below reads System.Comment, which is the very same property, so
@@ -7257,154 +6996,34 @@ namespace ce { namespace win2kwebview { namespace {
 			lines.push_back(std::move(line));
 		}
 
-		/*
-		 * The folder's own WebView template, when Customize This Folder set one.
-		 *
-		 * ReadWebViewTemplate (win2k/private/shell/shell32/sfvext.cpp:296-302) was one call —
-		 * SHGetSetFolderCustomSettings with FCSM_WEBVIEWTEMPLATE — reaching
-		 * SHGetSetWebViewTemplate (fldsets.c:255-330), which read desktop.ini's [{VID_WebView}]
-		 * section, preferring WebViewTemplate.NT5 over the older PersistMoniker.
-		 *
-		 * That API still exists on Windows 10 but no longer answers this. The SDK marks
-		 * FCSM_WEBVIEWTEMPLATE deprecated, and a live read over a desktop.ini that plainly
-		 * contains the key returns E_FAIL (measured, 0x80004005) while GetPrivateProfileStringW
-		 * over the same file returns the value. So the read follows fldsets.c directly:
-		 *
-		 *   - section: the VID_WebView view id, {5984FFE0-28D4-11CF-AE66-08002B2E1262};
-		 *   - keys newest-first, WebViewTemplate.NT5 then PersistMoniker
-		 *     (c_szWebViewTemplateVersions, fldsets.c:248-252);
-		 *   - the SZ_CANBEUNICODE "@" those key names carry in the source is a marker for
-		 *     SHGetIniStringUTF7, which strips it before touching the file (util.cpp:7387-7392),
-		 *     so the names on disk are plain and are read plain here.
-		 *
-		 * This is the secondary signal. IFolderType is asked first — see the caller — because it
-		 * is the shell's own answer and covers folders whose type was set through the modern UI
-		 * rather than by a Windows 2000-era desktop.ini. This one catches the converse: a folder
-		 * carrying a genuine Win2K desktop.ini that Windows 10 does not classify as Pictures.
-		 *
-		 * A value Windows 2000 stored UTF-7 encoded is not decoded; template names are ASCII and
-		 * the result is only ever compared against one.
-		 *
-		 * Returns the bare template file name, lowercased, or empty.
-		 */
-		std::wstring FolderWebViewTemplate(const std::wstring &folderPath) noexcept
-		{
-			if (folderPath.empty())
-			{
-				return {};
-			}
+// Read a legacy customization as data; never execute an HTT template. This is
+// a new parser over the documented GetPrivateProfileStringW API.
+std::wstring FolderWebViewTemplate(const std::wstring& folder) noexcept {
+    try {
+        if(folder.empty()) return {};
+        const std::wstring ini=folder+(folder.back()==L'\\' || folder.back()==L'/' ? L"" : L"\\")+L"desktop.ini";
+        std::wstring value;
+        for(PCWSTR key:{L"WebViewTemplate.NT5",L"PersistMoniker"}) {
+            std::vector<wchar_t> buffer(512);
+            for(;;) {
+                const DWORD length=GetPrivateProfileStringW(L"{5984FFE0-28D4-11CF-AE66-08002B2E1262}",
+                    key,L"",buffer.data(),static_cast<DWORD>(buffer.size()),ini.c_str());
+                if(length<buffer.size()-1) { value.assign(buffer.data(),length); break; }
+                if(buffer.size()>=32768) return {};
+                buffer.resize(buffer.size()*2);
+            }
+            if(!value.empty()) break;
+        }
+        if(value.empty()) return {};
+        const size_t slash=value.find_last_of(L"/\\");
+        if(slash!=std::wstring::npos) value.erase(0,slash+1);
+        CharLowerBuffW(value.data(),static_cast<DWORD>(value.size()));
+        return value;
+    } catch(...) { return {}; }
+}
 
-			wchar_t iniPath[MAX_PATH]{};
-			if (FAILED(StringCchCopyW(iniPath, ARRAYSIZE(iniPath), folderPath.c_str())) ||
-			    !PathAppendW(iniPath, L"desktop.ini") ||
-			    GetFileAttributesW(iniPath) == INVALID_FILE_ATTRIBUTES)
-			{
-				return {};
-			}
 
-			constexpr wchar_t kWebViewSection[] = L"{5984FFE0-28D4-11CF-AE66-08002B2E1262}";
-			constexpr const wchar_t *kTemplateKeys[] =
-				{ L"WebViewTemplate.NT5", L"PersistMoniker" };
 
-			wchar_t templatePath[MAX_PATH]{};
-			for (const wchar_t *key : kTemplateKeys)
-			{
-				if (GetPrivateProfileStringW(kWebViewSection, key, L"", templatePath,
-				                             ARRAYSIZE(templatePath), iniPath) > 0 &&
-				    templatePath[0] != L'\0')
-				{
-					break;
-				}
-				templatePath[0] = L'\0';
-			}
-
-			if (templatePath[0] == L'\0')
-			{
-				return {};
-			}
-
-			// sfvext.cpp:385-387 strips a file:// prefix before treating the rest as a path,
-			// because Customize This Folder wrote relative templates that way.
-			PCWSTR value = templatePath;
-			if (StrCmpNIW(L"file://", value, 7) == 0)
-			{
-				value += 7;
-			}
-
-			std::wstring name = PathFindFileNameW(value);
-			if (!name.empty())
-			{
-				// This project builds as C++14, where wstring::data() is const-only.
-				CharLowerBuffW(&name[0], static_cast<DWORD>(name.size()));
-			}
-			return name;
-		}
-
-		/*
-		 * The description box's text for a namespace whose wording is fixed by the era.
-		 *
-		 * CFileListWrapper::GetItemComment wraps the folder's own Comment property in
-		 * <p><div class=Message>. Windows 10 still answers that property for most namespaces, but
-		 * with its own wording, and returns nothing at all for Documents — so a live read
-		 * reproduces the box in the wrong words, or not at all.
-		 *
-		 * These strings are per profile rather than shared. Windows Me is 9x-derived, so its
-		 * shell strings are not a subset of Windows 2000's: My Computer alone differs
-		 * ("Displays the contents of your computer" against "Displays the files and folders on
-		 * your computer"), and assuming otherwise silently ships the wrong era's wording.
-		 *
-		 * Empty means "no fixed string is known for this one" — the caller then falls back to the
-		 * live comment, which is the right answer for an ordinary folder whose InfoTip really is
-		 * local to the machine.
-		 *
-		 * Provenance for every entry:
-		 *   Windows 2000 My Computer   evidence/win2k-reference/mycomputer.png
-		 *   Windows 2000 My Documents  win2k/.../shell32.rc:418 IDS_MYDOCS_TIP, and
-		 *                              win2k/.../mydocs2/resource.rc:103 IDS_INFOTIP_VALUE
-		 *   Windows Me   My Computer   evidence/winme-reference/mycomputer.png
-		 *   Windows Me   My Documents  evidence/winme-reference/mydocuments.png
-		 *
-		 * Anything not listed above has no capture behind it yet and must not be guessed at: an
-		 * invented string is worse than falling through to the live comment, because it looks
-		 * authoritative.
-		 */
-		std::wstring ProfileFolderComment(WebViewVisualProfile profile, bool isMyComputer,
-		                                  bool isMyDocuments) noexcept
-		{
-			if (isMyComputer)
-			{
-				switch (profile)
-				{
-					case WebViewVisualProfile::WindowsME:
-						return ReferenceCaption(L"Displays the contents of your computer");
-					case WebViewVisualProfile::Windows98:
-						// Windows 98's folder.htt has no description box at all — its pane is the
-						// prompt and nothing else — so this profile never reaches here. Listed so
-						// the switch is exhaustive rather than falling through to Windows 2000's
-						// wording if that ever changes.
-						return {};
-					case WebViewVisualProfile::Windows2000:
-					default:
-						return ReferenceCaption(L"Displays the files and folders on your computer");
-				}
-			}
-
-			if (isMyDocuments)
-			{
-				switch (profile)
-				{
-					case WebViewVisualProfile::WindowsME:
-						return ReferenceCaption(L"Stores and manages documents");
-					case WebViewVisualProfile::Windows98:
-						return {};
-					case WebViewVisualProfile::Windows2000:
-					default:
-						return ReferenceCaption(L"Stores and manages documents");
-				}
-			}
-
-			return {};
-		}
 
 		// FileList.Folder.Application, which is where the templates reached the shell automation
 		// object for GetSystemInformation and the Find* searches.
@@ -7461,194 +7080,100 @@ namespace ce { namespace win2kwebview { namespace {
 			lines.push_back(std::move(line));
 		}
 
-		/*
-		 * printers.htt's JobEta control, reproduced.
-		 *
-		 * The template drives three of its spans from an ActiveX object it creates as
-		 * clsid:C3701884-B39B-11D2-9D68-00C04FC30DF6 and then reads back in its OnInfoReady
-		 * handler (printers.htt:276-309). That control does not exist on Windows 10, so the pane
-		 * computes the same four things the same way CPrinter did, from the spooler APIs the
-		 * control itself used — see nt5src/.../printscan/print/spooler/oleprn/printer.cpp, which
-		 * is the Windows 2000 implementation XP carried forward.
-		 *
-		 * Status is a bitfield: 1 means a waiting time is available, 2 a printer web page,
-		 * 4 that the estimate is suppressed, 8 an OEM support URL.
-		 */
-		struct PrinterEta
-		{
-			bool waitingTimeValid = false;   // JobEta.Status & 1, and not & 4
-			DWORD waitingMinutes = 0;        // JobEta.WaitingTime
-			std::wstring webUrl;             // JobEta.WebUrl        (Status & 2)
-			std::wstring oemUrl;             // JobEta.OEMUrl        (Status & 8)
-			std::wstring manufacturer;       // JobEta.Manufacturer
-		};
+// New read-only implementation over the documented Winspool structures.
+struct PrinterEta {
+    bool waitingTimeValid=false;
+    DWORD waitingMinutes=0;
+    std::wstring webUrl,oemUrl,manufacturer;
+};
+template<class Query> bool SpoolerBuffer(Query&& query,std::vector<BYTE>& bytes,size_t minimum) {
+    DWORD needed=0;
+    if(query(nullptr,0,&needed) && !needed) { bytes.clear(); return true; }
+    for(int attempt=0;attempt<3;++attempt) {
+        if(needed<minimum || needed>16*1024*1024) return false;
+        bytes.resize(needed);
+        if(query(bytes.data(),static_cast<DWORD>(bytes.size()),&needed)) return true;
+        if(GetLastError()!=ERROR_INSUFFICIENT_BUFFER) return false;
+    }
+    return false;
+}
+DWORD PrinterPagesPerMinute(PCWSTR name) noexcept {
+    const int direct=DeviceCapabilitiesW(name,nullptr,DC_PRINTRATEPPM,nullptr,nullptr);
+    if(direct>0) return static_cast<DWORD>(direct);
+    const int rate=DeviceCapabilitiesW(name,nullptr,DC_PRINTRATE,nullptr,nullptr);
+    if(rate<=0) return printerjobeta::kError;
+    const int unit=DeviceCapabilitiesW(name,nullptr,DC_PRINTRATEUNIT,nullptr,nullptr);
+    const unsigned long long perMinute=unit==PRINTRATEUNIT_PPM ? rate :
+        unit==PRINTRATEUNIT_CPS ? rate*60ULL/4800 : unit==PRINTRATEUNIT_LPM ? rate/66ULL : 0;
+    return perMinute ? static_cast<DWORD>(std::min<unsigned long long>(perMinute,MAXDWORD-1ULL)) : printerjobeta::kError;
+}
+bool QueryPrinterEta(const std::wstring& name,PrinterEta& answer) noexcept {
+    answer={};
+    struct PrinterCloser { HANDLE value=nullptr; ~PrinterCloser() { if(value) ClosePrinter(value); } } printer;
+    try {
+        if(name.empty()) return false;
+        PRINTER_DEFAULTSW access{}; access.DesiredAccess=PRINTER_ACCESS_USE;
+        if(!OpenPrinterW(const_cast<PWSTR>(name.c_str()),&printer.value,&access)) return false;
+        std::vector<BYTE> info,driver,queue;
+        if(!SpoolerBuffer([&](BYTE* data,DWORD size,DWORD* needed) {
+            return GetPrinterW(printer.value,2,data,size,needed);
+        },info,sizeof(PRINTER_INFO_2W)) || info.empty()) return false;
+        const auto& device=*reinterpret_cast<const PRINTER_INFO_2W*>(info.data());
+        constexpr DWORD unavailable=PRINTER_STATUS_ERROR|PRINTER_STATUS_PAUSED|PRINTER_STATUS_OFFLINE|
+            PRINTER_STATUS_PAPER_OUT|PRINTER_STATUS_PAPER_JAM|PRINTER_STATUS_PENDING_DELETION;
+        DWORD count=0;
+        const bool queueValid=SpoolerBuffer([&](BYTE* data,DWORD size,DWORD* needed) {
+            return EnumJobsW(printer.value,0,65536,2,data,size,needed,&count);
+        },queue,sizeof(JOB_INFO_2W));
+        if(queueValid && count<=queue.size()/sizeof(JOB_INFO_2W) && !(device.Status&unavailable)) {
+            std::vector<printerjobeta::Job> jobs;
+            jobs.reserve(count);
+            const auto* raw=reinterpret_cast<const JOB_INFO_2W*>(queue.data());
+            for(DWORD i=0;i<count;++i) jobs.push_back({raw[i].Status,raw[i].TotalPages,raw[i].Size});
+            const DWORD minutes=printerjobeta::WaitingMinutes(count ? PrinterPagesPerMinute(name.c_str()) : 0,jobs.data(),jobs.size());
+            answer.waitingTimeValid=minutes!=printerjobeta::kError;
+            if(answer.waitingTimeValid) answer.waitingMinutes=minutes;
+        }
+        if(SpoolerBuffer([&](BYTE* data,DWORD size,DWORD* needed) {
+            return GetPrinterDriverW(printer.value,nullptr,6,data,size,needed);
+        },driver,sizeof(DRIVER_INFO_6W)) && !driver.empty()) {
+            const auto& details=*reinterpret_cast<const DRIVER_INFO_6W*>(driver.data());
+            if(details.pszMfgName) answer.manufacturer=details.pszMfgName;
+            if(details.pszOEMUrl) answer.oemUrl=details.pszOEMUrl;
+        }
+        if((device.Attributes&PRINTER_ATTRIBUTE_SHARED) && device.pShareName && *device.pShareName) {
+            std::wstring server=device.pServerName ? device.pServerName : L"";
+            server.erase(0,server.find_first_not_of(L'\\'));
+            if(server.empty()) {
+                wchar_t computer[MAX_COMPUTERNAME_LENGTH+1]{}; DWORD length=ARRAYSIZE(computer);
+                if(GetComputerNameW(computer,&length)) server.assign(computer,length);
+            }
+            if(!server.empty()) {
+                wchar_t share[2048]{}; DWORD length=ARRAYSIZE(share);
+                if(SUCCEEDED(UrlEscapeW(device.pShareName,share,&length,URL_ESCAPE_SEGMENT_ONLY)))
+                    answer.webUrl=L"http://"+server+L"/printers/"+share+L"/.printer";
+            }
+        }
+        return true;
+    } catch(...) { answer={}; return false; }
+}
 
-		// CPrinter::GetPPM (printer.cpp:252-289). DC_PRINTRATE is expressed in the unit
-		// DC_PRINTRATEUNIT names; only pages, characters and lines convert to pages per minute.
-		DWORD PrinterPagesPerMinute(PCWSTR printerName) noexcept
-		{
-			constexpr DWORD kError = static_cast<DWORD>(-1);
-			const DWORD rate = static_cast<DWORD>(
-				DeviceCapabilitiesW(printerName, nullptr, DC_PRINTRATE, nullptr, nullptr));
-			if (rate == kError || rate == 0)
-			{
-				return kError;
-			}
+// Independent property reading with a valid zero size and 64-bit file sizes.
+std::wstring ItemSizeText(IShellItem2* properties,FolderItem* item,IShellFolderViewDual* view) {
+    ULONGLONG bytes=0;
+    if(properties && SUCCEEDED(properties->GetUInt64(PKEY_Size,&bytes))) return FormatBytes(bytes);
+    LONG legacyBytes=0;
+    if(item && SUCCEEDED(item->get_Size(&legacyBytes)) && legacyBytes>=0) return FormatBytes(legacyBytes);
+    return DetailOf(view,item,1);
+}
+std::wstring ProfileFolderComment(WebViewVisualProfile era,bool computer,bool documents) noexcept {
+    if(era==WebViewVisualProfile::Windows98) return {};
+    if(documents) return ReferenceCaption(L"Stores and manages documents");
+    if(!computer) return {};
+    return era==WebViewVisualProfile::WindowsME ? ReferenceCaption(L"Displays the contents of your computer") :
+        ReferenceCaption(L"Displays the files and folders on your computer");
+}
 
-			switch (static_cast<DWORD>(
-				DeviceCapabilitiesW(printerName, nullptr, DC_PRINTRATEUNIT, nullptr, nullptr)))
-			{
-				case PRINTRATEUNIT_PPM:
-					return rate;
-				case PRINTRATEUNIT_CPS:
-					// CPS2PPM: characters per second over the 4800-character page, per minute.
-					return (rate * 60) / 4800;
-				case PRINTRATEUNIT_LPM:
-					// LPM2PPM: 66 lines to the page.
-					return rate / 66;
-				default:
-					// Inches per minute and anything unrecognised give no usable rate.
-					return kError;
-			}
-		}
-
-		bool QueryPrinterEta(const std::wstring &printerName, PrinterEta &eta) noexcept
-		{
-			using namespace printerjobeta;
-
-			if (printerName.empty())
-			{
-				return false;
-			}
-
-			HANDLE printer = nullptr;
-			// Read-only: this branch never changes spooler state.
-			PRINTER_DEFAULTSW defaults{ nullptr, nullptr, PRINTER_ACCESS_USE };
-			if (!OpenPrinterW(const_cast<PWSTR>(printerName.c_str()), &printer, &defaults) || !printer)
-			{
-				return false;
-			}
-
-			bool ok = false;
-			DWORD needed = 0;
-			std::vector<BYTE> printerBuffer;
-			GetPrinterW(printer, 2, nullptr, 0, &needed);
-			if (needed > 0)
-			{
-				printerBuffer.resize(needed);
-				if (GetPrinterW(printer, 2, printerBuffer.data(), needed, &needed))
-				{
-					const auto *info = reinterpret_cast<const PRINTER_INFO_2W *>(printerBuffer.data());
-
-					// CalcJobETA (printer.cpp:197-206) refuses an estimate when the device is in
-					// any of these states, which is what raises Status bit 4 in the template.
-					constexpr DWORD kNoEstimate = PRINTER_STATUS_PAUSED | PRINTER_STATUS_ERROR |
-					                              PRINTER_STATUS_PENDING_DELETION |
-					                              PRINTER_STATUS_PAPER_JAM |
-					                              PRINTER_STATUS_PAPER_OUT |
-					                              PRINTER_STATUS_OFFLINE;
-					const DWORD ppm = PrinterPagesPerMinute(printerName.c_str());
-
-					DWORD jobCount = 0;
-					std::vector<BYTE> jobBuffer;
-					needed = 0;
-					EnumJobsW(printer, 0, 0xFFFFFFFF, 2, nullptr, 0, &needed, &jobCount);
-					if (needed > 0)
-					{
-						jobBuffer.resize(needed);
-						if (!EnumJobsW(printer, 0, 0xFFFFFFFF, 2, jobBuffer.data(), needed,
-						               &needed, &jobCount))
-						{
-							jobCount = 0;
-						}
-					}
-
-					// Narrow JOB_INFO_2 down to the three fields the estimate reads, then hand it
-					// to the shared arithmetic in PrinterJobEta.h.
-					std::vector<Job> jobs(jobCount);
-					const auto *raw = reinterpret_cast<const JOB_INFO_2W *>(jobBuffer.data());
-					for (DWORD i = 0; i < jobCount; ++i)
-					{
-						jobs[i].status = raw[i].Status;
-						jobs[i].totalPages = raw[i].TotalPages;
-						jobs[i].size = raw[i].Size;
-					}
-
-					const DWORD minutes = WaitingMinutes(ppm, jobs.data(), jobs.size());
-					eta.waitingMinutes = (minutes == kError) ? 0 : minutes;
-					eta.waitingTimeValid =
-						(minutes != kError) && (info->Status & kNoEstimate) == 0;
-					ok = true;
-				}
-			}
-
-			// DRIVER_INFO_6 carries the OEM URL pattern and the manufacturer name that
-			// CPrinter::GetOemUrl and GetDriverData read (printer.cpp:684-712, 844-874).
-			needed = 0;
-			GetPrinterDriverW(printer, nullptr, 6, nullptr, 0, &needed);
-			if (needed > 0)
-			{
-				std::vector<BYTE> driverBuffer(needed);
-				if (GetPrinterDriverW(printer, nullptr, 6, driverBuffer.data(), needed, &needed))
-				{
-					const auto *driver = reinterpret_cast<const DRIVER_INFO_6W *>(driverBuffer.data());
-					if (driver->pszOEMUrl && *driver->pszOEMUrl)
-					{
-						eta.oemUrl = driver->pszOEMUrl;
-					}
-					if (driver->pszMfgName && *driver->pszMfgName)
-					{
-						eta.manufacturer = driver->pszMfgName;
-					}
-				}
-			}
-
-			// CPrinter::GetPrinterWebUrl builds the IPP address of a shared, published queue.
-			// A queue that is neither shared nor published has no page, and Status bit 2 stays
-			// clear — which is the ordinary case for a local printer.
-			needed = 0;
-			GetPrinterW(printer, 4, nullptr, 0, &needed);
-			if (needed > 0)
-			{
-				std::vector<BYTE> info4Buffer(needed);
-				if (GetPrinterW(printer, 4, info4Buffer.data(), needed, &needed))
-				{
-					const auto *info4 = reinterpret_cast<const PRINTER_INFO_4W *>(info4Buffer.data());
-					if ((info4->Attributes & PRINTER_ATTRIBUTE_SHARED) && !printerBuffer.empty())
-					{
-						const auto *info2 =
-							reinterpret_cast<const PRINTER_INFO_2W *>(printerBuffer.data());
-						if (info2->pShareName && *info2->pShareName)
-						{
-							std::wstring server = (info2->pServerName && *info2->pServerName)
-								? info2->pServerName : std::wstring();
-							// pServerName arrives as \\name; the URL wants the bare host.
-							while (!server.empty() && server.front() == L'\\')
-							{
-								server.erase(server.begin());
-							}
-							if (server.empty())
-							{
-								wchar_t local[MAX_COMPUTERNAME_LENGTH + 1]{};
-								DWORD size = ARRAYSIZE(local);
-								if (GetComputerNameW(local, &size))
-								{
-									server = local;
-								}
-							}
-							if (!server.empty())
-							{
-								eta.webUrl = L"http://" + server + L"/printers/" +
-								             info2->pShareName + L"/.printer";
-							}
-						}
-					}
-				}
-			}
-
-			ClosePrinter(printer);
-			return ok;
-		}
 
 		void AddPrinterSupportLink(std::vector<PaneLine> &lines, int marginTop) noexcept
 		{
@@ -7852,12 +7377,35 @@ struct PreviewLifetime {
 };
 struct PreviewWorkerContext {
     std::shared_ptr<PreviewLifetime> lifetime;
-    HMODULE module=nullptr;
 };
+std::mutex g_referenceThreadsMutex;
+std::vector<HANDLE> g_referenceThreads;
+
+static HANDLE StartReferenceWorker(LPTHREAD_START_ROUTINE entry,void* context) noexcept {
+    try {
+        std::lock_guard lock(g_referenceThreadsMutex);
+        std::erase_if(g_referenceThreads,[](HANDLE handle) {
+            if(WaitForSingleObject(handle,0)!=WAIT_OBJECT_0) return false;
+            CloseHandle(handle); return true;
+        });
+        // Reserve before starting: allocation failure cannot leave an untracked
+        // thread executing in the module that Windhawk is about to unload.
+        g_referenceThreads.reserve(g_referenceThreads.size()+1);
+        HANDLE handle=CreateThread(nullptr,0,entry,context,0,nullptr);
+        if(handle) g_referenceThreads.push_back(handle);
+        return handle;
+    } catch(...) { return nullptr; }
+}
+static void WaitForReferenceWorkers() {
+    std::vector<HANDLE> handles;
+    { std::lock_guard lock(g_referenceThreadsMutex); handles.swap(g_referenceThreads); }
+    // Called on the engine thread after panes are destroyed. No UI/lifetime lock
+    // is held, so a thumbnail provider can finish its Shell/COM callbacks.
+    for(HANDLE handle:handles) { WaitForSingleObject(handle,INFINITE); CloseHandle(handle); }
+}
 
 static DWORD WINAPI PreviewWorker(void* parameter) {
     auto* raw=static_cast<PreviewWorkerContext*>(parameter);
-    HMODULE module=raw->module;
     {
         std::unique_ptr<PreviewWorkerContext> context(raw);
         auto state=context->lifetime;
@@ -7928,11 +7476,6 @@ static DWORD WINAPI PreviewWorker(void* parameter) {
         }
         if (SUCCEEDED(init)) CoUninitialize();
     }
-    // Windhawk can unload while an external thumbnail provider is still busy.
-    // The worker holds the code module, owns no UI, and releases all C++ state
-    // before the atomic module-release/thread-exit operation. Unload never joins
-    // a COM call that might be waiting on Explorer's UI thread.
-    FreeLibraryAndExitThread(module,0);
     return 0;
 }
 
@@ -7949,18 +7492,13 @@ static bool QueuePreview(const std::shared_ptr<PreviewLifetime>& state,
     if (state->running) return true;
     auto context=std::make_unique<PreviewWorkerContext>();
     context->lifetime=state;
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                           reinterpret_cast<PCWSTR>(&PreviewWorker),&context->module)) {
-        state->pending.reset(); return false;
-    }
     state->running=true;
-    HANDLE thread=CreateThread(nullptr,0,PreviewWorker,context.get(),0,nullptr);
+    HANDLE thread=StartReferenceWorker(PreviewWorker,context.get());
     if (!thread) {
         state->running=false; state->pending.reset();
-        FreeLibrary(context->module); return false;
+        return false;
     }
     context.release();
-    CloseHandle(thread);
     return true;
 }
 static void CancelPreview(const std::shared_ptr<PreviewLifetime>& state,bool destroying=false) {
@@ -7968,6 +7506,71 @@ static void CancelPreview(const std::shared_ptr<PreviewLifetime>& state,bool des
     ++state->serial;
     state->pending.reset(); state->ready.reset();
     if (destroying) { state->alive=false; state->window=nullptr; }
+}
+} }
+
+namespace ce { namespace win2kwebview {
+constexpr UINT kPrinterReadyMessage=WM_APP+0x452;
+using PrinterQuery=bool(*)(const std::wstring&,PrinterEta&);
+struct PrinterJob { std::wstring name; ULONGLONG serial=0; PrinterQuery query=QueryPrinterEta; };
+struct PrinterLifetime {
+    std::mutex mutex;
+    bool alive=true,running=false,hasResult=false,success=false;
+    HWND window=nullptr;
+    ULONGLONG serial=0,readySerial=0,requestedAt=0;
+    std::wstring name;
+    PrinterEta value;
+    std::unique_ptr<PrinterJob> pending;
+};
+static DWORD WINAPI PrinterWorker(void* parameter) {
+    std::unique_ptr<std::shared_ptr<PrinterLifetime>> context(static_cast<std::shared_ptr<PrinterLifetime>*>(parameter));
+    const auto state=*context;
+    try {
+        for(;;) {
+            std::unique_ptr<PrinterJob> job;
+            { std::lock_guard lock(state->mutex);
+              if(!state->alive || !state->pending) { state->running=false; break; }
+              job=std::move(state->pending); }
+            PrinterEta value;
+            const bool success=job->query(job->name,value);
+            { std::lock_guard lock(state->mutex);
+              if(state->alive && job->serial==state->serial) {
+                  state->value=std::move(value); state->hasResult=true; state->success=success;
+                  state->readySerial=job->serial;
+                  state->requestedAt=GetTickCount64();
+                  PostMessageW(state->window,kPrinterReadyMessage,0,0);
+              } }
+        }
+    } catch(...) {
+        std::lock_guard lock(state->mutex);
+        state->running=false; state->pending.reset(); state->hasResult=false;
+    }
+    return 0;
+}
+static void CancelPrinterInfo(const std::shared_ptr<PrinterLifetime>& state,bool destroying=false) {
+    std::lock_guard lock(state->mutex);
+    ++state->serial; state->pending.reset(); state->hasResult=false; state->value={};
+    state->requestedAt=0; state->name.clear();
+    if(destroying) { state->alive=false; state->window=nullptr; }
+}
+static bool ReadCachedPrinter(const std::shared_ptr<PrinterLifetime>& state,HWND window,
+    const std::wstring& name,bool refresh,PrinterEta& result,PrinterQuery query=QueryPrinterEta) {
+    std::lock_guard lock(state->mutex);
+    if(!state->alive || name.empty()) return false;
+    state->window=window;
+    const auto now=GetTickCount64();
+    if(state->name!=name || !state->requestedAt || (refresh && now-state->requestedAt>=5000 && !state->running)) {
+        auto job=std::make_unique<PrinterJob>(); job->name=name; job->serial=++state->serial; job->query=query;
+        if(state->name!=name) { state->hasResult=false; state->value={}; }
+        state->name=name; state->requestedAt=now; state->pending=std::move(job);
+        if(!state->running) {
+            auto context=std::make_unique<std::shared_ptr<PrinterLifetime>>(state);
+            if(StartReferenceWorker(PrinterWorker,context.get())) { context.release(); state->running=true; }
+            else { state->pending.reset(); state->requestedAt=0; }
+        }
+    }
+    if(!state->hasResult || !state->success) return false;
+    result=state->value; return true;
 }
 } }
 
@@ -7996,6 +7599,10 @@ public:
     ImgViewZoomWindow zoom;
     ImgViewDetachedPreview detached;
     std::shared_ptr<PreviewLifetime> lifetime=std::make_shared<PreviewLifetime>();
+    std::shared_ptr<PrinterLifetime> printerLifetime=std::make_shared<PrinterLifetime>();
+    bool CachedPrinterEta(const std::wstring& name,PrinterEta& result) {
+        return ReadCachedPrinter(printerLifetime,window,name,g_webOptions.load()->printerRefresh,result);
+    }
     std::unique_ptr<PreviewResult> preview;
     std::wstring previewPath, signature;
     bool fullResolution=false, printable=false;
@@ -10165,7 +9772,7 @@ namespace ce { namespace win2kwebview {
 						// asynchronously; the pane resolves them up front instead, because
 						// nothing here is slow enough to need a second pass.
 						PrinterEta eta;
-						const bool haveEta = QueryPrinterEta(printerName, eta);
+						const bool haveEta = CachedPrinterEta(printerName, eta);
 
 						// Status & 1: the waiting time. Status & 4 blanks it again, which is what
 						// an unusable device or an errored job produces.
@@ -10691,121 +10298,45 @@ namespace ce { namespace win2kwebview {
 						}
 						CComQIPtr<IShellItem2> shellItem(selectedShellItem);
 
-						// CFileListWrapper::GetItemSize (filewrap.cpp:686-706) formats the item's
-						// own size with StrFormatByteSizeW and only falls back to the Size *column*
-						// when get_Size fails. The column is what Windows 10 renders as "2,640 KB",
-						// which is neither the Windows 2000 wording nor its rounding.
-						//
-						// The size is read as 64-bit rather than through get_Size's LONG. The
-						// original truncated above 2 GB; that is a defect of the era, not part of
-						// the presentation this branch is reproducing.
-						ULONGLONG selectedBytes = 0;
-						if (shellItem)
-						{
-							shellItem->GetUInt64(PKEY_Size, &selectedBytes);
-						}
-						if (selectedBytes == 0)
-						{
-							LONG automationSize = 0;
-							if (SUCCEEDED(item->get_Size(&automationSize)) && automationSize > 0)
-							{
-								selectedBytes = static_cast<ULONGLONG>(automationSize);
-							}
-						}
-
-						std::wstring sizeValue = (selectedBytes > 0) ? FormatBytes(selectedBytes)
-						                                             : std::wstring();
-						if (sizeValue.empty())
-						{
-							sizeValue = DetailOf(view, item, 1);
-						}
-						if (!sizeValue.empty())
-						{
-							AddParagraph(lines, ReferenceCaption(L"Size: ") + sizeValue);
-						}
+                        const std::wstring sizeValue=ItemSizeText(shellItem,item,view);
+                        if(!sizeValue.empty()) AddParagraph(lines,ReferenceCaption(L"Size: ")+sizeValue);
 
 						AddExtraFileDetails(lines, item, shellItem, liveComment);
 					}
 				}
 			}
 		}
-		else if (selected > 1)
-		{
-			// CFileListWrapper::MultipleSelected: count; optional total for at most 100;
-			// then every selected name for at most 16. This stays on SelectedItems and does
-			// not create a second folder model.
-			wchar_t buffer[64]{};
-			StringCchPrintfW(buffer, ARRAYSIZE(buffer), ReferenceCaption(L"%ld items selected."), selected);
-			AddBreak(lines, buffer);
-
-			if (selected <= 100)
-			{
-				LONGLONG totalSize = 0;
-				for (long itemIndex = 0; itemIndex < selected; ++itemIndex)
-				{
-					CComPtr<FolderItem> item;
-					CComVariant index(itemIndex);
-					if (SUCCEEDED(items->Item(index, &item)) && item) { totalSize += SelectionBytesAt(static_cast<DWORD>(itemIndex),item); }
-				}
-
-				if (totalSize > 0)
-				{
-					// StrFormatByteSizeW — "2.57 MB" — not a grouped byte count.
-					// CFileListWrapper::MultipleSelected (filewrap.cpp:1084-1088) loads
-					// IDS_FILESIZE and then calls StrFormatByteSizeW on the sum. The raw
-					// "2,702,824 bytes" form belongs to the script templates: standard.htt:563,
-					// recycle.htt:137 and imgview.htt:308 all build it from FormatNumber() plus
-					// L_Bytes_Text. folder.htt has no script and never ran that code, so the
-					// retail default folder must not use it either.
-					AddParagraph(lines,
-						ReferenceCaption(L"Total File Size: ") + FormatBytes(static_cast<ULONGLONG>(totalSize)));
-				}
-
-				if (selected <= 16)
-				{
-					for (long itemIndex = 0; itemIndex < selected; ++itemIndex)
-					{
-						CComPtr<FolderItem> item;
-						CComVariant index(itemIndex);
-						if (FAILED(items->Item(index, &item)) || !item)
-						{
-							continue;
-						}
-
-						CComBSTR name;
-						if (FAILED(item->get_Name(&name)) || !name)
-						{
-							continue;
-						}
-
-						PaneLine nameLine;
-						nameLine.text.assign(name, name.Length());
-						// MultipleSelected opens <p>, then prefixes the first name with <br>.
-						nameLine.marginTop = (itemIndex == 0)
-							? panemetrics::kParagraphTop + panemetrics::kBodyLineHeight : 0;
-						lines.push_back(std::move(nameLine));
-					}
-				}
-			}
-		}
+        else if(selected>1) {
+            wchar_t label[64]{};
+            StringCchPrintfW(label,ARRAYSIZE(label),ReferenceCaption(L"%ld items selected."),selected);
+            AddBreak(lines,label);
+            if(selected<=100) {
+                ULONGLONG total=0;
+                std::vector<std::wstring> names;
+                for(long index=0;index<selected;++index) {
+                    CComPtr<FolderItem> item;
+                    if(FAILED(items->Item(CComVariant(index),&item)) || !item) continue;
+                    total+=SelectionBytesAt(index,item);
+                    if(selected<=16) {
+                        CComBSTR name;
+                        if(SUCCEEDED(item->get_Name(&name)) && name) names.emplace_back(name,name.Length());
+                    }
+                }
+                if(total) AddParagraph(lines,ReferenceCaption(L"Total File Size: ")+FormatBytes(total));
+                for(size_t index=0;index<names.size();++index) {
+                    PaneLine line; line.text=std::move(names[index]);
+                    line.marginTop=index ? 0 : panemetrics::kParagraphTop+panemetrics::kBodyLineHeight;
+                    lines.push_back(std::move(line));
+                }
+            }
+        }
 		else
 		{
 			// NoneSelected(): the prompt, the folder's description, then the See also list.
 			AddBreak(lines, ReferenceCaption(L"Select an item to view its description."));
 
-			// CFileListWrapper::GetItemComment (filewrap.cpp:876-889) wraps the folder's own
-			// Comment property in <p><div class=Message>. Windows 10 still answers that property
-			// for most namespaces, but with its own wording, and returns nothing at all for
-			// Documents — so a live read reproduces the box in the wrong words or not at all.
-			// Where Windows 2000's own string is known from its resources, it wins.
-			std::wstring comment = ProfileFolderComment(m_visualProfile, m_isMyComputer,
-			                                            m_isMyDocuments);
-			if (comment.empty())
-			{
-				// An ordinary folder's comment is genuinely local — desktop.ini's InfoTip — so
-				// the live value is the right one here.
-				comment = FolderCommentOf(view);
-			}
+            std::wstring comment=ProfileFolderComment(m_visualProfile,m_isMyComputer,m_isMyDocuments);
+            if(comment.empty()) comment=FolderCommentOf(view);
 			const bool infoEndsInMessage = !comment.empty();
 			AddMessage(lines, std::move(comment));
 
@@ -10828,34 +10359,19 @@ namespace ce { namespace win2kwebview {
 				: (infoEndsInMessage ? panemetrics::kBodyLineHeight : panemetrics::kParagraphTop);
 			lines.push_back(std::move(seeAlso));
 
-			// CFileListWrapper::GetCrossLink omits a destination when it is the current
-			// folder. Keep the remaining links in the historical order.
-			if (!m_isMyDocuments)
-			{
-				AddLink(lines, ReferenceCaption(L"My Documents"), CSIDL_PERSONAL,
-				        ReferenceCaption(L"My Documents contains your personal documents."));
-			}
-			if (!m_isMyNetworkPlaces)
-			{
-				AddLink(lines, ReferenceCaption(L"My Network Places"), CSIDL_NETWORK,
-				        ReferenceCaption(L"My Network Places contains shortcuts to various locations on the corporate network and the Internet."));
-			}
-			if (m_isMyComputer)
-			{
-				// Windows Me calls the same destination "Dial-Up Networking"
-				// (evidence/winme-reference/mycomputer.png). The target is unchanged: on
-				// Windows 10 CSIDL_CONNECTIONS is the only surviving equivalent of either.
-				const bool me = m_visualProfile == WebViewVisualProfile::WindowsME;
-				AddLink(lines,
-				        me ? ReferenceCaption(L"Dial-Up Networking") : ReferenceCaption(L"Network and Dial-up Connections"),
-				        CSIDL_CONNECTIONS,
-				        ReferenceCaption(L"Connects to other computers, networks and the Internet"));
-			}
-			else
-			{
-				AddLink(lines, ReferenceCaption(L"My Computer"), CSIDL_DRIVES,
-				        ReferenceCaption(L"My Computer contains your various local drive and mapped network drives."));
-			}
+            const bool me=m_visualProfile==WebViewVisualProfile::WindowsME;
+            const struct { bool skip; int folder; PCWSTR name,description; } destinations[]={
+                {m_isMyDocuments,CSIDL_PERSONAL,ReferenceCaption(L"My Documents"),ReferenceCaption(L"My Documents contains your personal documents.")},
+                {m_isMyNetworkPlaces,CSIDL_NETWORK,ReferenceCaption(L"My Network Places"),
+                    ReferenceCaption(L"My Network Places contains shortcuts to various locations on the corporate network and the Internet.")},
+                {false,m_isMyComputer ? CSIDL_CONNECTIONS : CSIDL_DRIVES,
+                    m_isMyComputer ? (me ? ReferenceCaption(L"Dial-Up Networking") : ReferenceCaption(L"Network and Dial-up Connections")) : ReferenceCaption(L"My Computer"),
+                    m_isMyComputer ? ReferenceCaption(L"Connects to other computers, networks and the Internet") :
+                        ReferenceCaption(L"My Computer contains your various local drive and mapped network drives.")}
+            };
+            for(const auto& destination:destinations) if(!destination.skip)
+                AddLink(lines,destination.name,destination.folder,destination.description);
+
 		}
 
 		m_pane.SetCapacityPie(capacityPer1000);
@@ -10884,6 +10400,7 @@ static bool IsCsidl(IShellItem* item,int csidl) {
 }
 ReferenceContent::~ReferenceContent() {
     CancelPreview(lifetime,true);
+    CancelPrinterInfo(printerLifetime,true);
     ClearPreview(); DestroyViewer();
 }
 void ReferenceContent::ClearPreview() {
@@ -10892,6 +10409,7 @@ void ReferenceContent::ClearPreview() {
 }
 void ReferenceContent::ResetView() {
     viewReady=false;
+    CancelPrinterInfo(printerLifetime);
     CancelPreview(lifetime); ClearPreview(); DestroyViewer();
     previewPath.clear(); folderKey.clear(); signature.clear();
     pendingSince=0; selectedCount=0; fullResolution=false; printable=false; forceRefresh=true;
@@ -10924,6 +10442,7 @@ void ReferenceContent::Refresh(IShellView* view,IShellItem* folder,HWND hwnd,boo
     const auto options=g_webOptions.load();
     const auto key=DisplayName(folder,SIGDN_DESKTOPABSOLUTEPARSING);
     const bool navigated=key!=folderKey || m_spView.p!=view;
+    if(navigated) CancelPrinterInfo(printerLifetime);
     m_spView=view;
     CComQIPtr<IFolderView2> folderView(view);
     CComPtr<IShellItemArray> selection;
@@ -11667,24 +11186,10 @@ static void LoadSettings() {
         g_settings.imageWidth = 2000;
     }
 
-    if (g_webOptions.load()->autoPictureWidth &&
-        (g_settings.imagePath==kBuiltInClouds || g_settings.imagePath==kBuiltInSquares || g_settings.imagePath.starts_with(L"*profile"))) {
-        g_settings.imageWidth=g_settings.imagePath==kBuiltInSquares ? 127 :
-            g_settings.imagePath.starts_with(L"*profile") ? (g_webOptions.load()->profile==1 ? 0 :
-                                                g_webOptions.load()->profile==2 ? 150 : 127) : 0;
-        // Persist the shown Picture width as well as the drawing value. This is
-        // limited to this mod's active settings; custom pictures keep their width.
-        HKEY key=nullptr;
-        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE,
-            L"SOFTWARE\\Windhawk\\Engine\\Mods\\classic-webview-pane\\Settings",0,
-            KEY_QUERY_VALUE|KEY_SET_VALUE|KEY_WOW64_64KEY,&key)==ERROR_SUCCESS) {
-            DWORD value=0,type=0,size=sizeof(value);
-            const LONG result=RegQueryValueExW(key,L"imageWidth",nullptr,&type,reinterpret_cast<BYTE*>(&value),&size);
-            const DWORD preset=static_cast<DWORD>(g_settings.imageWidth);
-            if (result!=ERROR_SUCCESS || type!=REG_DWORD || value!=preset)
-                RegSetValueExW(key,L"imageWidth",0,REG_DWORD,reinterpret_cast<const BYTE*>(&preset),sizeof(preset));
-            RegCloseKey(key);
-        }
+    {
+        const auto pictureOptions=g_webOptions.load();
+        g_settings.imageWidth=EffectivePictureWidth(g_settings.imagePath,pictureOptions->profile,
+            pictureOptions->autoPictureWidth,g_settings.imageWidth);
     }
     g_settings.imageSmooth = Wh_GetIntSetting(L"imageSmooth");
     g_settings.imageBlendWhite = Wh_GetIntSetting(L"imageBlendWhite");
@@ -14291,6 +13796,12 @@ static LRESULT CALLBACK PaneWndProc(HWND hWnd,
         case ce::win2kwebview::kPreviewReadyMessage:
             if (pane) pane->reference.AcceptPreview();
             return 0;
+        case ce::win2kwebview::kPrinterReadyMessage:
+            if(pane) {
+                pane->reference.forceRefresh=true;
+                RefreshReferencePane(pane,false);
+            }
+            return 0;
         case WM_COMMAND:
             if (pane && g_webOptions.load()->classicLayout)
                 pane->reference.Command(LOWORD(wParam),reinterpret_cast<HWND>(lParam));
@@ -15044,6 +14555,12 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    if(!ce::win2kwebview::RegisterReferenceViewerClasses()) {
+        Wh_Log(L"Viewer window classes could not be registered");
+        UnregisterClassW(kPaneClassName,GetModuleHandleW(nullptr)); g_paneClass=0;
+        FreeLibrary(g_dui70); g_dui70=nullptr;
+        return FALSE;
+    }
     return TRUE;
 }
 
@@ -15082,6 +14599,7 @@ void Wh_ModUninit() {
     // A window still carrying a subclass of the mod, or a window whose window
     // procedure is in it, calls into a DLL that is about to be gone.
     ClosePanes();
+    ce::win2kwebview::WaitForReferenceWorkers();
     DropAllSubclasses();
     RestoreViewBorders();
     ce::win2kwebview::FreeReferenceSharedResources();
