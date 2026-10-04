@@ -4,7 +4,7 @@
 // @name:pt-BR      Ilha e Dock estilo Mac
 // @description     An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)
 // @description:pt-BR Uma ilha no topo da tela como a barra de menus do macOS e a Dynamic Island do iPhone (relógio, central de controle, notificações, mídia, ícones da bandeja) e uma dock como a do macOS no lugar da barra de tarefas (ou a barra do Windows, transparente ou como ela é)
-// @version         0.42.3
+// @version         0.42.5
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
@@ -776,6 +776,9 @@ std::atomic<double> g_backdropLight{0.5};
 
 std::atomic<bool> g_unloading;
 
+// The mod's own module (set in Wh_ModInit), for its window classes.
+HMODULE g_module;
+
 // Runs `f`, keeping its errors from reaching the code that called it: XAML
 // calls throw when an element isn't ready (the taskbar hiding for a
 // full-screen app, for one), and an exception left uncaught in code that
@@ -878,6 +881,19 @@ HWND FindCurrentProcessTaskbarWnd() {
 // There can be more than one explorer.exe (folders can open in a process of
 // their own): only the one with the taskbar runs the watchers and the
 // auto-hide setting.
+// This process's main taskbar window, remembered (the sender of the
+// island's messages).
+std::atomic<HWND> g_ownTaskbarWnd;
+
+HWND OwnTaskbarWnd() {
+    HWND hWnd = g_ownTaskbarWnd;
+    if (!hWnd || !IsWindow(hWnd)) {
+        hWnd = FindCurrentProcessTaskbarWnd();
+        g_ownTaskbarWnd = hWnd;
+    }
+    return hWnd;
+}
+
 bool OwnsTaskbar() {
     return FindCurrentProcessTaskbarWnd() != nullptr;
 }
@@ -891,6 +907,9 @@ bool OwnsTaskbar() {
 
 constexpr WCHAR kIslandClassName[] = L"WindhawkMacIslandDockIsland";
 constexpr WCHAR kPanelClassName[] = L"WindhawkMacIslandDockPanel";
+// The notification watcher's message-only window (the sender of the apps
+// with new notifications, with the island off too).
+constexpr WCHAR kNotifierClassName[] = L"WindhawkMacIslandDockNotifier";
 
 enum IpcKind : ULONG_PTR {
     // Explorer to the island: the apps with a badge ('\n'-separated IDs).
@@ -1387,12 +1406,12 @@ struct DockIcon {
 
 [[clang::no_destroy]] std::vector<DockIcon> g_dockIcons;
 HWND g_dockWnd;
-[[clang::no_destroy]] winrt::weak_ref<FrameworkElement> g_dockFrame;
-[[clang::no_destroy]] winrt::weak_ref<FrameworkElement> g_dockRepeater;
+winrt::weak_ref<FrameworkElement> g_dockFrame;
+winrt::weak_ref<FrameworkElement> g_dockRepeater;
 // The dock's visible background, which the icons are lined up with.
-[[clang::no_destroy]] winrt::weak_ref<FrameworkElement> g_dockBackground;
+winrt::weak_ref<FrameworkElement> g_dockBackground;
 // The transparent taskbar's shadow, and how strong it's shown.
-[[clang::no_destroy]] winrt::weak_ref<UIElement> g_shadowFill;
+winrt::weak_ref<UIElement> g_shadowFill;
 double g_shadowStrength = 0.6;
 // The transparent taskbar only takes the mouse around its apps: its window is
 // cut down to them (a window region), so clicks elsewhere reach the windows
@@ -1420,7 +1439,7 @@ double g_lastRenderTime;
     g_pointerHandler{nullptr};
 [[clang::no_destroy]] winrt::Windows::Foundation::IInspectable
     g_pressedHandler{nullptr};
-[[clang::no_destroy]] winrt::weak_ref<FrameworkElement> g_pointerTarget;
+winrt::weak_ref<FrameworkElement> g_pointerTarget;
 [[clang::no_destroy]] FrameworkElement::LayoutUpdated_revoker g_layoutRevoker;
 [[clang::no_destroy]] Media::CompositionTarget::Rendering_revoker
     g_renderingRevoker;
@@ -1432,8 +1451,8 @@ double g_lastRenderTime;
     g_stateRevokers;
 [[clang::no_destroy]] std::vector<FrameworkElement::SizeChanged_revoker>
     g_dotRevokers;
-[[clang::no_destroy]] std::vector<winrt::weak_ref<FrameworkElement>>
-    g_watchedButtons;
+// Weak references: safe to destroy at exit.
+std::vector<winrt::weak_ref<FrameworkElement>> g_watchedButtons;
 
 // Property callbacks on the notification badges, to remove them again.
 struct BadgeWatch {
@@ -1763,7 +1782,7 @@ void SendBadgeApps() {
     AcquireSRWLockShared(&g_badgeAppsLock);
     const std::vector<std::wstring> apps = g_badgeApps;
     ReleaseSRWLockShared(&g_badgeAppsLock);
-    SendLines(island, FindCurrentProcessTaskbarWnd(), kIpcBadgeApps, apps);
+    SendLines(island, OwnTaskbarWnd(), kIpcBadgeApps, apps);
 }
 
 void PublishBadgeApps() {
@@ -2848,7 +2867,6 @@ void FreeXamlGlobals() {
     std::vector<VisualStateGroup::CurrentStateChanged_revoker>().swap(
         g_stateRevokers);
     std::vector<FrameworkElement::SizeChanged_revoker>().swap(g_dotRevokers);
-    std::vector<winrt::weak_ref<FrameworkElement>>().swap(g_watchedButtons);
     std::vector<BadgeWatch>().swap(g_badgeWatches);
     g_layoutRevoker = {};
     g_renderingRevoker = {};
@@ -3501,7 +3519,7 @@ void SendTrayIcons() {
         keptAlive.push_back(icon.icon);
     }
     ReleaseSRWLockShared(&g_trayIconsLock);
-    SendIpc(island, FindCurrentProcessTaskbarWnd(), kIpcTrayIcons,
+    SendIpc(island, OwnTaskbarWnd(), kIpcTrayIcons,
             writer.bytes.data(), (DWORD)writer.bytes.size());
 }
 
@@ -3618,13 +3636,14 @@ LRESULT OnTrayIconRectRequest(const COPYDATASTRUCT* copyData) {
 // from then on, for the island to ask for them (kIpcHello). Only once the
 // taskbar receives them (subclassed), and only for an island that shows them.
 std::atomic<bool> g_trayIconsRequested;
-// The taskbars subclassed (see SubclassTaskbars), defined further down.
-extern std::vector<HWND> g_subclassedTaskbars;
+// Whether a taskbar is subclassed yet (see SubclassTaskbars), defined further
+// down.
+bool AnyTaskbarSubclassed();
 
 void RequestTrayIcons() {
     if (g_trayIconsRequested || !g_settings.showIsland ||
         !g_settings.islandTray || !OwnsTaskbar() ||
-        g_subclassedTaskbars.empty()) {
+        !AnyTaskbarSubclassed()) {
         return;
     }
     g_trayIconsRequested = true;
@@ -3716,7 +3735,8 @@ LRESULT CALLBACK TaskbarSubclassProc(HWND hWnd,
         WatchTaskbarPlace();
     }
     if (uMsg == WM_COPYDATA && lParam &&
-        IsIpcSender((HWND)wParam, kIslandClassName)) {
+        (IsIpcSender((HWND)wParam, kIslandClassName) ||
+         IsIpcSender((HWND)wParam, kNotifierClassName))) {
         const auto* copyData = (const COPYDATASTRUCT*)lParam;
         switch (copyData->dwData) {
             case kIpcHello:
@@ -3774,8 +3794,34 @@ LRESULT CALLBACK TaskbandSubclassProc(HWND hWnd,
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
+// Subclassed from several threads (the engine's, the late start, the taskbar's
+// for a new secondary taskbar): the lists are only touched under this lock,
+// never held while subclassing (that waits for the taskbar's thread).
+SRWLOCK g_subclassedLock = SRWLOCK_INIT;
 std::vector<HWND> g_subclassedTaskbars;
 std::vector<HWND> g_subclassedTaskbands;
+
+bool AnyTaskbarSubclassed() {
+    AcquireSRWLockShared(&g_subclassedLock);
+    const bool any = !g_subclassedTaskbars.empty();
+    ReleaseSRWLockShared(&g_subclassedLock);
+    return any;
+}
+
+bool IsListed(const std::vector<HWND>& list, HWND hWnd) {
+    AcquireSRWLockShared(&g_subclassedLock);
+    const bool listed = std::find(list.begin(), list.end(), hWnd) != list.end();
+    ReleaseSRWLockShared(&g_subclassedLock);
+    return listed;
+}
+
+void AddToList(std::vector<HWND>& list, HWND hWnd) {
+    AcquireSRWLockExclusive(&g_subclassedLock);
+    if (std::find(list.begin(), list.end(), hWnd) == list.end()) {
+        list.push_back(hWnd);
+    }
+    ReleaseSRWLockExclusive(&g_subclassedLock);
+}
 
 BOOL CALLBACK SubclassTaskbarProc(HWND hWnd, LPARAM) {
     DWORD processId = 0;
@@ -3785,12 +3831,10 @@ BOOL CALLBACK SubclassTaskbarProc(HWND hWnd, LPARAM) {
         GetClassName(hWnd, className, ARRAYSIZE(className)) &&
         (_wcsicmp(className, L"Shell_TrayWnd") == 0 ||
          _wcsicmp(className, L"Shell_SecondaryTrayWnd") == 0) &&
-        std::find(g_subclassedTaskbars.begin(),
-                  g_subclassedTaskbars.end(),
-                  hWnd) == g_subclassedTaskbars.end()) {
+        !IsListed(g_subclassedTaskbars, hWnd)) {
         if (WindhawkUtils::SetWindowSubclassFromAnyThread(
                 hWnd, TaskbarSubclassProc, 0)) {
-            g_subclassedTaskbars.push_back(hWnd);
+            AddToList(g_subclassedTaskbars, hWnd);
         }
     }
     // The main taskbar's buttons live in its taskband window (made a
@@ -3798,13 +3842,10 @@ BOOL CALLBACK SubclassTaskbarProc(HWND hWnd, LPARAM) {
     if (processId == GetCurrentProcessId() &&
         _wcsicmp(className, L"Shell_TrayWnd") == 0) {
         HWND taskband = (HWND)GetProp(hWnd, L"TaskbandHWND");
-        if (taskband &&
-            std::find(g_subclassedTaskbands.begin(),
-                      g_subclassedTaskbands.end(),
-                      taskband) == g_subclassedTaskbands.end() &&
+        if (taskband && !IsListed(g_subclassedTaskbands, taskband) &&
             WindhawkUtils::SetWindowSubclassFromAnyThread(
                 taskband, TaskbandSubclassProc, 0)) {
-            g_subclassedTaskbands.push_back(taskband);
+            AddToList(g_subclassedTaskbands, taskband);
         }
     }
     return TRUE;
@@ -3817,21 +3858,25 @@ void SubclassTaskbars() {
 }
 
 void UnsubclassTaskbars() {
-    for (HWND hWnd : g_subclassedTaskbars) {
+    AcquireSRWLockExclusive(&g_subclassedLock);
+    std::vector<HWND> taskbars = std::move(g_subclassedTaskbars);
+    std::vector<HWND> taskbands = std::move(g_subclassedTaskbands);
+    g_subclassedTaskbars.clear();
+    g_subclassedTaskbands.clear();
+    ReleaseSRWLockExclusive(&g_subclassedLock);
+    for (HWND hWnd : taskbars) {
         if (IsWindow(hWnd)) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 hWnd, TaskbarSubclassProc);
         }
     }
-    g_subclassedTaskbars.clear();
 
-    for (HWND hWnd : g_subclassedTaskbands) {
+    for (HWND hWnd : taskbands) {
         if (IsWindow(hWnd)) {
             WindhawkUtils::RemoveWindowSubclassFromAnyThread(
                 hWnd, TaskbandSubclassProc);
         }
     }
-    g_subclassedTaskbands.clear();
 }
 
 // Loaded with Explorer (or while it restarts), the taskbar isn't ready yet:
@@ -4371,6 +4416,14 @@ DWORD WINAPI ToastThreadProc(LPVOID) {
     }
     Wh_Log(L"Watching new notifications after %lld", lastId);
     g_toastWatchReady = true;
+    // The sender of the apps with new notifications (see kNotifierClassName).
+    WNDCLASS notifierClass{};
+    notifierClass.lpfnWndProc = DefWindowProc;
+    notifierClass.hInstance = g_module;
+    notifierClass.lpszClassName = kNotifierClassName;
+    RegisterClass(&notifierClass);
+    HWND notifier = CreateWindowEx(0, kNotifierClassName, nullptr, 0, 0, 0, 0,
+                                   0, HWND_MESSAGE, nullptr, g_module, nullptr);
 
     const HANDLE events[] = {g_toastStopEvent, g_toastChangedEvent};
     while (WaitForMultipleObjects(ARRAYSIZE(events), events, FALSE,
@@ -4395,8 +4448,12 @@ DWORD WINAPI ToastThreadProc(LPVOID) {
             }
         }
         // Explorer makes their icons bounce.
-        SendLines(FindTaskbarWnd(), g_islandWnd, kIpcNotifiedApps, apps);
+        SendLines(FindTaskbarWnd(), notifier, kIpcNotifiedApps, apps);
     }
+    if (notifier) {
+        DestroyWindow(notifier);
+    }
+    UnregisterClass(kNotifierClassName, g_module);
     sqlite.Unload();
     return 0;
 }
@@ -4476,7 +4533,6 @@ void StopToastWatch() {
 
 HANDLE g_attentionThread;
 DWORD g_attentionThreadId;
-HMODULE g_module;
 std::atomic<bool> g_attentionClicked;
 
 constexpr UINT WM_APP_ATTENTION = WM_APP + 30;  // lParam: the app's window.
@@ -9540,7 +9596,7 @@ class Island {
     void StopWatchingTrayAppWindows();
 
    public:
-    void OnWindowsBanner(HWND banner);
+    void OnWindowsBanner(HWND banner, bool appeared);
     void WatchWindowsBannerMoves(DWORD processId);
     void OnTrayAppWindow(HWND hWnd);
 
@@ -9729,16 +9785,19 @@ class Island {
     // (m_bannerAmount from 0 to 1, a bit more while bouncing), stays a few
     // seconds (longer under the mouse), and goes back.
     IslandToast m_banner;
+    // New notifications of other chats while a reply is typed: shown after.
+    std::vector<IslandToast> m_waitingToasts;
     bool m_bannerWanted = false;
-    // When the pill last took a notification, when the Windows banner was
-    // hidden ahead of it and where it was, and when it was put back (see
-    // OnWindowsBanner).
+    // When the pill last took a notification, when the Windows banner last
+    // appeared and where, and when it was put back (see OnWindowsBanner).
     double m_bannerTakenAt = -100;
-    double m_bannerHiddenAt = -100;
+    double m_bannerShownAt = -100;
     double m_bannerRestoredAt = -100;
     LONG m_bannerHomeTop = 0;
     bool CanTakeBanners() const;
-    void RestoreWindowsBanner();
+    bool BannerTaken() const;
+    double BannerRestoreSeconds() const;
+    void RestoreWindowsBanner(bool rejected);
     // The reply row: 0 hidden, 1 shown (under the mouse, or while typing).
     double m_bannerOpen = 0;
     double m_bannerOpenVelocity = 0;
@@ -14010,51 +14069,16 @@ bool FindToastActivator(const std::wstring& appId, CLSID* clsid) {
         }
     }
     ReleaseSRWLockShared(&g_toastActivatorsLock);
-    const size_t bang = appId.find(L'!');
-    if (!cached && bang != std::wstring::npos) {
-        const std::wstring family = appId.substr(0, bang);
-        UINT32 count = 0;
-        UINT32 length = 0;
-        if (GetPackagesByPackageFamily(family.c_str(), &count, nullptr, &length,
-                                       nullptr) == ERROR_INSUFFICIENT_BUFFER &&
-            count) {
-            std::vector<PWSTR> names(count);
-            std::vector<WCHAR> buffer(length);
-            UINT32 pathLength = 0;
-            if (GetPackagesByPackageFamily(family.c_str(), &count,
-                                           names.data(), &length,
-                                           buffer.data()) == ERROR_SUCCESS &&
-                GetPackagePathByFullName(names[0], &pathLength, nullptr) ==
-                    ERROR_INSUFFICIENT_BUFFER) {
-                std::wstring path(pathLength, L'\0');
-                if (GetPackagePathByFullName(names[0], &pathLength,
-                                             path.data()) == ERROR_SUCCESS) {
-                    path.resize(wcslen(path.c_str()));
-                    path += L"\\AppxManifest.xml";
-                    HANDLE file = CreateFile(path.c_str(), GENERIC_READ,
-                                             FILE_SHARE_READ, nullptr,
-                                             OPEN_EXISTING, 0, nullptr);
-                    if (file != INVALID_HANDLE_VALUE) {
-                        const DWORD size = GetFileSize(file, nullptr);
-                        std::string xml(size < 4 * 1024 * 1024 ? size : 0,
-                                        '\0');
-                        DWORD read = 0;
-                        ReadFile(file, xml.data(), (DWORD)xml.size(), &read,
-                                 nullptr);
-                        CloseHandle(file);
-                        const size_t at = xml.find("ToastActivatorCLSID=\"");
-                        if (at != std::string::npos) {
-                            const size_t start = at + 21;
-                            const size_t end = xml.find('"', start);
-                            if (end != std::string::npos && end - start < 40) {
-                                found = L"{" +
-                                        std::wstring(xml.begin() + start,
-                                                     xml.begin() + end) +
-                                        L"}";
-                            }
-                        }
-                    }
-                }
+    if (!cached) {
+        const std::string xml = ReadAppxManifest(appId);
+        const size_t at = xml.find("ToastActivatorCLSID=\"");
+        if (at != std::string::npos) {
+            const size_t start = at + 21;
+            const size_t end = xml.find('"', start);
+            if (end != std::string::npos && end - start < 40) {
+                found = L"{" +
+                        std::wstring(xml.begin() + start, xml.begin() + end) +
+                        L"}";
             }
         }
         AcquireSRWLockExclusive(&g_toastActivatorsLock);
@@ -17459,6 +17483,16 @@ void Island::EndBannerTyping() {
     SetWindowLongPtr(m_hwnd, GWL_EXSTYLE,
                      GetWindowLongPtr(m_hwnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE);
     StartAnimating();
+    // The notifications that came meanwhile show now.
+    if (!m_waitingToasts.empty()) {
+        AcquireSRWLockExclusive(&g_islandToastsLock);
+        g_islandToasts.insert(g_islandToasts.begin(),
+                              std::make_move_iterator(m_waitingToasts.begin()),
+                              std::make_move_iterator(m_waitingToasts.end()));
+        ReleaseSRWLockExclusive(&g_islandToastsLock);
+        m_waitingToasts.clear();
+        PostMessage(m_hwnd, WM_APP_TOAST, 0, 0);
+    }
 }
 
 void Island::SendBannerReply() {
@@ -17519,15 +17553,45 @@ void Island::ShowBanner() {
     std::vector<IslandToast> toasts = std::move(g_islandToasts);
     g_islandToasts.clear();
     ReleaseSRWLockExclusive(&g_islandToastsLock);
-    if (toasts.empty() || m_bannerTyping) {
+    if (toasts.empty()) {
         return;
     }
-    if (m_bar || !m_visible || m_calendar.IsOpen() || m_control.IsOpen() ||
-        m_notifications.IsOpen() || m_mediaPanel.IsOpen()) {
+    // Typing a reply: a new message of the same chat updates the banner (what
+    // was typed stays, and the focus), others wait until the reply is done.
+    // The pill takes them all, so the Windows banner goes.
+    if (m_bannerTyping) {
+        for (auto& toast : toasts) {
+            if (toast.appId == m_banner.appId &&
+                toast.title == m_banner.title) {
+                m_banner.text = std::move(toast.text);
+                m_banner.image = std::move(toast.image);
+                m_banner.imageCircle = toast.imageCircle;
+                m_banner.imageData = std::move(toast.imageData);
+                if (toast.reply.CanReply()) {
+                    m_banner.reply = std::move(toast.reply);
+                }
+            } else {
+                m_waitingToasts.push_back(std::move(toast));
+            }
+        }
+        m_bannerTakenAt = NowSeconds();
+        if (g_windowsBanner) {
+            OnWindowsBanner(g_windowsBanner, false);
+        }
+        StartAnimating();
+        Render(true);
+        return;
+    }
+    // Not shown in the pill now: the Windows banner stays.
+    if (m_bar || !m_visible || m_calendar.IsOpen() ||
+        m_control.IsOpen() || m_notifications.IsOpen() ||
+        m_mediaPanel.IsOpen()) {
+        RestoreWindowsBanner(true);
         return;
     }
     if (m_minimized && !g_bannerWhenMinimized &&
         !toasts.back().appId.empty()) {
+        RestoreWindowsBanner(true);
         m_peekApp = toasts.back().appId;
         m_peekStart = NowSeconds();
         StartAnimating();
@@ -17538,7 +17602,7 @@ void Island::ShowBanner() {
     // The Windows banner can go now (see OnWindowsBanner).
     m_bannerTakenAt = NowSeconds();
     if (g_windowsBanner) {
-        OnWindowsBanner(g_windowsBanner);
+        OnWindowsBanner(g_windowsBanner, false);
     }
     if (!m_banner.sticky) {
         SetTimer(m_hwnd, kBannerTimerId, kBannerShownMs, nullptr);
@@ -18727,7 +18791,7 @@ void CALLBACK BannerWinEventProc(HWINEVENTHOOK,
         }
     }
     if (hWnd == g_windowsBanner) {
-        g_island->OnWindowsBanner(hWnd);
+        g_island->OnWindowsBanner(hWnd, event == kEventObjectUncloaked);
     }
 }
 
@@ -18752,18 +18816,27 @@ bool Island::CanTakeBanners() const {
            !m_mediaPanel.IsOpen();
 }
 
+// Whether the pill took the notification of the Windows banner that last
+// appeared: it took one since (or just before, as it can be faster).
+bool Island::BannerTaken() const {
+    return m_bannerTakenAt >= m_bannerShownAt - 1.0 &&
+           NowSeconds() - m_bannerTakenAt < kBannerShownMs / 1000.0 + 3;
+}
+
+// How long a Windows banner hidden ahead of the pill waits for it: longer
+// when the pill may be downloading the notification's picture first.
+double Island::BannerRestoreSeconds() const {
+    return (g_settings.islandWebPictures ? 9000 : kBannerRestoreMs) / 1000.0;
+}
+
 // Moves the Windows banner off the screen when the pill shows the
-// notification instead. It's moved as soon as it shows, when the pill can
-// show notifications, so it doesn't flash; if the pill doesn't take the
-// notification shortly after (one it can't read), it's put back. Never a
-// window that's in front (a flyout the user opened).
-void Island::OnWindowsBanner(HWND banner) {
-    const double now = NowSeconds();
-    const bool taken =
-        now - m_bannerTakenAt < kBannerShownMs / 1000.0 + 3;
-    const bool ahead = !taken && CanTakeBanners() &&
-                       now - m_bannerRestoredAt > kBannerShownMs / 1000.0 + 3;
-    if (!g_settings.islandHideWindowsBanners || (!taken && !ahead) ||
+// notification instead. Each banner that appears is hidden right away when
+// the pill can show notifications, so it doesn't flash, and put back if the
+// pill doesn't take its notification shortly after (see
+// RestoreWindowsBanner). Never a window that's in front (a flyout the user
+// opened).
+void Island::OnWindowsBanner(HWND banner, bool appeared) {
+    if (!g_settings.islandHideWindowsBanners ||
         GetForegroundWindow() == banner) {
         return;
     }
@@ -18774,32 +18847,49 @@ void Island::OnWindowsBanner(HWND banner) {
         cloaked || !GetWindowRect(banner, &rect)) {
         return;
     }
+    const double now = NowSeconds();
     const int below = GetSystemMetrics(SM_YVIRTUALSCREEN) +
                       GetSystemMetrics(SM_CYVIRTUALSCREEN) + 200;
-    if (rect.top >= below) {
+    // A new notification's banner.
+    if (appeared) {
+        m_bannerShownAt = now;
+        if (rect.top < below) {
+            m_bannerHomeTop = rect.top;
+        }
+    }
+    const bool taken = BannerTaken();
+    const double waited = now - m_bannerShownAt;
+    const bool ahead = !taken && m_bannerRestoredAt < m_bannerShownAt &&
+                       waited < BannerRestoreSeconds() && CanTakeBanners();
+    if ((!taken && !ahead) || rect.top >= below) {
         return;
     }
-    if (ahead && now - m_bannerHiddenAt > kBannerRestoreMs / 1000.0) {
-        m_bannerHiddenAt = now;
-        m_bannerHomeTop = rect.top;
-        SetTimer(m_hwnd, kBannerRestoreTimerId, kBannerRestoreMs, nullptr);
+    if (ahead) {
+        SetTimer(m_hwnd, kBannerRestoreTimerId,
+                 (UINT)std::max(1.0, (BannerRestoreSeconds() - waited) * 1000),
+                 nullptr);
     }
     SetWindowPos(banner, nullptr, rect.left, below, 0, 0,
                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
-// The pill didn't take the notification it hid the Windows banner for: the
-// banner comes back where it was.
-void Island::RestoreWindowsBanner() {
-    if (m_bannerTakenAt >= m_bannerHiddenAt || !g_windowsBanner ||
-        !IsWindow(g_windowsBanner)) {
+// The Windows banner comes back where it was: the pill didn't take its
+// notification in time, or `rejected` it (it can't show it now, like while
+// typing a reply). Not hidden again until another banner appears.
+void Island::RestoreWindowsBanner(bool rejected) {
+    KillTimer(m_hwnd, kBannerRestoreTimerId);
+    if (!rejected && BannerTaken()) {
         return;
     }
+    if (rejected) {
+        m_bannerTakenAt = -100;
+    }
+    m_bannerRestoredAt = NowSeconds();
     RECT rect;
     const int below = GetSystemMetrics(SM_YVIRTUALSCREEN) +
                       GetSystemMetrics(SM_CYVIRTUALSCREEN) + 200;
-    if (GetWindowRect(g_windowsBanner, &rect) && rect.top >= below) {
-        m_bannerRestoredAt = NowSeconds();
+    if (g_windowsBanner && IsWindow(g_windowsBanner) &&
+        GetWindowRect(g_windowsBanner, &rect) && rect.top >= below) {
         SetWindowPos(g_windowsBanner, nullptr, rect.left, m_bannerHomeTop, 0,
                      0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
@@ -19367,7 +19457,7 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             }
             if (wParam == kBannerRestoreTimerId) {
                 KillTimer(m_hwnd, kBannerRestoreTimerId);
-                RestoreWindowsBanner();
+                RestoreWindowsBanner(false);
                 return 0;
             }
             if (wParam == kPinTimerId) {
