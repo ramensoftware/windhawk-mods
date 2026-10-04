@@ -4,7 +4,7 @@
 // @name:pt-BR      Ilha e Dock estilo Mac
 // @description     An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)
 // @description:pt-BR Uma ilha no topo da tela como a barra de menus do macOS e a Dynamic Island do iPhone (relógio, central de controle, notificações, mídia, ícones da bandeja) e uma dock como a do macOS no lugar da barra de tarefas (ou a barra do Windows, transparente ou como ela é)
-// @version         0.42.5
+// @version         0.42.6
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
@@ -4440,8 +4440,11 @@ DWORD WINAPI ToastThreadProc(LPVOID) {
         }
         // The island shows the latest one.
         if (!toasts.empty() && g_bannerEnabled) {
+            // Added: ones the island hasn't taken yet stay.
             AcquireSRWLockExclusive(&g_islandToastsLock);
-            g_islandToasts = std::move(toasts);
+            g_islandToasts.insert(g_islandToasts.end(),
+                                  std::make_move_iterator(toasts.begin()),
+                                  std::make_move_iterator(toasts.end()));
             ReleaseSRWLockExclusive(&g_islandToastsLock);
             if (HWND island = g_islandWnd) {
                 PostMessage(island, WM_APP_TOAST, 0, 0);
@@ -5782,6 +5785,10 @@ constexpr UINT_PTR kPinTimerId = 8;
 // notification by then (see OnWindowsBanner).
 constexpr UINT_PTR kBannerRestoreTimerId = 9;
 constexpr UINT kBannerRestoreMs = 1500;
+// After a banner goes, the next waiting one (see m_waitingToasts) comes this
+// much later.
+constexpr UINT_PTR kBannerNextTimerId = 10;
+constexpr UINT kBannerNextMs = 600;
 constexpr UINT kPinDelayMs = 2000;
 constexpr double kPinGrowSeconds = 0.22;
 // What's playing stays on the pill at least this long, and this long after it
@@ -9785,7 +9792,8 @@ class Island {
     // (m_bannerAmount from 0 to 1, a bit more while bouncing), stays a few
     // seconds (longer under the mouse), and goes back.
     IslandToast m_banner;
-    // New notifications of other chats while a reply is typed: shown after.
+    // New notifications of other chats while a reply is typed: shown after,
+    // one by one (the next when a banner goes).
     std::vector<IslandToast> m_waitingToasts;
     bool m_bannerWanted = false;
     // When the pill last took a notification, when the Windows banner last
@@ -17483,15 +17491,9 @@ void Island::EndBannerTyping() {
     SetWindowLongPtr(m_hwnd, GWL_EXSTYLE,
                      GetWindowLongPtr(m_hwnd, GWL_EXSTYLE) | WS_EX_NOACTIVATE);
     StartAnimating();
-    // The notifications that came meanwhile show now.
+    // The notifications that came meanwhile show now, one by one.
     if (!m_waitingToasts.empty()) {
-        AcquireSRWLockExclusive(&g_islandToastsLock);
-        g_islandToasts.insert(g_islandToasts.begin(),
-                              std::make_move_iterator(m_waitingToasts.begin()),
-                              std::make_move_iterator(m_waitingToasts.end()));
-        ReleaseSRWLockExclusive(&g_islandToastsLock);
-        m_waitingToasts.clear();
-        PostMessage(m_hwnd, WM_APP_TOAST, 0, 0);
+        SetTimer(m_hwnd, kBannerNextTimerId, kBannerNextMs, nullptr);
     }
 }
 
@@ -17553,7 +17555,7 @@ void Island::ShowBanner() {
     std::vector<IslandToast> toasts = std::move(g_islandToasts);
     g_islandToasts.clear();
     ReleaseSRWLockExclusive(&g_islandToastsLock);
-    if (toasts.empty()) {
+    if (toasts.empty() && m_waitingToasts.empty()) {
         return;
     }
     // Typing a reply: a new message of the same chat updates the banner (what
@@ -17582,22 +17584,37 @@ void Island::ShowBanner() {
         Render(true);
         return;
     }
-    // Not shown in the pill now: the Windows banner stays.
+    // Not shown in the pill now: the Windows banner stays (waiting ones keep
+    // waiting).
     if (m_bar || !m_visible || m_calendar.IsOpen() ||
         m_control.IsOpen() || m_notifications.IsOpen() ||
         m_mediaPanel.IsOpen()) {
-        RestoreWindowsBanner(true);
+        if (!toasts.empty()) {
+            RestoreWindowsBanner(true);
+        }
         return;
     }
-    if (m_minimized && !g_bannerWhenMinimized &&
-        !toasts.back().appId.empty()) {
-        RestoreWindowsBanner(true);
-        m_peekApp = toasts.back().appId;
+    // The newest notification shows at once; a waiting one only when no
+    // banner is shown.
+    IslandToast next;
+    if (!toasts.empty()) {
+        next = std::move(toasts.back());
+    } else if (!m_bannerWanted) {
+        next = std::move(m_waitingToasts.front());
+        m_waitingToasts.erase(m_waitingToasts.begin());
+    } else {
+        return;
+    }
+    if (m_minimized && !g_bannerWhenMinimized && !next.appId.empty()) {
+        if (!toasts.empty()) {
+            RestoreWindowsBanner(true);
+        }
+        m_peekApp = next.appId;
         m_peekStart = NowSeconds();
         StartAnimating();
         return;
     }
-    m_banner = std::move(toasts.back());
+    m_banner = std::move(next);
     m_bannerWanted = true;
     // The Windows banner can go now (see OnWindowsBanner).
     m_bannerTakenAt = NowSeconds();
@@ -17617,6 +17634,10 @@ void Island::HideBanner() {
     if (m_bannerWanted) {
         m_bannerWanted = false;
         StartAnimating();
+    }
+    // The next waiting notification, once this one has gone.
+    if (!m_waitingToasts.empty()) {
+        SetTimer(m_hwnd, kBannerNextTimerId, kBannerNextMs, nullptr);
     }
 }
 
@@ -19453,6 +19474,11 @@ LRESULT Island::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam,
             if (wParam == kMediaTimerId) {
                 KillTimer(m_hwnd, kMediaTimerId);
                 UpdateMediaShown();
+                return 0;
+            }
+            if (wParam == kBannerNextTimerId) {
+                KillTimer(m_hwnd, kBannerNextTimerId);
+                ShowBanner();
                 return 0;
             }
             if (wParam == kBannerRestoreTimerId) {
