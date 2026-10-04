@@ -8,7 +8,7 @@
 // @author          loliri
 // @github          https://github.com/loliri
 // @license         MIT
-// @compilerOptions -lole32 -loleaut32 -luuid
+// @compilerOptions -lole32
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -23,24 +23,25 @@ unmutes it when it comes back to the foreground.
 The mod targets nothing by default, so it does nothing until you tell it which
 process to apply to. Open the mod in Windhawk, go to the **Advanced** tab, and
 put the executable name of your target in the **Custom process inclusion list**.
-The mod is loaded into the program as soon as you save; if nothing happens right
-away, restart the program.
+The mod takes effect as soon as you save.
 
 ## Notes
 
 - Mute is used, not the volume level, so a program's volume in the Volume Mixer
   is left as it is.
 - Only sessions this mod muted itself are unmuted, so a program you muted by
-  hand in the Volume Mixer stays muted.
+  hand in the Volume Mixer stays muted. The one exception is the first pass after
+  a run that left the program muted: a mute that was already there can't be told
+  apart from one the user set, so it is treated as the mod's and undone.
 - Windows remembers a program's mute state between launches. If the program is
   closed while it is in the background, it starts muted the next time; the mod
   clears that as soon as it is loaded into the program again. If the mod is
   disabled while the program is closed, the mute has to be cleared by hand in
   the Volume Mixer.
-- The mod works per process, so it only handles audio that comes from the
-  process it is loaded into. Multi-process programs (Chromium/Electron apps such
-  as Chrome, Edge, Discord and Spotify) play audio from a child process that
-  never owns the foreground window, so their audio is not handled.
+- **Don't add multi-process programs** (Chrome, Edge, Discord, Spotify and other
+  Chromium/Electron apps). Their audio comes from a child process that never
+  owns the foreground window, so the mod would keep them muted the whole time,
+  including while they are in the foreground.
 */
 // ==/WindhawkModReadme==
 
@@ -69,6 +70,32 @@ std::set<std::wstring> g_mutedSessions;
 // Whether the sessions currently in g_mutedSessions were left muted by a
 // previous run of the program rather than muted by this one.
 bool g_adoptMutedSessions = false;
+
+// The name of the value recording that this program was left muted. The mod's
+// storage is shared by every process it runs in, so the key is per executable;
+// two instances of the same executable still share one key, which is rare
+// enough to accept.
+std::wstring g_leftMutedValueName;
+
+// Whether g_mutedSessions was non-empty when it was last written out, so the
+// value is only written when it changes rather than on every sync.
+bool g_leftMutedWritten = false;
+
+void InitLeftMutedValueName() {
+    WCHAR path[MAX_PATH];
+    if (!GetModuleFileNameW(nullptr, path, ARRAYSIZE(path))) {
+        g_leftMutedValueName = L"leftMuted";
+        return;
+    }
+
+    PCWSTR name = wcsrchr(path, L'\\');
+    name = name ? name + 1 : path;
+
+    g_leftMutedValueName = L"leftMuted_";
+    for (; *name; name++) {
+        g_leftMutedValueName.push_back(towlower(*name));
+    }
+}
 
 // Opens the default render endpoint's session manager. Returns null on failure.
 ComPtr<IAudioSessionManager2> GetSessionManager() {
@@ -180,8 +207,13 @@ void SyncMuteState() {
     g_adoptMutedSessions = false;
 
     // Remembered for the next run: if the program exits while muted, the next
-    // run has to clear that.
-    Wh_SetIntValue(L"leftMuted", g_mutedSessions.empty() ? 0 : 1);
+    // run has to clear that. Written only when it changes, so the value is not
+    // rewritten on every foreground change.
+    bool leftMuted = !g_mutedSessions.empty();
+    if (leftMuted != g_leftMutedWritten) {
+        g_leftMutedWritten = leftMuted;
+        Wh_SetIntValue(g_leftMutedValueName.c_str(), leftMuted ? 1 : 0);
+    }
 }
 
 // Unmutes everything this mod muted, for the mod unload path.
@@ -235,7 +267,8 @@ void UnmuteAll() {
     }
 
     g_mutedSessions.clear();
-    Wh_SetIntValue(L"leftMuted", 0);
+    g_leftMutedWritten = false;
+    Wh_SetIntValue(g_leftMutedValueName.c_str(), 0);
 }
 
 class SessionNotification : public IAudioSessionNotification {
@@ -284,13 +317,41 @@ class SessionNotification : public IAudioSessionNotification {
     LONG m_refCount = 1;
 };
 
+// The session manager and the notification are kept alive together by the
+// worker thread for as long as the mod runs. Letting either go while the other
+// is still registered would leave the audio stack calling into the mod after it
+// has been unloaded.
+ComPtr<IAudioSessionManager2> g_notifyManager;
+ComPtr<SessionNotification> g_notification;
+
 void RegisterSessionNotification() {
-    ComPtr<IAudioSessionManager2> manager = GetSessionManager();
-    if (!manager) {
+    g_notifyManager = GetSessionManager();
+    if (!g_notifyManager) {
         return;
     }
 
-    manager->RegisterSessionNotification(new SessionNotification);
+    // Attached, not copied: this owns the initial reference.
+    g_notification.Attach(new SessionNotification);
+
+    if (FAILED(g_notifyManager->RegisterSessionNotification(
+            g_notification.Get()))) {
+        g_notifyManager.Reset();
+        g_notification.Reset();
+        return;
+    }
+
+    // WASAPI does not deliver OnSessionCreated to a manager whose sessions were
+    // never enumerated.
+    ComPtr<IAudioSessionEnumerator> sessions;
+    g_notifyManager->GetSessionEnumerator(&sessions);
+}
+
+void UnregisterSessionNotification() {
+    if (g_notifyManager) {
+        g_notifyManager->UnregisterSessionNotification(g_notification.Get());
+        g_notifyManager.Reset();
+    }
+    g_notification.Reset();
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND, LONG idObject,
@@ -311,6 +372,9 @@ DWORD WINAPI WorkerThread(LPVOID) {
     MSG msg;
     PeekMessage(&msg, nullptr, 0, 0, PM_NOREMOVE);
 
+    // The message queue exists from here on, so the unload path can post to it.
+    SetEvent(g_readyEvent);
+
     HWINEVENTHOOK hook = SetWinEventHook(
         EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, WinEventProc,
         0, 0, WINEVENT_OUTOFCONTEXT);
@@ -322,9 +386,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
     RegisterSessionNotification();
 
     // A previous run may have left the program muted.
-    g_adoptMutedSessions = Wh_GetIntValue(L"leftMuted", 0) != 0;
-
-    SetEvent(g_readyEvent);
+    g_adoptMutedSessions = Wh_GetIntValue(g_leftMutedValueName.c_str(), 0) != 0;
+    g_leftMutedWritten = g_adoptMutedSessions;
 
     SyncMuteState();
 
@@ -340,6 +403,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
         UnhookWinEvent(hook);
     }
 
+    UnregisterSessionNotification();
+
     UnmuteAll();
 
     CoUninitialize();
@@ -348,6 +413,8 @@ DWORD WINAPI WorkerThread(LPVOID) {
 
 BOOL Wh_ModInit() {
     Wh_Log(L">");
+
+    InitLeftMutedValueName();
 
     g_readyEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     if (!g_readyEvent) {
@@ -364,9 +431,9 @@ BOOL Wh_ModInit() {
         return FALSE;
     }
 
+    // Waited on, not closed here: the worker may still signal it, and the
+    // handle could already have been reused by then.
     WaitForSingleObject(g_readyEvent, 5000);
-    CloseHandle(g_readyEvent);
-    g_readyEvent = nullptr;
 
     return TRUE;
 }
@@ -380,5 +447,10 @@ void Wh_ModUninit() {
         CloseHandle(g_workerThread);
         g_workerThread = nullptr;
         g_workerThreadId = 0;
+    }
+
+    if (g_readyEvent) {
+        CloseHandle(g_readyEvent);
+        g_readyEvent = nullptr;
     }
 }
