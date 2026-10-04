@@ -7,7 +7,6 @@
 // @version         2.0
 // @author          loliri
 // @github          https://github.com/loliri
-// @include         mspaint.exe
 // @license         MIT
 // ==/WindhawkMod==
 
@@ -20,15 +19,11 @@ built-in cursor, while letting the program hide the cursor normally.
 
 ## Choosing the target program
 
-The target program is set by the mod's `@include` metadata field, which
-Windhawk uses to decide which processes to inject into. It is set to
-`mspaint.exe` (Paint) as a placeholder, so nothing happens to your programs
-until you change it.
-
-You do not need to edit the source code to change it. Open the mod in Windhawk,
-go to **Details** → **Advanced settings**, and put the executable name of your
-target in the **process inclusion list** there. The change takes effect the next
-time the program starts.
+The mod targets nothing by default, so it does nothing until you tell it which
+process to apply to. Open the mod in Windhawk, go to the **Advanced** tab, and
+put the executable name of your target in the **Custom process inclusion list**.
+The change applies as soon as you save, and takes effect the next time the
+program starts.
 
 ## Settings
 
@@ -41,7 +36,7 @@ time the program starts.
 
 // ==WindhawkModSettings==
 /*
-- useCustomCursor: true
+- useCustomCursor: false
   $name: Enable custom cursor
   $name:zh-CN: 启用自定义光标
   $description: Use the built-in cursor (or the file set below) when on; use the system default cursor when off.
@@ -54,6 +49,11 @@ time the program starts.
 */
 // ==/WindhawkModSettings==
 
+#include <windhawk_utils.h>
+
+#include <windows.h>
+
+#include <vector>
 
 static const unsigned char kCursorData[] = {
     0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x28, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x13, 0x1a,
@@ -476,31 +476,30 @@ static const unsigned char kCursorData[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
-static const size_t kCursorDataSize = 6697;
 
 using SetCursor_t = HCURSOR(WINAPI*)(HCURSOR);
 SetCursor_t originalSetCursor = nullptr;
 HCURSOR customCursor = nullptr;
 
+// The embedded image is an ICO: a 6-byte ICONDIR, a 16-byte ICONDIRENTRY, then
+// the DIB. A cursor resource is the same DIB prefixed with a hotspot, so it can
+// be built in memory, with no temporary file and nothing written to disk.
 HCURSOR LoadBuiltinCursor() {
-    // Write the ico data to a temporary file before loading it
-    // (LoadCursorFromFile cannot load from memory)
-    wchar_t tempPath[MAX_PATH], tempFile[MAX_PATH];
-    GetTempPathW(MAX_PATH, tempPath);
-    GetTempFileNameW(tempPath, L"cur", 0, tempFile);
-    // Change the extension to .ico
-    wchar_t icoFile[MAX_PATH];
-    wcscpy_s(icoFile, tempFile);
-    wcscat_s(icoFile, L".ico");
-    HANDLE hFile = CreateFileW(icoFile, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile == INVALID_HANDLE_VALUE) return nullptr;
-    DWORD written;
-    WriteFile(hFile, kCursorData, (DWORD)kCursorDataSize, &written, nullptr);
-    CloseHandle(hFile);
-    HCURSOR hCursor = (HCURSOR)LoadImageW(nullptr, icoFile, IMAGE_CURSOR, 0, 0, LR_LOADFROMFILE);
-    DeleteFileW(icoFile);
-    DeleteFileW(tempFile);
-    return hCursor;
+    constexpr size_t kDibOffset = 22;
+    // BITMAPINFOHEADER + a 40x40 32bpp XOR bitmap + 40 rows of 8-byte AND mask.
+    constexpr size_t kDibSize = 40 + 40 * 40 * 4 + 8 * 40;
+    static_assert(sizeof(kCursorData) - kDibOffset <= kDibSize);
+
+    // Zero-filled, so the hotspot is (0, 0) and the AND mask tail the ICO omits
+    // is zeroed.
+    std::vector<BYTE> resource(4 + kDibSize);
+    memcpy(resource.data() + 4, kCursorData + kDibOffset,
+           sizeof(kCursorData) - kDibOffset);
+
+    return (HCURSOR)CreateIconFromResourceEx(resource.data(),
+                                             (DWORD)resource.size(), FALSE,
+                                             0x00030000, 0, 0,
+                                             LR_DEFAULTCOLOR);
 }
 
 void LoadCustomCursor() {
@@ -510,11 +509,12 @@ void LoadCustomCursor() {
     }
     if (!Wh_GetIntSetting(L"useCustomCursor")) return;
 
-    wchar_t path[MAX_PATH] = {};
-    Wh_GetStringSetting(L"cursorPath", path, MAX_PATH);
+    WindhawkUtils::StringSetting path =
+        WindhawkUtils::StringSetting::make(L"cursorPath");
 
-    if (path[0] != L'\0') {
-        customCursor = (HCURSOR)LoadImageW(nullptr, path, IMAGE_CURSOR, 0, 0, LR_LOADFROMFILE);
+    if (*path.get() != L'\0') {
+        customCursor = (HCURSOR)LoadImageW(nullptr, path.get(), IMAGE_CURSOR, 0,
+                                           0, LR_LOADFROMFILE);
     } else {
         customCursor = LoadBuiltinCursor();
     }
