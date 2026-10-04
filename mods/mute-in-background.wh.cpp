@@ -64,7 +64,7 @@ HANDLE g_readyEvent = nullptr;
 
 // Session instance identifiers of the sessions this mod muted. A session the
 // user muted by hand is never added here, so it is never unmuted by the mod.
-// Owned by the worker thread, except for the flag below.
+// Owned by the worker thread.
 std::set<std::wstring> g_mutedSessions;
 
 // Whether the sessions currently in g_mutedSessions were left muted by a
@@ -151,6 +151,7 @@ void SyncMuteState() {
 
     DWORD selfPid = GetCurrentProcessId();
     bool shouldMute = !IsForegroundProcess();
+    bool sawOwnSession = false;
 
     for (int i = 0; i < count; i++) {
         ComPtr<IAudioSessionControl> control;
@@ -183,6 +184,7 @@ void SyncMuteState() {
 
         BOOL muted = FALSE;
         volume->GetMute(&muted);
+        sawOwnSession = true;
 
         // On the first pass of a run, a session that is already muted was
         // either left behind by a previous run or muted by the user; the two
@@ -204,12 +206,19 @@ void SyncMuteState() {
         }
     }
 
-    g_adoptMutedSessions = false;
+    // Adoption stays pending until the program has an audio session to adopt.
+    // At startup the mod loads before the program opens its device, so the
+    // first pass usually finds nothing; OnSessionCreated brings us back here
+    // once the session exists.
+    if (sawOwnSession) {
+        g_adoptMutedSessions = false;
+    }
 
     // Remembered for the next run: if the program exits while muted, the next
     // run has to clear that. Written only when it changes, so the value is not
-    // rewritten on every foreground change.
-    bool leftMuted = !g_mutedSessions.empty();
+    // rewritten on every foreground change. A pending adoption keeps the record
+    // set, since the mute it refers to has not been dealt with yet.
+    bool leftMuted = !g_mutedSessions.empty() || g_adoptMutedSessions;
     if (leftMuted != g_leftMutedWritten) {
         g_leftMutedWritten = leftMuted;
         Wh_SetIntValue(g_leftMutedValueName.c_str(), leftMuted ? 1 : 0);
@@ -321,37 +330,41 @@ class SessionNotification : public IAudioSessionNotification {
 // worker thread for as long as the mod runs. Letting either go while the other
 // is still registered would leave the audio stack calling into the mod after it
 // has been unloaded.
-ComPtr<IAudioSessionManager2> g_notifyManager;
-ComPtr<SessionNotification> g_notification;
-
-void RegisterSessionNotification() {
-    g_notifyManager = GetSessionManager();
-    if (!g_notifyManager) {
+//
+// They are locals of WorkerThread rather than globals: a global with a
+// non-trivial destructor is released during process shutdown, under the loader
+// lock, with every other thread already terminated, and releasing a session
+// manager there can hang or crash the program on exit. A thread that is
+// terminated at process exit never runs its locals' destructors.
+void RegisterSessionNotification(ComPtr<IAudioSessionManager2>& manager,
+                                 ComPtr<SessionNotification>& notification) {
+    manager = GetSessionManager();
+    if (!manager) {
         return;
     }
 
     // Attached, not copied: this owns the initial reference.
-    g_notification.Attach(new SessionNotification);
+    notification.Attach(new SessionNotification);
 
-    if (FAILED(g_notifyManager->RegisterSessionNotification(
-            g_notification.Get()))) {
-        g_notifyManager.Reset();
-        g_notification.Reset();
+    if (FAILED(manager->RegisterSessionNotification(notification.Get()))) {
+        manager.Reset();
+        notification.Reset();
         return;
     }
 
     // WASAPI does not deliver OnSessionCreated to a manager whose sessions were
     // never enumerated.
     ComPtr<IAudioSessionEnumerator> sessions;
-    g_notifyManager->GetSessionEnumerator(&sessions);
+    manager->GetSessionEnumerator(&sessions);
 }
 
-void UnregisterSessionNotification() {
-    if (g_notifyManager) {
-        g_notifyManager->UnregisterSessionNotification(g_notification.Get());
-        g_notifyManager.Reset();
+void UnregisterSessionNotification(ComPtr<IAudioSessionManager2>& manager,
+                                   ComPtr<SessionNotification>& notification) {
+    if (manager) {
+        manager->UnregisterSessionNotification(notification.Get());
+        manager.Reset();
     }
-    g_notification.Reset();
+    notification.Reset();
 }
 
 void CALLBACK WinEventProc(HWINEVENTHOOK, DWORD event, HWND, LONG idObject,
@@ -383,7 +396,11 @@ DWORD WINAPI WorkerThread(LPVOID) {
         Wh_Log(L"SetWinEventHook failed: %u", GetLastError());
     }
 
-    RegisterSessionNotification();
+    // Released again before the thread exits, or by process termination, which
+    // is why these are locals rather than globals.
+    ComPtr<IAudioSessionManager2> notifyManager;
+    ComPtr<SessionNotification> notification;
+    RegisterSessionNotification(notifyManager, notification);
 
     // A previous run may have left the program muted.
     g_adoptMutedSessions = Wh_GetIntValue(g_leftMutedValueName.c_str(), 0) != 0;
@@ -403,7 +420,7 @@ DWORD WINAPI WorkerThread(LPVOID) {
         UnhookWinEvent(hook);
     }
 
-    UnregisterSessionNotification();
+    UnregisterSessionNotification(notifyManager, notification);
 
     UnmuteAll();
 
