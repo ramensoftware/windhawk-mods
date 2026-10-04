@@ -13368,6 +13368,68 @@ static bool s_ccCustomize = false;
 [[clang::no_destroy]] DispatcherTimer g_ccDelayedOpenTimer{nullptr};
 static std::wstring g_ccDelayedOpenTarget;
 
+// Airplane mode and mobile hotspot state are refreshed on a worker thread.
+// The Control Center tiles used to call Radio::GetRadiosAsync().get() and
+// NetworkOperatorTetheringManager::TetheringOperationalState() on the XAML
+// UI thread every time they were built. C++/WinRT asserts against .get() in
+// an STA because the blocking wait can deadlock; in release builds it just
+// freezes the bar until the radio service answers. Cache the results on a
+// worker and re-render through the dispatcher.
+std::atomic<bool> g_airplaneModeOn{false};
+std::atomic<bool> g_hotspotOn{false};
+std::atomic<bool> g_airplaneHotspotRefreshing{false};
+
+void RefreshAirplaneHotspotStateAsync() {
+    bool expected = false;
+    if (!g_airplaneHotspotRefreshing.compare_exchange_strong(expected, true)) {
+        return;
+    }
+    RunInBackground([] {
+        bool airplaneOn = false;
+        bool hotspotOn = false;
+#if TOPBAR_HAS_RADIOS
+        try {
+            using namespace winrt::Windows::Devices::Radios;
+            auto radios = Radio::GetRadiosAsync().get();
+            bool anyRadio = false;
+            bool anyOn = false;
+            for (auto&& radio : radios) {
+                if (radio.Kind() == RadioKind::WiFi ||
+                    radio.Kind() == RadioKind::Bluetooth ||
+                    radio.Kind() == RadioKind::MobileBroadband) {
+                    anyRadio = true;
+                    if (radio.State() == RadioState::On) { anyOn = true; break; }
+                }
+            }
+            airplaneOn = anyRadio && !anyOn;
+        } catch (...) {}
+#endif
+#if TOPBAR_HAS_NETWORK_OPERATORS
+        try {
+            using namespace winrt::Windows::Networking::NetworkOperators;
+            using namespace winrt::Windows::Networking::Connectivity;
+            auto profile = NetworkInformation::GetInternetConnectionProfile();
+            if (profile) {
+                auto mgr = NetworkOperatorTetheringManager::CreateFromConnectionProfile(profile);
+                if (mgr) {
+                    hotspotOn = (mgr.TetheringOperationalState() == TetheringOperationalState::On);
+                }
+            }
+        } catch (...) {}
+#endif
+        g_airplaneModeOn.store(airplaneOn);
+        g_hotspotOn.store(hotspotOn);
+        g_airplaneHotspotRefreshing.store(false);
+        RunOnUiThread([] {
+            try {
+                if (g_controlCenterFlyout && g_controlCenterFlyout.IsOpen()) {
+                    PopulateControlCenterPanel();
+                }
+            } catch (...) {}
+        });
+    });
+}
+
 void CCRequestFlyoutOpen(const std::wstring& target) {
     if (!g_ccDelayedOpenTimer) {
         g_ccDelayedOpenTimer = DispatcherTimer();
@@ -13725,24 +13787,7 @@ void PopulateControlCenterPanel_New() {
                 });
         }
         if (id == L"AirplaneMode") {
-            bool on = false;
-#if TOPBAR_HAS_RADIOS
-            try {
-                using namespace winrt::Windows::Devices::Radios;
-                auto radios = Radio::GetRadiosAsync().get();
-                bool anyRadio = false;
-                bool anyOn = false;
-                for (auto&& radio : radios) {
-                    if (radio.Kind() == RadioKind::WiFi ||
-                        radio.Kind() == RadioKind::Bluetooth ||
-                        radio.Kind() == RadioKind::MobileBroadband) {
-                        anyRadio = true;
-                        if (radio.State() == RadioState::On) { anyOn = true; break; }
-                    }
-                }
-                on = anyRadio && !anyOn;
-            } catch (...) {}
-#endif
+            bool on = g_airplaneModeOn.load();
             wuxc::FontIcon apIcon;
             apIcon.Glyph(L"\uE709");
             apIcon.FontSize(16);
@@ -13779,6 +13824,7 @@ void PopulateControlCenterPanel_New() {
                                 try { op.get(); } catch (...) {}
                             }
                         } catch (...) {}
+                        RefreshAirplaneHotspotStateAsync();
                         RunOnUiThread([] {
                             try { RefreshWifiButtonIcon(); } catch (...) {}
                             try { RefreshBluetoothRadioState(); } catch (...) {}
@@ -13789,23 +13835,8 @@ void PopulateControlCenterPanel_New() {
                 });
         }
         if (id == L"MobileHotspot") {
-            bool on = false;
-            std::wstring sub = L"Off";
-#if TOPBAR_HAS_NETWORK_OPERATORS
-            try {
-                using namespace winrt::Windows::Networking::NetworkOperators;
-                using namespace winrt::Windows::Networking::Connectivity;
-                auto profile = NetworkInformation::GetInternetConnectionProfile();
-                if (profile) {
-                    auto mgr = NetworkOperatorTetheringManager::CreateFromConnectionProfile(profile);
-                    if (mgr) {
-                        auto state = mgr.TetheringOperationalState();
-                        on = (state == TetheringOperationalState::On);
-                        sub = on ? L"On" : L"Off";
-                    }
-                }
-            } catch (...) {}
-#endif
+            bool on = g_hotspotOn.load();
+            std::wstring sub = on ? L"On" : L"Off";
             wuxc::FontIcon hsIcon;
             hsIcon.Glyph(L"\uE704");
             hsIcon.FontSize(16);
@@ -13830,6 +13861,7 @@ void PopulateControlCenterPanel_New() {
                             }
                         } catch (...) {}
                         WaitForSingleObject(g_stopEvent, 1200);
+                        RefreshAirplaneHotspotStateAsync();
                         RunOnUiThread([] {
                             try { PopulateControlCenterPanel_New(); } catch (...) {}
                         });
@@ -17181,22 +17213,12 @@ void BuildStartMenuFlyoutContent() {
 
                     UINT iconPx = static_cast<UINT>(std::lround(32.0 * std::max(1.0, dpi)));
                     bool iconAdded = false;
-                    SHFILEINFOW sfi{};
-                    if (SHGetFileInfoW(app.lnkPath.c_str(), 0, &sfi, sizeof(sfi),
-                                       SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon) {
-                        if (auto bmp = HIconToBitmapImage(sfi.hIcon, iconPx)) {
-                            wuxc::Image img;
-                            img.Source(bmp);
-                            img.Width(32);
-                            img.Height(32);
-                            img.Stretch(wuxm::Stretch::Uniform);
-                            img.HorizontalAlignment(HorizontalAlignment::Center);
-                            content.Children().Append(img);
-                            iconAdded = true;
-                        }
-                        DestroyIcon(sfi.hIcon);
-                    }
-                    if (!iconAdded) {
+                    // IShellItemImageFactory with SIIGBF_ICONONLY is the
+                    // primary source. It returns the shell-resolved icon
+                    // for the item and explicitly strips the shortcut
+                    // overlay, so .lnk entries no longer display the
+                    // little arrow badge on the bottom-left of their tile.
+                    {
                         winrt::com_ptr<IShellItemImageFactory> factory;
                         if (SUCCEEDED(SHCreateItemFromParsingName(
                                 app.lnkPath.c_str(), nullptr,
@@ -17225,6 +17247,23 @@ void BuildStartMenuFlyoutContent() {
                                     DestroyIcon(ico);
                                 }
                             }
+                        }
+                    }
+                    if (!iconAdded) {
+                        SHFILEINFOW sfi{};
+                        if (SHGetFileInfoW(app.lnkPath.c_str(), 0, &sfi, sizeof(sfi),
+                                           SHGFI_ICON | SHGFI_LARGEICON) && sfi.hIcon) {
+                            if (auto bmp = HIconToBitmapImage(sfi.hIcon, iconPx)) {
+                                wuxc::Image img;
+                                img.Source(bmp);
+                                img.Width(32);
+                                img.Height(32);
+                                img.Stretch(wuxm::Stretch::Uniform);
+                                img.HorizontalAlignment(HorizontalAlignment::Center);
+                                content.Children().Append(img);
+                                iconAdded = true;
+                            }
+                            DestroyIcon(sfi.hIcon);
                         }
                     }
                     if (!iconAdded) {
@@ -21378,6 +21417,7 @@ RunOnUiThread([status, networks = std::move(networks)]() mutable {
                                                   g_controlCenterPanel);
         g_controlCenterFlyout.Opened([](auto&&, auto&&) {
             g_nightLightCachedState.store(-1);
+            try { RefreshAirplaneHotspotStateAsync(); } catch (...) {}
             RunOnUiThread([] {
                 try {
                     PopulateControlCenterPanel();
@@ -22472,7 +22512,9 @@ winrt::com_ptr<IUIAutomation> GetCachedUIA() {
 std::mutex g_taskbarButtonRectMutex;
 RECT g_startButtonScreenRect{};
 RECT g_searchButtonScreenRect{};
+std::vector<RECT> g_taskbarScreenRects;
 std::atomic<bool> g_taskbarButtonRectsValid{false};
+UINT_PTR g_taskbarRectDebounceTimer = 0;
 
 void RefreshTaskbarButtonRectsAsync() {
     RunInBackground([] {
@@ -22480,6 +22522,7 @@ void RefreshTaskbarButtonRectsAsync() {
         RECT searchRect{};
         bool foundStart = false;
         bool foundSearch = false;
+        std::vector<RECT> taskbarRects;
         try {
             auto uia = GetCachedUIA();
             HWND tray = GetShellTrayWnd();
@@ -22516,16 +22559,59 @@ void RefreshTaskbarButtonRectsAsync() {
             }
         } catch (...) {}
 
+        // Cache every taskbar's screen rect so TaskbarClickRemap can cheaply
+        // test membership without an EnumWindows pass on every click. The
+        // per-click EnumWindows for secondary taskbars used to run inside
+        // the WH_MOUSE_LL hook, which is a stall on all system mouse input.
+        try {
+            HWND primary = FindWindowW(L"Shell_TrayWnd", nullptr);
+            if (primary) {
+                RECT r{};
+                if (GetWindowRect(primary, &r) && r.right > r.left && r.bottom > r.top) {
+                    taskbarRects.push_back(r);
+                }
+            }
+            struct SecCtx { std::vector<RECT>* out; };
+            SecCtx sc{ &taskbarRects };
+            EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
+                auto* c = reinterpret_cast<SecCtx*>(lp);
+                wchar_t cls[64]{};
+                if (!GetClassNameW(hwnd, cls, 64)) return TRUE;
+                if (_wcsicmp(cls, L"Shell_SecondaryTrayWnd") != 0) return TRUE;
+                RECT r{};
+                if (!GetWindowRect(hwnd, &r)) return TRUE;
+                if (r.right > r.left && r.bottom > r.top) c->out->push_back(r);
+                return TRUE;
+            }, reinterpret_cast<LPARAM>(&sc));
+        } catch (...) {}
+
+        size_t taskbarCount = 0;
         {
             std::lock_guard<std::mutex> lock(g_taskbarButtonRectMutex);
             if (foundStart)  g_startButtonScreenRect  = startRect;
             if (foundSearch) g_searchButtonScreenRect = searchRect;
+            g_taskbarScreenRects = std::move(taskbarRects);
+            taskbarCount = g_taskbarScreenRects.size();
             g_taskbarButtonRectsValid = foundStart || foundSearch;
         }
-        Wh_Log(L"Taskbar rect cache: start=%d search=%d (tray=%p)",
-               foundStart ? 1 : 0, foundSearch ? 1 : 0,
+        Wh_Log(L"Taskbar rect cache: start=%d search=%d taskbars=%zu (tray=%p)",
+               foundStart ? 1 : 0, foundSearch ? 1 : 0, taskbarCount,
                reinterpret_cast<void*>(GetShellTrayWnd()));
     });
+}
+
+void ScheduleTaskbarRectCacheRefresh() {
+    if (!g_topBarHwnd || !IsWindow(g_topBarHwnd)) return;
+    if (g_taskbarRectDebounceTimer) {
+        KillTimer(g_topBarHwnd, g_taskbarRectDebounceTimer);
+        g_taskbarRectDebounceTimer = 0;
+    }
+    g_taskbarRectDebounceTimer = SetTimer(g_topBarHwnd, 0, 500,
+        [](HWND, UINT, UINT_PTR timerId, DWORD) {
+            KillTimer(g_topBarHwnd, timerId);
+            g_taskbarRectDebounceTimer = 0;
+            RefreshTaskbarButtonRectsAsync();
+        });
 }
 
 void ScheduleTaskbarRectRefreshRetries() {
@@ -22548,34 +22634,8 @@ void ScheduleTaskbarRectRefreshRetries() {
 }
 
 static bool TaskbarClickRemap(POINT pt) {
-    // Cheap path first: is the click even inside the taskbar's rect?
-    HWND tray = GetShellTrayWnd();
-    if (!tray) {
-        static bool s_logged = false;
-        if (!s_logged) { s_logged = true; Wh_Log(L"TopBar: taskbar remap - no Shell_TrayWnd"); }
-        return false;
-    }
-    RECT trayRect{};
-    if (!GetWindowRect(tray, &trayRect)) return false;
-    if (!PtInRect(&trayRect, pt)) {
-        // Secondary taskbars (multi-monitor) — try each one.
-        struct SecCtx { POINT pt; bool found; };
-        SecCtx secCtx{ pt, false };
-        EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
-            auto* c = reinterpret_cast<SecCtx*>(lp);
-            wchar_t cls[64]{};
-            if (!GetClassNameW(hwnd, cls, 64)) return TRUE;
-            if (_wcsicmp(cls, L"Shell_SecondaryTrayWnd") != 0) return TRUE;
-            RECT r{};
-            if (!GetWindowRect(hwnd, &r)) return TRUE;
-            if (PtInRect(&r, c->pt)) { c->found = true; return FALSE; }
-            return TRUE;
-        }, reinterpret_cast<LPARAM>(&secCtx));
-        bool inSecondary = secCtx.found;
-        if (!inSecondary) return false;
-    }
-
-    // Win10 fast path: the Start and Search buttons are distinct HWNDs.
+    // Win10 fast path: the Start and Search buttons are distinct HWNDs, so
+    // WindowFromPoint identifies them without any cached geometry.
     HWND hit = WindowFromPoint(pt);
     if (hit) {
         wchar_t cls[64]{};
@@ -22607,88 +22667,63 @@ static bool TaskbarClickRemap(POINT pt) {
         }
     }
 
-    if (g_taskbarButtonRectsValid.load()) {
-        RECT sr{};
-        RECT qr{};
-        {
-            std::lock_guard<std::mutex> lock(g_taskbarButtonRectMutex);
-            sr = g_startButtonScreenRect;
-            qr = g_searchButtonScreenRect;
-        }
-        if (g_settings.defaultStartMenu && g_settings.remapTaskbarStart &&
-            PtInRect(&sr, pt)) {
-            RunOnUiThread([] {
-                try {
-                    CloseNativeStartMenuIfOpen();
-                    if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) {
-                        g_startMenuFlyout.Hide();
-                    } else {
-                        ShowStartMenuFlyout();
-                    }
-                } catch (...) {}
-            });
-            return true;
-        }
-        if (g_settings.defaultSearch && g_settings.remapTaskbarSearch &&
-            PtInRect(&qr, pt)) {
-            RunOnUiThread([] {
-                try {
-                    if (g_searchFlyout && g_searchFlyout.IsOpen()) {
-                        g_searchFlyout.Hide();
-                    } else {
-                        ShowSearchFlyout();
-                    }
-                } catch (...) {}
-            });
-            return true;
-        }
+    // Win11 path: the taskbar buttons live inside a XAML island, so
+    // WindowFromPoint gives the island HWND and UIA is the only accurate
+    // hit-test. UIA ElementFromPoint is a cross-process COM call and
+    // running it inside the WH_MOUSE_LL callback stalls all system mouse
+    // input; if Explorer is busy enough to exceed LowLevelHooksTimeout,
+    // Windows silently removes the hook and the remap stops working until
+    // the mod restarts. Use cached button rects instead, refreshed on
+    // every shell window create/destroy and on display change.
+    if (!g_taskbarButtonRectsValid.load()) {
+        RefreshTaskbarButtonRectsAsync();
+        return false;
     }
 
-    // Win11 path: the taskbar's buttons are inside a XAML island, so
-    // WindowFromPoint gives us the island HWND, not the button. Use
-    // UIAutomation's hit-test which correctly identifies the button via
-    // its AutomationId.
-    auto uia = GetCachedUIA();
-    if (!uia) {
-        static bool s_logged = false;
-        if (!s_logged) { s_logged = true; Wh_Log(L"TopBar: taskbar remap - no UIA"); }
-        return false;
-    }
-    winrt::com_ptr<IUIAutomationElement> el;
-    if (FAILED(uia->ElementFromPoint(pt, el.put())) || !el) {
-        Wh_Log(L"TopBar: taskbar remap - ElementFromPoint failed");
-        return false;
-    }
-    BSTR autoIdRaw = nullptr;
-    if (SUCCEEDED(el->get_CurrentAutomationId(&autoIdRaw)) && autoIdRaw) {
-        std::wstring id(autoIdRaw);
-        SysFreeString(autoIdRaw);
-        Wh_Log(L"TopBar: taskbar remap - UIA element AutomationId='%s'", id.c_str());
-        if (id == L"StartButton" && g_settings.defaultStartMenu && g_settings.remapTaskbarStart) {
-            RunOnUiThread([] {
-                try {
-                    CloseNativeStartMenuIfOpen();
-                    if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) {
-                        g_startMenuFlyout.Hide();
-                    } else {
-                        ShowStartMenuFlyout();
-                    }
-                } catch (...) {}
-            });
-            return true;
+    // Only clicks inside a taskbar rect can be Start / Search. Cache check
+    // is cheap; the alternative (ElementFromPoint) is what we're avoiding.
+    bool inAnyTaskbar = false;
+    {
+        std::lock_guard<std::mutex> lock(g_taskbarButtonRectMutex);
+        for (const auto& r : g_taskbarScreenRects) {
+            if (PtInRect(&r, pt)) { inAnyTaskbar = true; break; }
         }
-        if ((id == L"SearchButton" || id == L"SearchBox") && g_settings.defaultSearch && g_settings.remapTaskbarSearch) {
-            RunOnUiThread([] {
-                try {
-                    if (g_searchFlyout && g_searchFlyout.IsOpen()) {
-                        g_searchFlyout.Hide();
-                    } else {
-                        ShowSearchFlyout();
-                    }
-                } catch (...) {}
-            });
-            return true;
-        }
+    }
+    if (!inAnyTaskbar) return false;
+
+    RECT sr{};
+    RECT qr{};
+    {
+        std::lock_guard<std::mutex> lock(g_taskbarButtonRectMutex);
+        sr = g_startButtonScreenRect;
+        qr = g_searchButtonScreenRect;
+    }
+    if (g_settings.defaultStartMenu && g_settings.remapTaskbarStart &&
+        sr.right > sr.left && sr.bottom > sr.top && PtInRect(&sr, pt)) {
+        RunOnUiThread([] {
+            try {
+                CloseNativeStartMenuIfOpen();
+                if (g_startMenuFlyout && g_startMenuFlyout.IsOpen()) {
+                    g_startMenuFlyout.Hide();
+                } else {
+                    ShowStartMenuFlyout();
+                }
+            } catch (...) {}
+        });
+        return true;
+    }
+    if (g_settings.defaultSearch && g_settings.remapTaskbarSearch &&
+        qr.right > qr.left && qr.bottom > qr.top && PtInRect(&qr, pt)) {
+        RunOnUiThread([] {
+            try {
+                if (g_searchFlyout && g_searchFlyout.IsOpen()) {
+                    g_searchFlyout.Hide();
+                } else {
+                    ShowSearchFlyout();
+                }
+            } catch (...) {}
+        });
+        return true;
     }
     return false;
 }
@@ -24292,13 +24327,19 @@ static bool PopupRenderingState(HWND hwnd, bool* outRendering) {
 // doesn't get treated as a cold boot. Without this the boot-rebuild and
 // the forced composition reset both fire on every mod enable, each one
 // hide/show'ing the popup and making the bar visibly blink.
-static bool IsRecentColdBoot() {
-    // System uptime, not process age. A fresh process is spawned every
-    // time the mod is (re)enabled, so process age is always small — which
-    // would make the boot-rebuild fire on every enable. System uptime
-    // captures the actual condition: the OS itself just came up a moment
-    // ago. 5 minutes of slack covers a slow logon sequence.
-    return GetTickCount64() < 5ULL * 60ULL * 1000ULL;
+static bool IsRecentColdBoot() { 
+    // Process age, not system uptime. This is called from
+    // WaitForShellReadyIfColdBoot on every topbar thread start. On a
+    // genuine cold boot the process was just spawned by the shell, so
+    // process age is small and we wait for the shell to come up. On a
+    // scale-change thread restart the process has been running for
+    // minutes already, so we return immediately and the bar rebuilds
+    // without an artificial 3-second gap.
+    static ULONGLONG s_processStartTick = 0;
+    if (s_processStartTick == 0) {
+        s_processStartTick = GetTickCount64();
+    }
+    return (GetTickCount64() - s_processStartTick) < 60ULL * 1000ULL;
 }
 
 void EnsureTopBarPopupShown() {
@@ -24356,34 +24397,13 @@ void EnsureTopBarPopupShown() {
         // Poll slowly — just enough to notice if XAML ever destroys the
         // popup (e.g. after a display mode change). The old 150 / 200 ms
         // interval existed only to spam ShowAt, which we no longer do.
-        bool popupStable = false;
-        {
-            RECT wantR = GetBarMonitorRect();
-            RECT actualR{};
-            if (GetWindowRect(g_topBarPopupHwnd, &actualR)) {
-                popupStable = (actualR.left == wantR.left &&
-                               actualR.top == wantR.top &&
-                               (actualR.right - actualR.left) == (wantR.right - wantR.left) &&
-                               (actualR.bottom - actualR.top) == g_barHeightPx &&
-                               IsWindowVisible(g_topBarPopupHwnd));
-                if (popupStable) {
-                    BOOL cloakedNow = FALSE;
-                    if (SUCCEEDED(DwmGetWindowAttribute(g_topBarPopupHwnd, DWMWA_CLOAKED,
-                                                        &cloakedNow, sizeof(cloakedNow))) && cloakedNow) {
-                        popupStable = false;
-                    }
-                }
-            }
-        }
         if (!g_topBarPopupRetryTimer) {
             g_topBarPopupRetryTimer = DispatcherTimer();
             g_topBarPopupRetryTimer.Tick([](wf::IInspectable const&, wf::IInspectable const&) {
                 try { EnsureTopBarPopupShown(); } catch (...) {}
             });
         }
-        g_topBarPopupRetryTimer.Interval(popupStable
-            ? std::chrono::seconds(5)
-            : std::chrono::milliseconds(500));
+        g_topBarPopupRetryTimer.Interval(std::chrono::milliseconds(500));
         g_topBarPopupRetryTimer.Stop();
         g_topBarPopupRetryTimer.Start();
         return;
@@ -25397,6 +25417,15 @@ LRESULT CALLBACK TopBarWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             case HSHELL_RUDEAPPACTIVATED:
             case HSHELL_REDRAW:
                 ScheduleTaskListRefresh();
+                if (wParam == HSHELL_WINDOWCREATED ||
+                    wParam == HSHELL_WINDOWDESTROYED) {
+                    // Taskbar button layout shifts when apps open, close or
+                    // are pinned. Invalidate the cached Start/Search rects
+                    // and re-query on a debounce so the next click lands on
+                    // the right button.
+                    g_taskbarButtonRectsValid = false;
+                    ScheduleTaskbarRectCacheRefresh();
+                }
                 break;
         }
         return 0;
@@ -25859,35 +25888,10 @@ void RestartTopBarThreadForScaleChange() {
     if (g_topBarHwnd) PostMessage(g_topBarHwnd, WM_CLOSE, 0, 0);
 }
 
-void WaitForShellReadyIfColdBoot() {
-    if (!IsRecentColdBoot()) return;
-
-    // On a cold boot, WindowsXamlManager::InitializeForCurrentThread() can
-    // run before the shell's input stack is fully initialised. The popup
-    // input-site that XAML registers at that point is derived from an
-    // inconsistent snapshot and silently discards every mouse message,
-    // leaving the bar visually correct but inert to hover and clicks.
-    // Deferring XAML init until the shell is up avoids the broken
-    // registration entirely -- no respawn, no visible restart.
-    //
-    // Shell_TrayWnd is the taskbar's window class; its existence means the
-    // shell has started. The extra ~3 seconds let the shell finish bringing
-    // up its input stack and DWM composition.
-    for (int i = 0; i < 300; i++) {
-        if (FindWindowW(L"Shell_TrayWnd", nullptr)) break;
-        if (WaitForSingleObject(g_stopEvent, 100) == WAIT_OBJECT_0) return;
-    }
-    for (int i = 0; i < 30; i++) {
-        if (WaitForSingleObject(g_stopEvent, 100) == WAIT_OBJECT_0) return;
-    }
-}
-
 DWORD WINAPI TopBarThreadProc(LPVOID) {
     Wh_Log(L"TopBar: TopBarThreadProc started.");
     try {
         g_barStartTick = GetTickCount64();
-
-        WaitForShellReadyIfColdBoot();
 
         winrt::init_apartment(winrt::apartment_type::single_threaded);
 
@@ -26285,16 +26289,6 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                     return;
                 }
 
-                {
-                    static int s_bootNudgeTicks = 0;
-                    if (IsRecentColdBoot() && s_bootNudgeTicks < 30) {
-                        s_bootNudgeTicks++;
-                        if (g_topBarPopupHwnd && IsWindow(g_topBarPopupHwnd)) {
-                            ForcePopupDpiRecalc(g_topBarPopupHwnd);
-                        }
-                    }
-                }
-
                 // Only ensure-visible while not in fullscreen. The flag
                 // reflects the previous tick's classification, which is
                 // what keeps us from fighting the fullscreen app for one
@@ -26574,7 +26568,7 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                 {
                     RECT currentMonitor = GetBarMonitorRect();
                     double currentOsScale = GetBarDpiScale();
-                    bool monitorChanged =
+                    bool monitorChanged = 
                         g_lastBarMonitorRectValid &&
                         (currentMonitor.left != g_lastBarMonitorRect.left ||
                          currentMonitor.top != g_lastBarMonitorRect.top ||
@@ -26583,13 +26577,19 @@ DWORD WINAPI TopBarThreadProc(LPVOID) {
                     bool scaleChanged =
                         g_lastOsScale > 0.0 &&
                         std::abs(currentOsScale - g_lastOsScale) > 0.001;
-                    if (monitorChanged || scaleChanged) {
-                        Wh_Log(L"Restore: monitor/scale changed (rect %ld,%ld-%ld,%ld -> %ld,%ld-%ld,%ld, osScale %.3f -> %.3f), reloading topbar",
+                    if (scaleChanged) {
+                        // Handled by the OS-scale branch below (thread
+                        // restart). Running ReloadTopBarFully here would
+                        // build a new popup HWND on the thread that's
+                        // about to be killed, orphaning it and leaving a
+                        // visible gap while the new thread initialises
+                        // XAML from scratch.
+                    } else if (monitorChanged) {
+                        Wh_Log(L"Restore: monitor rect changed (rect %ld,%ld-%ld,%ld -> %ld,%ld-%ld,%ld), reloading topbar",
                                g_lastBarMonitorRect.left, g_lastBarMonitorRect.top,
                                g_lastBarMonitorRect.right, g_lastBarMonitorRect.bottom,
                                currentMonitor.left, currentMonitor.top,
-                               currentMonitor.right, currentMonitor.bottom,
-                               g_lastOsScale, currentOsScale);
+                               currentMonitor.right, currentMonitor.bottom);
                         ReloadTopBarFully();
                         g_taskbarButtonRectsValid = false;
                         RefreshTaskbarButtonRectsAsync();
@@ -27096,18 +27096,23 @@ void LoadSettings() {
 
 
 
-void KillStaleShellHosts(bool killStart, bool killSearch) {
-    if (!killStart && !killSearch) return;
-    struct Item { DWORD pid; bool isStart; bool isSearch; };
-    std::vector<Item> targets;
+void KillStaleShellHosts(bool hideStart, bool hideSearch) {
+    if (!hideStart && !hideSearch) return;
+
+    // Hide — do not terminate — the shell's Start / Search host top-level
+    // windows. TerminateProcess on system shell processes was heavy-handed:
+    // it killed the host mid-shutdown, and the shell respawned it on the
+    // next Win press anyway. The mod already hides these windows on sight
+    // via HideAllNativeShellHostWindows on the restore timer, so this call
+    // is really just crash recovery for a previous run that hid them and
+    // then died without restoring.
+    struct Hit { HWND hwnd; bool isStart; bool isSearch; };
+    std::vector<Hit> hits;
     EnumWindows([](HWND hwnd, LPARAM lp) -> BOOL {
-        auto* v = reinterpret_cast<std::vector<Item>*>(lp);
+        auto* v = reinterpret_cast<std::vector<Hit>*>(lp);
         DWORD pid = 0;
         GetWindowThreadProcessId(hwnd, &pid);
         if (!pid || pid == GetCurrentProcessId()) return TRUE;
-        for (auto const& existing : *v) {
-            if (existing.pid == pid) return TRUE;
-        }
         HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
         if (!proc) return TRUE;
         wchar_t path[MAX_PATH]{};
@@ -27125,28 +27130,21 @@ void KillStaleShellHosts(bool killStart, bool killSearch) {
             _wcsicmp(exe.c_str(), L"SearchApp.exe") == 0 ||
             _wcsicmp(exe.c_str(), L"SearchUI.exe") == 0);
         if (isStart || isSearch) {
-            v->push_back({ pid, isStart, isSearch });
+            v->push_back({ hwnd, isStart, isSearch });
         }
         return TRUE;
-    }, reinterpret_cast<LPARAM>(&targets));
+    }, reinterpret_cast<LPARAM>(&hits));
 
-    Wh_Log(L"KillStaleShellHosts: %zu candidate(s)", targets.size());
+    Wh_Log(L"HideStaleShellHosts: %zu candidate(s)", hits.size());
 
-    for (auto const& item : targets) {
-        if ((item.isStart && !killStart) || (item.isSearch && !killSearch)) {
+    for (auto const& hit : hits) {
+        if ((hit.isStart && !hideStart) || (hit.isSearch && !hideSearch)) {
             continue;
         }
-        HANDLE proc = OpenProcess(
-            PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
-            FALSE, item.pid);
-        if (!proc) continue;
-
-        TerminateProcess(proc, 0);
-        WaitForSingleObject(proc, 2000);
-        CloseHandle(proc);
-        Wh_Log(L"KillStaleShellHosts: killed pid=%lu (%s)",
-               item.pid,
-               item.isStart ? L"StartMenuExperienceHost" : L"SearchHost");
+        if (!IsWindow(hit.hwnd)) continue;
+        HideNativeShellHostWindow(hit.hwnd,
+            hit.isStart ? L"StartMenuExperienceHost.exe" : L"SearchHost.exe",
+            hit.isStart, hit.isSearch);
     }
 }
 
