@@ -7,7 +7,7 @@
 // @version         1.0
 // @author          loliri
 // @github          https://github.com/loliri
-// @include         mspaint.exe
+// @license         MIT
 // @compilerOptions -lole32
 // ==/WindhawkMod==
 
@@ -20,15 +20,11 @@ restores its volume when it comes back to the foreground.
 
 ## Choosing the target program
 
-The target program is set by the mod's `@include` metadata field, which
-Windhawk uses to decide which processes to inject into. It is set to
-`mspaint.exe` (Paint) as a placeholder, so nothing happens to your programs
-until you change it.
-
-You do not need to edit the source code to change it. Open the mod in Windhawk,
-go to **Details** → **Advanced settings**, and put the executable name of your
-target in the **process inclusion list** there. The change takes effect the next
-time the program starts.
+The mod targets nothing by default, so it does nothing until you tell it which
+process to apply to. Open the mod in Windhawk, go to the **Advanced** tab, and
+put the executable name of your target in the **Custom process inclusion list**.
+The change applies as soon as you save, and takes effect the next time the
+program starts.
 
 ## Notes
 
