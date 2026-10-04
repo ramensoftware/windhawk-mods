@@ -4,12 +4,11 @@
 // @description     Replaces the Windows 11 "not responding" dialog with the End Program dialog of Windows 2000, in English or Russian
 // @name:ru         Окно «Завершение программы» из Windows 2000
 // @description:ru  Заменяет окно Windows 11 о зависшей программе окном «Завершение программы» из Windows 2000 - на русском или английском
-// @version         1.4.0
+// @version         1.4.1
 // @author          appEW
 // @github          https://github.com/appEW
 // @include         explorer.exe
 // @include         WerFault.exe
-// @include         WerFaultSecure.exe
 // @compilerOptions -ldwmapi -ladvapi32
 // @license         MIT
 // ==/WindhawkMod==
@@ -63,6 +62,13 @@ scan events or semaphores. It does not modify service startup settings, registry
 policies or system files. Turning it off stops the heartbeat; Windows decides
 when to stop an idle service. No extra download or helper executable is needed.
 
+The ETW event matches WER's own trigger manifest, not a public WER contract;
+future Windows changes can break this opt-in feature. If the trigger provider's
+event-log channel is enabled, the heartbeat can log about 1,440 events per day.
+The mod does not enable that channel or change any logging settings. With the
+option off, the mod does not stay loaded in Explorer; a later setting change
+lets Windhawk load it again.
+
 ## По-русски
 
 Заменяет окно Windows о зависшей программе, которое появляется при попытке
@@ -88,6 +94,13 @@ WerSvc её системный ETW-триггер запуска. Это пом�
 Внутренние события и семафоры Windhawk не используются; настройки службы,
 системные файлы и политики не меняются. После отключения прогрева служба
 останавливается по обычным правилам Windows, а не принудительно.
+
+Событие ETW соответствует манифесту самого WER, а не публичному контракту WER;
+после обновления Windows этот опциональный механизм может перестать работать.
+Если включён канал журнала событий этого провайдера, прогрев может записывать
+около 1 440 событий в сутки. Мод не включает канал и не меняет настройки журнала.
+При выключенной опции DLL не остаётся в Проводнике; изменение настройки
+позволяет Windhawk загрузить её снова.
 
 **Проверено на Windows 11 24H2 (сборка 26100).** Другие версии не проверены.
 При позднем внедрении возможно краткое появление современного окна.
@@ -357,18 +370,14 @@ bool IsSystemWerProcess(DWORD processId) {
     wchar_t systemDirectory[MAX_PATH] = {};
     if (GetSystemDirectoryW(systemDirectory, ARRAYSIZE(systemDirectory))) {
         if (EqualPath(processPath,
-                      JoinPath(systemDirectory, L"WerFault.exe")) ||
-            EqualPath(processPath,
-                      JoinPath(systemDirectory, L"WerFaultSecure.exe"))) {
+                      JoinPath(systemDirectory, L"WerFault.exe"))) {
             return true;
         }
     }
 
     wchar_t wow64Directory[MAX_PATH] = {};
     if (GetSystemWow64DirectoryW(wow64Directory, ARRAYSIZE(wow64Directory))) {
-        if (EqualPath(processPath, JoinPath(wow64Directory, L"WerFault.exe")) ||
-            EqualPath(processPath,
-                      JoinPath(wow64Directory, L"WerFaultSecure.exe"))) {
+        if (EqualPath(processPath, JoinPath(wow64Directory, L"WerFault.exe"))) {
             return true;
         }
     }
@@ -760,7 +769,13 @@ void RequestFinalize(Session* session, bool restoreStock) {
 }
 
 void SendSelection(Session* session, int buttonId, bool hideClassicDialog) {
-    if (!session || session->selectionSent || !IsSameStockWindow(session)) {
+    if (!session || session->selectionSent) {
+        return;
+    }
+    if (!IsSameStockWindow(session)) {
+        // Recovery can remove the ghost mapping before WER closes its dialog.
+        // Do not leave a replacement with inert buttons and a cloaked stock UI.
+        RequestFinalize(session, true);
         return;
     }
 
@@ -907,7 +922,7 @@ INT_PTR CALLBACK ClassicDialogProc(HWND dialog,
             if (wParam == kActionTimerId && session && session->selectionSent) {
                 if (!IsSameStockWindow(session)) {
                     KillTimer(dialog, kActionTimerId);
-                    RequestFinalize(session, false);
+                    RequestFinalize(session, true);
                     return TRUE;
                 }
 
@@ -1210,23 +1225,25 @@ bool QueryWerServiceTrigger(GUID* providerId) {
 }
 
 DWORD WINAPI WerServicePrewarmThreadProc(void*) {
-    bool isShellProcess = false;
-    for (int attempt = 0; attempt < 100; ++attempt) {
+    // A slow sign-in may create the desktop long after Explorer is injected.
+    // Keep this stop-aware wait inexpensive instead of silently giving up.
+    while (WaitForSingleObject(g_stopEvent, 0) == WAIT_TIMEOUT) {
         const HWND shellWindow = GetShellWindow();
         if (shellWindow) {
             DWORD shellProcessId = 0;
             GetWindowThreadProcessId(shellWindow, &shellProcessId);
-            if (shellProcessId != GetCurrentProcessId()) {
-                return 0;  // No heartbeat from secondary Explorer processes.
+            if (shellProcessId) {
+                if (shellProcessId != GetCurrentProcessId()) {
+                    return 0;  // No heartbeat from secondary Explorer processes.
+                }
+                break;
             }
-            isShellProcess = true;
-            break;
         }
-        if (WaitForSingleObject(g_stopEvent, 100) != WAIT_TIMEOUT) {
+        if (WaitForSingleObject(g_stopEvent, 1000) != WAIT_TIMEOUT) {
             return 0;
         }
     }
-    if (!isShellProcess) {
+    if (WaitForSingleObject(g_stopEvent, 0) != WAIT_TIMEOUT) {
         return 0;
     }
 
@@ -1244,6 +1261,8 @@ DWORD WINAPI WerServicePrewarmThreadProc(void*) {
         return 0;
     }
 
+    // WER's trigger-event manifest is a component-private contract. Its channel
+    // can also log each heartbeat when enabled; the mod never enables it.
     EVENT_DESCRIPTOR event = {};
     event.Channel = 16;
     event.Level = 4;
@@ -1474,10 +1493,17 @@ BOOL Wh_ModInit() {
     Wh_Log(L"Init " WH_MOD_ID L" version " WH_MOD_VERSION);
 
     if (CurrentProcessBaseName() == L"explorer.exe") {
-        // Stay initialized so changing this setting can reload the mod. When
-        // disabled (the default), Explorer gets no worker, timer or heartbeat.
+        // Windhawk retries a failed initialization after a settings change.
+        // Avoid keeping an unused DLL loaded in every Explorer process.
         if (!Wh_GetIntSetting(L"keepWerSvcRunning")) {
-            return TRUE;
+            return FALSE;
+        }
+        if (const HWND shellWindow = GetShellWindow()) {
+            DWORD shellProcessId = 0;
+            GetWindowThreadProcessId(shellWindow, &shellProcessId);
+            if (shellProcessId && shellProcessId != GetCurrentProcessId()) {
+                return FALSE;
+            }
         }
         g_stopEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
         if (g_stopEvent) {
