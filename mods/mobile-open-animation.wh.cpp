@@ -219,6 +219,13 @@ Windhawk's process exclusion list.
 - handoffMs: 110
   $name: Panel fade-out (ms)
   $name:zh-CN: 面板淡出时长 (ms)
+  $description: >-
+    How long the panel takes to fade out once the real window is ready underneath it.
+    The panel is already fully transparent by then, so this only bridges the moment the
+    real window is revealed.
+  $description:zh-CN: >-
+    真窗口在面板底下画好之后，面板淡出所用的时间。这时面板已经全透明，这一步只是把
+    「露出真窗口」这一下过渡得自然些。
 - readyMs: 8000
   $name: Wait for content timeout (ms)
   $name:zh-CN: 等内容的超时 (ms)
@@ -423,16 +430,6 @@ static void ToLowerInPlace(std::wstring& s);  // used by ExtractExeName, defined
 static void WideToUtf8(PCWSTR w, char* out, int outChars);  // the exe name is printed in the log
 static bool IsThreadPumping(HWND hwnd);  // used by RestoreWindowStyle, defined later
 
-// The log is narrow (UTF-8), so a wchar_t* handed straight to %s prints only the low
-// byte of each character - the exe name in every INIT line came out as "w" for
-// windhawk.exe and "n" for notepad.exe. Anything printing a wide string goes through
-// this. Filled on first use; a benign race, both writers store the same bytes.
-static const char* ExeNameUtf8() {
-    static char buf[64] = {};
-    if (!buf[0]) WideToUtf8(g_thisExeName.c_str(), buf, sizeof(buf));
-    return buf;
-}
-
 // With the "target exe must match" gate in place, 30 seconds cannot leak into
 // another program
 static const DWORD kClickValidMs = 30000;
@@ -540,7 +537,8 @@ static void ClickShareRecord(const char* why, const wchar_t* targetExe,
     if (why) {
         char targetUtf8[64] = "(unknown)";
         if (!exe.empty()) WideToUtf8(exe.c_str(), targetUtf8, sizeof(targetUtf8));
-        Wh_Log(L"  record click (%ld,%ld) why=%S target=%S", p.x, p.y, why, targetUtf8);
+        Wh_Log(L"  record click (%ld,%ld) why=%S target=%s", p.x, p.y, why,
+               exe.empty() ? L"(unknown)" : exe.c_str());
     }
 }
 
@@ -617,10 +615,8 @@ static bool ClickShareRead(POINT* out, bool* ours) {
         // lets it through.
         if (!spawnedByThisClick && _wcsicmp(target, g_thisExeName.c_str()) != 0 &&
             age > kClickNameMismatchMs) {
-            char targetUtf8[64] = "?";
-            WideToUtf8(target, targetUtf8, sizeof(targetUtf8));
-            Wh_Log(L"  click record: target is %S, this is %S (recorded %lu ms ago)", targetUtf8,
-                 ExeNameUtf8(), (unsigned long)age);
+            Wh_Log(L"  click record: target is %s, this is %s (recorded %lu ms ago)", target,
+                 g_thisExeName.c_str(), (unsigned long)age);
             return false;
         }
     }
@@ -2668,20 +2664,28 @@ static void RestoreWindowStyle(AnimSlot* slot, HWND hwnd) {
     g_internalMove = true;
     if (slot->wasLayered) {
         SetLayeredWindowAttributes(hwnd, 0, slot->originalAlpha, LWA_ALPHA);
-    } else if (slot->addedLayered && IsThreadPumping(hwnd) &&
-               (GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED)) {
-        // The pumping check is what keeps the unload from waiting on a hung app:
-        // SetWindowLong on another thread's window is a synchronous send, and Wh_ModUninit
-        // now waits for this thread with INFINITE. Leaving the style in place is harmless
-        // then - the alpha below is restored either way, so the window is still visible.
-        // Remove only the style we added. "Remove WS_EX_LAYERED if present" would also
-        // remove the layering WinUI, WPF and Office set themselves, and removing layering
-        // always makes DWM recreate the surface, which is one frame of flicker.
-        const LONG cur = GetWindowLong(hwnd, GWL_EXSTYLE);
-        SetWindowLong(hwnd, GWL_EXSTYLE, cur & ~WS_EX_LAYERED);
-        CallRealSetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
-                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
-                                 SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    } else if (slot->addedLayered) {
+        // The alpha is restored first and unconditionally. Every exit from the real-window
+        // path can leave the window at alpha 0 - the app hides it during the readiness wait,
+        // StartAnimation fails after the alpha was set, an unload arrives mid-animation -
+        // and it would stay invisible the next time the app shows it.
+        // SetLayeredWindowAttributes sends nothing to the window's thread, so this cannot
+        // block and does not need the pumping check.
+        SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+        // Only the style removal is gated: SetWindowLong on another thread's window is a
+        // synchronous send, and Wh_ModUninit waits for this thread with INFINITE, so a hung
+        // app would hold up the unload. Keeping WS_EX_LAYERED is harmless there, since the
+        // alpha above already made the window visible again.
+        // It is also only the style we added: "remove WS_EX_LAYERED if present" would remove
+        // the layering WinUI, WPF and Office set themselves, and removing layering always
+        // makes DWM recreate the surface, which is one frame of flicker.
+        if (IsThreadPumping(hwnd) && (GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_LAYERED)) {
+            const LONG cur = GetWindowLong(hwnd, GWL_EXSTYLE);
+            SetWindowLong(hwnd, GWL_EXSTYLE, cur & ~WS_EX_LAYERED);
+            CallRealSetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                                     SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        }
     }
     g_internalMove = false;
     slot->lastRealAlpha = -1;
@@ -2891,7 +2895,14 @@ static void RunFadeOutPanel(AnimSlot* slot, uint32_t bgTo) {
 static void RunRealZoom(AnimSlot* slot, HWND hwnd, ULONGLONG showTick) {
     while (!IsWindowReady(slot, hwnd, showTick) &&
            !g_unloading.load(std::memory_order_relaxed)) {
-        if (!IsWindow(hwnd) || !IsWindowVisible(hwnd)) return;
+        if (!IsWindow(hwnd) || !IsWindowVisible(hwnd)) {
+            // StartAnimation has already put the window at the first animation frame, and
+            // this path only puts it back when the zoom runs to completion. Returning here
+            // would leave it shrunk - and apps save their window rect on exit, so the wrong
+            // size can stick. ApplyRealFrame is asynchronous, so this cannot block.
+            ApplyRealFrame(hwnd, slot, SnapshotTarget(slot), 255);
+            return;
+        }
         Sleep(15);
     }
 
@@ -2925,6 +2936,10 @@ static void RunRealZoom(AnimSlot* slot, HWND hwnd, ULONGLONG showTick) {
         const float spentMs = QpcSinceMs(frameStart);
         Sleep(spentMs + 0.5f < intervalMs ? (DWORD)lround(intervalMs - spentMs) : 1);
     }
+
+    // An unload breaks out of the loop before the last frame, which would leave the window
+    // at a partial frame. Setting the full rect again is a no-op when the zoom did finish.
+    if (IsWindow(hwnd)) ApplyRealFrame(hwnd, slot, SnapshotTarget(slot), 255);
 }
 
 // The body of the animation. The finishing steps (destroy the panel, restore the
@@ -2989,15 +3004,21 @@ static void RunAnimationBody(AnimSlot* slot, HWND hwnd) {
                 g_handoffFailStreak.store(0, std::memory_order_relaxed);
             }
         }
+    } else if (slot->params.splash) {
+        // The panel could not be created: the class registration failed, or the window is
+        // above kMaxPanelPixels. The window is cloaked from the show, and the fallback zoom
+        // is invisible through a cloak - the alpha calls do nothing on a window that is not
+        // layered - so reveal it right away instead of animating it. The tail of this
+        // function restores the style and lifts the cloak.
+        Wh_Log(L"  no panel and the window is cloaked, showing it without animation");
     } else {
-        if (slot->params.splash) Wh_Log(L"  falling back to real-window animation");
         RunRealZoom(slot, hwnd, showTick);
     }
 
     DestroySplash(slot);
     RestoreWindowStyle(slot, hwnd);
     ReleaseSlot(slot);
-    Wh_Log(L"  done [%S] total %llu ms", ExeNameUtf8(),
+    Wh_Log(L"  done [%s] total %llu ms", g_thisExeName.c_str(),
          (unsigned long long)(GetTickCount64() - showTick));
 }
 
@@ -3081,11 +3102,9 @@ static bool StartAnimation(int index, HWND hwnd) {
 
     wchar_t clsName[128] = L"";
     GetClassNameW(hwnd, clsName, 128);
-    char clsUtf8[256];
-    WideToUtf8(clsName, clsUtf8, sizeof(clsUtf8));
-    Wh_Log(L"  accepted class=%S %dx%d at (%d,%d) anchor=(%d,%d) source=%S frame=%.1fms(%.0ffps) "
+    Wh_Log(L"  accepted class=%s %dx%d at (%d,%d) anchor=(%d,%d) source=%S frame=%.1fms(%.0ffps) "
          L"display=%.1fms",
-         clsUtf8, rc.right - rc.left, rc.bottom - rc.top, rc.left, rc.top,
+         clsName, rc.right - rc.left, rc.bottom - rc.top, rc.left, rc.top,
          slot->origin.x, slot->origin.y, originSource, (double)slot->frameIntervalMs,
          1000.0 / (double)slot->frameIntervalMs, (double)slot->displayPeriodMs);
     return true;
@@ -3268,10 +3287,8 @@ HWND WINAPI HookedCreateWindowExW(DWORD exStyle, LPCWSTR className, LPCWSTR wind
         // window is created by now, and a later misjudgement must never lose it.
         wchar_t clsNow[256] = L"";
         GetClassNameW(hwnd, clsNow, 256);
-        char clsUtf8[256];
-        WideToUtf8(clsNow, clsUtf8, sizeof(clsUtf8));
-        Wh_Log(L"  visible on creation: CreateWindowExW class=%S style=%08lX exStyle=%08lX parent=%p owner=%p",
-             clsUtf8[0] ? clsUtf8 : "(empty)", (unsigned long)style, (unsigned long)exStyle,
+        Wh_Log(L"  visible on creation: CreateWindowExW class=%s style=%08lX exStyle=%08lX parent=%p owner=%p",
+             clsNow[0] ? clsNow : L"(empty)", (unsigned long)style, (unsigned long)exStyle,
              (void*)parent, (void*)GetWindow(hwnd, GW_OWNER));
         HandleWindowCreatedVisible(hwnd, "CreateWindowExW(WS_VISIBLE)");
     } else if (style & WS_VISIBLE) {
@@ -3300,10 +3317,8 @@ HWND WINAPI HookedCreateWindowExA(DWORD exStyle, LPCSTR className, LPCSTR window
         // it is where those 0xc0000005 crashes came from.
         wchar_t clsNow[256] = L"";
         GetClassNameW(hwnd, clsNow, 256);
-        char clsUtf8[256];
-        WideToUtf8(clsNow, clsUtf8, sizeof(clsUtf8));
-        Wh_Log(L"  visible on creation: CreateWindowExA class=%S style=%08lX exStyle=%08lX parent=%p owner=%p",
-             clsUtf8[0] ? clsUtf8 : "(empty)", (unsigned long)style,
+        Wh_Log(L"  visible on creation: CreateWindowExA class=%s style=%08lX exStyle=%08lX parent=%p owner=%p",
+             clsNow[0] ? clsNow : L"(empty)", (unsigned long)style,
              (unsigned long)exStyle, (void*)parent, (void*)GetWindow(hwnd, GW_OWNER));
         HandleWindowCreatedVisible(hwnd, "CreateWindowExA(WS_VISIBLE)");
     }
@@ -3480,7 +3495,17 @@ BOOL WINAPI HookedSetWindowPos(HWND hwnd, HWND after, int x, int y, int cx, int 
             RECT rc;
             if (GetWindowRect(hwnd, &rc) && rc.right > rc.left && rc.bottom > rc.top) {
                 AcquireSRWLockExclusive(&g_lock);
-                g_slots[index].target = rc;
+                RECT& t = g_slots[index].target;
+                // Only what this call actually changed is taken from the current rect. On
+                // the real-window path the window can be sitting at an animation frame, so a
+                // move-only call (SWP_NOSIZE) would otherwise adopt that frame's size as the
+                // target and the window would end up shrunk for good.
+                if (flags & SWP_NOSIZE) {
+                    rc.right = rc.left + (t.right - t.left);
+                    rc.bottom = rc.top + (t.bottom - t.top);
+                }
+                if (flags & SWP_NOMOVE) OffsetRect(&rc, t.left - rc.left, t.top - rc.top);
+                t = rc;
                 ReleaseSRWLockExclusive(&g_lock);
             }
         }
@@ -3522,9 +3547,8 @@ BOOL Wh_ModInit() {
     if (g_launchAnchorValid) ProbeLaunchFlyout();
 
     LoadSettings();
-    char versionUtf8[64] = {};
-    WideToUtf8(WH_MOD_VERSION, versionUtf8, sizeof(versionUtf8));
-    Wh_Log(L"INIT [%S] v%S splash=%d", ExeNameUtf8(), versionUtf8, g_params.splash ? 1 : 0);
+    Wh_Log(L"INIT [%s] v%s splash=%d", g_thisExeName.c_str(), WH_MOD_VERSION,
+           g_params.splash ? 1 : 0);
 
     if (!WindhawkUtils::SetFunctionHook(ShowWindow, HookedShowWindow, &pOrigShowWindow)) {
         Wh_Log(L"FAILED to hook ShowWindow");
