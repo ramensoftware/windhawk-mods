@@ -20147,7 +20147,7 @@ static void ApplySettingsPairs(
         L"showMediaButton", L"showMediaVisualizer",
         L"mediaButtonShowIcon", L"mediaButtonShowName",
         L"mediaButtonShowControls", L"mediaButtonShowVisualizer",
-        L"disableFlyoutAutoClose", L"defaultStartMenu", L"defaultSearch",
+        L"defaultStartMenu", L"defaultSearch",
         L"startButtonAction", L"searchButtonAction",
         L"showClock", L"timeFormat", L"showDate", L"dateFormat",
         L"weatherLocationName", L"weatherLatitude", L"weatherLongitude",
@@ -20181,7 +20181,6 @@ static void ApplySettingsPairs(
         { L"mediaButtonShowName",       {   0,   1 } },
         { L"mediaButtonShowControls",   {   0,   1 } },
         { L"mediaButtonShowVisualizer", {   0,   1 } },
-        { L"disableFlyoutAutoClose",    {   0,   1 } },
         { L"defaultStartMenu",          {   0,   1 } },
         { L"defaultSearch",             {   0,   1 } },
         { L"showClock",                 {   0,   1 } },
@@ -25055,18 +25054,26 @@ void SetTopBarContent(FrameworkElement content) {
     // of the bar missed at any OS DPI above 100%. A RenderTransform on an
     // ordinary child element goes through XAML's normal input transform
     // walk and is honoured by hit-testing.
-    wuxc::Grid scaler;
+    // Viewbox instead of a RenderTransform Grid. XAML ignores the
+    // RenderTransform on a flyout's direct content for hit-testing, so
+    // the untransformed layout box got clipped to the popup's actual DIP
+    // height and the bottom of the bar was dead to clicks (the dead strip
+    // grew with OS DPI as 1 - 1/osScale of the bar height). Viewbox does a
+    // layout-level scale, which XAML honours for both rendering and
+    // hit-testing.
+    //
+    // No explicit Width/Height on the Viewbox. During a resolution change
+    // GetDpiForMonitor can briefly return a stale value, and an explicitly-
+    // sized Viewbox built from that value gets clipped on the right. Letting
+    // it stretch-fill the popup means the popup's physical size (which
+    // EnsureTopBarPopupShown forces correctly) is what drives the layout.
+    wuxc::Viewbox scaler;
     scaler.Name(L"TopBarScaler");
-    scaler.Width(widthDip);
-    scaler.Height(heightDip);
-    scaler.HorizontalAlignment(HorizontalAlignment::Left);
-    scaler.VerticalAlignment(VerticalAlignment::Top);
-    scaler.RenderTransformOrigin(winrt::Windows::Foundation::Point{0.0, 0.0});
-    wuxm::ScaleTransform scaleTransform;
-    scaleTransform.ScaleX(visualScale);
-    scaleTransform.ScaleY(visualScale);
-    scaler.RenderTransform(scaleTransform);
-    scaler.Children().Append(content);
+    scaler.Stretch(wuxm::Stretch::Uniform);
+    scaler.StretchDirection(wuxc::StretchDirection::Both);
+    scaler.HorizontalAlignment(HorizontalAlignment::Stretch);
+    scaler.VerticalAlignment(VerticalAlignment::Stretch);
+    scaler.Child(content);
 
     g_topBarPopup.Content(scaler);
 
@@ -27120,7 +27127,7 @@ void LoadSettings() {
     g_settings.labelGpu = GetStringSettingCopy(L"labelGpu");
     if (g_settings.labelGpu.empty()) g_settings.labelGpu = L"GPU:";
     g_settings.enableHotkeys = Wh_GetIntSetting(L"enableHotkeys") != 0;
-    g_settings.disableFlyoutAutoClose = ReadIntSetting(L"disableFlyoutAutoClose", 0) != 0;
+    g_settings.disableFlyoutAutoClose = Wh_GetIntSetting(L"disableFlyoutAutoClose") != 0;
     g_settings.defaultStartMenu = ReadIntSetting(L"defaultStartMenu", 0) != 0;
     g_settings.defaultSearch    = ReadIntSetting(L"defaultSearch", 0) != 0;
     g_settings.startButtonAction = GetStringSettingCopy(L"startButtonAction");
