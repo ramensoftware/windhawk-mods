@@ -38,6 +38,8 @@ notification.
   straight into notes or a bug report. Deletion is disabled.
 * **None** leaves the clipboard unchanged.
 
+![The clipboard and deletion settings](https://raw.githubusercontent.com/mario0318/SnapSentry/4ba4a265d8f3b527071fb25a4fe5c35f44cd358a/assets/settings.png)
+
 ## Naming
 
 You can have SnapSentry rename each new screenshot from the window that was in
@@ -60,6 +62,8 @@ limited to 64 recent entries, resets when settings change or folder watching
 restarts, and does not scan or touch files that were already in the folder when
 watching began. Images with different embedded metadata are kept even if they
 look the same.
+
+![The duplicate removal and popup settings](https://raw.githubusercontent.com/mario0318/SnapSentry/4ba4a265d8f3b527071fb25a4fe5c35f44cd358a/assets/settings-duplicates.png)
 
 ## Which folder it watches
 
