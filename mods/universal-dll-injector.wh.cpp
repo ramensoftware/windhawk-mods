@@ -50,7 +50,7 @@ process restarts.
   understand the risk above.
 - The result for each DLL is written to Windhawk's **Log** panel.
 */
-// ==WindhawkModReadme==
+// ==/WindhawkModReadme==
 
 // ==WindhawkModSettings==
 /*
