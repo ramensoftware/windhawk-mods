@@ -1,7 +1,7 @@
 // ==WindhawkMod==
 // @id              cursor-override
 // @name            Cursor Override
-// @description     Recognizes Mozilla, Chromium, RichEdit and Excel web cursors and loads replacements on demand
+// @description     Recognizes supported cursors by image and hotspot and loads replacements on demand
 // @version         1.1.1
 // @author          Basti
 // @github          https://github.com/sebastianheder01
@@ -34,7 +34,8 @@ Replaces common additional cursors with custom `.cur` or `.ani` files.
 
 ## How it works
 
-Identifies supported Mozilla, Chromium, RichEdit and Excel for the web cursors based on their image and hotspot.
+Identifies supported cursors by their image and hotspot in applications targeted by Windhawk.
+Recognition is independent of the application or website the cursor originates from.
 Resource cursors are compared at a fixed size when their source resource is available; known bitmap signatures provide a fallback.
 Recognition can require an update when an application changes its cursor artwork.
 Supports `Grab`, `Grabbing`, `Cell`, `Copy`, `Alias`, `ZoomIn`, `ZoomOut`, `ColResize`, `ColSelect`, `RowResize`, `RowSelect`, `VerticalText` and `SelectionBar`.
