@@ -4,7 +4,7 @@
 // @name:pt-BR      Ilha e Dock estilo Mac
 // @description     An island at the top of the screen like the macOS menu bar and the iPhone's Dynamic Island (clock, control center, notifications, media, tray icons), and a macOS-like dock instead of the taskbar (or the Windows taskbar, transparent or as it is)
 // @description:pt-BR Uma ilha no topo da tela como a barra de menus do macOS e a Dynamic Island do iPhone (relógio, central de controle, notificações, mídia, ícones da bandeja) e uma dock como a do macOS no lugar da barra de tarefas (ou a barra do Windows, transparente ou como ela é)
-// @version         0.52.0
+// @version         0.52.1
 // @author          caliberda
 // @github          https://github.com/cesarkali
 // @homepage        https://caliberda.com.br
@@ -48,7 +48,8 @@ the taskbar.
   notification with nothing to open (like a script's) shows the list
   instead, scrolled to it. Opening the app in any way (from the island, the
   list or the taskbar) clears its notifications from the island and the
-  list.
+  list, and so does the app taking them away from the Windows notification
+  center (like a message read on the phone).
 * **Panels like the Dynamic Island**: the pill itself stretches into a panel,
   sideways and then down, with a little bounce:
   * **Calendar** (the clock).
@@ -298,7 +299,9 @@ tocando; e, se quiser, uma dock como a do macOS no lugar da barra de tarefas.
   lista ser aberta. Clicar num app abre a última notificação dele; uma
   notificação sem nada para abrir (como a de um script) mostra a lista, já
   nela. Abrir o app de qualquer jeito (pela ilha, pela lista ou pela barra)
-  limpa as notificações dele da ilha e da lista.
+  limpa as notificações dele da ilha e da lista, e o mesmo acontece quando o
+  app as tira da central de notificações do Windows (como uma mensagem lida
+  no celular).
 * **Painéis como a Dynamic Island**: a própria pílula se estica até virar um
   painel, para os lados e depois para baixo, com um leve balanço:
   * **Calendário** (o relógio).
@@ -10224,6 +10227,10 @@ class NotificationPanel : public Panel {
    public:
     // An app's notifications were seen (it came to the front): cleared here.
     void ClearApp(const std::wstring& appId);
+    // The apps with notifications in the Windows notification center now
+    // (an app takes its own away, like a message read on the phone).
+    // Returns false if the database can't be read.
+    bool AppsInCenter(std::vector<std::wstring>* apps);
     // Shows an app's notifications: the list scrolls to the first one, and
     // its cards glow for a moment (now if open, otherwise when it opens).
     void FocusApp(const std::wstring& appId) {
@@ -11332,6 +11339,9 @@ class Island {
     void ClearAppsFromList(const std::vector<std::wstring>& apps, bool all);
     // The notification list was opened: the bell's dot goes.
     void OnNotificationsSeen();
+    // Unread apps whose notifications left the Windows notification center
+    // (read elsewhere, like on the phone) leave the island too.
+    void DropGoneUnread();
     // Tells explorer the island is there (it sends what it has).
     void SayHello() {
         SendIpc(FindTaskbarWnd(), m_hwnd, kIpcHello, nullptr, 0);
@@ -11603,6 +11613,7 @@ class Island {
     void SaveUnread();
     void AddUnread(const IslandToast& toast);
     UnreadApp* FindUnread(const std::wstring& appId);
+    int m_unreadCheckTicks = 0;
     // Apps with a notification badge (from the taskbar), and their icons.
     // Each grows in and out (`shown` from 0 to 1).
     std::vector<std::wstring> m_badgeApps;
@@ -17333,6 +17344,45 @@ void NotificationPanel::ClearApp(const std::wstring& appId) {
     }
 }
 
+bool NotificationPanel::AppsInCenter(std::vector<std::wstring>* apps) {
+    apps->clear();
+    if (!m_sqliteLoaded) {
+        m_sqliteLoaded = true;
+        if (!m_sqlite.Load()) {
+            m_sqlite.Unload();
+        }
+    }
+    const std::string path = GetNotificationDatabasePath();
+    void* db = nullptr;
+    if (!m_sqlite.module || !m_sqlite.open_v2 || path.empty() ||
+        m_sqlite.open_v2(path.c_str(), &db, Sqlite::kOpenReadOnly, nullptr) !=
+            0) {
+        if (db) {
+            m_sqlite.close(db);
+        }
+        return false;
+    }
+    m_sqlite.busy_timeout(db, 500);
+    void* statement = nullptr;
+    bool read = false;
+    if (m_sqlite.prepare_v2(
+            db,
+            "SELECT DISTINCT h.PrimaryId FROM Notification n JOIN "
+            "NotificationHandler h ON h.RecordId = n.HandlerId WHERE n.Type = "
+            "'toast'",
+            -1, &statement, nullptr) == 0) {
+        while (m_sqlite.step(statement) == Sqlite::kRow) {
+            if (auto app = (PCWSTR)m_sqlite.column_text16(statement, 0)) {
+                apps->push_back(app);
+            }
+        }
+        m_sqlite.finalize(statement);
+        read = true;
+    }
+    m_sqlite.close(db);
+    return read;
+}
+
 // How long a card glows (see FocusApp).
 constexpr double kCardGlowSeconds = 1.6;
 
@@ -22416,6 +22466,11 @@ void Island::Tick() {
         m_ticks = 0;
         UpdateStatus();
     }
+    // Every few seconds, only while some app has the red dot.
+    if (!m_unreadApps.empty() && ++m_unreadCheckTicks >= 4) {
+        m_unreadCheckTicks = 0;
+        DropGoneUnread();
+    }
     if (++m_raiseTicks >= kIslandRaiseTicks) {
         m_raiseTicks = 0;
         m_control.Refresh();
@@ -22587,6 +22642,32 @@ void Island::ClearAppsFromList(const std::vector<std::wstring>& apps,
     }
     SaveUnread();
     UpdateApps();
+    StartAnimating();
+    Render(true);
+}
+
+void Island::DropGoneUnread() {
+    std::vector<std::wstring> inCenter;
+    if (!m_notifications.AppsInCenter(&inCenter)) {
+        return;
+    }
+    const size_t before = m_unreadApps.size();
+    std::erase_if(m_unreadApps, [&](const UnreadApp& app) {
+        return std::none_of(inCenter.begin(), inCenter.end(),
+                            [&](const std::wstring& id) {
+                                return _wcsicmp(id.c_str(), app.id.c_str()) ==
+                                       0;
+                            });
+    });
+    if (m_unreadApps.size() == before) {
+        return;
+    }
+    if (m_unreadApps.empty()) {
+        m_unseen = false;
+    }
+    SaveUnread();
+    UpdateApps();
+    m_notifications.Refresh();
     StartAnimating();
     Render(true);
 }
