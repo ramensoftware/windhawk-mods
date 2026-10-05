@@ -8183,21 +8183,6 @@ static std::shared_ptr<WindowIconShadow> GetWindowIconShadow(
     return record;
 }
 
-static void DrawDockIconWithAlpha(HDC hdc, const WindowEntry& e, int iconX, int iconY, int iconSz, float alphaMult = 1.0f) {
-    if (!e.hIcon || iconSz <= 0) return;
-    bool isMin = g_settings.showMinimizedIndicator && IsEntryMinimized(e);
-    float itemAlpha = alphaMult;
-    if (isMin && MinimizedStyleUsesDimming()) {
-        float minDim = (float)g_settings.minimizedIconOpacity / 100.0f;
-        int idx = FindWindowIndexByHwnd(e.hWnd);
-        if (idx == g_selectedIndex || idx == g_hoverIndex) {
-            minDim = std::min(1.0f, minDim + 0.15f);
-        }
-        itemAlpha *= minDim;
-    }
-    DrawIconWithAlpha(hdc, iconX, iconY, e.hIcon, iconSz, itemAlpha);
-}
-
 static void MaskRectCorners(HDC hdc, const RECT& rc, int radiusPx, bool forceOpaque = false, COLORREF overrideBg = CLR_INVALID) {
     if (radiusPx <= 0) {
         return;
@@ -9031,6 +9016,123 @@ static void FillSwitcherBackground(HDC hdc, const RECT& rect, bool fillBg) {
                   DIB_RGB_COLORS, SRCCOPY);
 }
 
+static void DrawDockEntryIcon(HDC hdc, const WindowEntry& e, const RECT& cell,
+                             int index, float itemAlpha) {
+    if (!HasLayoutRect(cell)) return;
+    int iconSz = DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
+    int cellW = cell.right - cell.left;
+    int cellH = cell.bottom - cell.top;
+    int iconX = (int)roundf(cell.left + (cellW - iconSz) / 2.0f);
+    int iconY = (int)roundf(cell.top + (cellH - iconSz) / 2.0f);
+    bool emphasized = index >= 0 && (index == g_selectedIndex || index == g_hoverIndex);
+    bool isMin = g_settings.showMinimizedIndicator && IsEntryMinimized(e);
+    if (isMin && MinimizedStyleUsesDimming()) {
+        float minDim = (float)g_settings.minimizedIconOpacity / 100.0f;
+        if (emphasized) { minDim = std::min(1.0f, minDim + 0.15f); }
+        itemAlpha *= minDim;
+    }
+
+    if (itemAlpha < 0.99f) {
+        DrawIconWithAlpha(hdc, iconX, iconY, e.hIcon, iconSz, itemAlpha);
+    } else {
+        DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
+    }
+
+    if (isMin && MinimizedStyleUsesBadge()) {
+        int badgeSz = DpiScale(14, g_dpiX);
+        int badgeX = iconX + iconSz - badgeSz + DpiScale(2, g_dpiX);
+        int badgeY = iconY + iconSz - badgeSz + DpiScale(2, g_dpiY);
+        Gdiplus::Graphics gfxBadge(hdc);
+        gfxBadge.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        COLORREF bgC = g_isDarkMode ? RGB(40, 40, 40) : RGB(235, 235, 235);
+        COLORREF fgC = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
+        BYTE bAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
+        Gdiplus::SolidBrush bgBrush(Gdiplus::Color(bAlpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
+        gfxBadge.FillEllipse(&bgBrush, badgeX, badgeY, badgeSz, badgeSz);
+        Gdiplus::Pen pen(Gdiplus::Color(bAlpha, GetRValue(fgC), GetGValue(fgC), GetBValue(fgC)), 1.5f);
+        pen.SetStartCap(Gdiplus::LineCapRound);
+        pen.SetEndCap(Gdiplus::LineCapRound);
+        int lineW = DpiScale(6, g_dpiX);
+        int lx1 = badgeX + (badgeSz - lineW) / 2;
+        int lx2 = lx1 + lineW;
+        int ly = badgeY + badgeSz / 2;
+        gfxBadge.DrawLine(&pen, lx1, ly, lx2, ly);
+    } else if (isMin && MinimizedStyleUsesDot()) {
+        int dotW = DpiScale(10, g_dpiX);
+        int dotH = DpiScale(3, g_dpiY);
+        int dotX = iconX + (iconSz - dotW) / 2;
+        int dotY = DockIconIsTop() ? (iconY + iconSz + DpiScale(3, g_dpiY)) : (iconY - dotH - DpiScale(3, g_dpiY));
+        Gdiplus::Graphics gfxDot(hdc);
+        gfxDot.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        COLORREF dotCol = g_isDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0);
+        BYTE dotAlpha = (BYTE)roundf((g_isDarkMode ? 160.0f : 130.0f) * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
+        if (emphasized) dotAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
+        Gdiplus::SolidBrush dotBrush(Gdiplus::Color(dotAlpha, GetRValue(dotCol), GetGValue(dotCol), GetBValue(dotCol)));
+        Gdiplus::GraphicsPath dotPath;
+        dotPath.AddArc((Gdiplus::REAL)dotX, (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 90, 180);
+        dotPath.AddArc((Gdiplus::REAL)(dotX + dotW - dotH), (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 270, 180);
+        dotPath.CloseFigure();
+        gfxDot.FillPath(&dotBrush, &dotPath);
+    }
+}
+
+// Rebuild just the strip above the cached background. The highlight is always
+// below every icon; icons follow their own cells and only the viewport/reflow
+// moves them. Cached icon pixels must be cleared before compositing the fill.
+static void DrawDockIconStrip(HDC hdc) {
+    int saved = SaveDC(hdc);
+    IntersectClipRect(hdc, g_rcDockIconStrip.left, g_rcDockIconStrip.top,
+                      g_rcDockIconStrip.right, g_rcDockIconStrip.bottom);
+    FillSwitcherBackground(hdc, g_rcDockIconStrip, ShouldFillBackground());
+    if (HighlightHasFill() && g_selectedIndex >= 0 &&
+        g_selectedIndex < (int)g_windows.size()) {
+        DrawSelectionFillF(hdc, SelectionRectWithViewport());
+    }
+
+    int offX = (int)roundf(g_scrollTransition.offsetCurrentX);
+    int iconSz = DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
+    if (g_scrollTransition.active) {
+        for (const auto& snap : g_scrollTransition.outgoingItems) {
+            int index = FindWindowIndexByHwnd(snap.hWnd);
+            if (index >= 0 && !IsWindowTruncated(index)) continue;
+            WindowEntry entry = {};
+            entry.hWnd = snap.hWnd;
+            entry.hIcon = snap.hIcon;
+            entry.groupWindows = snap.groupWindows;
+            RECT cell = snap.rcCell;
+            OffsetRect(&cell, offX - g_scrollTransition.travelDistanceX, 0);
+            DrawDockEntryIcon(hdc, entry, cell, index, snap.alpha);
+        }
+    }
+    for (int i = 0; i < (int)g_windows.size(); i++) {
+        auto& entry = g_windows[i];
+        if (IsWindowTruncated(i)) continue;
+        entry.drawnIconX = (int)roundf(entry.rcCell.left +
+            (entry.rcCell.right - entry.rcCell.left - iconSz) / 2.0f);
+        entry.drawnIconY = (int)roundf(entry.rcCell.top +
+            (entry.rcCell.bottom - entry.rcCell.top - iconSz) / 2.0f);
+        entry.drawnIconSz = iconSz;
+        RECT cell = entry.rcCell;
+        OffsetRect(&cell, offX, 0);
+        float alpha = (g_layoutTransition.active && entry.isNewEntry) ? entry.enterAlpha : 1.0f;
+        DrawDockEntryIcon(hdc, entry, cell, i, alpha);
+    }
+
+    if (g_layoutTransition.active && !g_layoutTransition.departingItems.empty()) {
+        for (const auto& dep : g_layoutTransition.departingItems) {
+            if (dep.alpha <= 0.01f || !dep.hIcon) continue;
+            int cellW = dep.rcCellCurrent.right - dep.rcCellCurrent.left;
+            int cellH = dep.rcCellCurrent.bottom - dep.rcCellCurrent.top;
+            if (cellW <= 0 || cellH <= 0) continue;
+            int iconX = (int)roundf(dep.rcCellCurrent.left + (cellW - iconSz) / 2.0f) + offX;
+            int iconY = (int)roundf(dep.rcCellCurrent.top + (cellH - iconSz) / 2.0f);
+
+            DrawIconWithAlpha(hdc, iconX, iconY, dep.hIcon, iconSz, dep.alpha);
+        }
+    }
+    RestoreDC(hdc, saved);
+}
+
 static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSelectionFill) {
     RECT rcClient; GetClientRect(g_hSwitcher, &rcClient);
     int w = rcClient.right;
@@ -9042,17 +9144,10 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
     HFONT hOldFont = (HFONT)SelectObject(hdc, g_hFont);
     SetBkMode(hdc, TRANSPARENT);
 
-    // 1. Draw animated selection background fill (underneath icons in the strip)
-    if (includeSelectionFill && g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
-        if (HighlightHasFill()) {
-            DrawSelectionFillF(hdc, SelectionRectWithViewport());
-        }
-    }
-
     int masterPadX = DpiScale(g_settings.switcherPadding, g_dpiX);
     int cornerRadius = GetThumbnailCornerRadiusPx();
 
-    // 2. Draw Central Preview shadow / card backdrop
+    // Central Preview shadow / card backdrop
     bool showPreview = DockShowPreview();
     if (showPreview && g_rcCentralPreview.right > g_rcCentralPreview.left &&
         g_rcCentralPreview.bottom > g_rcCentralPreview.top) {
@@ -9064,7 +9159,7 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
             shadowRc.right += offX;
             shadowAlphaMult = g_dockPreviewSlide.currentAlpha;
         }
-        // During active layout transition or preview slide, shadow is rendered dynamically per-frame in PaintSwitcher to track resizing smoothly
+        // Active preview reflow/slide shadows are submitted dynamically by PaintSwitcher.
         if (g_settings.showThumbnailShadow && shadowAlphaMult > 0.01f && !g_layoutTransition.active && !g_dockPreviewSlide.active) {
             DrawThumbnailShadow(hdc, shadowRc, cornerRadius, shadowAlphaMult);
         }
@@ -9073,12 +9168,12 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
         }
     }
 
-    // 3. Draw 1px subtle divider line between dock icon strip and content area
+    // 1px subtle divider between the icon strip and content area
     {
         Gdiplus::Graphics gfx(hdc);
         gfx.SetSmoothingMode(Gdiplus::SmoothingModeNone);
         COLORREF divCol = g_isDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0);
-        BYTE divAlpha = g_isDarkMode ? 24 : 18; // ~9.5% dark / ~7% light subtle Fluent divider
+        BYTE divAlpha = g_isDarkMode ? 24 : 18;
         Gdiplus::SolidBrush divBrush(Gdiplus::Color(divAlpha, GetRValue(divCol), GetGValue(divCol), GetBValue(divCol)));
 
         int divX = masterPadX + DpiScale(12, g_dpiX);
@@ -9094,87 +9189,10 @@ static void DrawDockContentInner(HDC hdc, bool fillBg, HWND hWnd, bool includeSe
         }
     }
 
-    // 4. Draw icons in the horizontal strip
-    int iconSz = DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
-    for (int i = 0; i < (int)g_windows.size(); i++) {
-        WindowEntry& e = g_windows[i];
-        if (IsWindowTruncated(i)) continue;
-        if (e.rcCell.right <= e.rcCell.left || e.rcCell.bottom <= e.rcCell.top) continue;
-
-        int cellW = e.rcCell.right - e.rcCell.left;
-        int cellH = e.rcCell.bottom - e.rcCell.top;
-        int iconX = (int)roundf(e.rcCell.left + (cellW - iconSz) / 2.0f);
-        int iconY = (int)roundf(e.rcCell.top + (cellH - iconSz) / 2.0f);
-
-        e.drawnIconX = iconX;
-        e.drawnIconY = iconY;
-        e.drawnIconSz = iconSz;
-
-        float itemAlpha = (g_layoutTransition.active && e.isNewEntry) ? e.enterAlpha : 1.0f;
-        bool isMin = g_settings.showMinimizedIndicator && IsEntryMinimized(e);
-        if (isMin && MinimizedStyleUsesDimming()) {
-            float minDim = (float)g_settings.minimizedIconOpacity / 100.0f;
-            if (i == g_selectedIndex || i == g_hoverIndex) { minDim = std::min(1.0f, minDim + 0.15f); }
-            itemAlpha *= minDim;
-        }
-
-        if (itemAlpha < 0.99f) {
-            DrawIconWithAlpha(hdc, iconX, iconY, e.hIcon, iconSz, itemAlpha);
-        } else {
-            DrawIconEx(hdc, iconX, iconY, e.hIcon, iconSz, iconSz, 0, NULL, DI_NORMAL);
-        }
-
-        if (isMin && MinimizedStyleUsesBadge()) {
-            int badgeSz = DpiScale(14, g_dpiX);
-            int badgeX = iconX + iconSz - badgeSz + DpiScale(2, g_dpiX);
-            int badgeY = iconY + iconSz - badgeSz + DpiScale(2, g_dpiY);
-            Gdiplus::Graphics gfxBadge(hdc);
-            gfxBadge.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-            COLORREF bgC = g_isDarkMode ? RGB(40, 40, 40) : RGB(235, 235, 235);
-            COLORREF fgC = g_isDarkMode ? SWS_TEXT_DARK : SWS_TEXT_LIGHT;
-            BYTE bAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
-            Gdiplus::SolidBrush bgBrush(Gdiplus::Color(bAlpha, GetRValue(bgC), GetGValue(bgC), GetBValue(bgC)));
-            gfxBadge.FillEllipse(&bgBrush, badgeX, badgeY, badgeSz, badgeSz);
-            Gdiplus::Pen pen(Gdiplus::Color(bAlpha, GetRValue(fgC), GetGValue(fgC), GetBValue(fgC)), 1.5f);
-            pen.SetStartCap(Gdiplus::LineCapRound);
-            pen.SetEndCap(Gdiplus::LineCapRound);
-            int lineW = DpiScale(6, g_dpiX);
-            int lx1 = badgeX + (badgeSz - lineW) / 2;
-            int lx2 = lx1 + lineW;
-            int ly = badgeY + badgeSz / 2;
-            gfxBadge.DrawLine(&pen, lx1, ly, lx2, ly);
-        } else if (isMin && MinimizedStyleUsesDot()) {
-            int dotW = DpiScale(10, g_dpiX);
-            int dotH = DpiScale(3, g_dpiY);
-            int dotX = iconX + (iconSz - dotW) / 2;
-            int dotY = DockIconIsTop() ? (iconY + iconSz + DpiScale(3, g_dpiY)) : (iconY - dotH - DpiScale(3, g_dpiY));
-            Gdiplus::Graphics gfxDot(hdc);
-            gfxDot.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-            COLORREF dotCol = g_isDarkMode ? RGB(255, 255, 255) : RGB(0, 0, 0);
-            BYTE dotAlpha = (BYTE)roundf((g_isDarkMode ? 160.0f : 130.0f) * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
-            if (i == g_selectedIndex || i == g_hoverIndex) dotAlpha = (BYTE)roundf(230.0f * (itemAlpha < 1.0f ? itemAlpha : 1.0f));
-            Gdiplus::SolidBrush dotBrush(Gdiplus::Color(dotAlpha, GetRValue(dotCol), GetGValue(dotCol), GetBValue(dotCol)));
-            Gdiplus::GraphicsPath dotPath;
-            dotPath.AddArc((Gdiplus::REAL)dotX, (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 90, 180);
-            dotPath.AddArc((Gdiplus::REAL)(dotX + dotW - dotH), (Gdiplus::REAL)dotY, (Gdiplus::REAL)dotH, (Gdiplus::REAL)dotH, 270, 180);
-            dotPath.CloseFigure();
-            gfxDot.FillPath(&dotBrush, &dotPath);
-        }
-    }
-
-    // 4b. Draw departing icons in dock strip if layout transition is active
-    if (g_layoutTransition.active && !g_layoutTransition.departingItems.empty()) {
-        for (const auto& dep : g_layoutTransition.departingItems) {
-            if (dep.alpha <= 0.01f || !dep.hIcon) continue;
-            int cellW = dep.rcCellCurrent.right - dep.rcCellCurrent.left;
-            int cellH = dep.rcCellCurrent.bottom - dep.rcCellCurrent.top;
-            if (cellW <= 0 || cellH <= 0) continue;
-            int iconX = (int)roundf(dep.rcCellCurrent.left + (cellW - iconSz) / 2.0f);
-            int iconY = (int)roundf(dep.rcCellCurrent.top + (cellH - iconSz) / 2.0f);
-
-            DrawIconWithAlpha(hdc, iconX, iconY, dep.hIcon, iconSz, dep.alpha);
-        }
-    }
+    // Static/scroll canvases hold only the backdrop, preview and title. Icons
+    // are composited once at presentation, never copied from an old strip row
+    // while a bottom-positioned Dock is resizing.
+    if (includeSelectionFill) DrawDockIconStrip(hdc);
 
     // 5. Draw centered window title in g_rcDockTitleBar
     if (g_settings.showTitle && g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size()) {
@@ -10394,18 +10412,12 @@ static void DrawScrollTransitionFrame(HDC hdc, int w, int h, bool includeSelecti
     if (s_cachedScrollToDC) {
         BitBlt(hdc, offX, offY, w, h, s_cachedScrollToDC, 0, 0, SRCCOPY);
     }
-    if (includeSelection && HighlightHasFill() && g_selectedIndex >= 0 &&
+    if (includeSelection && dock) {
+        DrawDockIconStrip(hdc);
+    } else if (includeSelection && HighlightHasFill() && g_selectedIndex >= 0 &&
         g_selectedIndex < (int)g_windows.size()) {
         RectF selection = SelectionRectWithViewport();
         DrawSelectionFillF(hdc, selection);
-        if (dock && !IsWindowTruncated(g_selectedIndex)) {
-            auto& entry = g_windows[g_selectedIndex];
-            int size = entry.drawnIconSz > 0 ? entry.drawnIconSz :
-                DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
-            int x = (int)roundf(selection.left + (selection.right - selection.left - size) / 2.0f);
-            int y = (int)roundf(selection.top + (selection.bottom - selection.top - size) / 2.0f);
-            DrawDockIconWithAlpha(hdc, entry, x, y, size);
-        }
     }
     RestoreDC(hdc, saved);
 }
@@ -10525,18 +10537,11 @@ static void PaintSwitcher() {
             }
 
             // Draw moving selection highlight fill on top of background
-            if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && HighlightHasFill()) {
+            if (DockLayoutActive()) {
+                DrawDockIconStrip(s_cachedMemDC);
+            } else if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && HighlightHasFill()) {
                 RectF fillRc = SelectionRectWithViewport();
                 DrawSelectionFillF(s_cachedMemDC, fillRc);
-                if (DockLayoutActive()) {
-                    auto& e = g_windows[g_selectedIndex];
-                    if (!IsWindowTruncated(g_selectedIndex)) {
-                        int iconSz = e.drawnIconSz > 0 ? e.drawnIconSz : DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
-                        int iconX = (int)roundf(fillRc.left + (fillRc.right - fillRc.left - iconSz) / 2.0f);
-                        int iconY = (int)roundf(fillRc.top + (fillRc.bottom - fillRc.top - iconSz) / 2.0f);
-                        DrawDockIconWithAlpha(s_cachedMemDC, e, iconX, iconY, iconSz);
-                    }
-                }
             }
         } else {
             // Composite the same stationary background used by settled frames.
@@ -11596,6 +11601,10 @@ static void SwitchToSelected() {
 
 // Helper: recompute layout and reposition switcher window
 static void RecomputeAndReposition() {
+    // A restore/foreground notification can arrive during activation. Keep the
+    // closing frame's membership and geometry; the next invocation enumerates
+    // fresh state, while already-owned animation tracks can finish normally.
+    if (g_animExitActive) return;
     // Purge any destroyed or non-iconic hidden windows that were closed or hidden silently
     if (!g_windows.empty()) {
         bool removedAny = false;
@@ -12894,7 +12903,7 @@ static bool RefreshGroupRepresentative(WindowEntry& entry) {
 
 static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
     if (!IsWindow(hDestroyed)) InvalidateWindowIcon(hDestroyed);
-    if ((!g_isVisible && !g_isPendingShow) || g_windows.empty()) return;
+    if (g_animExitActive || (!g_isVisible && !g_isPendingShow) || g_windows.empty()) return;
     InvalidateStaticCache();
     // Filtering a minimized drill-in member is not destruction: keep that live
     // member in the saved app unless the entire app is now minimized/hidden.
@@ -13094,7 +13103,7 @@ static void RemoveWindowEntryByHwnd(HWND hDestroyed) {
 }
 
 static void AddWindowEntry(HWND hWnd) {
-    if ((!g_isVisible && !g_isPendingShow) || g_windows.empty()) return;
+    if (g_animExitActive || (!g_isVisible && !g_isPendingShow) || g_windows.empty()) return;
     if (!hWnd || !IsWindow(hWnd) || IsSwitcherWindow(hWnd)) return;
     if (!IsEligibleWindow(hWnd)) {
         RemoveWindowEntryByHwnd(hWnd);
@@ -13435,7 +13444,7 @@ static void CALLBACK WinEventShowHideProc(HWINEVENTHOOK hHook, DWORD event, HWND
         return;
     }
 
-    if (!g_isVisible && !g_isPendingShow) return;
+    if (g_animExitActive || (!g_isVisible && !g_isPendingShow)) return;
 
     LONG_PTR style = GetWindowLongPtrW(hwnd, GWL_STYLE);
     if (style & WS_CHILD) return;
@@ -14864,18 +14873,11 @@ static LRESULT CALLBACK SwitcherWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPA
                         }
                     }
                 }
-                if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && HighlightHasFill()) {
+                if (DockLayoutActive()) {
+                    DrawDockIconStrip(hdcBuf);
+                } else if (g_selectedIndex >= 0 && g_selectedIndex < (int)g_windows.size() && HighlightHasFill()) {
                     RectF fillRc = SelectionRectWithViewport();
                     DrawSelectionFillF(hdcBuf, fillRc);
-                    if (DockLayoutActive()) {
-                        auto& e = g_windows[g_selectedIndex];
-                        if (!IsWindowTruncated(g_selectedIndex)) {
-                            int iconSz = e.drawnIconSz > 0 ? e.drawnIconSz : DpiScale(g_settings.dockIconSize > 0 ? g_settings.dockIconSize : 48, g_dpiX);
-                            int iconX = (int)roundf(fillRc.left + (fillRc.right - fillRc.left - iconSz) / 2.0f);
-                            int iconY = (int)roundf(fillRc.top + (fillRc.bottom - fillRc.top - iconSz) / 2.0f);
-                            DrawDockIconWithAlpha(hdcBuf, e, iconX, iconY, iconSz);
-                        }
-                    }
                 }
             } else {
                 DrawScrollTransitionFrame(hdcBuf, w, h, true);
