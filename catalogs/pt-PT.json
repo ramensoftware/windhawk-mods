@@ -6250,7 +6250,7 @@
         "ratingUsers": 129,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1790586309000,
+        "updated": 1791234098000,
         "users": 6790
       },
       "metadata": {
@@ -6258,7 +6258,7 @@
           "x86-64"
         ],
         "author": "digART",
-        "compilerOptions": "-lcomctl32 -lgdi32 -lgdiplus -lshlwapi -ladvapi32",
+        "compilerOptions": "-lcomctl32 -lgdi32 -lgdiplus -lshlwapi -ladvapi32 -luxtheme",
         "description": "Portable custom presentation for native Explorer file operations with a skin-safe unified presentation.",
         "github": "https://github.com/digart11",
         "include": [
@@ -6266,7 +6266,7 @@
         ],
         "license": "GPL-3.0",
         "name": "File Operation Styler",
-        "version": "1.1.0"
+        "version": "1.2.0"
       }
     },
     "files-2-folders": {
@@ -14284,7 +14284,7 @@
         "ratingUsers": 40,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1789924662000,
+        "updated": 1791234093000,
         "users": 1015
       },
       "metadata": {
@@ -14292,8 +14292,8 @@
           "x86-64"
         ],
         "author": "Yevhenii Starychenko",
-        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lpdh -ldxgi -lcomctl32 -DWIN32_LEAN_AND_MEAN",
-        "description": "A quiet two-column CPU, GPU, RAM and VRAM monitor with 60-second history graphs for the Windows 11 taskbar.",
+        "compilerOptions": "-lole32 -loleaut32 -lruntimeobject -lpdh -ldxgi -lcomctl32 -lgdi32 -lgdiplus -DWIN32_LEAN_AND_MEAN",
+        "description": "CPU, GPU, RAM and VRAM on the Windows 11 taskbar, with temperatures, history graphs, adaptive layouts and live dragging.",
         "github": "https://github.com/starychenko",
         "homepage": "https://github.com/starychenko/windhawk-taskbar-system-info",
         "include": [
@@ -14301,7 +14301,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Taskbar System Info",
-        "version": "1.5.0"
+        "version": "1.7.1"
       }
     },
     "taskbar-thumbnail-hover-fix": {

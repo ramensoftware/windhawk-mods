@@ -2,12 +2,50 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-05T18:02:40.000Z</updated>
+    <updated>2026-10-05T21:01:38.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[File Operation Styler 1.2.0]]></title>
+        <id>https://windhawk.net/mods/file-operation-styler#933fcf4fe0178cc31ac1888d772f05af15bbb1c8</id>
+        <link href="https://windhawk.net/mods/file-operation-styler"/>
+        <updated>2026-10-05T21:01:38.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Added a Frosted Glass theme with Windows Acrylic and Custom Blur styles, including adjustable tint and opacity.</li>
+<li>Added interactive Pause / Resume behavior to the large progress circle.</li>
+<li>Added options to hide the small Pause / Resume and Cancel controls and the progress percentage in the window title.</li>
+<li>Improved multiple-operation support, including synchronized More / Fewer Details behavior.</li>
+<li>Improved fallback to the native Windows UI for conflicts, errors, and unsupported presentation states.</li>
+<li>Improved restoration and teardown when the mod is disabled, reloaded, or settings are changed.</li>
+</ul>]]></content>
+        <author>
+            <name>digART</name>
+            <uri>https://github.com/digart11</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Taskbar System Info 1.7.1]]></title>
+        <id>https://windhawk.net/mods/taskbar-system-info#05168884e6fe6c3cbfa16abec0f2ccd6ab5e79cd</id>
+        <link href="https://windhawk.net/mods/taskbar-system-info"/>
+        <updated>2026-10-05T21:01:33.000Z</updated>
+        <content type="html"><![CDATA[<ul>
+<li>Add automatic placement around visible taskbar controls, with readable shrinking, collision-safe reservation, and hide/restore when free space changes. Remove the 1,000-pixel left-offset cap.</li>
+<li>Add four automatic layouts for available taskbar width and height: full, graphless, compact two-row and compact one-row. Keep essential readings visible and restore hidden details when space returns.</li>
+<li>Add opt-in live dragging through a configurable shortcut, disabled by default, with Enter to save, Esc to cancel and Home to reset. Save positions separately for each display and revalidate before applying them.</li>
+<li>Stop displaying stale collector readings as current; age graph history during a stall and recover on fresh publication.</li>
+<li>Reject stale/frozen HWiNFO Shared Memory and Gadget Registry temperatures, with automatic fallback to remaining providers.</li>
+<li>Isolate native GPU-temperature failures from other GPU metrics, retry with fresh handles, and recover persistently invalid GPU engine samples through a separately primed query.</li>
+<li>Contain move-editor and display-enumeration exceptions, reject stale window classes and release XAML references on their owning thread. Reuse unchanged placement/font data and avoid unrelated settings cancellations.</li>
+<li>Refresh the built-in guide, layout examples and English/Ukrainian setting descriptions. Preserve existing setting defaults; add only the optional move shortcut.</li>
+</ul>]]></content>
+        <author>
+            <name>Yevhenii Starychenko</name>
+            <uri>https://github.com/starychenko</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Alt+Tab Flip 3D (Vista Style) 1.5.3]]></title>
         <id>https://windhawk.net/mods/alt-tab-flip-3d#0d68d720b3eecf432b1b80445a6efb0afcb50de8</id>
@@ -995,126 +1033,6 @@ slightly behind the target.</li>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Snipping Tool Pen Text 1.0.2]]></title>
-        <id>https://windhawk.net/mods/snipping-tool-pen-text#afcaccaaf445cc1aaaf7bcb7123c090e62a9fc46</id>
-        <link href="https://windhawk.net/mods/snipping-tool-pen-text"/>
-        <updated>2026-10-03T17:01:41.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="snippingtoolpentext">Snipping Tool Pen Text</h1>
-<p>The Windows 11 Snipping Tool has a pen, a highlighter and shapes, but no text
-tool. This mod adds one: it "writes" your text on the screenshot using the
-<strong>Snipping Tool's own pen</strong>.</p>
-<p>Since the text becomes real pen strokes, it lives inside the editor: undo it
-with Ctrl+Z, erase it with the eraser, save and copy as usual.</p>
-<h2 id="preview">Preview</h2>
-<p><img src="https://raw.githubusercontent.com/cristianosm/windhawk-assets/main/snipping-tool-pen-text-demo.gif" alt="Snipping Tool Pen Text demo" /></p>
-<h2 id="howtouse">How to use</h2>
-<ol>
-<li>Open a screenshot in the Snipping Tool editor.</li>
-<li>Pick the pen color and thickness. The pen is selected automatically when
-writing, and the previous tool (highlighter or eraser) is restored after.</li>
-<li>Click the floating <strong>T</strong> button (near the window corner) or press
-<strong>Ctrl+Alt+Shift+T</strong>. With the hotkey, the text starts at the mouse position.</li>
-<li>Type the text. A live preview shows where it will be written, in the pen's
-color and thickness.</li>
-</ol>
-<ul>
-<li><strong>Position</strong>: click on the image where the text should start
- (the preview follows the mouse).</li>
-<li><strong>Alt+Arrows</strong>: move the text 10 px (100 px with Shift). The step is
- configurable.</li>
-<li><strong>Height</strong> and <strong>Speed</strong>: use the - / + buttons, the mouse wheel or the
- Up/Down keys. The last values used are remembered.</li>
-<li><strong>Ctrl+Enter</strong>: write. <strong>Shift+Enter</strong> (or Enter): new line.
- <strong>Esc</strong>: cancel.</li>
-</ul>
-<ol>
-<li>While the text is written, the physical mouse is ignored (optional).
-Press Esc to stop.</li>
-</ol>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>The text uses a single-stroke font (Hershey "futural", public domain), with
-support for accented Latin letters (á à â ã é ê í ó ô õ ú ü ç ñ) and º ª °.</li>
-<li>The dialog follows the Windows light/dark theme and accent color, and is
-shown in English or Portuguese (automatic, or chosen in the settings).</li>
-<li>The preview reads the pen color and thickness from the Snipping Tool's own
-settings. Thickness matches the result at 100% editor zoom.</li>
-<li>If curves come out jagged, lower the writing speed.</li>
-<li>The floating button position is configurable (corner + X/Y offsets).</li>
-</ul>
-<h2 id="portugus">Português</h2>
-<p>Este mod adiciona uma ferramenta de texto ao Snipping Tool do Windows 11. O
-texto é escrito com a <strong>própria caneta do Snipping Tool</strong>, então fica dentro do
-editor: dá para desfazer com Ctrl+Z, apagar com a borracha, salvar e copiar.</p>
-<p>Como usar: escolha a cor e a espessura da caneta (ela é selecionada
-automaticamente ao escrever, e a ferramenta anterior volta depois), clique no
-botão flutuante <strong>T</strong> ou use <strong>Ctrl+Alt+Shift+T</strong>, digite o texto e confira a
-prévia.
-<strong>Posicionar</strong> escolhe onde o texto começa; <strong>Alt+Setas</strong> ajusta a posição;
-<strong>Ctrl+Enter</strong> escreve, <strong>Shift+Enter</strong> quebra a linha e <strong>Esc</strong> cancela.
-A janela aparece em português automaticamente quando o Windows está em
-português.</p>]]></content>
-        <author>
-            <name>Cris</name>
-            <uri>https://github.com/cristianosm</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Desktop Icon Section Auto-Hide & Fluent Hover Reveal 1.3.4]]></title>
-        <id>https://windhawk.net/mods/desktop-icon-section-autohide#47d709edce0c60da43504bf61ff645eff601a7eb</id>
-        <link href="https://windhawk.net/mods/desktop-icon-section-autohide"/>
-        <updated>2026-10-03T17:01:37.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="desktopiconsectionautohidefluenthoverrevealzerowallpaperdimming">Desktop Icon Section Auto-Hide &amp; Fluent Hover Reveal (Zero Wallpaper Dimming)</h1>
-<p>Provides a clean, distraction-free desktop experience by automatically hiding desktop icons while keeping your wallpaper, Rainmeter widgets, and live wallpapers completely untouched and crystal clear.</p>
-<p><img src="https://raw.githubusercontent.com/Piyushdas1624/windhawk-mods/assets/desktop-icon-section-autohide-preview.jpg" alt="Desktop Icon Section Auto-Hide Preview" /></p>
-<h2 id="keyfeatures">Key Features</h2>
-<ul>
-<li><strong>Zero Wallpaper Dimming</strong>: Operates by modulating icon and label rendering directly in GDI. No dark overlays, no duplicated wallpaper snapshots, and no DirectComposition layers.</li>
-<li><strong>Smooth 60 FPS Fluent Eased Alpha Fade</strong>: Fluid, flicker-free alpha transitions using Ken Perlin's quintic smootherstep curve.</li>
-<li><strong>Specific App Pinning (Always-Visible Whitelist)</strong>: Keep essential shortcuts (e.g. Recycle Bin, This PC, or work apps) permanently visible at 100% opacity while all other shortcuts auto-hide.</li>
-<li><strong>Independent Pinned App Interaction</strong>: Clicking, hovering, or launching pinned apps never accidentally unhides the rest of your desktop icons.</li>
-<li><strong>Three-Way Double-Click Mode Cycle</strong>: Double-clicking empty desktop wallpaper cycles between:</li>
-</ul>
-<ol>
-<li><em>Auto Mode</em>: Unpinned icons reveal on section hover and auto-hide on exit or inactivity; pinned icons stay visible.</li>
-<li><em>Show All</em>: Keeps all desktop icons visible indefinitely (ideal for organizing files).</li>
-<li><em>Hide All</em>: Completely locks all unpinned icons hidden (ideal for presentations or clean wallpaper viewing).</li>
-</ol>
-<ul>
-<li><strong>Middle-Click Quick Toggle</strong>: Clicking the middle mouse button on empty wallpaper instantly toggles icon visibility.</li>
-<li><strong>Wallpaper Click-and-Hold Peek Mode</strong>: Press and hold the left mouse button on empty wallpaper for 400 ms to peek at your icons temporarily; releasing smoothly hides them again.</li>
-<li><strong>Active Rename & File Drag Focus Shield</strong>: Freezes all auto-hide timeouts while actively renaming an icon, dragging a shortcut, or rubber-band selecting multiple files.</li>
-<li><strong>Multi-Anchor Section Detection</strong>: Configure which edge houses your icons (Left edge, Right edge for secondary monitors, Top edge, or Custom bounding box).</li>
-<li><strong>Subtle Acoustic Feedback</strong>: Optional subtle Windows sound cues when switching modes.</li>
-</ul>
-<h2 id="pinningappsshortcuts">Pinning Apps &amp; Shortcuts</h2>
-<p>In the mod settings, you can enable built-in pinning for the <strong>Recycle Bin</strong> and <strong>This PC</strong>, or provide your own custom app names under <strong>Custom Pinned Apps & Shortcuts</strong>.</p>
-<ul>
-<li>Enter comma-separated names (e.g., <code>Google Chrome, Discord, Steam, Visual Studio Code</code>).</li>
-<li>Case-insensitive and extension-agnostic (<code>.lnk</code>, <code>.url</code> extensions are handled automatically).</li>
-<li>Supports wildcards like <code>*</code> and <code>?</code> (e.g., <code>Project*</code>, <code>Doc?</code>).</li>
-<li>Audit and verify all detected and pinned desktop icons in the Windhawk Mod Log tab.</li>
-</ul>
-<h2 id="creditsattribution">Credits &amp; Attribution</h2>
-<p>This mod builds upon and refines ideas and code patterns established in the Windhawk community:</p>
-<ul>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/zen-desktop-toggle-icons.wh.cpp">zen-desktop-toggle-icons</a> by Lanbo (Liset999) — Desktop window subclassing, window creation hook, property tracking, and clean lifecycle management.</li>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/desktop-icons-transparency.wh.cpp">desktop-icons-transparency</a> by zed712969-crypto — GDI icon and text alpha blending hooks enabling transparency without wallpaper dimming.</li>
-<li><a href="https://github.com/ramensoftware/windhawk-mods/blob/main/mods/transparent-desktop-icons-spotlight.wh.cpp">transparent-desktop-icons-spotlight</a> by drgutman — Desktop hover-reveal interaction concepts.</li>
-</ul>
-<h3 id="whythisisastandalonemod">Why this is a standalone mod</h3>
-<p>While related mods focus either on full-desktop toggle hiding or uniform transparency, this mod introduces:</p>
-<ol>
-<li><strong>Section-based triggering</strong>: Confines auto-hide and hover-reveal to a configurable screen edge or custom bounding box (ideal for dock-style icon arrangements and multi-monitor setups).</li>
-<li><strong>Selective per-icon whitelist pinning</strong>: Keeps essential icons (like Recycle Bin, This PC, or user-selected work apps) permanently visible and interactable while temporary desktop clutter smoothly auto-hides.</li>
-<li><strong>Four-state workflow cycle & interaction shields</strong>: Combines Auto, Show All, and Hide All modes with a peek-on-hold gesture, middle-click toggle, and focus protection shields during file renaming, shortcut dragging, and rubber-band selection.</li>
-</ol>]]></content>
-        <author>
-            <name>Piyush Das</name>
-            <uri>https://github.com/Piyushdas1624</uri>
         </author>
     </entry>
 </feed>

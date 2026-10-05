@@ -1,3 +1,14 @@
+## 1.7.1 ([Oct 5, 2026](https://github.com/ramensoftware/windhawk-mods/blob/05168884e6fe6c3cbfa16abec0f2ccd6ab5e79cd/mods/taskbar-system-info.wh.cpp))
+
+* Add automatic placement around visible taskbar controls, with readable shrinking, collision-safe reservation, and hide/restore when free space changes. Remove the 1,000-pixel left-offset cap.
+* Add four automatic layouts for available taskbar width and height: full, graphless, compact two-row and compact one-row. Keep essential readings visible and restore hidden details when space returns.
+* Add opt-in live dragging through a configurable shortcut, disabled by default, with Enter to save, Esc to cancel and Home to reset. Save positions separately for each display and revalidate before applying them.
+* Stop displaying stale collector readings as current; age graph history during a stall and recover on fresh publication.
+* Reject stale/frozen HWiNFO Shared Memory and Gadget Registry temperatures, with automatic fallback to remaining providers.
+* Isolate native GPU-temperature failures from other GPU metrics, retry with fresh handles, and recover persistently invalid GPU engine samples through a separately primed query.
+* Contain move-editor and display-enumeration exceptions, reject stale window classes and release XAML references on their owning thread. Reuse unchanged placement/font data and avoid unrelated settings cancellations.
+* Refresh the built-in guide, layout examples and English/Ukrainian setting descriptions. Preserve existing setting defaults; add only the optional move shortcut.
+
 ## 1.5.0 ([Sep 20, 2026](https://github.com/ramensoftware/windhawk-mods/blob/e81aaa5fd7a81fb12eb0ebde2ce65a435be0d936/mods/taskbar-system-info.wh.cpp))
 
 - Add a **Taskbar monitor** setting to place the widget on the primary or a secondary display. If the selected display is unavailable, use the primary taskbar and retry the selected display automatically.
