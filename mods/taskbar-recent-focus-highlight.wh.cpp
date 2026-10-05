@@ -2,7 +2,7 @@
 // @id              taskbar-recent-focus-highlight
 // @name            Taskbar Recent Focus Highlight
 // @description     Visually highlight the most recently focused running apps on the taskbar
-// @version         0.11.0
+// @version         0.11.1
 // @author          Jakub Vlášek
 // @github          https://github.com/jvlasek
 // @include         explorer.exe
@@ -706,6 +706,7 @@ struct UiDispatcher {
     winrt::Windows::UI::Core::CoreDispatcher dispatcher{nullptr};
     winrt::handle thread;
     DWORD threadId;
+    std::atomic<bool> identityApplyQueued{false};
 };
 [[clang::no_destroy]] std::optional<
     std::vector<std::shared_ptr<UiDispatcher>>>
@@ -1502,18 +1503,8 @@ std::wstring GetWindowTitle(HWND hWnd) {
     // GetWindowTextW sends WM_GETTEXT to same-process windows, so a hung
     // Explorer folder can stall our worker and its shutdown join. Read stored
     // text without messaging; missing text is acceptable for this label.
-    using InternalGetWindowText_t = int(WINAPI*)(HWND, LPWSTR, int);
-    static const auto readTitle = []() -> InternalGetWindowText_t {
-        HMODULE user32 = GetModuleHandleW(L"user32.dll");
-        return user32 ? reinterpret_cast<InternalGetWindowText_t>(
-                            GetProcAddress(user32, "InternalGetWindowText"))
-                      : nullptr;
-    }();
-    if (!readTitle) {
-        return {};
-    }
     wchar_t buf[512]{};
-    int n = readTitle(hWnd, buf, ARRAYSIZE(buf));
+    int n = InternalGetWindowText(hWnd, buf, ARRAYSIZE(buf));
     if (n <= 0) {
         return {};
     }
@@ -3902,6 +3893,25 @@ bool ButtonResolveWindowsLive(const ButtonResolveData& data) {
     return true;
 }
 
+// Retain a Win32 group's identity only when the new sample was already a
+// live member of that same captured group/process. PID equality alone is not
+// app identity (especially for shared UWP hosts or recycled buttons).
+bool CanRetainGroupIdentity(const ButtonPathCacheEntry& cached,
+                            const ButtonResolveData& current) {
+    if (!current.running || !current.hwnd || !current.pid ||
+        cached.samplePid != current.pid || cached.pathUpper.empty() ||
+        IsUwpHostPath(cached.pathUpper)) {
+        return false;
+    }
+    for (const auto& member : cached.groupWindows) {
+        if (member.hwnd == current.hwnd && member.pid == current.pid &&
+            HwndMatchesStoredPid(member.hwnd, member.pid)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // One queued request per button, with a fixed global bound. The worker
 // processes one per message so focus/shutdown messages can run between metadata
 // queries.
@@ -3928,6 +3938,8 @@ bool QueueButtonResolve(ButtonResolveData data) {
     }
     return true;
 }
+
+bool RequestIdentityCompletionApply();
 
 void ResolveOneButtonOnFocusThread() {
     ButtonResolveData data;
@@ -3988,7 +4000,7 @@ void ResolveOneButtonOnFocusThread() {
     }
     bool dispatched = false;
     if (published) {
-        dispatched = RunOnUiThread([]() { ApplyAllHighlights_UIThread(false); });
+        dispatched = RequestIdentityCompletionApply();
     }
     Wh_Log(L"Identity delivery: button=%p request=%llu published=%d dispatched=%d",
            buttonId, serial, published, dispatched);
@@ -4099,18 +4111,24 @@ std::wstring EnsureButtonPathCached(FrameworkElement button,
                 }
             }
         }
-        // If the captured windows changed, a prior identity is no longer
-        // evidence for this button. No filename/title fallback.
+        // A changed sample invalidates identity unless it is a known surviving
+        // Win32 group member. No filename/title or PID-only fallback.
         if ((e.sampleHwnd &&
              (e.sampleHwnd != data.hwnd || e.samplePid != data.pid)) ||
             (e.sampleHwnd && !data.running)) {
-            e.pathUpper.clear();
-            e.appIdUpper.clear();
-            e.classUpper.clear();
-            e.sampleHwnd = nullptr;
-            e.samplePid = 0;
-            e.groupWindows.clear();
-            e.lastPaintRank = -1;
+            if (CanRetainGroupIdentity(e, data)) {
+                e.sampleHwnd = data.hwnd;
+                e.samplePid = data.pid;
+                e.groupWindows = data.windows;
+            } else {
+                e.pathUpper.clear();
+                e.appIdUpper.clear();
+                e.classUpper.clear();
+                e.sampleHwnd = nullptr;
+                e.samplePid = 0;
+                e.groupWindows.clear();
+                e.lastPaintRank = -1;
+            }
         }
         path = e.pathUpper;
         // Expired matching requests cool down until the next normal refresh.
@@ -6140,6 +6158,46 @@ bool RunOnUiThread(const winrt::Windows::UI::Core::DispatchedHandler& handler) {
     return any;
 }
 
+// One outstanding completion repaint per dispatcher. A fast taskbar thread
+// must not reopen the queue for another thread whose pass has not run yet.
+bool QueueIdentityCompletionApply(const std::shared_ptr<UiDispatcher>& ui) {
+    if (g_unloading.load() || UiThreadExited(*ui))
+        return false;
+    if (ui->identityApplyQueued.exchange(true))
+        return true;  // Its queued pass will consume the published results.
+    try {
+        if (DispatcherTryRun(
+                ui->dispatcher,
+                winrt::Windows::UI::Core::CoreDispatcherPriority::Normal,
+                [ui]() {
+                    ui->identityApplyQueued.store(false);
+                    if (!g_unloading.load()) {
+                        try {
+                            ApplyAllHighlights_UIThread(false);
+                        } catch (...) {
+                            Wh_Log(L"Identity completion repaint failed");
+                        }
+                    }
+                })) {
+            return true;
+        }
+    } catch (...) {
+        Wh_Log(L"Identity completion dispatch failed");
+    }
+    ui->identityApplyQueued.store(false);
+    // Results remain cached for a later completion or normal full pass.
+    return false;
+}
+
+bool RequestIdentityCompletionApply() {
+    bool any = false;
+    for (const auto& ui : CollectUiDispatchers()) {
+        if (QueueIdentityCompletionApply(ui))
+            any = true;
+    }
+    return any;
+}
+
 void RequestApplyVisuals() {
     if (g_unloading.load()) {
         return;
@@ -7646,16 +7704,15 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
     }
     // Shell notifications require a desktop window. Never show or activate it.
     g_shellHookMessage = RegisterWindowMessageW(L"SHELLHOOK");
-    if (!g_shellHookMessage || !RegisterShellHookWindow(hwnd)) {
-        Wh_Log(L"Shell activation registration failed: %u", GetLastError());
-        DestroyWindow(hwnd);
-        UnregisterClassW(wc.lpszClassName, wc.hInstance);
+    const bool shellHookRegistered =
+        g_shellHookMessage && RegisterShellHookWindow(hwnd);
+    if (!shellHookRegistered) {
+        Wh_Log(L"Shell activation registration failed: %u; using foreground WinEvents only",
+               GetLastError());
         g_shellHookMessage = 0;
-        g_hookThreadId.store(0, std::memory_order_release);
-        SignalHookThreadReady();
-        return 1;
+    } else {
+        Wh_Log(L"Shell activation notifications registered (no foreground polling)");
     }
-    Wh_Log(L"Shell activation notifications registered (no foreground polling)");
     g_hookThreadHwnd.store(hwnd, std::memory_order_release);
 
     HRESULT coHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -7673,7 +7730,8 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
         UnsubscribeAccentChanges();
         ReleaseVdm();
         g_hookThreadHwnd.store(nullptr, std::memory_order_release);
-        DeregisterShellHookWindow(hwnd);
+        if (shellHookRegistered)
+            DeregisterShellHookWindow(hwnd);
         DestroyWindow(hwnd);
         g_shellHookMessage = 0;
         UnregisterClassW(wc.lpszClassName, wc.hInstance);
@@ -7728,7 +7786,8 @@ DWORD WINAPI WinEventHookThread(LPVOID /*param*/) {
 
     g_decayTimerArmed.store(false);
     g_hookThreadHwnd.store(nullptr, std::memory_order_release);
-    DeregisterShellHookWindow(hwnd);
+    if (shellHookRegistered)
+        DeregisterShellHookWindow(hwnd);
     DestroyWindow(hwnd);
     g_shellHookMessage = 0;
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
