@@ -220,12 +220,12 @@ Windhawk's process exclusion list.
   $name: Panel fade-out (ms)
   $name:zh-CN: 面板淡出时长 (ms)
   $description: >-
-    How long the panel takes to fade out once the real window is ready underneath it.
-    The panel is already fully transparent by then, so this only bridges the moment the
-    real window is revealed.
+    How long the panel takes to fade out, blending into the app's background colour, once
+    the real window is ready underneath it. The panel is still opaque when this starts, so
+    it is the length of the whole handover.
   $description:zh-CN: >-
-    真窗口在面板底下画好之后，面板淡出所用的时间。这时面板已经全透明，这一步只是把
-    「露出真窗口」这一下过渡得自然些。
+    真窗口在面板底下画好之后，面板淡出并过渡到应用自己的底色所用的时间。开始淡出时面板
+    还是不透明的，所以这个值就是整个交接过程的长度。
 - readyMs: 8000
   $name: Wait for content timeout (ms)
   $name:zh-CN: 等内容的超时 (ms)
@@ -427,7 +427,6 @@ struct LaunchClick {
 };
 
 static void ToLowerInPlace(std::wstring& s);  // used by ExtractExeName, defined later
-static void WideToUtf8(PCWSTR w, char* out, int outChars);  // the exe name is printed in the log
 static bool IsThreadPumping(HWND hwnd);  // used by RestoreWindowStyle, defined later
 
 // With the "target exe must match" gate in place, 30 seconds cannot leak into
@@ -535,8 +534,6 @@ static void ClickShareRecord(const char* why, const wchar_t* targetExe,
     InterlockedExchange(&g_clickShared->tick, (LONG)GetTickCount64());
     // mouse-down is high frequency, so it is not logged line by line
     if (why) {
-        char targetUtf8[64] = "(unknown)";
-        if (!exe.empty()) WideToUtf8(exe.c_str(), targetUtf8, sizeof(targetUtf8));
         Wh_Log(L"  record click (%ld,%ld) why=%S target=%s", p.x, p.y, why,
                exe.empty() ? L"(unknown)" : exe.c_str());
     }
@@ -726,12 +723,6 @@ static const ULONGLONG kLaunchAnchorMs = 15000;
 // every line report the helper's own line number.
 //
 // The format strings are wide, so %s takes a wchar_t* and %S a narrow (ASCII) one.
-static void WideToUtf8(PCWSTR w, char* out, int outChars) {
-    out[0] = '\0';
-    if (!w || !w[0]) return;
-    WideCharToMultiByte(CP_UTF8, 0, w, -1, out, outChars, nullptr, nullptr);
-}
-
 // "Skipped" logging that includes the window class, so it is obvious which rule
 // rejected which class.
 //
@@ -3138,6 +3129,17 @@ static void FinishAnimatedShow(HWND hwnd, int index) {
 }
 
 static BOOL ShowAnimated(HWND hwnd, const AnimParams& p, int nCmdShow) {
+    // The real-window path cannot animate a maximized window (see the WS_MAXIMIZE rule in
+    // ShouldAnimate). Hiding one first and then finding out is worse than not hiding it at
+    // all: the style added here has to be removed again from a window that is already
+    // visible, which recreates its surface for one frame, and with the splash panel off
+    // there is nothing covering that. Let these pass straight through.
+    if (!p.splash && nCmdShow == SW_SHOWMAXIMIZED) {
+        g_inHook = true;
+        const BOOL direct = pOrigShowWindow(hwnd, nCmdShow);
+        g_inHook = false;
+        return direct;
+    }
     if (TooSoon(hwnd)) {
         DiagSkip("repeat show", hwnd, "animated a moment ago");
         g_inHook = true;
@@ -3446,6 +3448,11 @@ BOOL WINAPI HookedSetWindowPlacement(HWND hwnd, const WINDOWPLACEMENT* wp) {
     if (!IsShowCommand(wp->showCmd)) return pOrigSetWindowPlacement(hwnd, wp);
 
     const AnimParams p = GetParams();
+    // Same as in ShowAnimated: a maximized window on the real-window path is rejected
+    // later anyway, and hiding it first only means removing a style from a visible window.
+    if (!p.splash && wp->showCmd == SW_SHOWMAXIMIZED) {
+        return pOrigSetWindowPlacement(hwnd, wp);
+    }
     wchar_t cls[256];
     const char* reason = nullptr;
     if (!ShouldAnimateShow(hwnd, p, cls, 256, &reason)) {
