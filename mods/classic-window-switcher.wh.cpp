@@ -21,6 +21,8 @@
 * This mod brings back the classic Alt+Tab dialog, even on Windows 11 24H2+, which removed the old switcher in win32kfull.sys.
 * This is a direct port of my [ClassicWindowSwitcher](https://github.com/Ingan121/ClassicWindowSwitcher), which is a fork of valinet's [SimpleWindowSwitcher](https://github.com/valinet/sws).
 * Please do not use this mod with other Alt+Tab mods. They might conflict with this mod.
+* If you are using an alternative shell like Explorer7, have disabled the modern Alt+Tab UI with `AltTabSettings` registry, or if you prefer to have the classic Alt+Tab restored (on 24H2+) even without Explorer running, enable the last option in the mod settings.
+    * If you enable this setting, you may have to restart Explorer after disabling this mod to get the modern switcher UI back.
 
 ![Animated Screenshot](https://raw.githubusercontent.com/Ingan121/ClassicWindowSwitcher/refs/heads/master/cws.webp)
 ## Differences with the original classic switcher
@@ -104,6 +106,11 @@
   $name:ko-KR: 한 창만 있으면 전환기 생략
   $description: Skip showing the switcher and immediately switch to the only window if there is just one window to switch to.
   $description:ko-KR: 전환 가능한 창이 하나만 있을 경우 전환기 표시를 건너뛰고 바로 해당 창으로 전환합니다.
+- RegisterHotKey: false
+  $name: Try registering hotkey directly
+  $name:ko-KR: 직접 바로 가기 키 등록 시도
+  $description: Enable if your setup involves disabling the default modern window switcher.
+  $description:ko-KR: 현재 시스템 구성 상 기본 창 전환기가 비활성화 된 경우 이 옵션을 켜십시오.
 */
 // ==/WindhawkModSettings==
 
@@ -126,6 +133,7 @@
 #include <processthreadsapi.h>
 #include <vector>
 #include <string>
+#include <atomic>
 
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 #define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
@@ -165,7 +173,6 @@ DEFINE_GUID(LiveSetting_Property_GUID, 0xc12bcd8e, 0x2a8e, 0x4950, 0x8a, 0xe7, 0
 
 #define SWS_WINDOWSWITCHER_PAINT_MSG (WM_APP + 1)
 #define SWS_WINDOWSWITCHER_RELOAD_CONFIG_MSG (WM_APP + 2)
-#define SWS_WINDOWSWITCHER_RELOAD_HOTKEY_MSG (WM_APP + 3)
 
 #define SWS_WINDOWSWITCHER_PAINTFLAGS_NONE 0b000
 #define SWS_WINDOWSWITCHER_PAINTFLAGS_REDRAWENTIRE 0b001
@@ -673,6 +680,7 @@ typedef struct _sws_WindowSwitcher
     DWORD dwOriginalScrollWheelBehavior;
 	BOOL bIsCursorOnSwitcher;
 	BOOL bSkipIfOneWindow;
+    BOOL bRegisterHotKey;
 
     sws_WindowSwitcherSettings settings;
 } sws_WindowSwitcher;
@@ -1461,7 +1469,7 @@ void sws_WindowHelpers_GetDesktopText(wchar_t* wszTitle)
         if (pos != std::wstring::npos) {
             titleText.replace(pos, 4, L"");
         }
-        wcscpy(wszTitle, titleText.c_str());
+        wcsncpy_s(wszTitle, MAX_PATH, titleText.c_str(), _TRUNCATE);
 	}
 	else
 	{
@@ -1599,18 +1607,14 @@ void sws_WindowHelpers_GetDesiredWindowText(sws_WindowSwitcher* _this, sws_Windo
                 }
             }
             auto titleText = std::wstring(wszFormat);
-            size_t pos = titleText.find(L"%s");
-            if (pos != std::wstring::npos) {
+            size_t pos;
+            if (window.dwCount && (pos = titleText.find(L"%d")) != std::wstring::npos) {
+                titleText.replace(pos, 2, std::to_wstring(window.dwCount));
+            }
+            if ((pos = titleText.find(L"%s")) != std::wstring::npos) {
                 titleText.replace(pos, 2, wszTitle2);
             }
-            if (window.dwCount)
-            {
-                pos = titleText.find(L"%d");
-                if (pos != std::wstring::npos) {
-                    titleText.replace(pos, 2, std::to_wstring(window.dwCount));
-                }
-            }
-            wcscpy(wszTitle, titleText.c_str());
+            wcsncpy_s(wszTitle, MAX_PATH, titleText.c_str(), _TRUNCATE);
         }
         else
         {
@@ -2287,59 +2291,12 @@ static int CALLBACK _sws_WindowSwitcher_free_stub(void* p, void* pData)
 static HRESULT STDMETHODCALLTYPE _sws_WindowsSwitcher_IInputSwitchCallback_OnUpdateProfile(sws_IInputSwitchCallback* _this, IInputSwitchCallbackUpdateData* ud)
 {
     // useful info: https://referencesource.microsoft.com/#system.windows.forms/winforms/Managed/System/WinForms/InputLanguage.cs,a01e59da9681988c
-
-    wchar_t pwszKLID[9];
-
     uint16_t language = ud->dwID & 0xffff;
     uint16_t device = (ud->dwID >> 16) & 0x0fff;
     Wh_Log(L"OnUpdateProfile %d %d:", language, device);
-    if (device == language)
-    {
-        swprintf_s(pwszKLID, 9, L"%08x", language);
-        PostMessageW(FindWindowW(SWS_WINDOWSWITCHER_CLASSNAME, NULL), WM_INPUTLANGCHANGE, 0, device == 0 ? 0 : (LPARAM)LoadKeyboardLayoutW(pwszKLID, KLF_ACTIVATE));
-    }
-    else
-    {
-        wchar_t pwszLanguage[5];
-        swprintf_s(pwszLanguage, 5, L"%04x", language);
-        wchar_t pwszDevice[5];
-        swprintf_s(pwszDevice, 5, L"%04x", device);
-        HKEY hKey = NULL;
-        RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Keyboard Layouts", 0, KEY_READ, &hKey);
-        if (hKey)
-        {
-            DWORD cSubKeys = 0;
-            RegQueryInfoKeyW(hKey, NULL, NULL, NULL, &cSubKeys, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-            if (cSubKeys)
-            {
-                for (unsigned int i = 0; i < cSubKeys; ++i)
-                {
-                    wchar_t name[9];
-                    ZeroMemory(name, 9 * sizeof(wchar_t));
-                    DWORD name_size = 9;
-                    RegEnumKeyExW(hKey, i, name, &name_size, NULL, NULL, NULL, NULL);
-                    if (name[0] && name_size == 8)
-                    {
-                        if (!wcsncmp(name + 4, pwszLanguage, 4))
-                        {
-                            wchar_t layoutId[5];
-                            ZeroMemory(layoutId, 5 * sizeof(wchar_t));
-                            DWORD layoutId_size = 5 * sizeof(wchar_t);
-                            RegGetValueW(hKey, name, L"Layout Id", RRF_RT_REG_SZ, NULL, layoutId, &layoutId_size);
-                            if (layoutId[0] && layoutId_size == 5 * sizeof(wchar_t))
-                            {
-                                if (!wcsncmp(layoutId, pwszDevice, 4))
-                                {
-                                    PostMessageW(FindWindowW(SWS_WINDOWSWITCHER_CLASSNAME, NULL), WM_INPUTLANGCHANGE, 0, (LPARAM)LoadKeyboardLayoutW(name, KLF_ACTIVATE));
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            RegCloseKey(hKey);
-        }
+    HWND hSwitcher = FindWindowW(SWS_WINDOWSWITCHER_CLASSNAME, NULL);
+    if (hSwitcher) {
+        PostMessageW(hSwitcher, WM_INPUTLANGCHANGE, 0, 0);
     }
     return S_OK;
 }
@@ -2611,17 +2568,8 @@ static void _sws_WindowSwitcher_DrawContour(sws_WindowSwitcher* _this, HDC hdcPa
         DIB_RGB_COLORS, SRCCOPY);
 }
 
-void sws_WindowSwitcher_RegisterHotkeys(sws_WindowSwitcher* _this, HKL hkl)
+void sws_WindowSwitcher_RegisterHotkeys(sws_WindowSwitcher* _this)
 {
-    if (hkl)
-    {
-        _this->vkTilde = MapVirtualKeyExW(0x29, MAPVK_VSC_TO_VK_EX, hkl);
-    }
-    else
-    {
-        _this->vkTilde = MapVirtualKeyW(0x29, MAPVK_VSC_TO_VK_EX);
-    }
-
     if (!_this->settings.bNoPerApplicationList)
     {
         RegisterHotKey(_this->hWnd, -1, MOD_ALT, _this->vkTilde);
@@ -2630,10 +2578,12 @@ void sws_WindowSwitcher_RegisterHotkeys(sws_WindowSwitcher* _this, HKL hkl)
         RegisterHotKey(_this->hWnd, -4, MOD_ALT | MOD_SHIFT | MOD_CONTROL, _this->vkTilde);
     }
 
-    RegisterHotKey(_this->hWnd, 1, MOD_ALT, VK_TAB);
-    RegisterHotKey(_this->hWnd, 2, MOD_ALT | MOD_SHIFT, VK_TAB);
-    RegisterHotKey(_this->hWnd, 3, MOD_ALT | MOD_CONTROL, VK_TAB);
-    RegisterHotKey(_this->hWnd, 4, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB);
+    if (_this->bRegisterHotKey) {
+        RegisterHotKey(_this->hWnd, 1, MOD_ALT, VK_TAB);
+        RegisterHotKey(_this->hWnd, 2, MOD_ALT | MOD_SHIFT, VK_TAB);
+        RegisterHotKey(_this->hWnd, 3, MOD_ALT | MOD_CONTROL, VK_TAB);
+        RegisterHotKey(_this->hWnd, 4, MOD_ALT | MOD_SHIFT | MOD_CONTROL, VK_TAB);
+    }
 }
 
 void sws_WindowSwitcher_UnregisterHotkeys(sws_WindowSwitcher* _this)
@@ -3346,14 +3296,15 @@ static void WINAPI _sws_WindowSwitcher_Show(sws_WindowSwitcher* _this)
     }
     _this->layout.iFirstItemIndex = _this->layout.pWindowList.cbSize;
     int col = _this->settings.dwGridColumns;
-    Wh_Log(L"[sws] cbSize=%d col=%d", _this->layout.pWindowList.cbSize, col);
     int row = _this->settings.dwGridRows;
+    Wh_Log(L"[sws] cbSize=%d col=%d", _this->layout.pWindowList.cbSize, col);
     if (_this->initialDirection == SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_BACKWARD) {
         _this->layout.iIndex = 0;
         if (_this->layout.pWindowList.cbSize > col * row) {
             _this->layout.iFirstItemIndex = col * (row / 2) + col / 2;
         }
     }
+    _this->initialDirection = SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_INITIAL;
     if (_this->hdcWindow)
     {
         EndBufferedPaint(_this->hBufferedPaint, FALSE);
@@ -3523,7 +3474,7 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
     {
         sws_WindowSwitcher_LoadSettings(_this);
         sws_WindowSwitcher_UnregisterHotkeys(_this);
-        sws_WindowSwitcher_RegisterHotkeys(_this, NULL);
+        sws_WindowSwitcher_RegisterHotkeys(_this);
     }
     else if (uMsg == WM_ERASEBKGND)
     {
@@ -3533,24 +3484,9 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
     {
         // Fallback for those who renamed InputSwitch.dll
         if (wParam == HSHELL_WINDOWACTIVATED || wParam == HSHELL_RUDEAPPACTIVATED) {
-            HWND foreground = GetForegroundWindow();
-            if (foreground && foreground != _this->hWnd)
-            {
-                DWORD tid = GetWindowThreadProcessId(foreground, NULL);
-                if (tid)
-                {
-                    HKL hkl = GetKeyboardLayout(tid);
-                    UINT vk = MapVirtualKeyExW(0x29, MAPVK_VSC_TO_VK_EX, hkl);
-
-                    if (vk && vk != _this->vkTilde)
-                    {
-                        Wh_Log(L"Layout changed");
-                        sws_WindowSwitcher_UnregisterHotkeys(_this);
-                        sws_WindowSwitcher_RegisterHotkeys(_this, hkl);
-                    }
-                }
-            }
+            SendMessageW(hWnd, WM_INPUTLANGCHANGE, 0, 0);
         }
+
         if (wParam == HSHELL_WINDOWCREATED || wParam == HSHELL_WINDOWACTIVATED || wParam == HSHELL_RUDEAPPACTIVATED || wParam == HSHELL_FLASH || wParam == HSHELL_REDRAW)
         {
             sws_tshwnd* tshWnd;
@@ -4084,7 +4020,7 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                 {
                     _this->mode = SWS_WINDOWSWITCHER_LAYOUTMODE_FULL;
                 }
-                _this->initialDirection = SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_FORWARD;
+                _this->initialDirection = SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_INITIAL;
                 if (uMsg == WM_HOTKEY && (LOWORD(lParam) & MOD_SHIFT)) {
                     _this->initialDirection = SWS_WINDOWSWITCHERLAYOUT_COMPUTE_DIRECTION_BACKWARD;
                 }
@@ -4216,10 +4152,33 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
         }
         return 0;
     }
-    else if (uMsg == WM_INPUTLANGCHANGE || uMsg == SWS_WINDOWSWITCHER_RELOAD_HOTKEY_MSG)
+    else if (uMsg == WM_INPUTLANGCHANGE)
     {
-        sws_WindowSwitcher_UnregisterHotkeys(_this);
-        sws_WindowSwitcher_RegisterHotkeys(_this, (HKL)lParam);
+        HKL hkl = (HKL)lParam;
+        if (!hkl)
+        {
+            HWND foreground = GetForegroundWindow();
+            if (foreground && foreground != _this->hWnd)
+            {
+                DWORD tid = GetWindowThreadProcessId(foreground, NULL);
+                if (tid)
+                {
+                    hkl = GetKeyboardLayout(tid);
+                }
+            }
+        }
+
+        if (hkl)
+        {
+            UINT vk = MapVirtualKeyExW(0x29, MAPVK_VSC_TO_VK_EX, hkl);
+            if (vk && vk != _this->vkTilde)
+            {
+                _this->vkTilde = vk;
+                Wh_Log(L"Layout changed");
+                sws_WindowSwitcher_UnregisterHotkeys(_this);
+                sws_WindowSwitcher_RegisterHotkeys(_this);
+            }
+        }
         return 0;
     }
 
@@ -4328,6 +4287,7 @@ void sws_WindowSwitcher_LoadSettings(sws_WindowSwitcher* _this)
 
     _this->settings.bScrollWheelInvert = Wh_GetIntSetting(L"ScrollWheelInvert");
     _this->bSkipIfOneWindow = Wh_GetIntSetting(L"SkipIfOneWindow");
+    _this->bRegisterHotKey = Wh_GetIntSetting(L"RegisterHotKey");
 
     _this->settings.dwGridColumns = Wh_GetIntSetting(L"CoolSwitchColumns");
     if (_this->settings.dwGridColumns < 1 || _this->settings.dwGridColumns > 50)
@@ -4611,7 +4571,7 @@ sws_error_t sws_WindowSwitcher_Initialize(sws_WindowSwitcher** __this)
             sws_WindowSwitcher_LoadSettings(_this);
         }
     }
-    sws_WindowSwitcher_RegisterHotkeys(_this, NULL);
+    sws_WindowSwitcher_RegisterHotkeys(_this);
     if (!rv)
     {
         if (_this->hWnd && !RegisterShellHookWindow(_this->hWnd))
@@ -4741,8 +4701,10 @@ void WhTool_ModUninit() {
 }
 
 HHOOK g_hHotKeyHook;
+std::atomic<int> g_hookCalls;
 
 LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam) {
+    g_hookCalls++;
     auto* msg = reinterpret_cast<MSG*>(lParam);
     if (code == HC_ACTION && wParam == PM_REMOVE && msg->message == WM_HOTKEY &&
         HIWORD(msg->lParam) == VK_TAB && (LOWORD(msg->lParam) & MOD_ALT)) {
@@ -4750,10 +4712,11 @@ LRESULT CALLBACK GetMessageProc(int code, WPARAM wParam, LPARAM lParam) {
         DWORD pid = 0;
         if (hSwitcher && GetWindowThreadProcessId(hSwitcher, &pid)) {
             AllowSetForegroundWindow(pid); // let the switcher take the focus
-            PostMessageW(hSwitcher, WM_HOTKEY, msg->wParam, msg->lParam);
+            PostMessageW(hSwitcher, WM_HOTKEY, 1, msg->lParam);
             msg->message = WM_NULL; // prevent showing the default switcher
         }
     }
+    g_hookCalls--;
     return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
@@ -4955,6 +4918,9 @@ void Wh_ModUninit() {
     if (g_isExplorer) {
         if (g_hHotKeyHook) {
             UnhookWindowsHookEx(g_hHotKeyHook);
+            while (g_hookCalls > 0) {
+                Sleep(1);
+            }
         }
         return;
     }
