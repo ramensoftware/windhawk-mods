@@ -2,7 +2,7 @@
 // @id              smart-process-priority-ram-optimizer
 // @name            Smart Process Priority & RAM Optimizer
 // @description     Boosts foreground responsiveness, shields audio, network, and AI workloads, throttles runaway background CPU, and safely reclaims idle memory.
-// @version         3.7.1
+// @version         3.8.0
 // @author          gilnett
 // @github          https://github.com/gilnett
 // @include         windhawk.exe
@@ -122,6 +122,9 @@ If you find this mod useful, you can support its development and maintenance:
 - enableSmartAiOptimization: true
   $name: Protect Local AI & Shader Compilers
   $description: Prevents throttling or memory trimming during local AI generation (Ollama, LM Studio) or background shader compilation.
+- customAiProcesses: ""
+  $name: Custom AI & Model Processes
+  $description: Optional comma-separated list of executable names to treat as local AI workloads.
 - freeRamThresholdPercent: 0
   $name: 4. Standard Free RAM Threshold (%)
   $description: Percentage of available physical memory below which background memory cleanup is triggered (0 = Auto-Adaptive, 5% to 80%). Automatically adapts thresholds to your installed RAM (e.g. cleans at 60% free RAM on 32 GB).
@@ -493,6 +496,7 @@ struct ModSettings {
     bool enableNetworkShielding = true;
     bool enableSmartAiOptimization = true;
     int aiInactivityGraceMinutes = 5;
+    std::vector<std::wstring> customAiProcesses;
     bool enableAudioShielding = true;
     bool enableMultitaskingAdaptation = true;
     bool enableGameModeDetection = true;
@@ -788,7 +792,21 @@ struct CpuSample {
 };
 static std::unordered_map<DWORD, CpuSample> g_cpuSamples;
 
-// AI Workload Tracking (Inference Activity Timestamps)
+// AI Workload Tracking (Inference Activity Timestamps & Dynamic Classification)
+enum class AiClassification : uint8_t {
+    Unknown = 0,
+    Pending,
+    IsAi,
+    NotAi,
+};
+
+struct AiProcessClassification {
+    AiClassification status = AiClassification::Unknown;
+    std::chrono::steady_clock::time_point firstSeen{};
+    std::chrono::steady_clock::time_point lastEvaluated{};
+};
+
+static std::unordered_map<DWORD, AiProcessClassification> g_aiProcessCache;
 static std::unordered_map<DWORD, std::chrono::steady_clock::time_point>
     g_aiLastInferenceTime;
 // Last known working-set size per AI pid; a meaningful change is used as a
@@ -1172,53 +1190,6 @@ static bool IsInList(const std::wstring& name,
     return false;
 }
 
-static bool IsKnownAiProcess(const std::wstring& name) {
-    static const std::unordered_set<std::wstring> kAiProcesses = {
-        L"llama-server.exe",
-        L"llama-cli.exe",
-        L"lm studio.exe",
-        L"lmstudio.exe",
-        L"lms.exe",
-        L"ollama.exe",
-        L"ollama_llama_server.exe",
-        L"ollama runner.exe",
-        L"koboldcpp.exe",
-        L"jan.exe",
-        L"cortex.exe",
-        L"nitro.exe",
-        L"text-generation-webui.exe",
-        L"oobabooga.exe",
-        L"comfyui.exe",
-        L"comfyui-electron.exe",
-        L"fooocus.exe",
-        L"invokeai.exe",
-        L"anythingllm.exe",
-        L"anythingllm-desktop.exe",
-        L"msty.exe",
-        L"msty-app.exe",
-        L"gpt4all.exe",
-        L"backyard.exe",
-        L"faraday.exe",
-        L"local-ai.exe",
-        L"localai.exe",
-        L"vllm.exe",
-        L"tabby.exe",
-        L"aphrodite.exe",
-        L"exllama.exe",
-        L"chatbox.exe",
-        L"jan-win-x64.exe",
-        L"lm-studio.exe",
-        L"diffusion-webui.exe",
-        L"invokeai-desktop.exe"};
-    if (kAiProcesses.count(name) != 0)
-        return true;
-
-    if (name.starts_with(L"koboldcpp"))
-        return true;
-
-    return false;
-}
-
 // Critical OS authentication dialogs excluded from priority modifications.
 static bool IsEssentialSystemSecurityProcess(const std::wstring& name) {
     static const std::unordered_set<std::wstring> kEssential = {
@@ -1229,6 +1200,218 @@ static bool IsEssentialSystemSecurityProcess(const std::wstring& name) {
         L"tiworker.exe", L"trustedinstaller.exe", L"msiexec.exe",
         L"dismhost.exe", L"dism.exe"};
     return kEssential.count(name) != 0;
+}
+
+#ifndef LIST_MODULES_ALL
+#define LIST_MODULES_ALL 0x03
+#endif
+
+struct ProcessCommandLineUnicodeString {
+    USHORT Length = 0;
+    USHORT MaximumLength = 0;
+    PWSTR Buffer = nullptr;
+};
+
+static std::wstring GetProcessCommandLine(HANDLE hProcess) {
+    if (!g_pfnNtQueryInformationProcess)
+        return {};
+
+    ULONG returnLength = 0;
+    // ProcessCommandLineInformation is 60
+    NTSTATUS status = g_pfnNtQueryInformationProcess(
+        hProcess, 60, nullptr, 0, &returnLength);
+    if (returnLength == 0)
+        return {};
+
+    std::vector<BYTE> buffer(returnLength + sizeof(WCHAR) * 2);
+    status = g_pfnNtQueryInformationProcess(
+        hProcess, 60, buffer.data(), returnLength, &returnLength);
+    if (status < 0 || buffer.size() < sizeof(ProcessCommandLineUnicodeString))
+        return {};
+
+    auto* pus =
+        reinterpret_cast<ProcessCommandLineUnicodeString*>(buffer.data());
+    if (pus->Length == 0 || pus->Buffer == nullptr)
+        return {};
+
+    size_t charCount = pus->Length / sizeof(WCHAR);
+    uintptr_t bufStart = reinterpret_cast<uintptr_t>(buffer.data());
+    uintptr_t bufEnd = bufStart + buffer.size();
+    uintptr_t strStart = reinterpret_cast<uintptr_t>(pus->Buffer);
+
+    if (strStart >= bufStart && (strStart + pus->Length) <= bufEnd) {
+        return std::wstring(pus->Buffer, charCount);
+    }
+    return {};
+}
+
+static bool DoesCommandLineMatchAiMarkers(const std::wstring& cmdline) {
+    if (cmdline.empty())
+        return false;
+    std::wstring lowerCmd = ToLower(cmdline);
+
+    static const std::vector<std::wstring_view> kMarkers = {
+        L".gguf",
+        L".safetensors",
+        L".onnx",
+        L"--model",
+        L"-m ",
+        L"ollama",
+        L"comfyui",
+        L"vllm",
+        L"koboldcpp",
+        L"text-generation-webui",
+        L"sd-webui",
+        L"diffusers",
+        L"llama_cpp",
+        L"transformers",
+        L"stable-diffusion"};
+
+    for (const auto& marker : kMarkers) {
+        if (lowerCmd.find(marker) != std::wstring::npos)
+            return true;
+    }
+    return false;
+}
+
+static bool DoesProcessLoadAiModules(HANDLE hProcess) {
+    HMODULE hMods[256];
+    DWORD cbNeeded = 0;
+    if (!EnumProcessModulesEx(hProcess, hMods, sizeof(hMods), &cbNeeded,
+                              LIST_MODULES_ALL)) {
+        return false;
+    }
+
+    DWORD count = cbNeeded / sizeof(HMODULE);
+    if (count > static_cast<DWORD>(std::size(hMods))) {
+        count = static_cast<DWORD>(std::size(hMods));
+    }
+
+    WCHAR modName[MAX_PATH];
+    for (DWORD i = 0; i < count; ++i) {
+        if (hMods[i] == nullptr)
+            continue;
+        DWORD len = GetModuleBaseNameW(hProcess, hMods[i], modName,
+                                       static_cast<DWORD>(std::size(modName)));
+        if (len == 0)
+            continue;
+
+        for (DWORD j = 0; j < len; ++j) {
+            modName[j] = static_cast<WCHAR>(::towlower(modName[j]));
+        }
+        std::wstring_view sv(modName, len);
+
+        if (sv.find(L"ggml") != std::wstring_view::npos ||
+            sv.find(L"llama") != std::wstring_view::npos ||
+            sv.find(L"cublas") != std::wstring_view::npos ||
+            sv.find(L"cudart") != std::wstring_view::npos ||
+            sv.find(L"cudnn") != std::wstring_view::npos ||
+            sv.find(L"onnxruntime") != std::wstring_view::npos ||
+            sv.find(L"torch") != std::wstring_view::npos ||
+            sv.find(L"libtorch") != std::wstring_view::npos ||
+            sv.find(L"c10_cuda") != std::wstring_view::npos ||
+            sv.find(L"amdhip") != std::wstring_view::npos ||
+            sv.find(L"rocblas") != std::wstring_view::npos ||
+            sv.find(L"openvino") != std::wstring_view::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static uint64_t GetProcessAgeSeconds(HANDLE hProcess) {
+    FILETIME ftCreation{}, ftExit{}, ftKernel{}, ftUser{};
+    if (!GetProcessTimes(hProcess, &ftCreation, &ftExit, &ftKernel, &ftUser))
+        return 1000;
+
+    ULARGE_INTEGER ulCreation{};
+    ulCreation.LowPart = ftCreation.dwLowDateTime;
+    ulCreation.HighPart = ftCreation.dwHighDateTime;
+
+    FILETIME ftNow{};
+    GetSystemTimeAsFileTime(&ftNow);
+    ULARGE_INTEGER ulNow{};
+    ulNow.LowPart = ftNow.dwLowDateTime;
+    ulNow.HighPart = ftNow.dwHighDateTime;
+
+    if (ulNow.QuadPart > ulCreation.QuadPart) {
+        return (ulNow.QuadPart - ulCreation.QuadPart) / 10000000ULL;
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic AI & Tensor Workload Detection
+// ---------------------------------------------------------------------------
+
+static bool IsAiProcess(DWORD pid,
+                        const std::wstring& name,
+                        const ModSettings& settings) {
+    if (!settings.enableSmartAiOptimization || pid <= 4)
+        return false;
+
+    if (IsInList(name, settings.excludedProcesses) ||
+        IsEssentialSystemSecurityProcess(name)) {
+        return false;
+    }
+
+    if (IsInList(name, settings.customAiProcesses))
+        return true;
+
+    auto now = std::chrono::steady_clock::now();
+    auto itCache = g_aiProcessCache.find(pid);
+    if (itCache != g_aiProcessCache.end()) {
+        if (itCache->second.status == AiClassification::IsAi)
+            return true;
+        if (itCache->second.status == AiClassification::NotAi)
+            return false;
+        if (itCache->second.status == AiClassification::Pending) {
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                               now - itCache->second.firstSeen)
+                               .count();
+            if (elapsed < 5)
+                return true;
+        }
+    }
+
+    auto firstSeen = (itCache != g_aiProcessCache.end())
+                         ? itCache->second.firstSeen
+                         : now;
+
+    // Check loaded tensor modules first (requires VM read)
+    HANDLE hProcess =
+        OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    if (hProcess) {
+        if (DoesProcessLoadAiModules(hProcess)) {
+            g_aiProcessCache[pid] = {AiClassification::IsAi, firstSeen, now};
+            CloseHandle(hProcess);
+            return true;
+        }
+        CloseHandle(hProcess);
+    }
+
+    // Fallback: command-line arguments and startup age via query-limited handle
+    hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (hProcess) {
+        if (DoesCommandLineMatchAiMarkers(GetProcessCommandLine(hProcess))) {
+            g_aiProcessCache[pid] = {AiClassification::IsAi, firstSeen, now};
+            CloseHandle(hProcess);
+            return true;
+        }
+
+        uint64_t age = GetProcessAgeSeconds(hProcess);
+        CloseHandle(hProcess);
+
+        if (age < 5) {
+            g_aiProcessCache[pid] = {AiClassification::Pending, firstSeen, now};
+            return true;
+        }
+
+        g_aiProcessCache[pid] = {AiClassification::NotAi, firstSeen, now};
+        return false;
+    }
+
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -2527,7 +2710,7 @@ static void UpdateAiProcessActivity(const ModSettings& settings) {
     }
 
     for (const auto& entry : processList) {
-        if (!IsKnownAiProcess(entry.name))
+        if (!IsAiProcess(entry.pid, entry.name, settings))
             continue;
 
         DWORD pid = entry.pid;
@@ -2569,6 +2752,7 @@ static void UpdateAiProcessActivity(const ModSettings& settings) {
     PruneDeadPids(g_aiLastInferenceTime, alivePids);
     PruneDeadPids(g_aiLastWorkingSetSize, alivePids);
     PruneDeadPids(g_aiCpuSamples, alivePids);
+    PruneDeadPids(g_aiProcessCache, alivePids);
 }
 
 // ---------------------------------------------------------------------------
@@ -2790,11 +2974,13 @@ struct SystemActionArbiter {
             return {false, VetoReason::AudioSessionActive,
                     L"Active WASAPI Audio Session"};
         }
-        if (settings.enableSmartAiOptimization && IsKnownAiProcess(name)) {
+        if (settings.enableSmartAiOptimization &&
+            IsAiProcess(pid, name, settings)) {
             auto itAi = g_aiLastInferenceTime.find(pid);
             if (itAi == g_aiLastInferenceTime.end()) {
+                g_aiLastInferenceTime[pid] = now;
                 return {false, VetoReason::AiInferenceActive,
-                        L"AI Process (No activity recorded, protected)"};
+                        L"AI Process (Freshly detected, protected)"};
             }
             if (action == ActionType::TrimWorkingSet) {
                 auto inactiveAiSec =
@@ -3282,6 +3468,7 @@ static void ApplyBackgroundThrottling(const ModSettings& settings,
     PruneDeadPids(g_audioWorkerActiveUntil, alivePids);
     PruneDeadPids(g_aiLastInferenceTime, alivePids);
     PruneDeadPids(g_aiLastWorkingSetSize, alivePids);
+    PruneDeadPids(g_aiProcessCache, alivePids);
     PruneAccessDeniedImmunity(alivePids);
     PruneClassifyCache(alivePids);
 }
@@ -4558,6 +4745,10 @@ static void LoadSettings() {
     auto customListStr = WindhawkUtils::StringSetting::make(L"customTargetList");
     g_settings.customTargetList =
         ParseProcessList(customListStr.get() ? customListStr.get() : L"");
+
+    auto customAiStr = WindhawkUtils::StringSetting::make(L"customAiProcesses");
+    g_settings.customAiProcesses =
+        ParseProcessList(customAiStr.get() ? customAiStr.get() : L"");
 
     auto exclListStr = WindhawkUtils::StringSetting::make(L"excludedProcesses");
     g_settings.excludedProcesses =
