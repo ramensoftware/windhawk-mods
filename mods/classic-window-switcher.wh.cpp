@@ -48,7 +48,7 @@
   $name: Show delay (ms)
   $name:ko-KR: 표시 지연 시간 (ms)
   $description: Set to the number of milliseconds to wait before showing the switcher. Set to 0 to show the switcher immediately. Maximum supported value is 10 seconds.
-  $description:ko-KR: 전환기를 표시하기 전에 대기할 시간을 밀리세컨드 단위로 입력하십시오. 0을 입력하면 전환기가 즉시 표시됩니다. 최대 10초까지 입력 가능합니다.
+  $description:ko-KR: 전환기를 표시하기 전에 대기할 시간을 밀리초 단위로 입력하십시오. 0을 입력하면 전환기가 즉시 표시됩니다. 최대 10초까지 입력 가능합니다.
 - IncludeWallpaper: false
   $name: Include 'show desktop' item
   $name:ko-KR: "'바탕 화면 표시' 항목 표시"
@@ -4167,17 +4167,23 @@ static LRESULT CALLBACK _sws_WindowsSwitcher_WndProc(HWND hWnd, UINT uMsg, WPARA
                 }
             }
         }
-
+        
+        UINT vk;
         if (hkl)
         {
-            UINT vk = MapVirtualKeyExW(0x29, MAPVK_VSC_TO_VK_EX, hkl);
-            if (vk && vk != _this->vkTilde)
-            {
-                _this->vkTilde = vk;
-                Wh_Log(L"Layout changed");
-                sws_WindowSwitcher_UnregisterHotkeys(_this);
-                sws_WindowSwitcher_RegisterHotkeys(_this);
-            }
+            vk = MapVirtualKeyExW(0x29, MAPVK_VSC_TO_VK_EX, hkl);
+        }
+        else
+        {
+            vk = MapVirtualKeyW(0x29, MAPVK_VSC_TO_VK_EX);
+        }
+
+        if (vk && vk != _this->vkTilde)
+        {
+            _this->vkTilde = vk;
+            Wh_Log(L"Layout changed");
+            sws_WindowSwitcher_UnregisterHotkeys(_this);
+            sws_WindowSwitcher_RegisterHotkeys(_this);
         }
         return 0;
     }
