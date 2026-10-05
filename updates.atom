@@ -2,12 +2,125 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk Mod Updates</title>
-    <updated>2026-10-05T08:04:15.000Z</updated>
+    <updated>2026-10-05T09:00:12.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>Updates in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Acrylic Color Glows 0.5.0]]></title>
+        <id>https://windhawk.net/mods/acrylic-color-glows#318c99c6364375c88fbfd29739e0208da2bc2268</id>
+        <link href="https://windhawk.net/mods/acrylic-color-glows"/>
+        <updated>2026-10-05T09:00:12.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="whatsnew">What's new</h2>
+<h3 id="audioreactivityoptionaloffbydefault">Audio reactivity (optional, off by default)</h3>
+<p>Every effect can now speed up while sound is playing.</p>
+<ul>
+<li><strong>React to audio</strong>: turns the feature on.</li>
+<li><strong>Cycle duration at full volume</strong>: the cycle duration at the loudest level (default 3 s). The regular "Cycle duration" is used in silence, with smooth transitions in between.</li>
+<li><strong>Sensitivity</strong>: a percentage from 25 to 400 (100 = normal), for listening at low volume.</li>
+</ul>
+<p>The effect speeds up quickly and calms down gently when the sound stops. The level follows loudness as heard (square root of the peak), so it reacts at normal and low volume too.</p>
+<p><strong>Privacy:</strong> only the peak level of the default output device is read through <code>IAudioMeterInformation</code>. It's the same value that drives the bar in the Windows volume mixer. No audio is recorded, analyzed or sent anywhere, and the microphone is never used.</p>
+<p><strong>Resources:</strong></p>
+<ul>
+<li>The level is read only while an effect is moving. Frozen effects, hidden windows and the automatic power-saving pauses all stop it.</li>
+<li>The mod follows changes of the default output device, for example when headphones are plugged in.</li>
+<li>Without an output device it simply stays at normal speed, without logging errors.</li>
+</ul>
+<p>The new settings sit right below "Cycle duration", since they work together.</p>
+<h2 id="fixes">Fixes</h2>
+<ul>
+<li><strong>Reduced smoothness rate:</strong> it ran at about 21 updates per second instead of the intended 30. USER timers fire on the system tick (15.6 ms), so a 33 ms interval rounded up to about 47 ms. The interval is now 30 ms (about 32 updates per second). The audio mode uses 15 ms (about 64 updates per second).</li>
+</ul>
+<h2 id="technicalnotes">Technical notes</h2>
+<ul>
+<li><strong>How speed changes:</strong> with audio reactivity on, the shared clock is advanced by the worker. It adds the elapsed time multiplied by the current speed, because the compositor can't change the speed of a running animation. Speed changes therefore never cause a jump.</li>
+<li><strong>Reentrancy:</strong> audio COM calls are covered by the same reentrancy guard as the refresh.</li>
+<li><strong>Cleanup:</strong> the audio objects are released before the COM apartment is torn down.</li>
+<li><strong>Headers:</strong> <code>IAudioMeterInformation</code> is declared locally, because the compiler's <code>endpointvolume.h</code> only forward-declares it.</li>
+<li><strong>Metadata:</strong> added the <code>@github</code> field.</li>
+</ul>]]></content>
+        <author>
+            <name>HaVeN80</name>
+            <uri>https://github.com/haven80</uri>
+        </author>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Hyprland Windows 1.1.2]]></title>
+        <id>https://windhawk.net/mods/hyprland-windows#63096e4ab291eeae57163f6581741267e1020fb9</id>
+        <link href="https://windhawk.net/mods/hyprland-windows"/>
+        <updated>2026-10-05T09:00:07.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="hyprlandwindows">Hyprland Windows</h1>
+<p>Window handling the way Hyprland does it, on Windows.</p>
+<p><img src="https://raw.githubusercontent.com/HiWord9/hyprland-windows/extra/demo/1.1.0.gif" alt="Hyprland Windows in action" /></p>
+<ul>
+<li><strong>Win + left mouse button</strong> - drag a window from anywhere on it, not just by
+its title bar.</li>
+<li><strong>Win + right mouse button</strong> - resize a window from anywhere on it, from
+whichever corner is closest to the cursor.</li>
+<li><strong>Win + double click</strong> - maximize a window, or restore it. The title bar is
+gone, so the double click that used to be on it now works anywhere on the
+window; the settings offer other things for it to do.</li>
+<li><strong>Win + middle click</strong> - close the window under the cursor. The button, the
+modifiers and the action are all settings; it can be a key instead, such as
+Win+Q - even one Windows already uses, like Win+W.</li>
+<li><strong>Ctrl+Alt+H</strong> - hide the focused window's title bar; press it again to bring
+the title bar back.</li>
+<li><strong>Win+Tab</strong> - go to the next virtual desktop that has windows on it, at once;
+Win+Shift+Tab goes back. Task View moves to Win+Ctrl+Tab.</li>
+</ul>
+<p>Moving and resizing feel like the real thing: windows still snap to the screen
+edges, dragging one to the top still offers the Windows 11 snap layouts, and
+<code>Esc</code> cancels a drag in progress. A window you are dragging fades to slightly
+translucent while you hold it, the way a Hyprland window does. Hold <code>Ctrl</code> as
+well and its edges turn magnetic: bring one close to another window or to the
+edge of the screen and it lines up with it. Hold <code>Shift</code> while resizing to
+keep the window's proportions.</p>
+<p>Title bars can also go away on their own: with hiding by default turned on,
+every new window opens without one, except the programs on a list of
+exceptions (Paint and the Snipping Tool to begin with).</p>
+<p>Give windows a border color - your own, or <code>accent</code> to follow the Windows
+accent color - and it fades from one color to the other as focus moves, the
+way a Hyprland border does. That goes for every window with a frame, or only
+for the ones whose title bar is hidden, whichever the settings say.</p>
+<p>Everything is configurable in the settings - the hotkey, the modifier key, the
+translucency, the magnet, the border, and how much of the frame goes away with
+the title bar.</p>
+<h2 id="goodtoknow">Good to know</h2>
+<ul>
+<li>Apps that draw their own title bar instead of using the system one (Chrome,
+Electron apps, VS Code, Office) are not affected by the hotkey.</li>
+<li>A window with a classic menu bar (File, Edit, …) can't keep that menu where it
+is once the title bar is gone, so by default it is hidden along with it and
+stays reachable from the keyboard with <code>Alt</code> or <code>F10</code>. The settings offer the
+other choices.</li>
+<li><code>Win</code> + mouse doesn't work over content drawn with WinUI or XAML - Paint,
+Windows Terminal, the tabs and address bar of File Explorer: Windows hands
+those clicks to the app past the point where the mod sees them.</li>
+<li>Win+Tab switches desktops through a part of Windows that Microsoft doesn't
+publish. It is known for Windows 10 and for Windows 11 from 22H2 on; on a
+build the mod doesn't recognize, and with only the one desktop, Win+Tab stays
+Task View.</li>
+<li>The hotkey, and a window shortcut that is a key, are taken everywhere: a
+program that uses the same keys for something of its own doesn't get them
+while the mod is on. Pick other keys in the settings if one does.</li>
+</ul>
+<h2 id="conflicts">Conflicts</h2>
+<ul>
+<li><a href="https://windhawk.net/mods/alt-drag">AltDrag</a> moves and resizes windows with
+a key and the mouse as well, and
+<a href="https://windhawk.net/mods/slick-window-arrangement">Slick Window Arrangement</a>
+snaps windows while they are dragged. Running either of them alongside this
+mod, two mods act on the same drag: use one of them at a time - or, with
+Slick Window Arrangement, turn this mod's magnetic edges off.</li>
+</ul>]]></content>
+        <author>
+            <name>hiword9</name>
+            <uri>https://github.com/HiWord9</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Margin 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-margin#a08ccae7c4e480dbdf1e9389d259d23c5d7448fd</id>
@@ -751,49 +864,6 @@ No folder, pin, or registry setting is changed.</p>]]></content>
         <author>
             <name>BlackPaw</name>
             <uri>https://github.com/BlackPaw21</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Restore to Snap Position 1.0]]></title>
-        <id>https://windhawk.net/mods/snap-restore-position#fc84bf84018d0f9cb95349fa8c7bf9859c3b9801</id>
-        <link href="https://windhawk.net/mods/snap-restore-position"/>
-        <updated>2026-10-03T16:00:08.000Z</updated>
-        <content type="html"><![CDATA[<h1 id="restoretosnapposition">Restore to Snap Position</h1>
-<p><img src="https://i.imgur.com/XqdsB0w.gif" alt="Demo" /></p>
-<p>In Windows, when a window snapped with Snap (for example, to the left half of
-the screen) is maximized and then restored, it goes back to the position and
-size it had <strong>before</strong> it was snapped.</p>
-<p>With this mod, when a snapped window is maximized, its snapped position
-becomes the window's "normal" position. The <strong>Restore</strong> button, double-clicking
-the title bar and <strong>Win + ↓</strong> then return the window exactly to where it was
-snapped.</p>
-<h2 id="notes">Notes</h2>
-<ul>
-<li>After being restored, the window comes back as a regular window, not as a
-snapped one, so it is no longer part of a Snap Group.</li>
-<li>The size the window had before it was snapped is no longer remembered.</li>
-<li>Works with the maximize button, double-clicking the title bar and the
-window menu (including dialogs and MDI frame windows), and with programs that
-maximize their own windows through <code>ShowWindow</code> or <code>ShowWindowAsync</code>.</li>
-</ul>]]></content>
-        <author>
-            <name>pajs</name>
-            <uri>https://github.com/pajs</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Start button always on the left 1.3.3]]></title>
-        <id>https://windhawk.net/mods/taskbar-start-button-position#525894960b8e1cdb3633ad6aa72afee4907dfa99</id>
-        <link href="https://windhawk.net/mods/taskbar-start-button-position"/>
-        <updated>2026-10-02T22:50:19.000Z</updated>
-        <content type="html"><![CDATA[<ul>
-<li>Added support for the vertical taskbar.</li>
-<li>Improved compatibility with the taskbar search box.</li>
-<li>Fixed the task view hover popup (vertical desktops preview) when "Move other system buttons to the left" is enabled.</li>
-</ul>]]></content>
-        <author>
-            <name>m417z</name>
-            <uri>https://github.com/m417z</uri>
         </author>
     </entry>
 </feed>

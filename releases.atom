@@ -2,12 +2,86 @@
 <feed xmlns="http://www.w3.org/2005/Atom">
     <id>https://windhawk.net/</id>
     <title>Windhawk New Mod Releases</title>
-    <updated>2026-10-05T08:04:15.000Z</updated>
+    <updated>2026-10-05T09:00:07.000Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
     <link rel="alternate" href="https://windhawk.net/"/>
     <subtitle>New mods in the official collection of Windhawk mods</subtitle>
     <icon>https://windhawk.net/favicon.ico</icon>
     <rights>Ramen Software</rights>
+    <entry>
+        <title type="html"><![CDATA[Hyprland Windows 1.1.2]]></title>
+        <id>https://windhawk.net/mods/hyprland-windows#63096e4ab291eeae57163f6581741267e1020fb9</id>
+        <link href="https://windhawk.net/mods/hyprland-windows"/>
+        <updated>2026-10-05T09:00:07.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="hyprlandwindows">Hyprland Windows</h1>
+<p>Window handling the way Hyprland does it, on Windows.</p>
+<p><img src="https://raw.githubusercontent.com/HiWord9/hyprland-windows/extra/demo/1.1.0.gif" alt="Hyprland Windows in action" /></p>
+<ul>
+<li><strong>Win + left mouse button</strong> - drag a window from anywhere on it, not just by
+its title bar.</li>
+<li><strong>Win + right mouse button</strong> - resize a window from anywhere on it, from
+whichever corner is closest to the cursor.</li>
+<li><strong>Win + double click</strong> - maximize a window, or restore it. The title bar is
+gone, so the double click that used to be on it now works anywhere on the
+window; the settings offer other things for it to do.</li>
+<li><strong>Win + middle click</strong> - close the window under the cursor. The button, the
+modifiers and the action are all settings; it can be a key instead, such as
+Win+Q - even one Windows already uses, like Win+W.</li>
+<li><strong>Ctrl+Alt+H</strong> - hide the focused window's title bar; press it again to bring
+the title bar back.</li>
+<li><strong>Win+Tab</strong> - go to the next virtual desktop that has windows on it, at once;
+Win+Shift+Tab goes back. Task View moves to Win+Ctrl+Tab.</li>
+</ul>
+<p>Moving and resizing feel like the real thing: windows still snap to the screen
+edges, dragging one to the top still offers the Windows 11 snap layouts, and
+<code>Esc</code> cancels a drag in progress. A window you are dragging fades to slightly
+translucent while you hold it, the way a Hyprland window does. Hold <code>Ctrl</code> as
+well and its edges turn magnetic: bring one close to another window or to the
+edge of the screen and it lines up with it. Hold <code>Shift</code> while resizing to
+keep the window's proportions.</p>
+<p>Title bars can also go away on their own: with hiding by default turned on,
+every new window opens without one, except the programs on a list of
+exceptions (Paint and the Snipping Tool to begin with).</p>
+<p>Give windows a border color - your own, or <code>accent</code> to follow the Windows
+accent color - and it fades from one color to the other as focus moves, the
+way a Hyprland border does. That goes for every window with a frame, or only
+for the ones whose title bar is hidden, whichever the settings say.</p>
+<p>Everything is configurable in the settings - the hotkey, the modifier key, the
+translucency, the magnet, the border, and how much of the frame goes away with
+the title bar.</p>
+<h2 id="goodtoknow">Good to know</h2>
+<ul>
+<li>Apps that draw their own title bar instead of using the system one (Chrome,
+Electron apps, VS Code, Office) are not affected by the hotkey.</li>
+<li>A window with a classic menu bar (File, Edit, …) can't keep that menu where it
+is once the title bar is gone, so by default it is hidden along with it and
+stays reachable from the keyboard with <code>Alt</code> or <code>F10</code>. The settings offer the
+other choices.</li>
+<li><code>Win</code> + mouse doesn't work over content drawn with WinUI or XAML - Paint,
+Windows Terminal, the tabs and address bar of File Explorer: Windows hands
+those clicks to the app past the point where the mod sees them.</li>
+<li>Win+Tab switches desktops through a part of Windows that Microsoft doesn't
+publish. It is known for Windows 10 and for Windows 11 from 22H2 on; on a
+build the mod doesn't recognize, and with only the one desktop, Win+Tab stays
+Task View.</li>
+<li>The hotkey, and a window shortcut that is a key, are taken everywhere: a
+program that uses the same keys for something of its own doesn't get them
+while the mod is on. Pick other keys in the settings if one does.</li>
+</ul>
+<h2 id="conflicts">Conflicts</h2>
+<ul>
+<li><a href="https://windhawk.net/mods/alt-drag">AltDrag</a> moves and resizes windows with
+a key and the mouse as well, and
+<a href="https://windhawk.net/mods/slick-window-arrangement">Slick Window Arrangement</a>
+snaps windows while they are dragged. Running either of them alongside this
+mod, two mods act on the same drag: use one of them at a time - or, with
+Slick Window Arrangement, turn this mod's magnetic edges off.</li>
+</ul>]]></content>
+        <author>
+            <name>hiword9</name>
+            <uri>https://github.com/HiWord9</uri>
+        </author>
+    </entry>
     <entry>
         <title type="html"><![CDATA[Taskbar Margin 1.0]]></title>
         <id>https://windhawk.net/mods/taskbar-margin#a08ccae7c4e480dbdf1e9389d259d23c5d7448fd</id>
@@ -887,27 +961,6 @@ slowed down, and only while a thumbnail is actually visible.</p>]]></content>
         <author>
             <name>HaVeN80</name>
             <uri>https://github.com/haven80</uri>
-        </author>
-    </entry>
-    <entry>
-        <title type="html"><![CDATA[Explorer Standard Title Bar Colors 1.0.0]]></title>
-        <id>https://windhawk.net/mods/standard-title-bar-colors#ffb89c1c92efa5f9d74a39e58f1b55972e255a21</id>
-        <link href="https://windhawk.net/mods/standard-title-bar-colors"/>
-        <updated>2026-09-30T07:02:49.000Z</updated>
-        <content type="html"><![CDATA[<p>Explorer overrides its titlebar colors. This stops that.
-If you're not applying your accent color to the titlebars, you may not notice the difference.</p>
-<p>If you disable this mod, toggling the focus of an open window will prompt Explorer to override the
-color again.</p>
-<p>This mod can probably be applied, at your own risk, to other apps that use DwmSetWindowAttribute to
-change their titlebar colors.</p>
-<p>Derived from <code>win11-custom-title-bar-colours</code> by Th3Fanbus.</p>
-<p>Before: Explorer does its own thing.</p>
-<p><img src="https://raw.githubusercontent.com/j--m/windhawk-mods/refs/heads/pages/before.png" alt="image of two apps with different titlebar colors" /></p>
-<p>After: They match!</p>
-<p><img src="https://raw.githubusercontent.com/j--m/windhawk-mods/refs/heads/pages/after.png" alt="image of two apps with same titlebar colors" /></p>]]></content>
-        <author>
-            <name>j--m</name>
-            <uri>https://github.com/j--m</uri>
         </author>
     </entry>
 </feed>

@@ -66,7 +66,7 @@
         "ratingUsers": 6,
         "reviews": 0,
         "trendingSorting": 0,
-        "updated": 1791046905000,
+        "updated": 1791190812000,
         "users": 122
       },
       "metadata": {
@@ -79,7 +79,7 @@
         ],
         "license": "GPL-3.0",
         "name": "Acrylic Color Glows",
-        "version": "0.4.2"
+        "version": "0.5.0"
       }
     },
     "acrylic-effect-radius-changer": {
@@ -7308,6 +7308,30 @@
         "license": "MIT",
         "name": "HWiNFO Registry Live Overlay",
         "version": "1.5.0"
+      }
+    },
+    "hyprland-windows": {
+      "details": {
+        "defaultSorting": 0,
+        "published": 1791190807000,
+        "rating": 0,
+        "ratingBreakdown": [0, 0, 0, 0, 0],
+        "ratingUsers": 0,
+        "reviews": 0,
+        "updated": 1791190807000,
+        "users": 0
+      },
+      "metadata": {
+        "author": "hiword9",
+        "compilerOptions": "-lcomctl32 -ldwmapi -lole32 -luuid",
+        "description": "Hyprland-style window handling: move, resize, maximize and close windows with Win + mouse from anywhere on them, hide title bars, color window borders, and go round the virtual desktops with Win+Tab",
+        "github": "https://github.com/HiWord9",
+        "include": [
+          "*"
+        ],
+        "license": "GPL-3.0",
+        "name": "Hyprland Windows",
+        "version": "1.1.2"
       }
     },
     "icon-customizer": {
