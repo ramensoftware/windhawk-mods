@@ -1996,7 +1996,9 @@ std::optional<bool> GetTaskbarButtonActiveState(FrameworkElement element)
                 return std::nullopt;
             }
 
-            return state.Name() == L"ActiveRunningIndicator";
+            auto stateName = state.Name();
+            return stateName == L"ActiveRunningIndicator" ||
+                   stateName == L"RequestingAttentionRunningIndicator";
         }
     }
     catch (...)
@@ -2024,9 +2026,12 @@ void ApplyCountToTrackedButton(TrackedButton &item, unsigned int count)
         return;
     }
 
+    // Skip active-state tracking entirely when inactive dimming is disabled.
     // If Windows' active taskbar state isn't available, keep the custom
     // indicator at full opacity rather than incorrectly dimming it.
-    bool isActive = GetTaskbarButtonActiveState(element).value_or(true);
+    bool isActive =
+        !g_settings.activeStateStyling ||
+        GetTaskbarButtonActiveState(element).value_or(true);
 
     bool runningIndicatorReady = true;
 
