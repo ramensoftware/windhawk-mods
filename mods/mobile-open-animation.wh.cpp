@@ -1660,6 +1660,8 @@ using ShowWindow_t = decltype(&ShowWindow);
 static ShowWindow_t pOrigShowWindow = nullptr;
 using ShowWindowAsync_t = decltype(&ShowWindowAsync);
 static ShowWindowAsync_t pOrigShowWindowAsync = nullptr;
+using SetWindowPlacement_t = decltype(&SetWindowPlacement);
+static SetWindowPlacement_t pOrigSetWindowPlacement = nullptr;
 using SetWindowPos_t = decltype(&SetWindowPos);
 static SetWindowPos_t pOrigSetWindowPos = nullptr;
 using EndPaint_t = decltype(&EndPaint);
@@ -3428,6 +3430,45 @@ BOOL WINAPI HookedShowWindowAsync(HWND hwnd, int nCmdShow) {
     return result;
 }
 
+// Hook: SetWindowPlacement
+//
+// A window that has to come up maximized is often not shown with ShowWindow at all: an app
+// that also has to set the maximized placement calls SetWindowPlacement, whose showCmd
+// shows the window as a side effect. Chromium does exactly that, which is why a maximized
+// Edge window had no animation while a normal one did - the hook never saw a show.
+//
+// The structure mirrors the ShowWindow hook, and so does the rule that matters most: the
+// call is never swallowed. Every path that does not animate ends in the original call.
+BOOL WINAPI HookedSetWindowPlacement(HWND hwnd, const WINDOWPLACEMENT* wp) {
+    if (g_inHook || !wp || wp->length < sizeof(WINDOWPLACEMENT)) {
+        return pOrigSetWindowPlacement(hwnd, wp);
+    }
+    if (!IsShowCommand(wp->showCmd)) return pOrigSetWindowPlacement(hwnd, wp);
+
+    const AnimParams p = GetParams();
+    wchar_t cls[256];
+    const char* reason = nullptr;
+    if (!ShouldAnimateShow(hwnd, p, cls, 256, &reason)) {
+        DiagSkip("SetWindowPlacement", hwnd, reason);
+        return pOrigSetWindowPlacement(hwnd, wp);
+    }
+    if (TooSoon(hwnd)) {
+        DiagSkip("repeat show", hwnd, "animated a moment ago");
+        return pOrigSetWindowPlacement(hwnd, wp);
+    }
+    const int index = AllocSlot(hwnd);
+    if (index < 0) return pOrigSetWindowPlacement(hwnd, wp);
+
+    BeginAnimatedShow(hwnd, p, index);
+
+    g_inHook = true;
+    const BOOL result = pOrigSetWindowPlacement(hwnd, wp);
+    g_inHook = false;
+
+    FinishAnimatedShow(hwnd, index);
+    return result;
+}
+
 // Hook: EndPaint (the content-ready signal) and SetWindowPos (following later moves)
 
 // @include * means this code runs in EVERY process, critical system ones such as
@@ -3563,6 +3604,12 @@ BOOL Wh_ModInit() {
     if (!WindhawkUtils::SetFunctionHook(ShowWindowAsync, HookedShowWindowAsync,
                                         &pOrigShowWindowAsync)) {
         Wh_Log(L"failed to hook ShowWindowAsync (non-fatal)");
+    }
+    // Windows that come up maximized go through SetWindowPlacement instead of ShowWindow
+    // (Chromium is the common example), so without this hook they never animate at all.
+    if (!WindhawkUtils::SetFunctionHook(SetWindowPlacement, HookedSetWindowPlacement,
+                                        &pOrigSetWindowPlacement)) {
+        Wh_Log(L"failed to hook SetWindowPlacement (maximized windows will not animate)");
     }
     if (!WindhawkUtils::SetFunctionHook(CreateWindowExW, HookedCreateWindowExW,
                                         &pOrigCreateWindowExW)) {
