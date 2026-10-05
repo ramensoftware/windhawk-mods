@@ -280,6 +280,7 @@ struct AddressUpdateScope {
 HRESULT WINAPI AddressNavigationComplete_Hook(void* addressList, void* shellUrl) {
     AddressUpdateContext context;
     AddressUpdateScope scope(&context);
+    Wh_Log(L"Address refresh");
     return g_originalAddressNavigationComplete(addressList, shellUrl);
 }
 
@@ -296,6 +297,10 @@ HRESULT WINAPI GetPidlIcon_Hook(void* addressList,
         if (caller >= g_addressUpdateFunctionBegin &&
             caller < g_addressUpdateFunctionEnd) {
             g_addressUpdateContext->path = GetAddressFolderPath(pidl);
+            Wh_Log(L"Address folder: %s",
+                   g_addressUpdateContext->path
+                       ? g_addressUpdateContext->path.get()
+                       : L"<not a filesystem folder>");
         }
     }
     return g_originalGetPidlIcon(addressList, pidl, icon, selectedIcon);
