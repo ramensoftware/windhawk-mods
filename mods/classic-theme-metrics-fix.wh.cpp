@@ -38,9 +38,24 @@ After mod:
 #include <windows.h>
 #include <wtsapi32.h>
 #include <sddl.h>
+#include <stdlib.h>
+#include <string.h>
 
 HANDLE g_hStopEvent = NULL;
 HANDLE g_hThread = NULL;
+
+#define WINDOW_METRICS_DEFAULT_PATH L".DEFAULT\\Control Panel\\Desktop\\WindowMetrics"
+#define BACKUP_MUTEX_NAME           L"Global\\ClassicThemeMetricsFix_DefaultBackupMutex"
+#define BACKUP_BLOB_VALUE_NAME      L"DefaultWindowMetricsBackup"
+#define BACKUP_SIZE_VALUE_NAME      L"DefaultWindowMetricsBackupSize"
+
+#pragma pack(push, 1)
+typedef struct {
+    DWORD nameLenBytes; // including terminating null, in bytes
+    DWORD type;
+    DWORD dataLen;
+} BackupEntryHeader;
+#pragma pack(pop)
 
 // Получение строкового SID активного пользователя сессии
 BOOL GetActiveUserSidString(LPWSTR* ppszSid) {
@@ -71,126 +86,11 @@ BOOL GetActiveUserSidString(LPWSTR* ppszSid) {
     return bSuccess;
 }
 
-// Резервное копирование оригинальных значений .DEFAULT (до первой перезаписи)
-void BackupDefaultMetrics() {
-    HANDLE hMutex = CreateMutexW(NULL, FALSE, L"Global\\Windhawk_ClassicThemeMetrics_BackupMutex");
-    if (!hMutex) return;
-    
-    WaitForSingleObject(hMutex, INFINITE);
-
-    // Сначала проверяем, есть ли уже бэкап
-    size_t existingSize = Wh_GetBinaryValue(L"Backup", NULL, 0);
-    if (existingSize > 0) {
-        // Бэкап уже сделан другой копией мода (или при предыдущем срабатывании), пропускаем
-    } else {
-        HKEY hKey = NULL;
-        if (RegOpenKeyExW(HKEY_USERS, L".DEFAULT\\Control Panel\\Desktop\\WindowMetrics", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-            DWORD cValues = 0, cchMaxName = 0, cbMaxData = 0;
-            if (RegQueryInfoKeyW(hKey, NULL, NULL, NULL, NULL, NULL, NULL, &cValues, &cchMaxName, &cbMaxData, NULL, NULL) == ERROR_SUCCESS) {
-                cchMaxName++;
-                WCHAR* nameBuf = (WCHAR*)malloc(cchMaxName * sizeof(WCHAR));
-                BYTE* dataBuf = (BYTE*)malloc(cbMaxData);
-                
-                DWORD bufCap = 8192; // 8KB должно хватить
-                BYTE* blob = (BYTE*)malloc(bufCap);
-                
-                if (nameBuf && dataBuf && blob) {
-                    DWORD blobOffset = sizeof(DWORD);
-                    DWORD actualCount = 0;
-
-                    for (DWORD i = 0; i < cValues; i++) {
-                        DWORD cchName = cchMaxName;
-                        DWORD cbData = cbMaxData;
-                        DWORD dwType = 0;
-                        if (RegEnumValueW(hKey, i, nameBuf, &cchName, NULL, &dwType, dataBuf, &cbData) == ERROR_SUCCESS) {
-                            DWORD nameBytes = (cchName + 1) * sizeof(WCHAR);
-                            DWORD entrySize = sizeof(DWORD) * 3 + nameBytes + cbData;
-                            
-                            if (blobOffset + entrySize > bufCap) {
-                                bufCap *= 2;
-                                BYTE* newBlob = (BYTE*)realloc(blob, bufCap);
-                                if (newBlob) {
-                                    blob = newBlob;
-                                } else {
-                                    break; // Ошибка выделения памяти
-                                }
-                            }
-                            
-                            *((DWORD*)(blob + blobOffset)) = nameBytes; blobOffset += sizeof(DWORD);
-                            *((DWORD*)(blob + blobOffset)) = dwType;    blobOffset += sizeof(DWORD);
-                            *((DWORD*)(blob + blobOffset)) = cbData;    blobOffset += sizeof(DWORD);
-                            
-                            memcpy(blob + blobOffset, nameBuf, nameBytes); blobOffset += nameBytes;
-                            memcpy(blob + blobOffset, dataBuf, cbData);    blobOffset += cbData;
-                            
-                            actualCount++;
-                        }
-                    }
-                    *((DWORD*)blob) = actualCount; // Записываем общее число элементов в начало блоба
-                    Wh_SetBinaryValue(L"Backup", blob, blobOffset);
-                }
-                
-                if (nameBuf) free(nameBuf);
-                if (dataBuf) free(dataBuf);
-                if (blob) free(blob);
-            }
-            RegCloseKey(hKey);
-        }
-    }
-    ReleaseMutex(hMutex);
-    CloseHandle(hMutex);
-}
-
-// Восстановление оригинальных значений при выгрузке мода
-void RestoreDefaultMetrics() {
-    HANDLE hMutex = CreateMutexW(NULL, FALSE, L"Global\\Windhawk_ClassicThemeMetrics_BackupMutex");
-    if (!hMutex) return;
-    
-    WaitForSingleObject(hMutex, INFINITE);
-
-    size_t blobSize = Wh_GetBinaryValue(L"Backup", NULL, 0);
-    if (blobSize > 0) {
-        BYTE* blob = (BYTE*)malloc(blobSize);
-        if (blob) {
-            if (Wh_GetBinaryValue(L"Backup", blob, blobSize) == blobSize) {
-                HKEY hKey = NULL;
-                if (RegOpenKeyExW(HKEY_USERS, L".DEFAULT\\Control Panel\\Desktop\\WindowMetrics", 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) {
-                    DWORD count = *((DWORD*)blob);
-                    DWORD offset = sizeof(DWORD);
-                    for (DWORD i = 0; i < count; i++) {
-                        // Защита от чтения за пределами буфера
-                        if (offset + sizeof(DWORD)*3 > blobSize) break;
-                        
-                        DWORD nameBytes = *((DWORD*)(blob + offset)); offset += sizeof(DWORD);
-                        DWORD dwType    = *((DWORD*)(blob + offset)); offset += sizeof(DWORD);
-                        DWORD cbData    = *((DWORD*)(blob + offset)); offset += sizeof(DWORD);
-                        
-                        if (offset + nameBytes + cbData > blobSize) break;
-                        
-                        WCHAR* pName = (WCHAR*)(blob + offset); offset += nameBytes;
-                        BYTE* pData  = (BYTE*)(blob + offset);  offset += cbData;
-                        
-                        RegSetValueExW(hKey, pName, 0, dwType, pData, cbData);
-                    }
-                    RegCloseKey(hKey);
-                }
-            }
-            free(blob); // Освобождаем выделенную через malloc память
-        }
-        Wh_DeleteValue(L"Backup"); // Удаляем бэкап из хранилища мода
-    }
-    
-    ReleaseMutex(hMutex);
-    CloseHandle(hMutex);
-}
-
 // Копирование параметров WindowMetrics из профиля пользователя в .DEFAULT
 void CopyWindowMetricsFromSid(LPCWSTR szSid) {
-    BackupDefaultMetrics(); // Гарантируем, что оригинальные значения сохранены перед первой перезаписью
-
     WCHAR szSrcPath[MAX_PATH];
     wsprintfW(szSrcPath, L"%s\\Control Panel\\Desktop\\WindowMetrics", szSid);
-    LPCWSTR szDestPath = L".DEFAULT\\Control Panel\\Desktop\\WindowMetrics";
+    LPCWSTR szDestPath = WINDOW_METRICS_DEFAULT_PATH;
 
     HKEY hKeySrc = NULL;
     HKEY hKeyDest = NULL;
@@ -235,14 +135,168 @@ void CopyWindowMetricsFromSid(LPCWSTR szSid) {
     RegCloseKey(hKeyDest);
 }
 
+// Сериализация текущих значений HKEY_USERS\.DEFAULT\...\WindowMetrics в бинарный блоб
+BYTE* SerializeDefaultWindowMetrics(DWORD* pOutSize) {
+    *pOutSize = 0;
+
+    HKEY hKey = NULL;
+    if (RegOpenKeyExW(HKEY_USERS, WINDOW_METRICS_DEFAULT_PATH, 0, KEY_READ, &hKey) != ERROR_SUCCESS) {
+        return NULL;
+    }
+
+    DWORD cValues = 0, cchMaxName = 0, cbMaxData = 0;
+    if (RegQueryInfoKeyW(hKey, NULL, NULL, NULL, NULL, NULL, NULL, &cValues, &cchMaxName, &cbMaxData, NULL, NULL) != ERROR_SUCCESS) {
+        RegCloseKey(hKey);
+        return NULL;
+    }
+
+    cchMaxName += 2;
+    cbMaxData += 2;
+
+    DWORD capacity = (DWORD)sizeof(DWORD) +
+        cValues * ((DWORD)sizeof(BackupEntryHeader) + (cchMaxName * (DWORD)sizeof(WCHAR)) + cbMaxData);
+    if (capacity < sizeof(DWORD)) capacity = sizeof(DWORD);
+
+    BYTE* buffer = (BYTE*)malloc(capacity);
+    if (!buffer) {
+        RegCloseKey(hKey);
+        return NULL;
+    }
+
+    DWORD offset = sizeof(DWORD); // место под счётчик
+    DWORD actualCount = 0;
+
+    WCHAR* valueName = (WCHAR*)malloc(cchMaxName * sizeof(WCHAR));
+    BYTE* valueData = (BYTE*)malloc(cbMaxData);
+
+    if (valueName && valueData) {
+        for (DWORD i = 0; i < cValues; i++) {
+            DWORD cchName = cchMaxName;
+            DWORD cbData = cbMaxData;
+            DWORD dwType = 0;
+
+            if (RegEnumValueW(hKey, i, valueName, &cchName, NULL, &dwType, valueData, &cbData) == ERROR_SUCCESS) {
+                DWORD nameLenBytes = (cchName + 1) * sizeof(WCHAR);
+
+                BackupEntryHeader header;
+                header.nameLenBytes = nameLenBytes;
+                header.type = dwType;
+                header.dataLen = cbData;
+
+                memcpy(buffer + offset, &header, sizeof(header));
+                offset += sizeof(header);
+                memcpy(buffer + offset, valueName, nameLenBytes);
+                offset += nameLenBytes;
+                memcpy(buffer + offset, valueData, cbData);
+                offset += cbData;
+
+                actualCount++;
+            }
+        }
+    }
+
+    free(valueName);
+    free(valueData);
+    RegCloseKey(hKey);
+
+    memcpy(buffer, &actualCount, sizeof(DWORD));
+
+    *pOutSize = offset;
+    return buffer;
+}
+
+// Восстановление значений из блоба обратно в HKEY_USERS\.DEFAULT\...\WindowMetrics
+void RestoreDefaultWindowMetricsFromBlob(const BYTE* blob, DWORD size) {
+    if (!blob || size < sizeof(DWORD)) return;
+
+    HKEY hKey = NULL;
+    if (RegCreateKeyExW(HKEY_USERS, WINDOW_METRICS_DEFAULT_PATH, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) != ERROR_SUCCESS) {
+        return;
+    }
+
+    DWORD count = 0;
+    memcpy(&count, blob, sizeof(DWORD));
+    DWORD offset = sizeof(DWORD);
+
+    for (DWORD i = 0; i < count && offset + sizeof(BackupEntryHeader) <= size; i++) {
+        BackupEntryHeader header;
+        memcpy(&header, blob + offset, sizeof(header));
+        offset += sizeof(header);
+
+        if ((unsigned long long)offset + header.nameLenBytes + header.dataLen > size) break;
+
+        const WCHAR* name = (const WCHAR*)(blob + offset);
+        offset += header.nameLenBytes;
+        const BYTE* data = blob + offset;
+        offset += header.dataLen;
+
+        RegSetValueExW(hKey, name, 0, header.type, data, header.dataLen);
+    }
+
+    RegCloseKey(hKey);
+}
+
+// Одноразовый бэкап .DEFAULT, защищённый именованным мьютексом от гонки между
+// несколькими копиями мода (по одному winlogon.exe на сессию)
+void BackupDefaultIfNeeded() {
+    HANDLE hMutex = CreateMutexW(NULL, FALSE, BACKUP_MUTEX_NAME);
+    if (!hMutex) {
+        return;
+    }
+    WaitForSingleObject(hMutex, INFINITE);
+
+    int existingSize = Wh_GetIntValue(BACKUP_SIZE_VALUE_NAME, 0);
+    if (existingSize <= 0) {
+        DWORD blobSize = 0;
+        BYTE* blob = SerializeDefaultWindowMetrics(&blobSize);
+        if (blob && blobSize > 0) {
+            if (Wh_SetBinaryValue(BACKUP_BLOB_VALUE_NAME, blob, blobSize)) {
+                Wh_SetIntValue(BACKUP_SIZE_VALUE_NAME, (int)blobSize);
+            }
+        }
+        if (blob) free(blob);
+    }
+
+    ReleaseMutex(hMutex);
+    CloseHandle(hMutex);
+}
+
+// Восстановление оригинальных значений .DEFAULT и удаление бэкапа
+void RestoreDefaultBackup() {
+    HANDLE hMutex = CreateMutexW(NULL, FALSE, BACKUP_MUTEX_NAME);
+    if (!hMutex) {
+        return;
+    }
+    WaitForSingleObject(hMutex, INFINITE);
+
+    int size = Wh_GetIntValue(BACKUP_SIZE_VALUE_NAME, 0);
+    if (size > 0) {
+        BYTE* blob = (BYTE*)malloc((size_t)size);
+        if (blob) {
+            if (Wh_GetBinaryValue(BACKUP_BLOB_VALUE_NAME, blob, (size_t)size)) {
+                RestoreDefaultWindowMetricsFromBlob(blob, (DWORD)size);
+            }
+            free(blob);
+        }
+        Wh_DeleteValue(BACKUP_BLOB_VALUE_NAME);
+        Wh_DeleteValue(BACKUP_SIZE_VALUE_NAME);
+    }
+
+    ReleaseMutex(hMutex);
+    CloseHandle(hMutex);
+}
+
 // Фоновый поток мониторинга изменений
 DWORD WINAPI MetricsMonitorThread(LPVOID lpParam) {
     HANDLE hRegEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
     if (!hRegEvent) return 0;
 
+    // Бэкапим оригинальные значения .DEFAULT до первой перезаписи
+    BackupDefaultIfNeeded();
+
     while (WaitForSingleObject(g_hStopEvent, 0) == WAIT_TIMEOUT) {
         LPWSTR szSid = NULL;
-        
+
         if (GetActiveUserSidString(&szSid)) {
             WCHAR szSrcPath[MAX_PATH];
             wsprintfW(szSrcPath, L"%s\\Control Panel\\Desktop\\WindowMetrics", szSid);
@@ -259,22 +313,26 @@ DWORD WINAPI MetricsMonitorThread(LPVOID lpParam) {
                     }
 
                     HANDLE handles[2] = { g_hStopEvent, hRegEvent };
-                    DWORD dwWait = WaitForMultipleObjects(2, handles, FALSE, 1000); // Сокращенный таймаут до 1 секунды
+                    // Короткий таймаут, чтобы быстро заметить выход пользователя
+                    // и отпустить куст реестра
+                    DWORD dwWait = WaitForMultipleObjects(2, handles, FALSE, 1000);
 
                     if (dwWait == WAIT_OBJECT_0) {
                         break; // Выход из мода
                     } else if (dwWait == WAIT_OBJECT_0 + 1) {
                         // Реестр изменился (пользователь сменил тему / метрики)
                         CopyWindowMetricsFromSid(szSid);
-                    } else if (dwWait == WAIT_TIMEOUT) {
-                        // Проверяем, не сменился ли активный пользователь (в т.ч. при логауте, когда нет пользователя)
+                    } else {
+                        // Проверяем, не сменился ли активный пользователь
+                        // (в том числе случай выхода из системы — нет активного
+                        // пользователя считаем как "сменился")
                         LPWSTR szCurrentSid = NULL;
                         BOOL bSame = FALSE;
                         if (GetActiveUserSidString(&szCurrentSid)) {
                             bSame = (lstrcmpiW(szSid, szCurrentSid) == 0);
                             LocalFree(szCurrentSid);
                         }
-                        if (!bSame) break; // Пользователь сменился или вышел -> немедленно освобождаем дескриптор улья (hive)
+                        if (!bSame) break; // пользователь сменился или вышел -> отпускаем куст
                     }
                 }
                 RegCloseKey(hKeySrc);
@@ -313,7 +371,10 @@ void Wh_ModUninit() {
         SetEvent(g_hStopEvent);
     }
     if (g_hThread) {
-        WaitForSingleObject(g_hThread, INFINITE); // INFINITE безопасен т.к. поток проверяет событие остановки
+        // Все ожидания в потоке следят за g_hStopEvent, поэтому
+        // бесконечное ожидание безопасно и не приведёт к выгрузке DLL
+        // из-под ещё работающего потока в критическом процессе.
+        WaitForSingleObject(g_hThread, INFINITE);
         CloseHandle(g_hThread);
         g_hThread = NULL;
     }
@@ -321,7 +382,8 @@ void Wh_ModUninit() {
         CloseHandle(g_hStopEvent);
         g_hStopEvent = NULL;
     }
-    
-    // Восстанавливаем оригинальные метрики при выгрузке
-    RestoreDefaultMetrics();
+
+    // Восстанавливаем оригинальные значения .DEFAULT (вступит в силу
+    // при следующем входе в систему) и удаляем бэкап
+    RestoreDefaultBackup();
 }
