@@ -24,7 +24,7 @@ A native replacement for Windows 11 Start Menu search, powered by voidtools Ever
 ## Key Features
 
 - Instant Everything Search: Queries voidtools Everything directly through its IPC interface for fast results across millions of files. The mod keeps no index of its own.
-- Smart Apps and Settings Search: Fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, and Windows Settings URIs (ms-settings:) with high-resolution shell icons.
+- Smart Apps and Settings Search: Fuzzy matching across Desktop applications, Microsoft Store / UWP packages, Control Panel applets, and Windows Settings URIs (ms-settings:) with sharp shell icons, made at the exact pixel size of your display.
 - Learns your favorites: apps you open from here more often move up among results that match equally well. A clearly better match always stays on top.
 - On-Demand Animated Palette: The Start Menu stays completely clean and uncluttered when idle. The search palette slides in with a short ease-out animation the moment you type or click the search box, and collapses when emptied or on Escape.
 - Windows Search Out of the Way: SearchHost keeps running for the shell, but its window is never shown and it cannot launch Edge WebView2, the web view behind its Bing-backed search panel.
@@ -33,6 +33,7 @@ A native replacement for Windows 11 Start Menu search, powered by voidtools Ever
 - Network Interface Inspector: Type /ip to display all active Wi-Fi, Ethernet, and VPN network interfaces with their IP addresses, subnet masks, gateways, and hardware descriptions. Press Enter to copy the IP.
 - Full Right-Click Context Menu: Right-click any file, folder, or application to Open, Run as Administrator, Open in terminal (folders), Properties, Create desktop shortcut, Cut/Copy (files), Copy path, or Open file location.
 - Native Properties Dialogs: Properties opens through explorer.exe, the same dialog as in File Explorer.
+- Opens in Front: Programs are started by Explorer, the way the stock Start menu starts them, so they come to the front even when they take a while to start or you move the mouse meanwhile.
 - Explicit Web Search: Trigger web searches on demand using the '?' prefix (e.g. '?query'). Includes customizable keyword shortcuts such as '?yt' (YouTube), '?gh' (GitHub), '?w' (Wikipedia), and '?r' (Reddit).
 - Start Menu Styler Compatibility: Automatically syncs background styles (Tinted Glass, Acrylic, custom theme colors) in real time without restarting the mod.
 - Type Anywhere: Typing anywhere in the open Start Menu goes to the search box.
@@ -55,7 +56,7 @@ The Windows key, the Start button, Win+S, and the taskbar search icon all open t
 - Up / Down: Navigate through application, calculation, conversion, and file results.
 - Tab / Shift + Tab: Move to the next / previous result, through the apps and on into the files.
 - Left / Right: Switch between the Apps and Files columns. Right switches only with the cursor at the end of the query, so the arrows still move the cursor while you edit.
-- Enter: Launch the selected application, copy calculation/conversion/IP result, or open item.
+- Enter: Launch the selected application, copy calculation/conversion/IP result, or open item. Pressed before the results for what you typed are in, it opens the first one as soon as they arrive.
 - Ctrl + Enter: Run the selected application or file as Administrator (triggers UAC).
 - Shift + Enter: Open the selected result's context menu, the same one a right-click opens; navigate it with the arrow keys and Enter.
 - Escape: Clear the current query and smoothly collapse the search palette back to pinned apps.
